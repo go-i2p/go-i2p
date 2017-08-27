@@ -67,7 +67,7 @@ func (r *Router) mainloop() {
 	if err == nil {
 		// netdb ready
 		log.WithFields(log.Fields{
-			"at": "(Router) Run",
+			"at": "(Router) mainloop",
 		}).Info("Router ready")
 		for err == nil {
 			time.Sleep(time.Second)
@@ -75,7 +75,7 @@ func (r *Router) mainloop() {
 	} else {
 		// netdb failed
 		log.WithFields(log.Fields{
-			"at":     "(Router) Run",
+			"at":     "(Router) mainloop",
 			"reason": err.Error(),
 		}).Error("Netdb Startup failed")
 		r.Stop()
