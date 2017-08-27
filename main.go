@@ -20,9 +20,9 @@ func main() {
 			// TODO: graceful shutdown
 			r.Stop()
 		})
-		go r.Run()
-		defer r.Close()
+		r.Start()
 		r.Wait()
+		r.Close()
 	} else {
 		log.Errorf("failed to create i2p router: %s", err)
 	}
