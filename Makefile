@@ -19,7 +19,7 @@ $(EXE):
 	$(GO) build -v -o $(EXE)
 
 test:
-	$(GO) test -v
+	$(GO) test ./...
 
 clean:
 	$(GO) clean -v

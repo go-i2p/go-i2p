@@ -7,9 +7,13 @@ import (
 	"github.com/hkparker/go-i2p/lib/bootstrap"
 	"github.com/hkparker/go-i2p/lib/common"
 	"github.com/hkparker/go-i2p/lib/common/base64"
+	"github.com/hkparker/go-i2p/lib/util"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // standard network database implementation using local filesystem skiplist
@@ -45,6 +49,60 @@ func (db StdNetDB) Path() string {
 // return how many routers we know about in our network database
 //
 func (db StdNetDB) Size() (routers int) {
+	// TODO: implement this
+	var err error
+	var data []byte
+	if !util.CheckFileExists(db.cacheFilePath()) {
+		// regenerate
+		err = db.RecalculateSize()
+		if err != nil {
+			// TODO : what now? let's panic for now
+			util.Panicf("could not recalculate netdb size: %s", err)
+		}
+	}
+	data, err = ioutil.ReadFile(db.cacheFilePath())
+	if err == nil {
+		routers, err = strconv.Atoi(string(data))
+	}
+	return
+}
+
+// name of file to hold precomputed size of netdb
+const CacheFileName = "sizecache.txt"
+
+// get filepath for storing netdb info cache
+func (db StdNetDB) cacheFilePath() string {
+	return filepath.Join(db.Path(), CacheFileName)
+}
+
+func (db StdNetDB) CheckFilePathValid(fpath string) bool {
+	// TODO: make this better
+	return strings.HasSuffix(fpath, ".dat")
+}
+
+// recalculateSize recalculates cached size of netdb
+func (db StdNetDB) RecalculateSize() (err error) {
+	fpath := db.cacheFilePath()
+	count := 0
+	err = filepath.Walk(fpath, func(fname string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return err
+		}
+		if db.CheckFilePathValid(fname) {
+			// TODO: make sure it's in a skiplist directory
+			count++
+		}
+		return err
+	})
+	if err == nil {
+		str := fmt.Sprintf("%d", count)
+		var f *os.File
+		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0600)
+		if err == nil {
+			_, err = io.WriteString(f, str)
+			f.Close()
+		}
+	}
 	return
 }
 
