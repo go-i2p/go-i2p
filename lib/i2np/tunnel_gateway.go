@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"github.com/hkparker/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 /*

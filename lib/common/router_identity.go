@@ -9,7 +9,7 @@ Identical to KeysAndCert
 */
 
 import (
-	"github.com/hkparker/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
 //

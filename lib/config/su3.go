@@ -2,8 +2,8 @@ package config
 
 import (
 	"errors"
-	log "github.com/Sirupsen/logrus"
-	"github.com/hkparker/go-i2p/lib/common"
+	log "github.com/sirupsen/logrus"
+	"github.com/go-i2p/go-i2p/lib/common"
 	"strings"
 	"unicode/utf8"
 )

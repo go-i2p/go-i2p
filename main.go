@@ -1,8 +1,8 @@
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
-	"github.com/hkparker/go-i2p/lib/router"
+	log "github.com/sirupsen/logrus"
+	"github.com/go-i2p/go-i2p/lib/router"
 )
 
 func main() {

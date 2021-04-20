@@ -1,8 +1,8 @@
 package router
 
 import (
-	"github.com/hkparker/go-i2p/lib/config"
-	"github.com/hkparker/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 )
 
 // i2p router type

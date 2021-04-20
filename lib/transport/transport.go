@@ -1,8 +1,8 @@
 package transport
 
 import (
-	"github.com/hkparker/go-i2p/lib/common"
-	"github.com/hkparker/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/common"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 )
 
 // a session between 2 routers for tranmitting i2np messages securly

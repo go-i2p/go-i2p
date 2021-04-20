@@ -1,6 +1,6 @@
 package bootstrap
 
-import "github.com/hkparker/go-i2p/lib/common"
+import "github.com/go-i2p/go-i2p/lib/common"
 
 // interface defining a way to bootstrap into the i2p network
 type Bootstrap interface {
