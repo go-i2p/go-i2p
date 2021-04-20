@@ -9,11 +9,11 @@ import (
 // XXX: IMPLEMENT THIS
 func Test_I2PHMAC(t *testing.T) {
 	data := make([]byte, 64)
-	for idx, _ := range data {
+	for idx := range data {
 		data[idx] = 1
 	}
 	var k HMACKey
-	for idx, _ := range k[:] {
+	for idx := range k[:] {
 		k[idx] = 1
 	}
 	d := I2PHMAC(data, k)

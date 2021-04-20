@@ -36,7 +36,7 @@ func (str String) Length() (length int, err error) {
 	str_len := len(str)
 	if inferred_len > str_len {
 		log.WithFields(log.Fields{
-			"at": "(String) Length",
+			"at":                    "(String) Length",
 			"string_bytes_length":   str_len,
 			"string_length_field":   length,
 			"expected_bytes_length": inferred_len,
@@ -45,7 +45,7 @@ func (str String) Length() (length int, err error) {
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
 	} else if str_len > inferred_len {
 		log.WithFields(log.Fields{
-			"at": "(String) Length",
+			"at":                    "(String) Length",
 			"string_bytes_length":   str_len,
 			"string_length_field":   length,
 			"expected_bytes_length": inferred_len,

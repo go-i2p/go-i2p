@@ -30,6 +30,9 @@ type NetworkDatabase interface {
 	// return how many router infos we have
 	Size() int
 
+	// Recaculate size of netdb from backend
+	RecalculateSize() error
+
 	// ensure underlying resources exist , i.e. directories, files, configs
 	Ensure() error
 }

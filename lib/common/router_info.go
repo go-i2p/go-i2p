@@ -204,13 +204,15 @@ func (router_info RouterInfo) Options() (mapping Mapping) {
 }
 
 //
-// Return the 40 bytes that follow the Mapping in the RouterInfo.
+// Return the signature of this router info
 //
 func (router_info RouterInfo) Signature() (signature Signature) {
 	head := router_info.optionsLocation()
 	size := head + router_info.optionsSize()
-	// TODO: signature is not always 40 bytes, is 40 bytes for DSA only
-	signature = Signature(router_info[size : size+40])
+	ident, _ := router_info.RouterIdentity()
+	keyCert := KeyCertificate(ident)
+	sigSize := keyCert.SignatureSize()
+	signature = Signature(router_info[size : size+sigSize])
 	return
 }
 

@@ -82,8 +82,8 @@ signature :: Signature
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	log "github.com/sirupsen/logrus"
 )
 
 // Sizes of various structures in an I2P LeaseSet

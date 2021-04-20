@@ -2,8 +2,8 @@ package config
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/go-i2p/go-i2p/lib/common"
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"unicode/utf8"
 )
@@ -41,14 +41,14 @@ var SU3_CONTENT_TYPE_NEWS_FEED = "news_feed"
 var SU3_CONTENT_TYPE_BLOCKLIST_FEED = "blocklist_feed"
 
 var SU3_SIGNATURE_TYPE_MAP = map[[SU3_SIGNATURE_TYPE_LEN]byte]string{
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x00}: SU3_SIGNATURE_TYPE_DSA_SHA1,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x01}: SU3_SIGNATURE_TYPE_ECDSA_SHA256_P256,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x02}: SU3_SIGNATURE_TYPE_ECDSA_SHA384_P384,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x03}: SU3_SIGNATURE_TYPE_ECDSA_SHA512_P521,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x04}: SU3_SIGNATURE_TYPE_RSA_SHA256_2048,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x05}: SU3_SIGNATURE_TYPE_RSA_SHA384_3072,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x06}: SU3_SIGNATURE_TYPE_RSA_SHA512_4096,
-	[SU3_SIGNATURE_TYPE_LEN]byte{0x00, 0x08}: SU3_SIGNATURE_TYPE_EdDSA_SHA512_Ed25519ph,
+	{0x00, 0x00}: SU3_SIGNATURE_TYPE_DSA_SHA1,
+	{0x00, 0x01}: SU3_SIGNATURE_TYPE_ECDSA_SHA256_P256,
+	{0x00, 0x02}: SU3_SIGNATURE_TYPE_ECDSA_SHA384_P384,
+	{0x00, 0x03}: SU3_SIGNATURE_TYPE_ECDSA_SHA512_P521,
+	{0x00, 0x04}: SU3_SIGNATURE_TYPE_RSA_SHA256_2048,
+	{0x00, 0x05}: SU3_SIGNATURE_TYPE_RSA_SHA384_3072,
+	{0x00, 0x06}: SU3_SIGNATURE_TYPE_RSA_SHA512_4096,
+	{0x00, 0x08}: SU3_SIGNATURE_TYPE_EdDSA_SHA512_Ed25519ph,
 }
 
 var SU3_FILE_TYPE_MAP = map[byte]string{
@@ -242,7 +242,7 @@ func getFileFormatVersion(data []byte) (int, error) {
 
 	if file_format_version_byte := data[SU3_MAGIC_BYTE_LEN+1]; file_format_version_byte != 0x00 {
 		log.WithFields(log.Fields{
-			"at": "config.getSignatureType",
+			"at":                       "config.getSignatureType",
 			"file_format_version_byte": file_format_version_byte,
 		}).Debug(ERR_SU3_FILE_FORMAT_VERSION_UNKNOWN)
 		return int(file_format_version_byte), ERR_SU3_FILE_FORMAT_VERSION_UNKNOWN

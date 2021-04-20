@@ -28,8 +28,8 @@ payload :: data
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	log "github.com/sirupsen/logrus"
 )
 
 // Key Certificate Signing Key Types
@@ -90,6 +90,10 @@ func (key_certificate KeyCertificate) Data() ([]byte, error) {
 func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int, err error) {
 	data, err := key_certificate.Data()
 	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "(KeyCertificate) SigningPublicKeyType",
+			"reason": err.Error(),
+		}).Error("error getting signing public key")
 		return
 	}
 	data_len := len(data)
@@ -231,6 +235,11 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 	}
 	key_type, err := key_certificate.SigningPublicKeyType()
 	if err != nil {
+		log.WithFields(log.Fields{
+			"at":       "(KeyCertificate) SignatureSize",
+			"key_type": key_type,
+			"reason":   "failed to read signing public key type",
+		}).Error("error getting signature size")
 		return 0
 	}
 	return sizes[int(key_type)]

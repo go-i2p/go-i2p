@@ -14,7 +14,7 @@ func TestDSA(t *testing.T) {
 	sk, err = sk.Generate()
 	if err == nil {
 		zeros := 0
-		for b, _ := range sk {
+		for b := range sk {
 			if b == 0 {
 				zeros++
 			}

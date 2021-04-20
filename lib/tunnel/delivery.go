@@ -3,8 +3,8 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/go-i2p/go-i2p/lib/common"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
