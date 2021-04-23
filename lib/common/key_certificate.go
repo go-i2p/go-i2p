@@ -74,13 +74,25 @@ const (
 	KEYCERT_SPK_SIZE    = 128
 )
 
-type KeyCertificate []byte
+type KeyCertificate struct {
+	PKType int
+	PKExtra []byte
+	SPKType int
+	SPKExtra []byte
+}//[]byte
+
 
 //
 // The data contained in the Key Certificate.
 //
 func (key_certificate KeyCertificate) Data() ([]byte, error) {
-	return Certificate(key_certificate).Data()
+	var r []byte
+
+	pk := IntegerBytes(key_certificate.PKType)
+	r = append(r, pk...)
+	spk := IntegerBytes(key_certificate.SPKType)
+	r = append(r, spk...)
+	return r, nil
 }
 
 //
@@ -88,27 +100,7 @@ func (key_certificate KeyCertificate) Data() ([]byte, error) {
 // parsing the KeyCertificate.
 //
 func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int, err error) {
-	data, err := key_certificate.Data()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"at":     "(KeyCertificate) SigningPublicKeyType",
-			"reason": err.Error(),
-		}).Error("error getting signing public key")
-		return
-	}
-	data_len := len(data)
-	if data_len < 2 {
-		log.WithFields(log.Fields{
-			"at":           "(KeyCertificate) SigningPublicKeyType",
-			"data_len":     data_len,
-			"required_len": 2,
-			"reason":       "not enough data",
-		}).Error("error parsing key certificate")
-		err = errors.New("error parsing key certificate: not enough data")
-		return
-	}
-	signing_pubkey_type = Integer(data[:2])
-	return
+	return key_certificate.SPKType, nil
 }
 
 //
@@ -116,23 +108,7 @@ func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_typ
 // this KeyCertificate.
 //
 func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int, err error) {
-	data, err := key_certificate.Data()
-	if err != nil {
-		return
-	}
-	data_len := len(data)
-	if data_len < 4 {
-		log.WithFields(log.Fields{
-			"at":           "(KeyCertificate) PublicKeyType",
-			"data_len":     data_len,
-			"required_len": 4,
-			"reason":       "not enough data",
-		}).Error("error parsing key certificate")
-		err = errors.New("error parsing key certificate: not enough data")
-		return
-	}
-	pubkey_type = Integer(data[2:4])
-	return
+	return key_certificate.PKType, nil
 }
 
 //
@@ -201,7 +177,8 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		var ec_key crypto.ECP521PublicKey
 		extra := KEYCERT_SIGN_P521_SIZE - KEYCERT_SPK_SIZE
 		copy(ec_key[:], data)
-		copy(ec_key[KEYCERT_SPK_SIZE:], key_certificate[4:4+extra])
+		d , _ := key_certificate.Data()
+		copy(ec_key[KEYCERT_SPK_SIZE:], d[4:4+extra])
 		signing_public_key = ec_key
 	case KEYCERT_SIGN_RSA2048:
 		//var rsa_key crypto.RSA2048PublicKey
@@ -243,4 +220,34 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 		return 0
 	}
 	return sizes[int(key_type)]
+}
+
+//
+// Read a KeyCertificate from a slice of bytes
+//
+func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error) {
+	data_len := len(data)
+	if data_len < 2 {
+		log.WithFields(log.Fields{
+			"at":           "(KeyCertificate) SigningPublicKeyType",
+			"data_len":     data_len,
+			"required_len": 2,
+			"reason":       "not enough data",
+		}).Error("error parsing key certificate")
+		err = errors.New("error parsing key certificate: not enough data")
+		return
+	}
+	key_certificate.SPKType = Integer(data[:2])
+	if data_len < 4 {
+		log.WithFields(log.Fields{
+			"at":           "(KeyCertificate) PublicKeyType",
+			"data_len":     data_len,
+			"required_len": 4,
+			"reason":       "not enough data",
+		}).Error("error parsing key certificate")
+		err = errors.New("error parsing key certificate: not enough data")
+		return
+	}
+	key_certificate.PKType = Integer(data[2:4])
+	return
 }

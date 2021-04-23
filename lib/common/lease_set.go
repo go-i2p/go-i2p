@@ -93,7 +93,10 @@ const (
 	LEASE_SET_SIG_SIZE    = 40
 )
 
-type LeaseSet []byte
+type LeaseSet struct {
+	Destination
+	Leases []Lease
+}
 
 //
 // Read a Destination from the LeaseSet.
@@ -101,7 +104,7 @@ type LeaseSet []byte
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
 	destination = Destination(keys_and_cert)
-	return
+	return Destination
 }
 
 //
@@ -241,7 +244,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 			return
 		}
 		var lease Lease
-		copy(lease[:], lease_set[start:end])
+		copy(lease.Bytes(), lease_set[start:end])
 		leases = append(leases, lease)
 	}
 	return

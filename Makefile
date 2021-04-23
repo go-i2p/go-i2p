@@ -23,3 +23,6 @@ test:
 
 clean:
 	$(GO) clean -v
+
+fmt:
+	find . -name '*.go' -exec gofmt -w -s {} \;

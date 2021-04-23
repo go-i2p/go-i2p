@@ -34,15 +34,21 @@ const (
 	LEASE_SIZE           = 44
 	LEASE_HASH_SIZE      = 32
 	LEASE_TUNNEL_ID_SIZE = 4
+	LEASE_TUNNEL_DATE_SIZE = 8
 )
 
-type Lease [LEASE_SIZE]byte
+type Lease struct {
+	LeaseHash [LEASE_HASH_SIZE]byte
+	TunnelIdent [LEASE_TUNNEL_ID_SIZE]byte
+	TunnelDate [LEASE_TUNNEL_DATE_SIZE]byte
+}
+//[LEASE_SIZE]byte
 
 //
 // Return the first 32 bytes of the Lease as a Hash.
 //
 func (lease Lease) TunnelGateway() (hash Hash) {
-	copy(hash[:], lease[:LEASE_HASH_SIZE])
+	copy(hash[:], lease.LeaseHash[:])
 	return
 }
 
@@ -50,15 +56,24 @@ func (lease Lease) TunnelGateway() (hash Hash) {
 // Parse the TunnelID Integer in the Lease.
 //
 func (lease Lease) TunnelID() uint32 {
-	return uint32(
-		Integer(lease[LEASE_HASH_SIZE : LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE]),
-	)
+	return uint32(Integer(lease.TunnelIdent[:]))
 }
 
 //
 // Return the Date inside the Lease.
 //
 func (lease Lease) Date() (date Date) {
-	copy(date[:], lease[LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE:])
+	copy(date[:], lease.TunnelDate[:])
 	return
+}
+
+//
+// Possibly temporary? Just to make it compile for now
+//
+func (lease Lease) Bytes() (bytes []byte) {
+	var r []byte
+	r = append(r, lease.LeaseHash[:]...)
+	r = append(r, lease.TunnelIdent[:]...)
+	r = append(r, lease.TunnelDate[:]...)
+	return r
 }
