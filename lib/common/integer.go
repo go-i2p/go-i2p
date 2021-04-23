@@ -31,8 +31,6 @@ func Integer(number []byte) (value int) {
 	return
 }
 
-
-
 func IntegerBytes(value int) (number []byte) {
 	number = make([]byte, INTEGER_SIZE)
 	binary.BigEndian.PutUint64(number, uint64(value))

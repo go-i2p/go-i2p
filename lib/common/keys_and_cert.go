@@ -64,6 +64,7 @@ type KeysAndCert struct {
 	//crypto.PublicKey
 	Certificate
 }
+
 //[]byte
 
 //
@@ -71,7 +72,7 @@ type KeysAndCert struct {
 // determine correct lengths.
 //
 func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
-	cert, err:= keys_and_cert.GetCertificate()
+	cert, err := keys_and_cert.GetCertificate()
 	if err != nil {
 		return
 	}
@@ -138,7 +139,7 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 			// This KeysAndCert contains a Key Certificate, construct
 			// a SigningPublicKey from the data in the KeysAndCert and
 			// any additional data in the Certificate.
-			signing_public_key, err = KeyCertificate{SPKType:cert_type}.ConstructSigningPublicKey(
+			signing_public_key, err = KeyCertificate{SPKType: cert_type}.ConstructSigningPublicKey(
 				keys_and_cert.Cert()[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
 			)
 		} else {
@@ -191,7 +192,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		return
 	}
 
-/*	keys_and_cert = KeysAndCert{
+	/*	keys_and_cert = KeysAndCert{
 		KeyCertificate: KeyCertificate{
 			Certificate: data[:KEYS_AND_CERT_MIN_SIZE],
 			PublicKey:,

@@ -53,8 +53,8 @@ type CertificateInterface interface {
 }
 
 type Certificate struct {
-	CertType int
-	CertLen int
+	CertType  int
+	CertLen   int
 	CertBytes []byte
 }
 

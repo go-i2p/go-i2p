@@ -75,12 +75,11 @@ const (
 )
 
 type KeyCertificate struct {
-	PKType int
-	PKExtra []byte
-	SPKType int
+	PKType   int
+	PKExtra  []byte
+	SPKType  int
 	SPKExtra []byte
-}//[]byte
-
+} //[]byte
 
 //
 // The data contained in the Key Certificate.
@@ -177,7 +176,7 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		var ec_key crypto.ECP521PublicKey
 		extra := KEYCERT_SIGN_P521_SIZE - KEYCERT_SPK_SIZE
 		copy(ec_key[:], data)
-		d , _ := key_certificate.Data()
+		d, _ := key_certificate.Data()
 		copy(ec_key[KEYCERT_SPK_SIZE:], d[4:4+extra])
 		signing_public_key = ec_key
 	case KEYCERT_SIGN_RSA2048:

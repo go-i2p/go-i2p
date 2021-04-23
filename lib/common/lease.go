@@ -31,17 +31,18 @@ end_date :: Date
 
 // Sizes or various components of a Lease
 const (
-	LEASE_SIZE           = 44
-	LEASE_HASH_SIZE      = 32
-	LEASE_TUNNEL_ID_SIZE = 4
+	LEASE_SIZE             = 44
+	LEASE_HASH_SIZE        = 32
+	LEASE_TUNNEL_ID_SIZE   = 4
 	LEASE_TUNNEL_DATE_SIZE = 8
 )
 
 type Lease struct {
-	LeaseHash [LEASE_HASH_SIZE]byte
+	LeaseHash   [LEASE_HASH_SIZE]byte
 	TunnelIdent [LEASE_TUNNEL_ID_SIZE]byte
-	TunnelDate [LEASE_TUNNEL_DATE_SIZE]byte
+	TunnelDate  [LEASE_TUNNEL_DATE_SIZE]byte
 }
+
 //[LEASE_SIZE]byte
 
 //
