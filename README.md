@@ -10,7 +10,7 @@ but when this restructuring is complete, it will be a fully-fledged I2P router
 and library for writing, embedding, and possiblly extending I2P routers in Go
 applications.
 
-The go module is declared as: github.com/go-i2p/go-i2p, in order to clone
+The go module is declared as: `github.com/go-i2p/go-i2p`, in order to clone
 anonymously you may use `torsocks` with `go get`(YMMV) or you may clone
 it from git.idk.i2p using:
 
