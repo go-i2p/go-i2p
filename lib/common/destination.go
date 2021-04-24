@@ -35,12 +35,6 @@ func (destination Destination) Certificate() (Certificate, error) {
 	return destination.KeysAndCert.GetCertificate()
 }
 
-func ReadDestination(data []byte) (destination Destination, remainder []byte, err error) {
-	keys_and_cert, remainder, err := ReadKeysAndCert(data)
-	destination.KeysAndCert = keys_and_cert
-	return
-}
-
 //
 // Generate the I2P base32 address for this Destination.
 //
@@ -56,4 +50,13 @@ func (destination Destination) Base32Address() (str string) {
 //
 func (destination Destination) Base64() string {
 	return base64.EncodeToString(destination.Cert())
+}
+
+func ReadDestination(data []byte) (destination Destination, remainder []byte, err error) {
+	keys_and_cert, remainder, err := ReadKeysAndCert(data)
+	if err != nil {
+		return
+	}
+	destination.KeysAndCert = keys_and_cert
+	return
 }

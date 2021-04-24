@@ -226,12 +226,6 @@ func ReadKeys(data []byte, cert Certificate) (spk crypto.SigningPublicKey, pk cr
 		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
 		return
 	}
-	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
-		cert.CertBytes = append(cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:]...)
-		err = cert_len_err
-	} else {
-		cert.CertBytes = append(cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
-		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
-	}
+	remainder = data[KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE:]
 	return
 }

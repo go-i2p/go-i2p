@@ -357,4 +357,11 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 	return
 }*/
 
-//func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {}
+func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error) {
+	destination, remainder, err := ReadDestination(data)
+	if err != nil {
+		return
+	}
+	lease_set.Destination = destination
+	return
+}
