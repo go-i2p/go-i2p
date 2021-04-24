@@ -24,11 +24,11 @@ type Destination struct {
 }
 
 func (destination Destination) PublicKey() (crypto.PublicKey, error) {
-	return destination.KeysAndCert.PublicKey()
+	return destination.KeysAndCert.GetPublicKey()
 }
 
 func (destination Destination) SigningPublicKey() (crypto.SigningPublicKey, error) {
-	return destination.KeysAndCert.SigningPublicKey()
+	return destination.KeysAndCert.GetSigningPublicKey()
 }
 
 func (destination Destination) Certificate() (Certificate, error) {

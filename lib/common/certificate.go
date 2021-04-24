@@ -61,7 +61,11 @@ type Certificate struct {
 var ci CertificateInterface = &Certificate{}
 
 func (certificate Certificate) Cert() []byte {
-	return certificate.CertBytes
+	var ret []byte
+	ret = append(ret, IntegerBytes(certificate.CertType)...)
+	ret = append(ret, IntegerBytes(certificate.CertLen)...)
+	ret = append(ret, certificate.CertBytes...)
+	return ret
 }
 
 //
@@ -69,17 +73,10 @@ func (certificate Certificate) Cert() []byte {
 // and an error if the certificate is shorter than the minimum certificate size.
 //
 func (certificate Certificate) Type() (cert_type int, err error) {
-	cert_len := len(certificate.Cert())
-	if cert_len < CERT_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) Type",
-			"certificate_bytes_length": cert_len,
-			"reason":                   "too short (len < CERT_MIN_SIZE)",
-		}).Error("invalid certificate")
-		err = errors.New("error parsing certificate length: certificate is too short")
+	_, err = certificate.Type()
+	if err != nil {
 		return
 	}
-	cert_type = certificate.CertType
 	return
 }
 
@@ -89,7 +86,6 @@ func (certificate Certificate) Type() (cert_type int, err error) {
 // match the provided data.
 //
 func (certificate Certificate) Length() (length int, err error) {
-	cert_len := len(certificate.Cert())
 	_, err = certificate.Type()
 	if err != nil {
 		return
@@ -115,7 +111,7 @@ func (certificate Certificate) Data() (data []byte, err error) {
 			return
 		}
 	}
-	data = certificate.Cert()[CERT_MIN_SIZE:]
+	data = certificate.Cert()
 	return
 }
 

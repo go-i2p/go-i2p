@@ -60,8 +60,8 @@ const (
 )
 
 type KeysAndCert struct {
-	//crypto.SigningPublicKey
-	//crypto.PublicKey
+	crypto.SigningPublicKey
+	crypto.PublicKey
 	Certificate
 }
 
@@ -71,7 +71,7 @@ type KeysAndCert struct {
 // Return the PublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
 // determine correct lengths.
 //
-func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
+func (keys_and_cert KeysAndCert) GetPublicKey() (key crypto.PublicKey, err error) {
 	cert, err := keys_and_cert.GetCertificate()
 	if err != nil {
 		return
@@ -80,35 +80,8 @@ func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
 	if err != nil {
 		return
 	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-		// PublicKey space as ElgPublicKey.
-		var elg_key crypto.ElgPublicKey
-		copy(keys_and_cert.Cert()[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-		key = elg_key
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a PublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			key, err = KeyCertificate{PKType: cert_type}.ConstructPublicKey(
-				keys_and_cert.Cert()[:KEYS_AND_CERT_PUBKEY_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-			// PublicKey space as ElgPublicKey.  No other Certificate
-			// types are currently in use.
-			var elg_key crypto.ElgPublicKey
-			copy(keys_and_cert.Cert()[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-			key = elg_key
-			log.WithFields(log.Fields{
-				"at":        "(KeysAndCert) PublicKey",
-				"cert_type": cert_type,
-			}).Warn("unused certificate type observed")
-		}
-
+	if cert_len != 0 {
+		key = keys_and_cert.PublicKey
 	}
 	return
 }
@@ -117,7 +90,7 @@ func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
 // Return the SigningPublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
 // determine correct lengths.
 //
-func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey, err error) {
+func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypto.SigningPublicKey, err error) {
 	cert, err := keys_and_cert.GetCertificate()
 	if err != nil {
 		return
@@ -126,31 +99,8 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 	if err != nil {
 		return
 	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-		var dsa_pk crypto.DSAPublicKey
-		copy(dsa_pk[:], keys_and_cert.Cert()[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-		signing_public_key = dsa_pk
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a SigningPublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			signing_public_key, err = KeyCertificate{SPKType: cert_type}.ConstructSigningPublicKey(
-				keys_and_cert.Cert()[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
-			// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
-			// No other Certificate types are currently in use.
-			var dsa_pk crypto.DSAPublicKey
-			copy(dsa_pk[:], keys_and_cert.Cert()[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-			signing_public_key = dsa_pk
-		}
-
+	if cert_len != 0 {
+		signing_public_key = keys_and_cert.SigningPublicKey
 	}
 	return
 }
@@ -160,18 +110,11 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 // KeysAndCert or Certificate.
 //
 func (keys_and_cert KeysAndCert) GetCertificate() (cert Certificate, err error) {
-	keys_cert_len := len(keys_and_cert.Cert())
-	if keys_cert_len < KEYS_AND_CERT_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":           "(KeysAndCert) Certificate",
-			"data_len":     keys_cert_len,
-			"required_len": KEYS_AND_CERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+	_, err = keys_and_cert.Certificate.Type()
+	if err != nil {
 		return
 	}
-	cert, _, err = ReadCertificate(keys_and_cert.Cert()[KEYS_AND_CERT_DATA_SIZE:])
+	cert = keys_and_cert.Certificate
 	return
 }
 
@@ -191,14 +134,20 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
-
-	/*	keys_and_cert = KeysAndCert{
-		KeyCertificate: KeyCertificate{
-			Certificate: data[:KEYS_AND_CERT_MIN_SIZE],
-			PublicKey:,
-			SigningPublicKey:,
-	}*/
-	cert, _ := keys_and_cert.GetCertificate()
+	cert, remainder, err := ReadCertificate(data[:KEYS_AND_CERT_MIN_SIZE])
+	if err != nil {
+		return
+	}
+	cert, _ = keys_and_cert.GetCertificate()
+	spk, pk, remainder, err := ReadKeys(data, cert)
+	if err != nil {
+		return
+	}
+	keys_and_cert = KeysAndCert{
+		SigningPublicKey: spk,
+		PublicKey:        pk,
+		Certificate:      cert,
+	}
 	cert_len, cert_len_err := cert.Length()
 	if cert_len == 0 {
 		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
@@ -210,6 +159,75 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	} else {
 		keys_and_cert.Certificate.CertBytes = append(keys_and_cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
 		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
+	}
+	return
+}
+
+func ReadKeys(data []byte, cert Certificate) (spk crypto.SigningPublicKey, pk crypto.PublicKey, remainder []byte, err error) {
+	data_len := len(data)
+	if data_len < KEYS_AND_CERT_MIN_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing keys and cert")
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		return
+	}
+	if data_len == 0 {
+		// No Certificate is present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
+		// PublicKey space as ElgPublicKey.
+		var elg_key crypto.ElgPublicKey
+		copy(data[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
+		pk = elg_key
+	} else {
+		// A Certificate is present in this KeysAndCert
+		cert_type, _ := cert.Type()
+		if cert_type == CERT_KEY {
+			// This KeysAndCert contains a Key Certificate, construct
+			// a PublicKey from the data in the KeysAndCert and
+			// any additional data in the Certificate.
+			pk, err = KeyCertificate{PKType: cert_type}.ConstructPublicKey(
+				data[:KEYS_AND_CERT_PUBKEY_SIZE],
+			)
+		} else {
+			// Key Certificate is not present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
+			// PublicKey space as ElgPublicKey.  No other Certificate
+			// types are currently in use.
+			var elg_key crypto.ElgPublicKey
+			copy(data[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
+			pk = elg_key
+			log.WithFields(log.Fields{
+				"at":        "(KeysAndCert) PublicKey",
+				"cert_type": cert_type,
+			}).Warn("unused certificate type observed")
+		}
+	}
+	if data_len == 0 {
+		// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
+		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
+		var dsa_pk crypto.DSAPublicKey
+		copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
+		spk = dsa_pk
+	} else {
+		// A Certificate is present in this KeysAndCert
+		cert_type, _ := cert.Type()
+		if cert_type == CERT_KEY {
+			// This KeysAndCert contains a Key Certificate, construct
+			// a SigningPublicKey from the data in the KeysAndCert and
+			// any additional data in the Certificate.
+			spk, err = KeyCertificate{SPKType: cert_type}.ConstructSigningPublicKey(
+				data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
+			)
+		} else {
+			// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
+			// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
+			// No other Certificate types are currently in use.
+			var dsa_pk crypto.DSAPublicKey
+			copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
+			spk = dsa_pk
+		}
 	}
 	return
 }

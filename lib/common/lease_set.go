@@ -95,16 +95,19 @@ const (
 
 type LeaseSet struct {
 	Destination
-	Leases []Lease
+	LeaseList []Lease
 }
 
 //
 // Read a Destination from the LeaseSet.
 //
-func (lease_set LeaseSet) Destination() (destination Destination, err error) {
-	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
-	destination = Destination(keys_and_cert)
-	return Destination
+func (lease_set LeaseSet) GetDestination() (destination Destination, err error) {
+	if &lease_set.Destination != nil {
+		destination = lease_set.Destination
+	} else {
+		err = errors.New("Error leaseset does not contain a destination")
+	}
+	return
 }
 
 //
@@ -132,6 +135,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 // Return the SigningPublicKey, as specified in the LeaseSet's Destination's Key Certificate if
 // present, or a legacy DSA key.
 //
+
 func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
