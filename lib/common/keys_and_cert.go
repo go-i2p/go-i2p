@@ -59,6 +59,12 @@ const (
 	KEYS_AND_CERT_DATA_SIZE   = 384
 )
 
+type KeysAndCertInterface interface {
+	GetPublicKey() (key crypto.PublicKey, err error)
+	GetSigningPublicKey() (signing_public_key crypto.SigningPublicKey, err error)
+	GetCertificate() (cert Certificate, err error)
+}
+
 type KeysAndCert struct {
 	crypto.SigningPublicKey
 	crypto.PublicKey
