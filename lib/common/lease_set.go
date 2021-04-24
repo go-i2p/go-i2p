@@ -95,6 +95,8 @@ const (
 
 type LeaseSet struct {
 	Destination
+	crypto.SigningPublicKey
+	crypto.PublicKey
 	LeaseList []Lease
 }
 
@@ -113,7 +115,7 @@ func (lease_set LeaseSet) GetDestination() (destination Destination, err error) 
 //
 // Return the PublicKey in this LeaseSet and any errors ancountered parsing the LeaseSet.
 //
-func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
+/*func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
@@ -129,15 +131,15 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 	}
 	copy(public_key[:], remainder[:LEASE_SET_PUBKEY_SIZE])
 	return
-}
+}*/
 
 //
 // Return the SigningPublicKey, as specified in the LeaseSet's Destination's Key Certificate if
 // present, or a legacy DSA key.
 //
 
-func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
-	destination, err := lease_set.Destination()
+/*func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
+	destination, err := lease_set.GetDestination()
 	if err != nil {
 		return
 	}
@@ -187,12 +189,12 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 
 	}
 	return
-}
+}*/
 
 //
 // Return the number of Leases specified by the LeaseCount value in this LeaseSet.
 //
-func (lease_set LeaseSet) LeaseCount() (count int, err error) {
+/*func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	if err != nil {
 		return
@@ -218,12 +220,12 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 		err = errors.New("invalid lease set: more than 16 leases")
 	}
 	return
-}
+}*/
 
 //
 // Read the Leases in this LeaseSet, returning a partial set if there is insufficient data.
 //
-func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
+/*func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
 		return
@@ -252,13 +254,13 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 		leases = append(leases, lease)
 	}
 	return
-}
+}*/
 
 //
 // Return the Signature data for the LeaseSet, as specified in the Destination's
 // Key Certificate if present or the 40 bytes following the Leases.
 //
-func (lease_set LeaseSet) Signature() (signature Signature, err error) {
+/*func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
 		return
@@ -296,11 +298,12 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	}
 	signature = []byte(lease_set[start:end])
 	return
-}
+}*/
 
 //
 //
 //
+/*
 func (lease_set LeaseSet) Verify() error {
 	//data_end := len(destination) +
 	//	LEASE_SET_PUBKEY_SIZE +
@@ -352,4 +355,6 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 		}
 	}
 	return
-}
+}*/
+
+//func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {}

@@ -146,18 +146,6 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		PublicKey:        pk,
 		Certificate:      cert,
 	}
-	cert_len, cert_len_err := cert.Length()
-	if cert_len == 0 {
-		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
-		return
-	}
-	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
-		keys_and_cert.Certificate.CertBytes = append(keys_and_cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:]...)
-		err = cert_len_err
-	} else {
-		keys_and_cert.Certificate.CertBytes = append(keys_and_cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
-		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
-	}
 	return
 }
 
@@ -226,6 +214,18 @@ func ReadKeys(data []byte, cert Certificate) (spk crypto.SigningPublicKey, pk cr
 			copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
 			spk = dsa_pk
 		}
+	}
+	cert_len, cert_len_err := cert.Length()
+	if cert_len == 0 {
+		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
+		return
+	}
+	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
+		cert.CertBytes = append(cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:]...)
+		err = cert_len_err
+	} else {
+		cert.CertBytes = append(cert.Cert(), data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
+		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
 	}
 	return
 }
