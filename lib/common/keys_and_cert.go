@@ -65,8 +65,6 @@ type KeysAndCert struct {
 	Certificate
 }
 
-//[]byte
-
 //
 // Return the PublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
 // determine correct lengths.

@@ -31,6 +31,9 @@ func Integer(number []byte) (value int) {
 	return
 }
 
+//
+// Take an int representation and return a big endian integer.
+//
 func IntegerBytes(value int) (number []byte) {
 	number = make([]byte, INTEGER_SIZE)
 	binary.BigEndian.PutUint64(number, uint64(value))
