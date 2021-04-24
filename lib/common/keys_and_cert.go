@@ -68,7 +68,16 @@ type KeysAndCertInterface interface {
 type KeysAndCert struct {
 	crypto.SigningPublicKey
 	crypto.PublicKey
-	Certificate
+	CertificateInterface
+}
+
+func (keys_and_cert KeysAndCert) Bytes() (bytes []byte) { //, err error) {
+	elg_key := keys_and_cert.PublicKey.(crypto.ElgPublicKey)
+	dsa_key := keys_and_cert.SigningPublicKey.(crypto.DSAPublicKey)
+	bytes = append(bytes, dsa_key[:]...)
+	bytes = append(bytes, elg_key[:]...)
+	bytes = append(bytes, keys_and_cert.CertificateInterface.Cert()...)
+	return
 }
 
 //
@@ -113,12 +122,12 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 // Return the Certificate contained in the KeysAndCert and any errors encountered while parsing the
 // KeysAndCert or Certificate.
 //
-func (keys_and_cert KeysAndCert) GetCertificate() (cert Certificate, err error) {
-	_, err = keys_and_cert.Certificate.Type()
+func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, err error) {
+	_, err = keys_and_cert.CertificateInterface.Type()
 	if err != nil {
 		return
 	}
-	cert = keys_and_cert.Certificate
+	cert = keys_and_cert.CertificateInterface
 	return
 }
 
@@ -142,15 +151,14 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	if err != nil {
 		return
 	}
-	cert, _ = keys_and_cert.GetCertificate()
 	spk, pk, remainder, err := ReadKeys(data, cert)
 	if err != nil {
 		return
 	}
 	keys_and_cert = KeysAndCert{
-		SigningPublicKey: spk,
-		PublicKey:        pk,
-		Certificate:      cert,
+		SigningPublicKey:     spk,
+		PublicKey:            pk,
+		CertificateInterface: cert,
 	}
 	return
 }
@@ -221,7 +229,7 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 			spk = dsa_pk
 		}
 	}
-	cert_len, cert_len_err := cert.Length()
+	cert_len, err := cert.Length()
 	if cert_len == 0 {
 		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
 		return

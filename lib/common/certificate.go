@@ -51,6 +51,7 @@ type CertificateInterface interface {
 	Length() (length int, err error)
 	Data() (data []byte, err error)
 	Type() (cert_type int, err error)
+	SignatureSize() (size int)
 }
 
 type Certificate struct {
@@ -60,6 +61,10 @@ type Certificate struct {
 }
 
 var ci CertificateInterface = &Certificate{}
+
+func (certificate Certificate) SignatureSize() (size int) {
+	return 40
+}
 
 func (certificate Certificate) Cert() []byte {
 	var ret []byte

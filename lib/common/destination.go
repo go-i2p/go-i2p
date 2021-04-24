@@ -31,7 +31,7 @@ func (destination Destination) SigningPublicKey() (crypto.SigningPublicKey, erro
 	return destination.KeysAndCert.GetSigningPublicKey()
 }
 
-func (destination Destination) Certificate() (Certificate, error) {
+func (destination Destination) Certificate() (CertificateInterface, error) {
 	return destination.KeysAndCert.GetCertificate()
 }
 

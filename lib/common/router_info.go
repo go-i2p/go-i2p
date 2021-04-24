@@ -97,7 +97,7 @@ func (router_info RouterInfo) IdentHash() (h Hash, err error) {
 	var ri RouterIdentity
 	ri, err = router_info.RouterIdentity()
 	if err == nil {
-		h = HashData(ri)
+		h = HashData(ri.Bytes())
 	}
 	return
 }
@@ -210,7 +210,7 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 	head := router_info.optionsLocation()
 	size := head + router_info.optionsSize()
 	ident, _ := router_info.RouterIdentity()
-	keyCert := KeyCertificate(ident)
+	keyCert := ident.CertificateInterface //KeyCertificate(ident)
 	sigSize := keyCert.SignatureSize()
 	signature = Signature(router_info[size : size+sigSize])
 	return
@@ -224,7 +224,7 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 	if err != nil {
 		return
 	}
-	location += len(data)
+	location += len(data.Bytes())
 
 	remainder_len := len(remainder)
 	if remainder_len < 9 {

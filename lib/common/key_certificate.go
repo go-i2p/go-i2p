@@ -75,6 +75,7 @@ const (
 )
 
 type KeyCertificate struct {
+	Certificate
 	PKType   int
 	PKExtra  []byte
 	SPKType  int
@@ -86,7 +87,7 @@ type KeyCertificate struct {
 //
 func (key_certificate KeyCertificate) Data() ([]byte, error) {
 	var r []byte
-
+	r = append(r, key_certificate.Certificate.Cert()...)
 	pk := IntegerBytes(key_certificate.PKType)
 	r = append(r, pk...)
 	spk := IntegerBytes(key_certificate.SPKType)
@@ -225,6 +226,11 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 // Read a KeyCertificate from a slice of bytes
 //
 func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error) {
+	cert, data, err := ReadCertificate(data)
+	if err != nil {
+		return
+	}
+	key_certificate.Certificate = cert
 	data_len := len(data)
 	if data_len < 2 {
 		log.WithFields(log.Fields{
