@@ -44,9 +44,9 @@ type LeaseInterface interface {
 }
 
 type Lease struct {
-	LeaseHash   Hash //[LEASE_HASH_SIZE]byte
-	TunnelIdent int  //[LEASE_TUNNEL_ID_SIZE]byte
-	TunnelDate  Date //[LEASE_TUNNEL_DATE_SIZE]byte
+	LeaseHash   Hash
+	TunnelIdent int
+	TunnelDate  Date
 } //[LEASE_SIZE]byte
 
 var li LeaseInterface = &Lease{}

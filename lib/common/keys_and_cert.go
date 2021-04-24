@@ -155,7 +155,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	return
 }
 
-func ReadKeys(data []byte, cert Certificate) (spk crypto.SigningPublicKey, pk crypto.PublicKey, remainder []byte, err error) {
+func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicKey, pk crypto.PublicKey, remainder []byte, err error) {
 	data_len := len(data)
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
@@ -167,7 +167,7 @@ func ReadKeys(data []byte, cert Certificate) (spk crypto.SigningPublicKey, pk cr
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
-	if data_len == 0 {
+	if cert == nil {
 		// No Certificate is present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
 		// PublicKey space as ElgPublicKey.
 		var elg_key crypto.ElgPublicKey

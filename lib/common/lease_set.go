@@ -93,12 +93,25 @@ const (
 	LEASE_SET_SIG_SIZE    = 40
 )
 
+type LeaseSetInterface interface {
+	GetPublicKey() (public_key crypto.ElgPublicKey, err error)
+	GetSigningKey() (signing_public_key crypto.SigningPublicKey, err error)
+	/*	LeaseCount() (count int, err error)
+		Leases() (leases []Lease, err error)
+		Signature() (signature Signature, err error)
+		Verify() error
+		NewestExpiration() (oldest Date, err error)
+		OldestExpiration() (earliest Date, err error)*/
+}
+
 type LeaseSet struct {
 	Destination
 	crypto.SigningPublicKey
-	crypto.PublicKey
+	crypto.ElgPublicKey
 	LeaseList []Lease
 }
+
+var lsi LeaseSetInterface = &LeaseSet{}
 
 //
 // Read a Destination from the LeaseSet.
@@ -115,81 +128,37 @@ func (lease_set LeaseSet) GetDestination() (destination Destination, err error) 
 //
 // Return the PublicKey in this LeaseSet and any errors ancountered parsing the LeaseSet.
 //
-/*func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
-	_, remainder, err := ReadKeysAndCert(lease_set)
-	remainder_len := len(remainder)
-	if remainder_len < LEASE_SET_PUBKEY_SIZE {
+func (lease_set LeaseSet) GetPublicKey() (public_key crypto.ElgPublicKey, err error) {
+	if lease_set.PublicKey == nil {
 		log.WithFields(log.Fields{
-			"at":           "(LeaseSet) PublicKey",
-			"data_len":     remainder_len,
-			"required_len": LEASE_SET_PUBKEY_SIZE,
-			"reason":       "not enough data",
+			"at":     "(LeaseSet) PublicKey",
+			"public": lease_set.PublicKey,
+			"reason": "not enough data",
 		}).Error("error parsing public key")
 		err = errors.New("error parsing public key: not enough data")
-		copy(public_key[:], remainder)
 		return
 	}
-	copy(public_key[:], remainder[:LEASE_SET_PUBKEY_SIZE])
+	public_key = lease_set.ElgPublicKey
 	return
-}*/
+}
 
 //
 // Return the SigningPublicKey, as specified in the LeaseSet's Destination's Key Certificate if
 // present, or a legacy DSA key.
 //
-
-/*func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
-	destination, err := lease_set.GetDestination()
-	if err != nil {
-		return
-	}
-	offset := len(destination) + LEASE_SET_PUBKEY_SIZE
-	cert, err := destination.Certificate()
-	if err != nil {
-		return
-	}
-	cert_len, err := cert.Length()
-	if err != nil {
-		return
-	}
-	lease_set_len := len(lease_set)
-	if lease_set_len < offset+LEASE_SET_SPK_SIZE {
+func (lease_set LeaseSet) GetSigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
+	if lease_set.SigningPublicKey == nil {
 		log.WithFields(log.Fields{
-			"at":           "(LeaseSet) SigningKey",
-			"data_len":     lease_set_len,
-			"required_len": offset + LEASE_SET_SPK_SIZE,
-			"reason":       "not enough data",
+			"at":     "(LeaseSet) SigningKey",
+			"public": lease_set.SigningPublicKey,
+			"reason": "not enough data",
 		}).Error("error parsing signing public key")
 		err = errors.New("error parsing signing public key: not enough data")
 		return
 	}
-	if cert_len == 0 {
-		// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-		var dsa_pk crypto.DSAPublicKey
-		copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
-		signing_public_key = dsa_pk
-	} else {
-		// A Certificate is present in this LeaseSet's Destination
-		cert_type, _ := cert.Type()
-		if cert_type == CERT_KEY {
-			// This LeaseSet's Destination's Certificate is a Key Certificate,
-			// create the signing publickey key using any data that might be
-			// contained in the key certificate.
-			signing_public_key, err = KeyCertificate(cert).ConstructSigningPublicKey(
-				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
-			)
-		} else {
-			// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
-			// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-			var dsa_pk crypto.DSAPublicKey
-			copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
-			signing_public_key = dsa_pk
-		}
-
-	}
+	signing_public_key = lease_set.SigningPublicKey
 	return
-}*/
+}
 
 //
 // Return the number of Leases specified by the LeaseCount value in this LeaseSet.
@@ -363,5 +332,16 @@ func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error)
 		return
 	}
 	lease_set.Destination = destination
+	spk, pk, remainder, err := ReadKeys(remainder, nil)
+	if err != nil {
+		return
+	}
+	lease_set.SigningPublicKey = spk
+	switch pk.(type) {
+	case crypto.ElgPublicKey:
+		lease_set.ElgPublicKey = pk.(crypto.ElgPublicKey)
+	default:
+		err = errors.New("LeaseSet1 uses Elgamal public keys.")
+	}
 	return
 }

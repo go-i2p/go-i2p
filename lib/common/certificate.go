@@ -50,6 +50,7 @@ type CertificateInterface interface {
 	Cert() []byte
 	Length() (length int, err error)
 	Data() (data []byte, err error)
+	Type() (cert_type int, err error)
 }
 
 type Certificate struct {
