@@ -69,8 +69,13 @@ func (certificate Certificate) SignatureSize() (size int) {
 func (certificate Certificate) Cert() []byte {
 	var ret []byte
 	ret = append(ret, IntegerBytes(certificate.CertType)...)
-	ret = append(ret, LengthBytes(certificate.CertLen)...)
-	ret = append(ret, certificate.CertBytes[:certificate.CertLen]...)
+	data, _ := certificate.Data()
+	if certificate.CertLen != 0 && len(data) != 0 {
+		ret = append(ret, LengthBytes(certificate.CertLen)...)
+		ret = append(ret, data...)
+	} else {
+		ret = append(ret, IntegerBytes(certificate.CertLen)...)
+	}
 	return ret
 }
 
