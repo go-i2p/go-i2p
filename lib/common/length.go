@@ -8,7 +8,6 @@ Accurate for version 0.9.24
 
 import (
 	"encoding/binary"
-	"log"
 )
 
 //
@@ -44,10 +43,8 @@ func LengthBytes(value int) (number []byte) {
 
 	if len(onumber[index:]) == 1 {
 		index--
-		log.Println("TEST", len(number))
 	}
 	number = onumber[index:]
 
-	log.Println("TEST", number, len(number))
 	return
 }

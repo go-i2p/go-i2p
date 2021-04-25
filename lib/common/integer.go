@@ -8,7 +8,6 @@ Accurate for version 0.9.24
 
 import (
 	"encoding/binary"
-	"log"
 )
 
 // Total byte length of an I2P integer
@@ -49,6 +48,5 @@ func IntegerBytes(value int) (number []byte) {
 
 	number = onumber[index:]
 
-	log.Println("TEST", number, len(number))
 	return
 }
