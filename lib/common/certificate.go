@@ -115,7 +115,6 @@ func (certificate Certificate) Length() (length int, err error) {
 			"reason":                    "certificate contains data beyond length",
 		}).Warn("certificate format warning")
 		err = errors.New("certificate parsing warning: certificate contains data beyond length")
-		//length = certificate.CertLen
 		length = certificate.CertLen
 		return
 	}
