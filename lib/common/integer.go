@@ -8,6 +8,7 @@ Accurate for version 0.9.24
 
 import (
 	"encoding/binary"
+	"log"
 )
 
 // Total byte length of an I2P integer
@@ -35,7 +36,19 @@ func Integer(number []byte) (value int) {
 // Take an int representation and return a big endian integer.
 //
 func IntegerBytes(value int) (number []byte) {
-	number = make([]byte, INTEGER_SIZE)
-	binary.BigEndian.PutUint64(number, uint64(value))
+	onumber := make([]byte, INTEGER_SIZE)
+	//	var number []byte
+	binary.BigEndian.PutUint64(onumber, uint64(value))
+	var index int
+	for i, j := range onumber {
+		index = i
+		if j != 0 {
+			break
+		}
+	}
+
+	number = onumber[index:]
+
+	log.Println("TEST", number, len(number))
 	return
 }

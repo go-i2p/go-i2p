@@ -35,6 +35,9 @@ func TestCertificateLengthErrWhenTooShort(t *testing.T) {
 
 	bytes := []byte{0x03, 0x01}
 	certificate, _, err := ReadCertificate(bytes)
+	if assert.NotNil(err) {
+		assert.Equal("error parsing certificate length: certificate is too short", err.Error(), "correct error message should be returned")
+	}
 	cert_len, err := certificate.Length()
 
 	assert.Equal(cert_len, 0, "certificate.Length() did not return zero length for missing length data")
@@ -61,12 +64,14 @@ func TestCertificateDataWhenCorrectSize(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x01, 0xaa}
 	certificate, _, err := ReadCertificate(bytes)
-	cert_data, err := certificate.Data()
+	assert.Nil(err, "certificate.Data() returned error with valid data")
+	cert_len, err := certificate.Length()
 
 	assert.Nil(err, "certificate.Data() returned error with valid data")
-	cert_len := len(cert_data)
+
 	assert.Equal(cert_len, 1, "certificate.Length() did not return indicated length when data was valid")
-	assert.Equal(170, int(cert_data[0]), "certificate.Data() returned incorrect data")
+	data := Integer(certificate.CertBytes)
+	assert.Equal(170, data, "certificate.Data() returned incorrect data")
 }
 
 func TestCertificateDataWhenTooLong(t *testing.T) {
@@ -74,14 +79,15 @@ func TestCertificateDataWhenTooLong(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff, 0xaa, 0xaa}
 	certificate, _, err := ReadCertificate(bytes)
-	cert_data := certificate.Cert() //, err := certificate.Data()
+
+	cert_len, err := certificate.Length()
 
 	if assert.NotNil(err) {
 		assert.Equal("certificate parsing warning: certificate contains data beyond length", err.Error(), "correct error message should be returned")
 	}
-	cert_len := len(cert_data)
+
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was too long")
-	if cert_data[0] != 0xff || cert_data[1] != 0xff {
+	if certificate.CertBytes[0] != 0xff || certificate.CertBytes[1] != 0xff {
 		t.Fatal("certificate.Data() returned incorrect data when data was too long")
 	}
 }
