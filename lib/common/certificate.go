@@ -79,11 +79,7 @@ func (certificate Certificate) Cert() []byte {
 // and an error if the certificate is shorter than the minimum certificate size.
 //
 func (certificate Certificate) Type() (cert_type int, err error) {
-	_, err = certificate.Type()
-	if err != nil {
-		return
-	}
-	return
+	return certificate.CertType, nil
 }
 
 //
@@ -92,7 +88,16 @@ func (certificate Certificate) Type() (cert_type int, err error) {
 // match the provided data.
 //
 func (certificate Certificate) Length() (length int, err error) {
-	_, err = certificate.Type()
+	length = len(certificate.Cert())
+	if length < CERT_MIN_SIZE {
+		log.WithFields(log.Fields{
+			"at":                       "(Certificate) Length",
+			"certificate_bytes_length": length,
+			"reason":                   "data shorter than expected",
+		}).Warn("certificate format warning")
+		err = errors.New("certificate parsing warning: certificate data shorter than expected")
+		return
+	}
 	if err != nil {
 		return
 	}
@@ -125,44 +130,51 @@ func (certificate Certificate) Data() (data []byte, err error) {
 // Read a Certificate from a slice of bytes, returning any extra data on the end of the slice
 // and any errors if a valid Certificate could not be read.
 //
-func ReadCertificate(data []byte) (Certificate, []byte, error) {
-	var remainder []byte
-	var err error
-	var certificate Certificate //= Certificate(data)
-	certificate.CertType = Integer([]byte{data[0]})
+func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
+	certificate.CertType = Integer(data[0:1])
 	cert_len := len(data)
-	_, err = certificate.Type()
-	if err != nil {
-		return certificate, nil, err
-	}
-	length := Integer(data[1:CERT_MIN_SIZE])
-	inferred_len := length + CERT_MIN_SIZE
-	if inferred_len > cert_len {
+	if cert_len < CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) Length",
 			"certificate_bytes_length": cert_len,
-			"certificate_length_field": length,
-			"expected_bytes_length":    inferred_len,
-			"reason":                   "data shorter than specified",
+			"reason":                   "data shorter than expected",
 		}).Warn("certificate format warning")
-		err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
-	} else if cert_len > inferred_len {
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) Length",
-			"certificate_bytes_length": cert_len,
-			"certificate_length_field": length,
-			"expected_bytes_length":    inferred_len,
-			"reason":                   "data longer than expected",
-		}).Warn("certificate format warning")
-		err = errors.New("certificate parsing warning: certificate contains data beyond length")
+		err = errors.New("certificate parsing warning: certificate data shorter than expected")
+		return
+	} else {
+		_, err = certificate.Type()
+		if err != nil {
+			return
+		}
+		length := Integer(data[1:CERT_MIN_SIZE])
+		inferred_len := length + CERT_MIN_SIZE
+		if inferred_len > cert_len {
+			log.WithFields(log.Fields{
+				"at":                       "(Certificate) Length",
+				"certificate_bytes_length": cert_len,
+				"certificate_length_field": length,
+				"expected_bytes_length":    inferred_len,
+				"reason":                   "data shorter than specified",
+			}).Warn("certificate format warning")
+			err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
+		} else if cert_len > inferred_len {
+			log.WithFields(log.Fields{
+				"at":                       "(Certificate) Length",
+				"certificate_bytes_length": cert_len,
+				"certificate_length_field": length,
+				"expected_bytes_length":    inferred_len,
+				"reason":                   "data longer than expected",
+			}).Warn("certificate format warning")
+			err = errors.New("certificate parsing warning: certificate contains data beyond length")
+		}
+		certificate.CertLen = length
+		certificate.CertBytes = data[CERT_MIN_SIZE:]
+		length, err = certificate.Length()
+		if err != nil && err.Error() == "certificate parsing warning: certificate contains data beyond length" {
+			certificate.CertBytes = data[:length+CERT_MIN_SIZE]
+			remainder = data[length+CERT_MIN_SIZE:]
+			err = nil
+		}
 	}
-	certificate.CertLen = length
-	certificate.CertBytes = data[CERT_MIN_SIZE:]
-	length, err = certificate.Length()
-	if err != nil && err.Error() == "certificate parsing warning: certificate contains data beyond length" {
-		certificate.CertBytes = data[:length+CERT_MIN_SIZE]
-		remainder = data[length+CERT_MIN_SIZE:]
-		err = nil
-	}
-	return certificate, remainder, err
+	return
 }
