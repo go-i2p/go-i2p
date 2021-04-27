@@ -8,6 +8,13 @@ go-i2p is in early development.
 
 ### Implemented Features
 
+- Clients
+  - [ ] Datagrams
+  - [ ] I2CP
+  - [ ] Message routing
+  - [ ] SAM
+  - [ ] Streaming
+  - [ ] Tunnel Manager
 - Cryptographic primitives
   - Signing
     - [ ] ECDSA_SHA256_P256
@@ -23,8 +30,19 @@ go-i2p is in early development.
     - [ ] RSA_SHA384_3072
     - [ ] RSA_SHA512_4096
     - [ ] Ed25519
+    - [ ] Red25519
   - [ ] ElGamal
   - [ ] AES256
+  - [ ] X25519
+  - [ ] ChaCha20/Poly1305
+  - [ ] Elligator2
+  - [ ] HKDF
+  - [ ] HMAC
+  - [ ] Noise subsystem
+- End-to-End Crypto
+  - [ ] Garlic messages
+  - [ ] ElGamal/AES+SessionTag
+  - [ ] Ratchet/X25519
 - I2NP
   - [ ] Message parsing
   - [ ] Message handling
@@ -37,17 +55,26 @@ go-i2p is in early development.
   - [ ] Exploration
   - [ ] Publishing
   - [ ] Floodfill
+  - [ ] LS2 and Encrypted Leasesets
 - Transports
   - [ ] Transport manager
-  - NTCP
-    - [ ] Handshake
-    - [ ] Session tracking
-    - [ ] Automatic session creation
   - NTCP2
     - [ ] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
-  - [ ] SSU
+  - SSU
+    - [ ] Handshake
+    - [ ] Session tracking
+    - [ ] Automatic session creation
+    - [ ] Peer Tests
+    - [ ] Introducers
+- Tunnels
+    - [ ] Building
+    - [ ] Build Message Crypto (ElGamal)
+    - [ ] Build Message Crypto (ECIES)
+    - [ ] Participating
+    - [ ] Tunnel Message Crypto
+    - [ ] Tunnel Message Fragmentation/Reassembly
 
 
 ## Contributing
