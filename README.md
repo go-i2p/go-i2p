@@ -27,10 +27,11 @@ promise.
 ### Implemented Features
 
 As the application is restructured and moved away from representing I2P data
-structures as byte slices, this chart will be filled in. Currently, much of
-this is partially implemented in byte-slice versions and partially implemented
-as Go Structs. Very little of it will work until it's all moved to Go Structs
-where appropriate. Most of this will happen in /lib/common.
+structures as byte slices, this chart will be filled in, when the tests pass,
+the item will be checked off. Currently, much of this is partially implemented
+in byte-slice versions and partially implemented as Go Structs. Very little of
+it will work until it's all moved to Go Structs where appropriate. Most of
+this will happen in /lib/common.
 
 - Cryptographic primitives
   - Signing
@@ -47,8 +48,38 @@ where appropriate. Most of this will happen in /lib/common.
     - [ ] RSA_SHA384_3072
     - [ ] RSA_SHA512_4096
     - [ ] Ed25519
-  - [ ] ElGamal
-  - [ ] AES256
+  - [x] ElGamal
+  - [x] AES256
+- Common Structures
+  - Common Type Specification
+    - [x] Integer
+    - [x] Date
+    - [x] String
+    - [x] PublicKey* As interface in lib/crypto
+    - [x] PrivateKey* As interface in lib/crypto
+    - [ ] SessionKey
+    - [ ] SigningPublicKey
+    - [ ] Signature
+    - [x] Hash
+    - [ ] Session Tag
+    - [ ] Tunnel ID
+    - [x] Certificate
+    - [ ] Mapping
+  - Common Structure Specification
+    - [ ] KeysAndCert
+    - [ ] RouterIdentity
+    - [ ] Destination
+    - [ ] Lease
+    - [ ] LeaseSet
+    - [ ] Lease2
+    - [ ] OfflineSigntature
+    - [ ] LeaseSet2Header
+    - [ ] LeaseSet2
+    - [ ] MetaLease
+    - [ ] MetaLeaseSet
+    - [ ] EncryptedLeaseSet
+    - [ ] RouterAddress
+    - [ ] RouterInfo
 - I2NP
   - [ ] Message parsing
   - [ ] Message handling
