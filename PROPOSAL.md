@@ -84,7 +84,7 @@ interface and wrapping existing connection types.
 Besides having the most extensive SAM and I2CP libraries available in a Non-Java
 language, go has several applications which could improve I2P's ecosystem.
 
-##### Extant
+##### Extant, applications that have users
 
  - [XD](https://github.com/majestrate/XD) - Simple bittorrent client with a WebUI
   and a custom RPC interface
@@ -109,7 +109,7 @@ language, go has several applications which could improve I2P's ecosystem.
 
 ... Many, many others but these are the most useful.
 
-##### In Development
+##### Partial/In Development
 
  - [Brook](https;//github.com/txthinking/brook) - Selfhosting multi-transport VPN and
   transparent proxy with Android support.
@@ -120,6 +120,9 @@ language, go has several applications which could improve I2P's ecosystem.
  - [gophertunnel/gopherhole](https://i2pgit.org/idk/gophertunnel) - Are a simple Gopher
   client and server in pure Go which automatically configure themselves with I2P. Also
   has the ability to proxy Gopher content into the I2P Web.
+ - [darkssh/darksshd](https://github.com/eyedeekay/darkssh) - SSH client and server
+  with transparent support for I2P and Tor addresses, making MITM attacks based on
+  social-engineering SSH clients into connecting to malicious servers impossible.
  - [samsocks](https://github.com/eyedeekay/samsocks) - Transparent socksifier with UDP
   support, built on SAM.
  - [i2pbrowser](https://github.com/eyedeekay/i2pbrowser) - Not pure go, this is
@@ -138,6 +141,9 @@ language, go has several applications which could improve I2P's ecosystem.
   comparable to BiglyBT.
  - [Gitea](https://github.com/gitea/gitea) - Gitea is a Git web server similar to Gitea
   but in most ways simpler to self-host.
+ - [Syncthing](https://github.com/syncthing/syncthing) - Syncthing is a continuous,
+  multi-device file synchronization tool which combines concepts from Git with Bittorrent
+  downloads to provide fast, decentralized file synchronization.
  - [webrtc](https://github.com/pion/webrtc) - Go has the only implementation of the WebRTC
   stack in a memory-safe language. `pion/webrtc` can be used with alternate transports and
   listeners as is standard in Go so it lends itself to adapting WebRTC applications to Go.
