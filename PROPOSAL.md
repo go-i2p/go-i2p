@@ -106,6 +106,8 @@ language, go has several applications which could improve I2P's ecosystem.
   as a web seed.
  - [reseed-tools](https://i2pgit.org/idk/reseed-tools) Reseed server and library for
   handling `.su3` files in Go.
+ - [syndie](https://github.com/kpetku/syndie-core) Maintained implementation of the
+  Syndie message board system in Go.
 
 ... Many, many others but these are the most useful.
 
