@@ -1,8 +1,7 @@
 FROM golang
 
 RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install libsodium-dev -y
+    apt-get upgrade -y
 
 RUN go get github.com/dvyukov/go-fuzz/go-fuzz
 RUN go get github.com/dvyukov/go-fuzz/go-fuzz-build

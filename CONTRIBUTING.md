@@ -9,7 +9,6 @@ Install required dependencies
 This example assumes Ubuntu 16.04
 
 ```sh
-sudo apt-get install pkg-config libsodium-dev
 go get github.com/hkparker/go-i2p
 go get github.com/Sirupsen/logrus
 go get github.com/stretchr/testify/assert
