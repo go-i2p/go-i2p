@@ -62,7 +62,7 @@ Interest in I2P transports has been expressed to me before, and I've enabled
 them using SAM in the past. Interestingly, however, IPFS has it's own pluggable
 peer-discovery methods as well, inclusing the "Hashmatter" anonymous DHT and
 in fact an IPFS network could hypothetically use a NetDB-like structure for
-anonymous peer discovery and I2P transports.
+anonymous peer discovery and also have I2P transports(related or unrelated).
 
 Deeper into the router, this approach yields possibilities for experimenting
 with other types of transports, in particular transports which imitate other
@@ -115,10 +115,9 @@ language, go has several applications which could improve I2P's ecosystem.
 
  - [Brook](https;//github.com/txthinking/brook) - Selfhosting multi-transport VPN and
   transparent proxy with Android support.
- - [bt](https://github.com/xgfone/bt) - a very simple, readable, and safe pure-Go 
-  bittorent library written in pure-go with a similar set of features to I2PSnark.
-  Although `anacrolix/torrent` supports more features, `xgfone/bt` is slightly
-  easier to work with when cross-compiling.
+ - [bt](https://github.com/xgfone/bt) - a very simple, readable, and safe pure-Go
+  bittorent library with a similar set of features to I2PSnark.  Although `anacrolix/torrent`
+  supports more features, `xgfone/bt` is slightly easier to work with when cross-compiling.
  - [gophertunnel/gopherhole](https://i2pgit.org/idk/gophertunnel) - Are a simple Gopher
   client and server in pure Go which automatically configure themselves with I2P. Also
   has the ability to proxy Gopher content into the I2P Web.
