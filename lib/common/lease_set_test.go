@@ -9,7 +9,8 @@ import (
 func buildDestination() RouterIdentity {
 	router_ident_data := make([]byte, 128+256)
 	router_ident_data = append(router_ident_data, []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}...)
-	return RouterIdentity(router_ident_data)
+	rri, _, _ := ReadRouterIdentity(router_ident_data)
+	return rri
 }
 
 func buildPublicKey() []byte {
@@ -54,7 +55,7 @@ func buildSignature(size int) []byte {
 
 func buildFullLeaseSet(n int) LeaseSet {
 	lease_set_data := make([]byte, 0)
-	lease_set_data = append(lease_set_data, buildDestination()...)
+	lease_set_data = append(lease_set_data, buildDestination().Bytes()...)
 	lease_set_data = append(lease_set_data, buildPublicKey()...)
 	lease_set_data = append(lease_set_data, buildSigningKey()...)
 	lease_set_data = append(lease_set_data, byte(n))

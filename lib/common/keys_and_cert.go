@@ -63,6 +63,7 @@ type KeysAndCertInterface interface {
 	GetPublicKey() (key crypto.PublicKey, err error)
 	GetSigningPublicKey() (signing_public_key crypto.SigningPublicKey, err error)
 	GetCertificate() (cert Certificate, err error)
+	Bytes() (bytes []byte)
 }
 
 type KeysAndCert struct {
