@@ -96,8 +96,9 @@ const (
 type LeaseSetInterface interface {
 	GetPublicKey() (public_key crypto.ElgPublicKey, err error)
 	GetSigningKey() (signing_public_key crypto.SigningPublicKey, err error)
+	Leases() (leases []Lease, err error)
 	/*	LeaseCount() (count int, err error)
-		Leases() (leases []Lease, err error)
+
 		Signature() (signature Signature, err error)
 		Verify() error
 		NewestExpiration() (oldest Date, err error)
@@ -160,70 +161,27 @@ func (lease_set LeaseSet) GetSigningKey() (signing_public_key crypto.SigningPubl
 	return
 }
 
+func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
+	if lease_set.Leases == nil {
+		log.WithFields(log.Fields{
+			"at":     "(LeaseSet) Leases",
+			"public": lease_set.Leases,
+			"reason": "not enough data",
+		}).Error("error parsing signing leases")
+		err = errors.New("error parsing leases")
+		return
+	}
+	leases = lease_set.LeaseList
+	return
+}
+
 //
 // Return the number of Leases specified by the LeaseCount value in this LeaseSet.
 //
-/*func (lease_set LeaseSet) LeaseCount() (count int, err error) {
-	_, remainder, err := ReadKeysAndCert(lease_set)
-	if err != nil {
-		return
-	}
-	remainder_len := len(remainder)
-	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
-		log.WithFields(log.Fields{
-			"at":           "(LeaseSet) LeaseCount",
-			"data_len":     remainder_len,
-			"required_len": LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1,
-			"reason":       "not enough data",
-		}).Error("error parsing lease count")
-		err = errors.New("error parsing lease count: not enough data")
-		return
-	}
-	count = Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
-	if count > 16 {
-		log.WithFields(log.Fields{
-			"at":          "(LeaseSet) LeaseCount",
-			"lease_count": count,
-			"reason":      "more than 16 leases",
-		}).Warn("invalid lease set")
-		err = errors.New("invalid lease set: more than 16 leases")
-	}
+func (lease_set LeaseSet) LeaseCount() (count int, err error) {
+	count = len(lease_set.LeaseList)
 	return
-}*/
-
-//
-// Read the Leases in this LeaseSet, returning a partial set if there is insufficient data.
-//
-/*func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
-	destination, err := lease_set.Destination()
-	if err != nil {
-		return
-	}
-	offset := len(destination) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
-	count, err := lease_set.LeaseCount()
-	if err != nil {
-		return
-	}
-	for i := 0; i < count; i++ {
-		start := offset + (i * LEASE_SIZE)
-		end := start + LEASE_SIZE
-		lease_set_len := len(lease_set)
-		if lease_set_len < end {
-			log.WithFields(log.Fields{
-				"at":           "(LeaseSet) Leases",
-				"data_len":     lease_set_len,
-				"required_len": end,
-				"reason":       "some leases missing",
-			}).Error("error parsnig lease set")
-			err = errors.New("error parsing lease set: some leases missing")
-			return
-		}
-		var lease Lease
-		copy(lease.Bytes(), lease_set[start:end])
-		leases = append(leases, lease)
-	}
-	return
-}*/
+}
 
 //
 // Return the Signature data for the LeaseSet, as specified in the Destination's
@@ -326,12 +284,75 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 	return
 }*/
 
+func ReadLeaseCount(bytes []byte) (count int, err error) {
+	_, remainder, err := ReadKeysAndCert(bytes)
+	if err != nil {
+		return
+	}
+	remainder_len := len(remainder)
+	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
+		log.WithFields(log.Fields{
+			"at":           "(LeaseSet) LeaseCount",
+			"data_len":     remainder_len,
+			"required_len": LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1,
+			"reason":       "not enough data",
+		}).Error("error parsing lease count")
+		err = errors.New("error parsing lease count: not enough data")
+		return
+	}
+	count = Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	if count > 16 {
+		log.WithFields(log.Fields{
+			"at":          "(LeaseSet) LeaseCount",
+			"lease_count": count,
+			"reason":      "more than 16 leases",
+		}).Warn("invalid lease set")
+		err = errors.New("invalid lease set: more than 16 leases")
+	}
+	return
+}
+
+//
+// Read the Leases in this LeaseSet, returning a partial set if there is insufficient data.
+//
+func ReadLeases(bytes []byte, offset int) (leases []Lease, err error) {
+	count, err := ReadLeaseCount(bytes)
+	if err != nil {
+		return
+	}
+	for i := 0; i < count; i++ {
+		start := offset + (i * LEASE_SIZE)
+		end := start + LEASE_SIZE
+		lease_set_len := len(bytes)
+		if lease_set_len < end {
+			log.WithFields(log.Fields{
+				"at":           "(LeaseSet) Leases",
+				"data_len":     lease_set_len,
+				"required_len": end,
+				"reason":       "some leases missing",
+			}).Error("error parsnig lease set")
+			err = errors.New("error parsing lease set: some leases missing")
+			return
+		}
+		var lease Lease
+		copy(lease.Bytes(), bytes[start:end])
+		leases = append(leases, lease)
+	}
+	return
+}
+
 func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error) {
 	destination, remainder, err := ReadDestination(data)
 	if err != nil {
 		return
 	}
 	lease_set.Destination = destination
+	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
+	leases, err := ReadLeases(data, offset)
+	if err != nil {
+		return
+	}
+	lease_set.LeaseList = leases
 	spk, pk, remainder, err := ReadKeys(remainder, nil)
 	if err != nil {
 		return

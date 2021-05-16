@@ -61,14 +61,15 @@ func buildFullLeaseSet(n int) LeaseSet {
 	lease_set_data = append(lease_set_data, byte(n))
 	lease_set_data = append(lease_set_data, buildLease(n)...)
 	lease_set_data = append(lease_set_data, buildSignature(64)...)
-	return LeaseSet(lease_set_data)
+	leaseSet, _, _ := ReadLeaseSet(lease_set_data)
+	return leaseSet
 }
 
 func TestDestinationIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	lease_set := buildFullLeaseSet(1)
-	dest, err := lease_set.Destination()
+	dest, err := lease_set.GetDestination()
 	assert.Nil(err)
 	dest_cert, err := dest.Certificate()
 	assert.Nil(err)
@@ -81,7 +82,7 @@ func TestPublicKeyIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	lease_set := buildFullLeaseSet(1)
-	pk, err := lease_set.PublicKey()
+	pk, err := lease_set.GetPublicKey()
 	if assert.Nil(err) {
 		assert.Equal(
 			0,
@@ -97,7 +98,7 @@ func TestSigningKeyIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	lease_set := buildFullLeaseSet(1)
-	sk, err := lease_set.SigningKey()
+	sk, err := lease_set.GetSigningKey()
 	if assert.Nil(err) {
 		assert.Equal(128, sk.Len())
 	}
