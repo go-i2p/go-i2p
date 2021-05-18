@@ -97,10 +97,10 @@ type LeaseSetInterface interface {
 	GetPublicKey() (public_key crypto.ElgPublicKey, err error)
 	GetSigningKey() (signing_public_key crypto.SigningPublicKey, err error)
 	Leases() (leases []Lease, err error)
-	/*	LeaseCount() (count int, err error)
+	/*	LeaseCount() (count int, err error)*/
 
-		Signature() (signature Signature, err error)
-		Verify() error
+	GetSignature() (signature Signature, err error)
+	/*	Verify() error
 		NewestExpiration() (oldest Date, err error)
 		OldestExpiration() (earliest Date, err error)*/
 }
@@ -187,45 +187,9 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 // Return the Signature data for the LeaseSet, as specified in the Destination's
 // Key Certificate if present or the 40 bytes following the Leases.
 //
-/*func (lease_set LeaseSet) Signature() (signature Signature, err error) {
-	destination, err := lease_set.Destination()
-	if err != nil {
-		return
-	}
-	lease_count, err := lease_set.LeaseCount()
-	if err != nil {
-		return
-	}
-	start := len(destination) +
-		LEASE_SET_PUBKEY_SIZE +
-		LEASE_SET_SPK_SIZE +
-		1 +
-		(LEASE_SIZE * lease_count)
-	cert, err := destination.Certificate()
-	if err != nil {
-		return
-	}
-	cert_type, _ := cert.Type()
-	var end int
-	if cert_type == CERT_KEY {
-		end = start + KeyCertificate(cert).SignatureSize()
-	} else {
-		end = start + LEASE_SET_SIG_SIZE
-	}
-	lease_set_len := len(lease_set)
-	if lease_set_len < end {
-		log.WithFields(log.Fields{
-			"at":           "(LeaseSet) Signature",
-			"data_len":     lease_set_len,
-			"required_len": end,
-			"reason":       "not enough data",
-		}).Error("error parsing signatre")
-		err = errors.New("error parsing signature: not enough data")
-		return
-	}
-	signature = []byte(lease_set[start:end])
+func (lease_set LeaseSet) GetSignature() (signature Signature, err error) {
 	return
-}*/
+}
 
 //
 //
@@ -247,7 +211,7 @@ func (lease_set LeaseSet) Verify() error {
 	//}
 	return nil // verifier.Verify(data, lease_set.Signature())
 }
-
+*/
 //
 // Return the oldest date from all the Leases in the LeaseSet.
 //
@@ -282,14 +246,35 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 		}
 	}
 	return
-}*/
+}
 
-func ReadLeaseCount(bytes []byte) (count int, err error) {
-	_, remainder, err := ReadKeysAndCert(bytes)
-	if err != nil {
+func ReadLeaseSetSignature(bytes []byte, cert CertificateInterface) (signature Signature, remainder []byte, err error) {
+	start := 0
+	cert_type, _ := cert.Type()
+	var end int
+	if cert_type == CERT_KEY {
+		end = start + cert.SignatureSize()
+	} else {
+		end = start + LEASE_SET_SIG_SIZE
+	}
+	bytes_len := len(bytes)
+	if bytes_len < end {
+		log.WithFields(log.Fields{
+			"at":           "(LeaseSet) Signature",
+			"data_len":     bytes_len,
+			"required_len": end,
+			"reason":       "not enough data",
+		}).Error("error parsing signatre")
+		err = errors.New("error parsing signature: not enough data")
+		signature = []byte(bytes[start:bytes_len])
 		return
 	}
-	remainder_len := len(remainder)
+	signature = []byte(bytes[start:end])
+	return
+}
+
+func ReadLeaseCount(bytes []byte) (count int, err error) {
+	remainder_len := len(bytes)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
 		log.WithFields(log.Fields{
 			"at":           "(LeaseSet) LeaseCount",
@@ -300,7 +285,7 @@ func ReadLeaseCount(bytes []byte) (count int, err error) {
 		err = errors.New("error parsing lease count: not enough data")
 		return
 	}
-	count = Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	count = Integer([]byte{bytes[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
 	if count > 16 {
 		log.WithFields(log.Fields{
 			"at":          "(LeaseSet) LeaseCount",
@@ -315,13 +300,13 @@ func ReadLeaseCount(bytes []byte) (count int, err error) {
 //
 // Read the Leases in this LeaseSet, returning a partial set if there is insufficient data.
 //
-func ReadLeases(bytes []byte, offset int) (leases []Lease, err error) {
+func ReadLeases(bytes []byte) (leases []Lease, remainder []byte, err error) {
 	count, err := ReadLeaseCount(bytes)
 	if err != nil {
 		return
 	}
 	for i := 0; i < count; i++ {
-		start := offset + (i * LEASE_SIZE)
+		start := 0 //offset + (i * LEASE_SIZE)
 		end := start + LEASE_SIZE
 		lease_set_len := len(bytes)
 		if lease_set_len < end {
@@ -334,35 +319,32 @@ func ReadLeases(bytes []byte, offset int) (leases []Lease, err error) {
 			err = errors.New("error parsing lease set: some leases missing")
 			return
 		}
-		var lease Lease
-		copy(lease.Bytes(), bytes[start:end])
+		lease, remainder, err := ReadLease(bytes[start:end])
 		leases = append(leases, lease)
 	}
 	return
 }
 
-func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error) {
-	destination, remainder, err := ReadDestination(data)
-	if err != nil {
-		return
-	}
-	lease_set.Destination = destination
-	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
-	leases, err := ReadLeases(data, offset)
-	if err != nil {
-		return
-	}
-	lease_set.LeaseList = leases
-	spk, pk, remainder, err := ReadKeys(remainder, nil)
-	if err != nil {
-		return
-	}
-	lease_set.SigningPublicKey = spk
-	switch pk.(type) {
+func ReadLeaseSetKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicKey,pk crypto.ElgPublicKey, remainder []byte, err error){
+	spk, ppk, remainder, err := ReadKeys(data, cert)
+	switch ppk.(type) {
 	case crypto.ElgPublicKey:
-		lease_set.ElgPublicKey = pk.(crypto.ElgPublicKey)
+		pk = ppk.(crypto.ElgPublicKey)
 	default:
 		err = errors.New("LeaseSet1 uses Elgamal public keys.")
 	}
+	return 
+}
+
+func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error) {
+	destination, remainder, err := ReadDestination(data)
+	lease_set.Destination = destination
+	//offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
+	spk, pk, remainder, err := ReadLeaseSetKeys(remainder, nil)
+	lease_set.SigningPublicKey = spk
+	lease_set.ElgPublicKey = pk
+	leases, remainder, err := ReadLeases(data)
+	lease_set.LeaseList = leases
+
 	return
 }

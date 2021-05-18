@@ -156,7 +156,7 @@ func TestLeasesHaveCorrectData(t *testing.T) {
 					0,
 					bytes.Compare(
 						lease,
-						leases[i][:],
+						leases[i].Bytes()[:],
 					),
 				)
 			}
@@ -168,7 +168,7 @@ func TestSignatureIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	lease_set := buildFullLeaseSet(1)
-	sig, err := lease_set.Signature()
+	sig, err := lease_set.GetSignature()
 	if assert.Nil(err) {
 		assert.Equal(
 			0,

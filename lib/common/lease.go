@@ -1,5 +1,10 @@
 package common
 
+import (
+	"errors"
+	log "github.com/sirupsen/logrus"
+)
+
 /*
 I2P Lease
 https://geti2p.net/spec/common-structures#lease
@@ -83,4 +88,21 @@ func (lease Lease) Bytes() (bytes []byte) {
 	r = append(r, IntegerBytes(lease.TunnelIdent)[:]...)
 	r = append(r, lease.TunnelDate[:]...)
 	return r
+}
+
+func ReadLease(data []byte) (lease Lease, remainder []byte, err error) {
+	if len(data) < LEASE_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "(Lease) ReadLease",
+			"data_len":     len(data),
+			"required_len": "44",
+			"reason":       "lease missing data",
+		}).Error("error parsnig lease")
+		err = errors.New("error parsing lease: lease missing data")
+	}
+	lease.LeaseHash, remainder, err = ReadHash(data)
+	identbytes, remainder, err := ReadIdent(remainder)
+	lease.TunnelIdent = Integer(identbytes[:])
+	lease.TunnelDate, remainder, err = ReadDate(remainder)
+	return
 }
