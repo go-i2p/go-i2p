@@ -325,7 +325,7 @@ func ReadLeases(bytes []byte) (leases []Lease, remainder []byte, err error) {
 	return
 }
 
-func ReadLeaseSetKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicKey,pk crypto.ElgPublicKey, remainder []byte, err error){
+func ReadLeaseSetKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicKey, pk crypto.ElgPublicKey, remainder []byte, err error) {
 	spk, ppk, remainder, err := ReadKeys(data, cert)
 	switch ppk.(type) {
 	case crypto.ElgPublicKey:
@@ -333,7 +333,7 @@ func ReadLeaseSetKeys(data []byte, cert CertificateInterface) (spk crypto.Signin
 	default:
 		err = errors.New("LeaseSet1 uses Elgamal public keys.")
 	}
-	return 
+	return
 }
 
 func ReadLeaseSet(data []byte) (lease_set LeaseSet, remainder []byte, err error) {

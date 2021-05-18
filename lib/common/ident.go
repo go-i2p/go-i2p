@@ -25,7 +25,7 @@ func ReadIdent(data []byte) (h Ident, remainder []byte, err error) {
 		}).Error("ident error")
 		err = errors.New("error reading ident, insufficient length")
 		copy(h[:], data[0:len(data)-1])
-	}else{
+	} else {
 		copy(h[:], data[0:IDENT_SIZE-1])
 		copy(remainder, data[IDENT_SIZE-1:])
 	}

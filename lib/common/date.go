@@ -7,9 +7,9 @@ Accurate for version 0.9.24
 */
 
 import (
-	"time"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type Date [8]byte
@@ -37,7 +37,7 @@ func ReadDate(data []byte) (h Date, remainder []byte, err error) {
 		}).Error("date error")
 		err = errors.New("error reading date, insufficient length")
 		copy(h[:], data[0:len(data)-1])
-	}else{
+	} else {
 		copy(h[:], data[0:DATE_SIZE-1])
 		copy(remainder, data[DATE_SIZE-1:])
 	}

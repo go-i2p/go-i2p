@@ -40,7 +40,7 @@ func ReadHash(data []byte) (h Hash, remainder []byte, err error) {
 		}).Error("hash error")
 		err = errors.New("error reading hash, insufficient length")
 		copy(h[:], data[0:len(data)-1])
-	}else{
+	} else {
 		copy(h[:], data[0:HASH_SIZE-1])
 		copy(remainder, data[HASH_SIZE-1:])
 	}
