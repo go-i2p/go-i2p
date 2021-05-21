@@ -34,7 +34,7 @@ gone dormant. In spite of that considerable lapse in time, the structure is
 a sound, understandable way of laying out a Go project and the extant code is
 usable as the basis for beginning the development of a Go based I2P router.
 It will considerably reduce the amount of work required to create a Go I2P
-router
+router.
 
 ### Why Go Applications?
 
