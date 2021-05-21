@@ -10,7 +10,11 @@ import (
 func buildRouterIdentity() RouterIdentity {
 	router_ident_data := make([]byte, 128+256)
 	router_ident_data = append(router_ident_data, []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}...)
-	return RouterIdentity(router_ident_data)
+	b, _, err := ReadRouterIdentity(router_ident_data)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func buildDate() []byte {
@@ -33,7 +37,7 @@ func buildRouterAddress(transport string) RouterAddress {
 
 func buildFullRouterInfo() RouterInfo {
 	router_info_data := make([]byte, 0)
-	router_info_data = append(router_info_data, buildRouterIdentity()...)
+	router_info_data = append(router_info_data, buildRouterIdentity().Bytes()...)
 	router_info_data = append(router_info_data, buildDate()...)
 	router_info_data = append(router_info_data, 0x01)
 	router_info_data = append(router_info_data, buildRouterAddress("foo")...)
@@ -116,7 +120,7 @@ func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
 	assert := assert.New(t)
 
 	router_info_data := make([]byte, 0)
-	router_info_data = append(router_info_data, buildRouterIdentity()...)
+	router_info_data = append(router_info_data, buildRouterIdentity().Bytes()...)
 	router_info_data = append(router_info_data, buildDate()...)
 	router_info_data = append(router_info_data, 0x03)
 	router_info_data = append(router_info_data, buildRouterAddress("foo0")...)
@@ -184,8 +188,8 @@ func TestRouterIdentityIsCorrect(t *testing.T) {
 	assert.Equal(
 		0,
 		bytes.Compare(
-			[]byte(buildRouterIdentity()),
-			[]byte(router_identity),
+			[]byte(buildRouterIdentity().Bytes()),
+			[]byte(router_identity.Bytes()),
 		),
 	)
 }

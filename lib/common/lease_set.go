@@ -130,15 +130,6 @@ func (lease_set LeaseSet) GetDestination() (destination Destination, err error) 
 // Return the PublicKey in this LeaseSet and any errors ancountered parsing the LeaseSet.
 //
 func (lease_set LeaseSet) GetPublicKey() (public_key crypto.ElgPublicKey, err error) {
-	if lease_set.PublicKey == nil {
-		log.WithFields(log.Fields{
-			"at":     "(LeaseSet) PublicKey",
-			"public": lease_set.PublicKey,
-			"reason": "not enough data",
-		}).Error("error parsing public key")
-		err = errors.New("error parsing public key: not enough data")
-		return
-	}
 	public_key = lease_set.ElgPublicKey
 	return
 }
@@ -162,15 +153,6 @@ func (lease_set LeaseSet) GetSigningKey() (signing_public_key crypto.SigningPubl
 }
 
 func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
-	if lease_set.Leases == nil {
-		log.WithFields(log.Fields{
-			"at":     "(LeaseSet) Leases",
-			"public": lease_set.Leases,
-			"reason": "not enough data",
-		}).Error("error parsing signing leases")
-		err = errors.New("error parsing leases")
-		return
-	}
 	leases = lease_set.LeaseList
 	return
 }
@@ -319,8 +301,12 @@ func ReadLeases(bytes []byte) (leases []Lease, remainder []byte, err error) {
 			err = errors.New("error parsing lease set: some leases missing")
 			return
 		}
-		lease, remainder, err := ReadLease(bytes[start:end])
+		var lease Lease
+		lease, remainder, err = ReadLease(bytes[start:end])
 		leases = append(leases, lease)
+		if err != nil {
+			return
+		}
 	}
 	return
 }
