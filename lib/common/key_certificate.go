@@ -240,6 +240,7 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 			"reason":       "not enough data",
 		}).Error("error parsing key certificate")
 		err = errors.New("error parsing key certificate: not enough data")
+		key_certificate.SPKType = Integer(data[:])
 		return
 	}
 	key_certificate.SPKType = Integer(data[:2])

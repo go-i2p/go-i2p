@@ -12,7 +12,7 @@ func TestCertificateWithMissingData(t *testing.T) {
 	data := make([]byte, 128+256)
 	data = append(data, cert_data...)
 	keys_and_cert, _, err := ReadKeysAndCert(data)
-
+	assert.Nil(err)
 	cert, err := keys_and_cert.GetCertificate()
 	if assert.NotNil(err) {
 		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())

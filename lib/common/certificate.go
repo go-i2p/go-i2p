@@ -179,6 +179,7 @@ func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, er
 		if err != nil {
 			switch err.Error() {
 			case "error parsing certificate length: certificate is too short":
+				certificate.CertLen = 0
 				return
 			case "certificate parsing warning: certificate data is shorter than specified by length":
 				//err = nil
