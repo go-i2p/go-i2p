@@ -73,9 +73,9 @@ func TestDestinationIsCorrect(t *testing.T) {
 	assert.Nil(err)
 	dest_cert, err := dest.Certificate()
 	assert.Nil(err)
-	cert_type, err := dest_cert.Type()
+	_, cert_bytes, err := dest_cert.Type()
 	assert.Nil(err)
-	assert.Equal(CERT_KEY, cert_type)
+	assert.Equal(CERT_KEY, cert_bytes)
 }
 
 func TestPublicKeyIsCorrect(t *testing.T) {

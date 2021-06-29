@@ -13,7 +13,7 @@ func TestCertificateTypeIsFirstByte(t *testing.T) {
 	if err != nil {
 		t.Log(err)
 	}
-	cert_type, err := certificate.Type()
+	cert_type, _, err := certificate.Type()
 
 	assert.Equal(cert_type, 3, "certificate.Type() should be the first bytes in a certificate")
 	assert.Nil(err)
@@ -25,6 +25,7 @@ func TestCertificateLengthCorrect(t *testing.T) {
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff}
 	certificate, _, err := ReadCertificate(bytes)
 	cert_len, err := certificate.Length()
+	assert.Nil(err)
 
 	assert.Equal(cert_len, 2, "certificate.Length() should return integer from second two bytes")
 	assert.Nil(err)
@@ -70,8 +71,8 @@ func TestCertificateDataWhenCorrectSize(t *testing.T) {
 	assert.Nil(err, "certificate.Data() returned error with valid data")
 
 	assert.Equal(cert_len, 1, "certificate.Length() did not return indicated length when data was valid")
-	data := Integer(certificate.CertBytes)
-	assert.Equal(170, data, "certificate.Data() returned incorrect data")
+	data, _ := NewInteger(certificate.CertBytes)
+	assert.Equal(170, data.Value(), "certificate.Data() returned incorrect data")
 }
 
 func TestCertificateDataWhenTooLong(t *testing.T) {
@@ -113,6 +114,7 @@ func TestReadCertificateWithCorrectData(t *testing.T) {
 	bytes := []byte{0x00, 0x00, 0x02, 0xff, 0xff}
 	cert, remainder, err := ReadCertificate(bytes)
 
+	t.Log("CERT IS:", cert.Cert())
 	assert.Equal(len(cert.Cert()), 5, "ReadCertificate() did not return correct amount of data for valid certificate")
 	assert.Equal(len(remainder), 0, "ReadCertificate() did not return a zero length remainder on a valid certificate")
 	assert.Nil(err, "ReadCertificate() should not return an error with valid data")

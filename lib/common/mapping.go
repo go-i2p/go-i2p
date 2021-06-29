@@ -45,8 +45,8 @@ func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
 	var remainder = mapping
 	var err error
 
-	length := Integer(remainder[:2])
-	inferred_length := length + 2
+	length, err := NewInteger(remainder[:2])
+	inferred_length := length.Value() + 2
 	remainder = remainder[2:]
 	mapping_len := len(mapping)
 	if mapping_len > inferred_length {

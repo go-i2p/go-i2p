@@ -22,7 +22,7 @@ type String []byte
 // Look up the length of the string, reporting errors if the string is
 // invalid or the specified length does not match the provided data.
 //
-func (str String) Length() (length int, err error) {
+func (str String) Length() (length Integer, err error) {
 	if len(str) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "(String) Length",
@@ -31,8 +31,8 @@ func (str String) Length() (length int, err error) {
 		err = errors.New("error parsing string: zero length")
 		return
 	}
-	length = Integer([]byte{byte(str[0])})
-	inferred_len := length + 1
+	length, err = NewInteger([]byte{byte(str[0])})
+	inferred_len := length.Value() + 1
 	str_len := len(str)
 	if inferred_len > str_len {
 		log.WithFields(log.Fields{
@@ -69,7 +69,7 @@ func (str String) Data() (data string, err error) {
 			data = string(str[1:])
 			return
 		case "string parsing warning: string contains data beyond length":
-			data = string(str[1 : length+1])
+			data = string(str[1 : length.Value()+1])
 			return
 		}
 	}
@@ -107,8 +107,8 @@ func ReadString(data []byte) (str String, remainder []byte, err error) {
 	str = String(data)
 	length, err := String(data).Length()
 	if err != nil && err.Error() == "string parsing warning: string contains data beyond length" {
-		str = String(data[:length+1])
-		remainder = data[length+1:]
+		str = String(data[:length.Value()+1])
+		remainder = data[length.Value()+1:]
 		err = nil
 	}
 	return

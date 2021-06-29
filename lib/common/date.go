@@ -22,8 +22,8 @@ const DATE_SIZE = 8
 // struct.
 //
 func (date Date) Time() (date_time time.Time) {
-	seconds := Integer(date[:])
-	date_time = time.Unix(0, int64(seconds*1000000))
+	seconds, _ := NewInteger(date[:])
+	date_time = time.Unix(0, int64(seconds.Value()*1000000))
 	return
 }
 

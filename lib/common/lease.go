@@ -50,7 +50,7 @@ type LeaseInterface interface {
 
 type Lease struct {
 	LeaseHash   Hash
-	TunnelIdent int
+	TunnelIdent Integer
 	TunnelDate  Date
 } //[LEASE_SIZE]byte
 
@@ -68,7 +68,7 @@ func (lease Lease) TunnelGateway() (hash Hash) {
 // Return the TunnelID Integer in the Lease.
 //
 func (lease Lease) TunnelID() uint32 {
-	return uint32(lease.TunnelIdent)
+	return uint32(lease.TunnelIdent.Value())
 }
 
 //
@@ -85,7 +85,7 @@ func (lease Lease) Date() (date Date) {
 func (lease Lease) Bytes() (bytes []byte) {
 	var r []byte
 	r = append(r, lease.LeaseHash[:]...)
-	r = append(r, IntegerBytes(lease.TunnelIdent)[:]...)
+	r = append(r, lease.TunnelIdent.Bytes()...)
 	r = append(r, lease.TunnelDate[:]...)
 	return r
 }
@@ -102,7 +102,7 @@ func ReadLease(data []byte) (lease Lease, remainder []byte, err error) {
 	}
 	lease.LeaseHash, remainder, err = ReadHash(data)
 	identbytes, remainder, err := ReadIdent(remainder)
-	lease.TunnelIdent = Integer(identbytes[:])
+	lease.TunnelIdent, err = NewInteger(identbytes[:])
 	lease.TunnelDate, remainder, err = ReadDate(remainder)
 	return
 }

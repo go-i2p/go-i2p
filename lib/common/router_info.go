@@ -128,7 +128,7 @@ func (router_info RouterInfo) Published() (date Date, err error) {
 //
 // Return the Integer representing the number of RouterAddresses that are contained in this RouterInfo.
 //
-func (router_info RouterInfo) RouterAddressCount() (count int, err error) {
+func (router_info RouterInfo) RouterAddressCount() (count Integer, err error) {
 	_, remainder, err := ReadRouterIdentity(router_info)
 	if err != nil {
 		return
@@ -144,7 +144,7 @@ func (router_info RouterInfo) RouterAddressCount() (count int, err error) {
 		err = errors.New("error parsing router addresses: not enough data")
 		return
 	}
-	count = Integer([]byte{remainder[8]})
+	count, err = NewInteger([]byte{remainder[8]})
 	return
 }
 
@@ -175,7 +175,7 @@ func (router_info RouterInfo) RouterAddresses() (router_addresses []RouterAddres
 		err = cerr
 		return
 	}
-	for i := 0; i < addr_count; i++ {
+	for i := 0; i < addr_count.Value(); i++ {
 		router_address, remaining, err = ReadRouterAddress(remaining)
 		if err == nil {
 			router_addresses = append(router_addresses, router_address)
@@ -198,7 +198,7 @@ func (router_info RouterInfo) PeerSize() int {
 //
 func (router_info RouterInfo) Options() (mapping Mapping) {
 	head := router_info.optionsLocation()
-	size := head + router_info.optionsSize()
+	size := head + router_info.optionsSize().Value()
 	mapping = Mapping(router_info[head:size])
 	return
 }
@@ -208,7 +208,7 @@ func (router_info RouterInfo) Options() (mapping Mapping) {
 //
 func (router_info RouterInfo) Signature() (signature Signature) {
 	head := router_info.optionsLocation()
-	size := head + router_info.optionsSize()
+	size := head + router_info.optionsSize().Value()
 	ident, _ := router_info.RouterIdentity()
 	keyCert := ident.CertificateInterface //KeyCertificate(ident)
 	sigSize := keyCert.SignatureSize()
@@ -247,7 +247,7 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 		err = cerr
 		return
 	}
-	for i := 0; i < addr_count; i++ {
+	for i := 0; i < addr_count.Value(); i++ {
 		router_address, remaining, err = ReadRouterAddress(remaining)
 		if err == nil {
 			location += len(router_address)
@@ -261,8 +261,8 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 //
 // Used during parsing to determine the size of the options in the RouterInfo.
 //
-func (router_info RouterInfo) optionsSize() (size int) {
+func (router_info RouterInfo) optionsSize() (size Integer) {
 	head := router_info.optionsLocation()
-	size = Integer(router_info[head:head+2]) + 2
+	size, _ = NewInteger(router_info[head : head+2]) //+ 2
 	return
 }

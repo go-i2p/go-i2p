@@ -73,8 +73,10 @@ type KeysAndCert struct {
 }
 
 func (keys_and_cert KeysAndCert) Bytes() (bytes []byte) { //, err error) {
-	elg_key := keys_and_cert.PublicKey.(crypto.ElgPublicKey)
-	dsa_key := keys_and_cert.SigningPublicKey.(crypto.DSAPublicKey)
+	pubkey, _ := keys_and_cert.GetPublicKey()
+	signpubkey, _ := keys_and_cert.GetSigningPublicKey()
+	elg_key := pubkey.(crypto.ElgPublicKey)
+	dsa_key := signpubkey.(crypto.DSAPublicKey)
 	bytes = append(bytes, dsa_key[:]...)
 	bytes = append(bytes, elg_key[:]...)
 	bytes = append(bytes, keys_and_cert.CertificateInterface.Cert()...)
@@ -86,7 +88,14 @@ func (keys_and_cert KeysAndCert) Bytes() (bytes []byte) { //, err error) {
 // determine correct lengths.
 //
 func (keys_and_cert KeysAndCert) GetPublicKey() (key crypto.PublicKey, err error) {
-	cert, err := keys_and_cert.GetCertificate()
+	data := make([]byte, KEYS_AND_CERT_PUBKEY_SIZE)
+	if keys_and_cert.PublicKey == nil {
+		epk := crypto.ElgPublicKey{}
+		copy(data[:KEYS_AND_CERT_PUBKEY_SIZE], epk[:])
+		keys_and_cert.PublicKey = epk
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+	}
+	/*cert, err := keys_and_cert.GetCertificate()
 	if err != nil {
 		return
 	}
@@ -94,9 +103,9 @@ func (keys_and_cert KeysAndCert) GetPublicKey() (key crypto.PublicKey, err error
 	if err != nil {
 		return
 	}
-	if cert_len != 0 {
-		key = keys_and_cert.PublicKey
-	}
+	if cert_len != 0 {*/
+	key = keys_and_cert.PublicKey
+	/*}*/
 	return
 }
 
@@ -105,7 +114,11 @@ func (keys_and_cert KeysAndCert) GetPublicKey() (key crypto.PublicKey, err error
 // determine correct lengths.
 //
 func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypto.SigningPublicKey, err error) {
-	cert, err := keys_and_cert.GetCertificate()
+	if keys_and_cert.SigningPublicKey == nil {
+		keys_and_cert.SigningPublicKey = crypto.DSAPublicKey{}
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+	}
+	/*cert, err := keys_and_cert.GetCertificate()
 	if err != nil {
 		return
 	}
@@ -113,9 +126,9 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 	if err != nil {
 		return
 	}
-	if cert_len != 0 {
-		signing_public_key = keys_and_cert.SigningPublicKey
-	}
+	if cert_len != 0 {*/
+	signing_public_key = keys_and_cert.SigningPublicKey
+	/*}*/
 	return
 }
 
@@ -124,9 +137,15 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 // KeysAndCert or Certificate.
 //
 func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, err error) {
-	_, err = keys_and_cert.CertificateInterface.Type()
-	if err != nil {
-		return
+	data_len := len(keys_and_cert.Bytes())
+	if data_len < KEYS_AND_CERT_MIN_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing keys and cert")
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 	}
 	cert = keys_and_cert.CertificateInterface
 	return
@@ -150,17 +169,23 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 	cert, remainder, err := ReadCertificate(data[:KEYS_AND_CERT_MIN_SIZE])
 	if err != nil {
-		return
+		//return
+		log.Error("ERROR READ CERTIFICATE", err)
+		err = nil
+
 	}
+	log.Println("READ CERTIFICATE")
+	keys_and_cert.CertificateInterface = cert
 	spk, pk, remainder, err := ReadKeys(data, cert)
 	if err != nil {
-		return
+		//		return
+		log.Error("ERROR READ KEYS", err)
+		err = nil
+
 	}
-	keys_and_cert = KeysAndCert{
-		SigningPublicKey:     spk,
-		PublicKey:            pk,
-		CertificateInterface: cert,
-	}
+	log.Println("READ KEYS")
+	keys_and_cert.SigningPublicKey = spk
+	keys_and_cert.PublicKey = pk
 	return
 }
 
@@ -184,12 +209,13 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 		pk = elg_key
 	} else {
 		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
+		cert_type, cert_bytes, _ := cert.Type()
 		if cert_type == CERT_KEY {
 			// This KeysAndCert contains a Key Certificate, construct
 			// a PublicKey from the data in the KeysAndCert and
 			// any additional data in the Certificate.
-			pk, err = KeyCertificate{PKType: cert_type}.ConstructPublicKey(
+			cert_integer, _ := NewInteger(cert_bytes)
+			pk, err = KeyCertificate{PKType: cert_integer}.ConstructPublicKey(
 				data[:KEYS_AND_CERT_PUBKEY_SIZE],
 			)
 		} else {
@@ -213,12 +239,13 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 		spk = dsa_pk
 	} else {
 		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
+		cert_type, cert_bytes, _ := cert.Type()
 		if cert_type == CERT_KEY {
 			// This KeysAndCert contains a Key Certificate, construct
 			// a SigningPublicKey from the data in the KeysAndCert and
 			// any additional data in the Certificate.
-			spk, err = KeyCertificate{SPKType: cert_type}.ConstructSigningPublicKey(
+			cert_integer, _ := NewInteger(cert_bytes)
+			spk, err = KeyCertificate{SPKType: cert_integer}.ConstructSigningPublicKey(
 				data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
 			)
 		} else {
@@ -230,7 +257,7 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 			spk = dsa_pk
 		}
 	}
-	cert_len, err := cert.Length()
+	cert_len, _ := cert.Length()
 	if cert_len == 0 {
 		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
 		return

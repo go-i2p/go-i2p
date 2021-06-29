@@ -232,7 +232,7 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 
 func ReadLeaseSetSignature(bytes []byte, cert CertificateInterface) (signature Signature, remainder []byte, err error) {
 	start := 0
-	cert_type, _ := cert.Type()
+	cert_type, _, _ := cert.Type()
 	var end int
 	if cert_type == CERT_KEY {
 		end = start + cert.SignatureSize()
@@ -255,7 +255,7 @@ func ReadLeaseSetSignature(bytes []byte, cert CertificateInterface) (signature S
 	return
 }
 
-func ReadLeaseCount(bytes []byte) (count int, err error) {
+func ReadLeaseCount(bytes []byte) (count Integer, err error) {
 	remainder_len := len(bytes)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
 		log.WithFields(log.Fields{
@@ -267,8 +267,8 @@ func ReadLeaseCount(bytes []byte) (count int, err error) {
 		err = errors.New("error parsing lease count: not enough data")
 		return
 	}
-	count = Integer([]byte{bytes[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
-	if count > 16 {
+	count, err = NewInteger([]byte{bytes[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	if count.Value() > 16 {
 		log.WithFields(log.Fields{
 			"at":          "(LeaseSet) LeaseCount",
 			"lease_count": count,
@@ -287,7 +287,7 @@ func ReadLeases(bytes []byte) (leases []Lease, remainder []byte, err error) {
 	if err != nil {
 		return
 	}
-	for i := 0; i < count; i++ {
+	for i := 0; i < count.Value(); i++ {
 		start := 0 //offset + (i * LEASE_SIZE)
 		end := start + LEASE_SIZE
 		lease_set_len := len(bytes)

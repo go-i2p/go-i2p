@@ -8,24 +8,27 @@ import (
 func TestIntegerBigEndian(t *testing.T) {
 	assert := assert.New(t)
 
-	bytes := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
-	integer := Integer(bytes)
+	bytes := []byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	integer, err := NewInteger(bytes)
+	assert.Nil(err)
 
-	assert.Equal(integer, 1, "Integer() did not parse bytes big endian")
+	assert.Equal(integer.Value(), 1, "Integer() did not parse bytes big endian")
+
+	checkbytes := integer.Bytes()
+
+	assert.Equal(bytes, checkbytes, "IntegerBytes() did not match original bytes")
 }
 
 func TestWorksWithOneByte(t *testing.T) {
 	assert := assert.New(t)
 
-	integer := Integer([]byte{0x01})
+	bytes := []byte{0x00}
+	integer, err := NewInteger(bytes)
+	assert.Nil(err)
 
-	assert.Equal(integer, 1, "Integer() did not correctly parse single byte slice")
-}
+	assert.Equal(integer.Value(), 0, "Integer() did not correctly parse single byte slice")
 
-func TestIsZeroWithNoData(t *testing.T) {
-	assert := assert.New(t)
+	checkbytes := integer.Bytes()
 
-	integer := Integer([]byte{})
-
-	assert.Equal(integer, 0, "Integer() did not correctly parse zero length byte slice")
+	assert.Equal(bytes, checkbytes, "IntegerBytes() did not match original bytes")
 }
