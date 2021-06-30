@@ -256,33 +256,39 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 	if err != nil {
 		return
 	}
+	cert_type, _, err := cert.Type()
+	if err != nil {
+		return
+	}
+	log.Println("KEYSANDCERT CERT TYPE=", cert_type, cert.CertBytes)
 	key_certificate.Certificate = cert
+	data = cert.CertBytes
 	data_len := len(data)
-	if data_len < 4 {
+	if data_len < 2 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) SigningPublicKeyType",
 			"data_len":     data_len,
-			"required_len": 4,
+			"required_len": 2,
 			"reason":       "not enough data",
 		}).Error("error parsing key certificate signing public key")
 		err = errors.New("error parsing key certificate signing public key: not enough data")
 		//		key_certificate.SPKType, err = NewInteger(data[:])
-		key_certificate.PKType, err = NewInteger(data[2:])
+		key_certificate.PKType, err = NewInteger(data[:])
 		return
 	}
-	key_certificate.PKType, err = NewInteger(data[2:4])
-	//	key_certificate.SPKType, err = NewInteger(data[2:4])
-	if data_len < 6 {
+//	key_certificate.SPKType, err = NewInteger(data[0:2])
+		key_certificate.PKType, err = NewInteger(data[0:2])
+	if data_len < 4 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) PublicKeyType",
 			"data_len":     data_len,
-			"required_len": 6,
+			"required_len": 4,
 			"reason":       "not enough data",
 		}).Error("error parsing key certificate public key")
 		err = errors.New("error parsing key certificate public key: not enough data")
 		return
 	}
-	key_certificate.SPKType, err = NewInteger(data[4:6])
-	//	key_certificate.PKType, err = NewInteger(data[4:6])
+//	key_certificate.PKType, err = NewInteger(data[2:4])
+		key_certificate.SPKType, err = NewInteger(data[2:4])
 	return
 }

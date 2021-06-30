@@ -8,8 +8,8 @@ Accurate for version 0.9.24
 
 import (
 	"encoding/binary"
-	//	log "github.com/sirupsen/logrus"
-	//	"errors"
+//	log "github.com/sirupsen/logrus"
+//	"errors"
 )
 
 // Total byte length of an I2P integer
@@ -20,17 +20,19 @@ const (
 type Integer []byte
 
 func (i Integer) longBytes() (value [INTEGER_SIZE]byte) {
-	value = [INTEGER_SIZE]byte{0, 0, 0, 0, 0, 0, 0, 0}
+	value = [INTEGER_SIZE]byte{0,0,0,0,0,0,0,0}
+	pad := INTEGER_SIZE-len([]byte(i))
 	for index, element := range []byte(i) {
-		value[INTEGER_SIZE-1-index] = element
+		value[pad+index] = element
 	}
 	return value
 }
 
 func (i Integer) Value() int {
 	r := i.longBytes()
+//	log.Println("LONG BYTES", r)
 	return int(binary.BigEndian.Uint64(r[:]))
-	//	return int(binary.BigEndian.Int64(r[:]))
+//	return int(binary.BigEndian.Int64(r[:]))
 }
 
 func (i Integer) Bytes() []byte {
@@ -47,9 +49,9 @@ func (i Integer) Bytes() []byte {
 //
 func NewInteger(number []byte) (value Integer, err error) {
 	value = number //[INTEGER_SIZE]byte(number)
-	//	for index, element := range number {
-	//		value[INTEGER_SIZE-1-index] = element
-	//	}
+//	for index, element := range number {
+//		value[INTEGER_SIZE-1-index] = element
+//	}
 	/*length := len(number)
 	if length < INTEGER_SIZE {
 		log.WithFields(log.Fields{

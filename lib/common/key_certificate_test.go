@@ -13,15 +13,15 @@ func TestSingingPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	spk_type, err := key_cert.SigningPublicKeyType()
 
 	assert.Nil(err, "SigningPublicKeyType() returned error with valid data")
-	assert.Equal(spk_type, KEYCERT_SIGN_P521, "SigningPublicKeyType() did not return correct type")
+	assert.Equal(spk_type, KEYCERT_SIGN_DSA_SHA1, "SigningPublicKeyType() did not return correct type")
 }
 
-func TestSingingPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
+func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, err := ReadKeyCertificate([]byte{0x05, 0x00, 0x01, 0x00})
 	//	assert.NotNil(err, "ReadKeyCertificate() returned error with valid data")
-	_, err = key_cert.SigningPublicKeyType()
+	_, err = key_cert.PublicKeyType()
 
 	if assert.NotNil(err) {
 		assert.Equal("error retrieving signing public key type: not enough data", err.Error(), "correct error message should be returned")
@@ -36,17 +36,17 @@ func TestPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	pk_type, err := key_cert.PublicKeyType()
 
 	assert.Nil(err, "PublicKeyType() returned error with valid data")
-	assert.Equal(pk_type, KEYCERT_CRYPTO_X25519, "PublicKeyType() did not return correct type")
+	assert.Equal(pk_type, KEYCERT_CRYPTO_P521, "PublicKeyType() did not return correct type")
 }
 
-func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
+func TestSigningPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, err := ReadKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
 	if assert.NotNil(err) {
 		assert.Equal("error parsing key certificate public key: not enough data", err.Error(), "correct error message should be returned")
 	}
-	_, err = key_cert.PublicKeyType()
+	_, err = key_cert.SigningPublicKeyType()
 
 	if assert.NotNil(err) {
 		assert.Equal("error retrieving signing public key type: not enough data", err.Error(), "correct error message should be returned")
