@@ -276,8 +276,8 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 		key_certificate.PKType, err = NewInteger(data[:])
 		return
 	}
-//	key_certificate.SPKType, err = NewInteger(data[0:2])
-		key_certificate.PKType, err = NewInteger(data[0:2])
+	//	key_certificate.SPKType, err = NewInteger(data[0:2])
+	key_certificate.PKType, err = NewInteger(data[0:2])
 	if data_len < 4 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) PublicKeyType",
@@ -288,7 +288,7 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 		err = errors.New("error parsing key certificate public key: not enough data")
 		return
 	}
-//	key_certificate.PKType, err = NewInteger(data[2:4])
-		key_certificate.SPKType, err = NewInteger(data[2:4])
+	//	key_certificate.PKType, err = NewInteger(data[2:4])
+	key_certificate.SPKType, err = NewInteger(data[2:4])
 	return
 }
