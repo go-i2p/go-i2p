@@ -55,8 +55,8 @@ type CertificateInterface interface {
 }
 
 type Certificate struct {
-	CertType  Integer
-	CertLen   Integer
+	CertType  *Integer
+	CertLen   *Integer
 	CertBytes []byte
 }
 
@@ -68,14 +68,21 @@ func (certificate Certificate) SignatureSize() (size int) {
 
 func (certificate Certificate) Cert() []byte {
 	var ret []byte
+	log.Println("CERT 1")
 	ret = append(ret, certificate.CertType.Bytes()...)
+	log.Println("CERT 2")
 	data, _ := certificate.Data()
+	log.Println("CERT 3")
 	if certificate.CertLen.Value() != 0 && len(data) != 0 {
-		ret = append(ret, LengthBytes(certificate.CertLen.Value())...)
+		log.Println("CERT 4")
+		ret = append(ret, certificate.CertLen.Bytes()...)
+		log.Println("CERT 5")
 		ret = append(ret, data...)
 	} else {
+		log.Println("CERT 4")
 		ret = append(ret, certificate.CertLen.Bytes()...)
 	}
+		log.Println("CERT 6")
 	return ret
 }
 

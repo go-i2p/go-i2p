@@ -22,7 +22,7 @@ type String []byte
 // Look up the length of the string, reporting errors if the string is
 // invalid or the specified length does not match the provided data.
 //
-func (str String) Length() (length Integer, err error) {
+func (str String) Length() (length *Integer, err error) {
 	if len(str) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "(String) Length",

@@ -50,7 +50,7 @@ type LeaseInterface interface {
 
 type Lease struct {
 	LeaseHash   Hash
-	TunnelIdent Integer
+	TunnelIdent *Integer
 	TunnelDate  Date
 } //[LEASE_SIZE]byte
 

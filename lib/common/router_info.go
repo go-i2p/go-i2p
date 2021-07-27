@@ -128,7 +128,7 @@ func (router_info RouterInfo) Published() (date Date, err error) {
 //
 // Return the Integer representing the number of RouterAddresses that are contained in this RouterInfo.
 //
-func (router_info RouterInfo) RouterAddressCount() (count Integer, err error) {
+func (router_info RouterInfo) RouterAddressCount() (count *Integer, err error) {
 	_, remainder, err := ReadRouterIdentity(router_info)
 	if err != nil {
 		return
@@ -261,7 +261,7 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 //
 // Used during parsing to determine the size of the options in the RouterInfo.
 //
-func (router_info RouterInfo) optionsSize() (size Integer) {
+func (router_info RouterInfo) optionsSize() (size *Integer) {
 	head := router_info.optionsLocation()
 	size, _ = NewInteger(router_info[head : head+2]) //+ 2
 	return

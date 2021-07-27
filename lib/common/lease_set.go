@@ -255,7 +255,7 @@ func ReadLeaseSetSignature(bytes []byte, cert CertificateInterface) (signature S
 	return
 }
 
-func ReadLeaseCount(bytes []byte) (count Integer, err error) {
+func ReadLeaseCount(bytes []byte) (count *Integer, err error) {
 	remainder_len := len(bytes)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
 		log.WithFields(log.Fields{

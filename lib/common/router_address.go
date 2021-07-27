@@ -51,7 +51,7 @@ type RouterAddress []byte
 // Return the cost integer for this RouterAddress and any errors encountered
 // parsing the RouterAddress.
 //
-func (router_address RouterAddress) Cost() (cost Integer, err error) {
+func (router_address RouterAddress) Cost() (cost *Integer, err error) {
 	err, exit := router_address.checkValid()
 	if exit {
 		return
@@ -142,7 +142,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		return
 	}
 	router_address = append(router_address, str...)
-	map_size := Integer{}
+	map_size := &Integer{}
 	mapping := make([]byte, 0)
 	if len(remainder) >= 2 {
 		map_size, err = NewInteger(remainder[:2])

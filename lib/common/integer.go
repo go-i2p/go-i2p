@@ -47,8 +47,9 @@ func (i Integer) Bytes() []byte {
 // Interpret a slice of bytes from length 0 to length 8 as a big-endian
 // integer and return an int representation.
 //
-func NewInteger(number []byte) (value Integer, err error) {
-	value = number //[INTEGER_SIZE]byte(number)
+func NewInteger(number []byte) (value *Integer, err error) {
+	var integer Integer = number
+	value = &integer //[INTEGER_SIZE]byte(number)
 	//	for index, element := range number {
 	//		value[INTEGER_SIZE-1-index] = element
 	//	}

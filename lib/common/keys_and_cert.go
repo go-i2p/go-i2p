@@ -234,6 +234,7 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 //
 func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
+	keys_and_cert.CertificateInterface = &Certificate{}
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
@@ -252,7 +253,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 
 	}
 	log.Println("READ CERTIFICATE")
-	keys_and_cert.CertificateInterface = cert
+	keys_and_cert.CertificateInterface = &cert
 	spk, pk, remainder, err := ReadKeys(data, cert)
 	if err != nil {
 		//		return
