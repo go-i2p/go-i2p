@@ -171,7 +171,7 @@ func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, er
 		err = errors.New("error parsing certificate length: certificate is too short")
 		return
 	} else {
-		certificate.CertLen, err = NewInteger(data[2:CERT_MIN_SIZE])
+		certificate.CertLen, err = NewInteger(data[1:CERT_MIN_SIZE])
 		//		_, err = certificate.Type()
 		//		if err != nil {
 		//			return
