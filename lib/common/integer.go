@@ -19,27 +19,33 @@ const (
 
 type Integer []byte
 
-func (i Integer) longBytes() (value [INTEGER_SIZE]byte) {
+func (i *Integer) longBytes() (value [INTEGER_SIZE]byte) {
 	value = [INTEGER_SIZE]byte{0, 0, 0, 0, 0, 0, 0, 0}
-	pad := INTEGER_SIZE - len([]byte(i))
-	for index, element := range []byte(i) {
+	pad := INTEGER_SIZE - len([]byte(*i))
+	for index, element := range []byte(*i) {
 		value[pad+index] = element
 	}
 	return value
 }
 
-func (i Integer) Value() int {
+func (i *Integer) Value() int {
+	if i == nil {
+		return 0
+	}
 	r := i.longBytes()
 	//	log.Println("LONG BYTES", r)
 	return int(binary.BigEndian.Uint64(r[:]))
 	//	return int(binary.BigEndian.Int64(r[:]))
 }
 
-func (i Integer) Bytes() []byte {
-	if len([]byte(i)) == 0 {
+func (i *Integer) Bytes() []byte {
+	if i == nil {
+		return []byte{}
+	}
+	if len([]byte(*i)) == 0 {
 		return []byte{0}
 	}
-	r := []byte(i)
+	r := []byte(*i)
 	return r
 }
 

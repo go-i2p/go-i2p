@@ -192,40 +192,42 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 				"cert_type": cert_type,
 			}).Warn("unused certificate type observed")
 		}
-	}
-	if data_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-		var dsa_pk crypto.DSAPublicKey
-		copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-		spk = dsa_pk
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type, cert_bytes, _ := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a SigningPublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			cert_integer, _ := NewInteger(cert_bytes)
-			spk, err = KeyCertificate{SPKType: cert_integer}.ConstructSigningPublicKey(
-				data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
-			// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
-			// No other Certificate types are currently in use.
+		//	}
+		if data_len == 0 {
+			// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
+			// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
 			var dsa_pk crypto.DSAPublicKey
 			copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
 			spk = dsa_pk
+		} else {
+			// A Certificate is present in this KeysAndCert
+			cert_type, cert_bytes, _ := cert.Type()
+			if cert_type == CERT_KEY {
+				// This KeysAndCert contains a Key Certificate, construct
+				// a SigningPublicKey from the data in the KeysAndCert and
+				// any additional data in the Certificate.
+				cert_integer, _ := NewInteger(cert_bytes)
+				spk, err = KeyCertificate{SPKType: cert_integer}.ConstructSigningPublicKey(
+					data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
+				)
+			} else {
+				// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
+				// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
+				// No other Certificate types are currently in use.
+				var dsa_pk crypto.DSAPublicKey
+				copy(dsa_pk[:], data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
+				spk = dsa_pk
+			}
 		}
+		cert_len, _ := cert.Length()
+		if cert_len == 0 {
+			remainder = data[KEYS_AND_CERT_MIN_SIZE:]
+			return
+		}
+		remainder = data[KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE:]
 	}
-	cert_len, _ := cert.Length()
-	if cert_len == 0 {
-		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
-		return
-	}
-	remainder = data[KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE:]
 	return
+
 }
 
 //

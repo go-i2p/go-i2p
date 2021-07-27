@@ -68,21 +68,14 @@ func (certificate Certificate) SignatureSize() (size int) {
 
 func (certificate Certificate) Cert() []byte {
 	var ret []byte
-	log.Println("CERT 1")
 	ret = append(ret, certificate.CertType.Bytes()...)
-	log.Println("CERT 2")
 	data, _ := certificate.Data()
-	log.Println("CERT 3")
 	if certificate.CertLen.Value() != 0 && len(data) != 0 {
-		log.Println("CERT 4")
 		ret = append(ret, certificate.CertLen.Bytes()...)
-		log.Println("CERT 5")
 		ret = append(ret, data...)
 	} else {
-		log.Println("CERT 4")
 		ret = append(ret, certificate.CertLen.Bytes()...)
 	}
-		log.Println("CERT 6")
 	return ret
 }
 
@@ -165,6 +158,7 @@ func (certificate Certificate) Data() (data []byte, err error) {
 //
 func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
 	certificate.CertType, err = NewInteger(data[0:1])
+	certificate.CertLen = &Integer{}
 	cert_len := len(data)
 
 	if cert_len < CERT_MIN_SIZE {

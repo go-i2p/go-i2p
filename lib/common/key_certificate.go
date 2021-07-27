@@ -252,6 +252,8 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 // Read a KeyCertificate from a slice of bytes
 //
 func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error) {
+	key_certificate.SPKType = &Integer{}
+	key_certificate.PKType = &Integer{}
 	cert, _, err := ReadCertificate(data)
 	if err != nil {
 		return

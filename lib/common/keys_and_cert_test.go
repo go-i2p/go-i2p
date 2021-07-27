@@ -4,7 +4,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
-/*
+
 func TestCertificateWithMissingData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -166,7 +166,7 @@ func TestSigningPublicKeyWithKeyCertificate(t *testing.T) {
 	assert.Nil(err)
 	assert.Equal(len(signing_pub_key_data), signing_pub_key.Len())
 }
-*/
+
 func TestReadKeysAndCertWithMissingData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -190,7 +190,7 @@ func TestReadKeysAndCertWithMissingData(t *testing.T) {
 		assert.Equal("error parsing KeysAndCert: data is smaller than minimum valid size", err.Error())
 	}
 }
-/*
+
 func TestReadKeysAndCertWithMissingCertData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -287,4 +287,3 @@ func TestReadKeysAndCertWithValidDataWithoutCertificateAndRemainder(t *testing.T
 	_, err = keys_and_cert.GetCertificate()
 	assert.Nil(err, "keys_and_cert.GetCertificate() returned error with valid data not containing certificate")
 }
-*/
