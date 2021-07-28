@@ -137,7 +137,7 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 // KeysAndCert or Certificate.
 //
 func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, err error) {
-	data_len := len(keys_and_cert.Bytes())
+	data_len := len(keys_and_cert.Cert())
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
@@ -145,7 +145,16 @@ func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, er
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
+	}
+	if data_len > KEYS_AND_CERT_MIN_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "too much data",
+		}).Error("error parsing keys and cert")
+		err = errors.New("certificate parsing warning: certificate data is longer than specified by length")
 	}
 	cert = keys_and_cert.CertificateInterface
 	return
@@ -245,17 +254,17 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		return
+//		return
 	}
-	cert, remainder, err := ReadCertificate(data[:KEYS_AND_CERT_MIN_SIZE])
+	cert, remainder, err := ReadCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		//return
 		log.Error("ERROR READ CERTIFICATE", err)
 		err = nil
 
 	}
-	log.Println("READ CERTIFICATE")
-	keys_and_cert.CertificateInterface = &cert
+	log.Println("READ CERTIFICATE", cert.Cert())
+	keys_and_cert.CertificateInterface = cert
 	spk, pk, remainder, err := ReadKeys(data, cert)
 	if err != nil {
 		//		return

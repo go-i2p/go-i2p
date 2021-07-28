@@ -156,7 +156,8 @@ func (certificate Certificate) Data() (data []byte, err error) {
 // Read a Certificate from a slice of bytes, returning any extra data on the end of the slice
 // and any errors if a valid Certificate could not be read.
 //
-func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
+func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, err error) {
+	certificate = &Certificate{}
 	certificate.CertType, err = NewInteger(data[0:1])
 	certificate.CertLen = &Integer{}
 	cert_len := len(data)

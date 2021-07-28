@@ -18,9 +18,9 @@ func TestCertificateWithMissingData(t *testing.T) {
 		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())
 	}
 	cert_bytes := []byte(cert.Cert())
-	if assert.Equal(len(cert_data), len(cert_bytes)) {
+//	if assert.Equal(len(cert_data), len(cert_bytes)) {
 		assert.Equal(cert_bytes, cert_data, "keys_and_cert.GetCertificate() did not return available data when cert was missing some data")
-	}
+//	}
 }
 
 func TestCertificateWithValidData(t *testing.T) {

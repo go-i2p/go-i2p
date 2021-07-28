@@ -79,7 +79,7 @@ const (
 )
 
 type KeyCertificate struct {
-	Certificate
+	CertificateInterface
 	PKType   *Integer
 	PKExtra  []byte
 	SPKType  *Integer
@@ -91,7 +91,7 @@ type KeyCertificate struct {
 //
 func (key_certificate KeyCertificate) Data() ([]byte, error) {
 	var r []byte
-	r = append(r, key_certificate.Certificate.Cert()...)
+	r = append(r, key_certificate.CertificateInterface.Cert()...)
 	r = append(r, key_certificate.PKType.Bytes()...)
 	r = append(r, key_certificate.SPKType.Bytes()...)
 	return r, nil
@@ -103,7 +103,7 @@ func (key_certificate KeyCertificate) Data() ([]byte, error) {
 //
 func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int, err error) {
 	//	signing_key_type := key_certificate.SPKType
-	//	data_len := len(key_certificate.Certificate.CertBytes)
+	//	data_len := len(key_certificate.CertificateInterface.CertBytes)
 	if len(key_certificate.SPKType.Bytes()) < 2 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) SingingPublicKeyType",
@@ -263,7 +263,7 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 		return
 	}
 	log.Println("KEYSANDCERT CERT TYPE=", cert_type, cert.CertBytes)
-	key_certificate.Certificate = cert
+	key_certificate.CertificateInterface = cert
 	data = cert.CertBytes
 	data_len := len(data)
 	if data_len < 2 {
