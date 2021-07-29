@@ -138,7 +138,7 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 //
 func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, err error) {
 	data_len := len(keys_and_cert.Cert())
-	if data_len < KEYS_AND_CERT_MIN_SIZE {
+	if data_len < CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -147,7 +147,7 @@ func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, er
 		}).Error("error parsing keys and cert")
 		err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
 	}
-	if data_len > KEYS_AND_CERT_MIN_SIZE {
+	if data_len > CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -254,7 +254,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-//		return
+		//		return
 	}
 	cert, remainder, err := ReadCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {

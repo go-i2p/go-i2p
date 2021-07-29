@@ -107,7 +107,7 @@ func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_typ
 	if len(key_certificate.SPKType.Bytes()) < 2 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) SingingPublicKeyType",
-			"data_len":     len(*key_certificate.SPKType),
+			"data_len":     len(key_certificate.SPKType.Bytes()),
 			"required_len": 2,
 			"reason":       "not enough data",
 		}).Error("error retrieving Singning Public Key type")
@@ -126,7 +126,7 @@ func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int, err erro
 	if len(key_certificate.PKType.Bytes()) < 2 {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) SingingPublicKeyType",
-			"data_len":     len(*key_certificate.PKType),
+			"data_len":     len(key_certificate.PKType.Bytes()),
 			"required_len": 2,
 			"reason":       "not enough data",
 		}).Error("error retrieving Singning Public Key type")
