@@ -26,3 +26,6 @@ clean:
 
 fmt:
 	find . -name '*.go' -exec gofmt -w -s {} \;
+
+testcommon:
+	$(GO) test -v -failfast ./lib/common/...

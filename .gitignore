@@ -5,4 +5,4 @@
 *.coverprofile
 *exportable-fuzz.zip
 go-i2p
-*.exe
+*.exe*.log

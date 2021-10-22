@@ -28,6 +28,7 @@ payload :: data
 
 import (
 	"errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -148,7 +149,6 @@ func (certificate Certificate) Data() (data []byte, err error) {
 			return
 		}
 	}
-
 	return
 }
 
@@ -174,9 +174,16 @@ func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, e
 	} else {
 		certificate.CertLen, err = NewInteger(data[1:CERT_MIN_SIZE])
 		//		_, err = certificate.Type()
-		//		if err != nil {
-		//			return
-		//		}
+		if err != nil {
+			//return
+			log.WithFields(log.Fields{
+				"at":                       "(Certificate) ReadCertificate",
+				"certificate_bytes_length": cert_len,
+				"certificate_min_size":     CERT_MIN_SIZE,
+				"reason":                   "certificate size is invalid",
+			}).Warn("certificate format warning")
+			err = errors.New("error parsing certificate type: certificate type is invalid")
+		}
 		certificate.CertBytes = data[CERT_MIN_SIZE:]
 		_, err = certificate.Length()
 		if err != nil {

@@ -47,6 +47,7 @@ total length: 387+ bytes
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )
@@ -137,17 +138,18 @@ func (keys_and_cert KeysAndCert) GetSigningPublicKey() (signing_public_key crypt
 // KeysAndCert or Certificate.
 //
 func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, err error) {
-	data_len := len(keys_and_cert.Cert())
-	if data_len < CERT_MIN_SIZE {
+	data_len := len(keys_and_cert.Bytes())
+	log.Println("LEN IS", data_len, "KEYS_AND_CERT_MIN_SIZE", KEYS_AND_CERT_MIN_SIZE)
+	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
-			"at":           "ReadKeysAndCert",
+			"at":           "GetCertificate",
 			"data_len":     data_len,
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
 	}
-	if data_len > CERT_MIN_SIZE {
+	/*if data_len > CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -155,7 +157,7 @@ func (keys_and_cert KeysAndCert) GetCertificate() (cert CertificateInterface, er
 			"reason":       "too much data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("certificate parsing warning: certificate data is longer than specified by length")
-	}
+	}*/
 	cert = keys_and_cert.CertificateInterface
 	return
 }
@@ -164,7 +166,7 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 	data_len := len(data)
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
-			"at":           "ReadKeysAndCert",
+			"at":           "ReadKeys",
 			"data_len":     data_len,
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
 			"reason":       "not enough data",
@@ -180,7 +182,8 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 		pk = elg_key
 	} else {
 		// A Certificate is present in this KeysAndCert
-		cert_type, cert_bytes, _ := cert.Type()
+		cert_type, cert_bytes, e := cert.Type()
+		err = e
 		if cert_type == CERT_KEY {
 			// This KeysAndCert contains a Key Certificate, construct
 			// a PublicKey from the data in the KeysAndCert and
@@ -210,7 +213,8 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 			spk = dsa_pk
 		} else {
 			// A Certificate is present in this KeysAndCert
-			cert_type, cert_bytes, _ := cert.Type()
+			cert_type, cert_bytes, e := cert.Type()
+			err = e
 			if cert_type == CERT_KEY {
 				// This KeysAndCert contains a Key Certificate, construct
 				// a SigningPublicKey from the data in the KeysAndCert and
@@ -228,7 +232,8 @@ func ReadKeys(data []byte, cert CertificateInterface) (spk crypto.SigningPublicK
 				spk = dsa_pk
 			}
 		}
-		cert_len, _ := cert.Length()
+		cert_len, e := cert.Length()
+		err = e
 		if cert_len == 0 {
 			remainder = data[KEYS_AND_CERT_MIN_SIZE:]
 			return
@@ -257,22 +262,8 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		//		return
 	}
 	cert, remainder, err := ReadCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
-	if err != nil {
-		//return
-		log.Error("ERROR READ CERTIFICATE", err)
-		err = nil
-
-	}
-	log.Println("READ CERTIFICATE", cert.Cert())
 	keys_and_cert.CertificateInterface = cert
 	spk, pk, remainder, err := ReadKeys(data, cert)
-	if err != nil {
-		//		return
-		log.Error("ERROR READ KEYS", err)
-		err = nil
-
-	}
-	log.Println("READ KEYS")
 	keys_and_cert.SigningPublicKey = spk
 	keys_and_cert.PublicKey = pk
 	return
