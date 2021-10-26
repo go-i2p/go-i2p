@@ -28,6 +28,7 @@ payload :: data
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )
@@ -78,6 +79,10 @@ const (
 	KEYCERT_SPK_SIZE    = 128
 )
 
+const (
+	KEYCERT_MIN_SIZE = 7
+)
+
 type KeyCertificate struct {
 	CertificateInterface
 	PKType   *Integer
@@ -106,15 +111,15 @@ func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_typ
 	//	data_len := len(key_certificate.CertificateInterface.CertBytes)
 	if len(key_certificate.SPKType.Bytes()) < 2 {
 		log.WithFields(log.Fields{
-			"at":           "(KeyCertificate) SingingPublicKeyType",
+			"at":           "(KeyCertificate) SigningPublicKeyType",
 			"data_len":     len(key_certificate.SPKType.Bytes()),
 			"required_len": 2,
 			"reason":       "not enough data",
-		}).Error("error retrieving Singning Public Key type")
+		}).Error("error retrieving Signing Public Key type")
 		err = errors.New("error retrieving signing public key type: not enough data")
 		return
 	}
-	log.Println("Signing Public Key Type", key_certificate.SPKType)
+	log.Println("Signing Public Key Type", key_certificate.SPKType) //.Value())
 	return key_certificate.SPKType.Value(), nil
 }
 
@@ -254,7 +259,7 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error) {
 	key_certificate.SPKType = &Integer{}
 	key_certificate.PKType = &Integer{}
-	cert, _, err := ReadCertificate(data)
+	cert, remainder, err := ReadCertificate(data)
 	if err != nil {
 		return
 	}
@@ -262,35 +267,37 @@ func ReadKeyCertificate(data []byte) (key_certificate KeyCertificate, err error)
 	if err != nil {
 		return
 	}
-	log.Println("KEYSANDCERT CERT TYPE=", cert_type, cert.CertBytes)
+	log.Println("KEYSANDCERT CERT TYPE=", cert_type, cert.CertBytes, remainder)
 	key_certificate.CertificateInterface = cert
-	data = cert.CertBytes
+	data = cert.Cert()
 	data_len := len(data)
-	if data_len < 2 {
-		log.WithFields(log.Fields{
-			"at":           "(KeyCertificate) SigningPublicKeyType",
-			"data_len":     data_len,
-			"required_len": 2,
-			"reason":       "not enough data",
-		}).Error("error parsing key certificate signing public key")
-		err = errors.New("error parsing key certificate signing public key: not enough data")
-		//		key_certificate.SPKType, err = NewInteger(data[:])
-		key_certificate.PKType, err = NewInteger(data[:])
-		return
-	}
-	//	key_certificate.SPKType, err = NewInteger(data[0:2])
-	key_certificate.PKType, err = NewInteger(data[0:2])
-	if data_len < 4 {
+	if data_len < KEYCERT_MIN_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) PublicKeyType",
 			"data_len":     data_len,
-			"required_len": 4,
+			"required_len": KEYCERT_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing key certificate public key")
 		err = errors.New("error parsing key certificate public key: not enough data")
 		return
 	}
-	//	key_certificate.PKType, err = NewInteger(data[2:4])
-	key_certificate.SPKType, err = NewInteger(data[2:4])
+	log.Println("KEYSANDCERT=", data, "| len=", data_len, "| 0=", data[0], "| 1=", data[1])
+	key_certificate.SPKType, err = NewInteger(data[len(data)-2 : len(data)])
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":       "(KeyCertificate) SigningPublicKeyType",
+			"key_type": key_certificate.PKType,
+			"reason":   "failed to read signing public key type",
+		}).Error("error parsing key certificate signing public key")
+	}
+	key_certificate.PKType, err = NewInteger(data[len(data)-4 : len(data)-2])
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":       "(KeyCertificate) PublicKeyType",
+			"key_type": key_certificate.PKType,
+			"reason":   "failed to read public key type",
+		}).Error("error parsing key certificate public key")
+		err = errors.New("error parsing key certificate public key: not enough data")
+	}
 	return
 }

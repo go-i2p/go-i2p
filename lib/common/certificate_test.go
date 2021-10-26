@@ -1,8 +1,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCertificateTypeIsFirstByte(t *testing.T) {
@@ -24,11 +25,13 @@ func TestCertificateLengthCorrect(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff}
 	certificate, _, err := ReadCertificate(bytes)
+	assert.Nil(err, "ReadCertificate() should not return an error with valid data")
+
 	cert_len, err := certificate.Length()
-	assert.Nil(err)
+	assert.Nil(err, "ReadCertificate() should not return an error with valid data")
 
 	assert.Equal(cert_len, 2, "certificate.Length() should return integer from second two bytes")
-	assert.Nil(err)
+	assert.Nil(err, "ReadCertificate() should not return an error with valid data")
 }
 
 func TestCertificateLengthErrWhenTooShort(t *testing.T) {
@@ -52,7 +55,14 @@ func TestCertificateLengthErrWhenDataTooShort(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff}
 	certificate, _, err := ReadCertificate(bytes)
+	if assert.NotNil(err) {
+		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error(), "correct error message should be returned")
+	}
+
 	cert_len, err := certificate.Length()
+	if assert.NotNil(err) {
+		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error(), "correct error message should be returned")
+	}
 
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was actually missing")
 	if assert.NotNil(err) {
@@ -80,11 +90,14 @@ func TestCertificateDataWhenTooLong(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff, 0xaa, 0xaa}
 	certificate, _, err := ReadCertificate(bytes)
+	if assert.NotNil(err) {
+		assert.Equal("certificate parsing warning: certificate data is longer than specified by length", err.Error(), "correct error message should be returned")
+	}
 
 	cert_len, err := certificate.Length()
 
 	if assert.NotNil(err) {
-		assert.Equal("certificate parsing warning: certificate contains data beyond length", err.Error(), "correct error message should be returned")
+		assert.Equal("certificate parsing warning: certificate data is longer than specified by length", err.Error(), "correct error message should be returned")
 	}
 
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was too long")
@@ -98,6 +111,9 @@ func TestCertificateDataWhenTooShort(t *testing.T) {
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff}
 	certificate, _, err := ReadCertificate(bytes)
+	if assert.NotNil(err) {
+		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error(), "correct error message should be returned")
+	}
 	cert_data, err := certificate.Data()
 
 	if assert.NotNil(err) {
@@ -142,7 +158,7 @@ func TestReadCertificateWithRemainder(t *testing.T) {
 	assert.Equal(len(cert.Cert()), 5, "ReadCertificate() did not return correct amount of data for certificate with extra data")
 	assert.Equal(len(remainder), 1, "ReadCertificate() returned incorrect length remainder on certificate with extra data")
 	assert.Equal(1, int(remainder[0]), "ReadCertificate() did not return correct remainder value")
-	assert.Nil(err)
+	assert.NotNil(err)
 }
 
 func TestReadCertificateWithInvalidLength(t *testing.T) {

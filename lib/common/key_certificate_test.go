@@ -1,8 +1,9 @@
 package common
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSingingPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
@@ -20,6 +21,9 @@ func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, err := ReadKeyCertificate([]byte{0x05, 0x00, 0x01, 0x00})
+	if assert.NotNil(err) {
+		assert.Equal("error parsing key certificate public key: not enough data", err.Error(), "correct error message should be returned")
+	}
 	//	assert.NotNil(err, "ReadKeyCertificate() returned error with valid data")
 	_, err = key_cert.PublicKeyType()
 
