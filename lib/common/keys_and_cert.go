@@ -259,9 +259,19 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		//		return
+		return
 	}
 	cert, remainder, err := ReadCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "error parsing certificate",
+		}).Error("error parsing keys and cert")
+		err = errors.New("error parsing KeysAndCert: error parsing certificate")
+		return
+	}
 	keys_and_cert.CertificateInterface = cert
 	spk, pk, remainder, err := ReadKeys(data, cert)
 	keys_and_cert.SigningPublicKey = spk
