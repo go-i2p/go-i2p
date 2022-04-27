@@ -42,14 +42,13 @@ func TestPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
-	//key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
-	//_, err := key_cert.PublicKeyType()
-	_, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
-	//_, err = key_cert.PublicKeyType()
+	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
+	pk_type := key_cert.PublicKeyType()
 
 	if assert.NotNil(err) {
 		assert.Equal("error parsing key certificate: not enough data", err.Error(), "correct error message should be returned")
 	}
+	assert.Equal(pk_type, 0, "PublicKeyType() did not return correct typec")
 }
 
 func TestConstructPublicKeyReportsWhenDataTooSmall(t *testing.T) {
