@@ -27,7 +27,8 @@ payload :: data
 */
 
 import (
-	"errors"
+	"fmt"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,24 +47,41 @@ const (
 	CERT_MIN_SIZE = 3
 )
 
-type Certificate []byte
+type Certificate struct {
+	kind Integer
+	leng Integer
+	payl []byte
+}
+
+func (c *Certificate) RawBytes() []byte {
+	bytes := c.kind.Bytes()
+	bytes = append(bytes, c.leng.Bytes()...)
+	bytes = append(bytes, c.payl...)
+	return bytes
+}
+
+func (c *Certificate) ExcessBytes() []byte {
+	return c.payl[c.leng.Int():]
+}
+
+func (c *Certificate) Bytes() []byte {
+	bytes := c.kind.Bytes()
+	bytes = append(bytes, c.leng.Bytes()...)
+	bytes = append(bytes, c.Data()...)
+	return bytes
+}
+
+func (c *Certificate) length() (cert_len int) {
+	cert_len = len(c.Bytes())
+	return
+}
 
 //
 // Return the Certificate Type specified in the first byte of the Certificate,
 // and an error if the certificate is shorter than the minimum certificate size.
 //
-func (certificate Certificate) Type() (cert_type int, err error) {
-	cert_len := len(certificate)
-	if cert_len < CERT_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) Type",
-			"certificate_bytes_length": cert_len,
-			"reason":                   "too short (len < CERT_MIN_SIZE)",
-		}).Error("invalid certificate")
-		err = errors.New("error parsing certificate length: certificate is too short")
-		return
-	}
-	cert_type = Integer([]byte{certificate[0]})
+func (c *Certificate) Type() (cert_type int) {
+	cert_type = c.kind.Int()
 	return
 }
 
@@ -72,67 +90,93 @@ func (certificate Certificate) Type() (cert_type int, err error) {
 // shorter than the minimum certificate size or if the reported length doesn't
 // match the provided data.
 //
-func (certificate Certificate) Length() (length int, err error) {
-	cert_len := len(certificate)
-	_, err = certificate.Type()
-	if err != nil {
-		return
-	}
-	length = Integer(certificate[1:CERT_MIN_SIZE])
-	inferred_len := length + CERT_MIN_SIZE
-	if inferred_len > cert_len {
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) Length",
-			"certificate_bytes_length": cert_len,
-			"certificate_length_field": length,
-			"expected_bytes_length":    inferred_len,
-			"reason":                   "data shorter than specified",
-		}).Warn("certificate format warning")
-		err = errors.New("certificate parsing warning: certificate data is shorter than specified by length")
-	} else if cert_len > inferred_len {
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) Length",
-			"certificate_bytes_length": cert_len,
-			"certificate_length_field": length,
-			"expected_bytes_length":    inferred_len,
-			"reason":                   "data longer than expected",
-		}).Warn("certificate format warning")
-		err = errors.New("certificate parsing warning: certificate contains data beyond length")
-	}
+func (c *Certificate) Length() (length int) {
+	length = c.leng.Int()
 	return
 }
 
 //
 // Return the Certificate data and any errors encountered parsing the Certificate.
 //
-func (certificate Certificate) Data() (data []byte, err error) {
-	length, err := certificate.Length()
-	if err != nil {
-		switch err.Error() {
-		case "error parsing certificate length: certificate is too short":
+func (c *Certificate) Data() (data []byte) {
+	lastElement := c.Length()
+	if lastElement > len(c.payl) {
+		data = c.payl
+	} else {
+		data = c.payl[0:lastElement]
+	}
+	return
+}
+
+func NewCertificate(data []byte) (certificate *Certificate, err error) {
+	certificate = &Certificate{}
+	switch len(data) {
+	case 0:
+		certificate.kind = NewInteger([]byte{0})
+		certificate.leng = NewInteger([]byte{0})
+		log.WithFields(log.Fields{
+			"at":                       "(Certificate) NewCertificate",
+			"certificate_bytes_length": len(data),
+			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
+		}).Error("invalid certificate")
+		err = fmt.Errorf("error parsing certificate: certificate is too short")
+		return
+	case 1:
+		certificate.kind = NewInteger(data[0:0])
+		certificate.leng = NewInteger([]byte{0})
+		log.WithFields(log.Fields{
+			"at":                       "(Certificate) NewCertificate",
+			"certificate_bytes_length": len(data),
+			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
+		}).Error("invalid certificate")
+		err = fmt.Errorf("error parsing certificate: certificate is too short")
+		return
+	case 2:
+		certificate.kind = NewInteger(data[0:1])
+		certificate.leng = NewInteger([]byte{0})
+		log.WithFields(log.Fields{
+			"at":                       "(Certificate) NewCertificate",
+			"certificate_bytes_length": len(data),
+			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
+		}).Error("invalid certificate")
+		err = fmt.Errorf("error parsing certificate length: certificate is too short")
+		return
+	default:
+		certificate.kind = NewInteger(data[0:1])
+		certificate.leng = NewInteger(data[1:3])
+		payleng := len(data) - CERT_MIN_SIZE
+		certificate.payl = data[CERT_MIN_SIZE:]
+		if certificate.leng.Int() > len(data)-CERT_MIN_SIZE {
+			err = fmt.Errorf("certificate parsing warning: certificate data is shorter than specified by length")
+			log.WithFields(log.Fields{
+				"at":                         "(Certificate) NewCertificate",
+				"certificate_bytes_length":   certificate.leng.Int(),
+				"certificate_payload_length": payleng,
+				"reason":                     err.Error(),
+			}).Error("invalid certificate")
 			return
-		case "certificate parsing warning: certificate data is shorter than specified by length":
-			data = certificate[CERT_MIN_SIZE:]
-			return
-		case "certificate parsing warning: certificate contains data beyond length":
-			data = certificate[CERT_MIN_SIZE : length+CERT_MIN_SIZE]
+		} else if certificate.leng.Int() < len(data)-CERT_MIN_SIZE {
+			err = fmt.Errorf("certificate parsing warning: certificate data is longer than specified by length")
+			log.WithFields(log.Fields{
+				"at":                         "(Certificate) NewCertificate",
+				"certificate_bytes_length":   certificate.leng.Int(),
+				"certificate_payload_length": payleng,
+				"reason":                     err.Error(),
+			}).Error("invalid certificate")
 			return
 		}
+		return
 	}
-	data = certificate[CERT_MIN_SIZE:]
-	return
 }
 
 //
 // Read a Certificate from a slice of bytes, returning any extra data on the end of the slice
 // and any errors if a valid Certificate could not be read.
 //
-func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
-	certificate = Certificate(data)
-	length, err := certificate.Length()
-	if err != nil && err.Error() == "certificate parsing warning: certificate contains data beyond length" {
-		certificate = Certificate(data[:length+CERT_MIN_SIZE])
-		remainder = data[length+CERT_MIN_SIZE:]
+func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, err error) {
+	certificate, err = NewCertificate(data)
+	if err != nil && err.Error() == "certificate parsing warning: certificate data is longer than specified by length" {
+		remainder = certificate.ExcessBytes()
 		err = nil
 	}
 	return

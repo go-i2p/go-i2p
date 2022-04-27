@@ -25,7 +25,7 @@ func (router_identity RouterIdentity) SigningPublicKey() (crypto.SigningPublicKe
 	return KeysAndCert(router_identity).SigningPublicKey()
 }
 
-func (router_identity RouterIdentity) Certificate() (Certificate, error) {
+func (router_identity RouterIdentity) Certificate() (*Certificate, error) {
 	return KeysAndCert(router_identity).Certificate()
 }
 

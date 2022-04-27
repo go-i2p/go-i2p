@@ -75,6 +75,7 @@ signature :: Signature
 
 import (
 	"errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -144,7 +145,8 @@ func (router_info RouterInfo) RouterAddressCount() (count int, err error) {
 		err = errors.New("error parsing router addresses: not enough data")
 		return
 	}
-	count = Integer([]byte{remainder[8]})
+	c := NewInteger([]byte{remainder[8]})
+	count = c.Int()
 	return
 }
 
@@ -210,7 +212,7 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 	head := router_info.optionsLocation()
 	size := head + router_info.optionsSize()
 	ident, _ := router_info.RouterIdentity()
-	keyCert := KeyCertificate(ident)
+	keyCert, _ := NewKeyCertificate(ident)
 	sigSize := keyCert.SignatureSize()
 	signature = Signature(router_info[size : size+sigSize])
 	return
@@ -263,6 +265,7 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 //
 func (router_info RouterInfo) optionsSize() (size int) {
 	head := router_info.optionsLocation()
-	size = Integer(router_info[head:head+2]) + 2
+	s := NewInteger(router_info[head : head+2])
+	size = s.Int() + 2
 	return
 }

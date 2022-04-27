@@ -37,6 +37,7 @@ options :: Mapping
 
 import (
 	"errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -56,7 +57,8 @@ func (router_address RouterAddress) Cost() (cost int, err error) {
 	if exit {
 		return
 	}
-	cost = Integer([]byte{router_address[0]})
+	c := NewInteger([]byte{router_address[0]})
+	cost = c.Int()
 	return
 }
 
@@ -77,12 +79,12 @@ func (router_address RouterAddress) Expiration() (date Date, err error) {
 // Return the Transport type for this RouterAddress and any errors encountered
 // parsing the RouterAddress.
 //
-func (router_address RouterAddress) TransportStyle() (str String, err error) {
+func (router_address RouterAddress) TransportStyle() (str I2PString, err error) {
 	err, exit := router_address.checkValid()
 	if exit {
 		return
 	}
-	str, _, err = ReadString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
+	str, _, err = ReadI2PString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
 	return
 }
 
@@ -95,7 +97,7 @@ func (router_address RouterAddress) Options() (mapping Mapping, err error) {
 	if exit {
 		return
 	}
-	_, remainder, err := ReadString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
+	_, remainder, err := ReadI2PString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
 	if len(remainder) == 0 {
 		return
 	}
@@ -137,7 +139,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		return
 	}
 	router_address = append(router_address, data[:ROUTER_ADDRESS_MIN_SIZE]...)
-	str, remainder, err := ReadString(data[ROUTER_ADDRESS_MIN_SIZE:])
+	str, remainder, err := ReadI2PString(data[ROUTER_ADDRESS_MIN_SIZE:])
 	if err != nil {
 		return
 	}
@@ -145,7 +147,8 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 	map_size := 0
 	mapping := make([]byte, 0)
 	if len(remainder) >= 2 {
-		map_size = Integer(remainder[:2])
+		ms := NewInteger(remainder[:2])
+		map_size = ms.Int()
 		if len(remainder) < map_size+2 {
 			err = errors.New("not enough data for map inside router address")
 			router_address = RouterAddress([]byte{})

@@ -28,24 +28,26 @@ val_string :: String
 import (
 	"encoding/binary"
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"sort"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Mapping []byte
 
 // Parsed key-values pairs inside a Mapping.
-type MappingValues [][2]String
+type MappingValues [][2]I2PString
 
 //
 // Returns the values contained in a Mapping in the form of a MappingValues.
 //
 func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
-	var str String
+	var str I2PString
 	var remainder = mapping
 	var err error
 
-	length := Integer(remainder[:2])
+	l := NewInteger(remainder[:2])
+	length := l.Int()
 	inferred_length := length + 2
 	remainder = remainder[2:]
 	mapping_len := len(mapping)
@@ -72,7 +74,7 @@ func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
 	for {
 		// Read a key, breaking on fatal errors
 		// and appending warnings
-		str, remainder, err = ReadString(remainder)
+		str, remainder, err = ReadI2PString(remainder)
 		key_str := str
 		if err != nil {
 			if stopValueRead(err) {
@@ -92,7 +94,7 @@ func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
 
 		// Read a value, breaking on fatal errors
 		// and appending warnings
-		str, remainder, err = ReadString(remainder)
+		str, remainder, err = ReadI2PString(remainder)
 		val_str := str
 		if err != nil {
 			if stopValueRead(err) {
@@ -111,7 +113,7 @@ func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
 		remainder = remainder[1:]
 
 		// Append the key-value pair and break if there is no more data to read
-		map_values = append(map_values, [2]String{key_str, val_str})
+		map_values = append(map_values, [2]I2PString{key_str, val_str})
 		if len(remainder) == 0 {
 			break
 		}
@@ -174,7 +176,7 @@ func GoMapToMapping(gomap map[string]string) (mapping Mapping, err error) {
 		}
 		map_vals = append(
 			map_vals,
-			[2]String{key_str, val_str},
+			[2]I2PString{key_str, val_str},
 		)
 	}
 	mapping = ValuesToMapping(map_vals)

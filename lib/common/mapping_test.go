@@ -3,8 +3,9 @@ package common
 import (
 	"bytes"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValuesExclusesPairWithBadData(t *testing.T) {
@@ -116,10 +117,10 @@ func TestMappingOrderSortsValuesThenKeys(t *testing.T) {
 	a, _ := ToI2PString("a")
 	b, _ := ToI2PString("b")
 	values := MappingValues{
-		[2]String{b, b},
-		[2]String{b, a},
-		[2]String{a, b},
-		[2]String{a, a},
+		[2]I2PString{b, b},
+		[2]I2PString{b, a},
+		[2]I2PString{a, b},
+		[2]I2PString{a, a},
 	}
 	mappingOrder(values)
 	for i, pair := range values {

@@ -47,6 +47,7 @@ total length: 387+ bytes
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )
@@ -70,7 +71,7 @@ func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
 	if err != nil {
 		return
 	}
-	cert_len, err := cert.Length()
+	cert_len := cert.Length()
 	if err != nil {
 		return
 	}
@@ -82,12 +83,12 @@ func (keys_and_cert KeysAndCert) PublicKey() (key crypto.PublicKey, err error) {
 		key = elg_key
 	} else {
 		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
+		cert_type := cert.Type()
 		if cert_type == CERT_KEY {
 			// This KeysAndCert contains a Key Certificate, construct
 			// a PublicKey from the data in the KeysAndCert and
 			// any additional data in the Certificate.
-			key, err = KeyCertificate(cert).ConstructPublicKey(
+			key, err = KeyCertificateFromCertificate(cert).ConstructPublicKey(
 				keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE],
 			)
 		} else {
@@ -116,7 +117,7 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 	if err != nil {
 		return
 	}
-	cert_len, err := cert.Length()
+	cert_len := cert.Length()
 	if err != nil {
 		return
 	}
@@ -128,12 +129,12 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 		signing_public_key = dsa_pk
 	} else {
 		// A Certificate is present in this KeysAndCert
-		cert_type, _ := cert.Type()
+		cert_type := cert.Type()
 		if cert_type == CERT_KEY {
 			// This KeysAndCert contains a Key Certificate, construct
 			// a SigningPublicKey from the data in the KeysAndCert and
 			// any additional data in the Certificate.
-			signing_public_key, err = KeyCertificate(cert).ConstructSigningPublicKey(
+			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
 				keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
 			)
 		} else {
@@ -153,7 +154,7 @@ func (keys_and_cert KeysAndCert) SigningPublicKey() (signing_public_key crypto.S
 // Return the Certificate contained in the KeysAndCert and any errors encountered while parsing the
 // KeysAndCert or Certificate.
 //
-func (keys_and_cert KeysAndCert) Certificate() (cert Certificate, err error) {
+func (keys_and_cert KeysAndCert) Certificate() (cert *Certificate, err error) {
 	keys_cert_len := len(keys_and_cert)
 	if keys_cert_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(log.Fields{
@@ -187,14 +188,14 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 	keys_and_cert = KeysAndCert(data[:KEYS_AND_CERT_MIN_SIZE])
 	cert, _ := keys_and_cert.Certificate()
-	cert_len, cert_len_err := cert.Length()
+	cert_len := cert.Length()
 	if cert_len == 0 {
 		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
 		return
 	}
 	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
 		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:]...)
-		err = cert_len_err
+		//err = cert_len_err
 	} else {
 		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
 		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]

@@ -18,7 +18,7 @@ type Date [8]byte
 // struct.
 //
 func (date Date) Time() (date_time time.Time) {
-	seconds := Integer(date[:])
-	date_time = time.Unix(0, int64(seconds*1000000))
+	seconds := NewInteger(date[:])
+	date_time = time.Unix(0, int64(seconds.Int()*1000000))
 	return
 }

@@ -2,8 +2,9 @@ package common
 
 import (
 	"bytes"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func buildDestination() RouterIdentity {
@@ -71,7 +72,7 @@ func TestDestinationIsCorrect(t *testing.T) {
 	assert.Nil(err)
 	dest_cert, err := dest.Certificate()
 	assert.Nil(err)
-	cert_type, err := dest_cert.Type()
+	cert_type := dest_cert.Type()
 	assert.Nil(err)
 	assert.Equal(CERT_KEY, cert_type)
 }

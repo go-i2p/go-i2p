@@ -82,6 +82,7 @@ signature :: Signature
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )
@@ -139,7 +140,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	if err != nil {
 		return
 	}
-	cert_len, err := cert.Length()
+	cert_len := cert.Length()
 	if err != nil {
 		return
 	}
@@ -162,12 +163,12 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 		signing_public_key = dsa_pk
 	} else {
 		// A Certificate is present in this LeaseSet's Destination
-		cert_type, _ := cert.Type()
+		cert_type := cert.Type()
 		if cert_type == CERT_KEY {
 			// This LeaseSet's Destination's Certificate is a Key Certificate,
 			// create the signing publickey key using any data that might be
 			// contained in the key certificate.
-			signing_public_key, err = KeyCertificate(cert).ConstructSigningPublicKey(
+			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
 				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
 			)
 		} else {
@@ -201,7 +202,8 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 		err = errors.New("error parsing lease count: not enough data")
 		return
 	}
-	count = Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	c := NewInteger([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	count = c.Int()
 	if count > 16 {
 		log.WithFields(log.Fields{
 			"at":          "(LeaseSet) LeaseCount",
@@ -269,10 +271,10 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	if err != nil {
 		return
 	}
-	cert_type, _ := cert.Type()
+	cert_type := cert.Type()
 	var end int
 	if cert_type == CERT_KEY {
-		end = start + KeyCertificate(cert).SignatureSize()
+		end = start + KeyCertificateFromCertificate(cert).SignatureSize()
 	} else {
 		end = start + LEASE_SET_SIG_SIZE
 	}

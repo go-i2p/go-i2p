@@ -9,10 +9,11 @@ Identical to KeysAndCert
 */
 
 import (
+	"strings"
+
 	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/common/base64"
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	"strings"
 )
 
 //
@@ -29,7 +30,7 @@ func (destination Destination) SigningPublicKey() (crypto.SigningPublicKey, erro
 	return KeysAndCert(destination).SigningPublicKey()
 }
 
-func (destination Destination) Certificate() (Certificate, error) {
+func (destination Destination) Certificate() (*Certificate, error) {
 	return KeysAndCert(destination).Certificate()
 }
 
