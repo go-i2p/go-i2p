@@ -4,7 +4,10 @@ A pure Go implementation of the I2P router.
 
 ## Status
 
-go-i2p is in early development.
+go-i2p is in early development. The master branch is being refactored and API's are
+definitely going to change. If you choose to use any part of this code right now,
+please keep up with these changes, as they will not be backward compatible and require
+**Fundamentally** changing any code that treats this as a dependency.
 
 ### Implemented Features
 
