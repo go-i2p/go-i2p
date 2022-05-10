@@ -26,14 +26,16 @@ val_string :: String
 */
 
 import (
-	"encoding/binary"
 	"errors"
 	"sort"
 
 	log "github.com/sirupsen/logrus"
 )
 
-type Mapping []byte
+type Mapping struct {
+	size *Integer
+	vals *MappingValues
+}
 
 // Parsed key-values pairs inside a Mapping.
 type MappingValues [][2]I2PString
@@ -41,84 +43,8 @@ type MappingValues [][2]I2PString
 //
 // Returns the values contained in a Mapping in the form of a MappingValues.
 //
-func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
-	var str I2PString
-	var remainder = mapping
-	var err error
-
-	l := NewInteger(remainder[:2])
-	length := l.Int()
-	inferred_length := length + 2
-	remainder = remainder[2:]
-	mapping_len := len(mapping)
-	if mapping_len > inferred_length {
-		log.WithFields(log.Fields{
-			"at":                    "(Mapping) Values",
-			"mappnig_bytes_length":  mapping_len,
-			"mapping_length_field":  length,
-			"expected_bytes_length": inferred_length,
-			"reason":                "data longer than expected",
-		}).Warn("mapping format warning")
-		errs = append(errs, errors.New("warning parsing mapping: data exists beyond length of mapping"))
-	} else if inferred_length > mapping_len {
-		log.WithFields(log.Fields{
-			"at":                    "(Mapping) Values",
-			"mappnig_bytes_length":  mapping_len,
-			"mapping_length_field":  length,
-			"expected_bytes_length": inferred_length,
-			"reason":                "data shorter than expected",
-		}).Warn("mapping format warning")
-		errs = append(errs, errors.New("warning parsing mapping: mapping length exceeds provided data"))
-	}
-
-	for {
-		// Read a key, breaking on fatal errors
-		// and appending warnings
-		str, remainder, err = ReadI2PString(remainder)
-		key_str := str
-		if err != nil {
-			if stopValueRead(err) {
-				errs = append(errs, err)
-				return
-			}
-		}
-		if !beginsWith(remainder, 0x3d) {
-			log.WithFields(log.Fields{
-				"at":     "(Mapping) Values",
-				"reason": "expected =",
-			}).Warn("mapping format violation")
-			errs = append(errs, errors.New("mapping format violation, expected ="))
-			return
-		}
-		remainder = remainder[1:]
-
-		// Read a value, breaking on fatal errors
-		// and appending warnings
-		str, remainder, err = ReadI2PString(remainder)
-		val_str := str
-		if err != nil {
-			if stopValueRead(err) {
-				errs = append(errs, err)
-				return
-			}
-		}
-		if !beginsWith(remainder, 0x3b) {
-			log.WithFields(log.Fields{
-				"at":     "(Mapping) Values",
-				"reason": "expected ;",
-			}).Warn("mapping format violation")
-			errs = append(errs, errors.New("mapping format violation, expected ;"))
-			return
-		}
-		remainder = remainder[1:]
-
-		// Append the key-value pair and break if there is no more data to read
-		map_values = append(map_values, [2]I2PString{key_str, val_str})
-		if len(remainder) == 0 {
-			break
-		}
-	}
-	return
+func (mapping Mapping) Values() *MappingValues {
+	return mapping.vals
 }
 
 //
@@ -126,8 +52,8 @@ func (mapping Mapping) Values() (map_values MappingValues, errs []error) {
 //
 func (mapping Mapping) HasDuplicateKeys() bool {
 	seen_values := make(map[string]bool)
-	values, _ := mapping.Values()
-	for _, pair := range values {
+	values := mapping.Values()
+	for _, pair := range *values {
 		key, _ := pair[0].Data()
 		if _, present := seen_values[key]; present {
 			return true
@@ -143,18 +69,8 @@ func (mapping Mapping) HasDuplicateKeys() bool {
 // sorted in the order defined in mappingOrder.
 //
 func ValuesToMapping(values MappingValues) (mapping Mapping) {
-	mappingOrder(values)
-	for _, kv_pair := range values {
-		key_string := kv_pair[0]
-		key_string = append(key_string, []byte("=")[0])
-		key_value := kv_pair[1]
-		key_value = append(key_value, []byte(";")[0])
-		mapping = append(append(mapping, key_string...), key_value...)
-	}
-	map_len := len(mapping)
-	len_bytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(len_bytes, uint16(map_len))
-	mapping = append(len_bytes, mapping...)
+	mapping.size, _ = NewIntegerFromInt(len(values))
+	mapping.vals = &values
 	return
 }
 
@@ -227,4 +143,131 @@ func stopValueRead(err error) bool {
 func beginsWith(bytes []byte, chr byte) bool {
 	return len(bytes) != 0 &&
 		bytes[0] == chr
+}
+
+func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes []byte, err error) {
+	var str I2PString
+	mapping := remainder
+	//var remainder = mapping
+	//var err error
+	var errs []error
+	map_values := make(MappingValues, 0)
+
+	l := Integer(remainder[:2])
+	length := l.Int()
+	inferred_length := length + 2
+	remainder = remainder[2:]
+	mapping_len := len(mapping)
+	if mapping_len > inferred_length {
+		log.WithFields(log.Fields{
+			"at":                    "(Mapping) Values",
+			"mappnig_bytes_length":  mapping_len,
+			"mapping_length_field":  length,
+			"expected_bytes_length": inferred_length,
+			"reason":                "data longer than expected",
+		}).Warn("mapping format warning")
+		errs = append(errs, errors.New("warning parsing mapping: data exists beyond length of mapping"))
+	} else if inferred_length > mapping_len {
+		log.WithFields(log.Fields{
+			"at":                    "(Mapping) Values",
+			"mappnig_bytes_length":  mapping_len,
+			"mapping_length_field":  length,
+			"expected_bytes_length": inferred_length,
+			"reason":                "data shorter than expected",
+		}).Warn("mapping format warning")
+		errs = append(errs, errors.New("warning parsing mapping: mapping length exceeds provided data"))
+	}
+
+	for {
+		// Read a key, breaking on fatal errors
+		// and appending warnings
+		str, remainder, err = ReadI2PString(remainder)
+		key_str := str
+		if err != nil {
+			if stopValueRead(err) {
+				errs = append(errs, err)
+				return
+			}
+		}
+		if !beginsWith(remainder, 0x3d) {
+			log.WithFields(log.Fields{
+				"at":     "(Mapping) Values",
+				"reason": "expected =",
+			}).Warn("mapping format violation")
+			errs = append(errs, errors.New("mapping format violation, expected ="))
+			return
+		}
+		remainder = remainder[1:]
+
+		// Read a value, breaking on fatal errors
+		// and appending warnings
+		str, remainder, err = ReadI2PString(remainder)
+		val_str := str
+		if err != nil {
+			if stopValueRead(err) {
+				errs = append(errs, err)
+				return
+			}
+		}
+		if !beginsWith(remainder, 0x3b) {
+			log.WithFields(log.Fields{
+				"at":     "(Mapping) Values",
+				"reason": "expected ;",
+			}).Warn("mapping format violation")
+			errs = append(errs, errors.New("mapping format violation, expected ;"))
+			return
+		}
+		remainder = remainder[1:]
+
+		// Append the key-value pair and break if there is no more data to read
+		map_values = append(map_values, [2]I2PString{key_str, val_str})
+		if len(remainder) == 0 {
+			break
+		}
+	}
+	values = &map_values
+	return
+
+}
+
+func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err error) {
+	if len(bytes) == 0 {
+		log.WithFields(log.Fields{
+			"at":     "ReadMapping",
+			"reason": "zero length",
+		}).Warn("mapping format violation")
+		err = errors.New("zero length")
+	}
+	size, remainder, err := NewInteger(bytes)
+	mapping.size = size
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "ReadMapping",
+			"reason": "error parsing integer",
+		}).Warn("mapping format violation")
+		err = errors.New("error parsing integer")
+	}
+	if len(remainder) == 0 {
+		log.WithFields(log.Fields{
+			"at":     "ReadMapping",
+			"reason": "zero length",
+		}).Warn("mapping format violation")
+		err = errors.New("zero length")
+	}
+	vals, remainder, err := ReadMappingValues(remainder)
+	mapping.vals = vals
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "ReadMapping",
+			"reason": "error parsing mapping values",
+		}).Warn("mapping format violation")
+		err = errors.New("error parsing mapping values")
+	}
+	return
+}
+
+func NewMapping(bytes []byte) (values *Mapping, remainder []byte, err error) {
+	objvalues, remainder, err := ReadMapping(bytes)
+	values = &objvalues
+	return
 }

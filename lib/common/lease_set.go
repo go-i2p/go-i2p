@@ -202,7 +202,7 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 		err = errors.New("error parsing lease count: not enough data")
 		return
 	}
-	c := NewInteger([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
+	c := Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
 	count = c.Int()
 	if count > 16 {
 		log.WithFields(log.Fields{

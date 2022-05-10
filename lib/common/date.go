@@ -7,8 +7,13 @@ Accurate for version 0.9.24
 */
 
 import (
+	"errors"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
+
+const DATE_SIZE = 8
 
 type Date [8]byte
 
@@ -18,7 +23,26 @@ type Date [8]byte
 // struct.
 //
 func (date Date) Time() (date_time time.Time) {
-	seconds := NewInteger(date[:])
+	seconds := Integer(date[:])
 	date_time = time.Unix(0, int64(seconds.Int()*1000000))
+	return
+}
+
+func ReadDate(data []byte) (date Date, remainder []byte, err error) {
+	if len(data) < 8 {
+		log.WithFields(log.Fields{
+			"data": data,
+		}).Error("ReadDate: data is too short")
+		err = errors.New("ReadDate: data is too short")
+		return
+	}
+	copy(date[:], data[:8])
+	remainder = data[8:]
+	return
+}
+
+func NewDate(data []byte) (date *Date, remainder []byte, err error) {
+	objdate, remainder, err := ReadDate(data)
+	date = &objdate
 	return
 }

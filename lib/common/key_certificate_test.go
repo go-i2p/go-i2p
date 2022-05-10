@@ -9,7 +9,7 @@ import (
 func TestSingingPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x03, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x03, 0x00, 0x00})
 	pk_type := key_cert.SigningPublicKeyType()
 
 	assert.Nil(err, "SigningPublicKeyType() returned error with valid data")
@@ -19,7 +19,7 @@ func TestSingingPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 func TestSingingPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x01, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x01, 0x00})
 	sk_type := key_cert.SigningPublicKeyType()
 
 	assert.Equal(sk_type, 0, "SigningPublicKeyType() did not return correct typec")
@@ -32,7 +32,7 @@ func TestSingingPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 func TestPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03})
 	pk_type := key_cert.PublicKeyType()
 
 	assert.Nil(err, "PublicKey() returned error with valid data")
@@ -42,7 +42,7 @@ func TestPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
 	pk_type := key_cert.PublicKeyType()
 
 	if assert.NotNil(err) {
@@ -54,7 +54,7 @@ func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 func TestConstructPublicKeyReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
 	data := make([]byte, 255)
 	_, err = key_cert.ConstructPublicKey(data)
 
@@ -66,7 +66,7 @@ func TestConstructPublicKeyReportsWhenDataTooSmall(t *testing.T) {
 func TestConstructPublicKeyReturnsCorrectDataWithElg(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
 	data := make([]byte, 256)
 	pk, err := key_cert.ConstructPublicKey(data)
 
@@ -77,7 +77,7 @@ func TestConstructPublicKeyReturnsCorrectDataWithElg(t *testing.T) {
 func TestConstructSigningPublicKeyReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
 	data := make([]byte, 127)
 	_, err = key_cert.ConstructSigningPublicKey(data)
 
@@ -89,7 +89,7 @@ func TestConstructSigningPublicKeyReportsWhenDataTooSmall(t *testing.T) {
 func TestConstructSigningPublicKeyWithDSASHA1(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00})
 	data := make([]byte, 128)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
@@ -100,7 +100,7 @@ func TestConstructSigningPublicKeyWithDSASHA1(t *testing.T) {
 func TestConstructSigningPublicKeyWithP256(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x01})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x01})
 	data := make([]byte, 128)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
@@ -111,7 +111,7 @@ func TestConstructSigningPublicKeyWithP256(t *testing.T) {
 func TestConstructSigningPublicKeyWithP384(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x02, 0x00, 0x02})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x04, 0x00, 0x02, 0x00, 0x02})
 	data := make([]byte, 128)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
@@ -122,7 +122,7 @@ func TestConstructSigningPublicKeyWithP384(t *testing.T) {
 func TestConstructSigningPublicKeyWithP521(t *testing.T) {
 	assert := assert.New(t)
 
-	key_cert, err := NewKeyCertificate([]byte{0x05, 0x00, 0x08, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00})
+	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x08, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00})
 	data := make([]byte, 128)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 

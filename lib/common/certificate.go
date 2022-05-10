@@ -112,8 +112,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 	certificate = &Certificate{}
 	switch len(data) {
 	case 0:
-		certificate.kind = NewInteger([]byte{0})
-		certificate.leng = NewInteger([]byte{0})
+		certificate.kind = Integer([]byte{0})
+		certificate.leng = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
@@ -122,8 +122,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
 		return
 	case 1:
-		certificate.kind = NewInteger(data[0:0])
-		certificate.leng = NewInteger([]byte{0})
+		certificate.kind = Integer(data[0:0])
+		certificate.leng = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
@@ -132,8 +132,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
 		return
 	case 2:
-		certificate.kind = NewInteger(data[0:1])
-		certificate.leng = NewInteger([]byte{0})
+		certificate.kind = Integer(data[0:1])
+		certificate.leng = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
@@ -142,8 +142,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 		err = fmt.Errorf("error parsing certificate length: certificate is too short")
 		return
 	default:
-		certificate.kind = NewInteger(data[0:1])
-		certificate.leng = NewInteger(data[1:3])
+		certificate.kind = Integer(data[0:1])
+		certificate.leng = Integer(data[1:3])
 		payleng := len(data) - CERT_MIN_SIZE
 		certificate.payl = data[CERT_MIN_SIZE:]
 		if certificate.leng.Int() > len(data)-CERT_MIN_SIZE {

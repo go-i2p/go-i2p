@@ -20,31 +20,48 @@ import (
 // A Destination is a KeysAndCert with functionallity
 // for generating base32 and base64 addresses.
 //
-type Destination []byte
-
-func (destination Destination) PublicKey() (crypto.PublicKey, error) {
-	return KeysAndCert(destination).PublicKey()
+type Destination struct {
+	KeysAndCert *KeysAndCert
 }
 
-func (destination Destination) SigningPublicKey() (crypto.SigningPublicKey, error) {
-	return KeysAndCert(destination).SigningPublicKey()
+//[]byte
+
+func (destination Destination) PublicKey() crypto.PublicKey {
+	//return KeysAndCert(destination).PublicKey()
+	return destination.KeysAndCert.PublicKey()
 }
 
-func (destination Destination) Certificate() (*Certificate, error) {
-	return KeysAndCert(destination).Certificate()
+func (destination Destination) SigningPublicKey() crypto.SigningPublicKey {
+	//return KeysAndCert(destination).SigningPublicKey()
+	return destination.KeysAndCert.SigningPublicKey()
+}
+
+func (destination Destination) Certificate() *Certificate {
+	//return KeysAndCert(destination).Certificate()
+	return destination.KeysAndCert.Certificate()
 }
 
 func ReadDestination(data []byte) (destination Destination, remainder []byte, err error) {
-	keys_and_cert, remainder, err := ReadKeysAndCert(data)
-	destination = Destination(keys_and_cert)
+	keys_and_cert, remainder, err := NewKeysAndCert(data)
+	destination = Destination{
+		KeysAndCert: keys_and_cert,
+	}
+	//Destination(keys_and_cert)
 	return
+}
+
+func NewDestination(data []byte) (destination *Destination, remainder []byte, err error) {
+	objdestination, remainder, err := ReadDestination(data)
+	destination = &objdestination
+	return destination, remainder, err
 }
 
 //
 // Generate the I2P base32 address for this Destination.
 //
 func (destination Destination) Base32Address() (str string) {
-	hash := crypto.SHA256(destination)
+	dest := destination.KeysAndCert.KeyCertificate.Bytes()
+	hash := crypto.SHA256(dest)
 	str = strings.Trim(base32.EncodeToString(hash[:]), "=")
 	str = str + ".b32.i2p"
 	return
@@ -54,5 +71,6 @@ func (destination Destination) Base32Address() (str string) {
 // Generate the I2P base64 address for this Destination.
 //
 func (destination Destination) Base64() string {
-	return base64.EncodeToString(destination)
+	dest := destination.KeysAndCert.KeyCertificate.Bytes()
+	return base64.EncodeToString(dest)
 }

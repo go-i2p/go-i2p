@@ -15,22 +15,34 @@ import (
 //
 // A RouterIdentity is identical to KeysAndCert.
 //
-type RouterIdentity []byte
-
-func (router_identity RouterIdentity) PublicKey() (crypto.PublicKey, error) {
-	return KeysAndCert(router_identity).PublicKey()
+type RouterIdentity struct {
+	KeysAndCert *KeysAndCert
 }
 
-func (router_identity RouterIdentity) SigningPublicKey() (crypto.SigningPublicKey, error) {
-	return KeysAndCert(router_identity).SigningPublicKey()
+//[]byte
+
+func (router_identity *RouterIdentity) PublicKey() crypto.PublicKey {
+	return router_identity.KeysAndCert.PublicKey()
 }
 
-func (router_identity RouterIdentity) Certificate() (*Certificate, error) {
-	return KeysAndCert(router_identity).Certificate()
+func (router_identity *RouterIdentity) SigningPublicKey() crypto.SigningPublicKey {
+	return router_identity.KeysAndCert.SigningPublicKey()
+}
+
+func (router_identity *RouterIdentity) Certificate() *Certificate {
+	return router_identity.KeysAndCert.Certificate()
 }
 
 func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder []byte, err error) {
-	keys_and_cert, remainder, err := ReadKeysAndCert(data)
-	router_identity = RouterIdentity(keys_and_cert)
+	keys_and_cert, remainder, err := NewKeysAndCert(data)
+	router_identity = RouterIdentity{
+		KeysAndCert: keys_and_cert,
+	} //(keys_and_cert)
+	return
+}
+
+func NewRouterIdentity(data []byte) (router_identity *RouterIdentity, remainder []byte, err error) {
+	objrouter_identity, remainder, err := ReadRouterIdentity(data)
+	router_identity = &objrouter_identity
 	return
 }

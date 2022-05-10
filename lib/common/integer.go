@@ -8,6 +8,9 @@ Accurate for version 0.9.24
 
 import (
 	"encoding/binary"
+	"errors"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Total byte length of an I2P integer
@@ -25,9 +28,28 @@ func (i Integer) Int() int {
 	return intFromBytes(i.Bytes())
 }
 
-func NewInteger(bytes []byte) Integer {
-	i := Integer(bytes)
-	return i
+func ReadInteger(bytes []byte) (Integer, []byte, error) {
+	if len(bytes) < INTEGER_SIZE {
+		log.WithFields(log.Fields{
+			"bytes": bytes,
+		}).Error("ReadInteger: bytes is too short")
+		return Integer(bytes), nil, errors.New("ReadInteger: bytes is too short")
+	}
+	return bytes[:INTEGER_SIZE], bytes[INTEGER_SIZE:], nil
+}
+
+func NewInteger(bytes []byte) (integer *Integer, remainder []byte, err error) {
+	i, remainder, err := ReadInteger(bytes)
+	integer = &i
+	return
+}
+
+func NewIntegerFromInt(value int) (integer *Integer, err error) {
+	bytes := make([]byte, INTEGER_SIZE)
+	binary.BigEndian.PutUint64(bytes, uint64(value))
+	objinteger, _, err := NewInteger(bytes)
+	integer = objinteger
+	return
 }
 
 //

@@ -208,20 +208,12 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 		KEYCERT_SIGN_ED25519PH: 64,
 	}
 	key_type := key_certificate.SigningPublicKeyType()
-	/*if err != nil {
-		log.WithFields(log.Fields{
-			"at":       "(KeyCertificate) SignatureSize",
-			"key_type": key_type,
-			"reason":   "failed to read signing public key type",
-		}).Error("error getting signature size")
-		return 0
-	}*/
 	return sizes[int(key_type)]
 }
 
-func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, err error) {
+func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder []byte, err error) {
 	var certificate *Certificate
-	certificate, _, err = ReadCertificate(bytes)
+	certificate, remainder, err = ReadCertificate(bytes)
 	//if err != nil {
 	//	return nil, err
 	//}
@@ -254,12 +246,12 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, err error
 			cpkType:     Integer(bytes[6:7]),
 		}
 	}
-
+	remainder = bytes[7:]
 	//key_certificate.PublicKey = NewPublicKey(bytes)
 	return
 }
 
 func KeyCertificateFromCertificate(certificate *Certificate) *KeyCertificate {
-	k, _ := NewKeyCertificate(certificate.RawBytes())
+	k, _, _ := NewKeyCertificate(certificate.RawBytes())
 	return k
 }

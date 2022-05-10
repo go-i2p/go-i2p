@@ -79,117 +79,64 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type RouterInfo []byte
+const ROUTER_INFO_MIN_SIZE = 439
+
+type RouterInfo struct {
+	router_identity *RouterIdentity
+	published       *Date
+	size            *Integer
+	addresses       []*RouterAddress
+	peer_size       *Integer
+	options         *Mapping
+	signature       *Signature
+}
+
+//[]byte
 
 //
 // Read a RouterIdentity from the RouterInfo, returning the RouterIdentity and any errors
 // encountered parsing the RouterIdentity.
 //
-func (router_info RouterInfo) RouterIdentity() (router_identity RouterIdentity, err error) {
-	router_identity, _, err = ReadRouterIdentity(router_info)
-	return
+func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
+	return router_info.router_identity
 }
 
 //
 // Calculate this RouterInfo's Identity Hash (the sha256 of the RouterIdentity)
 // returns error if the RouterIdentity is malformed
 //
-func (router_info RouterInfo) IdentHash() (h Hash, err error) {
-	var ri RouterIdentity
-	ri, err = router_info.RouterIdentity()
-	if err == nil {
-		h = HashData(ri)
-	}
-	return
+func (router_info *RouterInfo) IdentHash() Hash {
+	ri := router_info.RouterIdentity()
+	h := HashData(ri.KeysAndCert.Certificate().Data())
+	return h
 }
 
 //
 // Return the Date the RouterInfo was published and any errors encountered parsing the RouterInfo.
 //
-func (router_info RouterInfo) Published() (date Date, err error) {
-	_, remainder, err := ReadRouterIdentity(router_info)
-	if err != nil {
-		return
-	}
-	remainder_len := len(remainder)
-	if remainder_len < 8 {
-		log.WithFields(log.Fields{
-			"at":           "(RouterInfo) Published",
-			"data_len":     remainder_len,
-			"required_len": 8,
-			"reason":       "not enough data",
-		}).Error("error parsing router info")
-		err = errors.New("error parsing date: not enough data")
-		return
-	}
-	copy(date[:], remainder[:8])
-	return
+func (router_info *RouterInfo) Published() *Date {
+	return router_info.published
 }
 
 //
 // Return the Integer representing the number of RouterAddresses that are contained in this RouterInfo.
 //
-func (router_info RouterInfo) RouterAddressCount() (count int, err error) {
-	_, remainder, err := ReadRouterIdentity(router_info)
-	if err != nil {
-		return
-	}
-	remainder_len := len(remainder)
-	if remainder_len < 9 {
-		log.WithFields(log.Fields{
-			"at":           "(RouterInfo) RouterAddressCount",
-			"data_len":     remainder_len,
-			"required_len": 9,
-			"reason":       "not enough data",
-		}).Error("error parsing router info")
-		err = errors.New("error parsing router addresses: not enough data")
-		return
-	}
-	c := NewInteger([]byte{remainder[8]})
-	count = c.Int()
-	return
+func (router_info *RouterInfo) RouterAddressCount() int {
+	return router_info.size.Int()
 }
 
 //
 // Read the RouterAddresses inside this RouterInfo and return them in a slice, returning
 // a partial list if data is missing.
 //
-func (router_info RouterInfo) RouterAddresses() (router_addresses []RouterAddress, err error) {
-	_, remainder, err := ReadRouterIdentity(router_info)
-	if err != nil {
-		return
-	}
-	remainder_len := len(remainder)
-	if remainder_len < 9 {
-		log.WithFields(log.Fields{
-			"at":           "(RouterInfo) RouterAddresses",
-			"data_len":     remainder_len,
-			"required_len": 9,
-			"reason":       "not enough data",
-		}).Error("error parsing router info")
-		err = errors.New("error parsing router addresses: not enough data")
-		return
-	}
-	remaining := remainder[9:]
-	var router_address RouterAddress
-	addr_count, cerr := router_info.RouterAddressCount()
-	if cerr != nil {
-		err = cerr
-		return
-	}
-	for i := 0; i < addr_count; i++ {
-		router_address, remaining, err = ReadRouterAddress(remaining)
-		if err == nil {
-			router_addresses = append(router_addresses, router_address)
-		}
-	}
-	return
+func (router_info *RouterInfo) RouterAddresses() []*RouterAddress {
+	return router_info.addresses
 }
 
 //
 // Return the PeerSize value, currently unused and always zero.
 //
-func (router_info RouterInfo) PeerSize() int {
+func (router_info *RouterInfo) PeerSize() int {
 	// Peer size is unused:
 	// https://geti2p.net/spec/common-structures#routeraddress
 	return 0
@@ -199,29 +146,20 @@ func (router_info RouterInfo) PeerSize() int {
 // Return the Options Mapping inside this RouterInfo.
 //
 func (router_info RouterInfo) Options() (mapping Mapping) {
-	head := router_info.optionsLocation()
-	size := head + router_info.optionsSize()
-	mapping = Mapping(router_info[head:size])
-	return
+	return *router_info.options
 }
 
 //
 // Return the signature of this router info
 //
 func (router_info RouterInfo) Signature() (signature Signature) {
-	head := router_info.optionsLocation()
-	size := head + router_info.optionsSize()
-	ident, _ := router_info.RouterIdentity()
-	keyCert, _ := NewKeyCertificate(ident)
-	sigSize := keyCert.SignatureSize()
-	signature = Signature(router_info[size : size+sigSize])
-	return
+	return *router_info.signature
 }
 
 //
 // Used during parsing to determine where in the RouterInfo the Mapping data begins.
 //
-func (router_info RouterInfo) optionsLocation() (location int) {
+/*func (router_info RouterInfo) optionsLocation() (location int) {
 	data, remainder, err := ReadRouterIdentity(router_info)
 	if err != nil {
 		return
@@ -258,14 +196,80 @@ func (router_info RouterInfo) optionsLocation() (location int) {
 	}
 	location += 1
 	return
-}
+}*/
 
 //
 // Used during parsing to determine the size of the options in the RouterInfo.
 //
-func (router_info RouterInfo) optionsSize() (size int) {
+/*func (router_info RouterInfo) optionsSize() (size int) {
 	head := router_info.optionsLocation()
-	s := NewInteger(router_info[head : head+2])
+	s := Integer(router_info[head : head+2])
 	size = s.Int() + 2
+	return
+}*/
+
+func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error) {
+	identity, remainder, err := NewRouterIdentity(bytes)
+	info.router_identity = identity
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":           "(RouterInfo) ReadRouterInfo",
+			"data_len":     len(bytes),
+			"required_len": ROUTER_INFO_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing router info")
+		err = errors.New("error parsing router info: not enough data")
+	}
+	date, remainder, err := NewDate(remainder)
+	info.published = date
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":           "(RouterInfo) ReadRouterInfo",
+			"data_len":     len(remainder),
+			"required_len": DATE_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing router info")
+		err = errors.New("error parsing router info: not enough data")
+	}
+	size, remainder, err := NewInteger(remainder)
+	info.size = size
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":           "(RouterInfo) ReadRouterInfo",
+			"data_len":     len(remainder),
+			"required_len": INTEGER_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing router info")
+		err = errors.New("error parsing router info: not enough data")
+	}
+	addresses := make([]*RouterAddress, size.Int())
+	for i := 0; i < size.Int(); i++ {
+		address, remainder, err := NewRouterAddress(remainder)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"at":       "(RouterInfo) ReadRouterInfo",
+				"data_len": len(remainder),
+				//"required_len": ROUTER_ADDRESS_SIZE,
+				"reason": "not enough data",
+			}).Error("error parsing router info")
+			err = errors.New("error parsing router info: not enough data")
+		}
+		addresses = append(addresses, address)
+	}
+	info.addresses = addresses
+	peer_size := Integer(remainder[:1])
+	info.peer_size = &peer_size
+	remainder = remainder[1:]
+	options, remainder, err := NewMapping(remainder)
+	info.options = options
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":       "(RouterInfo) ReadRouterInfo",
+			"data_len": len(remainder),
+			//"required_len": MAPPING_SIZE,
+			"reason": "not enough data",
+		}).Error("error parsing router info")
+		err = errors.New("error parsing router info: not enough data")
+	}
 	return
 }

@@ -32,7 +32,7 @@ func (str I2PString) Length() (length int, err error) {
 		err = errors.New("error parsing string: zero length")
 		return
 	}
-	l := NewInteger([]byte{byte(str[0])})
+	l := Integer([]byte{byte(str[0])})
 	length = l.Int()
 	inferred_len := length + 1
 	str_len := len(str)
@@ -113,5 +113,11 @@ func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 		remainder = data[length+1:]
 		err = nil
 	}
+	return
+}
+
+func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
+	objstr, remainder, err := ReadI2PString(data)
+	str = &objstr
 	return
 }

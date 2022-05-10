@@ -50,7 +50,7 @@ func (lease Lease) TunnelGateway() (hash Hash) {
 // Parse the TunnelID Integer in the Lease.
 //
 func (lease Lease) TunnelID() uint32 {
-	i := NewInteger(lease[LEASE_HASH_SIZE : LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE])
+	i := Integer(lease[LEASE_HASH_SIZE : LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE])
 	return uint32(
 		i.Int(),
 	)

@@ -36,8 +36,6 @@ options :: Mapping
 */
 
 import (
-	"errors"
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,70 +44,52 @@ const (
 	ROUTER_ADDRESS_MIN_SIZE = 9
 )
 
-type RouterAddress []byte
+type RouterAddress struct {
+	cost            *Integer
+	expiration      *Date
+	transport_style *I2PString
+	options         *Mapping
+}
+
+//[]byte
 
 //
 // Return the cost integer for this RouterAddress and any errors encountered
 // parsing the RouterAddress.
 //
-func (router_address RouterAddress) Cost() (cost int, err error) {
-	err, exit := router_address.checkValid()
-	if exit {
-		return
-	}
-	c := NewInteger([]byte{router_address[0]})
-	cost = c.Int()
-	return
+func (router_address RouterAddress) Cost() int {
+	return router_address.cost.Int()
 }
 
 //
 // Return the Date this RouterAddress expires and any errors encountered
 // parsing the RouterAddress.
 //
-func (router_address RouterAddress) Expiration() (date Date, err error) {
-	err, exit := router_address.checkValid()
-	if exit {
-		return
-	}
-	copy(date[:], router_address[1:ROUTER_ADDRESS_MIN_SIZE])
-	return
+func (router_address RouterAddress) Expiration() Date {
+	return *router_address.expiration
 }
 
 //
 // Return the Transport type for this RouterAddress and any errors encountered
 // parsing the RouterAddress.
 //
-func (router_address RouterAddress) TransportStyle() (str I2PString, err error) {
-	err, exit := router_address.checkValid()
-	if exit {
-		return
-	}
-	str, _, err = ReadI2PString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
-	return
+func (router_address RouterAddress) TransportStyle() I2PString {
+	return *router_address.transport_style
 }
 
 //
 // Return the Mapping containing the options for this RouterAddress and any
 // errors encountered parsing the RouterAddress.
 //
-func (router_address RouterAddress) Options() (mapping Mapping, err error) {
-	err, exit := router_address.checkValid()
-	if exit {
-		return
-	}
-	_, remainder, err := ReadI2PString(router_address[ROUTER_ADDRESS_MIN_SIZE:])
-	if len(remainder) == 0 {
-		return
-	}
-	mapping = Mapping(remainder)
-	return
+func (router_address RouterAddress) Options() Mapping {
+	return *router_address.options
 }
 
 //
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
 //
 func (router_address RouterAddress) checkValid() (err error, exit bool) {
-	addr_len := len(router_address)
+	/*addr_len := len(router_address)
 	exit = false
 	if addr_len == 0 {
 		log.WithFields(log.Fields{
@@ -124,7 +104,7 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 			"reason": "data too small (len < ROUTER_ADDRESS_MIN_SIZE)",
 		}).Warn("router address format warning")
 		err = errors.New("warning parsing RouterAddress: data too small")
-	}
+	}*/
 	return
 }
 
@@ -132,33 +112,45 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // Given a slice of bytes, read a RouterAddress, returning the remaining bytes and any
 // errors encountered parsing the RouterAddress.
 //
-func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
-	test_address := RouterAddress(data)
-	err, _ = test_address.checkValid()
-	if err != nil {
-		return
-	}
-	router_address = append(router_address, data[:ROUTER_ADDRESS_MIN_SIZE]...)
-	str, remainder, err := ReadI2PString(data[ROUTER_ADDRESS_MIN_SIZE:])
-	if err != nil {
-		return
-	}
-	router_address = append(router_address, str...)
-	map_size := 0
-	mapping := make([]byte, 0)
-	if len(remainder) >= 2 {
-		ms := NewInteger(remainder[:2])
-		map_size = ms.Int()
-		if len(remainder) < map_size+2 {
-			err = errors.New("not enough data for map inside router address")
-			router_address = RouterAddress([]byte{})
-			remainder = []byte{}
-			return
-		}
-		mapping = remainder[:map_size+2]
-		router_address = append(router_address, mapping...)
-	}
 
-	remainder = data[ROUTER_ADDRESS_MIN_SIZE+len(str)+len(mapping):]
+func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
+	cost, remainder, err := NewInteger([]byte{data[0]})
+	router_address.cost = cost
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "(RouterAddress) ReadNewRouterAddress",
+			"reason": "error parsing cost",
+		}).Warn("error parsing RouterAddress")
+	}
+	expiration, remainder, err := NewDate(remainder)
+	router_address.expiration = expiration
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "(RouterAddress) ReadNewRouterAddress",
+			"reason": "error parsing expiration",
+		}).Error("error parsing RouterAddress")
+	}
+	transport_style, remainder, err := NewI2PString(remainder)
+	router_address.transport_style = transport_style
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "(RouterAddress) ReadNewRouterAddress",
+			"reason": "error parsing transport_style",
+		}).Error("error parsing RouterAddress")
+	}
+	options, remainder, err := NewMapping(remainder)
+	router_address.options = options
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":     "(RouterAddress) ReadNewRouterAddress",
+			"reason": "error parsing options",
+		}).Error("error parsing RouterAddress")
+	}
+	return
+}
+
+func NewRouterAddress(data []byte) (router_address *RouterAddress, remainder []byte, err error) {
+	objrouteraddress, remainder, err := ReadRouterAddress(data)
+	router_address = &objrouteraddress
 	return
 }
