@@ -11,6 +11,9 @@ Identical to KeysAndCert
 import (
 	"strings"
 
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+
 	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/common/base64"
 	"github.com/go-i2p/go-i2p/lib/crypto"

@@ -83,6 +83,13 @@ signature :: Signature
 import (
 	"errors"
 
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/data"
+	. "github.com/go-i2p/go-i2p/lib/common/destination"
+	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+	. "github.com/go-i2p/go-i2p/lib/common/lease"
+	. "github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )
@@ -95,6 +102,17 @@ const (
 )
 
 type LeaseSet []byte
+
+/*
+type LeaseSet struct {
+	Destination *Destination
+	EncryptionKey *crypto.ElgPublicKey
+	SigningKey *crypto.ElgPublicKey
+	Size *Integer
+	Leases []*Lease
+	Signature *Signature
+}
+*/
 
 //
 // Read a Destination from the LeaseSet.

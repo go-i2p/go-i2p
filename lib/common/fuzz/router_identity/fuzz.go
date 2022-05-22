@@ -1,6 +1,6 @@
 package exportable
 
-import "github.com/go-i2p/go-i2p/lib/common"
+import common "github.com/go-i2p/go-i2p/lib/common/router_identity"
 
 func Fuzz(data []byte) int {
 	router_identity, _, _ := common.ReadRouterIdentity(data)

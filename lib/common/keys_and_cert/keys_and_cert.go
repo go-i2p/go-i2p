@@ -48,6 +48,8 @@ total length: 387+ bytes
 import (
 	"errors"
 
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	log "github.com/sirupsen/logrus"
 )

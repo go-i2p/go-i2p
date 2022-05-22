@@ -76,6 +76,10 @@ signature :: Signature
 import (
 	"errors"
 
+	. "github.com/go-i2p/go-i2p/lib/common/data"
+	. "github.com/go-i2p/go-i2p/lib/common/router_address"
+	. "github.com/go-i2p/go-i2p/lib/common/router_identity"
+	. "github.com/go-i2p/go-i2p/lib/common/signature"
 	log "github.com/sirupsen/logrus"
 )
 

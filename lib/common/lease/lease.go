@@ -29,6 +29,8 @@ end_date :: Date
             length -> 8 bytes
 */
 
+import . "github.com/go-i2p/go-i2p/lib/common/data"
+
 // Sizes or various components of a Lease
 const (
 	LEASE_SIZE           = 44

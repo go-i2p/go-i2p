@@ -30,6 +30,8 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/go-i2p/go-i2p/lib/common/data"
 )
 
 // Certificate Types

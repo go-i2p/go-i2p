@@ -43,17 +43,18 @@ type MappingValues [][2]I2PString
 //
 // Returns the values contained in a Mapping in the form of a MappingValues.
 //
-func (mapping Mapping) Values() *MappingValues {
-	return mapping.vals
+func (mapping *Mapping) Values() MappingValues {
+	return *mapping.vals
+	//return mapping.vals
 }
 
 //
 // Return true if two keys in a mapping are identical.
 //
-func (mapping Mapping) HasDuplicateKeys() bool {
+func (mapping *Mapping) HasDuplicateKeys() bool {
 	seen_values := make(map[string]bool)
 	values := mapping.Values()
-	for _, pair := range *values {
+	for _, pair := range values {
 		key, _ := pair[0].Data()
 		if _, present := seen_values[key]; present {
 			return true

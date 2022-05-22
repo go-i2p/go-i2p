@@ -9,6 +9,9 @@ Identical to KeysAndCert
 */
 
 import (
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
