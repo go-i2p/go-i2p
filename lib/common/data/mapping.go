@@ -43,9 +43,26 @@ type MappingValues [][2]I2PString
 //
 // Returns the values contained in a Mapping in the form of a MappingValues.
 //
-func (mapping *Mapping) Values() MappingValues {
+func (mapping Mapping) Values() MappingValues {
+	if mapping.vals == nil {
+		return MappingValues{}
+	}
 	return *mapping.vals
-	//return mapping.vals
+}
+
+func (mapping *Mapping) Data() []byte {
+	bytes := mapping.size.Bytes()
+	for _, pair := range mapping.Values() {
+		klen, _ := pair[0].Length()
+		keylen, _ := NewIntegerFromInt(klen)
+		bytes = append(bytes, keylen.Bytes()...)
+		bytes = append(bytes, pair[0]...)
+		vlen, _ := pair[1].Length()
+		vallen, _ := NewIntegerFromInt(vlen)
+		bytes = append(bytes, vallen.Bytes()...)
+		bytes = append(bytes, pair[1]...)
+	}
+	return bytes
 }
 
 //
@@ -69,7 +86,7 @@ func (mapping *Mapping) HasDuplicateKeys() bool {
 // Convert a MappingValue struct to a Mapping.  The values are first
 // sorted in the order defined in mappingOrder.
 //
-func ValuesToMapping(values MappingValues) (mapping Mapping) {
+func ValuesToMapping(values MappingValues) (mapping *Mapping) {
 	mapping.size, _ = NewIntegerFromInt(len(values))
 	mapping.vals = &values
 	return
@@ -78,7 +95,7 @@ func ValuesToMapping(values MappingValues) (mapping Mapping) {
 //
 // Convert a Go map of unformatted strings to a sorted Mapping.
 //
-func GoMapToMapping(gomap map[string]string) (mapping Mapping, err error) {
+func GoMapToMapping(gomap map[string]string) (mapping *Mapping, err error) {
 	map_vals := MappingValues{}
 	for k, v := range gomap {
 		key_str, kerr := ToI2PString(k)
@@ -151,9 +168,24 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 	mapping := remainder
 	//var remainder = mapping
 	//var err error
+	if remainder == nil || len(remainder) < 0 {
+		log.WithFields(log.Fields{
+			"at":     "(Mapping) Values",
+			"reason": "data shorter than expected",
+		}).Error("mapping contained no data")
+		err = errors.New("mapping contained no data")
+		return
+	}
 	var errs []error
 	map_values := make(MappingValues, 0)
-
+	if len(remainder) < 2 {
+		log.WithFields(log.Fields{
+			"at":     "(Mapping) Values",
+			"reason": "data shorter than expected",
+		}).Error("mapping contained no data")
+		err = errors.New("mapping contained no data")
+		return
+	}
 	l := Integer(remainder[:2])
 	length := l.Int()
 	inferred_length := length + 2
@@ -231,43 +263,49 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 
 }
 
-func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err error) {
+func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) {
 	if len(bytes) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "zero length",
 		}).Warn("mapping format violation")
-		err = errors.New("zero length")
+		e := errors.New("zero length")
+		err = append(err, e)
 	}
-	size, remainder, err := NewInteger(bytes)
+	size, remainder, e := NewInteger(bytes)
+	err = append(err, e)
 	mapping.size = size
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "error parsing integer",
 		}).Warn("mapping format violation")
-		err = errors.New("error parsing integer")
+		e := errors.New("error parsing integer")
+		err = append(err, e)
 	}
 	if len(remainder) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "zero length",
 		}).Warn("mapping format violation")
-		err = errors.New("zero length")
+		e := errors.New("zero length")
+		err = append(err, e)
 	}
-	vals, remainder, err := ReadMappingValues(remainder)
+	vals, remainder, e := ReadMappingValues(remainder)
+	err = append(err, e)
 	mapping.vals = vals
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "error parsing mapping values",
 		}).Warn("mapping format violation")
-		err = errors.New("error parsing mapping values")
+		e := errors.New("error parsing mapping values")
+		err = append(err, e)
 	}
 	return
 }
 
-func NewMapping(bytes []byte) (values *Mapping, remainder []byte, err error) {
+func NewMapping(bytes []byte) (values *Mapping, remainder []byte, err []error) {
 	objvalues, remainder, err := ReadMapping(bytes)
 	values = &objvalues
 	return

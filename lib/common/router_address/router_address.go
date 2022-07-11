@@ -36,6 +36,8 @@ options :: Mapping
 */
 
 import (
+	"errors"
+
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	log "github.com/sirupsen/logrus"
 )
@@ -50,6 +52,7 @@ type RouterAddress struct {
 	expiration      *Date
 	transport_style *I2PString
 	options         *Mapping
+	parserErr       error
 }
 
 //[]byte
@@ -106,6 +109,9 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 		}).Warn("router address format warning")
 		err = errors.New("warning parsing RouterAddress: data too small")
 	}*/
+	if router_address.parserErr != nil {
+		exit = true
+	}
 	return
 }
 
@@ -115,6 +121,12 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 //
 
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
+	if data == nil || len(data) == 0 {
+		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("no data")
+		err = errors.New("error parsing RouterAddress: no data")
+		router_address.parserErr = err
+		return
+	}
 	cost, remainder, err := NewInteger([]byte{data[0]})
 	router_address.cost = cost
 	if err != nil {
@@ -122,6 +134,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing cost",
 		}).Warn("error parsing RouterAddress")
+		router_address.parserErr = err
 	}
 	expiration, remainder, err := NewDate(remainder)
 	router_address.expiration = expiration
@@ -130,6 +143,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
+		router_address.parserErr = err
 	}
 	transport_style, remainder, err := NewI2PString(remainder)
 	router_address.transport_style = transport_style
@@ -138,6 +152,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing transport_style",
 		}).Error("error parsing RouterAddress")
+		router_address.parserErr = err
 	}
 	options, remainder, err := NewMapping(remainder)
 	router_address.options = options
@@ -146,6 +161,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing options",
 		}).Error("error parsing RouterAddress")
+		router_address.parserErr = err
 	}
 	return
 }
