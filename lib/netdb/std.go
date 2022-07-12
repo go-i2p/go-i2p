@@ -3,23 +3,25 @@ package netdb
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
-	"github.com/go-i2p/go-i2p/lib/common"
-	"github.com/go-i2p/go-i2p/lib/common/base64"
-	"github.com/go-i2p/go-i2p/lib/util"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/common/base64"
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/util"
+	log "github.com/sirupsen/logrus"
 )
 
 // standard network database implementation using local filesystem skiplist
 type StdNetDB string
 
-func (db StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan common.RouterInfo) {
+func (db StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
 	fname := db.SkiplistFile(hash)
 	f, err := os.Open(fname)
 	if err != nil {
@@ -28,8 +30,11 @@ func (db StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan common.RouterInfo)
 	buff := new(bytes.Buffer)
 	_, err = io.Copy(buff, f)
 	f.Close()
-	chnl = make(chan common.RouterInfo)
-	chnl <- common.RouterInfo(buff.Bytes())
+	chnl = make(chan router_info.RouterInfo)
+	ri, _, err := router_info.ReadRouterInfo(buff.Bytes())
+	if err == nil {
+		chnl <- ri
+	}
 	return
 }
 
@@ -125,14 +130,14 @@ func (db StdNetDB) Exists() bool {
 func (db StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
 	var h common.Hash
-	h, err = e.ri.IdentHash()
+	h = e.ri.IdentHash()
+	//if err == nil {
+	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0700)
 	if err == nil {
-		f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0700)
-		if err == nil {
-			err = e.WriteTo(f)
-			f.Close()
-		}
+		err = e.WriteTo(f)
+		f.Close()
 	}
+	//}
 	if err != nil {
 		log.Errorf("failed to save netdb entry: %s", err.Error())
 	}

@@ -1,8 +1,9 @@
 package i2np
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
 )
 
 /*
@@ -66,7 +67,7 @@ type GarlicElGamal []byte
 type Garlic struct {
 	Count       int
 	Cloves      []GarlicClove
-	Certificate common.Certificate
+	Certificate certificate.Certificate
 	MessageID   int
 	Expiration  time.Time
 }

@@ -1,4 +1,4 @@
-package common
+package destination
 
 /*
 I2P Destination

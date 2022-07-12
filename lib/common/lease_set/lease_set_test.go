@@ -1,16 +1,22 @@
-package common
+package lease_set
 
 import (
 	"bytes"
 	"testing"
 
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/lease"
+	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/stretchr/testify/assert"
 )
 
-func buildDestination() RouterIdentity {
+func buildDestination() *router_identity.RouterIdentity {
 	router_ident_data := make([]byte, 128+256)
 	router_ident_data = append(router_ident_data, []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}...)
-	return RouterIdentity(router_ident_data)
+	ident, _, err := router_identity.NewRouterIdentity(router_ident_data)
+	panic(err)
+	return ident
 }
 
 func buildPublicKey() []byte {
@@ -32,15 +38,15 @@ func buildSigningKey() []byte {
 func buildLease(n int) []byte {
 	data := make([]byte, 0)
 	for i := 0; i < n; i++ {
-		lease := make([]byte, LEASE_SIZE)
-		for p := range lease {
-			lease[p] = byte(i)
+		l := make([]byte, lease.LEASE_SIZE)
+		for p := range l {
+			l[p] = byte(i)
 		}
-		for q := LEASE_SIZE - 9; q < LEASE_SIZE-1; q++ {
-			lease[q] = 0x00
+		for q := lease.LEASE_SIZE - 9; q < lease.LEASE_SIZE-1; q++ {
+			l[q] = 0x00
 		}
-		lease[LEASE_SIZE-1] = byte(i + 10)
-		data = append(data, lease...)
+		l[lease.LEASE_SIZE-1] = byte(i + 10)
+		data = append(data, l...)
 	}
 	return data
 }
@@ -55,7 +61,7 @@ func buildSignature(size int) []byte {
 
 func buildFullLeaseSet(n int) LeaseSet {
 	lease_set_data := make([]byte, 0)
-	lease_set_data = append(lease_set_data, buildDestination()...)
+	lease_set_data = append(lease_set_data, buildDestination().KeysAndCert.KeyCertificate.RawBytes()...)
 	lease_set_data = append(lease_set_data, buildPublicKey()...)
 	lease_set_data = append(lease_set_data, buildSigningKey()...)
 	lease_set_data = append(lease_set_data, byte(n))
@@ -70,11 +76,11 @@ func TestDestinationIsCorrect(t *testing.T) {
 	lease_set := buildFullLeaseSet(1)
 	dest, err := lease_set.Destination()
 	assert.Nil(err)
-	dest_cert, err := dest.Certificate()
-	assert.Nil(err)
+	dest_cert := dest.Certificate()
+	//assert.Nil(err)
 	cert_type := dest_cert.Type()
 	assert.Nil(err)
-	assert.Equal(CERT_KEY, cert_type)
+	assert.Equal(certificate.CERT_KEY, cert_type)
 }
 
 func TestPublicKeyIsCorrect(t *testing.T) {
@@ -143,18 +149,18 @@ func TestLeasesHaveCorrectData(t *testing.T) {
 		leases, err := lease_set.Leases()
 		if assert.Nil(err) {
 			for i := 0; i < count; i++ {
-				lease := make([]byte, LEASE_SIZE)
-				for p := range lease {
-					lease[p] = byte(i)
+				l := make([]byte, lease.LEASE_SIZE)
+				for p := range l {
+					l[p] = byte(i)
 				}
-				for q := LEASE_SIZE - 9; q < LEASE_SIZE-1; q++ {
-					lease[q] = 0x00
+				for q := lease.LEASE_SIZE - 9; q < lease.LEASE_SIZE-1; q++ {
+					l[q] = 0x00
 				}
-				lease[LEASE_SIZE-1] = byte(i + 10)
+				l[lease.LEASE_SIZE-1] = byte(i + 10)
 				assert.Equal(
 					0,
 					bytes.Compare(
-						lease,
+						l,
 						leases[i][:],
 					),
 				)
@@ -185,8 +191,9 @@ func TestNewestExpirationIsCorrect(t *testing.T) {
 	lease_set := buildFullLeaseSet(5)
 	latest, err := lease_set.NewestExpiration()
 	assert.Nil(err)
+	Date, _, err := common.NewDate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, byte(4 + 10)})
 	assert.Equal(
-		Date{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, byte(4 + 10)},
+		Date,
 		latest,
 	)
 }
@@ -197,8 +204,9 @@ func TestOldestExpirationIsCorrect(t *testing.T) {
 	lease_set := buildFullLeaseSet(5)
 	latest, err := lease_set.OldestExpiration()
 	assert.Nil(err)
+	Date, _, err := common.NewDate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a})
 	assert.Equal(
-		Date{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a},
+		Date,
 		latest,
 	)
 }

@@ -1,9 +1,11 @@
 package netdb
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"time"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // resolves router infos with recursive kademlia lookup
@@ -16,7 +18,7 @@ type kadResolver struct {
 }
 
 // TODO: implement
-func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (chnl chan common.RouterInfo) {
+func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (chnl chan router_info.RouterInfo) {
 	return
 }
 

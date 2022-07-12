@@ -1,7 +1,9 @@
 package transport
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
+	"github.com/go-i2p/go-i2p/lib/common/router_identity"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
+
 	"github.com/go-i2p/go-i2p/lib/i2np"
 )
 
@@ -26,16 +28,16 @@ type Transport interface {
 	// will bind if the underlying socket is not already
 	// if the underlying socket is already bound update the RouterIdentity
 	// returns any errors that happen if they do
-	SetIdentity(ident common.RouterIdentity) error
+	SetIdentity(ident router_identity.RouterIdentity) error
 
 	// Obtain a transport session with a router given its RouterInfo.
 	// If a session with this router is NOT already made attempt to create one and block until made or until an error happens
 	// returns an established TransportSession and nil on success
 	// returns nil and an error on error
-	GetSession(routerInfo common.RouterInfo) (TransportSession, error)
+	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
 
 	// return true if a routerInfo is compatable with this transport
-	Compatable(routerInfo common.RouterInfo) bool
+	Compatable(routerInfo router_info.RouterInfo) bool
 
 	// close the transport cleanly
 	// blocks until done

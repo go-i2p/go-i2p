@@ -1,8 +1,9 @@
-package common
+package data
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTimeFromMiliseconds(t *testing.T) {

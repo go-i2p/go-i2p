@@ -1,4 +1,4 @@
-package common
+package key_certificate
 
 import (
 	"testing"

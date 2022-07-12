@@ -2,10 +2,12 @@ package i2np
 
 import (
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/common"
+	"time"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 /*
@@ -155,9 +157,9 @@ type BuildRequestRecord struct {
 	OurIdent      common.Hash
 	NextTunnel    tunnel.TunnelID
 	NextIdent     common.Hash
-	LayerKey      common.SessionKey
-	IVKey         common.SessionKey
-	ReplyKey      common.SessionKey
+	LayerKey      session_key.SessionKey
+	IVKey         session_key.SessionKey
+	ReplyKey      session_key.SessionKey
 	ReplyIV       [16]byte
 	Flag          int
 	RequestTime   time.Time
@@ -251,7 +253,7 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 	}
 
 	receive_tunnel := tunnel.TunnelID(
-		common.Integer(data[0:4]),
+		common.Integer(data[0:4]).Int(),
 	)
 
 	log.WithFields(log.Fields{
@@ -281,7 +283,7 @@ func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 	}
 
 	next_tunnel := tunnel.TunnelID(
-		common.Integer(data[36:40]),
+		common.Integer(data[36:40]).Int(),
 	)
 
 	log.WithFields(log.Fields{
@@ -305,12 +307,12 @@ func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
 	return hash, nil
 }
 
-func readBuildRequestRecordLayerKey(data []byte) (common.SessionKey, error) {
+func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 104 {
-		return common.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	session_key := common.SessionKey{}
+	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[72:104])
 
 	log.WithFields(log.Fields{
@@ -319,12 +321,12 @@ func readBuildRequestRecordLayerKey(data []byte) (common.SessionKey, error) {
 	return session_key, nil
 }
 
-func readBuildRequestRecordIVKey(data []byte) (common.SessionKey, error) {
+func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 136 {
-		return common.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	session_key := common.SessionKey{}
+	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[104:136])
 
 	log.WithFields(log.Fields{
@@ -333,12 +335,12 @@ func readBuildRequestRecordIVKey(data []byte) (common.SessionKey, error) {
 	return session_key, nil
 }
 
-func readBuildRequestRecordReplyKey(data []byte) (common.SessionKey, error) {
+func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 168 {
-		return common.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	session_key := common.SessionKey{}
+	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[136:168])
 
 	log.WithFields(log.Fields{
@@ -366,7 +368,7 @@ func readBuildRequestRecordFlag(data []byte) (int, error) {
 		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	flag := int(common.Integer([]byte{data[185]}))
+	flag := common.Integer([]byte{data[185]}).Int()
 
 	log.WithFields(log.Fields{
 		"at":   "i2np.readBuildRequestRecordFlag",
@@ -380,7 +382,7 @@ func readBuildRequestRecordRequestTime(data []byte) (time.Time, error) {
 		return time.Time{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	count := int(common.Integer(data[185:189]))
+	count := common.Integer(data[185:189]).Int()
 	rtime := time.Unix(0, 0).Add(time.Duration(count) * time.Hour)
 
 	log.WithFields(log.Fields{
@@ -394,7 +396,7 @@ func readBuildRequestRecordSendMessageID(data []byte) (int, error) {
 		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	send_message_id := int(common.Integer(data[189:193]))
+	send_message_id := common.Integer(data[189:193]).Int()
 
 	log.WithFields(log.Fields{
 		"at": "i2np.readBuildRequestRecordSendMessageID",

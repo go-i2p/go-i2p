@@ -1,10 +1,11 @@
 package i2np
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
+	"testing"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestReadBuildRequestRecordReceiveTunnelTooLittleData(t *testing.T) {

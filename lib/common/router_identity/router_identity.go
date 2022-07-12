@@ -1,4 +1,4 @@
-package common
+package router_identity
 
 /*
 I2P RouterIdentity

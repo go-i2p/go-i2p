@@ -3,7 +3,8 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/common"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -194,7 +195,7 @@ func (delivery_instructions DeliveryInstructions) FragmentNumber() (int, error) 
 	if di_type == FOLLOW_ON_FRAGMENT {
 		return common.Integer(
 			[]byte{((delivery_instructions[0] & 0x7e) >> 1)},
-		), nil
+		).Int(), nil
 	}
 	return 0, errors.New("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
 }
@@ -491,11 +492,11 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 			return
 		} else {
 			extended_options_size := common.Integer([]byte{delivery_instructions[extended_options_index]})
-			if len(delivery_instructions) < extended_options_index+1+extended_options_size {
+			if len(delivery_instructions) < extended_options_index+1+extended_options_size.Int() {
 				err = errors.New("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
 				return
 			} else {
-				data = delivery_instructions[extended_options_index+1 : extended_options_size]
+				data = delivery_instructions[extended_options_index+1 : extended_options_size.Int()]
 				return
 			}
 
@@ -738,7 +739,7 @@ func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, curre
 func maybeAppendExtendedOptions(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
 	if index, err := DeliveryInstructions(data).extended_options_index(); err != nil {
 		extended_options_length := common.Integer([]byte{data[index]})
-		now = append(current, data[index:index+extended_options_length]...)
+		now = append(current, data[index:index+extended_options_length.Int()]...)
 	}
 	return
 }
@@ -747,7 +748,7 @@ func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []
 	if di_type == FIRST_FRAGMENT {
 		if index, err := DeliveryInstructions(data).extended_options_index(); err != nil {
 			extended_options_length := common.Integer([]byte{data[index]})
-			now = append(current, data[index+extended_options_length:index+extended_options_length+2]...)
+			now = append(current, data[index+extended_options_length.Int():index+extended_options_length.Int()+2]...)
 		}
 	} else if di_type == FOLLOW_ON_FRAGMENT {
 		if len(data) < 7 {

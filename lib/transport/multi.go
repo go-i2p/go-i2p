@@ -1,7 +1,8 @@
 package transport
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
+	"github.com/go-i2p/go-i2p/lib/common/router_identity"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
 )
 
 // muxes multiple transports into 1 Transport
@@ -19,7 +20,7 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 }
 
 // set the identity for every transport
-func (tmux *TransportMuxer) SetIdentity(ident common.RouterIdentity) (err error) {
+func (tmux *TransportMuxer) SetIdentity(ident router_identity.RouterIdentity) (err error) {
 	for _, t := range tmux.trans {
 		err = t.SetIdentity(ident)
 		if err != nil {
@@ -53,7 +54,7 @@ func (tmux *TransportMuxer) Name() string {
 // get a transport session given a router info
 // return session and nil if successful
 // return nil and ErrNoTransportAvailable if we failed to get a session
-func (tmux *TransportMuxer) GetSession(routerInfo common.RouterInfo) (s TransportSession, err error) {
+func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	for _, t := range tmux.trans {
 		// pick the first one that is compatable
 		if t.Compatable(routerInfo) {
@@ -74,7 +75,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo common.RouterInfo) (s Transpor
 }
 
 // is there a transport that we mux that is compatable with this router info?
-func (tmux *TransportMuxer) Compatable(routerInfo common.RouterInfo) (compat bool) {
+func (tmux *TransportMuxer) Compatable(routerInfo router_info.RouterInfo) (compat bool) {
 	for _, t := range tmux.trans {
 		if t.Compatable(routerInfo) {
 			compat = true

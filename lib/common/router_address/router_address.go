@@ -1,4 +1,4 @@
-package common
+package router_address
 
 /*
 I2P RouterAddress
@@ -154,7 +154,14 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RouterAddress")
 		router_address.parserErr = err
 	}
-	options, remainder, err := NewMapping(remainder)
+	options, remainder, errs := NewMapping(remainder)
+	for _, err := range errs {
+		log.WithFields(log.Fields{
+			"at":     "(RouterAddress) ReadNewRouterAddress",
+			"reason": "error parsing options",
+		}).Error("error parsing RouterAddress")
+		router_address.parserErr = err
+	}
 	router_address.options = options
 	if err != nil {
 		log.WithFields(log.Fields{

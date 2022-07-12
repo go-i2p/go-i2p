@@ -1,9 +1,10 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/stretchr/testify/assert"
 )
 
 type DeliveryInstructionsFlags struct {
@@ -49,7 +50,7 @@ func validFirstFragmentDeliveryInstructions(mapping common.Mapping) []byte {
 	message_id := []byte{0x00, 0x00, 0x00, 0x02}
 	data = append(data, message_id...)
 
-	data = append(data, mapping...)
+	data = append(data, mapping.Data()...)
 
 	return data
 }
@@ -60,7 +61,7 @@ func TestReadDeliveryInstructions(t *testing.T) {
 	mapping, _ := common.GoMapToMapping(map[string]string{})
 	_, _, err := readDeliveryInstructions(
 		validFirstFragmentDeliveryInstructions(
-			mapping,
+			*mapping,
 		),
 	)
 	assert.Nil(err)

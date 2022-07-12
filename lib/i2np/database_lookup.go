@@ -1,7 +1,9 @@
 package i2np
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/session_key"
+	"github.com/go-i2p/go-i2p/lib/common/session_tag"
 )
 
 /*
@@ -143,7 +145,7 @@ type DatabaseLookup struct {
 	ReplyTunnelID [4]byte
 	Size          int
 	ExcludedPeers []common.Hash
-	ReplyKey      common.SessionKey
+	ReplyKey      session_key.SessionKey
 	tags          int
-	ReplyTags     []common.SessionTag
+	ReplyTags     []session_tag.SessionTag
 }

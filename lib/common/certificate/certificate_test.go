@@ -1,4 +1,4 @@
-package common
+package certificate
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package common
+package router_info
 
 /*
 I2P RouterInfo
@@ -264,7 +264,20 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	peer_size := Integer(remainder[:1])
 	info.peer_size = &peer_size
 	remainder = remainder[1:]
-	options, remainder, err := NewMapping(remainder)
+	options, remainder, errs := NewMapping(remainder)
+	if len(errs) != 0 {
+		log.WithFields(log.Fields{
+			"at":       "(RouterInfo) ReadRouterInfo",
+			"data_len": len(remainder),
+			//"required_len": MAPPING_SIZE,
+			"reason": "not enough data",
+		}).Error("error parsing router info")
+		estring := ""
+		for _, e := range errs {
+			estring += e.Error() + " "
+		}
+		err = errors.New("error parsing router info: " + estring)
+	}
 	info.options = options
 	if err != nil {
 		log.WithFields(log.Fields{

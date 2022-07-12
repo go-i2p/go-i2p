@@ -1,9 +1,10 @@
 package i2np
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestReadI2NPTypeWithNoData(t *testing.T) {

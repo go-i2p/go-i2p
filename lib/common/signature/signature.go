@@ -1,3 +1,3 @@
-package common
+package signature
 
 type Signature []byte

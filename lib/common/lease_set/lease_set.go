@@ -1,4 +1,4 @@
-package common
+package lease_set
 
 /*
 I2P LeaseSet
@@ -285,10 +285,7 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 		LEASE_SET_SPK_SIZE +
 		1 +
 		(LEASE_SIZE * lease_count)
-	cert, err := destination.Certificate()
-	if err != nil {
-		return
-	}
+	cert := destination.Certificate()
 	cert_type := cert.Type()
 	var end int
 	if cert_type == CERT_KEY {

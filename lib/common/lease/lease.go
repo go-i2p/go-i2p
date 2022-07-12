@@ -1,4 +1,4 @@
-package common
+package lease
 
 /*
 I2P Lease

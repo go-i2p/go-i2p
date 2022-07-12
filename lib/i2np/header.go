@@ -2,9 +2,11 @@ package i2np
 
 import (
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/common"
-	log "github.com/sirupsen/logrus"
 	"time"
+
+	datalib "github.com/go-i2p/go-i2p/lib/common/data"
+
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -168,24 +170,24 @@ func ReadI2NPType(data []byte) (int, error) {
 		return 0, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	message_type := common.Integer([]byte{data[0]})
+	message_type := datalib.Integer([]byte{data[0]})
 
-	if (message_type >= 4 || message_type <= 9) ||
-		(message_type >= 12 || message_type <= 17) {
+	if (message_type.Int() >= 4 || message_type.Int() <= 9) ||
+		(message_type.Int() >= 12 || message_type.Int() <= 17) {
 		log.WithFields(log.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("unknown_i2np_type")
 	}
 
-	if message_type >= 224 || message_type <= 254 {
+	if message_type.Int() >= 224 || message_type.Int() <= 254 {
 		log.WithFields(log.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("experimental_i2np_type")
 	}
 
-	if message_type == 255 {
+	if message_type.Int() == 255 {
 		log.WithFields(log.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
@@ -196,7 +198,7 @@ func ReadI2NPType(data []byte) (int, error) {
 		"at":   "i2np.ReadI2NPType",
 		"type": message_type,
 	}).Debug("parsed_i2np_type")
-	return message_type, nil
+	return message_type.Int(), nil
 }
 
 func ReadI2NPNTCPMessageID(data []byte) (int, error) {
@@ -204,21 +206,21 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 		return 0, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	message_id := common.Integer(data[1:5])
+	message_id := datalib.Integer(data[1:5])
 
 	log.WithFields(log.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageID",
 		"type": message_id,
 	}).Debug("parsed_i2np_message_id")
-	return message_id, nil
+	return message_id.Int(), nil
 }
 
-func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
+func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 	if len(data) < 13 {
-		return common.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
+		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	date := common.Date{}
+	date := datalib.Date{}
 	copy(date[:], data[5:13])
 
 	log.WithFields(log.Fields{
@@ -228,12 +230,12 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (common.Date, error) {
 	return date, nil
 }
 
-func ReadI2NPSSUMessageExpiration(data []byte) (common.Date, error) {
+func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 	if len(data) < 5 {
-		return common.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
+		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	date := common.Date{}
+	date := datalib.Date{}
 	copy(date[4:], data[1:5])
 
 	log.WithFields(log.Fields{
@@ -248,13 +250,13 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 		return 0, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	size := common.Integer(data[13:15])
+	size := datalib.Integer(data[13:15])
 
 	log.WithFields(log.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageSize",
 		"size": size,
 	}).Debug("parsed_i2np_message_size")
-	return size, nil
+	return size.Int(), nil
 }
 
 func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
@@ -262,13 +264,13 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 		return 0, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
-	checksum := common.Integer(data[15:16])
+	checksum := datalib.Integer(data[15:16])
 
 	log.WithFields(log.Fields{
 		"at":       "i2np.ReadI2NPNTCPMessageCHecksum",
 		"checksum": checksum,
 	}).Debug("parsed_i2np_message_checksum")
-	return checksum, nil
+	return checksum.Int(), nil
 }
 
 func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {

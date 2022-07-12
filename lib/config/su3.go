@@ -2,10 +2,11 @@ package config
 
 import (
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/common"
-	log "github.com/sirupsen/logrus"
 	"strings"
 	"unicode/utf8"
+
+	datalib "github.com/go-i2p/go-i2p/lib/common/data"
+	log "github.com/sirupsen/logrus"
 )
 
 //
@@ -289,7 +290,7 @@ func getSignatureLength(data []byte) (int, error) {
 		signature_length_bytes[:],
 		data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN:SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN],
 	)
-	signature_length = common.Integer(signature_length_bytes[:])
+	signature_length = datalib.Integer(signature_length_bytes[:]).Int()
 
 	return signature_length, nil
 }
@@ -316,17 +317,17 @@ func getVersionLength(data []byte) (int, error) {
 		return 0, ERR_NOT_ENOUGH_SU3_DATA
 	}
 
-	version_length := common.Integer([]byte{data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1]})
+	version_length := datalib.Integer([]byte{data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1]})
 
-	if version_length < 16 {
+	if version_length.Int() < 16 {
 		log.WithFields(log.Fields{
 			"at":             "config.getSignatureType",
 			"version_length": version_length,
 		}).Debug(ERR_SU3_VERSION_LENGTH_TOO_SMALL)
-		return version_length, ERR_SU3_VERSION_LENGTH_TOO_SMALL
+		return version_length.Int(), ERR_SU3_VERSION_LENGTH_TOO_SMALL
 	}
 
-	return version_length, nil
+	return version_length.Int(), nil
 }
 
 func checkByte14Unused(data []byte) error {
@@ -351,9 +352,9 @@ func getSignerIDLength(data []byte) (int, error) {
 		return 0, ERR_NOT_ENOUGH_SU3_DATA
 	}
 
-	signer_id_length := common.Integer([]byte{data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1+1+1]})
+	signer_id_length := datalib.Integer([]byte{data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1+1+1]})
 
-	return signer_id_length, nil
+	return signer_id_length.Int(), nil
 }
 
 func getContentLength(data []byte) (int, error) {
@@ -368,7 +369,7 @@ func getContentLength(data []byte) (int, error) {
 		content_length_bytes[:],
 		data[SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1+1+1+1:SU3_MAGIC_BYTE_LEN+1+1+SU3_SIGNATURE_TYPE_LEN+SU3_SIGNATURE_LENGTH_LEN+1+1+1+1+SU3_CONTENT_LENGTH_LEN],
 	)
-	content_length = common.Integer(content_length_bytes[:])
+	content_length = datalib.Integer(content_length_bytes[:]).Int()
 
 	return content_length, nil
 }

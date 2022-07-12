@@ -1,16 +1,21 @@
-package common
+package router_info
 
 import (
 	"bytes"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
+	"github.com/go-i2p/go-i2p/lib/common/router_identity"
+	"github.com/stretchr/testify/assert"
 )
 
-func buildRouterIdentity() RouterIdentity {
+func buildRouterIdentity() router_identity.RouterIdentity {
 	router_ident_data := make([]byte, 128+256)
 	router_ident_data = append(router_ident_data, []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}...)
-	return RouterIdentity(router_ident_data)
+	return_data, _, _ := router_identity.ReadRouterIdentity(router_ident_data)
+	return return_data
 }
 
 func buildDate() []byte {
@@ -18,17 +23,18 @@ func buildDate() []byte {
 	return date_data
 }
 
-func buildMapping() Mapping {
-	mapping, _ := GoMapToMapping(map[string]string{"host": "127.0.0.1", "port": "4567"})
+func buildMapping() *common.Mapping {
+	mapping, _ := common.GoMapToMapping(map[string]string{"host": "127.0.0.1", "port": "4567"})
 	return mapping
 }
 
-func buildRouterAddress(transport string) RouterAddress {
+func buildRouterAddress(transport string) router_address.RouterAddress {
 	router_address_bytes := []byte{0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	str, _ := ToI2PString(transport)
+	str, _ := common.ToI2PString(transport)
 	router_address_bytes = append(router_address_bytes, []byte(str)...)
-	router_address_bytes = append(router_address_bytes, buildMapping()...)
-	return RouterAddress(router_address_bytes)
+	router_address_bytes = append(router_address_bytes, buildMapping().Data()...)
+	return_data, _, _ := router_address.ReadRouterAddress(router_address_bytes)
+	return return_data
 }
 
 func buildFullRouterInfo() RouterInfo {
@@ -47,8 +53,7 @@ func TestPublishedReturnsCorrectDate(t *testing.T) {
 	assert := assert.New(t)
 
 	router_info := buildFullRouterInfo()
-	date, err := router_info.Published()
-	assert.Nil(err)
+	date := router_info.Published()
 	assert.Equal(int64(86400), date.Time().Unix(), "RouterInfo.Published() did not return correct date")
 }
 
@@ -179,8 +184,8 @@ func TestRouterIdentityIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	router_info := buildFullRouterInfo()
-	router_identity, err := router_info.RouterIdentity()
-	assert.Nil(err)
+	router_identity := router_info.RouterIdentity()
+	//assert.Nil(err)
 	assert.Equal(
 		0,
 		bytes.Compare(

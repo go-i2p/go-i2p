@@ -1,4 +1,4 @@
-package common
+package data
 
 /*
 I2P Integer

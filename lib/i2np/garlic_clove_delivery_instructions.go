@@ -1,7 +1,8 @@
 package i2np
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common"
+	common "github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -73,7 +74,7 @@ Total length: Typical length is:
 
 type GarlicCloveDeliveryInstructions struct {
 	Flag       byte
-	SessionKey common.SessionKey
+	SessionKey session_key.SessionKey
 	Hash       common.Hash
 	TunnelID   tunnel.TunnelID
 	Delay      int

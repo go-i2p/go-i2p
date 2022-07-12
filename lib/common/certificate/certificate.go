@@ -1,4 +1,4 @@
-package common
+package certificate
 
 /*
 I2P Certificate
