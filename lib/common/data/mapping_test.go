@@ -8,11 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-/*func TestValuesExclusesPairWithBadData(t *testing.T) {
+func TestValuesExclusesPairWithBadData(t *testing.T) {
 	assert := assert.New(t)
 
 	bad_key, _, errs := NewMapping([]byte{0x00, 0x0c, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x00})
 	values := bad_key.Values()
+
+	e := WrapErrors(errs)
+	t.Log(e)
+
+	assert.NotNil(errs, "Values() did not return errors when some values had bad key")
 
 	if assert.Equal(len(values), 1, "Values() did not return valid values when some values had bad key") {
 		k := values[0][0]
@@ -22,9 +27,8 @@ import (
 		assert.Equal(key, "a", "Values() returned by data with invalid key contains incorrect present key")
 		assert.Equal(val, "b", "Values() returned by data with invalid key contains incorrect present key")
 	}
-	assert.NotNil(errs, "Values() did not return errors when some values had bad key")
-	//assert.Equal(len(errs), 2, "Values() reported wrong error count when some values had invalid data")
-}*/
+
+}
 
 func TestValuesWarnsMissingData(t *testing.T) {
 	assert := assert.New(t)
