@@ -1,14 +1,19 @@
 package noise
 
 import (
+	"net"
+
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
 	//. "github.com/flynn/noise"
+
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
 type NoiseSession struct {
 	*cb.Queue
+	router_info.RouterInfo
 }
 
 var exampleNoiseSession transport.TransportSession = &NoiseSession{}
@@ -30,8 +35,9 @@ func (s *NoiseSession) Close() error {
 	return nil
 }
 
-func NewNoiseSession() transport.TransportSession {
+func NewNoiseTransportSession(ri router_info.RouterInfo, socket net.Conn) (transport.TransportSession, error) {
 	return &NoiseSession{
-		Queue: cb.New(1024),
-	}
+		Queue:      cb.New(1024),
+		RouterInfo: ri,
+	}, nil
 }
