@@ -14,6 +14,7 @@ import (
 type NoiseSession struct {
 	*cb.Queue
 	router_info.RouterInfo
+	net.Conn
 }
 
 var exampleNoiseSession transport.TransportSession = &NoiseSession{}
@@ -39,5 +40,6 @@ func NewNoiseTransportSession(ri router_info.RouterInfo, socket net.Conn) (trans
 	return &NoiseSession{
 		Queue:      cb.New(1024),
 		RouterInfo: ri,
+		Conn:       socket,
 	}, nil
 }
