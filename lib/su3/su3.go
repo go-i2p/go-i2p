@@ -1,3 +1,32 @@
+// Package su3 implements reading the SU3 file format.
+//
+// SU3 files provide content that is signed by a known identity.
+// They are used to distributed many types of data, including reseed files,
+// plugins, blocklists, and more.
+//
+// See: https://geti2p.net/spec/updates#su3-file-specification
+//
+// The Read() function takes an io.Reader, and it returns four values:
+//   - meta: The SU3 file metadata, describing the type of file and the identity that signed it.
+//   - content: An io.Reader of the file contents.
+//   - signature: An io.Reader of the signature.
+//   - err: An error if something went wrong.
+//
+// Example usage:
+//     // Let's say we are reading an SU3 file from an HTTP body.
+//     meta, content, signature, err := su3.Read(body)
+//     if err != nil {
+//         // Handle error.
+//     }
+//     bytes, err := ioutil.ReadAll(content)
+//     if errors.Is(err, su3.ErrInvalidSignature) {
+//	       // The signature is invalid.
+//     } else if err != nil {
+//         // Handle error.
+//     }
+//
+// PLEASE NOTE: Signature validation is not implemented at this time.
+// Use with caution.
 package su3
 
 import (
@@ -95,6 +124,7 @@ var ErrMissingVersion = errors.New("missing version")
 var ErrMissingSignerID = errors.New("missing signer ID")
 var ErrMissingContent = errors.New("missing content")
 var ErrMissingSignature = errors.New("missing signature")
+var ErrInvalidSignature = errors.New("invalid signature")
 
 const magicBytes = "I2Psu3"
 
@@ -386,6 +416,8 @@ func (br *byteReader) Read(p []byte) (n int, err error) {
 	// We are at the correct position.
 	// If numBytes is 0, we have read all the bytes.
 	if br.numBytes == 0 {
+		// TODO when we finish reading content, we should then read the signature and verify it.
+		// If the signature doesn't match, we would return ErrInvalidSignature here.
 		return 0, io.EOF
 	}
 	// Otherwise, we have some bytes to read.
