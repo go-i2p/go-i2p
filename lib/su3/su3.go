@@ -25,6 +25,9 @@
 //         // Handle error.
 //     }
 //
+// If you want to parse from a []byte, you can wrap them like this:
+//     meta, content, signature, err := su3.Read(bytes.NewReader([]byte{0x00, 0x01, 0x02, 0x03}))
+//
 // Note: the content io.Reader must be read *before* the signature io.Reader.
 // If you read the signature first, the content bytes will be thrown away.
 // If you then attempt to read the content, you will get an error.
