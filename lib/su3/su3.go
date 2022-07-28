@@ -25,6 +25,11 @@
 //         // Handle error.
 //     }
 //
+// Note: the content io.Reader must be read *before* the signature io.Reader.
+// If you read the signature first, the content bytes will be thrown away.
+// If you then attempt to read the content, you will get an error.
+// For clarification, see TestReadSignatureFirst.
+//
 // PLEASE NOTE: Signature validation is not implemented at this time.
 // Use with caution.
 package su3
