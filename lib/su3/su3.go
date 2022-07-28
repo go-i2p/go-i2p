@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 )
 
 type SignatureType string
@@ -97,199 +98,193 @@ var ErrMissingSignature = errors.New("missing signature")
 
 const magicBytes = "I2Psu3"
 
-type SU3 struct {
-	signatureType   SignatureType
-	signatureLength uint16
-	versionLength   uint8
-	signerIDLength  uint8
-	contentLength   uint64
-	fileType        FileType
-	contentType     ContentType
-	version         string
-	signerID        string
-	content         []byte
-	signature       []byte
+type SU3Meta struct {
+	SignatureType   SignatureType
+	SignatureLength uint16
+	ContentLength   uint64
+	FileType        FileType
+	ContentType     ContentType
+	Version         string
+	SignerID        string
 }
 
-func Read(reader io.Reader) (*SU3, error) {
+func Read(reader io.Reader) (meta *SU3Meta, content io.Reader, signature io.Reader, err error) {
 	// Magic bytes.
 	mbytes := make([]byte, len(magicBytes))
 	l, err := reader.Read(mbytes)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading magic bytes: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading magic bytes: %w", err)
 	}
 	if l != len(mbytes) {
-		return nil, ErrMissingMagicBytes
+		return nil, nil, nil, ErrMissingMagicBytes
 	}
 	if string(mbytes) != magicBytes {
-		return nil, ErrMissingMagicBytes
+		return nil, nil, nil, ErrMissingMagicBytes
 	}
 
 	// Unused byte 6.
 	unused := [1]byte{}
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading unused byte 6: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading unused byte 6: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingUnusedByte6
+		return nil, nil, nil, ErrMissingUnusedByte6
 	}
 
 	// SU3 file format version (always 0).
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading SU3 file format version: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading SU3 file format version: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingFileFormatVersion
+		return nil, nil, nil, ErrMissingFileFormatVersion
 	}
 	if unused[0] != 0x00 {
-		return nil, ErrMissingFileFormatVersion
+		return nil, nil, nil, ErrMissingFileFormatVersion
 	}
 
-	su3 := &SU3{}
+	meta = &SU3Meta{}
 
 	// Signature type.
 	sigTypeBytes := [2]byte{}
 	l, err = reader.Read(sigTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading signature type: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading signature type: %w", err)
 	}
 	if l != 2 {
-		return nil, ErrMissingSignatureType
+		return nil, nil, nil, ErrMissingSignatureType
 	}
 	sigType, ok := sigTypes[sigTypeBytes]
 	if !ok {
-		return nil, ErrMissingSignatureType
+		return nil, nil, nil, ErrMissingSignatureType
 	}
-	su3.signatureType = sigType
+	meta.SignatureType = sigType
 
 	// Signature length.
 	sigLengthBytes := [2]byte{}
 	l, err = reader.Read(sigLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading signature length: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading signature length: %w", err)
 	}
 	if l != 2 {
-		return nil, ErrMissingSignatureLength
+		return nil, nil, nil, ErrMissingSignatureLength
 	}
 	sigLen := binary.BigEndian.Uint16(sigLengthBytes[:])
 	// TODO check that sigLen is the correct length for sigType.
-	su3.signatureLength = sigLen
+	meta.SignatureLength = sigLen
 
 	// Unused byte 12.
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading unused byte 12: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading unused byte 12: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingUnusedByte12
+		return nil, nil, nil, ErrMissingUnusedByte12
 	}
 
 	// Version length.
 	verLengthBytes := [1]byte{}
 	l, err = reader.Read(verLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading version length: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading version length: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingVersionLength
+		return nil, nil, nil, ErrMissingVersionLength
 	}
 	verLen := binary.BigEndian.Uint16([]byte{0x00, verLengthBytes[0]})
 	if verLen < 16 {
-		return nil, ErrVersionTooShort
+		return nil, nil, nil, ErrVersionTooShort
 	}
-	su3.versionLength = uint8(verLen)
 
 	// Unused byte 14.
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading unused byte 14: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading unused byte 14: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingUnusedByte14
+		return nil, nil, nil, ErrMissingUnusedByte14
 	}
 
 	// Signer ID length.
 	sigIDLengthBytes := [1]byte{}
 	l, err = reader.Read(sigIDLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading signer id length: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading signer id length: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingSignerIDLength
+		return nil, nil, nil, ErrMissingSignerIDLength
 	}
 	signIDLen := binary.BigEndian.Uint16([]byte{0x00, sigIDLengthBytes[0]})
-	su3.signerIDLength = uint8(signIDLen)
 
 	// Content length.
 	contentLengthBytes := [8]byte{}
 	l, err = reader.Read(contentLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading content length: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading content length: %w", err)
 	}
 	if l != 8 {
-		return nil, ErrMissingContentLength
+		return nil, nil, nil, ErrMissingContentLength
 	}
 	contentLen := binary.BigEndian.Uint64(contentLengthBytes[:])
-	su3.contentLength = contentLen
+	meta.ContentLength = contentLen
 
 	// Unused byte 24.
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading unused byte 24: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading unused byte 24: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingUnusedByte24
+		return nil, nil, nil, ErrMissingUnusedByte24
 	}
 
 	// File type.
 	fileTypeBytes := [1]byte{}
 	l, err = reader.Read(fileTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading file type: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading file type: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingFileType
+		return nil, nil, nil, ErrMissingFileType
 	}
 	fileType, ok := fileTypes[fileTypeBytes[0]]
 	if !ok {
-		return nil, ErrMissingFileType
+		return nil, nil, nil, ErrMissingFileType
 	}
-	su3.fileType = fileType
+	meta.FileType = fileType
 
 	// Unused byte 26.
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading unused byte 26: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading unused byte 26: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingUnusedByte26
+		return nil, nil, nil, ErrMissingUnusedByte26
 	}
 
 	// Content type.
 	contentTypeBytes := [1]byte{}
 	l, err = reader.Read(contentTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading content type: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading content type: %w", err)
 	}
 	if l != 1 {
-		return nil, ErrMissingContentType
+		return nil, nil, nil, ErrMissingContentType
 	}
 	contentType, ok := contentTypes[contentTypeBytes[0]]
 	if !ok {
-		return nil, ErrMissingContentType
+		return nil, nil, nil, ErrMissingContentType
 	}
-	su3.contentType = contentType
+	meta.ContentType = contentType
 
 	// Unused bytes 28-39.
 	for i := 0; i < 12; i++ {
 		l, err = reader.Read(unused[:])
 		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("reading unused bytes 28-39: %w", err)
+			return nil, nil, nil, fmt.Errorf("reading unused bytes 28-39: %w", err)
 		}
 		if l != 1 {
-			return nil, ErrMissingUnusedBytes28To39
+			return nil, nil, nil, ErrMissingUnusedBytes28To39
 		}
 	}
 
@@ -297,48 +292,115 @@ func Read(reader io.Reader) (*SU3, error) {
 	versionBytes := make([]byte, verLen)
 	l, err = reader.Read(versionBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading version: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading version: %w", err)
 	}
 	if l != int(verLen) {
-		return nil, ErrMissingVersion
+		return nil, nil, nil, ErrMissingVersion
 	}
 	version := strings.TrimRight(string(versionBytes), "\x00")
-	su3.version = version
+	meta.Version = version
 
 	// Signer ID.
 	signerIDBytes := make([]byte, signIDLen)
 	l, err = reader.Read(signerIDBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading signer id: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading signer id: %w", err)
 	}
 	if l != int(signIDLen) {
-		return nil, ErrMissingSignerID
+		return nil, nil, nil, ErrMissingSignerID
 	}
 	signerID := string(signerIDBytes)
-	su3.signerID = signerID
+	meta.SignerID = signerID
 
-	// Content.
-	contentBytes := make([]byte, contentLen)
-	l, err = reader.Read(contentBytes[:])
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading content: %w", err)
+	csr := &contentSignatureReader{
+		reader:          reader,
+		contentLength:   contentLen,
+		signatureLength: sigLen,
 	}
-	if l != int(contentLen) {
-		return nil, ErrMissingContent
-	}
-	su3.content = contentBytes
 
-	// Signature.
-	signatureBytes := make([]byte, sigLen)
-	l, err = reader.Read(signatureBytes[:])
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading signature: %w", err)
-	}
-	if l != int(sigLen) {
-		return nil, ErrMissingSignature
-	}
-	// TODO check that signature is correct
-	su3.signature = signatureBytes
+	return meta, csr.Content(), csr.Signature(), nil
+}
 
-	return su3, nil
+// contentSignatureReader synchronizes reading the content, and then the signature,
+// out of the same io.Reader that we are reading the SU3 file from. It allows us
+// to return two io.Readers, one for the content, and one for the signature, and
+// have them both be read out of the SU3 file io.Reader.
+type contentSignatureReader struct {
+	sync.Mutex
+	reader          io.Reader
+	contentLength   uint64
+	signatureLength uint16
+	bytesRead       uint64
+}
+
+func (csr *contentSignatureReader) Content() io.Reader {
+	return &byteReader{
+		csr:             csr,
+		numBytes:        csr.contentLength,
+		startByte:       0,
+		outOfBytesError: ErrMissingContent,
+	}
+}
+
+func (csr *contentSignatureReader) Signature() io.Reader {
+	return &byteReader{
+		csr:             csr,
+		numBytes:        uint64(csr.signatureLength),
+		startByte:       csr.contentLength,
+		outOfBytesError: ErrMissingSignature,
+	}
+}
+
+type byteReader struct {
+	csr             *contentSignatureReader
+	numBytes        uint64
+	startByte       uint64
+	outOfBytesError error
+}
+
+func (br *byteReader) Read(p []byte) (n int, err error) {
+	br.csr.Lock()
+	defer br.csr.Unlock()
+	// If we have already read past where we are supposed to, return an error.
+	// This would happen if someone read the signature before reading the content,
+	// and then tried to read the content.
+	if br.csr.bytesRead > br.startByte {
+		return 0, errors.New("out of bytes, maybe you read the signature before you read the content")
+	}
+	// If we have not read up until where we are supposed to, throw away the bytes.
+	// This would happen if someone read the signature before reading the content.
+	// We want to allow them to read the signature. The above condition will return
+	// an error if they try to read the content.
+	if br.csr.bytesRead < br.startByte {
+		bytesToThrowAway := br.startByte - br.csr.bytesRead
+		throwaway := make([]byte, bytesToThrowAway)
+		l, err := br.csr.reader.Read(throwaway)
+		br.csr.bytesRead += uint64(l)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return 0, fmt.Errorf("reading throwaway bytes: %w", err)
+		}
+		if l != int(bytesToThrowAway) {
+			return 0, br.outOfBytesError
+		}
+	}
+	// We are at the correct position.
+	// If numBytes is 0, we have read all the bytes.
+	if br.numBytes == 0 {
+		return 0, io.EOF
+	}
+	// Otherwise, we have some bytes to read.
+	numBytesToRead := len(p)
+	if numBytesToRead > int(br.numBytes) {
+		numBytesToRead = int(br.numBytes)
+	}
+	l, err := br.csr.reader.Read(p[:numBytesToRead])
+	// Advance the counters to keep track of how many bytes we've read.
+	br.csr.bytesRead += uint64(l)
+	br.numBytes = br.numBytes - uint64(l)
+	br.startByte = br.startByte + uint64(l)
+	// We should have read the correct number of bytes.
+	if l < numBytesToRead {
+		return l, br.outOfBytesError
+	}
+	return l, err
 }

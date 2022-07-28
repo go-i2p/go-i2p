@@ -36,10 +36,12 @@ func appendBytes(b ...[]byte) []byte {
 
 func TestRead(t *testing.T) {
 	tests := []struct {
-		name    string
-		reader  io.Reader
-		want    *SU3
-		wantErr string
+		name          string
+		reader        io.Reader
+		wantErr       string
+		wantMeta      *SU3Meta
+		wantContent   []byte
+		wantSignature []byte
 	}{
 		{
 			name:    "zero_bytes",
@@ -447,42 +449,45 @@ func TestRead(t *testing.T) {
 				[]byte("apeace rules"), // Content
 				[]byte{0x99},           // Signature
 			)),
-			want: &SU3{
-				signatureType:   ECDSA_SHA512_P521,
-				signatureLength: 1,
-				versionLength:   16,
-				signerIDLength:  6,
-				contentLength:   12,
-				fileType:        HTML,
-				contentType:     UNKNOWN,
-				version:         "1234567890",
-				signerID:        "apeace",
-				content:         []byte("apeace rules"),
-				signature:       []byte{0x99},
+			wantMeta: &SU3Meta{
+				SignatureType:   ECDSA_SHA512_P521,
+				SignatureLength: 1,
+				ContentLength:   12,
+				FileType:        HTML,
+				ContentType:     UNKNOWN,
+				Version:         "1234567890",
+				SignerID:        "apeace",
 			},
+			wantContent:   []byte("apeace rules"),
+			wantSignature: []byte{0x99},
 		},
 		{
 			name:   "reseed-i2pgit.su3",
 			reader: fileReader(t, "testdata/reseed-i2pgit.su3"),
-			want: &SU3{
-				signatureType:   RSA_SHA512_4096,
-				signatureLength: 512,
-				versionLength:   16,
-				signerIDLength:  23,
-				contentLength:   80138,
-				fileType:        ZIP,
-				contentType:     RESEED,
-				version:         "1658849028",
-				signerID:        "hankhill19580@gmail.com",
-				content:         fileBytes(t, "testdata/reseed-i2pgit-content.zip"),
-				signature:       fileBytes(t, "testdata/reseed-i2pgit-signature"),
+			wantMeta: &SU3Meta{
+				SignatureType:   RSA_SHA512_4096,
+				SignatureLength: 512,
+				ContentLength:   80138,
+				FileType:        ZIP,
+				ContentType:     RESEED,
+				Version:         "1658849028",
+				SignerID:        "hankhill19580@gmail.com",
 			},
+			wantContent:   fileBytes(t, "testdata/reseed-i2pgit-content.zip"),
+			wantSignature: fileBytes(t, "testdata/reseed-i2pgit-signature"),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			su3File, err := Read(test.reader)
+			meta, contentReader, signatureReader, err := Read(test.reader)
+			var content, signature []byte
+			if err == nil {
+				content, err = ioutil.ReadAll(contentReader)
+				if err == nil {
+					signature, err = ioutil.ReadAll(signatureReader)
+				}
+			}
 			if test.wantErr != "" && err == nil {
 				t.Fatal("expected error, got nil")
 			} else if test.wantErr != "" {
@@ -490,8 +495,27 @@ func TestRead(t *testing.T) {
 			} else if err != nil {
 				assert.Nil(t, err, "expected nil error")
 			} else {
-				assert.Equal(t, test.want, su3File, "expected SU3 file to match")
+				assert.Equal(t, test.wantMeta, meta, "expected metdata to match")
+				assert.Equal(t, test.wantContent, content, "expected content to match")
+				assert.Equal(t, test.wantSignature, signature, "expected signature to match")
 			}
 		})
 	}
+}
+
+func TestReadSignatureFirst(t *testing.T) {
+	assert := assert.New(t)
+
+	reader := fileReader(t, "testdata/reseed-i2pgit.su3")
+	_, contentReader, signatureReader, err := Read(reader)
+	assert.Nil(err)
+
+	// Read only the signature.
+	sig, err := ioutil.ReadAll(signatureReader)
+	assert.Nil(err)
+	assert.Equal(fileBytes(t, "testdata/reseed-i2pgit-signature"), sig)
+
+	// Reading content should give an error.
+	_, err = ioutil.ReadAll(contentReader)
+	assert.NotNil(err)
 }
