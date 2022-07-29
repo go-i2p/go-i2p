@@ -38,8 +38,9 @@ func TestRead(t *testing.T) {
 	tests := []struct {
 		name          string
 		reader        io.Reader
+		key           interface{}
 		wantErr       string
-		wantMeta      *SU3Meta
+		wantSU3       *SU3
 		wantContent   []byte
 		wantSignature []byte
 	}{
@@ -449,7 +450,8 @@ func TestRead(t *testing.T) {
 				[]byte("apeace rules"), // Content
 				[]byte{0x99},           // Signature
 			)),
-			wantMeta: &SU3Meta{
+			key: nil,
+			wantSU3: &SU3{
 				SignatureType:   ECDSA_SHA512_P521,
 				SignatureLength: 1,
 				ContentLength:   12,
@@ -464,7 +466,8 @@ func TestRead(t *testing.T) {
 		{
 			name:   "reseed-i2pgit.su3",
 			reader: fileReader(t, "testdata/reseed-i2pgit.su3"),
-			wantMeta: &SU3Meta{
+			key:    nil,
+			wantSU3: &SU3{
 				SignatureType:   RSA_SHA512_4096,
 				SignatureLength: 512,
 				ContentLength:   80138,
@@ -480,12 +483,12 @@ func TestRead(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			meta, contentReader, signatureReader, err := Read(test.reader)
+			su3, err := Read(test.reader)
 			var content, signature []byte
 			if err == nil {
-				content, err = ioutil.ReadAll(contentReader)
+				content, err = ioutil.ReadAll(su3.Content(test.key))
 				if err == nil {
-					signature, err = ioutil.ReadAll(signatureReader)
+					signature, err = ioutil.ReadAll(su3.Signature())
 				}
 			}
 			if test.wantErr != "" && err == nil {
@@ -495,7 +498,13 @@ func TestRead(t *testing.T) {
 			} else if err != nil {
 				assert.Nil(t, err, "expected nil error")
 			} else {
-				assert.Equal(t, test.wantMeta, meta, "expected metdata to match")
+				assert.Equal(t, test.wantSU3.SignatureType, su3.SignatureType, "expected SignatureType to match")
+				assert.Equal(t, test.wantSU3.SignatureLength, su3.SignatureLength, "expected SignatureLength to match")
+				assert.Equal(t, test.wantSU3.ContentLength, su3.ContentLength, "expected ContentLength to match")
+				assert.Equal(t, test.wantSU3.FileType, su3.FileType, "expected FileType to match")
+				assert.Equal(t, test.wantSU3.ContentType, su3.ContentType, "expected ContentType to match")
+				assert.Equal(t, test.wantSU3.Version, su3.Version, "expected Version to match")
+				assert.Equal(t, test.wantSU3.SignerID, su3.SignerID, "expected SignerID to match")
 				assert.Equal(t, test.wantContent, content, "expected content to match")
 				assert.Equal(t, test.wantSignature, signature, "expected signature to match")
 			}
@@ -507,15 +516,15 @@ func TestReadSignatureFirst(t *testing.T) {
 	assert := assert.New(t)
 
 	reader := fileReader(t, "testdata/reseed-i2pgit.su3")
-	_, contentReader, signatureReader, err := Read(reader)
+	su3, err := Read(reader)
 	assert.Nil(err)
 
 	// Read only the signature.
-	sig, err := ioutil.ReadAll(signatureReader)
+	sig, err := ioutil.ReadAll(su3.Signature())
 	assert.Nil(err)
 	assert.Equal(fileBytes(t, "testdata/reseed-i2pgit-signature"), sig)
 
 	// Reading content should give an error.
-	_, err = ioutil.ReadAll(contentReader)
+	_, err = ioutil.ReadAll(su3.Content(nil))
 	assert.NotNil(err)
 }
