@@ -41,10 +41,17 @@
 package su3
 
 import (
+	"bytes"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
+	"io/ioutil"
 	"strings"
 	"sync"
 )
@@ -119,6 +126,7 @@ var ErrMissingMagicBytes = errors.New("missing magic bytes")
 var ErrMissingUnusedByte6 = errors.New("missing unused byte 6")
 var ErrMissingFileFormatVersion = errors.New("missing or incorrect file format version")
 var ErrMissingSignatureType = errors.New("missing or invalid signature type")
+var ErrUnsupportedSignatureType = errors.New("unsupported signature type")
 var ErrMissingSignatureLength = errors.New("missing signature length")
 var ErrMissingUnusedByte12 = errors.New("missing unused byte 12")
 var ErrMissingVersionLength = errors.New("missing version length")
@@ -135,6 +143,7 @@ var ErrMissingVersion = errors.New("missing version")
 var ErrMissingSignerID = errors.New("missing signer ID")
 var ErrMissingContent = errors.New("missing content")
 var ErrMissingSignature = errors.New("missing signature")
+var ErrInvalidPublicKey = errors.New("invalid public key")
 var ErrInvalidSignature = errors.New("invalid signature")
 
 const magicBytes = "I2Psu3"
@@ -149,10 +158,9 @@ type SU3 struct {
 	SignerID        string
 	mut             sync.Mutex
 	reader          io.Reader
-	bytesRead       uint64
 	publicKey       interface{}
-	contentReader   *su3Reader
-	signatureReader *su3Reader
+	contentReader   *contentReader
+	signatureReader *signatureReader
 }
 
 func (su3 *SU3) Content(publicKey interface{}) io.Reader {
@@ -216,7 +224,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	}
 	sigType, ok := sigTypes[sigTypeBytes]
 	if !ok {
-		return nil, ErrMissingSignatureType
+		return nil, ErrUnsupportedSignatureType
 	}
 	su3.SignatureType = sigType
 
@@ -371,85 +379,160 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	signerID := string(signerIDBytes)
 	su3.SignerID = signerID
 
-	// Track the number of bytes read so that the su3Readers know their position.
-	su3.bytesRead = uint64(39 + int(verLen) + int(signIDLen))
-
-	su3.contentReader = &su3Reader{
-		su3:             su3,
-		startByte:       su3.bytesRead,
-		numBytes:        su3.ContentLength,
-		outOfBytesError: ErrMissingContent,
+	su3.contentReader = &contentReader{
+		su3: su3,
+	}
+	switch sigType {
+	case RSA_SHA256_2048:
+		su3.contentReader.hash = sha256.New()
+	case RSA_SHA512_4096:
+		su3.contentReader.hash = sha512.New()
+	default:
+		return nil, ErrUnsupportedSignatureType
 	}
 
-	su3.signatureReader = &su3Reader{
-		su3:             su3,
-		startByte:       su3.bytesRead + su3.ContentLength,
-		numBytes:        uint64(su3.SignatureLength),
-		outOfBytesError: ErrMissingSignature,
+	su3.signatureReader = &signatureReader{
+		su3: su3,
 	}
 
 	return su3, nil
 }
 
-type su3Reader struct {
-	su3             *SU3
-	startByte       uint64
-	numBytes        uint64
-	outOfBytesError error
+type fixedLengthReader struct {
+	length    uint64
+	readSoFar uint64
+	reader    io.Reader
 }
 
-func (r *su3Reader) Read(p []byte) (n int, err error) {
+func (r *fixedLengthReader) Read(p []byte) (n int, err error) {
+	if r.readSoFar >= r.length {
+		return 0, io.EOF
+	}
+	if uint64(len(p)) > r.length-r.readSoFar {
+		p = p[:r.length-r.readSoFar]
+	}
+	n, err = r.reader.Read(p)
+	r.readSoFar += uint64(n)
+	return n, err
+}
+
+type contentReader struct {
+	su3      *SU3
+	reader   *fixedLengthReader
+	hash     hash.Hash
+	finished bool
+}
+
+func (r *contentReader) Read(p []byte) (n int, err error) {
 	r.su3.mut.Lock()
 	defer r.su3.mut.Unlock()
 
-	// If we have already read past where we are supposed to, return an error.
-	// This would happen if someone read the signature before reading the content,
-	// and then tried to read the content.
-	if r.su3.bytesRead > r.startByte {
+	if r.finished {
 		return 0, errors.New("out of bytes, maybe you read the signature before you read the content")
 	}
 
-	// If we have not read up until where we are supposed to, throw away the bytes.
-	// This would happen if someone read the signature before reading the content.
-	// We want to allow them to read the signature. The above condition will return
-	// an error if they try to read the content after the bytes have been thrown away.
-	if r.su3.bytesRead < r.startByte {
-		bytesToThrowAway := r.startByte - r.su3.bytesRead
-		throwaway := make([]byte, bytesToThrowAway)
-		l, err := r.su3.reader.Read(throwaway)
-		r.su3.bytesRead += uint64(l)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return 0, fmt.Errorf("reading throwaway bytes: %w", err)
-		}
-		if l != int(bytesToThrowAway) {
-			return 0, r.outOfBytesError
+	if r.reader == nil {
+		r.reader = &fixedLengthReader{
+			length:    r.su3.ContentLength,
+			readSoFar: 0,
+			reader:    r.su3.reader,
 		}
 	}
 
-	// We are at the correct position.
-	// If numBytes is 0, we have read all the bytes.
-	if r.numBytes == 0 {
-		// TODO when we finish reading content, we should then read the signature and verify it.
-		// If the signature doesn't match, we would return ErrInvalidSignature here.
-		return 0, io.EOF
+	l, err := r.reader.Read(p)
+
+	if err != nil && !errors.Is(err, io.EOF) {
+		return l, fmt.Errorf("reading content: %w", err)
+	} else if errors.Is(err, io.EOF) && r.reader.readSoFar != r.su3.ContentLength {
+		return l, ErrMissingContent
+	} else if errors.Is(err, io.EOF) {
+		r.finished = true
 	}
 
-	// Otherwise, we have some bytes to read.
-	numBytesToRead := len(p)
-	if numBytesToRead > int(r.numBytes) {
-		numBytesToRead = int(r.numBytes)
+	if r.hash != nil {
+		r.hash.Write(p[:l])
 	}
-	l, err := r.su3.reader.Read(p[:numBytesToRead])
 
-	// Advance the counters to keep track of how many bytes we've read.
-	r.su3.bytesRead += uint64(l)
-	r.numBytes = r.numBytes - uint64(l)
-	r.startByte = r.startByte + uint64(l)
-
-	// We should have read the correct number of bytes.
-	if l < numBytesToRead {
-		return l, r.outOfBytesError
+	if r.finished {
+		if r.su3.publicKey == nil {
+			return l, ErrInvalidSignature
+		}
+		r.su3.signatureReader.getBytes()
+		if r.su3.signatureReader.err != nil {
+			return l, r.su3.signatureReader.err
+		}
+		switch r.su3.SignatureType {
+		case RSA_SHA256_2048:
+			var pubKey *rsa.PublicKey
+			if k, ok := r.su3.publicKey.(*rsa.PublicKey); !ok {
+				return l, ErrInvalidPublicKey
+			} else {
+				pubKey = k
+			}
+			err := rsa.VerifyPSS(pubKey, crypto.SHA256, r.hash.Sum(nil), r.su3.signatureReader.bytes, nil)
+			if err != nil {
+				return l, ErrInvalidSignature
+			}
+		case RSA_SHA512_4096:
+			var pubKey *rsa.PublicKey
+			if k, ok := r.su3.publicKey.(*rsa.PublicKey); !ok {
+				return l, ErrInvalidPublicKey
+			} else {
+				pubKey = k
+			}
+			err := rsa.VerifyPSS(pubKey, crypto.SHA512, r.hash.Sum(nil), r.su3.signatureReader.bytes, nil)
+			if err != nil {
+				return l, ErrInvalidSignature
+			}
+		default:
+			return l, ErrUnsupportedSignatureType
+		}
 	}
 
 	return l, err
+}
+
+type signatureReader struct {
+	su3    *SU3
+	bytes  []byte
+	err    error
+	reader io.Reader
+}
+
+func (r *signatureReader) getBytes() {
+	// If content hasn't been read yet, throw it away.
+	if !r.su3.contentReader.finished {
+		_, err := ioutil.ReadAll(r.su3.contentReader)
+		if err != nil {
+			r.err = fmt.Errorf("reading content: %w", err)
+			return
+		}
+	}
+
+	// Read signature.
+	reader := &fixedLengthReader{
+		length:    uint64(r.su3.SignatureLength),
+		readSoFar: 0,
+		reader:    r.su3.reader,
+	}
+	sigBytes, err := ioutil.ReadAll(reader)
+
+	if err != nil {
+		r.err = fmt.Errorf("reading signature: %w", err)
+	} else if reader.readSoFar != uint64(r.su3.SignatureLength) {
+		r.err = ErrMissingSignature
+	} else {
+		r.bytes = sigBytes
+		r.reader = bytes.NewReader(sigBytes)
+	}
+}
+
+func (r *signatureReader) Read(p []byte) (n int, err error) {
+	if len(r.bytes) == 0 {
+		r.getBytes()
+	}
+	if r.err != nil {
+		return 0, r.err
+	}
+	return r.reader.Read(p)
 }
