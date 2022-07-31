@@ -57,34 +57,14 @@ func fileRSAPubKey(t *testing.T, filename string) *rsa.PublicKey {
 	return pubKey
 }
 
-func genRSAKey(t *testing.T) *rsa.PrivateKey {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("cannot generate RSA key: %s", err)
-	}
-	return privateKey
-}
+// This fake data is generated in TestMain.
+var aliceFakeKey *rsa.PrivateKey
+var bobFakeKey *rsa.PrivateKey
+var aliceContent []byte
+var aliceSignature []byte
+var aliceSU3 []byte
 
 func TestRead(t *testing.T) {
-	// Test data.
-	apeaceKey := genRSAKey(t)
-	apeaceContent := []byte("apeace rules")
-	apeaceContentLength := make([]byte, 8)
-	binary.BigEndian.PutUint64(apeaceContentLength, uint64(len(apeaceContent)))
-	apeaceHash := sha256.New()
-	_, err := apeaceHash.Write(apeaceContent)
-	assert.Nil(t, err, "cannot hash content")
-	apeaceSum := apeaceHash.Sum(nil)
-	apeaceSignature, err := rsa.SignPSS(rand.Reader, apeaceKey, crypto.SHA256, apeaceSum, nil)
-	assert.Nil(t, err, "cannot sign content")
-	apeaceSignatureLength := make([]byte, 2)
-	binary.BigEndian.PutUint16(apeaceSignatureLength, uint16(len(apeaceSignature)))
-	apeaceWrongKey := genRSAKey(t)
-	apeaceInvalidSignature, err := rsa.SignPSS(rand.Reader, apeaceWrongKey, crypto.SHA256, apeaceSum, nil)
-	assert.Nil(t, err, "cannot sign content")
-	apeaceInvalidSignatureLength := make([]byte, 2)
-	binary.BigEndian.PutUint16(apeaceInvalidSignatureLength, uint16(len(apeaceInvalidSignature)))
-
 	tests := []struct {
 		name          string
 		skip          bool
@@ -102,7 +82,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:    "magic_bytes_not_long_enough",
-			reader:  bytes.NewReader([]byte("I2P")),
+			reader:  bytes.NewReader(aliceSU3[:3]),
 			wantErr: ErrMissingMagicBytes.Error(),
 		},
 		{
@@ -112,434 +92,164 @@ func TestRead(t *testing.T) {
 		},
 		{
 			name:    "missing_unused_byte_6",
-			reader:  bytes.NewReader([]byte("I2Psu3")),
+			reader:  bytes.NewReader(aliceSU3[:6]),
 			wantErr: ErrMissingUnusedByte6.Error(),
 		},
 		{
-			name: "missing_file_format",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"), // Magic bytes
-				[]byte{0x00},     // Unused byte 6
-			)),
+			name:    "missing_file_format",
+			reader:  bytes.NewReader(aliceSU3[:7]),
 			wantErr: ErrMissingFileFormatVersion.Error(),
 		},
 		{
 			name: "incorrect_file_format",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"), // Magic bytes
-				[]byte{0x00},     // Unused byte 6
-				[]byte{0x01},     // Incorrect file format
+				aliceSU3[:7],
+				[]byte{0x01}, // Incorrect file format
 			)),
 			wantErr: ErrMissingFileFormatVersion.Error(),
 		},
 		{
-			name: "missing_signature_type",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"), // Magic bytes
-				[]byte{0x00},     // Unused byte 6
-				[]byte{0x00},     // File format
-			)),
+			name:    "missing_signature_type",
+			reader:  bytes.NewReader(aliceSU3[:8]),
 			wantErr: ErrMissingSignatureType.Error(),
 		},
 		{
 			name: "unsupported_signature_type",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),   // Magic bytes
-				[]byte{0x00},       // Unused byte 6
-				[]byte{0x00},       // File format
+				aliceSU3[:8],
 				[]byte{0x99, 0x99}, // Unsupported signature type
 			)),
 			wantErr: ErrUnsupportedSignatureType.Error(),
 		},
 		{
-			name: "missing_signature_length",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),   // Magic bytes
-				[]byte{0x00},       // Unused byte 6
-				[]byte{0x00},       // File format
-				[]byte{0x00, 0x04}, // Signature type RSA_SHA256_2048
-			)),
+			name:    "missing_signature_length",
+			reader:  bytes.NewReader(aliceSU3[:10]),
 			wantErr: ErrMissingSignatureLength.Error(),
 		},
 		{
-			name: "missing_unused_byte_12",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-			)),
+			name:    "missing_unused_byte_12",
+			reader:  bytes.NewReader(aliceSU3[:12]),
 			wantErr: ErrMissingUnusedByte12.Error(),
 		},
 		{
-			name: "missing_version_length",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-			)),
+			name:    "missing_version_length",
+			reader:  bytes.NewReader(aliceSU3[:13]),
 			wantErr: ErrMissingVersionLength.Error(),
 		},
 		{
 			name: "version_too_short",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x01},          // Version length 1
+				aliceSU3[:13],
+				[]byte{0x01}, // Version length 1
 			)),
 			wantErr: ErrVersionTooShort.Error(),
 		},
 		{
-			name: "missing_unused_byte_14",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-			)),
+			name:    "missing_unused_byte_14",
+			reader:  bytes.NewReader(aliceSU3[:14]),
 			wantErr: ErrMissingUnusedByte14.Error(),
 		},
 		{
-			name: "missing_signer_length",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-			)),
+			name:    "missing_signer_length",
+			reader:  bytes.NewReader(aliceSU3[:15]),
 			wantErr: ErrMissingSignerIDLength.Error(),
 		},
 		{
-			name: "missing_content_length",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-			)),
+			name:    "missing_content_length",
+			reader:  bytes.NewReader(aliceSU3[:16]),
 			wantErr: ErrMissingContentLength.Error(),
 		},
 		{
-			name: "missing_unused_byte_24",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-			)),
+			name:    "missing_unused_byte_24",
+			reader:  bytes.NewReader(aliceSU3[:24]),
 			wantErr: ErrMissingUnusedByte24.Error(),
 		},
 		{
-			name: "missing_file_type",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-			)),
+			name:    "missing_file_type",
+			reader:  bytes.NewReader(aliceSU3[:25]),
 			wantErr: ErrMissingFileType.Error(),
 		},
 		{
 			name: "invalid_file_type",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x99},          // Invalid file type
+				aliceSU3[:25],
+				[]byte{0x99}, // Invalid file type
 			)),
 			wantErr: ErrMissingFileType.Error(),
 		},
 		{
-			name: "missing_unused_byte_26",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-			)),
+			name:    "missing_unused_byte_26",
+			reader:  bytes.NewReader(aliceSU3[:26]),
 			wantErr: ErrMissingUnusedByte26.Error(),
 		},
 		{
-			name: "missing_content_type",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-			)),
+			name:    "missing_content_type",
+			reader:  bytes.NewReader(aliceSU3[:27]),
 			wantErr: ErrMissingContentType.Error(),
 		},
 		{
 			name: "invalid_content_type",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x99},          // Invalid content type
+				aliceSU3[:27],
+				[]byte{0x99}, // Invalid content type
 			)),
 			wantErr: ErrMissingContentType.Error(),
 		},
 		{
-			name: "missing_unused_bytes_28-39",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-			)),
+			name:    "missing_unused_bytes_28-39",
+			reader:  bytes.NewReader(aliceSU3[:28]),
 			wantErr: ErrMissingUnusedBytes28To39.Error(),
 		},
 		{
 			name: "partial_unused_bytes_28-39",
 			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00},    // Partial unused bytes 28-39
+				aliceSU3[:28],
+				[]byte{0x00, 0x00}, // Partial unused bytes 28-39
 			)),
 			wantErr: ErrMissingUnusedBytes28To39.Error(),
 		},
 		{
-			name: "missing_version",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-			)),
+			name:    "missing_version",
+			reader:  bytes.NewReader(aliceSU3[:40]),
 			wantErr: ErrMissingVersion.Error(),
 		},
 		{
-			name: "missing_signer_ID",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-				appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
-			)),
+			name:    "missing_signer_ID",
+			reader:  bytes.NewReader(aliceSU3[:56]),
 			wantErr: ErrMissingSignerID.Error(),
 		},
 		{
-			name: "missing_content",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-				appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
-				[]byte("apeace"), // Signer ID
-			)),
+			name:    "missing_content",
+			reader:  bytes.NewReader(aliceSU3[:61]),
 			wantErr: ErrMissingContent.Error(),
 		},
 		{
-			name: "missing_signature",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-				appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
-				[]byte("apeace"), // Signer ID
-				apeaceContent,    // Content
-			)),
-			key:     &apeaceKey.PublicKey,
+			name:    "missing_signature",
+			reader:  bytes.NewReader(aliceSU3[:72]),
+			key:     &aliceFakeKey.PublicKey,
 			wantErr: ErrMissingSignature.Error(),
 		},
 		{
-			name: "invalid_signature",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),             // Magic bytes
-				[]byte{0x00},                 // Unused byte 6
-				[]byte{0x00},                 // File format
-				[]byte{0x00, 0x04},           // Signature type RSA_SHA256_2048
-				apeaceInvalidSignatureLength, // Signature length
-				[]byte{0x00},                 // Unused byte 12
-				[]byte{0x10},                 // Version length 16
-				[]byte{0x00},                 // Unused byte 14
-				[]byte{0x06},                 // Signer ID length 6
-				apeaceContentLength,          // Content length
-				[]byte{0x00},                 // Unused byte 24
-				[]byte{0x02},                 // File type HTML
-				[]byte{0x00},                 // Unused byte 26
-				[]byte{0x00},                 // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-				appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
-				[]byte("apeace"),       // Signer ID
-				apeaceContent,          // Content
-				apeaceInvalidSignature, // Invalid signature
-			)),
-			key:     &apeaceKey.PublicKey,
+			name:    "invalid_signature",
+			reader:  bytes.NewReader(aliceSU3),
+			key:     &bobFakeKey.PublicKey,
 			wantErr: ErrInvalidSignature.Error(),
 		},
 		{
-			name: "apeace_rules",
-			reader: bytes.NewReader(appendBytes(
-				[]byte("I2Psu3"),      // Magic bytes
-				[]byte{0x00},          // Unused byte 6
-				[]byte{0x00},          // File format
-				[]byte{0x00, 0x04},    // Signature type RSA_SHA256_2048
-				apeaceSignatureLength, // Signature length
-				[]byte{0x00},          // Unused byte 12
-				[]byte{0x10},          // Version length 16
-				[]byte{0x00},          // Unused byte 14
-				[]byte{0x06},          // Signer ID length 6
-				apeaceContentLength,   // Content length
-				[]byte{0x00},          // Unused byte 24
-				[]byte{0x02},          // File type HTML
-				[]byte{0x00},          // Unused byte 26
-				[]byte{0x00},          // Content type unknown
-				[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
-				appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
-				[]byte("apeace"), // Signer ID
-				apeaceContent,    // Content
-				apeaceSignature,  // Signature
-			)),
-			key: &apeaceKey.PublicKey,
+			name:   "complete_with_valid_signature",
+			reader: bytes.NewReader(aliceSU3),
+			key:    &aliceFakeKey.PublicKey,
 			wantSU3: &SU3{
 				SignatureType:   RSA_SHA256_2048,
-				SignatureLength: uint16(len(apeaceSignature)),
-				ContentLength:   uint64(len(apeaceContent)),
+				SignatureLength: uint16(len(aliceSignature)),
+				ContentLength:   uint64(len(aliceContent)),
 				FileType:        HTML,
 				ContentType:     UNKNOWN,
 				Version:         "1234567890",
-				SignerID:        "apeace",
+				SignerID:        "alice",
 			},
-			wantContent:   apeaceContent,
-			wantSignature: apeaceSignature,
+			wantContent:   aliceContent,
+			wantSignature: aliceSignature,
 		},
 		{
 			// Skipping this for now, as the signature doesn't seem to match.
@@ -613,4 +323,57 @@ func TestReadSignatureFirst(t *testing.T) {
 	// Reading content should give an error.
 	_, err = ioutil.ReadAll(su3.Content(nil))
 	assert.NotNil(err)
+}
+
+func TestMain(m *testing.M) {
+	// Generate fake RSA keys for test data.
+	var err error
+	aliceFakeKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	bobFakeKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	// Generate fake content and signature.
+	aliceContent = []byte("alice rules")
+	contentLength := make([]byte, 8)
+	binary.BigEndian.PutUint64(contentLength, uint64(len(aliceContent)))
+	hash := sha256.New()
+	_, err = hash.Write(aliceContent)
+	if err != nil {
+		panic(err)
+	}
+	sum := hash.Sum(nil)
+	aliceSignature, err = rsa.SignPSS(rand.Reader, aliceFakeKey, crypto.SHA256, sum, nil)
+	if err != nil {
+		panic(err)
+	}
+	signatureLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(signatureLength, uint16(len(aliceSignature)))
+	// Generate fake SU3 file bytes.
+	aliceSU3 = appendBytes(
+		[]byte("I2Psu3"),   // Magic bytes
+		[]byte{0x00},       // Unused byte 6
+		[]byte{0x00},       // File format
+		[]byte{0x00, 0x04}, // Signature type RSA_SHA256_2048
+		signatureLength,    // Signature length
+		[]byte{0x00},       // Unused byte 12
+		[]byte{0x10},       // Version length 16
+		[]byte{0x00},       // Unused byte 14
+		[]byte{0x05},       // Signer ID length 5
+		contentLength,      // Content length
+		[]byte{0x00},       // Unused byte 24
+		[]byte{0x02},       // File type HTML
+		[]byte{0x00},       // Unused byte 26
+		[]byte{0x00},       // Content type unknown
+		[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Unused bytes 28-39
+		appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
+		[]byte("alice"), // Signer ID
+		aliceContent,    // Content
+		aliceSignature,  // Signature
+	)
+	// Run tests.
+	os.Exit(m.Run())
 }

@@ -409,8 +409,6 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		su3.contentReader.hash = sha256.New()
 	case RSA_SHA512_4096:
 		su3.contentReader.hash = sha512.New()
-	default:
-		return nil, ErrUnsupportedSignatureType
 	}
 
 	su3.signatureReader = &signatureReader{
@@ -550,6 +548,8 @@ func (r *signatureReader) getBytes() {
 }
 
 func (r *signatureReader) Read(p []byte) (n int, err error) {
+	r.su3.mut.Lock()
+	defer r.su3.mut.Unlock()
 	if len(r.bytes) == 0 {
 		r.getBytes()
 	}
