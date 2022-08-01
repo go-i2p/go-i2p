@@ -39,7 +39,7 @@ func buildRouterAddress(transport string) router_address.RouterAddress {
 
 func buildFullRouterInfo() RouterInfo {
 	router_info_data := make([]byte, 0)
-	router_info_data = append(router_info_data, buildRouterIdentity()...)
+	router_info_data = append(router_info_data, buildRouterIdentity().KeysAndCert.Bytes()...)
 	router_info_data = append(router_info_data, buildDate()...)
 	router_info_data = append(router_info_data, 0x01)
 	router_info_data = append(router_info_data, buildRouterAddress("foo")...)
@@ -166,8 +166,8 @@ func TestOptionsAreCorrect(t *testing.T) {
 	assert.Equal(
 		0,
 		bytes.Compare(
-			[]byte(buildMapping()),
-			[]byte(options),
+			[]byte(buildMapping().Data()),
+			[]byte(options.Data()),
 		),
 	)
 }
@@ -189,8 +189,8 @@ func TestRouterIdentityIsCorrect(t *testing.T) {
 	assert.Equal(
 		0,
 		bytes.Compare(
-			[]byte(buildRouterIdentity()),
-			[]byte(router_identity),
+			[]byte(buildRouterIdentity().KeysAndCert.Bytes()),
+			[]byte(router_identity.KeysAndCert.Bytes()),
 		),
 	)
 }

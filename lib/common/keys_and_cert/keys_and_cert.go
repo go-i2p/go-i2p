@@ -69,6 +69,10 @@ type KeysAndCert struct {
 	signingPublicKey crypto.SigningPublicKey
 }
 
+func (keys_and_cert *KeysAndCert) Bytes() []byte {
+	return keys_and_cert.KeyCertificate.Bytes()
+}
+
 //
 // Return the PublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
 // determine correct lengths.

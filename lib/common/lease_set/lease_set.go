@@ -119,7 +119,7 @@ type LeaseSet struct {
 //
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
-	destination = Destination(keys_and_cert)
+	destination, _, err = ReadDestination(keys_and_cert.Bytes())
 	return
 }
 
@@ -153,11 +153,8 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	if err != nil {
 		return
 	}
-	offset := len(destination) + LEASE_SET_PUBKEY_SIZE
-	cert, err := destination.Certificate()
-	if err != nil {
-		return
-	}
+	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE
+	cert := destination.Certificate()
 	cert_len := cert.Length()
 	if err != nil {
 		return
@@ -241,7 +238,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 	if err != nil {
 		return
 	}
-	offset := len(destination) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
+	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
 	count, err := lease_set.LeaseCount()
 	if err != nil {
 		return
@@ -280,7 +277,7 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	if err != nil {
 		return
 	}
-	start := len(destination) +
+	start := len(destination.Bytes()) +
 		LEASE_SET_PUBKEY_SIZE +
 		LEASE_SET_SPK_SIZE +
 		1 +

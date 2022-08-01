@@ -24,10 +24,12 @@ import (
 // for generating base32 and base64 addresses.
 //
 type Destination struct {
-	KeysAndCert *KeysAndCert
+	*KeysAndCert
 }
 
-//[]byte
+func (destination *Destination) Bytes() []byte {
+	return destination.KeysAndCert.Bytes()
+}
 
 func (destination Destination) PublicKey() crypto.PublicKey {
 	//return KeysAndCert(destination).PublicKey()

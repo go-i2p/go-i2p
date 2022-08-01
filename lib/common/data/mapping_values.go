@@ -131,7 +131,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				return
+				//return
 			}
 		}
 		if !beginsWith(remainder, 0x3d) {
@@ -140,7 +140,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 				"reason": "expected =",
 			}).Warn("mapping format violation")
 			errs = append(errs, errors.New("mapping format violation, expected ="))
-			return
+			//return
 		}
 		remainder = remainder[1:]
 
@@ -151,7 +151,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				return
+				//return
 			}
 		}
 		if !beginsWith(remainder, 0x3b) {
@@ -160,7 +160,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 				"reason": "expected ;",
 			}).Warn("mapping format violation")
 			errs = append(errs, errors.New("mapping format violation, expected ;"))
-			return
+			//return
 		}
 		remainder = remainder[1:]
 
