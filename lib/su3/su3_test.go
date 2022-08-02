@@ -69,9 +69,23 @@ var aliceSU3 []byte
 
 func TestSig_reseed_i2pgit(t *testing.T) {
 	t.Skip()
-	key := fileRSAPubKey(t, "./testdata/hankhill19580_at_gmail.com.crt")
+	key := fileRSAPubKey(t, "./testdata/reseed-hankhill19580_at_gmail.com.crt")
 	content := fileBytes(t, "./testdata/reseed-i2pgit-content.zip")
 	sig := fileBytes(t, "./testdata/reseed-i2pgit-signature")
+	hash := crypto.SHA512.New()
+	hash.Write(content)
+	digest := hash.Sum(nil)
+	err := rsa.VerifyPKCS1v15(key, 0, digest, sig)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSig_plugin_snowflake(t *testing.T) {
+	t.Skip()
+	key := fileRSAPubKey(t, "./testdata/snowflake-hankhill19580_at_gmail.com.crt")
+	content := fileBytes(t, "./testdata/snowflake-content")
+	sig := fileBytes(t, "./testdata/snowflake-signature")
 	hash := crypto.SHA512.New()
 	hash.Write(content)
 	digest := hash.Sum(nil)
@@ -273,7 +287,7 @@ func TestRead(t *testing.T) {
 			name:   "reseed-i2pgit.su3",
 			skip:   true,
 			reader: fileReader(t, "testdata/reseed-i2pgit.su3"),
-			key:    fileRSAPubKey(t, "./testdata/hankhill19580_at_gmail.com.crt"),
+			key:    fileRSAPubKey(t, "./testdata/reseed-hankhill19580_at_gmail.com.crt"),
 			wantSU3: &SU3{
 				SignatureType:   RSA_SHA512_4096,
 				SignatureLength: 512,
