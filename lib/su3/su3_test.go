@@ -73,9 +73,12 @@ func TestSig_reseed_i2pgit(t *testing.T) {
 	content := fileBytes(t, "./testdata/reseed-i2pgit-content.zip")
 	sig := fileBytes(t, "./testdata/reseed-i2pgit-signature")
 	hash := crypto.SHA512.New()
-	hash.Write(content)
+	_, err := hash.Write(content)
+	if err != nil {
+		t.Fatal(err)
+	}
 	digest := hash.Sum(nil)
-	err := rsa.VerifyPKCS1v15(key, 0, digest, sig)
+	err = rsa.VerifyPKCS1v15(key, crypto.SHA512, digest, sig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,9 +90,12 @@ func TestSig_plugin_snowflake(t *testing.T) {
 	content := fileBytes(t, "./testdata/snowflake-content")
 	sig := fileBytes(t, "./testdata/snowflake-signature")
 	hash := crypto.SHA512.New()
-	hash.Write(content)
+	_, err := hash.Write(content)
+	if err != nil {
+		t.Fatal(err)
+	}
 	digest := hash.Sum(nil)
-	err := rsa.VerifyPKCS1v15(key, 0, digest, sig)
+	err = rsa.VerifyPKCS1v15(key, crypto.SHA512, digest, sig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +403,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	sum := hash.Sum(nil)
-	aliceSignature, err = rsa.SignPSS(rand.Reader, aliceFakeKey, crypto.SHA256, sum, nil)
+	aliceSignature, err = rsa.SignPKCS1v15(rand.Reader, aliceFakeKey, crypto.SHA256, sum)
 	if err != nil {
 		panic(err)
 	}

@@ -489,7 +489,7 @@ func (r *contentReader) Read(p []byte) (n int, err error) {
 			} else {
 				pubKey = k
 			}
-			err := rsa.VerifyPSS(pubKey, crypto.SHA256, r.hash.Sum(nil), r.su3.signatureReader.bytes, nil)
+			err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, r.hash.Sum(nil), r.su3.signatureReader.bytes)
 			if err != nil {
 				return l, ErrInvalidSignature
 			}
@@ -500,7 +500,7 @@ func (r *contentReader) Read(p []byte) (n int, err error) {
 			} else {
 				pubKey = k
 			}
-			err := rsa.VerifyPSS(pubKey, crypto.SHA512, r.hash.Sum(nil), r.su3.signatureReader.bytes, nil)
+			err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA512, r.hash.Sum(nil), r.su3.signatureReader.bytes)
 			if err != nil {
 				return l, ErrInvalidSignature
 			}
