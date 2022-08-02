@@ -43,7 +43,10 @@ func appendBytes(b ...[]byte) []byte {
 
 func fileRSAPubKey(t *testing.T, filename string) *rsa.PublicKey {
 	b := fileBytes(t, filename)
-	block, _ := pem.Decode(b)
+	block, rest := pem.Decode(b)
+	if len(rest) > 0 {
+		t.Fatalf("cannot decode PEM block %s: %d bytes left over", filename, len(rest))
+	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("cannot parse certificate file %s: %s", filename, err)
@@ -63,6 +66,20 @@ var bobFakeKey *rsa.PrivateKey
 var aliceContent []byte
 var aliceSignature []byte
 var aliceSU3 []byte
+
+func TestSig_reseed_i2pgit(t *testing.T) {
+	t.Skip()
+	key := fileRSAPubKey(t, "./testdata/hankhill19580_at_gmail.com.crt")
+	content := fileBytes(t, "./testdata/reseed-i2pgit-content.zip")
+	sig := fileBytes(t, "./testdata/reseed-i2pgit-signature")
+	hash := crypto.SHA512.New()
+	hash.Write(content)
+	digest := hash.Sum(nil)
+	err := rsa.VerifyPKCS1v15(key, 0, digest, sig)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestRead(t *testing.T) {
 	tests := []struct {
@@ -272,7 +289,9 @@ func TestRead(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			if test.skip {
 				t.Skip()
 			}
