@@ -286,6 +286,24 @@ func TestRead(t *testing.T) {
 			wantContent:   fileBytes(t, "testdata/reseed-i2pgit-content.zip"),
 			wantSignature: fileBytes(t, "testdata/reseed-i2pgit-signature"),
 		},
+		{
+			// Skipping this for now, as the signature doesn't seem to match.
+			name:   "snowflake-linux.su3",
+			skip:   true,
+			reader: fileReader(t, "testdata/snowflake-linux.su3"),
+			key:    fileRSAPubKey(t, "./testdata/snowflake-hankhill19580_at_gmail.com.crt"),
+			wantSU3: &SU3{
+				SignatureType:   RSA_SHA512_4096,
+				SignatureLength: 512,
+				ContentLength:   4511938,
+				FileType:        ZIP,
+				ContentType:     PLUGIN,
+				Version:         "0.0.47",
+				SignerID:        "hankhill19580@gmail.com",
+			},
+			wantContent:   fileBytes(t, "testdata/snowflake-content"),
+			wantSignature: fileBytes(t, "testdata/snowflake-signature"),
+		},
 	}
 
 	for _, test := range tests {
