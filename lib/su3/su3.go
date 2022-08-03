@@ -64,7 +64,6 @@ package su3
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -195,6 +194,11 @@ func (su3 *SU3) Signature() io.Reader {
 }
 
 func Read(reader io.Reader) (su3 *SU3, err error) {
+	// We will buffer everything up to the content, so that once we know
+	// the hash type being used for the signature, we can write these bytes
+	// into the hash.
+	var buff bytes.Buffer
+
 	// Magic bytes.
 	mbytes := make([]byte, len(magicBytes))
 	l, err := reader.Read(mbytes)
@@ -207,6 +211,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if string(mbytes) != magicBytes {
 		return nil, ErrMissingMagicBytes
 	}
+	buff.Write(mbytes)
 
 	// Unused byte 6.
 	unused := [1]byte{}
@@ -217,6 +222,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if l != 1 {
 		return nil, ErrMissingUnusedByte6
 	}
+	buff.Write(unused[:])
 
 	// SU3 file format version (always 0).
 	l, err = reader.Read(unused[:])
@@ -229,6 +235,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if unused[0] != 0x00 {
 		return nil, ErrMissingFileFormatVersion
 	}
+	buff.Write(unused[:])
 
 	su3 = &SU3{
 		mut:    sync.Mutex{},
@@ -249,6 +256,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		return nil, ErrUnsupportedSignatureType
 	}
 	su3.SignatureType = sigType
+	buff.Write(sigTypeBytes[:])
 
 	// Signature length.
 	sigLengthBytes := [2]byte{}
@@ -262,6 +270,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	sigLen := binary.BigEndian.Uint16(sigLengthBytes[:])
 	// TODO check that sigLen is the correct length for sigType.
 	su3.SignatureLength = sigLen
+	buff.Write(sigLengthBytes[:])
 
 	// Unused byte 12.
 	l, err = reader.Read(unused[:])
@@ -271,6 +280,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if l != 1 {
 		return nil, ErrMissingUnusedByte12
 	}
+	buff.Write(unused[:])
 
 	// Version length.
 	verLengthBytes := [1]byte{}
@@ -285,6 +295,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if verLen < 16 {
 		return nil, ErrVersionTooShort
 	}
+	buff.Write(verLengthBytes[:])
 
 	// Unused byte 14.
 	l, err = reader.Read(unused[:])
@@ -294,6 +305,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if l != 1 {
 		return nil, ErrMissingUnusedByte14
 	}
+	buff.Write(unused[:])
 
 	// Signer ID length.
 	sigIDLengthBytes := [1]byte{}
@@ -305,6 +317,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		return nil, ErrMissingSignerIDLength
 	}
 	signIDLen := binary.BigEndian.Uint16([]byte{0x00, sigIDLengthBytes[0]})
+	buff.Write(sigIDLengthBytes[:])
 
 	// Content length.
 	contentLengthBytes := [8]byte{}
@@ -317,6 +330,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	}
 	contentLen := binary.BigEndian.Uint64(contentLengthBytes[:])
 	su3.ContentLength = contentLen
+	buff.Write(contentLengthBytes[:])
 
 	// Unused byte 24.
 	l, err = reader.Read(unused[:])
@@ -326,6 +340,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if l != 1 {
 		return nil, ErrMissingUnusedByte24
 	}
+	buff.Write(unused[:])
 
 	// File type.
 	fileTypeBytes := [1]byte{}
@@ -341,6 +356,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		return nil, ErrMissingFileType
 	}
 	su3.FileType = fileType
+	buff.Write(fileTypeBytes[:])
 
 	// Unused byte 26.
 	l, err = reader.Read(unused[:])
@@ -350,6 +366,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	if l != 1 {
 		return nil, ErrMissingUnusedByte26
 	}
+	buff.Write(unused[:])
 
 	// Content type.
 	contentTypeBytes := [1]byte{}
@@ -365,6 +382,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		return nil, ErrMissingContentType
 	}
 	su3.ContentType = contentType
+	buff.Write(contentTypeBytes[:])
 
 	// Unused bytes 28-39.
 	for i := 0; i < 12; i++ {
@@ -375,6 +393,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		if l != 1 {
 			return nil, ErrMissingUnusedBytes28To39
 		}
+		buff.Write(unused[:])
 	}
 
 	// Version.
@@ -388,6 +407,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	}
 	version := strings.TrimRight(string(versionBytes), "\x00")
 	su3.Version = version
+	buff.Write(versionBytes[:])
 
 	// Signer ID.
 	signerIDBytes := make([]byte, signIDLen)
@@ -400,6 +420,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	}
 	signerID := string(signerIDBytes)
 	su3.SignerID = signerID
+	buff.Write(signerIDBytes[:])
 
 	su3.contentReader = &contentReader{
 		su3: su3,
@@ -409,6 +430,10 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		su3.contentReader.hash = sha256.New()
 	case RSA_SHA512_4096:
 		su3.contentReader.hash = sha512.New()
+	}
+
+	if su3.contentReader.hash != nil {
+		su3.contentReader.hash.Write(buff.Bytes())
 	}
 
 	su3.signatureReader = &signatureReader{
@@ -481,6 +506,7 @@ func (r *contentReader) Read(p []byte) (n int, err error) {
 		if r.su3.signatureReader.err != nil {
 			return l, r.su3.signatureReader.err
 		}
+		// TODO support all signature types
 		switch r.su3.SignatureType {
 		case RSA_SHA256_2048:
 			var pubKey *rsa.PublicKey
@@ -489,7 +515,7 @@ func (r *contentReader) Read(p []byte) (n int, err error) {
 			} else {
 				pubKey = k
 			}
-			err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, r.hash.Sum(nil), r.su3.signatureReader.bytes)
+			err := rsa.VerifyPKCS1v15(pubKey, 0, r.hash.Sum(nil), r.su3.signatureReader.bytes)
 			if err != nil {
 				return l, ErrInvalidSignature
 			}
@@ -500,7 +526,7 @@ func (r *contentReader) Read(p []byte) (n int, err error) {
 			} else {
 				pubKey = k
 			}
-			err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA512, r.hash.Sum(nil), r.su3.signatureReader.bytes)
+			err := rsa.VerifyPKCS1v15(pubKey, 0, r.hash.Sum(nil), r.su3.signatureReader.bytes)
 			if err != nil {
 				return l, ErrInvalidSignature
 			}

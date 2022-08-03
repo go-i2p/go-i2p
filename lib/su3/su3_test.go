@@ -2,7 +2,6 @@ package su3
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -66,40 +65,6 @@ var bobFakeKey *rsa.PrivateKey
 var aliceContent []byte
 var aliceSignature []byte
 var aliceSU3 []byte
-
-func TestSig_reseed_i2pgit(t *testing.T) {
-	t.Skip()
-	key := fileRSAPubKey(t, "./testdata/reseed-hankhill19580_at_gmail.com.crt")
-	content := fileBytes(t, "./testdata/reseed-i2pgit-content.zip")
-	sig := fileBytes(t, "./testdata/reseed-i2pgit-signature")
-	hash := crypto.SHA512.New()
-	_, err := hash.Write(content)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := hash.Sum(nil)
-	err = rsa.VerifyPKCS1v15(key, crypto.SHA512, digest, sig)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestSig_plugin_snowflake(t *testing.T) {
-	t.Skip()
-	key := fileRSAPubKey(t, "./testdata/snowflake-hankhill19580_at_gmail.com.crt")
-	content := fileBytes(t, "./testdata/snowflake-content")
-	sig := fileBytes(t, "./testdata/snowflake-signature")
-	hash := crypto.SHA512.New()
-	_, err := hash.Write(content)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := hash.Sum(nil)
-	err = rsa.VerifyPKCS1v15(key, crypto.SHA512, digest, sig)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestRead(t *testing.T) {
 	tests := []struct {
@@ -291,7 +256,6 @@ func TestRead(t *testing.T) {
 		{
 			// Skipping this for now, as the signature doesn't seem to match.
 			name:   "reseed-i2pgit.su3",
-			skip:   true,
 			reader: fileReader(t, "testdata/reseed-i2pgit.su3"),
 			key:    fileRSAPubKey(t, "./testdata/reseed-hankhill19580_at_gmail.com.crt"),
 			wantSU3: &SU3{
@@ -309,7 +273,6 @@ func TestRead(t *testing.T) {
 		{
 			// Skipping this for now, as the signature doesn't seem to match.
 			name:   "snowflake-linux.su3",
-			skip:   true,
 			reader: fileReader(t, "testdata/snowflake-linux.su3"),
 			key:    fileRSAPubKey(t, "./testdata/snowflake-hankhill19580_at_gmail.com.crt"),
 			wantSU3: &SU3{
@@ -323,6 +286,23 @@ func TestRead(t *testing.T) {
 			},
 			wantContent:   fileBytes(t, "testdata/snowflake-content"),
 			wantSignature: fileBytes(t, "testdata/snowflake-signature"),
+		},
+		{
+			// Skipping this for now, as the signature doesn't seem to match.
+			name:   "novg.su3",
+			reader: fileReader(t, "testdata/novg.su3"),
+			key:    fileRSAPubKey(t, "./testdata/igor_at_novg.net.crt"),
+			wantSU3: &SU3{
+				SignatureType:   RSA_SHA512_4096,
+				SignatureLength: 512,
+				ContentLength:   81367,
+				FileType:        ZIP,
+				ContentType:     RESEED,
+				Version:         "1659048682",
+				SignerID:        "igor@novg.net",
+			},
+			wantContent:   fileBytes(t, "testdata/novg-content.zip"),
+			wantSignature: fileBytes(t, "testdata/novg-signature"),
 		},
 	}
 
@@ -393,23 +373,12 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	// Generate fake content and signature.
+	// Generate fake SU3 file bytes.
 	aliceContent = []byte("alice rules")
 	contentLength := make([]byte, 8)
 	binary.BigEndian.PutUint64(contentLength, uint64(len(aliceContent)))
-	hash := sha256.New()
-	_, err = hash.Write(aliceContent)
-	if err != nil {
-		panic(err)
-	}
-	sum := hash.Sum(nil)
-	aliceSignature, err = rsa.SignPKCS1v15(rand.Reader, aliceFakeKey, crypto.SHA256, sum)
-	if err != nil {
-		panic(err)
-	}
 	signatureLength := make([]byte, 2)
-	binary.BigEndian.PutUint16(signatureLength, uint16(len(aliceSignature)))
-	// Generate fake SU3 file bytes.
+	binary.BigEndian.PutUint16(signatureLength, uint16(256))
 	aliceSU3 = appendBytes(
 		[]byte("I2Psu3"),   // Magic bytes
 		[]byte{0x00},       // Unused byte 6
@@ -429,8 +398,18 @@ func TestMain(m *testing.M) {
 		appendBytes([]byte("1234567890"), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),  // Version with padding
 		[]byte("alice"), // Signer ID
 		aliceContent,    // Content
-		aliceSignature,  // Signature
 	)
+	hash := sha256.New()
+	_, err = hash.Write(aliceSU3)
+	if err != nil {
+		panic(err)
+	}
+	sum := hash.Sum(nil)
+	aliceSignature, err = rsa.SignPKCS1v15(rand.Reader, aliceFakeKey, 0, sum)
+	if err != nil {
+		panic(err)
+	}
+	aliceSU3 = appendBytes(aliceSU3, aliceSignature)
 	// Run tests.
 	os.Exit(m.Run())
 }
