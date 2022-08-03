@@ -9,3 +9,8 @@ This directory contains test data for the `su3` package.
  - `snowflake-linux.su3` - A plugin file obtained from [https://github.com/eyedeekay/blizzard/releases](https://github.com/eyedeekay/blizzard/releases) on 2022-08-02.
  - `snowflake-content` - The content of the above plugin file.
  - `snowflake-signature` - The signature of the above plugin file.
+
+ - `igor_at_novg.net.crt` - A 4096-bit RSA public key used to sign `novg.su3`.
+ - `novg.su3` - A reseed file obtained from [https://i2p.novg.net/](https://i2p.novg.net/) on 2022-08-02.
+ - `novg-content.zip` - The content of the above reseed file.
+ - `novg-signature` - The signature of the above reseed file.
