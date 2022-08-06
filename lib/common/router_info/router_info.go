@@ -95,7 +95,25 @@ type RouterInfo struct {
 	signature       *Signature
 }
 
-//[]byte
+//
+// Bytes returns the RouterInfo as a slice of bytes suitable for writing to a stream.
+//
+func (router_info RouterInfo) Bytes() ([]byte, error) {
+	var err error
+	var bytes []byte
+
+	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
+	bytes = append(bytes, router_info.published.Bytes()...)
+	bytes = append(bytes, router_info.size.Bytes()...)
+	for _, router_address := range router_info.addresses {
+		bytes = append(bytes, router_address.Bytes()...)
+	}
+	bytes = append(bytes, router_info.peer_size.Bytes()...)
+	//bytes = append(bytes, router_info.options.Bytes()...)
+	bytes = append(bytes, []byte(*router_info.signature)...)
+
+	return bytes, err
+}
 
 //
 // Read a RouterIdentity from the RouterInfo, returning the RouterIdentity and any errors

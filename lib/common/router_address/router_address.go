@@ -55,7 +55,24 @@ type RouterAddress struct {
 	parserErr       error
 }
 
-//[]byte
+//
+// Bytes returns the router address as a byte slice.
+//
+func (router_address RouterAddress) Bytes() []byte {
+	bytes := make([]byte, 0)
+	bytes = append(bytes, router_address.cost.Bytes()...)
+	bytes = append(bytes, router_address.expiration.Bytes()...)
+	strData, err := router_address.transport_style.Data()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("RouterAddress.Bytes: error getting transport_style bytes")
+	} else {
+		bytes = append(bytes, strData...)
+	}
+	//bytes = append(bytes, router_address.options.Bytes()...)
+	return bytes
+}
 
 //
 // Return the cost integer for this RouterAddress and any errors encountered

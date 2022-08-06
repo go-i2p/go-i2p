@@ -18,6 +18,17 @@ const DATE_SIZE = 8
 type Date [8]byte
 
 //
+//
+//
+func (i Date) Bytes() []byte {
+	return i[:]
+}
+
+func (i Date) Int() int {
+	return intFromBytes(i.Bytes())
+}
+
+//
 // Time takes the value stored in date as an 8 byte big-endian integer representing the
 // number of milliseconds since the beginning of unix time and converts it to a Go time.Time
 // struct.

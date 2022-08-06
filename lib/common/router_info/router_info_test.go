@@ -37,22 +37,29 @@ func buildRouterAddress(transport string) router_address.RouterAddress {
 	return return_data
 }
 
-func buildFullRouterInfo() RouterInfo {
-	router_info_data := make([]byte, 0)
-	router_info_data = append(router_info_data, buildRouterIdentity().KeysAndCert.Bytes()...)
-	router_info_data = append(router_info_data, buildDate()...)
-	router_info_data = append(router_info_data, 0x01)
-	router_info_data = append(router_info_data, buildRouterAddress("foo")...)
-	router_info_data = append(router_info_data, 0x00)
-	router_info_data = append(router_info_data, buildMapping()...)
-	router_info_data = append(router_info_data, make([]byte, 40)...)
-	return RouterInfo(router_info_data)
+func buildFullRouterInfo(rid ...[]byte) (RouterInfo, error) {
+	var ri RouterInfo
+	var err error
+	if rid == nil || len(rid) == 0 {
+		router_info_data := make([]byte, 0)
+		router_info_data = append(router_info_data, buildRouterIdentity().KeysAndCert.Bytes()...)
+		router_info_data = append(router_info_data, buildDate()...)
+		router_info_data = append(router_info_data, 0x01)
+		router_info_data = append(router_info_data, buildRouterAddress("foo").Bytes()...)
+		router_info_data = append(router_info_data, 0x00)
+		router_info_data = append(router_info_data, buildMapping()...)
+		router_info_data = append(router_info_data, make([]byte, 40)...)
+		ri, _, err = ReadRouterInfo(router_info_data)
+	} else {
+		ri, _, err = ReadRouterInfo(rid[0])
+	}
+	return ri, err
 }
 
 func TestPublishedReturnsCorrectDate(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
+	router_info, _ := buildFullRouterInfo()
 	date := router_info.Published()
 	assert.Equal(int64(86400), date.Time().Unix(), "RouterInfo.Published() did not return correct date")
 }
@@ -60,9 +67,11 @@ func TestPublishedReturnsCorrectDate(t *testing.T) {
 func TestPublishedReturnsCorrectErrorWithPartialDate(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
-	router_info = router_info[:387+4]
-	_, err := router_info.Published()
+	router_info, err := buildFullRouterInfo()
+	assert.Nil(err)
+	bytes, err := router_info.Bytes()
+	router_info, err = buildFullRouterInfo(bytes[:387+4])
+	//_ := router_info.Published()
 	if assert.NotNil(err) {
 		assert.Equal("error parsing date: not enough data", err.Error())
 	}
@@ -71,80 +80,86 @@ func TestPublishedReturnsCorrectErrorWithPartialDate(t *testing.T) {
 func TestPublishedReturnsCorrectErrorWithInvalidData(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
-	router_info = router_info[:56]
-	_, err := router_info.Published()
-	if assert.NotNil(err) {
-		assert.Equal("error parsing KeysAndCert: data is smaller than minimum valid size", err.Error())
+	router_info, err := buildFullRouterInfo()
+	if assert.Nil(err) {
+		bytes, err := router_info.Bytes()
+		router_info, err = buildFullRouterInfo(bytes[:56])
+		if assert.NotNil(err) {
+			assert.Equal("error parsing KeysAndCert: data is smaller than minimum valid size", err.Error())
+		}
+	} else {
+		assert.Fail("error building router info")
 	}
 }
 
 func TestRouterAddressCountReturnsCorrectCount(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
-	count, err := router_info.RouterAddressCount()
-	assert.Nil(err)
+	router_info, _ := buildFullRouterInfo()
+	count := router_info.RouterAddressCount()
 	assert.Equal(1, count, "RouterInfo.RouterAddressCount() did not return correct count")
 }
 
 func TestRouterAddressCountReturnsCorrectErrorWithInvalidData(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
-	router_info = router_info[:387+8]
-	count, err := router_info.RouterAddressCount()
-	if assert.NotNil(err) {
-		assert.Equal("error parsing router addresses: not enough data", err.Error())
+	router_info, err := buildFullRouterInfo()
+	if assert.Nil(err) {
+		bytes, err := router_info.Bytes()
+		router_info, err = buildFullRouterInfo(bytes[:387+8])
+
+		count := router_info.RouterAddressCount()
+		if assert.NotNil(err) {
+			assert.Equal("error parsing router addresses: not enough data", err.Error())
+		}
+		assert.Equal(0, count)
 	}
-	assert.Equal(0, count)
 }
 
 func TestRouterAddressesReturnsAddresses(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
-	router_addresses, err := router_info.RouterAddresses()
+	router_info, err := buildFullRouterInfo()
+	router_addresses := router_info.RouterAddresses()
 	assert.Nil(err)
 	if assert.Equal(1, len(router_addresses)) {
 		assert.Equal(
 			0,
 			bytes.Compare(
-				[]byte(buildRouterAddress("foo")),
-				[]byte(router_addresses[0]),
+				[]byte(buildRouterAddress("foo").Bytes()),
+				[]byte(router_addresses[0].Bytes()),
 			),
 		)
 	}
+
 }
 
 func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
 	assert := assert.New(t)
 
 	router_info_data := make([]byte, 0)
-	router_info_data = append(router_info_data, buildRouterIdentity()...)
+	router_info_data = append(router_info_data, buildRouterIdentity().KeysAndCert.Bytes()...)
 	router_info_data = append(router_info_data, buildDate()...)
 	router_info_data = append(router_info_data, 0x03)
-	router_info_data = append(router_info_data, buildRouterAddress("foo0")...)
-	router_info_data = append(router_info_data, buildRouterAddress("foo1")...)
-	router_info_data = append(router_info_data, buildRouterAddress("foo2")...)
+	router_info_data = append(router_info_data, buildRouterAddress("foo0").Bytes()...)
+	router_info_data = append(router_info_data, buildRouterAddress("foo1").Bytes()...)
+	router_info_data = append(router_info_data, buildRouterAddress("foo2").Bytes()...)
 	router_info_data = append(router_info_data, 0x00)
 	router_info_data = append(router_info_data, buildMapping()...)
 	router_info_data = append(router_info_data, make([]byte, 40)...)
-	router_info := RouterInfo(router_info_data)
+	router_info, _, _ := ReadRouterInfo(router_info_data)
 
-	count, err := router_info.RouterAddressCount()
-	if assert.Equal(3, count) && assert.Nil(err) {
-		router_addresses, err := router_info.RouterAddresses()
-		if assert.Nil(err) {
-			for i := 0; i < 3; i++ {
-				assert.Equal(
-					0,
-					bytes.Compare(
-						[]byte(buildRouterAddress(fmt.Sprintf("foo%d", i))),
-						[]byte(router_addresses[i]),
-					),
-				)
-			}
+	count := router_info.RouterAddressCount()
+	if assert.Equal(3, count) {
+		router_addresses := router_info.RouterAddresses()
+		for i := 0; i < 3; i++ {
+			assert.Equal(
+				0,
+				bytes.Compare(
+					[]byte(buildRouterAddress(fmt.Sprintf("foo%d", i)).Bytes()),
+					[]byte(router_addresses[i].Bytes()),
+				),
+			)
 		}
 	}
 
@@ -153,7 +168,7 @@ func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
 func TestPeerSizeIsZero(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
+	router_info, _ := buildFullRouterInfo()
 	size := router_info.PeerSize()
 	assert.Equal(0, size, "RouterInfo.PeerSize() did not return 0")
 }
@@ -161,7 +176,7 @@ func TestPeerSizeIsZero(t *testing.T) {
 func TestOptionsAreCorrect(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
+	router_info, _ := buildFullRouterInfo()
 	options := router_info.Options()
 	assert.Equal(
 		0,
@@ -175,7 +190,7 @@ func TestOptionsAreCorrect(t *testing.T) {
 func TestSignatureIsCorrectSize(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
+	router_info, _ := buildFullRouterInfo()
 	signature := router_info.Signature()
 	assert.Equal(40, len(signature))
 }
@@ -183,7 +198,7 @@ func TestSignatureIsCorrectSize(t *testing.T) {
 func TestRouterIdentityIsCorrect(t *testing.T) {
 	assert := assert.New(t)
 
-	router_info := buildFullRouterInfo()
+	router_info, _ := buildFullRouterInfo()
 	router_identity := router_info.RouterIdentity()
 	//assert.Nil(err)
 	assert.Equal(
