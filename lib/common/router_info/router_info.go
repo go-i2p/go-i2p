@@ -253,13 +253,13 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
-	size, remainder, err := NewInteger(remainder)
+	size, remainder, err := NewInteger(remainder, 1)
 	info.size = size
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
 			"data_len":     len(remainder),
-			"required_len": INTEGER_SIZE,
+			"required_len": size.Int(),
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")

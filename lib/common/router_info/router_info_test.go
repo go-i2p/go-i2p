@@ -47,7 +47,7 @@ func buildFullRouterInfo(rid ...[]byte) (RouterInfo, error) {
 		router_info_data = append(router_info_data, 0x01)
 		router_info_data = append(router_info_data, buildRouterAddress("foo").Bytes()...)
 		router_info_data = append(router_info_data, 0x00)
-		router_info_data = append(router_info_data, buildMapping()...)
+		router_info_data = append(router_info_data, buildMapping().Data()...)
 		router_info_data = append(router_info_data, make([]byte, 40)...)
 		ri, _, err = ReadRouterInfo(router_info_data)
 	} else {
@@ -145,7 +145,7 @@ func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
 	router_info_data = append(router_info_data, buildRouterAddress("foo1").Bytes()...)
 	router_info_data = append(router_info_data, buildRouterAddress("foo2").Bytes()...)
 	router_info_data = append(router_info_data, 0x00)
-	router_info_data = append(router_info_data, buildMapping()...)
+	router_info_data = append(router_info_data, buildMapping().Data()...)
 	router_info_data = append(router_info_data, make([]byte, 40)...)
 	router_info, _, _ := ReadRouterInfo(router_info_data)
 

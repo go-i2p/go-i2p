@@ -4,18 +4,24 @@ package data
 I2P Integer
 https://geti2p.net/spec/common-structures#integer
 Accurate for version 0.9.24
+
+Description
+
+Represents a non-negative integer.
+
+Contents
+
+1 to 8 bytes in network byte order (big endian) representing an unsigned integer.
+
 */
 
 import (
 	"encoding/binary"
-	"errors"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // Total byte length of an I2P integer
 const (
-	INTEGER_SIZE = 8
+	MAX_INTEGER_SIZE = 8
 )
 
 type Integer []byte
@@ -28,26 +34,31 @@ func (i Integer) Int() int {
 	return intFromBytes(i.Bytes())
 }
 
-func ReadInteger(bytes []byte) (Integer, []byte, error) {
-	if len(bytes) < INTEGER_SIZE {
-		log.WithFields(log.Fields{
-			"bytes": bytes,
-		}).Error("ReadInteger: bytes is too short")
-		return Integer(bytes), nil, errors.New("ReadInteger: bytes is too short")
+func ReadInteger(bytes []byte, size int) (Integer, []byte) {
+	if len(bytes) < size {
+		return bytes[:size], bytes[len(bytes):]
 	}
-	return bytes[:INTEGER_SIZE], bytes[INTEGER_SIZE:], nil
+	return bytes[:size], bytes[size:]
 }
 
-func NewInteger(bytes []byte) (integer *Integer, remainder []byte, err error) {
-	i, remainder, err := ReadInteger(bytes)
+func NewInteger(bytes []byte, size int) (integer *Integer, remainder []byte, err error) {
+	integerSize := MAX_INTEGER_SIZE
+	if size < MAX_INTEGER_SIZE {
+		integerSize = size
+	}
+	i, remainder := ReadInteger(bytes, integerSize)
 	integer = &i
 	return
 }
 
-func NewIntegerFromInt(value int) (integer *Integer, err error) {
-	bytes := make([]byte, INTEGER_SIZE)
+func NewIntegerFromInt(value int, size int) (integer *Integer, err error) {
+	bytes := make([]byte, MAX_INTEGER_SIZE)
 	binary.BigEndian.PutUint64(bytes, uint64(value))
-	objinteger, _, err := NewInteger(bytes)
+	integerSize := MAX_INTEGER_SIZE
+	if size < MAX_INTEGER_SIZE {
+		integerSize = size
+	}
+	objinteger, _, err := NewInteger(bytes[MAX_INTEGER_SIZE-integerSize:], integerSize)
 	integer = objinteger
 	return
 }
@@ -58,9 +69,9 @@ func NewIntegerFromInt(value int) (integer *Integer, err error) {
 //
 func intFromBytes(number []byte) (value int) {
 	num_len := len(number)
-	if num_len < INTEGER_SIZE {
+	if num_len < MAX_INTEGER_SIZE {
 		number = append(
-			make([]byte, INTEGER_SIZE-num_len),
+			make([]byte, MAX_INTEGER_SIZE-num_len),
 			number...,
 		)
 	}

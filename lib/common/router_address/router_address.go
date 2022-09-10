@@ -144,7 +144,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		router_address.parserErr = err
 		return
 	}
-	cost, remainder, err := NewInteger([]byte{data[0]})
+	cost, remainder, err := NewInteger([]byte{data[0]}, 1)
 	router_address.cost = cost
 	if err != nil {
 		log.WithFields(log.Fields{
