@@ -47,16 +47,19 @@ func (mapping Mapping) Values() MappingValues {
 }
 
 func (mapping *Mapping) Data() []byte {
+	keyOrValIntegerLength := 1
 	bytes := mapping.size.Bytes()
 	for _, pair := range mapping.Values() {
 		klen, _ := pair[0].Length()
-		keylen, _ := NewIntegerFromInt(klen)
+		keylen, _ := NewIntegerFromInt(klen, keyOrValIntegerLength)
 		bytes = append(bytes, keylen.Bytes()...)
-		bytes = append(bytes, pair[0]...)
+		bytes = append(bytes, pair[0][1:]...)
+		bytes = append(bytes, 0x3d)
 		vlen, _ := pair[1].Length()
-		vallen, _ := NewIntegerFromInt(vlen)
+		vallen, _ := NewIntegerFromInt(vlen, keyOrValIntegerLength)
 		bytes = append(bytes, vallen.Bytes()...)
-		bytes = append(bytes, pair[1]...)
+		bytes = append(bytes, pair[1][1:]...)
+		bytes = append(bytes, 0x3b)
 	}
 	return bytes
 }
@@ -128,10 +131,13 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		e := errors.New("zero length")
 		err = append(err, e)
 	}
-	size, remainder, e := NewInteger(bytes)
-	err = append(err, e)
+	size, remainder, e := NewInteger(bytes, 2)
+	if e != nil {
+		err = append(err, e)
+	}
+
 	mapping.size = size
-	if err != nil {
+	if e != nil {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "error parsing integer",
@@ -147,10 +153,11 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		e := errors.New("zero length")
 		err = append(err, e)
 	}
-	vals, remainder, e := ReadMappingValues(remainder)
-	err = append(err, e)
+	vals, remainder, mappingValueErrs := ReadMappingValues(bytes)
+
+	err = append(err, mappingValueErrs...)
 	mapping.vals = vals
-	if err != nil {
+	if len(mappingValueErrs) > 0 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "error parsing mapping values",

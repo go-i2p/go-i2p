@@ -19,7 +19,7 @@ func TestValuesExclusesPairWithBadData(t *testing.T) {
 
 	assert.NotNil(errs, "Values() did not return errors when some values had bad key")
 
-	if assert.Equal(len(values), 1, "Values() did not return valid values when some values had bad key") {
+	if assert.Equal(1, len(values), "Values() did not return valid values when some values had bad key") {
 		k := values[0][0]
 		key, _ := k.Data()
 		v := values[0][1]
@@ -34,21 +34,28 @@ func TestValuesWarnsMissingData(t *testing.T) {
 	assert := assert.New(t)
 
 	_, _, errs := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62})
-	//_, errs := mapping.Values()
 
-	if assert.Equal(len(errs), 5, "Values() reported wrong error count when mapping had missing data") {
-		assert.Equal(errs[0].Error(), "warning parsing mapping: mapping length exceeds provided data", "correct error message should be returned")
+	if assert.Equal(2, len(errs), "Values() reported wrong error count when mapping had missing data") {
+		assert.Equal(errs[0].Error(), "warning parsing mapping: mapping length exceeds provided data")
 	}
 }
 
 func TestValuesWarnsExtraData(t *testing.T) {
 	assert := assert.New(t)
 
-	_, _, errs := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x00})
-	//_, errs := mapping.Values()
+	mapping, _, errs := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x00})
+	values := mapping.Values()
 
-	if assert.Equal(len(errs), 2, "Values() reported wrong error count when mapping had extra data") {
-		assert.Equal(errs[0].Error(), "warning parsing mapping: data exists beyond length of mapping", "correct error message should be returned")
+	key, kerr := values[0][0].Data()
+	val, verr := values[0][1].Data()
+
+	assert.Nil(kerr)
+	assert.Nil(verr)
+	assert.Equal(key, "a", "Values() did not return key in valid data")
+	assert.Equal(val, "b", "Values() did not return value in valid data")
+
+	if assert.Equal(2, len(errs), "Values() reported wrong error count when mapping had extra data") {
+		assert.Equal("warning parsing mapping: data exists beyond length of mapping", errs[0].Error(), "correct error message should be returned")
 	}
 }
 
@@ -58,10 +65,10 @@ func TestValuesEnforcesEqualDelimitor(t *testing.T) {
 	mapping, _, errs := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x30, 0x01, 0x62, 0x3b})
 	values := mapping.Values()
 
-	if assert.Equal(len(errs), 1, "Values() reported wrong error count when mapping had = format error") {
-		assert.Equal(errs[0].Error(), "mapping format violation, expected =", "correct error message should be returned")
+	if assert.Equal(2, len(errs), "Values() reported wrong error count when mapping had = format error") {
+		assert.Equal("mapping format violation, expected =", errs[0].Error(), "correct error message should be returned")
 	}
-	assert.Equal(len(values), 0, "Values() not empty with invalid data due to = format error")
+	assert.Equal(0, len(values), "Values() not empty with invalid data due to = format error")
 }
 
 func TestValuesEnforcedSemicolonDelimitor(t *testing.T) {
@@ -70,10 +77,10 @@ func TestValuesEnforcedSemicolonDelimitor(t *testing.T) {
 	mapping, _, errs := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x30})
 	values := mapping.Values()
 
-	if assert.Equal(len(errs), 1, "Values() reported wrong error count when mapping had ; format error") {
-		assert.Equal(errs[0].Error(), "mapping format violation, expected ;", "correct error message should be returned")
+	if assert.Equal(2, len(errs), "Values() reported wrong error count when mapping had ; format error") {
+		assert.Equal("mapping format violation, expected ;", errs[0].Error(), "correct error message should be returned")
 	}
-	assert.Equal(len(values), 0, "Values() not empty with invalid data due to ; format error")
+	assert.Equal(0, len(values), "Values() not empty with invalid data due to ; format error")
 }
 
 func TestValuesReturnsValues(t *testing.T) {
@@ -88,8 +95,8 @@ func TestValuesReturnsValues(t *testing.T) {
 	assert.Nil(errs, "Values() returned a errors with parsing valid data")
 	assert.Nil(kerr)
 	assert.Nil(verr)
-	assert.Equal(key, "a", "Values() did not return key in valid data")
-	assert.Equal(val, "b", "Values() did not return value in valid data")
+	assert.Equal("a", key, "Values() did not return key in valid data")
+	assert.Equal("b", val, "Values() did not return value in valid data")
 }
 
 func TestHasDuplicateKeysTrueWhenDuplicates(t *testing.T) {
@@ -97,7 +104,7 @@ func TestHasDuplicateKeysTrueWhenDuplicates(t *testing.T) {
 
 	dups, _, _ := NewMapping([]byte{0x00, 0x0c, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b})
 
-	assert.Equal(dups.HasDuplicateKeys(), true, "HasDuplicateKeys() did not report true when duplicate keys present")
+	assert.Equal(true, dups.HasDuplicateKeys(), "HasDuplicateKeys() did not report true when duplicate keys present")
 }
 
 func TestHasDuplicateKeysFalseWithoutDuplicates(t *testing.T) {
@@ -105,7 +112,7 @@ func TestHasDuplicateKeysFalseWithoutDuplicates(t *testing.T) {
 
 	mapping, _, _ := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b})
 
-	assert.Equal(mapping.HasDuplicateKeys(), false, "HasDuplicateKeys() did not report false when no duplicate keys present")
+	assert.Equal(false, mapping.HasDuplicateKeys(), "HasDuplicateKeys() did not report false when no duplicate keys present")
 }
 
 func TestGoMapToMappingProducesCorrectMapping(t *testing.T) {
@@ -116,6 +123,22 @@ func TestGoMapToMappingProducesCorrectMapping(t *testing.T) {
 
 	assert.Nil(err, "GoMapToMapping() returned error with valid data")
 	expected := []byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b}
+	if bytes.Compare(mapping.Data(), expected) != 0 {
+		t.Fatal("GoMapToMapping did not produce correct Mapping", mapping, expected)
+	}
+}
+
+func TestFullGoMapToMappingProducesCorrectMapping(t *testing.T) {
+	assert := assert.New(t)
+
+	gomap := map[string]string{
+		"a": "b",
+		"c": "d",
+	}
+	mapping, err := GoMapToMapping(gomap)
+
+	assert.Nil(err, "GoMapToMapping() returned error with valid data")
+	expected := []byte{0x00, 0x0c, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x01, 0x63, 0x3d, 0x01, 0x64, 0x3b}
 	if bytes.Compare(mapping.Data(), expected) != 0 {
 		t.Fatal("GoMapToMapping did not produce correct Mapping", mapping, expected)
 	}
@@ -160,7 +183,7 @@ func TestStopValueReadTrueWhenCorrectErr(t *testing.T) {
 
 	status := stopValueRead(errors.New("error parsing string: zero length"))
 
-	assert.Equal(status, true, "stopValueRead() did not return true when String error found")
+	assert.Equal(true, status, "stopValueRead() did not return true when String error found")
 }
 
 func TestStopValueReadFalseWhenWrongErr(t *testing.T) {
@@ -168,7 +191,7 @@ func TestStopValueReadFalseWhenWrongErr(t *testing.T) {
 
 	status := stopValueRead(errors.New("something else"))
 
-	assert.Equal(status, false, "stopValueRead() did not return false when non String error found")
+	assert.Equal(false, status, "stopValueRead() did not return false when non String error found")
 }
 
 func TestBeginsWithCorrectWhenTrue(t *testing.T) {
@@ -176,7 +199,7 @@ func TestBeginsWithCorrectWhenTrue(t *testing.T) {
 
 	slice := []byte{0x41}
 
-	assert.Equal(beginsWith(slice, 0x41), true, "beginsWith() did not return true when correct")
+	assert.Equal(true, beginsWith(slice, 0x41), "beginsWith() did not return true when correct")
 }
 
 func TestBeginsWithCorrectWhenFalse(t *testing.T) {
@@ -184,7 +207,7 @@ func TestBeginsWithCorrectWhenFalse(t *testing.T) {
 
 	slice := []byte{0x00}
 
-	assert.Equal(beginsWith(slice, 0x41), false, "beginsWith() did not false when incorrect")
+	assert.Equal(false, beginsWith(slice, 0x41), "beginsWith() did not false when incorrect")
 }
 
 func TestBeginsWithCorrectWhenNil(t *testing.T) {
@@ -192,5 +215,5 @@ func TestBeginsWithCorrectWhenNil(t *testing.T) {
 
 	slice := make([]byte, 0)
 
-	assert.Equal(beginsWith(slice, 0x41), false, "beginsWith() did not return false on empty slice")
+	assert.Equal(false, beginsWith(slice, 0x41), "beginsWith() did not return false on empty slice")
 }
