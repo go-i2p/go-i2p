@@ -1,9 +1,32 @@
+// Package keys_and_cert implements the I2P KeysAndCert common data structure
 package keys_and_cert
 
+import (
+	"errors"
+
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/crypto"
+	log "github.com/sirupsen/logrus"
+)
+
+// Sizes of various KeysAndCert structures and requirements
+const (
+	KEYS_AND_CERT_PUBKEY_SIZE = 256
+	KEYS_AND_CERT_SPK_SIZE    = 128
+	KEYS_AND_CERT_MIN_SIZE    = 387
+	KEYS_AND_CERT_DATA_SIZE   = 384
+)
+
 /*
-I2P KeysAndCert
-https://geti2p.net/spec/common-structures#keysandcert
-Accurate for version 0.9.24
+[KeysAndCert]
+Accurate for version 0.9.49
+
+Description
+An encryption public key, a signing public key, and a certificate, used as either a RouterIdentity or a Destination.
+
+Contents
+A PublicKey followed by a SigningPublicKey and then a Certificate.
 
 +----+----+----+----+----+----+----+----+
 | public_key                            |
@@ -33,11 +56,11 @@ public_key :: PublicKey (partial or full)
 
 padding :: random data
               length -> 0 bytes or as specified in key certificate
-              padding length + signing_key length == KEYS_AND_CERT_SPK_SIZE bytes
+              padding length + signing_key length == 128 bytes
 
 signing__key :: SigningPublicKey (partial or full)
               length -> 128 bytes or as specified in key certificate
-              padding length + signing_key length == KEYS_AND_CERT_SPK_SIZE bytes
+              padding length + signing_key length == 128 bytes
 
 certificate :: Certificate
                length -> >= 3 bytes
@@ -45,23 +68,9 @@ certificate :: Certificate
 total length: 387+ bytes
 */
 
-import (
-	"errors"
-
-	. "github.com/go-i2p/go-i2p/lib/common/certificate"
-	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
-	"github.com/go-i2p/go-i2p/lib/crypto"
-	log "github.com/sirupsen/logrus"
-)
-
-// Sizes of various KeysAndCert structures and requirements
-const (
-	KEYS_AND_CERT_PUBKEY_SIZE = 256
-	KEYS_AND_CERT_SPK_SIZE    = 128
-	KEYS_AND_CERT_MIN_SIZE    = 387
-	KEYS_AND_CERT_DATA_SIZE   = 384
-)
-
+// KeysAndCert is the represenation of an I2P KeysAndCert.
+//
+// https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
 	KeyCertificate   *KeyCertificate
 	publicKey        crypto.PublicKey
@@ -69,14 +78,12 @@ type KeysAndCert struct {
 	signingPublicKey crypto.SigningPublicKey
 }
 
+// Bytes returns the entire KeyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert *KeysAndCert) Bytes() []byte {
 	return keys_and_cert.KeyCertificate.Bytes()
 }
 
-//
-// Return the PublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
-// determine correct lengths.
-//
+// PublicKey returns the public key as a crypto.PublicKey.
 func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
 	/*cert := keys_and_cert.Certificate()
 	cert_len := cert.Length()
@@ -117,10 +124,7 @@ func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
 	return keys_and_cert.publicKey
 }
 
-//
-// Return the SigningPublicKey for this KeysAndCert, reading from the Key Certificate if it is present to
-// determine correct lengths.
-//
+// SigningPublicKey returns the signing public key.
 func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey) {
 	/*cert := keys_and_cert.Certificate()
 	cert_len := cert.Length()
@@ -156,10 +160,7 @@ func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.
 	return keys_and_cert.signingPublicKey
 }
 
-//
-// Return the Certificate contained in the KeysAndCert and any errors encountered while parsing the
-// KeysAndCert or Certificate.
-//
+// Certfificate returns the certificate.
 func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
 	return keys_and_cert.KeyCertificate.Certificate
 }
@@ -168,6 +169,10 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
 // Read a KeysAndCert from a slice of bytes, retuning it and the remaining data as well as any errors
 // encoutered parsing the KeysAndCert.
 //
+
+// ReadKeysAndCert returns KeysAndCert from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
 	/*data_len := len(data)
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
@@ -199,6 +204,8 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	return
 }
 
+// NewKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
+// Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
 func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
 	keys_and_cert = &KeysAndCert{}

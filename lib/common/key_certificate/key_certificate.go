@@ -1,3 +1,4 @@
+// Package key_certificate implements the I2P Destination common data structure
 package key_certificate
 
 /*
@@ -88,33 +89,23 @@ type KeyCertificate struct {
 	cpkType Integer
 }
 
-//
-// The data contained in the Key Certificate.
-//
+// Data returns the raw []byte contained in the Certificate.
 func (key_certificate KeyCertificate) Data() ([]byte, error) {
 	return key_certificate.Certificate.RawBytes(), nil
 }
 
-//
-// The SigningPublicKey type this Key Certificate describes and any errors encountered
-// parsing the KeyCertificate.
-//
+// SigningPublicKeyType returns the SigningPublicKey type as a Go integer.
 func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int) {
 	return key_certificate.spkType.Int()
 }
 
-//
-// The PublicKey type this Key Certificate describes and any errors encountered parsing
-// this KeyCertificate.
-//
+// PublicKeyType returns the PublicKey type as a Go integer.
 func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int) {
 	return key_certificate.cpkType.Int()
 }
 
-//
-// Given some bytes, build a PublicKey using any excess data that may be stored in the KeyCertificate and return
-// it along with any errors encountered constructing the PublicKey.
-//
+// ConstructPublicKey returns a PublicKey constructed using any excess data that may be stored in the KeyCertififcate.
+// Returns enr errors encountered while parsing.
 func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_key crypto.PublicKey, err error) {
 	key_type := key_certificate.PublicKeyType()
 	if err != nil {
@@ -140,10 +131,8 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 	return
 }
 
-//
-// Given some bytes, build a SigningPublicKey using any excess data that may be stored in the KeyCertificate and return
-// it along with any errors encountered constructing the SigningPublicKey.
-//
+// ConstructSigningPublicKey returns a SingingPublicKey constructed using any excess data that may be stored in the KeyCertificate.
+// Returns any errors encountered while parsing.
 func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (signing_public_key crypto.SigningPublicKey, err error) {
 	signing_key_type := key_certificate.PublicKeyType()
 	if err != nil {
@@ -193,10 +182,7 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 	return
 }
 
-//
-// Return the size of a Signature corresponding to the Key Certificate's
-// SigningPublicKey type.
-//
+// SignatureSize return the size of a Signature corresponding to the Key Certificate's SigningPublicKey type.
 func (key_certificate KeyCertificate) SignatureSize() (size int) {
 	sizes := map[int]int{
 		KEYCERT_SIGN_DSA_SHA1:  40,
@@ -213,6 +199,9 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 	return sizes[int(key_type)]
 }
 
+// NewKeyCertificate creates a new *KeyCertificate from []byte using ReadCertificate.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder []byte, err error) {
 	var certificate *Certificate
 	certificate, remainder, err = ReadCertificate(bytes)
@@ -253,6 +242,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	return
 }
 
+// KeyCertificateFromCertificate returns a *KeyCertificate from a *Certificate.
 func KeyCertificateFromCertificate(certificate *Certificate) *KeyCertificate {
 	k, _, _ := NewKeyCertificate(certificate.RawBytes())
 	return k

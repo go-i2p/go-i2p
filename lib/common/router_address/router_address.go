@@ -1,9 +1,33 @@
+// Package router_address implements the I2P RouterAddress common data structure
 package router_address
 
+import (
+	"errors"
+
+	. "github.com/go-i2p/go-i2p/lib/common/data"
+	log "github.com/sirupsen/logrus"
+)
+
+// Minimum number of bytes in a valid RouterAddress
+const (
+	ROUTER_ADDRESS_MIN_SIZE = 9
+)
+
 /*
-I2P RouterAddress
-https://geti2p.net/spec/common-structures#routeraddress
-Accurate for version 0.9.24
+[RouterAddress]
+Accurate for version 0.9.49
+
+Description
+This structure defines the means to contact a router through a transport protocol.
+
+Contents
+1 byte Integer defining the relative cost of using the address, where 0 is free and 255 is
+expensive, followed by the expiration Date after which the address should not be used,
+of if null, the address never expires. After that comes a String defining the transport
+protocol this router address uses. Finally there is a Mapping containing all of the
+transport specific options necessary to establish the connection, such as IP address,
+port number, email address, URL, etc.
+
 
 +----+----+----+----+----+----+----+----+
 |cost|           expiration
@@ -35,18 +59,9 @@ transport_style :: String
 options :: Mapping
 */
 
-import (
-	"errors"
-
-	. "github.com/go-i2p/go-i2p/lib/common/data"
-	log "github.com/sirupsen/logrus"
-)
-
-// Minimum number of bytes in a valid RouterAddress
-const (
-	ROUTER_ADDRESS_MIN_SIZE = 9
-)
-
+// RouterAddress is the represenation of an I2P RouterAddress.
+//
+// https://geti2p.net/spec/common-structures#routeraddress
 type RouterAddress struct {
 	cost            *Integer
 	expiration      *Date
@@ -55,9 +70,7 @@ type RouterAddress struct {
 	parserErr       error
 }
 
-//
-// Bytes returns the router address as a byte slice.
-//
+// Bytes returns the router address as a []byte.
 func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
 	bytes = append(bytes, router_address.cost.Bytes()...)
@@ -74,34 +87,22 @@ func (router_address RouterAddress) Bytes() []byte {
 	return bytes
 }
 
-//
-// Return the cost integer for this RouterAddress and any errors encountered
-// parsing the RouterAddress.
-//
+// Cost returns the cost for this RouterAddress as a Go integer.
 func (router_address RouterAddress) Cost() int {
 	return router_address.cost.Int()
 }
 
-//
-// Return the Date this RouterAddress expires and any errors encountered
-// parsing the RouterAddress.
-//
+// Expiration returns the expiration for this RouterAddress as an I2P Date.
 func (router_address RouterAddress) Expiration() Date {
 	return *router_address.expiration
 }
 
-//
-// Return the Transport type for this RouterAddress and any errors encountered
-// parsing the RouterAddress.
-//
+// TransportStyle returns the transport style for this RouterAddress as an I2PString.
 func (router_address RouterAddress) TransportStyle() I2PString {
 	return *router_address.transport_style
 }
 
-//
-// Return the Mapping containing the options for this RouterAddress and any
-// errors encountered parsing the RouterAddress.
-//
+// Options returns the options for this RouterAddress as an I2P Mapping.
 func (router_address RouterAddress) Options() Mapping {
 	return *router_address.options
 }
@@ -132,11 +133,9 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 	return
 }
 
-//
-// Given a slice of bytes, read a RouterAddress, returning the remaining bytes and any
-// errors encountered parsing the RouterAddress.
-//
-
+// ReadRouterAddress returns RouterAddress from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
 	if data == nil || len(data) == 0 {
 		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("no data")
@@ -190,6 +189,8 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 	return
 }
 
+// NewRouterAddress creates a new *RouterAddress from []byte using ReadRouterAddress.
+// Returns a pointer to RouterAddress unlike ReadRouterAddress.
 func NewRouterAddress(data []byte) (router_address *RouterAddress, remainder []byte, err error) {
 	objrouteraddress, remainder, err := ReadRouterAddress(data)
 	router_address = &objrouteraddress

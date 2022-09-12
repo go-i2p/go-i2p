@@ -118,7 +118,7 @@ func (db StdNetDB) Exists() bool {
 	_, err := os.Stat(p)
 	if err == nil {
 		// check subdirectories for skiplist
-		for _, c := range base64.Alphabet {
+		for _, c := range base64.I2PEncodeAlphabet {
 			if _, err = os.Stat(filepath.Join(p, fmt.Sprintf("r%c", c))); err != nil {
 				return false
 			}
@@ -168,7 +168,7 @@ func (db StdNetDB) Create() (err error) {
 	err = os.Mkdir(p, mode)
 	if err == nil {
 		// create all subdirectories for skiplist
-		for _, c := range base64.Alphabet {
+		for _, c := range base64.I2PEncodeAlphabet {
 			err = os.Mkdir(filepath.Join(p, fmt.Sprintf("r%c", c)), mode)
 			if err != nil {
 				return

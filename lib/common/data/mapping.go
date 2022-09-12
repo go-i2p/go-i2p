@@ -1,9 +1,21 @@
 package data
 
+import (
+	"errors"
+
+	log "github.com/sirupsen/logrus"
+)
+
 /*
-I2P Mapping
-https://geti2p.net/spec/common-structures#mapping
-Accurate for version 0.9.24
+[I2P Mapping]
+Accurate for version 0.9.49
+
+Description
+A set of key/value mappings or properties
+
+
+Contents
+A 2-byte size Integer followed by a series of String=String; pairs
 
 +----+----+----+----+----+----+----+----+
 |  size   |key_string (len + data) | =  |
@@ -25,20 +37,15 @@ val_string :: String
 ; :: A single byte containing ';'
 */
 
-import (
-	"errors"
-
-	log "github.com/sirupsen/logrus"
-)
-
+// Mapping is the represenation of an I2P Mapping.
+//
+// https://geti2p.net/spec/common-structures#mapping
 type Mapping struct {
 	size *Integer
 	vals *MappingValues
 }
 
-//
-// Returns the values contained in a Mapping in the form of a MappingValues.
-//
+// Values returns the values contained in a Mapping as MappingValues.
 func (mapping Mapping) Values() MappingValues {
 	if mapping.vals == nil {
 		return MappingValues{}
@@ -46,6 +53,7 @@ func (mapping Mapping) Values() MappingValues {
 	return *mapping.vals
 }
 
+// Data returns a Mapping in its []byte form.
 func (mapping *Mapping) Data() []byte {
 	keyOrValIntegerLength := 1
 	bytes := mapping.size.Bytes()
@@ -64,9 +72,7 @@ func (mapping *Mapping) Data() []byte {
 	return bytes
 }
 
-//
-// Return true if two keys in a mapping are identical.
-//
+// HasDuplicateKeys returns true if two keys in a mapping are identical.
 func (mapping *Mapping) HasDuplicateKeys() bool {
 	seen_values := make(map[string]bool)
 	values := mapping.Values()
@@ -81,9 +87,7 @@ func (mapping *Mapping) HasDuplicateKeys() bool {
 	return false
 }
 
-//
-// Convert a Go map of unformatted strings to a sorted Mapping.
-//
+// GoMapToMapping converts a Go map of unformatted strings to *Mapping.
 func GoMapToMapping(gomap map[string]string) (mapping *Mapping, err error) {
 	map_vals := MappingValues{}
 	for k, v := range gomap {
@@ -106,22 +110,21 @@ func GoMapToMapping(gomap map[string]string) (mapping *Mapping, err error) {
 	return
 }
 
-//
 // Check if the string parsing error indicates that the Mapping
 // should no longer be parsed.
-//
 func stopValueRead(err error) bool {
 	return err.Error() == "error parsing string: zero length"
 }
 
-//
 // Determine if the first byte in a slice of bytes is the provided byte.
-//
 func beginsWith(bytes []byte, chr byte) bool {
 	return len(bytes) != 0 &&
 		bytes[0] == chr
 }
 
+// ReadMapping returns Mapping from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) {
 	if len(bytes) == 0 {
 		log.WithFields(log.Fields{
@@ -168,6 +171,8 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	return
 }
 
+// NewMapping creates a new *Mapping from []byte using ReadMapping.
+// Returns a pointer to Mapping unlike ReadMapping.
 func NewMapping(bytes []byte) (values *Mapping, remainder []byte, err []error) {
 	objvalues, remainder, err := ReadMapping(bytes)
 	values = &objvalues

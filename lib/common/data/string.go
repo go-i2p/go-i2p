@@ -1,28 +1,34 @@
 package data
 
-/*
-I2P I2PString
-https://geti2p.net/spec/common-structures#string
-Accurate for version 0.9.24
-*/
-
 import (
 	"errors"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// Maximum number of bytes that can be stored in an I2P string
-const (
-	STRING_MAX_SIZE = 255
-)
+// STRING_MAX_SIZE is the maximum number of bytes that can be stored in an I2P string
+const STRING_MAX_SIZE = 255
 
+/*
+[I2P String]
+Accurate for version 0.9.49
+
+Description
+Represents a UTF-8 encoded string.
+
+Contents
+1 or more bytes where the first byte is the number of bytes (not characters!) in the string
+and the remaining 0-255 bytes are the non-null terminated UTF-8 encoded character array.
+Length limit is 255 bytes (not characters). Length may be 0.
+*/
+
+// I2PString is the represenation of an I2P String.
+//
+// https://geti2p.net/spec/common-structures#string
 type I2PString []byte
 
-//
-// Look up the length of the string, reporting errors if the string is
-// invalid or the specified length does not match the provided data.
-//
+// Length returns the length specified in the first byte.
+// Returns error if the specified does not match the actual length or the string is otherwise invalid.
 func (str I2PString) Length() (length int, err error) {
 	if len(str) == 0 {
 		log.WithFields(log.Fields{
@@ -58,9 +64,8 @@ func (str I2PString) Length() (length int, err error) {
 	return
 }
 
-//
-// Return the string data and any errors encountered by Length.
-//
+// Data returns the I2PString content as a string trimmed to the specified length and not including the length byte.
+// Returns error encountered by Length.
 func (str I2PString) Data() (data string, err error) {
 	length, err := str.Length()
 	if err != nil {
@@ -79,10 +84,8 @@ func (str I2PString) Data() (data string, err error) {
 	return
 }
 
-//
-// This function takes an unformatted Go string and returns a I2PString
-// and any errors encountered during the encoding.
-//
+// ToI2PString converts a Go string to an I2PString.
+// Returns error if the string exceeds STRING_MAX_SIZE.
 func ToI2PString(data string) (str I2PString, err error) {
 	data_len := len(data)
 	if data_len > STRING_MAX_SIZE {
@@ -105,6 +108,10 @@ func ToI2PString(data string) (str I2PString, err error) {
 // Read a string from a slice of bytes, returning any extra data on the end
 // of the slice and any errors encountered parsing the I2PString.
 //
+
+// ReadI2PString returns I2PString from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	str = I2PString(data)
 	length, err := I2PString(data).Length()
@@ -116,6 +123,8 @@ func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	return
 }
 
+// NewI2PString creates a new *I2PString from []byte using ReadI2PString.
+// Returns a pointer to I2PString unlike ReadI2PString.
 func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
 	objstr, remainder, err := ReadI2PString(data)
 	str = &objstr
