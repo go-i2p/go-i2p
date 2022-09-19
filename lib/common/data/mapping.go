@@ -72,21 +72,6 @@ func (mapping *Mapping) Data() []byte {
 	return bytes
 }
 
-// HasDuplicateKeys returns true if two keys in a mapping are identical.
-func (mapping *Mapping) HasDuplicateKeys() bool {
-	seen_values := make(map[string]bool)
-	values := mapping.Values()
-	for _, pair := range values {
-		key, _ := pair[0].Data()
-		if _, present := seen_values[key]; present {
-			return true
-		} else {
-			seen_values[key] = true
-		}
-	}
-	return false
-}
-
 // GoMapToMapping converts a Go map of unformatted strings to *Mapping.
 func GoMapToMapping(gomap map[string]string) (mapping *Mapping, err error) {
 	map_vals := MappingValues{}

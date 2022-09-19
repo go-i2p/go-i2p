@@ -30,37 +30,17 @@ func ValuesToMapping(values MappingValues) *Mapping {
 	}
 }
 
-type byValue MappingValues
-
-func (set byValue) Len() int      { return len(set) }
-func (set byValue) Swap(i, j int) { set[i], set[j] = set[j], set[i] }
-func (set byValue) Less(i, j int) bool {
-	data1, _ := set[i][1].Data()
-	data2, _ := set[j][1].Data()
-	return data1 < data2
-}
-
-type byKey MappingValues
-
-func (set byKey) Len() int      { return len(set) }
-func (set byKey) Swap(i, j int) { set[i], set[j] = set[j], set[i] }
-func (set byKey) Less(i, j int) bool {
-	data1, _ := set[i][0].Data()
-	data2, _ := set[j][0].Data()
-	return data1 < data2
-}
-
-//
-// I2P Mappings require consistent order for for cryptographic signing, and sorting
-// by keys.  When new Mappings are created, they are stable sorted first by values
-// than by keys to ensure a consistent order.
-//
-
-// TODO: This sort doesn't appear to work the same as ref implementation.
-// It also appears to be unstable
+// I2P Mappings require consistent order in some cases for cryptographic signing, and sorting
+// by keys. The Mapping is sorted lexographically by keys. Duplicate keys are allowed in general,
+// but in implementations where they must be sorted like I2CP SessionConfig duplicate keys are not allowed.
+// In practice routers do not seem to allow duplicate keys.
 func mappingOrder(values MappingValues) {
-	sort.Stable(byValue(values))
-	sort.Stable(byKey(values))
+	sort.SliceStable(values, func(i, j int) bool {
+		// Lexographic sort on keys only
+		data1, _ := values[i][0].Data()
+		data2, _ := values[j][0].Data()
+		return data1 < data2
+	})
 }
 
 // ReadMappingValues returns *MappingValues from a []byte.
@@ -109,6 +89,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		errs = append(errs, errors.New("warning parsing mapping: mapping length exceeds provided data"))
 	}
 
+	encounteredKeysMap := map[string]bool{}
 	// pop off length bytes before parsing kv pairs
 	remainder = remainder[2:]
 
@@ -140,6 +121,23 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 				//return
 			}
 		}
+
+		// Check if key has already been encountered in this mapping
+		keyBytes, _ := key_str.Data()
+		keyAsString := string(keyBytes)
+		_, ok := encounteredKeysMap[keyAsString]
+		if ok {
+			log.WithFields(log.Fields{
+				"at":     "(Mapping) Values",
+				"reason": "duplicate key in mapping",
+			}).Error("mapping format violation")
+			errs = append(errs, errors.New("mapping format violation, duplicate key in mapping"))
+			// Based on other implementations this does not seem to happen often?
+			// Java throws an exception in this case, the base object is a Hashmap so the value is overwritten and an exception is thrown.
+			// i2pd  as far as I can tell just overwrites the original value
+			return
+		}
+
 		if !beginsWith(remainder, 0x3d) {
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",
@@ -177,6 +175,9 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		if len(remainder) == 0 {
 			break
 		}
+
+		// Store the encountered key with arbitrary data
+		encounteredKeysMap[keyAsString] = true
 	}
 	values = &map_values
 	return
