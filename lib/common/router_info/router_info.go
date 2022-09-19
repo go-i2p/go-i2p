@@ -1,9 +1,29 @@
+// Package router_info implements the I2P RouterInfo common data structure
 package router_info
 
+import (
+	"errors"
+
+	. "github.com/go-i2p/go-i2p/lib/common/data"
+	. "github.com/go-i2p/go-i2p/lib/common/router_address"
+	. "github.com/go-i2p/go-i2p/lib/common/router_identity"
+	. "github.com/go-i2p/go-i2p/lib/common/signature"
+	log "github.com/sirupsen/logrus"
+)
+
+const ROUTER_INFO_MIN_SIZE = 439
+
 /*
-I2P RouterInfo
-https://geti2p.net/spec/common-structures#routerinfo
-Accurate for version 0.9.24
+[RouterInfo]
+Accurate for version 0.9.49
+
+Description
+Defines all of the data that a router wants to public for the network to see. The
+RouterInfo is one of two structures stored in the network database (the other being
+LeaseSet), and is keyed under the SHA256 of the contained RouterIdentity.
+
+Contents
+RouterIdentity followed by the Date, when the entry was published
 
 +----+----+----+----+----+----+----+----+
 | router_ident                          |
@@ -73,18 +93,9 @@ signature :: Signature
              length -> 40 bytes
 */
 
-import (
-	"errors"
-
-	. "github.com/go-i2p/go-i2p/lib/common/data"
-	. "github.com/go-i2p/go-i2p/lib/common/router_address"
-	. "github.com/go-i2p/go-i2p/lib/common/router_identity"
-	. "github.com/go-i2p/go-i2p/lib/common/signature"
-	log "github.com/sirupsen/logrus"
-)
-
-const ROUTER_INFO_MIN_SIZE = 439
-
+// RouterInfo is the represenation of an I2P RouterInfo.
+//
+// https://geti2p.net/spec/common-structures#routerinfo
 type RouterInfo struct {
 	router_identity *RouterIdentity
 	published       *Date
@@ -95,9 +106,7 @@ type RouterInfo struct {
 	signature       *Signature
 }
 
-//
-// Bytes returns the RouterInfo as a slice of bytes suitable for writing to a stream.
-//
+// Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
 func (router_info RouterInfo) Bytes() ([]byte, error) {
 	var err error
 	var bytes []byte
@@ -115,58 +124,41 @@ func (router_info RouterInfo) Bytes() ([]byte, error) {
 	return bytes, err
 }
 
-//
-// Read a RouterIdentity from the RouterInfo, returning the RouterIdentity and any errors
-// encountered parsing the RouterIdentity.
-//
+// RouterIdentity returns the router identity as *RouterIdentity.
 func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 	return router_info.router_identity
 }
 
-//
-// Calculate this RouterInfo's Identity Hash (the sha256 of the RouterIdentity)
-// returns error if the RouterIdentity is malformed
-//
+// IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
 	ri := router_info.RouterIdentity()
 	h := HashData(ri.KeysAndCert.Certificate().Data())
 	return h
 }
 
-//
-// Return the Date the RouterInfo was published and any errors encountered parsing the RouterInfo.
-//
+// Published returns the date this RouterInfo was published as an I2P Date.
 func (router_info *RouterInfo) Published() *Date {
 	return router_info.published
 }
 
-//
-// Return the Integer representing the number of RouterAddresses that are contained in this RouterInfo.
-//
+// RouterAddressCount returns the count of RouterAddress in this RouterInfo as a Go integer.
 func (router_info *RouterInfo) RouterAddressCount() int {
 	return router_info.size.Int()
 }
 
-//
-// Read the RouterAddresses inside this RouterInfo and return them in a slice, returning
-// a partial list if data is missing.
-//
+// RouterAddresses returns all RouterAddresses for this RouterInfo as []*RouterAddress.
 func (router_info *RouterInfo) RouterAddresses() []*RouterAddress {
 	return router_info.addresses
 }
 
-//
-// Return the PeerSize value, currently unused and always zero.
-//
+// PeerSize returns the peer size as a Go integer.
 func (router_info *RouterInfo) PeerSize() int {
 	// Peer size is unused:
 	// https://geti2p.net/spec/common-structures#routeraddress
 	return 0
 }
 
-//
-// Return the Options Mapping inside this RouterInfo.
-//
+// Options returns the options for this RouterInfo as an I2P Mapping.
 func (router_info RouterInfo) Options() (mapping Mapping) {
 	return *router_info.options
 }
@@ -174,6 +166,8 @@ func (router_info RouterInfo) Options() (mapping Mapping) {
 //
 // Return the signature of this router info
 //
+
+// Signature returns the signature for this RouterInfo as an I2P Signature.
 func (router_info RouterInfo) Signature() (signature Signature) {
 	return *router_info.signature
 }
@@ -230,6 +224,9 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 	return
 }*/
 
+// ReadRouterInfo returns RouterInfo from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error) {
 	identity, remainder, err := NewRouterIdentity(bytes)
 	info.router_identity = identity
@@ -306,5 +303,13 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
+	return
+}
+
+// NewRouterInfo creates a new *RouterInfo from []byte using ReadRouterInfo.
+// Returns a pointer to RouterInfo unlike ReadRouterInfo.
+func NewRouterInfo(data []byte) (router_info *RouterInfo, remainder []byte, err error) {
+	routerInfo, remainder, err := ReadRouterInfo(data)
+	router_info = &routerInfo
 	return
 }

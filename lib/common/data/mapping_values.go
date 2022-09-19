@@ -1,30 +1,5 @@
 package data
 
-/*
-I2P Mapping
-https://geti2p.net/spec/common-structures#mapping
-Accurate for version 0.9.24
-
-+----+----+----+----+----+----+----+----+
-|  size   |key_string (len + data) | =  |
-+----+----+----+----+----+----+----+----+
-| val_string (len + data)     | ;  | ...
-+----+----+----+----+----+----+----+
-size :: Integer
-        length -> 2 bytes
-        Total number of bytes that follow
-
-key_string :: String
-              A string (one byte length followed by UTF-8 encoded characters)
-
-= :: A single byte containing '='
-
-val_string :: String
-              A string (one byte length followed by UTF-8 encoded characters)
-
-; :: A single byte containing ';'
-*/
-
 import (
 	"errors"
 	"sort"
@@ -32,13 +7,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Parsed key-values pairs inside a Mapping.
+// MappingValues represents the parsed key value pairs inside of an I2P Mapping.
 type MappingValues [][2]I2PString
 
-//
-// Convert a MappingValue struct to a Mapping.  The values are first
-// sorted in the order defined in mappingOrder.
-//
+// ValuesToMapping creates a *Mapping using MappingValues.
+// The values are sorted in the order defined in mappingOrder.
 func ValuesToMapping(values MappingValues) *Mapping {
 	// Default length to 2 * len
 	// 1 byte for ;
@@ -90,6 +63,9 @@ func mappingOrder(values MappingValues) {
 	sort.Stable(byKey(values))
 }
 
+// ReadMappingValues returns *MappingValues from a []byte.
+// The remaining bytes after the specified length are also returned.
+// Returns a list of errors that occurred during parsing.
 func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes []byte, errs []error) {
 	mapping := remainder
 	//var remainder = mapping

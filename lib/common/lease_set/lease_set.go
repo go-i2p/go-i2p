@@ -1,9 +1,43 @@
+// Package lease_set implements the I2P LeastSet common data structure
 package lease_set
 
+import (
+	"errors"
+
+	. "github.com/go-i2p/go-i2p/lib/common/certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/data"
+	. "github.com/go-i2p/go-i2p/lib/common/destination"
+	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+	. "github.com/go-i2p/go-i2p/lib/common/lease"
+	. "github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/go-i2p/go-i2p/lib/crypto"
+	log "github.com/sirupsen/logrus"
+)
+
+// Sizes of various structures in an I2P LeaseSet
+const (
+	LEASE_SET_PUBKEY_SIZE = 256
+	LEASE_SET_SPK_SIZE    = 128
+	LEASE_SET_SIG_SIZE    = 40
+)
+
 /*
-I2P LeaseSet
-https://geti2p.net/spec/common-structures#leaseset
-Accurate for version 0.9.24
+[LeaseSet]
+Accurate for version 0.9.49
+
+Description
+Contains all of the currently authorized Leases for a particular Destination, the
+PublicKey to which garlic messages can be encrypted, and then the SigningPublicKey
+that can be used to revoke this particular version of the structure. The LeaseSet is one
+of the two structures stored in the network database (the other being RouterInfo), and
+is kered under the SHA256 of the contained Destination.
+
+Contents
+Destination, followed by a PublicKey for encryption, then a SigningPublicKey which
+can be used to revoke this version of the LeaseSet, then a 1 byte Integer specifying how
+many Lease structures are in the set, followed by the actual Lease structures and
+finally a Signature of the previous bytes signed by the Destination's SigningPrivateKey.
 
 +----+----+----+----+----+----+----+----+
 | destination                           |
@@ -80,27 +114,9 @@ signature :: Signature
              length -> 40 bytes or as specified in destination's key certificate
 */
 
-import (
-	"errors"
-
-	. "github.com/go-i2p/go-i2p/lib/common/certificate"
-	. "github.com/go-i2p/go-i2p/lib/common/data"
-	. "github.com/go-i2p/go-i2p/lib/common/destination"
-	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
-	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
-	. "github.com/go-i2p/go-i2p/lib/common/lease"
-	. "github.com/go-i2p/go-i2p/lib/common/signature"
-	"github.com/go-i2p/go-i2p/lib/crypto"
-	log "github.com/sirupsen/logrus"
-)
-
-// Sizes of various structures in an I2P LeaseSet
-const (
-	LEASE_SET_PUBKEY_SIZE = 256
-	LEASE_SET_SPK_SIZE    = 128
-	LEASE_SET_SIG_SIZE    = 40
-)
-
+// LeaseSet is the represenation of an I2P LeaseSet.
+//
+// https://geti2p.net/spec/common-structures#leaseset
 type LeaseSet []byte
 
 /*
@@ -114,18 +130,15 @@ type LeaseSet struct {
 }
 */
 
-//
-// Read a Destination from the LeaseSet.
-//
+// Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
 	destination, _, err = ReadDestination(keys_and_cert.Bytes())
 	return
 }
 
-//
-// Return the PublicKey in this LeaseSet and any errors ancountered parsing the LeaseSet.
-//
+// PublicKey returns the public key as crypto.ElgPublicKey.
+// Returns errors encountered during parsing.
 func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	remainder_len := len(remainder)
@@ -144,10 +157,8 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 	return
 }
 
-//
-// Return the SigningPublicKey, as specified in the LeaseSet's Destination's Key Certificate if
-// present, or a legacy DSA key.
-//
+// SigningKey returns the signing public key as crypto.SigningPublicKey.
+// returns errors encountered during parsing.
 func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -198,9 +209,8 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	return
 }
 
-//
-// Return the number of Leases specified by the LeaseCount value in this LeaseSet.
-//
+// LeaseCount returns the numbert of leases specified by the LeaseCount value as int.
+// returns errors encountered during parsing.
 func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	if err != nil {
@@ -230,9 +240,8 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 	return
 }
 
-//
-// Read the Leases in this LeaseSet, returning a partial set if there is insufficient data.
-//
+// Leases returns the leases as []Lease.
+// returns errors encountered during parsing.
 func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -264,10 +273,8 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 	return
 }
 
-//
-// Return the Signature data for the LeaseSet, as specified in the Destination's
-// Key Certificate if present or the 40 bytes following the Leases.
-//
+// Signature returns the signature as Signature.
+// returns errors encountered during parsing.
 func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -305,9 +312,7 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	return
 }
 
-//
-//
-//
+// Verify returns nil
 func (lease_set LeaseSet) Verify() error {
 	//data_end := len(destination) +
 	//	LEASE_SET_PUBKEY_SIZE +
@@ -325,27 +330,25 @@ func (lease_set LeaseSet) Verify() error {
 	return nil // verifier.Verify(data, lease_set.Signature())
 }
 
-//
-// Return the oldest date from all the Leases in the LeaseSet.
-//
-func (lease_set LeaseSet) NewestExpiration() (oldest Date, err error) {
+// NewestExpiration returns the newest lease expiration as an I2P Date.
+// Returns errors encountered during parsing.
+func (lease_set LeaseSet) NewestExpiration() (newest Date, err error) {
 	leases, err := lease_set.Leases()
 	if err != nil {
 		return
 	}
-	oldest = Date{0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	newest = Date{0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	for _, lease := range leases {
 		date := lease.Date()
-		if date.Time().After(oldest.Time()) {
-			oldest = date
+		if date.Time().After(newest.Time()) {
+			newest = date
 		}
 	}
 	return
 }
 
-//
-// Return the oldest date from all the Leases in the LeaseSet.
-//
+// OldestExpiration returns the oldest lease expiration as an I2P Date.
+// Returns errors encountered during parsing.
 func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 	leases, err := lease_set.Leases()
 	if err != nil {
