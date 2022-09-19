@@ -20,7 +20,7 @@ import (
 type NoiseTransport struct {
 	routerIdentity  router_identity.RouterIdentity
 	peerConnections map[data.Hash]transport.TransportSession
-	netSocket       net.Conn
+	netSocket       net.Listener
 }
 
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
@@ -48,10 +48,10 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	if len(hash) == 0 {
 		return nil, errors.New("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
 	}
-	if t, ok := noopt.peerConnections[hash]; ok == true {
+	if t, ok := noopt.peerConnections[hash]; ok {
 		return t, nil
 	}
-	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo, noopt.netSocket); err != nil {
+	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo); err != nil {
 		return noopt.peerConnections[hash], err
 	}
 	return nil, fmt.Errorf("Unable to obtain transport session with %s", routerInfo.IdentHash())
@@ -70,9 +70,20 @@ func (noopt *NoiseTransport) Close() error {
 	return nil
 }
 
-func NewNoiseTransport(netSocket net.Conn) *NoiseTransport {
+// NewNoiseTransport create a NoiseTransport using a supplied net.Listener
+func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 	return &NoiseTransport{
 		peerConnections: make(map[data.Hash]transport.TransportSession),
 		netSocket:       netSocket,
 	}
+}
+
+// NewNoiseTransportSocket creates a Noise transport socket with a random
+// host and port.
+func NewNoiseTransportSocket() (*NoiseTransport, error) {
+	netSocket, err := net.Listen("tcp", "")
+	if err != nil {
+		return nil, err
+	}
+	return NewNoiseTransport(netSocket), nil
 }
