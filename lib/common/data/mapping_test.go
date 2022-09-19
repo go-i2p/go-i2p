@@ -99,6 +99,22 @@ func TestValuesReturnsValues(t *testing.T) {
 	assert.Equal("b", val, "Values() did not return value in valid data")
 }
 
+func TestHasDuplicateKeysTrueWhenDuplicates(t *testing.T) {
+	assert := assert.New(t)
+
+	dups, _, _ := NewMapping([]byte{0x00, 0x0c, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b})
+
+	assert.Equal(true, dups.HasDuplicateKeys(), "HasDuplicateKeys() did not report true when duplicate keys present")
+}
+
+func TestHasDuplicateKeysFalseWithoutDuplicates(t *testing.T) {
+	assert := assert.New(t)
+
+	mapping, _, _ := NewMapping([]byte{0x00, 0x06, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b})
+
+	assert.Equal(false, mapping.HasDuplicateKeys(), "HasDuplicateKeys() did not report false when no duplicate keys present")
+}
+
 func TestReadMappingHasDuplicateKeys(t *testing.T) {
 	assert := assert.New(t)
 

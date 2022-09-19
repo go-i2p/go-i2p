@@ -135,7 +135,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 			// Based on other implementations this does not seem to happen often?
 			// Java throws an exception in this case, the base object is a Hashmap so the value is overwritten and an exception is thrown.
 			// i2pd  as far as I can tell just overwrites the original value
-			return
+			// Continue on, we can check if the Mapping contains duplicate keys later.
 		}
 
 		if !beginsWith(remainder, 0x3d) {
