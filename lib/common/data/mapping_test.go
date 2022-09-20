@@ -115,6 +115,14 @@ func TestHasDuplicateKeysFalseWithoutDuplicates(t *testing.T) {
 	assert.Equal(false, mapping.HasDuplicateKeys(), "HasDuplicateKeys() did not report false when no duplicate keys present")
 }
 
+func TestReadMappingHasDuplicateKeys(t *testing.T) {
+	assert := assert.New(t)
+
+	_, _, errs := NewMapping([]byte{0x00, 0x0c, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b, 0x01, 0x61, 0x3d, 0x01, 0x62, 0x3b})
+
+	assert.Equal("mapping format violation, duplicate key in mapping", errs[0].Error(), "ReadMapping should throw an error when duplicate keys are present.")
+}
+
 func TestGoMapToMappingProducesCorrectMapping(t *testing.T) {
 	assert := assert.New(t)
 
