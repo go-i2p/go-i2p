@@ -87,7 +87,7 @@ const (
 type KeyCertificate struct {
 	*Certificate
 	signingPubKeyType Integer
-	certPubKeyType    Integer
+	cryptoPubKeyType  Integer
 }
 
 // Data returns the raw []byte contained in the Certificate.
@@ -102,7 +102,7 @@ func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_typ
 
 // PublicKeyType returns the PublicKey type as a Go integer.
 func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int) {
-	return key_certificate.certPubKeyType.Int()
+	return key_certificate.cryptoPubKeyType.Int()
 }
 
 // ConstructPublicKey returns a PublicKey constructed using any excess data that may be stored in the KeyCertififcate.
@@ -113,12 +113,12 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 		return
 	}
 	data_len := len(data)
-	specifiedPubKeyLength := key_certificate.CryptoPublicKeySize()
-	if data_len < specifiedPubKeyLength {
+	cryptoPubKeyLength := key_certificate.CryptoPublicKeySize()
+	if data_len < cryptoPubKeyLength {
 		log.WithFields(log.Fields{
 			"at":               "(KeyCertificate) ConstructPublicKey",
 			"data_len":         data_len,
-			"specified_length": specifiedPubKeyLength,
+			"specified_length": cryptoPubKeyLength,
 			"reason":           "not enough data",
 		}).Error("error constructing public key")
 		err = errors.New("error constructing public key: not enough data")
@@ -127,7 +127,7 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 	switch keyType {
 	case KEYCERT_CRYPTO_PUBKEY_ELGAMAL:
 		var elg_key crypto.ElgPublicKey
-		copy(elg_key[:], data[:specifiedPubKeyLength])
+		copy(elg_key[:], data[:cryptoPubKeyLength])
 		public_key = elg_key
 	case KEYCERT_CRYPTO_PUBKEY_P256:
 		panic("KEYCERT_CRYPTO_PUBKEY_P256 Not implemented")
@@ -199,6 +199,23 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 	return
 }
 
+// SignatureSize return the size of a Signature corresponding to the Key Certificate's SigningPublicKey type.
+func (key_certificate KeyCertificate) SignatureSize() (size int) {
+	sizes := map[int]int{
+		KEYCERT_SIGN_PUBKEY_DSA_SHA1:  40,
+		KEYCERT_SIGN_PUBKEY_P256:      64,
+		KEYCERT_SIGN_PUBKEY_P384:      96,
+		KEYCERT_SIGN_PUBKEY_P521:      132,
+		KEYCERT_SIGN_PUBKEY_RSA2048:   256,
+		KEYCERT_SIGN_PUBKEY_RSA3072:   384,
+		KEYCERT_SIGN_PUBKEY_RSA4096:   512,
+		KEYCERT_SIGN_PUBKEY_ED25519:   64,
+		KEYCERT_SIGN_PUBKEY_ED25519PH: 64,
+	}
+	key_type := key_certificate.SigningPublicKeyType()
+	return sizes[int(key_type)]
+}
+
 // SigningPublicKeySize return the size of a Signing Public Key in bytes corresponding to the Key Certificate's SigningPublicKey type.
 func (key_certificate KeyCertificate) SigningPublicKeySize() (size int) {
 	sizes := map[int]int{
@@ -246,28 +263,28 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 		key_certificate = &KeyCertificate{
 			Certificate:       certificate,
 			signingPubKeyType: Integer(bytes[4:]),
-			certPubKeyType:    Integer([]byte{0}),
+			cryptoPubKeyType:  Integer([]byte{0}),
 		}
 		remainder = []byte{}
 	case 5:
 		key_certificate = &KeyCertificate{
 			Certificate:       certificate,
 			signingPubKeyType: Integer(bytes[4:5]),
-			certPubKeyType:    Integer([]byte{0}),
+			cryptoPubKeyType:  Integer([]byte{0}),
 		}
 		remainder = []byte{}
 	case 6:
 		key_certificate = &KeyCertificate{
 			Certificate:       certificate,
 			signingPubKeyType: Integer(bytes[4:5]),
-			certPubKeyType:    Integer(bytes[6:]),
+			cryptoPubKeyType:  Integer(bytes[6:]),
 		}
 		remainder = []byte{}
 	default:
 		key_certificate = &KeyCertificate{
 			Certificate:       certificate,
 			signingPubKeyType: Integer(bytes[4:5]),
-			certPubKeyType:    Integer(bytes[6:7]),
+			cryptoPubKeyType:  Integer(bytes[6:7]),
 		}
 		remainder = bytes[7:]
 	}
