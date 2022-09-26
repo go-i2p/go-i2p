@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTransportMuxer(t *testing.T) {
+func TestTransport(t *testing.T) {
 	ln, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		t.Error(err)

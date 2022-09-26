@@ -33,8 +33,11 @@ func (noopt *NoiseTransport) Name() string {
 // will bind if the underlying socket is not already
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
-func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) error {
+func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
 	noopt.routerIdentity = ident
+	if noopt.netSocket == nil {
+		noopt.netSocket, err = net.ListenTCP()
+	}
 	return nil
 }
 
@@ -57,7 +60,7 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	return nil, fmt.Errorf("Unable to obtain transport session with %s", routerInfo.IdentHash())
 }
 
-// return true if a routerInfo is compatable with this transport
+// Compatable return true if a routerInfo is compatable with this transport
 func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool {
 	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
 	return ok
