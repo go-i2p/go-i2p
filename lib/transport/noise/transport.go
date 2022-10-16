@@ -15,6 +15,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	log "github.com/sirupsen/logrus"
 )
 
 type NoiseTransport struct {
@@ -36,7 +37,12 @@ func (noopt *NoiseTransport) Name() string {
 func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
 	noopt.routerIdentity = ident
 	if noopt.netSocket == nil {
-		noopt.netSocket, err = net.ListenTCP()
+		log.WithFields(log.Fields{
+			"at":     "(NoiseTransport) SetIdentity",
+			"reason": "network socket is null",
+		}).Error("network socket is null")
+		err = errors.New("network socket is null")
+		return
 	}
 	return nil
 }

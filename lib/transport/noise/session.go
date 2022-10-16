@@ -57,7 +57,7 @@ func DialNoise(network string, addr router_info.RouterInfo) (net.Conn, error) {
 		log.WithFields(log.Fields{
 			"at":   "(DialNoise)",
 			"addr": addr,
-		}).Log("error parsing router info")
+		}).Error("error parsing router info")
 		Dial("noise", string(addr.TransportStyle()))
 	}
 	return nil, fmt.Errorf("No valid transport discovered.")
