@@ -1,10 +1,14 @@
 package noise
 
 import (
+	"bytes"
 	"fmt"
 	"net"
+	"sync"
+	"time"
 
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
+	"github.com/flynn/noise"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -15,10 +19,47 @@ import (
 type NoiseSession struct {
 	*cb.Queue
 	router_info.RouterInfo
-	net.Conn
+	*noise.CipherState
+	sync.Mutex
+	*sync.Cond
+	*NoiseTransport
+	handshakeBuffer   bytes.Buffer
+	activeCall        int32
+	handshakeComplete bool
+	Conn              net.Conn
+}
+
+// Read implements net.Conn
+func (*NoiseSession) Read(b []byte) (n int, err error) {
+	panic("unimplemented")
+}
+
+// RemoteAddr implements net.Conn
+func (*NoiseSession) RemoteAddr() net.Addr {
+	panic("unimplemented")
+}
+
+// SetDeadline implements net.Conn
+func (*NoiseSession) SetDeadline(t time.Time) error {
+	panic("unimplemented")
+}
+
+// SetReadDeadline implements net.Conn
+func (*NoiseSession) SetReadDeadline(t time.Time) error {
+	panic("unimplemented")
+}
+
+// SetWriteDeadline implements net.Conn
+func (*NoiseSession) SetWriteDeadline(t time.Time) error {
+	panic("unimplemented")
 }
 
 var exampleNoiseSession transport.TransportSession = &NoiseSession{}
+var ExampleNoiseSession net.Conn = exampleNoiseSession.(*NoiseSession)
+
+func (s *NoiseSession) LocalAddr() net.Addr {
+	return s.Conn.LocalAddr()
+}
 
 func (s *NoiseSession) QueueSendI2NP(msg i2np.I2NPMessage) {
 	s.Queue.Enqueue(msg)
