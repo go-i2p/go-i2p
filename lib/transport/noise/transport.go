@@ -8,9 +8,10 @@ package noise
 
 import (
 	"errors"
-	"fmt"
 	"net"
+	"sync"
 
+	"github.com/flynn/noise"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -18,12 +19,27 @@ import (
 )
 
 type NoiseTransport struct {
-	routerIdentity  router_identity.RouterIdentity
+	*noise.CipherState
+	router_identity.RouterIdentity
+	sync.Mutex
+	Listener        net.Listener
 	peerConnections map[data.Hash]transport.TransportSession
-	netSocket       net.Conn
 }
 
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
+
+// ExampleNoiseListener is not a real Noise Listener, do not use it.
+// It is exported so that it can be confirmed that the transport
+// implements net.Listener
+var ExampleNoiseListener net.Listener = exampleNoiseTransport
+
+func (noopt *NoiseTransport) Accept() (net.Conn, error) {
+	return noopt.Listener.Accept()
+}
+
+func (noopt *NoiseTransport) Addr() net.Addr {
+	return noopt.Listener.Addr()
+}
 
 func (noopt *NoiseTransport) Name() string {
 	return "noise"
@@ -34,7 +50,7 @@ func (noopt *NoiseTransport) Name() string {
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
 func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) error {
-	noopt.routerIdentity = ident
+	noopt.RouterIdentity = ident
 	return nil
 }
 
@@ -43,7 +59,6 @@ func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) e
 // returns an established TransportSession and nil on success
 // returns nil and an error on error
 func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
-	var err error
 	hash := routerInfo.IdentHash()
 	if len(hash) == 0 {
 		return nil, errors.New("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
@@ -51,10 +66,13 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	if t, ok := noopt.peerConnections[hash]; ok == true {
 		return t, nil
 	}
-	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo, noopt.netSocket); err != nil {
-		return noopt.peerConnections[hash], err
+	conn, err := noopt.Accept()
+	if err == nil {
+		if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo, conn); err != nil {
+			return noopt.peerConnections[hash], err
+		}
 	}
-	return nil, fmt.Errorf("Unable to obtain transport session with %s", routerInfo.IdentHash())
+	return nil, err
 }
 
 // return true if a routerInfo is compatable with this transport
@@ -70,9 +88,9 @@ func (noopt *NoiseTransport) Close() error {
 	return nil
 }
 
-func NewNoiseTransport(netSocket net.Conn) *NoiseTransport {
+func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 	return &NoiseTransport{
 		peerConnections: make(map[data.Hash]transport.TransportSession),
-		netSocket:       netSocket,
+		Listener:        netSocket,
 	}
 }

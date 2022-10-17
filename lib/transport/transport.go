@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"net"
+
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 
@@ -23,6 +25,11 @@ type TransportSession interface {
 }
 
 type Transport interface {
+	// Accept accepts an incoming session.
+	Accept() (net.Conn, error)
+
+	// Addr returns an
+	Addr() net.Addr
 
 	// Set the router identity for this transport.
 	// will bind if the underlying socket is not already
