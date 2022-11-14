@@ -30,7 +30,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 	prologue := make([]byte, 2, uint16Size+len(negData))
 	binary.BigEndian.PutUint16(prologue, uint16(len(negData)))
 	prologue = append(prologue, negData...)
-	prologue = append(initString, prologue...)
+	//prologue = append(initString, prologue...)
 	state, err = noise.NewHandshakeState(noise.Config{
 		StaticKeypair: s,
 		Initiator:     true,
@@ -49,7 +49,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 	return
 }
 
-func (c *NoiseSession) RunClientHandshake() error {
+func (c *NoiseSession) RunIncomingHandshake() error {
 	var (
 		negData, msg []byte
 		state        *noise.HandshakeState
@@ -109,7 +109,7 @@ func (c *NoiseSession) RunClientHandshake() error {
 		c.freeBlock(b)
 		if c.CipherState == nil || c.NoiseTransport.CipherState == nil {
 			log.WithFields(log.Fields{
-				"at":     "(NoiseSession) RunClientHandshake",
+				"at":     "(NoiseSession) RunIncomingHandshake",
 				"reason": "unsupported session",
 			}).Error("unsupported session")
 			return errors.New("unsupported session")

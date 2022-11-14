@@ -24,7 +24,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 			break
 		}
 	}
-	if err := c.RunClientHandshake(); err != nil {
+	if err := c.RunIncomingHandshake(); err != nil {
 		return 0, err
 	}
 	c.Mutex.Lock()

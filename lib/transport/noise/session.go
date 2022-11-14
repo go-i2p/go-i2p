@@ -89,6 +89,11 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 	return err
 }
 
+// newBlock allocates a new packet, from hc's free list if possible.
+func (h *NoiseSession) newBlock() *buffer {
+	return new(buffer)
+}
+
 type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error) {
