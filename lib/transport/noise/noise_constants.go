@@ -1,6 +1,10 @@
 package noise
 
-import "github.com/flynn/noise"
+import (
+	"math"
+
+	"github.com/flynn/noise"
+)
 
 const (
 	NOISE_DH_CURVE25519 = 1
@@ -16,7 +20,8 @@ const (
 	NOISE_PATTERN_XX = 9
 	NOISE_PATTERN_IK = 14
 
-	uint16Size = 2 // uint16 takes 2 bytes
+	uint16Size     = 2                                             // uint16 takes 2 bytes
+	MaxPayloadSize = math.MaxUint16 - 16 /*mac size*/ - uint16Size /*data len*/
 )
 
 var ciphers = map[byte]noise.CipherFunc{

@@ -30,7 +30,7 @@ func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
 	defer session.(*NoiseSession).Mutex.Unlock()
 	c.Mutex.Lock()
 	//	if c.config.isClient {
-	if err := session.(*NoiseSession).RunClientHandshake(); err != nil {
+	if err := session.(*NoiseSession).RunOutgoingHandshake(); err != nil {
 		return err
 	}
 	// Wake any other goroutines that are waiting for this handshake to

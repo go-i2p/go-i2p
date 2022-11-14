@@ -49,7 +49,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 	return
 }
 
-func (c *NoiseSession) RunIncomingHandshake() error {
+func (c *NoiseSession) RunOutgoingHandshake() error {
 	var (
 		negData, msg []byte
 		state        *noise.HandshakeState
@@ -65,10 +65,12 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 		return err
 	}
 	//read negotiation data
-	/*if err := c.readPacket(); err != nil {
+	if i2np, err := c.ReadNextI2NP(); err != nil {
 		return err
+	} else {
+		c.RecvQueue.Enqueue(i2np)
 	}
-	negotiationData := c.handshakeBuffer.Next(c.handshakeBuffer.Len())
+	/*negotiationData := c.handshakeBuffer.Next(c.handshakeBuffer.Len())
 	//read noise message
 	if err := c.readPacket(); err != nil {
 		return err
@@ -76,21 +78,21 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 	msg = c.handshakeBuffer.Next(c.handshakeBuffer.Len())
 	if len(negotiationData) != 0 || len(msg) == 0 {
 		return errors.New("Server returned error")
-	}
-	// cannot reuse msg for read, need another buf
-	inBlock := c.NoiseTransport.newBlock()
-	inBlock.reserve(len(msg))*/
+	}*/
+	//cannot reuse msg for read, need another buf
+	inBlock := newBlock()
+	//inBlock.reserve(len(msg))
 	var payload []byte
-	payload, c.CipherState, c.NoiseTransport.CipherState, err = state.ReadMessage(inBlock.data, msg)
+	payload, c.CipherState, c.NoiseTransport.CipherState, err = state.ReadMessage(inBlock, msg)
+	if err != nil {
+		//c.NoiseTransport.freeBlock(inBlock)
+		return err
+	}
+	err = c.processCallback(state.PeerStatic(), payload)
 	/*if err != nil {
 		c.NoiseTransport.freeBlock(inBlock)
 		return err
 	}*/
-	err = c.processCallback(state.PeerStatic(), payload)
-	if err != nil {
-		c.NoiseTransport.freeBlock(inBlock)
-		return err
-	}
 	/*c.NoiseTransport.freeBlock(inBlock)
 	if c.CipherState == nil && c.NoiseTransport.CipherState == nil {
 		b := c.newBlock()

@@ -17,13 +17,14 @@ import (
 )
 
 type NoiseSession struct {
-	*cb.Queue
 	router_info.RouterInfo
 	*noise.CipherState
 	sync.Mutex
 	*sync.Cond
 	*NoiseTransport
 	noise.DHKey
+	RecvQueue         *cb.Queue
+	SendQueue         *cb.Queue
 	VerifyCallback    VerifyCallbackFunc
 	handshakeBuffer   bytes.Buffer
 	activeCall        int32
@@ -64,11 +65,11 @@ func (s *NoiseSession) LocalAddr() net.Addr {
 }
 
 func (s *NoiseSession) QueueSendI2NP(msg i2np.I2NPMessage) {
-	s.Queue.Enqueue(msg)
+	s.SendQueue.Enqueue(msg)
 }
 
 func (s *NoiseSession) SendQueueSize() int {
-	return s.Queue.Size()
+	return s.SendQueue.Size()
 }
 
 func (s *NoiseSession) ReadNextI2NP() (i2np.I2NPMessage, error) {
@@ -76,7 +77,8 @@ func (s *NoiseSession) ReadNextI2NP() (i2np.I2NPMessage, error) {
 }
 
 func (s *NoiseSession) Close() error {
-	s.Queue.Clear()
+	s.SendQueue.Clear()
+	s.RecvQueue.Clear()
 	return nil
 }
 
@@ -90,8 +92,8 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 }
 
 // newBlock allocates a new packet, from hc's free list if possible.
-func (h *NoiseSession) newBlock() *buffer {
-	return new(buffer)
+func newBlock() []byte {
+	return make([]byte, MaxPayloadSize)
 }
 
 type VerifyCallbackFunc func(publicKey []byte, data []byte) error
@@ -102,7 +104,8 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 		return nil, err
 	}
 	return &NoiseSession{
-		Queue:      cb.New(1024),
+		SendQueue:  cb.New(1024),
+		RecvQueue:  cb.New(1024),
 		RouterInfo: ri,
 		Conn:       socket,
 	}, nil
