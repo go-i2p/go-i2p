@@ -18,7 +18,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 	}
 	var pattern noise.HandshakePattern
 	negData = make([]byte, 6)
-	copy(negData, negotiationData)
+	copy(negData, initNegotiationData(nil))
 	pattern = noise.HandshakeIK
 	negData[5] = NOISE_PATTERN_IK
 	var random io.Reader
@@ -55,7 +55,7 @@ func (c *NoiseSession) RunClientHandshake() error {
 		state        *noise.HandshakeState
 		err          error
 	)
-	if negData, msg, state, err = ComposeInitiatorHandshakeMessage(c.StaticKey, nil, nil, nil); err != nil {
+	if negData, msg, state, err = ComposeInitiatorHandshakeMessage(c.DHKey, nil, nil, nil); err != nil {
 		return err
 	}
 	if _, err = c.Write(negData); err != nil {
@@ -80,7 +80,7 @@ func (c *NoiseSession) RunClientHandshake() error {
 	// cannot reuse msg for read, need another buf
 	inBlock := c.NoiseTransport.newBlock()
 	inBlock.reserve(len(msg))*/
-	var payload int
+	var payload []byte
 	payload, c.CipherState, c.NoiseTransport.CipherState, err = state.ReadMessage(inBlock.data, msg)
 	/*if err != nil {
 		c.NoiseTransport.freeBlock(inBlock)

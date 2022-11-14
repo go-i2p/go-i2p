@@ -23,6 +23,8 @@ type NoiseSession struct {
 	sync.Mutex
 	*sync.Cond
 	*NoiseTransport
+	noise.DHKey
+	VerifyCallback    VerifyCallbackFunc
 	handshakeBuffer   bytes.Buffer
 	activeCall        int32
 	handshakeComplete bool
@@ -77,6 +79,17 @@ func (s *NoiseSession) Close() error {
 	s.Queue.Clear()
 	return nil
 }
+
+func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
+	if c.VerifyCallback == nil {
+		return nil
+	}
+
+	err := c.VerifyCallback(publicKey, payload)
+	return err
+}
+
+type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error) {
 	socket, err := DialNoise("noise", ri)

@@ -25,10 +25,6 @@ type NoiseTransport struct {
 	sync.Mutex
 	Listener        net.Listener
 	peerConnections map[data.Hash]transport.TransportSession
-<<<<<<< HEAD
-	netSocket       net.Listener
-=======
->>>>>>> 8d631239b7559bf5f65b5e1e6872219d156efa8b
 }
 
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
@@ -55,8 +51,8 @@ func (noopt *NoiseTransport) Name() string {
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
 func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
-	noopt.routerIdentity = ident
-	if noopt.netSocket == nil {
+	noopt.RouterIdentity = ident
+	if noopt.Listener == nil {
 		log.WithFields(log.Fields{
 			"at":     "(NoiseTransport) SetIdentity",
 			"reason": "network socket is null",
@@ -79,11 +75,9 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	if t, ok := noopt.peerConnections[hash]; ok {
 		return t, nil
 	}
-	conn, err := noopt.Accept()
-	if err == nil {
-		if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo, conn); err != nil {
-			return noopt.peerConnections[hash], err
-		}
+	var err error
+	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo); err != nil {
+		return noopt.peerConnections[hash], err
 	}
 	return nil, err
 }

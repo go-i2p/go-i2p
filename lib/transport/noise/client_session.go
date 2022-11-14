@@ -1,6 +1,7 @@
 package noise
 
 import (
+	"encoding/binary"
 	"errors"
 	"sync/atomic"
 
@@ -72,4 +73,16 @@ func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 		*/
 	}
 	return n, nil
+}
+
+func initNegotiationData(negotiationData []byte) []byte {
+	if negotiationData != nil {
+		return negotiationData
+	}
+	negotiationData = make([]byte, 6)
+	binary.BigEndian.PutUint16(negotiationData, 1) //version
+	negotiationData[2] = NOISE_DH_CURVE25519
+	negotiationData[3] = NOISE_CIPHER_AESGCM
+	negotiationData[4] = NOISE_HASH_BLAKE2b
+	return negotiationData
 }
