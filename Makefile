@@ -19,7 +19,7 @@ $(EXE):
 	$(GO) build -v -o $(EXE)
 
 test:
-	$(GO) test -v -failfast ./lib/common/data/...
+	$(GO) test -v -failfast ./lib/common/data/... ./lib/common/key_certificate
 
 clean:
 	$(GO) clean -v

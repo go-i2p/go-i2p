@@ -13,7 +13,7 @@ func TestSingingPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	pk_type := key_cert.SigningPublicKeyType()
 
 	assert.Nil(err, "SigningPublicKeyType() returned error with valid data")
-	assert.Equal(pk_type, KEYCERT_SIGN_P521, "SigningPublicKeyType() did not return correct typec")
+	assert.Equal(pk_type, KEYCERT_SIGN_PUBKEY_P521, "SigningPublicKeyType() did not return correct typec")
 }
 
 func TestSingingPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
@@ -36,7 +36,7 @@ func TestPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	pk_type := key_cert.PublicKeyType()
 
 	assert.Nil(err, "PublicKey() returned error with valid data")
-	assert.Equal(pk_type, KEYCERT_SIGN_P521, "PublicKeyType() did not return correct typec")
+	assert.Equal(pk_type, KEYCERT_SIGN_PUBKEY_P521, "PublicKeyType() did not return correct typec")
 }
 
 func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
@@ -94,7 +94,7 @@ func TestConstructSigningPublicKeyWithDSASHA1(t *testing.T) {
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
 	assert.Nil(err, "ConstructSigningPublicKey() with DSA SHA1 returned error with valid data")
-	assert.Equal(spk.Len(), KEYCERT_SIGN_DSA_SHA1_SIZE, "ConstructSigningPublicKey() with DSA SHA1 returned incorrect SigningPublicKey length")
+	assert.Equal(spk.Len(), KEYCERT_SIGN_PUBKEY_DSA_SHA1_SIZE, "ConstructSigningPublicKey() with DSA SHA1 returned incorrect SigningPublicKey length")
 }
 
 func TestConstructSigningPublicKeyWithP256(t *testing.T) {
@@ -105,7 +105,7 @@ func TestConstructSigningPublicKeyWithP256(t *testing.T) {
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
 	assert.Nil(err, "ConstructSigningPublicKey() with P256 returned err on valid data")
-	assert.Equal(spk.Len(), KEYCERT_SIGN_P256_SIZE, "ConstructSigningPublicKey() with P256 returned incorrect SigningPublicKey length")
+	assert.Equal(spk.Len(), KEYCERT_SIGN_PUBKEY_P256_SIZE, "ConstructSigningPublicKey() with P256 returned incorrect SigningPublicKey length")
 }
 
 func TestConstructSigningPublicKeyWithP384(t *testing.T) {
@@ -116,16 +116,16 @@ func TestConstructSigningPublicKeyWithP384(t *testing.T) {
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
 	assert.Nil(err, "ConstructSigningPublicKey() with P384 returned err on valid data")
-	assert.Equal(spk.Len(), KEYCERT_SIGN_P384_SIZE, "ConstructSigningPublicKey() with P384 returned incorrect SigningPublicKey length")
+	assert.Equal(spk.Len(), KEYCERT_SIGN_PUBKEY_P384_SIZE, "ConstructSigningPublicKey() with P384 returned incorrect SigningPublicKey length")
 }
 
 func TestConstructSigningPublicKeyWithP521(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x08, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00})
-	data := make([]byte, 128)
+	data := make([]byte, 132)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
 	assert.Nil(err, "ConstructSigningPublicKey() with P521 returned err on valid data")
-	assert.Equal(spk.Len(), KEYCERT_SIGN_P521_SIZE, "ConstructSigningPublicKey() with P521 returned incorrect SigningPublicKey length")
+	assert.Equal(spk.Len(), KEYCERT_SIGN_PUBKEY_P521_SIZE, "ConstructSigningPublicKey() with P521 returned incorrect SigningPublicKey length")
 }
