@@ -65,7 +65,7 @@ options :: Mapping
 type RouterAddress struct {
 	cost            *Integer
 	expiration      *Date
-	transport_style *I2PString
+	Transport_Style *I2PString
 	options         *Mapping
 	parserErr       error
 }
@@ -75,11 +75,11 @@ func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
 	bytes = append(bytes, router_address.cost.Bytes()...)
 	bytes = append(bytes, router_address.expiration.Bytes()...)
-	strData, err := router_address.transport_style.Data()
+	strData, err := router_address.Transport_Style.Data()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("RouterAddress.Bytes: error getting transport_style bytes")
+		}).Error("RouterAddress.Bytes: error getting Transport_Style bytes")
 	} else {
 		bytes = append(bytes, strData...)
 	}
@@ -99,7 +99,7 @@ func (router_address RouterAddress) Expiration() Date {
 
 // TransportStyle returns the transport style for this RouterAddress as an I2PString.
 func (router_address RouterAddress) TransportStyle() I2PString {
-	return *router_address.transport_style
+	return *router_address.Transport_Style
 }
 
 // Options returns the options for this RouterAddress as an I2P Mapping.
@@ -107,9 +107,7 @@ func (router_address RouterAddress) Options() Mapping {
 	return *router_address.options
 }
 
-//
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
-//
 func (router_address RouterAddress) checkValid() (err error, exit bool) {
 	/*addr_len := len(router_address)
 	exit = false
@@ -161,12 +159,12 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RouterAddress")
 		router_address.parserErr = err
 	}
-	transport_style, remainder, err := NewI2PString(remainder)
-	router_address.transport_style = transport_style
+	Transport_Style, remainder, err := NewI2PString(remainder)
+	router_address.Transport_Style = Transport_Style
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
-			"reason": "error parsing transport_style",
+			"reason": "error parsing Transport_Style",
 		}).Error("error parsing RouterAddress")
 		router_address.parserErr = err
 	}

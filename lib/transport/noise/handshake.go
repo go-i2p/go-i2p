@@ -4,23 +4,32 @@ import (
 	"sync"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
-func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	session, err := c.GetSession(routerInfo)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for {
 		if session.(*NoiseSession).handshakeComplete {
-			return nil
+			return nil, nil
 		}
 		if session.(*NoiseSession).Cond == nil {
 			break
 		}
 		session.(*NoiseSession).Cond.Wait()
+	}
+	return session, nil
+}
+
+func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
+	c.Mutex.Lock()
+	defer c.Mutex.Unlock()
+	session, err := c.getSession(routerInfo)
+	if err != nil {
+		return err
 	}
 	// Set handshakeCond to indicate that this goroutine is committing to
 	// running the handshake.

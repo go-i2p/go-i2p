@@ -34,19 +34,23 @@ var exampleNoiseTransport transport.Transport = &NoiseTransport{}
 // implements net.Listener
 var ExampleNoiseListener net.Listener = exampleNoiseTransport
 
+// Accept a connection on a listening socket.
 func (noopt *NoiseTransport) Accept() (net.Conn, error) {
 	return noopt.Listener.Accept()
 }
 
+// Addr of the transport, for now this is returning the IP:Port the transport is listening on,
+// but this might actually be the router identity
 func (noopt *NoiseTransport) Addr() net.Addr {
 	return noopt.Listener.Addr()
 }
 
+// Name of the transport TYPE, in this case `noise`
 func (noopt *NoiseTransport) Name() string {
 	return "noise"
 }
 
-// Set the router identity for this transport.
+// SetIdentity will set the router identity for this transport.
 // will bind if the underlying socket is not already
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do

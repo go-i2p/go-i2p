@@ -16,11 +16,10 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
 
 	}
-	var pattern noise.HandshakePattern
 	negData = make([]byte, 6)
 	copy(negData, initNegotiationData(nil))
-	pattern = noise.HandshakeIK
-	negData[5] = NOISE_PATTERN_IK
+	pattern := noise.HandshakeXK
+	negData[5] = NOISE_PATTERN_XK
 	var random io.Reader
 	if len(ePrivate) == 0 {
 		random = rand.Reader
@@ -35,7 +34,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 		StaticKeypair: s,
 		Initiator:     true,
 		Pattern:       pattern,
-		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashBLAKE2b),
+		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		PeerStatic:    rs,
 		Prologue:      prologue,
 		Random:        random,
@@ -50,12 +49,8 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 }
 
 func (c *NoiseSession) RunOutgoingHandshake() error {
-	var (
-		negData, msg []byte
-		state        *noise.HandshakeState
-		err          error
-	)
-	if negData, msg, state, err = ComposeInitiatorHandshakeMessage(c.DHKey, nil, nil, nil); err != nil {
+	negData, msg, state, err := ComposeInitiatorHandshakeMessage(c.DHKey, nil, nil, nil)
+	if err != nil {
 		return err
 	}
 	if _, err = c.Write(negData); err != nil {
@@ -70,15 +65,17 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 	} else {
 		c.RecvQueue.Enqueue(i2np)
 	}
-	/*negotiationData := c.handshakeBuffer.Next(c.handshakeBuffer.Len())
+	negotiationData := c.handshakeBuffer.Next(c.handshakeBuffer.Len())
 	//read noise message
-	if err := c.readPacket(); err != nil {
+	if i2np, err := c.ReadNextI2NP(); err != nil {
 		return err
+	} else {
+		c.RecvQueue.Enqueue(i2np)
 	}
 	msg = c.handshakeBuffer.Next(c.handshakeBuffer.Len())
 	if len(negotiationData) != 0 || len(msg) == 0 {
 		return errors.New("Server returned error")
-	}*/
+	}
 	//cannot reuse msg for read, need another buf
 	inBlock := newBlock()
 	//inBlock.reserve(len(msg))

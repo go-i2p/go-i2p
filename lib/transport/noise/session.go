@@ -33,28 +33,28 @@ type NoiseSession struct {
 }
 
 // Read implements net.Conn
-func (*NoiseSession) Read(b []byte) (n int, err error) {
-	panic("unimplemented")
+func (noise_session *NoiseSession) Read(b []byte) (n int, err error) {
+	return noise_session.Conn.Read(b)
 }
 
 // RemoteAddr implements net.Conn
-func (*NoiseSession) RemoteAddr() net.Addr {
-	panic("unimplemented")
+func (noise_session *NoiseSession) RemoteAddr() net.Addr {
+	return &noise_session.RouterInfo
 }
 
 // SetDeadline implements net.Conn
-func (*NoiseSession) SetDeadline(t time.Time) error {
-	panic("unimplemented")
+func (noise_session *NoiseSession) SetDeadline(t time.Time) error {
+	return noise_session.Conn.SetDeadline(t)
 }
 
 // SetReadDeadline implements net.Conn
-func (*NoiseSession) SetReadDeadline(t time.Time) error {
-	panic("unimplemented")
+func (noise_session *NoiseSession) SetReadDeadline(t time.Time) error {
+	return noise_session.Conn.SetReadDeadline(t)
 }
 
 // SetWriteDeadline implements net.Conn
-func (*NoiseSession) SetWriteDeadline(t time.Time) error {
-	panic("unimplemented")
+func (noise_session *NoiseSession) SetWriteDeadline(t time.Time) error {
+	return noise_session.Conn.SetWriteDeadline(t)
 }
 
 var exampleNoiseSession transport.TransportSession = &NoiseSession{}
@@ -86,7 +86,6 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 	if c.VerifyCallback == nil {
 		return nil
 	}
-
 	err := c.VerifyCallback(publicKey, payload)
 	return err
 }
@@ -120,7 +119,7 @@ func DialNoise(network string, addr router_info.RouterInfo) (net.Conn, error) {
 			"at":   "(DialNoise)",
 			"addr": addr,
 		}).Error("error parsing router info")
-		Dial("noise", string(addr.TransportStyle()))
+		return Dial(string(addr.TransportStyle()), "")
 	}
 	return nil, fmt.Errorf("No valid transport discovered.")
 }

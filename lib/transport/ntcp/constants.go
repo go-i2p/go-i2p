@@ -1,4 +1,4 @@
-package noise
+package ntcp
 
 import (
 	"math"

@@ -44,7 +44,7 @@ func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 		}
 	}
 	for len(data) > 0 {
-		/*m := len(data)
+		m := len(data)
 		packet := c.InitializePacket()
 		maxPayloadSize := c.maxPayloadSizeForWrite(packet)
 		if m > int(maxPayloadSize) {
@@ -70,7 +70,7 @@ func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 		}
 		n += m
 		data = data[m:]
-		*/
+
 	}
 	return n, nil
 }
@@ -82,7 +82,7 @@ func initNegotiationData(negotiationData []byte) []byte {
 	negotiationData = make([]byte, 6)
 	binary.BigEndian.PutUint16(negotiationData, 1) //version
 	negotiationData[2] = NOISE_DH_CURVE25519
-	negotiationData[3] = NOISE_CIPHER_AESGCM
-	negotiationData[4] = NOISE_HASH_BLAKE2b
+	negotiationData[3] = NOISE_CIPHER_CHACHAPOLY
+	negotiationData[4] = NOISE_HASH_SHA256
 	return negotiationData
 }

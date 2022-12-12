@@ -3,6 +3,8 @@ package router_info
 
 import (
 	"errors"
+	"net"
+	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	. "github.com/go-i2p/go-i2p/lib/common/router_address"
@@ -106,6 +108,8 @@ type RouterInfo struct {
 	signature       *Signature
 }
 
+var routerInfoTest net.Addr = &RouterInfo{}
+
 // Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
 func (router_info RouterInfo) Bytes() ([]byte, error) {
 	var err error
@@ -122,6 +126,29 @@ func (router_info RouterInfo) Bytes() ([]byte, error) {
 	bytes = append(bytes, []byte(*router_info.signature)...)
 
 	return bytes, err
+}
+
+// Network Implements net.Addr, returns comma-separated list of transport types
+func (router_info *RouterInfo) Network() string {
+	var str []string
+	for _, addr := range router_info.addresses {
+		t, err := addr.Transport_Style.Data()
+		if err != nil {
+			return strings.Join(str, ",")
+		}
+		str = append(str, t)
+	}
+	return strings.Join(str, ",")
+}
+
+// String Implements net.Addr, returns router-info `Bytes` converted to a string
+func (router_info *RouterInfo) String() string {
+	bytes, err := router_info.Bytes()
+	if err != nil {
+		// TODO handle this issue
+		return ""
+	}
+	return string(bytes)
 }
 
 // RouterIdentity returns the router identity as *RouterIdentity.

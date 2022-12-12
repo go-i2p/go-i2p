@@ -11,5 +11,20 @@ func TestTransport(t *testing.T) {
 		t.Error(err)
 	}
 	nt := NewNoiseTransport(ln)
-	t.Log(nt.Name())
+	go func() {
+		for {
+			conn, err := nt.Accept()
+			if err != nil {
+				t.Log(err)
+			}
+			conn.Write([]byte("World"))
+		}
+	}()
+	lnn, err := net.Listen("tcp", ":42070")
+	if err != nil {
+		t.Error(err)
+	}
+	ntt := NewNoiseTransport(lnn)
+	t.Log(ntt.Name())
+	//ntt.GetSession()
 }
