@@ -7,13 +7,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (c *NoiseSession) Write(b []byte) (int, error) {
+func (c *NoiseSession) Read(b []byte) (int, error) {
 	// interlock with Close below
 	for {
 		x := atomic.LoadInt32(&c.activeCall)
 		if x&1 != 0 {
 			log.WithFields(log.Fields{
-				"at":     "(NoiseSession) Write",
+				"at":     "(NoiseSession) Read",
 				"reason": "session is closed",
 			}).Error("session is closed")
 			return 0, errors.New("session is closed")
@@ -24,7 +24,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 		}
 	}
 	if !c.handshakeComplete {
-		if err := c.RunOutgoingHandshake(); err != nil {
+		if err := c.RunIncomingHandshake(); err != nil {
 			return 0, err
 		}
 	}
@@ -33,14 +33,14 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 	if !c.handshakeComplete {
 		return 0, errors.New("internal error")
 	}
-	n, err := c.writePacketLocked(b)
+	n, err := c.readPacketLocked(b)
 	return n, err
 }
 
-func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
+func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 	m := len(data)
 	/*packet := c.InitializePacket()
-	maxPayloadSize := c.maxPayloadSizeForWrite(packet)
+	maxPayloadSize := c.maxPayloadSizeForRead(packet)
 	if m > int(maxPayloadSize) {
 		m = int(maxPayloadSize)
 	}
@@ -61,10 +61,10 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	return m, data, nil
 }
 
-func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
+func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {
 	var n int
 	if len(data) == 0 { //special case to answer when everything is ok during handshake
-		if _, err := c.Conn.Write(make([]byte, 2)); err != nil {
+		if _, err := c.Conn.Read(make([]byte, 2)); err != nil {
 			return 0, err
 		}
 	}
@@ -73,7 +73,7 @@ func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if n, err := c.Conn.Write(b); err != nil {
+		if n, err := c.Conn.Read(b); err != nil {
 			return n, err
 		} else {
 			n += m

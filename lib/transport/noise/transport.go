@@ -20,9 +20,9 @@ import (
 )
 
 type NoiseTransport struct {
-	*noise.CipherState
-	router_identity.RouterIdentity
 	sync.Mutex
+	router_identity.RouterIdentity
+	*noise.CipherState
 	Listener        net.Listener
 	peerConnections map[data.Hash]transport.TransportSession
 }
@@ -84,6 +84,23 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 		return noopt.peerConnections[hash], err
 	}
 	return nil, err
+}
+
+func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
+	session, err := c.GetSession(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		if session.(*NoiseSession).handshakeComplete {
+			return nil, nil
+		}
+		if session.(*NoiseSession).Cond == nil {
+			break
+		}
+		session.(*NoiseSession).Cond.Wait()
+	}
+	return session, nil
 }
 
 // Compatable return true if a routerInfo is compatable with this transport
