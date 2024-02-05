@@ -138,7 +138,6 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	if e != nil {
 		err = append(err, e)
 	}
-
 	mapping.size = size
 	if e != nil {
 		log.WithFields(log.Fields{

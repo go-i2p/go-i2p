@@ -165,45 +165,6 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
 	return keys_and_cert.KeyCertificate.Certificate
 }
 
-//
-// Read a KeysAndCert from a slice of bytes, retuning it and the remaining data as well as any errors
-// encoutered parsing the KeysAndCert.
-//
-
-// ReadKeysAndCert returns KeysAndCert from a []byte.
-// The remaining bytes after the specified length are also returned.
-// Returns a list of errors that occurred during parsing.
-func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
-	/*data_len := len(data)
-	if data_len < KEYS_AND_CERT_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":           "ReadKeysAndCert",
-			"data_len":     data_len,
-			"required_len": KEYS_AND_CERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		return
-	}
-	keys_and_cert = KeysAndCert(data[:KEYS_AND_CERT_MIN_SIZE])
-	cert, _ := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if cert_len == 0 {
-		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
-		return
-	}
-	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
-		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:]...)
-		//err = cert_len_err
-	} else {
-		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
-		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
-	}*/
-	keys_and_cert_pointer, remainder, err := NewKeysAndCert(data)
-	keys_and_cert = *keys_and_cert_pointer
-	return
-}
-
 // NewKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
 func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
@@ -217,21 +178,21 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data)
 		return
 	}
-	cert, remainder, err := NewKeyCertificate(data)
-	keys_and_cert.KeyCertificate = cert
+	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data)
 	if err != nil {
 		return nil, nil, err
 	}
-	padding := data[KEYS_AND_CERT_MIN_SIZE+cert.Length():]
+	padding := data[KEYS_AND_CERT_MIN_SIZE+keys_and_cert.KeyCertificate.Length():]
 	keys_and_cert.padding = padding
-	publicKey, err := cert.ConstructPublicKey(padding)
+	publicKey, err := keys_and_cert.KeyCertificate.ConstructPublicKey(padding)
 	keys_and_cert.publicKey = publicKey
 	if err != nil {
 		return nil, nil, err
 	}
-	signingPublicKey, err := cert.ConstructSigningPublicKey(padding)
+	signingPublicKey, err := keys_and_cert.KeyCertificate.ConstructSigningPublicKey(padding)
 	keys_and_cert.signingPublicKey = signingPublicKey
 	if err != nil {
 		return nil, nil, err

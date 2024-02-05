@@ -153,10 +153,8 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() crypto.TunnelI
 	return decrypted_tunnel_message[4+16 : 4+4+16]
 }
 
-//
 // Returns the contents of a decrypted tunnel message that contain the data for the
 // DeliveryInstructions.
-//
 func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData() []byte {
 	data_area := decrypted_tunnel_message[4+4+16:]
 	for i := 0; i < len(data_area); i++ {
@@ -167,11 +165,8 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData()
 	return []byte{}
 }
 
-//
 // Returns a slice of DeliveryInstructionWithFragment structures, which all of the Delivery Instructions
 // in the tunnel message and their corresponding MessageFragment structures.
-//
-//
 func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() []DeliveryInstructionsWithFragment {
 	set := make([]DeliveryInstructionsWithFragment, 0)
 	data := decrypted_tunnel_message.deliveryInstructionData()

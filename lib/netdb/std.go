@@ -50,9 +50,7 @@ func (db StdNetDB) Path() string {
 	return string(db)
 }
 
-//
 // return how many routers we know about in our network database
-//
 func (db StdNetDB) Size() (routers int) {
 	// TODO: implement this
 	var err error

@@ -23,9 +23,7 @@ func (hk HMACKey) xor(p byte) (i []byte) {
 	return
 }
 
-//
 // do i2p hmac
-//
 func I2PHMAC(data []byte, k HMACKey) (d HMACDigest) {
 
 	buff := make([]byte, 64+len(data))

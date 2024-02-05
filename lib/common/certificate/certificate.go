@@ -160,6 +160,9 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
 				"certificate_payload_length": payleng,
+				"data_bytes:":                data,
+				"kind_bytes":                 data[0:1],
+				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
 			}).Error("invalid certificate")
 			return
@@ -169,6 +172,9 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
 				"certificate_payload_length": payleng,
+				"data_bytes:":                data,
+				"kind_bytes":                 data[0:1],
+				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
 			}).Error("invalid certificate")
 			return

@@ -19,7 +19,11 @@ $(EXE):
 	$(GO) build -v -o $(EXE)
 
 test:
-	$(GO) test -v -failfast ./lib/common/data/...
+	#$(GO) test -v -failfast ./lib/common/data/...
+	$(GO) test -v -failfast ./lib/common/keys_and_cert/...
 
 clean:
 	$(GO) clean -v
+
+fmt:
+	find . -name '*.go' -exec gofmt -w -s {} \;

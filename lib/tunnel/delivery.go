@@ -380,8 +380,9 @@ func (delivery_instructions DeliveryInstructions) TunnelID() (tunnel_id uint32, 
 }
 
 // Return the hash for these DeliveryInstructions, which varies by hash type.
-//  If the type is DT_TUNNEL, hash is the SHA256 of the gateway router, if
-//  the type is DT_ROUTER it is the SHA256 of the router.
+//
+//	If the type is DT_TUNNEL, hash is the SHA256 of the gateway router, if
+//	the type is DT_ROUTER it is the SHA256 of the router.
 func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err error) {
 	delivery_type, err := delivery_instructions.DeliveryType()
 	if err != nil {

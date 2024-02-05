@@ -132,7 +132,10 @@ type LeaseSet struct {
 
 // Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
-	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
+	keys_and_cert, _, err := NewKeysAndCert(lease_set)
+	if err != nil {
+		return
+	}
 	destination, _, err = ReadDestination(keys_and_cert.Bytes())
 	return
 }
@@ -140,7 +143,7 @@ func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 // PublicKey returns the public key as crypto.ElgPublicKey.
 // Returns errors encountered during parsing.
 func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
-	_, remainder, err := ReadKeysAndCert(lease_set)
+	_, remainder, err := NewKeysAndCert(lease_set)
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
 		log.WithFields(log.Fields{
@@ -212,7 +215,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 // LeaseCount returns the numbert of leases specified by the LeaseCount value as int.
 // returns errors encountered during parsing.
 func (lease_set LeaseSet) LeaseCount() (count int, err error) {
-	_, remainder, err := ReadKeysAndCert(lease_set)
+	_, remainder, err := NewKeysAndCert(lease_set)
 	if err != nil {
 		return
 	}

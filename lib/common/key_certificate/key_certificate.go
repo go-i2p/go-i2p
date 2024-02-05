@@ -82,7 +82,7 @@ const (
 	KEYCERT_SPK_SIZE    = 128
 )
 
-//type KeyCertificate []byte
+// type KeyCertificate []byte
 type KeyCertificate struct {
 	*Certificate
 	spkType Integer
@@ -205,9 +205,9 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder []byte, err error) {
 	var certificate *Certificate
 	certificate, remainder, err = ReadCertificate(bytes)
-	//if err != nil {
-	//	return nil, err
-	//}
+	if err != nil {
+		return
+	}
 	if len(bytes) < KEYCERT_MIN_SIZE {
 		err = errors.New("error parsing key certificate: not enough data")
 	}
@@ -237,7 +237,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 			cpkType:     Integer(bytes[6:7]),
 		}
 	}
-	remainder = bytes[7:]
+	remainder = bytes[len(bytes):]
 	//key_certificate.PublicKey = NewPublicKey(bytes)
 	return
 }

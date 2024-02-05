@@ -1,4 +1,6 @@
-/**
-  i2np messages transports
+/*
+*
+
+	i2np messages transports
 */
 package transport

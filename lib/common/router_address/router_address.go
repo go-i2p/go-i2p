@@ -107,9 +107,7 @@ func (router_address RouterAddress) Options() Mapping {
 	return *router_address.options
 }
 
-//
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
-//
 func (router_address RouterAddress) checkValid() (err error, exit bool) {
 	/*addr_len := len(router_address)
 	exit = false
