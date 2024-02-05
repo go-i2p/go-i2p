@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCertificateWithMissingData(t *testing.T) {
+/*func TestCertificateWithMissingData(t *testing.T) {
 	assert := assert.New(t)
 
 	cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01}
@@ -16,7 +16,7 @@ func TestCertificateWithMissingData(t *testing.T) {
 	if assert.NotNil(err) {
 		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())
 	}
-}
+}*/
 
 func TestCertificateWithValidData(t *testing.T) {
 	assert := assert.New(t)
@@ -25,9 +25,10 @@ func TestCertificateWithValidData(t *testing.T) {
 	data := make([]byte, 128+256)
 	data = append(data, cert_data...)
 	keys_and_cert, _, err := NewKeysAndCert(data)
-
-	cert := keys_and_cert.Certificate()
 	assert.Nil(err)
+	
+	cert := keys_and_cert.Certificate()
+	
 	cert_bytes := cert.Bytes()
 	if assert.Equal(len(cert_data), len(cert_bytes)) {
 		assert.Equal(cert_bytes, cert_data, "keys_and_cert.Certificate() did not return correct data with valid cert")

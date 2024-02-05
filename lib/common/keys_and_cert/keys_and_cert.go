@@ -178,10 +178,10 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data)
+		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 		return
 	}
-	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data)
+	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		return nil, nil, err
 	}
