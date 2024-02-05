@@ -26,9 +26,9 @@ func TestCertificateWithValidData(t *testing.T) {
 	data = append(data, cert_data...)
 	keys_and_cert, _, err := NewKeysAndCert(data)
 	assert.Nil(err)
-	
+
 	cert := keys_and_cert.Certificate()
-	
+
 	cert_bytes := cert.Bytes()
 	if assert.Equal(len(cert_data), len(cert_bytes)) {
 		assert.Equal(cert_bytes, cert_data, "keys_and_cert.Certificate() did not return correct data with valid cert")

@@ -170,7 +170,7 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
 func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
 	keys_and_cert = &KeysAndCert{}
-	if data_len < KEYS_AND_CERT_MIN_SIZE {
+	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -180,20 +180,27 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 		return
+	} else if data_len < KEYS_AND_CERT_DATA_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing keys and cert")
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		return
 	}
 	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		return nil, nil, err
 	}
-	padding := data[KEYS_AND_CERT_MIN_SIZE+keys_and_cert.KeyCertificate.Length():]
-	keys_and_cert.padding = padding
-	publicKey, err := keys_and_cert.KeyCertificate.ConstructPublicKey(padding)
-	keys_and_cert.publicKey = publicKey
+	//padding := data[KEYS_AND_CERT_MIN_SIZE+keys_and_cert.KeyCertificate.Length():]
+	//keys_and_cert.padding = padding
+	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:KEYS_AND_CERT_PUBKEY_SIZE])
 	if err != nil {
 		return nil, nil, err
 	}
-	signingPublicKey, err := keys_and_cert.KeyCertificate.ConstructSigningPublicKey(padding)
-	keys_and_cert.signingPublicKey = signingPublicKey
+	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
 	if err != nil {
 		return nil, nil, err
 	}
