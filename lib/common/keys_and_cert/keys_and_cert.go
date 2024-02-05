@@ -194,15 +194,18 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 	if err != nil {
 		return nil, nil, err
 	}
-	//padding := data[KEYS_AND_CERT_MIN_SIZE+keys_and_cert.KeyCertificate.Length():]
-	//keys_and_cert.padding = padding
+	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
+	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
+	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
 	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:KEYS_AND_CERT_PUBKEY_SIZE])
 	if err != nil {
 		return nil, nil, err
 	}
-	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
+	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE : KEYS_AND_CERT_DATA_SIZE])
 	if err != nil {
 		return nil, nil, err
 	}
+	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
+	keys_and_cert.padding = padding
 	return keys_and_cert, remainder, err
 }
