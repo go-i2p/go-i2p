@@ -52,6 +52,7 @@ const (
 // Key Certificate Public Key Types
 const (
 	KEYCERT_CRYPTO_ELG = iota
+	KEYCERT_CRYPTO_ED25519
 )
 
 const (
@@ -127,6 +128,10 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 		var elg_key crypto.ElgPublicKey
 		copy(elg_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = elg_key
+	case KEYCERT_CRYPTO_ED25519:
+		var ed25519_key crypto.Ed25519PublicKey
+		copy(ed25519_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
+		public_key = ed25519_key
 	}
 	return
 }

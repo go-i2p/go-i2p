@@ -240,6 +240,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		err = errors.New("error parsing router info: not enough data")
 	}
 	date, remainder, err := NewDate(remainder)
+	log.Println(remainder)
 	info.published = date
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -250,6 +251,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
+	log.Println(remainder)
 	size, remainder, err := NewInteger(remainder, 1)
 	info.size = size
 	if err != nil {

@@ -51,8 +51,9 @@ func NewInteger(bytes []byte, size int) (integer *Integer, remainder []byte, err
 	if size < MAX_INTEGER_SIZE {
 		integerSize = size
 	}
+	intBytes := bytes[:integerSize]
 	fmt.Println("IntegerSize: ", integerSize, "IntegerBytes:", bytes)
-	i, remainder := ReadInteger(bytes, integerSize)
+	i, remainder := ReadInteger(intBytes, integerSize)
 	integer = &i
 	return
 }

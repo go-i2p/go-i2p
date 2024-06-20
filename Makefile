@@ -19,8 +19,7 @@ $(EXE):
 	$(GO) build -v -o $(EXE)
 
 test: fmt
-	#$(GO) test -vv -failfast ./lib/common/data/...
-	$(GO) test -vv -failfast ./lib/common/keys_and_cert/...
+	$(GO) test -vv -failfast ./lib/common/...
 
 clean:
 	$(GO) clean -v

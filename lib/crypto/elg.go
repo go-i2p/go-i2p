@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
-	"golang.org/x/crypto/openpgp/elgamal"
 	"io"
 	"math/big"
+
+	"golang.org/x/crypto/openpgp/elgamal"
 )
 
 var elgp = new(big.Int).SetBytes([]byte{

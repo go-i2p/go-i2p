@@ -65,7 +65,7 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
-  - SSU
+  - SSU2
     - [ ] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
