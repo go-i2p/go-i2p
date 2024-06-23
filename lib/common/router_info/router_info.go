@@ -110,12 +110,16 @@ type RouterInfo struct {
 func (router_info RouterInfo) Bytes() ([]byte, error) {
 	var err error
 	var bytes []byte
-
+	log.Println("0")
 	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
+	log.Println("1")
 	bytes = append(bytes, router_info.published.Bytes()...)
+	log.Println("2")
 	bytes = append(bytes, router_info.size.Bytes()...)
-	for _, router_address := range router_info.addresses {
+	log.Println("3")
+	for i, router_address := range router_info.addresses {
 		bytes = append(bytes, router_address.Bytes()...)
+		log.Println(i+3)
 	}
 	bytes = append(bytes, router_info.peer_size.Bytes()...)
 	//bytes = append(bytes, router_info.options.Bytes()...)
@@ -241,7 +245,6 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		err = errors.New("error parsing router info: not enough data")
 	}
 	date, remainder, err := NewDate(remainder)
-	log.Println("Remainder of Date", remainder)
 	info.published = date
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -252,8 +255,17 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
-	log.Println(remainder)
+	log.Println("Remainder of date:", remainder)
 	size, remainder, err := NewInteger(remainder, 1)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"at":           "(RouterInfo) ReadRouterInfo",
+			"data_len":     len(remainder),
+			"required_len": size.Int(),
+			"reason":       "read error",
+		}).Error("error parsing router info size")
+	}
+	log.Println("Size Remainder:", remainder)
 	info.size = size
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -265,6 +277,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		err = errors.New("error parsing router info: not enough data")
 	}
 	addresses := make([]*RouterAddress, size.Int())
+	log.Println("Address Count:", size.Int())
 	for i := 0; i < size.Int(); i++ {
 		address, remainder, err := NewRouterAddress(remainder)
 		if err != nil {
@@ -273,7 +286,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 				"data_len": len(remainder),
 				//"required_len": ROUTER_ADDRESS_SIZE,
 				"reason": "not enough data",
-			}).Error("error parsing router info")
+			}).Error("error parsing router address")
 			err = errors.New("error parsing router info: not enough data")
 		}
 		addresses = append(addresses, address)

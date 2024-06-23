@@ -136,12 +136,12 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
 	if data == nil || len(data) == 0 {
-		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("no data")
+		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
 		err = errors.New("error parsing RouterAddress: no data")
 		router_address.parserErr = err
 		return
 	}
-	cost, remainder, err := NewInteger([]byte{data[0]}, 1)
+	cost, remainder, err := NewInteger(data, 1)
 	router_address.cost = cost
 	if err != nil {
 		log.WithFields(log.Fields{
