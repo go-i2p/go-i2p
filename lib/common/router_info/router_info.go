@@ -229,6 +229,7 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 // Returns a list of errors that occurred during parsing.
 func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error) {
 	identity, remainder, err := NewRouterIdentity(bytes)
+	log.Println("Remainder of RouterIdentity", remainder)
 	info.router_identity = identity
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -240,7 +241,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		err = errors.New("error parsing router info: not enough data")
 	}
 	date, remainder, err := NewDate(remainder)
-	log.Println(remainder)
+	log.Println("Remainder of Date", remainder)
 	info.published = date
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -280,7 +281,8 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	info.addresses = addresses
 	peer_size := Integer(remainder[:1])
 	info.peer_size = &peer_size
-	remainder = remainder[1:]
+	//remainder = remainder[1:]
+	log.Println("Remainder:", remainder)
 	options, remainder, errs := NewMapping(remainder)
 	if len(errs) != 0 {
 		log.WithFields(log.Fields{

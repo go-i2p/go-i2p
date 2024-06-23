@@ -75,6 +75,7 @@ func (c *Certificate) RawBytes() []byte {
 
 // ExcessBytes returns the excess bytes in a certificate found after the specified payload length.
 func (c *Certificate) ExcessBytes() []byte {
+	log.Println("Bytes after:", c.len.Int())
 	return c.payload[c.len.Int():]
 }
 
@@ -129,8 +130,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 		}).Error("invalid certificate")
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
 		return
-	case 1:
-		certificate.kind = Integer(data[0:0])
+	case 1 , 2:
+		certificate.kind = Integer(data[0:len(data)-1])
 		certificate.len = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",
@@ -138,16 +139,6 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
 		}).Error("invalid certificate")
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
-		return
-	case 2:
-		certificate.kind = Integer(data[0:1])
-		certificate.len = Integer([]byte{0})
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) NewCertificate",
-			"certificate_bytes_length": len(data),
-			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
-		err = fmt.Errorf("error parsing certificate length: certificate is too short")
 		return
 	default:
 		certificate.kind = Integer(data[0:1])
@@ -188,8 +179,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, err error) {
 	certificate, err = NewCertificate(data)
 	if err != nil && err.Error() == "certificate parsing warning: certificate data is longer than specified by length" {
-		remainder = certificate.ExcessBytes()
 		err = nil
 	}
+	remainder = certificate.ExcessBytes()
 	return
 }

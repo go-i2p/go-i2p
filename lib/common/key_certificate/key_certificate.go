@@ -52,7 +52,10 @@ const (
 // Key Certificate Public Key Types
 const (
 	KEYCERT_CRYPTO_ELG = iota
-	KEYCERT_CRYPTO_ED25519
+	KEYCERT_CRYPTO_P256
+	KEYCERT_CRYPTO_P384
+	KEYCERT_CRYPTO_P521
+	KEYCERT_CRYPTO_X25519
 )
 
 const (
@@ -74,7 +77,11 @@ const (
 
 // PublicKey sizes for Public Key Types
 const (
-	KEYCERT_CRYPTO_ELG_SIZE = 256
+	KEYCERT_CRYPTO_ELG_SIZE    = 256
+	KEYCERT_CRYPTO_P256_SIZE   = 64
+	KEYCERT_CRYPTO_P384_SIZE   = 96
+	KEYCERT_CRYPTO_P521_SIZE   = 132
+	KEYCERT_CRYPTO_X25519_SIZE = 32
 )
 
 // Sizes of structures in KeyCertificates
@@ -113,7 +120,7 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 		return
 	}
 	data_len := len(data)
-	if data_len < KEYCERT_PUBKEY_SIZE {
+	if data_len < key_certificate.CryptoSize() {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) ConstructPublicKey",
 			"data_len":     data_len,
@@ -128,7 +135,7 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 		var elg_key crypto.ElgPublicKey
 		copy(elg_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = elg_key
-	case KEYCERT_CRYPTO_ED25519:
+	case KEYCERT_CRYPTO_X25519:
 		var ed25519_key crypto.Ed25519PublicKey
 		copy(ed25519_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = ed25519_key
@@ -144,7 +151,7 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		return
 	}
 	data_len := len(data)
-	if data_len < KEYCERT_SPK_SIZE {
+	if data_len < key_certificate.SignatureSize() {
 		log.WithFields(log.Fields{
 			"at":           "(KeyCertificate) ConstructSigningPublicKey",
 			"data_len":     data_len,
@@ -190,17 +197,30 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 // SignatureSize return the size of a Signature corresponding to the Key Certificate's SigningPublicKey type.
 func (key_certificate KeyCertificate) SignatureSize() (size int) {
 	sizes := map[int]int{
-		KEYCERT_SIGN_DSA_SHA1:  40,
-		KEYCERT_SIGN_P256:      64,
-		KEYCERT_SIGN_P384:      96,
-		KEYCERT_SIGN_P521:      132,
-		KEYCERT_SIGN_RSA2048:   256,
-		KEYCERT_SIGN_RSA3072:   384,
-		KEYCERT_SIGN_RSA4096:   512,
-		KEYCERT_SIGN_ED25519:   64,
-		KEYCERT_SIGN_ED25519PH: 64,
+		KEYCERT_SIGN_DSA_SHA1:  KEYCERT_SIGN_DSA_SHA1_SIZE,
+		KEYCERT_SIGN_P256:      KEYCERT_SIGN_P256_SIZE,
+		KEYCERT_SIGN_P384:      KEYCERT_SIGN_P384_SIZE,
+		KEYCERT_SIGN_P521:      KEYCERT_SIGN_P521_SIZE,
+		KEYCERT_SIGN_RSA2048:   KEYCERT_SIGN_RSA2048_SIZE,
+		KEYCERT_SIGN_RSA3072:   KEYCERT_SIGN_RSA3072_SIZE,
+		KEYCERT_SIGN_RSA4096:   KEYCERT_SIGN_RSA4096_SIZE,
+		KEYCERT_SIGN_ED25519:   KEYCERT_SIGN_ED25519_SIZE,
+		KEYCERT_SIGN_ED25519PH: KEYCERT_SIGN_ED25519PH_SIZE,
 	}
 	key_type := key_certificate.SigningPublicKeyType()
+	return sizes[int(key_type)]
+}
+
+// CryptoSize return the size of a Public Key corresponding to the Key Certificate's PublicKey type.
+func (key_certificate KeyCertificate) CryptoSize() (size int) {
+	sizes := map[int]int{
+		KEYCERT_CRYPTO_ELG:    KEYCERT_CRYPTO_ELG_SIZE,
+		KEYCERT_CRYPTO_P256:   KEYCERT_CRYPTO_P256_SIZE,
+		KEYCERT_CRYPTO_P384:   KEYCERT_CRYPTO_P384_SIZE,
+		KEYCERT_CRYPTO_P521:   KEYCERT_CRYPTO_P521_SIZE,
+		KEYCERT_CRYPTO_X25519: KEYCERT_CRYPTO_X25519_SIZE,
+	}
+	key_type := key_certificate.PublicKeyType()
 	return sizes[int(key_type)]
 }
 
@@ -213,37 +233,16 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	if err != nil {
 		return
 	}
+	log.Println("Certificate Remainder:", remainder)
 	if len(bytes) < KEYCERT_MIN_SIZE {
 		err = errors.New("error parsing key certificate: not enough data")
 	}
-	switch len(bytes) {
-	case 4:
-		key_certificate = &KeyCertificate{
-			Certificate: certificate,
-			spkType:     Integer(bytes[4:]),
-			cpkType:     Integer([]byte{0}),
-		}
-	case 5:
-		key_certificate = &KeyCertificate{
-			Certificate: certificate,
-			spkType:     Integer(bytes[4:5]),
-			cpkType:     Integer([]byte{0}),
-		}
-	case 6:
-		key_certificate = &KeyCertificate{
-			Certificate: certificate,
-			spkType:     Integer(bytes[4:5]),
-			cpkType:     Integer(bytes[6:]),
-		}
-	default:
-		key_certificate = &KeyCertificate{
-			Certificate: certificate,
-			spkType:     Integer(bytes[4:5]),
-			cpkType:     Integer(bytes[6:7]),
-		}
+	key_certificate = &KeyCertificate{
+		Certificate: certificate,
+		spkType:     Integer(bytes[4:5]),
+		cpkType:     Integer(bytes[6:7]),
 	}
-	remainder = bytes[len(bytes):]
-	//key_certificate.PublicKey = NewPublicKey(bytes)
+	remainder = bytes[KEYCERT_MIN_SIZE:]
 	return
 }
 
