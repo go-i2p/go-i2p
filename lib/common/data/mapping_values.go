@@ -46,11 +46,11 @@ func mappingOrder(values MappingValues) {
 // ReadMappingValues returns *MappingValues from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
-func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes []byte, errs []error) {
+func ReadMappingValues(remainder []byte, l Integer) (values *MappingValues, remainder_bytes []byte, errs []error) {
 	mapping := remainder
 	//var remainder = mapping
 	//var err error
-	if remainder == nil || len(remainder) < 0 {
+	if remainder == nil || len(remainder) < 1 {
 		log.WithFields(log.Fields{
 			"at":     "(Mapping) Values",
 			"reason": "data shorter than expected",
@@ -59,15 +59,6 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		return
 	}
 	map_values := make(MappingValues, 0)
-	if len(remainder) < 1 {
-		log.WithFields(log.Fields{
-			"at":     "(Mapping) Values",
-			"reason": "data shorter than expected",
-		}).Error("mapping contained no data")
-		errs = []error{errors.New("mapping contained no data")}
-		return
-	}
-	l := Integer(remainder[:2])
 	length := l.Int()
 	// - 2 bytes for map length bits
 	mapping_len := len(mapping) - 2
