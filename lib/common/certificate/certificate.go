@@ -127,8 +127,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
-		err = fmt.Errorf("error parsing certificate: certificate is too short")
+		}).Error("invalid certificate, empty")
+		err = fmt.Errorf("error parsing certificate: certificate is empty")
 		return
 	case 1 , 2:
 		certificate.kind = Integer(data[0:len(data)-1])
@@ -137,7 +137,7 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
+		}).Error("invalid certificate, too short")
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
 		return
 	default:
@@ -151,11 +151,11 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
 				"certificate_payload_length": payleng,
-				"data_bytes:":                data,
+				"data_bytes:":                string(data),
 				"kind_bytes":                 data[0:1],
 				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
-			}).Error("invalid certificate")
+			}).Error("invalid certificate, shorter than specified by length")
 			return
 		} else if certificate.len.Int() < len(data)-CERT_MIN_SIZE {
 			err = fmt.Errorf("certificate parsing warning: certificate data is longer than specified by length")
@@ -163,11 +163,11 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
 				"certificate_payload_length": payleng,
-				"data_bytes:":                data,
+				"data_bytes:":                string(data),
 				"kind_bytes":                 data[0:1],
 				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
-			}).Error("invalid certificate")
+			}).Error("invalid certificate, longer than specified by length")
 			return
 		}
 		return

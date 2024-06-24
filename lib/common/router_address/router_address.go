@@ -135,14 +135,18 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
-	if data == nil || len(data) == 0 {
+	log.WithFields(log.Fields{
+		"at":     "(RouterAddress) ReadNewRouterAddress",
+		"reason": "notification",
+	}).Warn("parsing RouterAddress")
+	router_address.parserErr = err
+	if len(data) == 0 {
 		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
 		err = errors.New("error parsing RouterAddress: no data")
 		router_address.parserErr = err
 		return
 	}
 	cost, remainder, err := NewInteger(data, 1)
-	router_address.cost = cost
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
@@ -150,8 +154,9 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Warn("error parsing RouterAddress")
 		router_address.parserErr = err
 	}
+	router_address.cost = cost
+	log.Warnf("Cost, %d Remainder: %s", router_address.cost.Int(), string(remainder))
 	expiration, remainder, err := NewDate(remainder)
-	router_address.expiration = expiration
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
@@ -159,8 +164,9 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RouterAddress")
 		router_address.parserErr = err
 	}
+	router_address.expiration = expiration
+	log.Warnf("Expiration Date: %s, Remainder: %s", router_address.expiration.Time(), remainder)
 	transport_style, remainder, err := NewI2PString(remainder)
-	router_address.transport_style = transport_style
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
@@ -168,6 +174,8 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RouterAddress")
 		router_address.parserErr = err
 	}
+	router_address.transport_style = transport_style
+	log.Warnf("Transport, %s Remainder: %s", string(*router_address.transport_style), string(remainder))
 	options, remainder, errs := NewMapping(remainder)
 	for _, err := range errs {
 		log.WithFields(log.Fields{
@@ -177,13 +185,6 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		router_address.parserErr = err
 	}
 	router_address.options = options
-	if err != nil {
-		log.WithFields(log.Fields{
-			"at":     "(RouterAddress) ReadNewRouterAddress",
-			"reason": "error parsing options",
-		}).Error("error parsing RouterAddress")
-		router_address.parserErr = err
-	}
 	return
 }
 

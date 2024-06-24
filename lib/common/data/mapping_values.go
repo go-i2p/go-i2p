@@ -47,7 +47,7 @@ func mappingOrder(values MappingValues) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadMappingValues(remainder []byte, l Integer) (values *MappingValues, remainder_bytes []byte, errs []error) {
-	mapping := remainder
+	//mapping := remainder
 	//var remainder = mapping
 	//var err error
 	if remainder == nil || len(remainder) < 1 {
@@ -60,8 +60,7 @@ func ReadMappingValues(remainder []byte, l Integer) (values *MappingValues, rema
 	}
 	map_values := make(MappingValues, 0)
 	length := l.Int()
-	// - 2 bytes for map length bits
-	mapping_len := len(mapping) - 2
+	mapping_len := len(remainder)
 	if mapping_len > length {
 		log.WithFields(log.Fields{
 			"at":                   "(Mapping) Values",
@@ -82,7 +81,7 @@ func ReadMappingValues(remainder []byte, l Integer) (values *MappingValues, rema
 
 	encounteredKeysMap := map[string]bool{}
 	// pop off length bytes before parsing kv pairs
-	remainder = remainder[2:]
+	//remainder = remainder[2:]
 
 	for {
 		// Read a key, breaking on fatal errors
@@ -151,6 +150,7 @@ func ReadMappingValues(remainder []byte, l Integer) (values *MappingValues, rema
 				//return
 			}
 		}
+		log.Printf("String: %s\n", str)
 		if !beginsWith(remainder, 0x3b) {
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",

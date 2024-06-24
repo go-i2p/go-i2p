@@ -38,28 +38,17 @@ func (str I2PString) Length() (length int, err error) {
 		err = errors.New("error parsing string: zero length")
 		return
 	}
-	l := Integer([]byte{byte(str[0])})
+	l, _, _ := NewInteger(str, 1)
 	length = l.Int()
-	inferred_len := length + 1
-	str_len := len(str)
-	if inferred_len > str_len {
+	str_len := len(str)-1
+	if length != str_len {
 		log.WithFields(log.Fields{
 			"at":                    "(I2PString) Length",
 			"string_bytes_length":   str_len,
 			"string_length_field":   length,
-			"expected_bytes_length": inferred_len,
-			"reason":                "data shorter than specified",
-		}).Warn("string format warning")
+			"reason":                "data less than specified by length",
+		}).Error("string format warning")
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
-	} else if str_len > inferred_len {
-		log.WithFields(log.Fields{
-			"at":                    "(I2PString) Length",
-			"string_bytes_length":   str_len,
-			"string_length_field":   length,
-			"expected_bytes_length": inferred_len,
-			"reason":                "data longer than specified",
-		}).Warn("string format warning")
-		err = errors.New("string parsing warning: string contains data beyond length")
 	}
 	return
 }
@@ -80,7 +69,7 @@ func (str I2PString) Data() (data string, err error) {
 			return
 		}
 	}
-	data = string(str[1:])
+	data = string(str[1:length])
 	return
 }
 
@@ -113,13 +102,18 @@ func ToI2PString(data string) (str I2PString, err error) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
-	str = I2PString(data)
-	length, err := I2PString(data).Length()
-	if err != nil && err.Error() == "string parsing warning: string contains data beyond length" {
-		str = I2PString(data[:length+1])
-		remainder = data[length+1:]
-		err = nil
+	log.Println("Data bytes:", string(data))
+	length, remainder, err := NewInteger(data, 1)
+	if err  != nil  {
+		return
 	}
+	data_len  := length.Int()
+	str = data[:data_len+1]
+	remainder = data[data_len+1:]
+	len, err := str.Length()
+	log.Println("Parsed string of length", data_len, len, err, ":", string([]byte(str)))
+	log.Println("Remaining bytes:", string(remainder))
+	log.Println("Errors:", err)
 	return
 }
 
