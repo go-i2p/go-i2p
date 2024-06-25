@@ -140,7 +140,12 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	if e != nil {
 		err = append(err, e)
 	}
+	if size.Int() == 0 {
+		return
+	}
 	mapping.size = size
+	map_bytes := remainder[:mapping.size.Int()]
+	remainder = remainder[mapping.size.Int():]
 	log.Println("Mapping Size:", mapping.size.Int())
 	log.Println("Remainder Size:", len(remainder))
 	if len(remainder) == 0 {
@@ -154,7 +159,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	// TODO: this should take the remainder and the length we already parsed above, as a parameter.
 	// Like tomorrow morning.
 	// ReadMappingValues should not attempt to figure out the length of the bytes it's reading over.
-	vals, remainder, mappingValueErrs := ReadMappingValues(remainder, *mapping.size)
+	vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *mapping.size)
 
 	err = append(err, mappingValueErrs...)
 	mapping.vals = vals

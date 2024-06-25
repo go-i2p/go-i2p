@@ -69,6 +69,9 @@ func (str I2PString) Data() (data string, err error) {
 			return
 		}
 	}
+	if (length == 0)  {
+		return
+	}
 	data = string(str[1:length])
 	return
 }
@@ -103,7 +106,7 @@ func ToI2PString(data string) (str I2PString, err error) {
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	//log.Println("Data bytes:", string(data))
-	length, remainder, err := NewInteger(data, 1)
+	length, _, err := NewInteger(data, 1)
 	if err  != nil  {
 		return
 	}
@@ -111,9 +114,6 @@ func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	str = data[:data_len+1]
 	remainder = data[data_len+1:]
 	_, err = str.Length()
-	//log.Println("Parsed string of length", data_len, len, err, ":", string([]byte(str)))
-	log.Println("Remaining bytes:", string(remainder))
-	//log.Println("Errors:", err)
 	return
 }
 

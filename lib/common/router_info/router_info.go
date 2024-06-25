@@ -110,20 +110,15 @@ type RouterInfo struct {
 func (router_info RouterInfo) Bytes() ([]byte, error) {
 	var err error
 	var bytes []byte
-	log.Println("0")
 	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
-	log.Println("1")
 	bytes = append(bytes, router_info.published.Bytes()...)
-	log.Println("2")
 	bytes = append(bytes, router_info.size.Bytes()...)
-	log.Println("3")
-	for i, router_address := range router_info.addresses {
+	for _, router_address := range router_info.addresses {
 		bytes = append(bytes, router_address.Bytes()...)
-		log.Println(i+3)
 	}
 	bytes = append(bytes, router_info.peer_size.Bytes()...)
-	//bytes = append(bytes, router_info.options.Bytes()...)
-	bytes = append(bytes, []byte(*router_info.signature)...)
+	bytes = append(bytes, router_info.options.Data()...)
+	//bytes = append(bytes, []byte(*router_info.signature)...)
 
 	return bytes, err
 }
@@ -274,10 +269,10 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
-	addresses := make([]*RouterAddress, size.Int())
 	log.Println("Address Count:", size.Int())
 	for i := 0; i < size.Int(); i++ {
-		address, remainder, err := NewRouterAddress(remainder)
+		address, more, err := NewRouterAddress(remainder)
+		remainder = more
 		if err != nil {
 			log.WithFields(log.Fields{
 				"at":       "(RouterInfo) ReadRouterInfo",
@@ -287,15 +282,13 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			}).Error("error parsing router address")
 			err = errors.New("error parsing router info: not enough data")
 		}
-		log.Println("Address Remainder:", remainder)
-		addresses = append(addresses, address)
+		//log.Println("Address Remainder:", string(remainder))
+		info.addresses = append(info.addresses, address)
 	}
-	info.addresses = addresses
-	peer_size, remainder, err := NewInteger(remainder, 1)
-	info.peer_size = peer_size
-	//remainder = remainder[1:]
-	log.Println("Peer size Remainder:", string(remainder))
-	options, remainder, errs := NewMapping(remainder)
+	info.peer_size, remainder, err = NewInteger(remainder, 1)
+	log.Println("Peer Size:", info.peer_size, "Peer size Remainder:", string(remainder))
+	var errs []error
+	info.options, remainder, errs = NewMapping(remainder)
 	if len(errs) != 0 {
 		log.WithFields(log.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
@@ -309,7 +302,6 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}
 		err = errors.New("error parsing router info: " + estring)
 	}
-	info.options = options
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
