@@ -79,7 +79,7 @@ func (str I2PString) Data() (data string, err error) {
 // ToI2PString converts a Go string to an I2PString.
 // Returns error if the string exceeds STRING_MAX_SIZE.
 func ToI2PString(data string) (str I2PString, err error) {
-	data_len := len(data) + 1
+	data_len := len(data)
 	if data_len > STRING_MAX_SIZE {
 		log.WithFields(log.Fields{
 			"at":         "ToI2PI2PString",
@@ -105,7 +105,6 @@ func ToI2PString(data string) (str I2PString, err error) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
-	//log.Println("Data bytes:", string(data))
 	length, _, err := NewInteger(data, 1)
 	if err != nil {
 		return

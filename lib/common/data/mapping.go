@@ -126,7 +126,6 @@ func beginsWith(bytes []byte, chr byte) bool {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) {
-	log.Println("Read Mapping")
 	if len(bytes) < 3 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
@@ -146,8 +145,6 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	mapping.size = size
 	map_bytes := remainder[:mapping.size.Int()]
 	remainder = remainder[mapping.size.Int():]
-	log.Println("Mapping Size:", mapping.size.Int())
-	log.Println("Remainder Size:", len(remainder))
 	if len(remainder) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",

@@ -2,7 +2,6 @@ package data
 
 import (
 	"encoding/binary"
-	"log"
 )
 
 // MAX_INTEGER_SIZE is the maximum length of an I2P integer in bytes.
@@ -38,7 +37,6 @@ func (i Integer) Int() int {
 // The remaining bytes after the specified length are also returned.
 func ReadInteger(bytes []byte, size int) (Integer, []byte) {
 	if len(bytes) < size {
-		log.Println("length less than specified size")
 		return bytes[:size], bytes[len(bytes):]
 	}
 	return bytes[:size], bytes[size:]
@@ -54,7 +52,6 @@ func NewInteger(bytes []byte, size int) (integer *Integer, remainder []byte, err
 	}
 	intBytes := bytes[:integerSize]
 	remainder = bytes[integerSize:]
-	//fmt.Println("IntegerSize: ", integerSize, "IntegerBytes:", bytes)
 	i, _ := ReadInteger(intBytes, integerSize)
 	integer = &i
 	return

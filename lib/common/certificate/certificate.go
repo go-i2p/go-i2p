@@ -75,7 +75,6 @@ func (c *Certificate) RawBytes() []byte {
 
 // ExcessBytes returns the excess bytes in a certificate found after the specified payload length.
 func (c *Certificate) ExcessBytes() []byte {
-	log.Println("Bytes after:", c.len.Int())
 	return c.payload[c.len.Int():]
 }
 
@@ -156,18 +155,6 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
 			}).Error("invalid certificate, shorter than specified by length")
-			return
-		} else if certificate.len.Int() < len(data)-CERT_MIN_SIZE {
-			err = fmt.Errorf("certificate parsing warning: certificate data is longer than specified by length")
-			log.WithFields(log.Fields{
-				"at":                         "(Certificate) NewCertificate",
-				"certificate_bytes_length":   certificate.len.Int(),
-				"certificate_payload_length": payleng,
-				"data_bytes:":                string(data),
-				"kind_bytes":                 data[0:1],
-				"len_bytes":                  data[1:3],
-				"reason":                     err.Error(),
-			}).Error("invalid certificate, longer than specified by length")
 			return
 		}
 		return

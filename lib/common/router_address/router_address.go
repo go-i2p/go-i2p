@@ -115,10 +115,6 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
-	log.WithFields(log.Fields{
-		"at":     "(RouterAddress) ReadNewRouterAddress",
-		"reason": "notification",
-	}).Warn("parsing RouterAddress")
 	if len(data) == 0 {
 		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
 		err = errors.New("error parsing RouterAddress: no data")
@@ -131,7 +127,6 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"reason": "error parsing cost",
 		}).Warn("error parsing RouterAddress")
 	}
-	log.Warnf("Cost, %d Remainder: %s", router_address.cost.Int(), string(remainder))
 	router_address.expiration, remainder, err = NewDate(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -139,7 +134,6 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
 	}
-	log.Warnf("Expiration Date: %s, Remainder: %s", router_address.expiration.Time(), remainder)
 	router_address.transport_style, remainder, err = NewI2PString(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -147,7 +141,6 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"reason": "error parsing transport_style",
 		}).Error("error parsing RouterAddress")
 	}
-	log.Warnf("Transport, %s Remainder: %s", string(*router_address.transport_style), string(remainder))
 	var errs []error
 	router_address.options, remainder, errs = NewMapping(remainder)
 	for _, err := range errs {

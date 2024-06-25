@@ -194,16 +194,13 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Println("Key Certificate Remainder:", remainder)
 	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
 	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
 	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
-	log.Println("constructing pubkey of size", keys_and_cert.KeyCertificate.CryptoSize())
 	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:keys_and_cert.KeyCertificate.CryptoSize()])
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Println("constructing signing pubkey of size", keys_and_cert.KeyCertificate.SignatureSize())
 	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.KeyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
 	if err != nil {
 		return nil, nil, err

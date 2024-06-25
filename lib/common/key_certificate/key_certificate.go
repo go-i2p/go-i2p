@@ -233,7 +233,6 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	if err != nil {
 		return
 	}
-	log.Println("Certificate Remainder:", remainder)
 	if len(bytes) < KEYCERT_MIN_SIZE {
 		err = errors.New("error parsing key certificate: not enough data")
 	}
