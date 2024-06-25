@@ -3,6 +3,7 @@ package router_info
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
@@ -13,6 +14,9 @@ import (
 )
 
 const ROUTER_INFO_MIN_SIZE = 439
+
+const MIN_GOOD_VERSION = 58
+const MAX_GOOD_VERSION = 99
 
 /*
 [RouterInfo]
@@ -323,15 +327,40 @@ func (router_info *RouterInfo) RouterCapabilities() string {
 	return string(router_info.options.Values().Get(str))
 }
 
-func (router_info *RouterInfo) UnCongested() bool  {
+func (router_info *RouterInfo) RouterVersion() string {
+	str, err := ToI2PString("router.version")
+	if err != nil {
+		return ""
+	}
+	return string(router_info.options.Values().Get(str))
+}
+
+func (router_info *RouterInfo) GoodVersion() bool {
+	version := router_info.RouterVersion()
+	v := strings.Split(version, ".")
+	if len(v) != 3 {
+		return false
+	}
+	if v[0] == "0" {
+		if v[1] == "9" {
+			val, _ := strconv.Atoi(v[2])
+			if val >= MIN_GOOD_VERSION && val <= MAX_GOOD_VERSION {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (router_info *RouterInfo) UnCongested() bool {
 	caps := router_info.RouterCapabilities()
-	if strings.Contains(caps, "K"){
+	if strings.Contains(caps, "K") {
 		return false
 	}
-	if strings.Contains(caps, "G"){
+	if strings.Contains(caps, "G") {
 		return false
 	}
-	if strings.Contains(caps, "E"){
+	if strings.Contains(caps, "E") {
 		return false
 	}
 	return true
