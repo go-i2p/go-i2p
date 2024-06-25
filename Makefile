@@ -1,4 +1,5 @@
-RELEASE_VERSION=0.0.1
+RELEASE_TAG=0.0.1
+RELEASE_VERSION=${RELEASE_VERSION}
 RELEASE_DESCRIPTION=`cat PASTA.md`
 REPO := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
@@ -34,4 +35,4 @@ info:
 	echo "REPO: ${REPO}"
 
 release:
-	github-release release -u go-i2p -r go-i2p -n "${RELEASE_VERSION}" -d "${RELEASE_DESCRIPTION}" -p
+	github-release release -u go-i2p -r go-i2p -n "${RELEASE_VERSION}" -t "${RELEASE_VERSION}" -d "${RELEASE_DESCRIPTION}" -p
