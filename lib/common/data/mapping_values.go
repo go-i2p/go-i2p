@@ -10,6 +10,17 @@ import (
 // MappingValues represents the parsed key value pairs inside of an I2P Mapping.
 type MappingValues [][2]I2PString
 
+func (m MappingValues) Get(key I2PString) I2PString {
+	keyBytes, _ := key.Data()
+	for _, pair := range m {
+		kb, _ := pair[0][0:].Data()
+		if kb == keyBytes {
+			return pair[1][1:]
+		}
+	}
+	return nil
+}
+
 // ValuesToMapping creates a *Mapping using MappingValues.
 // The values are sorted in the order defined in mappingOrder.
 func ValuesToMapping(values MappingValues) *Mapping {

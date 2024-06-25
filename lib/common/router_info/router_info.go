@@ -314,6 +314,14 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	return
 }
 
+func (router_info *RouterInfo) RouterCapabilities() string {
+	str, err := ToI2PString("caps")
+	if err != nil {
+		return ""
+	}
+	return string(router_info.options.Values().Get(str))
+}
+
 // NewRouterInfo creates a new *RouterInfo from []byte using ReadRouterInfo.
 // Returns a pointer to RouterInfo unlike ReadRouterInfo.
 func NewRouterInfo(data []byte) (router_info *RouterInfo, remainder []byte, err error) {

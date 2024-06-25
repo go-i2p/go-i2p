@@ -40,13 +40,13 @@ func (str I2PString) Length() (length int, err error) {
 	}
 	l, _, _ := NewInteger(str, 1)
 	length = l.Int()
-	str_len := len(str)-1
+	str_len := len(str) - 1
 	if length != str_len {
 		log.WithFields(log.Fields{
-			"at":                    "(I2PString) Length",
-			"string_bytes_length":   str_len,
-			"string_length_field":   length,
-			"reason":                "data less than specified by length",
+			"at":                  "(I2PString) Length",
+			"string_bytes_length": str_len,
+			"string_length_field": length,
+			"reason":              "data less than specified by length",
 		}).Error("string format warning")
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
 	}
@@ -65,21 +65,21 @@ func (str I2PString) Data() (data string, err error) {
 			data = string(str[1:])
 			return
 		case "string parsing warning: string contains data beyond length":
-			data = string(str[1 : length+1])
+			data = string(str[1:])
 			return
 		}
 	}
-	if (length == 0)  {
+	if length == 0 {
 		return
 	}
-	data = string(str[1:length])
+	data = string(str[1 : length+1])
 	return
 }
 
 // ToI2PString converts a Go string to an I2PString.
 // Returns error if the string exceeds STRING_MAX_SIZE.
 func ToI2PString(data string) (str I2PString, err error) {
-	data_len := len(data)
+	data_len := len(data) + 1
 	if data_len > STRING_MAX_SIZE {
 		log.WithFields(log.Fields{
 			"at":         "ToI2PI2PString",
@@ -107,10 +107,10 @@ func ToI2PString(data string) (str I2PString, err error) {
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	//log.Println("Data bytes:", string(data))
 	length, _, err := NewInteger(data, 1)
-	if err  != nil  {
+	if err != nil {
 		return
 	}
-	data_len  := length.Int()
+	data_len := length.Int()
 	str = data[:data_len+1]
 	remainder = data[data_len+1:]
 	_, err = str.Length()
