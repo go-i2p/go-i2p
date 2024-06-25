@@ -1,4 +1,5 @@
 RELEASE_VERSION=0.0.1
+RELEASE_DESCRIPTION=`cat PASTA.md`
 REPO := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 ifdef GOROOT
@@ -33,4 +34,4 @@ info:
 	echo "REPO: ${REPO}"
 
 release:
-	github-release release -u go-i2p -repo go-i2p -name "${RELEASE_VERSION}" -p
+	github-release release -u go-i2p -repo go-i2p -name "${RELEASE_VERSION}" -d "${RELEASE_DESCRIPTION}" -p
