@@ -34,4 +34,4 @@ info:
 	echo "REPO: ${REPO}"
 
 release:
-	github-release release -u go-i2p -r go-i2p -name "${RELEASE_VERSION}" -d "${RELEASE_DESCRIPTION}" -p
+	github-release release -u go-i2p -r go-i2p -n "${RELEASE_VERSION}" -d "${RELEASE_DESCRIPTION}" -p
