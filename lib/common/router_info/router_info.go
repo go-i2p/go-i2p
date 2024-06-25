@@ -3,6 +3,7 @@ package router_info
 
 import (
 	"errors"
+	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	. "github.com/go-i2p/go-i2p/lib/common/router_address"
@@ -320,6 +321,28 @@ func (router_info *RouterInfo) RouterCapabilities() string {
 		return ""
 	}
 	return string(router_info.options.Values().Get(str))
+}
+
+func (router_info *RouterInfo) UnCongested() bool  {
+	caps := router_info.RouterCapabilities()
+	if strings.Contains(caps, "K"){
+		return false
+	}
+	if strings.Contains(caps, "G"){
+		return false
+	}
+	if strings.Contains(caps, "E"){
+		return false
+	}
+	return true
+}
+
+func (router_info *RouterInfo) Reachable() bool {
+	caps := router_info.RouterCapabilities()
+	if strings.Contains(caps, "U") {
+		return false
+	}
+	return strings.Contains(caps, "R")
 }
 
 // NewRouterInfo creates a new *RouterInfo from []byte using ReadRouterInfo.
