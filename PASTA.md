@@ -1,19 +1,18 @@
-Weekly notes about what I'm working on
-======================================
+At long last... something useful
+================================
 
-July 18, 2022:
+It's been 2 years of me mostly not having time to work on go-i2p itself since my last update.
+However, after much waiting, this library is actually **useful** for something.
+It is now being used in the `reseed-tools` application to examine RouterInfos prior to including them in reseed bundles.
+Routers that self-report as unreachable or congested will be excluded from future reseed bundles.
+Additionally, routers that self-report an old version will be excluded from reseed bundles.
+This should help new users build better connections faster with the existing, working router implementations.
 
- - Implementation-in-Progress of a pure-Noise TCP transport using flynn/noise.
- - This transport is **not** operable with the rest of the I2P network and useful
- only for testing the transport interface implementation.
- - Most examples/docs on flynn/noise use client-server paradigm and not P2P paradigm, strictly
- speaking.
- - It does *not* process messages for obfuscation or de-obfuscation, key difference from NTCP2
- - It doesn't yet actually manage sending messages on a socket, right now it can:
-  - Set up a Transport muxer
-  - Set up a Transport, which is basically a session muxer sharing a common socket
-  - Set up a Session, which is an individual connection to a peer which speaks the transport protocol
- - At some point there needs to be a loop on the socket which reads the socket for input and output.
- - At this time the transports *intentionally* do not know about the nature of the underlying socket 
- beyond the fact that it must implement a `net.Conn` interface so that it can connect over TCP.
- - In the future, this will need to be able to accept either a `net.Conn` or a `net.PacketConn`
+This is not a working release of a go-i2p router
+------------------------------------------------
+
+It is a numbered version of the go-i2p library, which is pre-release, expressly for use in the `reseed-tools` application.
+The common library works, and so do some of the cryptographic primitives, however the API is unstable and the software itself is certain to have serious bugs outside of a few well-tested areas.
+If you're using it for something other than parsing and analyzing RouterInfos and LeaseSets, you'll probably encounter bugs.
+Please report them to the https://github.com/go-i2p/go-i2p
+Use any part of it at your own risk.

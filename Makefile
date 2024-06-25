@@ -1,5 +1,5 @@
+RELEASE_VERSION=0.0.1
 REPO := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-
 
 ifdef GOROOT
 	GO = $(GOROOT)/bin/go
@@ -26,3 +26,11 @@ clean:
 
 fmt:
 	find . -name '*.go' -exec gofmt -w -s {} \;
+
+info:
+	echo "GOROOT: ${GOROOT}"
+	echo "GO: ${GO}"
+	echo "REPO: ${REPO}"
+
+release:
+	github-release release -u go-i2p -repo go-i2p -name "${RELEASE_VERSION}" -p
