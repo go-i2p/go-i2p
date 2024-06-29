@@ -1,10 +1,14 @@
 package reseed
 
 import (
+	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -47,19 +51,44 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	}
 	if su3file.FileType == su3.ZIP {
 		if su3file.ContentType == su3.RESEED {
-			var content, signature []byte
 			if err == nil {
-				content, err := ioutil.ReadAll(su3file.Content(test.key))
+				content, err := ioutil.ReadAll(su3file.Content(""))
 				if err == nil {
-					signature, err = ioutil.ReadAll(su3file.Signature())
+					signature, err := ioutil.ReadAll(su3file.Signature())
 					if err != nil {
 						return nil, err
 					}
-					// TODO: validate the signature
+					log.Println("WARNING: this doesn't validate the signature yet", signature)
+				}
+				zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
+				err = ioutil.WriteFile(zip, content, 0644)
+				if err != nil {
+					return nil, err
 				}
 				//content is a zip file, unzip it and get the files
-				err = unzip.New().Extract(content, config.RouterConfigProperties.NetDb.Path)
+				files, err := unzip.New().Extract(zip, config.RouterConfigProperties.NetDb.Path)
+				if err != nil {
+					return nil, err
+				}
+				if len(files) <= 0 {
+					return nil, fmt.Errorf("Error: reseed appears to have no content")
+				}
+				var ris []router_info.RouterInfo
+				for _, f := range files {
+					riB, err := ioutil.ReadFile(f)
+					if err != nil {
+						continue
+					}
+					ri, _, err := router_info.ReadRouterInfo(riB)
+					if err != nil {
+						continue
+					}
+					ris = append(ris, ri)
+				}
+				err = os.Remove(zip)
+				return ris, err
 			}
 		}	
 	}
+	return nil, fmt.Errorf("Undefined reseed error")
 }
