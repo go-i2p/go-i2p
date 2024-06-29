@@ -3,6 +3,7 @@ module github.com/go-i2p/go-i2p
 go 1.21
 
 require (
+	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.23.0
