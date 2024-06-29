@@ -145,6 +145,9 @@ func (db StdNetDB) SaveEntry(e *Entry) (err error) {
 // reseed if we have less than minRouters known routers
 // returns error if reseed failed
 func (db StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
+	if db.Size() > minRouters {
+		return nil
+	}
 	return
 }
 

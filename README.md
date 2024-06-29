@@ -79,7 +79,7 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Tunnel Message Crypto
     - [ ] Tunnel Message Fragmentation/Reassembly
 - Common Data Structures
-    - [/] Keys and Cert
+    - [X] Keys and Cert
     - [X] Key Certificates
     - [X] Certificate
     - [X] Lease

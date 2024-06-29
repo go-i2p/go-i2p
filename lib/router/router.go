@@ -1,10 +1,11 @@
 package router
 
 import (
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 // i2p router type
@@ -17,7 +18,7 @@ type Router struct {
 
 // create router with default configuration
 func CreateRouter() (r *Router, err error) {
-	cfg := config.DefaultRouterConfig
+	cfg := config.RouterConfigProperties
 	r, err = FromConfig(cfg)
 	return
 }
