@@ -23,6 +23,10 @@ Contents
 // https://geti2p.net/spec/common-structures#hash
 type Hash [32]byte
 
+func (h Hash) Bytes() [32]byte {
+	return h
+}
+
 // HashData returns the SHA256 sum of a []byte input as Hash.
 func HashData(data []byte) (h Hash) {
 	h = sha256.Sum256(data)

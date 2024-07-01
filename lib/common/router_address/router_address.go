@@ -101,6 +101,16 @@ func (router_address RouterAddress) TransportStyle() I2PString {
 	return *router_address.transport_style
 }
 
+// GetOption returns the value of the option specified by the key
+func (router_address RouterAddress) GetOption(key I2PString) I2PString {
+	return router_address.Options().Values().Get(key)
+}
+
+func (router_address RouterAddress) Host() I2PString {
+	host, _ := ToI2PString("host")
+	return router_address.GetOption(host)
+}
+
 // Options returns the options for this RouterAddress as an I2P Mapping.
 func (router_address RouterAddress) Options() Mapping {
 	return *router_address.options
@@ -147,8 +157,8 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing options",
-			"error": err,
-		}).Error("error parsing RouterAddress")
+			"error":  err,
+		}).Error("error parsing RozuterAddress")
 	}
 	return
 }

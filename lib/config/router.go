@@ -35,9 +35,9 @@ func defaultConfig() string {
 
 // defaults for router
 var defaultRouterConfig = &RouterConfig{
-	NetDb:     &DefaultNetDbConfig,
-	Bootstrap: &DefaultBootstrapConfig,
-	BaseDir: defaultBase(),
+	NetDb:      &DefaultNetDbConfig,
+	Bootstrap:  &DefaultBootstrapConfig,
+	BaseDir:    defaultBase(),
 	WorkingDir: defaultConfig(),
 }
 

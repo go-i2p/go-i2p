@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/common/base64"
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -19,20 +20,43 @@ import (
 )
 
 // standard network database implementation using local filesystem skiplist
-type StdNetDB string
+type StdNetDB struct {
+	DB          string
+	RouterInfos map[common.Hash]Entry
+	LeaseSets   map[common.Hash]Entry
+}
+
+func NewStdNetDB(db string) StdNetDB {
+	return StdNetDB{
+		DB:          db,
+		RouterInfos: make(map[common.Hash]Entry),
+		LeaseSets:   make(map[common.Hash]Entry),
+	}
+}
 
 func (db StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
-	fname := db.SkiplistFile(hash)
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil
+	if ri, ok := db.RouterInfos[hash]; ok {
+		chnl <- ri.ri
+		return
 	}
+	fname := db.SkiplistFile(hash)
 	buff := new(bytes.Buffer)
-	_, err = io.Copy(buff, f)
-	f.Close()
+	if f, err := os.Open(fname); err != nil {
+		return nil
+	} else {
+		if _, err := io.Copy(buff, f); err != nil {
+			return nil
+		}
+		defer f.Close()
+	}
 	chnl = make(chan router_info.RouterInfo)
 	ri, _, err := router_info.ReadRouterInfo(buff.Bytes())
 	if err == nil {
+		if _, ok := db.RouterInfos[hash]; !ok {
+			db.RouterInfos[hash] = Entry{
+				ri: ri,
+			}
+		}
 		chnl <- ri
 	}
 	return
@@ -47,7 +71,7 @@ func (db StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 
 // get netdb path
 func (db StdNetDB) Path() string {
-	return string(db)
+	return string(db.DB)
 }
 
 // return how many routers we know about in our network database
@@ -55,7 +79,7 @@ func (db StdNetDB) Size() (routers int) {
 	// TODO: implement this
 	var err error
 	var data []byte
-	if !util.CheckFileExists(db.cacheFilePath()) {
+	if !util.CheckFileExists(db.cacheFilePath()) || util.CheckFileAge(db.cacheFilePath(), 2) || len(db.RouterInfos) == 0 {
 		// regenerate
 		err = db.RecalculateSize()
 		if err != nil {
@@ -85,14 +109,38 @@ func (db StdNetDB) CheckFilePathValid(fpath string) bool {
 
 // recalculateSize recalculates cached size of netdb
 func (db StdNetDB) RecalculateSize() (err error) {
-	fpath := db.cacheFilePath()
 	count := 0
-	err = filepath.Walk(fpath, func(fname string, info os.FileInfo, err error) error {
+	err = filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
 		if info.IsDir() {
-			return err
+			if !strings.HasPrefix(db.Path(), fname) {
+				if db.Path() == fname {
+					return nil
+				}
+				return err
+			}
 		}
 		if db.CheckFilePathValid(fname) {
-			// TODO: make sure it's in a skiplist directory
+			if len(strings.Split(fname, "/")) > len(strings.Split(db.Path(), "/")) {
+				b, err := os.ReadFile(fname)
+				if err != nil {
+					return err
+				}
+				ri, _, err := router_info.ReadRouterInfo(b)
+				if err != nil {
+					return err
+				}
+				if ent, ok := db.RouterInfos[ri.IdentHash()]; !ok {
+					db.RouterInfos[ri.IdentHash()] = Entry{
+						ri: ri,
+					}
+				} else {
+					by := ent.ri.IdentHash().Bytes()
+					log.Infof("RouterInfo: %s, %s, %s", base32.EncodeToString(by[:]), ent.ri.RouterCapabilities(), ent.ri.RouterVersion())
+					for ai, ad := range ent.ri.RouterAddresses() {
+						log.Infof("  %d RouterAddress: %s IP: %s", ai, ad.TransportStyle(), ad.Host())
+					}
+				}
+			}
 			count++
 		}
 		return err
@@ -100,7 +148,7 @@ func (db StdNetDB) RecalculateSize() (err error) {
 	if err == nil {
 		str := fmt.Sprintf("%d", count)
 		var f *os.File
-		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0600)
+		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0600)
 		if err == nil {
 			_, err = io.WriteString(f, str)
 			f.Close()
@@ -148,6 +196,7 @@ func (db StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 	if db.Size() > minRouters {
 		return nil
 	}
+
 	return
 }
 

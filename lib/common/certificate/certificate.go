@@ -129,8 +129,8 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 		}).Error("invalid certificate, empty")
 		err = fmt.Errorf("error parsing certificate: certificate is empty")
 		return
-	case 1 , 2:
-		certificate.kind = Integer(data[0:len(data)-1])
+	case 1, 2:
+		certificate.kind = Integer(data[0 : len(data)-1])
 		certificate.len = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",

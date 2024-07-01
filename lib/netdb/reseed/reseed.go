@@ -2,7 +2,7 @@ package reseed
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	i2pUserAgent = "Wget/1.11.4"
+	I2pUserAgent = "Wget/1.11.4"
 )
 
 type Reseed struct {
@@ -25,10 +25,10 @@ type Reseed struct {
 }
 
 func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
-	transport := http.Transport {
+	transport := http.Transport{
 		DialContext: r.DialContext,
 	}
-	client := http.Client {
+	client := http.Client{
 		Transport: &transport,
 	}
 	URL, err := url.Parse(uri)
@@ -37,8 +37,8 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	}
 	header := http.Header{}
 	header.Add("user-agent", "Wget/1.11.4")
-	request := http.Request {
-		URL: URL,
+	request := http.Request{
+		URL:    URL,
 		Header: header,
 	}
 	response, err := client.Do(&request)
@@ -52,16 +52,16 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	if su3file.FileType == su3.ZIP {
 		if su3file.ContentType == su3.RESEED {
 			if err == nil {
-				content, err := ioutil.ReadAll(su3file.Content(""))
+				content, err := io.ReadAll(su3file.Content(""))
 				if err == nil {
-					signature, err := ioutil.ReadAll(su3file.Signature())
+					signature, err := io.ReadAll(su3file.Signature())
 					if err != nil {
 						return nil, err
 					}
-					log.Println("WARNING: this doesn't validate the signature yet", signature)
+					log.Println("warning: this doesn't validate the signature yet", signature)
 				}
 				zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
-				err = ioutil.WriteFile(zip, content, 0644)
+				err = os.WriteFile(zip, content, 0644)
 				if err != nil {
 					return nil, err
 				}
@@ -71,11 +71,11 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 					return nil, err
 				}
 				if len(files) <= 0 {
-					return nil, fmt.Errorf("Error: reseed appears to have no content")
+					return nil, fmt.Errorf("error: reseed appears to have no content")
 				}
 				var ris []router_info.RouterInfo
 				for _, f := range files {
-					riB, err := ioutil.ReadFile(f)
+					riB, err := os.ReadFile(f)
 					if err != nil {
 						continue
 					}
@@ -88,7 +88,7 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 				err = os.Remove(zip)
 				return ris, err
 			}
-		}	
+		}
 	}
-	return nil, fmt.Errorf("Undefined reseed error")
+	return nil, fmt.Errorf("error: undefined reseed error")
 }
