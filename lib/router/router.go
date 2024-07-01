@@ -69,9 +69,8 @@ func (r *Router) mainloop() {
 		e = err
 	}
 	if sz := r.ndb.Size(); sz >= 0 {
-		log.Println("NetDB Size:", sz)
+		log.Info("NetDB Size:", sz)
 	}
-
 	if e == nil {
 		// netdb ready
 		log.WithFields(log.Fields{

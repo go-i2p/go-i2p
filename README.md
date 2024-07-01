@@ -50,7 +50,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Message parsing
   - [ ] Message handling
 - NetDB
-  - [ ] Local storage
+  - [/] Local storage
   - [/] Persistence to disk
   - [X] Reseeding
   - [ ] Lookups
