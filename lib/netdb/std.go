@@ -139,10 +139,10 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 				db.RouterInfos[ri.IdentHash()] = Entry{
 					RouterInfo: &ri,
 				}
-				log.Infof("RouterInfo: %s %s, %s, %s", fname, base32.EncodeToString(ih[:]), ri.RouterCapabilities(), ri.RouterVersion())
-				for ai, ad := range ri.RouterAddresses() {
-					log.Infof("  Transport%d: %s, Address: %s", ai, ad.TransportStyle(), ad.String())
-				}
+				//log.Infof("RouterInfo: %s %s, %s, %s", fname, base32.EncodeToString(ih[:]), ri.RouterCapabilities(), ri.RouterVersion())
+				//for ai, ad := range ri.RouterAddresses() {
+				//	log.Infof("  Transport%d: %s, Address: %s", ai, ad.TransportStyle(), ad.String())
+				//}
 			} else {
 				log.Println("entry previously found in table", ent, fname)
 			}
