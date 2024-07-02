@@ -3,6 +3,10 @@ package router_address
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	log "github.com/sirupsen/logrus"
@@ -69,6 +73,31 @@ type RouterAddress struct {
 	options         *Mapping
 }
 
+// Network implements net.Addr. It returns the transport type
+func (router_address *RouterAddress) Network() string {
+	if router_address.transport_style == nil {
+		return ""
+	}
+	str, err := router_address.transport_style.Data()
+	if err != nil {
+		return ""
+	}
+	return string(str)
+}
+
+// String implements net.Addr. It returns the IP address, followed by the options
+func (router_address *RouterAddress) String() string {
+	var rv []string
+	rv = append(rv, string(router_address.HostString()))
+	rv = append(rv, string(router_address.PortString()))
+	rv = append(rv, string(router_address.StaticKeyString()))
+	rv = append(rv, string(router_address.InitializationVectorString()))
+	rv = append(rv, string(router_address.ProtocolVersionString()))
+	return strings.Join(rv, " ")
+}
+
+var ex_addr net.Addr = &RouterAddress{}
+
 // Bytes returns the router address as a []byte.
 func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
@@ -106,9 +135,70 @@ func (router_address RouterAddress) GetOption(key I2PString) I2PString {
 	return router_address.Options().Values().Get(key)
 }
 
-func (router_address RouterAddress) Host() I2PString {
+func (router_address RouterAddress) HostString() I2PString {
 	host, _ := ToI2PString("host")
 	return router_address.GetOption(host)
+}
+
+func (router_address RouterAddress) PortString() I2PString {
+	host, _ := ToI2PString("port")
+	return router_address.GetOption(host)
+}
+
+func (router_address RouterAddress) StaticKeyString() I2PString {
+	sk, _ := ToI2PString("s")
+	return router_address.GetOption(sk)
+}
+
+func (router_address RouterAddress) InitializationVectorString() I2PString {
+	iv, _ := ToI2PString("i")
+	return router_address.GetOption(iv)
+}
+
+func (router_address RouterAddress) ProtocolVersionString() I2PString {
+	v, _ := ToI2PString("v")
+	return router_address.GetOption(v)
+}
+
+func (router_address RouterAddress) Host() (net.Addr, error) {
+	host := router_address.HostString()
+	hostBytes, err := host.Data()
+	if err != nil {
+		return nil, err
+	}
+	ip := net.ParseIP(string(hostBytes))
+	if ip == nil {
+		return nil, fmt.Errorf("null host error")
+	}
+	return net.ResolveIPAddr("", ip.String())
+}
+
+func (router_address RouterAddress) Port() (string, error) {
+	port := router_address.PortString()
+	portBytes, err := port.Data()
+	if err != nil {
+		return "", err
+	}
+	val, err := strconv.Atoi(string(portBytes))
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(val), nil
+}
+
+func (router_address RouterAddress) StaticKey() I2PString {
+	sk, _ := ToI2PString("s")
+	return router_address.GetOption(sk)
+}
+
+func (router_address RouterAddress) InitializationVector() I2PString {
+	iv, _ := ToI2PString("i")
+	return router_address.GetOption(iv)
+}
+
+func (router_address RouterAddress) ProtocolVersion() I2PString {
+	v, _ := ToI2PString("v")
+	return router_address.GetOption(v)
 }
 
 // Options returns the options for this RouterAddress as an I2P Mapping.

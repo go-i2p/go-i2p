@@ -137,7 +137,7 @@ func (db StdNetDB) RecalculateSize() (err error) {
 					by := ent.ri.IdentHash().Bytes()
 					log.Infof("RouterInfo: %s, %s, %s", base32.EncodeToString(by[:]), ent.ri.RouterCapabilities(), ent.ri.RouterVersion())
 					for ai, ad := range ent.ri.RouterAddresses() {
-						log.Infof("  %d RouterAddress: %s IP: %s", ai, ad.TransportStyle(), ad.Host())
+						log.Infof("  %d Transport: %s, Address: %s", ai, ad.TransportStyle(), ad.String())
 					}
 				}
 			}
