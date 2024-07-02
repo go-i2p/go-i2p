@@ -15,12 +15,12 @@ type NoiseConn struct {
 
 // Close implements net.Conn.
 func (n *NoiseConn) Close() error {
-	panic("unimplemented")
+	return n.Close()
 }
 
 // LocalAddr implements net.Conn.
 func (n *NoiseConn) LocalAddr() net.Addr {
-	panic("unimplemented")
+	return &n.Noise.RouterAddress
 }
 
 // Read implements net.Conn.

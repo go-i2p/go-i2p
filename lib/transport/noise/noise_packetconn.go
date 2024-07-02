@@ -13,12 +13,12 @@ type NoisePacketConn struct {
 // Close implements net.PacketConn.
 // Subtle: this method shadows the method (PacketConn).Close of NoisePacketConn.PacketConn.
 func (n *NoisePacketConn) Close() error {
-	panic("unimplemented")
+	return n.PacketConn.Close()
 }
 
 // LocalAddr implements net.PacketConn.
 func (n *NoisePacketConn) LocalAddr() net.Addr {
-	panic("unimplemented")
+	return &n.Noise.RouterAddress
 }
 
 // ReadFrom implements net.PacketConn.
