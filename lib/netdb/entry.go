@@ -10,8 +10,8 @@ import (
 // netdb entry
 // wraps a router info and provides serialization
 type Entry struct {
-	ri router_info.RouterInfo
-	ls lease_set.LeaseSet
+	*router_info.RouterInfo
+	*lease_set.LeaseSet
 }
 
 func (e *Entry) WriteTo(w io.Writer) (err error) {

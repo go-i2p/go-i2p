@@ -85,6 +85,10 @@ func (router_address *RouterAddress) Network() string {
 	return string(str)
 }
 
+func (router_address *RouterAddress) UDP() bool {
+	return strings.HasPrefix(strings.ToLower(router_address.Network()), "ssu")
+}
+
 // String implements net.Addr. It returns the IP address, followed by the options
 func (router_address *RouterAddress) String() string {
 	var rv []string
@@ -93,7 +97,18 @@ func (router_address *RouterAddress) String() string {
 	rv = append(rv, string(router_address.StaticKeyString()))
 	rv = append(rv, string(router_address.InitializationVectorString()))
 	rv = append(rv, string(router_address.ProtocolVersionString()))
-	return strings.Join(rv, " ")
+	if router_address.UDP() {
+		rv = append(rv, string(router_address.IntroducerHashString(0)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(0)))
+		rv = append(rv, string(router_address.IntroducerTagString(0)))
+		rv = append(rv, string(router_address.IntroducerHashString(1)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(1)))
+		rv = append(rv, string(router_address.IntroducerTagString(1)))
+		rv = append(rv, string(router_address.IntroducerHashString(2)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(2)))
+		rv = append(rv, string(router_address.IntroducerTagString(2)))		
+	}
+	return strings.TrimSpace(strings.Join(rv, " ")) 
 }
 
 var ex_addr net.Addr = &RouterAddress{}
@@ -160,13 +175,41 @@ func (router_address RouterAddress) ProtocolVersionString() I2PString {
 	return router_address.GetOption(v)
 }
 
+func (router_address RouterAddress) IntroducerHashString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("ih" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("ih0")
+	return router_address.GetOption(v)
+}
+func (router_address RouterAddress) IntroducerExpirationString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("iexp" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("iexp0")
+	return router_address.GetOption(v)
+}
+func (router_address RouterAddress) IntroducerTagString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("itag" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("itag0")
+	return router_address.GetOption(v)
+}
+
 func (router_address RouterAddress) Host() (net.Addr, error) {
 	host := router_address.HostString()
 	hostBytes, err := host.Data()
 	if err != nil {
 		return nil, err
 	}
-	ip := net.ParseIP(string(hostBytes))
+	ip := net.ParseIP(hostBytes)
 	if ip == nil {
 		return nil, fmt.Errorf("null host error")
 	}
@@ -179,26 +222,32 @@ func (router_address RouterAddress) Port() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	val, err := strconv.Atoi(string(portBytes))
+	val, err := strconv.Atoi(portBytes)
 	if err != nil {
 		return "", err
 	}
 	return strconv.Itoa(val), nil
 }
 
-func (router_address RouterAddress) StaticKey() I2PString {
-	sk, _ := ToI2PString("s")
-	return router_address.GetOption(sk)
+func (router_address RouterAddress) StaticKey() ([32]byte, error) {
+	sk := router_address.StaticKeyString()
+	if len([]byte(sk)) != 32 {
+		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	}
+	return [32]byte(sk), nil
+
 }
 
-func (router_address RouterAddress) InitializationVector() I2PString {
-	iv, _ := ToI2PString("i")
-	return router_address.GetOption(iv)
+func (router_address RouterAddress) InitializationVector() ([32]byte, error) {
+	iv := router_address.InitializationVectorString()
+	if len([]byte(iv)) != 32 {
+		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	}
+	return [32]byte(iv), nil
 }
 
-func (router_address RouterAddress) ProtocolVersion() I2PString {
-	v, _ := ToI2PString("v")
-	return router_address.GetOption(v)
+func (router_address RouterAddress) ProtocolVersion() (string, error) {
+	return router_address.ProtocolVersionString().Data()
 }
 
 // Options returns the options for this RouterAddress as an I2P Mapping.

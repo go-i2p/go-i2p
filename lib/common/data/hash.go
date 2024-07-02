@@ -29,6 +29,7 @@ func (h Hash) Bytes() [32]byte {
 
 // HashData returns the SHA256 sum of a []byte input as Hash.
 func HashData(data []byte) (h Hash) {
+	//log.Println("Hashing Data:", data)
 	h = sha256.Sum256(data)
 	return
 }

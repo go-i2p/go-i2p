@@ -2,7 +2,6 @@ package noise
 
 import (
 	"net"
-	"strings"
 	"time"
 
 	"github.com/flynn/noise"
@@ -60,7 +59,7 @@ func (ns *Noise) DialNoise(n, addr string) (conn NoiseConn, err error) {
 		return
 	}
 	network := "tcp"
-	if strings.HasPrefix(strings.ToLower(ns.Network()), "ssu") {
+	if ns.UDP() {
 		network = "udp"
 	}
 	netConn, err := net.Dial(network, addr)

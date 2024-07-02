@@ -2,7 +2,6 @@ package noise
 
 import (
 	"net"
-	"strings"
 )
 
 type NoiseListener struct {
@@ -28,7 +27,7 @@ func (ns *NoiseListener) Accept() (net.Conn, error) {
 func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
 	ns.Config.Initiator = false
 	network := "tcp"
-	if strings.HasPrefix(strings.ToLower(ns.Network()), "ssu") {
+	if ns.UDP() {
 		network = "udp"
 	}
 	host, err := ns.Host()
