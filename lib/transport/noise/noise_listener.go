@@ -2,6 +2,8 @@ package noise
 
 import (
 	"net"
+
+	"github.com/flynn/noise"
 )
 
 type NoiseListener struct {
@@ -21,30 +23,19 @@ func (ns *NoiseListener) Close() error {
 
 // Accept implements net.Listener.
 func (ns *NoiseListener) Accept() (net.Conn, error) {
-	return ns.Listener.Accept()
-}
-
-func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
-	ns.Config.Initiator = false
-	network := "tcp"
-	if ns.UDP() {
-		network = "udp"
-	}
-	host, err := ns.Host()
+	cfg := ns.Noise
+	cfg.Initiator = false
+	accept, err := ns.Listener.Accept()
 	if err != nil {
-		return
+		return nil, err
 	}
-	port, err := ns.Port()
+	hs, err := noise.NewHandshakeState(ns.Config)
 	if err != nil {
-		return
+		return nil, err
 	}
-	hostip := net.JoinHostPort(host.String(), port)
-	listener, err := net.Listen(network, hostip)
-	if err != nil {
-		return
-	}
-	return NoiseListener{
-		Noise:    ns,
-		Listener: listener,
+	cfg.HandshakeState = hs
+	return &NoiseConn{
+		Noise: cfg,
+		Conn: accept,
 	}, nil
 }

@@ -40,7 +40,7 @@ func TestCheckRouterAddressValidNoErrWithValidData(t *testing.T) {
 	router_address, _, _ := ReadRouterAddress([]byte{0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
 	mapping, err := GoMapToMapping(map[string]string{"host": "127.0.0.1", "port": "4567"})
 	assert.Nil(err, "GoMapToMapping() returned error with valid data")
-	router_address.options = mapping
+	router_address.TransportOptions = mapping
 	//router_address = append(router_address, mapping...)
 	err, exit := router_address.checkValid()
 

@@ -128,21 +128,19 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 			if err != nil {
 				return err
 			}
-			log.Println("Reading in Routerinfo:", base32.EncodeToString(b))
 			ri, _, err := router_info.ReadRouterInfo(b)
 			if err != nil {
 				return err
 			}
 			ih := ri.IdentHash().Bytes()
 			log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
+			for _, addr := range ri.RouterAddresses() {
+				log.Println(string(addr.Bytes()))
+			}
 			if ent, ok := db.RouterInfos[ih]; !ok {
 				db.RouterInfos[ri.IdentHash()] = Entry{
 					RouterInfo: &ri,
 				}
-				//log.Infof("RouterInfo: %s %s, %s, %s", fname, base32.EncodeToString(ih[:]), ri.RouterCapabilities(), ri.RouterVersion())
-				//for ai, ad := range ri.RouterAddresses() {
-				//	log.Infof("  Transport%d: %s, Address: %s", ai, ad.TransportStyle(), ad.String())
-				//}
 			} else {
 				log.Println("entry previously found in table", ent, fname)
 			}
@@ -183,8 +181,7 @@ func (db *StdNetDB) Exists() bool {
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
-	var h common.Hash
-	h = e.RouterInfo.IdentHash()
+	h := e.RouterInfo.IdentHash()
 	//if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0700)
 	if err == nil {
@@ -198,13 +195,22 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	return
 }
 
+func (db *StdNetDB) Save() (err error) {
+	for _, dbe := range db.RouterInfos {
+		if e := db.SaveEntry(&dbe); e != nil {
+			err = e
+			// TODO: log this
+		}
+	}
+	return
+}
+
 // reseed if we have less than minRouters known routers
 // returns error if reseed failed
 func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 	if db.Size() > minRouters {
 		return nil
 	}
-
 	return
 }
 

@@ -67,18 +67,18 @@ options :: Mapping
 //
 // https://geti2p.net/spec/common-structures#routeraddress
 type RouterAddress struct {
-	cost            *Integer
-	expiration      *Date
-	transport_style *I2PString
-	options         *Mapping
+	TransportCost    *Integer
+	ExpirationDate   *Date
+	TransportType    *I2PString
+	TransportOptions *Mapping
 }
 
 // Network implements net.Addr. It returns the transport type
 func (router_address *RouterAddress) Network() string {
-	if router_address.transport_style == nil {
+	if router_address.TransportType == nil {
 		return ""
 	}
-	str, err := router_address.transport_style.Data()
+	str, err := router_address.TransportType.Data()
 	if err != nil {
 		return ""
 	}
@@ -106,9 +106,9 @@ func (router_address *RouterAddress) String() string {
 		rv = append(rv, string(router_address.IntroducerTagString(1)))
 		rv = append(rv, string(router_address.IntroducerHashString(2)))
 		rv = append(rv, string(router_address.IntroducerExpirationString(2)))
-		rv = append(rv, string(router_address.IntroducerTagString(2)))		
+		rv = append(rv, string(router_address.IntroducerTagString(2)))
 	}
-	return strings.TrimSpace(strings.Join(rv, " ")) 
+	return strings.TrimSpace(strings.Join(rv, " "))
 }
 
 var ex_addr net.Addr = &RouterAddress{}
@@ -116,9 +116,9 @@ var ex_addr net.Addr = &RouterAddress{}
 // Bytes returns the router address as a []byte.
 func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
-	bytes = append(bytes, router_address.cost.Bytes()...)
-	bytes = append(bytes, router_address.expiration.Bytes()...)
-	strData, err := router_address.transport_style.Data()
+	bytes = append(bytes, router_address.TransportCost.Bytes()...)
+	bytes = append(bytes, router_address.ExpirationDate.Bytes()...)
+	strData, err := router_address.TransportType.Data()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
@@ -126,23 +126,23 @@ func (router_address RouterAddress) Bytes() []byte {
 	} else {
 		bytes = append(bytes, strData...)
 	}
-	bytes = append(bytes, router_address.options.Data()...)
+	bytes = append(bytes, router_address.TransportOptions.Data()...)
 	return bytes
 }
 
 // Cost returns the cost for this RouterAddress as a Go integer.
 func (router_address RouterAddress) Cost() int {
-	return router_address.cost.Int()
+	return router_address.TransportCost.Int()
 }
 
 // Expiration returns the expiration for this RouterAddress as an I2P Date.
 func (router_address RouterAddress) Expiration() Date {
-	return *router_address.expiration
+	return *router_address.ExpirationDate
 }
 
 // TransportStyle returns the transport style for this RouterAddress as an I2PString.
 func (router_address RouterAddress) TransportStyle() I2PString {
-	return *router_address.transport_style
+	return *router_address.TransportType
 }
 
 // GetOption returns the value of the option specified by the key
@@ -252,7 +252,7 @@ func (router_address RouterAddress) ProtocolVersion() (string, error) {
 
 // Options returns the options for this RouterAddress as an I2P Mapping.
 func (router_address RouterAddress) Options() Mapping {
-	return *router_address.options
+	return *router_address.TransportOptions
 }
 
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
@@ -269,21 +269,21 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		err = errors.New("error parsing RouterAddress: no data")
 		return
 	}
-	router_address.cost, remainder, err = NewInteger(data, 1)
+	router_address.TransportCost, remainder, err = NewInteger(data, 1)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing cost",
 		}).Warn("error parsing RouterAddress")
 	}
-	router_address.expiration, remainder, err = NewDate(remainder)
+	router_address.ExpirationDate, remainder, err = NewDate(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
 	}
-	router_address.transport_style, remainder, err = NewI2PString(remainder)
+	router_address.TransportType, remainder, err = NewI2PString(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
@@ -291,7 +291,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RouterAddress")
 	}
 	var errs []error
-	router_address.options, remainder, errs = NewMapping(remainder)
+	router_address.TransportOptions, remainder, errs = NewMapping(remainder)
 	for _, err := range errs {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
