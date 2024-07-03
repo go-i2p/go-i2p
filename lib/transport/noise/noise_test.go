@@ -25,9 +25,15 @@ func TestEstablishment(t *testing.T) {
 	}else if len(r) != 0 {
 		log.Println("r should not be longer than 0")
 	}
+	trans, err := data.ToI2PString("NTCP2")
+	if err != nil {
+		t.Error(err)
+	}
 	ra := router_address.RouterAddress{
 		TransportCost: i,
 		ExpirationDate: &d,
+		TransportType: &trans,
+		TransportOptions: nil,
 	}
 	ns, err := NewNoise(ra)
 	if err != nil {
