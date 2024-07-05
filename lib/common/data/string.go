@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -41,11 +42,12 @@ func (str I2PString) Length() (length int, err error) {
 	l, _, _ := NewInteger(str, 1)
 	length = l.Int()
 	str_len := len(str) - 1
-	if length != str_len {
+	if length > str_len {
 		log.WithFields(log.Fields{
 			"at":                  "(I2PString) Length",
 			"string_bytes_length": str_len,
 			"string_length_field": length,
+			"data":                string(str),
 			"reason":              "data less than specified by length",
 		}).Error("string format warning")
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
@@ -73,6 +75,7 @@ func (str I2PString) Data() (data string, err error) {
 		return
 	}
 	data = string(str[1 : length+1])
+	log.Println("data", data)
 	return
 }
 
@@ -109,17 +112,21 @@ func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	if err != nil {
 		return
 	}
-	data_len := length.Int()
-	str = data[:data_len+1]
-	remainder = data[data_len+1:]
-	_, err = str.Length()
+	data_len := length.Int() + 1
+	str = data[:data_len]
+	remainder = data[data_len:]
+	l, err := str.Length()
+	if l != data_len-1 {
+		err = fmt.Errorf("error reading I2P string, length does not match data")
+		return
+	}
 	return
 }
 
 // NewI2PString creates a new *I2PString from []byte using ReadI2PString.
 // Returns a pointer to I2PString unlike ReadI2PString.
-func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
+/*func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
 	objstr, remainder, err := ReadI2PString(data)
 	str = &objstr
 	return
-}
+}*/

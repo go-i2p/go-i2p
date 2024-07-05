@@ -302,6 +302,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}
 		err = errors.New("error parsing router info: " + estring)
 	}
+	info.signature, remainder, err = NewSignature(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",

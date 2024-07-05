@@ -1,6 +1,7 @@
 package noise
 
 import (
+	"log"
 	"net"
 	"sync"
 
@@ -45,6 +46,8 @@ var ex_ns net.Conn = &NoiseConn{}
 var ex_ns_l net.Listener = &NoiseListener{}
 var ex_ns_u net.PacketConn = &NoisePacketConn{}
 
+//var ex_tc_up net.PacketConn = &NoiseConn{}
+
 func NewNoise(ra router_address.RouterAddress) (ns *Noise, err error) {
 	ns = &Noise{}
 	ns.RouterAddress = ra
@@ -65,14 +68,23 @@ func (ns *Noise) Addr() net.Addr {
 	return ns.LocalAddr()
 }
 
-func (ns *Noise) DialNoise(n, addr string) (conn NoiseConn, err error) {
+func (ns *Noise) DialNoise(addr router_address.RouterAddress) (conn NoiseConn, err error) {
 	cfg := ns
 	cfg.Initiator = false
 	network := "tcp"
 	if ns.UDP() {
 		network = "udp"
 	}
-	netConn, err := net.Dial(network, addr)
+	host, err := ns.RouterAddress.Host()
+	if err != nil {
+		return
+	}
+	port, err := ns.RouterAddress.Port()
+	if err != nil {
+		return
+	}
+	raddr := net.JoinHostPort(host.String(), port)
+	netConn, err := net.Dial(network, raddr)
 	if err != nil {
 		return
 	}
@@ -94,15 +106,19 @@ func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
 	if ns.UDP() {
 		network = "udp"
 	}
+	log.Println("u", network)
 	host, err := ns.Host()
 	if err != nil {
 		return
 	}
+	log.Println("h", host)
 	port, err := ns.Port()
 	if err != nil {
 		return
 	}
+	log.Println("p", port)
 	hostip := net.JoinHostPort(host.String(), port)
+	log.Println("hip", hostip)
 	listener, err := net.Listen(network, hostip)
 	if err != nil {
 		return

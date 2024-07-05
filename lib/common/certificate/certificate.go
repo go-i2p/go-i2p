@@ -75,7 +75,10 @@ func (c *Certificate) RawBytes() []byte {
 
 // ExcessBytes returns the excess bytes in a certificate found after the specified payload length.
 func (c *Certificate) ExcessBytes() []byte {
-	return c.payload[c.len.Int():]
+	if len(c.payload) >= c.len.Int() {
+		return c.payload[c.len.Int():]
+	}
+	return nil
 }
 
 // Bytes returns the entire certificate in []byte form, trims payload to specified length.

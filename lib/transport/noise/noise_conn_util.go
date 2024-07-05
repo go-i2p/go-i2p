@@ -15,9 +15,9 @@ func (nc *NoiseConn) HandshakeStateRead() (err error) {
 	nc.SetCipherStates(cs1, cs2)
 	nc.HandshakeStateResponsibility = true
 	//if nc.rfmValidate != nil {
-		//err = nc.rfmValidate(nc.Conn.RemoteAddr(), nc.readMsgBuf)
-		//nc.rfmValidate = nil
-		//return err
+	//err = nc.rfmValidate(nc.Conn.RemoteAddr(), nc.readMsgBuf)
+	//nc.rfmValidate = nil
+	//return err
 	//}
 	return nil
 }
@@ -30,8 +30,8 @@ func (nc *NoiseConn) HandshakeStateCreate(out, payload []byte) (by []byte, err e
 		return nil, err
 	}
 	//if nc.rfmValidate != nil {
-		// only applies to responders, not initiators.
-		//nc.rfmValidate = nil
+	// only applies to responders, not initiators.
+	//nc.rfmValidate = nil
 	//}
 	nc.SetCipherStates(cs1, cs2)
 	nc.HandshakeStateResponsibility = false

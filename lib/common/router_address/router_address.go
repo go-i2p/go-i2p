@@ -69,7 +69,7 @@ options :: Mapping
 type RouterAddress struct {
 	TransportCost    *Integer
 	ExpirationDate   *Date
-	TransportType    *I2PString
+	TransportType    I2PString
 	TransportOptions *Mapping
 }
 
@@ -142,7 +142,7 @@ func (router_address RouterAddress) Expiration() Date {
 
 // TransportStyle returns the transport style for this RouterAddress as an I2PString.
 func (router_address RouterAddress) TransportStyle() I2PString {
-	return *router_address.TransportType
+	return router_address.TransportType
 }
 
 // GetOption returns the value of the option specified by the key
@@ -152,6 +152,7 @@ func (router_address RouterAddress) GetOption(key I2PString) I2PString {
 
 func (router_address RouterAddress) HostString() I2PString {
 	host, _ := ToI2PString("host")
+	log.Println("Host", string(host))
 	return router_address.GetOption(host)
 }
 
@@ -283,7 +284,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
 	}
-	router_address.TransportType, remainder, err = NewI2PString(remainder)
+	router_address.TransportType, remainder, err = ReadI2PString(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",

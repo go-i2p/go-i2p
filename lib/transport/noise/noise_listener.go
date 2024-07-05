@@ -36,6 +36,6 @@ func (ns *NoiseListener) Accept() (net.Conn, error) {
 	cfg.HandshakeState = hs
 	return &NoiseConn{
 		Noise: cfg,
-		Conn: accept,
+		Conn:  accept,
 	}, nil
 }

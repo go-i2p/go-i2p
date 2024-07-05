@@ -235,13 +235,17 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 	if len(bytes) < KEYCERT_MIN_SIZE {
 		err = errors.New("error parsing key certificate: not enough data")
+		remainder = bytes[KEYCERT_MIN_SIZE:]
 	}
 	key_certificate = &KeyCertificate{
 		Certificate: certificate,
-		spkType:     Integer(bytes[4:5]),
-		cpkType:     Integer(bytes[6:7]),
 	}
-	remainder = bytes[KEYCERT_MIN_SIZE:]
+	if len(bytes) >= 5 {
+		key_certificate.spkType = Integer(bytes[4:5])
+	}
+	if len(bytes) >= 7 {
+		key_certificate.cpkType = Integer(bytes[6:7])
+	}
 	return
 }
 
