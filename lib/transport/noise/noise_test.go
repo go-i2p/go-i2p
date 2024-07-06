@@ -29,11 +29,15 @@ func TestEstablishment(t *testing.T) {
 				if ns, err := NewNoise(*ra); err != nil {
 					t.Error("ERROR", err)
 				} else {
-					log.Println("NOISE TEST", ns)
-					if nl, err := ns.ListenNoise(); err != nil {
+					if host, err := ns.Host(); err != nil {
 						t.Error("ERROR", err)
 					} else {
-						defer nl.Close()
+						log.Println("NOISE TEST", host)
+						if nl, err := ns.ListenNoise(); err != nil {
+							t.Error("ERROR", err)
+						} else {
+							defer nl.Close()
+						}
 					}
 				}
 			}

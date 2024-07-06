@@ -152,13 +152,12 @@ func (router_address RouterAddress) GetOption(key I2PString) I2PString {
 
 func (router_address RouterAddress) HostString() I2PString {
 	host, _ := ToI2PString("host")
-	log.Println("Host", string(host))
 	return router_address.GetOption(host)
 }
 
 func (router_address RouterAddress) PortString() I2PString {
-	host, _ := ToI2PString("port")
-	return router_address.GetOption(host)
+	port, _ := ToI2PString("port")
+	return router_address.GetOption(port)
 }
 
 func (router_address RouterAddress) StaticKeyString() I2PString {
