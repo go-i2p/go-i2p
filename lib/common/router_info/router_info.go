@@ -102,7 +102,7 @@ signature :: Signature
 //
 // https://geti2p.net/spec/common-structures#routerinfo
 type RouterInfo struct {
-	router_identity *RouterIdentity
+	router_identity RouterIdentity
 	published       *Date
 	size            *Integer
 	addresses       []*RouterAddress
@@ -112,9 +112,7 @@ type RouterInfo struct {
 }
 
 // Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
-func (router_info RouterInfo) Bytes() ([]byte, error) {
-	var err error
-	var bytes []byte
+func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
 	bytes = append(bytes, router_info.published.Bytes()...)
 	bytes = append(bytes, router_info.size.Bytes()...)
@@ -123,14 +121,27 @@ func (router_info RouterInfo) Bytes() ([]byte, error) {
 	}
 	bytes = append(bytes, router_info.peer_size.Bytes()...)
 	bytes = append(bytes, router_info.options.Data()...)
-	//bytes = append(bytes, []byte(*router_info.signature)...)
+	bytes = append(bytes, []byte(*router_info.signature)...)
 
 	return bytes, err
 }
 
+func (router_info RouterInfo) String() string {
+	str := "Certificate: " + string(router_info.router_identity.KeysAndCert.Bytes())
+	str += "Published: " + string(router_info.published.Bytes())
+	str += "Addresses:" + string(router_info.size.Bytes())
+	for index, router_address := range router_info.addresses {
+		str += "Address " + strconv.Itoa(index) + ": " + router_address.String()
+	}
+	str += "Peer Size: " + string(router_info.peer_size.Bytes())
+	str += "Options: " + string(router_info.options.Data())
+	str += "Signature: " + string([]byte(*router_info.signature))
+	return str
+}
+
 // RouterIdentity returns the router identity as *RouterIdentity.
 func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
-	return router_info.router_identity
+	return &router_info.router_identity
 }
 
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
@@ -231,8 +242,7 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error) {
-	identity, remainder, err := NewRouterIdentity(bytes)
-	info.router_identity = identity
+	info.router_identity, remainder, err = ReadRouterIdentity(bytes)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
@@ -241,9 +251,9 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
+		return
 	}
-	date, remainder, err := NewDate(remainder)
-	info.published = date
+	info.published, remainder, err = NewDate(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
@@ -253,27 +263,17 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
-	size, remainder, err := NewInteger(remainder, 1)
+	info.size, remainder, err = NewInteger(remainder, 1)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
 			"data_len":     len(remainder),
-			"required_len": size.Int(),
+			"required_len": info.size.Int(),
 			"reason":       "read error",
 		}).Error("error parsing router info size")
 	}
-	info.size = size
-	if err != nil {
-		log.WithFields(log.Fields{
-			"at":           "(RouterInfo) ReadRouterInfo",
-			"data_len":     len(remainder),
-			"required_len": size.Int(),
-			"reason":       "not enough data",
-		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
-	}
-	for i := 0; i < size.Int(); i++ {
-		address, more, err := NewRouterAddress(remainder)
+	for i := 0; i < info.size.Int(); i++ {
+		address, more, err := ReadRouterAddress(remainder)
 		remainder = more
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -284,7 +284,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			}).Error("error parsing router address")
 			err = errors.New("error parsing router info: not enough data")
 		}
-		info.addresses = append(info.addresses, address)
+		info.addresses = append(info.addresses, &address)
 	}
 	info.peer_size, remainder, err = NewInteger(remainder, 1)
 	var errs []error
@@ -368,12 +368,4 @@ func (router_info *RouterInfo) Reachable() bool {
 		return false
 	}
 	return strings.Contains(caps, "R")
-}
-
-// NewRouterInfo creates a new *RouterInfo from []byte using ReadRouterInfo.
-// Returns a pointer to RouterInfo unlike ReadRouterInfo.
-func NewRouterInfo(data []byte) (router_info *RouterInfo, remainder []byte, err error) {
-	routerInfo, remainder, err := ReadRouterInfo(data)
-	router_info = &routerInfo
-	return
 }

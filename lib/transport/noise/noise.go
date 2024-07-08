@@ -2,6 +2,7 @@ package noise
 
 import (
 	"net"
+	"strconv"
 	"sync"
 
 	"github.com/flynn/noise"
@@ -109,6 +110,8 @@ func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
 	if err != nil {
 		return
 	}
+	portNum, _ := strconv.Atoi(port)
+	port = strconv.Itoa(portNum+1)
 	hostip := net.JoinHostPort(host.String(), port)
 	listener, err := net.Listen(network, hostip)
 	if err != nil {

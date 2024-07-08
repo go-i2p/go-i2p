@@ -92,7 +92,7 @@ const (
 
 // type KeyCertificate []byte
 type KeyCertificate struct {
-	*Certificate
+	Certificate
 	spkType Integer
 	cpkType Integer
 }
@@ -228,7 +228,7 @@ func (key_certificate KeyCertificate) CryptoSize() (size int) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder []byte, err error) {
-	var certificate *Certificate
+	var certificate Certificate
 	certificate, remainder, err = ReadCertificate(bytes)
 	if err != nil {
 		return
@@ -250,7 +250,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 }
 
 // KeyCertificateFromCertificate returns a *KeyCertificate from a *Certificate.
-func KeyCertificateFromCertificate(certificate *Certificate) *KeyCertificate {
+func KeyCertificateFromCertificate(certificate Certificate) *KeyCertificate {
 	k, _, _ := NewKeyCertificate(certificate.RawBytes())
 	return k
 }

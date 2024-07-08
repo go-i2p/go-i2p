@@ -14,9 +14,9 @@ import (
 func buildDestination() *router_identity.RouterIdentity {
 	router_ident_data := make([]byte, 128+256)
 	router_ident_data = append(router_ident_data, []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}...)
-	ident, _, err := router_identity.NewRouterIdentity(router_ident_data)
+	ident, _, err := router_identity.ReadRouterIdentity(router_ident_data)
 	panic(err)
-	return ident
+	return &ident
 }
 
 func buildPublicKey() []byte {

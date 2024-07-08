@@ -22,6 +22,7 @@ func TestEstablishment(t *testing.T) {
 			if ri, rem, err := router_info.ReadRouterInfo(riBytes); err != nil {
 				t.Error("ERROR", err)
 			} else {
+				log.Println(ri.String())
 				if len(rem) != 0 {
 					t.Error("ERROR", "Too much data", len(rem), string(rem))
 				}

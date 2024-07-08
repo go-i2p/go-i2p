@@ -31,7 +31,31 @@ type I2PString []byte
 // Length returns the length specified in the first byte.
 // Returns error if the specified does not match the actual length or the string is otherwise invalid.
 func (str I2PString) Length() (length int, err error) {
-	return len(str)-1, nil
+	if len(str) == 0 {
+		log.WithFields(log.Fields{
+			"at":     "(I2PString) Length",
+			"reason": "no data",
+		}).Error("error parsing string")
+		err = errors.New("error parsing string: zero length")
+		return
+	}
+	l, _, err := NewInteger(str[:], 1)
+	if err != nil {
+		return l.Int(), err
+	}
+	length = l.Int()
+	str_len := len(str)
+	if length > str_len {
+		log.WithFields(log.Fields{
+			"at":                  "(I2PString) Length",
+			"string_bytes_length": str_len,
+			"string_length_field": length,
+			"data":                string(str),
+			"reason":              "data less than specified by length",
+		}).Error("string format warning")
+		err = errors.New("string parsing warning: string data is shorter than specified by length")
+	}
+	return
 }
 
 // Data returns the I2PString content as a string trimmed to the specified length and not including the length byte.

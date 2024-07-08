@@ -79,7 +79,7 @@ type KeysAndCert struct {
 }
 
 // Bytes returns the entire KeyCertificate in []byte form, trims payload to specified length.
-func (keys_and_cert *KeysAndCert) Bytes() []byte {
+func (keys_and_cert KeysAndCert) Bytes() []byte {
 	return keys_and_cert.KeyCertificate.Bytes()
 }
 
@@ -161,15 +161,15 @@ func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.
 }
 
 // Certfificate returns the certificate.
-func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
+func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 	return keys_and_cert.KeyCertificate.Certificate
 }
 
-// NewKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
+// ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
-func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
+func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
-	keys_and_cert = &KeysAndCert{}
+	//keys_and_cert = KeysAndCert{}
 	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
@@ -192,20 +192,20 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 	}
 	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
 	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
 	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
 	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:keys_and_cert.KeyCertificate.CryptoSize()])
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.KeyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
 	keys_and_cert.padding = padding
-	return keys_and_cert, remainder, err
+	return
 }

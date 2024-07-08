@@ -26,7 +26,7 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#destination
 type Destination struct {
-	*KeysAndCert
+	KeysAndCert
 }
 
 // Base32Address returns the I2P base32 address for this Destination.
@@ -48,17 +48,9 @@ func (destination Destination) Base64() string {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadDestination(data []byte) (destination Destination, remainder []byte, err error) {
-	keys_and_cert, remainder, err := NewKeysAndCert(data)
+	keys_and_cert, remainder, err := ReadKeysAndCert(data)
 	destination = Destination{
 		keys_and_cert,
 	}
 	return
-}
-
-// NewDestination creates a new *Destination from []byte using ReadDestination.
-// Returns a pointer to Destination unlike ReadDestination.
-func NewDestination(data []byte) (destination *Destination, remainder []byte, err error) {
-	objdestination, remainder, err := ReadDestination(data)
-	destination = &objdestination
-	return destination, remainder, err
 }

@@ -119,8 +119,8 @@ func (c *Certificate) Data() (data []byte) {
 
 // NewCertificate creates a new Certficiate from []byte
 // returns err if the certificate is too short or if the payload doesn't match specified length.
-func NewCertificate(data []byte) (certificate *Certificate, err error) {
-	certificate = &Certificate{}
+func NewCertificate(data []byte) (certificate Certificate, err error) {
+	certificate = Certificate{}
 	switch len(data) {
 	case 0:
 		certificate.kind = Integer([]byte{0})
@@ -166,7 +166,7 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 
 // ReadCertificate creates a Certificate from []byte and returns any ExcessBytes at the end of the input.
 // returns err if the certificate could not be read.
-func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, err error) {
+func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
 	certificate, err = NewCertificate(data)
 	if err != nil && err.Error() == "certificate parsing warning: certificate data is longer than specified by length" {
 		err = nil

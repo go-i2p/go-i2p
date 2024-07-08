@@ -92,6 +92,7 @@ func (router_address *RouterAddress) UDP() bool {
 // String implements net.Addr. It returns the IP address, followed by the options
 func (router_address *RouterAddress) String() string {
 	var rv []string
+	rv = append(rv, string(router_address.TransportStyle()))
 	rv = append(rv, string(router_address.HostString()))
 	rv = append(rv, string(router_address.PortString()))
 	rv = append(rv, string(router_address.StaticKeyString()))
@@ -299,13 +300,5 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 			"error":  err,
 		}).Error("error parsing RozuterAddress")
 	}
-	return
-}
-
-// NewRouterAddress creates a new *RouterAddress from []byte using ReadRouterAddress.
-// Returns a pointer to RouterAddress unlike ReadRouterAddress.
-func NewRouterAddress(data []byte) (router_address *RouterAddress, remainder []byte, err error) {
-	objrouteraddress, remainder, err := ReadRouterAddress(data)
-	router_address = &objrouteraddress
 	return
 }
