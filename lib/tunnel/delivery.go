@@ -708,6 +708,7 @@ func maybeAppendDelay(di_flag DeliveryInstructions, data, current []byte) (now [
 	}
 	return
 }
+
 func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
 	if di_type == FIRST_FRAGMENT {
 		if fragmented, _ := di_flag.Fragmented(); fragmented {

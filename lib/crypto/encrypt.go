@@ -8,7 +8,6 @@ type Encrypter interface {
 }
 
 type PublicEncryptionKey interface {
-
 	// create a new encrypter to encrypt data to this public key
 	NewEncrypter() (Encrypter, error)
 

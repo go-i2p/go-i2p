@@ -74,7 +74,7 @@ func TestCertificateDataWhenTooLong(t *testing.T) {
 	certificate, _, _ := ReadCertificate(bytes)
 	cert_data := certificate.Data()
 
-	cert_len := certificate.Length() //len(cert_data)
+	cert_len := certificate.Length() // len(cert_data)
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was too long")
 	if cert_data[0] != 0xff || cert_data[1] != 0xff {
 		t.Fatal("certificate.Data() returned incorrect data when data was too long")

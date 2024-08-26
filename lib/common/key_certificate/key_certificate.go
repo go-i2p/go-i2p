@@ -181,11 +181,11 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		copy(ec_key[KEYCERT_SPK_SIZE:], key_certificate.Certificate.RawBytes()[4:4+extra])
 		signing_public_key = ec_key
 	case KEYCERT_SIGN_RSA2048:
-		//var rsa_key crypto.RSA2048PublicKey
-		//extra := KEYCERT_SIGN_RSA2048_SIZE - 128
-		//copy(rsa_key[:], data)
-		//copy(rsa_key[128:], key_certificate[4:4+extra])
-		//signing_public_key = rsa_key
+		// var rsa_key crypto.RSA2048PublicKey
+		// extra := KEYCERT_SIGN_RSA2048_SIZE - 128
+		// copy(rsa_key[:], data)
+		// copy(rsa_key[128:], key_certificate[4:4+extra])
+		// signing_public_key = rsa_key
 	case KEYCERT_SIGN_RSA3072:
 	case KEYCERT_SIGN_RSA4096:
 	case KEYCERT_SIGN_ED25519:

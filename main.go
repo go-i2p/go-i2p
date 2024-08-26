@@ -1,12 +1,12 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	log "github.com/sirupsen/logrus"
-
-	"flag"
 )
 
 func main() {

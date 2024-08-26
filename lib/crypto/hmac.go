@@ -4,11 +4,15 @@ import (
 	"crypto/md5"
 )
 
-const IPAD = byte(0x36)
-const OPAD = byte(0x5C)
+const (
+	IPAD = byte(0x36)
+	OPAD = byte(0x5C)
+)
 
-type HMACKey [32]byte
-type HMACDigest [16]byte
+type (
+	HMACKey    [32]byte
+	HMACDigest [16]byte
+)
 
 func (hk HMACKey) xor(p byte) (i []byte) {
 	i = make([]byte, 64)
@@ -25,7 +29,6 @@ func (hk HMACKey) xor(p byte) (i []byte) {
 
 // do i2p hmac
 func I2PHMAC(data []byte, k HMACKey) (d HMACDigest) {
-
 	buff := make([]byte, 64+len(data))
 	ip := k.xor(IPAD)
 	copy(buff, ip)

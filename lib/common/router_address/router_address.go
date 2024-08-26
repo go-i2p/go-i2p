@@ -185,6 +185,7 @@ func (router_address RouterAddress) IntroducerHashString(num int) I2PString {
 	v, _ := ToI2PString("ih0")
 	return router_address.GetOption(v)
 }
+
 func (router_address RouterAddress) IntroducerExpirationString(num int) I2PString {
 	if num >= 0 && num <= 2 {
 		val := strconv.Itoa(num)
@@ -194,6 +195,7 @@ func (router_address RouterAddress) IntroducerExpirationString(num int) I2PStrin
 	v, _ := ToI2PString("iexp0")
 	return router_address.GetOption(v)
 }
+
 func (router_address RouterAddress) IntroducerTagString(num int) I2PString {
 	if num >= 0 && num <= 2 {
 		val := strconv.Itoa(num)
@@ -236,7 +238,6 @@ func (router_address RouterAddress) StaticKey() ([32]byte, error) {
 		return [32]byte{}, fmt.Errorf("error: invalid static key")
 	}
 	return [32]byte(sk), nil
-
 }
 
 func (router_address RouterAddress) InitializationVector() ([32]byte, error) {

@@ -61,11 +61,11 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 					log.Println("warning: this doesn't validate the signature yet", signature)
 				}
 				zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
-				err = os.WriteFile(zip, content, 0644)
+				err = os.WriteFile(zip, content, 0o644)
 				if err != nil {
 					return nil, err
 				}
-				//content is a zip file, unzip it and get the files
+				// content is a zip file, unzip it and get the files
 				files, err := unzip.New().Extract(zip, config.RouterConfigProperties.NetDb.Path)
 				if err != nil {
 					return nil, err

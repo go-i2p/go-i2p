@@ -11,5 +11,4 @@ const (
 )
 
 // Transport is an ntcp transport implementing transport.Transport interface
-type Transport struct {
-}
+type Transport struct{}

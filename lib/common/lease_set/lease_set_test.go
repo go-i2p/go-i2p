@@ -77,7 +77,7 @@ func TestDestinationIsCorrect(t *testing.T) {
 	dest, err := lease_set.Destination()
 	assert.Nil(err)
 	dest_cert := dest.Certificate()
-	//assert.Nil(err)
+	// assert.Nil(err)
 	cert_type := dest_cert.Type()
 	assert.Nil(err)
 	assert.Equal(certificate.CERT_KEY, cert_type)

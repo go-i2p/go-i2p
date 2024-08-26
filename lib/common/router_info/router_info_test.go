@@ -131,7 +131,6 @@ func TestRouterAddressesReturnsAddresses(t *testing.T) {
 			),
 		)
 	}
-
 }
 
 func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
@@ -162,7 +161,6 @@ func TestRouterAddressesReturnsAddressesWithMultiple(t *testing.T) {
 			)
 		}
 	}
-
 }
 
 func TestPeerSizeIsZero(t *testing.T) {
@@ -200,7 +198,7 @@ func TestRouterIdentityIsCorrect(t *testing.T) {
 
 	router_info, _ := buildFullRouterInfo()
 	router_identity := router_info.RouterIdentity()
-	//assert.Nil(err)
+	// assert.Nil(err)
 	assert.Equal(
 		0,
 		bytes.Compare(

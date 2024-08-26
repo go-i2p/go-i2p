@@ -58,9 +58,9 @@ func mappingOrder(values MappingValues) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingValues, remainder_bytes []byte, errs []error) {
-	//mapping := remainder
-	//var remainder = mapping
-	//var err error
+	// mapping := remainder
+	// var remainder = mapping
+	// var err error
 	if remainder == nil || len(remainder) < 1 {
 		log.WithFields(log.Fields{
 			"at":     "(Mapping) Values",
@@ -92,7 +92,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 
 	encounteredKeysMap := map[string]bool{}
 	// pop off length bytes before parsing kv pairs
-	//remainder = remainder[2:]
+	// remainder = remainder[2:]
 
 	for {
 		// Read a key, breaking on fatal errors
@@ -116,12 +116,12 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				//return
+				// return
 			}
 		}
 		// overwriting remainder with more as another var to prevent memory weirdness in loops
 		remainder = more
-		//log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
+		// log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
 
 		// Check if key has already been encountered in this mapping
 		keyBytes, _ := key_str.Data()
@@ -160,13 +160,13 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				//return
+				// return
 			}
 		}
 		// overwriting remainder with more as another var to prevent memory weirdness in loops
 		remainder = more
-		//log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
-		//log.Printf("(MAPPING VALUES DEBUG) String: value: %s", val_str)
+		// log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
+		// log.Printf("(MAPPING VALUES DEBUG) String: value: %s", val_str)
 		if !beginsWith(remainder, 0x3b) {
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",
@@ -190,5 +190,4 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 	}
 	values = &map_values
 	return
-
 }

@@ -7,13 +7,29 @@ import (
 
 type NoisePacketConn struct {
 	*Noise
-	net.PacketConn
+	// this is always a actually a PacketConn
+	net.Conn
+}
+
+// Read implements net.Conn.
+func (*NoisePacketConn) Read(b []byte) (n int, err error) {
+	panic("unimplemented")
+}
+
+// RemoteAddr implements net.Conn.
+func (n *NoisePacketConn) RemoteAddr() net.Addr {
+	panic("unimplemented")
+}
+
+// Write implements net.Conn.
+func (*NoisePacketConn) Write(b []byte) (n int, err error) {
+	panic("unimplemented")
 }
 
 // Close implements net.PacketConn.
-// Subtle: this method shadows the method (PacketConn).Close of NoisePacketConn.PacketConn.
+// Subtle: this method shadows the method (Conn).Close of NoisePacketConn.Conn.
 func (n *NoisePacketConn) Close() error {
-	return n.PacketConn.Close()
+	return n.Conn.Close()
 }
 
 // LocalAddr implements net.PacketConn.

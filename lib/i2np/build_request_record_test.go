@@ -14,7 +14,6 @@ func TestReadBuildRequestRecordReceiveTunnelTooLittleData(t *testing.T) {
 	receive_tunnel, err := readBuildRequestRecordReceiveTunnel([]byte{0x01})
 	assert.Equal(tunnel.TunnelID(0), receive_tunnel)
 	assert.Equal(ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA, err)
-
 }
 
 func TestReadBuildRequestRecordReceiveTunnelValidData(t *testing.T) {

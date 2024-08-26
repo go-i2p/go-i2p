@@ -169,7 +169,7 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
 func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
-	//keys_and_cert = KeysAndCert{}
+	// keys_and_cert = KeysAndCert{}
 	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",

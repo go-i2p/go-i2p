@@ -172,7 +172,6 @@ func TestNewKeysAndCertWithMissingData(t *testing.T) {
 	if assert.NotNil(err) {
 		assert.Equal("error parsing KeysAndCert: data is smaller than minimum valid size", err.Error())
 	}
-
 }
 
 func TestNewKeysAndCertWithMissingCertData(t *testing.T) {

@@ -31,7 +31,6 @@ func TestCheckRouterAddressValidReportsDataMissing(t *testing.T) {
 
 	err, exit := router_address.checkValid()
 	assert.Equal(exit, false, "checkValid indicates to stop parsing when some fields  may be present")
-
 }
 
 func TestCheckRouterAddressValidNoErrWithValidData(t *testing.T) {
@@ -41,7 +40,7 @@ func TestCheckRouterAddressValidNoErrWithValidData(t *testing.T) {
 	mapping, err := GoMapToMapping(map[string]string{"host": "127.0.0.1", "port": "4567"})
 	assert.Nil(err, "GoMapToMapping() returned error with valid data")
 	router_address.TransportOptions = mapping
-	//router_address = append(router_address, mapping...)
+	// router_address = append(router_address, mapping...)
 	err, exit := router_address.checkValid()
 
 	assert.Nil(err, "checkValid() reported error with valid data")

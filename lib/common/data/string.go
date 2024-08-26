@@ -69,7 +69,7 @@ func (str I2PString) Data() (data string, err error) {
 		case "string parsing warning: string data is shorter than specified by length":
 			if is, e := ToI2PString(string(str[:])); e != nil {
 				return "", e
-			}else{
+			} else {
 				return is.Data()
 			}
 		case "string parsing warning: string contains data beyond length":

@@ -149,8 +149,10 @@ padding :: Data
 total length: 222
 */
 
-type BuildRequestRecordElGamalAES [528]byte
-type BuildRequestRecordElGamal [528]byte
+type (
+	BuildRequestRecordElGamalAES [528]byte
+	BuildRequestRecordElGamal    [528]byte
+)
 
 type BuildRequestRecord struct {
 	ReceiveTunnel tunnel.TunnelID

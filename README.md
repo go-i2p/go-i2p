@@ -41,7 +41,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Elligator2
   - [ ] HKDF
   - [ ] HMAC
-  - [ ] Noise subsystem
+  - [/] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
   - [ ] ElGamal/AES+SessionTag

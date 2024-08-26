@@ -27,7 +27,6 @@ func TestValuesExclusesPairWithBadData(t *testing.T) {
 		assert.Equal(key, "a", "Values() returned by data with invalid key contains incorrect present key")
 		assert.Equal(val, "b", "Values() returned by data with invalid key contains incorrect present key")
 	}
-
 }
 
 func TestValuesWarnsMissingData(t *testing.T) {

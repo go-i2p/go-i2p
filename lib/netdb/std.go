@@ -154,7 +154,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 	if err == nil {
 		str := fmt.Sprintf("%d", count)
 		var f *os.File
-		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0600)
+		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
 			_, err = io.WriteString(f, str)
 			f.Close()
@@ -182,8 +182,8 @@ func (db *StdNetDB) Exists() bool {
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
 	h := e.RouterInfo.IdentHash()
-	//if err == nil {
-	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0700)
+	// if err == nil {
+	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
 	if err == nil {
 		err = e.WriteTo(f)
 		f.Close()
@@ -224,7 +224,7 @@ func (db *StdNetDB) Ensure() (err error) {
 
 // create base network database directory
 func (db *StdNetDB) Create() (err error) {
-	mode := os.FileMode(0700)
+	mode := os.FileMode(0o700)
 	p := db.Path()
 	log.Infof("Create network database in %s", p)
 

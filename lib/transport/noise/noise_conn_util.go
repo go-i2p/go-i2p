@@ -2,6 +2,8 @@ package noise
 
 import "github.com/flynn/noise"
 
+// HandshakeStateRead reads a handshake's state off the socket for storage in the
+// NoiseConn.HandshakeState
 func (nc *NoiseConn) HandshakeStateRead() (err error) {
 	nc.readMsgBuf, err = nc.ReadMsg(nc.readMsgBuf[:0])
 	if err != nil {
@@ -35,7 +37,7 @@ func (nc *NoiseConn) HandshakeStateCreate(out, payload []byte) (by []byte, err e
 	//}
 	nc.SetCipherStates(cs1, cs2)
 	nc.HandshakeStateResponsibility = false
-	//nc.readBarrier.Release()
+	// nc.readBarrier.Release()
 	return out, nc.Frame(out[outlen:], out[outlen+4:])
 }
 
@@ -54,7 +56,7 @@ func (nc *NoiseConn) SetCipherStates(cs1, cs2 *noise.CipherState) {
 		nc.send, nc.recv = cs2, cs1
 	}
 	if nc.send != nil {
-		//nc.readBarrier.Release()
+		// nc.readBarrier.Release()
 		nc.handshakeHash = nc.HandshakeState.ChannelBinding()
 		nc.HandshakeState = nil
 	}

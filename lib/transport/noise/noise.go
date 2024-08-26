@@ -10,7 +10,7 @@ import (
 )
 
 // wrapper around flynn/noise with just enough options exposed to enable configuring NTCP2
-
+// possible and/or relatively intuitive
 type Noise struct {
 	noise.Config
 	router_address.RouterAddress // always the local addr
@@ -42,10 +42,11 @@ func (ns *Noise) lockMutex() {
 	}
 }
 
-var ex_ns net.Conn = &NoiseConn{}
-var ex_ns_l net.Listener = &NoiseListener{}
-var ex_ns_u net.PacketConn = &NoisePacketConn{}
-//var ex_tc_up net.PacketConn = &NoiseConn{}
+var (
+	ex_ns   net.Conn       = &NoiseConn{}
+	ex_ns_l net.Listener   = &NoiseListener{}
+	ex_ns_u net.PacketConn = &NoisePacketConn{}
+)
 
 func NewNoise(ra router_address.RouterAddress) (ns *Noise, err error) {
 	ns = &Noise{}
@@ -53,8 +54,10 @@ func NewNoise(ra router_address.RouterAddress) (ns *Noise, err error) {
 	ns.Config = noise.Config{
 		CipherSuite: noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:     noise.HandshakeXK,
-		//StaticKeypair: ,
-		//EphemeralKeypair: ,
+		// here's the sort of tricky/undefined part. The NTCP2 spec says we need to be able to obfuscate and deobfuscate these static keys before we give them to noise.
+		// pretty sure that's no biggie but designing it has been... wierd? probably overthinking it.
+		// StaticKeypair: ,
+		// EphemeralKeypair: ,
 	}
 	return
 }
@@ -67,35 +70,60 @@ func (ns *Noise) Addr() net.Addr {
 	return ns.LocalAddr()
 }
 
-func (ns *Noise) DialNoise(addr router_address.RouterAddress) (conn NoiseConn, err error) {
+func (ns *Noise) DialNoise(addr router_address.RouterAddress) (conn net.Conn, err error) {
 	cfg := ns
 	cfg.Initiator = false
 	network := "tcp"
+	var host net.Addr
+	var port string
 	if ns.UDP() {
 		network = "udp"
+		host, err = ns.RouterAddress.Host()
+		if err != nil {
+			return
+		}
+		port, err = ns.RouterAddress.Port()
+		if err != nil {
+			return
+		}
+		raddr := net.JoinHostPort(host.String(), port)
+		var netConn net.Conn
+		netConn, err = net.Dial(network, raddr)
+		if err != nil {
+			return
+		}
+		cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
+		if err != nil {
+			return
+		}
+		return &NoisePacketConn{
+			Noise: cfg,
+			Conn:  netConn,
+		}, nil
+	} else {
+		host, err = ns.RouterAddress.Host()
+		if err != nil {
+			return
+		}
+		port, err = ns.RouterAddress.Port()
+		if err != nil {
+			return
+		}
+		raddr := net.JoinHostPort(host.String(), port)
+		var netConn net.Conn
+		netConn, err = net.Dial(network, raddr)
+		if err != nil {
+			return
+		}
+		cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
+		if err != nil {
+			return
+		}
+		return &NoiseConn{
+			Noise: cfg,
+			Conn:  netConn,
+		}, nil
 	}
-	host, err := ns.RouterAddress.Host()
-	if err != nil {
-		return
-	}
-	port, err := ns.RouterAddress.Port()
-	if err != nil {
-		return
-	}
-	raddr := net.JoinHostPort(host.String(), port)
-	netConn, err := net.Dial(network, raddr)
-	if err != nil {
-		return
-	}
-	hs, err := noise.NewHandshakeState(cfg.Config)
-	if err != nil {
-		return
-	}
-	cfg.HandshakeState = hs
-	return NoiseConn{
-		Noise: cfg,
-		Conn:  netConn,
-	}, nil
 }
 
 func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
@@ -111,7 +139,7 @@ func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
 		return
 	}
 	portNum, _ := strconv.Atoi(port)
-	port = strconv.Itoa(portNum+1)
+	port = strconv.Itoa(portNum + 1)
 	hostip := net.JoinHostPort(host.String(), port)
 	listener, err := net.Listen(network, hostip)
 	if err != nil {
