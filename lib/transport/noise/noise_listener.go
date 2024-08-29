@@ -2,13 +2,16 @@ package noise
 
 import (
 	"net"
+	"sync"
 
 	"github.com/flynn/noise"
 )
 
 type NoiseListener struct {
-	*Noise
+	Noise
 	net.Listener
+	sync.Mutex
+	lock bool
 }
 
 // Addr implements net.Listener.

@@ -22,38 +22,19 @@ func TestEstablishment(t *testing.T) {
 			if ri, rem, err := router_info.ReadRouterInfo(riBytes); err != nil {
 				t.Error("ERROR", err)
 			} else {
-				log.Println(ri.String())
-				if len(rem) != 0 {
-					t.Error("ERROR", "Too much data", len(rem), string(rem))
-				}
-				ra := ri.RouterAddresses()[0]
-				if ns, err := NewNoise(*ra); err != nil {
+				log.Println(ri.String(), rem)
+				if ns, err := NewNoise(ri); err != nil {
 					t.Error("ERROR", err)
 				} else {
-					if host, err := ns.Host(); err != nil {
+					host := ns.LocalAddr()
+					log.Println("NOISE TEST", host)
+					if nl, err := ns.DialNoise(*ri.RouterAddresses()[0]); err != nil {
 						t.Error("ERROR", err)
 					} else {
-						log.Println("NOISE TEST", host)
-						if nl, err := ns.ListenNoise(); err != nil {
-							t.Error("ERROR", err)
-						} else {
-							defer nl.Close()
-						}
+						defer nl.Close()
 					}
 				}
 			}
 		}
 	}
-	/*conn, err := ns.DialNoise()
-	if err != nil {
-		t.Error("ERROR", err)
-	}
-	log.Println("NOISE TEST")
-	test := []byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-AA")
-	bytes, err := conn.Write(test)
-	if err != nil {
-		t.Error(err)
-	}
-	log.Println("NOISE TEST")
-	log.Print(bytes)*/
 }

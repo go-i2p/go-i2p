@@ -13,8 +13,7 @@ import (
 // Noise obfuscation functions used in I2P NTCP2 and SSU2 Handshakes,
 // including obfuscating the ephemeral keys with a known key and IV found
 // in the netDb.
-
-func AESDeObfuscateEphemeralKeys(cipherText string, config noise.Config, bob router_address.RouterAddress) (*noise.DHKey, error) {
+func AESDeObfuscateEphemeralKeys(cipherText string, config noise.Config, bob router_address.RouterAddress) ([]byte, error) {
 	bobsStaticKey, err := bob.StaticKey()
 	if err != nil {
 		return nil, err
@@ -26,8 +25,8 @@ func AESDeObfuscateEphemeralKeys(cipherText string, config noise.Config, bob rou
 	log.WithFields(
 		log.Fields{
 			"at": "(noise) AESObfuscateEphemeralKeys",
-		}).Debugf("getting ready to obfuscate our ephemeral keys with bob's static key %s and IV %s", bobsStaticKey, bobsInitializatonVector)
-	cipherTextDecoded, err := hex.DecodeString(cipherText)
+		}).Debugf("getting ready to deobfuscate our bob's ephemeral keys with bob's static key %s and IV %s", bobsStaticKey, bobsInitializatonVector)
+	deobfuscate, err := hex.DecodeString(cipherText)
 	if err != nil {
 		return nil, err
 	}
@@ -36,9 +35,6 @@ func AESDeObfuscateEphemeralKeys(cipherText string, config noise.Config, bob rou
 		return nil, err
 	}
 	mode := cipher.NewCBCDecrypter(block, bobsInitializatonVector[:])
-	mode.CryptBlocks([]byte(cipherTextDecoded), []byte(cipherTextDecoded))
-	dhk := &noise.DHKey{
-		Private: cipherTextDecoded,
-	}
-	return dhk, nil
+	mode.CryptBlocks([]byte(deobfuscate), []byte(deobfuscate))
+	return deobfuscate, nil
 }

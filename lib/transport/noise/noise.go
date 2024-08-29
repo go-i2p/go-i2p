@@ -1,45 +1,31 @@
 package noise
 
 import (
+	"fmt"
+	"log"
 	"net"
 	"strconv"
-	"sync"
 
 	"github.com/flynn/noise"
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
 )
 
 // wrapper around flynn/noise with just enough options exposed to enable configuring NTCP2
 // possible and/or relatively intuitive
 type Noise struct {
 	noise.Config
-	router_address.RouterAddress // always the local addr
+	router_info.RouterInfo // always the local
 	*noise.HandshakeState
-	sync.Mutex
 
 	HandshakeStateResponsibility bool
 	handshakeHash                []byte
 
-	lock       bool
 	send, recv *noise.CipherState
 
 	readMsgBuf  []byte
 	writeMsgBuf []byte
 	readBuf     []byte
-}
-
-func (ns *Noise) unlockMutex() {
-	if ns.lock {
-		ns.lock = false
-		ns.Mutex.Unlock()
-	}
-}
-
-func (ns *Noise) lockMutex() {
-	if !ns.lock {
-		ns.lock = true
-		ns.Mutex.Lock()
-	}
 }
 
 var (
@@ -48,14 +34,19 @@ var (
 	ex_ns_u net.PacketConn = &NoisePacketConn{}
 )
 
-func NewNoise(ra router_address.RouterAddress) (ns *Noise, err error) {
+// NewNoise creates a new Noise-based transport with only the config for our side of the connection.
+// It accepts a RouterInfo which should always be our own RouterInfo.
+func NewNoise(ri router_info.RouterInfo) (ns *Noise, err error) {
 	ns = &Noise{}
-	ns.RouterAddress = ra
+	ns.RouterInfo = ri
+	// sk, err := ra.StaticKey()
+	if err != nil {
+		return nil, err
+	}
 	ns.Config = noise.Config{
 		CipherSuite: noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:     noise.HandshakeXK,
-		// here's the sort of tricky/undefined part. The NTCP2 spec says we need to be able to obfuscate and deobfuscate these static keys before we give them to noise.
-		// pretty sure that's no biggie but designing it has been... wierd? probably overthinking it.
+		// StaticKeypair: ,
 		// StaticKeypair: ,
 		// EphemeralKeypair: ,
 	}
@@ -63,78 +54,68 @@ func NewNoise(ra router_address.RouterAddress) (ns *Noise, err error) {
 }
 
 func (ns *Noise) LocalAddr() net.Addr {
-	return &ns.RouterAddress
+	return &ns.RouterInfo
 }
 
 func (ns *Noise) Addr() net.Addr {
 	return ns.LocalAddr()
 }
 
-func (ns *Noise) DialNoise(addr router_address.RouterAddress) (conn net.Conn, err error) {
-	cfg := ns
-	cfg.Initiator = false
-	network := "tcp"
-	var host net.Addr
-	var port string
-	if ns.UDP() {
-		network = "udp"
-		host, err = ns.RouterAddress.Host()
-		if err != nil {
-			return
+// MatchAddr finds a transport suitable for an incoming RouterAddress
+func (ns *Noise) MatchAddr(addr net.Addr) (*router_address.RouterAddress, error) {
+	for index, address := range ns.RouterInfo.RouterAddresses() {
+		log.Println("index", index, "address", address)
+		if addr.Network() == address.Network() {
+			return address, nil
 		}
-		port, err = ns.RouterAddress.Port()
-		if err != nil {
-			return
-		}
-		raddr := net.JoinHostPort(host.String(), port)
-		var netConn net.Conn
-		netConn, err = net.Dial(network, raddr)
-		if err != nil {
-			return
-		}
-		cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
-		if err != nil {
-			return
-		}
-		return &NoisePacketConn{
-			Noise: cfg,
-			Conn:  netConn,
-		}, nil
-	} else {
-		host, err = ns.RouterAddress.Host()
-		if err != nil {
-			return
-		}
-		port, err = ns.RouterAddress.Port()
-		if err != nil {
-			return
-		}
-		raddr := net.JoinHostPort(host.String(), port)
-		var netConn net.Conn
-		netConn, err = net.Dial(network, raddr)
-		if err != nil {
-			return
-		}
-		cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
-		if err != nil {
-			return
-		}
-		return &NoiseConn{
-			Noise: cfg,
-			Conn:  netConn,
-		}, nil
 	}
+	return nil, fmt.Errorf("no suitable address found for type %s from %s", addr.Network(), addr.String())
 }
 
-func (ns *Noise) ListenNoise() (list NoiseListener, err error) {
+func (ns Noise) DialNoise(addr router_address.RouterAddress) (net.Conn, error) {
+	cfg := ns
+	cfg.Initiator = false
+	network := addr.Network()
+	host, err := addr.Host()
+	if err != nil {
+		return nil, err
+	}
+	port, err := addr.Port()
+	if err != nil {
+		return nil, err
+	}
+	raddr := net.JoinHostPort(host.String(), port)
+	var netConn net.Conn
+	netConn, err = net.Dial(network, raddr)
+	if err != nil {
+		return nil, err
+	}
+	cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
+	if err != nil {
+		return nil, err
+	}
+	laddr, err := ns.MatchAddr(&addr)
+	if err != nil {
+		return nil, err
+	}
+	// cfg.Config.PeerEphemeral, err = AESDeObfuscateEphemeralKeys()
+	return &NoiseConn{
+		Noise: cfg,
+		Conn:  netConn,
+		raddr: addr,
+		laddr: *laddr,
+	}, nil
+}
+
+func (ns Noise) ListenNoise(addr router_address.RouterAddress) (list NoiseListener, err error) {
 	cfg := ns
 	cfg.Initiator = false
 	network := "tcp"
-	host, err := ns.Host()
+	host, err := addr.Host()
 	if err != nil {
 		return
 	}
-	port, err := ns.Port()
+	port, err := addr.Port()
 	if err != nil {
 		return
 	}

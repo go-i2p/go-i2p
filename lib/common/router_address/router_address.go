@@ -73,7 +73,7 @@ type RouterAddress struct {
 	TransportOptions *Mapping
 }
 
-// Network implements net.Addr. It returns the transport type
+// Network implements net.Addr. It returns the transport type plus 4 or 6
 func (router_address *RouterAddress) Network() string {
 	if router_address.TransportType == nil {
 		return ""
@@ -82,7 +82,19 @@ func (router_address *RouterAddress) Network() string {
 	if err != nil {
 		return ""
 	}
-	return string(str)
+	return string(str) + router_address.IPVersion()
+}
+
+// IPVersion returns a string "4" for IPv4 or 6 for IPv6
+func (router_address *RouterAddress) IPVersion() string {
+	str, err := router_address.CapsString().Data()
+	if err != nil {
+		return ""
+	}
+	if strings.HasSuffix(str, "6") {
+		return "6"
+	}
+	return "4"
 }
 
 func (router_address *RouterAddress) UDP() bool {
@@ -159,6 +171,11 @@ func (router_address RouterAddress) HostString() I2PString {
 func (router_address RouterAddress) PortString() I2PString {
 	port, _ := ToI2PString("port")
 	return router_address.GetOption(port)
+}
+
+func (router_address RouterAddress) CapsString() I2PString {
+	caps, _ := ToI2PString("caps")
+	return router_address.GetOption(caps)
 }
 
 func (router_address RouterAddress) StaticKeyString() I2PString {

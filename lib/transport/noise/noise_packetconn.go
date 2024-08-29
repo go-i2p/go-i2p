@@ -34,7 +34,7 @@ func (n *NoisePacketConn) Close() error {
 
 // LocalAddr implements net.PacketConn.
 func (n *NoisePacketConn) LocalAddr() net.Addr {
-	return &n.Noise.RouterAddress
+	return &n.Noise.RouterInfo
 }
 
 // ReadFrom implements net.PacketConn.

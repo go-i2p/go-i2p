@@ -2,16 +2,35 @@ package noise
 
 import (
 	"net"
+	"sync"
 	"time"
 
 	"github.com/flynn/noise"
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
 )
 
 const FlushLimit = 640 * 1024
 
 type NoiseConn struct {
-	*Noise
+	Noise
 	net.Conn
+	sync.Mutex
+	laddr, raddr router_address.RouterAddress
+	lock         bool
+}
+
+func (ns *NoiseConn) unlockMutex() {
+	if ns.lock {
+		ns.lock = false
+		ns.Mutex.Unlock()
+	}
+}
+
+func (ns *NoiseConn) lockMutex() {
+	if !ns.lock {
+		ns.lock = true
+		ns.Mutex.Lock()
+	}
 }
 
 // Close implements net.Conn.
@@ -21,7 +40,7 @@ func (nc *NoiseConn) Close() error {
 
 // LocalAddr implements net.Conn.
 func (nc *NoiseConn) LocalAddr() net.Addr {
-	return &nc.Noise.RouterAddress
+	return &nc.laddr
 }
 
 // Write implements net.Conn.

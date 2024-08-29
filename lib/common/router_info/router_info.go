@@ -179,66 +179,15 @@ func (router_info RouterInfo) Options() (mapping Mapping) {
 	return *router_info.options
 }
 
-//
-// Return the signature of this router info
-//
-
 // Signature returns the signature for this RouterInfo as an I2P Signature.
 func (router_info RouterInfo) Signature() (signature Signature) {
 	return *router_info.signature
 }
 
-//
-// Used during parsing to determine where in the RouterInfo the Mapping data begins.
-//
-/*func (router_info RouterInfo) optionsLocation() (location int) {
-	data, remainder, err := ReadRouterIdentity(router_info)
-	if err != nil {
-		return
-	}
-	location += len(data)
-
-	remainder_len := len(remainder)
-	if remainder_len < 9 {
-		log.WithFields(log.Fields{
-			"at":           "(RouterInfo) optionsLocation",
-			"data_len":     remainder_len,
-			"required_len": 9,
-			"reason":       "not enough data",
-		}).Error("error parsing router info")
-		err = errors.New("error parsing router addresses: not enough data")
-		return
-	}
-	location += 9
-
-	remaining := remainder[9:]
-	var router_address RouterAddress
-	var router_addresses []RouterAddress
-	addr_count, cerr := router_info.RouterAddressCount()
-	if cerr != nil {
-		err = cerr
-		return
-	}
-	for i := 0; i < addr_count; i++ {
-		router_address, remaining, err = ReadRouterAddress(remaining)
-		if err == nil {
-			location += len(router_address)
-			router_addresses = append(router_addresses, router_address)
-		}
-	}
-	location += 1
-	return
-}*/
-
-//
-// Used during parsing to determine the size of the options in the RouterInfo.
-//
-/*func (router_info RouterInfo) optionsSize() (size int) {
-	head := router_info.optionsLocation()
-	s := Integer(router_info[head : head+2])
-	size = s.Int() + 2
-	return
-}*/
+// Network implements net.Addr
+func (router_info RouterInfo) Network() string {
+	return "i2p"
+}
 
 // ReadRouterInfo returns RouterInfo from a []byte.
 // The remaining bytes after the specified length are also returned.
