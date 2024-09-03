@@ -2,7 +2,7 @@
 
 Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started.
 
-## Getting Starting
+## Getting Started
 
 Install required dependencies
 
