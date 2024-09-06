@@ -28,7 +28,10 @@ func main() {
 		})
 		r.Start()
 		r.Wait()
-		r.Close()
+		err = r.Close()
+		if err != nil {
+			log.Errorf("failed to close i2p router: %s", err)
+		}
 	} else {
 		log.Errorf("failed to create i2p router: %s", err)
 	}
