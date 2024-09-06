@@ -170,9 +170,6 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE
 	cert := destination.Certificate()
 	cert_len := cert.Length()
-	if err != nil {
-		return
-	}
 	lease_set_len := len(lease_set)
 	if lease_set_len < offset+LEASE_SET_SPK_SIZE {
 		log.WithFields(log.Fields{
