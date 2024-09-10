@@ -46,13 +46,13 @@ func (str I2PString) Length() (length int, err error) {
 	length = l.Int()
 	str_len := len(str)
 	if length > str_len {
-		log.WithFields(log.Fields{
+		/*log.WithFields(log.Fields{
 			"at":                  "(I2PString) Length",
 			"string_bytes_length": str_len,
 			"string_length_field": length,
 			"data":                string(str),
 			"reason":              "data less than specified by length",
-		}).Error("string format warning")
+		}).Error("string format warning")*/
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
 	}
 	return

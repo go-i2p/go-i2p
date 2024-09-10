@@ -85,78 +85,11 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 
 // PublicKey returns the public key as a crypto.PublicKey.
 func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
-	/*cert := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if err != nil {
-		return
-	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-		// PublicKey space as ElgPublicKey.
-		var elg_key crypto.ElgPublicKey
-		copy(keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-		key = elg_key
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a PublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			key, err = KeyCertificateFromCertificate(cert).ConstructPublicKey(
-				keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-			// PublicKey space as ElgPublicKey.  No other Certificate
-			// types are currently in use.
-			var elg_key crypto.ElgPublicKey
-			copy(keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-			key = elg_key
-			log.WithFields(log.Fields{
-				"at":        "(KeysAndCert) PublicKey",
-				"cert_type": cert_type,
-			}).Warn("unused certificate type observed")
-		}
-
-	}
-	return*/
 	return keys_and_cert.publicKey
 }
 
 // SigningPublicKey returns the signing public key.
 func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey) {
-	/*cert := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if err != nil {
-		return
-	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-		var dsa_pk crypto.DSAPublicKey
-		copy(dsa_pk[:], keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-		signing_public_key = dsa_pk
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a SigningPublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
-				keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
-			// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
-			// No other Certificate types are currently in use.
-			var dsa_pk crypto.DSAPublicKey
-			copy(dsa_pk[:], keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-			signing_public_key = dsa_pk
-		}
-
-	}*/
 	return keys_and_cert.signingPublicKey
 }
 

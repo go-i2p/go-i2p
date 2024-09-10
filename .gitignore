@@ -7,3 +7,5 @@
 go-i2p
 *.exe
 .idea/
+router.info
+log

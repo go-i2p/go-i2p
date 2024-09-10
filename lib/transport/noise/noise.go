@@ -72,31 +72,52 @@ func (ns *Noise) MatchAddr(addr net.Addr) (*router_address.RouterAddress, error)
 	return nil, fmt.Errorf("no suitable address found for type %s from %s", addr.Network(), addr.String())
 }
 
+func dialWrapper(network, address string) (net.Conn, error) {
+	switch network {
+	case "SSU24":
+		return net.Dial("udp4", address)
+	case "SSU26":
+		return net.Dial("udp6", address)
+	case "NTCP2":
+		return net.Dial("tcp", address)
+	case "NTCP24":
+		return net.Dial("tcp4", address)
+	case "NTCP26":
+		return net.Dial("tcp6", address)
+	case "NTCP4":
+		return net.Dial("tcp4", address)
+	case "NTCP6":
+		return net.Dial("tcp6", address)
+	default:
+		return nil, fmt.Errorf("unknown transport, cannot dial %s", network)
+	}
+}
+
 func (ns Noise) DialNoise(addr router_address.RouterAddress) (net.Conn, error) {
 	cfg := ns
 	cfg.Initiator = false
 	network := addr.Network()
 	host, err := addr.Host()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("host error: %s", err)
 	}
 	port, err := addr.Port()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("port error: %s", err)
 	}
 	raddr := net.JoinHostPort(host.String(), port)
 	var netConn net.Conn
-	netConn, err = net.Dial(network, raddr)
+	netConn, err = dialWrapper(network, raddr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial error: %s", err)
 	}
 	cfg.HandshakeState, err = noise.NewHandshakeState(cfg.Config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("handshake state initialization error: %s", err)
 	}
 	laddr, err := ns.MatchAddr(&addr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("transport mismatch error %s", err)
 	}
 	// cfg.Config.PeerEphemeral, err = AESDeObfuscateEphemeralKeys()
 	return &NoiseConn{
