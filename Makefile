@@ -2,6 +2,7 @@ RELEASE_TAG=0.0.1
 RELEASE_VERSION=${RELEASE_TAG}
 RELEASE_DESCRIPTION=`cat PASTA.md`
 REPO := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+CGO_ENABLED=0
 
 ifdef GOROOT
 	GO = $(GOROOT)/bin/go
@@ -18,7 +19,7 @@ endif
 build: clean $(EXE)
 
 $(EXE):
-	$(GO) build -v -o $(EXE)
+	$(GO) build --tags netgo,osusergo -v -o $(EXE)
 
 test: fmt
 	$(GO) test -v -failfast ./lib/common/...
