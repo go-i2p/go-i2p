@@ -17,7 +17,10 @@ func TestTransport(t *testing.T) {
 			if err != nil {
 				t.Log(err)
 			}
-			conn.Write([]byte("World"))
+			_, err = conn.Write([]byte("World"))
+			if err != nil {
+				t.Error(err)
+			}
 		}
 	}()
 	lnn, err := net.Listen("tcp", ":42070")

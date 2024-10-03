@@ -1,7 +1,9 @@
 package noise
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -39,6 +41,23 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 
 func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	m := len(data)
+	if c.CipherState == nil {
+		return 0, nil, errors.New("CipherState is nil")
+	}
+
+	// Encrypt the data
+	encryptedData, err := c.CipherState.Encrypt(nil, nil, data)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to encrypt: '%w'", err)
+	}
+	//m := len(encryptedData)
+
+	lengthPrefix := make([]byte, 2)
+	binary.BigEndian.PutUint16(lengthPrefix, uint16(len(encryptedData)))
+
+	// Append encr data to prefix
+	packet := append(lengthPrefix, encryptedData...)
+	return m, packet, nil
 	/*packet := c.InitializePacket()
 	maxPayloadSize := c.maxPayloadSizeForWrite(packet)
 	if m > int(maxPayloadSize) {
@@ -58,7 +77,6 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	}
 	b := c.encryptIfNeeded(packet)*/
 	//c.freeBlock(packet)
-	return m, data, nil
 }
 
 func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {

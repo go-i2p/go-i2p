@@ -38,7 +38,16 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 }
 
 func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
-	m := len(data)
+	if c.CipherState == nil {
+		return 0, nil, errors.New("CipherState is nil")
+	}
+	// Decrypt
+	decryptedData, err := c.CipherState.Decrypt(nil, nil, data)
+	if err != nil {
+		return 0, nil, err
+	}
+	m := len(decryptedData)
+	return m, decryptedData, nil
 	/*packet := c.InitializePacket()
 	maxPayloadSize := c.maxPayloadSizeForRead(packet)
 	if m > int(maxPayloadSize) {
@@ -58,7 +67,6 @@ func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 	}
 	b := c.encryptIfNeeded(packet)*/
 	//c.freeBlock(packet)
-	return m, data, nil
 }
 
 func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {

@@ -11,7 +11,7 @@ import (
 	"github.com/flynn/noise"
 )
 
-func ComposeRecieverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
 	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
 	}
@@ -48,7 +48,7 @@ func ComposeRecieverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, e
 }
 
 func (c *NoiseSession) RunIncomingHandshake() error {
-	negData, msg, state, err := ComposeRecieverHandshakeMessage(c.HandKey, nil, nil, nil)
+	negData, msg, state, err := ComposeReceiverHandshakeMessage(c.HandKey, nil, nil, nil)
 	if err != nil {
 		return err
 	}
