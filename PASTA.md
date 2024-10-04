@@ -1,16 +1,18 @@
-Weekly notes about what I'm working on
-======================================
+At long last... something useful
+================================
 
-I finally got back to work on go-i2p last Friday, continuing work on the Noise transport(also enhanced marek's privs as a reddit mod which has been helpful, also the Dread community does appear to have begun to step a little re: onboarding eachother)
-I can now make a socket, instantiate a noise transport using the socket, and begin to use it to manage "incoming" and "outgoing" handshakes.
-They don't complete yet, still working on that, but it's more like debugging now and less figuring out how to actually do it, I more or less know where the pieces go now
-I'm beginning to notice drawbacks of what I've done here already, I think noiseSocket is intended at times as example of a way to use flynn/noise which is not exactly like I would do it or how a P2P application needs to do it
-Some of the functions are very long and hard to break down, and they use a different Noise flavor than NTCP2 by default, so I'm breaking things down into steps until I have exactly one step of a Noise handshake, exactly one function
-Which should finally give me what I've been hoping for all along, an interface where I can modify steps(i.e. add padding, eventually turn it into NTCP2) by instantiating it with different versions of that function, so I get to think about reusability now
-I'm going to attempt to ask a question I don't quite know how to ask yet, and maybe won't know the answer until I try it out for myself:
-Supposing:
-0. Go network structures can be "nested" if they implement the common interface(`net.Conn`, `net.PacketConn`), and use the common interface to store the information about the socket in their implmentation, and only use the functions of the common interface(This is true)
-1. That I can instantiate this Noise-framework Transport struct with functions to modify the process in a granular enough way that turning it into NTCP2 is a matter of writing a few custom functions and plugging them in to an instance of the struct(Sort of like what you would do with inheritance)(which I think is true)
-2. that I can instantiate it with both a `net.Conn(TCP Socket interface)` and a `net.PacketConn(UDP Socket interface)` because I only use the common features of those 2 interfaces, (Which isn't true yet but I'm thinking about how to do it)
-Does that potential definition of a moddable Noise-over-many-transports library mean that I can approach SSU2 mostly in terms of connection management and peer testing, because the crypto would be similar enough to NTCP2 that I could re-use the custom functions?
-I'll find out the hard way eventually the first time I have to do it with SSU2, but it would be exciting to have come up with a design that has accelerating returns in such a way.
+It's been 2 years of me mostly not having time to work on go-i2p itself since my last update.
+However, after much waiting, this library is actually **useful** for something.
+It is now being used in the `reseed-tools` application to examine RouterInfos prior to including them in reseed bundles.
+Routers that self-report as unreachable or congested will be excluded from future reseed bundles.
+Additionally, routers that self-report an old version will be excluded from reseed bundles.
+This should help new users build better connections faster with the existing, working router implementations.
+
+This is not a working release of a go-i2p router
+------------------------------------------------
+
+It is a numbered version of the go-i2p library, which is pre-release, expressly for use in the `reseed-tools` application.
+The common library works, and so do some of the cryptographic primitives, however the API is unstable and the software itself is certain to have serious bugs outside of a few well-tested areas.
+If you're using it for something other than parsing and analyzing RouterInfos and LeaseSets, you'll probably encounter bugs.
+Please report them to the https://github.com/go-i2p/go-i2p
+Use any part of it at your own risk.
