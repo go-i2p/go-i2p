@@ -103,8 +103,8 @@ func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transpor
 	return session, nil
 }
 
-// Compatable return true if a routerInfo is compatable with this transport
-func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool {
+// Compatible return true if a routerInfo is compatible with this transport
+func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
 	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
 	return ok
 }

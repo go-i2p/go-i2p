@@ -44,7 +44,7 @@ type Transport interface {
 	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
 
 	// return true if a routerInfo is compatable with this transport
-	Compatable(routerInfo router_info.RouterInfo) bool
+	Compatible(routerInfo router_info.RouterInfo) bool
 
 	// close the transport cleanly
 	// blocks until done
