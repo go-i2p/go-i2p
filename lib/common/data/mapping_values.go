@@ -10,6 +10,17 @@ import (
 // MappingValues represents the parsed key value pairs inside of an I2P Mapping.
 type MappingValues [][2]I2PString
 
+func (m MappingValues) Get(key I2PString) I2PString {
+	keyBytes, _ := key.Data()
+	for _, pair := range m {
+		kb, _ := pair[0][0:].Data()
+		if kb == keyBytes {
+			return pair[1][1:]
+		}
+	}
+	return nil
+}
+
 // ValuesToMapping creates a *Mapping using MappingValues.
 // The values are sorted in the order defined in mappingOrder.
 func ValuesToMapping(values MappingValues) *Mapping {
@@ -46,11 +57,11 @@ func mappingOrder(values MappingValues) {
 // ReadMappingValues returns *MappingValues from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
-func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes []byte, errs []error) {
-	mapping := remainder
-	//var remainder = mapping
-	//var err error
-	if remainder == nil || len(remainder) < 0 {
+func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingValues, remainder_bytes []byte, errs []error) {
+	// mapping := remainder
+	// var remainder = mapping
+	// var err error
+	if remainder == nil || len(remainder) < 1 {
 		log.WithFields(log.Fields{
 			"at":     "(Mapping) Values",
 			"reason": "data shorter than expected",
@@ -59,31 +70,21 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 		return
 	}
 	map_values := make(MappingValues, 0)
-	if len(remainder) < 1 {
-		log.WithFields(log.Fields{
-			"at":     "(Mapping) Values",
-			"reason": "data shorter than expected",
-		}).Error("mapping contained no data")
-		errs = []error{errors.New("mapping contained no data")}
-		return
-	}
-	l := Integer(remainder[:2])
-	length := l.Int()
-	// - 2 bytes for map length bits
-	mapping_len := len(mapping) - 2
-	if mapping_len > length {
+	int_map_length := map_length.Int()
+	mapping_len := len(remainder)
+	if mapping_len > int_map_length {
 		log.WithFields(log.Fields{
 			"at":                   "(Mapping) Values",
 			"mapping_bytes_length": mapping_len,
-			"mapping_length_field": length,
+			"mapping_length_field": int_map_length,
 			"reason":               "data longer than expected",
 		}).Warn("mapping format warning")
 		errs = append(errs, errors.New("warning parsing mapping: data exists beyond length of mapping"))
-	} else if length > mapping_len {
+	} else if int_map_length > mapping_len {
 		log.WithFields(log.Fields{
 			"at":                   "(Mapping) Values",
 			"mapping_bytes_length": mapping_len,
-			"mapping_length_field": length,
+			"mapping_length_field": int_map_length,
 			"reason":               "data shorter than expected",
 		}).Warn("mapping format warning")
 		errs = append(errs, errors.New("warning parsing mapping: mapping length exceeds provided data"))
@@ -91,7 +92,7 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 
 	encounteredKeysMap := map[string]bool{}
 	// pop off length bytes before parsing kv pairs
-	remainder = remainder[2:]
+	// remainder = remainder[2:]
 
 	for {
 		// Read a key, breaking on fatal errors
@@ -111,16 +112,16 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 			break
 		}
 
-		str, more, err := ReadI2PString(remainder)
-		// overwriting remainder with more as another var to prevent memory weirdness in loops
-		remainder = more
-		key_str := str
+		key_str, more, err := ReadI2PString(remainder)
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				//return
+				// return
 			}
 		}
+		// overwriting remainder with more as another var to prevent memory weirdness in loops
+		remainder = more
+		// log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
 
 		// Check if key has already been encountered in this mapping
 		keyBytes, _ := key_str.Data()
@@ -130,7 +131,9 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",
 				"reason": "duplicate key in mapping",
+				"key":    string(key_str),
 			}).Error("mapping format violation")
+			log.Printf("DUPE: %s", key_str)
 			errs = append(errs, errors.New("mapping format violation, duplicate key in mapping"))
 			// Based on other implementations this does not seem to happen often?
 			// Java throws an exception in this case, the base object is a Hashmap so the value is overwritten and an exception is thrown.
@@ -142,33 +145,39 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",
 				"reason": "expected =",
+				"value:": string(remainder),
 			}).Warn("mapping format violation")
 			errs = append(errs, errors.New("mapping format violation, expected ="))
+			log.Printf("ERRVAL: %s", remainder)
 			break
+		} else {
+			remainder = remainder[1:]
 		}
-		remainder = remainder[1:]
 
 		// Read a value, breaking on fatal errors
 		// and appending warnings
-		str, more, err = ReadI2PString(remainder)
-		// overwriting remainder with more as another var to prevent memory weirdness in loops
-		remainder = more
-		val_str := str
+		val_str, more, err := ReadI2PString(remainder)
 		if err != nil {
 			if stopValueRead(err) {
 				errs = append(errs, err)
-				//return
+				// return
 			}
 		}
+		// overwriting remainder with more as another var to prevent memory weirdness in loops
+		remainder = more
+		// log.Printf("(MAPPING VALUES DEBUG) Remainder: %s\n", remainder)
+		// log.Printf("(MAPPING VALUES DEBUG) String: value: %s", val_str)
 		if !beginsWith(remainder, 0x3b) {
 			log.WithFields(log.Fields{
 				"at":     "(Mapping) Values",
 				"reason": "expected ;",
+				"value:": string(remainder),
 			}).Warn("mapping format violation")
 			errs = append(errs, errors.New("mapping format violation, expected ;"))
 			break
+		} else {
+			remainder = remainder[1:]
 		}
-		remainder = remainder[1:]
 
 		// Append the key-value pair and break if there is no more data to read
 		map_values = append(map_values, [2]I2PString{key_str, val_str})
@@ -181,5 +190,4 @@ func ReadMappingValues(remainder []byte) (values *MappingValues, remainder_bytes
 	}
 	values = &map_values
 	return
-
 }

@@ -50,7 +50,9 @@ func NewInteger(bytes []byte, size int) (integer *Integer, remainder []byte, err
 	if size < MAX_INTEGER_SIZE {
 		integerSize = size
 	}
-	i, remainder := ReadInteger(bytes, integerSize)
+	intBytes := bytes[:integerSize]
+	remainder = bytes[integerSize:]
+	i, _ := ReadInteger(intBytes, integerSize)
 	integer = &i
 	return
 }

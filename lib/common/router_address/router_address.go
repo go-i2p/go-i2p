@@ -3,6 +3,10 @@ package router_address
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	log "github.com/sirupsen/logrus"
@@ -63,71 +67,215 @@ options :: Mapping
 //
 // https://geti2p.net/spec/common-structures#routeraddress
 type RouterAddress struct {
-	cost            *Integer
-	expiration      *Date
-	Transport_Style *I2PString
-	options         *Mapping
-	parserErr       error
+	TransportCost    *Integer
+	ExpirationDate   *Date
+	TransportType    I2PString
+	TransportOptions *Mapping
 }
+
+// Network implements net.Addr. It returns the transport type plus 4 or 6
+func (router_address *RouterAddress) Network() string {
+	if router_address.TransportType == nil {
+		return ""
+	}
+	str, err := router_address.TransportType.Data()
+	if err != nil {
+		return ""
+	}
+	return string(str) + router_address.IPVersion()
+}
+
+// IPVersion returns a string "4" for IPv4 or 6 for IPv6
+func (router_address *RouterAddress) IPVersion() string {
+	str, err := router_address.CapsString().Data()
+	if err != nil {
+		return ""
+	}
+	if strings.HasSuffix(str, "6") {
+		return "6"
+	}
+	return "4"
+}
+
+func (router_address *RouterAddress) UDP() bool {
+	return strings.HasPrefix(strings.ToLower(router_address.Network()), "ssu")
+}
+
+// String implements net.Addr. It returns the IP address, followed by the options
+func (router_address *RouterAddress) String() string {
+	var rv []string
+	rv = append(rv, string(router_address.TransportStyle()))
+	rv = append(rv, string(router_address.HostString()))
+	rv = append(rv, string(router_address.PortString()))
+	rv = append(rv, string(router_address.StaticKeyString()))
+	rv = append(rv, string(router_address.InitializationVectorString()))
+	rv = append(rv, string(router_address.ProtocolVersionString()))
+	if router_address.UDP() {
+		rv = append(rv, string(router_address.IntroducerHashString(0)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(0)))
+		rv = append(rv, string(router_address.IntroducerTagString(0)))
+		rv = append(rv, string(router_address.IntroducerHashString(1)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(1)))
+		rv = append(rv, string(router_address.IntroducerTagString(1)))
+		rv = append(rv, string(router_address.IntroducerHashString(2)))
+		rv = append(rv, string(router_address.IntroducerExpirationString(2)))
+		rv = append(rv, string(router_address.IntroducerTagString(2)))
+	}
+	return strings.TrimSpace(strings.Join(rv, " "))
+}
+
+var ex_addr net.Addr = &RouterAddress{}
 
 // Bytes returns the router address as a []byte.
 func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
-	bytes = append(bytes, router_address.cost.Bytes()...)
-	bytes = append(bytes, router_address.expiration.Bytes()...)
-	strData, err := router_address.Transport_Style.Data()
+	bytes = append(bytes, router_address.TransportCost.Bytes()...)
+	bytes = append(bytes, router_address.ExpirationDate.Bytes()...)
+	strData, err := router_address.TransportType.Data()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("RouterAddress.Bytes: error getting Transport_Style bytes")
+		}).Error("RouterAddress.Bytes: error getting transport_style bytes")
 	} else {
 		bytes = append(bytes, strData...)
 	}
-	//bytes = append(bytes, router_address.options.Bytes()...)
+	bytes = append(bytes, router_address.TransportOptions.Data()...)
 	return bytes
 }
 
 // Cost returns the cost for this RouterAddress as a Go integer.
 func (router_address RouterAddress) Cost() int {
-	return router_address.cost.Int()
+	return router_address.TransportCost.Int()
 }
 
 // Expiration returns the expiration for this RouterAddress as an I2P Date.
 func (router_address RouterAddress) Expiration() Date {
-	return *router_address.expiration
+	return *router_address.ExpirationDate
 }
 
 // TransportStyle returns the transport style for this RouterAddress as an I2PString.
 func (router_address RouterAddress) TransportStyle() I2PString {
-	return *router_address.Transport_Style
+	return router_address.TransportType
+}
+
+// GetOption returns the value of the option specified by the key
+func (router_address RouterAddress) GetOption(key I2PString) I2PString {
+	return router_address.Options().Values().Get(key)
+}
+
+func (router_address RouterAddress) HostString() I2PString {
+	host, _ := ToI2PString("host")
+	return router_address.GetOption(host)
+}
+
+func (router_address RouterAddress) PortString() I2PString {
+	port, _ := ToI2PString("port")
+	return router_address.GetOption(port)
+}
+
+func (router_address RouterAddress) CapsString() I2PString {
+	caps, _ := ToI2PString("caps")
+	return router_address.GetOption(caps)
+}
+
+func (router_address RouterAddress) StaticKeyString() I2PString {
+	sk, _ := ToI2PString("s")
+	return router_address.GetOption(sk)
+}
+
+func (router_address RouterAddress) InitializationVectorString() I2PString {
+	iv, _ := ToI2PString("i")
+	return router_address.GetOption(iv)
+}
+
+func (router_address RouterAddress) ProtocolVersionString() I2PString {
+	v, _ := ToI2PString("v")
+	return router_address.GetOption(v)
+}
+
+func (router_address RouterAddress) IntroducerHashString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("ih" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("ih0")
+	return router_address.GetOption(v)
+}
+
+func (router_address RouterAddress) IntroducerExpirationString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("iexp" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("iexp0")
+	return router_address.GetOption(v)
+}
+
+func (router_address RouterAddress) IntroducerTagString(num int) I2PString {
+	if num >= 0 && num <= 2 {
+		val := strconv.Itoa(num)
+		v, _ := ToI2PString("itag" + val)
+		return router_address.GetOption(v)
+	}
+	v, _ := ToI2PString("itag0")
+	return router_address.GetOption(v)
+}
+
+func (router_address RouterAddress) Host() (net.Addr, error) {
+	host := router_address.HostString()
+	hostBytes, err := host.Data()
+	if err != nil {
+		return nil, err
+	}
+	ip := net.ParseIP(hostBytes)
+	if ip == nil {
+		return nil, fmt.Errorf("null host error")
+	}
+	return net.ResolveIPAddr("", ip.String())
+}
+
+func (router_address RouterAddress) Port() (string, error) {
+	port := router_address.PortString()
+	portBytes, err := port.Data()
+	if err != nil {
+		return "", err
+	}
+	val, err := strconv.Atoi(portBytes)
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(val), nil
+}
+
+func (router_address RouterAddress) StaticKey() ([32]byte, error) {
+	sk := router_address.StaticKeyString()
+	if len([]byte(sk)) != 32 {
+		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	}
+	return [32]byte(sk), nil
+}
+
+func (router_address RouterAddress) InitializationVector() ([32]byte, error) {
+	iv := router_address.InitializationVectorString()
+	if len([]byte(iv)) != 32 {
+		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	}
+	return [32]byte(iv), nil
+}
+
+func (router_address RouterAddress) ProtocolVersion() (string, error) {
+	return router_address.ProtocolVersionString().Data()
 }
 
 // Options returns the options for this RouterAddress as an I2P Mapping.
 func (router_address RouterAddress) Options() Mapping {
-	return *router_address.options
+	return *router_address.TransportOptions
 }
 
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
 func (router_address RouterAddress) checkValid() (err error, exit bool) {
-	/*addr_len := len(router_address)
-	exit = false
-	if addr_len == 0 {
-		log.WithFields(log.Fields{
-			"at":     "(RouterAddress) checkValid",
-			"reason": "no data",
-		}).Error("invalid router address")
-		err = errors.New("error parsing RouterAddress: no data")
-		exit = true
-	} else if addr_len < ROUTER_ADDRESS_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":     "(RouterAddress) checkValid",
-			"reason": "data too small (len < ROUTER_ADDRESS_MIN_SIZE)",
-		}).Warn("router address format warning")
-		err = errors.New("warning parsing RouterAddress: data too small")
-	}*/
-	if router_address.parserErr != nil {
-		exit = true
-	}
 	return
 }
 
@@ -135,62 +283,40 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
-	if data == nil || len(data) == 0 {
-		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("no data")
+	if len(data) == 0 {
+		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
 		err = errors.New("error parsing RouterAddress: no data")
-		router_address.parserErr = err
 		return
 	}
-	cost, remainder, err := NewInteger([]byte{data[0]}, 1)
-	router_address.cost = cost
+	router_address.TransportCost, remainder, err = NewInteger(data, 1)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing cost",
 		}).Warn("error parsing RouterAddress")
-		router_address.parserErr = err
 	}
-	expiration, remainder, err := NewDate(remainder)
-	router_address.expiration = expiration
+	router_address.ExpirationDate, remainder, err = NewDate(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
-		router_address.parserErr = err
 	}
-	Transport_Style, remainder, err := NewI2PString(remainder)
-	router_address.Transport_Style = Transport_Style
+	router_address.TransportType, remainder, err = ReadI2PString(remainder)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
-			"reason": "error parsing Transport_Style",
+			"reason": "error parsing transport_style",
 		}).Error("error parsing RouterAddress")
-		router_address.parserErr = err
 	}
-	options, remainder, errs := NewMapping(remainder)
+	var errs []error
+	router_address.TransportOptions, remainder, errs = NewMapping(remainder)
 	for _, err := range errs {
 		log.WithFields(log.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing options",
-		}).Error("error parsing RouterAddress")
-		router_address.parserErr = err
+			"error":  err,
+		}).Error("error parsing RozuterAddress")
 	}
-	router_address.options = options
-	if err != nil {
-		log.WithFields(log.Fields{
-			"at":     "(RouterAddress) ReadNewRouterAddress",
-			"reason": "error parsing options",
-		}).Error("error parsing RouterAddress")
-		router_address.parserErr = err
-	}
-	return
-}
-
-// NewRouterAddress creates a new *RouterAddress from []byte using ReadRouterAddress.
-// Returns a pointer to RouterAddress unlike ReadRouterAddress.
-func NewRouterAddress(data []byte) (router_address *RouterAddress, remainder []byte, err error) {
-	objrouteraddress, remainder, err := ReadRouterAddress(data)
-	router_address = &objrouteraddress
 	return
 }

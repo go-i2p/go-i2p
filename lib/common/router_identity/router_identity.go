@@ -20,24 +20,16 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#routeridentity
 type RouterIdentity struct {
-	*KeysAndCert
+	KeysAndCert
 }
 
 // ReadRouterIdentity returns RouterIdentity from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder []byte, err error) {
-	keys_and_cert, remainder, err := NewKeysAndCert(data)
+	keys_and_cert, remainder, err := ReadKeysAndCert(data)
 	router_identity = RouterIdentity{
 		keys_and_cert,
 	}
-	return
-}
-
-// NewRouterIdentity creates a new *RouterIdentity from []byte using ReadRouterIdentity.
-// Returns a pointer to RouterIdentity unlike ReadRouterIdentity.
-func NewRouterIdentity(data []byte) (router_identity *RouterIdentity, remainder []byte, err error) {
-	objrouter_identity, remainder, err := ReadRouterIdentity(data)
-	router_identity = &objrouter_identity
 	return
 }

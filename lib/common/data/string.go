@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -38,28 +39,21 @@ func (str I2PString) Length() (length int, err error) {
 		err = errors.New("error parsing string: zero length")
 		return
 	}
-	l := Integer([]byte{byte(str[0])})
+	l, _, err := NewInteger(str[:], 1)
+	if err != nil {
+		return l.Int(), err
+	}
 	length = l.Int()
-	inferred_len := length + 1
 	str_len := len(str)
-	if inferred_len > str_len {
-		log.WithFields(log.Fields{
-			"at":                    "(I2PString) Length",
-			"string_bytes_length":   str_len,
-			"string_length_field":   length,
-			"expected_bytes_length": inferred_len,
-			"reason":                "data shorter than specified",
-		}).Warn("string format warning")
+	if length > str_len {
+		/*log.WithFields(log.Fields{
+			"at":                  "(I2PString) Length",
+			"string_bytes_length": str_len,
+			"string_length_field": length,
+			"data":                string(str),
+			"reason":              "data less than specified by length",
+		}).Error("string format warning")*/
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
-	} else if str_len > inferred_len {
-		log.WithFields(log.Fields{
-			"at":                    "(I2PString) Length",
-			"string_bytes_length":   str_len,
-			"string_length_field":   length,
-			"expected_bytes_length": inferred_len,
-			"reason":                "data longer than specified",
-		}).Warn("string format warning")
-		err = errors.New("string parsing warning: string contains data beyond length")
 	}
 	return
 }
@@ -73,14 +67,20 @@ func (str I2PString) Data() (data string, err error) {
 		case "error parsing string: zero length":
 			return
 		case "string parsing warning: string data is shorter than specified by length":
-			data = string(str[1:])
-			return
+			if is, e := ToI2PString(string(str[:])); e != nil {
+				return "", e
+			} else {
+				return is.Data()
+			}
 		case "string parsing warning: string contains data beyond length":
-			data = string(str[1 : length+1])
+			data = string(str[1:])
 			return
 		}
 	}
-	data = string(str[1:])
+	if length == 0 {
+		return
+	}
+	data = string(str[1 : length+1])
 	return
 }
 
@@ -113,20 +113,25 @@ func ToI2PString(data string) (str I2PString, err error) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
-	str = I2PString(data)
-	length, err := I2PString(data).Length()
-	if err != nil && err.Error() == "string parsing warning: string contains data beyond length" {
-		str = I2PString(data[:length+1])
-		remainder = data[length+1:]
-		err = nil
+	length, _, err := NewInteger(data, 1)
+	if err != nil {
+		return
+	}
+	data_len := length.Int() + 1
+	str = data[:data_len]
+	remainder = data[data_len:]
+	l, err := str.Length()
+	if l != data_len-1 {
+		err = fmt.Errorf("error reading I2P string, length does not match data")
+		return
 	}
 	return
 }
 
 // NewI2PString creates a new *I2PString from []byte using ReadI2PString.
 // Returns a pointer to I2PString unlike ReadI2PString.
-func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
+/*func NewI2PString(data []byte) (str *I2PString, remainder []byte, err error) {
 	objstr, remainder, err := ReadI2PString(data)
 	str = &objstr
 	return
-}
+}*/

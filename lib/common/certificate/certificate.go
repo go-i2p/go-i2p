@@ -75,7 +75,10 @@ func (c *Certificate) RawBytes() []byte {
 
 // ExcessBytes returns the excess bytes in a certificate found after the specified payload length.
 func (c *Certificate) ExcessBytes() []byte {
-	return c.payload[c.len.Int():]
+	if len(c.payload) >= c.len.Int() {
+		return c.payload[c.len.Int():]
+	}
+	return nil
 }
 
 // Bytes returns the entire certificate in []byte form, trims payload to specified length.
@@ -116,8 +119,8 @@ func (c *Certificate) Data() (data []byte) {
 
 // NewCertificate creates a new Certficiate from []byte
 // returns err if the certificate is too short or if the payload doesn't match specified length.
-func NewCertificate(data []byte) (certificate *Certificate, err error) {
-	certificate = &Certificate{}
+func NewCertificate(data []byte) (certificate Certificate, err error) {
+	certificate = Certificate{}
 	switch len(data) {
 	case 0:
 		certificate.kind = Integer([]byte{0})
@@ -126,28 +129,18 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
-		err = fmt.Errorf("error parsing certificate: certificate is too short")
+		}).Error("invalid certificate, empty")
+		err = fmt.Errorf("error parsing certificate: certificate is empty")
 		return
-	case 1:
-		certificate.kind = Integer(data[0:0])
+	case 1, 2:
+		certificate.kind = Integer(data[0 : len(data)-1])
 		certificate.len = Integer([]byte{0})
 		log.WithFields(log.Fields{
 			"at":                       "(Certificate) NewCertificate",
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
+		}).Error("invalid certificate, too short")
 		err = fmt.Errorf("error parsing certificate: certificate is too short")
-		return
-	case 2:
-		certificate.kind = Integer(data[0:1])
-		certificate.len = Integer([]byte{0})
-		log.WithFields(log.Fields{
-			"at":                       "(Certificate) NewCertificate",
-			"certificate_bytes_length": len(data),
-			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
-		}).Error("invalid certificate")
-		err = fmt.Errorf("error parsing certificate length: certificate is too short")
 		return
 	default:
 		certificate.kind = Integer(data[0:1])
@@ -160,17 +153,11 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
 				"certificate_payload_length": payleng,
+				"data_bytes:":                string(data),
+				"kind_bytes":                 data[0:1],
+				"len_bytes":                  data[1:3],
 				"reason":                     err.Error(),
-			}).Error("invalid certificate")
-			return
-		} else if certificate.len.Int() < len(data)-CERT_MIN_SIZE {
-			err = fmt.Errorf("certificate parsing warning: certificate data is longer than specified by length")
-			log.WithFields(log.Fields{
-				"at":                         "(Certificate) NewCertificate",
-				"certificate_bytes_length":   certificate.len.Int(),
-				"certificate_payload_length": payleng,
-				"reason":                     err.Error(),
-			}).Error("invalid certificate")
+			}).Error("invalid certificate, shorter than specified by length")
 			return
 		}
 		return
@@ -179,11 +166,11 @@ func NewCertificate(data []byte) (certificate *Certificate, err error) {
 
 // ReadCertificate creates a Certificate from []byte and returns any ExcessBytes at the end of the input.
 // returns err if the certificate could not be read.
-func ReadCertificate(data []byte) (certificate *Certificate, remainder []byte, err error) {
+func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
 	certificate, err = NewCertificate(data)
 	if err != nil && err.Error() == "certificate parsing warning: certificate data is longer than specified by length" {
-		remainder = certificate.ExcessBytes()
 		err = nil
 	}
+	remainder = certificate.ExcessBytes()
 	return
 }

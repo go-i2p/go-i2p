@@ -126,28 +126,25 @@ func beginsWith(bytes []byte, chr byte) bool {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) {
-	if len(bytes) == 0 {
+	if len(bytes) < 3 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
 			"reason": "zero length",
 		}).Warn("mapping format violation")
 		e := errors.New("zero length")
 		err = append(err, e)
+		return
 	}
 	size, remainder, e := NewInteger(bytes, 2)
 	if e != nil {
 		err = append(err, e)
 	}
-
-	mapping.size = size
-	if e != nil {
-		log.WithFields(log.Fields{
-			"at":     "ReadMapping",
-			"reason": "error parsing integer",
-		}).Warn("mapping format violation")
-		e := errors.New("error parsing integer")
-		err = append(err, e)
+	if size.Int() == 0 {
+		return
 	}
+	mapping.size = size
+	map_bytes := remainder[:mapping.size.Int()]
+	remainder = remainder[mapping.size.Int():]
 	if len(remainder) == 0 {
 		log.WithFields(log.Fields{
 			"at":     "ReadMapping",
@@ -156,7 +153,10 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		e := errors.New("zero length")
 		err = append(err, e)
 	}
-	vals, remainder, mappingValueErrs := ReadMappingValues(bytes)
+	// TODO: this should take the remainder and the length we already parsed above, as a parameter.
+	// Like tomorrow morning.
+	// ReadMappingValues should not attempt to figure out the length of the bytes it's reading over.
+	vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *mapping.size)
 
 	err = append(err, mappingValueErrs...)
 	mapping.vals = vals

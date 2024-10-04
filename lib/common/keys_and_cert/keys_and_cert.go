@@ -79,137 +79,41 @@ type KeysAndCert struct {
 }
 
 // Bytes returns the entire KeyCertificate in []byte form, trims payload to specified length.
-func (keys_and_cert *KeysAndCert) Bytes() []byte {
+func (keys_and_cert KeysAndCert) Bytes() []byte {
 	return keys_and_cert.KeyCertificate.Bytes()
 }
 
 // PublicKey returns the public key as a crypto.PublicKey.
 func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
-	/*cert := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if err != nil {
-		return
-	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-		// PublicKey space as ElgPublicKey.
-		var elg_key crypto.ElgPublicKey
-		copy(keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-		key = elg_key
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a PublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			key, err = KeyCertificateFromCertificate(cert).ConstructPublicKey(
-				keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_PUBKEY_SIZE byte
-			// PublicKey space as ElgPublicKey.  No other Certificate
-			// types are currently in use.
-			var elg_key crypto.ElgPublicKey
-			copy(keys_and_cert[:KEYS_AND_CERT_PUBKEY_SIZE], elg_key[:])
-			key = elg_key
-			log.WithFields(log.Fields{
-				"at":        "(KeysAndCert) PublicKey",
-				"cert_type": cert_type,
-			}).Warn("unused certificate type observed")
-		}
-
-	}
-	return*/
 	return keys_and_cert.publicKey
 }
 
 // SigningPublicKey returns the signing public key.
 func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey) {
-	/*cert := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if err != nil {
-		return
-	}
-	if cert_len == 0 {
-		// No Certificate is present, return the KEYS_AND_CERT_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
-		var dsa_pk crypto.DSAPublicKey
-		copy(dsa_pk[:], keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-		signing_public_key = dsa_pk
-	} else {
-		// A Certificate is present in this KeysAndCert
-		cert_type := cert.Type()
-		if cert_type == CERT_KEY {
-			// This KeysAndCert contains a Key Certificate, construct
-			// a SigningPublicKey from the data in the KeysAndCert and
-			// any additional data in the Certificate.
-			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
-				keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE],
-			)
-		} else {
-			// Key Certificate is not present, return the KEYS_AND_CERT_SPK_SIZE byte
-			// SigningPublicKey space as legacy SHA DSA1 SigningPublicKey.
-			// No other Certificate types are currently in use.
-			var dsa_pk crypto.DSAPublicKey
-			copy(dsa_pk[:], keys_and_cert[KEYS_AND_CERT_PUBKEY_SIZE:KEYS_AND_CERT_PUBKEY_SIZE+KEYS_AND_CERT_SPK_SIZE])
-			signing_public_key = dsa_pk
-		}
-
-	}*/
 	return keys_and_cert.signingPublicKey
 }
 
 // Certfificate returns the certificate.
-func (keys_and_cert *KeysAndCert) Certificate() (cert *Certificate) {
+func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 	return keys_and_cert.KeyCertificate.Certificate
 }
 
-//
-// Read a KeysAndCert from a slice of bytes, retuning it and the remaining data as well as any errors
-// encoutered parsing the KeysAndCert.
-//
-
-// ReadKeysAndCert returns KeysAndCert from a []byte.
-// The remaining bytes after the specified length are also returned.
-// Returns a list of errors that occurred during parsing.
-func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
-	/*data_len := len(data)
-	if data_len < KEYS_AND_CERT_MIN_SIZE {
-		log.WithFields(log.Fields{
-			"at":           "ReadKeysAndCert",
-			"data_len":     data_len,
-			"required_len": KEYS_AND_CERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		return
-	}
-	keys_and_cert = KeysAndCert(data[:KEYS_AND_CERT_MIN_SIZE])
-	cert, _ := keys_and_cert.Certificate()
-	cert_len := cert.Length()
-	if cert_len == 0 {
-		remainder = data[KEYS_AND_CERT_MIN_SIZE:]
-		return
-	}
-	if data_len < KEYS_AND_CERT_MIN_SIZE+cert_len {
-		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:]...)
-		//err = cert_len_err
-	} else {
-		keys_and_cert = append(keys_and_cert, data[KEYS_AND_CERT_MIN_SIZE:KEYS_AND_CERT_MIN_SIZE+cert_len]...)
-		remainder = data[KEYS_AND_CERT_MIN_SIZE+cert_len:]
-	}*/
-	keys_and_cert_pointer, remainder, err := NewKeysAndCert(data)
-	keys_and_cert = *keys_and_cert_pointer
-	return
-}
-
-// NewKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
+// ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
-func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
+func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
 	data_len := len(data)
-	keys_and_cert = &KeysAndCert{}
-	if data_len < KEYS_AND_CERT_MIN_SIZE {
+	// keys_and_cert = KeysAndCert{}
+	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
+		log.WithFields(log.Fields{
+			"at":           "ReadKeysAndCert",
+			"data_len":     data_len,
+			"required_len": KEYS_AND_CERT_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing keys and cert")
+		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
+		return
+	} else if data_len < KEYS_AND_CERT_DATA_SIZE {
 		log.WithFields(log.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -219,22 +123,22 @@ func NewKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, 
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
-	cert, remainder, err := NewKeyCertificate(data)
-	keys_and_cert.KeyCertificate = cert
+	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
-		return nil, nil, err
+		return
 	}
-	padding := data[KEYS_AND_CERT_MIN_SIZE+cert.Length():]
+	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
+	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
+	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
+	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:keys_and_cert.KeyCertificate.CryptoSize()])
+	if err != nil {
+		return
+	}
+	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.KeyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
+	if err != nil {
+		return
+	}
+	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
 	keys_and_cert.padding = padding
-	publicKey, err := cert.ConstructPublicKey(padding)
-	keys_and_cert.publicKey = publicKey
-	if err != nil {
-		return nil, nil, err
-	}
-	signingPublicKey, err := cert.ConstructSigningPublicKey(padding)
-	keys_and_cert.signingPublicKey = signingPublicKey
-	if err != nil {
-		return nil, nil, err
-	}
-	return keys_and_cert, remainder, err
+	return
 }

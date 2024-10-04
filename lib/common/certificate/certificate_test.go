@@ -32,12 +32,12 @@ func TestCertificateLengthErrWhenTooShort(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x01}
-	certificate, err := NewCertificate(bytes)
+	certificate, _, err := ReadCertificate(bytes)
 	cert_len := certificate.Length()
 
 	assert.Equal(cert_len, 0, "certificate.Length() did not return zero length for missing length data")
 	if assert.NotNil(err) {
-		assert.Equal("error parsing certificate length: certificate is too short", err.Error(), "correct error message should be returned")
+		assert.Equal("error parsing certificate: certificate is too short", err.Error(), "correct error message should be returned")
 	}
 }
 
@@ -71,13 +71,10 @@ func TestCertificateDataWhenTooLong(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff, 0xaa, 0xaa}
-	certificate, err := NewCertificate(bytes)
+	certificate, _, _ := ReadCertificate(bytes)
 	cert_data := certificate.Data()
 
-	if assert.NotNil(err) {
-		assert.Equal("certificate parsing warning: certificate data is longer than specified by length", err.Error(), "correct error message should be returned")
-	}
-	cert_len := certificate.Length() //len(cert_data)
+	cert_len := certificate.Length() // len(cert_data)
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was too long")
 	if cert_data[0] != 0xff || cert_data[1] != 0xff {
 		t.Fatal("certificate.Data() returned incorrect data when data was too long")
@@ -144,6 +141,6 @@ func TestReadCertificateWithInvalidLength(t *testing.T) {
 	assert.Equal(cert.length(), 2, "ReadCertificate() should populate the certificate with the provided data even when invalid")
 	assert.Equal(len(remainder), 0, "ReadCertificate() returned non-zero length remainder on invalid certificate")
 	if assert.NotNil(err) {
-		assert.Equal("error parsing certificate length: certificate is too short", err.Error(), "correct error message should be returned")
+		assert.Equal("error parsing certificate: certificate is too short", err.Error(), "correct error message should be returned")
 	}
 }

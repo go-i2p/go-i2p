@@ -133,6 +133,9 @@ type LeaseSet struct {
 // Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
+	if err != nil {
+		return
+	}
 	destination, _, err = ReadDestination(keys_and_cert.Bytes())
 	return
 }
