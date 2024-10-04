@@ -50,7 +50,7 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to encrypt: '%w'", err)
 	}
-	// m := len(encryptedData)
+	//m := len(encryptedData)
 
 	lengthPrefix := make([]byte, 2)
 	binary.BigEndian.PutUint16(lengthPrefix, uint16(len(encryptedData)))
@@ -81,7 +81,7 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 
 func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 	var n int
-	if len(data) == 0 { // special case to answer when everything is ok during handshake
+	if len(data) == 0 { //special case to answer when everything is ok during handshake
 		if _, err := c.Conn.Write(make([]byte, 2)); err != nil {
 			return 0, err
 		}

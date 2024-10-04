@@ -29,5 +29,5 @@ func TestTransport(t *testing.T) {
 	}
 	ntt := NewNoiseTransport(lnn)
 	t.Log(ntt.Name())
-	// ntt.GetSession()
+	//ntt.GetSession()
 }

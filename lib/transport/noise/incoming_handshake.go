@@ -28,7 +28,7 @@ func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, e
 	prologue := make([]byte, 2, uint16Size+len(negData))
 	binary.BigEndian.PutUint16(prologue, uint16(len(negData)))
 	prologue = append(prologue, negData...)
-	// prologue = append(initString, prologue...)
+	//prologue = append(initString, prologue...)
 	state, err = noise.NewHandshakeState(noise.Config{
 		StaticKeypair: s,
 		Initiator:     false,
