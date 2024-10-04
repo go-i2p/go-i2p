@@ -18,7 +18,7 @@ type Router struct {
 
 // create router with default configuration
 func CreateRouter() (r *Router, err error) {
-	cfg := config.DefaultRouterConfig
+	cfg := config.RouterConfigProperties
 	r, err = FromConfig(cfg)
 	return
 }
@@ -62,22 +62,28 @@ func (r *Router) Start() {
 
 // run i2p router mainloop
 func (r *Router) mainloop() {
-	r.ndb = netdb.StdNetDB(r.cfg.NetDb.Path)
+	r.ndb = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	// make sure the netdb is ready
-	err := r.ndb.Ensure()
-	if err == nil {
+	var e error
+	if err := r.ndb.Ensure(); err != nil {
+		e = err
+	}
+	if sz := r.ndb.Size(); sz >= 0 {
+		log.Info("NetDB Size:", sz)
+	}
+	if e == nil {
 		// netdb ready
 		log.WithFields(log.Fields{
 			"at": "(Router) mainloop",
 		}).Info("Router ready")
-		for err == nil {
+		for e == nil {
 			time.Sleep(time.Second)
 		}
 	} else {
 		// netdb failed
 		log.WithFields(log.Fields{
 			"at":     "(Router) mainloop",
-			"reason": err.Error(),
+			"reason": e.Error(),
 		}).Error("Netdb Startup failed")
 		r.Stop()
 	}

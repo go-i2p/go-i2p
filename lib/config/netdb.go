@@ -12,5 +12,5 @@ type NetDbConfig struct {
 
 // default settings for netdb
 var DefaultNetDbConfig = NetDbConfig{
-	Path: filepath.Join(".", "netDb"),
+	Path: filepath.Join(defaultConfig(), "netDb"),
 }
