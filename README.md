@@ -41,7 +41,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Elligator2
   - [ ] HKDF
   - [ ] HMAC
-  - [ ] Noise subsystem
+  - [/] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
   - [ ] ElGamal/AES+SessionTag
@@ -50,9 +50,9 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Message parsing
   - [ ] Message handling
 - NetDB
-  - [ ] Local storage
-  - [ ] Persistence to disk
-  - [ ] Reseeding
+  - [/] Local storage
+  - [/] Persistence to disk
+  - [X] Reseeding
   - [ ] Lookups
   - [ ] Expiry
   - [ ] Exploration
@@ -60,12 +60,12 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Floodfill
   - [ ] LS2 and Encrypted Leasesets
 - Transports
-  - [ ] Transport manager
+  - [X] Transport manager
   - NTCP2
     - [ ] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
-  - SSU
+  - SSU2
     - [ ] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
@@ -78,7 +78,20 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Participating
     - [ ] Tunnel Message Crypto
     - [ ] Tunnel Message Fragmentation/Reassembly
-
+- Common Data Structures
+    - [X] Keys and Cert
+    - [X] Key Certificates
+    - [X] Certificate
+    - [X] Lease
+    - [X] Lease Set
+    - [X] Router Info
+    - [X] Router Identity
+    - [X] Router Address
+    - [X] Session Key
+    - [X] Signature Types
+    - [X] Destination
+    - [X] Data Types
+    - [X] Session Tag
 
 ## Contributing
 

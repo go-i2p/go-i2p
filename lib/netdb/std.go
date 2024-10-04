@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/common/base64"
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -19,43 +20,70 @@ import (
 )
 
 // standard network database implementation using local filesystem skiplist
-type StdNetDB string
+type StdNetDB struct {
+	DB          string
+	RouterInfos map[common.Hash]Entry
+	LeaseSets   map[common.Hash]Entry
+}
 
-func (db StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
-	fname := db.SkiplistFile(hash)
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil
+func NewStdNetDB(db string) StdNetDB {
+	return StdNetDB{
+		DB:          db,
+		RouterInfos: make(map[common.Hash]Entry),
+		LeaseSets:   make(map[common.Hash]Entry),
 	}
+}
+
+func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
+	if ri, ok := db.RouterInfos[hash]; ok {
+		chnl <- *ri.RouterInfo
+		return
+	}
+	fname := db.SkiplistFile(hash)
 	buff := new(bytes.Buffer)
-	_, err = io.Copy(buff, f)
-	f.Close()
+	if f, err := os.Open(fname); err != nil {
+		return nil
+	} else {
+		if _, err := io.Copy(buff, f); err != nil {
+			return nil
+		}
+		defer f.Close()
+	}
 	chnl = make(chan router_info.RouterInfo)
 	ri, _, err := router_info.ReadRouterInfo(buff.Bytes())
 	if err == nil {
+		if _, ok := db.RouterInfos[hash]; !ok {
+			db.RouterInfos[hash] = Entry{
+				RouterInfo: &ri,
+			}
+		}
 		chnl <- ri
 	}
 	return
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in
-func (db StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
+func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])
 	fpath = filepath.Join(db.Path(), fmt.Sprintf("r%c", fname[0]), fmt.Sprintf("routerInfo-%s.dat", fname))
 	return
 }
 
 // get netdb path
-func (db StdNetDB) Path() string {
-	return string(db)
+func (db *StdNetDB) Path() string {
+	return string(db.DB)
 }
 
 // return how many routers we know about in our network database
+<<<<<<< HEAD
 func (db StdNetDB) Size() (routers int) {
+=======
+func (db *StdNetDB) Size() (routers int) {
+>>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	// TODO: implement this
 	var err error
 	var data []byte
-	if !util.CheckFileExists(db.cacheFilePath()) {
+	if !util.CheckFileExists(db.cacheFilePath()) || util.CheckFileAge(db.cacheFilePath(), 2) || len(db.RouterInfos) == 0 {
 		// regenerate
 		err = db.RecalculateSize()
 		if err != nil {
@@ -74,33 +102,67 @@ func (db StdNetDB) Size() (routers int) {
 const CacheFileName = "sizecache.txt"
 
 // get filepath for storing netdb info cache
-func (db StdNetDB) cacheFilePath() string {
+func (db *StdNetDB) cacheFilePath() string {
 	return filepath.Join(db.Path(), CacheFileName)
 }
 
-func (db StdNetDB) CheckFilePathValid(fpath string) bool {
+func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 	// TODO: make this better
 	return strings.HasSuffix(fpath, ".dat")
 }
 
 // recalculateSize recalculates cached size of netdb
-func (db StdNetDB) RecalculateSize() (err error) {
-	fpath := db.cacheFilePath()
+func (db *StdNetDB) RecalculateSize() (err error) {
 	count := 0
-	err = filepath.Walk(fpath, func(fname string, info os.FileInfo, err error) error {
+	err = filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
 		if info.IsDir() {
+			if !strings.HasPrefix(fname, db.Path()) {
+				if db.Path() == fname {
+					log.Info("path==name time to exit")
+					return nil
+				}
+				log.Info("Outside of netDb dir time to exit", db.Path(), " ", fname)
+				return err
+			}
 			return err
 		}
 		if db.CheckFilePathValid(fname) {
-			// TODO: make sure it's in a skiplist directory
+			log.Println("Reading in file:", fname)
+			b, err := os.ReadFile(fname)
+			if err != nil {
+				return err
+			}
+			ri, _, err := router_info.ReadRouterInfo(b)
+			if err != nil {
+				return err
+			}
+			ih := ri.IdentHash().Bytes()
+			log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
+			for _, addr := range ri.RouterAddresses() {
+				log.Println(string(addr.Bytes()))
+			}
+			if ent, ok := db.RouterInfos[ih]; !ok {
+				db.RouterInfos[ri.IdentHash()] = Entry{
+					RouterInfo: &ri,
+				}
+			} else {
+				log.Println("entry previously found in table", ent, fname)
+			}
+			ri = router_info.RouterInfo{}
 			count++
+		} else {
+			log.Println("Invalid path error")
 		}
 		return err
 	})
 	if err == nil {
 		str := fmt.Sprintf("%d", count)
 		var f *os.File
+<<<<<<< HEAD
 		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0o600)
+=======
+		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
+>>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 		if err == nil {
 			_, err = io.WriteString(f, str)
 			f.Close()
@@ -110,7 +172,7 @@ func (db StdNetDB) RecalculateSize() (err error) {
 }
 
 // return true if the network db directory exists and is writable
-func (db StdNetDB) Exists() bool {
+func (db *StdNetDB) Exists() bool {
 	p := db.Path()
 	// check root directory
 	_, err := os.Stat(p)
@@ -125,10 +187,14 @@ func (db StdNetDB) Exists() bool {
 	return err == nil
 }
 
-func (db StdNetDB) SaveEntry(e *Entry) (err error) {
+func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
+<<<<<<< HEAD
 	var h common.Hash
 	h = e.ri.IdentHash()
+=======
+	h := e.RouterInfo.IdentHash()
+>>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
 	if err == nil {
@@ -142,14 +208,27 @@ func (db StdNetDB) SaveEntry(e *Entry) (err error) {
 	return
 }
 
+func (db *StdNetDB) Save() (err error) {
+	for _, dbe := range db.RouterInfos {
+		if e := db.SaveEntry(&dbe); e != nil {
+			err = e
+			// TODO: log this
+		}
+	}
+	return
+}
+
 // reseed if we have less than minRouters known routers
 // returns error if reseed failed
-func (db StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
+func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
+	if db.Size() > minRouters {
+		return nil
+	}
 	return
 }
 
 // ensure that the network database exists
-func (db StdNetDB) Ensure() (err error) {
+func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
 		err = db.Create()
 	}
@@ -157,7 +236,11 @@ func (db StdNetDB) Ensure() (err error) {
 }
 
 // create base network database directory
+<<<<<<< HEAD
 func (db StdNetDB) Create() (err error) {
+=======
+func (db *StdNetDB) Create() (err error) {
+>>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	mode := os.FileMode(0o700)
 	p := db.Path()
 	log.Infof("Create network database in %s", p)
