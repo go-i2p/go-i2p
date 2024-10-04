@@ -6,13 +6,13 @@ import "crypto"
 // Public Key and the Signing Public Key
 type PrivateKeysAndCert struct {
 	KeysAndCert
-	PK_KEY crypto.PrivateKey
+	PK_KEY  crypto.PrivateKey
 	SPK_KEY crypto.PrivateKey
 }
 
 func NewPrivateKeysAndCert() (*PrivateKeysAndCert, error) {
 	var pkc PrivateKeysAndCert
 	var err error
-	//pkc.PK_KEY, err = 
+	// pkc.PK_KEY, err =
 	return &pkc, err
 }
