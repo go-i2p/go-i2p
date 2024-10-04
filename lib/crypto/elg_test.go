@@ -3,10 +3,11 @@ package crypto
 import (
 	"bytes"
 	"crypto/rand"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/openpgp/elgamal"
 	"io"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/openpgp/elgamal"
 )
 
 func BenchmarkElgGenerate(b *testing.B) {
@@ -46,7 +47,6 @@ func BenchmarkElgDecrypt(b *testing.B) {
 		}
 	}
 	log.Infof("%d fails %d rounds", fails, b.N)
-
 }
 
 func BenchmarkElgEncrypt(b *testing.B) {

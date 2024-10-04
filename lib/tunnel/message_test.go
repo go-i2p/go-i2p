@@ -1,8 +1,9 @@
 package tunnel
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDeliveryInstructionDataWithNoPadding(t *testing.T) {
@@ -33,7 +34,6 @@ func TestDeliveryInstructionDataWithSomePadding(t *testing.T) {
 	copy(decrypted_tunnel_message[:], data)
 	di := decrypted_tunnel_message.deliveryInstructionData()
 	assert.Equal(1028-4-4-16-1-padding_size, len(di))
-
 }
 
 func TestDeliveryInstructionDataWithOnlyPadding(t *testing.T) {
@@ -53,11 +53,9 @@ func TestDeliveryInstructionDataWithOnlyPadding(t *testing.T) {
 }
 
 func TestDeliveryInstructionsWithFragmentsWithAllPadding(t *testing.T) {
-
 }
 
 // Test invalid delivery instructions and message fragments
 
 func TestDeliveryInstructionsWithFragmentsWithValidData(t *testing.T) {
-
 }

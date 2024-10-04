@@ -46,10 +46,12 @@ package ntcp
 
 type MessageType uint8
 
-const MessageTypeSessionRequest = 0x00
-const MessageTypeSessionCreated = 0x01
-const MessageTypeSessionConfirmed = 0x02
-const MessageTypeData = 0x03
+const (
+	MessageTypeSessionRequest   = 0x00
+	MessageTypeSessionCreated   = 0x01
+	MessageTypeSessionConfirmed = 0x02
+	MessageTypeData             = 0x03
+)
 
 type Message interface {
 	// Type returns the message type

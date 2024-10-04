@@ -38,8 +38,10 @@ byte  527    :: reply
 total length: 528
 */
 
-type BuildResponseRecordELGamalAES [528]byte
-type BuildResponseRecordELGamal [528]byte
+type (
+	BuildResponseRecordELGamalAES [528]byte
+	BuildResponseRecordELGamal    [528]byte
+)
 
 type BuildResponseRecord struct {
 	Hash    common.Hash

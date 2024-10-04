@@ -44,8 +44,10 @@ func createECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerif
 	return
 }
 
-type ECP256PublicKey [64]byte
-type ECP256PrivateKey [32]byte
+type (
+	ECP256PublicKey  [64]byte
+	ECP256PrivateKey [32]byte
+)
 
 func (k ECP256PublicKey) Len() int {
 	return len(k)
@@ -55,8 +57,10 @@ func (k ECP256PublicKey) NewVerifier() (Verifier, error) {
 	return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
 }
 
-type ECP384PublicKey [96]byte
-type ECP384PrivateKey [48]byte
+type (
+	ECP384PublicKey  [96]byte
+	ECP384PrivateKey [48]byte
+)
 
 func (k ECP384PublicKey) Len() int {
 	return len(k)
@@ -66,8 +70,10 @@ func (k ECP384PublicKey) NewVerifier() (Verifier, error) {
 	return createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
 }
 
-type ECP521PublicKey [132]byte
-type ECP521PrivateKey [66]byte
+type (
+	ECP521PublicKey  [132]byte
+	ECP521PrivateKey [66]byte
+)
 
 func (k ECP521PublicKey) Len() int {
 	return len(k)

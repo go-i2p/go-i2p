@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package signals
@@ -26,5 +27,4 @@ func Handle() {
 			// wtf?
 		}
 	}
-
 }

@@ -71,7 +71,7 @@ func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 
 func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {
 	var n int
-	if len(data) == 0 { //special case to answer when everything is ok during handshake
+	if len(data) == 0 { // special case to answer when everything is ok during handshake
 		if _, err := c.Conn.Read(make([]byte, 2)); err != nil {
 			return 0, err
 		}

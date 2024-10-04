@@ -1,4 +1,4 @@
 /*
-  i2p garlic tunnel implementation
+i2p garlic tunnel implementation
 */
 package tunnel

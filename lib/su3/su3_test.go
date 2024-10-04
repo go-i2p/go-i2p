@@ -9,11 +9,12 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func fileReader(t *testing.T, filename string) io.Reader {
@@ -60,11 +61,13 @@ func fileRSAPubKey(t *testing.T, filename string) *rsa.PublicKey {
 }
 
 // This fake data is generated in TestMain.
-var aliceFakeKey *rsa.PrivateKey
-var bobFakeKey *rsa.PrivateKey
-var aliceContent []byte
-var aliceSignature []byte
-var aliceSU3 []byte
+var (
+	aliceFakeKey   *rsa.PrivateKey
+	bobFakeKey     *rsa.PrivateKey
+	aliceContent   []byte
+	aliceSignature []byte
+	aliceSU3       []byte
+)
 
 func TestRead(t *testing.T) {
 	tests := []struct {

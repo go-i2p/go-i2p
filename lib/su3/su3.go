@@ -14,47 +14,50 @@
 // content the error ErrInvalidSignature will be returned.
 //
 // Example usage:
-//     // Let's say we are reading an SU3 file from an HTTP body, which is an io.Reader.
-//     su3File, err := su3.Read(body)
-//     if err != nil {
-//         // Handle error.
-//     }
-//     // Look up this signer's key.
-//     key := somehow_lookup_the_key(su3File.SignerID)
-//     // Read the content.
-//     contentReader := su3File.Content(key)
-//     bytes, err := ioutil.ReadAll(contentReader)
-//     if errors.Is(err, su3.ErrInvalidSignature) {
-//	       // The signature is invalid, OR a nil key was provided.
-//     } else if err != nil {
-//         // Handle error.
-//     }
+//
+//	    // Let's say we are reading an SU3 file from an HTTP body, which is an io.Reader.
+//	    su3File, err := su3.Read(body)
+//	    if err != nil {
+//	        // Handle error.
+//	    }
+//	    // Look up this signer's key.
+//	    key := somehow_lookup_the_key(su3File.SignerID)
+//	    // Read the content.
+//	    contentReader := su3File.Content(key)
+//	    bytes, err := ioutil.ReadAll(contentReader)
+//	    if errors.Is(err, su3.ErrInvalidSignature) {
+//		       // The signature is invalid, OR a nil key was provided.
+//	    } else if err != nil {
+//	        // Handle error.
+//	    }
 //
 // If you want to parse from a []byte, you can wrap it like this:
-//     mySU3FileBytes := []byte{0x00, 0x01, 0x02, 0x03}
-//     su3File, err := su3.Read(bytes.NewReader(mySU3FileBytes))
+//
+//	mySU3FileBytes := []byte{0x00, 0x01, 0x02, 0x03}
+//	su3File, err := su3.Read(bytes.NewReader(mySU3FileBytes))
 //
 // One of the advantages of this library's design is that you can avoid buffering
 // the file contents in memory. Here's how you would stream from an HTTP body
 // directly to disk:
-//     su3File, err := su3.Read(body)
-//     if err != nil {
-// 	       // Handle error.
-//     }
-//     // Look up this signer's key.
-//     key := somehow_lookup_the_key(su3File.SignerID)
-//     // Stream directly to disk.
-//     f, err := os.Create("my_file.txt")
-//     if err != nil {
-// 	       // Handle error.
-//     }
-//     _, err := io.Copy(f, su3File.Content(key))
-//     if errors.Is(err, su3.ErrInvalidSignature) {
-//	       // The signature is invalid, OR a nil key was provided.
-//         // Don't trust the file, delete it!
-//     } else if err != nil {
-//         // Handle error.
-//     }
+//
+//	    su3File, err := su3.Read(body)
+//	    if err != nil {
+//		       // Handle error.
+//	    }
+//	    // Look up this signer's key.
+//	    key := somehow_lookup_the_key(su3File.SignerID)
+//	    // Stream directly to disk.
+//	    f, err := os.Create("my_file.txt")
+//	    if err != nil {
+//		       // Handle error.
+//	    }
+//	    _, err := io.Copy(f, su3File.Content(key))
+//	    if errors.Is(err, su3.ErrInvalidSignature) {
+//		       // The signature is invalid, OR a nil key was provided.
+//	        // Don't trust the file, delete it!
+//	    } else if err != nil {
+//	        // Handle error.
+//	    }
 //
 // Note: if you want to read the content, the Content() io.Reader must be read
 // *before* the Signature() io.Reader. If you read the signature first, the
@@ -143,29 +146,31 @@ var contentTypes = map[byte]ContentType{
 	0x05: BLOCKLIST,
 }
 
-var ErrMissingMagicBytes = errors.New("missing magic bytes")
-var ErrMissingUnusedByte6 = errors.New("missing unused byte 6")
-var ErrMissingFileFormatVersion = errors.New("missing or incorrect file format version")
-var ErrMissingSignatureType = errors.New("missing or invalid signature type")
-var ErrUnsupportedSignatureType = errors.New("unsupported signature type")
-var ErrMissingSignatureLength = errors.New("missing signature length")
-var ErrMissingUnusedByte12 = errors.New("missing unused byte 12")
-var ErrMissingVersionLength = errors.New("missing version length")
-var ErrVersionTooShort = errors.New("version length too short")
-var ErrMissingUnusedByte14 = errors.New("missing unused byte 14")
-var ErrMissingSignerIDLength = errors.New("missing signer ID length")
-var ErrMissingContentLength = errors.New("missing content length")
-var ErrMissingUnusedByte24 = errors.New("missing unused byte 24")
-var ErrMissingFileType = errors.New("missing or invalid file type")
-var ErrMissingUnusedByte26 = errors.New("missing unused byte 26")
-var ErrMissingContentType = errors.New("missing or invalid content type")
-var ErrMissingUnusedBytes28To39 = errors.New("missing unused bytes 28-39")
-var ErrMissingVersion = errors.New("missing version")
-var ErrMissingSignerID = errors.New("missing signer ID")
-var ErrMissingContent = errors.New("missing content")
-var ErrMissingSignature = errors.New("missing signature")
-var ErrInvalidPublicKey = errors.New("invalid public key")
-var ErrInvalidSignature = errors.New("invalid signature")
+var (
+	ErrMissingMagicBytes        = errors.New("missing magic bytes")
+	ErrMissingUnusedByte6       = errors.New("missing unused byte 6")
+	ErrMissingFileFormatVersion = errors.New("missing or incorrect file format version")
+	ErrMissingSignatureType     = errors.New("missing or invalid signature type")
+	ErrUnsupportedSignatureType = errors.New("unsupported signature type")
+	ErrMissingSignatureLength   = errors.New("missing signature length")
+	ErrMissingUnusedByte12      = errors.New("missing unused byte 12")
+	ErrMissingVersionLength     = errors.New("missing version length")
+	ErrVersionTooShort          = errors.New("version length too short")
+	ErrMissingUnusedByte14      = errors.New("missing unused byte 14")
+	ErrMissingSignerIDLength    = errors.New("missing signer ID length")
+	ErrMissingContentLength     = errors.New("missing content length")
+	ErrMissingUnusedByte24      = errors.New("missing unused byte 24")
+	ErrMissingFileType          = errors.New("missing or invalid file type")
+	ErrMissingUnusedByte26      = errors.New("missing unused byte 26")
+	ErrMissingContentType       = errors.New("missing or invalid content type")
+	ErrMissingUnusedBytes28To39 = errors.New("missing unused bytes 28-39")
+	ErrMissingVersion           = errors.New("missing version")
+	ErrMissingSignerID          = errors.New("missing signer ID")
+	ErrMissingContent           = errors.New("missing content")
+	ErrMissingSignature         = errors.New("missing signature")
+	ErrInvalidPublicKey         = errors.New("invalid public key")
+	ErrInvalidSignature         = errors.New("invalid signature")
+)
 
 const magicBytes = "I2Psu3"
 

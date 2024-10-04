@@ -1,10 +1,11 @@
 package router
 
 import (
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 // i2p router type

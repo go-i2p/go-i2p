@@ -4,9 +4,11 @@ import (
 	"errors"
 )
 
-var ErrBadSignatureSize = errors.New("bad signature size")
-var ErrInvalidKeyFormat = errors.New("invalid key format")
-var ErrInvalidSignature = errors.New("invalid signature")
+var (
+	ErrBadSignatureSize = errors.New("bad signature size")
+	ErrInvalidKeyFormat = errors.New("invalid key format")
+	ErrInvalidSignature = errors.New("invalid signature")
+)
 
 // type for verifying signatures
 type Verifier interface {

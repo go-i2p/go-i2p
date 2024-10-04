@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
-	"golang.org/x/crypto/openpgp/elgamal"
 	"io"
 	"math/big"
+
+	"golang.org/x/crypto/openpgp/elgamal"
 )
 
 var elgp = new(big.Int).SetBytes([]byte{
@@ -29,11 +30,15 @@ var elgp = new(big.Int).SetBytes([]byte{
 	0x15, 0x72, 0x8E, 0x5A, 0x8A, 0xAC, 0xAA, 0x68, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 })
 
-var one = big.NewInt(1)
-var elgg = big.NewInt(2)
+var (
+	one  = big.NewInt(1)
+	elgg = big.NewInt(2)
+)
 
-var ElgDecryptFail = errors.New("failed to decrypt elgamal encrypted data")
-var ElgEncryptTooBig = errors.New("failed to encrypt data, too big for elgamal")
+var (
+	ElgDecryptFail   = errors.New("failed to decrypt elgamal encrypted data")
+	ElgEncryptTooBig = errors.New("failed to encrypt data, too big for elgamal")
+)
 
 // generate an elgamal key pair
 func ElgamalGenerate(priv *elgamal.PrivateKey, rand io.Reader) (err error) {
@@ -183,8 +188,10 @@ func createElgamalEncryption(pub *elgamal.PublicKey, rand io.Reader) (enc *Elgam
 	return
 }
 
-type ElgPublicKey [256]byte
-type ElgPrivateKey [256]byte
+type (
+	ElgPublicKey  [256]byte
+	ElgPrivateKey [256]byte
+)
 
 func (elg ElgPublicKey) Len() int {
 	return len(elg)

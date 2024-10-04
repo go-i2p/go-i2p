@@ -19,7 +19,6 @@ type Tunnel struct {
 }
 
 func NewTunnelCrypto(layerKey, ivKey TunnelKey) (t *Tunnel, err error) {
-
 	t = new(Tunnel)
 	t.layerKey, err = aes.NewCipher(layerKey[:])
 	if err == nil {
