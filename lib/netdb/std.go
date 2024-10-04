@@ -75,11 +75,7 @@ func (db *StdNetDB) Path() string {
 }
 
 // return how many routers we know about in our network database
-<<<<<<< HEAD
-func (db StdNetDB) Size() (routers int) {
-=======
 func (db *StdNetDB) Size() (routers int) {
->>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	// TODO: implement this
 	var err error
 	var data []byte
@@ -158,11 +154,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 	if err == nil {
 		str := fmt.Sprintf("%d", count)
 		var f *os.File
-<<<<<<< HEAD
-		f, err = os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0o600)
-=======
 		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
->>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 		if err == nil {
 			_, err = io.WriteString(f, str)
 			f.Close()
@@ -189,12 +181,7 @@ func (db *StdNetDB) Exists() bool {
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
-<<<<<<< HEAD
-	var h common.Hash
-	h = e.ri.IdentHash()
-=======
 	h := e.RouterInfo.IdentHash()
->>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
 	if err == nil {
@@ -236,11 +223,7 @@ func (db *StdNetDB) Ensure() (err error) {
 }
 
 // create base network database directory
-<<<<<<< HEAD
-func (db StdNetDB) Create() (err error) {
-=======
 func (db *StdNetDB) Create() (err error) {
->>>>>>> 9f4154ff457f962bc3b5d77e266b5d87b4de3742
 	mode := os.FileMode(0o700)
 	p := db.Path()
 	log.Infof("Create network database in %s", p)
