@@ -7,38 +7,79 @@ import (
 	"fmt"
 )
 
-func aesEncrypt(key, iv, plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+// AesSymmetricKey represents a symmetric key for AES encryption/decryption
+type AesSymmetricKey struct {
+	Key []byte // AES key (must be 16, 24, or 32 bytes for AES-128, AES-192, AES-256)
+	IV  []byte // Initialization Vector (must be 16 bytes for AES)
+}
+
+// AesSymmetricEncrypter implements the Encrypter interface using AES
+type AesSymmetricEncrypter struct {
+	Key []byte
+	IV  []byte
+}
+
+// Encrypt encrypts data using AES-CBC with PKCS#7 padding
+func (e *AesSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
+	block, err := aes.NewCipher(e.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	plaintext = pkcs7Pad(plaintext, aes.BlockSize)
+	plaintext := pkcs7Pad(data, aes.BlockSize)
 	ciphertext := make([]byte, len(plaintext))
-	mode := cipher.NewCBCEncrypter(block, iv)
+	mode := cipher.NewCBCEncrypter(block, e.IV)
 	mode.CryptBlocks(ciphertext, plaintext)
 	return ciphertext, nil
 }
 
-func aesDecrypt(key, iv, ciphertext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+// AesSymmetricDecrypter implements the Decrypter interface using AES
+type AesSymmetricDecrypter struct {
+	Key []byte
+	IV  []byte
+}
+
+// Decrypt decrypts data using AES-CBC with PKCS#7 padding
+func (d *AesSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
+	block, err := aes.NewCipher(d.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(ciphertext)%aes.BlockSize != 0 {
+	if len(data)%aes.BlockSize != 0 {
 		return nil, fmt.Errorf("ciphertext is not a multiple of the block size")
 	}
 
-	plaintext := make([]byte, len(ciphertext))
-	mode := cipher.NewCBCDecrypter(block, iv)
-	mode.CryptBlocks(plaintext, ciphertext)
+	plaintext := make([]byte, len(data))
+	mode := cipher.NewCBCDecrypter(block, d.IV)
+	mode.CryptBlocks(plaintext, data)
 
 	plaintext, err = pkcs7Unpad(plaintext)
 	if err != nil {
 		return nil, err
 	}
 	return plaintext, nil
+}
+
+// NewEncrypter creates a new AesSymmetricEncrypter
+func (k *AesSymmetricKey) NewEncrypter() (Encrypter, error) {
+	return &AesSymmetricEncrypter{
+		Key: k.Key,
+		IV:  k.IV,
+	}, nil
+}
+
+// Len returns the length of the key
+func (k *AesSymmetricKey) Len() int {
+	return len(k.Key)
+}
+
+// NewDecrypter creates a new AesSymmetricDecrypter
+func (k *AesSymmetricKey) NewDecrypter() (Decrypter, error) {
+	return &AesSymmetricDecrypter{
+		Key: k.Key,
+		IV:  k.IV,
+	}, nil
 }
 
 func pkcs7Pad(data []byte, blockSize int) []byte {
@@ -53,7 +94,7 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("data is empty")
 	}
 	padding := int(data[length-1])
-	if padding == 0 || padding > aes.BlockSize || length < aes.BlockSize {
+	if padding == 0 || padding > aes.BlockSize {
 		return nil, fmt.Errorf("invalid padding")
 	}
 	paddingStart := length - padding
