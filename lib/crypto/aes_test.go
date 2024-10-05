@@ -5,8 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/rand"
 	"encoding/hex"
-	log "github.com/sirupsen/logrus"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func TestAESEncryptDecrypt(t *testing.T) {
