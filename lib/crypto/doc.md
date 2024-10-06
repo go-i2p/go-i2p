@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/crypto"
 
-package for i2p specific crpytography
+package for i2p specific cryptography
 
 ## Usage
 
