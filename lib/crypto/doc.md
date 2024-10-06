@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/crypto"
 
-package for i2p specific crpytography
+package for i2p specific cryptography
 
 ## Usage
 
@@ -12,7 +12,72 @@ const (
 	OPAD = byte(0x5C)
 )
 ```
+#### type AESSymmetricKey
+```go
+type AESSymmetricKey struct {
+    Key []byte // AES key (must be 16, 24, or 32 bytes for AES-128, AES-192, AES-256)
+    IV  []byte // Initialization Vector (must be 16 bytes for AES)
+}
+```
 
+AESSymmetricKey represents a symmetric key for AES encryption/decryption
+
+#### func (AESSymmetricKey) NewEncrypter
+
+```go
+func (k *AESSymmetricKey) NewEncrypter() (Encrypter, error)
+```
+NewEncrypter creates a new AESSymmetricEncrypter
+
+#### func (AESSymmetricKey) NewDecrypter
+
+```go
+func (k *AESSymmetricKey) NewDecrypter() (Decrypter, error)
+```
+NewDecrypter creates a new AESSymmetricDecrypter
+
+#### func (AESSymmetricKey) Len
+
+```go
+func (k *AESSymmetricKey) Len() int
+```
+Len returns the length of the key
+
+#### type AESSymmetricEncrypter
+
+```go
+type AESSymmetricEncrypter struct {
+    Key []byte
+    IV  []byte
+}
+```
+
+AESSymmetricEncrypter implements the Encrypter interface using AES
+
+#### func (*AESSymmetricEncrypter) Encrypt
+
+```go
+func (e *AESSymmetricEncrypter) Encrypt(data []byte) ([]byte, error)
+```
+Encrypt encrypts data using AES-CBC with PKCS#7 padding
+
+#### type AESSymmetricDecrypter
+
+```go
+type AESSymmetricDecrypter struct {
+    Key []byte
+    IV  []byte
+}
+```
+
+AESSymmetricDecrypter implements the Decrypter interface using AES
+
+#### func (*AESSymmetricDecrypter) Decrypt
+
+```go
+func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error)
+```
+Decrypt decrypts data using AES-CBC with PKCS#7 padding
 ```go
 var (
 	ElgDecryptFail   = errors.New("failed to decrypt elgamal encrypted data")

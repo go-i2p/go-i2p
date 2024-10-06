@@ -35,8 +35,8 @@ type Transport interface {
 	// returns nil and an error on error
 	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
 
-	// return true if a routerInfo is compatable with this transport
-	Compatable(routerInfo router_info.RouterInfo) bool
+	// return true if a routerInfo is compatible with this transport
+	Compatible(routerInfo router_info.RouterInfo) bool
 
 	// close the transport cleanly
 	// blocks until done
@@ -72,12 +72,12 @@ func (tmux *TransportMuxer) Close() (err error)
 ```
 close every transport that this transport muxer has
 
-#### func (*TransportMuxer) Compatable
+#### func (*TransportMuxer) Compatible
 
 ```go
-func (tmux *TransportMuxer) Compatable(routerInfo router_info.RouterInfo) (compat bool)
+func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compat bool)
 ```
-is there a transport that we mux that is compatable with this router info?
+is there a transport that we mux that is compatible with this router info?
 
 #### func (*TransportMuxer) GetSession
 

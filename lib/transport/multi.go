@@ -57,7 +57,7 @@ func (tmux *TransportMuxer) Name() string {
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	for _, t := range tmux.trans {
 		// pick the first one that is compatable
-		if t.Compatable(routerInfo) {
+		if t.Compatible(routerInfo) {
 			// try to get a session
 			s, err = t.GetSession(routerInfo)
 			if err != nil {
@@ -75,9 +75,9 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 }
 
 // is there a transport that we mux that is compatable with this router info?
-func (tmux *TransportMuxer) Compatable(routerInfo router_info.RouterInfo) (compat bool) {
+func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compat bool) {
 	for _, t := range tmux.trans {
-		if t.Compatable(routerInfo) {
+		if t.Compatible(routerInfo) {
 			compat = true
 			return
 		}
