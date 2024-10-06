@@ -7,20 +7,20 @@ import (
 	"fmt"
 )
 
-// AesSymmetricKey represents a symmetric key for AES encryption/decryption
-type AesSymmetricKey struct {
+// AESSymmetricKey represents a symmetric key for AES encryption/decryption
+type AESSymmetricKey struct {
 	Key []byte // AES key (must be 16, 24, or 32 bytes for AES-128, AES-192, AES-256)
 	IV  []byte // Initialization Vector (must be 16 bytes for AES)
 }
 
-// AesSymmetricEncrypter implements the Encrypter interface using AES
-type AesSymmetricEncrypter struct {
+// AESSymmetricEncrypter implements the Encrypter interface using AES
+type AESSymmetricEncrypter struct {
 	Key []byte
 	IV  []byte
 }
 
 // Encrypt encrypts data using AES-CBC with PKCS#7 padding
-func (e *AesSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
+func (e *AESSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(e.Key)
 	if err != nil {
 		return nil, err
@@ -33,14 +33,14 @@ func (e *AesSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-// AesSymmetricDecrypter implements the Decrypter interface using AES
-type AesSymmetricDecrypter struct {
+// AESSymmetricDecrypter implements the Decrypter interface using AES
+type AESSymmetricDecrypter struct {
 	Key []byte
 	IV  []byte
 }
 
 // Decrypt decrypts data using AES-CBC with PKCS#7 padding
-func (d *AesSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
+func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(d.Key)
 	if err != nil {
 		return nil, err
@@ -61,22 +61,22 @@ func (d *AesSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// NewEncrypter creates a new AesSymmetricEncrypter
-func (k *AesSymmetricKey) NewEncrypter() (Encrypter, error) {
-	return &AesSymmetricEncrypter{
+// NewEncrypter creates a new AESSymmetricEncrypter
+func (k *AESSymmetricKey) NewEncrypter() (Encrypter, error) {
+	return &AESSymmetricEncrypter{
 		Key: k.Key,
 		IV:  k.IV,
 	}, nil
 }
 
 // Len returns the length of the key
-func (k *AesSymmetricKey) Len() int {
+func (k *AESSymmetricKey) Len() int {
 	return len(k.Key)
 }
 
-// NewDecrypter creates a new AesSymmetricDecrypter
-func (k *AesSymmetricKey) NewDecrypter() (Decrypter, error) {
-	return &AesSymmetricDecrypter{
+// NewDecrypter creates a new AESSymmetricDecrypter
+func (k *AESSymmetricKey) NewDecrypter() (Decrypter, error) {
+	return &AESSymmetricDecrypter{
 		Key: k.Key,
 		IV:  k.IV,
 	}, nil

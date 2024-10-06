@@ -22,7 +22,7 @@ func TestAESEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Failed to generate random IV: %v", err)
 	}
 
-	symmetricKey := AesSymmetricKey{
+	symmetricKey := AESSymmetricKey{
 		Key: key,
 		IV:  iv,
 	}
@@ -82,7 +82,7 @@ func TestAESEncryptInvalidKey(t *testing.T) {
 	_, _ = rand.Read(iv)
 
 	for _, key := range invalidKeys {
-		symmetricKey := &AesSymmetricKey{
+		symmetricKey := &AESSymmetricKey{
 			Key: key,
 			IV:  iv,
 		}
@@ -104,7 +104,7 @@ func TestAESDecryptInvalidInput(t *testing.T) {
 	_, _ = rand.Read(key)
 	_, _ = rand.Read(iv)
 
-	symmetricKey := &AesSymmetricKey{
+	symmetricKey := &AESSymmetricKey{
 		Key: key,
 		IV:  iv,
 	}
