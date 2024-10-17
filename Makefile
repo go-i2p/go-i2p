@@ -16,12 +16,16 @@ else
 	EXE := $(REPO)/go-i2p
 endif
 
+#check for gofumpt
+check_gofumpt:
+	@which gofumpt > /dev/null 2>&1 || (echo "gofumpt is required but not installed. Please install it from https://github.com/mvdan/gofumpt."; exit 1)
+
 build: clean $(EXE)
 
 $(EXE):
 	$(GO) build --tags netgo,osusergo -v -o $(EXE)
 
-test: fmt
+test: check_gofumpt fmt
 	$(GO) test -v -failfast ./lib/common/...
 
 clean:
