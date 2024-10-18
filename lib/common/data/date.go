@@ -3,10 +3,12 @@ package data
 
 import (
 	"errors"
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.GetLogger()
 
 // DATE_SIZE is the length in bytes of an I2P Date.
 const DATE_SIZE = 8
@@ -51,7 +53,7 @@ func (date Date) Time() (date_time time.Time) {
 // Any data after DATE_SIZE is returned as a remainder.
 func ReadDate(data []byte) (date Date, remainder []byte, err error) {
 	if len(data) < 8 {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"data": data,
 		}).Error("ReadDate: data is too short")
 		err = errors.New("ReadDate: data is too short")
@@ -59,6 +61,10 @@ func ReadDate(data []byte) (date Date, remainder []byte, err error) {
 	}
 	copy(date[:], data[:8])
 	remainder = data[8:]
+	log.WithFields(logrus.Fields{
+		"date_value":       date.Int(),
+		"remainder_length": len(remainder),
+	}).Debug("Successfully read Date from data")
 	return
 }
 
@@ -66,6 +72,15 @@ func ReadDate(data []byte) (date Date, remainder []byte, err error) {
 // Returns a pointer to Date unlike ReadDate.
 func NewDate(data []byte) (date *Date, remainder []byte, err error) {
 	objdate, remainder, err := ReadDate(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to create new Date")
+		return nil, remainder, err
+	}
+
 	date = &objdate
+	log.WithFields(logrus.Fields{
+		"date_value":       date.Int(),
+		"remainder_length": len(remainder),
+	}).Debug("Successfully created new Date")
 	return
 }
