@@ -29,6 +29,7 @@ payload :: data
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
 
@@ -327,7 +328,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 // KeyCertificateFromCertificate returns a *KeyCertificate from a *Certificate.
 func KeyCertificateFromCertificate(certificate Certificate) *KeyCertificate {
 	log.Debug("Creating KeyCertificate from Certificate")
-	//k, _, _ := NewKeyCertificate(certificate.RawBytes())
+	// k, _, _ := NewKeyCertificate(certificate.RawBytes())
 	k, _, err := NewKeyCertificate(certificate.RawBytes())
 	if err != nil {
 		log.WithError(err).Error("Failed to create KeyCertificate from Certificate")

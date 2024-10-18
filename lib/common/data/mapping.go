@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+
 	"github.com/sirupsen/logrus"
 )
 

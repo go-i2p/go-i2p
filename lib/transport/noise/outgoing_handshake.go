@@ -13,9 +13,7 @@ import (
 
 func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
 	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
-
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
-
 	}
 	negData = make([]byte, 6)
 	copy(negData, initNegotiationData(nil))
@@ -30,7 +28,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 	prologue := make([]byte, 2, uint16Size+len(negData))
 	binary.BigEndian.PutUint16(prologue, uint16(len(negData)))
 	prologue = append(prologue, negData...)
-	//prologue = append(initString, prologue...)
+	// prologue = append(initString, prologue...)
 	state, err = noise.NewHandshakeState(noise.Config{
 		StaticKeypair: s,
 		Initiator:     true,

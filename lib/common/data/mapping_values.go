@@ -2,8 +2,9 @@ package data
 
 import (
 	"errors"
-	"github.com/sirupsen/logrus"
 	"sort"
+
+	"github.com/sirupsen/logrus"
 )
 
 // MappingValues represents the parsed key value pairs inside of an I2P Mapping.

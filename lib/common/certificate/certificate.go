@@ -4,9 +4,10 @@ package certificate
 
 import (
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 
-	//log "github.com/sirupsen/logrus"
+	// log "github.com/sirupsen/logrus"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"

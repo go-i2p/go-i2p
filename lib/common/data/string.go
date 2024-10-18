@@ -3,6 +3,7 @@ package data
 import (
 	"errors"
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 )
 

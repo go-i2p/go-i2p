@@ -1,11 +1,12 @@
 package logger
 
 import (
-	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 var (

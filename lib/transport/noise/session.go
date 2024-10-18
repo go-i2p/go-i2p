@@ -52,8 +52,10 @@ func (noise_session *NoiseSession) SetWriteDeadline(t time.Time) error {
 	return noise_session.Conn.SetWriteDeadline(t)
 }
 
-var exampleNoiseSession transport.TransportSession = &NoiseSession{}
-var ExampleNoiseSession net.Conn = exampleNoiseSession.(*NoiseSession)
+var (
+	exampleNoiseSession transport.TransportSession = &NoiseSession{}
+	ExampleNoiseSession net.Conn                   = exampleNoiseSession.(*NoiseSession)
+)
 
 func (s *NoiseSession) LocalAddr() net.Addr {
 	return s.Conn.LocalAddr()
@@ -81,7 +83,7 @@ func newBlock() []byte {
 type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error) {
-	//socket, err := DialNoise("noise", ri)
+	// socket, err := DialNoise("noise", ri)
 	for _, addr := range ri.RouterAddresses() {
 		socket, err := net.Dial("tcp", string(addr.Bytes()))
 		if err != nil {

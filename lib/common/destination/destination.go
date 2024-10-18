@@ -2,9 +2,10 @@
 package destination
 
 import (
+	"strings"
+
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
-	"strings"
 
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 

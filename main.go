@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
@@ -11,7 +12,6 @@ import (
 var log = logger.GetLogger()
 
 func main() {
-
 	netDbPath := flag.String("netDb", config.DefaultNetDbConfig.Path, "Path to the netDb")
 	flag.Parse()
 	config.RouterConfigProperties.NetDb.Path = *netDbPath
