@@ -5,7 +5,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetLogger()
 
 // AESSymmetricKey represents a symmetric key for AES encryption/decryption
 type AESSymmetricKey struct {
@@ -21,8 +25,11 @@ type AESSymmetricEncrypter struct {
 
 // Encrypt encrypts data using AES-CBC with PKCS#7 padding
 func (e *AESSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
+	log.WithField("data_length", len(data)).Debug("Encrypting data")
+
 	block, err := aes.NewCipher(e.Key)
 	if err != nil {
+		log.WithError(err).Error("Failed to create AES cipher")
 		return nil, err
 	}
 
@@ -30,6 +37,8 @@ func (e *AESSymmetricEncrypter) Encrypt(data []byte) ([]byte, error) {
 	ciphertext := make([]byte, len(plaintext))
 	mode := cipher.NewCBCEncrypter(block, e.IV)
 	mode.CryptBlocks(ciphertext, plaintext)
+
+	log.WithField("ciphertext_length", len(ciphertext)).Debug("Data encrypted successfully")
 	return ciphertext, nil
 }
 
@@ -41,12 +50,16 @@ type AESSymmetricDecrypter struct {
 
 // Decrypt decrypts data using AES-CBC with PKCS#7 padding
 func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
+	log.WithField("data_length", len(data)).Debug("Decrypting data")
+
 	block, err := aes.NewCipher(d.Key)
 	if err != nil {
+		log.WithError(err).Error("Failed to create AES cipher")
 		return nil, err
 	}
 
 	if len(data)%aes.BlockSize != 0 {
+		log.Error("Ciphertext is not a multiple of the block size")
 		return nil, fmt.Errorf("ciphertext is not a multiple of the block size")
 	}
 
@@ -56,13 +69,17 @@ func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
 
 	plaintext, err = pkcs7Unpad(plaintext)
 	if err != nil {
+		log.WithError(err).Error("Failed to unpad plaintext")
 		return nil, err
 	}
+
+	log.WithField("plaintext_length", len(plaintext)).Debug("Data decrypted successfully")
 	return plaintext, nil
 }
 
 // NewEncrypter creates a new AESSymmetricEncrypter
 func (k *AESSymmetricKey) NewEncrypter() (Encrypter, error) {
+	log.Debug("Creating new AESSymmetricEncrypter")
 	return &AESSymmetricEncrypter{
 		Key: k.Key,
 		IV:  k.IV,
@@ -83,25 +100,41 @@ func (k *AESSymmetricKey) NewDecrypter() (Decrypter, error) {
 }
 
 func pkcs7Pad(data []byte, blockSize int) []byte {
+	log.WithFields(logrus.Fields{
+		"data_length": len(data),
+		"block_size":  blockSize,
+	}).Debug("Applying PKCS#7 padding")
+
 	padding := blockSize - (len(data) % blockSize)
 	padText := bytes.Repeat([]byte{byte(padding)}, padding)
+	padded := append(data, padText...)
+
+	log.WithField("padded_length", len(padded)).Debug("PKCS#7 padding applied")
 	return append(data, padText...)
 }
 
 func pkcs7Unpad(data []byte) ([]byte, error) {
+	log.WithField("data_length", len(data)).Debug("Removing PKCS#7 padding")
+
 	length := len(data)
 	if length == 0 {
+		log.Error("Data is empty")
 		return nil, fmt.Errorf("data is empty")
 	}
 	padding := int(data[length-1])
 	if padding == 0 || padding > aes.BlockSize {
+		log.WithField("padding", padding).Error("Invalid padding")
 		return nil, fmt.Errorf("invalid padding")
 	}
 	paddingStart := length - padding
 	for i := paddingStart; i < length; i++ {
 		if data[i] != byte(padding) {
+			log.Error("Invalid padding")
 			return nil, fmt.Errorf("invalid padding")
 		}
 	}
-	return data[:paddingStart], nil
+
+	unpadded := data[:paddingStart]
+	log.WithField("unpadded_length", len(unpadded)).Debug("PKCS#7 padding removed")
+	return unpadded, nil
 }
