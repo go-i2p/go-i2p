@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
 
@@ -42,6 +43,7 @@ var (
 
 // generate an elgamal key pair
 func ElgamalGenerate(priv *elgamal.PrivateKey, rand io.Reader) (err error) {
+	log.Debug("Generating ElGamal key pair")
 	priv.P = elgp
 	priv.G = elgg
 	xBytes := make([]byte, priv.P.BitLen()/8)
@@ -51,6 +53,9 @@ func ElgamalGenerate(priv *elgamal.PrivateKey, rand io.Reader) (err error) {
 		priv.X = new(big.Int).SetBytes(xBytes)
 		// compute public key
 		priv.Y = new(big.Int).Exp(priv.G, priv.X, priv.P)
+		log.Debug("ElGamal key pair generated successfully")
+	} else {
+		log.WithError(err).Error("Failed to generate ElGamal key pair")
 	}
 	return
 }
@@ -60,12 +65,23 @@ type elgDecrypter struct {
 }
 
 func (elg *elgDecrypter) Decrypt(data []byte) (dec []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Decrypting ElGamal data")
 	dec, err = elgamalDecrypt(elg.k, data, true) // TODO(psi): should this be true or false?
+	if err != nil {
+		log.WithError(err).Error("Failed to decrypt ElGamal data")
+	} else {
+		log.WithField("decrypted_length", len(dec)).Debug("ElGamal data decrypted successfully")
+	}
 	return
 }
 
 // decrypt an elgamal encrypted message, i2p style
 func elgamalDecrypt(priv *elgamal.PrivateKey, data []byte, zeroPadding bool) (decrypted []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"data_length":  len(data),
+		"zero_padding": zeroPadding,
+	}).Debug("Decrypting ElGamal data")
+
 	a := new(big.Int)
 	b := new(big.Int)
 	idx := 0
@@ -87,9 +103,11 @@ func elgamalDecrypt(priv *elgamal.PrivateKey, data []byte, zeroPadding bool) (de
 	if subtle.ConstantTimeCompare(d[:], m[1:33]) == 1 {
 		// decryption successful
 		good = 1
+		log.Debug("ElGamal decryption successful")
 	} else {
 		// decrypt failed
 		err = ElgDecryptFail
+		log.WithError(err).Error("ElGamal decryption failed")
 	}
 	// copy result
 	decrypted = make([]byte, 222)
@@ -107,10 +125,16 @@ type ElgamalEncryption struct {
 }
 
 func (elg *ElgamalEncryption) Encrypt(data []byte) (enc []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Encrypting data with ElGamal")
 	return elg.EncryptPadding(data, true)
 }
 
 func (elg *ElgamalEncryption) EncryptPadding(data []byte, zeroPadding bool) (encrypted []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"data_length":  len(data),
+		"zero_padding": zeroPadding,
+	}).Debug("Encrypting data with ElGamal padding")
+
 	if len(data) > 222 {
 		err = ElgEncryptTooBig
 		return
@@ -134,23 +158,31 @@ func (elg *ElgamalEncryption) EncryptPadding(data []byte, zeroPadding bool) (enc
 		copy(encrypted, elg.a.Bytes())
 		copy(encrypted[256:], b)
 	}
+
+	log.WithField("encrypted_length", len(encrypted)).Debug("Data encrypted successfully with ElGamal")
 	return
 }
 
 // create an elgamal public key from byte slice
 func createElgamalPublicKey(data []byte) (k *elgamal.PublicKey) {
+	log.WithField("data_length", len(data)).Debug("Creating ElGamal public key")
 	if len(data) == 256 {
 		k = &elgamal.PublicKey{
 			G: elgg,
 			P: elgp,
 			Y: new(big.Int).SetBytes(data),
 		}
+		log.Debug("ElGamal public key created successfully")
+	} else {
+		log.Warn("Invalid data length for ElGamal public key")
 	}
+
 	return
 }
 
 // create an elgamal private key from byte slice
 func createElgamalPrivateKey(data []byte) (k *elgamal.PrivateKey) {
+	log.WithField("data_length", len(data)).Debug("Creating ElGamal private key")
 	if len(data) == 256 {
 		x := new(big.Int).SetBytes(data)
 		y := new(big.Int).Exp(elgg, x, elgp)
@@ -162,12 +194,16 @@ func createElgamalPrivateKey(data []byte) (k *elgamal.PrivateKey) {
 			},
 			X: x,
 		}
+		log.Debug("ElGamal private key created successfully")
+	} else {
+		log.Warn("Invalid data length for ElGamal private key")
 	}
 	return
 }
 
 // create a new elgamal encryption session
 func createElgamalEncryption(pub *elgamal.PublicKey, rand io.Reader) (enc *ElgamalEncryption, err error) {
+	log.Debug("Creating ElGamal encryption session")
 	kbytes := make([]byte, 256)
 	k := new(big.Int)
 	for err == nil {
@@ -184,6 +220,9 @@ func createElgamalEncryption(pub *elgamal.PublicKey, rand io.Reader) (enc *Elgam
 			a:  new(big.Int).Exp(pub.G, k, pub.P),
 			b1: new(big.Int).Exp(pub.Y, k, pub.P),
 		}
+		log.Debug("ElGamal encryption session created successfully")
+	} else {
+		log.WithError(err).Error("Failed to create ElGamal encryption session")
 	}
 	return
 }
@@ -198,8 +237,14 @@ func (elg ElgPublicKey) Len() int {
 }
 
 func (elg ElgPublicKey) NewEncrypter() (enc Encrypter, err error) {
+	log.Debug("Creating new ElGamal encrypter")
 	k := createElgamalPublicKey(elg[:])
 	enc, err = createElgamalEncryption(k, rand.Reader)
+	if err != nil {
+		log.WithError(err).Error("Failed to create ElGamal encrypter")
+	} else {
+		log.Debug("ElGamal encrypter created successfully")
+	}
 	return
 }
 
@@ -208,8 +253,10 @@ func (elg ElgPrivateKey) Len() int {
 }
 
 func (elg ElgPrivateKey) NewDecrypter() (dec Decrypter, err error) {
+	log.Debug("Creating new ElGamal decrypter")
 	dec = &elgDecrypter{
 		k: createElgamalPrivateKey(elg[:]),
 	}
+	log.Debug("ElGamal decrypter created successfully")
 	return
 }

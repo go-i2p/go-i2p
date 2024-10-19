@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
+	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
 )
@@ -30,10 +31,14 @@ func (k Ed25519PublicKey) Len() int {
 }
 
 func createEd25519PublicKey(data []byte) (k *ed25519.PublicKey) {
+	log.WithField("data_length", len(data)).Debug("Creating Ed25519 public key")
 	if len(data) == 256 {
 		k2 := ed25519.PublicKey{}
 		copy(k2[:], data)
 		k = &k2
+		log.Debug("Ed25519 public key created successfully")
+	} else {
+		log.Warn("Invalid data length for Ed25519 public key")
 	}
 	return
 }
@@ -52,6 +57,7 @@ func createEd25519Encryption(pub *ed25519.PublicKey, rand io.Reader) (enc *Ed255
 	if err == nil {
 		enc = &Ed25519Encryption{}
 	}*/
+	log.Warn("createEd25519Encryption is not implemented")
 	return
 }
 
@@ -60,11 +66,18 @@ type Ed25519Encryption struct {
 }
 
 func (ed25519 *Ed25519Encryption) Encrypt(data []byte) (enc []byte, err error) {
+	log.Warn("createEd25519Encryption is not implemented")
 	return ed25519.EncryptPadding(data, true)
 }
 
 func (ed25519 *Ed25519Encryption) EncryptPadding(data []byte, zeroPadding bool) (encrypted []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"data_length":  len(data),
+		"zero_padding": zeroPadding,
+	}).Debug("Encrypting data with padding using Ed25519")
+
 	if len(data) > 222 {
+		log.Error("Data too big for Ed25519 encryption")
 		err = Ed25519EncryptTooBig
 		return
 	}
@@ -87,33 +100,56 @@ func (ed25519 *Ed25519Encryption) EncryptPadding(data []byte, zeroPadding bool) 
 		copy(encrypted, ed25519.a.Bytes())
 		copy(encrypted[256:], b)
 	}
+
+	log.WithField("encrypted_length", len(encrypted)).Debug("Data encrypted successfully with Ed25519")
 	return
 }
 
 func (elg Ed25519PublicKey) NewEncrypter() (enc Encrypter, err error) {
+	log.Debug("Creating new Ed25519 encrypter")
 	k := createEd25519PublicKey(elg[:])
 	enc, err = createEd25519Encryption(k, rand.Reader)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Ed25519 encrypter")
+	} else {
+		log.Debug("Ed25519 encrypter created successfully")
+	}
 	return
 }
 
 func (v *Ed25519Verifier) VerifyHash(h, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"hash_length": len(h),
+		"sig_length":  len(sig),
+	}).Debug("Verifying Ed25519 signature hash")
+
 	if len(sig) != ed25519.SignatureSize {
+		log.Error("Bad Ed25519 signature size")
 		err = ErrBadSignatureSize
 		return
 	}
 	if len(v.k) != ed25519.PublicKeySize {
+		log.Error("Invalid Ed25519 public key size")
 		err = errors.New("failed to verify: invalid ed25519 public key size")
 		return
 	}
 
 	ok := ed25519.Verify(v.k, h, sig)
 	if !ok {
+		log.Warn("Invalid Ed25519 signature")
 		err = errors.New("failed to verify: invalid signature")
+	} else {
+		log.Debug("Ed25519 signature verified successfully")
 	}
 	return
 }
 
 func (v *Ed25519Verifier) Verify(data, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"data_length": len(data),
+		"sig_length":  len(sig),
+	}).Debug("Verifying Ed25519 signature")
+
 	h := sha512.Sum512(data)
 	err = v.VerifyHash(h[:], sig)
 	return
@@ -126,7 +162,10 @@ type Ed25519Signer struct {
 }
 
 func (s *Ed25519Signer) Sign(data []byte) (sig []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Signing data with Ed25519")
+
 	if len(s.k) != ed25519.PrivateKeySize {
+		log.Error("Invalid Ed25519 private key size")
 		err = errors.New("failed to sign: invalid ed25519 private key size")
 		return
 	}
@@ -136,6 +175,8 @@ func (s *Ed25519Signer) Sign(data []byte) (sig []byte, err error) {
 }
 
 func (s *Ed25519Signer) SignHash(h []byte) (sig []byte, err error) {
+	log.WithField("hash_length", len(h)).Debug("Signing hash with Ed25519")
 	sig = ed25519.Sign(s.k, h)
+	log.WithField("signature_length", len(sig)).Debug("Ed25519 signature created successfully")
 	return
 }

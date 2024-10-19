@@ -3,9 +3,10 @@ package noise
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"testing"
+
 	"github.com/flynn/noise"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestEncryptDecryptPacketOffline(t *testing.T) {

@@ -4,6 +4,9 @@ package lease_set
 import (
 	"errors"
 
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
+
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	. "github.com/go-i2p/go-i2p/lib/common/destination"
@@ -12,8 +15,9 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/lease"
 	. "github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.GetLogger()
 
 // Sizes of various structures in an I2P LeaseSet
 const (
@@ -134,9 +138,15 @@ type LeaseSet struct {
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
 	if err != nil {
+		log.WithError(err).Error("Failed to read KeysAndCert from LeaseSet")
 		return
 	}
 	destination, _, err = ReadDestination(keys_and_cert.Bytes())
+	if err != nil {
+		log.WithError(err).Error("Failed to read Destination from KeysAndCert")
+	} else {
+		log.Debug("Successfully retrieved Destination from LeaseSet")
+	}
 	return
 }
 
@@ -146,7 +156,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(LeaseSet) PublicKey",
 			"data_len":     remainder_len,
 			"required_len": LEASE_SET_PUBKEY_SIZE,
@@ -157,25 +167,29 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 		return
 	}
 	copy(public_key[:], remainder[:LEASE_SET_PUBKEY_SIZE])
+	log.Debug("Successfully retrieved PublicKey from LeaseSet")
 	return
 }
 
 // SigningKey returns the signing public key as crypto.SigningPublicKey.
 // returns errors encountered during parsing.
 func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
+	log.Debug("Retrieving SigningKey from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve Destination for SigningKey")
 		return
 	}
 	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE
 	cert := destination.Certificate()
 	cert_len := cert.Length()
 	if err != nil {
+		log.WithError(err).Error("Failed to get Certificate length")
 		return
 	}
 	lease_set_len := len(lease_set)
 	if lease_set_len < offset+LEASE_SET_SPK_SIZE {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(LeaseSet) SigningKey",
 			"data_len":     lease_set_len,
 			"required_len": offset + LEASE_SET_SPK_SIZE,
@@ -190,6 +204,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 		var dsa_pk crypto.DSAPublicKey
 		copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 		signing_public_key = dsa_pk
+		log.Debug("Retrieved legacy DSA SHA1 SigningPublicKey")
 	} else {
 		// A Certificate is present in this LeaseSet's Destination
 		cert_type := cert.Type()
@@ -200,14 +215,19 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
 				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
 			)
+			if err != nil {
+				log.WithError(err).Error("Failed to construct SigningPublicKey from KeyCertificate")
+			} else {
+				log.Debug("Retrieved SigningPublicKey from KeyCertificate")
+			}
 		} else {
 			// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
 			// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
 			var dsa_pk crypto.DSAPublicKey
 			copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 			signing_public_key = dsa_pk
+			log.Debug("Retrieved legacy DSA SHA1 SigningPublicKey (Certificate present but not Key Certificate)")
 		}
-
 	}
 	return
 }
@@ -215,13 +235,15 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 // LeaseCount returns the numbert of leases specified by the LeaseCount value as int.
 // returns errors encountered during parsing.
 func (lease_set LeaseSet) LeaseCount() (count int, err error) {
+	log.Debug("Retrieving LeaseCount from LeaseSet")
 	_, remainder, err := ReadKeysAndCert(lease_set)
 	if err != nil {
+		log.WithError(err).Error("Failed to read KeysAndCert for LeaseCount")
 		return
 	}
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE+1 {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(LeaseSet) LeaseCount",
 			"data_len":     remainder_len,
 			"required_len": LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1,
@@ -233,12 +255,14 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 	c := Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
 	count = c.Int()
 	if count > 16 {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":          "(LeaseSet) LeaseCount",
 			"lease_count": count,
 			"reason":      "more than 16 leases",
 		}).Warn("invalid lease set")
 		err = errors.New("invalid lease set: more than 16 leases")
+	} else {
+		log.WithField("lease_count", count).Debug("Retrieved LeaseCount from LeaseSet")
 	}
 	return
 }
@@ -246,13 +270,16 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 // Leases returns the leases as []Lease.
 // returns errors encountered during parsing.
 func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
+	log.Debug("Retrieving Leases from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve Destination for Leases")
 		return
 	}
 	offset := len(destination.Bytes()) + LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1
 	count, err := lease_set.LeaseCount()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve LeaseCount for Leases")
 		return
 	}
 	for i := 0; i < count; i++ {
@@ -260,7 +287,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 		end := start + LEASE_SIZE
 		lease_set_len := len(lease_set)
 		if lease_set_len < end {
-			log.WithFields(log.Fields{
+			log.WithFields(logrus.Fields{
 				"at":           "(LeaseSet) Leases",
 				"data_len":     lease_set_len,
 				"required_len": end,
@@ -273,18 +300,22 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 		copy(lease[:], lease_set[start:end])
 		leases = append(leases, lease)
 	}
+	log.WithField("lease_count", len(leases)).Debug("Retrieved Leases from LeaseSet")
 	return
 }
 
 // Signature returns the signature as Signature.
 // returns errors encountered during parsing.
 func (lease_set LeaseSet) Signature() (signature Signature, err error) {
+	log.Debug("Retrieving Signature from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve Destination for Signature")
 		return
 	}
 	lease_count, err := lease_set.LeaseCount()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve LeaseCount for Signature")
 		return
 	}
 	start := len(destination.Bytes()) +
@@ -302,7 +333,7 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	}
 	lease_set_len := len(lease_set)
 	if lease_set_len < end {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(LeaseSet) Signature",
 			"data_len":     lease_set_len,
 			"required_len": end,
@@ -312,11 +343,13 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 		return
 	}
 	signature = []byte(lease_set[start:end])
+	log.WithField("signature_length", len(signature)).Debug("Retrieved Signature from LeaseSet")
 	return
 }
 
 // Verify returns nil
 func (lease_set LeaseSet) Verify() error {
+	log.Debug("Verifying LeaseSet")
 	//data_end := len(destination) +
 	//	LEASE_SET_PUBKEY_SIZE +
 	//	LEASE_SET_SPK_SIZE +
@@ -330,14 +363,17 @@ func (lease_set LeaseSet) Verify() error {
 	//if err != nil {
 	//	return err
 	//}
+	log.Warn("LeaseSet verification not implemented")
 	return nil // verifier.Verify(data, lease_set.Signature())
 }
 
 // NewestExpiration returns the newest lease expiration as an I2P Date.
 // Returns errors encountered during parsing.
 func (lease_set LeaseSet) NewestExpiration() (newest Date, err error) {
+	log.Debug("Finding newest expiration in LeaseSet")
 	leases, err := lease_set.Leases()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve Leases for NewestExpiration")
 		return
 	}
 	newest = Date{0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
@@ -347,14 +383,17 @@ func (lease_set LeaseSet) NewestExpiration() (newest Date, err error) {
 			newest = date
 		}
 	}
+	log.WithField("newest_expiration", newest.Time()).Debug("Found newest expiration in LeaseSet")
 	return
 }
 
 // OldestExpiration returns the oldest lease expiration as an I2P Date.
 // Returns errors encountered during parsing.
 func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
+	log.Debug("Finding oldest expiration in LeaseSet")
 	leases, err := lease_set.Leases()
 	if err != nil {
+		log.WithError(err).Error("Failed to retrieve Leases for OldestExpiration")
 		return
 	}
 	earliest = Date{0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
@@ -364,5 +403,6 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 			earliest = date
 		}
 	}
+	log.WithField("oldest_expiration", earliest.Time()).Debug("Found oldest expiration in LeaseSet")
 	return
 }

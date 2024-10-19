@@ -38,7 +38,7 @@ func initNegotiationData(negotiationData []byte) []byte {
 		return negotiationData
 	}
 	negotiationData = make([]byte, 6)
-	binary.BigEndian.PutUint16(negotiationData, 1) //version
+	binary.BigEndian.PutUint16(negotiationData, 1) // version
 	negotiationData[2] = NOISE_DH_CURVE25519
 	negotiationData[3] = NOISE_CIPHER_CHACHAPOLY
 	negotiationData[4] = NOISE_HASH_SHA256

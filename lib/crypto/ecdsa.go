@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"github.com/sirupsen/logrus"
 )
 
 type ECDSAVerifier struct {
@@ -14,15 +15,27 @@ type ECDSAVerifier struct {
 
 // verify a signature given the hash
 func (v *ECDSAVerifier) VerifyHash(h, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"hash_length": len(h),
+		"sig_length":  len(sig),
+	}).Debug("Verifying ECDSA signature hash")
+
 	r, s := elliptic.Unmarshal(v.c, sig)
 	if r == nil || s == nil || !ecdsa.Verify(v.k, h, r, s) {
+		log.Warn("Invalid ECDSA signature")
 		err = ErrInvalidSignature
+	} else {
+		log.Debug("ECDSA signature verified successfully")
 	}
 	return
 }
 
 // verify a block of data by hashing it and comparing the hash against the signature
 func (v *ECDSAVerifier) Verify(data, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"data_length": len(data),
+		"sig_length":  len(sig),
+	}).Debug("Verifying ECDSA signature")
 	// sum the data and get the hash
 	h := v.h.New().Sum(data)[len(data):]
 	// verify
@@ -31,8 +44,13 @@ func (v *ECDSAVerifier) Verify(data, sig []byte) (err error) {
 }
 
 func createECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerifier, err error) {
+	log.WithFields(logrus.Fields{
+		"curve": c.Params().Name,
+		"hash":  h.String(),
+	}).Debug("Creating ECDSA verifier")
 	x, y := elliptic.Unmarshal(c, k[:])
 	if x == nil {
+		log.Error("Invalid ECDSA key format")
 		err = ErrInvalidKeyFormat
 	} else {
 		ev = &ECDSAVerifier{
@@ -40,6 +58,7 @@ func createECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerif
 			h: h,
 		}
 		ev.k = &ecdsa.PublicKey{c, x, y}
+		log.Debug("ECDSA verifier created successfully")
 	}
 	return
 }
@@ -54,7 +73,13 @@ func (k ECP256PublicKey) Len() int {
 }
 
 func (k ECP256PublicKey) NewVerifier() (Verifier, error) {
-	return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
+	log.Debug("Creating new P256 ECDSA verifier")
+	//return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
+	v, err := createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
+	if err != nil {
+		log.WithError(err).Error("Failed to create P256 ECDSA verifier")
+	}
+	return v, err
 }
 
 type (
@@ -67,7 +92,13 @@ func (k ECP384PublicKey) Len() int {
 }
 
 func (k ECP384PublicKey) NewVerifier() (Verifier, error) {
-	return createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
+	log.Debug("Creating new P384 ECDSA verifier")
+	v, err := createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
+	if err != nil {
+		log.WithError(err).Error("Failed to create P384 ECDSA verifier")
+	}
+	return v, err
+	//return createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
 }
 
 type (
@@ -80,5 +111,11 @@ func (k ECP521PublicKey) Len() int {
 }
 
 func (k ECP521PublicKey) NewVerifier() (Verifier, error) {
-	return createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
+	log.Debug("Creating new P521 ECDSA verifier")
+	v, err := createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
+	if err != nil {
+		log.WithError(err).Error("Failed to create P521 ECDSA verifier")
+	}
+	return v, err
+	//return createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
 }

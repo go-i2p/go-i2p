@@ -4,11 +4,15 @@ package keys_and_cert
 import (
 	"errors"
 
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetLogger()
 
 // Sizes of various KeysAndCert structures and requirements
 const (
@@ -80,7 +84,11 @@ type KeysAndCert struct {
 
 // Bytes returns the entire KeyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert KeysAndCert) Bytes() []byte {
-	return keys_and_cert.KeyCertificate.Bytes()
+	bytes := keys_and_cert.KeyCertificate.Bytes()
+	log.WithFields(logrus.Fields{
+		"bytes_length": len(bytes),
+	}).Debug("Retrieved bytes from KeysAndCert")
+	return bytes
 }
 
 // PublicKey returns the public key as a crypto.PublicKey.
@@ -101,10 +109,14 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
 func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"input_length": len(data),
+	}).Debug("Reading KeysAndCert from data")
+
 	data_len := len(data)
 	// keys_and_cert = KeysAndCert{}
 	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
@@ -114,7 +126,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		keys_and_cert.KeyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 		return
 	} else if data_len < KEYS_AND_CERT_DATA_SIZE {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
@@ -125,6 +137,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
+		log.WithError(err).Error("Failed to create KeyCertificate")
 		return
 	}
 	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
@@ -132,13 +145,23 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
 	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:keys_and_cert.KeyCertificate.CryptoSize()])
 	if err != nil {
+		log.WithError(err).Error("Failed to construct PublicKey")
 		return
 	}
 	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.KeyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
 	if err != nil {
+		log.WithError(err).Error("Failed to construct SigningPublicKey")
 		return
 	}
 	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
 	keys_and_cert.padding = padding
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         keys_and_cert.KeyCertificate.PublicKeyType(),
+		"signing_public_key_type": keys_and_cert.KeyCertificate.SigningPublicKeyType(),
+		"padding_length":          len(padding),
+		"remainder_length":        len(remainder),
+	}).Debug("Successfully read KeysAndCert")
+
 	return
 }
