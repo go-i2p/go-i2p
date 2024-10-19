@@ -108,16 +108,15 @@ func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {
 				data = data[m:]
 			}
 		*/
-		bytesRead, err := c.Conn.Read(b)
+		n, err := c.Conn.Read(b)
 		if err != nil {
-			log.WithError(err).WithField("bytes_read", bytesRead).Error("readPacketLocked: failed to read from connection")
+			log.WithError(err).WithField("bytes_read (aka n)", n).Error("readPacketLocked: failed to read from connection")
 			return n, err
 		}
 		n += m
 		data = data[m:]
 		log.WithFields(logrus.Fields{
-			"bytes_read":     bytesRead,
-			"total_read":     n,
+			"bytes_read":     n,
 			"remaining_data": len(data),
 		}).Debug("readPacketLocked: read packet chunk")
 	}
