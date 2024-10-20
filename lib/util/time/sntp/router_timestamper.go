@@ -121,33 +121,99 @@ func (rt *RouterTimestamper) TimestampNow() {
 		go rt.runOnce()
 	}
 }
+func (rt *RouterTimestamper) secureRandBool(probability float64) bool {
+	return rand.Float64() < probability
+}
+func (rt *RouterTimestamper) performTimeQuery() bool {
+	rt.updateConfig()
+	preferIPv6 := checkIPv6Connectivity()
 
-func (rt *RouterTimestamper) run() {
-	defer rt.waitGroup.Done()
-	lastFailed := false
-	for rt.isRunning {
-		rt.updateConfig()
-		preferIPv6 := checkIPv6Connectivity()
-		if !rt.disabled {
-			if rt.priorityServers != nil {
-				for _, servers := range rt.priorityServers {
-					lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
-					if !lastFailed {
-						break
+	if rt.disabled {
+		return false
+	}
+
+	lastFailed := true
+
+	if rt.priorityServers != nil {
+		for _, servers := range rt.priorityServers {
+			lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
+			if !lastFailed {
+				break
+			}
+		}
+	}
+
+	if rt.priorityServers == nil || lastFailed {
+		prefIPv6 := preferIPv6 && rt.secureRandBool(0.75)
+		lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
+	}
+
+	rt.mutex.Lock()
+	if !rt.initialized {
+		rt.initialized = true
+	}
+	rt.mutex.Unlock()
+
+	return lastFailed
+}
+
+/*
+	func (rt *RouterTimestamper) run() {
+		defer rt.waitGroup.Done()
+		lastFailed := false
+		for rt.isRunning {
+			rt.updateConfig()
+			preferIPv6 := checkIPv6Connectivity()
+			if !rt.disabled {
+				if rt.priorityServers != nil {
+					for _, servers := range rt.priorityServers {
+						lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
+						if !lastFailed {
+							break
+						}
 					}
 				}
+				if rt.priorityServers == nil || lastFailed {
+					prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
+					lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
+				}
 			}
-			if rt.priorityServers == nil || lastFailed {
-				prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
-				lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
-			}
-		}
 
-		rt.mutex.Lock()
-		if !rt.initialized {
-			rt.initialized = true
+			rt.mutex.Lock()
+			if !rt.initialized {
+				rt.initialized = true
+			}
+			rt.mutex.Unlock()
+
+			var sleepTime time.Duration
+			if lastFailed {
+				rt.consecutiveFails++
+				if rt.consecutiveFails >= maxConsecutiveFails {
+					sleepTime = 30 * time.Minute
+				} else {
+					sleepTime = 30 * time.Second
+				}
+			} else {
+				rt.consecutiveFails = 0
+				randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
+				sleepTime = rt.queryFrequency + randomDelay
+				if rt.wellSynced {
+					sleepTime *= 3
+				}
+			}
+
+			select {
+			case <-time.After(sleepTime):
+			case <-rt.stopChan:
+				return
+			}
 		}
-		rt.mutex.Unlock()
+	}
+*/
+func (rt *RouterTimestamper) run() {
+	defer rt.waitGroup.Done()
+	for rt.isRunning {
+		lastFailed := rt.performTimeQuery()
 
 		var sleepTime time.Duration
 		if lastFailed {
@@ -174,32 +240,36 @@ func (rt *RouterTimestamper) run() {
 	}
 }
 
-func (rt *RouterTimestamper) runOnce() {
-	lastFailed := false
-	rt.updateConfig()
-	preferIPv6 := checkIPv6Connectivity()
-	if !rt.disabled {
-		if rt.priorityServers != nil {
-			for _, servers := range rt.priorityServers {
-				lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
-				if !lastFailed {
-					break
+/*
+	func (rt *RouterTimestamper) runOnce() {
+		lastFailed := false
+		rt.updateConfig()
+		preferIPv6 := checkIPv6Connectivity()
+		if !rt.disabled {
+			if rt.priorityServers != nil {
+				for _, servers := range rt.priorityServers {
+					lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
+					if !lastFailed {
+						break
+					}
 				}
 			}
+			if rt.priorityServers == nil || lastFailed {
+				prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
+				lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
+			}
 		}
-		if rt.priorityServers == nil || lastFailed {
-			prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
-			lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
-		}
-	}
 
-	rt.mutex.Lock()
-	if !rt.initialized {
-		rt.initialized = true
+		rt.mutex.Lock()
+		if !rt.initialized {
+			rt.initialized = true
+		}
+		rt.mutex.Unlock()
 	}
-	rt.mutex.Unlock()
+*/
+func (rt *RouterTimestamper) runOnce() {
+	rt.performTimeQuery()
 }
-
 func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, preferIPv6 bool) bool {
 	found := make([]time.Duration, rt.concurringServers)
 	var expectedDelta time.Duration
