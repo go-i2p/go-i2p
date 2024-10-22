@@ -3,14 +3,15 @@ package netdb
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/common/base32"
@@ -98,7 +99,7 @@ func (db *StdNetDB) Size() (routers int) {
 		err = db.RecalculateSize()
 		if err != nil {
 			// TODO : what now? let's panic for now
-			//util.Panicf("could not recalculate netdb size: %s", err)
+			// util.Panicf("could not recalculate netdb size: %s", err)
 			log.WithError(err).Panic("Failed to recalculate NetDB size")
 		}
 	}
@@ -124,7 +125,7 @@ func (db *StdNetDB) cacheFilePath() string {
 
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 	// TODO: make this better
-	//return strings.HasSuffix(fpath, ".dat")
+	// return strings.HasSuffix(fpath, ".dat")
 	isValid := strings.HasSuffix(fpath, ".dat")
 	log.WithFields(logrus.Fields{
 		"file_path": fpath,
@@ -285,7 +286,7 @@ func (db *StdNetDB) Ensure() (err error) {
 func (db *StdNetDB) Create() (err error) {
 	mode := os.FileMode(0o700)
 	p := db.Path()
-	//log.Infof("Create network database in %s", p)
+	// log.Infof("Create network database in %s", p)
 	log.WithField("path", p).Debug("Creating network database directory")
 	// create root for skiplist
 	err = os.Mkdir(p, mode)

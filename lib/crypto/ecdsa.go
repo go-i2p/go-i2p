@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -74,7 +75,7 @@ func (k ECP256PublicKey) Len() int {
 
 func (k ECP256PublicKey) NewVerifier() (Verifier, error) {
 	log.Debug("Creating new P256 ECDSA verifier")
-	//return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
+	// return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
 	v, err := createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create P256 ECDSA verifier")
@@ -98,7 +99,7 @@ func (k ECP384PublicKey) NewVerifier() (Verifier, error) {
 		log.WithError(err).Error("Failed to create P384 ECDSA verifier")
 	}
 	return v, err
-	//return createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
+	// return createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
 }
 
 type (
@@ -117,5 +118,5 @@ func (k ECP521PublicKey) NewVerifier() (Verifier, error) {
 		log.WithError(err).Error("Failed to create P521 ECDSA verifier")
 	}
 	return v, err
-	//return createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
+	// return createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
 }

@@ -5,8 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
 )

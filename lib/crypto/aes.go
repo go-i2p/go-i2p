@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
 )

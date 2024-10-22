@@ -73,13 +73,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
-	"github.com/sirupsen/logrus"
 	"hash"
 	"io"
 	"io/ioutil"
 	"strings"
 	"sync"
+
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 )
 
 var log = logger.GetLogger()
@@ -692,7 +693,7 @@ func (r *signatureReader) Read(p []byte) (n int, err error) {
 		log.WithError(r.err).Error("Error encountered while getting signature bytes")
 		return 0, r.err
 	}
-	//return r.reader.Read(p)
+	// return r.reader.Read(p)
 	n, err = r.reader.Read(p)
 	log.WithField("bytes_read", n).Debug("Read from signature")
 	return n, err

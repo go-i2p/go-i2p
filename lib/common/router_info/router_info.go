@@ -3,10 +3,11 @@ package router_info
 
 import (
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
-	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
+
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	. "github.com/go-i2p/go-i2p/lib/common/router_address"
@@ -299,7 +300,7 @@ func (router_info *RouterInfo) RouterCapabilities() string {
 		log.WithError(err).Error("Failed to create I2PString for 'caps'")
 		return ""
 	}
-	//return string(router_info.options.Values().Get(str))
+	// return string(router_info.options.Values().Get(str))
 	caps := string(router_info.options.Values().Get(str))
 	log.WithField("capabilities", caps).Debug("Retrieved RouterCapabilities")
 	return caps
@@ -312,7 +313,7 @@ func (router_info *RouterInfo) RouterVersion() string {
 		log.WithError(err).Error("Failed to create I2PString for 'router.version'")
 		return ""
 	}
-	//return string(router_info.options.Values().Get(str))
+	// return string(router_info.options.Values().Get(str))
 	version := string(router_info.options.Values().Get(str))
 	log.WithField("version", version).Debug("Retrieved RouterVersion")
 	return version
@@ -364,7 +365,7 @@ func (router_info *RouterInfo) Reachable() bool {
 		log.WithField("reason", "U capability").Debug("RouterInfo is unreachable")
 		return false
 	}
-	//return strings.Contains(caps, "R")
+	// return strings.Contains(caps, "R")
 	reachable := strings.Contains(caps, "R")
 	log.WithFields(logrus.Fields{
 		"reachable": reachable,

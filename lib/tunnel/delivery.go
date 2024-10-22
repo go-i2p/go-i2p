@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
+
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -329,7 +330,7 @@ func (delivery_instructions DeliveryInstructions) Fragmented() (bool, error) {
 		fragmented := (delivery_instructions[0] & 0x08) == 0x08
 		log.WithField("fragmented", fragmented).Debug("Fragmented status determined")
 		return fragmented, nil
-		//return ((delivery_instructions[0] & 0x08) == 0x08), nil
+		// return ((delivery_instructions[0] & 0x08) == 0x08), nil
 	}
 	log.Error("DeliveryInstructions contains no data")
 	return false, errors.New("DeliveryInstructions contains no data")
@@ -378,7 +379,7 @@ func (delivery_instructions DeliveryInstructions) HasTunnelID() (bool, error) {
 		log.WithError(err).Error("Failed to get DeliveryType")
 		return false, err
 	}
-	//return di_type == DT_TUNNEL, nil
+	// return di_type == DT_TUNNEL, nil
 	hasTunnelID := di_type == DT_TUNNEL
 	log.WithField("has_tunnel_id", hasTunnelID).Debug("HasTunnelID status determined")
 	return hasTunnelID, nil

@@ -2,8 +2,9 @@ package i2np
 
 import (
 	"errors"
-	"github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	datalib "github.com/go-i2p/go-i2p/lib/common/data"
 )
