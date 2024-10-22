@@ -3,6 +3,8 @@ package router_info
 
 import (
 	"errors"
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 
@@ -10,8 +12,9 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/router_address"
 	. "github.com/go-i2p/go-i2p/lib/common/router_identity"
 	. "github.com/go-i2p/go-i2p/lib/common/signature"
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.GetLogger()
 
 const ROUTER_INFO_MIN_SIZE = 439
 
@@ -115,6 +118,7 @@ type RouterInfo struct {
 
 // Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
 func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
+	log.Debug("Converting RouterInfo to bytes")
 	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
 	bytes = append(bytes, router_info.published.Bytes()...)
 	bytes = append(bytes, router_info.size.Bytes()...)
@@ -124,11 +128,12 @@ func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	bytes = append(bytes, router_info.peer_size.Bytes()...)
 	bytes = append(bytes, router_info.options.Data()...)
 	bytes = append(bytes, []byte(*router_info.signature)...)
-
+	log.WithField("bytes_length", len(bytes)).Debug("Converted RouterInfo to bytes")
 	return bytes, err
 }
 
 func (router_info RouterInfo) String() string {
+	log.Debug("Converting RouterInfo to string")
 	str := "Certificate: " + string(router_info.router_identity.KeysAndCert.Bytes())
 	str += "Published: " + string(router_info.published.Bytes())
 	str += "Addresses:" + string(router_info.size.Bytes())
@@ -138,6 +143,7 @@ func (router_info RouterInfo) String() string {
 	str += "Peer Size: " + string(router_info.peer_size.Bytes())
 	str += "Options: " + string(router_info.options.Data())
 	str += "Signature: " + string([]byte(*router_info.signature))
+	log.WithField("string_length", len(str)).Debug("Converted RouterInfo to string")
 	return str
 }
 
@@ -148,7 +154,10 @@ func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
+	log.Debug("Calculating IdentHash for RouterInfo")
 	data, _ := router_info.RouterIdentity().KeyCertificate.Data()
+	hash := HashData(data)
+	log.WithField("hash", hash).Debug("Calculated IdentHash for RouterInfo")
 	return HashData(data)
 }
 
@@ -159,11 +168,14 @@ func (router_info *RouterInfo) Published() *Date {
 
 // RouterAddressCount returns the count of RouterAddress in this RouterInfo as a Go integer.
 func (router_info *RouterInfo) RouterAddressCount() int {
-	return router_info.size.Int()
+	count := router_info.size.Int()
+	log.WithField("count", count).Debug("Retrieved RouterAddressCount from RouterInfo")
+	return count
 }
 
 // RouterAddresses returns all RouterAddresses for this RouterInfo as []*RouterAddress.
 func (router_info *RouterInfo) RouterAddresses() []*RouterAddress {
+	log.WithField("address_count", len(router_info.addresses)).Debug("Retrieved RouterAddresses from RouterInfo")
 	return router_info.addresses
 }
 
@@ -193,9 +205,11 @@ func (router_info RouterInfo) Network() string {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error) {
+	log.WithField("input_length", len(bytes)).Debug("Reading RouterInfo from bytes")
+
 	info.router_identity, remainder, err = ReadRouterIdentity(bytes)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
 			"data_len":     len(bytes),
 			"required_len": ROUTER_INFO_MIN_SIZE,
@@ -206,7 +220,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	}
 	info.published, remainder, err = NewDate(remainder)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
 			"data_len":     len(remainder),
 			"required_len": DATE_SIZE,
@@ -216,7 +230,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	}
 	info.size, remainder, err = NewInteger(remainder, 1)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":           "(RouterInfo) ReadRouterInfo",
 			"data_len":     len(remainder),
 			"required_len": info.size.Int(),
@@ -227,7 +241,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		address, more, err := ReadRouterAddress(remainder)
 		remainder = more
 		if err != nil {
-			log.WithFields(log.Fields{
+			log.WithFields(logrus.Fields{
 				"at":       "(RouterInfo) ReadRouterInfo",
 				"data_len": len(remainder),
 				//"required_len": ROUTER_ADDRESS_SIZE,
@@ -238,10 +252,14 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		info.addresses = append(info.addresses, &address)
 	}
 	info.peer_size, remainder, err = NewInteger(remainder, 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to read PeerSize")
+		return
+	}
 	var errs []error
 	info.options, remainder, errs = NewMapping(remainder)
 	if len(errs) != 0 {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
 			"data_len": len(remainder),
 			//"required_len": MAPPING_SIZE,
@@ -255,7 +273,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	}
 	info.signature, remainder, err = NewSignature(remainder)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
 			"data_len": len(remainder),
 			//"required_len": MAPPING_SIZE,
@@ -263,29 +281,49 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}).Error("error parsing router info")
 		err = errors.New("error parsing router info: not enough data")
 	}
+
+	log.WithFields(logrus.Fields{
+		"router_identity":  info.router_identity,
+		"published":        info.published,
+		"address_count":    len(info.addresses),
+		"remainder_length": len(remainder),
+	}).Debug("Successfully read RouterInfo")
+
 	return
 }
 
 func (router_info *RouterInfo) RouterCapabilities() string {
+	log.Debug("Retrieving RouterCapabilities")
 	str, err := ToI2PString("caps")
 	if err != nil {
+		log.WithError(err).Error("Failed to create I2PString for 'caps'")
 		return ""
 	}
-	return string(router_info.options.Values().Get(str))
+	//return string(router_info.options.Values().Get(str))
+	caps := string(router_info.options.Values().Get(str))
+	log.WithField("capabilities", caps).Debug("Retrieved RouterCapabilities")
+	return caps
 }
 
 func (router_info *RouterInfo) RouterVersion() string {
+	log.Debug("Retrieving RouterVersion")
 	str, err := ToI2PString("router.version")
 	if err != nil {
+		log.WithError(err).Error("Failed to create I2PString for 'router.version'")
 		return ""
 	}
-	return string(router_info.options.Values().Get(str))
+	//return string(router_info.options.Values().Get(str))
+	version := string(router_info.options.Values().Get(str))
+	log.WithField("version", version).Debug("Retrieved RouterVersion")
+	return version
 }
 
 func (router_info *RouterInfo) GoodVersion() bool {
+	log.Debug("Checking if RouterVersion is good")
 	version := router_info.RouterVersion()
 	v := strings.Split(version, ".")
 	if len(v) != 3 {
+		log.WithField("version", version).Warn("Invalid version format")
 		return false
 	}
 	if v[0] == "0" {
@@ -296,27 +334,41 @@ func (router_info *RouterInfo) GoodVersion() bool {
 			}
 		}
 	}
+	log.WithField("version", version).Warn("Version not in good range")
 	return false
 }
 
 func (router_info *RouterInfo) UnCongested() bool {
+	log.Debug("Checking if RouterInfo is uncongested")
 	caps := router_info.RouterCapabilities()
 	if strings.Contains(caps, "K") {
+		log.WithField("reason", "K capability").Warn("RouterInfo is congested")
 		return false
 	}
 	if strings.Contains(caps, "G") {
+		log.WithField("reason", "G capability").Warn("RouterInfo is congested")
 		return false
 	}
 	if strings.Contains(caps, "E") {
+		log.WithField("reason", "E capability").Warn("RouterInfo is congested")
 		return false
 	}
+	log.Debug("RouterInfo is uncongested")
 	return true
 }
 
 func (router_info *RouterInfo) Reachable() bool {
+	log.Debug("Checking if RouterInfo is reachable")
 	caps := router_info.RouterCapabilities()
 	if strings.Contains(caps, "U") {
+		log.WithField("reason", "U capability").Debug("RouterInfo is unreachable")
 		return false
 	}
-	return strings.Contains(caps, "R")
+	//return strings.Contains(caps, "R")
+	reachable := strings.Contains(caps, "R")
+	log.WithFields(logrus.Fields{
+		"reachable": reachable,
+		"reason":    "R capability",
+	}).Debug("Checked RouterInfo reachability")
+	return reachable
 }

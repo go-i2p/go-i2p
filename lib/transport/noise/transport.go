@@ -8,6 +8,7 @@ package noise
 
 import (
 	"errors"
+	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	log "github.com/sirupsen/logrus"
 )
 
 type NoiseTransport struct {
@@ -36,13 +36,24 @@ var ExampleNoiseListener net.Listener = exampleNoiseTransport
 
 // Accept a connection on a listening socket.
 func (noopt *NoiseTransport) Accept() (net.Conn, error) {
-	return noopt.Listener.Accept()
+	log.Debug("NoiseTransport: Accepting new connection")
+	//return noopt.Listener.Accept()
+	conn, err := noopt.Listener.Accept()
+	if err != nil {
+		log.WithError(err).Error("NoiseTransport: Failed to accept connection")
+	} else {
+		log.WithField("remote_addr", conn.RemoteAddr().String()).Info("NoiseTransport: Accepted new connection")
+	}
+	return conn, err
 }
 
 // Addr of the transport, for now this is returning the IP:Port the transport is listening on,
 // but this might actually be the router identity
 func (noopt *NoiseTransport) Addr() net.Addr {
-	return noopt.Listener.Addr()
+	//return noopt.Listener.Addr()
+	addr := noopt.Listener.Addr()
+	log.WithField("addr", addr.String()).Debug("NoiseTransport: Returning address")
+	return addr
 }
 
 // Name of the transport TYPE, in this case `noise`
@@ -55,15 +66,17 @@ func (noopt *NoiseTransport) Name() string {
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
 func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
+	log.WithField("identity", ident).Debug("NoiseTransport: Setting identity")
 	noopt.RouterIdentity = ident
 	if noopt.Listener == nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":     "(NoiseTransport) SetIdentity",
 			"reason": "network socket is null",
 		}).Error("network socket is null")
 		err = errors.New("network socket is null")
 		return
 	}
+	log.Debug("NoiseTransport: Identity set successfully")
 	return nil
 }
 
@@ -73,39 +86,55 @@ func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (
 // returns nil and an error on error
 func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	hash := routerInfo.IdentHash()
+	log.WithField("hash", hash).Debug("NoiseTransport: Getting session")
 	if len(hash) == 0 {
+		log.Error("NoiseTransport: RouterInfo has no IdentityHash")
 		return nil, errors.New("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
 	}
 	if t, ok := noopt.peerConnections[hash]; ok {
+		log.Debug("NoiseTransport: Existing session found")
 		return t, nil
 	}
+	log.Debug("NoiseTransport: Creating new session")
 	var err error
 	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo); err != nil {
+		log.WithError(err).Error("NoiseTransport: Failed to create new session")
 		return noopt.peerConnections[hash], err
 	}
+	log.Debug("NoiseTransport: New session created successfully")
 	return nil, err
 }
 
 func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
+	log.WithField("router_info", routerInfo.String()).Debug("NoiseTransport: Getting session (internal)")
 	session, err := c.GetSession(routerInfo)
 	if err != nil {
+		log.WithError(err).Error("NoiseTransport: Failed to get session")
 		return nil, err
 	}
 	for {
 		if session.(*NoiseSession).handshakeComplete {
+			log.Debug("NoiseTransport: Handshake complete")
 			return nil, nil
 		}
 		if session.(*NoiseSession).Cond == nil {
+			log.Debug("NoiseTransport: No condition variable, breaking")
 			break
 		}
+		log.Debug("NoiseTransport: Waiting for handshake to complete")
 		session.(*NoiseSession).Cond.Wait()
 	}
+	log.Debug("NoiseTransport: Returning session")
 	return session, nil
 }
 
 // Compatable return true if a routerInfo is compatable with this transport
 func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool {
 	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
+	log.WithFields(logrus.Fields{
+		"router_info": routerInfo.String(),
+		"compatible":  ok,
+	}).Debug("NoiseTransport: Checking compatibility")
 	return ok
 }
 
@@ -113,11 +142,13 @@ func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool 
 // blocks until done
 // returns an error if one happens
 func (noopt *NoiseTransport) Close() error {
+	log.Debug("NoiseTransport: Closing transport")
 	return nil
 }
 
 // NewNoiseTransport create a NoiseTransport using a supplied net.Listener
 func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
+	log.WithField("listener_addr", netSocket.Addr().String()).Info("Creating new NoiseTransport")
 	return &NoiseTransport{
 		peerConnections: make(map[data.Hash]transport.TransportSession),
 		Listener:        netSocket,
@@ -127,9 +158,14 @@ func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 // NewNoiseTransportSocket creates a Noise transport socket with a random
 // host and port.
 func NewNoiseTransportSocket() (*NoiseTransport, error) {
+	log.Debug("Creating new NoiseTransportSocket")
 	netSocket, err := net.Listen("tcp", "")
 	if err != nil {
+		log.WithError(err).Error("Failed to create listener for NoiseTransportSocket")
 		return nil, err
 	}
-	return NewNoiseTransport(netSocket), nil
+	//return NewNoiseTransport(netSocket), nil
+	_transport := NewNoiseTransport(netSocket)
+	log.WithField("addr", netSocket.Addr().String()).Info("Created new NoiseTransportSocket")
+	return _transport, nil
 }

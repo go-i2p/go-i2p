@@ -8,14 +8,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
+
 	. "github.com/go-i2p/go-i2p/lib/common/data"
-	log "github.com/sirupsen/logrus"
 )
 
 // Minimum number of bytes in a valid RouterAddress
 const (
 	ROUTER_ADDRESS_MIN_SIZE = 9
 )
+
+var log = logger.GetLogger()
 
 /*
 [RouterAddress]
@@ -75,34 +79,48 @@ type RouterAddress struct {
 
 // Network implements net.Addr. It returns the transport type plus 4 or 6
 func (router_address *RouterAddress) Network() string {
+	log.Debug("Getting network for RouterAddress")
 	if router_address.TransportType == nil {
+		log.Warn("TransportType is nil in RouterAddress")
 		return ""
 	}
 	str, err := router_address.TransportType.Data()
 	if err != nil {
+		log.WithError(err).Error("Failed to get TransportType data")
 		return ""
 	}
-	return string(str) + router_address.IPVersion()
+	network := string(str) + router_address.IPVersion()
+	log.WithField("network", network).Debug("Retrieved network for RouterAddress")
+	return network
 }
 
 // IPVersion returns a string "4" for IPv4 or 6 for IPv6
 func (router_address *RouterAddress) IPVersion() string {
+	log.Debug("Getting IP version for RouterAddress")
 	str, err := router_address.CapsString().Data()
 	if err != nil {
+		log.WithError(err).Error("Failed to get CapsString data")
 		return ""
 	}
 	if strings.HasSuffix(str, "6") {
+		log.Debug("IP version is IPv6")
 		return "6"
 	}
+	log.Debug("IP version is IPv4")
 	return "4"
 }
 
 func (router_address *RouterAddress) UDP() bool {
-	return strings.HasPrefix(strings.ToLower(router_address.Network()), "ssu")
+	// return strings.HasPrefix(strings.ToLower(router_address.Network()), "ssu")
+	log.Debug("Checking if RouterAddress is UDP")
+	isUDP := strings.HasPrefix(strings.ToLower(router_address.Network()), "ssu")
+	log.WithField("is_udp", isUDP).Debug("Checked if RouterAddress is UDP")
+	return isUDP
 }
 
 // String implements net.Addr. It returns the IP address, followed by the options
 func (router_address *RouterAddress) String() string {
+	log.Debug("Converting RouterAddress to string")
 	var rv []string
 	rv = append(rv, string(router_address.TransportStyle()))
 	rv = append(rv, string(router_address.HostString()))
@@ -121,25 +139,29 @@ func (router_address *RouterAddress) String() string {
 		rv = append(rv, string(router_address.IntroducerExpirationString(2)))
 		rv = append(rv, string(router_address.IntroducerTagString(2)))
 	}
-	return strings.TrimSpace(strings.Join(rv, " "))
+	str := strings.TrimSpace(strings.Join(rv, " "))
+	log.WithField("router_address_string", str).Debug("Converted RouterAddress to string")
+	return str
 }
 
 var ex_addr net.Addr = &RouterAddress{}
 
 // Bytes returns the router address as a []byte.
 func (router_address RouterAddress) Bytes() []byte {
+	log.Debug("Converting RouterAddress to bytes")
 	bytes := make([]byte, 0)
 	bytes = append(bytes, router_address.TransportCost.Bytes()...)
 	bytes = append(bytes, router_address.ExpirationDate.Bytes()...)
 	strData, err := router_address.TransportType.Data()
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("RouterAddress.Bytes: error getting transport_style bytes")
 	} else {
 		bytes = append(bytes, strData...)
 	}
 	bytes = append(bytes, router_address.TransportOptions.Data()...)
+	log.WithField("bytes_length", len(bytes)).Debug("Converted RouterAddress to bytes")
 	return bytes
 }
 
@@ -224,29 +246,45 @@ func (router_address RouterAddress) IntroducerTagString(num int) I2PString {
 }
 
 func (router_address RouterAddress) Host() (net.Addr, error) {
+	log.Debug("Getting host from RouterAddress")
 	host := router_address.HostString()
 	hostBytes, err := host.Data()
 	if err != nil {
+		log.WithError(err).Error("Failed to get host data")
 		return nil, err
 	}
 	ip := net.ParseIP(hostBytes)
 	if ip == nil {
+		log.Error("Failed to parse IP address")
 		return nil, fmt.Errorf("null host error")
 	}
-	return net.ResolveIPAddr("", ip.String())
+	// return net.ResolveIPAddr("", ip.String())
+	addr, err := net.ResolveIPAddr("", ip.String())
+	if err != nil {
+		log.WithError(err).Error("Failed to resolve IP address")
+	} else {
+		log.WithField("addr", addr).Debug("Retrieved host from RouterAddress")
+	}
+	return addr, err
 }
 
 func (router_address RouterAddress) Port() (string, error) {
+	log.Debug("Getting port from RouterAddress")
 	port := router_address.PortString()
 	portBytes, err := port.Data()
 	if err != nil {
+		log.WithError(err).Error("Failed to get port data")
 		return "", err
 	}
 	val, err := strconv.Atoi(portBytes)
 	if err != nil {
+		log.WithError(err).Error("Failed to convert port to integer")
 		return "", err
 	}
-	return strconv.Itoa(val), nil
+	// return strconv.Itoa(val), nil
+	portStr := strconv.Itoa(val)
+	log.WithField("port", portStr).Debug("Retrieved port from RouterAddress")
+	return portStr, nil
 }
 
 func (router_address RouterAddress) StaticKey() ([32]byte, error) {
@@ -283,6 +321,7 @@ func (router_address RouterAddress) checkValid() (err error, exit bool) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Reading RouterAddress from data")
 	if len(data) == 0 {
 		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
 		err = errors.New("error parsing RouterAddress: no data")
@@ -290,21 +329,21 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 	}
 	router_address.TransportCost, remainder, err = NewInteger(data, 1)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing cost",
 		}).Warn("error parsing RouterAddress")
 	}
 	router_address.ExpirationDate, remainder, err = NewDate(remainder)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing expiration",
 		}).Error("error parsing RouterAddress")
 	}
 	router_address.TransportType, remainder, err = ReadI2PString(remainder)
 	if err != nil {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing transport_style",
 		}).Error("error parsing RouterAddress")
@@ -312,7 +351,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 	var errs []error
 	router_address.TransportOptions, remainder, errs = NewMapping(remainder)
 	for _, err := range errs {
-		log.WithFields(log.Fields{
+		log.WithFields(logrus.Fields{
 			"at":     "(RouterAddress) ReadNewRouterAddress",
 			"reason": "error parsing options",
 			"error":  err,
