@@ -2,14 +2,15 @@ package reseed
 
 import (
 	"fmt"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
-	"github.com/sirupsen/logrus"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/sirupsen/logrus"
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"

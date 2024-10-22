@@ -52,7 +52,7 @@ func ReadSignature(bytes []byte) (info Signature, remainder []byte, err error) {
 // Returns a pointer to Signature unlike ReadSignature.
 func NewSignature(data []byte) (session_tag *Signature, remainder []byte, err error) {
 	log.WithField("input_length", len(data)).Debug("Creating new Signature")
-	//sessionTag, remainder, err := ReadSignature(data)
+	// sessionTag, remainder, err := ReadSignature(data)
 	sig, remainder, err := ReadSignature(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Signature")

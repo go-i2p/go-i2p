@@ -5,8 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
 )
@@ -50,7 +51,7 @@ func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, e
 		return
 	}
 	log.WithField("message_length", len(msg)).Debug("Handshake message composed successfully")
-	//log.Debug("Handshake state created successfully")
+	// log.Debug("Handshake state created successfully")
 	padBuf := make([]byte, 2+len(payload))
 	copy(padBuf[2:], payload)
 	msg, _, _, err = state.WriteMessage(msg, padBuf)

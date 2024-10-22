@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
+
+	"github.com/sirupsen/logrus"
 
 	curve25519 "go.step.sm/crypto/x25519"
 )
@@ -188,6 +189,6 @@ func (s *Curve25519Signer) SignHash(h []byte) (sig []byte, err error) {
 	} else {
 		log.WithField("signature_length", len(sig)).Debug("Hash signed successfully")
 	}
-	//return curve25519.Sign(rand.Reader, s.k, h)
+	// return curve25519.Sign(rand.Reader, s.k, h)
 	return
 }

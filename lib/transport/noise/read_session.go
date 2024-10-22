@@ -2,8 +2,9 @@ package noise
 
 import (
 	"errors"
-	"github.com/sirupsen/logrus"
 	"sync/atomic"
+
+	"github.com/sirupsen/logrus"
 )
 
 func (c *NoiseSession) Read(b []byte) (int, error) {

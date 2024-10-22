@@ -8,9 +8,10 @@ package noise
 
 import (
 	"errors"
-	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
 	"github.com/go-i2p/go-i2p/lib/common/data"
@@ -37,7 +38,7 @@ var ExampleNoiseListener net.Listener = exampleNoiseTransport
 // Accept a connection on a listening socket.
 func (noopt *NoiseTransport) Accept() (net.Conn, error) {
 	log.Debug("NoiseTransport: Accepting new connection")
-	//return noopt.Listener.Accept()
+	// return noopt.Listener.Accept()
 	conn, err := noopt.Listener.Accept()
 	if err != nil {
 		log.WithError(err).Error("NoiseTransport: Failed to accept connection")
@@ -50,7 +51,7 @@ func (noopt *NoiseTransport) Accept() (net.Conn, error) {
 // Addr of the transport, for now this is returning the IP:Port the transport is listening on,
 // but this might actually be the router identity
 func (noopt *NoiseTransport) Addr() net.Addr {
-	//return noopt.Listener.Addr()
+	// return noopt.Listener.Addr()
 	addr := noopt.Listener.Addr()
 	log.WithField("addr", addr.String()).Debug("NoiseTransport: Returning address")
 	return addr
@@ -164,7 +165,7 @@ func NewNoiseTransportSocket() (*NoiseTransport, error) {
 		log.WithError(err).Error("Failed to create listener for NoiseTransportSocket")
 		return nil, err
 	}
-	//return NewNoiseTransport(netSocket), nil
+	// return NewNoiseTransport(netSocket), nil
 	_transport := NewNoiseTransport(netSocket)
 	log.WithField("addr", netSocket.Addr().String()).Info("Created new NoiseTransportSocket")
 	return _transport, nil

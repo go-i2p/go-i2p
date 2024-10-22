@@ -28,7 +28,7 @@ func NewTunnelCrypto(layerKey, ivKey TunnelKey) (t *Tunnel, err error) {
 
 	if err != nil {
 		// error happened we don't need t
-		//log.WithError(err).Error("Failed to create Tunnel crypto")
+		// log.WithError(err).Error("Failed to create Tunnel crypto")
 		t = nil
 	} else {
 		log.Debug("Tunnel crypto created successfully")

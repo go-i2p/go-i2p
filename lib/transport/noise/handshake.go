@@ -1,8 +1,9 @@
 package noise
 
 import (
-	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"sync"
+
+	"github.com/go-i2p/go-i2p/lib/util/logger"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 )

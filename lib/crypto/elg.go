@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
+
+	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/openpgp/elgamal"
 )

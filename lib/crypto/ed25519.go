@@ -6,9 +6,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
+
+	"github.com/sirupsen/logrus"
 )
 
 var Ed25519EncryptTooBig = errors.New("failed to encrypt data, too big for Ed25519")

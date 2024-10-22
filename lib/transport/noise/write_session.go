@@ -4,8 +4,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync/atomic"
+
+	"github.com/sirupsen/logrus"
 )
 
 func (c *NoiseSession) Write(b []byte) (int, error) {

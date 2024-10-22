@@ -3,10 +3,11 @@ package noise
 import (
 	"bytes"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
 	"github.com/flynn/noise"
@@ -97,7 +98,7 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 
 // newBlock allocates a new packet, from hc's free list if possible.
 func newBlock() []byte {
-	//return make([]byte, MaxPayloadSize)
+	// return make([]byte, MaxPayloadSize)
 	block := make([]byte, MaxPayloadSize)
 	log.WithField("block_size", MaxPayloadSize).Debug("Created new block")
 	return block

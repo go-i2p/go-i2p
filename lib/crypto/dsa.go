@@ -4,9 +4,10 @@ import (
 	"crypto/dsa"
 	"crypto/rand"
 	"crypto/sha1"
-	"github.com/sirupsen/logrus"
 	"io"
 	"math/big"
+
+	"github.com/sirupsen/logrus"
 )
 
 var dsap = new(big.Int).SetBytes([]byte{

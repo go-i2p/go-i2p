@@ -63,7 +63,7 @@ func (tmux *TransportMuxer) Name() string {
 	for _, t := range tmux.trans {
 		name += t.Name() + ", "
 	}
-	//return name[len(name)-3:]
+	// return name[len(name)-3:]
 	_name := name[len(name)-3:]
 	log.WithField("name", _name).Debug("TransportMuxer: Muxed transport name generated")
 	return _name
