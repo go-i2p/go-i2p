@@ -111,7 +111,7 @@ export DEBUG_I2P=warn
 export DEBUG_I2P=error
 ```
 
-If in case I2P_DEBUG is set to an unrecognized variable, it will fall back to "debug".
+In case I2P_DEBUG is set to an unrecognized variable, it will fall back to "debug".
 
 ## Contributing
 
