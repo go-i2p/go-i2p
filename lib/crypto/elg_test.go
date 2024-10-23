@@ -6,7 +6,6 @@ import (
 	"io"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/openpgp/elgamal"
 )
 

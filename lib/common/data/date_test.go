@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTimeFromMiliseconds(t *testing.T) {
+func TestTimeFromMilliseconds(t *testing.T) {
 	assert := assert.New(t)
 
 	next_day := Date{0x00, 0x00, 0x00, 0x00, 0x05, 0x26, 0x5c, 0x00}

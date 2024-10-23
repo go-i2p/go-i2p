@@ -9,7 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 func main() {
 	netDbPath := flag.String("netDb", config.DefaultNetDbConfig.Path, "Path to the netDb")

@@ -8,7 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
 	log.WithField("router_info", routerInfo.IdentHash()).Debug("Starting Noise handshake")

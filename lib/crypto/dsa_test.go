@@ -4,8 +4,6 @@ import (
 	"crypto/rand"
 	"io"
 	"testing"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func TestDSA(t *testing.T) {

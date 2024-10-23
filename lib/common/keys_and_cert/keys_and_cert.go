@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 // Sizes of various KeysAndCert structures and requirements
 const (

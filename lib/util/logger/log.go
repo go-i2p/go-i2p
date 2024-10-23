@@ -14,7 +14,7 @@ var (
 	once sync.Once
 )
 
-func InitializeLogger() {
+func InitializeGoI2PLogger() {
 	once.Do(func() {
 		log = logrus.New()
 		// We do not want to log by default
@@ -38,14 +38,14 @@ func InitializeLogger() {
 	})
 }
 
-// GetLogger returns the initialized logger
-func GetLogger() *logrus.Logger {
+// GetGoI2PLogger returns the initialized logger
+func GetGoI2PLogger() *logrus.Logger {
 	if log == nil {
-		InitializeLogger()
+		InitializeGoI2PLogger()
 	}
 	return log
 }
 
 func init() {
-	InitializeLogger()
+	InitializeGoI2PLogger()
 }

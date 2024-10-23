@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 // DATE_SIZE is the length in bytes of an I2P Date.
 const DATE_SIZE = 8

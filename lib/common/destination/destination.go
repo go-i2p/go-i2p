@@ -14,7 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 /*
 [Destination]

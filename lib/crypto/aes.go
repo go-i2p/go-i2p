@@ -10,7 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 // AESSymmetricKey represents a symmetric key for AES encryption/decryption
 type AESSymmetricKey struct {
