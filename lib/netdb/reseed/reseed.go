@@ -18,7 +18,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/su3"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 const (
 	I2pUserAgent = "Wget/1.11.4"

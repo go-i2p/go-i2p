@@ -15,7 +15,7 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/signature"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 const ROUTER_INFO_MIN_SIZE = 439
 

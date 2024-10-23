@@ -21,7 +21,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/util"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 // standard network database implementation using local filesystem skiplist
 type StdNetDB struct {

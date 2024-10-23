@@ -19,7 +19,7 @@ const (
 	ROUTER_ADDRESS_MIN_SIZE = 9
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 /*
 [RouterAddress]

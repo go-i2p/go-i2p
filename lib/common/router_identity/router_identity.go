@@ -7,7 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 /*
 [RouterIdentity]

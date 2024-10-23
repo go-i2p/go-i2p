@@ -6,7 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 )
 
-var log = logger.GetLogger()
+var log = logger.GetGoI2PLogger()
 
 // muxes multiple transports into 1 Transport
 // implements transport.Transport
