@@ -289,11 +289,11 @@ func (db *StdNetDB) Create() (err error) {
 	// log.Infof("Create network database in %s", p)
 	log.WithField("path", p).Debug("Creating network database directory")
 	// create root for skiplist
-	err = os.Mkdir(p, mode)
+	err = os.MkdirAll(p, mode)
 	if err == nil {
 		// create all subdirectories for skiplist
 		for _, c := range base64.I2PEncodeAlphabet {
-			err = os.Mkdir(filepath.Join(p, fmt.Sprintf("r%c", c)), mode)
+			err = os.MkdirAll(filepath.Join(p, fmt.Sprintf("r%c", c)), mode)
 			if err != nil {
 				log.WithError(err).Error("Failed to create subdirectory")
 				return
