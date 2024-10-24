@@ -28,6 +28,12 @@ type NoiseTransport struct {
 	peerConnections map[data.Hash]transport.TransportSession
 }
 
+func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
+	//TODO implement
+	//panic("implement me")
+	return true
+}
+
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
 
 // ExampleNoiseListener is not a real Noise Listener, do not use it.
