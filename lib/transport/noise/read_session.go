@@ -1,7 +1,9 @@
 package noise
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
@@ -82,6 +84,32 @@ func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 	}
 	b := c.encryptIfNeeded(packet)*/
 	//c.freeBlock(packet)
+}
+func (ns *NoiseSession) decryptPacketDeux(packet []byte) (int, []byte, error) {
+	if ns.CipherState == nil {
+		return 0, nil, fmt.Errorf("CipherState is nil")
+	}
+
+	if len(packet) < 2 {
+		return 0, nil, fmt.Errorf("Packet too short to contain length prefix")
+	}
+
+	// Extract the length prefix
+	packetLength := binary.BigEndian.Uint16(packet[:2])
+
+	if len(packet[2:]) < int(packetLength) {
+		return 0, nil, fmt.Errorf("Packet data is shorter than indicated length")
+	}
+
+	ciphertext := packet[2 : 2+packetLength]
+
+	// Decrypt the data
+	plaintext, err := ns.CipherState.Decrypt(nil, nil, ciphertext)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return len(plaintext), plaintext, nil
 }
 
 func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {

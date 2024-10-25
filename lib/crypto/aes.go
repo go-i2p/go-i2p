@@ -139,3 +139,39 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 	log.WithField("unpadded_length", len(unpadded)).Debug("PKCS#7 padding removed")
 	return unpadded, nil
 }
+
+// EncryptNoPadding encrypts data using AES-CBC without padding
+func (e *AESSymmetricEncrypter) EncryptNoPadding(data []byte) ([]byte, error) {
+	if len(data)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("data length must be a multiple of block size")
+	}
+
+	block, err := aes.NewCipher(e.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	ciphertext := make([]byte, len(data))
+	mode := cipher.NewCBCEncrypter(block, e.IV)
+	mode.CryptBlocks(ciphertext, data)
+
+	return ciphertext, nil
+}
+
+// DecryptNoPadding decrypts data using AES-CBC without padding
+func (d *AESSymmetricDecrypter) DecryptNoPadding(data []byte) ([]byte, error) {
+	if len(data)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("data length must be a multiple of block size")
+	}
+
+	block, err := aes.NewCipher(d.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	plaintext := make([]byte, len(data))
+	mode := cipher.NewCBCDecrypter(block, d.IV)
+	mode.CryptBlocks(plaintext, data)
+
+	return plaintext, nil
+}
