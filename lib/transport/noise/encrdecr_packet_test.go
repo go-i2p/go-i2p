@@ -5,8 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 	"testing"
 
 	"github.com/flynn/noise"
@@ -403,60 +403,6 @@ func TestEncryptDecryptPacketObfsOffline(t *testing.T) {
 	assert.Equal(t, responseData, decryptedResponse, "Decrypted response does not match original data")
 }
 
-// ObfuscateEphemeralKey encrypts the ephemeral public key in the message using AES-256-CBC without padding
-func ObfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]byte, error) {
-	if len(message) < 32 {
-		return nil, fmt.Errorf("message is too short to contain ephemeral public key")
-	}
-
-	// Extract the ephemeral public key (first 32 bytes)
-	ephemeralPubKey := message[:32]
-
-	// Create AES encrypter
-	encrypter := &crypto.AESSymmetricEncrypter{
-		Key: aesKey.Key,
-		IV:  aesKey.IV,
-	}
-
-	// Encrypt the ephemeral public key without padding
-	encryptedKey, err := encrypter.EncryptNoPadding(ephemeralPubKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// Replace the ephemeral public key in the message with the encrypted key
-	obfuscatedMessage := append(encryptedKey, message[32:]...)
-
-	return obfuscatedMessage, nil
-}
-
-// DeobfuscateEphemeralKey decrypts the ephemeral public key in the message using AES-256-CBC without padding
-func DeobfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]byte, error) {
-	if len(message) < 32 {
-		return nil, fmt.Errorf("message is too short to contain ephemeral public key")
-	}
-
-	// Extract the encrypted ephemeral public key (first 32 bytes)
-	encryptedKey := message[:32]
-
-	// Create AES decrypter
-	decrypter := &crypto.AESSymmetricDecrypter{
-		Key: aesKey.Key,
-		IV:  aesKey.IV,
-	}
-
-	// Decrypt the ephemeral public key without padding
-	decryptedKey, err := decrypter.DecryptNoPadding(encryptedKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// Replace the encrypted ephemeral key in the message with the decrypted key
-	deobfuscatedMessage := append(decryptedKey, message[32:]...)
-
-	return deobfuscatedMessage, nil
-}
-
 // TestEncryptDecryptPacketObfsOffline tests the encryption and decryption with AES obfuscation
 func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	// Simulate Bob's Router Hash (RH_B)
@@ -540,7 +486,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	// Obfuscate Alice's ephemeral public key in message 1
-	obfuscatedMsg1, err := ObfuscateEphemeralKey(msg1, aesKey)
+	obfuscatedMsg1, err := ntcp.ObfuscateEphemeralKey(msg1, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to obfuscate message 1: %v", err)
 	}
@@ -550,7 +496,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	// -------------------------------
 
 	// Deobfuscate Alice's ephemeral public key in message 1
-	deobfuscatedMsg1, err := DeobfuscateEphemeralKey(obfuscatedMsg1, aesKey)
+	deobfuscatedMsg1, err := ntcp.DeobfuscateEphemeralKey(obfuscatedMsg1, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to deobfuscate message 1: %v", err)
 	}
@@ -578,7 +524,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	// Obfuscate Bob's ephemeral public key in message 2
-	obfuscatedMsg2, err := ObfuscateEphemeralKey(msg2, aesKey)
+	obfuscatedMsg2, err := ntcp.ObfuscateEphemeralKey(msg2, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to obfuscate message 2: %v", err)
 	}
@@ -588,7 +534,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	// -------------------------------
 
 	// Deobfuscate Bob's ephemeral public key in message 2
-	deobfuscatedMsg2, err := DeobfuscateEphemeralKey(obfuscatedMsg2, aesKey)
+	deobfuscatedMsg2, err := ntcp.DeobfuscateEphemeralKey(obfuscatedMsg2, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to deobfuscate message 2: %v", err)
 	}
