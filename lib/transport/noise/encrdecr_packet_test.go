@@ -5,9 +5,10 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
+	"testing"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
-	"testing"
 
 	"github.com/flynn/noise"
 	"github.com/stretchr/testify/assert"
@@ -168,6 +169,7 @@ func TestEncryptDecryptPacketOffline(t *testing.T) {
 
 	assert.Equal(t, responseData, decryptedResponse, "Decrypted response does not match original data")
 }
+
 func TestEncryptDecryptPacketObfsOffline(t *testing.T) {
 	// Simulate Bob's Router Hash (RH_B)
 	bobRouterHash := make([]byte, 32)

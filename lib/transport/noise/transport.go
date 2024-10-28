@@ -29,8 +29,8 @@ type NoiseTransport struct {
 }
 
 func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
-	//TODO implement
-	//panic("implement me")
+	// TODO implement
+	// panic("implement me")
 	log.Warn("func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) is not implemented!")
 	return true
 }

@@ -97,6 +97,7 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	b := c.encryptIfNeeded(packet)*/
 	//c.freeBlock(packet)
 }
+
 func (ns *NoiseSession) encryptPacketDeux(plaintext []byte) (int, []byte, error) {
 	if ns.CipherState == nil {
 		return 0, nil, fmt.Errorf("CipherState is nil")
@@ -116,6 +117,7 @@ func (ns *NoiseSession) encryptPacketDeux(plaintext []byte) (int, []byte, error)
 
 	return len(packet), packet, nil
 }
+
 func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 	log.WithField("data_length", len(data)).Debug("NoiseSession: Starting writePacketLocked")
 

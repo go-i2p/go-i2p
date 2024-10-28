@@ -85,6 +85,7 @@ func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 	b := c.encryptIfNeeded(packet)*/
 	//c.freeBlock(packet)
 }
+
 func (ns *NoiseSession) decryptPacketDeux(packet []byte) (int, []byte, error) {
 	if ns.CipherState == nil {
 		return 0, nil, fmt.Errorf("CipherState is nil")

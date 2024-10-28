@@ -22,7 +22,7 @@ func (m MappingValues) Get(key I2PString) I2PString {
 				"key":   string(keyBytes),
 				"value": string(pair[1][1:]),
 			}).Debug("Found matching key in MappingValues")
-			return pair[1][1:]
+			return pair[1]
 		}
 	}
 	log.WithFields(logrus.Fields{
