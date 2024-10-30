@@ -17,7 +17,6 @@ var (
 	log            = logger.GetGoI2PLogger()
 )
 
-// RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "go-i2p",
 	Short: "I2P Router implementation in Go",
@@ -54,7 +53,6 @@ func InitConfig() {
 				Bootstrap:  *DefaultRouterConfig().Bootstrap,
 			}
 
-			// Marshal config to YAML
 			yamlData, err := yaml.Marshal(defaultConfig)
 			if err != nil {
 				log.Fatalf("Could not marshal default config: %s", err)
@@ -77,7 +75,6 @@ func InitConfig() {
 	// Load defaults
 	setDefaults()
 
-	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
 		log.Warnf("Error reading config file: %s", err)
 	} else {

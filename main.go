@@ -6,6 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 	"os"
 )
 
@@ -58,10 +59,32 @@ var configCmd = &cobra.Command{
 	},
 }
 
+func debugPrintConfig() {
+	currentConfig := struct {
+		BaseDir    string                 `yaml:"base_dir"`
+		WorkingDir string                 `yaml:"working_dir"`
+		NetDB      config.NetDbConfig     `yaml:"netdb"`
+		Bootstrap  config.BootstrapConfig `yaml:"bootstrap"`
+	}{
+		BaseDir:    config.RouterConfigProperties.BaseDir,
+		WorkingDir: config.RouterConfigProperties.WorkingDir,
+		NetDB:      *config.RouterConfigProperties.NetDb,
+		Bootstrap:  *config.RouterConfigProperties.Bootstrap,
+	}
+
+	yamlData, err := yaml.Marshal(currentConfig)
+	if err != nil {
+		log.Errorf("Error marshaling config for debug: %s", err)
+		return
+	}
+
+	log.Debugf("Current configuration:\n%s", string(yamlData))
+}
 func main() {
 	config.RootCmd.AddCommand(configCmd)
 	if err := config.RootCmd.Execute(); err != nil {
 		log.Error(err)
+		debugPrintConfig()
 		os.Exit(1)
 	}
 	/*
