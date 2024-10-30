@@ -3,37 +3,50 @@ package main
 import (
 	"fmt"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"os"
 )
 
-var log = logger.GetGoI2PLogger()
+var (
+	routerInstance *router.Router
+	log            = logger.GetGoI2PLogger()
+)
+
+var RootCmd = &cobra.Command{
+	Use:   "go-i2p",
+	Short: "I2P Router implementation in Go",
+	Run: func(cmd *cobra.Command, args []string) {
+		runRouter()
+	},
+}
 
 func init() {
 	cobra.OnInitialize(config.InitConfig)
 
 	// Global flags
-	config.RootCmd.PersistentFlags().StringVar(&config.CfgFile, "config", "", "config file (default is $HOME/.go-i2p/config.yaml)")
+	RootCmd.PersistentFlags().StringVar(&config.CfgFile, "config", "", "config file (default is $HOME/.go-i2p/config.yaml)")
 
 	// Router configuration flags
-	config.RootCmd.PersistentFlags().String("base-dir", config.DefaultRouterConfig().BaseDir, "Base directory for I2P router")
-	config.RootCmd.PersistentFlags().String("working-dir", config.DefaultRouterConfig().WorkingDir, "Working directory for I2P router")
+	RootCmd.PersistentFlags().String("base-dir", config.DefaultRouterConfig().BaseDir, "Base directory for I2P router")
+	RootCmd.PersistentFlags().String("working-dir", config.DefaultRouterConfig().WorkingDir, "Working directory for I2P router")
 
 	// NetDb flags
-	config.RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDbConfig.Path, "Path to the netDb")
+	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDbConfig.Path, "Path to the netDb")
 
 	// Bootstrap flags
-	config.RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
+	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
 
 	// Bind flags to viper
-	viper.BindPFlag("base_dir", config.RootCmd.PersistentFlags().Lookup("base-dir"))
-	viper.BindPFlag("working_dir", config.RootCmd.PersistentFlags().Lookup("working-dir"))
-	viper.BindPFlag("netdb.path", config.RootCmd.PersistentFlags().Lookup("netdb.path"))
-	viper.BindPFlag("bootstrap.low_peer_threshold", config.RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold"))
+	viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir"))
+	viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir"))
+	viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path"))
+	viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold"))
 }
 
 // configCmd shows current configuration
@@ -80,9 +93,42 @@ func debugPrintConfig() {
 
 	log.Debugf("Current configuration:\n%s", string(yamlData))
 }
+
+func runRouter() {
+	go signals.Handle()
+
+	log.Debug("parsing i2p router configuration")
+	log.Debug("using netDb in:", config.RouterConfigProperties.NetDb.Path)
+	log.Debug("starting up i2p router")
+
+	var err error
+	routerInstance, err = router.CreateRouter(config.RouterConfigProperties)
+	if err == nil {
+		signals.RegisterReloadHandler(func() {
+			if err := viper.ReadInConfig(); err != nil {
+				log.Errorf("failed to reload config: %s", err)
+				return
+			}
+			config.UpdateRouterConfig()
+		})
+
+		signals.RegisterInterruptHandler(func() {
+			if routerInstance != nil {
+				routerInstance.Stop()
+			}
+		})
+
+		routerInstance.Start()
+		routerInstance.Wait()
+		routerInstance.Close()
+	} else {
+		log.Errorf("failed to create i2p router: %s", err)
+	}
+}
+
 func main() {
-	config.RootCmd.AddCommand(configCmd)
-	if err := config.RootCmd.Execute(); err != nil {
+	RootCmd.AddCommand(configCmd)
+	if err := RootCmd.Execute(); err != nil {
 		log.Error(err)
 		debugPrintConfig()
 		os.Exit(1)

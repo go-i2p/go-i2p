@@ -1,10 +1,7 @@
 package config
 
 import (
-	"github.com/go-i2p/go-i2p/lib/router"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
-	"github.com/go-i2p/go-i2p/lib/util/signals"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -12,18 +9,9 @@ import (
 )
 
 var (
-	CfgFile        string
-	routerInstance *router.Router
-	log            = logger.GetGoI2PLogger()
+	CfgFile string
+	log     = logger.GetGoI2PLogger()
 )
-
-var RootCmd = &cobra.Command{
-	Use:   "go-i2p",
-	Short: "I2P Router implementation in Go",
-	Run: func(cmd *cobra.Command, args []string) {
-		runRouter()
-	},
-}
 
 func InitConfig() {
 	defaultConfigDir := filepath.Join(os.Getenv("HOME"), ".go-i2p")
@@ -82,7 +70,7 @@ func InitConfig() {
 	}
 
 	// Update RouterConfigProperties
-	updateRouterConfig()
+	UpdateRouterConfig()
 }
 
 func setDefaults() {
@@ -98,7 +86,7 @@ func setDefaults() {
 	viper.SetDefault("bootstrap.reseed_servers", []ReseedConfig{})
 }
 
-func updateRouterConfig() {
+func UpdateRouterConfig() {
 	// Update Router configuration
 	RouterConfigProperties.BaseDir = viper.GetString("base_dir")
 	RouterConfigProperties.WorkingDir = viper.GetString("working_dir")
@@ -118,37 +106,5 @@ func updateRouterConfig() {
 	RouterConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
 		ReseedServers:    reseedServers,
-	}
-}
-
-func runRouter() {
-	go signals.Handle()
-
-	log.Debug("parsing i2p router configuration")
-	log.Debug("using netDb in:", RouterConfigProperties.NetDb.Path)
-	log.Debug("starting up i2p router")
-
-	var err error
-	routerInstance, err = router.CreateRouter()
-	if err == nil {
-		signals.RegisterReloadHandler(func() {
-			if err := viper.ReadInConfig(); err != nil {
-				log.Errorf("failed to reload config: %s", err)
-				return
-			}
-			updateRouterConfig()
-		})
-
-		signals.RegisterInterruptHandler(func() {
-			if routerInstance != nil {
-				routerInstance.Stop()
-			}
-		})
-
-		routerInstance.Start()
-		routerInstance.Wait()
-		routerInstance.Close()
-	} else {
-		log.Errorf("failed to create i2p router: %s", err)
 	}
 }
