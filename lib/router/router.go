@@ -20,17 +20,16 @@ type Router struct {
 	running   bool
 }
 
-// create router with default configuration
-func CreateRouter() (r *Router, err error) {
-	log.Debug("Creating router with default configuration")
-	cfg := config.RouterConfigProperties
-	r, err = FromConfig(cfg)
+// CreateRouter creates a router with the provided configuration
+func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
+	log.Debug("Creating router with provided configuration")
+	r, err := FromConfig(cfg)
 	if err != nil {
-		log.WithError(err).Error("Failed to create router from default configuration")
+		log.WithError(err).Error("Failed to create router from configuration")
 	} else {
-		log.Debug("Router created successfully with default configuration")
+		log.Debug("Router created successfully with provided configuration")
 	}
-	return
+	return r, err
 }
 
 // create router from configuration
