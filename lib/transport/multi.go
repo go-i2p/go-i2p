@@ -87,7 +87,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 				continue
 			}
 			// we got a session
-			log.WithField("transport_index", i).Info("TransportMuxer: Successfully got session from transport")
+			log.WithField("transport_index", i).Debug("TransportMuxer: Successfully got session from transport")
 			return
 		}
 	}

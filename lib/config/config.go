@@ -51,7 +51,7 @@ func InitConfig() {
 				log.Fatalf("Could not write default config file: %s", err)
 			}
 
-			log.Infof("Created default configuration at: %s", defaultConfigFile)
+			log.Debugf("Created default configuration at: %s", defaultConfigFile)
 		}
 
 		// Set up viper to use the config file

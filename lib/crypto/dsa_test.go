@@ -84,5 +84,5 @@ func BenchmarkDSASignVerify(b *testing.B) {
 			fail++
 		}
 	}
-	log.Infof("%d fails %d signs", fail, b.N)
+	log.Debugf("%d fails %d signs", fail, b.N)
 }

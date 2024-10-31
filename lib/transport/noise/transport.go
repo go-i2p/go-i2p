@@ -50,7 +50,7 @@ func (noopt *NoiseTransport) Accept() (net.Conn, error) {
 	if err != nil {
 		log.WithError(err).Error("NoiseTransport: Failed to accept connection")
 	} else {
-		log.WithField("remote_addr", conn.RemoteAddr().String()).Info("NoiseTransport: Accepted new connection")
+		log.WithField("remote_addr", conn.RemoteAddr().String()).Debug("NoiseTransport: Accepted new connection")
 	}
 	return conn, err
 }
@@ -156,7 +156,7 @@ func (noopt *NoiseTransport) Close() error {
 
 // NewNoiseTransport create a NoiseTransport using a supplied net.Listener
 func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
-	log.WithField("listener_addr", netSocket.Addr().String()).Info("Creating new NoiseTransport")
+	log.WithField("listener_addr", netSocket.Addr().String()).Debug("Creating new NoiseTransport")
 	return &NoiseTransport{
 		peerConnections: make(map[data.Hash]transport.TransportSession),
 		Listener:        netSocket,
@@ -174,6 +174,6 @@ func NewNoiseTransportSocket() (*NoiseTransport, error) {
 	}
 	// return NewNoiseTransport(netSocket), nil
 	_transport := NewNoiseTransport(netSocket)
-	log.WithField("addr", netSocket.Addr().String()).Info("Created new NoiseTransportSocket")
+	log.WithField("addr", netSocket.Addr().String()).Debug("Created new NoiseTransportSocket")
 	return _transport, nil
 }

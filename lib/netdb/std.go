@@ -31,7 +31,7 @@ type StdNetDB struct {
 }
 
 func NewStdNetDB(db string) StdNetDB {
-	log.WithField("db_path", db).Info("Creating new StdNetDB")
+	log.WithField("db_path", db).Debug("Creating new StdNetDB")
 	return StdNetDB{
 		DB:          db,
 		RouterInfos: make(map[common.Hash]Entry),
@@ -189,7 +189,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 		return err
 	})
 	if err == nil {
-		log.WithField("count", count).Info("Finished recalculating NetDB size")
+		log.WithField("count", count).Debug("Finished recalculating NetDB size")
 		str := fmt.Sprintf("%d", count)
 		var f *os.File
 		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
@@ -286,7 +286,6 @@ func (db *StdNetDB) Ensure() (err error) {
 func (db *StdNetDB) Create() (err error) {
 	mode := os.FileMode(0o700)
 	p := db.Path()
-	// log.Infof("Create network database in %s", p)
 	log.WithField("path", p).Debug("Creating network database directory")
 	// create root for skiplist
 	err = os.MkdirAll(p, mode)
