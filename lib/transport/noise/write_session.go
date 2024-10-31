@@ -98,26 +98,6 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	//c.freeBlock(packet)
 }
 
-func (ns *NoiseSession) encryptPacketDeux(plaintext []byte) (int, []byte, error) {
-	if ns.CipherState == nil {
-		return 0, nil, fmt.Errorf("CipherState is nil")
-	}
-
-	// Encrypt the data
-	ciphertext, err := ns.CipherState.Encrypt(nil, nil, plaintext)
-	if err != nil {
-		log.Fatalf("unimplemented\nerror:%v\n", err)
-	}
-
-	// Prepend the length of the ciphertext as a 2-byte big-endian value
-	packetLength := uint16(len(ciphertext))
-	packet := make([]byte, 2+len(ciphertext))
-	binary.BigEndian.PutUint16(packet[:2], packetLength)
-	copy(packet[2:], ciphertext)
-
-	return len(packet), packet, nil
-}
-
 func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {
 	log.WithField("data_length", len(data)).Debug("NoiseSession: Starting writePacketLocked")
 

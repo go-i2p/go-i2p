@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
@@ -14,6 +15,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func (ns *NoiseSession) testEncryptPacket(plaintext []byte) (int, []byte, error) {
+	if ns.CipherState == nil {
+		return 0, nil, fmt.Errorf("CipherState is nil")
+	}
+
+	// Encrypt the data
+	ciphertext, err := ns.CipherState.Encrypt(nil, nil, plaintext)
+	if err != nil {
+		log.Fatalf("unimplemented\nerror:%v\n", err)
+	}
+
+	// Prepend the length of the ciphertext as a 2-byte big-endian value
+	packetLength := uint16(len(ciphertext))
+	packet := make([]byte, 2+len(ciphertext))
+	binary.BigEndian.PutUint16(packet[:2], packetLength)
+	copy(packet[2:], ciphertext)
+
+	return len(packet), packet, nil
+}
+func (ns *NoiseSession) testPacketDeux(packet []byte) (int, []byte, error) {
+	if ns.CipherState == nil {
+		return 0, nil, fmt.Errorf("CipherState is nil")
+	}
+
+	if len(packet) < 2 {
+		return 0, nil, fmt.Errorf("Packet too short to contain length prefix")
+	}
+
+	// Extract the length prefix
+	packetLength := binary.BigEndian.Uint16(packet[:2])
+
+	if len(packet[2:]) < int(packetLength) {
+		return 0, nil, fmt.Errorf("Packet data is shorter than indicated length")
+	}
+
+	ciphertext := packet[2 : 2+packetLength]
+
+	// Decrypt the data
+	plaintext, err := ns.CipherState.Decrypt(nil, nil, ciphertext)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return len(plaintext), plaintext, nil
+}
 func TestEncryptDecryptPacketOffline(t *testing.T) {
 	// Generate static keypairs
 	initiatorStatic, err := noise.DH25519.GenerateKeypair(rand.Reader)
@@ -587,12 +633,12 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	originalData := []byte("This is a test message.")
-	_, encryptedPacket, err := initiatorSession.encryptPacketDeux(originalData)
+	_, encryptedPacket, err := initiatorSession.testEncryptPacket(originalData)
 	if err != nil {
 		t.Fatalf("Encryption failed: %v", err)
 	}
 
-	_, decryptedData, err := responderSession.decryptPacketDeux(encryptedPacket)
+	_, decryptedData, err := responderSession.testPacketDeux(encryptedPacket)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
@@ -608,12 +654,12 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	responseData := []byte("This is a response message.")
-	_, encryptedResponse, err := responderSession.encryptPacketDeux(responseData)
+	_, encryptedResponse, err := responderSession.testEncryptPacket(responseData)
 	if err != nil {
 		t.Fatalf("Responder encryption failed: %v", err)
 	}
 
-	_, decryptedResponse, err := initiatorSession.decryptPacketDeux(encryptedResponse)
+	_, decryptedResponse, err := initiatorSession.testPacketDeux(encryptedResponse)
 	if err != nil {
 		t.Fatalf("Initiator decryption failed: %v", err)
 	}
