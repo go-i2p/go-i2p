@@ -1,11 +1,12 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
-	"os"
-	"path/filepath"
 )
 
 var (
@@ -24,7 +25,7 @@ func InitConfig() {
 		// Create default config if it doesn't exist
 		if _, err := os.Stat(defaultConfigFile); os.IsNotExist(err) {
 			// Ensure directory exists
-			if err := os.MkdirAll(defaultConfigDir, 0755); err != nil {
+			if err := os.MkdirAll(defaultConfigDir, 0o755); err != nil {
 				log.Fatalf("Could not create config directory: %s", err)
 			}
 
@@ -47,7 +48,7 @@ func InitConfig() {
 			}
 
 			// Write default config file
-			if err := os.WriteFile(defaultConfigFile, yamlData, 0644); err != nil {
+			if err := os.WriteFile(defaultConfigFile, yamlData, 0o644); err != nil {
 				log.Fatalf("Could not write default config file: %s", err)
 			}
 

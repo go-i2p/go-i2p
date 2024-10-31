@@ -34,6 +34,7 @@ func (ns *NoiseSession) testEncryptPacket(plaintext []byte) (int, []byte, error)
 
 	return len(packet), packet, nil
 }
+
 func (ns *NoiseSession) testPacketDeux(packet []byte) (int, []byte, error) {
 	if ns.CipherState == nil {
 		return 0, nil, fmt.Errorf("CipherState is nil")
@@ -60,6 +61,7 @@ func (ns *NoiseSession) testPacketDeux(packet []byte) (int, []byte, error) {
 
 	return len(plaintext), plaintext, nil
 }
+
 func TestEncryptDecryptPacketOffline(t *testing.T) {
 	// Generate static keypairs
 	initiatorStatic, err := noise.DH25519.GenerateKeypair(rand.Reader)
