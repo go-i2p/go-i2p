@@ -131,7 +131,7 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 			RouterInfo: ri,
 			Conn:       socket,
 		}
-		log.WithField("local_addr", socket.LocalAddr().String()).Info("NoiseTransportSession created successfully")
+		log.WithField("local_addr", socket.LocalAddr().String()).Debug("NoiseTransportSession created successfully")
 		return session, nil
 	}
 	log.Error("Failed to create NoiseTransportSession, all addresses failed")
