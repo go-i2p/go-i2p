@@ -4,8 +4,6 @@ import (
 	"crypto/rand"
 	"io"
 	"testing"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func TestDSA(t *testing.T) {
@@ -86,5 +84,5 @@ func BenchmarkDSASignVerify(b *testing.B) {
 			fail++
 		}
 	}
-	log.Infof("%d fails %d signs", fail, b.N)
+	log.Debugf("%d fails %d signs", fail, b.N)
 }

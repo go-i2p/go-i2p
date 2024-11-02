@@ -6,7 +6,6 @@ import (
 	"io"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/openpgp/elgamal"
 )
 
@@ -46,7 +45,7 @@ func BenchmarkElgDecrypt(b *testing.B) {
 			fails++
 		}
 	}
-	log.Infof("%d fails %d rounds", fails, b.N)
+	log.Debugf("%d fails %d rounds", fails, b.N)
 }
 
 func BenchmarkElgEncrypt(b *testing.B) {
@@ -69,7 +68,7 @@ func BenchmarkElgEncrypt(b *testing.B) {
 			fails++
 		}
 	}
-	log.Infof("%d fails %d rounds", fails, b.N)
+	log.Debugf("%d fails %d rounds", fails, b.N)
 }
 
 func TestElg(t *testing.T) {

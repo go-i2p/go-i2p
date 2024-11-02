@@ -8,6 +8,8 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/sirupsen/logrus"
+
 	curve25519 "go.step.sm/crypto/x25519"
 )
 
@@ -27,14 +29,20 @@ func (k Curve25519PublicKey) NewVerifier() (v Verifier, err error) {
 }
 
 func (k Curve25519PublicKey) Len() int {
-	return len(k)
+	length := len(k)
+	log.WithField("length", length).Debug("Retrieved Curve25519PublicKey length")
+	return length
 }
 
 func createCurve25519PublicKey(data []byte) (k *curve25519.PublicKey) {
+	log.WithField("data_length", len(data)).Debug("Creating Curve25519PublicKey")
 	if len(data) == 256 {
 		k2 := curve25519.PublicKey{}
 		copy(k2[:], data)
 		k = &k2
+		log.Debug("Curve25519PublicKey created successfully")
+	} else {
+		log.Warn("Invalid data length for Curve25519PublicKey")
 	}
 	return
 }
@@ -53,6 +61,7 @@ func createCurve25519Encryption(pub *curve25519.PublicKey, rand io.Reader) (enc 
 	if err == nil {
 		enc = &Curve25519Encryption{}
 	}*/
+	log.Warn("createCurve25519Encryption is not implemented")
 	return
 }
 
@@ -61,11 +70,17 @@ type Curve25519Encryption struct {
 }
 
 func (curve25519 *Curve25519Encryption) Encrypt(data []byte) (enc []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Encrypting data with Curve25519")
 	return curve25519.EncryptPadding(data, true)
 }
 
 func (curve25519 *Curve25519Encryption) EncryptPadding(data []byte, zeroPadding bool) (encrypted []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"data_length":  len(data),
+		"zero_padding": zeroPadding,
+	}).Debug("Encrypting data with padding using Curve25519")
 	if len(data) > 222 {
+		log.Error("Data too big for Curve25519 encryption")
 		err = Curve25519EncryptTooBig
 		return
 	}
@@ -88,33 +103,55 @@ func (curve25519 *Curve25519Encryption) EncryptPadding(data []byte, zeroPadding 
 		copy(encrypted, curve25519.a.Bytes())
 		copy(encrypted[256:], b)
 	}
+	log.WithField("encrypted_length", len(encrypted)).Debug("Data encrypted successfully")
 	return
 }
 
 func (elg Curve25519PublicKey) NewEncrypter() (enc Encrypter, err error) {
+	log.Debug("Creating new Curve25519 Encrypter")
 	k := createCurve25519PublicKey(elg[:])
 	enc, err = createCurve25519Encryption(k, rand.Reader)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Curve25519 Encrypter")
+	} else {
+		log.Debug("Curve25519 Encrypter created successfully")
+	}
 	return
 }
 
 func (v *Curve25519Verifier) VerifyHash(h, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"hash_length":      len(h),
+		"signature_length": len(sig),
+	}).Debug("Verifying hash with Curve25519")
+
 	if len(sig) != curve25519.SignatureSize {
+		log.Error("Bad signature size")
 		err = ErrBadSignatureSize
 		return
 	}
 	if len(v.k) != curve25519.PublicKeySize {
+		log.Error("Invalid Curve25519 public key size")
 		err = errors.New("failed to verify: invalid curve25519 public key size")
 		return
 	}
 
 	ok := curve25519.Verify(v.k, h, sig)
 	if !ok {
+		log.Error("Invalid signature")
 		err = errors.New("failed to verify: invalid signature")
+	} else {
+		log.Debug("Hash verified successfully")
 	}
 	return
 }
 
 func (v *Curve25519Verifier) Verify(data, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"data_length":      len(data),
+		"signature_length": len(sig),
+	}).Debug("Verifying data with Curve25519")
+
 	h := sha512.Sum512(data)
 	err = v.VerifyHash(h[:], sig)
 	return
@@ -127,15 +164,31 @@ type Curve25519Signer struct {
 }
 
 func (s *Curve25519Signer) Sign(data []byte) (sig []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Signing data with Curve25519")
+
 	if len(s.k) != curve25519.PrivateKeySize {
+		log.Error("Invalid Curve25519 private key size")
 		err = errors.New("failed to sign: invalid curve25519 private key size")
 		return
 	}
 	h := sha512.Sum512(data)
 	sig, err = s.SignHash(h[:])
+	if err != nil {
+		log.WithError(err).Error("Failed to sign data")
+	} else {
+		log.WithField("signature_length", len(sig)).Debug("Data signed successfully")
+	}
 	return
 }
 
 func (s *Curve25519Signer) SignHash(h []byte) (sig []byte, err error) {
-	return curve25519.Sign(rand.Reader, s.k, h)
+	log.WithField("hash_length", len(h)).Debug("Signing hash with Curve25519")
+	sig, err = curve25519.Sign(rand.Reader, s.k, h)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign hash")
+	} else {
+		log.WithField("signature_length", len(sig)).Debug("Hash signed successfully")
+	}
+	// return curve25519.Sign(rand.Reader, s.k, h)
+	return
 }

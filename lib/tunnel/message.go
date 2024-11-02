@@ -3,8 +3,9 @@ package tunnel
 import (
 	"encoding/binary"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -157,12 +158,17 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() crypto.TunnelI
 // Returns the contents of a decrypted tunnel message that contain the data for the
 // DeliveryInstructions.
 func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData() []byte {
+	log.Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
 	data_area := decrypted_tunnel_message[4+4+16:]
 	for i := 0; i < len(data_area); i++ {
 		if data_area[i] == 0x00 {
-			return data_area[i+1:]
+			// return data_area[i+1:]
+			delivery_data := data_area[i+1:]
+			log.WithField("delivery_data_length", len(delivery_data)).Debug("Retrieved delivery instruction data")
+			return delivery_data
 		}
 	}
+	log.Warn("No delivery instruction data found in DecryptedTunnelMessage")
 	return []byte{}
 }
 
@@ -174,7 +180,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 	for {
 		instructions, remainder, err := readDeliveryInstructions(data)
 		if err != nil {
-			log.WithFields(log.Fields{
+			log.WithFields(logrus.Fields{
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error reading delivery instructions")
@@ -183,7 +189,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 
 		fragment_size, err := instructions.FragmentSize()
 		if err != nil {
-			log.WithFields(log.Fields{
+			log.WithFields(logrus.Fields{
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error getting delivery instructions fragment size")

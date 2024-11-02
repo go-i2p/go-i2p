@@ -6,6 +6,8 @@ import (
 	"crypto/sha1"
 	"io"
 	"math/big"
+
+	"github.com/sirupsen/logrus"
 )
 
 var dsap = new(big.Int).SetBytes([]byte{
@@ -43,16 +45,24 @@ var param = dsa.Parameters{
 
 // generate a dsa keypair
 func generateDSA(priv *dsa.PrivateKey, rand io.Reader) error {
+	log.Debug("Generating DSA key pair")
 	// put our paramters in
 	priv.P = param.P
 	priv.Q = param.Q
 	priv.G = param.G
 	// generate the keypair
-	return dsa.GenerateKey(priv, rand)
+	err := dsa.GenerateKey(priv, rand)
+	if err != nil {
+		log.WithError(err).Error("Failed to generate DSA key pair")
+	} else {
+		log.Debug("DSA key pair generated successfully")
+	}
+	return err
 }
 
 // create i2p dsa public key given its public component
 func createDSAPublicKey(Y *big.Int) *dsa.PublicKey {
+	log.Debug("Creating DSA public key")
 	return &dsa.PublicKey{
 		Parameters: param,
 		Y:          Y,
@@ -61,6 +71,7 @@ func createDSAPublicKey(Y *big.Int) *dsa.PublicKey {
 
 // createa i2p dsa private key given its public component
 func createDSAPrivkey(X *big.Int) (k *dsa.PrivateKey) {
+	log.Debug("Creating DSA private key")
 	if X.Cmp(dsap) == -1 {
 		Y := new(big.Int)
 		Y.Exp(dsag, X, dsap)
@@ -71,6 +82,9 @@ func createDSAPrivkey(X *big.Int) (k *dsa.PrivateKey) {
 			},
 			X: X,
 		}
+		log.Debug("DSA private key created successfully")
+	} else {
+		log.Warn("Failed to create DSA private key: X is not less than p")
 	}
 	return
 }
@@ -83,6 +97,7 @@ type DSAPublicKey [128]byte
 
 // create a new dsa verifier
 func (k DSAPublicKey) NewVerifier() (v Verifier, err error) {
+	log.Debug("Creating new DSA verifier")
 	v = &DSAVerifier{
 		k: createDSAPublicKey(new(big.Int).SetBytes(k[:])),
 	}
@@ -91,6 +106,10 @@ func (k DSAPublicKey) NewVerifier() (v Verifier, err error) {
 
 // verify data with a dsa public key
 func (v *DSAVerifier) Verify(data, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"data_length": len(data),
+		"sig_length":  len(sig),
+	}).Debug("Verifying DSA signature")
 	h := sha1.Sum(data)
 	err = v.VerifyHash(h[:], sig)
 	return
@@ -98,16 +117,23 @@ func (v *DSAVerifier) Verify(data, sig []byte) (err error) {
 
 // verify hash of data with a dsa public key
 func (v *DSAVerifier) VerifyHash(h, sig []byte) (err error) {
+	log.WithFields(logrus.Fields{
+		"hash_length": len(h),
+		"sig_length":  len(sig),
+	}).Debug("Verifying DSA signature hash")
 	if len(sig) == 40 {
 		r := new(big.Int).SetBytes(sig[:20])
 		s := new(big.Int).SetBytes(sig[20:])
 		if dsa.Verify(v.k, h, r, s) {
 			// valid signature
+			log.Debug("DSA signature verified successfully")
 		} else {
 			// invalid signature
+			log.Warn("Invalid DSA signature")
 			err = ErrInvalidSignature
 		}
 	} else {
+		log.Error("Bad DSA signature size")
 		err = ErrBadSignatureSize
 	}
 	return
@@ -125,6 +151,7 @@ type DSAPrivateKey [20]byte
 
 // create a new dsa signer
 func (k DSAPrivateKey) NewSigner() (s Signer, err error) {
+	log.Debug("Creating new DSA signer")
 	s = &DSASigner{
 		k: createDSAPrivkey(new(big.Int).SetBytes(k[:])),
 	}
@@ -134,30 +161,38 @@ func (k DSAPrivateKey) NewSigner() (s Signer, err error) {
 func (k DSAPrivateKey) Public() (pk DSAPublicKey, err error) {
 	p := createDSAPrivkey(new(big.Int).SetBytes(k[:]))
 	if p == nil {
+		log.Error("Invalid DSA private key format")
 		err = ErrInvalidKeyFormat
 	} else {
 		copy(pk[:], p.Y.Bytes())
+		log.Debug("DSA public key derived successfully")
 	}
 	return
 }
 
 func (k DSAPrivateKey) Generate() (s DSAPrivateKey, err error) {
+	log.Debug("Generating new DSA private key")
 	dk := new(dsa.PrivateKey)
 	err = generateDSA(dk, rand.Reader)
 	if err == nil {
 		copy(k[:], dk.X.Bytes())
 		s = k
+		log.Debug("New DSA private key generated successfully")
+	} else {
+		log.WithError(err).Error("Failed to generate new DSA private key")
 	}
 	return
 }
 
 func (ds *DSASigner) Sign(data []byte) (sig []byte, err error) {
+	log.WithField("data_length", len(data)).Debug("Signing data with DSA")
 	h := sha1.Sum(data)
 	sig, err = ds.SignHash(h[:])
 	return
 }
 
 func (ds *DSASigner) SignHash(h []byte) (sig []byte, err error) {
+	log.WithField("hash_length", len(h)).Debug("Signing hash with DSA")
 	var r, s *big.Int
 	r, s, err = dsa.Sign(rand.Reader, ds.k, h)
 	if err == nil {
@@ -168,6 +203,9 @@ func (ds *DSASigner) SignHash(h []byte) (sig []byte, err error) {
 		sb := s.Bytes()
 		sl := len(sb)
 		copy(sig[20+(20-sl):], sb)
+		log.WithField("sig_length", len(sig)).Debug("DSA signature created successfully")
+	} else {
+		log.WithError(err).Error("Failed to create DSA signature")
 	}
 	return
 }
