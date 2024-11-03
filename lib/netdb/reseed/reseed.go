@@ -69,59 +69,55 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 
 	if su3file.FileType == su3.ZIP {
 		if su3file.ContentType == su3.RESEED {
+			content, err := io.ReadAll(su3file.Content(""))
 			if err == nil {
-				content, err := io.ReadAll(su3file.Content(""))
-				if err == nil {
-					signature, err := io.ReadAll(su3file.Signature())
-					if err != nil {
-						return nil, err
-					}
-					log.Println("warning: this doesn't validate the signature yet", signature)
-					log.Warn("Doesn't validate the signature yet", logrus.Fields{"signature": signature})
-				}
-				zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
-				err = os.WriteFile(zip, content, 0o644)
+				signature, err := io.ReadAll(su3file.Signature())
 				if err != nil {
-					log.WithError(err).Error("Failed to write reseed zip file")
+					log.WithError(err).Error("Failed to read SU3 file signature")
 					return nil, err
 				}
-				// content is a zip file, unzip it and get the files
-				files, err := unzip.New().Extract(zip, config.RouterConfigProperties.NetDb.Path)
-				if err != nil {
-					log.WithError(err).Error("Failed to extract reseed zip file")
-					return nil, err
-				}
-				if len(files) <= 0 {
-					log.Error("Reseed appears to have no content")
-					return nil, fmt.Errorf("error: reseed appears to have no content")
-				}
-
-				log.WithField("file_count", len(files)).Debug("Successfully extracted reseed files")
-
-				var ris []router_info.RouterInfo
-				for _, f := range files {
-					riB, err := os.ReadFile(f)
-					if err != nil {
-						log.WithError(err).WithField("file", f).Warn("Failed to read router info file")
-						continue
-					}
-					ri, _, err := router_info.ReadRouterInfo(riB)
-					if err != nil {
-						log.WithError(err).WithField("file", f).Warn("Failed to parse router info")
-						continue
-					}
-					ris = append(ris, ri)
-				}
-				err = os.Remove(zip)
-				if err != nil {
-					log.WithError(err).Warn("Failed to remove reseed zip file")
-				}
-				log.WithField("router_info_count", len(ris)).Debug("Successfully processed reseed data")
-				return ris, err
-			} else {
-				log.WithError(err).Error("Failed to read SU3 file signature")
+				log.Println("warning: this doesn't validate the signature yet", signature)
+				log.Warn("Doesn't validate the signature yet", logrus.Fields{"signature": signature})
+			}
+			zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
+			err = os.WriteFile(zip, content, 0o644)
+			if err != nil {
+				log.WithError(err).Error("Failed to write reseed zip file")
 				return nil, err
 			}
+			// content is a zip file, unzip it and get the files
+			files, err := unzip.New().Extract(zip, config.RouterConfigProperties.NetDb.Path)
+			if err != nil {
+				log.WithError(err).Error("Failed to extract reseed zip file")
+				return nil, err
+			}
+			if len(files) <= 0 {
+				log.Error("Reseed appears to have no content")
+				return nil, fmt.Errorf("error: reseed appears to have no content")
+			}
+
+			log.WithField("file_count", len(files)).Debug("Successfully extracted reseed files")
+
+			var ris []router_info.RouterInfo
+			for _, f := range files {
+				riB, err := os.ReadFile(f)
+				if err != nil {
+					log.WithError(err).WithField("file", f).Warn("Failed to read router info file")
+					continue
+				}
+				ri, _, err := router_info.ReadRouterInfo(riB)
+				if err != nil {
+					log.WithError(err).WithField("file", f).Warn("Failed to parse router info")
+					continue
+				}
+				ris = append(ris, ri)
+			}
+			err = os.Remove(zip)
+			if err != nil {
+				log.WithError(err).Warn("Failed to remove reseed zip file")
+			}
+			log.WithField("router_info_count", len(ris)).Debug("Successfully processed reseed data")
+			return ris, err
 		}
 	}
 	log.Error("Undefined reseed error")
