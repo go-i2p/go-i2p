@@ -2,8 +2,9 @@ package sntp
 
 import (
 	"fmt"
-	"github.com/beevik/ntp"
 	"time"
+
+	"github.com/beevik/ntp"
 )
 
 func (rt *RouterTimestamper) validateResponse(response *ntp.Response) bool {

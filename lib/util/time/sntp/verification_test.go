@@ -1,9 +1,10 @@
 package sntp
 
 import (
-	"github.com/beevik/ntp"
 	"testing"
 	"time"
+
+	"github.com/beevik/ntp"
 )
 
 func TestValidateResponse(t *testing.T) {
