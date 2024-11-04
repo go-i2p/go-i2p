@@ -77,7 +77,7 @@ func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, 
 		return nil, nil, nil, err
 	}
 
-	// Write message, expecting no CipherStates yet since this is message 1 [[1]](https://poe.com/citation?message_id=283961551087&citation=1)
+	// Write message, expecting no CipherStates yet since this is message 1
 	msg, cs0, cs1, err := state.WriteMessage(nil, payload)
 	if err != nil {
 		return nil, nil, nil, err
