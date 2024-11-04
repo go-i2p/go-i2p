@@ -22,6 +22,8 @@ type TransportSession interface {
 	// close the session cleanly
 	// returns any errors that happen while closing the session
 	Close() error
+	// create a handshake message for the session
+	// CreateHandshakeMessage() (i2np.I2NPMessage, error)
 }
 
 type Transport interface {

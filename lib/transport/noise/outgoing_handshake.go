@@ -24,7 +24,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 		"msg_length":     len(msg),
 	}).Debug("Initiator handshake message composed")
 	c.HandshakeState = &HandshakeState{
-		protocol: state,
+		HandshakeState: state,
 	}
 
 	if _, err = c.Write(negData); err != nil {

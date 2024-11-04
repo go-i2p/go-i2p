@@ -10,13 +10,15 @@ import (
 )
 
 type HandshakeState struct {
-	mutex     sync.Mutex
-	protocol  *noise.HandshakeState
-	ephemeral *noise.DHKey
-	pattern   noise.HandshakePattern
+	mutex             sync.Mutex
+	ephemeral         *noise.DHKey
+	pattern           noise.HandshakePattern
+	handshakeComplete bool
+	HandKey           noise.DHKey
+	*noise.HandshakeState
 }
 
-func NewHandshakeState(s noise.DHKey, isInitiator bool) (*HandshakeState, error) {
+func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState, error) {
 	hs := &HandshakeState{
 		pattern: noise.HandshakeXK,
 	}
@@ -25,7 +27,7 @@ func NewHandshakeState(s noise.DHKey, isInitiator bool) (*HandshakeState, error)
 		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashSHA256),
 		Pattern:       hs.pattern,
 		Initiator:     isInitiator,
-		StaticKeypair: s,
+		StaticKeypair: staticKey,
 	}
 
 	protocol, err := noise.NewHandshakeState(config)
@@ -33,7 +35,7 @@ func NewHandshakeState(s noise.DHKey, isInitiator bool) (*HandshakeState, error)
 		return nil, err
 	}
 
-	hs.protocol = protocol
+	hs.HandshakeState = protocol
 	return hs, nil
 }
 
@@ -64,49 +66,18 @@ func (h *HandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherStat
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	return h.protocol.WriteMessage(nil, payload)
+	return h.HandshakeState.WriteMessage(nil, payload)
 }
 
 func (h *HandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	return h.protocol.ReadMessage(nil, message)
+	return h.HandshakeState.ReadMessage(nil, message)
 }
 
 var log = logger.GetGoI2PLogger()
 
-/*
-	func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
-		log.WithField("router_info", routerInfo.IdentHash()).Debug("Starting Noise handshake")
-		c.Mutex.Lock()
-		defer c.Mutex.Unlock()
-		session, err := c.getSession(routerInfo)
-		if err != nil {
-			log.WithError(err).Error("Failed to get session for handshake")
-			return err
-		}
-		log.Debug("Session obtained for handshake")
-		// Set handshakeCond to indicate that this goroutine is committing to
-		// running the handshake.
-		session.(*NoiseSession).Cond = sync.NewCond(&c.Mutex)
-		c.Mutex.Unlock()
-		session.(*NoiseSession).Mutex.Lock()
-		defer session.(*NoiseSession).Mutex.Unlock()
-		c.Mutex.Lock()
-		log.Debug("Running outgoing handshake")
-		if err := session.(*NoiseSession).RunOutgoingHandshake(); err != nil {
-			return err
-		}
-		log.Debug("Outgoing handshake completed successfully")
-		// Wake any other goroutines that are waiting for this handshake to
-		// complete.
-		session.(*NoiseSession).Cond.Broadcast()
-		session.(*NoiseSession).Cond = nil
-		log.Debug("Noise handshake completed successfully")
-		return nil
-	}
-*/
 func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error {
 	log.WithField("router_info", routerInfo.IdentHash()).Debug("Starting Noise handshake")
 	c.Mutex.Lock()

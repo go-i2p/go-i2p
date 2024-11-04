@@ -18,19 +18,14 @@ import (
 type NoiseSession struct {
 	router_info.RouterInfo
 	*noise.CipherState
-	sync.Mutex
 	*sync.Cond
-	*NoiseTransport   // The parent transport, which "Dialed" the connection to the peer whith whom we established the session
-	RecvQueue         *cb.Queue
-	SendQueue         *cb.Queue
-	SendKey           noise.DHKey
-	RecvKey           noise.DHKey
-	HandKey           noise.DHKey
-	VerifyCallback    VerifyCallbackFunc
-	activeCall        int32
-	handshakeComplete bool
-	Conn              net.Conn
+	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer whith whom we established the session
 	*HandshakeState
+	RecvQueue       *cb.Queue
+	SendQueue       *cb.Queue
+	VerifyCallback  VerifyCallbackFunc
+	activeCall      int32
+	Conn            net.Conn
 }
 
 // RemoteAddr implements net.Conn
@@ -115,15 +110,6 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 			log.WithError(err).Error("Failed to dial address")
 			return nil, err
 		}
-		/*
-			return &NoiseSession{
-				SendQueue:  cb.New(1024),
-				RecvQueue:  cb.New(1024),
-				RouterInfo: ri,
-				Conn:       socket,
-			}, nil
-
-		*/
 		session := &NoiseSession{
 			SendQueue:  cb.New(1024),
 			RecvQueue:  cb.New(1024),

@@ -13,7 +13,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/flynn/noise"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -23,7 +22,6 @@ import (
 type NoiseTransport struct {
 	sync.Mutex
 	router_identity.RouterIdentity
-	*noise.CipherState
 	Listener        net.Listener
 	peerConnections map[data.Hash]transport.TransportSession
 }

@@ -19,7 +19,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 		return err
 	}
 	c.HandshakeState = &HandshakeState{
-		protocol: state,
+		HandshakeState: state,
 	}
 	log.WithFields(logrus.Fields{
 		"negData_length": len(negData),
