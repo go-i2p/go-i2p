@@ -1,25 +1,25 @@
 test-mapping-all: test-mapping-values test-mapping-duplicates test-mapping-conversion test-mapping-utils
 
 test-mapping-values:
-	go test -v ./lib/common/data -run TestValuesExclusesPairWithBadData
-	go test -v ./lib/common/data -run TestValuesWarnsMissingData
-	go test -v ./lib/common/data -run TestValuesWarnsExtraData
-	go test -v ./lib/common/data -run TestValuesEnforcesEqualDelimitor
-	go test -v ./lib/common/data -run TestValuesEnforcedSemicolonDelimitor
-	go test -v ./lib/common/data -run TestValuesReturnsValues
+	$(GO) test -v ./lib/common/data -run TestValuesExclusesPairWithBadData
+	$(GO) test -v ./lib/common/data -run TestValuesWarnsMissingData
+	$(GO) test -v ./lib/common/data -run TestValuesWarnsExtraData
+	$(GO) test -v ./lib/common/data -run TestValuesEnforcesEqualDelimitor
+	$(GO) test -v ./lib/common/data -run TestValuesEnforcedSemicolonDelimitor
+	$(GO) test -v ./lib/common/data -run TestValuesReturnsValues
 
 test-mapping-duplicates:
-	go test -v ./lib/common/data -run TestHasDuplicateKeysTrueWhenDuplicates
-	go test -v ./lib/common/data -run TestHasDuplicateKeysFalseWithoutDuplicates
-	go test -v ./lib/common/data -run TestReadMappingHasDuplicateKeys
+	$(GO) test -v ./lib/common/data -run TestHasDuplicateKeysTrueWhenDuplicates
+	$(GO) test -v ./lib/common/data -run TestHasDuplicateKeysFalseWithoutDuplicates
+	$(GO) test -v ./lib/common/data -run TestReadMappingHasDuplicateKeys
 
 test-mapping-conversion:
-	go test -v ./lib/common/data -run TestGoMapToMappingProducesCorrectMapping
-	go test -v ./lib/common/data -run TestFullGoMapToMappingProducesCorrectMapping
+	$(GO) test -v ./lib/common/data -run TestGoMapToMappingProducesCorrectMapping
+	$(GO) test -v ./lib/common/data -run TestFullGoMapToMappingProducesCorrectMapping
 
 test-mapping-utils:
-	go test -v ./lib/common/data -run TestStopValueRead
-	go test -v ./lib/common/data -run TestBeginsWith
+	$(GO) test -v ./lib/common/data -run TestStopValueRead
+	$(GO) test -v ./lib/common/data -run TestBeginsWith
 
 .PHONY: test-mapping-all \
         test-mapping-values \

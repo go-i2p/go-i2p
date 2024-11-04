@@ -1,27 +1,27 @@
 test-keys-cert-all: test-keys-cert-certificate test-keys-cert-public test-keys-cert-signing test-keys-cert-creation
 
 test-keys-cert-certificate:
-	go test -v ./lib/common/keys_and_cert -run TestCertificateWithValidData
+	$(GO) test -v ./lib/common/keys_and_cert -run TestCertificateWithValidData
 
 test-keys-cert-public:
-	go test -v ./lib/common/keys_and_cert -run TestPublicKeyWithBadData
-	go test -v ./lib/common/keys_and_cert -run TestPublicKeyWithBadCertificate
-	go test -v ./lib/common/keys_and_cert -run TestPublicKeyWithNullCertificate
-	go test -v ./lib/common/keys_and_cert -run TestPublicKeyWithKeyCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestPublicKeyWithBadData
+	$(GO) test -v ./lib/common/keys_and_cert -run TestPublicKeyWithBadCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestPublicKeyWithNullCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestPublicKeyWithKeyCertificate
 
 test-keys-cert-signing:
-	go test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithBadData
-	go test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithBadCertificate
-	go test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithNullCertificate
-	go test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithKeyCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithBadData
+	$(GO) test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithBadCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithNullCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestSigningPublicKeyWithKeyCertificate
 
 test-keys-cert-creation:
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithMissingData
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithMissingCertData
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithCertificate
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithoutCertificate
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithCertificateAndRemainder
-	go test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithoutCertificateAndRemainder
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithMissingData
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithMissingCertData
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithoutCertificate
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithCertificateAndRemainder
+	$(GO) test -v ./lib/common/keys_and_cert -run TestNewKeysAndCertWithValidDataWithoutCertificateAndRemainder
 
 .PHONY: test-keys-cert-all \
         test-keys-cert-certificate \

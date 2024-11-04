@@ -1,7 +1,6 @@
 package noise
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"sync"
@@ -28,10 +27,10 @@ type NoiseSession struct {
 	RecvKey           noise.DHKey
 	HandKey           noise.DHKey
 	VerifyCallback    VerifyCallbackFunc
-	handshakeBuffer   bytes.Buffer
 	activeCall        int32
 	handshakeComplete bool
 	Conn              net.Conn
+	*HandshakeState
 }
 
 // RemoteAddr implements net.Conn
