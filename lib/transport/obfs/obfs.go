@@ -1,4 +1,4 @@
-package ntcp
+package obfs
 
 import (
 	"fmt"

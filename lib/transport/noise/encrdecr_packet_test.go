@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
+	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 
 	"github.com/flynn/noise"
 	"github.com/stretchr/testify/assert"
@@ -536,7 +536,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	// Obfuscate Alice's ephemeral public key in message 1
-	obfuscatedMsg1, err := ntcp.ObfuscateEphemeralKey(msg1, aesKey)
+	obfuscatedMsg1, err := obfs.ObfuscateEphemeralKey(msg1, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to obfuscate message 1: %v", err)
 	}
@@ -546,7 +546,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	// -------------------------------
 
 	// Deobfuscate Alice's ephemeral public key in message 1
-	deobfuscatedMsg1, err := ntcp.DeobfuscateEphemeralKey(obfuscatedMsg1, aesKey)
+	deobfuscatedMsg1, err := obfs.DeobfuscateEphemeralKey(obfuscatedMsg1, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to deobfuscate message 1: %v", err)
 	}
@@ -574,7 +574,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	}
 
 	// Obfuscate Bob's ephemeral public key in message 2
-	obfuscatedMsg2, err := ntcp.ObfuscateEphemeralKey(msg2, aesKey)
+	obfuscatedMsg2, err := obfs.ObfuscateEphemeralKey(msg2, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to obfuscate message 2: %v", err)
 	}
@@ -584,7 +584,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	// -------------------------------
 
 	// Deobfuscate Bob's ephemeral public key in message 2
-	deobfuscatedMsg2, err := ntcp.DeobfuscateEphemeralKey(obfuscatedMsg2, aesKey)
+	deobfuscatedMsg2, err := obfs.DeobfuscateEphemeralKey(obfuscatedMsg2, aesKey)
 	if err != nil {
 		t.Fatalf("Failed to deobfuscate message 2: %v", err)
 	}
