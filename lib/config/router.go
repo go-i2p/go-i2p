@@ -26,11 +26,11 @@ func home() string {
 }
 
 func defaultBase() string {
-	return filepath.Join(home(), "go-i2p", "base")
+	return filepath.Join(home(), GOI2P_BASE_DIR, "base")
 }
 
 func defaultConfig() string {
-	return filepath.Join(home(), "go-i2p", "config")
+	return filepath.Join(home(), GOI2P_BASE_DIR, "config")
 }
 
 // defaults for router

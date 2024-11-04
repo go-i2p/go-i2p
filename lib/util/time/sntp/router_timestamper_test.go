@@ -1,10 +1,11 @@
 package sntp
 
 import (
-	"github.com/beevik/ntp"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/beevik/ntp"
 )
 
 type MockNTPClient struct {
@@ -86,6 +87,7 @@ func TestTimestampNow(t *testing.T) {
 		t.Error("Expected at least one time update, got none")
 	}
 }
+
 func TestTimestampNowWithRealNTP(t *testing.T) {
 	defaultClient := &DefaultNTPClient{}
 	timestamper := NewRouterTimestamper(defaultClient)
@@ -140,6 +142,7 @@ func TestTimestampNowWithRealNTP(t *testing.T) {
 	t.Logf("NTP Servers: %v", timestamper.servers)
 	t.Logf("Priority Servers: %v", timestamper.priorityServers)
 }
+
 func TestWaitForInitialization(t *testing.T) {
 	defaultClient := &DefaultNTPClient{}
 	timestamper := NewRouterTimestamper(defaultClient)
