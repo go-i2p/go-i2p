@@ -121,9 +121,11 @@ func (rt *RouterTimestamper) TimestampNow() {
 		go rt.runOnce()
 	}
 }
+
 func (rt *RouterTimestamper) secureRandBool(probability float64) bool {
 	return rand.Float64() < probability
 }
+
 func (rt *RouterTimestamper) performTimeQuery() bool {
 	rt.updateConfig()
 	preferIPv6 := checkIPv6Connectivity()
@@ -270,6 +272,7 @@ func (rt *RouterTimestamper) run() {
 func (rt *RouterTimestamper) runOnce() {
 	rt.performTimeQuery()
 }
+
 func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, preferIPv6 bool) bool {
 	found := make([]time.Duration, rt.concurringServers)
 	var expectedDelta time.Duration
@@ -279,7 +282,7 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 		server := servers[rand.Intn(len(servers))]
 		options := ntp.QueryOptions{
 			Timeout: timeout,
-			//TTL:     5,
+			// TTL:     5,
 		}
 
 		if preferIPv6 {

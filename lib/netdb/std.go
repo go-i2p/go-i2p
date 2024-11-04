@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -103,7 +102,7 @@ func (db *StdNetDB) Size() (routers int) {
 			log.WithError(err).Panic("Failed to recalculate NetDB size")
 		}
 	}
-	data, err = ioutil.ReadFile(db.cacheFilePath())
+	data, err = os.ReadFile(db.cacheFilePath())
 	if err == nil {
 		routers, err = strconv.Atoi(string(data))
 		if err != nil {

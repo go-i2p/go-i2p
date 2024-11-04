@@ -14,8 +14,10 @@ var (
 	log     = logger.GetGoI2PLogger()
 )
 
+const GOI2P_BASE_DIR = ".go-i2p"
+
 func InitConfig() {
-	defaultConfigDir := filepath.Join(os.Getenv("HOME"), ".go-i2p")
+	defaultConfigDir := filepath.Join(os.Getenv("HOME"), GOI2P_BASE_DIR)
 	defaultConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
 
 	if CfgFile != "" {
