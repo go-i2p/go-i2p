@@ -10,7 +10,7 @@ func TestCertificateTypeIsFirstByte(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x00}
-	certificate, err := NewCertificate(bytes)
+	certificate, err := readCertificate(bytes)
 	cert_type := certificate.Type()
 
 	assert.Equal(cert_type, 3, "certificate.Type() should be the first bytes in a certificate")
@@ -21,7 +21,7 @@ func TestCertificateLengthCorrect(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff, 0xff}
-	certificate, err := NewCertificate(bytes)
+	certificate, err := readCertificate(bytes)
 	cert_len := certificate.Length()
 
 	assert.Equal(cert_len, 2, "certificate.Length() should return integer from second two bytes")
@@ -45,7 +45,7 @@ func TestCertificateLengthErrWhenDataTooShort(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff}
-	certificate, err := NewCertificate(bytes)
+	certificate, err := readCertificate(bytes)
 	cert_len := certificate.Length()
 
 	assert.Equal(cert_len, 2, "certificate.Length() did not return indicated length when data was actually missing")
@@ -58,7 +58,7 @@ func TestCertificateDataWhenCorrectSize(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x01, 0xaa}
-	certificate, err := NewCertificate(bytes)
+	certificate, err := readCertificate(bytes)
 	cert_data := certificate.Data()
 
 	assert.Nil(err, "certificate.Data() returned error with valid data")
@@ -85,7 +85,7 @@ func TestCertificateDataWhenTooShort(t *testing.T) {
 	assert := assert.New(t)
 
 	bytes := []byte{0x03, 0x00, 0x02, 0xff}
-	certificate, err := NewCertificate(bytes)
+	certificate, err := readCertificate(bytes)
 	cert_data := certificate.Data()
 
 	if assert.NotNil(err) {

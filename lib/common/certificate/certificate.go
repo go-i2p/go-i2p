@@ -3,6 +3,7 @@
 package certificate
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -143,9 +144,9 @@ func (c *Certificate) Data() (data []byte) {
 	return
 }
 
-// NewCertificate creates a new Certficiate from []byte
+// readCertificate creates a new Certficiate from []byte
 // returns err if the certificate is too short or if the payload doesn't match specified length.
-func NewCertificate(data []byte) (certificate Certificate, err error) {
+func readCertificate(data []byte) (certificate Certificate, err error) {
 	certificate = Certificate{}
 	switch len(data) {
 	case 0:
@@ -197,7 +198,7 @@ func NewCertificate(data []byte) (certificate Certificate, err error) {
 // ReadCertificate creates a Certificate from []byte and returns any ExcessBytes at the end of the input.
 // returns err if the certificate could not be read.
 func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, err error) {
-	certificate, err = NewCertificate(data)
+	certificate, err = readCertificate(data)
 	if err != nil && err.Error() == "certificate parsing warning: certificate data is longer than specified by length" {
 		log.Warn("Certificate data longer than specified length")
 		err = nil
@@ -207,4 +208,43 @@ func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, er
 		"remainder_length": len(remainder),
 	}).Debug("Read certificate and extracted remainder")
 	return
+}
+
+// NewCertificate creates a new Certificate with default NULL type
+func NewCertificate() *Certificate {
+    return &Certificate{
+        kind:     Integer([]byte{CERT_NULL}),
+        len:      Integer([]byte{0}),
+        payload:  make([]byte, 0),
+    }
+}
+
+// NewCertificateWithType creates a new Certificate with specified type and payload
+func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error) {
+    // Validate certificate type
+    switch certType {
+    case CERT_NULL, CERT_HASHCASH, CERT_HIDDEN, CERT_SIGNED, CERT_MULTIPLE, CERT_KEY:
+        // Valid type
+    default:
+        return nil, fmt.Errorf("invalid certificate type: %d", certType)
+    }
+
+    // For NULL certificates, payload should be empty
+    if certType == CERT_NULL && len(payload) > 0 {
+        return nil, errors.New("NULL certificates must have empty payload")
+    }
+	length, _ := NewIntegerFromInt(len(payload), 2)
+	
+    cert := &Certificate{
+        kind:          Integer([]byte{certType}),
+        len:           *length,
+        payload: make([]byte, len(payload)),
+    }
+
+    // Copy payload if present
+    if len(payload) > 0 {
+        copy(cert.payload, payload)
+    }
+
+    return cert, nil
 }
