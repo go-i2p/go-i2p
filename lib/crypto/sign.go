@@ -27,7 +27,6 @@ type SigningPublicKey interface {
 	// get the size of this public key
 	Len() int
 }
-
 type PublicKey interface {
 	Len() int
 	NewEncrypter() (Encrypter, error)

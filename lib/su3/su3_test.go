@@ -53,7 +53,7 @@ func fileRSAPubKey(t *testing.T, filename string) *rsa.PublicKey {
 	}
 	var pubKey *rsa.PublicKey
 	if k, ok := cert.PublicKey.(*rsa.PublicKey); !ok {
-		t.Fatalf("expected rsa.PublicKey from file %s", filename)
+		t.Fatalf("expected rsa.publicKey from file %s", filename)
 	} else {
 		pubKey = k
 	}

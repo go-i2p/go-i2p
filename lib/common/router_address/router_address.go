@@ -2,11 +2,13 @@
 package router_address
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -358,4 +360,58 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 		}).Error("error parsing RozuterAddress")
 	}
 	return
+}
+
+// NewRouterAddress creates a new RouterAddress with the provided parameters.
+// Returns a pointer to RouterAddress.
+func NewRouterAddress(cost uint8, expiration time.Time, transportType string, options map[string]string) (*RouterAddress, error) {
+	log.Debug("Creating new RouterAddress")
+
+	// Create TransportCost as an Integer (1 byte)
+	transportCost, err := NewIntegerFromInt(int(cost), 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create TransportCost Integer")
+		return nil, err
+	}
+
+	// Create ExpirationDate as a Date
+	millis := expiration.UnixNano() / int64(time.Millisecond)
+	dateBytes := make([]byte, DATE_SIZE)
+	binary.BigEndian.PutUint64(dateBytes, uint64(millis))
+	expirationDate, _, err := NewDate(dateBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to create ExpirationDate")
+		return nil, err
+	}
+
+	// Create TransportType as an I2PString
+	transportTypeStr, err := ToI2PString(transportType)
+	if err != nil {
+		log.WithError(err).Error("Failed to create TransportType I2PString")
+		return nil, err
+	}
+
+	// Create TransportOptions as a Mapping
+	transportOptions, err := GoMapToMapping(options)
+	if err != nil {
+		log.WithError(err).Error("Failed to create TransportOptions Mapping")
+		return nil, err
+	}
+
+	// Create RouterAddress
+	ra := &RouterAddress{
+		TransportCost:    transportCost,
+		ExpirationDate:   expirationDate,
+		TransportType:    transportTypeStr,
+		TransportOptions: transportOptions,
+	}
+
+	log.WithFields(logrus.Fields{
+		"cost":          cost,
+		"expiration":    expiration,
+		"transportType": transportType,
+		"options":       options,
+	}).Debug("Successfully created new RouterAddress")
+
+	return ra, nil
 }

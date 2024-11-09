@@ -61,7 +61,7 @@ func buildSignature(size int) []byte {
 
 func buildFullLeaseSet(n int) LeaseSet {
 	lease_set_data := make([]byte, 0)
-	lease_set_data = append(lease_set_data, buildDestination().KeysAndCert.KeyCertificate.RawBytes()...)
+	lease_set_data = append(lease_set_data, buildDestination().KeysAndCert.keyCertificate.RawBytes()...)
 	lease_set_data = append(lease_set_data, buildPublicKey()...)
 	lease_set_data = append(lease_set_data, buildSigningKey()...)
 	lease_set_data = append(lease_set_data, byte(n))

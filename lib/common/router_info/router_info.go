@@ -2,9 +2,12 @@
 package router_info
 
 import (
+	"encoding/binary"
 	"errors"
+	"github.com/go-i2p/go-i2p/lib/crypto"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -156,7 +159,9 @@ func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
 	log.Debug("Calculating IdentHash for RouterInfo")
-	data, _ := router_info.RouterIdentity().KeyCertificate.Data()
+	//data, _ := router_info.RouterIdentity().keyCertificate.Data()
+	cert := router_info.RouterIdentity().KeysAndCert.Certificate()
+	data := cert.Data()
 	hash := HashData(data)
 	log.WithField("hash", hash).Debug("Calculated IdentHash for RouterInfo")
 	return HashData(data)
@@ -291,6 +296,118 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	}).Debug("Successfully read RouterInfo")
 
 	return
+}
+
+// serializeWithoutSignature serializes the RouterInfo up to (but not including) the signature.
+func (ri *RouterInfo) serializeWithoutSignature() []byte {
+	var bytes []byte
+	// Serialize RouterIdentity
+	bytes = append(bytes, ri.router_identity.Bytes()...)
+
+	// Serialize Published Date
+	bytes = append(bytes, ri.published.Bytes()...)
+
+	// Serialize Size
+	bytes = append(bytes, ri.size.Bytes()...)
+
+	// Serialize Addresses
+	for _, addr := range ri.addresses {
+		bytes = append(bytes, addr.Bytes()...)
+	}
+
+	// Serialize PeerSize (always zero)
+	bytes = append(bytes, ri.peer_size.Bytes()...)
+
+	// Serialize Options
+	bytes = append(bytes, ri.options.Data()...)
+
+	return bytes
+}
+
+func NewRouterInfo(
+	routerIdentity *RouterIdentity,
+	publishedTime time.Time,
+	addresses []*RouterAddress,
+	options map[string]string,
+	signingPrivateKey crypto.SigningPrivateKey,
+) (*RouterInfo, error) {
+	log.Debug("Creating new RouterInfo")
+
+	// 1. Create Published Date
+	millis := publishedTime.UnixNano() / int64(time.Millisecond)
+	dateBytes := make([]byte, DATE_SIZE)
+	binary.BigEndian.PutUint64(dateBytes, uint64(millis))
+	publishedDate, _, err := ReadDate(dateBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Published Date")
+		return nil, err
+	}
+
+	// 2. Create Size Integer
+	sizeInt, err := NewIntegerFromInt(len(addresses), 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Size Integer")
+		return nil, err
+	}
+
+	// 3. Create PeerSize Integer (always 0)
+	peerSizeInt, err := NewIntegerFromInt(0, 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create PeerSize Integer")
+		return nil, err
+	}
+
+	// 4. Convert options map to Mapping
+	mapping, err := GoMapToMapping(options)
+	if err != nil {
+		log.WithError(err).Error("Failed to convert options map to Mapping")
+		return nil, err
+	}
+
+	// 5. Assemble RouterInfo without signature
+	routerInfo := &RouterInfo{
+		router_identity: *routerIdentity,
+		published:       &publishedDate,
+		size:            sizeInt,
+		addresses:       addresses,
+		peer_size:       peerSizeInt,
+		options:         mapping,
+		signature:       nil, // To be set after signing
+	}
+
+	// 6. Serialize RouterInfo without signature
+	dataBytes := routerInfo.serializeWithoutSignature()
+
+	// 7. Compute signature over serialized data
+	signer, err := signingPrivateKey.NewSigner()
+	if err != nil {
+		log.WithError(err).Error("Failed to create new signer")
+		return nil, err
+	}
+	signatureBytes, err := signer.Sign(dataBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign")
+	}
+
+	// 8. Create Signature struct from signatureBytes
+	sig, _, err := ReadSignature(signatureBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Signature from signature bytes")
+		return nil, err
+	}
+
+	// 9. Attach signature to RouterInfo
+	routerInfo.signature = &sig
+
+	log.WithFields(logrus.Fields{
+		"router_identity": routerIdentity,
+		"published":       publishedDate,
+		"address_count":   len(addresses),
+		"options":         options,
+		"signature":       sig,
+	}).Debug("Successfully created RouterInfo")
+
+	return routerInfo, nil
 }
 
 func (router_info *RouterInfo) RouterCapabilities() string {
