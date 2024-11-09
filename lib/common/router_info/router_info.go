@@ -4,10 +4,11 @@ package router_info
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/crypto"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -221,7 +222,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": ROUTER_INFO_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read identity")
 		return
 	}
 	info.published, remainder, err = NewDate(remainder)
@@ -232,7 +233,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": DATE_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read publish date")
 	}
 	info.size, remainder, err = NewInteger(remainder, 1)
 	if err != nil {
@@ -253,7 +254,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 				//"required_len": ROUTER_ADDRESS_SIZE,
 				"reason": "not enough data",
 			}).Error("error parsing router address")
-			err = errors.New("error parsing router info: not enough data")
+			err = errors.New("error parsing router info: not enough data to read router addresses")
 		}
 		info.addresses = append(info.addresses, &address)
 	}
@@ -285,7 +286,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			//"required_len": MAPPING_SIZE,
 			"reason": "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read signature")
 	}
 
 	log.WithFields(logrus.Fields{

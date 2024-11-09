@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"testing"
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"golang.org/x/crypto/openpgp/elgamal"
-	"testing"
-	"time"
 )
 
 func TestCreateRouterInfo(t *testing.T) {
@@ -82,8 +84,17 @@ func TestCreateRouterInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create router identity: %v\n", err)
 	}
-
-	routerInfo, err := NewRouterInfo(routerIdentity, time.Now(), nil, nil, &ed25519_privkey)
+	// create some dummy addresses
+	routerAddress, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", nil)
+	if err != nil {
+		t.Fatalf("Failed to create router address: %v\n", err)
+	}
+	routerAddresses := []*router_address.RouterAddress{routerAddress}
+	// create router info
+	routerInfo, err := NewRouterInfo(routerIdentity, time.Now(), routerAddresses, nil, &ed25519_privkey)
+	if err != nil {
+		t.Fatalf("Failed to create router info: %v\n", err)
+	}
 
 	t.Run("Serialize and Deserialize RouterInfo", func(t *testing.T) {
 		routerInfoBytes, err := routerInfo.Bytes()
