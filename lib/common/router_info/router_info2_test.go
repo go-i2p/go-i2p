@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
@@ -85,5 +84,15 @@ func TestCreateRouterInfo(t *testing.T) {
 	}
 
 	routerInfo, err := NewRouterInfo(routerIdentity, time.Now(), nil, nil, &ed25519_privkey)
-	fmt.Printf("routerInfo:%v\n", routerInfo)
+
+	t.Run("Serialize and Deserialize RouterInfo", func(t *testing.T) {
+		routerInfoBytes, err := routerInfo.Bytes()
+		if err != nil {
+			t.Fatalf("Failed to write RouterInfo to bytes: %v\n", err)
+		}
+		_, _, err = ReadRouterInfo(routerInfoBytes)
+		if err != nil {
+			t.Fatalf("Failed to read routerInfoBytes: %v\n", err)
+		}
+	})
 }
