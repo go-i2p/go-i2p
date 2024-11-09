@@ -139,7 +139,7 @@ func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 
 func (router_info RouterInfo) String() string {
 	log.Debug("Converting RouterInfo to string")
-	str := "Certificate: " + string(router_info.router_identity.KeysAndCert.Bytes())
+	str := "Certificate: " + string(router_info.router_identity.Bytes())
 	str += "Published: " + string(router_info.published.Bytes())
 	str += "Addresses:" + string(router_info.size.Bytes())
 	for index, router_address := range router_info.addresses {

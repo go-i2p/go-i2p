@@ -98,7 +98,7 @@ func TestCreateRouterInfo(t *testing.T) {
 
 	t.Run("Serialize and Deserialize RouterInfo", func(t *testing.T) {
 		routerInfoBytes, err := routerInfo.Bytes()
-		t.Log(routerInfoBytes)
+		t.Log(routerInfo.String(), routerInfoBytes)
 		if err != nil {
 			t.Fatalf("Failed to write RouterInfo to bytes: %v\n", err)
 		}
