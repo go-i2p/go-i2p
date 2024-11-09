@@ -124,7 +124,7 @@ type RouterInfo struct {
 // Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
 func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	log.Debug("Converting RouterInfo to bytes")
-	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
+	bytes = append(bytes, router_info.router_identity.Bytes()...)
 	bytes = append(bytes, router_info.published.Bytes()...)
 	bytes = append(bytes, router_info.size.Bytes()...)
 	for _, router_address := range router_info.addresses {
