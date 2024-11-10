@@ -26,9 +26,11 @@ type SigningPublicKey interface {
 	NewVerifier() (Verifier, error)
 	// get the size of this public key
 	Len() int
+	Bytes() []byte
 }
 type PublicKey interface {
 	Len() int
+	Bytes()	[]byte
 	NewEncrypter() (Encrypter, error)
 }
 

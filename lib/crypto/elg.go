@@ -237,6 +237,10 @@ func (elg ElgPublicKey) Len() int {
 	return len(elg)
 }
 
+func (elg ElgPublicKey) Bytes() []byte {
+	return elg[:]
+}
+
 func (elg ElgPublicKey) NewEncrypter() (enc Encrypter, err error) {
 	log.Debug("Creating new ElGamal encrypter")
 	k := createElgamalPublicKey(elg[:])

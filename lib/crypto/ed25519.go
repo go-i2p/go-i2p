@@ -34,6 +34,10 @@ func (k Ed25519PublicKey) Len() int {
 	return len(k)
 }
 
+func (k Ed25519PublicKey) Bytes() []byte {
+	return k
+}
+
 func createEd25519PublicKey(data []byte) (k *ed25519.PublicKey) {
 	log.WithField("data_length", len(data)).Debug("Creating Ed25519 public key")
 	if len(data) == 256 {

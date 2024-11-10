@@ -95,6 +95,10 @@ type DSAVerifier struct {
 
 type DSAPublicKey [128]byte
 
+func (k DSAPublicKey) Bytes() []byte {
+	return k[:]
+}
+
 // create a new dsa verifier
 func (k DSAPublicKey) NewVerifier() (v Verifier, err error) {
 	log.Debug("Creating new DSA verifier")

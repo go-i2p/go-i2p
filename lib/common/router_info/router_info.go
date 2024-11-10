@@ -137,17 +137,30 @@ func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	return bytes, err
 }
 
+// Convert a byte slice into a string like [1, 2, 3] -> "1, 2, 3"
+func bytesToString(bytes []byte) string {
+	str := "["
+	for i, b := range bytes {
+		str += strconv.Itoa(int(b))
+		if i < len(bytes)-1 {
+			str += ", "
+		}
+	}
+	str += "]"
+	return str
+}
+
 func (router_info RouterInfo) String() string {
 	log.Debug("Converting RouterInfo to string")
-	str := "Certificate: " + string(router_info.router_identity.Bytes())
-	str += "Published: " + string(router_info.published.Bytes())
-	str += "Addresses:" + string(router_info.size.Bytes())
+	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes())
+	str += "Published: " + bytesToString(router_info.published.Bytes())
+	str += "Addresses:" + bytesToString(router_info.size.Bytes())
 	for index, router_address := range router_info.addresses {
 		str += "Address " + strconv.Itoa(index) + ": " + router_address.String()
 	}
-	str += "Peer Size: " + string(router_info.peer_size.Bytes())
-	str += "Options: " + string(router_info.options.Data())
-	str += "Signature: " + string([]byte(*router_info.signature))
+	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes())
+	str += "Options: " + bytesToString(router_info.options.Data())
+	str += "Signature: " + bytesToString([]byte(*router_info.signature))
 	log.WithField("string_length", len(str)).Debug("Converted RouterInfo to string")
 	return str
 }
