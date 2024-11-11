@@ -2,6 +2,7 @@
 package keys_and_cert
 
 import (
+	"crypto/rand"
 	"errors"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
@@ -85,12 +86,16 @@ type KeysAndCert struct {
 // Bytes returns the entire keyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert KeysAndCert) Bytes() []byte {
 	bytes := keys_and_cert.keyCertificate.Bytes()
-	log.WithFields(logrus.Fields{
-		"bytes_length": len(bytes),
-	}).Debug("Retrieved bytes from KeysAndCert")
 	bytes = append(bytes, keys_and_cert.publicKey.Bytes()...)
 	bytes = append(bytes, keys_and_cert.Padding...)
 	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
+	log.WithFields(logrus.Fields{
+		"bytes_length": len(bytes),
+		"pk_bytes_length": len(keys_and_cert.publicKey.Bytes()),
+		"padding_bytes_length": len(keys_and_cert.Padding),
+		"spk_bytes_length": len(keys_and_cert.signingPublicKey.Bytes()),
+		"cert_bytes_length": len(keys_and_cert.keyCertificate.Bytes()),
+	}).Debug("Retrieved bytes from KeysAndCert")
 	return bytes
 }
 
@@ -207,13 +212,26 @@ func NewKeysAndCert(
 	*/
 
 	// 4. Validate padding size
-	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - KEYS_AND_CERT_PUBKEY_SIZE - KEYS_AND_CERT_SPK_SIZE
+	publicKeyLength := publicKey.Len()
+	signingPublicKeyLength := signingPublicKey.Len()
+	totalKeysSize := publicKeyLength + signingPublicKeyLength
+	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - totalKeysSize
 	if len(padding) != expectedPaddingSize {
 		log.WithFields(logrus.Fields{
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
-		}).Error("Invalid padding size")
-		return nil, errors.New("padding has an invalid size")
+		}).Warn("Invalid padding size")
+		// generate some random padding and continue
+		padding = make([]byte, expectedPaddingSize)
+		_, err := rand.Read(padding)
+		if err != nil {
+			log.WithError(err).Error("Failed to generate random padding")
+			return nil, err
+		}
+		log.WithFields(logrus.Fields{
+			"expected_size": expectedPaddingSize,
+			"actual_size":   len(padding),
+		}).Warn("Generated random padding")
 	}
 
 	// 5. Assemble KeysAndCert
