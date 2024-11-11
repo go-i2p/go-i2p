@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"errors"
 	"sort"
 
@@ -11,20 +12,37 @@ import (
 type MappingValues [][2]I2PString
 
 func (m MappingValues) Get(key I2PString) I2PString {
-	keyBytes, _ := key.Data()
+	if key == nil {
+		return nil
+	}
+
+	keyBytes, err := key.Data()
+	if err != nil {
+		return nil
+	}
+
 	log.WithFields(logrus.Fields{
 		"key": string(keyBytes),
 	}).Debug("Searching for key in MappingValues")
+
 	for _, pair := range m {
-		kb, _ := pair[0][0:].Data()
+		if pair[0] == nil {
+			continue
+		}
+		kb, err := pair[0].Data()
+		if err != nil {
+			continue
+		}
 		if kb == keyBytes {
+			data, _ := pair[1].Data()
 			log.WithFields(logrus.Fields{
 				"key":   string(keyBytes),
-				"value": string(pair[1][1:]),
+				"value": string(data),
 			}).Debug("Found matching key in MappingValues")
 			return pair[1]
 		}
 	}
+
 	log.WithFields(logrus.Fields{
 		"key": string(keyBytes),
 	}).Debug("Key not found in MappingValues")
@@ -64,10 +82,15 @@ func ValuesToMapping(values MappingValues) *Mapping {
 // In practice routers do not seem to allow duplicate keys.
 func mappingOrder(values MappingValues) {
 	sort.SliceStable(values, func(i, j int) bool {
-		// Lexographic sort on keys only
-		data1, _ := values[i][0].Data()
-		data2, _ := values[j][0].Data()
-		return data1 < data2
+		data1, err1 := values[i][0].Data()
+		data2, err2 := values[j][0].Data()
+
+		// Handle error cases by treating them as "less than"
+		if err1 != nil || err2 != nil {
+			return err1 == nil
+		}
+
+		return bytes.Compare([]byte(data1), []byte(data2)) < 0
 	})
 }
 
@@ -217,6 +240,6 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 		"remainder_length": len(remainder_bytes),
 		"error_count":      len(errs),
 	}).Debug("Finished reading MappingValues")
-
+	remainder_bytes = remainder
 	return
 }

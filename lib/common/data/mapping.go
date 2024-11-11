@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 )
@@ -97,34 +98,20 @@ func (mapping *Mapping) HasDuplicateKeys() bool {
 }
 
 // GoMapToMapping converts a Go map of unformatted strings to *Mapping.
-func GoMapToMapping(gomap map[string]string) (mapping *Mapping, err error) {
-	log.WithFields(logrus.Fields{
-		"input_map_size": len(gomap),
-	}).Debug("Converting Go map to Mapping")
+func GoMapToMapping(gomap map[string]string) (*Mapping, error) {
 	map_vals := MappingValues{}
 	for k, v := range gomap {
-		key_str, kerr := ToI2PString(k)
-		if kerr != nil {
-			log.WithError(kerr).Error("Failed to convert key to I2PString")
-			err = kerr
-			return
+		key_str, err := ToI2PString(k)
+		if err != nil {
+			return nil, fmt.Errorf("key conversion error: %w", err)
 		}
-		val_str, verr := ToI2PString(v)
-		if verr != nil {
-			log.WithError(verr).Error("Failed to convert value to I2PString")
-			err = verr
-			return
+		val_str, err := ToI2PString(v)
+		if err != nil {
+			return nil, fmt.Errorf("value conversion error: %w", err)
 		}
-		map_vals = append(
-			map_vals,
-			[2]I2PString{key_str, val_str},
-		)
+		map_vals = append(map_vals, [2]I2PString{key_str, val_str})
 	}
-	mapping = ValuesToMapping(map_vals)
-	log.WithFields(logrus.Fields{
-		"mapping_size": len(map_vals),
-	}).Debug("Successfully converted Go map to Mapping")
-	return
+	return ValuesToMapping(map_vals), nil
 }
 
 // Check if the string parsing error indicates that the Mapping
@@ -152,10 +139,37 @@ func beginsWith(bytes []byte, chr byte) bool {
 	return result
 }
 
+func (mapping *Mapping) addValue(key, value I2PString) error {
+	for _, pair := range *mapping.vals {
+		existingKey, _ := pair[0].Data()
+		newKey, _ := key.Data()
+		if existingKey == newKey {
+			return fmt.Errorf("duplicate key: %s", newKey)
+		}
+	}
+	*mapping.vals = append(*mapping.vals, [2]I2PString{key, value})
+	return nil
+}
+
 // ReadMapping returns Mapping from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
+const MaxMappingSize = 65535 // Match Java I2P's maximum mapping size
+
 func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) {
+	if len(bytes) < 3 {
+		err = append(err, errors.New("mapping data too short"))
+		return
+	}
+	size, remainder, e := NewInteger(bytes, 2)
+	if e != nil {
+		log.WithError(e).Error("Failed to read Mapping size")
+		err = append(err, e)
+	}
+	if size.Int() > MaxMappingSize {
+		err = append(err, fmt.Errorf("mapping size %d exceeds maximum %d", size.Int(), MaxMappingSize))
+		return
+	}
 	log.WithFields(logrus.Fields{
 		"input_length": len(bytes),
 	}).Debug("Reading Mapping from bytes")
@@ -168,16 +182,16 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		err = append(err, e)
 		return
 	}
-	size, remainder, e := NewInteger(bytes, 2)
-	if e != nil {
-		log.WithError(e).Error("Failed to read Mapping size")
-		err = append(err, e)
-	}
 	if size.Int() == 0 {
 		log.Warn("Mapping size is zero")
 		return
 	}
 	mapping.size = size
+	if mapping.size.Int() > len(remainder) {
+		err = append(err, fmt.Errorf("mapping size %d exceeds available data length %d",
+			mapping.size.Int(), len(remainder)))
+		return
+	}
 	map_bytes := remainder[:mapping.size.Int()]
 	remainder = remainder[mapping.size.Int():]
 	if len(remainder) == 0 {

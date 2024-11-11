@@ -185,7 +185,7 @@ func (v *Ed25519Verifier) Verify(data, sig []byte) (err error) {
 type Ed25519PrivateKey ed25519.PrivateKey
 
 func (k Ed25519PrivateKey) NewDecrypter() (Decrypter, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

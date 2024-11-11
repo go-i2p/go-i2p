@@ -152,15 +152,15 @@ func bytesToString(bytes []byte) string {
 
 func (router_info RouterInfo) String() string {
 	log.Debug("Converting RouterInfo to string")
-	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes())+"\n"
-	str += "Published: " + bytesToString(router_info.published.Bytes())+"\n"
-	str += "Addresses:" + bytesToString(router_info.size.Bytes())+"\n"
+	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes()) + "\n"
+	str += "Published: " + bytesToString(router_info.published.Bytes()) + "\n"
+	str += "Addresses:" + bytesToString(router_info.size.Bytes()) + "\n"
 	for index, router_address := range router_info.addresses {
-		str += "Address " + strconv.Itoa(index) + ": " + router_address.String()+"\n"
+		str += "Address " + strconv.Itoa(index) + ": " + router_address.String() + "\n"
 	}
-	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes())+"\n"
-	str += "Options: " + bytesToString(router_info.options.Data())+"\n"
-	str += "Signature: " + bytesToString([]byte(*router_info.signature))+"\n"
+	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes()) + "\n"
+	str += "Options: " + bytesToString(router_info.options.Data()) + "\n"
+	str += "Signature: " + bytesToString([]byte(*router_info.signature)) + "\n"
 	log.WithField("string_length", len(str)).Debug("Converted RouterInfo to string")
 	return str
 }
@@ -173,7 +173,7 @@ func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
 	log.Debug("Calculating IdentHash for RouterInfo")
-	//data, _ := router_info.RouterIdentity().keyCertificate.Data()
+	// data, _ := router_info.RouterIdentity().keyCertificate.Data()
 	cert := router_info.RouterIdentity().KeysAndCert.Certificate()
 	data := cert.Data()
 	hash := HashData(data)

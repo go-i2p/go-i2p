@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -43,5 +44,43 @@ func TestMappingOrderSortsValuesThenKeys(t *testing.T) {
 				t.Fatal(fmt.Sprintf("mappingOrder expected key b, got %s at index", key), i)
 			}
 		}
+	}
+}
+
+func TestMappingValuesEdgeCases(t *testing.T) {
+	k1, _ := ToI2PString("test")
+	tests := []struct {
+		name string
+		mv   MappingValues
+		key  I2PString
+		want I2PString
+	}{
+		{
+			name: "nil key",
+			mv:   MappingValues{},
+			key:  nil,
+			want: nil,
+		},
+		{
+			name: "empty mapping",
+			mv:   MappingValues{},
+			key:  k1,
+			want: nil,
+		},
+		{
+			name: "nil value in pair",
+			mv:   MappingValues{{k1, nil}},
+			key:  k1,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.mv.Get(tt.key)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MappingValues.Get() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

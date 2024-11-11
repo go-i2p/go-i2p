@@ -30,7 +30,7 @@ type SigningPublicKey interface {
 }
 type PublicKey interface {
 	Len() int
-	Bytes()	[]byte
+	Bytes() []byte
 	NewEncrypter() (Encrypter, error)
 }
 
