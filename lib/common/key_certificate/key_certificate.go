@@ -111,46 +111,46 @@ func (key_certificate KeyCertificate) Data() ([]byte, error) {
 }
 
 // SigningPublicKeyType returns the signingPublicKey type as a Go integer.
-func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int) {
-	signing_pubkey_type = key_certificate.spkType.Int()
-	log.WithFields(logrus.Fields{
-		"signing_pubkey_type": signing_pubkey_type,
-	}).Debug("Retrieved signingPublicKey type")
-	return key_certificate.spkType.Int()
+func (key_certificate KeyCertificate) SigningPublicKeyType() int {
+    spk_type := key_certificate.spkType.Int()
+    log.WithFields(logrus.Fields{
+        "signing_pubkey_type": spk_type,
+    }).Debug("Retrieved signingPublicKey type")
+    return spk_type
 }
 
-// PublicKeyType returns the publicKey type as a Go integer.
-func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int) {
-	pubkey_type = key_certificate.cpkType.Int()
-	log.WithFields(logrus.Fields{
-		"pubkey_type": pubkey_type,
-	}).Debug("Retrieved publicKey type")
-	return key_certificate.cpkType.Int()
+func (key_certificate KeyCertificate) CryptoSize() int {
+    switch key_certificate.PublicKeyType() {
+    case KEYCERT_CRYPTO_ELG:
+        return KEYCERT_CRYPTO_ELG_SIZE
+    case KEYCERT_CRYPTO_P256:
+        return KEYCERT_CRYPTO_P256_SIZE
+    case KEYCERT_CRYPTO_P384:
+        return KEYCERT_CRYPTO_P384_SIZE
+    case KEYCERT_CRYPTO_P521:
+        return KEYCERT_CRYPTO_P521_SIZE
+    case KEYCERT_CRYPTO_X25519:
+        return KEYCERT_CRYPTO_X25519_SIZE
+    default:
+        return 0
+    }
 }
 
-// ConstructPublicKey returns a publicKey constructed using any excess data that may be stored in the KeyCertififcate.
-// Returns enr errors encountered while parsing.
 func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_key crypto.PublicKey, err error) {
-	log.WithFields(logrus.Fields{
-		"input_length": len(data),
-	}).Debug("Constructing publicKey from keyCertificate")
-	key_type := key_certificate.PublicKeyType()
-	if err != nil {
-		return
-	}
-	data_len := len(data)
-	if data_len < key_certificate.CryptoSize() {
-		log.WithFields(logrus.Fields{
-			"at":           "(keyCertificate) ConstructPublicKey",
-			"data_len":     data_len,
-			"required_len": KEYCERT_PUBKEY_SIZE,
-			"reason":       "not enough data",
-		}).Error("error constructing public key")
-		err = errors.New("error constructing public key: not enough data")
-		return
-	}
-	switch key_type {
-	case KEYCERT_CRYPTO_ELG:
+    log.WithFields(logrus.Fields{
+        "input_length": len(data),
+    }).Debug("Constructing publicKey from keyCertificate")
+    
+    key_type := key_certificate.PublicKeyType()
+    
+    data_len := len(data)
+    if data_len < key_certificate.CryptoSize() {
+        return nil, errors.New("error constructing public key: not enough data")
+    }
+    
+    // Implementation missing here - needs to construct appropriate key type
+    switch key_type {
+    case KEYCERT_CRYPTO_ELG:
 		var elg_key crypto.ElgPublicKey
 		copy(elg_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = elg_key
@@ -160,13 +160,25 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 		copy(ed25519_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = ed25519_key
 		log.Debug("Constructed Ed25519PublicKey")
-	default:
-		log.WithFields(logrus.Fields{
-			"key_type": key_type,
-		}).Warn("Unknown public key type")
-	}
+	case KEYCERT_CRYPTO_P256:
+        //return crypto.CreatePublicKey(data[:KEYCERT_CRYPTO_P256_SIZE])
+    case KEYCERT_CRYPTO_P384:
+        //return crypto.CreatePublicKey(data[:KEYCERT_CRYPTO_P384_SIZE]) 
+    case KEYCERT_CRYPTO_P521:
+        //return crypto.CreatePublicKey(data[:KEYCERT_CRYPTO_P521_SIZE])
+    default:
+        return nil, errors.New("error constructing public key: unknown key type")
+    }
+	return nil, errors.New("error constructing public key: unknown key type")
+}
 
-	return
+// PublicKeyType returns the publicKey type as a Go integer.
+func (key_certificate KeyCertificate) PublicKeyType() int {
+    pk_type := key_certificate.cpkType.Int()
+    log.WithFields(logrus.Fields{
+        "pubkey_type": pk_type,
+    }).Debug("Retrieved publicKey type")
+    return pk_type
 }
 
 // ConstructSigningPublicKey returns a SingingPublicKey constructed using any excess data that may be stored in the KeyCertificate.
@@ -269,24 +281,6 @@ func (key_certificate KeyCertificate) SignatureSize() (size int) {
 	return sizes[int(key_type)]
 }
 
-// CryptoSize return the size of a Public Key corresponding to the Key Certificate's publicKey type.
-func (key_certificate KeyCertificate) CryptoSize() (size int) {
-	sizes := map[int]int{
-		KEYCERT_CRYPTO_ELG:    KEYCERT_CRYPTO_ELG_SIZE,
-		KEYCERT_CRYPTO_P256:   KEYCERT_CRYPTO_P256_SIZE,
-		KEYCERT_CRYPTO_P384:   KEYCERT_CRYPTO_P384_SIZE,
-		KEYCERT_CRYPTO_P521:   KEYCERT_CRYPTO_P521_SIZE,
-		KEYCERT_CRYPTO_X25519: KEYCERT_CRYPTO_X25519_SIZE,
-	}
-	key_type := key_certificate.PublicKeyType()
-	size = sizes[int(key_type)]
-	log.WithFields(logrus.Fields{
-		"key_type":    key_type,
-		"crypto_size": size,
-	}).Debug("Retrieved crypto size")
-	return sizes[int(key_type)]
-}
-
 // NewKeyCertificate creates a new *KeyCertificate from []byte using ReadCertificate.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
@@ -301,6 +295,10 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 		log.WithError(err).Error("Failed to read Certificate")
 		return
 	}
+		
+		if certificate.Type() != 5 { // Key certificate type must be 5
+			return nil, nil, errors.New("error parsing key certificate: invalid certificate type")
+		}
 	if len(bytes) < KEYCERT_MIN_SIZE {
 		log.WithError(err).Error("keyCertificate data too short")
 		err = errors.New("error parsing key certificate: not enough data")

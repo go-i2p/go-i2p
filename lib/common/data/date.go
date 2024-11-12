@@ -38,7 +38,8 @@ func (i Date) Bytes() []byte {
 
 // Int returns the Date as a Go integer.
 func (i Date) Int() int {
-	return intFromBytes(i.Bytes())
+	val, _ := intFromBytes(i.Bytes())
+	return val
 }
 
 // Time takes the value stored in date as an 8 byte big-endian integer representing the
