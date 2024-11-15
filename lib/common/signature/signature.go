@@ -24,6 +24,19 @@ const (
 	RedDSA_SHA512_Ed25519_SIZE  = 64
 )
 
+const (
+	SIGNATURE_TYPE_DSA_SHA1               = 0
+	SIGNATURE_TYPE_ECDSA_SHA256_P256      = 1
+	SIGNATURE_TYPE_ECDSA_SHA384_P384      = 2
+	SIGNATURE_TYPE_ECDSA_SHA512_P521      = 3
+	SIGNATURE_TYPE_RSA_SHA256_2048        = 4
+	SIGNATURE_TYPE_RSA_SHA384_3072        = 5
+	SIGNATURE_TYPE_RSA_SHA512_4096        = 6
+	SIGNATURE_TYPE_EDDSA_SHA512_ED25519   = 7
+	SIGNATURE_TYPE_EDDSA_SHA512_ED25519PH = 8
+	SIGNATURE_TYPE_REDDSA_SHA512_ED25519  = 11
+)
+
 /*
 [Signature]
 Accurate for version 0.9.49
@@ -51,9 +64,18 @@ type Signature []byte
 //
 // If a different signature type is expected based on context, this function should be
 // modified accordingly to handle the correct signature length.
-func ReadSignature(data []byte) (sig Signature, remainder []byte, err error) {
-	// Assume the default signature type DSA_SHA1 with length 40 bytes
-	sigLength := DSA_SHA1_SIZE
+func ReadSignature(data []byte, sigType int) (sig Signature, remainder []byte, err error) {
+	var sigLength int
+	switch sigType {
+	case SIGNATURE_TYPE_DSA_SHA1:
+		sigLength = DSA_SHA1_SIZE
+	case SIGNATURE_TYPE_EDDSA_SHA512_ED25519:
+		sigLength = EdDSA_SHA512_Ed25519_SIZE
+	default:
+		err = fmt.Errorf("unsupported signature type: %d", sigType)
+		return
+	}
+
 	if len(data) < sigLength {
 		err = fmt.Errorf("insufficient data to read signature: need %d bytes, have %d", sigLength, len(data))
 		log.WithError(err).Error("Failed to read Signature")
@@ -66,9 +88,9 @@ func ReadSignature(data []byte) (sig Signature, remainder []byte, err error) {
 
 // NewSignature creates a new *Signature from []byte using ReadSignature.
 // Returns a pointer to Signature unlike ReadSignature.
-func NewSignature(data []byte) (signature *Signature, remainder []byte, err error) {
+func NewSignature(data []byte, sigType int) (signature *Signature, remainder []byte, err error) {
 	log.WithField("input_length", len(data)).Debug("Creating new Signature")
-	sig, remainder, err := ReadSignature(data)
+	sig, remainder, err := ReadSignature(data, sigType)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Signature")
 		return nil, remainder, err

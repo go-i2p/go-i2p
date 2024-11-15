@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"testing"
 	"time"
 
@@ -85,13 +86,14 @@ func TestCreateRouterInfo(t *testing.T) {
 		t.Fatalf("Failed to create router identity: %v\n", err)
 	}
 	// create some dummy addresses
-	routerAddress, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", nil)
+	options := map[string]string{}
+	routerAddress, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", options)
 	if err != nil {
 		t.Fatalf("Failed to create router address: %v\n", err)
 	}
 	routerAddresses := []*router_address.RouterAddress{routerAddress}
 	// create router info
-	routerInfo, err := NewRouterInfo(routerIdentity, time.Now(), routerAddresses, nil, &ed25519_privkey)
+	routerInfo, err := NewRouterInfo(routerIdentity, time.Now(), routerAddresses, nil, &ed25519_privkey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519)
 	if err != nil {
 		t.Fatalf("Failed to create router info: %v\n", err)
 	}

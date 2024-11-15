@@ -3,6 +3,7 @@
 package certificate
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -280,4 +281,15 @@ func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error
 	}
 
 	return cert, nil
+}
+
+func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
+	if cert.Type() != CERT_KEY {
+		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type)
+	}
+	if len(cert.payload) < 2 {
+		return 0, fmt.Errorf("certificate payload too short to contain signature type")
+	}
+	sigType := int(binary.BigEndian.Uint16(cert.payload[0:2]))
+	return sigType, nil
 }

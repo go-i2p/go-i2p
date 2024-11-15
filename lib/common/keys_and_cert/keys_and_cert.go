@@ -85,10 +85,10 @@ type KeysAndCert struct {
 
 // Bytes returns the entire keyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert KeysAndCert) Bytes() []byte {
-	bytes := keys_and_cert.keyCertificate.Bytes()
-	bytes = append(bytes, keys_and_cert.publicKey.Bytes()...)
+	bytes := keys_and_cert.publicKey.Bytes()
 	bytes = append(bytes, keys_and_cert.Padding...)
 	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
+	bytes = append(bytes, keys_and_cert.keyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
 		"bytes_length":         len(bytes),
 		"pk_bytes_length":      len(keys_and_cert.publicKey.Bytes()),
