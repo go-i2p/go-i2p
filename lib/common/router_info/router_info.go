@@ -349,6 +349,7 @@ func NewRouterInfo(
 	addresses []*RouterAddress,
 	options map[string]string,
 	signingPrivateKey crypto.SigningPrivateKey,
+	sigType int,
 ) (*RouterInfo, error) {
 	log.Debug("Creating new RouterInfo")
 
@@ -409,7 +410,7 @@ func NewRouterInfo(
 	}
 
 	// 8. Create Signature struct from signatureBytes
-	sig, _, err := ReadSignature(signatureBytes, 7) // Refactor this later
+	sig, _, err := ReadSignature(signatureBytes, sigType)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Signature from signature bytes")
 		return nil, err
