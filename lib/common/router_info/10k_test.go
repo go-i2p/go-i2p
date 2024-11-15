@@ -133,7 +133,7 @@ func Test10K(t *testing.T) {
 	if err := consolidateAllNetDbs(tempDir); err != nil {
 		t.Fatalf("Failed to consolidate netDbs: %v", err)
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	targetDir, err := createTempNetDbDir()
 
 	// Read and process all router info files
@@ -152,12 +152,32 @@ func Test10K(t *testing.T) {
 			}
 
 			// Parse the router info
+			//fmt.Printf("data: %s\n", string(data))
 			routerInfo, _, err := ReadRouterInfo(data)
 			if err != nil {
 				t.Logf("Failed to parse router info from %s: %v", file.Name(), err)
 				continue
 			}
 
+			/*
+				log.WithFields(logrus.Fields{
+					"peer_size":       routerInfo.peer_size,
+					"addresses":       routerInfo.addresses,
+					"published":       routerInfo.published,
+					"router_identity": routerInfo.router_identity,
+					"options":         routerInfo.options,
+					"signature":       routerInfo.signature,
+					"size":            routerInfo.size,
+				}).Debug("routerInfo")
+
+			*/ // For some reason, this freezes when attempting to print
+			fmt.Printf("peer_size: %v\n", routerInfo.peer_size)
+			fmt.Printf("addresses: %v\n", routerInfo.addresses)
+			fmt.Printf("published: %v\n", routerInfo.published)
+			fmt.Printf("router_identity: %v\n", routerInfo.router_identity)
+			fmt.Printf("options: %v\n", routerInfo.options)
+			fmt.Printf("signature: %v\n", routerInfo.signature)
+			fmt.Printf("size: %v\n", routerInfo.size)
 			// Write the router info to the target directory
 			routerBytes, err := routerInfo.Bytes()
 			if err != nil {
