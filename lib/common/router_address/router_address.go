@@ -154,14 +154,7 @@ func (router_address RouterAddress) Bytes() []byte {
 	bytes := make([]byte, 0)
 	bytes = append(bytes, router_address.TransportCost.Bytes()...)
 	bytes = append(bytes, router_address.ExpirationDate.Bytes()...)
-	strData, err := router_address.TransportType.Data()
-	if err != nil {
-		log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("RouterAddress.Bytes: error getting transport_style bytes")
-	} else {
-		bytes = append(bytes, strData...)
-	}
+	bytes = append(bytes, router_address.TransportType...)
 	bytes = append(bytes, router_address.TransportOptions.Data()...)
 	log.WithField("bytes_length", len(bytes)).Debug("Converted RouterAddress to bytes")
 	return bytes
