@@ -134,6 +134,11 @@ func ToI2PString(data string) (str I2PString, err error) {
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
+	if len(data) == 0 {
+		err = errors.New("data slice is empty")
+		log.WithError(err).Error("Passed data with len == 0")
+		return
+	}
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading I2PString from bytes")
