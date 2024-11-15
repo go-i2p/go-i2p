@@ -4,6 +4,7 @@ package router_info
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"strconv"
 	"strings"
 	"time"
@@ -152,15 +153,15 @@ func bytesToString(bytes []byte) string {
 
 func (router_info RouterInfo) String() string {
 	log.Debug("Converting RouterInfo to string")
-	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes())+"\n"
-	str += "Published: " + bytesToString(router_info.published.Bytes())+"\n"
-	str += "Addresses:" + bytesToString(router_info.size.Bytes())+"\n"
+	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes()) + "\n"
+	str += "Published: " + bytesToString(router_info.published.Bytes()) + "\n"
+	str += "Addresses:" + bytesToString(router_info.size.Bytes()) + "\n"
 	for index, router_address := range router_info.addresses {
-		str += "Address " + strconv.Itoa(index) + ": " + router_address.String()+"\n"
+		str += "Address " + strconv.Itoa(index) + ": " + router_address.String() + "\n"
 	}
-	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes())+"\n"
-	str += "Options: " + bytesToString(router_info.options.Data())+"\n"
-	str += "Signature: " + bytesToString([]byte(*router_info.signature))+"\n"
+	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes()) + "\n"
+	str += "Options: " + bytesToString(router_info.options.Data()) + "\n"
+	str += "Signature: " + bytesToString([]byte(*router_info.signature)) + "\n"
 	log.WithField("string_length", len(str)).Debug("Converted RouterInfo to string")
 	return str
 }
@@ -291,7 +292,11 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}
 		err = errors.New("error parsing router info: " + estring)
 	}
-	info.signature, remainder, err = NewSignature(remainder)
+	sigType, err := certificate.GetSignatureTypeFromCertificate(info.router_identity.Certificate())
+	log.WithFields(logrus.Fields{
+		"sigType": sigType,
+	}).Debug("Got sigType")
+	info.signature, remainder, err = NewSignature(remainder, sigType)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
@@ -404,7 +409,7 @@ func NewRouterInfo(
 	}
 
 	// 8. Create Signature struct from signatureBytes
-	sig, _, err := ReadSignature(signatureBytes)
+	sig, _, err := ReadSignature(signatureBytes, 7) // Refactor this later
 	if err != nil {
 		log.WithError(err).Error("Failed to create Signature from signature bytes")
 		return nil, err
