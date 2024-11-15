@@ -29,6 +29,7 @@ payload :: data
 
 import (
 	"errors"
+
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
 
@@ -174,7 +175,7 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Constructing signingPublicKey from keyCertificate")
-	signing_key_type := key_certificate.PublicKeyType()
+	signing_key_type := key_certificate.SigningPublicKeyType()
 	if err != nil {
 		return
 	}
@@ -213,34 +214,40 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		signing_public_key = ec_key
 		log.Debug("Constructed ECP521PublicKey")
 	case KEYCERT_SIGN_RSA2048:
-		// var rsa_key crypto.RSA2048PublicKey
-		// extra := KEYCERT_SIGN_RSA2048_SIZE - 128
-		// copy(rsa_key[:], data)
-		// copy(rsa_key[128:], key_certificate[4:4+extra])
-		// signing_public_key = rsa_key
-		log.WithFields(logrus.Fields{
-			"signing_key_type": signing_key_type,
-		}).Warn("Signing key type KEYCERT_SIGN_RSA2048 not implemented")
+		var rsa2048_key crypto.RSA2048PublicKey
+		extra := KEYCERT_SIGN_RSA2048_SIZE - 128
+		copy(rsa2048_key[:], data)
+		copy(rsa2048_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		signing_public_key = rsa2048_key
 	case KEYCERT_SIGN_RSA3072:
-		log.WithFields(logrus.Fields{
-			"signing_key_type": signing_key_type,
-		}).Warn("Signing key type KEYCERT_SIGN_RSA3072 not implemented")
+		var rsa3072_key crypto.RSA3072PublicKey
+		extra := KEYCERT_SIGN_RSA3072_SIZE - 128
+		copy(rsa3072_key[:], data)
+		copy(rsa3072_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		signing_public_key = rsa3072_key
 	case KEYCERT_SIGN_RSA4096:
-		log.WithFields(logrus.Fields{
-			"signing_key_type": signing_key_type,
-		}).Warn("Signing key type KEYCERT_SIGN_RSA4096 not implemented")
+		var rsa4096_key crypto.RSA4096PublicKey
+		extra := KEYCERT_SIGN_RSA4096_SIZE - 128
+		copy(rsa4096_key[:], data)
+		copy(rsa4096_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		signing_public_key = rsa4096_key
 	case KEYCERT_SIGN_ED25519:
-		log.WithFields(logrus.Fields{
-			"signing_key_type": signing_key_type,
-		}).Warn("Signing key type KEYCERT_SIGN_ED25519 not implemented")
+		var ed25519_key crypto.Ed25519PublicKey
+		extra := KEYCERT_SIGN_ED25519_SIZE - 128
+		copy(ed25519_key[:], data)
+		copy(ed25519_key[32:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		signing_public_key = ed25519_key
 	case KEYCERT_SIGN_ED25519PH:
-		log.WithFields(logrus.Fields{
-			"signing_key_type": signing_key_type,
-		}).Warn("Signing key type KEYCERT_SIGN_ED25519PH not implemented")
+		var ed25519ph_key crypto.Ed25519PublicKey
+		extra := KEYCERT_SIGN_ED25519PH_SIZE - 128
+		copy(ed25519ph_key[:], data)
+		copy(ed25519ph_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		signing_public_key = ed25519ph_key
 	default:
 		log.WithFields(logrus.Fields{
 			"signing_key_type": signing_key_type,
 		}).Warn("Unknown signing key type")
+		panic(err)
 	}
 
 	return
