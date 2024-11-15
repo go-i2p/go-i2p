@@ -3,6 +3,7 @@
 package certificate
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -212,39 +213,50 @@ func ReadCertificate(data []byte) (certificate Certificate, remainder []byte, er
 
 // NewCertificate creates a new Certificate with default NULL type
 func NewCertificate() *Certificate {
-    return &Certificate{
-        kind:     Integer([]byte{CERT_NULL}),
-        len:      Integer([]byte{0}),
-        payload:  make([]byte, 0),
-    }
+	return &Certificate{
+		kind:    Integer([]byte{CERT_NULL}),
+		len:     Integer([]byte{0}),
+		payload: make([]byte, 0),
+	}
 }
 
 // NewCertificateWithType creates a new Certificate with specified type and payload
 func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error) {
-    // Validate certificate type
-    switch certType {
-    case CERT_NULL, CERT_HASHCASH, CERT_HIDDEN, CERT_SIGNED, CERT_MULTIPLE, CERT_KEY:
-        // Valid type
-    default:
-        return nil, fmt.Errorf("invalid certificate type: %d", certType)
-    }
+	// Validate certificate type
+	switch certType {
+	case CERT_NULL, CERT_HASHCASH, CERT_HIDDEN, CERT_SIGNED, CERT_MULTIPLE, CERT_KEY:
+		// Valid type
+	default:
+		return nil, fmt.Errorf("invalid certificate type: %d", certType)
+	}
 
-    // For NULL certificates, payload should be empty
-    if certType == CERT_NULL && len(payload) > 0 {
-        return nil, errors.New("NULL certificates must have empty payload")
-    }
+	// For NULL certificates, payload should be empty
+	if certType == CERT_NULL && len(payload) > 0 {
+		return nil, errors.New("NULL certificates must have empty payload")
+	}
 	length, _ := NewIntegerFromInt(len(payload), 2)
-	
-    cert := &Certificate{
-        kind:          Integer([]byte{certType}),
-        len:           *length,
-        payload: make([]byte, len(payload)),
-    }
 
-    // Copy payload if present
-    if len(payload) > 0 {
-        copy(cert.payload, payload)
-    }
+	cert := &Certificate{
+		kind:    Integer([]byte{certType}),
+		len:     *length,
+		payload: make([]byte, len(payload)),
+	}
 
-    return cert, nil
+	// Copy payload if present
+	if len(payload) > 0 {
+		copy(cert.payload, payload)
+	}
+
+	return cert, nil
+}
+
+func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
+	if cert.Type() != CERT_KEY {
+		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type)
+	}
+	if len(cert.payload) < 2 {
+		return 0, fmt.Errorf("certificate payload too short to contain signature type")
+	}
+	sigType := int(binary.BigEndian.Uint16(cert.payload[0:2]))
+	return sigType, nil
 }
