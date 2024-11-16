@@ -152,7 +152,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 		}
 		if db.CheckFilePathValid(fname) {
 			log.WithField("file_name", fname).Debug("Reading RouterInfo file")
-			log.Println("Reading in file:", fname)
+			log.Debug("Reading in file:", fname)
 			b, err := os.ReadFile(fname)
 			if err != nil {
 				log.WithError(err).Error("Failed to read RouterInfo file")
@@ -165,9 +165,9 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 			}
 			ih := ri.IdentHash().Bytes()
 			log.WithError(err).Error("Failed to parse RouterInfo")
-			log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
+			log.Debugf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
 			for _, addr := range ri.RouterAddresses() {
-				log.Println(string(addr.Bytes()))
+				log.Debug(string(addr.Bytes()))
 				log.WithField("address", string(addr.Bytes())).Debug("RouterInfo address")
 			}
 			if ent, ok := db.RouterInfos[ih]; !ok {
@@ -177,13 +177,13 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 				}
 			} else {
 				log.Debug("RouterInfo already in memory cache")
-				log.Println("entry previously found in table", ent, fname)
+				log.Debug("entry previously found in table", ent, fname)
 			}
 			ri = router_info.RouterInfo{}
 			count++
 		} else {
 			log.WithField("file_path", fname).Warn("Invalid file path")
-			log.Println("Invalid path error")
+			log.Debug("Invalid path error")
 		}
 		return err
 	})

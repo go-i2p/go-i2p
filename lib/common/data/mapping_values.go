@@ -155,7 +155,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 				"reason": "duplicate key in mapping",
 				"key":    string(key_str),
 			}).Error("mapping format violation")
-			log.Printf("DUPE: %s", key_str)
+			log.Warnf("DUPE: %s", key_str)
 			errs = append(errs, errors.New("mapping format violation, duplicate key in mapping"))
 			// Based on other implementations this does not seem to happen often?
 			// Java throws an exception in this case, the base object is a Hashmap so the value is overwritten and an exception is thrown.
@@ -170,7 +170,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 				"value:": string(remainder),
 			}).Warn("mapping format violation")
 			errs = append(errs, errors.New("mapping format violation, expected ="))
-			log.Printf("ERRVAL: %s", remainder)
+			log.Warnf("ERRVAL: %s", remainder)
 			break
 		} else {
 			remainder = remainder[1:]

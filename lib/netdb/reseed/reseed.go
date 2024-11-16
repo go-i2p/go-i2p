@@ -76,7 +76,7 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 					log.WithError(err).Error("Failed to read SU3 file signature")
 					return nil, err
 				}
-				log.Println("warning: this doesn't validate the signature yet", signature)
+				log.Debug("warning: this doesn't validate the signature yet", signature)
 				log.Warn("Doesn't validate the signature yet", logrus.Fields{"signature": signature})
 			}
 			zip := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")

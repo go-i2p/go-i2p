@@ -39,7 +39,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 	}
 	log.Debug("Handshake message written successfully")
 	log.WithField("state", state).Debug("Handshake state after message write")
-	log.Println(state)
+	log.Debug(state)
 	c.handshakeComplete = true
 	log.Debug("Outgoing handshake completed successfully")
 	return nil
