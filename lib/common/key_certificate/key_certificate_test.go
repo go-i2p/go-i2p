@@ -123,7 +123,7 @@ func TestConstructSigningPublicKeyWithP521(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x08, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00})
-	data := make([]byte, 128)
+	data := make([]byte, 132)
 	spk, err := key_cert.ConstructSigningPublicKey(data)
 
 	assert.Nil(err, "ConstructSigningPublicKey() with P521 returned err on valid data")
