@@ -21,11 +21,11 @@ type NoiseSession struct {
 	*sync.Cond
 	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer whith whom we established the session
 	*HandshakeState
-	RecvQueue       *cb.Queue
-	SendQueue       *cb.Queue
-	VerifyCallback  VerifyCallbackFunc
-	activeCall      int32
-	Conn            net.Conn
+	RecvQueue      *cb.Queue
+	SendQueue      *cb.Queue
+	VerifyCallback VerifyCallbackFunc
+	activeCall     int32
+	Conn           net.Conn
 }
 
 // RemoteAddr implements net.Conn

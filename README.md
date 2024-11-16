@@ -41,7 +41,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Elligator2
   - [ ] HKDF
   - [ ] HMAC
-  - [/] Noise subsystem
+  - [X] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
   - [ ] ElGamal/AES+SessionTag
@@ -94,7 +94,7 @@ please keep up with these changes, as they will not be backward compatible and r
     - [X] Session Tag
 
 ## Verbosity ##
-Logging can be enabled and configured using the DEBUG_I2P environment variable. By default, logging is disabled.
+Logging can be enabled and configured using the `DEBUG_I2P` environment variable. By default, logging is disabled.
 
 There are three available log levels:
 
@@ -112,6 +112,17 @@ export DEBUG_I2P=error
 ```
 
 If DEBUG_I2P is set to an unrecognized variable, it will fall back to "debug".
+
+## Fast-Fail mode ##
+
+Fast-Fail mode can be activated by setting `WARNFAIL_I2P` to any non-empty value. When set, every warning or error is Fatal.
+It is unsafe for production use, and intended only for debugging and testing purposes.
+
+```shell
+export WARNFAIL_I2P=true
+```
+
+If `WARNFAIL_I2P` is set and `DEBUG_I2P` is unset, `DEBUG_I2P` will be set to `debug`.
 
 ## Contributing
 
