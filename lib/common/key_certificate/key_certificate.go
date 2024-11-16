@@ -197,52 +197,49 @@ func (key_certificate KeyCertificate) ConstructSigningPublicKey(data []byte) (si
 		signing_public_key = dsa_key
 		log.Debug("Constructed DSAPublicKey")
 	case KEYCERT_SIGN_P256:
-		var ec_key crypto.ECP256PublicKey
-		copy(ec_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P256_SIZE:KEYCERT_SPK_SIZE])
-		signing_public_key = ec_key
-		log.Debug("Constructed ECP256PublicKey")
+		var ec_p256_key crypto.ECP256PublicKey
+		copy(ec_p256_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P256_SIZE:KEYCERT_SPK_SIZE])
+		signing_public_key = ec_p256_key
+		log.Debug("Constructed P256PublicKey")
 	case KEYCERT_SIGN_P384:
-		var ec_key crypto.ECP384PublicKey
-		copy(ec_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P384_SIZE:KEYCERT_SPK_SIZE])
-		signing_public_key = ec_key
-		log.Debug("Constructed ECP384PublicKey")
+		var ec_p384_key crypto.ECP384PublicKey
+		copy(ec_p384_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P384_SIZE:KEYCERT_SPK_SIZE])
+		signing_public_key = ec_p384_key
+		log.Debug("Constructed P384PublicKey")
 	case KEYCERT_SIGN_P521:
-		var ec_key crypto.ECP521PublicKey
-		extra := KEYCERT_SIGN_P521_SIZE - KEYCERT_SPK_SIZE
-		copy(ec_key[:], data)
-		copy(ec_key[KEYCERT_SPK_SIZE:], key_certificate.Certificate.RawBytes()[4:4+extra])
-		signing_public_key = ec_key
-		log.Debug("Constructed ECP521PublicKey")
+		/*var ec_p521_key crypto.ECP521PublicKey
+		copy(ec_p521_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P521_SIZE:KEYCERT_SPK_SIZE])
+		signing_public_key = ec_p521_key
+		log.Debug("Constructed P521PublicKey")*/
+		panic("unimplemented P521SigningPublicKey")
 	case KEYCERT_SIGN_RSA2048:
-		var rsa2048_key crypto.RSA2048PublicKey
-		extra := KEYCERT_SIGN_RSA2048_SIZE - 128
-		copy(rsa2048_key[:], data)
-		copy(rsa2048_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		/*var rsa2048_key crypto.RSA2048PublicKey
+		copy(rsa2048_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_RSA2048_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = rsa2048_key
+		log.Debug("Constructed RSA2048PublicKey")*/
+		panic("unimplemented RSA2048SigningPublicKey")
 	case KEYCERT_SIGN_RSA3072:
-		var rsa3072_key crypto.RSA3072PublicKey
-		extra := KEYCERT_SIGN_RSA3072_SIZE - 128
-		copy(rsa3072_key[:], data)
-		copy(rsa3072_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		/*var rsa3072_key crypto.RSA3072PublicKey
+		copy(rsa3072_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_RSA3072_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = rsa3072_key
+		log.Debug("Constructed RSA3072PublicKey")*/
+		panic("unimplemented RSA3072SigningPublicKey")
 	case KEYCERT_SIGN_RSA4096:
-		var rsa4096_key crypto.RSA4096PublicKey
-		extra := KEYCERT_SIGN_RSA4096_SIZE - 128
-		copy(rsa4096_key[:], data)
-		copy(rsa4096_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		/*var rsa4096_key crypto.RSA4096PublicKey
+		copy(rsa4096_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_RSA4096_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = rsa4096_key
+		log.Debug("Constructed RSA4096PublicKey")*/
+		panic("unimplemented RSA4096SigningPublicKey")
 	case KEYCERT_SIGN_ED25519:
 		var ed25519_key crypto.Ed25519PublicKey
-		extra := KEYCERT_SIGN_ED25519_SIZE - 128
-		copy(ed25519_key[:], data)
-		copy(ed25519_key[32:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		copy(ed25519_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_ED25519_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ed25519_key
+		log.Debug("Constructed Ed25519PublicKey")
 	case KEYCERT_SIGN_ED25519PH:
 		var ed25519ph_key crypto.Ed25519PublicKey
-		extra := KEYCERT_SIGN_ED25519PH_SIZE - 128
-		copy(ed25519ph_key[:], data)
-		copy(ed25519ph_key[128:], key_certificate.Certificate.RawBytes()[4:4+extra])
+		copy(ed25519ph_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_ED25519PH_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ed25519ph_key
+		log.Debug("Constructed Ed25519PHPublicKey")
 	default:
 		log.WithFields(logrus.Fields{
 			"signing_key_type": signing_key_type,
