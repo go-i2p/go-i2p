@@ -195,4 +195,18 @@ func Test10K(t *testing.T) {
 			}
 		}
 	}
+	// Cleanup both directories
+	if err := cleanupTempDir(tempDir); err != nil {
+		log.WithError(err).Error("Failed to cleanup temp directory")
+		t.Errorf("Failed to cleanup temp directory: %v", err)
+	} else {
+		log.Debug("Successfully cleaned up temp directory")
+	}
+
+	if err := cleanupTempDir(targetDir); err != nil {
+		log.WithError(err).Error("Failed to cleanup target directory")
+		t.Errorf("Failed to cleanup target directory: %v", err)
+	} else {
+		log.Debug("Successfully cleaned up target directory")
+	}
 }
