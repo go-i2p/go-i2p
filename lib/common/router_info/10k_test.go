@@ -135,6 +135,9 @@ func Test10K(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second)
 	targetDir, err := createTempNetDbDir()
+	if err != nil {
+		panic(err)
+	}
 
 	// Read and process all router info files
 	files, err := os.ReadDir(tempDir)
@@ -168,9 +171,8 @@ func Test10K(t *testing.T) {
 					"options":         routerInfo.options,
 					"signature":       routerInfo.signature,
 					"size":            routerInfo.size,
-				}).Debug("routerInfo")
-
-			*/ // For some reason, this freezes when attempting to print
+				}).Debug("routerInfo") // For some reason, this freezes when attempting to print
+			*/
 			fmt.Printf("peer_size: %v\n", routerInfo.peer_size)
 			fmt.Printf("addresses: %v\n", routerInfo.addresses)
 			fmt.Printf("published: %v\n", routerInfo.published)
