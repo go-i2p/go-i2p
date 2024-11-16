@@ -12,7 +12,7 @@ import (
 
 func consolidateNetDb(sourcePath string, destPath string) error {
 	// Create destination directory if it doesn't exist
-	if err := os.MkdirAll(destPath, 0755); err != nil {
+	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %v", err)
 	}
 
@@ -68,7 +68,7 @@ func consolidateAllNetDbs(tempDir string) error {
 	i2pdPath := filepath.Join(os.Getenv("HOME"), ".i2pd/netDb")
 
 	// Create the temp directory
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
+	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create temp directory: %v", err)
 	}
 
@@ -88,12 +88,14 @@ func consolidateAllNetDbs(tempDir string) error {
 
 	return nil
 }
+
 func cleanupTempDir(path string) error {
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("failed to cleanup temporary directory %s: %v", path, err)
 	}
 	return nil
 }
+
 func createTempNetDbDir() (string, error) {
 	// Get system's temp directory in a platform-independent way
 	baseDir := os.TempDir()
@@ -106,13 +108,14 @@ func createTempNetDbDir() (string, error) {
 	tempDir := filepath.Join(baseDir, dirName)
 
 	// Create the directory with appropriate permissions
-	err := os.MkdirAll(tempDir, 0755)
+	err := os.MkdirAll(tempDir, 0o755)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %v", err)
 	}
 
 	return tempDir, nil
 }
+
 func Test10K(t *testing.T) {
 	i2pPath := filepath.Join(os.Getenv("HOME"), ".i2p/netDb")
 	i2pdPath := filepath.Join(os.Getenv("HOME"), ".i2pd/netDb")
@@ -128,7 +131,7 @@ func Test10K(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	//defer cleanupTempDir(tempDir)
+	// defer cleanupTempDir(tempDir)
 
 	if err := consolidateAllNetDbs(tempDir); err != nil {
 		t.Fatalf("Failed to consolidate netDbs: %v", err)
@@ -156,7 +159,7 @@ func Test10K(t *testing.T) {
 			}
 
 			// Parse the router info
-			//fmt.Printf("data: %s\n", string(data))
+			// fmt.Printf("data: %s\n", string(data))
 			routerInfo, _, err := ReadRouterInfo(data)
 			if err != nil {
 				t.Logf("Failed to parse router info from %s: %v", file.Name(), err)
@@ -170,7 +173,7 @@ func Test10K(t *testing.T) {
 				continue
 			}
 
-			err = os.WriteFile(filepath.Join(targetDir, file.Name()), routerBytes, 0644)
+			err = os.WriteFile(filepath.Join(targetDir, file.Name()), routerBytes, 0o644)
 			if err != nil {
 				t.Logf("Failed to write router info %s: %v", file.Name(), err)
 				continue

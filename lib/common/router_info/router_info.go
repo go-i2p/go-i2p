@@ -4,10 +4,11 @@ package router_info
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
 
@@ -174,7 +175,7 @@ func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
 	log.Debug("Calculating IdentHash for RouterInfo")
-	//data, _ := router_info.RouterIdentity().keyCertificate.Data()
+	// data, _ := router_info.RouterIdentity().keyCertificate.Data()
 	cert := router_info.RouterIdentity().KeysAndCert.Certificate()
 	data := cert.Data()
 	hash := HashData(data)
