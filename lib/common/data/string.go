@@ -46,14 +46,8 @@ func (str I2PString) Length() (length int, err error) {
 	}
 	length = l.Int()
 	str_len := len(str)
-	if length > str_len {
-		/*log.WithFields(log.Fields{
-			"at":                  "(I2PString) Length",
-			"string_bytes_length": str_len,
-			"string_length_field": length,
-			"data":                string(str),
-			"reason":              "data less than specified by length",
-		}).Error("string format warning")*/
+
+	if length > (str_len - 1) {
 		log.WithFields(logrus.Fields{
 			"at":                  "(I2PString) Length",
 			"string_bytes_length": str_len,
@@ -62,6 +56,17 @@ func (str I2PString) Length() (length int, err error) {
 		}).Warn("string format warning")
 		err = errors.New("string parsing warning: string data is shorter than specified by length")
 	}
+
+	if (str_len - 1) > length {
+		log.WithFields(logrus.Fields{
+			"at":                  "(I2PString) Length",
+			"string_bytes_length": str_len,
+			"string_length_field": length,
+			"reason":              "data contains extra bytes beyond specified length",
+		}).Warn("string format warning")
+		err = errors.New("string parsing warning: string contains data beyond length")
+	}
+
 	return
 }
 
