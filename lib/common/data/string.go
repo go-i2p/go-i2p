@@ -36,7 +36,7 @@ func (str I2PString) Length() (length int, err error) {
 			"at":     "(I2PString) Length",
 			"reason": "no data",
 		}).Error("error parsing string")
-		err = errors.New("error parsing string: zero length")
+		err = ErrZeroLength
 		return
 	}
 	l, _, err := NewInteger(str[:], 1)
@@ -54,7 +54,7 @@ func (str I2PString) Length() (length int, err error) {
 			"string_length_field": length,
 			"reason":              "data less than specified by length",
 		}).Warn("string format warning")
-		err = errors.New("string parsing warning: string data is shorter than specified by length")
+		err = ErrDataTooShort
 	}
 
 	if (str_len - 1) > length {
@@ -64,7 +64,7 @@ func (str I2PString) Length() (length int, err error) {
 			"string_length_field": length,
 			"reason":              "data contains extra bytes beyond specified length",
 		}).Warn("string format warning")
-		err = errors.New("string parsing warning: string contains data beyond length")
+		err = ErrDataTooLong
 	}
 
 	return
@@ -75,11 +75,11 @@ func (str I2PString) Length() (length int, err error) {
 func (str I2PString) Data() (data string, err error) {
 	length, err := str.Length()
 	if err != nil {
-		switch err.Error() {
-		case "error parsing string: zero length":
+		switch err {
+		case ErrZeroLength:
 			log.WithError(err).Warn("Zero length I2PString")
 			return "", err
-		case "string parsing warning: string data is shorter than specified by length":
+		case ErrDataTooShort:
 			log.WithError(err).Warn("I2PString data shorter than specified length")
 			/*
 				if is, e := ToI2PString(string(str[:])); e != nil {
@@ -90,12 +90,16 @@ func (str I2PString) Data() (data string, err error) {
 				}
 			*/ //Recovery attempt
 			return "", err
-		case "string parsing warning: string contains data beyond length":
+		case ErrDataTooLong:
 			log.WithError(err).Warn("I2PString contains data beyond specified length")
 			data = string(str[1:])
 			//data = string(str[1 : length+1]) // Should we recover and trim?
 			return
+		default:
+			log.WithError(err).Error("Unknown error encountered in I2PString.Data()")
+			return "", err
 		}
+
 	}
 	if length == 0 {
 		log.Debug("I2PString is empty")
@@ -166,7 +170,7 @@ func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	remainder = data[data_len:]
 	l, err := str.Length()
 	if l != data_len-1 {
-		err = fmt.Errorf("error reading I2P string, length does not match data")
+		err = ErrLengthMismatch
 		log.WithFields(logrus.Fields{
 			"expected_length": data_len - 1,
 			"actual_length":   l,
