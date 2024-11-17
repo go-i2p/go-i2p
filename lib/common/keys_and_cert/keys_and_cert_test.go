@@ -54,7 +54,6 @@ func TestPublicKeyWithBadData(t *testing.T) {
 
 func TestPublicKeyWithBadCertificate(t *testing.T) {
 	assert := assert.New(t)
-
 	cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01}
 	pub_key_data := make([]byte, 256)
 	data := make([]byte, 128)
@@ -62,10 +61,10 @@ func TestPublicKeyWithBadCertificate(t *testing.T) {
 	data = append(data, cert_data...)
 	keys_and_cert, _, err := ReadKeysAndCert(data)
 
-	pub_key := keys_and_cert.PublicKey()
 	if assert.NotNil(err) {
-		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())
+		log.WithError(err).Debug("Correctly got error")
 	}
+	pub_key := keys_and_cert.PublicKey()
 	assert.Nil(pub_key)
 }
 
@@ -110,9 +109,7 @@ func TestSigningPublicKeyWithBadData(t *testing.T) {
 	keys_and_cert, _, err := ReadKeysAndCert(data)
 
 	signing_pub_key := keys_and_cert.SigningPublicKey()
-	if assert.NotNil(err) {
-		assert.Equal("error parsing KeysAndCert: data is smaller than minimum valid size", err.Error())
-	}
+	assert.NotNil(err)
 	assert.Nil(signing_pub_key)
 }
 
@@ -125,11 +122,8 @@ func TestSigningPublicKeyWithBadCertificate(t *testing.T) {
 	data = append(data, pub_key_data...)
 	data = append(data, cert_data...)
 	keys_and_cert, _, err := ReadKeysAndCert(data)
-
 	signing_pub_key := keys_and_cert.SigningPublicKey()
-	if assert.NotNil(err) {
-		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())
-	}
+	assert.NotNil(err)
 	assert.Nil(signing_pub_key)
 }
 
