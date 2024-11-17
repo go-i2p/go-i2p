@@ -129,7 +129,7 @@ func TestReadI2PStringErrWhenEmptySlice(t *testing.T) {
 	_, _, err := ReadI2PString(bytes)
 
 	if assert.NotNil(err) {
-		assert.Equal(err.Error(), "error parsing string: zero length", "correct error message should be returned")
+		assert.Equal(err.Error(), ErrZeroLength.Error(), "correct error message should be returned")
 	}
 }
 

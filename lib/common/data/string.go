@@ -78,31 +78,34 @@ func (str I2PString) Data() (data string, err error) {
 		switch err.Error() {
 		case "error parsing string: zero length":
 			log.WithError(err).Warn("Zero length I2PString")
-			return
+			return "", err
 		case "string parsing warning: string data is shorter than specified by length":
 			log.WithError(err).Warn("I2PString data shorter than specified length")
-			if is, e := ToI2PString(string(str[:])); e != nil {
-				log.WithError(e).Error("Failed to convert short I2PString")
-				return "", e
-			} else {
-				return is.Data()
-			}
+			/*
+				if is, e := ToI2PString(string(str[:])); e != nil {
+					log.WithError(e).Error("Failed to convert short I2PString")
+					return "", e
+				} else {
+					return is.Data()
+				}
+			*/ //Recovery attempt
+			return "", err
 		case "string parsing warning: string contains data beyond length":
 			log.WithError(err).Warn("I2PString contains data beyond specified length")
 			data = string(str[1:])
-			//data = string(str[1 : length+1]) // Should we trim?
+			//data = string(str[1 : length+1]) // Should we recover and trim?
 			return
 		}
 	}
 	if length == 0 {
 		log.Debug("I2PString is empty")
-		return
+		return "", nil
 	}
 	data = string(str[1 : length+1])
 	log.WithFields(logrus.Fields{
 		"data_length": len(data),
 	}).Debug("Retrieved I2PString data")
-	return
+	return data, nil
 }
 
 // ToI2PString converts a Go string to an I2PString.
@@ -141,7 +144,7 @@ func ToI2PString(data string) (str I2PString, err error) {
 // Returns a list of errors that occurred during parsing.
 func ReadI2PString(data []byte) (str I2PString, remainder []byte, err error) {
 	if len(data) == 0 {
-		err = errors.New("data slice is empty")
+		err = ErrZeroLength
 		log.WithError(err).Error("Passed data with len == 0")
 		return
 	}
