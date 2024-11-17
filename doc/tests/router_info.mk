@@ -1,4 +1,4 @@
-test-router-info-all: test-router-info-published test-router-info-addresses test-router-info-identity test-router-info-misc
+test-router-info-all: test-router-info-published test-router-info-addresses test-router-info-identity test-router-info-misc test-router-info-create test-router-info-10k
 
 test-router-info-published:
 	$(GO) test -v ./lib/common/router_info -run TestPublishedReturnsCorrectDate
@@ -19,8 +19,16 @@ test-router-info-misc:
 	$(GO) test -v ./lib/common/router_info -run TestOptionsAreCorrect
 	$(GO) test -v ./lib/common/router_info -run TestSignatureIsCorrectSize
 
+test-router-info-create:
+	$(GO) test -v ./lib/common/router_info -run TestCreateRouterInfo
+
+test-router-info-10k:
+	$(GO) test -v ./lib/common/router_info -run Test10K
+
 .PHONY: test-router-info-all \
         test-router-info-published \
         test-router-info-addresses \
         test-router-info-identity \
-        test-router-info-misc
+        test-router-info-misc \
+        test-router-info-create \
+        test-router-info-10k
