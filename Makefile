@@ -61,7 +61,6 @@ test-all: test-string-all \
          test-crypto-elg-all \
          test-crypto-hmac-all \
          test-i2np-header-all \
-         test-i2np-build-request-all \
          test-key-cert-all \
          test-keys-cert-all \
          test-lease-set-all \

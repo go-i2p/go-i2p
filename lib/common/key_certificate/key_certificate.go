@@ -298,25 +298,40 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 		"input_length": len(bytes),
 	}).Debug("Creating new keyCertificate")
 
+	if len(bytes) < KEYCERT_MIN_SIZE {
+		log.WithFields(logrus.Fields{
+			"at":           "NewKeyCertificate",
+			"data_len":     len(bytes),
+			"required_len": KEYCERT_MIN_SIZE,
+			"reason":       "not enough data",
+		}).Error("error parsing key certificate")
+		err = errors.New("error parsing key certificate: not enough data")
+		// Initialize an empty key certificate with zero values
+		key_certificate = &KeyCertificate{
+			spkType: Integer{0},
+			cpkType: Integer{0},
+		}
+		return
+	}
+
 	var certificate Certificate
 	certificate, remainder, err = ReadCertificate(bytes)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Certificate")
 		return
 	}
-	if len(bytes) < KEYCERT_MIN_SIZE {
-		log.WithError(err).Error("keyCertificate data too short")
-		err = errors.New("error parsing key certificate: not enough data")
-		remainder = bytes[KEYCERT_MIN_SIZE:]
-	}
 	key_certificate = &KeyCertificate{
 		Certificate: certificate,
 	}
 	if len(bytes) >= 5 {
 		key_certificate.spkType = Integer(bytes[4:5])
+	} else {
+		key_certificate.spkType = Integer{0}
 	}
 	if len(bytes) >= 7 {
 		key_certificate.cpkType = Integer(bytes[6:7])
+	} else {
+		key_certificate.cpkType = Integer{0}
 	}
 
 	log.WithFields(logrus.Fields{
