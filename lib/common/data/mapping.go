@@ -177,22 +177,30 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		log.Warn("Mapping size is zero")
 		return
 	}
-	mapping.size = size
-	map_bytes := remainder[:mapping.size.Int()]
-	remainder = remainder[mapping.size.Int():]
-	if len(remainder) == 0 {
+	// Length Check
+	if len(remainder) < size.Int() {
 		log.WithFields(logrus.Fields{
-			"at":     "ReadMapping",
-			"reason": "zero length",
-		}).Warn("mapping format violation")
-		e := errors.New("zero length")
+			"expected_size": size.Int(),
+			"actual_size":   len(remainder),
+		}).Warn("mapping format violation: mapping length exceeds provided data")
+		e := errors.New("warning parsing mapping: mapping length exceeds provided data")
 		err = append(err, e)
-	}
-	// TODO: this should take the remainder and the length we already parsed above, as a parameter.
-	// Like tomorrow morning.
-	// ReadMappingValues should not attempt to figure out the length of the bytes it's reading over.
-	vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *mapping.size)
 
+		// Use whatever data is available (recovery)
+		map_bytes := remainder
+		remainder = nil
+
+		vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *size)
+		err = append(err, mappingValueErrs...)
+		mapping.vals = vals
+		return
+	}
+
+	// Proceed normally if enough data is present
+	map_bytes := remainder[:size.Int()]
+	remainder = remainder[size.Int():]
+
+	vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *size)
 	err = append(err, mappingValueErrs...)
 	mapping.vals = vals
 	if len(mappingValueErrs) > 0 {
@@ -205,7 +213,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 	}
 
 	log.WithFields(logrus.Fields{
-		"mapping_size":     mapping.size.Int(),
+		"mapping_size":     size.Int(),
 		"values_count":     len(*mapping.vals),
 		"remainder_length": len(remainder),
 		"error_count":      len(err),
