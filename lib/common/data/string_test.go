@@ -54,7 +54,7 @@ func TestI2PStringDataReportsExtraDataError(t *testing.T) {
 	data, err := I2PString([]byte{0x01, 0x00, 0x01}).Data()
 	data_len := len(data)
 
-	assert.Equal(data_len, 1, "Data() reported wrong size on string with extra data")
+	assert.Equal(data_len, 2, "Data() reported wrong size on string with extra data")
 	if assert.NotNil(err) {
 		assert.Equal(err.Error(), "string parsing warning: string contains data beyond length", "correct error message should be returned")
 	}

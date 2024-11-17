@@ -90,6 +90,7 @@ func (str I2PString) Data() (data string, err error) {
 		case "string parsing warning: string contains data beyond length":
 			log.WithError(err).Warn("I2PString contains data beyond specified length")
 			data = string(str[1:])
+			//data = string(str[1 : length+1]) // Should we trim?
 			return
 		}
 	}
