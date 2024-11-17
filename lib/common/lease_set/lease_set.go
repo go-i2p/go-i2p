@@ -3,6 +3,7 @@ package lease_set
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -415,12 +416,33 @@ func NewLeaseSet(
 	signingPrivateKey crypto.SigningPrivateKey,
 ) (LeaseSet, error) {
 	log.Debug("Creating new LeaseSet")
-
+	// Validate destination size
+	if len(destination.KeysAndCert.Bytes()) < 387 {
+		return nil, errors.New("invalid destination: minimum size is 387 bytes")
+	}
+	// Validate encryption key size
+	if len(encryptionKey.Bytes()) != LEASE_SET_PUBKEY_SIZE {
+		return nil, errors.New("invalid encryption key size")
+	}
 	// Validate inputs
 	if len(leases) > 16 {
 		return nil, errors.New("invalid lease set: more than 16 leases")
 	}
-
+	// Validate signing key size matches certificate
+	cert := destination.Certificate()
+	if cert.Type() == CERT_KEY {
+		// Get expected size from key certificate
+		expectedSize := KeyCertificateFromCertificate(cert).SignatureSize()
+		if len(signingKey.Bytes()) != expectedSize {
+			return nil, fmt.Errorf("invalid signing key size: got %d, expected %d",
+				len(signingKey.Bytes()), expectedSize)
+		}
+	} else {
+		// Default DSA size
+		if len(signingKey.Bytes()) != LEASE_SET_SPK_SIZE {
+			return nil, errors.New("invalid signing key size")
+		}
+	}
 	// Build LeaseSet data
 	data := make([]byte, 0)
 
