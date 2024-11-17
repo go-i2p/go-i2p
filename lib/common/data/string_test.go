@@ -140,10 +140,14 @@ func TestReadI2PStringErrWhenDataTooShort(t *testing.T) {
 	str, remainder, err := ReadI2PString(short_str)
 
 	if assert.NotNil(err) {
-		assert.Equal(err.Error(), "string parsing warning: string data is shorter than specified by length", "correct error message should be returned")
+		assert.Equal(err.Error(), ErrDataTooShort.Error(), "correct error message should be returned")
 	}
-	assert.Equal(len(str), 2, "ReadI2PString() did not return the slice as string when too long")
-	assert.Equal(3, int(str[0]), "ReadI2PString() did not return the correct partial string")
-	assert.Equal(1, int(str[1]), "ReadI2PString() did not return the correct partial string")
-	assert.Equal(len(remainder), 0, "ReadI2PString() returned a remainder when the string data was too short")
+	/*
+		assert.Equal(len(str), 2, "ReadI2PString() did not return the slice as string when too long")
+		assert.Equal(3, int(str[0]), "ReadI2PString() did not return the correct partial string")
+		assert.Equal(1, int(str[1]), "ReadI2PString() did not return the correct partial string")
+		assert.Equal(len(remainder), 0, "ReadI2PString() returned a remainder when the string data was too short")
+	*/
+	assert.Equal(len(str), 0, "ReadI2PString() should not return any data when data is too short")
+	assert.Equal(len(remainder), 0, "ReadI2PString() should not return any remainder when data is too short")
 }
