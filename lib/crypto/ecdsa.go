@@ -73,6 +73,10 @@ func (k ECP256PublicKey) Len() int {
 	return len(k)
 }
 
+func (k ECP256PublicKey) Bytes() []byte {
+	return k[:]
+}
+
 func (k ECP256PublicKey) NewVerifier() (Verifier, error) {
 	log.Debug("Creating new P256 ECDSA verifier")
 	// return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
@@ -87,6 +91,10 @@ type (
 	ECP384PublicKey  [96]byte
 	ECP384PrivateKey [48]byte
 )
+
+func (k ECP384PublicKey) Bytes() []byte {
+	return k[:]
+}
 
 func (k ECP384PublicKey) Len() int {
 	return len(k)
@@ -106,6 +114,10 @@ type (
 	ECP521PublicKey  [132]byte
 	ECP521PrivateKey [66]byte
 )
+
+func (k ECP521PublicKey) Bytes() []byte {
+	return k[:]
+}
 
 func (k ECP521PublicKey) Len() int {
 	return len(k)

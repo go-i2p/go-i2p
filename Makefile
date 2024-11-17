@@ -3,6 +3,7 @@ RELEASE_VERSION=${RELEASE_TAG}
 RELEASE_DESCRIPTION=`cat PASTA.md`
 REPO := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 CGO_ENABLED=0
+export DEBUG_I2P=debug
 
 ifdef GOROOT
 	GO = $(GOROOT)/bin/go

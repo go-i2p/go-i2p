@@ -3,6 +3,7 @@
 package certificate
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -172,14 +173,14 @@ func readCertificate(data []byte) (certificate Certificate, err error) {
 	default:
 		certificate.kind = Integer(data[0:1])
 		certificate.len = Integer(data[1:3])
-		payleng := len(data) - CERT_MIN_SIZE
+		payloadLength := len(data) - CERT_MIN_SIZE
 		certificate.payload = data[CERT_MIN_SIZE:]
 		if certificate.len.Int() > len(data)-CERT_MIN_SIZE {
 			err = fmt.Errorf("certificate parsing warning: certificate data is shorter than specified by length")
 			log.WithFields(logrus.Fields{
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
-				"certificate_payload_length": payleng,
+				"certificate_payload_length": payloadLength,
 				"data_bytes:":                string(data),
 				"kind_bytes":                 data[0:1],
 				"len_bytes":                  data[1:3],
@@ -247,4 +248,15 @@ func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error
 	}
 
 	return cert, nil
+}
+
+func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
+	if cert.Type() != CERT_KEY {
+		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type)
+	}
+	if len(cert.payload) < 2 {
+		return 0, fmt.Errorf("certificate payload too short to contain signature type")
+	}
+	sigType := int(binary.BigEndian.Uint16(cert.payload[0:2]))
+	return sigType, nil
 }

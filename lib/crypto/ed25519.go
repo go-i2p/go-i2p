@@ -12,7 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var Ed25519EncryptTooBig = errors.New("failed to encrypt data, too big for Ed25519")
+var (
+	Ed25519EncryptTooBig    = errors.New("failed to encrypt data, too big for Ed25519")
+	ErrInvalidPublicKeySize = errors.New("failed to verify: invalid ed25519 public key size")
+)
 
 type Ed25519PublicKey []byte
 
@@ -31,6 +34,10 @@ func (k Ed25519PublicKey) Len() int {
 	return len(k)
 }
 
+func (k Ed25519PublicKey) Bytes() []byte {
+	return k
+}
+
 func createEd25519PublicKey(data []byte) (k *ed25519.PublicKey) {
 	log.WithField("data_length", len(data)).Debug("Creating Ed25519 public key")
 	if len(data) == 256 {
@@ -44,22 +51,36 @@ func createEd25519PublicKey(data []byte) (k *ed25519.PublicKey) {
 	return
 }
 
-func createEd25519Encryption(pub *ed25519.PublicKey, rand io.Reader) (enc *Ed25519Encryption, err error) {
-	/*kbytes := make([]byte, 256)
-	k := new(big.Int)
-	for err == nil {
-		_, err = io.ReadFull(rand, kbytes)
-		k = new(big.Int).SetBytes(kbytes)
-		k = k.Mod(k, pub.P)
-		if k.Sign() != 0 {
-			break
-		}
+// createEd25519Encryption initializes the Ed25519Encryption struct using the public key.
+func createEd25519Encryption(pub *ed25519.PublicKey, randReader io.Reader) (*Ed25519Encryption, error) {
+	// Define p = 2^255 - 19
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+
+	// Validate public key length
+	if len(*pub) != ed25519.PublicKeySize {
+		log.WithField("pub_length", len(*pub)).Error("Invalid Ed25519 public key size")
+		return nil, ErrInvalidPublicKeySize
 	}
-	if err == nil {
-		enc = &Ed25519Encryption{}
-	}*/
-	log.Warn("createEd25519Encryption is not implemented")
-	return
+
+	// Convert public key bytes to big.Int
+	a := new(big.Int).SetBytes(*pub)
+
+	// Generate a random scalar b1 in [0, p)
+	b1, err := rand.Int(randReader, p)
+	if err != nil {
+		log.WithError(err).Error("Failed to generate b1 for Ed25519Encryption")
+		return nil, err
+	}
+
+	// Initialize Ed25519Encryption struct
+	enc := &Ed25519Encryption{
+		p:  p,
+		a:  a,
+		b1: b1,
+	}
+
+	log.Debug("Ed25519Encryption created successfully")
+	return enc, nil
 }
 
 type Ed25519Encryption struct {
@@ -109,13 +130,18 @@ func (ed25519 *Ed25519Encryption) EncryptPadding(data []byte, zeroPadding bool) 
 func (elg Ed25519PublicKey) NewEncrypter() (enc Encrypter, err error) {
 	log.Debug("Creating new Ed25519 encrypter")
 	k := createEd25519PublicKey(elg[:])
+	if k == nil {
+		return nil, errors.New("invalid public key format")
+	}
+
 	enc, err = createEd25519Encryption(k, rand.Reader)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Ed25519 encrypter")
-	} else {
-		log.Debug("Ed25519 encrypter created successfully")
+		return nil, err
 	}
-	return
+
+	log.Debug("Ed25519 encrypter created successfully")
+	return enc, nil
 }
 
 func (v *Ed25519Verifier) VerifyHash(h, sig []byte) (err error) {
@@ -157,6 +183,42 @@ func (v *Ed25519Verifier) Verify(data, sig []byte) (err error) {
 }
 
 type Ed25519PrivateKey ed25519.PrivateKey
+
+func (k Ed25519PrivateKey) NewDecrypter() (Decrypter, error) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (k Ed25519PrivateKey) NewSigner() (Signer, error) {
+	if len(k) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid ed25519 private key size")
+	}
+	return &Ed25519Signer{k: k}, nil
+}
+
+func (k Ed25519PrivateKey) Len() int {
+	return len(k)
+}
+
+func (k *Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
+	// Generate a new Ed25519 key pair
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	// Assign the generated private key to the receiver
+	*k = Ed25519PrivateKey(priv)
+	return k, nil
+}
+
+func (k Ed25519PrivateKey) Public() (SigningPublicKey, error) {
+	if len(k) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid ed25519 private key size")
+	}
+	// The public key is the first 32 bytes of the private key's seed
+	pubKey := k[32:]
+	return Ed25519PublicKey(pubKey), nil
+}
 
 type Ed25519Signer struct {
 	k []byte

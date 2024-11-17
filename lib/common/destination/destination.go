@@ -38,7 +38,8 @@ type Destination struct {
 func (destination Destination) Base32Address() (str string) {
 	log.Debug("Generating Base32 address for Destination")
 
-	dest := destination.KeysAndCert.KeyCertificate.Bytes()
+	cert := destination.KeysAndCert.Certificate()
+	dest := cert.Bytes()
 	hash := crypto.SHA256(dest)
 	str = strings.Trim(base32.EncodeToString(hash[:]), "=")
 	str = str + ".b32.i2p"
@@ -54,7 +55,8 @@ func (destination Destination) Base32Address() (str string) {
 func (destination Destination) Base64() string {
 	log.Debug("Generating Base64 address for Destination")
 
-	dest := destination.KeysAndCert.KeyCertificate.Bytes()
+	cert := destination.KeysAndCert.Certificate()
+	dest := cert.Bytes()
 	base64Address := base64.EncodeToString(dest)
 
 	log.WithFields(logrus.Fields{

@@ -2,7 +2,10 @@
 package router_identity
 
 import (
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
 )
@@ -46,4 +49,31 @@ func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder 
 		"remainder_length": len(remainder),
 	}).Debug("Successfully read RouterIdentity")
 	return
+}
+
+func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error) {
+	log.Debug("Creating new RouterIdentity")
+
+	// Step 1: Create keyCertificate from the provided certificate.
+	// Assuming NewKeyCertificate is a constructor that takes a Certificate and returns a keyCertificate.
+	keyCert := key_certificate.KeyCertificateFromCertificate(cert)
+
+	// Step 2: Create KeysAndCert instance.
+	keysAndCert, err := NewKeysAndCert(keyCert, publicKey, padding, signingPublicKey)
+	if err != nil {
+		log.WithError(err).Error("NewKeysAndCert failed.")
+	}
+
+	// Step 3: Initialize RouterIdentity with KeysAndCert.
+	routerIdentity := RouterIdentity{
+		KeysAndCert: *keysAndCert,
+	}
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         keyCert.PublicKeyType(),
+		"signing_public_key_type": keyCert.SigningPublicKeyType(),
+		"padding_length":          len(padding),
+	}).Debug("Successfully created RouterIdentity")
+
+	return &routerIdentity, nil
 }

@@ -32,13 +32,13 @@ Accurate for version 0.9.49
 
 Description
 Contains all of the currently authorized Leases for a particular Destination, the
-PublicKey to which garlic messages can be encrypted, and then the SigningPublicKey
+publicKey to which garlic messages can be encrypted, and then the signingPublicKey
 that can be used to revoke this particular version of the structure. The LeaseSet is one
 of the two structures stored in the network database (the other being RouterInfo), and
 is kered under the SHA256 of the contained Destination.
 
 Contents
-Destination, followed by a PublicKey for encryption, then a SigningPublicKey which
+Destination, followed by a publicKey for encryption, then a signingPublicKey which
 can be used to revoke this version of the LeaseSet, then a 1 byte Integer specifying how
 many Lease structures are in the set, followed by the actual Lease structures and
 finally a Signature of the previous bytes signed by the Destination's SigningPrivateKey.
@@ -100,10 +100,10 @@ finally a Signature of the previous bytes signed by the Destination's SigningPri
 destination :: Destination
                length -> >= 387 bytes
 
-encryption_key :: PublicKey
+encryption_key :: publicKey
                   length -> 256 bytes
 
-signing_key :: SigningPublicKey
+signing_key :: signingPublicKey
                length -> 128 bytes or as specified in destination's key certificate
 
 num :: Integer
@@ -157,7 +157,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
 		log.WithFields(logrus.Fields{
-			"at":           "(LeaseSet) PublicKey",
+			"at":           "(LeaseSet) publicKey",
 			"data_len":     remainder_len,
 			"required_len": LEASE_SET_PUBKEY_SIZE,
 			"reason":       "not enough data",
@@ -167,7 +167,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 		return
 	}
 	copy(public_key[:], remainder[:LEASE_SET_PUBKEY_SIZE])
-	log.Debug("Successfully retrieved PublicKey from LeaseSet")
+	log.Debug("Successfully retrieved publicKey from LeaseSet")
 	return
 }
 
@@ -200,11 +200,11 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	}
 	if cert_len == 0 {
 		// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
-		// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
+		// signingPublicKey space as legacy DSA SHA1 signingPublicKey.
 		var dsa_pk crypto.DSAPublicKey
 		copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 		signing_public_key = dsa_pk
-		log.Debug("Retrieved legacy DSA SHA1 SigningPublicKey")
+		log.Debug("Retrieved legacy DSA SHA1 signingPublicKey")
 	} else {
 		// A Certificate is present in this LeaseSet's Destination
 		cert_type := cert.Type()
@@ -216,17 +216,17 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
 			)
 			if err != nil {
-				log.WithError(err).Error("Failed to construct SigningPublicKey from KeyCertificate")
+				log.WithError(err).Error("Failed to construct signingPublicKey from keyCertificate")
 			} else {
-				log.Debug("Retrieved SigningPublicKey from KeyCertificate")
+				log.Debug("Retrieved signingPublicKey from keyCertificate")
 			}
 		} else {
 			// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
-			// SigningPublicKey space as legacy DSA SHA1 SigningPublicKey.
+			// signingPublicKey space as legacy DSA SHA1 signingPublicKey.
 			var dsa_pk crypto.DSAPublicKey
 			copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 			signing_public_key = dsa_pk
-			log.Debug("Retrieved legacy DSA SHA1 SigningPublicKey (Certificate present but not Key Certificate)")
+			log.Debug("Retrieved legacy DSA SHA1 signingPublicKey (Certificate present but not Key Certificate)")
 		}
 	}
 	return
@@ -358,7 +358,7 @@ func (lease_set LeaseSet) Verify() error {
 	//data := lease_set[:data_end]
 	//spk, _ := lease_set.
 	//	Destination().
-	//	SigningPublicKey()
+	//	signingPublicKey()
 	//verifier, err := spk.NewVerifier()
 	//if err != nil {
 	//	return err

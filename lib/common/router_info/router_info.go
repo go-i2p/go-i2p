@@ -2,9 +2,15 @@
 package router_info
 
 import (
+	"encoding/binary"
 	"errors"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
+
+	"github.com/go-i2p/go-i2p/lib/crypto"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -120,7 +126,7 @@ type RouterInfo struct {
 // Bytes returns the RouterInfo as a []byte suitable for writing to a stream.
 func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	log.Debug("Converting RouterInfo to bytes")
-	bytes = append(bytes, router_info.router_identity.KeysAndCert.Bytes()...)
+	bytes = append(bytes, router_info.router_identity.Bytes()...)
 	bytes = append(bytes, router_info.published.Bytes()...)
 	bytes = append(bytes, router_info.size.Bytes()...)
 	for _, router_address := range router_info.addresses {
@@ -133,17 +139,30 @@ func (router_info RouterInfo) Bytes() (bytes []byte, err error) {
 	return bytes, err
 }
 
+// Convert a byte slice into a string like [1, 2, 3] -> "1, 2, 3"
+func bytesToString(bytes []byte) string {
+	str := "["
+	for i, b := range bytes {
+		str += strconv.Itoa(int(b))
+		if i < len(bytes)-1 {
+			str += ", "
+		}
+	}
+	str += "]"
+	return str
+}
+
 func (router_info RouterInfo) String() string {
 	log.Debug("Converting RouterInfo to string")
-	str := "Certificate: " + string(router_info.router_identity.KeysAndCert.Bytes())
-	str += "Published: " + string(router_info.published.Bytes())
-	str += "Addresses:" + string(router_info.size.Bytes())
+	str := "Certificate: " + bytesToString(router_info.router_identity.Bytes()) + "\n"
+	str += "Published: " + bytesToString(router_info.published.Bytes()) + "\n"
+	str += "Addresses:" + bytesToString(router_info.size.Bytes()) + "\n"
 	for index, router_address := range router_info.addresses {
-		str += "Address " + strconv.Itoa(index) + ": " + router_address.String()
+		str += "Address " + strconv.Itoa(index) + ": " + router_address.String() + "\n"
 	}
-	str += "Peer Size: " + string(router_info.peer_size.Bytes())
-	str += "Options: " + string(router_info.options.Data())
-	str += "Signature: " + string([]byte(*router_info.signature))
+	str += "Peer Size: " + bytesToString(router_info.peer_size.Bytes()) + "\n"
+	str += "Options: " + bytesToString(router_info.options.Data()) + "\n"
+	str += "Signature: " + bytesToString([]byte(*router_info.signature)) + "\n"
 	log.WithField("string_length", len(str)).Debug("Converted RouterInfo to string")
 	return str
 }
@@ -156,7 +175,9 @@ func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
 func (router_info *RouterInfo) IdentHash() Hash {
 	log.Debug("Calculating IdentHash for RouterInfo")
-	data, _ := router_info.RouterIdentity().KeyCertificate.Data()
+	// data, _ := router_info.RouterIdentity().keyCertificate.Data()
+	cert := router_info.RouterIdentity().KeysAndCert.Certificate()
+	data := cert.Data()
 	hash := HashData(data)
 	log.WithField("hash", hash).Debug("Calculated IdentHash for RouterInfo")
 	return HashData(data)
@@ -216,7 +237,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": ROUTER_INFO_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read identity")
 		return
 	}
 	info.published, remainder, err = NewDate(remainder)
@@ -227,7 +248,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": DATE_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read publish date")
 	}
 	info.size, remainder, err = NewInteger(remainder, 1)
 	if err != nil {
@@ -248,7 +269,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 				//"required_len": ROUTER_ADDRESS_SIZE,
 				"reason": "not enough data",
 			}).Error("error parsing router address")
-			err = errors.New("error parsing router info: not enough data")
+			err = errors.New("error parsing router info: not enough data to read router addresses")
 		}
 		info.addresses = append(info.addresses, &address)
 	}
@@ -272,7 +293,11 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		}
 		err = errors.New("error parsing router info: " + estring)
 	}
-	info.signature, remainder, err = NewSignature(remainder)
+	sigType, err := certificate.GetSignatureTypeFromCertificate(info.router_identity.Certificate())
+	log.WithFields(logrus.Fields{
+		"sigType": sigType,
+	}).Debug("Got sigType")
+	info.signature, remainder, err = NewSignature(remainder, sigType)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"at":       "(RouterInfo) ReadRouterInfo",
@@ -280,7 +305,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			//"required_len": MAPPING_SIZE,
 			"reason": "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data")
+		err = errors.New("error parsing router info: not enough data to read signature")
 	}
 
 	log.WithFields(logrus.Fields{
@@ -291,6 +316,119 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	}).Debug("Successfully read RouterInfo")
 
 	return
+}
+
+// serializeWithoutSignature serializes the RouterInfo up to (but not including) the signature.
+func (ri *RouterInfo) serializeWithoutSignature() []byte {
+	var bytes []byte
+	// Serialize RouterIdentity
+	bytes = append(bytes, ri.router_identity.Bytes()...)
+
+	// Serialize Published Date
+	bytes = append(bytes, ri.published.Bytes()...)
+
+	// Serialize Size
+	bytes = append(bytes, ri.size.Bytes()...)
+
+	// Serialize Addresses
+	for _, addr := range ri.addresses {
+		bytes = append(bytes, addr.Bytes()...)
+	}
+
+	// Serialize PeerSize (always zero)
+	bytes = append(bytes, ri.peer_size.Bytes()...)
+
+	// Serialize Options
+	bytes = append(bytes, ri.options.Data()...)
+
+	return bytes
+}
+
+func NewRouterInfo(
+	routerIdentity *RouterIdentity,
+	publishedTime time.Time,
+	addresses []*RouterAddress,
+	options map[string]string,
+	signingPrivateKey crypto.SigningPrivateKey,
+	sigType int,
+) (*RouterInfo, error) {
+	log.Debug("Creating new RouterInfo")
+
+	// 1. Create Published Date
+	millis := publishedTime.UnixNano() / int64(time.Millisecond)
+	dateBytes := make([]byte, DATE_SIZE)
+	binary.BigEndian.PutUint64(dateBytes, uint64(millis))
+	publishedDate, _, err := ReadDate(dateBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Published Date")
+		return nil, err
+	}
+
+	// 2. Create Size Integer
+	sizeInt, err := NewIntegerFromInt(len(addresses), 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Size Integer")
+		return nil, err
+	}
+
+	// 3. Create PeerSize Integer (always 0)
+	peerSizeInt, err := NewIntegerFromInt(0, 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create PeerSize Integer")
+		return nil, err
+	}
+
+	// 4. Convert options map to Mapping
+	mapping, err := GoMapToMapping(options)
+	if err != nil {
+		log.WithError(err).Error("Failed to convert options map to Mapping")
+		return nil, err
+	}
+
+	// 5. Assemble RouterInfo without signature
+	routerInfo := &RouterInfo{
+		router_identity: *routerIdentity,
+		published:       &publishedDate,
+		size:            sizeInt,
+		addresses:       addresses,
+		peer_size:       peerSizeInt,
+		options:         mapping,
+		signature:       nil, // To be set after signing
+	}
+
+	// 6. Serialize RouterInfo without signature
+	dataBytes := routerInfo.serializeWithoutSignature()
+
+	// 7. Compute signature over serialized data
+	signer, err := signingPrivateKey.NewSigner()
+	if err != nil {
+		log.WithError(err).Error("Failed to create new signer")
+		return nil, err
+	}
+	signatureBytes, err := signer.Sign(dataBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign")
+	}
+
+	// 8. Create Signature struct from signatureBytes
+	sig, _, err := ReadSignature(signatureBytes, sigType)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Signature from signature bytes")
+		return nil, err
+	}
+
+	// 9. Attach signature to RouterInfo
+	routerInfo.signature = &sig
+
+	log.WithFields(logrus.Fields{
+		"router_identity": routerIdentity,
+		"published":       publishedDate,
+		"address_count":   len(addresses),
+		"options":         options,
+		"signature":       sig,
+	}).Debug("Successfully created RouterInfo")
+
+	return routerInfo, nil
 }
 
 func (router_info *RouterInfo) RouterCapabilities() string {
