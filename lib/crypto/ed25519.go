@@ -243,3 +243,16 @@ func (s *Ed25519Signer) SignHash(h []byte) (sig []byte, err error) {
 	log.WithField("signature_length", len(sig)).Debug("Ed25519 signature created successfully")
 	return
 }
+
+func CreateEd25519PublicKeyFromBytes(data []byte) (Ed25519PublicKey, error) {
+	log.WithField("data_length", len(data)).Debug("Creating Ed25519 public key")
+
+	if len(data) != ed25519.PublicKeySize {
+		log.WithField("data_length", len(data)).Error("Invalid Ed25519 public key size")
+		return nil, ErrInvalidPublicKeySize
+	}
+
+	// Return the Ed25519 public key
+	log.Debug("Ed25519 public key created successfully")
+	return Ed25519PublicKey(data), nil
+}
