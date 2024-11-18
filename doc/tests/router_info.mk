@@ -1,34 +1,52 @@
-test-router-info-all: test-router-info-published test-router-info-addresses test-router-info-identity test-router-info-misc test-router-info-create test-router-info-10k
+test-router-info-all: test-router-info-creation test-router-info-published-date test-router-info-identity test-router-info-addresses test-router-info-serialization test-router-info-signature test-router-info-capabilities test-router-info-version test-router-info-good-version test-router-info-uncongested test-router-info-reachable test-router-info-10k
 
-test-router-info-published:
-	$(GO) test -v ./lib/common/router_info -run TestPublishedReturnsCorrectDate
-	$(GO) test -v ./lib/common/router_info -run TestPublishedReturnsCorrectErrorWithPartialDate
-	$(GO) test -v ./lib/common/router_info -run TestPublishedReturnsCorrectErrorWithInvalidData
+test-router-info-creation:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoCreation
+	$(GO) test -v ./lib/common/router_info -run TestCreateRouterInfo
 
-test-router-info-addresses:
-	$(GO) test -v ./lib/common/router_info -run TestRouterAddressCountReturnsCorrectCount
-	$(GO) test -v ./lib/common/router_info -run TestRouterAddressCountReturnsCorrectErrorWithInvalidData
-	$(GO) test -v ./lib/common/router_info -run TestRouterAddressesReturnsAddresses
-	$(GO) test -v ./lib/common/router_info -run TestRouterAddressesReturnsAddressesWithMultiple
+test-router-info-published-date:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoPublishedDate
 
 test-router-info-identity:
-	$(GO) test -v ./lib/common/router_info -run TestRouterIdentityIsCorrect
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoRouterIdentity
 
-test-router-info-misc:
-	$(GO) test -v ./lib/common/router_info -run TestPeerSizeIsZero
-	$(GO) test -v ./lib/common/router_info -run TestOptionsAreCorrect
-	$(GO) test -v ./lib/common/router_info -run TestSignatureIsCorrectSize
+test-router-info-addresses:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoAddresses
 
-test-router-info-create:
-	$(GO) test -v ./lib/common/router_info -run TestCreateRouterInfo
+test-router-info-serialization:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoSerialization
+
+test-router-info-signature:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoSignature
+
+test-router-info-capabilities:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoCapabilities
+
+test-router-info-version:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoVersion
+
+test-router-info-good-version:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoGoodVersion
+
+test-router-info-uncongested:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoUnCongested
+
+test-router-info-reachable:
+	$(GO) test -v ./lib/common/router_info -run TestRouterInfoReachable
 
 test-router-info-10k:
 	$(GO) test -v ./lib/common/router_info -run Test10K
 
 .PHONY: test-router-info-all \
-        test-router-info-published \
-        test-router-info-addresses \
+        test-router-info-creation \
+        test-router-info-published-date \
         test-router-info-identity \
-        test-router-info-misc \
-        test-router-info-create \
+        test-router-info-addresses \
+        test-router-info-serialization \
+        test-router-info-signature \
+        test-router-info-capabilities \
+        test-router-info-version \
+        test-router-info-good-version \
+        test-router-info-uncongested \
+        test-router-info-reachable \
         test-router-info-10k
