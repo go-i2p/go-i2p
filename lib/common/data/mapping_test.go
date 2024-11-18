@@ -53,7 +53,7 @@ func TestValuesWarnsExtraData(t *testing.T) {
 	assert.Equal(key, "a", "Values() did not return key in valid data")
 	assert.Equal(val, "b", "Values() did not return value in valid data")
 
-	if assert.Equal(2, len(errs), "Values() reported wrong error count when mapping had extra data") {
+	if assert.Equal(1, len(errs), "Values() reported wrong error count when mapping had extra data") {
 		assert.Equal("warning parsing mapping: data exists beyond length of mapping", errs[0].Error(), "correct error message should be returned")
 	}
 }

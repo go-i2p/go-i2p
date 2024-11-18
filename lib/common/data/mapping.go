@@ -210,22 +210,24 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		}).Warn("mapping format violation")
 		e := errors.New("error parsing mapping values")
 		err = append(err, e)
-	} else if len(remainder) > size.Int() { // Handle extra bytes beyond mapping length
+	}
+	if len(remainder) > 0 { // Handle extra bytes beyond mapping length
 		log.WithFields(logrus.Fields{
 			"expected_size": size.Int(),
 			"actual_size":   len(remainder),
-		}).Warn("mapping format violation: data exists beyond length of mapping")
+		}).Error("mapping format violation: data exists beyond length of mapping")
 		e := errors.New("warning parsing mapping: data exists beyond length of mapping")
 		err = append(err, e)
 
 		// Slice the exact mapping bytes
+		/* // Don't attempt recovery, can cause panics
 		map_bytes := remainder[:size.Int()]
 		remainder = remainder[size.Int():]
 
 		vals, _, mappingValueErrs := ReadMappingValues(map_bytes, *size)
 		err = append(err, mappingValueErrs...)
 		mapping.vals = vals
-
+		*/
 		return
 	}
 
