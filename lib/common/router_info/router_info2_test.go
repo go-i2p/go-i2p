@@ -62,8 +62,19 @@ func TestCreateRouterInfo(t *testing.T) {
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
 
-	signingPublicKeyType, _ := data.NewIntegerFromInt(7, 2)
-	cryptoPublicKeyType, _ := data.NewIntegerFromInt(0, 2)
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
+	if err != nil {
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
+	}
+
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	if err != nil {
+		t.Fatalf("Failed to create crypto public key type integer: %v", err)
+	}
+
+	// Directly write the bytes of the Integer instances to the payload
+	payload.Write(*signingPublicKeyType)
+	payload.Write(*cryptoPublicKeyType)
 
 	err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
 	if err != nil {
@@ -80,6 +91,9 @@ func TestCreateRouterInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create new certificate: %v\n", err)
 	}
+
+	certBytes := cert.Bytes()
+	t.Logf("Serialized Certificate Size: %d bytes", len(certBytes))
 
 	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, nil)
