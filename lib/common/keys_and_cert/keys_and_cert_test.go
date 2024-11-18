@@ -1,12 +1,21 @@
 package keys_and_cert
 
 import (
+	"bytes"
+	"crypto/rand"
+	key_certificate2 "github.com/go-i2p/go-i2p/generated/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/crypto"
+	"golang.org/x/crypto/openpgp/elgamal"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-/*func TestCertificateWithMissingData(t *testing.T) {
+/*
+func TestCertificateWithMissingData(t *testing.T) {
 	assert := assert.New(t)
 
 	cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01}
@@ -16,9 +25,92 @@ import (
 	if assert.NotNil(err) {
 		assert.Equal("certificate parsing warning: certificate data is shorter than specified by length", err.Error())
 	}
-}*/
+}
 
-func TestCertificateWithValidData(t *testing.T) {
+*/
+
+// createValidKeyCertificate creates a valid KeyCertificate for testing.
+func createValidKeyAndCert(t *testing.T) *KeysAndCert {
+	// Generate signing key pair (Ed25519)
+	var ed25519_privkey crypto.Ed25519PrivateKey
+	_, err := (&ed25519_privkey).Generate()
+	if err != nil {
+		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
+	}
+	ed25519_pubkey_raw, err := ed25519_privkey.Public()
+	if err != nil {
+		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
+	}
+	ed25519_pubkey, ok := ed25519_pubkey_raw.(crypto.SigningPublicKey)
+	if !ok {
+		t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
+	}
+
+	// Generate encryption key pair (ElGamal)
+	var elgamal_privkey elgamal.PrivateKey
+	err = crypto.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
+	}
+
+	// Convert elgamal public key to crypto.ElgPublicKey
+	var elg_pubkey crypto.ElgPublicKey
+	yBytes := elgamal_privkey.PublicKey.Y.Bytes()
+	if len(yBytes) > 256 {
+		t.Fatalf("ElGamal public key Y too large")
+	}
+	copy(elg_pubkey[256-len(yBytes):], yBytes)
+
+	// Create KeyCertificate specifying key types
+	var payload bytes.Buffer
+	signingPublicKeyType, _ := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
+	cryptoPublicKeyType, _ := data.NewIntegerFromInt(key_certificate2.KEYCERT_CRYPTO_ELG, 2)
+	payload.Write(*signingPublicKeyType)
+	payload.Write(*cryptoPublicKeyType)
+
+	// Create certificate
+	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v\n", err)
+	}
+
+	key_cert := key_certificate.KeyCertificateFromCertificate(*cert)
+
+	// Generate random padding
+	paddingSize := KEYS_AND_CERT_DATA_SIZE - KEYS_AND_CERT_PUBKEY_SIZE - KEYS_AND_CERT_SPK_SIZE
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keysAndCert, err := NewKeysAndCert(key_cert, elg_pubkey, padding, ed25519_pubkey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return keysAndCert
+}
+
+func TestCertificateWithValidDataDeux(t *testing.T) {
+	assert := assert.New(t)
+	keysAndCert := createValidKeyAndCert(t)
+
+	// Serialize KeysAndCert to bytes
+	serialized := keysAndCert.Bytes()
+
+	// Deserialize KeysAndCert from bytes
+	parsedKeysAndCert, remainder, err := ReadKeysAndCert(serialized)
+	assert.Nil(err, "ReadKeysAndCert should not error with valid data")
+	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
+
+	// Compare individual fields
+	assert.Equal(keysAndCert.keyCertificate.Bytes(), parsedKeysAndCert.keyCertificate.Bytes(), "KeyCertificates should match")
+	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
+	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
+	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")
+}
+func TestCertificateWithValidDataManual(t *testing.T) {
 	assert := assert.New(t)
 
 	cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}

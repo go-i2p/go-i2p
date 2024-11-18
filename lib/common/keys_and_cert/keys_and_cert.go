@@ -4,6 +4,7 @@ package keys_and_cert
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 
@@ -122,18 +123,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}).Debug("Reading KeysAndCert from data")
 
 	data_len := len(data)
-	// keys_and_cert = KeysAndCert{}
-	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
-		log.WithFields(logrus.Fields{
-			"at":           "ReadKeysAndCert",
-			"data_len":     data_len,
-			"required_len": KEYS_AND_CERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		keys_and_cert.keyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
-		return
-	} else if data_len < KEYS_AND_CERT_DATA_SIZE {
+	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(logrus.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -143,31 +133,44 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
+
 	keys_and_cert.keyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate")
 		return
 	}
-	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
-	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
-	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
-	keys_and_cert.publicKey, err = keys_and_cert.keyCertificate.ConstructPublicKey(data[:keys_and_cert.keyCertificate.CryptoSize()])
+
+	// Get the actual key sizes from the certificate
+	pubKeySize := keys_and_cert.keyCertificate.CryptoSize()
+	sigKeySize := keys_and_cert.keyCertificate.SignatureSize()
+
+	// Construct public key
+	keys_and_cert.publicKey, err = keys_and_cert.keyCertificate.ConstructPublicKey(data[:pubKeySize])
 	if err != nil {
 		log.WithError(err).Error("Failed to construct publicKey")
 		return
 	}
-	keys_and_cert.signingPublicKey, err = keys_and_cert.keyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.keyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
+
+	// Calculate padding size and extract padding
+	paddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	if paddingSize > 0 {
+		keys_and_cert.Padding = make([]byte, paddingSize)
+		copy(keys_and_cert.Padding, data[pubKeySize:pubKeySize+paddingSize])
+	}
+
+	// Construct signing public key
+	keys_and_cert.signingPublicKey, err = keys_and_cert.keyCertificate.ConstructSigningPublicKey(
+		data[KEYS_AND_CERT_DATA_SIZE-sigKeySize : KEYS_AND_CERT_DATA_SIZE],
+	)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct signingPublicKey")
 		return
 	}
-	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
-	keys_and_cert.Padding = padding
 
 	log.WithFields(logrus.Fields{
 		"public_key_type":         keys_and_cert.keyCertificate.PublicKeyType(),
 		"signing_public_key_type": keys_and_cert.keyCertificate.SigningPublicKeyType(),
-		"padding_length":          len(padding),
+		"padding_length":          len(keys_and_cert.Padding),
 		"remainder_length":        len(remainder),
 	}).Debug("Successfully read KeysAndCert")
 
@@ -184,57 +187,50 @@ func NewKeysAndCert(
 ) (*KeysAndCert, error) {
 	log.Debug("Creating new KeysAndCert with provided parameters")
 
-	// 1. Validate keyCertificate
 	if keyCertificate == nil {
 		log.Error("KeyCertificate is nil")
 		return nil, errors.New("KeyCertificate cannot be nil")
 	}
 
-	// 2. Validate publicKey size
-	if publicKey.Len() != KEYS_AND_CERT_PUBKEY_SIZE {
+	// Get actual key sizes from certificate
+	pubKeySize := keyCertificate.CryptoSize()
+	sigKeySize := keyCertificate.SignatureSize()
+
+	// Validate public key size
+	if publicKey.Len() != pubKeySize {
 		log.WithFields(logrus.Fields{
-			"expected_size": KEYS_AND_CERT_PUBKEY_SIZE,
+			"expected_size": pubKeySize,
 			"actual_size":   publicKey.Len(),
 		}).Error("Invalid publicKey size")
-		return nil, errors.New("publicKey has an invalid size")
+		return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
 	}
 
-	/*
-		// 3. Validate signingPublicKey size
-		if signingPublicKey.Len() != KEYS_AND_CERT_SPK_SIZE {
-			log.WithFields(logrus.Fields{
-				"expected_size": KEYS_AND_CERT_SPK_SIZE,
-				"actual_size":   signingPublicKey.Len(),
-			}).Error("Invalid signingPublicKey size")
-			return nil, errors.New("signingPublicKey has an invalid size")
-		}
+	// Validate signing key size
+	if signingPublicKey.Len() != sigKeySize {
+		log.WithFields(logrus.Fields{
+			"expected_size": sigKeySize,
+			"actual_size":   signingPublicKey.Len(),
+		}).Error("Invalid signingPublicKey size")
+		return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+	}
 
-	*/
-
-	// 4. Validate padding size
-	publicKeyLength := publicKey.Len()
-	signingPublicKeyLength := signingPublicKey.Len()
-	totalKeysSize := publicKeyLength + signingPublicKeyLength
-	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - totalKeysSize
+	// Calculate expected padding size
+	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
 	if len(padding) != expectedPaddingSize {
 		log.WithFields(logrus.Fields{
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
 		}).Warn("Invalid padding size")
-		// generate some random padding and continue
+
+		// Generate random padding if invalid or missing
 		padding = make([]byte, expectedPaddingSize)
-		_, err := rand.Read(padding)
-		if err != nil {
+		if _, err := rand.Read(padding); err != nil {
 			log.WithError(err).Error("Failed to generate random padding")
 			return nil, err
 		}
-		log.WithFields(logrus.Fields{
-			"expected_size": expectedPaddingSize,
-			"actual_size":   len(padding),
-		}).Warn("Generated random padding")
+		log.Debug("Generated random padding")
 	}
 
-	// 5. Assemble KeysAndCert
 	keysAndCert := &KeysAndCert{
 		keyCertificate:   keyCertificate,
 		publicKey:        publicKey,
