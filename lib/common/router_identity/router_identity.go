@@ -3,6 +3,7 @@ package router_identity
 
 import (
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
@@ -76,4 +77,10 @@ func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.Signi
 	}).Debug("Successfully created RouterIdentity")
 
 	return &routerIdentity, nil
+}
+
+func (router_identity *RouterIdentity) AsDestination() destination.Destination {
+	return destination.Destination{
+		KeysAndCert: router_identity.KeysAndCert,
+	}
 }
