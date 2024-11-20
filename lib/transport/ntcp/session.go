@@ -62,7 +62,7 @@ func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("Remote static key error")
 }
 
-func (s *NTCP2Session) peerStaticIV() ([32]byte, error) {
+func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
 	for _, addr := range s.RouterInfo.RouterAddresses() {
 		transportStyle, err := addr.TransportStyle().Data()
 		if err != nil {
@@ -72,7 +72,7 @@ func (s *NTCP2Session) peerStaticIV() ([32]byte, error) {
 			return addr.InitializationVector()
 		}
 	}
-	return [32]byte{}, fmt.Errorf("Remote static IV error")
+	return [16]byte{}, fmt.Errorf("Remote static IV error")
 }
 
 // ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC
@@ -82,6 +82,9 @@ func (s *NTCP2Session) ObfuscateEphemeral(ephemeralKey []byte) ([]byte, error) {
 		return nil, err
 	}
 	staticIV, err := s.peerStaticIV()
+	if err != nil {
+		return nil, err
+	}
 	var AESStaticKey *crypto.AESSymmetricKey
 	AESStaticKey.Key = static[:]
 	AESStaticKey.IV = staticIV[:]

@@ -290,12 +290,12 @@ func (router_address RouterAddress) StaticKey() ([32]byte, error) {
 	return [32]byte(sk), nil
 }
 
-func (router_address RouterAddress) InitializationVector() ([32]byte, error) {
+func (router_address RouterAddress) InitializationVector() ([16]byte, error) {
 	iv := router_address.InitializationVectorString()
-	if len([]byte(iv)) != 32 {
-		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	if len([]byte(iv)) != 16 {
+		return [16]byte{}, fmt.Errorf("error: invalid IV")
 	}
-	return [32]byte(iv), nil
+	return [16]byte(iv), nil
 }
 
 func (router_address RouterAddress) ProtocolVersion() (string, error) {
