@@ -1,12 +1,12 @@
 package ntcp
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
+	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 )
 
 /*
@@ -62,40 +62,41 @@ func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("Remote static key error")
 }
 
+func (s *NTCP2Session) peerStaticIV() ([32]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NTCP_PROTOCOL_NAME {
+			return addr.InitializationVector()
+		}
+	}
+	return [32]byte{}, fmt.Errorf("Remote static IV error")
+}
+
 // ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC
-func (s *NTCP2Session) ObfuscateEphemeral(key []byte) ([]byte, error) {
+func (s *NTCP2Session) ObfuscateEphemeral(ephemeralKey []byte) ([]byte, error) {
 	static, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(static[:])
-	if err != nil {
-		return nil, err
-	}
-
-	obfuscated := make([]byte, len(key))
-	iv := make([]byte, aes.BlockSize)
-	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(obfuscated, key)
-
-	return obfuscated, nil
+	staticIV, err := s.peerStaticIV()
+	var AESStaticKey *crypto.AESSymmetricKey
+	AESStaticKey.Key = static[:]
+	AESStaticKey.IV = staticIV[:]
+	return obfs.ObfuscateEphemeralKey(ephemeralKey, AESStaticKey)
 }
 
 // DeobfuscateEphemeral reverses the key obfuscation
-func (s *NTCP2Session) DeobfuscateEphemeral(obfuscated []byte) ([]byte, error) {
+func (s *NTCP2Session) DeobfuscateEphemeral(obfuscatedEphemeralKey []byte) ([]byte, error) {
 	static, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(static[:])
-	if err != nil {
-		return nil, err
-	}
-
-	key := make([]byte, len(obfuscated))
-	iv := make([]byte, aes.BlockSize)
-	mode := cipher.NewCBCDecrypter(block, iv)
-	mode.CryptBlocks(key, obfuscated)
-
-	return key, nil
+	staticIV, err := s.peerStaticIV()
+	var AESStaticKey *crypto.AESSymmetricKey
+	AESStaticKey.Key = static[:]
+	AESStaticKey.IV = staticIV[:]
+	return obfs.ObfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
 }
