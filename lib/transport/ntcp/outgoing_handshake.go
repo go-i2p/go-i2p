@@ -40,7 +40,7 @@ func (c *NTCP2Session) ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte
 	copy(negData[6:], eph)
 
 	config := noise.Config{
-		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashSHA256),
+		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     true,
 		StaticKeypair: s,

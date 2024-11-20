@@ -24,7 +24,7 @@ func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState
 	}
 
 	config := noise.Config{
-		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashSHA256),
+		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       hs.pattern,
 		Initiator:     isInitiator,
 		StaticKeypair: staticKey,
