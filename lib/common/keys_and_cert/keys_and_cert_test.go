@@ -3,7 +3,6 @@ package keys_and_cert
 import (
 	"bytes"
 	"crypto/rand"
-	key_certificate2 "github.com/go-i2p/go-i2p/generated/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
@@ -64,7 +63,7 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
 	signingPublicKeyType, _ := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
-	cryptoPublicKeyType, _ := data.NewIntegerFromInt(key_certificate2.KEYCERT_CRYPTO_ELG, 2)
+	cryptoPublicKeyType, _ := data.NewIntegerFromInt(key_certificate.KEYCERT_CRYPTO_ELG, 2)
 	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
 
