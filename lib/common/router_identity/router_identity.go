@@ -6,7 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
 

@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 
 	"github.com/flynn/noise"
 )

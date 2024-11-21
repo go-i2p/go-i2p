@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/flynn/noise"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 )
 
 var log = logger.GetGoI2PLogger()
