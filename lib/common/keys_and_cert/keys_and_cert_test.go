@@ -73,17 +73,18 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 		t.Fatalf("Failed to create certificate: %v\n", err)
 	}
 
-	key_cert := key_certificate.KeyCertificateFromCertificate(*cert)
-
+	keyCert := key_certificate.KeyCertificateFromCertificate(*cert)
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
 	// Generate random padding
-	paddingSize := KEYS_AND_CERT_DATA_SIZE - KEYS_AND_CERT_PUBKEY_SIZE - KEYS_AND_CERT_SPK_SIZE
 	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	keysAndCert, err := NewKeysAndCert(key_cert, elg_pubkey, padding, ed25519_pubkey)
+	keysAndCert, err := NewKeysAndCert(keyCert, elg_pubkey, padding, ed25519_pubkey)
 	if err != nil {
 		t.Fatal(err)
 	}

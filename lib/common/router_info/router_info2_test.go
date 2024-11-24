@@ -100,8 +100,8 @@ func TestCreateRouterInfo(t *testing.T) {
 	keyCert := key_certificate.KeyCertificateFromCertificate(*cert)
 	pubKeySize := keyCert.CryptoSize()
 	sigKeySize := keyCert.SignatureSize()
-	expectedPaddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
-	padding := make([]byte, expectedPaddingSize)
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
 	if err != nil {
 		t.Fatalf("Failed to generate random padding: %v\n", err)
