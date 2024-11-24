@@ -176,6 +176,74 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	return
 }
 
+func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"input_length": len(data),
+	}).Debug("Reading KeysAndCert from data")
+
+	// Constants based on fixed key sizes
+	const (
+		pubKeySize    = 256                                    // ElGamal public key size
+		sigKeySize    = 32                                     // Ed25519 public key size
+		totalKeySize  = 384                                    // KEYS_AND_CERT_DATA_SIZE
+		paddingSize   = totalKeySize - pubKeySize - sigKeySize // 96 bytes
+		minDataLength = totalKeySize + 3
+	)
+
+	dataLen := len(data)
+	if dataLen < minDataLength {
+		err = fmt.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
+		log.WithError(err).Error("Data is smaller than minimum valid size")
+		return
+	}
+
+	// Initialize KeysAndCert
+	keysAndCert = &KeysAndCert{}
+
+	// Extract public key
+	publicKeyData := data[:pubKeySize]
+	if len(publicKeyData) != pubKeySize {
+		err = errors.New("invalid ElGamal public key length")
+		log.WithError(err).Error("Invalid ElGamal public key length")
+		return
+	}
+	var elgPublicKey crypto.ElgPublicKey
+	copy(elgPublicKey[:], publicKeyData)
+	keysAndCert.publicKey = elgPublicKey
+
+	// Extract padding
+	paddingStart := pubKeySize
+	paddingEnd := paddingStart + paddingSize
+	keysAndCert.Padding = data[paddingStart:paddingEnd]
+
+	// Extract signing public key
+	signingPubKeyData := data[paddingEnd : paddingEnd+sigKeySize]
+	if len(signingPubKeyData) != sigKeySize {
+		err = errors.New("invalid Ed25519 public key length")
+		log.WithError(err).Error("Invalid Ed25519 public key length")
+		return
+	}
+	edPublicKey := crypto.Ed25519PublicKey(signingPubKeyData)
+	keysAndCert.signingPublicKey = edPublicKey
+
+	// Extract the certificate
+	certData := data[totalKeySize:]
+	keysAndCert.keyCertificate, remainder, err = NewKeyCertificate(certData)
+	if err != nil {
+		log.WithError(err).Error("Failed to read keyCertificate")
+		return
+	}
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         "ElGamal",
+		"signing_public_key_type": "Ed25519",
+		"padding_length":          len(keysAndCert.Padding),
+		"remainder_length":        len(remainder),
+	}).Debug("Successfully read KeysAndCert")
+
+	return
+}
+
 // NewKeysAndCert creates a new KeysAndCert instance with the provided parameters.
 // It validates the sizes of the provided keys and padding before assembling the struct.
 func NewKeysAndCert(

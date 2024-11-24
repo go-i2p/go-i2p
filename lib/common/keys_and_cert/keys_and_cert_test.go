@@ -84,15 +84,20 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 		t.Fatal(err)
 	}
 
+	t.Logf("pubkey len: %v\n", ed25519_pubkey.Len())
+	t.Logf("pubkey bytes: %v\n", ed25519_pubkey.Bytes())
+
 	keysAndCert, err := NewKeysAndCert(keyCert, elg_pubkey, padding, ed25519_pubkey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	t.Logf("pubkey bytes after NewKeysAndCert: %v\n", keysAndCert.signingPublicKey.Bytes())
+
 	return keysAndCert
 }
 
-func TestCertificateWithValidDataDeux(t *testing.T) {
+func TestCertificateWithValidDataElgAndEd25519(t *testing.T) {
 	assert := assert.New(t)
 	keysAndCert := createValidKeyAndCert(t)
 
@@ -100,7 +105,7 @@ func TestCertificateWithValidDataDeux(t *testing.T) {
 	serialized := keysAndCert.Bytes()
 
 	// Deserialize KeysAndCert from bytes
-	parsedKeysAndCert, remainder, err := ReadKeysAndCert(serialized)
+	parsedKeysAndCert, remainder, err := ReadKeysAndCertElgAndEd25519(serialized)
 	assert.Nil(err, "ReadKeysAndCert should not error with valid data")
 	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
 
