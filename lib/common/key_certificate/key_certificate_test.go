@@ -20,12 +20,14 @@ func TestSingingPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x01, 0x00})
-	sk_type := key_cert.SigningPublicKeyType()
 
-	assert.Equal(sk_type, 0, "SigningPublicKeyType() did not return correct typec")
+	assert.NotNil(err, "Expected error when data is too small")
+	assert.Equal("key certificate payload too short", err.Error(), "Correct error message should be returned")
+	assert.Nil(key_cert, "key_cert should be nil when an error occurs")
 
-	if assert.NotNil(err) {
-		assert.Equal("error parsing key certificate: not enough data", err.Error(), "correct error message should be returned")
+	if key_cert != nil {
+		sk_type := key_cert.SigningPublicKeyType()
+		assert.Equal(sk_type, 0, "SigningPublicKeyType() did not return correct type")
 	}
 }
 
@@ -43,12 +45,15 @@ func TestPublicKeyTypeReportsWhenDataTooSmall(t *testing.T) {
 	assert := assert.New(t)
 
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02, 0x00, 0x00})
-	pk_type := key_cert.PublicKeyType()
 
-	if assert.NotNil(err) {
-		assert.Equal("error parsing key certificate: not enough data", err.Error(), "correct error message should be returned")
+	assert.NotNil(err, "Expected error when data is too small")
+	assert.Equal("key certificate payload too short", err.Error(), "Correct error message should be returned")
+	assert.Nil(key_cert, "key_cert should be nil when an error occurs")
+
+	if key_cert != nil {
+		pk_type := key_cert.PublicKeyType()
+		assert.Equal(pk_type, 0, "PublicKeyType() did not return correct type")
 	}
-	assert.Equal(pk_type, 0, "PublicKeyType() did not return correct typec")
 }
 
 func TestConstructPublicKeyReportsWhenDataTooSmall(t *testing.T) {
