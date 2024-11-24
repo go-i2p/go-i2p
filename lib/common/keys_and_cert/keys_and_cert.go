@@ -2,6 +2,7 @@
 package keys_and_cert
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -22,6 +23,8 @@ const (
 	KEYS_AND_CERT_MIN_SIZE    = 387
 	KEYS_AND_CERT_DATA_SIZE   = 384
 )
+
+// Key sizes in bytes
 
 /*
 [KeysAndCert]
@@ -244,6 +247,205 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	return
 }
 
+func ReadKeysAndCertDeux(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"input_length": len(data),
+	}).Debug("Reading KeysAndCert from data")
+
+	dataLen := len(data)
+	if dataLen < CERT_MIN_SIZE {
+		err = errors.New("data is too short to contain a certificate")
+		log.WithError(err).Error("Data is too short to contain a certificate")
+		return
+	}
+
+	// Read the certificate from the end
+	cert, certStartIndex, err := readCertificateFromEnd(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read Certificate")
+		return
+	}
+
+	log.WithFields(logrus.Fields{
+		"cert_type": cert.Type(),
+	}).Debug("Certificate type read")
+
+	// Check if the certificate is of type CERT_KEY
+	if cert.Type() != CERT_KEY {
+		err = fmt.Errorf("unsupported certificate type: %d", cert.Type())
+		log.WithError(err).Error("Unsupported certificate type")
+		return
+	}
+
+	// Parse the Key Certificate from the certificate payload
+	keyCert, err := NewKeyCertificateFromCertificate(cert)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse KeyCertificate")
+		return
+	}
+
+	// Get key sizes
+	pubKeySize, err := keyCert.CryptoPublicKeySize()
+	if err != nil {
+		log.WithError(err).Error("Failed to get crypto public key size")
+		return
+	}
+	sigKeySize, err := keyCert.SigningPublicKeySize()
+	if err != nil {
+		log.WithError(err).Error("Failed to get signing public key size")
+		return
+	}
+
+	// Calculate positions
+	signingKeyEndIndex := certStartIndex
+	signingKeyStartIndex := signingKeyEndIndex - sigKeySize
+	paddingEndIndex := signingKeyStartIndex
+	paddingStartIndex := pubKeySize
+	paddingSize := paddingEndIndex - paddingStartIndex
+
+	// Validate positions
+	if signingKeyStartIndex < 0 || paddingStartIndex < 0 || paddingSize < 0 {
+		err = errors.New("error parsing KeysAndCert: invalid key sizes or data too short")
+		log.WithError(err).Error("Invalid key sizes or data too short")
+		return
+	}
+
+	keysAndCert = &KeysAndCert{
+		keyCertificate: keyCert,
+	}
+
+	// Extract public key
+	publicKeyData := data[:pubKeySize]
+	keysAndCert.publicKey, err = constructPublicKey(publicKeyData, uint16(keyCert.CpkType.Int()))
+	if err != nil {
+		log.WithError(err).Error("Failed to construct public key")
+		return
+	}
+
+	// Extract padding
+	if paddingSize > 0 {
+		keysAndCert.Padding = data[paddingStartIndex:paddingEndIndex]
+	} else {
+		keysAndCert.Padding = []byte{}
+	}
+
+	// Extract signing public key
+	signingPubKeyData := data[signingKeyStartIndex:signingKeyEndIndex]
+	keysAndCert.signingPublicKey, err = constructSigningPublicKey(signingPubKeyData, uint16(keyCert.SpkType.Int()))
+	if err != nil {
+		log.WithError(err).Error("Failed to construct signing public key")
+		return
+	}
+
+	// Set remainder to any data before the KeysAndCert
+	totalCertLen := 1 + 2 + cert.Length() // type (1 byte) + length (2 bytes) + payload
+
+	/*
+		Set remainder to any data after the KeysAndCert
+		Since certStartIndex is the index where the certificate starts,
+		certStartIndex + totalCertLen should equal dataLen if there's no extra data.
+		If there's extra data after the certificate, remainder will contain it.
+	*/
+	remainderIndex := certStartIndex + totalCertLen
+	if remainderIndex < dataLen {
+		remainder = data[remainderIndex:]
+	} else {
+		remainder = []byte{}
+	}
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         keyCert.CpkType,
+		"signing_public_key_type": keyCert.SpkType,
+		"padding_length":          len(keysAndCert.Padding),
+		"remainder_length":        len(remainder),
+	}).Debug("Successfully read KeysAndCert")
+
+	return
+}
+
+func readCertificateFromEnd(data []byte) (cert Certificate, certStartIndex int, err error) {
+	dataLen := len(data)
+
+	// Minimum certificate size is 3 bytes (type + length)
+	if dataLen < CERT_MIN_SIZE {
+		err = errors.New("data is too short to contain a certificate")
+		return
+	}
+
+	// Start from the end and work backwards
+	for certLen := 0; certLen <= dataLen-CERT_MIN_SIZE; certLen++ {
+		totalCertLen := 1 + 2 + certLen
+		certStartIndex = dataLen - totalCertLen
+		if certStartIndex < 0 {
+			continue
+		}
+
+		certTypeIndex := certStartIndex
+		certLenBytesIndex := certStartIndex + 1
+
+		// Ensure we have enough data to read type and length
+		if certLenBytesIndex+2 > dataLen {
+			continue
+		}
+
+		// Extract certificate type
+		certType := data[certTypeIndex]
+
+		// Extract certificate length
+		certLenBytes := data[certLenBytesIndex : certLenBytesIndex+2]
+		expectedCertLen := int(binary.BigEndian.Uint16(certLenBytes))
+
+		if expectedCertLen != certLen {
+			continue
+		}
+
+		// Optionally, check for valid certificate types
+		if certType != CERT_KEY && certType != CERT_NULL && certType != CERT_HASHCASH &&
+			certType != CERT_HIDDEN && certType != CERT_SIGNED && certType != CERT_MULTIPLE {
+			continue
+		}
+
+		certData := data[certStartIndex:dataLen]
+
+		// Attempt to read the certificate
+		cert, _, err = ReadCertificate(certData)
+		if err == nil {
+			// Successfully read certificate
+			return
+		}
+	}
+
+	err = errors.New("could not find certificate in data")
+	return
+}
+func constructPublicKey(data []byte, cryptoType uint16) (crypto.PublicKey, error) {
+	switch cryptoType {
+	case CRYPTO_KEY_TYPE_ELGAMAL:
+		if len(data) != 256 {
+			return nil, errors.New("invalid ElGamal public key length")
+		}
+		var elgPublicKey crypto.ElgPublicKey
+		copy(elgPublicKey[:], data)
+		return elgPublicKey, nil
+	// Handle other crypto types...
+	default:
+		return nil, fmt.Errorf("unsupported crypto key type: %d", cryptoType)
+	}
+}
+
+func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPublicKey, error) {
+	switch sigType {
+	case SIGNATURE_TYPE_ED25519_SHA512:
+		if len(data) != 32 {
+			return nil, errors.New("invalid Ed25519 public key length")
+		}
+		return crypto.Ed25519PublicKey(data), nil
+	// Handle other signature types...
+	default:
+		return nil, fmt.Errorf("unsupported signature key type: %d", sigType)
+	}
+}
+
 // NewKeysAndCert creates a new KeysAndCert instance with the provided parameters.
 // It validates the sizes of the provided keys and padding before assembling the struct.
 func NewKeysAndCert(
@@ -288,17 +490,7 @@ func NewKeysAndCert(
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
 		}).Error("Invalid padding size")
-		return nil, fmt.Errorf("Invalid padding size")
-		/*
-			// Generate random padding if invalid or missing
-			padding = make([]byte, expectedPaddingSize)
-			if _, err := rand.Read(padding); err != nil {
-				log.WithError(err).Error("Failed to generate random padding")
-				return nil, err
-			}
-			log.Debug("Generated random padding")
-
-		*/
+		return nil, fmt.Errorf("invalid padding size")
 	}
 
 	keysAndCert := &KeysAndCert{

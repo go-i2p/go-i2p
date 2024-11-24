@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-
 	"github.com/sirupsen/logrus"
 
 	// log "github.com/sirupsen/logrus"

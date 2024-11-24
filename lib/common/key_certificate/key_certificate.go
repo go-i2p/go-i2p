@@ -29,6 +29,7 @@ payload :: data
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -97,8 +98,8 @@ const (
 // type KeyCertificate []byte
 type KeyCertificate struct {
 	Certificate
-	spkType Integer
-	cpkType Integer
+	SpkType Integer
+	CpkType Integer
 }
 
 // Data returns the raw []byte contained in the Certificate.
@@ -112,20 +113,20 @@ func (key_certificate KeyCertificate) Data() ([]byte, error) {
 
 // SigningPublicKeyType returns the signingPublicKey type as a Go integer.
 func (key_certificate KeyCertificate) SigningPublicKeyType() (signing_pubkey_type int) {
-	signing_pubkey_type = key_certificate.spkType.Int()
+	signing_pubkey_type = key_certificate.SpkType.Int()
 	log.WithFields(logrus.Fields{
 		"signing_pubkey_type": signing_pubkey_type,
 	}).Debug("Retrieved signingPublicKey type")
-	return key_certificate.spkType.Int()
+	return key_certificate.SpkType.Int()
 }
 
 // PublicKeyType returns the publicKey type as a Go integer.
 func (key_certificate KeyCertificate) PublicKeyType() (pubkey_type int) {
-	pubkey_type = key_certificate.cpkType.Int()
+	pubkey_type = key_certificate.CpkType.Int()
 	log.WithFields(logrus.Fields{
 		"pubkey_type": pubkey_type,
 	}).Debug("Retrieved publicKey type")
-	return key_certificate.cpkType.Int()
+	return key_certificate.CpkType.Int()
 }
 
 // ConstructPublicKey returns a publicKey constructed using any excess data that may be stored in the KeyCertififcate.
@@ -167,6 +168,40 @@ func (key_certificate KeyCertificate) ConstructPublicKey(data []byte) (public_ke
 	}
 
 	return
+}
+
+const (
+	CRYPTO_KEY_TYPE_ELGAMAL = 0 // ElGamal
+
+	// Signature Types
+	SIGNATURE_TYPE_DSA_SHA1       = 0 // DSA-SHA1
+	SIGNATURE_TYPE_ED25519_SHA512 = 7 // Ed25519
+)
+
+var CryptoPublicKeySizes = map[uint16]int{
+	CRYPTO_KEY_TYPE_ELGAMAL: 256,
+}
+
+var SignaturePublicKeySizes = map[uint16]int{
+	SIGNATURE_TYPE_DSA_SHA1:       128,
+	SIGNATURE_TYPE_ED25519_SHA512: 32,
+	// Add other signature types and their sizes as needed
+}
+
+func (kc *KeyCertificate) CryptoPublicKeySize() (int, error) {
+	size, exists := CryptoPublicKeySizes[uint16(kc.CpkType.Int())]
+	if !exists {
+		return 0, fmt.Errorf("unknown crypto key type: %d", kc.CpkType.Int())
+	}
+	return size, nil
+}
+
+func (kc *KeyCertificate) SigningPublicKeySize() (int, error) {
+	size, exists := SignaturePublicKeySizes[uint16(kc.SpkType.Int())]
+	if !exists {
+		return 0, fmt.Errorf("unknown signature key type: %d", kc.SpkType.Int())
+	}
+	return size, nil
 }
 
 // ConstructSigningPublicKey returns a SingingPublicKey constructed using any excess data that may be stored in the KeyCertificate.
@@ -298,45 +333,35 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 		"input_length": len(bytes),
 	}).Debug("Creating new keyCertificate")
 
-	if len(bytes) < KEYCERT_MIN_SIZE {
-		log.WithFields(logrus.Fields{
-			"at":           "NewKeyCertificate",
-			"data_len":     len(bytes),
-			"required_len": KEYCERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing key certificate")
-		err = errors.New("error parsing key certificate: not enough data")
-		// Initialize an empty key certificate with zero values
-		key_certificate = &KeyCertificate{
-			spkType: Integer{0},
-			cpkType: Integer{0},
-		}
-		return
-	}
-
 	var certificate Certificate
 	certificate, remainder, err = ReadCertificate(bytes)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Certificate")
 		return
 	}
+
+	payload := certificate.Data()
+	if len(payload) < 4 {
+		err = errors.New("key certificate payload too short")
+		log.WithError(err).Error("Failed to parse KeyCertificate")
+		return
+	}
+
+	spkTypeBytes := payload[0:2]
+	cpkTypeBytes := payload[2:4]
+
+	spkType := Integer(spkTypeBytes)
+	cpkType := Integer(cpkTypeBytes)
+
 	key_certificate = &KeyCertificate{
 		Certificate: certificate,
-	}
-	if len(bytes) >= 5 {
-		key_certificate.spkType = Integer(bytes[4:5])
-	} else {
-		key_certificate.spkType = Integer{0}
-	}
-	if len(bytes) >= 7 {
-		key_certificate.cpkType = Integer(bytes[6:7])
-	} else {
-		key_certificate.cpkType = Integer{0}
+		SpkType:     spkType,
+		CpkType:     cpkType,
 	}
 
 	log.WithFields(logrus.Fields{
-		"spk_type":         key_certificate.spkType.Int(),
-		"cpk_type":         key_certificate.cpkType.Int(),
+		"spk_type":         key_certificate.SpkType.Int(),
+		"cpk_type":         key_certificate.CpkType.Int(),
 		"remainder_length": len(remainder),
 	}).Debug("Successfully created new keyCertificate")
 
@@ -346,12 +371,29 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 // KeyCertificateFromCertificate returns a *KeyCertificate from a *Certificate.
 func KeyCertificateFromCertificate(certificate Certificate) *KeyCertificate {
 	log.Debug("Creating keyCertificate from Certificate")
-	// k, _, _ := NewKeyCertificate(certificate.RawBytes())
-	k, _, err := NewKeyCertificate(certificate.RawBytes())
+	k, _, err := NewKeyCertificate(certificate.Bytes())
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate from Certificate")
 	} else {
 		log.Debug("Successfully created keyCertificate from Certificate")
 	}
 	return k
+}
+func NewKeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
+	payload := cert.Data()
+	if len(payload) < 4 {
+		return nil, errors.New("key certificate payload too short")
+	}
+	sigTypeBytes := payload[0:2]
+	cryptoTypeBytes := payload[2:4]
+
+	// Convert bytes to data.Integer
+	sigType := Integer(sigTypeBytes)
+	cryptoType := Integer(cryptoTypeBytes)
+
+	return &KeyCertificate{
+		Certificate: cert,
+		SpkType:     sigType,
+		CpkType:     cryptoType,
+	}, nil
 }
