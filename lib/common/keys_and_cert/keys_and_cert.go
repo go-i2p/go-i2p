@@ -2,7 +2,6 @@
 package keys_and_cert
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
 
@@ -220,15 +219,18 @@ func NewKeysAndCert(
 		log.WithFields(logrus.Fields{
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
-		}).Warn("Invalid padding size")
+		}).Error("Invalid padding size")
+		return nil, fmt.Errorf("Invalid padding size")
+		/*
+			// Generate random padding if invalid or missing
+			padding = make([]byte, expectedPaddingSize)
+			if _, err := rand.Read(padding); err != nil {
+				log.WithError(err).Error("Failed to generate random padding")
+				return nil, err
+			}
+			log.Debug("Generated random padding")
 
-		// Generate random padding if invalid or missing
-		padding = make([]byte, expectedPaddingSize)
-		if _, err := rand.Read(padding); err != nil {
-			log.WithError(err).Error("Failed to generate random padding")
-			return nil, err
-		}
-		log.Debug("Generated random padding")
+		*/
 	}
 
 	keysAndCert := &KeysAndCert{

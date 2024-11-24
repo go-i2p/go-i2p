@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"testing"
 	"time"
 
@@ -95,8 +97,17 @@ func TestCreateRouterInfo(t *testing.T) {
 	certBytes := cert.Bytes()
 	t.Logf("Serialized Certificate Size: %d bytes", len(certBytes))
 
+	keyCert := key_certificate.KeyCertificateFromCertificate(*cert)
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	expectedPaddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	padding := make([]byte, expectedPaddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		t.Fatalf("Failed to generate random padding: %v\n", err)
+	}
 	// Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, nil)
+	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, padding)
 	if err != nil {
 		t.Fatalf("Failed to create router identity: %v\n", err)
 	}
