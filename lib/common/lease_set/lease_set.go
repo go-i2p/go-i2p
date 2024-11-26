@@ -4,6 +4,7 @@ package lease_set
 import (
 	"errors"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -14,7 +15,6 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	. "github.com/go-i2p/go-i2p/lib/common/lease"
-	. "github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
@@ -213,7 +213,11 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 			// This LeaseSet's Destination's Certificate is a Key Certificate,
 			// create the signing publickey key using any data that might be
 			// contained in the key certificate.
-			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
+			keyCert, err := KeyCertificateFromCertificate(cert)
+			if err != nil {
+				log.WithError(err).Error("Failed to create keyCert")
+			}
+			signing_public_key, err = keyCert.ConstructSigningPublicKey(
 				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
 			)
 			if err != nil {
@@ -307,7 +311,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 
 // Signature returns the signature as Signature.
 // returns errors encountered during parsing.
-func (lease_set LeaseSet) Signature() (signature Signature, err error) {
+func (lease_set LeaseSet) Signature() (signature signature.Signature, err error) {
 	log.Debug("Retrieving Signature from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -328,7 +332,11 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	cert_type := cert.Type()
 	var end int
 	if cert_type == CERT_KEY {
-		end = start + KeyCertificateFromCertificate(cert).SignatureSize()
+		keyCert, err := KeyCertificateFromCertificate(cert)
+		if err != nil {
+			log.WithError(err).Error("Failed to create keyCert")
+		}
+		end = start + keyCert.SignatureSize()
 	} else {
 		end = start + LEASE_SET_SIG_SIZE
 	}
@@ -432,7 +440,11 @@ func NewLeaseSet(
 	cert := destination.Certificate()
 	if cert.Type() == CERT_KEY {
 		// Get expected size from key certificate
-		expectedSize := KeyCertificateFromCertificate(cert).SignatureSize()
+		keyCert, err := KeyCertificateFromCertificate(cert)
+		if err != nil {
+			log.WithError(err).Error("Failed to create keyCert")
+		}
+		expectedSize := keyCert.SignatureSize()
 		if len(signingKey.Bytes()) != expectedSize {
 			return nil, fmt.Errorf("invalid signing key size: got %d, expected %d",
 				len(signingKey.Bytes()), expectedSize)

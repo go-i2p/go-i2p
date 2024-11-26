@@ -73,7 +73,10 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 		t.Fatalf("Failed to create certificate: %v\n", err)
 	}
 
-	keyCert := key_certificate.KeyCertificateFromCertificate(*cert)
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		t.Fatalf("KeyCertificateFromCertificate failed: %v\n", err)
+	}
 	pubKeySize := keyCert.CryptoSize()
 	sigKeySize := keyCert.SignatureSize()
 	paddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize

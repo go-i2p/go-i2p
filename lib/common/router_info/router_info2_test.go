@@ -97,7 +97,10 @@ func TestCreateRouterInfo(t *testing.T) {
 	certBytes := cert.Bytes()
 	t.Logf("Serialized Certificate Size: %d bytes", len(certBytes))
 
-	keyCert := key_certificate.KeyCertificateFromCertificate(*cert)
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		log.Fatalf("KeyCertificateFromCertificate failed: %v\n", err)
+	}
 	pubKeySize := keyCert.CryptoSize()
 	sigKeySize := keyCert.SignatureSize()
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize

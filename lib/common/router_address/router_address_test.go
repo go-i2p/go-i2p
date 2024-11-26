@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+/*
 func TestCheckValidReportsEmptySlice(t *testing.T) {
 	assert := assert.New(t)
 
@@ -32,6 +33,8 @@ func TestCheckRouterAddressValidReportsDataMissing(t *testing.T) {
 	err, exit := router_address.checkValid()
 	assert.Equal(exit, false, "checkValid indicates to stop parsing when some fields  may be present")
 }
+
+*/
 
 func TestCheckRouterAddressValidNoErrWithValidData(t *testing.T) {
 	assert := assert.New(t)

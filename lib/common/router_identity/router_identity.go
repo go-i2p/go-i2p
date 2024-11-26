@@ -57,12 +57,17 @@ func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.Signi
 
 	// Step 1: Create keyCertificate from the provided certificate.
 	// Assuming NewKeyCertificate is a constructor that takes a Certificate and returns a keyCertificate.
-	keyCert := key_certificate.KeyCertificateFromCertificate(cert)
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
+	if err != nil {
+		log.WithError(err).Error("KeyCertificateFromCertificate failed.")
+		return nil, err
+	}
 
 	// Step 2: Create KeysAndCert instance.
 	keysAndCert, err := NewKeysAndCert(keyCert, publicKey, padding, signingPublicKey)
 	if err != nil {
 		log.WithError(err).Error("NewKeysAndCert failed.")
+		return nil, err
 	}
 
 	// Step 3: Initialize RouterIdentity with KeysAndCert.
