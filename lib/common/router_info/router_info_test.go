@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
@@ -58,18 +59,15 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 	}
 	copy(elgPubKey[256-len(yBytes):], yBytes)
 
-	// Ensure ElGamal Public Key implements crypto.PublicKey interface
-	var _ crypto.PublicKey = elgPubKey
-
 	// Step 3: Create KeyCertificate specifying key types
 	var payload bytes.Buffer
 
-	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
+	signingPublicKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create signing public key type integer: %v", err)
 	}
 
-	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_CRYPTO_ELG, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create crypto public key type integer: %v", err)
 	}
@@ -84,15 +82,38 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 		return nil, fmt.Errorf("failed to create new certificate: %v", err)
 	}
 
-	// Step 4: Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, *cert, nil)
+	// Get KeyCertificate from Certificate
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KeyCertificate: %v", err)
+	}
+
+	// Calculate padding size
+	pubKeySize := keyCert.CryptoSize()    // 256 bytes for ElGamal
+	sigKeySize := keyCert.SignatureSize() // 32 bytes for Ed25519
+	const KEYS_AND_CERT_DATA_SIZE = 387   // Fixed size for KeysAndCert data
+
+	paddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	if paddingSize < 0 {
+		return nil, fmt.Errorf("invalid padding size calculated: %d", paddingSize)
+	}
+
+	// Generate random padding
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate random padding: %v", err)
+	}
+
+	// Step 4: Create RouterIdentity with calculated padding
+	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, *cert, padding)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RouterIdentity: %v", err)
 	}
 
 	// Step 5: Create RouterAddress
 	options := map[string]string{}
-	routerAddress, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", options)
+	routerAddress, err := router_address.NewRouterAddress(3, time.Now(), "NTCP2", options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RouterAddress: %v", err)
 	}
