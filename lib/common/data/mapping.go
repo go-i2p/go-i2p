@@ -173,6 +173,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 		log.WithError(e).Error("Failed to read Mapping size")
 		err = append(err, e)
 	}
+	mapping.size = size
 	if size.Int() == 0 {
 		log.Warn("Mapping size is zero")
 		return
