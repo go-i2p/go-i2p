@@ -114,18 +114,18 @@ func NewLease(tunnelGateway Hash, tunnelID uint32, expirationTime time.Time) (*L
 	var lease Lease
 
 	// Gateway hash
-	copy(lease[:LEASE_HASH_SIZE], tunnelGateway[:])
+	copy(lease[:LEASE_TUNNEL_GW_SIZE], tunnelGateway[:])
 
 	// Convert and copy tunnel ID
 	tunnelIDBytes := make([]byte, LEASE_TUNNEL_ID_SIZE)
 	binary.BigEndian.PutUint32(tunnelIDBytes, tunnelID)
-	copy(lease[LEASE_HASH_SIZE:LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE], tunnelIDBytes)
+	copy(lease[LEASE_TUNNEL_GW_SIZE:LEASE_TUNNEL_GW_SIZE+LEASE_TUNNEL_ID_SIZE], tunnelIDBytes)
 
 	// Convert and copy expiration date
 	millis := expirationTime.UnixNano() / int64(time.Millisecond)
 	dateBytes := make([]byte, DATE_SIZE)
 	binary.BigEndian.PutUint64(dateBytes, uint64(millis))
-	copy(lease[LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE:], dateBytes)
+	copy(lease[LEASE_TUNNEL_GW_SIZE+LEASE_TUNNEL_ID_SIZE:], dateBytes)
 
 	log.WithFields(logrus.Fields{
 		"tunnel_id":  tunnelID,
