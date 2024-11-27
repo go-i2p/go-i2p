@@ -3,8 +3,8 @@ package lease_set
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"golang.org/x/crypto/openpgp/elgamal"
@@ -82,21 +81,33 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	// Directly write the bytes of the Integer instances to the payload
 	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
+	/*
+		err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
+		if err != nil {
+			t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
+		}
 
-	err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
-	if err != nil {
-		t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
-	}
+		err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
+		if err != nil {
+			t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
+		}
 
-	err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
-	if err != nil {
-		t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
-	}
+	*/
 
 	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
 		t.Fatalf("Failed to create new certificate: %v\n", err)
+	}
+
+	// Log certificate details
+	t.Logf("Certificate Type: %d", cert.Type())
+	t.Logf("Certificate Length Field: %d", cert.Length())
+	t.Logf("Certificate Bytes Length: %d", len(cert.Bytes()))
+	t.Logf("Certificate Bytes: %d", cert.Bytes())
+
+	if cert.Length() != len(cert.Bytes()) {
+		t.Logf("Certificate length (%d) does not match with bytes length (%d)", cert.Length(), cert.Bytes())
 	}
 
 	certBytes := cert.Bytes()
@@ -108,7 +119,10 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	}
 	pubKeySize := keyCert.CryptoSize()
 	sigKeySize := keyCert.SignatureSize()
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
+	if paddingSize < 0 {
+		t.Fatalf("Padding size is negative: %d", paddingSize)
+	}
 	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
 	if err != nil {
@@ -174,14 +188,8 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	return routerInfo, elg_pubkey, leaseSetSigningPubKey, &leaseSetSigningPrivKey, &identityPrivKey, nil
 }
 
-func createTestLease(t *testing.T, index int) (*lease.Lease, error) {
-	// Create test RouterIdentity for tunnel gateway hash
-	//routerIdentity, _, _, _, _ := createTestIdentityAndKeys(t)
-	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
-	if err != nil {
-		log.Fatalf("failed to create router info: %v", err)
-	}
-
+func createTestLease(t *testing.T, index int, routerInfo *router_info.RouterInfo) (*lease.Lease, error) {
+	// Use the provided routerInfo instead of generating a new one
 	tunnelGatewayHash := crypto.SHA256(routerInfo.RouterIdentity().KeysAndCert.Bytes())
 
 	// Create expiration time
@@ -195,21 +203,103 @@ func createTestLease(t *testing.T, index int) (*lease.Lease, error) {
 
 	return testLease, nil
 }
+func generateTestDestination(t *testing.T) (*destination.Destination, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, error) {
+	// Generate client signing key pair (Ed25519)
+	var ed25519_privkey crypto.Ed25519PrivateKey
+	_, err := (&ed25519_privkey).Generate()
+	if err != nil {
+		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
+	}
+	ed25519_pubkey_raw, err := ed25519_privkey.Public()
+	if err != nil {
+		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
+	}
+	ed25519_pubkey, ok := ed25519_pubkey_raw.(crypto.SigningPublicKey)
+	if !ok {
+		t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
+	}
+
+	// Generate client encryption key pair (ElGamal)
+	var elgamal_privkey elgamal.PrivateKey
+	err = crypto.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
+	}
+
+	// Convert ElGamal public key to crypto.ElgPublicKey
+	var elg_pubkey crypto.ElgPublicKey
+	yBytes := elgamal_privkey.PublicKey.Y.Bytes()
+	if len(yBytes) > 256 {
+		t.Fatalf("ElGamal public key Y too large")
+	}
+	copy(elg_pubkey[256-len(yBytes):], yBytes)
+
+	// Create KeyCertificate specifying key types
+	var payload bytes.Buffer
+
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
+	if err != nil {
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
+	}
+
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	if err != nil {
+		t.Fatalf("Failed to create crypto public key type integer: %v", err)
+	}
+	versionByte := byte(0x00)
+	payload.WriteByte(versionByte)
+	// Write the bytes of the Integer instances to the payload
+	payload.Write(*signingPublicKeyType)
+	payload.Write(*cryptoPublicKeyType)
+
+	// Create Certificate
+	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
+	if err != nil {
+		t.Fatalf("Failed to create new certificate: %v\n", err)
+	}
+
+	// Convert Certificate to KeyCertificate
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		t.Fatalf("Failed to create KeyCertificate from Certificate: %v", err)
+	}
+
+	// Create padding
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (elg_pubkey.Len() + ed25519_pubkey.Len())
+	if paddingSize < 0 {
+		t.Fatalf("Padding size is negative: %d", paddingSize)
+	}
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		t.Fatalf("Failed to generate random padding: %v\n", err)
+	}
+
+	// Correctly call NewKeysAndCert with parameters in the right order
+	kac, err := keys_and_cert.NewKeysAndCert(
+		keyCert,        // keyCertificate *KeyCertificate
+		elg_pubkey,     // publicKey crypto.PublicKey
+		padding,        // padding []byte
+		ed25519_pubkey, // signingPublicKey crypto.SigningPublicKey
+	)
+	if err != nil {
+		t.Fatalf("Failed to create KeysAndCert: %v", err)
+	}
+
+	// Create Destination
+	dest := &destination.Destination{
+		KeysAndCert: *kac,
+	}
+
+	return dest, elg_pubkey, ed25519_pubkey, &ed25519_privkey, nil
+}
 
 // (*router_info.RouterInfo, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey, error) {
-func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, encryptionKey crypto.PublicKey, signingKey crypto.SigningPublicKey, signingPrivKey crypto.SigningPrivateKey, leaseCount int) (LeaseSet, error) {
-	// Generate router identity and keys
-	//routerIdentity, encryptionKey, signingKey, signingPrivKey, _ := createTestIdentityAndKeys(t)
-
-	// Debug destination size
-	routerIdentityBytes := routerInfo.RouterIdentity().Bytes()
-	t.Logf("Router Identity size: %d bytes", len(routerIdentityBytes))
-
-	// Create destination from router identity bytes
-	dest, _, err := destination.ReadDestination(routerIdentityBytes)
+func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, leaseCount int) (LeaseSet, error) {
+	// Generate test Destination and client keys
+	dest, encryptionKey, signingKey, signingPrivKey, err := generateTestDestination(t)
 	if err != nil {
-		t.Logf("Failed to read destination: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to generate test destination: %v", err)
 	}
 
 	destBytes := dest.KeysAndCert.Bytes()
@@ -217,51 +307,13 @@ func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, encryp
 
 	// Ensure the destination size is at least 387 bytes
 	if len(destBytes) < 387 {
-		t.Logf("WARNING: Destination size %d is less than required 387 bytes", len(destBytes))
-
-		// Calculate the amount of padding needed
-		paddingSize := 387 - len(destBytes)
-		padding := make([]byte, paddingSize)
-		_, err := rand.Read(padding) // Fill with random data
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate padding: %v", err)
-		}
-
-		// Append the padding to the destination bytes
-		destBytes = append(destBytes, padding...)
-
-		// Re-create the KeysAndCert structure from the padded bytes
-		newKeysAndCert, remainder, err := keys_and_cert.ReadKeysAndCert(destBytes)
-		if err != nil {
-			t.Logf("Failed to create KeysAndCert from padded bytes: %v", err)
-			return nil, fmt.Errorf("failed to create KeysAndCert from padded bytes: %v", err)
-		}
-
-		// Check if there is any remainder and fill if necessary
-		if len(remainder) > 0 {
-			t.Logf("Additional remainder of size %d found, filling with zero bytes", len(remainder))
-			destBytes = append(destBytes, make([]byte, len(remainder))...)
-			// Re-create the KeysAndCert structure again to include the filled remainder
-			newKeysAndCert, _, err = keys_and_cert.ReadKeysAndCert(destBytes)
-			if err != nil {
-				t.Logf("Failed to re-create KeysAndCert after filling remainder: %v", err)
-				return nil, fmt.Errorf("failed to re-create KeysAndCert after filling remainder: %v", err)
-			}
-		}
-
-		// Assign the newly created KeysAndCert to the destination
-		dest.KeysAndCert = newKeysAndCert
+		t.Fatalf("Destination size %d is less than required 387 bytes", len(destBytes))
 	}
 
-	// Additional check to ensure KeysAndCert is valid
-	if dest.KeysAndCert.Bytes() == nil {
-		return nil, fmt.Errorf("KeysAndCert is nil after padding and creation")
-	}
-
-	// Create leases
+	// Create leases using the routerInfo
 	var leases []lease.Lease
 	for i := 0; i < leaseCount; i++ {
-		testLease, err := createTestLease(t, i)
+		testLease, err := createTestLease(t, i, routerInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +322,7 @@ func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, encryp
 
 	// Create LeaseSet
 	leaseSet, err := NewLeaseSet(
-		dest,
+		*dest,
 		encryptionKey,
 		signingKey,
 		leases,
@@ -287,10 +339,10 @@ func TestLeaseSetCreation(t *testing.T) {
 	assert := assert.New(t)
 
 	// Generate test router info and keys
-	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
 	assert.Nil(err)
 
-	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 1)
+	leaseSet, err := createTestLeaseSet(t, routerInfo, 1)
 	assert.Nil(err)
 	assert.NotNil(leaseSet)
 
@@ -309,11 +361,11 @@ func TestLeaseSetValidation(t *testing.T) {
 	assert := assert.New(t)
 
 	// Generate test router info and keys
-	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
 	assert.Nil(err)
 
 	// Test with too many leases
-	_, err = createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 17)
+	_, err = createTestLeaseSet(t, routerInfo, 17)
 	assert.NotNil(err)
 	assert.Equal("invalid lease set: more than 16 leases", err.Error())
 }
@@ -322,11 +374,11 @@ func TestLeaseSetComponents(t *testing.T) {
 	assert := assert.New(t)
 
 	// Generate test router info and keys
-	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
 	assert.Nil(err)
 
 	// Create the test lease set with 3 leases
-	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 3)
+	leaseSet, err := createTestLeaseSet(t, routerInfo, 3)
 	assert.Nil(err)
 
 	dest, err := leaseSet.Destination()
@@ -354,11 +406,11 @@ func TestExpirations(t *testing.T) {
 	assert := assert.New(t)
 
 	// Generate test router info and keys
-	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
 	assert.Nil(err)
 
 	// Create the test lease set with 3 leases
-	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 3)
+	leaseSet, err := createTestLeaseSet(t, routerInfo, 3)
 	assert.Nil(err)
 
 	newest, err := leaseSet.NewestExpiration()
@@ -376,11 +428,11 @@ func TestSignatureVerification(t *testing.T) {
 	assert := assert.New(t)
 
 	// Generate test router info and keys
-	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
 	assert.Nil(err)
 
 	// Create the test lease set
-	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 1)
+	leaseSet, err := createTestLeaseSet(t, routerInfo, 1)
 	assert.Nil(err)
 
 	sig, err := leaseSet.Signature()

@@ -93,6 +93,8 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
 	bytes = append(bytes, keys_and_cert.keyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
+		"bytes":                bytes,
+		"padding":              keys_and_cert.Padding,
 		"bytes_length":         len(bytes),
 		"pk_bytes_length":      len(keys_and_cert.publicKey.Bytes()),
 		"padding_bytes_length": len(keys_and_cert.Padding),
