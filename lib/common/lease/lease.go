@@ -14,7 +14,7 @@ import (
 // Sizes in bytes of various components of a Lease
 const (
 	LEASE_SIZE           = 44
-	LEASE_HASH_SIZE      = 32
+	LEASE_TUNNEL_GW_SIZE = 32
 	LEASE_TUNNEL_ID_SIZE = 4
 )
 
@@ -62,13 +62,13 @@ type Lease [LEASE_SIZE]byte
 
 // TunnelGateway returns the tunnel gateway as a Hash.
 func (lease Lease) TunnelGateway() (hash Hash) {
-	copy(hash[:], lease[:LEASE_HASH_SIZE])
+	copy(hash[:], lease[:LEASE_TUNNEL_GW_SIZE])
 	return
 }
 
 // TunnelID returns the tunnel id as a uint23.
 func (lease Lease) TunnelID() uint32 {
-	i := Integer(lease[LEASE_HASH_SIZE : LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE])
+	i := Integer(lease[LEASE_TUNNEL_GW_SIZE : LEASE_TUNNEL_GW_SIZE+LEASE_TUNNEL_ID_SIZE])
 	return uint32(
 		i.Int(),
 	)
@@ -76,7 +76,7 @@ func (lease Lease) TunnelID() uint32 {
 
 // Date returns the date as an I2P Date.
 func (lease Lease) Date() (date Date) {
-	copy(date[:], lease[LEASE_HASH_SIZE+LEASE_TUNNEL_ID_SIZE:])
+	copy(date[:], lease[LEASE_TUNNEL_GW_SIZE+LEASE_TUNNEL_ID_SIZE:])
 	return
 }
 

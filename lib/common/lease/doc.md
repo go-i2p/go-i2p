@@ -9,7 +9,7 @@ Package lease implements the I2P lease common data structure
 ```go
 const (
 	LEASE_SIZE           = 44
-	LEASE_HASH_SIZE      = 32
+	LEASE_TUNNEL_GW_SIZE = 32
 	LEASE_TUNNEL_ID_SIZE = 4
 )
 ```
