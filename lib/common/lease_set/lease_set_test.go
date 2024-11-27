@@ -282,6 +282,12 @@ func generateTestDestination(t *testing.T) (*destination.Destination, crypto.Pub
 		padding,        // padding []byte
 		ed25519_pubkey, // signingPublicKey crypto.SigningPublicKey
 	)
+	t.Logf("Signing Public Key Type: %d", signingPublicKeyType.Int())
+	t.Logf("Crypto Public Key Type: %d", cryptoPublicKeyType.Int())
+	t.Logf("Expected Signing Public Key Size: %d", keyCert.SignatureSize())
+	t.Logf("Expected Crypto Public Key Size: %d", keyCert.CryptoSize())
+	t.Logf("Actual Signing Public Key Size: %d", ed25519_pubkey.Len())
+	t.Logf("Actual Crypto Public Key Size: %d", elg_pubkey.Len())
 	if err != nil {
 		t.Fatalf("Failed to create KeysAndCert: %v", err)
 	}
