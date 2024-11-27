@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"golang.org/x/crypto/openpgp/elgamal"
-	"testing"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/lease"

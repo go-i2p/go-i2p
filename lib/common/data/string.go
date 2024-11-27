@@ -2,6 +2,7 @@ package data
 
 import (
 	"errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -91,13 +92,12 @@ func (str I2PString) Data() (data string, err error) {
 		case ErrDataTooLong:
 			log.WithError(err).Warn("I2PString contains data beyond specified length")
 			data = string(str[1:])
-			//data = string(str[1 : length+1]) // Should we recover and trim?
+			// data = string(str[1 : length+1]) // Should we recover and trim?
 			return
 		default:
 			log.WithError(err).Error("Unknown error encountered in I2PString.Data()")
 			return "", err
 		}
-
 	}
 	if length == 0 {
 		log.Debug("I2PString is empty")

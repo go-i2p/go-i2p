@@ -379,6 +379,7 @@ func KeyCertificateFromCertificate(certificate Certificate) (*KeyCertificate, er
 	log.Debug("Successfully created keyCertificate from Certificate")
 	return k, nil
 }
+
 func NewKeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	payload := cert.Data()
 	if len(payload) < 4 {

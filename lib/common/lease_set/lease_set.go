@@ -4,6 +4,7 @@ package lease_set
 import (
 	"errors"
 	"fmt"
+
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"

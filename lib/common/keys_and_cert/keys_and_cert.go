@@ -418,6 +418,7 @@ func readCertificateFromEnd(data []byte) (cert Certificate, certStartIndex int, 
 	err = errors.New("could not find certificate in data")
 	return
 }
+
 func constructPublicKey(data []byte, cryptoType uint16) (crypto.PublicKey, error) {
 	switch cryptoType {
 	case CRYPTO_KEY_TYPE_ELGAMAL:

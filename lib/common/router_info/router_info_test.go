@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
@@ -12,8 +15,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/openpgp/elgamal"
-	"testing"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 )

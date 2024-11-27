@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
-	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
-	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 
