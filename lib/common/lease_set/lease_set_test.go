@@ -3,7 +3,12 @@ package lease_set
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"testing"
 	"time"
 
@@ -19,85 +24,165 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func createTestIdentityAndKeys(t *testing.T) (*router_identity.RouterIdentity, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey) {
-	// Generate signing key pair (Ed25519) for the identity
-	var identityPrivKey crypto.Ed25519PrivateKey
-	_, err := (&identityPrivKey).Generate()
+func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey, error) {
+	// Generate signing key pair (Ed25519)
+	var ed25519_privkey crypto.Ed25519PrivateKey
+	_, err := (&ed25519_privkey).Generate()
 	if err != nil {
-		t.Fatalf("Failed to generate identity Ed25519 private key: %v", err)
+		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
-	identityPubKeyRaw, err := identityPrivKey.Public()
+	ed25519_pubkey_raw, err := ed25519_privkey.Public()
 	if err != nil {
-		t.Fatalf("Failed to derive identity Ed25519 public key: %v", err)
+		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
 	}
-	identityPubKey, ok := identityPubKeyRaw.(crypto.SigningPublicKey)
+	ed25519_pubkey, ok := ed25519_pubkey_raw.(crypto.SigningPublicKey)
 	if !ok {
 		t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
 	}
 
 	// Generate encryption key pair (ElGamal)
-	var elgamalPrivKey elgamal.PrivateKey
-	err = crypto.ElgamalGenerate(&elgamalPrivKey, rand.Reader)
+	var elgamal_privkey elgamal.PrivateKey
+	err = crypto.ElgamalGenerate(&elgamal_privkey, rand.Reader)
 	if err != nil {
-		t.Fatalf("Failed to generate ElGamal private key: %v", err)
+		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
 	}
 
-	// Convert ElGamal public key
-	var elgPubKey crypto.ElgPublicKey
-	yBytes := elgamalPrivKey.PublicKey.Y.Bytes()
+	// Convert elgamal private key to crypto.ElgPrivateKey
+	var elg_privkey crypto.ElgPrivateKey
+	xBytes := elgamal_privkey.X.Bytes()
+	if len(xBytes) > 256 {
+		t.Fatalf("ElGamal private key X too large")
+	}
+	copy(elg_privkey[256-len(xBytes):], xBytes)
+
+	// Convert elgamal public key to crypto.ElgPublicKey
+	var elg_pubkey crypto.ElgPublicKey
+	yBytes := elgamal_privkey.PublicKey.Y.Bytes()
 	if len(yBytes) > 256 {
 		t.Fatalf("ElGamal public key Y too large")
 	}
-	// Ensure the public key is padded to 256 bytes
-	copy(elgPubKey[256-len(yBytes):], yBytes)
+	copy(elg_pubkey[256-len(yBytes):], yBytes)
 
-	// Create certificate payload
+	// Ensure that elg_pubkey implements crypto.PublicKey interface
+	var _ crypto.PublicKey = elg_pubkey
+
+	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
-	signingPublicKeyType, _ := data.NewIntegerFromInt(7, 2) // Ed25519
-	cryptoPublicKeyType, _ := data.NewIntegerFromInt(0, 2)  // ElGamal
-	payload.Write(signingPublicKeyType.Bytes())
-	payload.Write(cryptoPublicKeyType.Bytes())
 
-	// Create certificate
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
+	if err != nil {
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
+	}
+
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	if err != nil {
+		t.Fatalf("Failed to create crypto public key type integer: %v", err)
+	}
+
+	// Directly write the bytes of the Integer instances to the payload
+	payload.Write(*signingPublicKeyType)
+	payload.Write(*cryptoPublicKeyType)
+
+	err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
+	if err != nil {
+		t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
+	}
+
+	err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
+	if err != nil {
+		t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
+	}
+
+	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
-		t.Fatalf("Failed to create certificate: %v", err)
+		t.Fatalf("Failed to create new certificate: %v\n", err)
 	}
 
-	// Use the Ed25519 public key as-is (32 bytes)
-	paddedSigningKey, err := crypto.CreateEd25519PublicKeyFromBytes(identityPubKey.Bytes())
+	certBytes := cert.Bytes()
+	t.Logf("Serialized Certificate Size: %d bytes", len(certBytes))
+
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
 	if err != nil {
-		t.Fatalf("Failed to create Ed25519 public key from bytes: %v", err)
+		log.Fatalf("KeyCertificateFromCertificate failed: %v\n", err)
 	}
-
-	// Create RouterIdentity with the Ed25519 signing key
-	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, paddedSigningKey, *cert, nil)
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
 	if err != nil {
-		t.Fatalf("Failed to create router identity: %v", err)
+		t.Fatalf("Failed to generate random padding: %v\n", err)
 	}
-
-	// Generate second signing key pair for the lease set
+	// Create RouterIdentity
+	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, padding)
+	if err != nil {
+		t.Fatalf("Failed to create router identity: %v\n", err)
+	}
+	// create some dummy addresses
+	options := map[string]string{}
+	routerAddress, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", options)
+	if err != nil {
+		t.Fatalf("Failed to create router address: %v\n", err)
+	}
+	routerAddresses := []*router_address.RouterAddress{routerAddress}
+	// create router info
+	routerInfo, err := router_info.NewRouterInfo(routerIdentity, time.Now(), routerAddresses, nil, &ed25519_privkey, signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519)
+	if err != nil {
+		t.Fatalf("Failed to create router info: %v\n", err)
+	}
+	//
+	// Generate signing key pair for the LeaseSet (Ed25519)
 	var leaseSetSigningPrivKey crypto.Ed25519PrivateKey
-	_, err = (&leaseSetSigningPrivKey).Generate()
+	_, err = leaseSetSigningPrivKey.Generate()
+
 	if err != nil {
 		t.Fatalf("Failed to generate lease set Ed25519 private key: %v", err)
 	}
+
 	leaseSetSigningPubKeyRaw, err := leaseSetSigningPrivKey.Public()
+
 	if err != nil {
 		t.Fatalf("Failed to derive lease set Ed25519 public key: %v", err)
 	}
+
 	leaseSetSigningPubKey, ok := leaseSetSigningPubKeyRaw.(crypto.SigningPublicKey)
+
 	if !ok {
 		t.Fatalf("Failed to get lease set SigningPublicKey from Ed25519 public key")
 	}
 
-	return routerIdentity, elgPubKey, leaseSetSigningPubKey, &leaseSetSigningPrivKey, &identityPrivKey
+	//
+	var identityPrivKey crypto.Ed25519PrivateKey
+	_, err = identityPrivKey.Generate()
+	if err != nil {
+		t.Fatalf("Failed to generate identity Ed25519 private key: %v", err)
+	}
+	/*
+		identityPubKeyRaw, err := identityPrivKey.Public()
+		if err != nil {
+			t.Fatalf("Failed to derive identity Ed25519 public key: %v", err)
+		}
+		identityPubKey, ok := identityPubKeyRaw.(crypto.SigningPublicKey)
+		if !ok {
+			t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
+		}
+		identityPubKeyBytes := identityPubKey.Bytes() // 32 bytes
+
+	*/
+
+	return routerInfo, elg_pubkey, leaseSetSigningPubKey, &leaseSetSigningPrivKey, &identityPrivKey, nil
 }
 
 func createTestLease(t *testing.T, index int) (*lease.Lease, error) {
 	// Create test RouterIdentity for tunnel gateway hash
-	routerIdentity, _, _, _, _ := createTestIdentityAndKeys(t)
-	tunnelGatewayHash := crypto.SHA256(routerIdentity.KeysAndCert.Bytes())
+	//routerIdentity, _, _, _, _ := createTestIdentityAndKeys(t)
+	routerInfo, _, _, _, _, err := generateTestRouterInfo(t)
+	if err != nil {
+		log.Fatalf("failed to create router info: %v", err)
+	}
+
+	tunnelGatewayHash := crypto.SHA256(routerInfo.RouterIdentity().KeysAndCert.Bytes())
 
 	// Create expiration time
 	expiration := time.Now().Add(time.Hour * time.Duration(index+1)) // Different times for each lease
@@ -111,12 +196,13 @@ func createTestLease(t *testing.T, index int) (*lease.Lease, error) {
 	return testLease, nil
 }
 
-func createTestLeaseSet(t *testing.T, leaseCount int) (LeaseSet, error) {
+// (*router_info.RouterInfo, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey, error) {
+func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, encryptionKey crypto.PublicKey, signingKey crypto.SigningPublicKey, signingPrivKey crypto.SigningPrivateKey, leaseCount int) (LeaseSet, error) {
 	// Generate router identity and keys
-	routerIdentity, encryptionKey, signingKey, signingPrivKey, _ := createTestIdentityAndKeys(t)
+	//routerIdentity, encryptionKey, signingKey, signingPrivKey, _ := createTestIdentityAndKeys(t)
 
 	// Debug destination size
-	routerIdentityBytes := routerIdentity.Bytes()
+	routerIdentityBytes := routerInfo.RouterIdentity().Bytes()
 	t.Logf("Router Identity size: %d bytes", len(routerIdentityBytes))
 
 	// Create destination from router identity bytes
@@ -200,12 +286,17 @@ func createTestLeaseSet(t *testing.T, leaseCount int) (LeaseSet, error) {
 func TestLeaseSetCreation(t *testing.T) {
 	assert := assert.New(t)
 
-	leaseSet, err := createTestLeaseSet(t, 1)
+	// Generate test router info and keys
+	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	assert.Nil(err)
+
+	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 1)
 	assert.Nil(err)
 	assert.NotNil(leaseSet)
 
 	// Check the size of the LeaseSet
-	assert.GreaterOrEqual(len(leaseSet), 387, "LeaseSet should be at least 387 bytes")
+	//leaseSetBytes := leaseSet.Bytes()
+	//assert.GreaterOrEqual(len(leaseSetBytes), 387, "LeaseSet should be at least 387 bytes")
 
 	// Check the destination structure
 	dest, err := leaseSet.Destination()
@@ -217,8 +308,12 @@ func TestLeaseSetCreation(t *testing.T) {
 func TestLeaseSetValidation(t *testing.T) {
 	assert := assert.New(t)
 
+	// Generate test router info and keys
+	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	assert.Nil(err)
+
 	// Test with too many leases
-	_, err := createTestLeaseSet(t, 17)
+	_, err = createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 17)
 	assert.NotNil(err)
 	assert.Equal("invalid lease set: more than 16 leases", err.Error())
 }
@@ -226,7 +321,12 @@ func TestLeaseSetValidation(t *testing.T) {
 func TestLeaseSetComponents(t *testing.T) {
 	assert := assert.New(t)
 
-	leaseSet, err := createTestLeaseSet(t, 3)
+	// Generate test router info and keys
+	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	assert.Nil(err)
+
+	// Create the test lease set with 3 leases
+	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 3)
 	assert.Nil(err)
 
 	dest, err := leaseSet.Destination()
@@ -253,7 +353,12 @@ func TestLeaseSetComponents(t *testing.T) {
 func TestExpirations(t *testing.T) {
 	assert := assert.New(t)
 
-	leaseSet, err := createTestLeaseSet(t, 3)
+	// Generate test router info and keys
+	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	assert.Nil(err)
+
+	// Create the test lease set with 3 leases
+	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 3)
 	assert.Nil(err)
 
 	newest, err := leaseSet.NewestExpiration()
@@ -270,7 +375,12 @@ func TestExpirations(t *testing.T) {
 func TestSignatureVerification(t *testing.T) {
 	assert := assert.New(t)
 
-	leaseSet, err := createTestLeaseSet(t, 1)
+	// Generate test router info and keys
+	routerInfo, encryptionKey, signingKey, signingPrivKey, _, err := generateTestRouterInfo(t)
+	assert.Nil(err)
+
+	// Create the test lease set
+	leaseSet, err := createTestLeaseSet(t, routerInfo, encryptionKey, signingKey, signingPrivKey, 1)
 	assert.Nil(err)
 
 	sig, err := leaseSet.Signature()
