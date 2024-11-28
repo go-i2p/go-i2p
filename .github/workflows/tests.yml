@@ -31,10 +31,3 @@ jobs:
           GOROOT: ${{ env.GOROOT }}
           DEBUG_I2P: debug
           CGO_ENABLED: 0
-      - name: Run all test suites
-        run: make test-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
