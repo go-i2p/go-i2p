@@ -70,9 +70,8 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test_target }}-results
-          path: path/to/test/results  # Adjust this path as needed
+          path: path/to/test/results
 
-  # Optional: Aggregate Test Results
   aggregate_results:
     needs: test
     runs-on: ubuntu-latest
