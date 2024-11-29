@@ -68,7 +68,8 @@ test-all: test-string-all \
          test-router-address-all \
          test-router-info-all \
          test-su3-all \
-         test-tunnel-all
+         test-tunnel-all \
+         test-lease-all
 
 #-include $(shell find doc/tests -type f -name '*.mk') #search for .mk files recursively
 
