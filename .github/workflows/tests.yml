@@ -11,27 +11,26 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false
+      fail-fast: false  # Ensure all matrix jobs run even if some fail
       matrix:
-        test_target: [
-          "test-string-all",
-          "test-mapping-all",
-          "test-crypto-aes-all",
-          "test-crypto-dsa-all",
-          "test-crypto-ed25519-all",
-          "test-crypto-elg-all",
-          "test-crypto-hmac-all",
-          "test-i2np-header-all",
-          "test-i2np-build-request-all",
-          "test-key-cert-all",
-          "test-keys-cert-all",
-          "test-lease-set-all",
-          "test-noise-transport-all",
-          "test-router-address-all",
-          "test-router-info-all",
-          "test-su3-all",
-          "test-tunnel-all"
-        ]
+        test_target:
+          - "test-string-all"
+          - "test-mapping-all"
+          - "test-crypto-aes-all"
+          - "test-crypto-dsa-all"
+          - "test-crypto-ed25519-all"
+          - "test-crypto-elg-all"
+          - "test-crypto-hmac-all"
+          - "test-i2np-header-all"
+          - "test-i2np-build-request-all"
+          - "test-key-cert-all"
+          - "test-keys-cert-all"
+          - "test-lease-set-all"
+          - "test-noise-transport-all"
+          - "test-router-address-all"
+          - "test-router-info-all"
+          - "test-su3-all"
+          - "test-tunnel-all"
 
     steps:
       - name: Checkout repository
@@ -62,7 +61,6 @@ jobs:
         run: make ${{ matrix.test_target }}
         env:
           GO: go
-          GOROOT: ${{ env.GOROOT }}
           DEBUG_I2P: debug
           CGO_ENABLED: 0
 
@@ -71,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test_target }}-logs
-          path: path/to/test/logs
+          path: ./test-logs/${{ matrix.test_target }}.log  # Adjust this path as needed
 
   aggregate_results:
     needs: test
