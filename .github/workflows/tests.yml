@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         test_target: [
           "test-string-all",
@@ -65,16 +66,16 @@ jobs:
           DEBUG_I2P: debug
           CGO_ENABLED: 0
 
-      - name: Upload Test Results (if any)
+      - name: Upload Test Logs (Optional)
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.test_target }}-results
-          path: path/to/test/results
+          name: ${{ matrix.test_target }}-logs
+          path: path/to/test/logs
 
   aggregate_results:
     needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate Test Results
-        run: echo "All tests have been executed."
+        run: echo "All tests have been executed. Review individual job logs for details."
