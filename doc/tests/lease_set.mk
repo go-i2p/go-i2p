@@ -1,22 +1,15 @@
-test-lease-set-all: test-lease-set-basic test-lease-set-leases test-lease-set-expiration
+test-lease-set-all: test-lease-set-tunnel-gateway test-lease-set-tunnel-id test-lease-set-date
 
-test-lease-set-basic:
-	$(GO) test -v ./lib/common/lease_set -run TestDestinationIsCorrect
-	$(GO) test -v ./lib/common/lease_set -run TestPublicKeyIsCorrect
-	$(GO) test -v ./lib/common/lease_set -run TestSigningKeyIsCorrect
-	$(GO) test -v ./lib/common/lease_set -run TestSignatureIsCorrect
+test-lease-set-tunnel-gateway:
+	$(GO) test -v ./lib/common/lease_set -run TestTunnelGateway
 
-test-lease-set-leases:
-	$(GO) test -v ./lib/common/lease_set -run TestLeaseCountCorrect
-	$(GO) test -v ./lib/common/lease_set -run TestLeaseCountCorrectWithMultiple
-	$(GO) test -v ./lib/common/lease_set -run TestLeaseCountErrorWithTooMany
-	$(GO) test -v ./lib/common/lease_set -run TestLeasesHaveCorrectData
+test-lease-set-tunnel-id:
+	$(GO) test -v ./lib/common/lease_set -run TestTunnelID
 
-test-lease-set-expiration:
-	$(GO) test -v ./lib/common/lease_set -run TestNewestExpirationIsCorrect
-	$(GO) test -v ./lib/common/lease_set -run TestOldestExpirationIsCorrect
+test-lease-set-date:
+	$(GO) test -v ./lib/common/lease_set -run TestDate
 
 .PHONY: test-lease-set-all \
-        test-lease-set-basic \
-        test-lease-set-leases \
-        test-lease-set-expiration
+        test-lease-set-tunnel-gateway \
+        test-lease-set-tunnel-id \
+        test-lease-set-date
