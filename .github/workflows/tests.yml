@@ -10,6 +10,28 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        test_target: [
+          "test-string-all",
+          "test-mapping-all",
+          "test-crypto-aes-all",
+          "test-crypto-dsa-all",
+          "test-crypto-ed25519-all",
+          "test-crypto-elg-all",
+          "test-crypto-hmac-all",
+          "test-i2np-header-all",
+          "test-i2np-build-request-all",
+          "test-key-cert-all",
+          "test-keys-cert-all",
+          "test-lease-set-all",
+          "test-noise-transport-all",
+          "test-router-address-all",
+          "test-router-info-all",
+          "test-su3-all",
+          "test-tunnel-all"
+        ]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,145 +41,41 @@ jobs:
         with:
           go-version: '1.21'  # Adjust this version as needed
 
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@latest
 
       - name: Go mod tidy
         run: go mod tidy
 
-      # Define individual test steps
-      - name: Test - String All
-        run: make test-string-all
+      - name: Run ${{ matrix.test_target }}
+        run: make ${{ matrix.test_target }}
         env:
           GO: go
           GOROOT: ${{ env.GOROOT }}
           DEBUG_I2P: debug
           CGO_ENABLED: 0
 
-      - name: Test - Mapping All
-        run: make test-mapping-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
+      - name: Upload Test Results (if any)
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.test_target }}-results
+          path: path/to/test/results  # Adjust this path as needed
 
-      - name: Test - Crypto AES All
-        run: make test-crypto-aes-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Crypto DSA All
-        run: make test-crypto-dsa-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Crypto Ed25519 All
-        run: make test-crypto-ed25519-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Crypto ElG All
-        run: make test-crypto-elg-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Crypto HMAC All
-        run: make test-crypto-hmac-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - I2NP Header All
-        run: make test-i2np-header-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - I2NP Build Request All
-        run: make test-i2np-build-request-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Key Cert All
-        run: make test-key-cert-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Keys Cert All
-        run: make test-keys-cert-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Lease Set All
-        run: make test-lease-set-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Noise Transport All
-        run: make test-noise-transport-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Router Address All
-        run: make test-router-address-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Router Info All
-        run: make test-router-info-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - SU3 All
-        run: make test-su3-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
-
-      - name: Test - Tunnel All
-        run: make test-tunnel-all
-        env:
-          GO: go
-          GOROOT: ${{ env.GOROOT }}
-          DEBUG_I2P: debug
-          CGO_ENABLED: 0
+  # Optional: Aggregate Test Results
+  aggregate_results:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate Test Results
+        run: echo "All tests have been executed."
