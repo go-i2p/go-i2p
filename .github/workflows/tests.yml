@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -24,8 +25,137 @@ jobs:
       - name: Go mod tidy
         run: go mod tidy
 
-      - name: Run tests
-        run: make test
+      # Define individual test steps
+      - name: Test - String All
+        run: make test-string-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Mapping All
+        run: make test-mapping-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Crypto AES All
+        run: make test-crypto-aes-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Crypto DSA All
+        run: make test-crypto-dsa-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Crypto Ed25519 All
+        run: make test-crypto-ed25519-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Crypto ElG All
+        run: make test-crypto-elg-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Crypto HMAC All
+        run: make test-crypto-hmac-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - I2NP Header All
+        run: make test-i2np-header-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - I2NP Build Request All
+        run: make test-i2np-build-request-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Key Cert All
+        run: make test-key-cert-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Keys Cert All
+        run: make test-keys-cert-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Lease Set All
+        run: make test-lease-set-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Noise Transport All
+        run: make test-noise-transport-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Router Address All
+        run: make test-router-address-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Router Info All
+        run: make test-router-info-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - SU3 All
+        run: make test-su3-all
+        env:
+          GO: go
+          GOROOT: ${{ env.GOROOT }}
+          DEBUG_I2P: debug
+          CGO_ENABLED: 0
+
+      - name: Test - Tunnel All
+        run: make test-tunnel-all
         env:
           GO: go
           GOROOT: ${{ env.GOROOT }}
