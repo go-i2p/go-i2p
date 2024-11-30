@@ -67,12 +67,6 @@ jobs:
           DEBUG_I2P: debug
           CGO_ENABLED: 0
 
-      - name: Build
-        run: make build
-        env:
-          GO: go
-          CGO_ENABLED: 0
-
       - name: Upload Test Logs
         if: always()
         uses: actions/upload-artifact@v3
