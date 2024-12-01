@@ -26,8 +26,26 @@ build: clean $(EXE)
 $(EXE):
 	$(GO) build --tags netgo,osusergo -v -o $(EXE)
 
-test: check_gofumpt fmt
-	$(GO) test -v -failfast ./lib/common/...
+# Include test definitions
+-include doc/tests/*.mk
+
+test: 		   test-string-all \
+               test-mapping-all \
+               test-crypto-aes-all \
+               test-crypto-dsa-all \
+               test-crypto-ed25519-all \
+               test-crypto-elg-all \
+               test-crypto-hmac-all \
+               test-i2np-header-all \
+               test-i2np-build-request-all \
+               test-key-cert-all \
+               test-keys-cert-all \
+               test-lease-set-all \
+               test-noise-transport-all \
+               test-router-address-all \
+               test-router-info-all \
+               test-su3-all \
+               test-tunnel-all
 
 clean:
 	$(GO) clean -v
@@ -49,29 +67,3 @@ callvis:
 godoc:
 	find lib -type d -exec bash -c "ls {}/*.go && godocdown -o ./{}/doc.md ./{}" \;
 
-# Include test definitions
--include doc/tests/*.mk
-
-# Define the all-tests target that runs every test suite
-test-all: test-string-all \
-         test-mapping-all \
-         test-crypto-aes-all \
-         test-crypto-dsa-all \
-         test-crypto-ed25519-all \
-         test-crypto-elg-all \
-         test-crypto-hmac-all \
-         test-i2np-header-all \
-         test-i2np-build-request-all \
-         test-key-cert-all \
-         test-keys-cert-all \
-         test-lease-set-all \
-         test-noise-transport-all \
-         test-router-address-all \
-         test-router-info-all \
-         test-su3-all \
-         test-tunnel-all
-
-#-include $(shell find doc/tests -type f -name '*.mk') #search for .mk files recursively
-
-#test-base64-encode-decode-not-mangled:
-	#go test -v ./lib/common/base64 -run TestEncodeDecodeNotMangled
