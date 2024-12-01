@@ -114,7 +114,7 @@ func TestCertificateWithValidDataElgAndEd25519(t *testing.T) {
 	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
 
 	// Compare individual fields
-	assert.Equal(keysAndCert.keyCertificate.Bytes(), parsedKeysAndCert.keyCertificate.Bytes(), "KeyCertificates should match")
+	assert.Equal(keysAndCert.KeyCertificate.Bytes(), parsedKeysAndCert.KeyCertificate.Bytes(), "KeyCertificates should match")
 	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
 	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
 	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")
@@ -133,7 +133,7 @@ func TestCertificateWithValidDataDeux(t *testing.T) {
 	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
 
 	// Compare individual fields
-	assert.Equal(keysAndCert.keyCertificate.Bytes(), parsedKeysAndCert.keyCertificate.Bytes(), "KeyCertificates should match")
+	assert.Equal(keysAndCert.KeyCertificate.Bytes(), parsedKeysAndCert.KeyCertificate.Bytes(), "KeyCertificates should match")
 	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
 	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
 	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")

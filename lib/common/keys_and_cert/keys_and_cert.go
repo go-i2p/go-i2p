@@ -80,7 +80,7 @@ total length: 387+ bytes
 //
 // https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
-	keyCertificate   *KeyCertificate
+	KeyCertificate   *KeyCertificate
 	publicKey        crypto.PublicKey
 	Padding          []byte
 	signingPublicKey crypto.SigningPublicKey
@@ -91,7 +91,7 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 	bytes := keys_and_cert.publicKey.Bytes()
 	bytes = append(bytes, keys_and_cert.Padding...)
 	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
-	bytes = append(bytes, keys_and_cert.keyCertificate.Bytes()...)
+	bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
 		"bytes":                bytes,
 		"padding":              keys_and_cert.Padding,
@@ -99,7 +99,7 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 		"pk_bytes_length":      len(keys_and_cert.publicKey.Bytes()),
 		"padding_bytes_length": len(keys_and_cert.Padding),
 		"spk_bytes_length":     len(keys_and_cert.signingPublicKey.Bytes()),
-		"cert_bytes_length":    len(keys_and_cert.keyCertificate.Bytes()),
+		"cert_bytes_length":    len(keys_and_cert.KeyCertificate.Bytes()),
 	}).Debug("Retrieved bytes from KeysAndCert")
 	return bytes
 }
@@ -116,7 +116,7 @@ func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.
 
 // Certfificate returns the certificate.
 func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
-	return keys_and_cert.keyCertificate.Certificate
+	return keys_and_cert.KeyCertificate.Certificate
 }
 
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
@@ -138,18 +138,18 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		return
 	}
 
-	keys_and_cert.keyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
+	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate")
 		return
 	}
 
 	// Get the actual key sizes from the certificate
-	pubKeySize := keys_and_cert.keyCertificate.CryptoSize()
-	sigKeySize := keys_and_cert.keyCertificate.SignatureSize()
+	pubKeySize := keys_and_cert.KeyCertificate.CryptoSize()
+	sigKeySize := keys_and_cert.KeyCertificate.SignatureSize()
 
 	// Construct public key
-	keys_and_cert.publicKey, err = keys_and_cert.keyCertificate.ConstructPublicKey(data[:pubKeySize])
+	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:pubKeySize])
 	if err != nil {
 		log.WithError(err).Error("Failed to construct publicKey")
 		return
@@ -163,7 +163,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 
 	// Construct signing public key
-	keys_and_cert.signingPublicKey, err = keys_and_cert.keyCertificate.ConstructSigningPublicKey(
+	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(
 		data[KEYS_AND_CERT_DATA_SIZE-sigKeySize : KEYS_AND_CERT_DATA_SIZE],
 	)
 	if err != nil {
@@ -172,8 +172,8 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 
 	log.WithFields(logrus.Fields{
-		"public_key_type":         keys_and_cert.keyCertificate.PublicKeyType(),
-		"signing_public_key_type": keys_and_cert.keyCertificate.SigningPublicKeyType(),
+		"public_key_type":         keys_and_cert.KeyCertificate.PublicKeyType(),
+		"signing_public_key_type": keys_and_cert.KeyCertificate.SigningPublicKeyType(),
 		"padding_length":          len(keys_and_cert.Padding),
 		"remainder_length":        len(remainder),
 	}).Debug("Successfully read KeysAndCert")
@@ -233,7 +233,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 
 	// Extract the certificate
 	certData := data[totalKeySize:]
-	keysAndCert.keyCertificate, remainder, err = NewKeyCertificate(certData)
+	keysAndCert.KeyCertificate, remainder, err = NewKeyCertificate(certData)
 	if err != nil {
 		log.WithError(err).Error("Failed to read keyCertificate")
 		return
@@ -313,7 +313,7 @@ func ReadKeysAndCertDeux(data []byte) (keysAndCert *KeysAndCert, remainder []byt
 	}
 
 	keysAndCert = &KeysAndCert{
-		keyCertificate: keyCert,
+		KeyCertificate: keyCert,
 	}
 
 	// Extract public key
@@ -497,7 +497,7 @@ func NewKeysAndCert(
 	}
 
 	keysAndCert := &KeysAndCert{
-		keyCertificate:   keyCertificate,
+		KeyCertificate:   keyCertificate,
 		publicKey:        publicKey,
 		Padding:          padding,
 		signingPublicKey: signingPublicKey,
