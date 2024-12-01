@@ -236,21 +236,19 @@ func generateTestDestination(t *testing.T) (*destination.Destination, crypto.Pub
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
-
-	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
-	if err != nil {
-		t.Fatalf("Failed to create signing public key type integer: %v", err)
-	}
-
-	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2) // ElGamal
 	if err != nil {
 		t.Fatalf("Failed to create crypto public key type integer: %v", err)
 	}
+
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
+	if err != nil {
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
+	}
 	versionByte := byte(0x00)
 	payload.WriteByte(versionByte)
-	// Write the bytes of the Integer instances to the payload
-	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
+	payload.Write(*signingPublicKeyType)
 
 	// Create Certificate
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
@@ -352,15 +350,21 @@ func TestLeaseSetCreation(t *testing.T) {
 	assert.Nil(err)
 	assert.NotNil(leaseSet)
 
-	// Check the size of the LeaseSet
-	//leaseSetBytes := leaseSet.Bytes()
-	//assert.GreaterOrEqual(len(leaseSetBytes), 387, "LeaseSet should be at least 387 bytes")
-
-	// Check the destination structure
+	// Check the size of the LeaseSet's Destination KeysAndCert
 	dest, err := leaseSet.Destination()
 	assert.Nil(err)
 	assert.NotNil(dest)
-	assert.Equal(387, len(dest.KeysAndCert.Bytes()), "Destination KeysAndCert should be exactly 387 bytes")
+
+	// Correct expected size: 256 (public key) + 96 (padding) + 32 (signing key) + 7 (certificate) = 391 bytes
+	assert.Equal(391, len(dest.KeysAndCert.Bytes()), "Destination KeysAndCert should be exactly 391 bytes")
+
+	// Verify individual key sizes
+	keysAndCert := dest.KeysAndCert
+	pubKeySize := keysAndCert.KeyCertificate.CryptoSize()
+	assert.Equal(256, pubKeySize, "CryptoPublicKeySize should be 256 bytes for ElGamal")
+
+	sigKeySize := keysAndCert.KeyCertificate.SignatureSize()
+	assert.Equal(32, sigKeySize, "SignatureSize should be 32 bytes for Ed25519")
 }
 
 func TestLeaseSetValidation(t *testing.T) {
