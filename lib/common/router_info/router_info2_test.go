@@ -3,7 +3,6 @@ package router_info
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/binary"
 	"testing"
 	"time"
 
@@ -76,18 +75,8 @@ func TestCreateRouterInfo(t *testing.T) {
 	}
 
 	// Directly write the bytes of the Integer instances to the payload
-	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
-
-	err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
-	if err != nil {
-		t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
-	}
-
-	err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
-	if err != nil {
-		t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
-	}
+	payload.Write(*signingPublicKeyType)
 
 	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
