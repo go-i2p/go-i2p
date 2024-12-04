@@ -30,6 +30,7 @@ payload :: data
 import (
 	"errors"
 	"fmt"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"github.com/sirupsen/logrus"
@@ -195,12 +196,30 @@ func (keyCertificate *KeyCertificate) CryptoPublicKeySize() (int, error) {
 	return size, nil
 }
 
-func (keyCertificate *KeyCertificate) SigningPublicKeySize() (int, error) {
-	size, exists := SignaturePublicKeySizes[uint16(keyCertificate.SpkType.Int())]
-	if !exists {
-		return 0, fmt.Errorf("unknown signature key type: %d", keyCertificate.SpkType.Int())
+func (keyCertificate *KeyCertificate) SigningPublicKeySize() int {
+	spk_type := keyCertificate.SpkType
+	switch spk_type.Int() {
+	case SIGNATURE_TYPE_DSA_SHA1:
+		log.Debug("Returning DSA_SHA1")
+		return 128
+	case signature.SIGNATURE_TYPE_ECDSA_SHA256_P256:
+		log.Debug("Returning ECDSA_SHA256_P256")
+		return 64
+	case signature.SIGNATURE_TYPE_ECDSA_SHA384_P384:
+		return 96
+	case signature.SIGNATURE_TYPE_ECDSA_SHA512_P521:
+		return 132
+	case signature.SIGNATURE_TYPE_RSA_SHA256_2048:
+		return 256
+	case signature.SIGNATURE_TYPE_RSA_SHA384_3072:
+		return 384
+	case signature.SIGNATURE_TYPE_RSA_SHA512_4096:
+		return 512
+	case SIGNATURE_TYPE_ED25519_SHA512:
+		return 32
+	default:
+		return 128
 	}
-	return size, nil
 }
 
 // ConstructSigningPublicKey returns a SingingPublicKey constructed using any excess data that may be stored in the KeyCertificate.

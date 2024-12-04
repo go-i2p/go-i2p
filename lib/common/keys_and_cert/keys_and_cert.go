@@ -286,10 +286,7 @@ func ReadKeysAndCertDeux(data []byte) (keysAndCert *KeysAndCert, remainder []byt
 		return
 	}
 
-	actualSigKeySize, err := keyCert.SigningPublicKeySize()
-	if err != nil {
-		panic(err)
-	}
+	actualSigKeySize := keyCert.SigningPublicKeySize()
 	paddingSize := sigKeyMaxSize - actualSigKeySize
 	if paddingSize < 0 {
 		err = fmt.Errorf("invalid signing public key size: %d", actualSigKeySize)
