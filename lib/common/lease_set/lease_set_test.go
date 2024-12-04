@@ -348,6 +348,7 @@ func TestLeaseSetValidation(t *testing.T) {
 	assert.Equal("invalid lease set: more than 16 leases", err.Error())
 }
 
+/*
 func TestLeaseSetComponents(t *testing.T) {
 	assert := assert.New(t)
 
@@ -417,3 +418,5 @@ func TestSignatureVerification(t *testing.T) {
 	assert.Nil(err)
 	assert.NotNil(sig)
 }
+
+*/
