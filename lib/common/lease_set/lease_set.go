@@ -206,14 +206,14 @@ func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainde
 
 	destinationData := data[:destinationLength]
 
-	keysAndCert, _, err := ReadKeysAndCertDeux(destinationData)
+	keysAndCert, _, err := ReadKeysAndCert(destinationData)
 	if err != nil {
-		fmt.Printf("Failed to read KeysAndCert: %v\n", err)
+		fmt.Printf("Failed to read KeysAndCert: %v\n", err) //32 / 0 error
 		return
 	}
 
 	destination = Destination{
-		KeysAndCert: *keysAndCert,
+		KeysAndCert: keysAndCert,
 	}
 
 	remainder = data[destinationLength:]

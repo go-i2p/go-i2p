@@ -69,9 +69,9 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	payload.Write(*cryptoPublicKeyType)
 
 	// Create certificate
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
+	cert, err := certificate.NewCertificateDeux(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
-		t.Fatalf("Failed to create certificate: %v\n", err)
+		panic(err)
 	}
 
 	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
@@ -110,25 +110,6 @@ func TestCertificateWithValidDataElgAndEd25519(t *testing.T) {
 
 	// Deserialize KeysAndCert from bytes
 	parsedKeysAndCert, remainder, err := ReadKeysAndCertElgAndEd25519(serialized)
-	assert.Nil(err, "ReadKeysAndCert should not error with valid data")
-	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
-
-	// Compare individual fields
-	assert.Equal(keysAndCert.KeyCertificate.Bytes(), parsedKeysAndCert.KeyCertificate.Bytes(), "KeyCertificates should match")
-	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
-	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
-	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")
-}
-
-func TestCertificateWithValidDataDeux(t *testing.T) {
-	assert := assert.New(t)
-	keysAndCert := createValidKeyAndCert(t)
-
-	// Serialize KeysAndCert to bytes
-	serialized := keysAndCert.Bytes()
-
-	// Deserialize KeysAndCert from bytes
-	parsedKeysAndCert, remainder, err := ReadKeysAndCertDeux(serialized)
 	assert.Nil(err, "ReadKeysAndCert should not error with valid data")
 	assert.Empty(remainder, "There should be no remainder after parsing KeysAndCert")
 

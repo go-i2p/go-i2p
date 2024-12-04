@@ -365,15 +365,9 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 
 	payload := certificate.Data()
-	if len(payload) < 5 {
-		err = errors.New("key certificate payload too short")
-		log.WithError(err).Error("Failed to parse KeyCertificate")
-		return
-	}
 
-	versionByte := payload[0]
-	cpkTypeBytes := payload[1:3]
-	spkTypeBytes := payload[3:5]
+	cpkTypeBytes := payload[0:2]
+	spkTypeBytes := payload[2:4]
 
 	cpkType := Integer(cpkTypeBytes)
 	spkType := Integer(spkTypeBytes)
@@ -385,7 +379,6 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 
 	log.WithFields(logrus.Fields{
-		"version":          versionByte,
 		"spk_type":         key_certificate.SpkType.Int(),
 		"cpk_type":         key_certificate.CpkType.Int(),
 		"remainder_length": len(remainder),
@@ -400,24 +393,24 @@ func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	}
 
 	data := cert.Data()
-	fmt.Printf("Certificate Data Length: %d\n", len(data))
-	fmt.Printf("Certificate Data Bytes: %v\n", data)
+	fmt.Printf("Certificate Data Length in KeyCertificateFromCertificate: %d\n", len(data))
+	fmt.Printf("Certificate Data Bytes in KeyCertificateFromCertificate: %v\n", data)
 
 	if len(data) < 4 {
-		return nil, fmt.Errorf("certificate payload too short")
+		return nil, fmt.Errorf("certificate payload too short in KeyCertificateFromCertificate")
 	}
 
-	cpkTypeBytes := data[1:3]
-	spkTypeBytes := data[3:5]
+	cpkTypeBytes := data[0:2]
+	spkTypeBytes := data[2:4]
 
-	fmt.Printf("cpkTypeBytes: %v\n", cpkTypeBytes)
-	fmt.Printf("spkTypeBytes: %v\n", spkTypeBytes)
+	fmt.Printf("cpkTypeBytes in KeyCertificateFromCertificate: %v\n", cpkTypeBytes)
+	fmt.Printf("spkTypeBytes in KeyCertificateFromCertificate: %v\n", spkTypeBytes)
 
 	cpkType := Integer(cpkTypeBytes)
 	spkType := Integer(spkTypeBytes)
 
-	fmt.Printf("cpkType (Int): %d\n", cpkType.Int())
-	fmt.Printf("spkType (Int): %d\n", spkType.Int())
+	fmt.Printf("cpkType (Int) in KeyCertificateFromCertificate: %d\n", cpkType.Int())
+	fmt.Printf("spkType (Int) in KeyCertificateFromCertificate: %d\n", spkType.Int())
 
 	keyCert := &KeyCertificate{
 		Certificate: cert,
