@@ -274,7 +274,7 @@ func ReadKeysAndCertDeux(data []byte) (keysAndCert *KeysAndCert, remainder []byt
 		return
 	}
 
-	keyCert, err := NewKeyCertificateFromCertificate(cert)
+	keyCert, err := KeyCertificateFromCertificate(cert)
 	if err != nil {
 		fmt.Printf("Failed to parse KeyCertificate: %v\n", err)
 		return

@@ -394,33 +394,36 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	return
 }
 
-// KeyCertificateFromCertificate returns a *KeyCertificate from a *Certificate.
-func KeyCertificateFromCertificate(certificate Certificate) (*KeyCertificate, error) {
-	log.Debug("Creating keyCertificate from Certificate")
-	k, _, err := NewKeyCertificate(certificate.Bytes())
-	if err != nil {
-		log.WithError(err).Error("Failed to create keyCertificate from Certificate")
-		return nil, err
+func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
+	if cert.Type() != CERT_KEY {
+		return nil, fmt.Errorf("expected Key Certificate type, got %d", cert.Type())
 	}
-	log.Debug("Successfully created keyCertificate from Certificate")
-	return k, nil
-}
 
-func NewKeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
-	payload := cert.Data()
-	if len(payload) < 4 {
-		return nil, errors.New("key certificate payload too short")
+	data := cert.Data()
+	fmt.Printf("Certificate Data Length: %d\n", len(data))
+	fmt.Printf("Certificate Data Bytes: %v\n", data)
+
+	if len(data) < 4 {
+		return nil, fmt.Errorf("certificate payload too short")
 	}
-	sigTypeBytes := payload[0:2]
-	cryptoTypeBytes := payload[2:4]
 
-	// Convert bytes to data.Integer
-	sigType := Integer(sigTypeBytes)
-	cryptoType := Integer(cryptoTypeBytes)
+	cpkTypeBytes := data[1:3]
+	spkTypeBytes := data[3:5]
 
-	return &KeyCertificate{
+	fmt.Printf("cpkTypeBytes: %v\n", cpkTypeBytes)
+	fmt.Printf("spkTypeBytes: %v\n", spkTypeBytes)
+
+	cpkType := Integer(cpkTypeBytes)
+	spkType := Integer(spkTypeBytes)
+
+	fmt.Printf("cpkType (Int): %d\n", cpkType.Int())
+	fmt.Printf("spkType (Int): %d\n", spkType.Int())
+
+	keyCert := &KeyCertificate{
 		Certificate: cert,
-		SpkType:     sigType,
-		CpkType:     cryptoType,
-	}, nil
+		CpkType:     cpkType,
+		SpkType:     spkType,
+	}
+
+	return keyCert, nil
 }
