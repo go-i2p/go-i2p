@@ -155,41 +155,73 @@ func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 func (lease_set LeaseSet) DestinationDeux() (destination Destination, err error) {
 	data := lease_set
 
-	if len(data) < 3 {
-		err = errors.New("LeaseSet data is too short to contain a certificate")
-		log.WithError(err).Error("LeaseSet data too short")
-		return
-	}
+	fmt.Printf("Starting DestinationDeux, lease_set_length=%d\n", len(data))
 
-	certLengthIndex := len(data) - 3
-
-	certLengthBytes := data[certLengthIndex : certLengthIndex+2]
-	certLength := int(certLengthBytes[0])<<8 | int(certLengthBytes[1])
-	certTotalLength := 1 + 2 + certLength
-
-	certStartIndex := len(data) - certTotalLength
-	if certStartIndex < 0 {
-		err = errors.New("LeaseSet data is too short to contain the certificate")
-		log.WithError(err).Error("LeaseSet data too short")
-		return
-	}
-
-	keysAndCertLength := certStartIndex
-
-	keysAndCertData := data[:keysAndCertLength+certTotalLength]
-
-	keys_and_cert, _, err := ReadKeysAndCertTrois(keysAndCertData)
+	// Read the Destination (KeysAndCert) from the LeaseSet
+	destination, remainder, err := ReadDestinationFromLeaseSet(data)
 	if err != nil {
-		log.WithError(err).Error("Failed to read KeysAndCert from LeaseSet")
+		fmt.Printf("Failed to read Destination from LeaseSet: %v\n", err)
 		return
 	}
 
-	destination, _, err = ReadDestination(keys_and_cert.Bytes())
-	if err != nil {
-		log.WithError(err).Error("Failed to read Destination from KeysAndCert")
-	} else {
-		log.Debug("Successfully retrieved Destination from LeaseSet")
+	fmt.Printf("Successfully retrieved Destination from LeaseSet\n")
+	fmt.Printf("  destination_length: %d\n", len(data)-len(remainder))
+	fmt.Printf("  remainder_length: %d\n", len(remainder))
+
+	return
+}
+
+func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainder []byte, err error) {
+	fmt.Printf("Reading Destination from LeaseSet, input_length=%d\n", len(data))
+
+	if len(data) < 387 { // Minimum size of Destination (384 keys + 3 bytes for minimum certificate)
+		err = errors.New("LeaseSet data too short to contain Destination")
+		fmt.Printf("Error: %v\n", err)
+		return
 	}
+
+	certDataStart := 384
+	certData := data[certDataStart:]
+
+	cert, _, err := ReadCertificate(certData)
+	if err != nil {
+		fmt.Printf("Failed to read Certificate from LeaseSet: %v\n", err)
+		return
+	}
+
+	certTotalLength := 3 + int(cert.Length())
+	destinationLength := certDataStart + certTotalLength
+
+	fmt.Printf("Certificate details:\n")
+	fmt.Printf("  certType: %d\n", cert.Type())
+	fmt.Printf("  certLength: %d\n", cert.Length())
+	fmt.Printf("  certTotalLength: %d\n", certTotalLength)
+	fmt.Printf("  destinationLength: %d\n", destinationLength)
+
+	if len(data) < destinationLength {
+		err = errors.New("LeaseSet data too short to contain full Destination")
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	destinationData := data[:destinationLength]
+
+	keysAndCert, _, err := ReadKeysAndCertDeux(destinationData)
+	if err != nil {
+		fmt.Printf("Failed to read KeysAndCert: %v\n", err)
+		return
+	}
+
+	destination = Destination{
+		KeysAndCert: *keysAndCert,
+	}
+
+	remainder = data[destinationLength:]
+
+	fmt.Printf("Successfully read Destination from LeaseSet\n")
+	fmt.Printf("  destination_length: %d\n", destinationLength)
+	fmt.Printf("  remainder_length: %d\n", len(remainder))
+
 	return
 }
 

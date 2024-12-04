@@ -327,7 +327,7 @@ func TestLeaseSetCreation(t *testing.T) {
 	assert.NotNil(leaseSet)
 
 	// Check the size of the LeaseSet's Destination KeysAndCert
-	dest, err := leaseSet.Destination()
+	dest, err := leaseSet.DestinationDeux()
 	assert.Nil(err)
 	assert.NotNil(dest)
 
