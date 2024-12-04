@@ -1,6 +1,7 @@
 package certificate
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,4 +144,225 @@ func TestReadCertificateWithInvalidLength(t *testing.T) {
 	if assert.NotNil(err) {
 		assert.Equal("error parsing certificate: certificate is too short", err.Error(), "correct error message should be returned")
 	}
+}
+
+func TestNewCertificateNullType(t *testing.T) {
+	assert := assert.New(t)
+
+	// Create a NULL certificate with no payload
+	cert, err := NewCertificateWithType(CERT_NULL, []byte{})
+	assert.Nil(err, "Expected no error when creating NULL certificate with empty payload")
+	assert.Equal(CERT_NULL, cert.Type(), "Certificate type should be CERT_NULL")
+	assert.Equal(0, cert.Length(), "Certificate length should be 0 for NULL certificate")
+	assert.Equal(0, len(cert.Data()), "Certificate data should be empty for NULL certificate")
+}
+
+func TestNewCertificateNullTypeWithPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	// Attempt to create a NULL certificate with a payload (should fail)
+	_, err := NewCertificateWithType(CERT_NULL, []byte{0x00})
+	assert.NotNil(err, "Expected error when creating NULL certificate with payload")
+	assert.Equal("NULL certificates must have empty payload", err.Error(), "Correct error message should be returned")
+}
+
+func TestNewCertificateKeyType(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0x00, 0x01, 0x02, 0x03, 0x04}
+	cert, err := NewCertificateWithType(CERT_KEY, payload)
+	assert.Nil(err, "Expected no error when creating KEY certificate with valid payload")
+	assert.Equal(CERT_KEY, cert.Type(), "Certificate type should be CERT_KEY")
+	assert.Equal(len(payload), cert.Length(), "Certificate length should match payload length")
+	assert.Equal(payload, cert.Data(), "Certificate data should match payload")
+}
+
+func TestNewCertificateInvalidType(t *testing.T) {
+	assert := assert.New(t)
+
+	invalidCertType := uint8(6) // Invalid type (valid types are 0-5)
+	_, err := NewCertificateWithType(invalidCertType, []byte{})
+	assert.NotNil(err, "Expected error when creating certificate with invalid type")
+	assert.Equal("invalid certificate type: 6", err.Error(), "Correct error message should be returned")
+}
+
+func TestNewCertificatePayloadTooLong(t *testing.T) {
+	assert := assert.New(t)
+
+	// Create a payload that exceeds the maximum allowed length (65535 bytes)
+	payload := make([]byte, 65536) // 65536 bytes
+	_, err := NewCertificateWithType(CERT_KEY, payload)
+	assert.NotNil(err, "Expected error when creating certificate with payload too long")
+	assert.Equal("certificate payload too long: maximum length is 65535 bytes", err.Error(), "Correct error message should be returned")
+}
+
+func TestCertificateBytesSerialization(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0xAA, 0xBB, 0xCC}
+	certType := CERT_SIGNED
+	cert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating SIGNED certificate")
+
+	expectedBytes := []byte{
+		byte(certType),           // Certificate type
+		0x00, byte(len(payload)), // Certificate length (2 bytes)
+		0xAA, 0xBB, 0xCC, // Payload
+	}
+
+	actualBytes := cert.Bytes()
+	assert.Equal(expectedBytes, actualBytes, "Certificate bytes should match expected serialization")
+}
+
+func TestCertificateFieldsAfterCreation(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	certType := CERT_MULTIPLE
+	cert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating MULTIPLE certificate")
+
+	assert.Equal(certType, cert.Type(), "Certificate type should match")
+	assert.Equal(len(payload), cert.Length(), "Certificate length should match payload length")
+	assert.Equal(payload, cert.Data(), "Certificate data should match payload")
+}
+
+func TestCertificateWithZeroLengthPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	certType := CERT_HASHCASH
+	cert, err := NewCertificateWithType(uint8(certType), []byte{})
+	assert.Nil(err, "Expected no error when creating certificate with zero-length payload")
+
+	assert.Equal(certType, cert.Type(), "Certificate type should match")
+	assert.Equal(0, cert.Length(), "Certificate length should be 0 for zero-length payload")
+	assert.Equal(0, len(cert.Data()), "Certificate data should be empty")
+}
+
+func TestNewCertificateDeuxFunction(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0x11, 0x22}
+	certType := CERT_HIDDEN
+	cert, err := NewCertificateDeux(certType, payload)
+	assert.Nil(err, "Expected no error when creating certificate with NewCertificateDeux")
+
+	assert.Equal(certType, cert.Type(), "Certificate type should match")
+	assert.Equal(len(payload), cert.Length(), "Certificate length should match payload length")
+	assert.Equal(payload, cert.Data(), "Certificate data should match payload")
+}
+
+func TestNewCertificateWithInvalidPayloadLength(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := make([]byte, 70000) // Exceeds 65535 bytes
+	_, err := NewCertificateDeux(CERT_KEY, payload)
+	assert.NotNil(err, "Expected error when creating certificate with payload exceeding maximum length")
+	assert.Equal("payload too long: 70000 bytes", err.Error(), "Correct error message should be returned")
+}
+
+func TestCertificateExcessBytes(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0x01, 0x02}
+	extraBytes := []byte{0x03, 0x04}
+	certData := append(payload, extraBytes...)
+
+	certBytes := append([]byte{byte(CERT_SIGNED)}, []byte{0x00, byte(len(payload))}...)
+	certBytes = append(certBytes, certData...)
+
+	cert, err := readCertificate(certBytes)
+	assert.Nil(err, "Expected no error when reading certificate with excess bytes")
+
+	excess := cert.ExcessBytes()
+	assert.Equal(extraBytes, excess, "ExcessBytes should return the extra bytes in the payload")
+
+	assert.Equal(payload, cert.Data(), "Data() should return the valid payload excluding excess bytes")
+}
+
+func TestCertificateSerializationDeserialization(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0xAA, 0xBB, 0xCC}
+	certType := CERT_SIGNED
+
+	originalCert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating SIGNED certificate")
+
+	serializedBytes := originalCert.Bytes()
+	assert.NotNil(serializedBytes, "Serialized bytes should not be nil")
+
+	deserializedCert, err := readCertificate(serializedBytes)
+	assert.Nil(err, "Expected no error when deserializing certificate")
+
+	assert.Equal(originalCert.Type(), deserializedCert.Type(), "Certificate types should match")
+	assert.Equal(originalCert.Length(), deserializedCert.Length(), "Certificate lengths should match")
+	assert.Equal(originalCert.Data(), deserializedCert.Data(), "Certificate payloads should match")
+}
+
+func TestCertificateSerializationDeserializationWithExcessBytes(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{0x01, 0x02}
+	certType := CERT_MULTIPLE
+
+	originalCert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating MULTIPLE certificate")
+
+	serializedBytes := originalCert.Bytes()
+
+	excessBytes := []byte{0x03, 0x04}
+	serializedBytesWithExcess := append(serializedBytes, excessBytes...)
+
+	deserializedCert, err := readCertificate(serializedBytesWithExcess)
+	assert.Nil(err, "Expected no error when deserializing certificate with excess bytes")
+
+	assert.Equal(originalCert.Type(), deserializedCert.Type(), "Certificate types should match")
+	assert.Equal(originalCert.Length(), deserializedCert.Length(), "Certificate lengths should match")
+	assert.Equal(originalCert.Data(), deserializedCert.Data(), "Certificate payloads should match")
+
+	excess := deserializedCert.ExcessBytes()
+	assert.Equal(excessBytes, excess, "ExcessBytes should return the extra bytes appended to the serialized data")
+}
+
+func TestCertificateSerializationDeserializationEmptyPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := []byte{}
+	certType := CERT_NULL
+
+	originalCert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating NULL certificate")
+
+	serializedBytes := originalCert.Bytes()
+
+	deserializedCert, err := readCertificate(serializedBytes)
+	assert.Nil(err, "Expected no error when deserializing NULL certificate")
+
+	assert.Equal(originalCert.Type(), deserializedCert.Type(), "Certificate types should match")
+	assert.Equal(originalCert.Length(), deserializedCert.Length(), "Certificate lengths should match")
+	assert.Equal(originalCert.Data(), deserializedCert.Data(), "Certificate payloads should match")
+}
+
+func TestCertificateSerializationDeserializationMaxPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	payload := make([]byte, 65535)
+	for i := range payload {
+		payload[i] = byte(i % 256)
+	}
+	certType := CERT_KEY
+
+	originalCert, err := NewCertificateWithType(uint8(certType), payload)
+	assert.Nil(err, "Expected no error when creating KEY certificate with maximum payload")
+
+	serializedBytes := originalCert.Bytes()
+	assert.Equal(1+2+65535, len(serializedBytes), "Serialized bytes length should be correct for maximum payload")
+
+	deserializedCert, err := readCertificate(serializedBytes)
+	assert.Nil(err, "Expected no error when deserializing certificate with maximum payload")
+
+	assert.Equal(originalCert.Type(), deserializedCert.Type(), "Certificate types should match")
+	assert.Equal(originalCert.Length(), deserializedCert.Length(), "Certificate lengths should match")
+	assert.True(bytes.Equal(originalCert.Data(), deserializedCert.Data()), "Certificate payloads should match")
 }

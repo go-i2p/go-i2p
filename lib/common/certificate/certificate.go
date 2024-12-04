@@ -220,6 +220,34 @@ func NewCertificate() *Certificate {
 	}
 }
 
+func NewCertificateDeux(certType int, payload []byte) (*Certificate, error) {
+	if certType < 0 || certType > 255 {
+		return nil, fmt.Errorf("invalid certificate type: %d", certType)
+	}
+	certTypeByte := byte(certType)
+
+	if len(payload) > 65535 {
+		return nil, fmt.Errorf("payload too long: %d bytes", len(payload))
+	}
+
+	_len, err := NewIntegerFromInt(len(payload), 2)
+	if err != nil {
+		panic(err)
+	}
+	cert := &Certificate{
+		kind:    Integer([]byte{certTypeByte}),
+		len:     *_len,
+		payload: payload,
+	}
+
+	log.WithFields(logrus.Fields{
+		"type":   certType,
+		"length": len(payload),
+	}).Debug("Successfully created new certificate")
+
+	return cert, nil
+}
+
 // NewCertificateWithType creates a new Certificate with specified type and payload
 func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error) {
 	// Validate certificate type
