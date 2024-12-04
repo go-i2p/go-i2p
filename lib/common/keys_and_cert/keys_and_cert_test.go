@@ -63,15 +63,22 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
-	signingPublicKeyType, _ := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
-	cryptoPublicKeyType, _ := data.NewIntegerFromInt(key_certificate.KEYCERT_CRYPTO_ELG, 2)
-	payload.Write(*signingPublicKeyType)
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2) // ElGamal
+	if err != nil {
+		t.Fatalf("Failed to create crypto public key type integer: %v", err)
+	}
+
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
+	if err != nil {
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
+	}
 	payload.Write(*cryptoPublicKeyType)
+	payload.Write(*signingPublicKeyType)
 
 	// Create certificate
-	cert, err := certificate.NewCertificateDeux(certificate.CERT_KEY, payload.Bytes())
+	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
-		panic(err)
+		t.Fatalf("Failed to create new certificate: %v\n", err)
 	}
 
 	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
