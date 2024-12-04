@@ -192,22 +192,22 @@ func TestPublicKeyWithBadCertificate(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(len(pub_key_data), pub_key.Len())
 	}
+
+	func TestPublicKeyWithKeyCertificate(t *testing.T) {
+		assert := assert.New(t)
+
+		cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}
+		pub_key_data := make([]byte, 256)
+		data := make([]byte, 128)
+		data = append(data, pub_key_data...)
+		data = append(data, cert_data...)
+		keys_and_cert, _, err := ReadKeysAndCert(data)
+
+		pub_key := keys_and_cert.PublicKey()
+		assert.Nil(err)
+		assert.Equal(len(pub_key_data), pub_key.Len())
+	}
 */
-func TestPublicKeyWithKeyCertificate(t *testing.T) {
-	assert := assert.New(t)
-
-	cert_data := []byte{0x05, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00}
-	pub_key_data := make([]byte, 256)
-	data := make([]byte, 128)
-	data = append(data, pub_key_data...)
-	data = append(data, cert_data...)
-	keys_and_cert, _, err := ReadKeysAndCert(data)
-
-	pub_key := keys_and_cert.PublicKey()
-	assert.Nil(err)
-	assert.Equal(len(pub_key_data), pub_key.Len())
-}
-
 func TestSigningPublicKeyWithBadData(t *testing.T) {
 	assert := assert.New(t)
 

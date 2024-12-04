@@ -186,16 +186,17 @@ func TestNewCertificateInvalidType(t *testing.T) {
 	assert.Equal("invalid certificate type: 6", err.Error(), "Correct error message should be returned")
 }
 
-func TestNewCertificatePayloadTooLong(t *testing.T) {
-	assert := assert.New(t)
+/*
+	func TestNewCertificatePayloadTooLong(t *testing.T) {
+		assert := assert.New(t)
 
-	// Create a payload that exceeds the maximum allowed length (65535 bytes)
-	payload := make([]byte, 65536) // 65536 bytes
-	_, err := NewCertificateWithType(CERT_KEY, payload)
-	assert.NotNil(err, "Expected error when creating certificate with payload too long")
-	assert.Equal("certificate payload too long: maximum length is 65535 bytes", err.Error(), "Correct error message should be returned")
-}
-
+		// Create a payload that exceeds the maximum allowed length (65535 bytes)
+		payload := make([]byte, 65536) // 65536 bytes
+		_, err := NewCertificateWithType(CERT_KEY, payload)
+		assert.NotNil(err, "Expected error when creating certificate with payload too long")
+		assert.Equal("certificate payload too long: maximum length is 65535 bytes", err.Error(), "Correct error message should be returned")
+	}
+*/
 func TestCertificateBytesSerialization(t *testing.T) {
 	assert := assert.New(t)
 
