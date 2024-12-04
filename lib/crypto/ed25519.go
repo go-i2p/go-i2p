@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 
@@ -212,11 +213,12 @@ func (k *Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
 }
 
 func (k Ed25519PrivateKey) Public() (SigningPublicKey, error) {
+	fmt.Printf("Ed25519PrivateKey.Public(): len(k) = %d\n", len(k))
 	if len(k) != ed25519.PrivateKeySize {
-		return nil, errors.New("invalid ed25519 private key size")
+		return nil, fmt.Errorf("invalid ed25519 private key size: expected %d, got %d", ed25519.PrivateKeySize, len(k))
 	}
-	// The public key is the first 32 bytes of the private key's seed
 	pubKey := k[32:]
+	fmt.Printf("Ed25519PrivateKey.Public(): extracted pubKey length: %d\n", len(pubKey))
 	return Ed25519PublicKey(pubKey), nil
 }
 
