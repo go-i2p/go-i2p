@@ -81,18 +81,6 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	// Directly write the bytes of the Integer instances to the payload
 	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
-	/*
-		err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
-		if err != nil {
-			t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
-		}
-
-		err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
-		if err != nil {
-			t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
-		}
-
-	*/
 
 	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
@@ -145,7 +133,7 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	if err != nil {
 		t.Fatalf("Failed to create router info: %v\n", err)
 	}
-	//
+
 	// Generate signing key pair for the LeaseSet (Ed25519)
 	var leaseSetSigningPrivKey crypto.Ed25519PrivateKey
 	_, err = leaseSetSigningPrivKey.Generate()
@@ -166,24 +154,11 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 		t.Fatalf("Failed to get lease set SigningPublicKey from Ed25519 public key")
 	}
 
-	//
 	var identityPrivKey crypto.Ed25519PrivateKey
 	_, err = identityPrivKey.Generate()
 	if err != nil {
 		t.Fatalf("Failed to generate identity Ed25519 private key: %v", err)
 	}
-	/*
-		identityPubKeyRaw, err := identityPrivKey.Public()
-		if err != nil {
-			t.Fatalf("Failed to derive identity Ed25519 public key: %v", err)
-		}
-		identityPubKey, ok := identityPubKeyRaw.(crypto.SigningPublicKey)
-		if !ok {
-			t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
-		}
-		identityPubKeyBytes := identityPubKey.Bytes() // 32 bytes
-
-	*/
 
 	return routerInfo, elg_pubkey, leaseSetSigningPubKey, &leaseSetSigningPrivKey, &identityPrivKey, nil
 }
@@ -275,10 +250,10 @@ func generateTestDestination(t *testing.T) (*destination.Destination, crypto.Pub
 
 	// Correctly call NewKeysAndCert with parameters in the right order
 	kac, err := keys_and_cert.NewKeysAndCert(
-		keyCert,        // keyCertificate *KeyCertificate
-		elg_pubkey,     // publicKey crypto.PublicKey
-		padding,        // padding []byte
-		ed25519_pubkey, // signingPublicKey crypto.SigningPublicKey
+		keyCert,
+		elg_pubkey,
+		padding,
+		ed25519_pubkey,
 	)
 	t.Logf("Signing Public Key Type: %d", signingPublicKeyType.Int())
 	t.Logf("Crypto Public Key Type: %d", cryptoPublicKeyType.Int())
