@@ -364,6 +364,113 @@ func ReadKeysAndCertDeux(data []byte) (keysAndCert *KeysAndCert, remainder []byt
 
 	return
 }
+func ReadKeysAndCertTrois(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"input_length": len(data),
+	}).Debug("Reading KeysAndCert from data")
+
+	dataLen := len(data)
+	if dataLen < 3 {
+		err = errors.New("data is too short to contain a certificate")
+		log.WithError(err).Error("Data is too short to contain the certificate")
+		return
+	}
+
+	certLengthIndex := dataLen - 3
+	certLengthBytes := data[certLengthIndex : certLengthIndex+2]
+	certLength := int(certLengthBytes[0])<<8 | int(certLengthBytes[1])
+
+	certTotalLength := 1 + 2 + certLength
+
+	certStartIndex := dataLen - certTotalLength
+	if certStartIndex < 0 {
+		err = errors.New("data too short to contain the certificate")
+		log.WithError(err).Error("Data too short to contain the certificate")
+		return
+	}
+
+	certData := data[certStartIndex:dataLen]
+	cert, _, err := ReadCertificate(certData)
+	if err != nil {
+		log.WithError(err).Error("Failed to read Certificate")
+		return
+	}
+
+	keyCert, err := NewKeyCertificateFromCertificate(cert)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse KeyCertificate")
+		return
+	}
+
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+
+	publicKeyStart := 0
+	publicKeyEnd := publicKeyStart + pubKeySize
+
+	signingKeyEnd := certStartIndex
+	signingKeyStart := signingKeyEnd - sigKeySize
+
+	paddingStart := publicKeyEnd
+	paddingEnd := signingKeyStart
+
+	if signingKeyStart < paddingEnd || paddingEnd < paddingStart {
+		err = errors.New("invalid key sizes or data too short")
+		log.WithError(err).Error("Invalid key sizes or data too short")
+		return
+	}
+
+	publicKeyData := data[publicKeyStart:publicKeyEnd]
+	var publicKey crypto.PublicKey
+	switch keyCert.CpkType.Int() {
+	case KEYCERT_CRYPTO_ELG:
+		if len(publicKeyData) != 256 {
+			err = fmt.Errorf("invalid ElGamal public key length: expected 256, got %d", len(publicKeyData))
+			log.WithError(err).Error("Invalid ElGamal public key length")
+			return
+		}
+		var elgPublicKey crypto.ElgPublicKey
+		copy(elgPublicKey[:], publicKeyData)
+		publicKey = elgPublicKey
+	default:
+		panic("Unsupported public key type")
+	}
+
+	signingKeyData := data[signingKeyStart:signingKeyEnd]
+	var signingPublicKey crypto.SigningPublicKey
+	switch keyCert.SpkType.Int() {
+	case KEYCERT_SIGN_ED25519:
+		if len(signingKeyData) != 32 {
+			err = fmt.Errorf("invalid Ed25519 public key length: expected 32, got %d", len(signingKeyData))
+			log.WithError(err).Error("Invalid Ed25519 public key length")
+			return
+		}
+		var edPublicKey crypto.Ed25519PublicKey
+		copy(edPublicKey[:], signingKeyData)
+		signingPublicKey = edPublicKey
+	default:
+		panic("Unsupported signing public key type")
+	}
+
+	paddingData := data[paddingStart:paddingEnd]
+
+	remainder = []byte{}
+
+	keysAndCert = &KeysAndCert{
+		KeyCertificate:   keyCert,
+		publicKey:        publicKey,
+		signingPublicKey: signingPublicKey,
+		Padding:          paddingData,
+	}
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         keyCert.CpkType.Int(),
+		"signing_public_key_type": keyCert.SpkType.Int(),
+		"padding_length":          len(paddingData),
+	}).Debug("Successfully read KeysAndCert")
+
+	return
+}
 
 func readCertificateFromEnd(data []byte) (cert Certificate, certStartIndex int, err error) {
 	dataLen := len(data)

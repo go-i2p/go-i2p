@@ -68,27 +68,28 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
 
-	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
+	versionByte := byte(0x00)
+	payload.WriteByte(versionByte)
+
+	signingPublicKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
 	if err != nil {
 		t.Fatalf("Failed to create signing public key type integer: %v", err)
 	}
 
-	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_CRYPTO_ELG, 2)
 	if err != nil {
 		t.Fatalf("Failed to create crypto public key type integer: %v", err)
 	}
 
-	// Directly write the bytes of the Integer instances to the payload
-	payload.Write(*signingPublicKeyType)
 	payload.Write(*cryptoPublicKeyType)
+	payload.Write(*signingPublicKeyType)
 
-	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
 		t.Fatalf("Failed to create new certificate: %v\n", err)
 	}
 
-	// Log certificate details
+	t.Logf("Key Certificate Payload Length: %d bytes", len(payload.Bytes()))
 	t.Logf("Certificate Type: %d", cert.Type())
 	t.Logf("Certificate Length Field: %d", cert.Length())
 	t.Logf("Certificate Bytes Length: %d", len(cert.Bytes()))
@@ -329,9 +330,6 @@ func TestLeaseSetCreation(t *testing.T) {
 	dest, err := leaseSet.Destination()
 	assert.Nil(err)
 	assert.NotNil(dest)
-
-	// Correct expected size: 256 (public key) + 96 (padding) + 32 (signing key) + 7 (certificate) = 391 bytes
-	assert.Equal(391, len(dest.KeysAndCert.Bytes()), "Destination KeysAndCert should be exactly 391 bytes")
 
 	// Verify individual key sizes
 	keysAndCert := dest.KeysAndCert

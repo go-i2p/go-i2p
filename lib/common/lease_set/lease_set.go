@@ -138,11 +138,52 @@ type LeaseSet struct {
 
 // Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
-	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
+	keys_and_cert, _, err := ReadKeysAndCertElgAndEd25519(lease_set)
 	if err != nil {
 		log.WithError(err).Error("Failed to read KeysAndCert from LeaseSet")
 		return
 	}
+	destination, _, err = ReadDestination(keys_and_cert.Bytes())
+	if err != nil {
+		log.WithError(err).Error("Failed to read Destination from KeysAndCert")
+	} else {
+		log.Debug("Successfully retrieved Destination from LeaseSet")
+	}
+	return
+}
+
+func (lease_set LeaseSet) DestinationDeux() (destination Destination, err error) {
+	data := lease_set
+
+	if len(data) < 3 {
+		err = errors.New("LeaseSet data is too short to contain a certificate")
+		log.WithError(err).Error("LeaseSet data too short")
+		return
+	}
+
+	certLengthIndex := len(data) - 3
+
+	certLengthBytes := data[certLengthIndex : certLengthIndex+2]
+	certLength := int(certLengthBytes[0])<<8 | int(certLengthBytes[1])
+	certTotalLength := 1 + 2 + certLength
+
+	certStartIndex := len(data) - certTotalLength
+	if certStartIndex < 0 {
+		err = errors.New("LeaseSet data is too short to contain the certificate")
+		log.WithError(err).Error("LeaseSet data too short")
+		return
+	}
+
+	keysAndCertLength := certStartIndex
+
+	keysAndCertData := data[:keysAndCertLength+certTotalLength]
+
+	keys_and_cert, _, err := ReadKeysAndCertTrois(keysAndCertData)
+	if err != nil {
+		log.WithError(err).Error("Failed to read KeysAndCert from LeaseSet")
+		return
+	}
+
 	destination, _, err = ReadDestination(keys_and_cert.Bytes())
 	if err != nil {
 		log.WithError(err).Error("Failed to read Destination from KeysAndCert")

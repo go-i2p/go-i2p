@@ -43,24 +43,24 @@ var log = logger.GetGoI2PLogger()
 
 // Key Certificate Signing Key Types
 const (
-	KEYCERT_SIGN_DSA_SHA1 = iota
-	KEYCERT_SIGN_P256
-	KEYCERT_SIGN_P384
-	KEYCERT_SIGN_P521
-	KEYCERT_SIGN_RSA2048
-	KEYCERT_SIGN_RSA3072
-	KEYCERT_SIGN_RSA4096
-	KEYCERT_SIGN_ED25519
-	KEYCERT_SIGN_ED25519PH
+	KEYCERT_SIGN_DSA_SHA1  = 0
+	KEYCERT_SIGN_P256      = 1
+	KEYCERT_SIGN_P384      = 2
+	KEYCERT_SIGN_P521      = 3
+	KEYCERT_SIGN_RSA2048   = 4
+	KEYCERT_SIGN_RSA3072   = 5
+	KEYCERT_SIGN_RSA4096   = 6
+	KEYCERT_SIGN_ED25519   = 7
+	KEYCERT_SIGN_ED25519PH = 8
 )
 
 // Key Certificate Public Key Types
 const (
-	KEYCERT_CRYPTO_ELG = iota
-	KEYCERT_CRYPTO_P256
-	KEYCERT_CRYPTO_P384
-	KEYCERT_CRYPTO_P521
-	KEYCERT_CRYPTO_X25519
+	KEYCERT_CRYPTO_ELG    = 0
+	KEYCERT_CRYPTO_P256   = 1
+	KEYCERT_CRYPTO_P384   = 2
+	KEYCERT_CRYPTO_P521   = 3
+	KEYCERT_CRYPTO_X25519 = 4
 )
 
 const (
@@ -185,7 +185,6 @@ var CryptoPublicKeySizes = map[uint16]int{
 var SignaturePublicKeySizes = map[uint16]int{
 	SIGNATURE_TYPE_DSA_SHA1:       128,
 	SIGNATURE_TYPE_ED25519_SHA512: 32,
-	// Add other signature types and their sizes as needed
 }
 
 func (keyCertificate *KeyCertificate) CryptoPublicKeySize() (int, error) {
@@ -299,7 +298,13 @@ func (keyCertificate KeyCertificate) SignatureSize() (size int) {
 		KEYCERT_SIGN_ED25519PH: KEYCERT_SIGN_ED25519PH_SIZE,
 	}
 	key_type := keyCertificate.SigningPublicKeyType()
-	size = sizes[int(key_type)]
+	size, exists := sizes[key_type]
+	if !exists {
+		log.WithFields(logrus.Fields{
+			"key_type": key_type,
+		}).Warn("Unknown signing key type")
+		return 0 // Or handle error appropriately
+	}
 	log.WithFields(logrus.Fields{
 		"key_type":       key_type,
 		"signature_size": size,
@@ -341,17 +346,18 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 
 	payload := certificate.Data()
-	if len(payload) < 4 {
+	if len(payload) < 5 {
 		err = errors.New("key certificate payload too short")
 		log.WithError(err).Error("Failed to parse KeyCertificate")
 		return
 	}
 
-	spkTypeBytes := payload[0:2]
-	cpkTypeBytes := payload[2:4]
+	versionByte := payload[0]
+	cpkTypeBytes := payload[1:3]
+	spkTypeBytes := payload[3:5]
 
-	spkType := Integer(spkTypeBytes)
 	cpkType := Integer(cpkTypeBytes)
+	spkType := Integer(spkTypeBytes)
 
 	key_certificate = &KeyCertificate{
 		Certificate: certificate,
@@ -360,6 +366,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 
 	log.WithFields(logrus.Fields{
+		"version":          versionByte,
 		"spk_type":         key_certificate.SpkType.Int(),
 		"cpk_type":         key_certificate.CpkType.Int(),
 		"remainder_length": len(remainder),
