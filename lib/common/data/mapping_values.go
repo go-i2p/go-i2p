@@ -34,9 +34,11 @@ func (m MappingValues) Get(key I2PString) I2PString {
 // ValuesToMapping creates a *Mapping using MappingValues.
 // The values are sorted in the order defined in mappingOrder.
 func ValuesToMapping(values MappingValues) *Mapping {
+	mappingOrder(values)
+
 	// Default length to 2 * len
-	// 1 byte for ;
-	// 1 byte for =
+	// 1 byte for ';'
+	// 1 byte for '='
 	log.WithFields(logrus.Fields{
 		"values_count": len(values),
 	}).Debug("Converting MappingValues to Mapping")

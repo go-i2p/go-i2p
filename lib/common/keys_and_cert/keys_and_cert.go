@@ -2,8 +2,8 @@
 package keys_and_cert
 
 import (
-	"crypto/rand"
 	"errors"
+	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
 
@@ -22,6 +22,8 @@ const (
 	KEYS_AND_CERT_MIN_SIZE    = 387
 	KEYS_AND_CERT_DATA_SIZE   = 384
 )
+
+// Key sizes in bytes
 
 /*
 [KeysAndCert]
@@ -77,7 +79,7 @@ total length: 387+ bytes
 //
 // https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
-	keyCertificate   *KeyCertificate
+	KeyCertificate   *KeyCertificate
 	publicKey        crypto.PublicKey
 	Padding          []byte
 	signingPublicKey crypto.SigningPublicKey
@@ -88,13 +90,15 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 	bytes := keys_and_cert.publicKey.Bytes()
 	bytes = append(bytes, keys_and_cert.Padding...)
 	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
-	bytes = append(bytes, keys_and_cert.keyCertificate.Bytes()...)
+	bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
+		"bytes":                bytes,
+		"padding":              keys_and_cert.Padding,
 		"bytes_length":         len(bytes),
 		"pk_bytes_length":      len(keys_and_cert.publicKey.Bytes()),
 		"padding_bytes_length": len(keys_and_cert.Padding),
 		"spk_bytes_length":     len(keys_and_cert.signingPublicKey.Bytes()),
-		"cert_bytes_length":    len(keys_and_cert.keyCertificate.Bytes()),
+		"cert_bytes_length":    len(keys_and_cert.KeyCertificate.Bytes()),
 	}).Debug("Retrieved bytes from KeysAndCert")
 	return bytes
 }
@@ -111,7 +115,7 @@ func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.
 
 // Certfificate returns the certificate.
 func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
-	return keys_and_cert.keyCertificate.Certificate
+	return keys_and_cert.KeyCertificate.Certificate
 }
 
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
@@ -122,18 +126,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}).Debug("Reading KeysAndCert from data")
 
 	data_len := len(data)
-	// keys_and_cert = KeysAndCert{}
-	if data_len < KEYS_AND_CERT_MIN_SIZE && data_len > KEYS_AND_CERT_DATA_SIZE {
-		log.WithFields(logrus.Fields{
-			"at":           "ReadKeysAndCert",
-			"data_len":     data_len,
-			"required_len": KEYS_AND_CERT_MIN_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		keys_and_cert.keyCertificate, remainder, _ = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
-		return
-	} else if data_len < KEYS_AND_CERT_DATA_SIZE {
+	if data_len < KEYS_AND_CERT_MIN_SIZE {
 		log.WithFields(logrus.Fields{
 			"at":           "ReadKeysAndCert",
 			"data_len":     data_len,
@@ -143,35 +136,144 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
-	keys_and_cert.keyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
+
+	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate")
 		return
 	}
-	// TODO: this only supports one key type right now and it's the old key type, but the layout is the same.
-	// a case-switch which sets the size of the SPK and the PK should be used to replace the referenced KEYS_AND_CERT_PUBKEY_SIZE
-	// and KEYS_AND_CERT_SPK_SIZE constants in the future.
-	keys_and_cert.publicKey, err = keys_and_cert.keyCertificate.ConstructPublicKey(data[:keys_and_cert.keyCertificate.CryptoSize()])
+
+	// Get the actual key sizes from the certificate
+	pubKeySize := keys_and_cert.KeyCertificate.CryptoSize()
+	sigKeySize := keys_and_cert.KeyCertificate.SignatureSize()
+
+	// Construct public key
+	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:pubKeySize])
 	if err != nil {
 		log.WithError(err).Error("Failed to construct publicKey")
 		return
 	}
-	keys_and_cert.signingPublicKey, err = keys_and_cert.keyCertificate.ConstructSigningPublicKey(data[KEYS_AND_CERT_DATA_SIZE-keys_and_cert.keyCertificate.SignatureSize() : KEYS_AND_CERT_DATA_SIZE])
+
+	// Calculate padding size and extract padding
+	paddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	if paddingSize > 0 {
+		keys_and_cert.Padding = make([]byte, paddingSize)
+		copy(keys_and_cert.Padding, data[pubKeySize:pubKeySize+paddingSize])
+	}
+
+	// Construct signing public key
+	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(
+		data[KEYS_AND_CERT_DATA_SIZE-sigKeySize : KEYS_AND_CERT_DATA_SIZE],
+	)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct signingPublicKey")
 		return
 	}
-	padding := data[KEYS_AND_CERT_PUBKEY_SIZE : KEYS_AND_CERT_DATA_SIZE-KEYS_AND_CERT_SPK_SIZE]
-	keys_and_cert.Padding = padding
 
 	log.WithFields(logrus.Fields{
-		"public_key_type":         keys_and_cert.keyCertificate.PublicKeyType(),
-		"signing_public_key_type": keys_and_cert.keyCertificate.SigningPublicKeyType(),
-		"padding_length":          len(padding),
+		"public_key_type":         keys_and_cert.KeyCertificate.PublicKeyType(),
+		"signing_public_key_type": keys_and_cert.KeyCertificate.SigningPublicKeyType(),
+		"padding_length":          len(keys_and_cert.Padding),
 		"remainder_length":        len(remainder),
 	}).Debug("Successfully read KeysAndCert")
 
 	return
+}
+
+func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {
+	log.WithFields(logrus.Fields{
+		"input_length": len(data),
+	}).Debug("Reading KeysAndCert from data")
+
+	// Constants based on fixed key sizes
+	const (
+		pubKeySize    = 256                                    // ElGamal public key size
+		sigKeySize    = 32                                     // Ed25519 public key size
+		totalKeySize  = 384                                    // KEYS_AND_CERT_DATA_SIZE
+		paddingSize   = totalKeySize - pubKeySize - sigKeySize // 96 bytes
+		minDataLength = totalKeySize + 3
+	)
+
+	dataLen := len(data)
+	if dataLen < minDataLength {
+		err = fmt.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
+		log.WithError(err).Error("Data is smaller than minimum valid size")
+		return
+	}
+
+	// Initialize KeysAndCert
+	keysAndCert = &KeysAndCert{}
+
+	// Extract public key
+	publicKeyData := data[:pubKeySize]
+	if len(publicKeyData) != pubKeySize {
+		err = errors.New("invalid ElGamal public key length")
+		log.WithError(err).Error("Invalid ElGamal public key length")
+		return
+	}
+	var elgPublicKey crypto.ElgPublicKey
+	copy(elgPublicKey[:], publicKeyData)
+	keysAndCert.publicKey = elgPublicKey
+
+	// Extract padding
+	paddingStart := pubKeySize
+	paddingEnd := paddingStart + paddingSize
+	keysAndCert.Padding = data[paddingStart:paddingEnd]
+
+	// Extract signing public key
+	signingPubKeyData := data[paddingEnd : paddingEnd+sigKeySize]
+	if len(signingPubKeyData) != sigKeySize {
+		err = errors.New("invalid Ed25519 public key length")
+		log.WithError(err).Error("Invalid Ed25519 public key length")
+		return
+	}
+	edPublicKey := crypto.Ed25519PublicKey(signingPubKeyData)
+	keysAndCert.signingPublicKey = edPublicKey
+
+	// Extract the certificate
+	certData := data[totalKeySize:]
+	keysAndCert.KeyCertificate, remainder, err = NewKeyCertificate(certData)
+	if err != nil {
+		log.WithError(err).Error("Failed to read keyCertificate")
+		return
+	}
+
+	log.WithFields(logrus.Fields{
+		"public_key_type":         "ElGamal",
+		"signing_public_key_type": "Ed25519",
+		"padding_length":          len(keysAndCert.Padding),
+		"remainder_length":        len(remainder),
+	}).Debug("Successfully read KeysAndCert")
+
+	return
+}
+
+func constructPublicKey(data []byte, cryptoType uint16) (crypto.PublicKey, error) {
+	switch cryptoType {
+	case CRYPTO_KEY_TYPE_ELGAMAL:
+		if len(data) != 256 {
+			return nil, errors.New("invalid ElGamal public key length")
+		}
+		var elgPublicKey crypto.ElgPublicKey
+		copy(elgPublicKey[:], data)
+		return elgPublicKey, nil
+	// Handle other crypto types...
+	default:
+		return nil, fmt.Errorf("unsupported crypto key type: %d", cryptoType)
+	}
+}
+
+func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPublicKey, error) {
+	switch sigType {
+	case SIGNATURE_TYPE_ED25519_SHA512:
+		if len(data) != 32 {
+			return nil, errors.New("invalid Ed25519 public key length")
+		}
+		return crypto.Ed25519PublicKey(data), nil
+	// Handle other signature types...
+	default:
+		return nil, fmt.Errorf("unsupported signature key type: %d", sigType)
+	}
 }
 
 // NewKeysAndCert creates a new KeysAndCert instance with the provided parameters.
@@ -184,59 +286,45 @@ func NewKeysAndCert(
 ) (*KeysAndCert, error) {
 	log.Debug("Creating new KeysAndCert with provided parameters")
 
-	// 1. Validate keyCertificate
 	if keyCertificate == nil {
 		log.Error("KeyCertificate is nil")
 		return nil, errors.New("KeyCertificate cannot be nil")
 	}
 
-	// 2. Validate publicKey size
-	if publicKey.Len() != KEYS_AND_CERT_PUBKEY_SIZE {
+	// Get actual key sizes from certificate
+	pubKeySize := keyCertificate.CryptoSize()
+	sigKeySize := keyCertificate.SignatureSize()
+
+	// Validate public key size
+	if publicKey.Len() != pubKeySize {
 		log.WithFields(logrus.Fields{
-			"expected_size": KEYS_AND_CERT_PUBKEY_SIZE,
+			"expected_size": pubKeySize,
 			"actual_size":   publicKey.Len(),
 		}).Error("Invalid publicKey size")
-		return nil, errors.New("publicKey has an invalid size")
+		return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
 	}
 
-	/*
-		// 3. Validate signingPublicKey size
-		if signingPublicKey.Len() != KEYS_AND_CERT_SPK_SIZE {
-			log.WithFields(logrus.Fields{
-				"expected_size": KEYS_AND_CERT_SPK_SIZE,
-				"actual_size":   signingPublicKey.Len(),
-			}).Error("Invalid signingPublicKey size")
-			return nil, errors.New("signingPublicKey has an invalid size")
-		}
+	// Validate signing key size
+	if signingPublicKey.Len() != sigKeySize {
+		log.WithFields(logrus.Fields{
+			"expected_size": sigKeySize,
+			"actual_size":   signingPublicKey.Len(),
+		}).Error("Invalid signingPublicKey size")
+		return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+	}
 
-	*/
-
-	// 4. Validate padding size
-	publicKeyLength := publicKey.Len()
-	signingPublicKeyLength := signingPublicKey.Len()
-	totalKeysSize := publicKeyLength + signingPublicKeyLength
-	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - totalKeysSize
+	// Calculate expected padding size
+	expectedPaddingSize := KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
 	if len(padding) != expectedPaddingSize {
 		log.WithFields(logrus.Fields{
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
-		}).Warn("Invalid padding size")
-		// generate some random padding and continue
-		padding = make([]byte, expectedPaddingSize)
-		_, err := rand.Read(padding)
-		if err != nil {
-			log.WithError(err).Error("Failed to generate random padding")
-			return nil, err
-		}
-		log.WithFields(logrus.Fields{
-			"expected_size": expectedPaddingSize,
-			"actual_size":   len(padding),
-		}).Warn("Generated random padding")
+		}).Error("Invalid padding size")
+		return nil, fmt.Errorf("invalid padding size")
 	}
 
-	// 5. Assemble KeysAndCert
 	keysAndCert := &KeysAndCert{
-		keyCertificate:   keyCertificate,
+		KeyCertificate:   keyCertificate,
 		publicKey:        publicKey,
 		Padding:          padding,
 		signingPublicKey: signingPublicKey,

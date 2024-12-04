@@ -220,6 +220,34 @@ func NewCertificate() *Certificate {
 	}
 }
 
+func NewCertificateDeux(certType int, payload []byte) (*Certificate, error) {
+	if certType < 0 || certType > 255 {
+		return nil, fmt.Errorf("invalid certificate type: %d", certType)
+	}
+	certTypeByte := byte(certType)
+
+	if len(payload) > 65535 {
+		return nil, fmt.Errorf("payload too long: %d bytes", len(payload))
+	}
+
+	_len, err := NewIntegerFromInt(len(payload), 2)
+	if err != nil {
+		panic(err)
+	}
+	cert := &Certificate{
+		kind:    Integer([]byte{certTypeByte}),
+		len:     *_len,
+		payload: payload,
+	}
+
+	log.WithFields(logrus.Fields{
+		"type":   certType,
+		"length": len(payload),
+	}).Debug("Successfully created new certificate")
+
+	return cert, nil
+}
+
 // NewCertificateWithType creates a new Certificate with specified type and payload
 func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error) {
 	// Validate certificate type
@@ -252,7 +280,7 @@ func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error
 
 func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
 	if cert.Type() != CERT_KEY {
-		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type)
+		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type())
 	}
 	if len(cert.payload) < 2 {
 		return 0, fmt.Errorf("certificate payload too short to contain signature type")

@@ -3,6 +3,7 @@ package router_identity
 
 import (
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
@@ -56,12 +57,17 @@ func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.Signi
 
 	// Step 1: Create keyCertificate from the provided certificate.
 	// Assuming NewKeyCertificate is a constructor that takes a Certificate and returns a keyCertificate.
-	keyCert := key_certificate.KeyCertificateFromCertificate(cert)
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
+	if err != nil {
+		log.WithError(err).Error("KeyCertificateFromCertificate failed.")
+		return nil, err
+	}
 
 	// Step 2: Create KeysAndCert instance.
 	keysAndCert, err := NewKeysAndCert(keyCert, publicKey, padding, signingPublicKey)
 	if err != nil {
 		log.WithError(err).Error("NewKeysAndCert failed.")
+		return nil, err
 	}
 
 	// Step 3: Initialize RouterIdentity with KeysAndCert.
@@ -76,4 +82,10 @@ func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.Signi
 	}).Debug("Successfully created RouterIdentity")
 
 	return &routerIdentity, nil
+}
+
+func (router_identity *RouterIdentity) AsDestination() destination.Destination {
+	return destination.Destination{
+		KeysAndCert: router_identity.KeysAndCert,
+	}
 }

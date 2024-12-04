@@ -3,9 +3,11 @@ package router_info
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/binary"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
+	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 
@@ -62,18 +64,19 @@ func TestCreateRouterInfo(t *testing.T) {
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
 
-	signingPublicKeyType, _ := data.NewIntegerFromInt(7, 2)
-	cryptoPublicKeyType, _ := data.NewIntegerFromInt(0, 2)
-
-	err = binary.Write(&payload, binary.BigEndian, signingPublicKeyType)
+	signingPublicKeyType, err := data.NewIntegerFromInt(7, 2)
 	if err != nil {
-		t.Fatalf("Failed to write signing public key type to payload: %v\n", err)
+		t.Fatalf("Failed to create signing public key type integer: %v", err)
 	}
 
-	err = binary.Write(&payload, binary.BigEndian, cryptoPublicKeyType)
+	cryptoPublicKeyType, err := data.NewIntegerFromInt(0, 2)
 	if err != nil {
-		t.Fatalf("Failed to write crypto public key type to payload: %v\n", err)
+		t.Fatalf("Failed to create crypto public key type integer: %v", err)
 	}
+
+	// Directly write the bytes of the Integer instances to the payload
+	payload.Write(*cryptoPublicKeyType)
+	payload.Write(*signingPublicKeyType)
 
 	// Create KeyCertificate specifying key types
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
@@ -81,8 +84,23 @@ func TestCreateRouterInfo(t *testing.T) {
 		t.Fatalf("Failed to create new certificate: %v\n", err)
 	}
 
+	certBytes := cert.Bytes()
+	t.Logf("Serialized Certificate Size: %d bytes", len(certBytes))
+
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		log.Fatalf("KeyCertificateFromCertificate failed: %v\n", err)
+	}
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		t.Fatalf("Failed to generate random padding: %v\n", err)
+	}
 	// Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, nil)
+	routerIdentity, err := router_identity.NewRouterIdentity(elg_pubkey, ed25519_pubkey, *cert, padding)
 	if err != nil {
 		t.Fatalf("Failed to create router identity: %v\n", err)
 	}
