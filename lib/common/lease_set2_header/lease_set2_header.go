@@ -1,6 +1,10 @@
 package lease_set2_header
 
-const ()
+const (
+	LEASE_SET2_HEADER_MAX_SIZE       = 395
+	LEASE_SET2_HEADER_PUBLISHED_SIZE = 4
+	LEASE_SET2_HEADER_EXPIRY_SIZE    = 2
+)
 
 /*
 [LeaseSet2Header]
