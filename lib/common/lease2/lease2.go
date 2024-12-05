@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// Sizes in bytes of various components of a Lease
 const (
 	LEASE2_SIZE           = 40
 	LEASE2_TUNNEL_GW_SIZE = 32
