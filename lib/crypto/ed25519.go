@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -185,9 +186,89 @@ func (v *Ed25519Verifier) Verify(data, sig []byte) (err error) {
 
 type Ed25519PrivateKey ed25519.PrivateKey
 
+// Ed25519Decrypter handles decryption using Ed25519.
+type Ed25519Decrypter struct {
+	p    *big.Int // The prime modulus p = 2^255 - 19
+	xInv *big.Int // The modular inverse of the private scalar x mod p
+}
+
+// Decrypt decrypts the ciphertext and returns the original data.
+func (d *Ed25519Decrypter) Decrypt(ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) != 512 && len(ciphertext) != 514 {
+		return nil, errors.New("invalid ciphertext length")
+	}
+
+	var bBytes []byte
+	if len(ciphertext) == 514 {
+		bBytes = ciphertext[258:514]
+	} else {
+		bBytes = ciphertext[256:512]
+	}
+
+	b := new(big.Int).SetBytes(bBytes)
+
+	m := new(big.Int).Mul(b, d.xInv)
+	m.Mod(m, d.p)
+
+	mBytes := m.Bytes()
+	if len(mBytes) < 255 {
+		padded := make([]byte, 255)
+		copy(padded[255-len(mBytes):], mBytes)
+		mBytes = padded
+	} else if len(mBytes) > 255 {
+		return nil, errors.New("decrypted message exceeds expected length")
+	}
+
+	// Validate padding
+	if mBytes[0] != 0xFF {
+		return nil, errors.New("invalid padding prefix")
+	}
+
+	receivedHash := mBytes[1:33]
+	data := mBytes[33:]
+
+	expectedHash := sha256.Sum256(data)
+	if !bytes.Equal(receivedHash, expectedHash[:]) {
+		return nil, errors.New("hash mismatch after decryption")
+	}
+
+	return data, nil
+}
+
+// NewDecrypter creates a new Decrypter instance for Ed25519PrivateKey.
 func (k Ed25519PrivateKey) NewDecrypter() (Decrypter, error) {
-	// TODO implement me
-	panic("implement me")
+	if len(k) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid Ed25519 private key size")
+	}
+
+	// Extract the seed (first 32 bytes)
+	seed := k[:32]
+
+	// Hash the seed using SHA-512
+	hash := sha512.Sum512(seed)
+
+	// Clamp the private scalar as per Ed25519 specifications
+	hash[0] &= 248
+	hash[31] &= 63
+	hash[31] |= 64
+
+	// Convert the first 32 bytes of the hash to a big.Int (private scalar x)
+	x := new(big.Int).SetBytes(hash[:32])
+
+	// Define p = 2^255 - 19
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+
+	// Compute the modular inverse of x mod p (xInv)
+	xInv := new(big.Int).ModInverse(x, p)
+	if xInv == nil {
+		return nil, errors.New("failed to compute inverse of private scalar")
+	}
+
+	// Create and return the Decrypter
+	return &Ed25519Decrypter{
+		p:    p,
+		xInv: xInv,
+	}, nil
 }
 
 func (k Ed25519PrivateKey) NewSigner() (Signer, error) {
@@ -256,5 +337,5 @@ func CreateEd25519PublicKeyFromBytes(data []byte) (Ed25519PublicKey, error) {
 
 	// Return the Ed25519 public key
 	log.Debug("Ed25519 public key created successfully")
-	return Ed25519PublicKey(data), nil
+	return data, nil
 }
