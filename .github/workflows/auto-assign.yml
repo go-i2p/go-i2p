@@ -1,19 +1,38 @@
-name: Auto Assign
+name: Auto Assign Issues and PRs
+
 on:
   issues:
     types: [opened]
   pull_request:
     types: [opened]
+
 jobs:
-  run:
+  auto-assign:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: write
+
     steps:
-      - name: 'Auto-assign issue'
-        uses: pozil/auto-assign-issue@v1
+      - name: Assign to Issue
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v6
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          assignees: eyedeekay
-          numOfAssignee: 1
+          script: |
+            const assignees = ['eyedeekay'];
+            const issue_number = context.issue.number;
+            await github.rest.issues.addAssignees({
+              ...context.repo,
+              issue_number,
+              assignees,
+            });
+
+      - name: Assign to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const assignees = ['eyedeekay'];
+            const pr_number = context.issue.number;
+            await github.rest.issues.addAssignees({
+              ...context.repo,
+              issue_number: pr_number,
+              assignees,
+            });
