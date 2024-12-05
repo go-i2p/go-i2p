@@ -307,3 +307,215 @@ func TestElgamalConcurrentOperations(t *testing.T) {
 		}
 	})
 }
+
+// Test key generation and properties
+func TestElgKeyGenerationEncrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal key: %v", err)
+	}
+
+	if k.P.Cmp(elgp) != 0 {
+		t.Error("Generated key has incorrect P value")
+	}
+	if k.G.Cmp(elgg) != 0 {
+		t.Error("Generated key has incorrect G value")
+	}
+	if k.Y == nil {
+		t.Error("Public component Y is nil")
+	}
+	if k.X == nil {
+		t.Error("Private component X is nil")
+	}
+
+	expectedY := new(big.Int).Exp(k.G, k.X, k.P)
+	if k.Y.Cmp(expectedY) != 0 {
+		t.Error("Public component Y doesn't match G^X mod P")
+	}
+}
+
+// Test public key operations
+func TestElgPublicKeyEncrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal key: %v", err)
+	}
+
+	pubKey := ElgPublicKey{}
+	copy(pubKey[:], k.Y.Bytes())
+
+	encrypter, err := pubKey.NewEncrypter()
+	if err != nil {
+		t.Fatalf("Failed to create encrypter: %v", err)
+	}
+
+	// Perform type assertion to access *ElgamalEncryption fields
+	encryptionSession, ok := encrypter.(*ElgamalEncryption)
+	if !ok {
+		t.Fatalf("Failed to assert Encrypter to *ElgamalEncryption")
+	}
+
+	if encryptionSession.p.Cmp(elgp) != 0 {
+		t.Error("Encryption session has wrong P value")
+	}
+	if encryptionSession.a == nil {
+		t.Error("Encryption session has nil A value")
+	}
+	if encryptionSession.b1 == nil {
+		t.Error("Encryption session has nil B1 value")
+	}
+}
+
+// Test private key operations
+func TestElgPrivateKeyDecrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal key: %v", err)
+	}
+
+	privKey := ElgPrivateKey{}
+	copy(privKey[:], k.X.Bytes())
+
+	dec, err := privKey.NewDecrypter()
+	if err != nil {
+		t.Fatalf("Failed to create decrypter: %v", err)
+	}
+
+	decrypter, ok := dec.(*elgDecrypter)
+	if !ok {
+		t.Fatalf("Failed to assert Decrypter to *elgDecrypter")
+	}
+
+	if decrypter.k.P.Cmp(elgp) != 0 {
+		t.Error("Private key has wrong P value")
+	}
+	if decrypter.k.G.Cmp(elgg) != 0 {
+		t.Error("Private key has wrong G value")
+	}
+	if decrypter.k.X.Cmp(k.X) != 0 {
+		t.Error("Private key has wrong X value")
+	}
+	if decrypter.k.Y.Cmp(k.Y) != 0 {
+		t.Error("Private key has wrong Y value")
+	}
+}
+
+// Test encryption session creation
+func TestElgEncryptionSessionEncrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal key: %v", err)
+	}
+
+	pubKey := ElgPublicKey{}
+	copy(pubKey[:], k.Y.Bytes())
+
+	enc, err := pubKey.NewEncrypter()
+	if err != nil {
+		t.Fatalf("Failed to create encryption session: %v", err)
+	}
+
+	// Perform type assertion to access *ElgamalEncryption fields
+	encryptionSession, ok := enc.(*ElgamalEncryption)
+	if !ok {
+		t.Fatalf("Failed to assert Encrypter to *ElgamalEncryption")
+	}
+
+	if encryptionSession.p.Cmp(elgp) != 0 {
+		t.Error("Encryption session has wrong P value")
+	}
+	if encryptionSession.a == nil {
+		t.Error("Encryption session has nil A value")
+	}
+	if encryptionSession.b1 == nil {
+		t.Error("Encryption session has nil B1 value")
+	}
+
+	tempKey := new(big.Int).Exp(encryptionSession.a, k.X, encryptionSession.p)
+	tempKey = tempKey.ModInverse(tempKey, encryptionSession.p)
+	result := new(big.Int).Mul(encryptionSession.b1, tempKey)
+	result.Mod(result, encryptionSession.p)
+	if result.Cmp(one) != 0 {
+		t.Error("Encryption session parameters don't satisfy ElGamal properties")
+	}
+}
+
+// Test encryption integrity
+func TestElgEncryptionIntegrityEncrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ElGamal key: %v", err)
+	}
+
+	pubKey := ElgPublicKey{}
+	copy(pubKey[:], k.Y.Bytes())
+
+	enc, err := pubKey.NewEncrypter()
+	if err != nil {
+		t.Fatalf("Failed to create encryption session: %v", err)
+	}
+
+	data := []byte("test message")
+	encrypted, err := enc.Encrypt(data)
+	if err != nil {
+		t.Fatalf("Encryption failed: %v", err)
+	}
+
+	tamperedData := make([]byte, len(encrypted))
+	copy(tamperedData, encrypted)
+	tamperedData[len(tamperedData)-1] ^= 0xFF
+
+	decrypted, err := elgamalDecrypt(k, tamperedData, true)
+	if err == nil {
+		t.Error("Expected decryption of tampered data to fail")
+	}
+	if decrypted != nil {
+		t.Error("Expected nil decrypted data for tampered input")
+	}
+}
+
+func TestElgamalConcurrentOperationsEncrypterInterface(t *testing.T) {
+	k := new(elgamal.PrivateKey)
+	err := ElgamalGenerate(k, rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate key: %v", err)
+	}
+
+	pubKey := ElgPublicKey{}
+	copy(pubKey[:], k.Y.Bytes())
+
+	enc, err := pubKey.NewEncrypter()
+	if err != nil {
+		t.Fatalf("Failed to create encryption session: %v", err)
+	}
+
+	t.Run("Concurrent Encryptions", func(t *testing.T) {
+		const numGoroutines = 50
+		errChan := make(chan error, numGoroutines)
+
+		for i := 0; i < numGoroutines; i++ {
+			go func() {
+				msg := make([]byte, 100)
+				_, err := io.ReadFull(rand.Reader, msg)
+				if err != nil {
+					errChan <- fmt.Errorf("failed to generate random data: %v", err)
+					return
+				}
+
+				_, err = enc.Encrypt(msg)
+				errChan <- err
+			}()
+		}
+
+		for i := 0; i < numGoroutines; i++ {
+			if err := <-errChan; err != nil {
+				t.Errorf("Concurrent encryption failed: %v", err)
+			}
+		}
+	})
+}
