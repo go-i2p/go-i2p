@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
-	"fmt"
 	"io"
 	"math/big"
 
@@ -15,8 +14,10 @@ import (
 )
 
 var (
-	Ed25519EncryptTooBig    = errors.New("failed to encrypt data, too big for Ed25519")
-	ErrInvalidPublicKeySize = errors.New("failed to verify: invalid ed25519 public key size")
+	Ed25519EncryptTooBig      = errors.New("failed to encrypt data, too big for Ed25519")
+	ErrInvalidPublicKeySize   = errors.New("failed to verify: invalid ed25519 public key size")
+	ErrInvalidPrivateKeySize  = errors.New("invalid Ed25519 private key size")
+	ErrInvalidPublicKeyFormat = errors.New("invalid public key format")
 )
 
 type Ed25519PublicKey []byte
@@ -42,13 +43,14 @@ func (k Ed25519PublicKey) Bytes() []byte {
 
 func createEd25519PublicKey(data []byte) (k *ed25519.PublicKey) {
 	log.WithField("data_length", len(data)).Debug("Creating Ed25519 public key")
-	if len(data) == 256 {
-		k2 := ed25519.PublicKey{}
-		copy(k2[:], data)
-		k = &k2
+	if len(data) == ed25519.PublicKeySize {
+		pubKey := make(ed25519.PublicKey, ed25519.PublicKeySize)
+		copy(pubKey, data)
+		k = &pubKey
 		log.Debug("Ed25519 public key created successfully")
 	} else {
-		log.Warn("Invalid data length for Ed25519 public key")
+		log.WithField("expected_size", ed25519.PublicKeySize).
+			Warn("Invalid data length for Ed25519 public key")
 	}
 	return
 }
@@ -293,14 +295,26 @@ func (k *Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
 	return k, nil
 }
 
+// Public returns the corresponding SigningPublicKey for the Ed25519PrivateKey.
 func (k Ed25519PrivateKey) Public() (SigningPublicKey, error) {
-	fmt.Printf("Ed25519PrivateKey.Public(): len(k) = %d\n", len(k))
+	log.Println("Ed25519PrivateKey.Public(): len(k) =", len(k))
+
 	if len(k) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("invalid ed25519 private key size: expected %d, got %d", ed25519.PrivateKeySize, len(k))
+		log.Println("Ed25519PrivateKey.Public(): invalid private key size:", len(k))
+		return nil, ErrInvalidPrivateKeySize
 	}
-	pubKey := k[32:]
-	fmt.Printf("Ed25519PrivateKey.Public(): extracted pubKey length: %d\n", len(pubKey))
-	return Ed25519PublicKey(pubKey), nil
+
+	// Extract the public key part from the private key
+	pubKeyBytes := ed25519.PrivateKey(k).Public().(ed25519.PublicKey)
+	log.Println("Ed25519PrivateKey.Public(): extracted pubKey length:", len(pubKeyBytes))
+
+	// Create Ed25519PublicKey from bytes
+	edPubKey, err := CreateEd25519PublicKeyFromBytes(pubKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return edPubKey, nil
 }
 
 type Ed25519Signer struct {
