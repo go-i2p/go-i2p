@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"io"
 )
@@ -32,6 +33,10 @@ func HashData(data []byte) (h Hash) {
 	// log.Println("Hashing Data:", data)
 	h = sha256.Sum256(data)
 	return
+}
+
+func (h Hash) Equals(other Hash) bool {
+	return bytes.Equal(h[:], other[:])
 }
 
 // HashReader returns the SHA256 sum from all data read from an io.Reader.
