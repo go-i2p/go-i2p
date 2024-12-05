@@ -4,7 +4,7 @@ package signature
 import (
 	"fmt"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
 

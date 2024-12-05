@@ -1,12 +1,14 @@
 package ntcp
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"fmt"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
+	"github.com/go-i2p/go-i2p/lib/transport/obfs"
+	"golang.org/x/exp/rand"
 )
 
 /*
@@ -29,6 +31,41 @@ import (
 type NTCP2Session struct {
 	*noise.NoiseSession
 	paddingStrategy PaddingStrategy
+}
+
+type SessionRequest struct {
+    ObfuscatedKey []byte // 32 bytes
+    Timestamp     uint32 // 4 bytes
+    Padding       []byte // Random padding
+}
+
+func (s *NTCP2Session) CreateSessionRequest() (*SessionRequest, error) {
+    // Get our ephemeral key pair
+    ephemeralKey := make([]byte, 32)
+    if _, err := rand.Read(ephemeralKey); err != nil {
+        return nil, err
+    }
+    
+    // Obfuscate the ephemeral key using Bob's static key
+    obfuscatedKey, err := s.ObfuscateEphemeral(ephemeralKey)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Create timestamp (current time in seconds)
+    timestamp := uint32(time.Now().Unix())
+    
+    // Add random padding (implementation specific)
+    padding := make([]byte, rand.Intn(16)) // Up to 16 bytes of padding
+    if _, err := rand.Read(padding); err != nil {
+        return nil, err
+    }
+    
+    return &SessionRequest{
+        ObfuscatedKey: obfuscatedKey,
+        Timestamp: timestamp,
+        Padding: padding,
+    }, nil
 }
 
 // NewNTCP2Session creates a new NTCP2 session using the existing noise implementation
@@ -62,40 +99,44 @@ func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("Remote static key error")
 }
 
+func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NTCP_PROTOCOL_NAME {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, fmt.Errorf("Remote static IV error")
+}
+
 // ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC
-func (s *NTCP2Session) ObfuscateEphemeral(key []byte) ([]byte, error) {
+func (s *NTCP2Session) ObfuscateEphemeral(ephemeralKey []byte) ([]byte, error) {
 	static, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(static[:])
+	staticIV, err := s.peerStaticIV()
 	if err != nil {
 		return nil, err
 	}
-
-	obfuscated := make([]byte, len(key))
-	iv := make([]byte, aes.BlockSize)
-	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(obfuscated, key)
-
-	return obfuscated, nil
+	var AESStaticKey *crypto.AESSymmetricKey
+	AESStaticKey.Key = static[:]
+	AESStaticKey.IV = staticIV[:]
+	return obfs.ObfuscateEphemeralKey(ephemeralKey, AESStaticKey)
 }
 
 // DeobfuscateEphemeral reverses the key obfuscation
-func (s *NTCP2Session) DeobfuscateEphemeral(obfuscated []byte) ([]byte, error) {
+func (s *NTCP2Session) DeobfuscateEphemeral(obfuscatedEphemeralKey []byte) ([]byte, error) {
 	static, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(static[:])
-	if err != nil {
-		return nil, err
-	}
-
-	key := make([]byte, len(obfuscated))
-	iv := make([]byte, aes.BlockSize)
-	mode := cipher.NewCBCDecrypter(block, iv)
-	mode.CryptBlocks(key, obfuscated)
-
-	return key, nil
+	staticIV, err := s.peerStaticIV()
+	var AESStaticKey *crypto.AESSymmetricKey
+	AESStaticKey.Key = static[:]
+	AESStaticKey.IV = staticIV[:]
+	return obfs.ObfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
 }

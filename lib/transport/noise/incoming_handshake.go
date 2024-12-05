@@ -13,7 +13,7 @@ import (
 func (c *NoiseSession) RunIncomingHandshake() error {
 	log.Debug("Starting incoming handshake")
 
-	negData, msg, state, err := ComposeReceiverHandshakeMessage(c.HandKey, nil, nil, nil)
+	negData, msg, state, err := c.ComposeReceiverHandshakeMessage(c.HandKey, nil, nil, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to compose receiver handshake message")
 		return err
@@ -42,7 +42,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 	return nil
 }
 
-func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func (c *NoiseSession) ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
 	log.Debug("Starting ComposeReceiverHandshakeMessage")
 
 	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
@@ -64,7 +64,7 @@ func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, e
 	}
 
 	config := noise.Config{
-		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashSHA256),
+		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     false,
 		StaticKeypair: s,
