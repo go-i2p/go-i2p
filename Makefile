@@ -48,7 +48,10 @@ test: 		   test-string-all \
                test-base32-encode-decode-not-mangled \
                test-base64-encode-decode-not-mangled \
                test-lease-all \
-               test-date-time-from-milliseconds
+               test-date-time-from-milliseconds \
+               test-cert-all \
+               test-offline-signature-all \
+               test-lease2-all
 
 clean:
 	$(GO) clean -v
