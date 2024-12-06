@@ -393,8 +393,8 @@ func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	}
 
 	data := cert.Data()
-	fmt.Printf("Certificate Data Length in KeyCertificateFromCertificate: %d\n", len(data))
-	fmt.Printf("Certificate Data Bytes in KeyCertificateFromCertificate: %v\n", data)
+	log.Debugf("Certificate Data Length in KeyCertificateFromCertificate: %d\n", len(data))
+	log.Debugf("Certificate Data Bytes in KeyCertificateFromCertificate: %v\n", data)
 
 	if len(data) < 4 {
 		return nil, fmt.Errorf("certificate payload too short in KeyCertificateFromCertificate")
@@ -403,14 +403,14 @@ func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	cpkTypeBytes := data[0:2]
 	spkTypeBytes := data[2:4]
 
-	fmt.Printf("cpkTypeBytes in KeyCertificateFromCertificate: %v\n", cpkTypeBytes)
-	fmt.Printf("spkTypeBytes in KeyCertificateFromCertificate: %v\n", spkTypeBytes)
+	log.Debugf("cpkTypeBytes in KeyCertificateFromCertificate: %v\n", cpkTypeBytes)
+	log.Debugf("spkTypeBytes in KeyCertificateFromCertificate: %v\n", spkTypeBytes)
 
 	cpkType := Integer(cpkTypeBytes)
 	spkType := Integer(spkTypeBytes)
 
-	fmt.Printf("cpkType (Int) in KeyCertificateFromCertificate: %d\n", cpkType.Int())
-	fmt.Printf("spkType (Int) in KeyCertificateFromCertificate: %d\n", spkType.Int())
+	log.Debugf("cpkType (Int) in KeyCertificateFromCertificate: %d\n", cpkType.Int())
+	log.Debugf("spkType (Int) in KeyCertificateFromCertificate: %d\n", spkType.Int())
 
 	keyCert := &KeyCertificate{
 		Certificate: cert,

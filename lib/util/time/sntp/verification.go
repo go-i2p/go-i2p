@@ -1,48 +1,50 @@
 package sntp
 
 import (
-	"fmt"
+	"github.com/go-i2p/go-i2p/lib/util/logger"
 	"time"
 
 	"github.com/beevik/ntp"
 )
 
+var log = logger.GetGoI2PLogger()
+
 func (rt *RouterTimestamper) validateResponse(response *ntp.Response) bool {
 	// Check Leap Indicator
 	if response.Leap == ntp.LeapNotInSync {
-		fmt.Println("Invalid response: Server clock not synchronized (Leap Indicator)")
+		log.Error("Invalid response: Server clock not synchronized (Leap Indicator)")
 		return false
 	}
 
 	// Check Stratum Level
 	if response.Stratum == 0 || response.Stratum > 15 {
-		fmt.Printf("Invalid response: Stratum level %d is out of valid range\n", response.Stratum)
+		log.Errorf("Invalid response: Stratum level %d is out of valid range\n", response.Stratum)
 		return false
 	}
 
 	// Round-Trip Delay and Clock Offset Sanity Checks
 	if response.RTT < 0 || response.RTT > maxRTT {
-		fmt.Printf("Invalid response: Round-trip delay %v is out of bounds\n", response.RTT)
+		log.Errorf("Invalid response: Round-trip delay %v is out of bounds\n", response.RTT)
 		return false
 	}
 	if absDuration(response.ClockOffset) > maxClockOffset {
-		fmt.Printf("Invalid response: Clock offset %v is out of bounds\n", response.ClockOffset)
+		log.Errorf("Invalid response: Clock offset %v is out of bounds\n", response.ClockOffset)
 		return false
 	}
 
 	// Non-zero Time
 	if response.Time.IsZero() {
-		fmt.Println("Invalid response: Received zero time")
+		log.Error("Invalid response: Received zero time")
 		return false
 	}
 
 	// Root Dispersion and Root Delay
 	if response.RootDispersion > maxRootDispersion {
-		fmt.Printf("Invalid response: Root dispersion %v is too high\n", response.RootDispersion)
+		log.Errorf("Invalid response: Root dispersion %v is too high\n", response.RootDispersion)
 		return false
 	}
 	if response.RootDelay > maxRootDelay {
-		fmt.Printf("Invalid response: Root delay %v is too high\n", response.RootDelay)
+		log.Errorf("Invalid response: Root delay %v is too high\n", response.RootDelay)
 		return false
 	}
 

@@ -48,7 +48,8 @@ test: 		   test-string-all \
                test-base32-encode-decode-not-mangled \
                test-base64-encode-decode-not-mangled \
                test-lease-all \
-               test-date-time-from-milliseconds
+               test-date-time-from-milliseconds \
+               test-crypto-curve25519-all
 
 clean:
 	$(GO) clean -v
