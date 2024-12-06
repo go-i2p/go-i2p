@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"github.com/go-i2p/go-i2p/lib/common/lease_set2_header"
 	"testing"
 	"time"
 
@@ -109,7 +110,7 @@ func TestNewAndReadLeaseSet2(t *testing.T) {
 
 	dest, signingPriv := createTestDestination(t)
 
-	header := ParsedLeaseSet2Header{
+	header := lease_set2_header.ParsedLeaseSet2Header{
 		Destination: dest,
 		Published:   123456,
 		Expires:     3600,
