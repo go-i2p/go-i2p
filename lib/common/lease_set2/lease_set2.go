@@ -8,7 +8,7 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	. "github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/lease2"
-	"github.com/go-i2p/go-i2p/lib/common/offline_signature"
+	. "github.com/go-i2p/go-i2p/lib/common/lease_set2_header"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/util/logger"
@@ -137,76 +137,6 @@ type EncryptionKeyEntry struct {
 	KeyType uint16
 	KeyLen  uint16
 	KeyData []byte
-}
-
-// ParsedLeaseSet2Header holds the parsed LeaseSet2Header content.
-type ParsedLeaseSet2Header struct {
-	Destination      Destination
-	Published        uint32
-	Expires          uint16
-	Flags            uint16
-	OfflineSignature *offline_signature.OfflineSignature
-}
-
-func (h *ParsedLeaseSet2Header) serialize() []byte {
-	data := h.Destination.Bytes()
-	pub := make([]byte, 4)
-	binary.BigEndian.PutUint32(pub, h.Published)
-	data = append(data, pub...)
-
-	exp := make([]byte, 2)
-	binary.BigEndian.PutUint16(exp, h.Expires)
-	data = append(data, exp...)
-
-	fl := make([]byte, 2)
-	binary.BigEndian.PutUint16(fl, h.Flags)
-	data = append(data, fl...)
-
-	if h.Flags&0x0001 != 0 && h.OfflineSignature != nil {
-		data = append(data, h.OfflineSignature.Bytes()...)
-	}
-	return data
-}
-func ReadLeaseSet2Header(data []byte) (ParsedLeaseSet2Header, []byte, error) {
-	var hdr ParsedLeaseSet2Header
-
-	dest, remainder, err := ReadDestination(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read destination from LeaseSet2Header")
-		return hdr, data, err
-	}
-	hdr.Destination = dest
-
-	if len(remainder) < 4 {
-		return hdr, data, errors.New("not enough data for published")
-	}
-	hdr.Published = binary.BigEndian.Uint32(remainder[0:4])
-	remainder = remainder[4:]
-
-	if len(remainder) < 2 {
-		return hdr, data, errors.New("not enough data for expires")
-	}
-	hdr.Expires = binary.BigEndian.Uint16(remainder[0:2])
-	remainder = remainder[2:]
-
-	if len(remainder) < 2 {
-		return hdr, data, errors.New("not enough data for flags")
-	}
-	hdr.Flags = binary.BigEndian.Uint16(remainder[0:2])
-	remainder = remainder[2:]
-
-	// If offline keys bit is set (bit 0), read OfflineSignature
-	if hdr.Flags&0x0001 != 0 {
-		osig, r, err := offline_signature.ReadOfflineSignature(remainder)
-		if err != nil {
-			log.WithError(err).Error("Failed to read OfflineSignature from LeaseSet2Header")
-			return hdr, data, err
-		}
-		hdr.OfflineSignature = &osig
-		remainder = r
-	}
-
-	return hdr, remainder, nil
 }
 
 // ReadLeaseSet2 parses a LeaseSet2 from a byte slice.
@@ -342,7 +272,7 @@ func (parsed *ParsedLeaseSet2) VerifyLeaseSet2(verifyFunc func(data, sig []byte)
 
 // serializeWithoutSignature recreates the LeaseSet2 data without the signature.
 func (parsed *ParsedLeaseSet2) serializeWithoutSignature() []byte {
-	data := parsed.Header.serialize()
+	data := parsed.Header.Serialize()
 
 	data = append(data, parsed.Options.Data()...)
 
