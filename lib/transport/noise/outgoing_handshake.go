@@ -45,40 +45,50 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 	return nil
 }
 
-func (c *NoiseSession) ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
+	localStatic noise.DHKey,
+	remoteStatic []byte,
+	payload []byte,
+	ephemeralPrivate []byte,
+) (
+	negotiationData,
+	handshakeMessage []byte,
+	handshakeState *noise.HandshakeState,
+	err error,
+) {
 	log.Debug("Starting ComposeInitiatorHandshakeMessage")
 
-	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
+	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
 	}
 
-	negData = make([]byte, 6)
-	copy(negData, initNegotiationData(nil))
+	negotiationData = make([]byte, 6)
+	copy(negotiationData, initNegotiationData(nil))
 	pattern := noise.HandshakeXK
-	negData[5] = NOISE_PATTERN_XK
+	negotiationData[5] = NOISE_PATTERN_XK
 
 	var random io.Reader
-	if len(ePrivate) == 0 {
+	if len(ephemeralPrivate) == 0 {
 		random = rand.Reader
 	} else {
-		random = bytes.NewBuffer(ePrivate)
+		random = bytes.NewBuffer(ephemeralPrivate)
 	}
 
 	config := noise.Config{
 		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     true,
-		StaticKeypair: s,
+		StaticKeypair: localStatic,
 		Random:        random,
 	}
 
-	state, err = noise.NewHandshakeState(config)
+	handshakeState, err = noise.NewHandshakeState(config)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// Write message, expecting no CipherStates yet since this is message 1
-	msg, cs0, cs1, err := state.WriteMessage(nil, payload)
+	handshakeMessage, cs0, cs1, err := handshakeState.WriteMessage(nil, payload)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -88,5 +98,5 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte
 		return nil, nil, nil, errors.New("unexpected cipher states in message 1")
 	}
 
-	return negData, msg, state, nil
+	return negotiationData, handshakeMessage, handshakeState, nil
 }

@@ -34,38 +34,38 @@ type NTCP2Session struct {
 }
 
 type SessionRequest struct {
-    ObfuscatedKey []byte // 32 bytes
-    Timestamp     uint32 // 4 bytes
-    Padding       []byte // Random padding
+	ObfuscatedKey []byte // 32 bytes
+	Timestamp     uint32 // 4 bytes
+	Padding       []byte // Random padding
 }
 
 func (s *NTCP2Session) CreateSessionRequest() (*SessionRequest, error) {
-    // Get our ephemeral key pair
-    ephemeralKey := make([]byte, 32)
-    if _, err := rand.Read(ephemeralKey); err != nil {
-        return nil, err
-    }
-    
-    // Obfuscate the ephemeral key using Bob's static key
-    obfuscatedKey, err := s.ObfuscateEphemeral(ephemeralKey)
-    if err != nil {
-        return nil, err
-    }
-    
-    // Create timestamp (current time in seconds)
-    timestamp := uint32(time.Now().Unix())
-    
-    // Add random padding (implementation specific)
-    padding := make([]byte, rand.Intn(16)) // Up to 16 bytes of padding
-    if _, err := rand.Read(padding); err != nil {
-        return nil, err
-    }
-    
-    return &SessionRequest{
-        ObfuscatedKey: obfuscatedKey,
-        Timestamp: timestamp,
-        Padding: padding,
-    }, nil
+	// Get our ephemeral key pair
+	ephemeralKey := make([]byte, 32)
+	if _, err := rand.Read(ephemeralKey); err != nil {
+		return nil, err
+	}
+
+	// Obfuscate the ephemeral key using Bob's static key
+	obfuscatedKey, err := s.ObfuscateEphemeral(ephemeralKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create timestamp (current time in seconds)
+	timestamp := uint32(time.Now().Unix())
+
+	// Add random padding (implementation specific)
+	padding := make([]byte, rand.Intn(16)) // Up to 16 bytes of padding
+	if _, err := rand.Read(padding); err != nil {
+		return nil, err
+	}
+
+	return &SessionRequest{
+		ObfuscatedKey: obfuscatedKey,
+		Timestamp:     timestamp,
+		Padding:       padding,
+	}, nil
 }
 
 // NewNTCP2Session creates a new NTCP2 session using the existing noise implementation
