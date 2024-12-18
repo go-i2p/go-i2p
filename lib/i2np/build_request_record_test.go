@@ -24,7 +24,7 @@ func TestReadBuildRequestRecordReceiveTunnelValidData(t *testing.T) {
 	assert.Equal(nil, err)
 }
 
-func TestReadBuildRequestRecordOurIdentTooLittleValidData(t *testing.T) {
+func TestReadBuildRequestRecordOurIdentTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
 	receive_tunnel := []byte{0x00, 0x00, 0x00, 0x01}
