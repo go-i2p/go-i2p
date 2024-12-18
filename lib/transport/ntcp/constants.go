@@ -1,6 +1,7 @@
 package ntcp
 
 import (
+	"encoding/binary"
 	"math"
 
 	"github.com/flynn/noise"
@@ -31,4 +32,16 @@ var hashes = map[byte]noise.HashFunc{
 
 var patterns = map[byte]noise.HandshakePattern{
 	NOISE_PATTERN_XK: noise.HandshakeXK,
+}
+
+func initNegotiationData(negotiationData []byte) []byte {
+	if negotiationData != nil {
+		return negotiationData
+	}
+	negotiationData = make([]byte, 6)
+	binary.BigEndian.PutUint16(negotiationData, 1) // version
+	negotiationData[2] = NOISE_DH_CURVE25519
+	negotiationData[3] = NOISE_CIPHER_CHACHAPOLY
+	negotiationData[4] = NOISE_HASH_SHA256
+	return negotiationData
 }

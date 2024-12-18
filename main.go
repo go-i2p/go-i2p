@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
