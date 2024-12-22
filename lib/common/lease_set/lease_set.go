@@ -3,6 +3,9 @@ package lease_set
 
 import (
 	"errors"
+	"fmt"
+
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -13,7 +16,6 @@ import (
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	. "github.com/go-i2p/go-i2p/lib/common/lease"
-	. "github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
@@ -136,7 +138,7 @@ type LeaseSet struct {
 
 // Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (destination Destination, err error) {
-	keys_and_cert, _, err := ReadKeysAndCert(lease_set)
+	keys_and_cert, _, err := ReadKeysAndCertElgAndEd25519(lease_set)
 	if err != nil {
 		log.WithError(err).Error("Failed to read KeysAndCert from LeaseSet")
 		return
@@ -147,6 +149,79 @@ func (lease_set LeaseSet) Destination() (destination Destination, err error) {
 	} else {
 		log.Debug("Successfully retrieved Destination from LeaseSet")
 	}
+	return
+}
+
+func (lease_set LeaseSet) DestinationDeux() (destination Destination, err error) {
+	data := lease_set
+
+	fmt.Printf("Starting DestinationDeux, lease_set_length=%d\n", len(data))
+
+	// Read the Destination (KeysAndCert) from the LeaseSet
+	destination, remainder, err := ReadDestinationFromLeaseSet(data)
+	if err != nil {
+		fmt.Printf("Failed to read Destination from LeaseSet: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Successfully retrieved Destination from LeaseSet\n")
+	fmt.Printf("  destination_length: %d\n", len(data)-len(remainder))
+	fmt.Printf("  remainder_length: %d\n", len(remainder))
+
+	return
+}
+
+func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainder []byte, err error) {
+	fmt.Printf("Reading Destination from LeaseSet, input_length=%d\n", len(data))
+
+	if len(data) < 387 { // Minimum size of Destination (384 keys + 3 bytes for minimum certificate)
+		err = errors.New("LeaseSet data too short to contain Destination")
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	certDataStart := 384
+	certData := data[certDataStart:]
+
+	cert, _, err := ReadCertificate(certData)
+	if err != nil {
+		fmt.Printf("Failed to read Certificate from LeaseSet: %v\n", err)
+		return
+	}
+
+	certTotalLength := 3 + int(cert.Length())
+	destinationLength := certDataStart + certTotalLength
+
+	fmt.Printf("Certificate details:\n")
+	fmt.Printf("  certType: %d\n", cert.Type())
+	fmt.Printf("  certLength: %d\n", cert.Length())
+	fmt.Printf("  certTotalLength: %d\n", certTotalLength)
+	fmt.Printf("  destinationLength: %d\n", destinationLength)
+
+	if len(data) < destinationLength {
+		err = errors.New("LeaseSet data too short to contain full Destination")
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	destinationData := data[:destinationLength]
+
+	keysAndCert, _, err := ReadKeysAndCert(destinationData)
+	if err != nil {
+		fmt.Printf("Failed to read KeysAndCert: %v\n", err) //32 / 0 error
+		return
+	}
+
+	destination = Destination{
+		KeysAndCert: keysAndCert,
+	}
+
+	remainder = data[destinationLength:]
+
+	fmt.Printf("Successfully read Destination from LeaseSet\n")
+	fmt.Printf("  destination_length: %d\n", destinationLength)
+	fmt.Printf("  remainder_length: %d\n", len(remainder))
+
 	return
 }
 
@@ -212,7 +287,11 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 			// This LeaseSet's Destination's Certificate is a Key Certificate,
 			// create the signing publickey key using any data that might be
 			// contained in the key certificate.
-			signing_public_key, err = KeyCertificateFromCertificate(cert).ConstructSigningPublicKey(
+			keyCert, err := KeyCertificateFromCertificate(cert)
+			if err != nil {
+				log.WithError(err).Error("Failed to create keyCert")
+			}
+			signing_public_key, err = keyCert.ConstructSigningPublicKey(
 				lease_set[offset : offset+LEASE_SET_SPK_SIZE],
 			)
 			if err != nil {
@@ -306,7 +385,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 
 // Signature returns the signature as Signature.
 // returns errors encountered during parsing.
-func (lease_set LeaseSet) Signature() (signature Signature, err error) {
+func (lease_set LeaseSet) Signature() (signature signature.Signature, err error) {
 	log.Debug("Retrieving Signature from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -327,7 +406,11 @@ func (lease_set LeaseSet) Signature() (signature Signature, err error) {
 	cert_type := cert.Type()
 	var end int
 	if cert_type == CERT_KEY {
-		end = start + KeyCertificateFromCertificate(cert).SignatureSize()
+		keyCert, err := KeyCertificateFromCertificate(cert)
+		if err != nil {
+			log.WithError(err).Error("Failed to create keyCert")
+		}
+		end = start + keyCert.SignatureSize()
 	} else {
 		end = start + LEASE_SET_SIG_SIZE
 	}
@@ -405,4 +488,95 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 	}
 	log.WithField("oldest_expiration", earliest.Time()).Debug("Found oldest expiration in LeaseSet")
 	return
+}
+
+func NewLeaseSet(
+	destination Destination,
+	encryptionKey crypto.PublicKey,
+	signingKey crypto.SigningPublicKey,
+	leases []Lease,
+	signingPrivateKey crypto.SigningPrivateKey,
+) (LeaseSet, error) {
+	log.Debug("Creating new LeaseSet")
+	// Validate destination size
+	if len(destination.KeysAndCert.Bytes()) < 387 {
+		return nil, errors.New("invalid destination: minimum size is 387 bytes")
+	}
+	// Validate encryption key size
+	if len(encryptionKey.Bytes()) != LEASE_SET_PUBKEY_SIZE {
+		return nil, errors.New("invalid encryption key size")
+	}
+	// Validate inputs
+	if len(leases) > 16 {
+		return nil, errors.New("invalid lease set: more than 16 leases")
+	}
+	// Validate signing key size matches certificate
+	cert := destination.Certificate()
+	if cert.Type() == CERT_KEY {
+		// Get expected size from key certificate
+		keyCert, err := KeyCertificateFromCertificate(cert)
+		if err != nil {
+			log.WithError(err).Error("Failed to create keyCert")
+		}
+		expectedSize := keyCert.SignatureSize()
+		if len(signingKey.Bytes()) != expectedSize {
+			return nil, fmt.Errorf("invalid signing key size: got %d, expected %d",
+				len(signingKey.Bytes()), expectedSize)
+		}
+	} else {
+		// Default DSA size
+		if len(signingKey.Bytes()) != LEASE_SET_SPK_SIZE {
+			return nil, errors.New("invalid signing key size")
+		}
+	}
+	// Build LeaseSet data
+	data := make([]byte, 0)
+
+	// Add Destination
+	data = append(data, destination.KeysAndCert.Bytes()...)
+
+	// Add encryption key
+	data = append(data, encryptionKey.Bytes()...)
+
+	// Add signing key
+	data = append(data, signingKey.Bytes()...)
+
+	// Add lease count
+	leaseCount, err := NewIntegerFromInt(len(leases), 1)
+	if err != nil {
+		log.WithError(err).Error("Failed to create lease count")
+		return nil, err
+	}
+	data = append(data, leaseCount.Bytes()...)
+
+	// Add leases
+	for _, lease := range leases {
+		data = append(data, lease[:]...)
+	}
+
+	// Create signature for all data up to this point
+	signer, err := signingPrivateKey.NewSigner()
+	if err != nil {
+		log.WithError(err).Error("Failed to create signer")
+		return nil, err
+	}
+
+	signature, err := signer.Sign(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign LeaseSet")
+		return nil, err
+	}
+
+	// Add signature
+	data = append(data, signature...)
+
+	log.WithFields(logrus.Fields{
+		"destination_length":    len(destination.KeysAndCert.Bytes()),
+		"encryption_key_length": len(encryptionKey.Bytes()),
+		"signing_key_length":    len(signingKey.Bytes()),
+		"lease_count":           len(leases),
+		"total_length":          len(data),
+	}).Debug("Successfully created new LeaseSet")
+
+	return LeaseSet(data), nil
 }

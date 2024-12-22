@@ -69,8 +69,24 @@ func ReadSignature(data []byte, sigType int) (sig Signature, remainder []byte, e
 	switch sigType {
 	case SIGNATURE_TYPE_DSA_SHA1:
 		sigLength = DSA_SHA1_SIZE
+	case SIGNATURE_TYPE_ECDSA_SHA256_P256:
+		sigLength = ECDSA_SHA256_P256_SIZE
+	case SIGNATURE_TYPE_ECDSA_SHA384_P384:
+		sigLength = ECDSA_SHA384_P384_SIZE
+	case SIGNATURE_TYPE_ECDSA_SHA512_P521:
+		sigLength = ECDSA_SHA512_P512_SIZE
+	case SIGNATURE_TYPE_RSA_SHA256_2048:
+		sigLength = RSA_SHA256_2048_SIZE
+	case SIGNATURE_TYPE_RSA_SHA384_3072:
+		sigLength = RSA_SHA384_3072_SIZE
+	case SIGNATURE_TYPE_RSA_SHA512_4096:
+		sigLength = RSA_SHA512_4096_SIZE
 	case SIGNATURE_TYPE_EDDSA_SHA512_ED25519:
 		sigLength = EdDSA_SHA512_Ed25519_SIZE
+	case SIGNATURE_TYPE_EDDSA_SHA512_ED25519PH:
+		sigLength = EdDSA_SHA512_Ed25519ph_SIZE
+	case SIGNATURE_TYPE_REDDSA_SHA512_ED25519:
+		sigLength = RedDSA_SHA512_Ed25519_SIZE
 	default:
 		err = fmt.Errorf("unsupported signature type: %d", sigType)
 		return

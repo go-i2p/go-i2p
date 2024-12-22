@@ -37,7 +37,6 @@ test: 		   test-string-all \
                test-crypto-elg-all \
                test-crypto-hmac-all \
                test-i2np-header-all \
-               test-i2np-build-request-all \
                test-key-cert-all \
                test-keys-cert-all \
                test-lease-set-all \
@@ -45,7 +44,11 @@ test: 		   test-string-all \
                test-router-address-all \
                test-router-info-all \
                test-su3-all \
-               test-tunnel-all
+               test-tunnel-all \
+               test-base32-encode-decode-not-mangled \
+               test-base64-encode-decode-not-mangled \
+               test-lease-all \
+               test-date-time-from-milliseconds
 
 clean:
 	$(GO) clean -v

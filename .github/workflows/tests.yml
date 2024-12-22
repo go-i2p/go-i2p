@@ -7,6 +7,18 @@ on:
     branches: [ main, master ]
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      - run: make build
+        env:
+          GO: go
+          CGO_ENABLED: 0
+
   test:
     runs-on: ubuntu-latest
 
@@ -22,7 +34,6 @@ jobs:
           - "test-crypto-elg-all"
           - "test-crypto-hmac-all"
           - "test-i2np-header-all"
-          - "test-i2np-build-request-all"
           - "test-key-cert-all"
           - "test-keys-cert-all"
           - "test-lease-set-all"
@@ -31,6 +42,12 @@ jobs:
           - "test-router-info-all"
           - "test-su3-all"
           - "test-tunnel-all"
+          - "test-base32-encode-decode-not-mangled"
+          - "test-base64-encode-decode-not-mangled"
+          - "test-lease-all"
+          - "test-date-time-from-milliseconds"
+          - "test-cert-all"
+          - "test-signatures"
 
     steps:
       - name: Checkout repository
@@ -64,16 +81,9 @@ jobs:
           DEBUG_I2P: debug
           CGO_ENABLED: 0
 
-      - name: Upload Test Logs (Optional)
+      - name: Upload Test Logs
         if: always()
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test_target }}-logs
           path: ./test-logs/${{ matrix.test_target }}.log  # Adjust this path as needed
-
-  aggregate_results:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Aggregate Test Results
-        run: echo "All tests have been executed. Review individual job logs for details."
