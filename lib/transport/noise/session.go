@@ -19,7 +19,7 @@ type NoiseSession struct {
 	router_info.RouterInfo
 	*noise.CipherState
 	*sync.Cond
-	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer whith whom we established the session
+	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
 	*HandshakeState
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
@@ -88,6 +88,33 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 		log.Debug("VerifyCallback succeeded")
 	}
 	return err
+}
+
+// PeerStaticKey is equal to the NTCP2 peer's static public key, found in their router info
+func (s *NoiseSession) peerStaticKey() ([32]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			return addr.StaticKey()
+		}
+	}
+	return [32]byte{}, fmt.Errorf("Remote static key error")
+}
+
+func (s *NoiseSession) peerStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, fmt.Errorf("Remote static IV error")
 }
 
 // newBlock allocates a new packet, from hc's free list if possible.

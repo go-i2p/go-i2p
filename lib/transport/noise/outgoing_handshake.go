@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/sirupsen/logrus"
@@ -14,7 +15,7 @@ import (
 func (c *NoiseSession) RunOutgoingHandshake() error {
 	log.Debug("Starting outgoing handshake")
 
-	negData, msg, state, err := c.ComposeInitiatorHandshakeMessage(c.HandKey, nil, nil, nil)
+	negData, msg, state, err := c.ComposeInitiatorHandshakeMessage(nil, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to compose initiator handshake message")
 		return err
@@ -46,8 +47,6 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 }
 
 func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
-	localStatic noise.DHKey,
-	remoteStatic []byte,
 	payload []byte,
 	ephemeralPrivate []byte,
 ) (
@@ -57,6 +56,21 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
 	err error,
 ) {
 	log.Debug("Starting ComposeInitiatorHandshakeMessage")
+
+	remoteStatic, err := c.peerStaticKey()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Peer static key retrieval error: %s", err)
+	}
+
+	/*localStatic, err := c.localStaticKey()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Local static key retrieval error: %s", err)
+	}
+	localStaticDH := noise.DHKey{
+		Public: localStatic[:],
+		Private: localStatic[:],
+	}*/
+	localStaticDH := *c.HandshakeKey()
 
 	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
@@ -78,7 +92,7 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
 		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     true,
-		StaticKeypair: localStatic,
+		StaticKeypair: localStaticDH,
 		Random:        random,
 	}
 

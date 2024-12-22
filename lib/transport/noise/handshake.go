@@ -14,7 +14,6 @@ type HandshakeState struct {
 	ephemeral         *noise.DHKey
 	pattern           noise.HandshakePattern
 	handshakeComplete bool
-	HandKey           noise.DHKey
 	*noise.HandshakeState
 }
 

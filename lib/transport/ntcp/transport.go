@@ -19,18 +19,18 @@ const (
 	NTCP_MESSAGE_MAX_SIZE = 65537
 )
 
-var exampleNTCPTransport transport.Transport = &Transport{}
+var exampleNTCPTransport transport.Transport = &NTCP2Transport{}
 
-// Transport is an ntcp2 transport implementing transport.Transport interface
-type Transport struct {
+// NTCP2Transport is an ntcp2 transport implementing transport.NTCP2Transport interface
+type NTCP2Transport struct {
 	*noise.NoiseTransport
 }
 
-func (t *Transport) Name() string {
+func (t *NTCP2Transport) Name() string {
 	return NTCP_PROTOCOL_NAME
 }
 
-func (t *Transport) Compatible(routerInfo router_info.RouterInfo) bool {
+func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	// Check if the router info contains NTCP2 address and capabilities
 	addresses := routerInfo.RouterAddresses()
 	for _, addr := range addresses {
@@ -45,7 +45,7 @@ func (t *Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	return false
 }
 
-func (t *Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
+func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	// Create new NTCP2 session
 	session, err := NewNTCP2Session(routerInfo)
 	if err != nil {
@@ -53,14 +53,14 @@ func (t *Transport) GetSession(routerInfo router_info.RouterInfo) (transport.Tra
 	}
 
 	// Perform handshake
-	if err := session.Handshake(routerInfo); err != nil {
+	if err := session.NTCP2Transport.Handshake(routerInfo); err != nil {
 		return nil, err
 	}
 
 	return session, nil
 }
 
-func (t *Transport) Accept() (net.Conn, error) {
+func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	conn, err := t.NoiseTransport.Accept()
 	if err != nil {
 		return nil, err
@@ -85,4 +85,32 @@ func (t *Transport) Accept() (net.Conn, error) {
 	}
 
 	return session, nil
+}
+
+// LocalStaticKey is equal to the NTCP2 static public key, found in our router info
+func (s *NTCP2Transport) localStaticKey() ([32]byte, error) {
+	// s.RouterIdentity
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NTCP_PROTOCOL_NAME {
+			return addr.StaticKey()
+		}
+	}
+	return [32]byte{}, fmt.Errorf("Remote static key error")
+}
+
+func (s *NTCP2Transport) localStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NTCP_PROTOCOL_NAME {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, fmt.Errorf("Remote static IV error")
 }

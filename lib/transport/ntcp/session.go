@@ -30,6 +30,7 @@ import (
 // NTCP2Session extends the base noise.NoiseSession with NTCP2-specific functionality
 type NTCP2Session struct {
 	*noise.NoiseSession
+	*NTCP2Transport
 	paddingStrategy PaddingStrategy
 }
 

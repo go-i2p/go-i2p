@@ -13,7 +13,7 @@ import (
 func (c *NoiseSession) RunIncomingHandshake() error {
 	log.Debug("Starting incoming handshake")
 
-	negData, msg, state, err := c.ComposeReceiverHandshakeMessage(c.HandKey, nil, nil, nil)
+	negData, msg, state, err := c.ComposeReceiverHandshakeMessage(*c.HandshakeKey(), nil, nil, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to compose receiver handshake message")
 		return err
@@ -42,11 +42,11 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 	return nil
 }
 
-func (c *NoiseSession) ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, remoteStatic []byte, payload []byte, ephemeralPrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
 	log.Debug("Starting ComposeReceiverHandshakeMessage")
 
-	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
-		log.WithField("rs_length", len(rs)).Error("Invalid remote static key length")
+	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
+		log.WithField("rs_length", len(remoteStatic)).Error("Invalid remote static key length")
 		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
 	}
 
@@ -56,18 +56,18 @@ func (c *NoiseSession) ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte,
 	negData[5] = NOISE_PATTERN_XK
 
 	var random io.Reader
-	if len(ePrivate) == 0 {
+	if len(ephemeralPrivate) == 0 {
 		random = rand.Reader
 		log.Debug("Using crypto/rand as random source")
 	} else {
-		random = bytes.NewBuffer(ePrivate)
+		random = bytes.NewBuffer(ephemeralPrivate)
 	}
 
 	config := noise.Config{
 		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     false,
-		StaticKeypair: s,
+		StaticKeypair: localStatic,
 		Random:        random,
 	}
 
