@@ -15,7 +15,7 @@ import (
 
 const ROUTER_INFO_MIN_SIZE = 439
 
-const MIN_GOOD_VERSION = 58
+var MIN_GOOD_VERSION = 59
 const MAX_GOOD_VERSION = 99
 
 /*
