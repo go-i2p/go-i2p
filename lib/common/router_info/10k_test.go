@@ -148,10 +148,10 @@ func Test10K(t *testing.T) {
 		t.Fatalf("Failed to read temp directory: %v", err)
 	}
 
-	for _, file := range files {
+	for d, file := range files {
 		if !file.IsDir() && strings.HasPrefix(file.Name(), "routerInfo-") {
 			// Read the router info file
-			log.Println("RI LOAD: ", file.Name())
+			log.Println("RI LOAD: ", d, file.Name())
 			data, err := os.ReadFile(filepath.Join(tempDir, file.Name()))
 			if err != nil {
 				t.Logf("Failed to read file %s: %v", file.Name(), err)
