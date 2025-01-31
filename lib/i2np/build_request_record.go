@@ -278,7 +278,7 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 
 	log.WithFields(logrus.Fields{
 		"at":              "i2np.readBuildRequestRecordReceiveTunnel",
-		"receieve_tunnel": receive_tunnel,
+		"receive_tunnel": receive_tunnel,
 	}).Debug("parsed_build_request_record_receive_tunnel")
 	return receive_tunnel, nil
 }
