@@ -15,9 +15,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Datagrams
   - [ ] I2CP
   - [ ] Message routing
-  - [ ] SAM
   - [ ] Streaming
-  - [ ] Tunnel Manager
 - Cryptographic primitives
   - Signing
     - [ ] ECDSA_SHA256_P256
