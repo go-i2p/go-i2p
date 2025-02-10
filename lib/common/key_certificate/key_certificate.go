@@ -28,8 +28,8 @@ payload :: data
 */
 
 import (
-	"errors"
 	"fmt"
+
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 
 	"github.com/go-i2p/go-i2p/lib/util/logger"
@@ -148,7 +148,7 @@ func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key
 			"required_len": KEYCERT_PUBKEY_SIZE,
 			"reason":       "not enough data",
 		}).Error("error constructing public key")
-		err = errors.New("error constructing public key: not enough data")
+		err = fmt.Errorf("error constructing public key: not enough data")
 		return
 	}
 	switch key_type {
@@ -240,7 +240,7 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 			"required_len": KEYCERT_SPK_SIZE,
 			"reason":       "not enough data",
 		}).Error("error constructing signing public key")
-		err = errors.New("error constructing signing public key: not enough data")
+		err = fmt.Errorf("error constructing signing public key: not enough data")
 		return
 	}
 	switch signing_key_type {
@@ -297,7 +297,7 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 		log.WithFields(logrus.Fields{
 			"signing_key_type": signing_key_type,
 		}).Warn("Unknown signing key type")
-		panic(err)
+		return nil, fmt.Errorf("unknown signing key type")
 	}
 
 	return
@@ -364,19 +364,23 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 		return
 	}
 
-	payload := certificate.Data()
+	if certificate.Type() != CERT_KEY {
+		return nil, remainder, fmt.Errorf("invalid certificate type: %d", certificate.Type())
+	}
 
-	cpkTypeBytes := payload[0:2]
-	spkTypeBytes := payload[2:4]
+	if len(certificate.Data()) < 4 {
+		return nil, remainder, fmt.Errorf("key certificate data too short")
+	}
+	log.Println("Certificate Data in NewKeyCertificate: ", certificate.Data()[0:2], certificate.Data()[2:4])
 
-	cpkType := Integer(cpkTypeBytes)
-	spkType := Integer(spkTypeBytes)
-
+	cpkType, _ := ReadInteger(certificate.Data()[2:4], 2)
+	spkType, _ := ReadInteger(certificate.Data()[0:2], 2)
 	key_certificate = &KeyCertificate{
 		Certificate: certificate,
-		SpkType:     spkType,
 		CpkType:     cpkType,
+		SpkType:     spkType,
 	}
+	log.Println("cpkType in NewKeyCertificate: ", cpkType.Int(), "spkType in NewKeyCertificate: ", spkType.Int())
 
 	log.WithFields(logrus.Fields{
 		"spk_type":         key_certificate.SpkType.Int(),

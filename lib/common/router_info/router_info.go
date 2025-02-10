@@ -4,6 +4,7 @@ package router_info
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -301,12 +302,18 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	sigType, err := certificate.GetSignatureTypeFromCertificate(cert)
 	if err != nil {
 		log.WithError(err).Error("Failed to get signature type from certificate")
+		return RouterInfo{}, remainder, fmt.Errorf("certificate signature type error: %v", err)
 	}
-	// Validate signature type
-	if sigType <= 0 {
-		//return RouterInfo{}, remainder, fmt.Errorf("invalid signature type: %d", sigType)
-		sigType = 0
+
+	// Enhanced signature type validation
+	if sigType <= SIGNATURE_TYPE_RSA_SHA256_2048 || sigType > SIGNATURE_TYPE_REDDSA_SHA512_ED25519 {
+		log.WithFields(logrus.Fields{
+			"sigType": sigType,
+			"cert":    cert,
+		}).Error("Invalid signature type detected")
+		return RouterInfo{}, remainder, fmt.Errorf("invalid signature type: %d", sigType)
 	}
+
 	log.WithFields(logrus.Fields{
 		"sigType": sigType,
 	}).Debug("Got sigType")

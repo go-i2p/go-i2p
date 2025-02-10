@@ -282,9 +282,9 @@ func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
 	if cert.Type() != CERT_KEY {
 		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type())
 	}
-	if len(cert.payload) < 2 {
+	if len(cert.payload) < 4 {
 		return 0, fmt.Errorf("certificate payload too short to contain signature type")
 	}
-	sigType := int(binary.BigEndian.Uint16(cert.payload[0:2]))
+	sigType := int(binary.BigEndian.Uint16(cert.payload[2:4])) // Changed offset to read signing key type
 	return sigType, nil
 }
