@@ -4,6 +4,7 @@ package router_info
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -237,7 +238,6 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": ROUTER_INFO_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data to read identity")
 		return
 	}
 	info.published, remainder, err = NewDate(remainder)
@@ -248,7 +248,6 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"required_len": DATE_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data to read publish date")
 	}
 	info.size, remainder, err = NewInteger(remainder, 1)
 	if err != nil {
@@ -269,7 +268,6 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 				//"required_len": ROUTER_ADDRESS_SIZE,
 				"reason": "not enough data",
 			}).Error("error parsing router address")
-			err = errors.New("error parsing router info: not enough data to read router addresses")
 		}
 		info.addresses = append(info.addresses, &address)
 	}
@@ -291,9 +289,31 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 		for _, e := range errs {
 			estring += e.Error() + " "
 		}
-		err = errors.New("error parsing router info: " + estring)
 	}
-	sigType, err := certificate.GetSignatureTypeFromCertificate(info.router_identity.Certificate())
+	// Add debug logging for certificate inspection
+	cert := info.router_identity.Certificate()
+	log.WithFields(logrus.Fields{
+		"at":            "(RouterInfo) ReadRouterInfo",
+		"cert_type":     cert.Type(),
+		"cert_length":   cert.Length(),
+		"remainder_len": len(remainder),
+	}).Debug("Processing certificate")
+
+	sigType, err := certificate.GetSignatureTypeFromCertificate(cert)
+	if err != nil {
+		log.WithError(err).Error("Failed to get signature type from certificate")
+		return RouterInfo{}, remainder, fmt.Errorf("certificate signature type error: %v", err)
+	}
+
+	// Enhanced signature type validation
+	if sigType <= SIGNATURE_TYPE_RSA_SHA256_2048 || sigType > SIGNATURE_TYPE_REDDSA_SHA512_ED25519 {
+		log.WithFields(logrus.Fields{
+			"sigType": sigType,
+			"cert":    cert,
+		}).Error("Invalid signature type detected")
+		return RouterInfo{}, remainder, fmt.Errorf("invalid signature type: %d", sigType)
+	}
+
 	log.WithFields(logrus.Fields{
 		"sigType": sigType,
 	}).Debug("Got sigType")

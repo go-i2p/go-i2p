@@ -28,16 +28,29 @@ func (i Integer) Bytes() []byte {
 	return i[:]
 }
 
-// Int returns the Date as a Go integer
+// Int returns the Integer as a Go integer
 func (i Integer) Int() int {
 	return intFromBytes(i.Bytes())
+}
+
+// Interpret a slice of bytes from length 0 to length 8 as a big-endian
+// integer and return an int representation.
+func intFromBytes(number []byte) (value int) {
+	numLen := len(number)
+	if numLen < MAX_INTEGER_SIZE {
+		paddedNumber := make([]byte, MAX_INTEGER_SIZE)
+		copy(paddedNumber[MAX_INTEGER_SIZE-numLen:], number)
+		number = paddedNumber
+	}
+	value = int(binary.BigEndian.Uint64(number))
+	return
 }
 
 // ReadInteger returns an Integer from a []byte of specified length.
 // The remaining bytes after the specified length are also returned.
 func ReadInteger(bytes []byte, size int) (Integer, []byte) {
 	if len(bytes) < size {
-		return bytes[:size], bytes[len(bytes):]
+		return bytes, nil
 	}
 	return bytes[:size], bytes[size:]
 }
@@ -46,13 +59,7 @@ func ReadInteger(bytes []byte, size int) (Integer, []byte) {
 // Limits the length of the created Integer to MAX_INTEGER_SIZE.
 // Returns a pointer to Integer unlike ReadInteger.
 func NewInteger(bytes []byte, size int) (integer *Integer, remainder []byte, err error) {
-	integerSize := MAX_INTEGER_SIZE
-	if size < MAX_INTEGER_SIZE {
-		integerSize = size
-	}
-	intBytes := bytes[:integerSize]
-	remainder = bytes[integerSize:]
-	i, _ := ReadInteger(intBytes, integerSize)
+	i, remainder := ReadInteger(bytes, size)
 	integer = &i
 	return
 }
@@ -67,19 +74,5 @@ func NewIntegerFromInt(value int, size int) (integer *Integer, err error) {
 	}
 	objinteger, _, err := NewInteger(bytes[MAX_INTEGER_SIZE-integerSize:], integerSize)
 	integer = objinteger
-	return
-}
-
-// Interpret a slice of bytes from length 0 to length 8 as a big-endian
-// integer and return an int representation.
-func intFromBytes(number []byte) (value int) {
-	num_len := len(number)
-	if num_len < MAX_INTEGER_SIZE {
-		number = append(
-			make([]byte, MAX_INTEGER_SIZE-num_len),
-			number...,
-		)
-	}
-	value = int(binary.BigEndian.Uint64(number))
 	return
 }
