@@ -9,7 +9,7 @@ import (
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 )
 
 var log = logger.GetGoI2PLogger()

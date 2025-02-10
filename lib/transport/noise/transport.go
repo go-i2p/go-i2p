@@ -8,20 +8,24 @@ package noise
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
+	"github.com/flynn/noise"
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
+const NOISE_PROTOCOL_NAME = "NOISE"
+
 type NoiseTransport struct {
 	sync.Mutex
-	router_identity.RouterIdentity
+	router_info.RouterInfo
+	transportStyle  string
 	Listener        net.Listener
 	peerConnections map[data.Hash]transport.TransportSession
 }
@@ -71,9 +75,9 @@ func (noopt *NoiseTransport) Name() string {
 // will bind if the underlying socket is not already
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
-func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
+func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err error) {
 	log.WithField("identity", ident).Debug("NoiseTransport: Setting identity")
-	noopt.RouterIdentity = ident
+	noopt.RouterInfo = ident
 	if noopt.Listener == nil {
 		log.WithFields(logrus.Fields{
 			"at":     "(NoiseTransport) SetIdentity",
@@ -158,6 +162,7 @@ func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 	return &NoiseTransport{
 		peerConnections: make(map[data.Hash]transport.TransportSession),
 		Listener:        netSocket,
+		transportStyle:  NOISE_PROTOCOL_NAME,
 	}
 }
 
@@ -174,4 +179,36 @@ func NewNoiseTransportSocket() (*NoiseTransport, error) {
 	_transport := NewNoiseTransport(netSocket)
 	log.WithField("addr", netSocket.Addr().String()).Debug("Created new NoiseTransportSocket")
 	return _transport, nil
+}
+
+// LocalStaticKey is equal to the NTCP2 static public key, found in our router info
+func (s *NoiseTransport) localStaticKey() ([32]byte, error) {
+	// s.RouterIdentity
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == s.transportStyle {
+			return addr.StaticKey()
+		}
+	}
+	return [32]byte{}, fmt.Errorf("Remote static key error")
+}
+
+func (s *NoiseTransport) localStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == s.transportStyle {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, fmt.Errorf("Remote static IV error")
+}
+
+func (h *NoiseTransport) HandshakeKey() *noise.DHKey {
+	return nil
 }
