@@ -393,3 +393,23 @@ func absDuration(d time.Duration) time.Duration {
 func getLocalCountryCode() string {
 	return ""
 }
+
+func (rt *RouterTimestamper) GetCurrentTime() time.Time {
+	if rt.initialized && rt.isRunning && !rt.disabled {
+		// Request immediate timestamp update
+		rt.TimestampNow()
+		// Wait briefly for update to complete
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Return current time based on latest offset
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+	if len(rt.listeners) > 0 {
+		// Use first listener's time if available
+		var t time.Time
+		rt.listeners[0].SetNow(t, 0) // Get current time from listener
+		return t
+	}
+	return time.Now() // Fallback to system time
+}

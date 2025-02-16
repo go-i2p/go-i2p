@@ -1,8 +1,11 @@
 package router
 
 import (
+	"crypto/sha256"
 	"strconv"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/base32"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -37,9 +40,36 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	r, err := FromConfig(cfg)
 	if err != nil {
 		log.WithError(err).Error("Failed to create router from configuration")
+		return nil, err
 	} else {
 		log.Debug("Router created successfully with provided configuration")
 	}
+	r.RouterInfoKeystore, err = keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
+	log.Debug("Working directory is:", cfg.WorkingDir)
+	if err != nil {
+		log.WithError(err).Error("Failed to create RouterInfoKeystore")
+		return nil, err
+	} else {
+		log.Debug("RouterInfoKeystore created successfully")
+		if err = r.RouterInfoKeystore.StoreKeys(); err != nil {
+			log.WithError(err).Error("Failed to store RouterInfoKeystore")
+			return nil, err
+		} else {
+			log.Debug("RouterInfoKeystore stored successfully")
+		}
+	}
+	pub, _, err := r.RouterInfoKeystore.GetKeys()
+	if err != nil {
+		log.WithError(err).Error("Failed to get keys from RouterInfoKeystore")
+		return nil, err
+	} else {
+		// sha256 hash of public key
+		pubHash := sha256.Sum256(pub.Bytes())
+		b32PubHash := base32.EncodeToString(pubHash[:])
+		log.Debug("Router public hash:", b32PubHash)
+	}
+	r.TransportMuxer = transport.Mux()
+
 	return r, err
 }
 

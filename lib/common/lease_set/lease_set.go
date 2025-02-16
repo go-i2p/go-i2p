@@ -208,7 +208,7 @@ func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainde
 
 	keysAndCert, _, err := ReadKeysAndCert(destinationData)
 	if err != nil {
-		fmt.Printf("Failed to read KeysAndCert: %v\n", err) //32 / 0 error
+		fmt.Printf("Failed to read KeysAndCert: %v\n", err) // 32 / 0 error
 		return
 	}
 

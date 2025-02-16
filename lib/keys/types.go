@@ -56,12 +56,12 @@ func (ks *KeyStoreImpl) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error) {
 func (ks *KeyStoreImpl) StoreKeys() error {
 	// make sure the directory exists
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
-		err := os.MkdirAll(ks.dir, 0755)
+		err := os.MkdirAll(ks.dir, 0o755)
 		if err != nil {
 			return err
 		}
 	}
 	// on the disk somewhere
 	filename := fmt.Sprintf("private-%s.key", ks.KeyID())
-	return os.WriteFile(filename, ks.privateKey.Bytes(), 0644)
+	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o644)
 }

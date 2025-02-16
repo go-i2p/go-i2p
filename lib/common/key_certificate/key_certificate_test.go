@@ -61,6 +61,7 @@ func TestConstructPublicKeyWithInsufficientData(t *testing.T) {
 	assert.NotNil(err)
 	assert.Equal("error constructing public key: not enough data", err.Error())
 }
+
 func TestConstructPublicKeyReturnsCorrectDataWithElg(t *testing.T) {
 	assert := assert.New(t)
 

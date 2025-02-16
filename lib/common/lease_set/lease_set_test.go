@@ -136,13 +136,11 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Recie
 	// Generate signing key pair for the LeaseSet (Ed25519)
 	var leaseSetSigningPrivKey crypto.Ed25519PrivateKey
 	_, err = leaseSetSigningPrivKey.Generate()
-
 	if err != nil {
 		t.Fatalf("Failed to generate lease set Ed25519 private key: %v", err)
 	}
 
 	leaseSetSigningPubKeyRaw, err := leaseSetSigningPrivKey.Public()
-
 	if err != nil {
 		t.Fatalf("Failed to derive lease set Ed25519 public key: %v", err)
 	}
@@ -177,6 +175,7 @@ func createTestLease(t *testing.T, index int, routerInfo *router_info.RouterInfo
 
 	return testLease, nil
 }
+
 func generateTestDestination(t *testing.T) (*destination.Destination, crypto.RecievingPublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, error) {
 	// Generate client signing key pair (Ed25519)
 	var ed25519_privkey crypto.Ed25519PrivateKey

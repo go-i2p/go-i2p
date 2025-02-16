@@ -103,7 +103,7 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 		t.Fatal(err)
 	}
 
-	t.Logf("pubkey bytes after NewKeysAndCert: %v\n", keysAndCert.signingPublicKey.Bytes())
+	t.Logf("pubkey bytes after NewKeysAndCert: %v\n", keysAndCert.SigningPublic.Bytes())
 
 	return keysAndCert
 }
@@ -122,9 +122,9 @@ func TestCertificateWithValidDataElgAndEd25519(t *testing.T) {
 
 	// Compare individual fields
 	assert.Equal(keysAndCert.KeyCertificate.Bytes(), parsedKeysAndCert.KeyCertificate.Bytes(), "KeyCertificates should match")
-	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
+	assert.Equal(keysAndCert.ReceivingPublic.Bytes(), parsedKeysAndCert.ReceivingPublic.Bytes(), "PublicKeys should match")
 	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
-	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")
+	assert.Equal(keysAndCert.SigningPublic.Bytes(), parsedKeysAndCert.SigningPublic.Bytes(), "SigningPublicKeys should match")
 }
 
 func TestCertificateWithValidDataManual(t *testing.T) {

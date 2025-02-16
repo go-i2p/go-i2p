@@ -7,11 +7,17 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
+	"github.com/go-i2p/go-i2p/lib/common/router_identity"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 )
 
 // RouterInfoKeystore is an implementation of KeyStore for storing and retrieving RouterInfo private keys and exporting RouterInfos
 type RouterInfoKeystore struct {
+	*sntp.RouterTimestamper
 	dir        string
 	name       string
 	privateKey crypto.PrivateKey
@@ -24,7 +30,7 @@ var riks KeyStore = &RouterInfoKeystore{}
 // then it generates new private keys for the routerInfo if none exist
 func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err := os.MkdirAll(dir, 0755)
+		err := os.MkdirAll(dir, 0o755)
 		if err != nil {
 			return nil, err
 		}
@@ -46,10 +52,13 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 			return nil, err
 		}
 	}
+	defaultClient := &sntp.DefaultNTPClient{}
+	timestamper := sntp.NewRouterTimestamper(defaultClient)
 	return &RouterInfoKeystore{
-		dir:        dir,
-		name:       name,
-		privateKey: privateKey,
+		dir:               dir,
+		name:              name,
+		privateKey:        privateKey,
+		RouterTimestamper: timestamper,
 	}, nil
 }
 
@@ -84,14 +93,14 @@ func (ks *RouterInfoKeystore) GetKeys() (crypto.PublicKey, crypto.PrivateKey, er
 
 func (ks *RouterInfoKeystore) StoreKeys() error {
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
-		err := os.MkdirAll(ks.dir, 0755)
+		err := os.MkdirAll(ks.dir, 0o755)
 		if err != nil {
 			return err
 		}
 	}
 	// on the disk somewhere
-	filename := filepath.Join(ks.dir, ks.name)
-	return os.WriteFile(filename, ks.privateKey.Bytes(), 0644)
+	filename := filepath.Join(ks.dir, ks.KeyID()+".key")
+	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o644)
 }
 
 func (ks *RouterInfoKeystore) KeyID() string {
@@ -106,4 +115,21 @@ func (ks *RouterInfoKeystore) KeyID() string {
 		return string(public.Bytes())
 	}
 	return ks.name
+}
+
+func (ks *RouterInfoKeystore) ConstructRouterInfo() (*router_info.RouterInfo, error) {
+	spk, ppk, err := ks.GetKeys()
+	if err != nil {
+		return nil, err
+	}
+	rid := &router_identity.RouterIdentity{
+		KeysAndCert: keys_and_cert.KeysAndCert{
+			SigningPublic:   spk.(crypto.SigningPublicKey),
+			ReceivingPublic: spk.(crypto.RecievingPublicKey),
+		},
+	}
+	publishedTime := ks.RouterTimestamper.GetCurrentTime()
+	addresses := []*router_address.RouterAddress{}
+	options := map[string]string{}
+	return router_info.NewRouterInfo(rid, publishedTime, addresses, options, ppk.(crypto.SigningPrivateKey), 7)
 }
