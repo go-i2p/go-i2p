@@ -10,17 +10,25 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
 var log = logger.GetGoI2PLogger()
 
 // i2p router type
 type Router struct {
+	// keystore for router info
 	*keys.RouterInfoKeystore
-	cfg       *config.RouterConfig
-	ndb       netdb.StdNetDB
+	// multi-transport manager
+	*transport.TransportMuxer
+	// router configuration
+	cfg *config.RouterConfig
+	// netdb
+	ndb netdb.StdNetDB
+	// close channel
 	closeChnl chan bool
-	running   bool
+	// running flag
+	running bool
 }
 
 // CreateRouter creates a router with the provided configuration
