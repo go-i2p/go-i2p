@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 )
 
@@ -15,6 +16,7 @@ var log = logger.GetGoI2PLogger()
 
 // i2p router type
 type Router struct {
+	*keys.RouterInfoKeystore
 	cfg       *config.RouterConfig
 	ndb       netdb.StdNetDB
 	closeChnl chan bool
