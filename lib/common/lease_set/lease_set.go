@@ -492,7 +492,7 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 
 func NewLeaseSet(
 	destination Destination,
-	encryptionKey crypto.PublicKey,
+	encryptionKey crypto.RecievingPublicKey,
 	signingKey crypto.SigningPublicKey,
 	leases []Lease,
 	signingPrivateKey crypto.SigningPrivateKey,

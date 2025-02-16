@@ -1,6 +1,7 @@
 package router
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -89,7 +90,7 @@ func (r *Router) mainloop() {
 		log.WithError(err).Error("Failed to ensure NetDB")
 	}
 	if sz := r.ndb.Size(); sz >= 0 {
-		log.WithField("size", sz).Debug("NetDB Size")
+		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.Warn("Unable to determine NetDB size")
 	}

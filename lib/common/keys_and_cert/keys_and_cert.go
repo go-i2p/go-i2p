@@ -80,7 +80,7 @@ total length: 387+ bytes
 // https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
 	KeyCertificate   *KeyCertificate
-	publicKey        crypto.PublicKey
+	publicKey        crypto.RecievingPublicKey
 	Padding          []byte
 	signingPublicKey crypto.SigningPublicKey
 }
@@ -104,7 +104,7 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 }
 
 // publicKey returns the public key as a crypto.publicKey.
-func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
+func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.RecievingPublicKey) {
 	return keys_and_cert.publicKey
 }
 
@@ -248,7 +248,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	return
 }
 
-func constructPublicKey(data []byte, cryptoType uint16) (crypto.PublicKey, error) {
+func constructPublicKey(data []byte, cryptoType uint16) (crypto.RecievingPublicKey, error) {
 	switch cryptoType {
 	case CRYPTO_KEY_TYPE_ELGAMAL:
 		if len(data) != 256 {
@@ -280,7 +280,7 @@ func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPubli
 // It validates the sizes of the provided keys and padding before assembling the struct.
 func NewKeysAndCert(
 	keyCertificate *KeyCertificate,
-	publicKey crypto.PublicKey,
+	publicKey crypto.RecievingPublicKey,
 	padding []byte,
 	signingPublicKey crypto.SigningPublicKey,
 ) (*KeysAndCert, error) {

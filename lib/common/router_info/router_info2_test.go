@@ -59,7 +59,7 @@ func TestCreateRouterInfo(t *testing.T) {
 	copy(elg_pubkey[256-len(yBytes):], yBytes)
 
 	// Ensure that elg_pubkey implements crypto.PublicKey interface
-	var _ crypto.PublicKey = elg_pubkey
+	var _ crypto.RecievingPublicKey = elg_pubkey
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer

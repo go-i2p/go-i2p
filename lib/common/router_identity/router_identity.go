@@ -52,7 +52,7 @@ func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder 
 	return
 }
 
-func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error) {
+func NewRouterIdentity(publicKey crypto.RecievingPublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error) {
 	log.Debug("Creating new RouterIdentity")
 
 	// Step 1: Create keyCertificate from the provided certificate.
