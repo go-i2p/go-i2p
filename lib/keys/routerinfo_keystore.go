@@ -1,16 +1,21 @@
 package keys
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 )
@@ -117,19 +122,71 @@ func (ks *RouterInfoKeystore) KeyID() string {
 	return ks.name
 }
 
-func (ks *RouterInfoKeystore) ConstructRouterInfo() (*router_info.RouterInfo, error) {
-	spk, ppk, err := ks.GetKeys()
+func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress) (*router_info.RouterInfo, error) {
+	// Get signing keys
+	publicKey, privateKey, err := ks.GetKeys()
 	if err != nil {
 		return nil, err
 	}
-	rid := &router_identity.RouterIdentity{
-		KeysAndCert: keys_and_cert.KeysAndCert{
-			SigningPublic:   spk.(crypto.SigningPublicKey),
-			ReceivingPublic: spk.(crypto.RecievingPublicKey),
-		},
+
+	// Create certificate with Ed25519 key type
+	payload := new(bytes.Buffer)
+	cryptoKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
+	if err != nil {
+		return nil, err
 	}
+	signingKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
+	if err != nil {
+		return nil, err
+	}
+	payload.Write(*cryptoKeyType)
+	payload.Write(*signingKeyType)
+
+	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	// Create padding
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	if err != nil {
+		return nil, err
+	}
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create RouterIdentity
+	routerIdentity, err := router_identity.NewRouterIdentity(
+		publicKey.(crypto.RecievingPublicKey),
+		publicKey.(crypto.SigningPublicKey),
+		*cert,
+		padding,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get timestamp
 	publishedTime := ks.RouterTimestamper.GetCurrentTime()
-	addresses := []*router_address.RouterAddress{}
-	options := map[string]string{}
-	return router_info.NewRouterInfo(rid, publishedTime, addresses, options, ppk.(crypto.SigningPrivateKey), 7)
+
+	// Standard router options
+	options := map[string]string{
+		"caps":  "NU", // Standard capabilities - Not floodfill, Not Reachable
+		"netId": "2",  // Production network
+	}
+
+	return router_info.NewRouterInfo(
+		routerIdentity,
+		publishedTime,
+		addresses,
+		options,
+		privateKey.(crypto.SigningPrivateKey),
+		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
+	)
 }
