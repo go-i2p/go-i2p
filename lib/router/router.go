@@ -66,8 +66,17 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		// sha256 hash of public key
 		pubHash := sha256.Sum256(pub.Bytes())
 		b32PubHash := base32.EncodeToString(pubHash[:])
-		log.Debug("Router public hash:", b32PubHash)
+		log.Debug("Router public key hash:", b32PubHash)
 	}
+	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
+	if err != nil {
+		log.WithError(err).Error("Failed to construct RouterInfo")
+		return nil, err
+	} else {
+		log.Debug("RouterInfo constructed successfully")
+		log.Debug("RouterInfo:", ri)
+	}
+
 	r.TransportMuxer = transport.Mux()
 
 	return r, err
