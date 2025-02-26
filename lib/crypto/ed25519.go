@@ -272,14 +272,14 @@ func (k Ed25519PrivateKey) Len() int {
 	return len(k)
 }
 
-func (k *Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
+func (k Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
 	// Generate a new Ed25519 key pair
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 	// Assign the generated private key to the receiver
-	*k = Ed25519PrivateKey(priv)
+	k = Ed25519PrivateKey(priv)
 	return k, nil
 }
 

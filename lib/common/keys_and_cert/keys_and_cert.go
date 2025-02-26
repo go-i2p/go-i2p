@@ -87,18 +87,39 @@ type KeysAndCert struct {
 
 // Bytes returns the entire keyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert KeysAndCert) Bytes() []byte {
-	bytes := keys_and_cert.ReceivingPublic.Bytes()
-	bytes = append(bytes, keys_and_cert.Padding...)
-	bytes = append(bytes, keys_and_cert.SigningPublic.Bytes()...)
-	bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
+	bytes := []byte{}
+	rpublen := 0
+	if keys_and_cert.ReceivingPublic != nil {
+		bytes = append(bytes, keys_and_cert.ReceivingPublic.Bytes()...)
+		rpublen = len(keys_and_cert.ReceivingPublic.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.ReceivingPublic.Bytes()...)
+	padlen := 0
+	if keys_and_cert.Padding != nil {
+		bytes = append(bytes, keys_and_cert.Padding...)
+		padlen = len(keys_and_cert.Padding)
+	}
+	// bytes = append(bytes, keys_and_cert.Padding...)
+	spublen := 0
+	if keys_and_cert.SigningPublic != nil {
+		bytes = append(bytes, keys_and_cert.SigningPublic.Bytes()...)
+		spublen = len(keys_and_cert.SigningPublic.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.SigningPublic.Bytes()...)
+	certlen := 0
+	if keys_and_cert.KeyCertificate != nil {
+		bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
+		certlen = len(keys_and_cert.KeyCertificate.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
 		"bytes":                bytes,
 		"padding":              keys_and_cert.Padding,
 		"bytes_length":         len(bytes),
-		"pk_bytes_length":      len(keys_and_cert.ReceivingPublic.Bytes()),
-		"padding_bytes_length": len(keys_and_cert.Padding),
-		"spk_bytes_length":     len(keys_and_cert.SigningPublic.Bytes()),
-		"cert_bytes_length":    len(keys_and_cert.KeyCertificate.Bytes()),
+		"pk_bytes_length":      rpublen,
+		"padding_bytes_length": padlen,
+		"spk_bytes_length":     spublen,
+		"cert_bytes_length":    certlen,
 	}).Debug("Retrieved bytes from KeysAndCert")
 	return bytes
 }
@@ -296,21 +317,25 @@ func NewKeysAndCert(
 	sigKeySize := keyCertificate.SignatureSize()
 
 	// Validate public key size
-	if publicKey.Len() != pubKeySize {
-		log.WithFields(logrus.Fields{
-			"expected_size": pubKeySize,
-			"actual_size":   publicKey.Len(),
-		}).Error("Invalid publicKey size")
-		return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
+	if publicKey != nil {
+		if publicKey.Len() != pubKeySize {
+			log.WithFields(logrus.Fields{
+				"expected_size": pubKeySize,
+				"actual_size":   publicKey.Len(),
+			}).Error("Invalid publicKey size")
+			return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
+		}
 	}
 
-	// Validate signing key size
-	if signingPublicKey.Len() != sigKeySize {
-		log.WithFields(logrus.Fields{
-			"expected_size": sigKeySize,
-			"actual_size":   signingPublicKey.Len(),
-		}).Error("Invalid signingPublicKey size")
-		return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+	if signingPublicKey != nil {
+		// Validate signing key size
+		if signingPublicKey.Len() != sigKeySize {
+			log.WithFields(logrus.Fields{
+				"expected_size": sigKeySize,
+				"actual_size":   signingPublicKey.Len(),
+			}).Error("Invalid signingPublicKey size")
+			return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+		}
 	}
 
 	// Calculate expected padding size
@@ -330,11 +355,11 @@ func NewKeysAndCert(
 		SigningPublic:   signingPublicKey,
 	}
 
-	log.WithFields(logrus.Fields{
+	/*log.WithFields(logrus.Fields{
 		"public_key_length":         publicKey.Len(),
 		"signing_public_key_length": signingPublicKey.Len(),
 		"padding_length":            len(padding),
-	}).Debug("Successfully created KeysAndCert")
+	}).Debug("Successfully created KeysAndCert")*/
 
 	return keysAndCert, nil
 }

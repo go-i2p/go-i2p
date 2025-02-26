@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -126,31 +127,31 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	// Get signing keys
 	publicKey, privateKey, err := ks.GetKeys()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get keys: %w", err)
 	}
 
 	// Create certificate with Ed25519 key type
 	payload := new(bytes.Buffer)
 	cryptoKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create crypto key type: %w", err)
 	}
 	signingKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create signing key type: %w", err)
 	}
 	payload.Write(*cryptoKeyType)
 	payload.Write(*signingKeyType)
 
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create certificate: %w", err)
 	}
 
 	// Create padding
 	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create key certificate: %w", err)
 	}
 
 	pubKeySize := keyCert.CryptoSize()
@@ -159,18 +160,18 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate padding: %w", err)
 	}
 
 	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(
-		publicKey.(crypto.RecievingPublicKey),
+		crypto.RecievingPublicKey(nil),
 		publicKey.(crypto.SigningPublicKey),
 		*cert,
 		padding,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create router identity: %w", err)
 	}
 
 	// Get timestamp
@@ -182,7 +183,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		"netId": "2",  // Production network
 	}
 
-	return router_info.NewRouterInfo(
+	ri, err := router_info.NewRouterInfo(
 		routerIdentity,
 		publishedTime,
 		addresses,
@@ -190,4 +191,9 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		privateKey.(crypto.SigningPrivateKey),
 		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create router info: %w", err)
+	}
+
+	return ri, nil
 }
