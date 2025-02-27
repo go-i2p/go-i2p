@@ -65,8 +65,10 @@ release:
 	github-release release -u go-i2p -r go-i2p -n "${RELEASE_VERSION}" -t "${RELEASE_TAG}" -d "${RELEASE_DESCRIPTION}" -p
 
 callvis:
-	go-callvis -format svg -focus upgrade -group pkg,type -limit github.com/go-i2p/go-i2p github.com/go-i2p/go-i2p
+	go-callvis -file index.html -format svg -group pkg,type github.com/go-i2p/go-i2p/
 
 godoc:
 	find lib -type d -exec bash -c "ls {}/*.go && godocdown -o ./{}/doc.md ./{}" \;
 
+gocallvis:
+    find lib -type d -exec bash -c "ls {}/*.go && go-callvis -focus github.com/go-i2p/go-i2p/{} -file ./{}/index.html -format svg -group pkg,type github.com/go-i2p/go-i2p/{}" \;
