@@ -31,6 +31,7 @@ import (
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -148,7 +149,7 @@ func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key
 			"required_len": KEYCERT_PUBKEY_SIZE,
 			"reason":       "not enough data",
 		}).Error("error constructing public key")
-		err = fmt.Errorf("error constructing public key: not enough data")
+		err = oops.Errorf("error constructing public key: not enough data")
 		return
 	}
 	switch key_type {
@@ -191,7 +192,7 @@ var SignaturePublicKeySizes = map[uint16]int{
 func (keyCertificate *KeyCertificate) CryptoPublicKeySize() (int, error) {
 	size, exists := CryptoPublicKeySizes[uint16(keyCertificate.CpkType.Int())]
 	if !exists {
-		return 0, fmt.Errorf("unknown crypto key type: %d", keyCertificate.CpkType.Int())
+		return 0, oops.Errorf("unknown crypto key type: %d", keyCertificate.CpkType.Int())
 	}
 	return size, nil
 }
@@ -240,7 +241,7 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 			"required_len": KEYCERT_SPK_SIZE,
 			"reason":       "not enough data",
 		}).Error("error constructing signing public key")
-		err = fmt.Errorf("error constructing signing public key: not enough data")
+		err = oops.Errorf("error constructing signing public key: not enough data")
 		return
 	}
 	switch signing_key_type {
@@ -297,7 +298,7 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 		log.WithFields(logrus.Fields{
 			"signing_key_type": signing_key_type,
 		}).Warn("Unknown signing key type")
-		return nil, fmt.Errorf("unknown signing key type")
+		return nil, oops.Errorf("unknown signing key type")
 	}
 
 	return
@@ -365,11 +366,11 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 	}
 
 	if certificate.Type() != CERT_KEY {
-		return nil, remainder, fmt.Errorf("invalid certificate type: %d", certificate.Type())
+		return nil, remainder, oops.Errorf("invalid certificate type: %d", certificate.Type())
 	}
 
 	if len(certificate.Data()) < 4 {
-		return nil, remainder, fmt.Errorf("key certificate data too short")
+		return nil, remainder, oops.Errorf("key certificate data too short")
 	}
 	log.Println("Certificate Data in NewKeyCertificate: ", certificate.Data()[0:2], certificate.Data()[2:4])
 
@@ -393,7 +394,7 @@ func NewKeyCertificate(bytes []byte) (key_certificate *KeyCertificate, remainder
 
 func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	if cert.Type() != CERT_KEY {
-		return nil, fmt.Errorf("expected Key Certificate type, got %d", cert.Type())
+		return nil, oops.Errorf("expected Key Certificate type, got %d", cert.Type())
 	}
 
 	data := cert.Data()
@@ -401,7 +402,7 @@ func KeyCertificateFromCertificate(cert Certificate) (*KeyCertificate, error) {
 	fmt.Printf("Certificate Data Bytes in KeyCertificateFromCertificate: %v\n", data)
 
 	if len(data) < 4 {
-		return nil, fmt.Errorf("certificate payload too short in KeyCertificateFromCertificate")
+		return nil, oops.Errorf("certificate payload too short in KeyCertificateFromCertificate")
 	}
 
 	cpkTypeBytes := data[0:2]

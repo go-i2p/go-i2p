@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -19,6 +17,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
+	"github.com/samber/oops"
 )
 
 // RouterInfoKeystore is an implementation of KeyStore for storing and retrieving RouterInfo private keys and exporting RouterInfos
@@ -82,7 +81,7 @@ func generateNewKey() (crypto.Ed25519PrivateKey, error) {
 func loadExistingKey(keyData []byte) (crypto.Ed25519PrivateKey, error) {
 	// Validate key length
 	if len(keyData) != ed25519.PrivateKeySize {
-		return nil, errors.New("invalid key length")
+		return nil, oops.Errorf("invalid key length")
 	}
 
 	// Convert to our type
@@ -127,31 +126,31 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	// Get signing keys
 	publicKey, privateKey, err := ks.GetKeys()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get keys: %w", err)
+		return nil, oops.Errorf("failed to get keys: %w", err)
 	}
 
 	// Create certificate with Ed25519 key type
 	payload := new(bytes.Buffer)
 	cryptoKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
 	if err != nil {
-		return nil, fmt.Errorf("failed to create crypto key type: %w", err)
+		return nil, oops.Errorf("failed to create crypto key type: %w", err)
 	}
 	signingKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
 	if err != nil {
-		return nil, fmt.Errorf("failed to create signing key type: %w", err)
+		return nil, oops.Errorf("failed to create signing key type: %w", err)
 	}
 	payload.Write(*cryptoKeyType)
 	payload.Write(*signingKeyType)
 
 	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create certificate: %w", err)
+		return nil, oops.Errorf("failed to create certificate: %w", err)
 	}
 
 	// Create padding
 	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create key certificate: %w", err)
+		return nil, oops.Errorf("failed to create key certificate: %w", err)
 	}
 
 	pubKeySize := keyCert.CryptoSize()
@@ -160,7 +159,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate padding: %w", err)
+		return nil, oops.Errorf("failed to generate padding: %w", err)
 	}
 
 	// Create RouterIdentity
@@ -171,7 +170,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		padding,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create router identity: %w", err)
+		return nil, oops.Errorf("failed to create router identity: %w", err)
 	}
 
 	// Get timestamp
@@ -192,7 +191,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create router info: %w", err)
+		return nil, oops.Errorf("failed to create router info: %w", err)
 	}
 
 	return ri, nil

@@ -8,18 +8,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/samber/oops"
 )
 
 func consolidateNetDb(sourcePath string, destPath string) error {
 	// Create destination directory if it doesn't exist
 	if err := os.MkdirAll(destPath, 0o755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %v", err)
+		return oops.Errorf("failed to create destination directory: %v", err)
 	}
 
 	// Walk through all subdirectories
 	return filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("error accessing path %q: %v", path, err)
+			return oops.Errorf("error accessing path %q: %v", path, err)
 		}
 
 		// Skip if it's a directory
@@ -37,7 +39,7 @@ func consolidateNetDb(sourcePath string, destPath string) error {
 
 			// Copy the file
 			if err := copyFile(srcFile, dstFile); err != nil {
-				return fmt.Errorf("failed to copy %s: %v", info.Name(), err)
+				return oops.Errorf("failed to copy %s: %v", info.Name(), err)
 			}
 		}
 
@@ -69,7 +71,7 @@ func consolidateAllNetDbs(tempDir string) error {
 
 	// Create the temp directory
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create temp directory: %v", err)
+		return oops.Errorf("failed to create temp directory: %v", err)
 	}
 
 	// Try to consolidate I2P netDb
@@ -91,7 +93,7 @@ func consolidateAllNetDbs(tempDir string) error {
 
 func cleanupTempDir(path string) error {
 	if err := os.RemoveAll(path); err != nil {
-		return fmt.Errorf("failed to cleanup temporary directory %s: %v", path, err)
+		return oops.Errorf("failed to cleanup temporary directory %s: %v", path, err)
 	}
 	return nil
 }
@@ -110,7 +112,7 @@ func createTempNetDbDir() (string, error) {
 	// Create the directory with appropriate permissions
 	err := os.MkdirAll(tempDir, 0o755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %v", err)
+		return "", oops.Errorf("failed to create temporary directory: %v", err)
 	}
 
 	return tempDir, nil

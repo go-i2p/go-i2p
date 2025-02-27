@@ -3,13 +3,12 @@ package router_info
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
 
@@ -306,7 +305,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	sigType, err := certificate.GetSignatureTypeFromCertificate(cert)
 	if err != nil {
 		log.WithError(err).Error("Failed to get signature type from certificate")
-		return RouterInfo{}, remainder, fmt.Errorf("certificate signature type error: %v", err)
+		return RouterInfo{}, remainder, oops.Errorf("certificate signature type error: %v", err)
 	}
 
 	// Enhanced signature type validation
@@ -315,7 +314,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"sigType": sigType,
 			"cert":    cert,
 		}).Error("Invalid signature type detected")
-		return RouterInfo{}, remainder, fmt.Errorf("invalid signature type: %d", sigType)
+		return RouterInfo{}, remainder, oops.Errorf("invalid signature type: %d", sigType)
 	}
 
 	log.WithFields(logrus.Fields{
@@ -329,7 +328,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			//"required_len": MAPPING_SIZE,
 			"reason": "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data to read signature")
+		err = oops.Errorf("error parsing router info: not enough data to read signature")
 	}
 
 	log.WithFields(logrus.Fields{

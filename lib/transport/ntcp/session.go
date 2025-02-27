@@ -1,13 +1,14 @@
 package ntcp
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
+
+	"github.com/samber/oops"
 	"golang.org/x/exp/rand"
 )
 
@@ -97,7 +98,7 @@ func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
 			return addr.StaticKey()
 		}
 	}
-	return [32]byte{}, fmt.Errorf("Remote static key error")
+	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
 func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
@@ -110,7 +111,7 @@ func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
 			return addr.InitializationVector()
 		}
 	}
-	return [16]byte{}, fmt.Errorf("Remote static IV error")
+	return [16]byte{}, oops.Errorf("Remote static IV error")
 }
 
 // ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC

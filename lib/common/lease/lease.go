@@ -3,11 +3,11 @@ package lease
 
 import (
 	"encoding/binary"
-	"errors"
 	"time"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -87,7 +87,7 @@ func ReadLease(data []byte) (lease Lease, remainder []byte, err error) {
 	log.WithField("input_length", len(data)).Debug("Reading Lease from bytes")
 
 	if len(data) < LEASE_SIZE {
-		err = errors.New("error parsing lease: not enough data")
+		err = oops.Errorf("error parsing lease: not enough data")
 		log.WithFields(logrus.Fields{
 			"data_length":     len(data),
 			"required_length": LEASE_SIZE,

@@ -2,10 +2,10 @@
 package data
 
 import (
-	"errors"
 	"time"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -57,7 +57,7 @@ func ReadDate(data []byte) (date Date, remainder []byte, err error) {
 		log.WithFields(logrus.Fields{
 			"data": data,
 		}).Error("ReadDate: data is too short")
-		err = errors.New("ReadDate: data is too short")
+		err = oops.Errorf("ReadDate: data is too short")
 		return
 	}
 	copy(date[:], data[:8])

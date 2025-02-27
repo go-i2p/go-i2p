@@ -3,7 +3,6 @@ package lease_set
 import (
 	"bytes"
 	"crypto/rand"
-	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
@@ -274,7 +274,7 @@ func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, leaseC
 	// Generate test Destination and client keys
 	dest, encryptionKey, signingKey, signingPrivKey, err := generateTestDestination(t)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate test destination: %v", err)
+		return nil, oops.Errorf("failed to generate test destination: %v", err)
 	}
 
 	destBytes := dest.KeysAndCert.Bytes()

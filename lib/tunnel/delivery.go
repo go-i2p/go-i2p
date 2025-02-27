@@ -2,10 +2,10 @@ package tunnel
 
 import (
 	"encoding/binary"
-	"errors"
 
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -180,7 +180,7 @@ func (delivery_instructions DeliveryInstructions) Type() (int, error) {
 		return FIRST_FRAGMENT, nil
 	}
 	log.Error("DeliveryInstructions contains no data")
-	return 0, errors.New("DeliveryInstructions contains no data")
+	return 0, oops.Errorf("DeliveryInstructions contains no data")
 }
 
 // Read the integer stored in the 6-1 bits of a FOLLOW_ON_FRAGMENT's flag, indicating
@@ -212,7 +212,7 @@ func (delivery_instructions DeliveryInstructions) FragmentNumber() (int, error) 
 		return fragNum, nil
 	}
 	log.Error("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
-	return 0, errors.New("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
+	return 0, oops.Errorf("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
 }
 
 // Read the value of the 0 bit of a FOLLOW_ON_FRAGMENT, which is set to 1 to indicate the
@@ -246,7 +246,7 @@ func (delivery_instructions DeliveryInstructions) LastFollowOnFragment() (bool, 
 		return isLast, nil
 	}
 	log.Error("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
-	return false, errors.New("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
+	return false, oops.Errorf("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
 }
 
 // Return the delivery type for these DeliveryInstructions, can be of type
@@ -270,7 +270,7 @@ func (delivery_instructions DeliveryInstructions) DeliveryType() (byte, error) {
 		return deliveryType, nil
 	}
 	log.Error("DeliveryInstructions contains no data")
-	return 0, errors.New("DeliveryInstructions contains no data")
+	return 0, oops.Errorf("DeliveryInstructions contains no data")
 }
 
 // Check if the delay bit is set.  This feature in unimplemented in the Java router.
@@ -304,7 +304,7 @@ func (delivery_instructions DeliveryInstructions) HasDelay() (bool, error) {
 		return delay, nil
 	}
 	log.Error("DeliveryInstructions contains no data")
-	return false, errors.New("DeliveryInstructions contains no data")
+	return false, oops.Errorf("DeliveryInstructions contains no data")
 }
 
 // Returns true if the Delivery Instructions are fragmented or false
@@ -333,7 +333,7 @@ func (delivery_instructions DeliveryInstructions) Fragmented() (bool, error) {
 		// return ((delivery_instructions[0] & 0x08) == 0x08), nil
 	}
 	log.Error("DeliveryInstructions contains no data")
-	return false, errors.New("DeliveryInstructions contains no data")
+	return false, oops.Errorf("DeliveryInstructions contains no data")
 }
 
 // Check if the extended options bit is set.  This feature in unimplemented in the Java router.
@@ -368,7 +368,7 @@ func (delivery_instructions DeliveryInstructions) HasExtendedOptions() (bool, er
 		return extended_options, nil
 	}
 	log.Error("DeliveryInstructions contains no data")
-	return false, errors.New("DeliveryInstructions contains no data")
+	return false, oops.Errorf("DeliveryInstructions contains no data")
 }
 
 // Check if the DeliveryInstructions is of type DT_TUNNEL.
@@ -399,7 +399,7 @@ func (delivery_instructions DeliveryInstructions) HasHash() (bool, error) {
 		}
 		if len(delivery_instructions) < min_size {
 			log.Error("Delivery Instructions indicates hash present but has too little data")
-			return false, errors.New("Delivery Instructions indicates hash present but has too little data")
+			return false, oops.Errorf("Delivery Instructions indicates hash present but has too little data")
 		}
 		log.Debug("DeliveryInstructions has Hash")
 	} else {
@@ -425,11 +425,11 @@ func (delivery_instructions DeliveryInstructions) TunnelID() (tunnel_id uint32, 
 			log.WithField("tunnel_id", tunnel_id).Debug("TunnelID retrieved")
 		} else {
 			log.Error("DeliveryInstructions are invalid, too little data for Tunnel ID")
-			err = errors.New("DeliveryInstructions are invalid, too little data for Tunnel ID")
+			err = oops.Errorf("DeliveryInstructions are invalid, too little data for Tunnel ID")
 		}
 	} else {
 		log.Error("DeliveryInstructions are not of type DT_TUNNEL")
-		err = errors.New("DeliveryInstructions are not of type DT_TUNNEL")
+		err = oops.Errorf("DeliveryInstructions are not of type DT_TUNNEL")
 	}
 	return
 }
@@ -455,7 +455,7 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 			log.WithField("hash", hash).Debug("Hash retrieved for DT_TUNNEL")
 		} else {
 			log.Error("DeliveryInstructions is invalid, not contain enough data for hash given type DT_TUNNEL")
-			err = errors.New("DeliveryInstructions is invalid, not contain enough data for hash given type DT_TUNNEL")
+			err = oops.Errorf("DeliveryInstructions is invalid, not contain enough data for hash given type DT_TUNNEL")
 		}
 	} else if delivery_type == DT_ROUTER {
 		if len(delivery_instructions) >= hash_end {
@@ -463,11 +463,11 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 			log.WithField("hash", hash).Debug("Hash retrieved for DT_ROUTER")
 		} else {
 			log.Error("DeliveryInstructions is invalid, not contain enough data for hash given type DT_ROUTER")
-			err = errors.New("DeliveryInstructions is invalid, not contain enough data for hash given type DT_ROUTER")
+			err = oops.Errorf("DeliveryInstructions is invalid, not contain enough data for hash given type DT_ROUTER")
 		}
 	} else {
 		log.Error("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
-		err = errors.New("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
+		err = oops.Errorf("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 	}
 	return
 }
@@ -493,7 +493,7 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 				log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_TUNNEL")
 			} else {
 				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				err = errors.New("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
 				return
 			}
 		} else if di_type == DT_ROUTER {
@@ -502,7 +502,7 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 				log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_ROUTER")
 			} else {
 				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				err = errors.New("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
 				return
 			}
 		} else {
@@ -529,7 +529,7 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 			log.WithField("message_id", msgid).Debug("MessageID retrieved for FOLLOW_ON_FRAGMENT")
 		} else {
 			log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-			err = errors.New("DeliveryInstructions are invalid, not enough data for Message ID")
+			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
 		}
 	} else if di_type == FIRST_FRAGMENT {
 		var message_id_index int
@@ -543,11 +543,11 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 			log.WithField("message_id", msgid).Debug("MessageID retrieved for FIRST_FRAGMENT")
 		} else {
 			log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-			err = errors.New("DeliveryInstructions are invalid, not enough data for Message ID")
+			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
 		}
 	} else {
 		log.Error("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		err = errors.New("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+		err = oops.Errorf("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 	}
 	return
 }
@@ -570,13 +570,13 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 		}
 		if len(delivery_instructions) < extended_options_index+2 {
 			log.Error("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
-			err = errors.New("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
+			err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
 			return
 		} else {
 			extended_options_size := common.Integer([]byte{delivery_instructions[extended_options_index]})
 			if len(delivery_instructions) < extended_options_index+1+extended_options_size.Int() {
 				log.Error("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
-				err = errors.New("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
+				err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
 				return
 			} else {
 				data = delivery_instructions[extended_options_index+1 : extended_options_size.Int()]
@@ -587,7 +587,7 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 		}
 	} else {
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
-		err = errors.New("DeliveryInstruction does not have the ExtendedOptions flag set")
+		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
 	return
 }
@@ -606,7 +606,7 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 			log.WithField("fragment_size", frag_size).Debug("FragmentSize retrieved for FOLLOW_ON_FRAGMENT")
 		} else {
 			log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-			err = errors.New("DeliveryInstructions are invalid, not enough data for Fragment Size")
+			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
 		}
 	} else if di_type == FIRST_FRAGMENT {
 		var fragment_size_index int
@@ -620,11 +620,11 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 			log.WithField("fragment_size", frag_size).Debug("FragmentSize retrieved for FIRST_FRAGMENT")
 		} else {
 			log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-			err = errors.New("DeliveryInstructions are invalid, not enough data for Fragment Size")
+			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
 		}
 	} else {
 		log.Error("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		err = errors.New("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+		err = oops.Errorf("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
 	}
 	return
 }
@@ -668,7 +668,7 @@ func (delivery_instructions DeliveryInstructions) message_id_index() (message_id
 		return message_id, nil
 	} else {
 		log.Error("DeliveryInstruction must be fragmented to have a Message ID")
-		return 0, errors.New("DeliveryInstruction must be fragmented to have a Message ID")
+		return 0, oops.Errorf("DeliveryInstruction must be fragmented to have a Message ID")
 	}
 }
 
@@ -719,7 +719,7 @@ func (delivery_instructions DeliveryInstructions) extended_options_index() (exte
 
 	} else {
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
-		err = errors.New("DeliveryInstruction does not have the ExtendedOptions flag set")
+		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
 	return
 }
@@ -845,7 +845,7 @@ func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, curre
 			}
 			if len(data) < message_id_index+4 {
 				log.Error("Data is too short to contain message ID in FIRST_FRAGMENT")
-				err = errors.New("data is too short to contain message ID in FIRST_FRAGMENT")
+				err = oops.Errorf("data is too short to contain message ID in FIRST_FRAGMENT")
 			} else {
 				now = append(current, data[message_id_index:message_id_index+4]...)
 				log.Debug("MessageID appended for FIRST_FRAGMENT")
@@ -854,7 +854,7 @@ func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, curre
 	} else if di_type == FOLLOW_ON_FRAGMENT {
 		if len(data) < 5 {
 			log.Error("Data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
-			err = errors.New("data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
+			err = oops.Errorf("data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
 		} else {
 			now = append(current, data[1:5]...)
 			log.Debug("MessageID appended for FOLLOW_ON_FRAGMENT")
@@ -886,7 +886,7 @@ func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []
 	} else if di_type == FOLLOW_ON_FRAGMENT {
 		if len(data) < 7 {
 			log.Error("Data is too short to contain size data")
-			err = errors.New("data is too short to contain size data")
+			err = oops.Errorf("data is too short to contain size data")
 		} else {
 			now = append(now, data[5:7]...)
 			log.Debug("Size appended for FOLLOW_ON_FRAGMENT")
@@ -899,7 +899,7 @@ func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, r
 	log.Debug("Reading DeliveryInstructions")
 	if len(data) < 1 {
 		log.Error("No data provided")
-		err = errors.New("no data provided")
+		err = oops.Errorf("no data provided")
 		return
 	}
 

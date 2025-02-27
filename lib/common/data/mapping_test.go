@@ -2,9 +2,9 @@ package data
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -154,7 +154,7 @@ func TestFullGoMapToMappingProducesCorrectMapping(t *testing.T) {
 func TestStopValueReadTrueWhenCorrectErr(t *testing.T) {
 	assert := assert.New(t)
 
-	status := stopValueRead(errors.New("error parsing string: zero length"))
+	status := stopValueRead(oops.Errorf("error parsing string: zero length"))
 
 	assert.Equal(true, status, "stopValueRead() did not return true when String error found")
 }
@@ -162,7 +162,7 @@ func TestStopValueReadTrueWhenCorrectErr(t *testing.T) {
 func TestStopValueReadFalseWhenWrongErr(t *testing.T) {
 	assert := assert.New(t)
 
-	status := stopValueRead(errors.New("something else"))
+	status := stopValueRead(oops.Errorf("something else"))
 
 	assert.Equal(false, status, "stopValueRead() did not return false when non String error found")
 }

@@ -1,9 +1,9 @@
 package noise
 
 import (
-	"errors"
 	"sync/atomic"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,7 +17,7 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 				"at":     "(NoiseSession) Read",
 				"reason": "session is closed",
 			}).Error("session is closed")
-			return 0, errors.New("session is closed")
+			return 0, oops.Errorf("session is closed")
 		}
 		if atomic.CompareAndSwapInt32(&c.activeCall, x, x+2) {
 			defer atomic.AddInt32(&c.activeCall, -2)
@@ -36,7 +36,7 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 	defer c.Mutex.Unlock()
 	if !c.handshakeComplete {
 		log.Error("NoiseSession Read: internal error - handshake still not complete after running")
-		return 0, errors.New("internal error")
+		return 0, oops.Errorf("internal error")
 	}
 	n, err := c.readPacketLocked(b)
 	if err != nil {
@@ -52,7 +52,7 @@ func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
 
 	if c.CipherState == nil {
 		log.Error("Packet decryption: CipherState is nil")
-		return 0, nil, errors.New("CipherState is nil")
+		return 0, nil, oops.Errorf("CipherState is nil")
 	}
 	// Decrypt
 	decryptedData, err := c.CipherState.Decrypt(nil, nil, data)

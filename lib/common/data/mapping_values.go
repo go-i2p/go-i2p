@@ -1,9 +1,9 @@
 package data
 
 import (
-	"errors"
 	"sort"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -90,7 +90,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 			"at":     "(Mapping) Values",
 			"reason": "data shorter than expected",
 		}).Error("mapping contained no data")
-		errs = []error{errors.New("mapping contained no data")}
+		errs = []error{oops.Errorf("mapping contained no data")}
 		return
 	}
 	map_values := make(MappingValues, 0)
@@ -103,7 +103,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 			"mapping_length_field": int_map_length,
 			"reason":               "data longer than expected",
 		}).Warn("mapping format warning")
-		errs = append(errs, errors.New("warning parsing mapping: data exists beyond length of mapping"))
+		errs = append(errs, oops.Errorf("warning parsing mapping: data exists beyond length of mapping"))
 	} else if int_map_length > mapping_len {
 		log.WithFields(logrus.Fields{
 			"at":                   "(Mapping) Values",
@@ -111,7 +111,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 			"mapping_length_field": int_map_length,
 			"reason":               "data shorter than expected",
 		}).Warn("mapping format warning")
-		errs = append(errs, errors.New("warning parsing mapping: mapping length exceeds provided data"))
+		errs = append(errs, oops.Errorf("warning parsing mapping: mapping length exceeds provided data"))
 	}
 
 	encounteredKeysMap := map[string]bool{}
@@ -158,7 +158,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 				"key":    string(key_str),
 			}).Error("mapping format violation")
 			log.Printf("DUPE: %s", key_str)
-			errs = append(errs, errors.New("mapping format violation, duplicate key in mapping"))
+			errs = append(errs, oops.Errorf("mapping format violation, duplicate key in mapping"))
 			// Based on other implementations this does not seem to happen often?
 			// Java throws an exception in this case, the base object is a Hashmap so the value is overwritten and an exception is thrown.
 			// i2pd  as far as I can tell just overwrites the original value
@@ -171,7 +171,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 				"reason": "expected =",
 				"value:": string(remainder),
 			}).Warn("mapping format violation")
-			errs = append(errs, errors.New("mapping format violation, expected ="))
+			errs = append(errs, oops.Errorf("mapping format violation, expected ="))
 			log.Printf("ERRVAL: %s", remainder)
 			break
 		} else {
@@ -197,7 +197,7 @@ func ReadMappingValues(remainder []byte, map_length Integer) (values *MappingVal
 				"reason": "expected ;",
 				"value:": string(remainder),
 			}).Warn("mapping format violation")
-			errs = append(errs, errors.New("mapping format violation, expected ;"))
+			errs = append(errs, oops.Errorf("mapping format violation, expected ;"))
 			break
 		} else {
 			remainder = remainder[1:]

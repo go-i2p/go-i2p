@@ -3,10 +3,10 @@ package noise
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"io"
 
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -47,7 +47,7 @@ func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, 
 
 	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
 		log.WithField("rs_length", len(remoteStatic)).Error("Invalid remote static key length")
-		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
+		return nil, nil, nil, oops.Errorf("only 32 byte curve25519 public keys are supported")
 	}
 
 	negData = make([]byte, 6)
@@ -84,7 +84,7 @@ func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, 
 
 	// Verify no CipherStates are returned yet
 	if cs0 != nil || cs1 != nil {
-		return nil, nil, nil, errors.New("unexpected cipher states in message 2")
+		return nil, nil, nil, oops.Errorf("unexpected cipher states in message 2")
 	}
 
 	return negData, msg, state, nil

@@ -1,7 +1,6 @@
 package noise
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
@@ -101,7 +101,7 @@ func (s *NoiseSession) peerStaticKey() ([32]byte, error) {
 			return addr.StaticKey()
 		}
 	}
-	return [32]byte{}, fmt.Errorf("Remote static key error")
+	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
 func (s *NoiseSession) peerStaticIV() ([16]byte, error) {
@@ -114,7 +114,7 @@ func (s *NoiseSession) peerStaticIV() ([16]byte, error) {
 			return addr.InitializationVector()
 		}
 	}
-	return [16]byte{}, fmt.Errorf("Remote static IV error")
+	return [16]byte{}, oops.Errorf("Remote static IV error")
 }
 
 // newBlock allocates a new packet, from hc's free list if possible.
@@ -147,7 +147,7 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 		return session, nil
 	}
 	log.Error("Failed to create NoiseTransportSession, all addresses failed")
-	return nil, fmt.Errorf("Transport constructor error")
+	return nil, oops.Errorf("Transport constructor error")
 }
 
 func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error) {

@@ -1,23 +1,24 @@
 package data
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/samber/oops"
 )
 
 var (
-	ErrZeroLength            = errors.New("error parsing string: zero length")
-	ErrDataTooShort          = errors.New("string parsing warning: string data is shorter than specified by length")
-	ErrDataTooLong           = errors.New("string parsing warning: string contains data beyond length")
-	ErrLengthMismatch        = errors.New("error reading I2P string, length does not match data")
-	ErrMappingLengthMismatch = errors.New("warning parsing mapping: mapping length exceeds provided data")
+	ErrZeroLength            = oops.Errorf("error parsing string: zero length")
+	ErrDataTooShort          = oops.Errorf("string parsing warning: string data is shorter than specified by length")
+	ErrDataTooLong           = oops.Errorf("string parsing warning: string contains data beyond length")
+	ErrLengthMismatch        = oops.Errorf("error reading I2P string, length does not match data")
+	ErrMappingLengthMismatch = oops.Errorf("warning parsing mapping: mapping length exceeds provided data")
 )
 
 // WrapErrors compiles a slice of errors and returns them wrapped together as a single error.
 func WrapErrors(errs []error) error {
 	var err error
 	for i, e := range errs {
-		err = fmt.Errorf("%v\n\t%d: %v", err, i, e)
+		err = oops.Errorf("%v\n\t%d: %v", err, i, e)
 	}
 	return err
 }

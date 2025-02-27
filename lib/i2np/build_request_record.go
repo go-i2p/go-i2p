@@ -1,9 +1,9 @@
 package i2np
 
 import (
-	"errors"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	common "github.com/go-i2p/go-i2p/lib/common/data"
@@ -173,7 +173,7 @@ type BuildRequestRecord struct {
 	Padding       [29]byte
 }
 
-var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
+var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
 
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	log.Debug("Reading BuildRequestRecord")

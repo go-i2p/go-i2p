@@ -1,7 +1,6 @@
 package reseed
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
@@ -93,7 +93,7 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 			}
 			if len(files) <= 0 {
 				log.Error("Reseed appears to have no content")
-				return nil, fmt.Errorf("error: reseed appears to have no content")
+				return nil, oops.Errorf("error: reseed appears to have no content")
 			}
 
 			log.WithField("file_count", len(files)).Debug("Successfully extracted reseed files")
@@ -121,5 +121,5 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 		}
 	}
 	log.Error("Undefined reseed error")
-	return nil, fmt.Errorf("error: undefined reseed error")
+	return nil, oops.Errorf("error: undefined reseed error")
 }

@@ -2,10 +2,9 @@ package noise
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"sync/atomic"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,7 +18,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 				"at":     "(NoiseSession) Write",
 				"reason": "session is closed",
 			}).Error("session is closed")
-			return 0, errors.New("session is closed")
+			return 0, oops.Errorf("session is closed")
 		}
 		if atomic.CompareAndSwapInt32(&c.activeCall, x, x+2) {
 			defer atomic.AddInt32(&c.activeCall, -2)
@@ -38,7 +37,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 	defer c.Mutex.Unlock()
 	if !c.handshakeComplete {
 		log.Error("NoiseSession: Write - internal error, handshake still not complete")
-		return 0, errors.New("internal error")
+		return 0, oops.Errorf("internal error")
 	}
 	n, err := c.writePacketLocked(b)
 	if err != nil {
@@ -55,14 +54,14 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 	m := len(data)
 	if c.CipherState == nil {
 		log.Error("NoiseSession: encryptPacket - CipherState is nil")
-		return 0, nil, errors.New("CipherState is nil")
+		return 0, nil, oops.Errorf("CipherState is nil")
 	}
 
 	// Encrypt the data
 	encryptedData, err := c.CipherState.Encrypt(nil, nil, data)
 	if err != nil {
 		log.WithError(err).Error("NoiseSession: encryptPacket - failed to encrypt data")
-		return 0, nil, fmt.Errorf("failed to encrypt: '%w'", err)
+		return 0, nil, oops.Errorf("failed to encrypt: '%w'", err)
 	}
 	// m := len(encryptedData)
 

@@ -2,10 +2,8 @@
 package keys_and_cert
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
@@ -154,7 +152,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
+		err = oops.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size")
 		return
 	}
 
@@ -217,7 +215,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 
 	dataLen := len(data)
 	if dataLen < minDataLength {
-		err = fmt.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
+		err = oops.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
 		log.WithError(err).Error("Data is smaller than minimum valid size")
 		return
 	}
@@ -228,7 +226,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	// Extract public key
 	publicKeyData := data[:pubKeySize]
 	if len(publicKeyData) != pubKeySize {
-		err = errors.New("invalid ElGamal public key length")
+		err = oops.Errorf("invalid ElGamal public key length")
 		log.WithError(err).Error("Invalid ElGamal public key length")
 		return
 	}
@@ -244,7 +242,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	// Extract signing public key
 	signingPubKeyData := data[paddingEnd : paddingEnd+sigKeySize]
 	if len(signingPubKeyData) != sigKeySize {
-		err = errors.New("invalid Ed25519 public key length")
+		err = oops.Errorf("invalid Ed25519 public key length")
 		log.WithError(err).Error("Invalid Ed25519 public key length")
 		return
 	}
@@ -273,14 +271,14 @@ func constructPublicKey(data []byte, cryptoType uint16) (crypto.RecievingPublicK
 	switch cryptoType {
 	case CRYPTO_KEY_TYPE_ELGAMAL:
 		if len(data) != 256 {
-			return nil, errors.New("invalid ElGamal public key length")
+			return nil, oops.Errorf("invalid ElGamal public key length")
 		}
 		var elgPublicKey crypto.ElgPublicKey
 		copy(elgPublicKey[:], data)
 		return elgPublicKey, nil
 	// Handle other crypto types...
 	default:
-		return nil, fmt.Errorf("unsupported crypto key type: %d", cryptoType)
+		return nil, oops.Errorf("unsupported crypto key type: %d", cryptoType)
 	}
 }
 
@@ -288,12 +286,12 @@ func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPubli
 	switch sigType {
 	case SIGNATURE_TYPE_ED25519_SHA512:
 		if len(data) != 32 {
-			return nil, errors.New("invalid Ed25519 public key length")
+			return nil, oops.Errorf("invalid Ed25519 public key length")
 		}
 		return crypto.Ed25519PublicKey(data), nil
 	// Handle other signature types...
 	default:
-		return nil, fmt.Errorf("unsupported signature key type: %d", sigType)
+		return nil, oops.Errorf("unsupported signature key type: %d", sigType)
 	}
 }
 
@@ -309,7 +307,7 @@ func NewKeysAndCert(
 
 	if keyCertificate == nil {
 		log.Error("KeyCertificate is nil")
-		return nil, errors.New("KeyCertificate cannot be nil")
+		return nil, oops.Errorf("KeyCertificate cannot be nil")
 	}
 
 	// Get actual key sizes from certificate
@@ -323,7 +321,7 @@ func NewKeysAndCert(
 				"expected_size": pubKeySize,
 				"actual_size":   publicKey.Len(),
 			}).Error("Invalid publicKey size")
-			return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
+			return nil, oops.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
 		}
 	}
 
@@ -334,7 +332,7 @@ func NewKeysAndCert(
 				"expected_size": sigKeySize,
 				"actual_size":   signingPublicKey.Len(),
 			}).Error("Invalid signingPublicKey size")
-			return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+			return nil, oops.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
 		}
 	}
 
@@ -345,7 +343,7 @@ func NewKeysAndCert(
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
 		}).Error("Invalid padding size")
-		return nil, fmt.Errorf("invalid padding size")
+		return nil, oops.Errorf("invalid padding size")
 	}
 
 	keysAndCert := &KeysAndCert{

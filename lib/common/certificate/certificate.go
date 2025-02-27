@@ -4,9 +4,9 @@ package certificate
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	// log "github.com/sirupsen/logrus"
@@ -158,7 +158,7 @@ func readCertificate(data []byte) (certificate Certificate, err error) {
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
 		}).Error("invalid certificate, empty")
-		err = fmt.Errorf("error parsing certificate: certificate is empty")
+		err = oops.Errorf("error parsing certificate: certificate is empty")
 		return
 	case 1, 2:
 		certificate.kind = Integer(data[0 : len(data)-1])
@@ -168,7 +168,7 @@ func readCertificate(data []byte) (certificate Certificate, err error) {
 			"certificate_bytes_length": len(data),
 			"reason":                   "too short (len < CERT_MIN_SIZE)" + fmt.Sprintf("%d", certificate.kind.Int()),
 		}).Error("invalid certificate, too short")
-		err = fmt.Errorf("error parsing certificate: certificate is too short")
+		err = oops.Errorf("error parsing certificate: certificate is too short")
 		return
 	default:
 		certificate.kind = Integer(data[0:1])
@@ -176,7 +176,7 @@ func readCertificate(data []byte) (certificate Certificate, err error) {
 		payloadLength := len(data) - CERT_MIN_SIZE
 		certificate.payload = data[CERT_MIN_SIZE:]
 		if certificate.len.Int() > len(data)-CERT_MIN_SIZE {
-			err = fmt.Errorf("certificate parsing warning: certificate data is shorter than specified by length")
+			err = oops.Errorf("certificate parsing warning: certificate data is shorter than specified by length")
 			log.WithFields(logrus.Fields{
 				"at":                         "(Certificate) NewCertificate",
 				"certificate_bytes_length":   certificate.len.Int(),
@@ -222,12 +222,12 @@ func NewCertificate() *Certificate {
 
 func NewCertificateDeux(certType int, payload []byte) (*Certificate, error) {
 	if certType < 0 || certType > 255 {
-		return nil, fmt.Errorf("invalid certificate type: %d", certType)
+		return nil, oops.Errorf("invalid certificate type: %d", certType)
 	}
 	certTypeByte := byte(certType)
 
 	if len(payload) > 65535 {
-		return nil, fmt.Errorf("payload too long: %d bytes", len(payload))
+		return nil, oops.Errorf("payload too long: %d bytes", len(payload))
 	}
 
 	_len, err := NewIntegerFromInt(len(payload), 2)
@@ -255,12 +255,12 @@ func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error
 	case CERT_NULL, CERT_HASHCASH, CERT_HIDDEN, CERT_SIGNED, CERT_MULTIPLE, CERT_KEY:
 		// Valid type
 	default:
-		return nil, fmt.Errorf("invalid certificate type: %d", certType)
+		return nil, oops.Errorf("invalid certificate type: %d", certType)
 	}
 
 	// For NULL certificates, payload should be empty
 	if certType == CERT_NULL && len(payload) > 0 {
-		return nil, errors.New("NULL certificates must have empty payload")
+		return nil, oops.Errorf("NULL certificates must have empty payload")
 	}
 	length, _ := NewIntegerFromInt(len(payload), 2)
 
@@ -280,10 +280,10 @@ func NewCertificateWithType(certType uint8, payload []byte) (*Certificate, error
 
 func GetSignatureTypeFromCertificate(cert Certificate) (int, error) {
 	if cert.Type() != CERT_KEY {
-		return 0, fmt.Errorf("unexpected certificate type: %d", cert.Type())
+		return 0, oops.Errorf("unexpected certificate type: %d", cert.Type())
 	}
 	if len(cert.payload) < 4 {
-		return 0, fmt.Errorf("certificate payload too short to contain signature type")
+		return 0, oops.Errorf("certificate payload too short to contain signature type")
 	}
 	sigType := int(binary.BigEndian.Uint16(cert.payload[2:4])) // Changed offset to read signing key type
 	return sigType, nil

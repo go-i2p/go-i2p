@@ -2,9 +2,8 @@
 package signature
 
 import (
-	"fmt"
-
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -88,12 +87,12 @@ func ReadSignature(data []byte, sigType int) (sig Signature, remainder []byte, e
 	case SIGNATURE_TYPE_REDDSA_SHA512_ED25519:
 		sigLength = RedDSA_SHA512_Ed25519_SIZE
 	default:
-		err = fmt.Errorf("unsupported signature type: %d", sigType)
+		err = oops.Errorf("unsupported signature type: %d", sigType)
 		return
 	}
 
 	if len(data) < sigLength {
-		err = fmt.Errorf("insufficient data to read signature: need %d bytes, have %d", sigLength, len(data))
+		err = oops.Errorf("insufficient data to read signature: need %d bytes, have %d", sigLength, len(data))
 		log.WithError(err).Error("Failed to read Signature")
 		return
 	}

@@ -1,8 +1,6 @@
 package transport
 
-import (
-	"errors"
-)
+import "github.com/samber/oops"
 
 // error for when we have no transports available to use
-var ErrNoTransportAvailable = errors.New("no transports available")
+var ErrNoTransportAvailable = oops.Errorf("no transports available")

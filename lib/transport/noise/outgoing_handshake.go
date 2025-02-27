@@ -3,13 +3,12 @@ package noise
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
-	"fmt"
 	"io"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 )
 
 func (c *NoiseSession) RunOutgoingHandshake() error {
@@ -59,12 +58,12 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
 
 	remoteStatic, err := c.peerStaticKey()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Peer static key retrieval error: %s", err)
+		return nil, nil, nil, oops.Errorf("Peer static key retrieval error: %s", err)
 	}
 
 	/*localStatic, err := c.localStaticKey()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Local static key retrieval error: %s", err)
+		return nil, nil, nil, oops.Errorf("Local static key retrieval error: %s", err)
 	}
 	localStaticDH := noise.DHKey{
 		Public: localStatic[:],
@@ -73,7 +72,7 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
 	localStaticDH := *c.HandshakeKey()
 
 	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
-		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
+		return nil, nil, nil, oops.Errorf("only 32 byte curve25519 public keys are supported")
 	}
 
 	negotiationData = make([]byte, 6)
@@ -109,7 +108,7 @@ func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
 
 	// Verify no CipherStates are returned yet
 	if cs0 != nil || cs1 != nil {
-		return nil, nil, nil, errors.New("unexpected cipher states in message 1")
+		return nil, nil, nil, oops.Errorf("unexpected cipher states in message 1")
 	}
 
 	return negotiationData, handshakeMessage, handshakeState, nil

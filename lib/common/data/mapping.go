@@ -1,8 +1,7 @@
 package data
 
 import (
-	"errors"
-
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -164,7 +163,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 			"at":     "ReadMapping",
 			"reason": "zero length",
 		}).Warn("mapping format violation")
-		e := errors.New("zero length")
+		e := oops.Errorf("zero length")
 		err = append(err, e)
 		return
 	}
@@ -184,7 +183,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 			"expected_size": size.Int(),
 			"actual_size":   len(remainder),
 		}).Warn("mapping format violation: mapping length exceeds provided data")
-		e := errors.New("warning parsing mapping: mapping length exceeds provided data")
+		e := oops.Errorf("warning parsing mapping: mapping length exceeds provided data")
 		err = append(err, e)
 
 		// Use whatever data is available (recovery)
@@ -209,7 +208,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 			"at":     "ReadMapping",
 			"reason": "error parsing mapping values",
 		}).Warn("mapping format violation")
-		e := errors.New("error parsing mapping values")
+		e := oops.Errorf("error parsing mapping values")
 		err = append(err, e)
 	}
 	if len(remainder) > 0 { // Handle extra bytes beyond mapping length
@@ -217,7 +216,7 @@ func ReadMapping(bytes []byte) (mapping Mapping, remainder []byte, err []error) 
 			"expected_size": size.Int(),
 			"actual_size":   len(remainder),
 		}).Error("mapping format violation: data exists beyond length of mapping")
-		e := errors.New("warning parsing mapping: data exists beyond length of mapping")
+		e := oops.Errorf("warning parsing mapping: data exists beyond length of mapping")
 		err = append(err, e)
 
 		// Slice the exact mapping bytes

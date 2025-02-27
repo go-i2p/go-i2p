@@ -7,12 +7,11 @@ package noise
 **/
 
 import (
-	"errors"
-	"fmt"
 	"net"
 	"sync"
 
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
@@ -27,7 +26,7 @@ type NoiseTransport struct {
 	router_info.RouterInfo
 	transportStyle string
 	Listener       net.Listener
-	//peerConnections map[data.Hash]transport.TransportSession
+	// peerConnections map[data.Hash]transport.TransportSession
 	peerConnections map[data.Hash]*NoiseSession
 }
 
@@ -84,7 +83,7 @@ func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err erro
 			"at":     "(NoiseTransport) SetIdentity",
 			"reason": "network socket is null",
 		}).Error("network socket is null")
-		err = errors.New("network socket is null")
+		err = oops.Errorf("network socket is null")
 		return
 	}
 	log.Debug("NoiseTransport: Identity set successfully")
@@ -100,7 +99,7 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	log.WithField("hash", hash).Debug("NoiseTransport: Getting session")
 	if len(hash) == 0 {
 		log.Error("NoiseTransport: RouterInfo has no IdentityHash")
-		return nil, errors.New("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
+		return nil, oops.Errorf("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
 	}
 	if t, ok := noopt.peerConnections[hash]; ok {
 		log.Debug("NoiseTransport: Existing session found")
@@ -194,7 +193,7 @@ func (s *NoiseTransport) localStaticKey() ([32]byte, error) {
 			return addr.StaticKey()
 		}
 	}
-	return [32]byte{}, fmt.Errorf("Remote static key error")
+	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
 func (s *NoiseTransport) localStaticIV() ([16]byte, error) {
@@ -207,7 +206,7 @@ func (s *NoiseTransport) localStaticIV() ([16]byte, error) {
 			return addr.InitializationVector()
 		}
 	}
-	return [16]byte{}, fmt.Errorf("Remote static IV error")
+	return [16]byte{}, oops.Errorf("Remote static IV error")
 }
 
 func (h *NoiseTransport) HandshakeKey() *noise.DHKey {

@@ -5,13 +5,14 @@ package ntcp
 **/
 
 import (
-	"fmt"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
+
+	"github.com/samber/oops"
 )
 
 const (
@@ -74,11 +75,11 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	// then check if it's a router address
 	routerAddr, ok := remoteAddr.(*router_info.RouterInfo)
 	if !ok {
-		return nil, fmt.Errorf("remote address is not a router address")
+		return nil, oops.Errorf("remote address is not a router address")
 	}
 	// then check if it's compatible
 	if !t.Compatible(*routerAddr) {
-		return nil, fmt.Errorf("remote router address is not compatible with NTCP2")
+		return nil, oops.Errorf("remote router address is not compatible with NTCP2")
 	}
 	// Wrap connection with NTCP2 session
 	session, err := NewNTCP2Session(remoteAddr.(router_info.RouterInfo)) // nil for incoming connections
@@ -102,7 +103,7 @@ func (s *NTCP2Transport) localStaticKey() ([32]byte, error) {
 			return addr.StaticKey()
 		}
 	}
-	return [32]byte{}, fmt.Errorf("Remote static key error")
+	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
 func (s *NTCP2Transport) localStaticIV() ([16]byte, error) {
@@ -115,5 +116,5 @@ func (s *NTCP2Transport) localStaticIV() ([16]byte, error) {
 			return addr.InitializationVector()
 		}
 	}
-	return [16]byte{}, fmt.Errorf("Remote static IV error")
+	return [16]byte{}, oops.Errorf("Remote static IV error")
 }
