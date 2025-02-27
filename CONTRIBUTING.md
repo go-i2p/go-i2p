@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started.
+Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we're reachable here at github.com/go-i2p also.
 
 ## Getting Started
 
