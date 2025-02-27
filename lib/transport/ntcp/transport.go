@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
+	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 )
 
 const (
@@ -24,6 +25,8 @@ var exampleNTCPTransport transport.Transport = &NTCP2Transport{}
 // NTCP2Transport is an ntcp2 transport implementing transport.NTCP2Transport interface
 type NTCP2Transport struct {
 	*noise.NoiseTransport
+	*sntp.RouterTimestamper
+	transportStyle string
 }
 
 func (t *NTCP2Transport) Name() string {

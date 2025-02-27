@@ -149,3 +149,11 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 	log.Error("Failed to create NoiseTransportSession, all addresses failed")
 	return nil, fmt.Errorf("Transport constructor error")
 }
+
+func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error) {
+	ns, err := NewNoiseTransportSession(ri)
+	if err != nil {
+		return nil, err
+	}
+	return ns.(*NoiseSession), err
+}

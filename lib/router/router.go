@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/base32"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -68,6 +69,7 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		b32PubHash := base32.EncodeToString(pubHash[:])
 		log.Debug("Router public key hash:", b32PubHash)
 	}
+
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
@@ -77,7 +79,26 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		log.Debug("RouterInfo:", ri)
 	}
 
-	r.TransportMuxer = transport.Mux()
+	// we have our keystore and our routerInfo,, so now let's set up transports
+	// add NTCP2 transport
+	ntcp2, err := ntcp.NewNTCP2Transport(ri)
+	if err != nil {
+		log.WithError(err).Error("Failed to create NTCP2 transport")
+		return nil, err
+	} else {
+		log.Debug("NTCP2 transport created successfully")
+	}
+	r.TransportMuxer = transport.Mux(ntcp2)
+	ntcpaddr, err := ntcp2.Address()
+	if err != nil {
+		log.WithError(err).Error("Failed to get NTCP2 address")
+		return nil, err
+	} else {
+		log.Debug("NTCP2 address:", ntcpaddr)
+	}
+	ri.AddAddress(ntcpaddr)
+
+	// create a transport address
 
 	return r, err
 }

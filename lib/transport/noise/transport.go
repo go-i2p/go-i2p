@@ -25,9 +25,10 @@ const NOISE_PROTOCOL_NAME = "NOISE"
 type NoiseTransport struct {
 	sync.Mutex
 	router_info.RouterInfo
-	transportStyle  string
-	Listener        net.Listener
-	peerConnections map[data.Hash]transport.TransportSession
+	transportStyle string
+	Listener       net.Listener
+	//peerConnections map[data.Hash]transport.TransportSession
+	peerConnections map[data.Hash]*NoiseSession
 }
 
 func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
@@ -107,7 +108,7 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	}
 	log.Debug("NoiseTransport: Creating new session")
 	var err error
-	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo); err != nil {
+	if noopt.peerConnections[hash], err = NewNoiseSession(routerInfo); err != nil {
 		log.WithError(err).Error("NoiseTransport: Failed to create new session")
 		return noopt.peerConnections[hash], err
 	}
@@ -160,7 +161,7 @@ func (noopt *NoiseTransport) Close() error {
 func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 	log.WithField("listener_addr", netSocket.Addr().String()).Debug("Creating new NoiseTransport")
 	return &NoiseTransport{
-		peerConnections: make(map[data.Hash]transport.TransportSession),
+		peerConnections: make(map[data.Hash]*NoiseSession),
 		Listener:        netSocket,
 		transportStyle:  NOISE_PROTOCOL_NAME,
 	}

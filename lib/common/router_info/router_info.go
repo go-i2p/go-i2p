@@ -224,6 +224,10 @@ func (router_info RouterInfo) Network() string {
 	return "i2p"
 }
 
+func (router_info *RouterInfo) AddAddress(address *RouterAddress) {
+	router_info.addresses = append(router_info.addresses, address)
+}
+
 // ReadRouterInfo returns RouterInfo from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
