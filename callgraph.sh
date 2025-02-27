@@ -12,6 +12,7 @@ for dir in $dirs; do
     packageLine=$(grep -E "^package" $file)
     package=$(echo $packageLine | awk '{print $2}')
     echo "Generating callgraph for $package"
-    go-callvis -nostd -focus "$package" -group pkg,type -format svg -file $dir/$package.svg "github.com/go-i2p/go-i2p/$dir"
-    git add -v "$dir/$package.svg"
+    go-callvis -nostd -focus "$package" -group pkg,type -format svg -file $dir/$package "github.com/go-i2p/go-i2p/$dir"
+    godocdown -template template.md -o "$dir/doc.md" "./$dir"
+    git add -v "$dir/$package.svg" "$dir/doc.md"
 done

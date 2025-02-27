@@ -1,62 +1,45 @@
 # sntp
 --
-    import "github.com/go-i2p/go-i2p/lib/util/sntp"
+    import "github.com/go-i2p/go-i2p/lib/util/time/sntp"
+
 
 ## Usage
 
+#### type DefaultNTPClient
+
 ```go
-import "github.com/go-i2p/go-i2p/lib/util/sntp"
+type DefaultNTPClient struct{}
 ```
 
-## Types
 
-### type RouterTimestamper
+#### func (*DefaultNTPClient) QueryWithOptions
 
 ```go
-type RouterTimestamper struct {
-    servers           []string
-    priorityServers   [][]string
-    listeners         []UpdateListener
-    queryFrequency    time.Duration
-    concurringServers int
-    consecutiveFails  int
-    disabled          bool
-    initialized       bool
-    wellSynced        bool
-    isRunning         bool
-    mutex             sync.Mutex
-    zones             *Zones
-    stopChan          chan struct{}
-    waitGroup         sync.WaitGroup
-    ntpClient         NTPClient
+func (c *DefaultNTPClient) QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
+```
+
+#### type NTPClient
+
+```go
+type NTPClient interface {
+	QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
 }
 ```
 
-RouterTimestamper is responsible for querying NTP servers and managing time synchronization.
 
-#### func NewRouterTimestamper
+#### type RouterTimestamper
+
+```go
+type RouterTimestamper struct {
+}
+```
+
+
+#### func  NewRouterTimestamper
 
 ```go
 func NewRouterTimestamper(client NTPClient) *RouterTimestamper
 ```
-
-NewRouterTimestamper creates a new RouterTimestamper instance.
-
-#### func (*RouterTimestamper) Start
-
-```go
-func (rt *RouterTimestamper) Start()
-```
-
-Start begins the time synchronization process.
-
-#### func (*RouterTimestamper) Stop
-
-```go
-func (rt *RouterTimestamper) Stop()
-```
-
-Stop halts the time synchronization process.
 
 #### func (*RouterTimestamper) AddListener
 
@@ -64,7 +47,11 @@ Stop halts the time synchronization process.
 func (rt *RouterTimestamper) AddListener(listener UpdateListener)
 ```
 
-AddListener adds a new listener for time updates.
+#### func (*RouterTimestamper) GetCurrentTime
+
+```go
+func (rt *RouterTimestamper) GetCurrentTime() time.Time
+```
 
 #### func (*RouterTimestamper) RemoveListener
 
@@ -72,15 +59,17 @@ AddListener adds a new listener for time updates.
 func (rt *RouterTimestamper) RemoveListener(listener UpdateListener)
 ```
 
-RemoveListener removes a listener from receiving time updates.
-
-#### func (*RouterTimestamper) WaitForInitialization
+#### func (*RouterTimestamper) Start
 
 ```go
-func (rt *RouterTimestamper) WaitForInitialization()
+func (rt *RouterTimestamper) Start()
 ```
 
-WaitForInitialization blocks until the RouterTimestamper is initialized or a timeout occurs.
+#### func (*RouterTimestamper) Stop
+
+```go
+func (rt *RouterTimestamper) Stop()
+```
 
 #### func (*RouterTimestamper) TimestampNow
 
@@ -88,36 +77,36 @@ WaitForInitialization blocks until the RouterTimestamper is initialized or a tim
 func (rt *RouterTimestamper) TimestampNow()
 ```
 
-TimestampNow triggers an immediate time synchronization.
+#### func (*RouterTimestamper) WaitForInitialization
 
-### type UpdateListener
+```go
+func (rt *RouterTimestamper) WaitForInitialization()
+```
+
+#### type UpdateListener
 
 ```go
 type UpdateListener interface {
-    SetNow(now time.Time, stratum uint8)
+	SetNow(now time.Time, stratum uint8)
 }
 ```
 
-UpdateListener is an interface that listeners must implement to receive time updates.
+UpdateListener is an interface that listeners must implement to receive time
+updates.
 
-### type Zones
+#### type Zones
 
 ```go
 type Zones struct {
-    countryToZone   map[string]string
-    continentToZone map[string]string
 }
 ```
 
-Zones manages mappings between country codes, continent codes, and NTP zones.
 
-#### func NewZones
+#### func  NewZones
 
 ```go
 func NewZones() *Zones
 ```
-
-NewZones creates a new Zones instance and initializes it with data.
 
 #### func (*Zones) GetZone
 
@@ -125,4 +114,127 @@ NewZones creates a new Zones instance and initializes it with data.
 func (z *Zones) GetZone(countryCode string) string
 ```
 
-GetZone returns the NTP zone for a given country code.
+# sntp
+--
+    import "github.com/go-i2p/go-i2p/lib/util/time/sntp"
+
+
+
+![sntp.svg](sntp)
+
+## Usage
+
+#### type DefaultNTPClient
+
+```go
+type DefaultNTPClient struct{}
+```
+
+
+#### func (*DefaultNTPClient) QueryWithOptions
+
+```go
+func (c *DefaultNTPClient) QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
+```
+
+#### type NTPClient
+
+```go
+type NTPClient interface {
+	QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
+}
+```
+
+
+#### type RouterTimestamper
+
+```go
+type RouterTimestamper struct {
+}
+```
+
+
+#### func  NewRouterTimestamper
+
+```go
+func NewRouterTimestamper(client NTPClient) *RouterTimestamper
+```
+
+#### func (*RouterTimestamper) AddListener
+
+```go
+func (rt *RouterTimestamper) AddListener(listener UpdateListener)
+```
+
+#### func (*RouterTimestamper) GetCurrentTime
+
+```go
+func (rt *RouterTimestamper) GetCurrentTime() time.Time
+```
+
+#### func (*RouterTimestamper) RemoveListener
+
+```go
+func (rt *RouterTimestamper) RemoveListener(listener UpdateListener)
+```
+
+#### func (*RouterTimestamper) Start
+
+```go
+func (rt *RouterTimestamper) Start()
+```
+
+#### func (*RouterTimestamper) Stop
+
+```go
+func (rt *RouterTimestamper) Stop()
+```
+
+#### func (*RouterTimestamper) TimestampNow
+
+```go
+func (rt *RouterTimestamper) TimestampNow()
+```
+
+#### func (*RouterTimestamper) WaitForInitialization
+
+```go
+func (rt *RouterTimestamper) WaitForInitialization()
+```
+
+#### type UpdateListener
+
+```go
+type UpdateListener interface {
+	SetNow(now time.Time, stratum uint8)
+}
+```
+
+UpdateListener is an interface that listeners must implement to receive time
+updates.
+
+#### type Zones
+
+```go
+type Zones struct {
+}
+```
+
+
+#### func  NewZones
+
+```go
+func NewZones() *Zones
+```
+
+#### func (*Zones) GetZone
+
+```go
+func (z *Zones) GetZone(countryCode string) string
+```
+
+
+
+sntp
+
+github.com/go-i2p/go-i2p/lib/util/time/sntp

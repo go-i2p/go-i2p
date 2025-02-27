@@ -1,300 +1,646 @@
-
 # noise
-
-## Overview
-
-The `noise` package implements the Noise Protocol to establish secure, authenticated sessions over TCP. This package includes functions for session management, handshake initiation, packet encryption, decryption, and transport abstraction.
+--
+    import "github.com/go-i2p/go-i2p/lib/transport/noise"
 
 
-- [handshake.go](#handshakego)
-- [i2np.go](#i2npgo)
-- [incoming_handshake.go](#incoming_handshakego)
-- [outgoing_handshake.go](#outgoing_handshakego)
-- [noise_constants.go](#noise_constantsgo)
-- [read_session.go](#read_sessiongo)
-- [session.go](#sessiongo)
-- [transport.go](#transportgo)
-- [write_session.go](#write_sessiongo)
-
----
-
-## handshake.go
-
-Defines the `Handshake` function, which initiates the Noise handshake process for secure, authenticated sessions.
-
-### Package
+## Usage
 
 ```go
-package noise
-```
+const (
+	NOISE_DH_CURVE25519 = 1
 
-### Imports
+	NOISE_CIPHER_CHACHAPOLY = 1
+	NOISE_CIPHER_AESGCM     = 2
 
-```go
-import (
-    "sync"
-    "github.com/go-i2p/go-i2p/lib/util/logger"
-    "github.com/go-i2p/go-i2p/lib/common/router_info"
+	NOISE_HASH_SHA256 = 3
+
+	NOISE_PATTERN_XK = 11
+
+	MaxPayloadSize = 65537
 )
 ```
 
-### Variables
-
-- **`log`**: Logger instance for capturing debug and error messages related to the handshake process.
-
-### Function: `Handshake`
-
-#### Definition
-
 ```go
-func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error
+const NOISE_PROTOCOL_NAME = "NOISE"
 ```
 
-#### Parameters
-- `routerInfo`: Information about the router with which the handshake is established.
-
-#### Returns
-- `error`: Returns `nil` on success, or an error if the handshake fails.
-
-#### Description
-The `Handshake` function initiates an authenticated handshake with a router, establishing a secure session.
-
-#### Workflow
-1. **Logging Start**: Logs initiation of the handshake.
-2. **Lock Mutex**: Locks `c.Mutex` to prevent concurrent access.
-3. **Session Retrieval**: Calls `c.getSession(routerInfo)`.
-4. **Condition Variable Setup**: Sets a `Cond` for the session.
-5. **Outgoing Handshake**: Executes `RunOutgoingHandshake`.
-6. **Completion Broadcast**: Broadcasts to waiting goroutines.
-7. **Finalize and Unlock**: Logs success.
-
----
-
-## i2np.go
-
-Provides functions to queue and send I2NP messages using a `NoiseSession`.
-
-### Package
+```go
+var ExampleNoiseListener net.Listener = exampleNoiseTransport
+```
+ExampleNoiseListener is not a real Noise Listener, do not use it. It is exported
+so that it can be confirmed that the transport implements net.Listener
 
 ```go
-package noise
+var (
+	ExampleNoiseSession net.Conn = exampleNoiseSession.(*NoiseSession)
+)
 ```
 
-### Imports
+#### func  NewNoiseTransportSession
 
 ```go
-import "github.com/go-i2p/go-i2p/lib/i2np"
+func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error)
 ```
 
-### Functions
+#### type HandshakeState
 
-#### `QueueSendI2NP`
+```go
+type HandshakeState struct {
+	*noise.HandshakeState
+}
+```
 
-Queues an I2NP message for sending.
+
+#### func  NewHandshakeState
+
+```go
+func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState, error)
+```
+
+#### func (*HandshakeState) GenerateEphemeral
+
+```go
+func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error)
+```
+GenerateEphemeral creates the ephemeral keypair that will be used in handshake
+This needs to be separate so NTCP2 can obfuscate it
+
+#### func (*HandshakeState) ReadMessage
+
+```go
+func (h *HandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+```
+
+#### func (*HandshakeState) SetEphemeral
+
+```go
+func (h *HandshakeState) SetEphemeral(key *noise.DHKey) error
+```
+SetEphemeral allows setting a potentially modified ephemeral key This is needed
+for NTCP2's obfuscation layer
+
+#### func (*HandshakeState) WriteMessage
+
+```go
+func (h *HandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+```
+
+#### type NoiseSession
+
+```go
+type NoiseSession struct {
+	router_info.RouterInfo
+	*noise.CipherState
+	*sync.Cond
+	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
+	*HandshakeState
+	RecvQueue      *cb.Queue
+	SendQueue      *cb.Queue
+	VerifyCallback VerifyCallbackFunc
+
+	Conn net.Conn
+}
+```
+
+
+#### func  NewNoiseSession
+
+```go
+func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error)
+```
+
+#### func (*NoiseSession) Close
+
+```go
+func (s *NoiseSession) Close() error
+```
+
+#### func (*NoiseSession) ComposeInitiatorHandshakeMessage
+
+```go
+func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
+	payload []byte,
+	ephemeralPrivate []byte,
+) (
+	negotiationData,
+	handshakeMessage []byte,
+	handshakeState *noise.HandshakeState,
+	err error,
+)
+```
+
+#### func (*NoiseSession) ComposeReceiverHandshakeMessage
+
+```go
+func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, remoteStatic []byte, payload []byte, ephemeralPrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error)
+```
+
+#### func (*NoiseSession) LocalAddr
+
+```go
+func (s *NoiseSession) LocalAddr() net.Addr
+```
+
+#### func (*NoiseSession) QueueSendI2NP
 
 ```go
 func (s *NoiseSession) QueueSendI2NP(msg i2np.I2NPMessage)
 ```
 
-#### Parameters
-- `msg`: The I2NP message.
-
----
-
-#### `SendQueueSize`
-
-Returns the size of the send queue.
-
-```go
-func (s *NoiseSession) SendQueueSize() int
-```
-
----
-
-#### `ReadNextI2NP`
-
-Attempts to read the next I2NP message from the queue.
-
-```go
-func (s *NoiseSession) ReadNextI2NP() (i2np.I2NPMessage, error)
-```
-
----
-
-## incoming_handshake.go
-
-Defines functions for the incoming (receiver) side of the handshake.
-
-### Functions
-
-#### `ComposeReceiverHandshakeMessage`
-
-Creates a receiver handshake message using Noise patterns.
-
-```go
-func ComposeReceiverHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error)
-```
-
-- **`s`**: Static Diffie-Hellman key.
-- **`rs`**: Remote static key.
-- **`payload`**: Optional payload data.
-- **`ePrivate`**: Private ephemeral key.
-
----
-
-#### `RunIncomingHandshake`
-
-Executes an incoming handshake process.
-
-```go
-func (c *NoiseSession) RunIncomingHandshake() error
-```
-
-- Initializes and sends the negotiation data and handshake message.
-
----
-
-## outgoing_handshake.go
-
-Defines functions for the outgoing (initiator) side of the handshake.
-
-### Functions
-
-#### `ComposeInitiatorHandshakeMessage`
-
-Creates an initiator handshake message.
-
-```go
-func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error)
-```
-
----
-
-#### `RunOutgoingHandshake`
-
-Executes the outgoing handshake process.
-
-```go
-func (c *NoiseSession) RunOutgoingHandshake() error
-```
-
-- Sends negotiation data and handshake message.
-
----
-
-## noise_constants.go
-
-Defines constants and utility functions for configuring Noise protocol parameters.
-
-### Constants
-
-```go
-const (
-    NOISE_DH_CURVE25519 = 1
-    NOISE_CIPHER_CHACHAPOLY = 1
-    NOISE_HASH_SHA256 = 3
-    NOISE_PATTERN_XK = 11
-    uint16Size = 2
-    MaxPayloadSize = 65537
-)
-```
-
-### Functions
-
-#### `initNegotiationData`
-
-Initializes negotiation data with default values.
-
-```go
-func initNegotiationData(negotiationData []byte) []byte
-```
-
----
-
-## read_session.go
-
-Functions related to reading encrypted data in a Noise session.
-
-### Functions
-
-#### `Read`
-
-Reads from the Noise session.
+#### func (*NoiseSession) Read
 
 ```go
 func (c *NoiseSession) Read(b []byte) (int, error)
 ```
 
-#### `decryptPacket`
-
-Decrypts a packet.
+#### func (*NoiseSession) ReadNextI2NP
 
 ```go
-func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error)
+func (s *NoiseSession) ReadNextI2NP() (i2np.I2NPMessage, error)
 ```
 
----
-
-## session.go
-
-Defines the `NoiseSession` struct and associated methods for session management.
-
-### Struct: `NoiseSession`
-
-Defines session properties.
+#### func (*NoiseSession) RemoteAddr
 
 ```go
-type NoiseSession struct {
-    // Session properties here
-}
+func (noise_session *NoiseSession) RemoteAddr() net.Addr
 ```
+RemoteAddr implements net.Conn
 
----
-
-## transport.go
-
-Defines the `NoiseTransport` struct and its methods for session compatibility, accepting connections, etc.
-
-### Struct: `NoiseTransport`
+#### func (*NoiseSession) RunIncomingHandshake
 
 ```go
-type NoiseTransport struct {
-    sync.Mutex
-    router_identity.RouterIdentity
-    *noise.CipherState
-    Listener        net.Listener
-    peerConnections map[data.Hash]transport.TransportSession
-}
+func (c *NoiseSession) RunIncomingHandshake() error
 ```
 
-#### Methods
+#### func (*NoiseSession) RunOutgoingHandshake
 
-- `Compatible`: Checks compatibility.
-- `Accept`: Accepts a connection.
-- `Addr`: Returns the address.
-- `SetIdentity`: Sets the router identity.
-- `GetSession`: Obtains a session.
+```go
+func (c *NoiseSession) RunOutgoingHandshake() error
+```
 
----
+#### func (*NoiseSession) SendQueueSize
 
-## write_session.go
+```go
+func (s *NoiseSession) SendQueueSize() int
+```
 
-Functions for writing encrypted data in a Noise session.
+#### func (*NoiseSession) SetDeadline
 
-### Functions
+```go
+func (noise_session *NoiseSession) SetDeadline(t time.Time) error
+```
+SetDeadline implements net.Conn
 
-#### `Write`
+#### func (*NoiseSession) SetReadDeadline
 
-Writes data in a Noise session.
+```go
+func (noise_session *NoiseSession) SetReadDeadline(t time.Time) error
+```
+SetReadDeadline implements net.Conn
+
+#### func (*NoiseSession) SetWriteDeadline
+
+```go
+func (noise_session *NoiseSession) SetWriteDeadline(t time.Time) error
+```
+SetWriteDeadline implements net.Conn
+
+#### func (*NoiseSession) Write
 
 ```go
 func (c *NoiseSession) Write(b []byte) (int, error)
 ```
 
-#### `encryptPacket`
-
-Encrypts a packet.
+#### type NoiseTransport
 
 ```go
-func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error)
+type NoiseTransport struct {
+	sync.Mutex
+	router_info.RouterInfo
+
+	Listener net.Listener
+}
 ```
+
+
+#### func  NewNoiseTransport
+
+```go
+func NewNoiseTransport(netSocket net.Listener) *NoiseTransport
+```
+NewNoiseTransport create a NoiseTransport using a supplied net.Listener
+
+#### func  NewNoiseTransportSocket
+
+```go
+func NewNoiseTransportSocket() (*NoiseTransport, error)
+```
+NewNoiseTransportSocket creates a Noise transport socket with a random host and
+port.
+
+#### func (*NoiseTransport) Accept
+
+```go
+func (noopt *NoiseTransport) Accept() (net.Conn, error)
+```
+Accept a connection on a listening socket.
+
+#### func (*NoiseTransport) Addr
+
+```go
+func (noopt *NoiseTransport) Addr() net.Addr
+```
+Addr of the transport, for now this is returning the IP:Port the transport is
+listening on, but this might actually be the router identity
+
+#### func (*NoiseTransport) Close
+
+```go
+func (noopt *NoiseTransport) Close() error
+```
+close the transport cleanly blocks until done returns an error if one happens
+
+#### func (*NoiseTransport) Compatable
+
+```go
+func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool
+```
+Compatable return true if a routerInfo is compatable with this transport
+
+#### func (*NoiseTransport) Compatible
+
+```go
+func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool
+```
+
+#### func (*NoiseTransport) GetSession
+
+```go
+func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error)
+```
+Obtain a transport session with a router given its RouterInfo. If a session with
+this router is NOT already made attempt to create one and block until made or
+until an error happens returns an established TransportSession and nil on
+success returns nil and an error on error
+
+#### func (*NoiseTransport) Handshake
+
+```go
+func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error
+```
+
+#### func (*NoiseTransport) HandshakeKey
+
+```go
+func (h *NoiseTransport) HandshakeKey() *noise.DHKey
+```
+
+#### func (*NoiseTransport) Name
+
+```go
+func (noopt *NoiseTransport) Name() string
+```
+Name of the transport TYPE, in this case `noise`
+
+#### func (*NoiseTransport) SetIdentity
+
+```go
+func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err error)
+```
+SetIdentity will set the router identity for this transport. will bind if the
+underlying socket is not already if the underlying socket is already bound
+update the RouterIdentity returns any errors that happen if they do
+
+#### type VerifyCallbackFunc
+
+```go
+type VerifyCallbackFunc func(publicKey []byte, data []byte) error
+```
+
+# noise
+--
+    import "github.com/go-i2p/go-i2p/lib/transport/noise"
+
+
+
+![noise.svg](noise)
+
+## Usage
+
+```go
+const (
+	NOISE_DH_CURVE25519 = 1
+
+	NOISE_CIPHER_CHACHAPOLY = 1
+	NOISE_CIPHER_AESGCM     = 2
+
+	NOISE_HASH_SHA256 = 3
+
+	NOISE_PATTERN_XK = 11
+
+	MaxPayloadSize = 65537
+)
+```
+
+```go
+const NOISE_PROTOCOL_NAME = "NOISE"
+```
+
+```go
+var ExampleNoiseListener net.Listener = exampleNoiseTransport
+```
+ExampleNoiseListener is not a real Noise Listener, do not use it. It is exported
+so that it can be confirmed that the transport implements net.Listener
+
+```go
+var (
+	ExampleNoiseSession net.Conn = exampleNoiseSession.(*NoiseSession)
+)
+```
+
+#### func  NewNoiseTransportSession
+
+```go
+func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error)
+```
+
+#### type HandshakeState
+
+```go
+type HandshakeState struct {
+	*noise.HandshakeState
+}
+```
+
+
+#### func  NewHandshakeState
+
+```go
+func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState, error)
+```
+
+#### func (*HandshakeState) GenerateEphemeral
+
+```go
+func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error)
+```
+GenerateEphemeral creates the ephemeral keypair that will be used in handshake
+This needs to be separate so NTCP2 can obfuscate it
+
+#### func (*HandshakeState) ReadMessage
+
+```go
+func (h *HandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+```
+
+#### func (*HandshakeState) SetEphemeral
+
+```go
+func (h *HandshakeState) SetEphemeral(key *noise.DHKey) error
+```
+SetEphemeral allows setting a potentially modified ephemeral key This is needed
+for NTCP2's obfuscation layer
+
+#### func (*HandshakeState) WriteMessage
+
+```go
+func (h *HandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+```
+
+#### type NoiseSession
+
+```go
+type NoiseSession struct {
+	router_info.RouterInfo
+	*noise.CipherState
+	*sync.Cond
+	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
+	*HandshakeState
+	RecvQueue      *cb.Queue
+	SendQueue      *cb.Queue
+	VerifyCallback VerifyCallbackFunc
+
+	Conn net.Conn
+}
+```
+
+
+#### func  NewNoiseSession
+
+```go
+func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error)
+```
+
+#### func (*NoiseSession) Close
+
+```go
+func (s *NoiseSession) Close() error
+```
+
+#### func (*NoiseSession) ComposeInitiatorHandshakeMessage
+
+```go
+func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
+	payload []byte,
+	ephemeralPrivate []byte,
+) (
+	negotiationData,
+	handshakeMessage []byte,
+	handshakeState *noise.HandshakeState,
+	err error,
+)
+```
+
+#### func (*NoiseSession) ComposeReceiverHandshakeMessage
+
+```go
+func (c *NoiseSession) ComposeReceiverHandshakeMessage(localStatic noise.DHKey, remoteStatic []byte, payload []byte, ephemeralPrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error)
+```
+
+#### func (*NoiseSession) LocalAddr
+
+```go
+func (s *NoiseSession) LocalAddr() net.Addr
+```
+
+#### func (*NoiseSession) QueueSendI2NP
+
+```go
+func (s *NoiseSession) QueueSendI2NP(msg i2np.I2NPMessage)
+```
+
+#### func (*NoiseSession) Read
+
+```go
+func (c *NoiseSession) Read(b []byte) (int, error)
+```
+
+#### func (*NoiseSession) ReadNextI2NP
+
+```go
+func (s *NoiseSession) ReadNextI2NP() (i2np.I2NPMessage, error)
+```
+
+#### func (*NoiseSession) RemoteAddr
+
+```go
+func (noise_session *NoiseSession) RemoteAddr() net.Addr
+```
+RemoteAddr implements net.Conn
+
+#### func (*NoiseSession) RunIncomingHandshake
+
+```go
+func (c *NoiseSession) RunIncomingHandshake() error
+```
+
+#### func (*NoiseSession) RunOutgoingHandshake
+
+```go
+func (c *NoiseSession) RunOutgoingHandshake() error
+```
+
+#### func (*NoiseSession) SendQueueSize
+
+```go
+func (s *NoiseSession) SendQueueSize() int
+```
+
+#### func (*NoiseSession) SetDeadline
+
+```go
+func (noise_session *NoiseSession) SetDeadline(t time.Time) error
+```
+SetDeadline implements net.Conn
+
+#### func (*NoiseSession) SetReadDeadline
+
+```go
+func (noise_session *NoiseSession) SetReadDeadline(t time.Time) error
+```
+SetReadDeadline implements net.Conn
+
+#### func (*NoiseSession) SetWriteDeadline
+
+```go
+func (noise_session *NoiseSession) SetWriteDeadline(t time.Time) error
+```
+SetWriteDeadline implements net.Conn
+
+#### func (*NoiseSession) Write
+
+```go
+func (c *NoiseSession) Write(b []byte) (int, error)
+```
+
+#### type NoiseTransport
+
+```go
+type NoiseTransport struct {
+	sync.Mutex
+	router_info.RouterInfo
+
+	Listener net.Listener
+}
+```
+
+
+#### func  NewNoiseTransport
+
+```go
+func NewNoiseTransport(netSocket net.Listener) *NoiseTransport
+```
+NewNoiseTransport create a NoiseTransport using a supplied net.Listener
+
+#### func  NewNoiseTransportSocket
+
+```go
+func NewNoiseTransportSocket() (*NoiseTransport, error)
+```
+NewNoiseTransportSocket creates a Noise transport socket with a random host and
+port.
+
+#### func (*NoiseTransport) Accept
+
+```go
+func (noopt *NoiseTransport) Accept() (net.Conn, error)
+```
+Accept a connection on a listening socket.
+
+#### func (*NoiseTransport) Addr
+
+```go
+func (noopt *NoiseTransport) Addr() net.Addr
+```
+Addr of the transport, for now this is returning the IP:Port the transport is
+listening on, but this might actually be the router identity
+
+#### func (*NoiseTransport) Close
+
+```go
+func (noopt *NoiseTransport) Close() error
+```
+close the transport cleanly blocks until done returns an error if one happens
+
+#### func (*NoiseTransport) Compatable
+
+```go
+func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool
+```
+Compatable return true if a routerInfo is compatable with this transport
+
+#### func (*NoiseTransport) Compatible
+
+```go
+func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool
+```
+
+#### func (*NoiseTransport) GetSession
+
+```go
+func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error)
+```
+Obtain a transport session with a router given its RouterInfo. If a session with
+this router is NOT already made attempt to create one and block until made or
+until an error happens returns an established TransportSession and nil on
+success returns nil and an error on error
+
+#### func (*NoiseTransport) Handshake
+
+```go
+func (c *NoiseTransport) Handshake(routerInfo router_info.RouterInfo) error
+```
+
+#### func (*NoiseTransport) HandshakeKey
+
+```go
+func (h *NoiseTransport) HandshakeKey() *noise.DHKey
+```
+
+#### func (*NoiseTransport) Name
+
+```go
+func (noopt *NoiseTransport) Name() string
+```
+Name of the transport TYPE, in this case `noise`
+
+#### func (*NoiseTransport) SetIdentity
+
+```go
+func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err error)
+```
+SetIdentity will set the router identity for this transport. will bind if the
+underlying socket is not already if the underlying socket is already bound
+update the RouterIdentity returns any errors that happen if they do
+
+#### type VerifyCallbackFunc
+
+```go
+type VerifyCallbackFunc func(publicKey []byte, data []byte) error
+```
+
+
+
+noise
+
+github.com/go-i2p/go-i2p/lib/transport/noise
