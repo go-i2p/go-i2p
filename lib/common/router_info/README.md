@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/router_info"
 
-![router_info.svg](router_info)
+![router_info.svg](router_info.svg)
 
 Package router_info implements the I2P RouterInfo common data structure
 

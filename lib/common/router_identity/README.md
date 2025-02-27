@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/router_identity"
 
-![router_identity.svg](router_identity)
+![router_identity.svg](router_identity.svg)
 
 Package router_identity implements the I2P RouterIdentity common data structure
 

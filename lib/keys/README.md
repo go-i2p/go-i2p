@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/keys"
 
-![keys.svg](keys)
+![keys.svg](keys.svg)
 
 
 

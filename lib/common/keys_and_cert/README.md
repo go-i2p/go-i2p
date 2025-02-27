@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
-![keys_and_cert.svg](keys_and_cert)
+![keys_and_cert.svg](keys_and_cert.svg)
 
 Package keys_and_cert implements the I2P KeysAndCert common data structure
 

@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/bootstrap"
 
-![bootstrap.svg](bootstrap)
+![bootstrap.svg](bootstrap.svg)
 
 provides generic interfaces for initial bootstrap into network and network
 ### reseeding

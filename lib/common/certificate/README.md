@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/certificate"
 
-![certificate.svg](certificate)
+![certificate.svg](certificate.svg)
 
 
 

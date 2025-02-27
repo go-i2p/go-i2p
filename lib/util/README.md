@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/util"
 
-![util.svg](util)
+![util.svg](util.svg)
 
 
 

@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/crypto"
 
-![crypto.svg](crypto)
+![crypto.svg](crypto.svg)
 
 package for i2p specific crpytography
 

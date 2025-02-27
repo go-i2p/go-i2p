@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/signature"
 
-![signature.svg](signature)
+![signature.svg](signature.svg)
 
 Package signature implements the I2P Signature common data structure
 

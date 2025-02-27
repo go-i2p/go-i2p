@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/transport/messages"
 
-![ntcp.svg](ntcp)
+![ntcp.svg](ntcp.svg)
 
 
 

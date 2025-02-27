@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/lease_set"
 
-![lease_set.svg](lease_set)
+![lease_set.svg](lease_set.svg)
 
 Package lease_set implements the I2P LeastSet common data structure
 

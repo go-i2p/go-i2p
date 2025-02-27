@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/netdb"
 
-![netdb.svg](netdb)
+![netdb.svg](netdb.svg)
 
 
 

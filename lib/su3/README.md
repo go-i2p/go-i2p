@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/su3"
 
-![su3.svg](su3)
+![su3.svg](su3.svg)
 
 Package su3 implements reading the SU3 file format.
 

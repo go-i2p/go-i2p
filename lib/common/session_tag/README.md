@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/session_tag"
 
-![session_tag.svg](session_tag)
+![session_tag.svg](session_tag.svg)
 
 Package session_tag implements the I2P SessionTag common data structure
 

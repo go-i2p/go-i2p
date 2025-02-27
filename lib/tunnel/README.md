@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/tunnel"
 
-![tunnel.svg](tunnel)
+![tunnel.svg](tunnel.svg)
 
 i2p garlic tunnel implementation
 

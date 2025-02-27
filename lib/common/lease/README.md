@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/lease"
 
-![lease.svg](lease)
+![lease.svg](lease.svg)
 
 Package lease implements the I2P lease common data structure
 

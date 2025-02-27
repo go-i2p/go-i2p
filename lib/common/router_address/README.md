@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/router_address"
 
-![router_address.svg](router_address)
+![router_address.svg](router_address.svg)
 
 Package router_address implements the I2P RouterAddress common data structure
 

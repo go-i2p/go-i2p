@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/data"
 
-![data.svg](data)
+![data.svg](data.svg)
 
 Package data implements common data structures used in higher level structures.
 

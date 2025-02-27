@@ -25,7 +25,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:9: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type]&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate]&#10;at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data]&#10;at fuzz.go:8: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate]&#10;at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data]&#10;at fuzz.go:8: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length]&#10;at fuzz.go:9: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M58,-160C58,-160 28,-160 28,-160 22,-160 16,-154 16,-148 16,-148 16,-136 16,-136 16,-130 22,-124 28,-124 28,-124 58,-124 58,-124 64,-124 70,-130 70,-136 70,-136 70,-148 70,-148 70,-154 64,-160 58,-160"/>
 <text text-anchor="middle" x="43" y="-137.8" font-family="Verdana" font-size="14.00" fill="#000000">Fuzz</text>
 </a>
@@ -42,9 +42,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate -->
-<g id="edge2" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate</title>
-<g id="a_edge2"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate]">
+<g id="a_edge1"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.ReadCertificate]">
 <path fill="none" stroke="#8b4513" d="M60.5563,-123.8395C78.2431,-106.2965 107.1045,-79.6361 142.3601,-57.393"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="144.2536,-60.3376 150.9601,-52.1355 140.6025,-54.3652 144.2536,-60.3376"/>
 </a>
@@ -61,9 +61,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data -->
-<g id="edge3" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data</title>
-<g id="a_edge3"><a xlink:title="at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data]">
+<g id="a_edge2"><a xlink:title="at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Data]">
 <path fill="none" stroke="#8b4513" d="M70.3338,-136.7744C92.2913,-132.5766 123.7111,-126.5699 150.1132,-121.5224"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="150.7913,-124.9562 159.9562,-119.6406 149.4768,-118.0807 150.7913,-124.9562"/>
 </a>
@@ -80,9 +80,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length -->
-<g id="edge4" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length</title>
-<g id="a_edge4"><a xlink:title="at fuzz.go:8: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length]">
+<g id="a_edge3"><a xlink:title="at fuzz.go:8: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Length]">
 <path fill="none" stroke="#8b4513" d="M70.3338,-147.3998C92.2913,-151.7375 123.7111,-157.9445 150.1132,-163.1602"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="149.4674,-166.6002 159.9562,-165.1047 150.8241,-159.7329 149.4674,-166.6002"/>
 </a>
@@ -99,9 +99,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type -->
-<g id="edge1" class="edge">
+<g id="edge4" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/certificate.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type</title>
-<g id="a_edge1"><a xlink:title="at fuzz.go:9: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type]">
+<g id="a_edge4"><a xlink:title="at fuzz.go:9: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/certificate.Certificate).Type]">
 <path fill="none" stroke="#8b4513" d="M70.1769,-159.2759C90.3621,-171.9616 118.6668,-189.4457 144,-204 148.084,-206.3463 152.3634,-208.7456 156.6592,-211.1147"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="154.9879,-214.1898 165.4424,-215.9086 158.3415,-208.0455 154.9879,-214.1898"/>
 </a>

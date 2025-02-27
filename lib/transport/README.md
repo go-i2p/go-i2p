@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/transport"
 
-![transport.svg](transport)
+![transport.svg](transport.svg)
 
 *
 

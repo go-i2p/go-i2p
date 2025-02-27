@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/config"
 
-![config.svg](config)
+![config.svg](config.svg)
 
 
 

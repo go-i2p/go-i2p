@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/fuzz/keys_and_cert"
 
-![exportable.svg](exportable)
+![exportable.svg](exportable.svg)
 
 
 

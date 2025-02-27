@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/key_certificate"
 
-![key_certificate.svg](key_certificate)
+![key_certificate.svg](key_certificate.svg)
 
 Package key_certificate implements the I2P Destination common data structure
 

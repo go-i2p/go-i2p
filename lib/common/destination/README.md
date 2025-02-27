@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/destination"
 
-![destination.svg](destination)
+![destination.svg](destination.svg)
 
 Package destination implements the I2P Destination common data structure
 

@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/base32"
 
-![base32.svg](base32)
+![base32.svg](base32.svg)
 
 Package base32 implmenets utilities for encoding and decoding text using I2P's
 ### alphabet

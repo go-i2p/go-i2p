@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/session_key"
 
-![session_key.svg](session_key)
+![session_key.svg](session_key.svg)
 
 Package session_key implements the I2P SessionKey common data structure
 

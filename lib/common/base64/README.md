@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/common/base64"
 
-![base64.svg](base64)
+![base64.svg](base64.svg)
 
 Package base64 implmenets utilities for encoding and decoding text using I2P's
 ### alphabet

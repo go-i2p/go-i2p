@@ -17,8 +17,8 @@
 <g id="clust3" class="cluster">
 <title>cluster_*github.com/sirupsen/logrus.Logger</title>
 <g id="a_clust3"><a xlink:title="type: *github.com/sirupsen/logrus.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M237.9061,-253C237.9061,-253 292.2273,-253 292.2273,-253 298.2273,-253 304.2273,-259 304.2273,-265 304.2273,-265 304.2273,-319 304.2273,-319 304.2273,-325 298.2273,-331 292.2273,-331 292.2273,-331 237.9061,-331 237.9061,-331 231.9061,-331 225.9061,-325 225.9061,-319 225.9061,-319 225.9061,-265 225.9061,-265 225.9061,-259 231.9061,-253 237.9061,-253"/>
-<text text-anchor="middle" x="265.0667" y="-261.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M237.9061,-207C237.9061,-207 292.2273,-207 292.2273,-207 298.2273,-207 304.2273,-213 304.2273,-219 304.2273,-219 304.2273,-273 304.2273,-273 304.2273,-279 298.2273,-285 292.2273,-285 292.2273,-285 237.9061,-285 237.9061,-285 231.9061,-285 225.9061,-279 225.9061,-273 225.9061,-273 225.9061,-219 225.9061,-219 225.9061,-213 231.9061,-207 237.9061,-207"/>
+<text text-anchor="middle" x="265.0667" y="-215.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
 </a>
 </g>
 </g>
@@ -30,21 +30,68 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag -->
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init -->
 <g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag | defined in session_tag.go:38&#10;at session_tag.go:46: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at session_tag.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at session_tag.go:39: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:48: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag]&#10;at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M118.958,-221C118.958,-221 28.014,-221 28.014,-221 22.014,-221 16.014,-215 16.014,-209 16.014,-209 16.014,-197 16.014,-197 16.014,-191 22.014,-185 28.014,-185 28.014,-185 118.958,-185 118.958,-185 124.958,-185 130.958,-191 130.958,-197 130.958,-197 130.958,-209 130.958,-209 130.958,-215 124.958,-221 118.958,-221"/>
-<text text-anchor="middle" x="73.486" y="-198.8" font-family="Verdana" font-size="14.00" fill="#000000">NewSessionTag</text>
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init</title>
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init | defined in .:0&#10;at session_tag.go:9: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M88.486,-338C88.486,-338 58.486,-338 58.486,-338 52.486,-338 46.486,-332 46.486,-326 46.486,-326 46.486,-314 46.486,-314 46.486,-308 52.486,-302 58.486,-302 58.486,-302 88.486,-302 88.486,-302 94.486,-302 100.486,-308 100.486,-314 100.486,-314 100.486,-326 100.486,-326 100.486,-332 94.486,-338 88.486,-338"/>
+<text text-anchor="middle" x="73.486" y="-315.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="node2" class="node">
+<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M313.2562,-338C313.2562,-338 215.8772,-338 215.8772,-338 209.8772,-338 203.8772,-332 203.8772,-326 203.8772,-326 203.8772,-314 203.8772,-314 203.8772,-308 209.8772,-302 215.8772,-302 215.8772,-302 313.2562,-302 313.2562,-302 319.2562,-302 325.2562,-308 325.2562,-314 325.2562,-314 325.2562,-326 325.2562,-326 325.2562,-332 319.2562,-338 313.2562,-338"/>
+<text text-anchor="middle" x="264.5667" y="-324.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="264.5667" y="-307.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="edge2" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_edge2"><a xlink:title="at session_tag.go:9: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M100.8632,-320C124.9805,-320 161.1891,-320 193.4256,-320"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="193.7322,-323.5001 203.7321,-320 193.7321,-316.5001 193.7322,-323.5001"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag -->
-<g id="node2" class="node">
+<g id="node3" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag | defined in session_tag.go:30&#10;at session_tag.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M311.3771,-128C311.3771,-128 217.7563,-128 217.7563,-128 211.7563,-128 205.7563,-122 205.7563,-116 205.7563,-116 205.7563,-104 205.7563,-104 205.7563,-98 211.7563,-92 217.7563,-92 217.7563,-92 311.3771,-92 311.3771,-92 317.3771,-92 323.3771,-98 323.3771,-104 323.3771,-104 323.3771,-116 323.3771,-116 323.3771,-122 317.3771,-128 311.3771,-128"/>
-<text text-anchor="middle" x="264.5667" y="-105.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSessionTag</text>
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag | defined in session_tag.go:30&#10;at session_tag.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M311.3771,-89C311.3771,-89 217.7563,-89 217.7563,-89 211.7563,-89 205.7563,-83 205.7563,-77 205.7563,-77 205.7563,-65 205.7563,-65 205.7563,-59 211.7563,-53 217.7563,-53 217.7563,-53 311.3771,-53 311.3771,-53 317.3771,-53 323.3771,-59 323.3771,-65 323.3771,-65 323.3771,-77 323.3771,-77 323.3771,-83 317.3771,-89 311.3771,-89"/>
+<text text-anchor="middle" x="264.5667" y="-66.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSessionTag</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Logger).Warn -->
+<g id="node5" class="node">
+<title>(*github.com/go&#45;i2p/logger.Logger).Warn</title>
+<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Warn | defined in log.go:30">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M459.0371,-86C459.0371,-86 423.5045,-86 423.5045,-86 417.5045,-86 411.5045,-80 411.5045,-74 411.5045,-74 411.5045,-62 411.5045,-62 411.5045,-56 417.5045,-50 423.5045,-50 423.5045,-50 459.0371,-50 459.0371,-50 465.0371,-50 471.0371,-56 471.0371,-62 471.0371,-62 471.0371,-74 471.0371,-74 471.0371,-80 465.0371,-86 459.0371,-86"/>
+<text text-anchor="middle" x="441.2708" y="-72.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="441.2708" y="-55.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
+<g id="edge3" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
+<g id="a_edge3"><a xlink:title="at session_tag.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
+<path fill="none" stroke="#8b4513" d="M323.4066,-70.001C349.0032,-69.5665 378.3334,-69.0685 401.332,-68.6781"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="401.4781,-72.1762 411.4172,-68.5068 401.3592,-65.1772 401.4781,-72.1762"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag -->
+<g id="node4" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag</title>
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag | defined in session_tag.go:38&#10;at session_tag.go:46: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at session_tag.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at session_tag.go:39: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:48: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag]&#10;at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M118.958,-175C118.958,-175 28.014,-175 28.014,-175 22.014,-175 16.014,-169 16.014,-163 16.014,-163 16.014,-151 16.014,-151 16.014,-145 22.014,-139 28.014,-139 28.014,-139 118.958,-139 118.958,-139 124.958,-139 130.958,-145 130.958,-151 130.958,-151 130.958,-163 130.958,-163 130.958,-169 124.958,-175 118.958,-175"/>
+<text text-anchor="middle" x="73.486" y="-152.8" font-family="Verdana" font-size="14.00" fill="#000000">NewSessionTag</text>
 </a>
 </g>
 </g>
@@ -52,15 +99,15 @@
 <g id="edge6" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag</title>
 <g id="a_edge6"><a xlink:title="at session_tag.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag]">
-<path fill="none" stroke="#000000" d="M106.0521,-184.7968C123.8767,-175.0334 146.4515,-162.9903 166.972,-153 181.4472,-145.9528 197.3486,-138.732 212.0373,-132.2686"/>
-<polygon fill="#000000" stroke="#000000" points="213.725,-135.3508 221.4875,-128.1401 210.9226,-128.9362 213.725,-135.3508"/>
+<path fill="none" stroke="#000000" d="M107.7754,-138.8764C125.3106,-129.8351 147.0943,-118.9486 166.972,-110 179.9588,-104.1535 194.099,-98.2467 207.4821,-92.8597"/>
+<polygon fill="#000000" stroke="#000000" points="209.074,-95.9929 217.0659,-89.0373 206.4808,-89.491 209.074,-95.9929"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="node5" class="node">
+<g id="node6" class="node">
 <title>(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithField | defined in log.go:54">
+<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithField | defined in log.go:54">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M469.5453,-147C469.5453,-147 412.9963,-147 412.9963,-147 406.9963,-147 400.9963,-141 400.9963,-135 400.9963,-135 400.9963,-123 400.9963,-123 400.9963,-117 406.9963,-111 412.9963,-111 412.9963,-111 469.5453,-111 469.5453,-111 475.5453,-111 481.5453,-117 481.5453,-123 481.5453,-123 481.5453,-135 481.5453,-135 481.5453,-141 475.5453,-147 469.5453,-147"/>
 <text text-anchor="middle" x="441.2708" y="-133.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
 <text text-anchor="middle" x="441.2708" y="-116.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
@@ -68,11 +115,11 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge3" class="edge">
+<g id="edge4" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge3"><a xlink:title="at session_tag.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
-<path fill="none" stroke="#8b4513" d="M131.357,-191.3561C202.7426,-176.993 322.9463,-152.8074 390.7638,-139.1622"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="391.667,-142.5507 400.7801,-137.1469 390.2862,-135.6883 391.667,-142.5507"/>
+<g id="a_edge4"><a xlink:title="at session_tag.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<path fill="none" stroke="#8b4513" d="M131.0584,-142.9712C142.8716,-140.5766 155.2725,-138.4102 166.972,-137 244.5117,-127.6536 335.2259,-126.9969 390.4445,-127.7334"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="390.6126,-131.2363 400.6655,-127.8912 390.7207,-124.2372 390.6126,-131.2363"/>
 </a>
 </g>
 </g>
@@ -90,8 +137,8 @@
 <g id="edge7" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
 <g id="a_edge7"><a xlink:title="at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
-<path fill="none" stroke="#8b4513" d="M131.357,-200.9544C202.6464,-198.4346 322.6224,-194.1938 390.4893,-191.795"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="390.6454,-195.2917 400.5155,-191.4406 390.3981,-188.2961 390.6454,-195.2917"/>
+<path fill="none" stroke="#8b4513" d="M131.2039,-153.4715C189.8248,-151.0372 282.9951,-150.338 362.1614,-164 371.5718,-165.624 381.3929,-168.1409 390.7862,-170.9819"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="389.7944,-174.3392 400.3849,-174.0359 391.9168,-167.6687 389.7944,-174.3392"/>
 </a>
 </g>
 </g>
@@ -109,8 +156,8 @@
 <g id="edge8" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
 <g id="a_edge8"><a xlink:title="at session_tag.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="none" stroke="#8b4513" d="M131.1251,-208.7956C189.4872,-214.897 282.2809,-225.2377 362.1614,-237 374.8823,-238.8731 388.7001,-241.2127 401.1752,-243.4398"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="400.8211,-246.9326 411.2849,-245.2715 402.0691,-240.0447 400.8211,-246.9326"/>
+<path fill="none" stroke="#8b4513" d="M130.9975,-159.1129C203.3633,-162.5668 322.9335,-171.1449 362.1614,-191 378.4342,-199.2364 375.9262,-209.5982 390.1614,-221 394.1252,-224.1748 398.4605,-227.2407 402.8767,-230.1215"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="401.0515,-233.108 411.3925,-235.4135 404.7463,-227.1625 401.0515,-233.108"/>
 </a>
 </g>
 </g>
@@ -128,8 +175,8 @@
 <g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
 <g id="a_edge1"><a xlink:title="at session_tag.go:46: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M131.1401,-216.2015C153.7818,-221.1681 180.0345,-226.6586 203.972,-231 257.5508,-240.7172 273.5123,-231.7524 325.1614,-249 340.6011,-254.1559 374.6188,-272.9648 401.864,-288.7001"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="400.4022,-291.8986 410.8074,-293.8944 403.9179,-285.8454 400.4022,-291.8986"/>
+<path fill="none" stroke="#8b4513" d="M131.2291,-166.525C202.9067,-178.5 316.8096,-198.0892 325.1614,-203 364.3561,-226.0464 355.5781,-252.4814 390.1614,-282 392.6656,-284.1375 395.3424,-286.2094 398.1094,-288.1986"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="396.3464,-291.2306 406.599,-293.9015 400.2497,-285.4199 396.3464,-291.2306"/>
 </a>
 </g>
 </g>
@@ -137,65 +184,18 @@
 <g id="node10" class="node">
 <title>(*github.com/sirupsen/logrus.Logger).Debug</title>
 <g id="a_node10"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Debug | defined in logger.go:221">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M283.3887,-323C283.3887,-323 245.7447,-323 245.7447,-323 239.7447,-323 233.7447,-317 233.7447,-311 233.7447,-311 233.7447,-299 233.7447,-299 233.7447,-293 239.7447,-287 245.7447,-287 245.7447,-287 283.3887,-287 283.3887,-287 289.3887,-287 295.3887,-293 295.3887,-299 295.3887,-299 295.3887,-311 295.3887,-311 295.3887,-317 289.3887,-323 283.3887,-323"/>
-<text text-anchor="middle" x="264.5667" y="-309.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="264.5667" y="-292.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M283.3887,-277C283.3887,-277 245.7447,-277 245.7447,-277 239.7447,-277 233.7447,-271 233.7447,-265 233.7447,-265 233.7447,-253 233.7447,-253 233.7447,-247 239.7447,-241 245.7447,-241 245.7447,-241 283.3887,-241 283.3887,-241 289.3887,-241 295.3887,-247 295.3887,-253 295.3887,-253 295.3887,-265 295.3887,-265 295.3887,-271 289.3887,-277 283.3887,-277"/>
+<text text-anchor="middle" x="264.5667" y="-263.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="264.5667" y="-246.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge4" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge4"><a xlink:title="at session_tag.go:39: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:48: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M99.5846,-221.1809C125.3107,-238.5699 166.1513,-264.7711 203.972,-283 210.3393,-286.0689 217.2529,-288.9626 224.0558,-291.5807"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="223.2736,-295.0231 233.8669,-295.2077 225.7009,-288.4573 223.2736,-295.0231"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="node6" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Warn | defined in log.go:30">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M459.0371,-86C459.0371,-86 423.5045,-86 423.5045,-86 417.5045,-86 411.5045,-80 411.5045,-74 411.5045,-74 411.5045,-62 411.5045,-62 411.5045,-56 417.5045,-50 423.5045,-50 423.5045,-50 459.0371,-50 459.0371,-50 465.0371,-50 471.0371,-56 471.0371,-62 471.0371,-62 471.0371,-74 471.0371,-74 471.0371,-80 465.0371,-86 459.0371,-86"/>
-<text text-anchor="middle" x="441.2708" y="-72.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="441.2708" y="-55.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
 <g id="edge5" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.ReadSessionTag&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_edge5"><a xlink:title="at session_tag.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
-<path fill="none" stroke="#8b4513" d="M323.4066,-96.0146C349.1185,-89.9033 378.5977,-82.8965 401.6424,-77.4191"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="402.4976,-80.8134 411.4172,-75.0958 400.8788,-74.0031 402.4976,-80.8134"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init -->
-<g id="node3" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init | defined in .:0&#10;at session_tag.go:9: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M88.486,-55C88.486,-55 58.486,-55 58.486,-55 52.486,-55 46.486,-49 46.486,-43 46.486,-43 46.486,-31 46.486,-31 46.486,-25 52.486,-19 58.486,-19 58.486,-19 88.486,-19 88.486,-19 94.486,-19 100.486,-25 100.486,-31 100.486,-31 100.486,-43 100.486,-43 100.486,-49 94.486,-55 88.486,-55"/>
-<text text-anchor="middle" x="73.486" y="-32.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="node4" class="node">
-<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M313.2562,-55C313.2562,-55 215.8772,-55 215.8772,-55 209.8772,-55 203.8772,-49 203.8772,-43 203.8772,-43 203.8772,-31 203.8772,-31 203.8772,-25 209.8772,-19 215.8772,-19 215.8772,-19 313.2562,-19 313.2562,-19 319.2562,-19 325.2562,-25 325.2562,-31 325.2562,-31 325.2562,-43 325.2562,-43 325.2562,-49 319.2562,-55 313.2562,-55"/>
-<text text-anchor="middle" x="264.5667" y="-41.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="264.5667" y="-24.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge2" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge2"><a xlink:title="at session_tag.go:9: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M100.8632,-37C124.9805,-37 161.1891,-37 193.4256,-37"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="193.7322,-40.5001 203.7321,-37 193.7321,-33.5001 193.7322,-40.5001"/>
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_tag.NewSessionTag&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
+<g id="a_edge5"><a xlink:title="at session_tag.go:39: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at session_tag.go:48: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<path fill="none" stroke="#8b4513" d="M99.5846,-175.1809C125.3107,-192.5699 166.1513,-218.7711 203.972,-237 210.3393,-240.0689 217.2529,-242.9626 224.0558,-245.5807"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="223.2736,-249.0231 233.8669,-249.2077 225.7009,-242.4573 223.2736,-249.0231"/>
 </a>
 </g>
 </g>

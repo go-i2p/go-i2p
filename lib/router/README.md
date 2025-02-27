@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/router"
 
-![router.svg](router)
+![router.svg](router.svg)
 
 
 

@@ -2,7 +2,7 @@
 --
     import "github.com/go-i2p/go-i2p/lib/netdb/reseed"
 
-![reseed.svg](reseed)
+![reseed.svg](reseed.svg)
 
 
 
