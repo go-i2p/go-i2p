@@ -1,6 +1,7 @@
 package ntcp
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -8,8 +9,9 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 
+	"crypto/rand"
+
 	"github.com/samber/oops"
-	"golang.org/x/exp/rand"
 )
 
 /*
@@ -58,7 +60,11 @@ func (s *NTCP2Session) CreateSessionRequest() (*SessionRequest, error) {
 	timestamp := uint32(time.Now().Unix())
 
 	// Add random padding (implementation specific)
-	padding := make([]byte, rand.Intn(16)) // Up to 16 bytes of padding
+	randomInt, err := rand.Int(rand.Reader, big.NewInt(16))
+	if err != nil {
+		return nil, err
+	}
+	padding := make([]byte, randomInt.Int64()) // Up to 16 bytes of padding
 	if _, err := rand.Read(padding); err != nil {
 		return nil, err
 	}
@@ -116,29 +122,35 @@ func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
 
 // ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC
 func (s *NTCP2Session) ObfuscateEphemeral(ephemeralKey []byte) ([]byte, error) {
-	static, err := s.peerStaticKey()
+	AESStaticKey, err := s.buildAesStaticKey()
 	if err != nil {
 		return nil, err
 	}
-	staticIV, err := s.peerStaticIV()
-	if err != nil {
-		return nil, err
-	}
-	var AESStaticKey *crypto.AESSymmetricKey
-	AESStaticKey.Key = static[:]
-	AESStaticKey.IV = staticIV[:]
+
 	return obfs.ObfuscateEphemeralKey(ephemeralKey, AESStaticKey)
 }
 
 // DeobfuscateEphemeral reverses the key obfuscation
 func (s *NTCP2Session) DeobfuscateEphemeral(obfuscatedEphemeralKey []byte) ([]byte, error) {
-	static, err := s.peerStaticKey()
+	AESStaticKey, err := s.buildAesStaticKey()
+	if err != nil {
+		return nil, err
+	}
+
+	return obfs.DeobfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
+}
+
+func (s *NTCP2Session) buildAesStaticKey() (*crypto.AESSymmetricKey, error) {
+	staticKey, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
 	}
 	staticIV, err := s.peerStaticIV()
-	var AESStaticKey *crypto.AESSymmetricKey
-	AESStaticKey.Key = static[:]
+	if err != nil {
+		return nil, err
+	}
+	var AESStaticKey crypto.AESSymmetricKey
+	AESStaticKey.Key = staticKey[:]
 	AESStaticKey.IV = staticIV[:]
-	return obfs.ObfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
+	return &AESStaticKey, nil
 }
