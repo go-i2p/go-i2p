@@ -114,7 +114,7 @@ signature :: Signature
 //
 // https://geti2p.net/spec/common-structures#routerinfo
 type RouterInfo struct {
-	router_identity RouterIdentity
+	router_identity *RouterIdentity
 	published       *Date
 	size            *Integer
 	addresses       []*RouterAddress
@@ -169,7 +169,7 @@ func (router_info RouterInfo) String() string {
 
 // RouterIdentity returns the router identity as *RouterIdentity.
 func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
-	return &router_info.router_identity
+	return router_info.router_identity
 }
 
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
@@ -410,7 +410,7 @@ func NewRouterInfo(
 
 	// 5. Assemble RouterInfo without signature
 	routerInfo := &RouterInfo{
-		router_identity: *routerIdentity,
+		router_identity: routerIdentity,
 		published:       &publishedDate,
 		size:            sizeInt,
 		addresses:       addresses,

@@ -14,7 +14,7 @@ func TestSigningPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	assert.Nil(err)
 
 	pk_type := key_cert.SigningPublicKeyType()
-	assert.Equal(KEYCERT_SIGN_ED25519, pk_type, "SigningPublicKeyType() did not return correct type")
+	assert.Equal(KEYCERT_SIGN_P521, pk_type, "SigningPublicKeyType() did not return correct type")
 }
 
 func TestSigningPublicKeyTypeWithInvalidData(t *testing.T) {

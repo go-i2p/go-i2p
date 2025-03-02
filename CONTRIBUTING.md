@@ -43,7 +43,9 @@ The I2P community maintains up-to-date [specifications](https://geti2p.net/spec)
 
 #### Errors
 
-We use oops to provide context to the errors we return. Do not use `errors.New` or `fmt.Errorf`. Wrap raw errors in oops errors. When an error is recieved, used oops to supplement the log output.
+We use oops to provide context to the errors we return. Do not use `errors.New` or `fmt.Errorf` when returning errors from functions. Instead, wrap raw errors in oops errors. When an error is recieved, used oops to supplement the log output.
+
+It is OK to use `fmt.Errorf` for declaring custom error types.
 
 #### Logging
 

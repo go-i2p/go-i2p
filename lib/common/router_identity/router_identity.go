@@ -34,7 +34,7 @@ type RouterIdentity struct {
 // ReadRouterIdentity returns RouterIdentity from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
-func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder []byte, err error) {
+func ReadRouterIdentity(data []byte) (router_identity *RouterIdentity, remainder []byte, err error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading RouterIdentity from data")
@@ -43,7 +43,7 @@ func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder 
 		log.WithError(err).Error("Failed to read KeysAndCert for RouterIdentity")
 		return
 	}
-	router_identity = RouterIdentity{
+	router_identity = &RouterIdentity{
 		keys_and_cert,
 	}
 	log.WithFields(logrus.Fields{

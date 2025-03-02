@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	ErrZeroLength            = oops.Errorf("error parsing string: zero length")
-	ErrDataTooShort          = oops.Errorf("string parsing warning: string data is shorter than specified by length")
-	ErrDataTooLong           = oops.Errorf("string parsing warning: string contains data beyond length")
-	ErrLengthMismatch        = oops.Errorf("error reading I2P string, length does not match data")
-	ErrMappingLengthMismatch = oops.Errorf("warning parsing mapping: mapping length exceeds provided data")
+	ErrZeroLength            = fmt.Errorf("error parsing string: zero length")
+	ErrDataTooShort          = fmt.Errorf("string parsing warning: string data is shorter than specified by length")
+	ErrDataTooLong           = fmt.Errorf("string parsing warning: string contains data beyond length")
+	ErrLengthMismatch        = fmt.Errorf("error reading I2P string, length does not match data")
+	ErrMappingLengthMismatch = fmt.Errorf("warning parsing mapping: mapping length exceeds provided data")
 )
 
 // WrapErrors compiles a slice of errors and returns them wrapped together as a single error.
