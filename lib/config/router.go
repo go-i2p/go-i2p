@@ -1,8 +1,9 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
+
+	"github.com/go-i2p/go-i2p/lib/util"
 )
 
 // router.config options
@@ -17,20 +18,12 @@ type RouterConfig struct {
 	Bootstrap *BootstrapConfig
 }
 
-func home() string {
-	h, err := os.UserHomeDir()
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-
 func defaultBase() string {
-	return filepath.Join(home(), GOI2P_BASE_DIR, "base")
+	return filepath.Join(util.UserHome(), GOI2P_BASE_DIR, "base")
 }
 
 func defaultConfig() string {
-	return filepath.Join(home(), GOI2P_BASE_DIR, "config")
+	return filepath.Join(util.UserHome(), GOI2P_BASE_DIR, "config")
 }
 
 // defaults for router
