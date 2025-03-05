@@ -31,7 +31,7 @@ func InitConfig() {
 	// Load defaults
 	setDefaults()
 
-	// handle config file creating if needed
+	// handle config file creating it if needed
 	handleConfigFile()
 
 	// Update RouterConfigProperties
