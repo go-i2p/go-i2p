@@ -17,14 +17,13 @@ var (
 const GOI2P_BASE_DIR = ".go-i2p"
 
 func InitConfig() {
-	defaultConfigDir := filepath.Join(util.UserHome(), GOI2P_BASE_DIR)
 
 	if CfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(CfgFile)
 	} else {
-		// Set up viper to use the default config file: $HOME/.go-ip/config.yaml
-		viper.AddConfigPath(defaultConfigDir)
+		// Set up viper to use the default config path $HOME/.go-ip/
+		viper.AddConfigPath(BuildI2PDirPath())
 		viper.SetConfigName("config")
 		viper.SetConfigType("yaml")
 	}
@@ -32,19 +31,8 @@ func InitConfig() {
 	// Load defaults
 	setDefaults()
 
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			if CfgFile != "" {
-				log.Fatalf("Config file %s is not found: %s", CfgFile, err)
-			} else {
-				createDefaultConfig(defaultConfigDir)
-			}
-		} else {
-			log.Fatalf("Error reading config file: %s", err)
-		}
-	} else {
-		log.Debugf("Using config file: %s", viper.ConfigFileUsed())
-	}
+	// handle config file creating if needed
+	handleConfigFile()
 
 	// Update RouterConfigProperties
 	UpdateRouterConfig()
@@ -101,4 +89,25 @@ func createDefaultConfig(defaultConfigDir string) {
 
 	log.Debugf("Created default configuration at: %s", defaultConfigFile)
 
+}
+
+func handleConfigFile() {
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			if CfgFile != "" {
+				log.Fatalf("Config file %s is not found: %s", CfgFile, err)
+			} else {
+				createDefaultConfig(BuildI2PDirPath())
+			}
+		} else {
+			log.Fatalf("Error reading config file: %s", err)
+		}
+	} else {
+		log.Debugf("Using config file: %s", viper.ConfigFileUsed())
+	}
+
+}
+
+func BuildI2PDirPath() string {
+	return filepath.Join(util.UserHome(), GOI2P_BASE_DIR)
 }
