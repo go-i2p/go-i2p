@@ -28,7 +28,7 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#routeridentity
 type RouterIdentity struct {
-	KeysAndCert
+	*KeysAndCert
 }
 
 // ReadRouterIdentity returns RouterIdentity from a []byte.

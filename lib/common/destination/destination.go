@@ -31,7 +31,7 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#destination
 type Destination struct {
-	KeysAndCert
+	*KeysAndCert
 }
 
 // Base32Address returns the I2P base32 address for this Destination.

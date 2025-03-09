@@ -1,6 +1,7 @@
 package ntcp
 
 import (
+	"crypto/rand"
 	"math/big"
 	"time"
 
@@ -8,8 +9,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
-
-	"crypto/rand"
 
 	"github.com/samber/oops"
 )
