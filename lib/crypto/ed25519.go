@@ -273,24 +273,36 @@ func (k Ed25519PrivateKey) Len() int {
 }
 
 func (k Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
-	// Generate a new Ed25519 key pair
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to generate ed25519 key: %v", err)
 	}
-	// Assign the generated private key to the receiver
-	k = Ed25519PrivateKey(priv)
-	return k, nil
+	// Copy the full private key (includes public key)
+	newKey := make(Ed25519PrivateKey, ed25519.PrivateKeySize)
+	copy(newKey, priv)
+	return newKey, nil
 }
 
 func (k Ed25519PrivateKey) Public() (SigningPublicKey, error) {
 	fmt.Printf("Ed25519PrivateKey.Public(): len(k) = %d\n", len(k))
 	if len(k) != ed25519.PrivateKeySize {
-		return nil, oops.Errorf("invalid ed25519 private key size: expected %d, got %d", ed25519.PrivateKeySize, len(k))
+		return nil, oops.Errorf("invalid ed25519 private key size: expected %d, got %d",
+			ed25519.PrivateKeySize, len(k))
 	}
-	pubKey := k[32:]
+	// Extract public key portion (last 32 bytes)
+	pubKey := ed25519.PrivateKey(k).Public().(ed25519.PublicKey)
 	fmt.Printf("Ed25519PrivateKey.Public(): extracted pubKey length: %d\n", len(pubKey))
 	return Ed25519PublicKey(pubKey), nil
+}
+
+func CreateEd25519PrivateKeyFromBytes(data []byte) (Ed25519PrivateKey, error) {
+	if len(data) != ed25519.PrivateKeySize {
+		return nil, oops.Errorf("invalid ed25519 private key size: expected %d, got %d",
+			ed25519.PrivateKeySize, len(data))
+	}
+	privKey := make(Ed25519PrivateKey, ed25519.PrivateKeySize)
+	copy(privKey, data)
+	return privKey, nil
 }
 
 type Ed25519Signer struct {

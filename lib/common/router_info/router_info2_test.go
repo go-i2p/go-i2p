@@ -22,11 +22,12 @@ import (
 func TestCreateRouterInfo(t *testing.T) {
 	// Generate signing key pair (Ed25519)
 	var ed25519_privkey crypto.Ed25519PrivateKey
-	_, err := (&ed25519_privkey).Generate()
+	ed25519_signingprivkey, err := ed25519_privkey.Generate()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
-	ed25519_pubkey_raw, err := ed25519_privkey.Public()
+
+	ed25519_pubkey_raw, err := ed25519_signingprivkey.Public()
 	if err != nil {
 		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
 	}

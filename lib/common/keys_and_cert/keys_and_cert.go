@@ -139,7 +139,7 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
-func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
+func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading KeysAndCert from data")

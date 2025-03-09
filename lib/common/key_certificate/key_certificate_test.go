@@ -44,7 +44,7 @@ func TestPublicKeyTypeWithInvalidData(t *testing.T) {
 	// Test with invalid short data
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02})
 	assert.NotNil(err)
-	assert.Contains(err.Error(), "key certificate data too short", "Expected error for invalid data")
+	assert.Contains(err.Error(), "certificate parsing warning: certificate data is shorter than specified by length", "Expected error for invalid data")
 	assert.Nil(key_cert)
 }
 
