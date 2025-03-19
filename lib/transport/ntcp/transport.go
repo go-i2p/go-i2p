@@ -43,7 +43,10 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 			continue
 		}
 		if transportStyle == NTCP_PROTOCOL_NAME {
-			return true
+			// Verify required NTCP2 options exist
+			if addr.CheckOption("s") && addr.CheckOption("i") && addr.CheckOption("v") {
+				return true
+			}
 		}
 	}
 	return false

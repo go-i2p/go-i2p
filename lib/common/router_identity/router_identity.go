@@ -72,7 +72,7 @@ func NewRouterIdentity(publicKey crypto.RecievingPublicKey, signingPublicKey cry
 
 	// Step 3: Initialize RouterIdentity with KeysAndCert.
 	routerIdentity := RouterIdentity{
-		KeysAndCert: *keysAndCert,
+		KeysAndCert: keysAndCert,
 	}
 
 	log.WithFields(logrus.Fields{

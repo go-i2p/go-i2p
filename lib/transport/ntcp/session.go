@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
+	"github.com/go-i2p/go-i2p/lib/transport/padding"
 
 	"github.com/samber/oops"
 )
@@ -33,7 +34,7 @@ import (
 type NTCP2Session struct {
 	*noise.NoiseSession
 	*NTCP2Transport
-	paddingStrategy PaddingStrategy
+	paddingStrategy padding.PaddingStrategy
 }
 
 type SessionRequest struct {
@@ -83,13 +84,9 @@ func NewNTCP2Session(noiseConfig router_info.RouterInfo) (*NTCP2Session, error) 
 	}
 
 	return &NTCP2Session{
-		NoiseSession: baseNoiseSession.(*noise.NoiseSession),
+		NoiseSession:    baseNoiseSession.(*noise.NoiseSession),
+		paddingStrategy: &padding.NullPaddingStrategy{},
 	}, nil
-}
-
-type PaddingStrategy interface {
-	AddPadding(message []byte) []byte
-	RemovePadding(message []byte) []byte
 }
 
 // PeerStaticKey is equal to the NTCP2 peer's static public key, found in their router info

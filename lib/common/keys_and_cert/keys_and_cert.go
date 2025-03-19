@@ -139,10 +139,13 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
-func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte, err error) {
+func ReadKeysAndCert(data []byte) (*KeysAndCert, []byte, error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading KeysAndCert from data")
+	var err error
+	var remainder []byte
+	var keys_and_cert KeysAndCert
 
 	data_len := len(data)
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
@@ -153,13 +156,13 @@ func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte,
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
 		err = oops.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	// Get the actual key sizes from the certificate
@@ -170,7 +173,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte,
 	keys_and_cert.ReceivingPublic, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:pubKeySize])
 	if err != nil {
 		log.WithError(err).Error("Failed to construct publicKey")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	// Calculate padding size and extract padding
@@ -186,7 +189,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte,
 	)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct signingPublicKey")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	log.WithFields(logrus.Fields{
@@ -196,7 +199,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert *KeysAndCert, remainder []byte,
 		"remainder_length":        len(remainder),
 	}).Debug("Successfully read KeysAndCert")
 
-	return
+	return &keys_and_cert, remainder, err
 }
 
 func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {

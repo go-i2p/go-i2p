@@ -2,6 +2,7 @@ package keys_and_cert
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
 
@@ -32,8 +33,15 @@ func TestCertificateWithMissingData(t *testing.T) {
 // createValidKeyCertificate creates a valid KeyCertificate for testing.
 func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Generate signing key pair (Ed25519)
-	var ed25519_privkey crypto.Ed25519PrivateKey
-	_, err := (&ed25519_privkey).Generate()
+	//var ed25519_privkey crypto.Ed25519PrivateKey
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate Ed25519 private %s", err)
+	}
+	// Copy the full private key (includes public key)
+	ed25519_privkey := make(crypto.Ed25519PrivateKey, ed25519.PrivateKeySize)
+	copy(ed25519_privkey, priv)
+	//_, err = (ed25519_privkey).Generate()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}

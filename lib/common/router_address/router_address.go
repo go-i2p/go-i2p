@@ -179,6 +179,16 @@ func (router_address RouterAddress) GetOption(key I2PString) I2PString {
 	return router_address.Options().Values().Get(key)
 }
 
+func (router_address RouterAddress) HasOption(key I2PString) bool {
+	opt := router_address.GetOption(key)
+	return opt != nil
+}
+
+func (router_address RouterAddress) CheckOption(key string) bool {
+	keyv, _ := ToI2PString(key)
+	return router_address.HasOption(keyv)
+}
+
 func (router_address RouterAddress) HostString() I2PString {
 	host, _ := ToI2PString("host")
 	return router_address.GetOption(host)
