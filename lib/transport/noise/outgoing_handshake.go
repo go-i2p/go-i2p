@@ -23,7 +23,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 		"negData_length": len(negData),
 		"msg_length":     len(msg),
 	}).Debug("Initiator handshake message composed")
-	c.HandshakeState = &HandshakeState{
+	c.HandshakeState = &NoiseHandshakeState{
 		HandshakeState: state,
 	}
 
@@ -40,7 +40,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 	log.Debug("Handshake message written successfully")
 	log.WithField("state", state).Debug("Handshake state after message write")
 	log.Println(state)
-	c.handshakeComplete = true
+	c.CompleteHandshake()
 	log.Debug("Outgoing handshake completed successfully")
 	return nil
 }

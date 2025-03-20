@@ -18,7 +18,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 		log.WithError(err).Error("Failed to compose receiver handshake message")
 		return err
 	}
-	c.HandshakeState = &HandshakeState{
+	c.HandshakeState = &NoiseHandshakeState{
 		HandshakeState: state,
 	}
 	log.WithFields(logrus.Fields{
@@ -37,7 +37,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 	log.Debug("Handshake message written successfully")
 	log.WithField("state", state).Debug("Handshake state after message write")
 	log.Println(state)
-	c.handshakeComplete = true
+	c.CompleteHandshake()
 	log.Debug("Incoming handshake completed successfully")
 	return nil
 }

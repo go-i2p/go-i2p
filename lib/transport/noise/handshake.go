@@ -9,7 +9,7 @@ import (
 	"github.com/flynn/noise"
 )
 
-type HandshakeState struct {
+type NoiseHandshakeState struct {
 	mutex             sync.Mutex
 	ephemeral         *noise.DHKey
 	pattern           noise.HandshakePattern
@@ -17,8 +17,8 @@ type HandshakeState struct {
 	*noise.HandshakeState
 }
 
-func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState, error) {
-	hs := &HandshakeState{
+func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*NoiseHandshakeState, error) {
+	hs := &NoiseHandshakeState{
 		pattern: noise.HandshakeXK,
 	}
 
@@ -38,9 +38,20 @@ func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState
 	return hs, nil
 }
 
+func (h *NoiseHandshakeState) HandshakeComplete() bool {
+	return h.handshakeComplete
+}
+
+func (h *NoiseHandshakeState) CompleteHandshake() error {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	h.handshakeComplete = true
+	return nil
+}
+
 // GenerateEphemeral creates the ephemeral keypair that will be used in handshake
 // This needs to be separate so NTCP2 can obfuscate it
-func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error) {
+func (h *NoiseHandshakeState) GenerateEphemeral() (*noise.DHKey, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -54,21 +65,21 @@ func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error) {
 
 // SetEphemeral allows setting a potentially modified ephemeral key
 // This is needed for NTCP2's obfuscation layer
-func (h *HandshakeState) SetEphemeral(key *noise.DHKey) error {
+func (h *NoiseHandshakeState) SetEphemeral(key *noise.DHKey) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 	h.ephemeral = key
 	return nil
 }
 
-func (h *HandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error) {
+func (h *NoiseHandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	return h.HandshakeState.WriteMessage(nil, payload)
 }
 
-func (h *HandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error) {
+func (h *NoiseHandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 

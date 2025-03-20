@@ -31,10 +31,28 @@ type NoiseTransport struct {
 }
 
 func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
-	// TODO implement
-	// panic("implement me")
-	log.Warn("func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) is not implemented!")
-	return true
+	// Check if we have an existing session with this router
+	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
+	if ok {
+		return true
+	}
+
+	// Check router addresses for Noise protocol support
+	for _, addr := range routerInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+
+		// Check for Noise protocol support
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			// A router is compatible if it has a static key
+			if addr.CheckOption("s") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
@@ -123,7 +141,7 @@ func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transpor
 		return nil, err
 	}
 	for {
-		if session.(*NoiseSession).handshakeComplete {
+		if session.(*NoiseSession).HandshakeComplete() {
 			log.Debug("NoiseTransport: Handshake complete")
 			return nil, nil
 		}

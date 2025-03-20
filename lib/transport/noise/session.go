@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/transport/handshake"
 )
 
 type NoiseSession struct {
@@ -20,7 +21,7 @@ type NoiseSession struct {
 	*noise.CipherState
 	*sync.Cond
 	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
-	*HandshakeState
+	handshake.HandshakeState
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
 	VerifyCallback VerifyCallbackFunc
