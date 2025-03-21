@@ -3,14 +3,15 @@ package lease_set
 import (
 	"bytes"
 	"crypto/rand"
-	"fmt"
+	"testing"
+	"time"
+
 	"github.com/go-i2p/go-i2p/lib/common/destination"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
-	"testing"
-	"time"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
@@ -23,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey, error) {
+func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.RecievingPublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, crypto.SigningPrivateKey, error) {
 	// Generate signing key pair (Ed25519)
 	var ed25519_privkey crypto.Ed25519PrivateKey
 	_, err := (&ed25519_privkey).Generate()
@@ -63,7 +64,7 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	copy(elg_pubkey[256-len(yBytes):], yBytes)
 
 	// Ensure that elg_pubkey implements crypto.PublicKey interface
-	var _ crypto.PublicKey = elg_pubkey
+	var _ crypto.RecievingPublicKey = elg_pubkey
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer
@@ -135,13 +136,11 @@ func generateTestRouterInfo(t *testing.T) (*router_info.RouterInfo, crypto.Publi
 	// Generate signing key pair for the LeaseSet (Ed25519)
 	var leaseSetSigningPrivKey crypto.Ed25519PrivateKey
 	_, err = leaseSetSigningPrivKey.Generate()
-
 	if err != nil {
 		t.Fatalf("Failed to generate lease set Ed25519 private key: %v", err)
 	}
 
 	leaseSetSigningPubKeyRaw, err := leaseSetSigningPrivKey.Public()
-
 	if err != nil {
 		t.Fatalf("Failed to derive lease set Ed25519 public key: %v", err)
 	}
@@ -176,7 +175,8 @@ func createTestLease(t *testing.T, index int, routerInfo *router_info.RouterInfo
 
 	return testLease, nil
 }
-func generateTestDestination(t *testing.T) (*destination.Destination, crypto.PublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, error) {
+
+func generateTestDestination(t *testing.T) (*destination.Destination, crypto.RecievingPublicKey, crypto.SigningPublicKey, crypto.SigningPrivateKey, error) {
 	// Generate client signing key pair (Ed25519)
 	var ed25519_privkey crypto.Ed25519PrivateKey
 	_, err := (&ed25519_privkey).Generate()
@@ -274,7 +274,7 @@ func createTestLeaseSet(t *testing.T, routerInfo *router_info.RouterInfo, leaseC
 	// Generate test Destination and client keys
 	dest, encryptionKey, signingKey, signingPrivKey, err := generateTestDestination(t)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate test destination: %v", err)
+		return nil, oops.Errorf("failed to generate test destination: %v", err)
 	}
 
 	destBytes := dest.KeysAndCert.Bytes()

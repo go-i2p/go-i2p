@@ -4,10 +4,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
-	"errors"
 	"io"
 	"math/big"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/openpgp/elgamal"
@@ -38,8 +38,8 @@ var (
 )
 
 var (
-	ElgDecryptFail   = errors.New("failed to decrypt elgamal encrypted data")
-	ElgEncryptTooBig = errors.New("failed to encrypt data, too big for elgamal")
+	ElgDecryptFail   = oops.Errorf("failed to decrypt elgamal encrypted data")
+	ElgEncryptTooBig = oops.Errorf("failed to encrypt data, too big for elgamal")
 )
 
 // generate an elgamal key pair

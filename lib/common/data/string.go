@@ -1,8 +1,7 @@
 package data
 
 import (
-	"errors"
-
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -124,7 +123,7 @@ func ToI2PString(data string) (str I2PString, err error) {
 			"max_len":    STRING_MAX_SIZE,
 			"reason":     "too much data",
 		}).Error("cannot create I2P string")
-		err = errors.New("cannot store that much data in I2P string")
+		err = oops.Errorf("cannot store that much data in I2P string")
 		return
 	}
 	i2p_string := []byte{byte(data_len)}

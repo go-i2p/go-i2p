@@ -2,10 +2,9 @@ package noise
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"sync/atomic"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,7 +18,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 				"at":     "(NoiseSession) Write",
 				"reason": "session is closed",
 			}).Error("session is closed")
-			return 0, errors.New("session is closed")
+			return 0, oops.Errorf("session is closed")
 		}
 		if atomic.CompareAndSwapInt32(&c.activeCall, x, x+2) {
 			defer atomic.AddInt32(&c.activeCall, -2)
@@ -27,7 +26,7 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 		}
 		log.Debug("NoiseSession: Write - retrying atomic operation")
 	}
-	if !c.handshakeComplete {
+	if !c.HandshakeComplete() {
 		log.Debug("NoiseSession: Write - handshake not complete, running outgoing handshake")
 		if err := c.RunOutgoingHandshake(); err != nil {
 			log.WithError(err).Error("NoiseSession: Write - failed to run outgoing handshake")
@@ -36,9 +35,9 @@ func (c *NoiseSession) Write(b []byte) (int, error) {
 	}
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
-	if !c.handshakeComplete {
+	if !c.HandshakeComplete() {
 		log.Error("NoiseSession: Write - internal error, handshake still not complete")
-		return 0, errors.New("internal error")
+		return 0, oops.Errorf("internal error")
 	}
 	n, err := c.writePacketLocked(b)
 	if err != nil {
@@ -54,48 +53,33 @@ func (c *NoiseSession) encryptPacket(data []byte) (int, []byte, error) {
 
 	m := len(data)
 	if c.CipherState == nil {
-		log.Error("NoiseSession: encryptPacket - CipherState is nil")
-		return 0, nil, errors.New("CipherState is nil")
+		log.Error("NoiseSession: encryptPacket - writeState is nil")
+		return 0, nil, oops.Errorf("writeState is nil")
 	}
+
+	// Create length prefix first
+	lengthPrefix := make([]byte, 2)
+	binary.BigEndian.PutUint16(lengthPrefix, uint16(m))
 
 	// Encrypt the data
 	encryptedData, err := c.CipherState.Encrypt(nil, nil, data)
 	if err != nil {
 		log.WithError(err).Error("NoiseSession: encryptPacket - failed to encrypt data")
-		return 0, nil, fmt.Errorf("failed to encrypt: '%w'", err)
+		return 0, nil, oops.Errorf("failed to encrypt: %w", err)
 	}
-	// m := len(encryptedData)
 
-	lengthPrefix := make([]byte, 2)
-	binary.BigEndian.PutUint16(lengthPrefix, uint16(len(encryptedData)))
+	// Combine length prefix and encrypted data
+	packet := make([]byte, 0, len(lengthPrefix)+len(encryptedData))
+	packet = append(packet, lengthPrefix...)
+	packet = append(packet, encryptedData...)
 
-	// Append encr data to prefix
-	packet := append(lengthPrefix, encryptedData...)
 	log.WithFields(logrus.Fields{
 		"original_length":  m,
 		"encrypted_length": len(encryptedData),
 		"packet_length":    len(packet),
 	}).Debug("NoiseSession: encryptPacket - packet encrypted successfully")
+
 	return m, packet, nil
-	/*packet := c.InitializePacket()
-	maxPayloadSize := c.maxPayloadSizeForWrite(packet)
-	if m > int(maxPayloadSize) {
-		m = int(maxPayloadSize)
-	}
-	if c.CipherState != nil {
-		////fmt.Println("writing encrypted packet:", m)
-		packet.reserve(uint16Size + uint16Size + m + macSize)
-		packet.resize(uint16Size + uint16Size + m)
-		copy(packet.data[uint16Size+uint16Size:], data[:m])
-		binary.BigEndian.PutUint16(packet.data[uint16Size:], uint16(m))
-		//fmt.Println("encrypt size", uint16(m))
-	} else {
-		packet.resize(len(packet.data) + len(data))
-		copy(packet.data[uint16Size:len(packet.data)], data[:m])
-		binary.BigEndian.PutUint16(packet.data, uint16(len(data)))
-	}
-	b := c.encryptIfNeeded(packet)*/
-	//c.freeBlock(packet)
 }
 
 func (c *NoiseSession) writePacketLocked(data []byte) (int, error) {

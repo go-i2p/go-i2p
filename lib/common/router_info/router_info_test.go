@@ -3,9 +3,10 @@ package router_info
 import (
 	"bytes"
 	"crypto/rand"
-	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
@@ -59,7 +60,7 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 	copy(elg_pubkey[256-len(yBytes):], yBytes)
 
 	// Ensure that elg_pubkey implements crypto.PublicKey interface
-	var _ crypto.PublicKey = elg_pubkey
+	var _ crypto.RecievingPublicKey = elg_pubkey
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer

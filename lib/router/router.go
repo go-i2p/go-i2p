@@ -1,23 +1,38 @@
 package router
 
 import (
+	"crypto/sha256"
+	"strconv"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/go-i2p/lib/common/base32"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
+
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
 var log = logger.GetGoI2PLogger()
 
 // i2p router type
 type Router struct {
-	cfg       *config.RouterConfig
-	ndb       netdb.StdNetDB
+	// keystore for router info
+	*keys.RouterInfoKeystore
+	// multi-transport manager
+	*transport.TransportMuxer
+	// router configuration
+	cfg *config.RouterConfig
+	// netdb
+	ndb netdb.StdNetDB
+	// close channel
 	closeChnl chan bool
-	running   bool
+	// running flag
+	running bool
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -26,9 +41,65 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	r, err := FromConfig(cfg)
 	if err != nil {
 		log.WithError(err).Error("Failed to create router from configuration")
+		return nil, err
 	} else {
 		log.Debug("Router created successfully with provided configuration")
 	}
+	r.RouterInfoKeystore, err = keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
+	log.Debug("Working directory is:", cfg.WorkingDir)
+	if err != nil {
+		log.WithError(err).Error("Failed to create RouterInfoKeystore")
+		return nil, err
+	} else {
+		log.Debug("RouterInfoKeystore created successfully")
+		if err = r.RouterInfoKeystore.StoreKeys(); err != nil {
+			log.WithError(err).Error("Failed to store RouterInfoKeystore")
+			return nil, err
+		} else {
+			log.Debug("RouterInfoKeystore stored successfully")
+		}
+	}
+	pub, _, err := r.RouterInfoKeystore.GetKeys()
+	if err != nil {
+		log.WithError(err).Error("Failed to get keys from RouterInfoKeystore")
+		return nil, err
+	} else {
+		// sha256 hash of public key
+		pubHash := sha256.Sum256(pub.Bytes())
+		b32PubHash := base32.EncodeToString(pubHash[:])
+		log.Debug("Router public key hash:", b32PubHash)
+	}
+
+	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
+	if err != nil {
+		log.WithError(err).Error("Failed to construct RouterInfo")
+		return nil, err
+	} else {
+		log.Debug("RouterInfo constructed successfully")
+		log.Debug("RouterInfo:", ri)
+	}
+
+	// we have our keystore and our routerInfo,, so now let's set up transports
+	// add NTCP2 transport
+	ntcp2, err := ntcp.NewNTCP2Transport(ri)
+	if err != nil {
+		log.WithError(err).Error("Failed to create NTCP2 transport")
+		return nil, err
+	} else {
+		log.Debug("NTCP2 transport created successfully")
+	}
+	r.TransportMuxer = transport.Mux(ntcp2)
+	ntcpaddr, err := ntcp2.Address()
+	if err != nil {
+		log.WithError(err).Error("Failed to get NTCP2 address")
+		return nil, err
+	} else {
+		log.Debug("NTCP2 address:", ntcpaddr)
+	}
+	ri.AddAddress(ntcpaddr)
+
+	// create a transport address
+
 	return r, err
 }
 
@@ -89,7 +160,7 @@ func (r *Router) mainloop() {
 		log.WithError(err).Error("Failed to ensure NetDB")
 	}
 	if sz := r.ndb.Size(); sz >= 0 {
-		log.WithField("size", sz).Debug("NetDB Size")
+		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.Warn("Unable to determine NetDB size")
 	}

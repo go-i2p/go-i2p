@@ -2,12 +2,12 @@
 package lease_set
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/samber/oops"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
@@ -175,7 +175,7 @@ func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainde
 	fmt.Printf("Reading Destination from LeaseSet, input_length=%d\n", len(data))
 
 	if len(data) < 387 { // Minimum size of Destination (384 keys + 3 bytes for minimum certificate)
-		err = errors.New("LeaseSet data too short to contain Destination")
+		err = oops.Errorf("LeaseSet data too short to contain Destination")
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
@@ -199,7 +199,7 @@ func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainde
 	fmt.Printf("  destinationLength: %d\n", destinationLength)
 
 	if len(data) < destinationLength {
-		err = errors.New("LeaseSet data too short to contain full Destination")
+		err = oops.Errorf("LeaseSet data too short to contain full Destination")
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
@@ -208,7 +208,7 @@ func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainde
 
 	keysAndCert, _, err := ReadKeysAndCert(destinationData)
 	if err != nil {
-		fmt.Printf("Failed to read KeysAndCert: %v\n", err) //32 / 0 error
+		fmt.Printf("Failed to read KeysAndCert: %v\n", err) // 32 / 0 error
 		return
 	}
 
@@ -237,7 +237,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 			"required_len": LEASE_SET_PUBKEY_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing public key")
-		err = errors.New("error parsing public key: not enough data")
+		err = oops.Errorf("error parsing public key: not enough data")
 		copy(public_key[:], remainder)
 		return
 	}
@@ -270,7 +270,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 			"required_len": offset + LEASE_SET_SPK_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing signing public key")
-		err = errors.New("error parsing signing public key: not enough data")
+		err = oops.Errorf("error parsing signing public key: not enough data")
 		return
 	}
 	if cert_len == 0 {
@@ -328,7 +328,7 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 			"required_len": LEASE_SET_PUBKEY_SIZE + LEASE_SET_SPK_SIZE + 1,
 			"reason":       "not enough data",
 		}).Error("error parsing lease count")
-		err = errors.New("error parsing lease count: not enough data")
+		err = oops.Errorf("error parsing lease count: not enough data")
 		return
 	}
 	c := Integer([]byte{remainder[LEASE_SET_PUBKEY_SIZE+LEASE_SET_SPK_SIZE]})
@@ -339,7 +339,7 @@ func (lease_set LeaseSet) LeaseCount() (count int, err error) {
 			"lease_count": count,
 			"reason":      "more than 16 leases",
 		}).Warn("invalid lease set")
-		err = errors.New("invalid lease set: more than 16 leases")
+		err = oops.Errorf("invalid lease set: more than 16 leases")
 	} else {
 		log.WithField("lease_count", count).Debug("Retrieved LeaseCount from LeaseSet")
 	}
@@ -372,7 +372,7 @@ func (lease_set LeaseSet) Leases() (leases []Lease, err error) {
 				"required_len": end,
 				"reason":       "some leases missing",
 			}).Error("error parsnig lease set")
-			err = errors.New("error parsing lease set: some leases missing")
+			err = oops.Errorf("error parsing lease set: some leases missing")
 			return
 		}
 		var lease Lease
@@ -422,7 +422,7 @@ func (lease_set LeaseSet) Signature() (signature signature.Signature, err error)
 			"required_len": end,
 			"reason":       "not enough data",
 		}).Error("error parsing signatre")
-		err = errors.New("error parsing signature: not enough data")
+		err = oops.Errorf("error parsing signature: not enough data")
 		return
 	}
 	signature = []byte(lease_set[start:end])
@@ -492,7 +492,7 @@ func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error) {
 
 func NewLeaseSet(
 	destination Destination,
-	encryptionKey crypto.PublicKey,
+	encryptionKey crypto.RecievingPublicKey,
 	signingKey crypto.SigningPublicKey,
 	leases []Lease,
 	signingPrivateKey crypto.SigningPrivateKey,
@@ -500,15 +500,15 @@ func NewLeaseSet(
 	log.Debug("Creating new LeaseSet")
 	// Validate destination size
 	if len(destination.KeysAndCert.Bytes()) < 387 {
-		return nil, errors.New("invalid destination: minimum size is 387 bytes")
+		return nil, oops.Errorf("invalid destination: minimum size is 387 bytes")
 	}
 	// Validate encryption key size
 	if len(encryptionKey.Bytes()) != LEASE_SET_PUBKEY_SIZE {
-		return nil, errors.New("invalid encryption key size")
+		return nil, oops.Errorf("invalid encryption key size")
 	}
 	// Validate inputs
 	if len(leases) > 16 {
-		return nil, errors.New("invalid lease set: more than 16 leases")
+		return nil, oops.Errorf("invalid lease set: more than 16 leases")
 	}
 	// Validate signing key size matches certificate
 	cert := destination.Certificate()
@@ -520,13 +520,13 @@ func NewLeaseSet(
 		}
 		expectedSize := keyCert.SignatureSize()
 		if len(signingKey.Bytes()) != expectedSize {
-			return nil, fmt.Errorf("invalid signing key size: got %d, expected %d",
+			return nil, oops.Errorf("invalid signing key size: got %d, expected %d",
 				len(signingKey.Bytes()), expectedSize)
 		}
 	} else {
 		// Default DSA size
 		if len(signingKey.Bytes()) != LEASE_SET_SPK_SIZE {
-			return nil, errors.New("invalid signing key size")
+			return nil, oops.Errorf("invalid signing key size")
 		}
 	}
 	// Build LeaseSet data

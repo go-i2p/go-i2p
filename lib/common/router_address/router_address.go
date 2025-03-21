@@ -3,14 +3,13 @@ package router_address
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
@@ -180,6 +179,16 @@ func (router_address RouterAddress) GetOption(key I2PString) I2PString {
 	return router_address.Options().Values().Get(key)
 }
 
+func (router_address RouterAddress) HasOption(key I2PString) bool {
+	opt := router_address.GetOption(key)
+	return opt != nil
+}
+
+func (router_address RouterAddress) CheckOption(key string) bool {
+	keyv, _ := ToI2PString(key)
+	return router_address.HasOption(keyv)
+}
+
 func (router_address RouterAddress) HostString() I2PString {
 	host, _ := ToI2PString("host")
 	return router_address.GetOption(host)
@@ -251,7 +260,7 @@ func (router_address RouterAddress) Host() (net.Addr, error) {
 	ip := net.ParseIP(hostBytes)
 	if ip == nil {
 		log.Error("Failed to parse IP address")
-		return nil, fmt.Errorf("null host error")
+		return nil, oops.Errorf("null host error")
 	}
 	// return net.ResolveIPAddr("", ip.String())
 	addr, err := net.ResolveIPAddr("", ip.String())
@@ -285,17 +294,17 @@ func (router_address RouterAddress) Port() (string, error) {
 func (router_address RouterAddress) StaticKey() ([32]byte, error) {
 	sk := router_address.StaticKeyString()
 	if len([]byte(sk)) != 32 {
-		return [32]byte{}, fmt.Errorf("error: invalid static key")
+		return [32]byte{}, oops.Errorf("error: invalid static key")
 	}
 	return [32]byte(sk), nil
 }
 
-func (router_address RouterAddress) InitializationVector() ([32]byte, error) {
+func (router_address RouterAddress) InitializationVector() ([16]byte, error) {
 	iv := router_address.InitializationVectorString()
-	if len([]byte(iv)) != 32 {
-		return [32]byte{}, fmt.Errorf("error: invalid static key")
+	if len([]byte(iv)) != 16 {
+		return [16]byte{}, oops.Errorf("error: invalid IV")
 	}
-	return [32]byte(iv), nil
+	return [16]byte(iv), nil
 }
 
 func (router_address RouterAddress) ProtocolVersion() (string, error) {
@@ -319,7 +328,7 @@ func ReadRouterAddress(data []byte) (router_address RouterAddress, remainder []b
 	log.WithField("data_length", len(data)).Debug("Reading RouterAddress from data")
 	if len(data) == 0 {
 		log.WithField("at", "(RouterAddress) ReadRouterAddress").Error("error parsing RouterAddress: no data")
-		err = errors.New("error parsing RouterAddress: no data")
+		err = oops.Errorf("error parsing RouterAddress: no data")
 		return
 	}
 	router_address.TransportCost, remainder, err = NewInteger(data, 1)

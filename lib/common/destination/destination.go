@@ -4,7 +4,7 @@ package destination
 import (
 	"strings"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
@@ -31,7 +31,7 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#destination
 type Destination struct {
-	KeysAndCert
+	*KeysAndCert
 }
 
 // Base32Address returns the I2P base32 address for this Destination.

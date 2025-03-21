@@ -5,19 +5,19 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 )
 
 func (ns *NoiseSession) testEncryptPacket(plaintext []byte) (int, []byte, error) {
 	if ns.CipherState == nil {
-		return 0, nil, fmt.Errorf("CipherState is nil")
+		return 0, nil, oops.Errorf("CipherState is nil")
 	}
 
 	// Encrypt the data
@@ -37,18 +37,18 @@ func (ns *NoiseSession) testEncryptPacket(plaintext []byte) (int, []byte, error)
 
 func (ns *NoiseSession) testPacketDeux(packet []byte) (int, []byte, error) {
 	if ns.CipherState == nil {
-		return 0, nil, fmt.Errorf("CipherState is nil")
+		return 0, nil, oops.Errorf("CipherState is nil")
 	}
 
 	if len(packet) < 2 {
-		return 0, nil, fmt.Errorf("Packet too short to contain length prefix")
+		return 0, nil, oops.Errorf("Packet too short to contain length prefix")
 	}
 
 	// Extract the length prefix
 	packetLength := binary.BigEndian.Uint16(packet[:2])
 
 	if len(packet[2:]) < int(packetLength) {
-		return 0, nil, fmt.Errorf("Packet data is shorter than indicated length")
+		return 0, nil, oops.Errorf("Packet data is shorter than indicated length")
 	}
 
 	ciphertext := packet[2 : 2+packetLength]

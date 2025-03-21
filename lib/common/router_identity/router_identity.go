@@ -7,7 +7,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 	"github.com/go-i2p/go-i2p/lib/crypto"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,13 +28,13 @@ Identical to KeysAndCert.
 //
 // https://geti2p.net/spec/common-structures#routeridentity
 type RouterIdentity struct {
-	KeysAndCert
+	*KeysAndCert
 }
 
 // ReadRouterIdentity returns RouterIdentity from a []byte.
 // The remaining bytes after the specified length are also returned.
 // Returns a list of errors that occurred during parsing.
-func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder []byte, err error) {
+func ReadRouterIdentity(data []byte) (router_identity *RouterIdentity, remainder []byte, err error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading RouterIdentity from data")
@@ -43,7 +43,7 @@ func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder 
 		log.WithError(err).Error("Failed to read KeysAndCert for RouterIdentity")
 		return
 	}
-	router_identity = RouterIdentity{
+	router_identity = &RouterIdentity{
 		keys_and_cert,
 	}
 	log.WithFields(logrus.Fields{
@@ -52,7 +52,7 @@ func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder 
 	return
 }
 
-func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error) {
+func NewRouterIdentity(publicKey crypto.RecievingPublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error) {
 	log.Debug("Creating new RouterIdentity")
 
 	// Step 1: Create keyCertificate from the provided certificate.
@@ -72,7 +72,7 @@ func NewRouterIdentity(publicKey crypto.PublicKey, signingPublicKey crypto.Signi
 
 	// Step 3: Initialize RouterIdentity with KeysAndCert.
 	routerIdentity := RouterIdentity{
-		KeysAndCert: *keysAndCert,
+		KeysAndCert: keysAndCert,
 	}
 
 	log.WithFields(logrus.Fields{

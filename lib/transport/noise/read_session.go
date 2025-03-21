@@ -1,9 +1,10 @@
 package noise
 
 import (
-	"errors"
+	"encoding/binary"
 	"sync/atomic"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,7 +18,7 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 				"at":     "(NoiseSession) Read",
 				"reason": "session is closed",
 			}).Error("session is closed")
-			return 0, errors.New("session is closed")
+			return 0, oops.Errorf("session is closed")
 		}
 		if atomic.CompareAndSwapInt32(&c.activeCall, x, x+2) {
 			defer atomic.AddInt32(&c.activeCall, -2)
@@ -25,7 +26,7 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 		}
 		log.Debug("NoiseSession Read: retrying atomic operation")
 	}
-	if !c.handshakeComplete {
+	if !c.HandshakeComplete() {
 		log.Debug("NoiseSession Read: handshake not complete, running incoming handshake")
 		if err := c.RunIncomingHandshake(); err != nil {
 			log.WithError(err).Error("NoiseSession Read: failed to run incoming handshake")
@@ -34,9 +35,9 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 	}
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
-	if !c.handshakeComplete {
+	if !c.HandshakeComplete() {
 		log.Error("NoiseSession Read: internal error - handshake still not complete after running")
-		return 0, errors.New("internal error")
+		return 0, oops.Errorf("internal error")
 	}
 	n, err := c.readPacketLocked(b)
 	if err != nil {
@@ -48,47 +49,46 @@ func (c *NoiseSession) Read(b []byte) (int, error) {
 }
 
 func (c *NoiseSession) decryptPacket(data []byte) (int, []byte, error) {
-	log.WithField("data_length", len(data)).Debug("Starting packet decryption")
+	log.WithField("data_length", len(data)).Debug("NoiseSession: Starting packet decryption")
 
 	if c.CipherState == nil {
-		log.Error("Packet decryption: CipherState is nil")
-		return 0, nil, errors.New("CipherState is nil")
+		log.Error("NoiseSession: decryptPacket - readState is nil")
+		return 0, nil, oops.Errorf("readState is nil")
 	}
-	// Decrypt
-	decryptedData, err := c.CipherState.Decrypt(nil, nil, data)
+
+	if len(data) < 2 {
+		log.Error("NoiseSession: decryptPacket - packet too short")
+		return 0, nil, oops.Errorf("packet too short")
+	}
+
+	// Extract payload length from prefix
+	payloadLen := binary.BigEndian.Uint16(data[:2])
+	if len(data[2:]) < int(payloadLen) {
+		log.Error("NoiseSession: decryptPacket - incomplete packet")
+		return 0, nil, oops.Errorf("incomplete packet")
+	}
+
+	// Decrypt payload
+	decryptedData, err := c.CipherState.Decrypt(nil, nil, data[2:2+payloadLen])
 	if err != nil {
-		log.WithError(err).Error("Packet decryption: failed to decrypt data")
-		return 0, nil, err
+		log.WithError(err).Error("NoiseSession: decryptPacket - failed to decrypt data")
+		return 0, nil, oops.Errorf("failed to decrypt: %w", err)
 	}
+
 	m := len(decryptedData)
-	log.WithField("decrypted_length", m).Debug("Packet decryption: successfully decrypted data")
+	log.WithFields(logrus.Fields{
+		"encrypted_length": payloadLen,
+		"decrypted_length": m,
+	}).Debug("NoiseSession: decryptPacket - packet decrypted successfully")
+
 	return m, decryptedData, nil
-	/*packet := c.InitializePacket()
-	maxPayloadSize := c.maxPayloadSizeForRead(packet)
-	if m > int(maxPayloadSize) {
-		m = int(maxPayloadSize)
-	}
-	if c.CipherState != nil {
-		////fmt.Println("writing encrypted packet:", m)
-		packet.reserve(uint16Size + uint16Size + m + macSize)
-		packet.resize(uint16Size + uint16Size + m)
-		copy(packet.data[uint16Size+uint16Size:], data[:m])
-		binary.BigEndian.PutUint16(packet.data[uint16Size:], uint16(m))
-		//fmt.Println("encrypt size", uint16(m))
-	} else {
-		packet.resize(len(packet.data) + len(data))
-		copy(packet.data[uint16Size:len(packet.data)], data[:m])
-		binary.BigEndian.PutUint16(packet.data, uint16(len(data)))
-	}
-	b := c.encryptIfNeeded(packet)*/
-	//c.freeBlock(packet)
 }
 
 func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {
 	log.WithField("data_length", len(data)).Debug("Starting readPacketLocked")
 
 	var n int
-	if len(data) == 0 { // special case to answer when everything is ok during handshake
+	if len(data) == 0 { // Handle special case where data length is zero during handshake
 		log.Debug("readPacketLocked: special case - reading 2 bytes during handshake")
 		if _, err := c.Conn.Read(make([]byte, 2)); err != nil {
 			log.WithError(err).Error("readPacketLocked: failed to read 2 bytes during handshake")
@@ -96,26 +96,18 @@ func (c *NoiseSession) readPacketLocked(data []byte) (int, error) {
 		}
 	}
 	for len(data) > 0 {
-		m, b, err := c.encryptPacket(data)
+		_, b, err := c.decryptPacket(data)
 		if err != nil {
 			log.WithError(err).Error("readPacketLocked: failed to encrypt packet")
 			return 0, err
 		}
-		/*
-			if n, err := c.Conn.Read(b); err != nil {
-				return n, err
-			} else {
-				n += m
-				data = data[m:]
-			}
-		*/
-		n, err := c.Conn.Read(b)
+		bytesRead, err := c.Conn.Read(b)
 		if err != nil {
-			log.WithError(err).WithField("bytes_read (aka n)", n).Error("readPacketLocked: failed to read from connection")
-			return n, err
+			log.WithError(err).WithField("bytes_read", bytesRead).Error("readPacketLocked: failed to read from connection")
+			return bytesRead, err
 		}
-		n += m
-		data = data[m:]
+		n += bytesRead
+		data = data[bytesRead:]
 		log.WithFields(logrus.Fields{
 			"bytes_read":     n,
 			"remaining_data": len(data),

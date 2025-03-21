@@ -3,17 +3,16 @@ package router_info
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/data"
@@ -115,7 +114,7 @@ signature :: Signature
 //
 // https://geti2p.net/spec/common-structures#routerinfo
 type RouterInfo struct {
-	router_identity RouterIdentity
+	router_identity *RouterIdentity
 	published       *Date
 	size            *Integer
 	addresses       []*RouterAddress
@@ -170,7 +169,7 @@ func (router_info RouterInfo) String() string {
 
 // RouterIdentity returns the router identity as *RouterIdentity.
 func (router_info *RouterInfo) RouterIdentity() *RouterIdentity {
-	return &router_info.router_identity
+	return router_info.router_identity
 }
 
 // IndentHash returns the identity hash (sha256 sum) for this RouterInfo.
@@ -222,6 +221,10 @@ func (router_info RouterInfo) Signature() (signature Signature) {
 // Network implements net.Addr
 func (router_info RouterInfo) Network() string {
 	return "i2p"
+}
+
+func (router_info *RouterInfo) AddAddress(address *RouterAddress) {
+	router_info.addresses = append(router_info.addresses, address)
 }
 
 // ReadRouterInfo returns RouterInfo from a []byte.
@@ -302,7 +305,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 	sigType, err := certificate.GetSignatureTypeFromCertificate(cert)
 	if err != nil {
 		log.WithError(err).Error("Failed to get signature type from certificate")
-		return RouterInfo{}, remainder, fmt.Errorf("certificate signature type error: %v", err)
+		return RouterInfo{}, remainder, oops.Errorf("certificate signature type error: %v", err)
 	}
 
 	// Enhanced signature type validation
@@ -311,7 +314,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			"sigType": sigType,
 			"cert":    cert,
 		}).Error("Invalid signature type detected")
-		return RouterInfo{}, remainder, fmt.Errorf("invalid signature type: %d", sigType)
+		return RouterInfo{}, remainder, oops.Errorf("invalid signature type: %d", sigType)
 	}
 
 	log.WithFields(logrus.Fields{
@@ -325,7 +328,7 @@ func ReadRouterInfo(bytes []byte) (info RouterInfo, remainder []byte, err error)
 			//"required_len": MAPPING_SIZE,
 			"reason": "not enough data",
 		}).Error("error parsing router info")
-		err = errors.New("error parsing router info: not enough data to read signature")
+		err = oops.Errorf("error parsing router info: not enough data to read signature")
 	}
 
 	log.WithFields(logrus.Fields{
@@ -407,7 +410,7 @@ func NewRouterInfo(
 
 	// 5. Assemble RouterInfo without signature
 	routerInfo := &RouterInfo{
-		router_identity: *routerIdentity,
+		router_identity: routerIdentity,
 		published:       &publishedDate,
 		size:            sizeInt,
 		addresses:       addresses,

@@ -3,7 +3,6 @@ package transport
 import (
 	"net"
 
-	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -37,7 +36,7 @@ type Transport interface {
 	// will bind if the underlying socket is not already
 	// if the underlying socket is already bound update the RouterIdentity
 	// returns any errors that happen if they do
-	SetIdentity(ident router_identity.RouterIdentity) error
+	SetIdentity(ident router_info.RouterInfo) error
 
 	// Obtain a transport session with a router given its RouterInfo.
 	// If a session with this router is NOT already made attempt to create one and block until made or until an error happens

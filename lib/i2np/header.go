@@ -1,9 +1,9 @@
 package i2np
 
 import (
-	"errors"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	datalib "github.com/go-i2p/go-i2p/lib/common/data"
@@ -90,7 +90,7 @@ type I2NPSSUHeader struct {
 	Expiration time.Time
 }
 
-var ERR_I2NP_NOT_ENOUGH_DATA = errors.New("not enough i2np header data")
+var ERR_I2NP_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np header data")
 
 // Read an entire I2NP message and return the parsed header
 // with embedded encrypted data

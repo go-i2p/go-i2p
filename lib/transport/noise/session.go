@@ -1,7 +1,6 @@
 package noise
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -10,17 +9,19 @@ import (
 
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/transport/handshake"
 )
 
 type NoiseSession struct {
 	router_info.RouterInfo
 	*noise.CipherState
 	*sync.Cond
-	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer whith whom we established the session
-	*HandshakeState
+	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
+	handshake.HandshakeState
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
 	VerifyCallback VerifyCallbackFunc
@@ -90,6 +91,33 @@ func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
 	return err
 }
 
+// PeerStaticKey is equal to the NTCP2 peer's static public key, found in their router info
+func (s *NoiseSession) peerStaticKey() ([32]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			return addr.StaticKey()
+		}
+	}
+	return [32]byte{}, oops.Errorf("Remote static key error")
+}
+
+func (s *NoiseSession) peerStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, oops.Errorf("Remote static IV error")
+}
+
 // newBlock allocates a new packet, from hc's free list if possible.
 func newBlock() []byte {
 	// return make([]byte, MaxPayloadSize)
@@ -120,5 +148,13 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 		return session, nil
 	}
 	log.Error("Failed to create NoiseTransportSession, all addresses failed")
-	return nil, fmt.Errorf("Transport constructor error")
+	return nil, oops.Errorf("Transport constructor error")
+}
+
+func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error) {
+	ns, err := NewNoiseTransportSession(ri)
+	if err != nil {
+		return nil, err
+	}
+	return ns.(*NoiseSession), err
 }

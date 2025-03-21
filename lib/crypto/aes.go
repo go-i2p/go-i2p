@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"fmt"
 
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
 
@@ -61,7 +61,7 @@ func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
 
 	if len(data)%aes.BlockSize != 0 {
 		log.Error("Ciphertext is not a multiple of the block size")
-		return nil, fmt.Errorf("ciphertext is not a multiple of the block size")
+		return nil, oops.Errorf("ciphertext is not a multiple of the block size")
 	}
 
 	plaintext := make([]byte, len(data))
@@ -120,18 +120,18 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 	length := len(data)
 	if length == 0 {
 		log.Error("Data is empty")
-		return nil, fmt.Errorf("data is empty")
+		return nil, oops.Errorf("data is empty")
 	}
 	padding := int(data[length-1])
 	if padding == 0 || padding > aes.BlockSize {
 		log.WithField("padding", padding).Error("Invalid padding")
-		return nil, fmt.Errorf("invalid padding")
+		return nil, oops.Errorf("invalid padding")
 	}
 	paddingStart := length - padding
 	for i := paddingStart; i < length; i++ {
 		if data[i] != byte(padding) {
 			log.Error("Invalid padding")
-			return nil, fmt.Errorf("invalid padding")
+			return nil, oops.Errorf("invalid padding")
 		}
 	}
 
@@ -143,7 +143,7 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 // EncryptNoPadding encrypts data using AES-CBC without padding
 func (e *AESSymmetricEncrypter) EncryptNoPadding(data []byte) ([]byte, error) {
 	if len(data)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("data length must be a multiple of block size")
+		return nil, oops.Errorf("data length must be a multiple of block size")
 	}
 
 	block, err := aes.NewCipher(e.Key)
@@ -161,7 +161,7 @@ func (e *AESSymmetricEncrypter) EncryptNoPadding(data []byte) ([]byte, error) {
 // DecryptNoPadding decrypts data using AES-CBC without padding
 func (d *AESSymmetricDecrypter) DecryptNoPadding(data []byte) ([]byte, error) {
 	if len(data)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("data length must be a multiple of block size")
+		return nil, oops.Errorf("data length must be a multiple of block size")
 	}
 
 	block, err := aes.NewCipher(d.Key)

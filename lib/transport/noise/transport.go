@@ -7,30 +7,52 @@ package noise
 **/
 
 import (
-	"errors"
 	"net"
 	"sync"
 
+	"github.com/flynn/noise"
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 )
 
+const NOISE_PROTOCOL_NAME = "NOISE"
+
 type NoiseTransport struct {
 	sync.Mutex
-	router_identity.RouterIdentity
-	Listener        net.Listener
-	peerConnections map[data.Hash]transport.TransportSession
+	router_info.RouterInfo
+	transportStyle string
+	Listener       net.Listener
+	// peerConnections map[data.Hash]transport.TransportSession
+	peerConnections map[data.Hash]*NoiseSession
 }
 
 func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) bool {
-	// TODO implement
-	// panic("implement me")
-	log.Warn("func (noopt *NoiseTransport) Compatible(routerInfo router_info.RouterInfo) is not implemented!")
-	return true
+	// Check if we have an existing session with this router
+	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
+	if ok {
+		return true
+	}
+
+	// Check router addresses for Noise protocol support
+	for _, addr := range routerInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+
+		// Check for Noise protocol support
+		if transportStyle == NOISE_PROTOCOL_NAME {
+			// A router is compatible if it has a static key
+			if addr.CheckOption("s") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var exampleNoiseTransport transport.Transport = &NoiseTransport{}
@@ -71,15 +93,15 @@ func (noopt *NoiseTransport) Name() string {
 // will bind if the underlying socket is not already
 // if the underlying socket is already bound update the RouterIdentity
 // returns any errors that happen if they do
-func (noopt *NoiseTransport) SetIdentity(ident router_identity.RouterIdentity) (err error) {
+func (noopt *NoiseTransport) SetIdentity(ident router_info.RouterInfo) (err error) {
 	log.WithField("identity", ident).Debug("NoiseTransport: Setting identity")
-	noopt.RouterIdentity = ident
+	noopt.RouterInfo = ident
 	if noopt.Listener == nil {
 		log.WithFields(logrus.Fields{
 			"at":     "(NoiseTransport) SetIdentity",
 			"reason": "network socket is null",
 		}).Error("network socket is null")
-		err = errors.New("network socket is null")
+		err = oops.Errorf("network socket is null")
 		return
 	}
 	log.Debug("NoiseTransport: Identity set successfully")
@@ -95,7 +117,7 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	log.WithField("hash", hash).Debug("NoiseTransport: Getting session")
 	if len(hash) == 0 {
 		log.Error("NoiseTransport: RouterInfo has no IdentityHash")
-		return nil, errors.New("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
+		return nil, oops.Errorf("NoiseTransport: GetSession: RouterInfo has no IdentityHash")
 	}
 	if t, ok := noopt.peerConnections[hash]; ok {
 		log.Debug("NoiseTransport: Existing session found")
@@ -103,7 +125,7 @@ func (noopt *NoiseTransport) GetSession(routerInfo router_info.RouterInfo) (tran
 	}
 	log.Debug("NoiseTransport: Creating new session")
 	var err error
-	if noopt.peerConnections[hash], err = NewNoiseTransportSession(routerInfo); err != nil {
+	if noopt.peerConnections[hash], err = NewNoiseSession(routerInfo); err != nil {
 		log.WithError(err).Error("NoiseTransport: Failed to create new session")
 		return noopt.peerConnections[hash], err
 	}
@@ -119,7 +141,7 @@ func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transpor
 		return nil, err
 	}
 	for {
-		if session.(*NoiseSession).handshakeComplete {
+		if session.(*NoiseSession).HandshakeComplete() {
 			log.Debug("NoiseTransport: Handshake complete")
 			return nil, nil
 		}
@@ -156,8 +178,9 @@ func (noopt *NoiseTransport) Close() error {
 func NewNoiseTransport(netSocket net.Listener) *NoiseTransport {
 	log.WithField("listener_addr", netSocket.Addr().String()).Debug("Creating new NoiseTransport")
 	return &NoiseTransport{
-		peerConnections: make(map[data.Hash]transport.TransportSession),
+		peerConnections: make(map[data.Hash]*NoiseSession),
 		Listener:        netSocket,
+		transportStyle:  NOISE_PROTOCOL_NAME,
 	}
 }
 
@@ -174,4 +197,36 @@ func NewNoiseTransportSocket() (*NoiseTransport, error) {
 	_transport := NewNoiseTransport(netSocket)
 	log.WithField("addr", netSocket.Addr().String()).Debug("Created new NoiseTransportSocket")
 	return _transport, nil
+}
+
+// LocalStaticKey is equal to the NTCP2 static public key, found in our router info
+func (s *NoiseTransport) localStaticKey() ([32]byte, error) {
+	// s.RouterIdentity
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == s.transportStyle {
+			return addr.StaticKey()
+		}
+	}
+	return [32]byte{}, oops.Errorf("Remote static key error")
+}
+
+func (s *NoiseTransport) localStaticIV() ([16]byte, error) {
+	for _, addr := range s.RouterInfo.RouterAddresses() {
+		transportStyle, err := addr.TransportStyle().Data()
+		if err != nil {
+			continue
+		}
+		if transportStyle == s.transportStyle {
+			return addr.InitializationVector()
+		}
+	}
+	return [16]byte{}, oops.Errorf("Remote static IV error")
+}
+
+func (h *NoiseTransport) HandshakeKey() *noise.DHKey {
+	return nil
 }

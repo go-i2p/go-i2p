@@ -9,3 +9,6 @@ go-i2p
 .idea/
 router.info
 log
+*.gv
+diff
+err

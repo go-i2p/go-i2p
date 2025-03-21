@@ -2,6 +2,7 @@ package keys_and_cert
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
 
@@ -32,8 +33,15 @@ func TestCertificateWithMissingData(t *testing.T) {
 // createValidKeyCertificate creates a valid KeyCertificate for testing.
 func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Generate signing key pair (Ed25519)
-	var ed25519_privkey crypto.Ed25519PrivateKey
-	_, err := (&ed25519_privkey).Generate()
+	//var ed25519_privkey crypto.Ed25519PrivateKey
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate Ed25519 private %s", err)
+	}
+	// Copy the full private key (includes public key)
+	ed25519_privkey := make(crypto.Ed25519PrivateKey, ed25519.PrivateKeySize)
+	copy(ed25519_privkey, priv)
+	//_, err = (ed25519_privkey).Generate()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
@@ -103,7 +111,7 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 		t.Fatal(err)
 	}
 
-	t.Logf("pubkey bytes after NewKeysAndCert: %v\n", keysAndCert.signingPublicKey.Bytes())
+	t.Logf("pubkey bytes after NewKeysAndCert: %v\n", keysAndCert.SigningPublic.Bytes())
 
 	return keysAndCert
 }
@@ -122,9 +130,9 @@ func TestCertificateWithValidDataElgAndEd25519(t *testing.T) {
 
 	// Compare individual fields
 	assert.Equal(keysAndCert.KeyCertificate.Bytes(), parsedKeysAndCert.KeyCertificate.Bytes(), "KeyCertificates should match")
-	assert.Equal(keysAndCert.publicKey.Bytes(), parsedKeysAndCert.publicKey.Bytes(), "PublicKeys should match")
+	assert.Equal(keysAndCert.ReceivingPublic.Bytes(), parsedKeysAndCert.ReceivingPublic.Bytes(), "PublicKeys should match")
 	assert.Equal(keysAndCert.Padding, parsedKeysAndCert.Padding, "Padding should match")
-	assert.Equal(keysAndCert.signingPublicKey.Bytes(), parsedKeysAndCert.signingPublicKey.Bytes(), "SigningPublicKeys should match")
+	assert.Equal(keysAndCert.SigningPublic.Bytes(), parsedKeysAndCert.SigningPublic.Bytes(), "SigningPublicKeys should match")
 }
 
 func TestCertificateWithValidDataManual(t *testing.T) {

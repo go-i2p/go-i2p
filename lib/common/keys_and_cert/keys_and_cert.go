@@ -2,10 +2,8 @@
 package keys_and_cert
 
 import (
-	"errors"
-	"fmt"
-
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
@@ -79,38 +77,59 @@ total length: 387+ bytes
 //
 // https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
-	KeyCertificate   *KeyCertificate
-	publicKey        crypto.PublicKey
-	Padding          []byte
-	signingPublicKey crypto.SigningPublicKey
+	KeyCertificate  *KeyCertificate
+	ReceivingPublic crypto.RecievingPublicKey
+	Padding         []byte
+	SigningPublic   crypto.SigningPublicKey
 }
 
 // Bytes returns the entire keyCertificate in []byte form, trims payload to specified length.
 func (keys_and_cert KeysAndCert) Bytes() []byte {
-	bytes := keys_and_cert.publicKey.Bytes()
-	bytes = append(bytes, keys_and_cert.Padding...)
-	bytes = append(bytes, keys_and_cert.signingPublicKey.Bytes()...)
-	bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
+	bytes := []byte{}
+	rpublen := 0
+	if keys_and_cert.ReceivingPublic != nil {
+		bytes = append(bytes, keys_and_cert.ReceivingPublic.Bytes()...)
+		rpublen = len(keys_and_cert.ReceivingPublic.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.ReceivingPublic.Bytes()...)
+	padlen := 0
+	if keys_and_cert.Padding != nil {
+		bytes = append(bytes, keys_and_cert.Padding...)
+		padlen = len(keys_and_cert.Padding)
+	}
+	// bytes = append(bytes, keys_and_cert.Padding...)
+	spublen := 0
+	if keys_and_cert.SigningPublic != nil {
+		bytes = append(bytes, keys_and_cert.SigningPublic.Bytes()...)
+		spublen = len(keys_and_cert.SigningPublic.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.SigningPublic.Bytes()...)
+	certlen := 0
+	if keys_and_cert.KeyCertificate != nil {
+		bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
+		certlen = len(keys_and_cert.KeyCertificate.Bytes())
+	}
+	// bytes = append(bytes, keys_and_cert.KeyCertificate.Bytes()...)
 	log.WithFields(logrus.Fields{
 		"bytes":                bytes,
 		"padding":              keys_and_cert.Padding,
 		"bytes_length":         len(bytes),
-		"pk_bytes_length":      len(keys_and_cert.publicKey.Bytes()),
-		"padding_bytes_length": len(keys_and_cert.Padding),
-		"spk_bytes_length":     len(keys_and_cert.signingPublicKey.Bytes()),
-		"cert_bytes_length":    len(keys_and_cert.KeyCertificate.Bytes()),
+		"pk_bytes_length":      rpublen,
+		"padding_bytes_length": padlen,
+		"spk_bytes_length":     spublen,
+		"cert_bytes_length":    certlen,
 	}).Debug("Retrieved bytes from KeysAndCert")
 	return bytes
 }
 
 // publicKey returns the public key as a crypto.publicKey.
-func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.PublicKey) {
-	return keys_and_cert.publicKey
+func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.RecievingPublicKey) {
+	return keys_and_cert.ReceivingPublic
 }
 
 // signingPublicKey returns the signing public key.
 func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey) {
-	return keys_and_cert.signingPublicKey
+	return keys_and_cert.SigningPublic
 }
 
 // Certfificate returns the certificate.
@@ -120,10 +139,13 @@ func (keys_and_cert *KeysAndCert) Certificate() (cert Certificate) {
 
 // ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 // Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
-func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error) {
+func ReadKeysAndCert(data []byte) (*KeysAndCert, []byte, error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Reading KeysAndCert from data")
+	var err error
+	var remainder []byte
+	var keys_and_cert KeysAndCert
 
 	data_len := len(data)
 	if data_len < KEYS_AND_CERT_MIN_SIZE {
@@ -133,14 +155,14 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 			"required_len": KEYS_AND_CERT_MIN_SIZE,
 			"reason":       "not enough data",
 		}).Error("error parsing keys and cert")
-		err = errors.New("error parsing KeysAndCert: data is smaller than minimum valid size")
-		return
+		err = oops.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size")
+		return &keys_and_cert, remainder, err
 	}
 
 	keys_and_cert.KeyCertificate, remainder, err = NewKeyCertificate(data[KEYS_AND_CERT_DATA_SIZE:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create keyCertificate")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	// Get the actual key sizes from the certificate
@@ -148,10 +170,10 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	sigKeySize := keys_and_cert.KeyCertificate.SignatureSize()
 
 	// Construct public key
-	keys_and_cert.publicKey, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:pubKeySize])
+	keys_and_cert.ReceivingPublic, err = keys_and_cert.KeyCertificate.ConstructPublicKey(data[:pubKeySize])
 	if err != nil {
 		log.WithError(err).Error("Failed to construct publicKey")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	// Calculate padding size and extract padding
@@ -162,12 +184,12 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 	}
 
 	// Construct signing public key
-	keys_and_cert.signingPublicKey, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(
+	keys_and_cert.SigningPublic, err = keys_and_cert.KeyCertificate.ConstructSigningPublicKey(
 		data[KEYS_AND_CERT_DATA_SIZE-sigKeySize : KEYS_AND_CERT_DATA_SIZE],
 	)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct signingPublicKey")
-		return
+		return &keys_and_cert, remainder, err
 	}
 
 	log.WithFields(logrus.Fields{
@@ -177,7 +199,7 @@ func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, 
 		"remainder_length":        len(remainder),
 	}).Debug("Successfully read KeysAndCert")
 
-	return
+	return &keys_and_cert, remainder, err
 }
 
 func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remainder []byte, err error) {
@@ -196,7 +218,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 
 	dataLen := len(data)
 	if dataLen < minDataLength {
-		err = fmt.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
+		err = oops.Errorf("error parsing KeysAndCert: data is smaller than minimum valid size, got %d bytes", dataLen)
 		log.WithError(err).Error("Data is smaller than minimum valid size")
 		return
 	}
@@ -207,13 +229,13 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	// Extract public key
 	publicKeyData := data[:pubKeySize]
 	if len(publicKeyData) != pubKeySize {
-		err = errors.New("invalid ElGamal public key length")
+		err = oops.Errorf("invalid ElGamal public key length")
 		log.WithError(err).Error("Invalid ElGamal public key length")
 		return
 	}
 	var elgPublicKey crypto.ElgPublicKey
 	copy(elgPublicKey[:], publicKeyData)
-	keysAndCert.publicKey = elgPublicKey
+	keysAndCert.ReceivingPublic = elgPublicKey
 
 	// Extract padding
 	paddingStart := pubKeySize
@@ -223,12 +245,12 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	// Extract signing public key
 	signingPubKeyData := data[paddingEnd : paddingEnd+sigKeySize]
 	if len(signingPubKeyData) != sigKeySize {
-		err = errors.New("invalid Ed25519 public key length")
+		err = oops.Errorf("invalid Ed25519 public key length")
 		log.WithError(err).Error("Invalid Ed25519 public key length")
 		return
 	}
 	edPublicKey := crypto.Ed25519PublicKey(signingPubKeyData)
-	keysAndCert.signingPublicKey = edPublicKey
+	keysAndCert.SigningPublic = edPublicKey
 
 	// Extract the certificate
 	certData := data[totalKeySize:]
@@ -248,18 +270,18 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	return
 }
 
-func constructPublicKey(data []byte, cryptoType uint16) (crypto.PublicKey, error) {
+func constructPublicKey(data []byte, cryptoType uint16) (crypto.RecievingPublicKey, error) {
 	switch cryptoType {
 	case CRYPTO_KEY_TYPE_ELGAMAL:
 		if len(data) != 256 {
-			return nil, errors.New("invalid ElGamal public key length")
+			return nil, oops.Errorf("invalid ElGamal public key length")
 		}
 		var elgPublicKey crypto.ElgPublicKey
 		copy(elgPublicKey[:], data)
 		return elgPublicKey, nil
 	// Handle other crypto types...
 	default:
-		return nil, fmt.Errorf("unsupported crypto key type: %d", cryptoType)
+		return nil, oops.Errorf("unsupported crypto key type: %d", cryptoType)
 	}
 }
 
@@ -267,12 +289,12 @@ func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPubli
 	switch sigType {
 	case SIGNATURE_TYPE_ED25519_SHA512:
 		if len(data) != 32 {
-			return nil, errors.New("invalid Ed25519 public key length")
+			return nil, oops.Errorf("invalid Ed25519 public key length")
 		}
 		return crypto.Ed25519PublicKey(data), nil
 	// Handle other signature types...
 	default:
-		return nil, fmt.Errorf("unsupported signature key type: %d", sigType)
+		return nil, oops.Errorf("unsupported signature key type: %d", sigType)
 	}
 }
 
@@ -280,7 +302,7 @@ func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPubli
 // It validates the sizes of the provided keys and padding before assembling the struct.
 func NewKeysAndCert(
 	keyCertificate *KeyCertificate,
-	publicKey crypto.PublicKey,
+	publicKey crypto.RecievingPublicKey,
 	padding []byte,
 	signingPublicKey crypto.SigningPublicKey,
 ) (*KeysAndCert, error) {
@@ -288,7 +310,7 @@ func NewKeysAndCert(
 
 	if keyCertificate == nil {
 		log.Error("KeyCertificate is nil")
-		return nil, errors.New("KeyCertificate cannot be nil")
+		return nil, oops.Errorf("KeyCertificate cannot be nil")
 	}
 
 	// Get actual key sizes from certificate
@@ -296,21 +318,25 @@ func NewKeysAndCert(
 	sigKeySize := keyCertificate.SignatureSize()
 
 	// Validate public key size
-	if publicKey.Len() != pubKeySize {
-		log.WithFields(logrus.Fields{
-			"expected_size": pubKeySize,
-			"actual_size":   publicKey.Len(),
-		}).Error("Invalid publicKey size")
-		return nil, fmt.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
+	if publicKey != nil {
+		if publicKey.Len() != pubKeySize {
+			log.WithFields(logrus.Fields{
+				"expected_size": pubKeySize,
+				"actual_size":   publicKey.Len(),
+			}).Error("Invalid publicKey size")
+			return nil, oops.Errorf("publicKey has invalid size: expected %d, got %d", pubKeySize, publicKey.Len())
+		}
 	}
 
-	// Validate signing key size
-	if signingPublicKey.Len() != sigKeySize {
-		log.WithFields(logrus.Fields{
-			"expected_size": sigKeySize,
-			"actual_size":   signingPublicKey.Len(),
-		}).Error("Invalid signingPublicKey size")
-		return nil, fmt.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+	if signingPublicKey != nil {
+		// Validate signing key size
+		if signingPublicKey.Len() != sigKeySize {
+			log.WithFields(logrus.Fields{
+				"expected_size": sigKeySize,
+				"actual_size":   signingPublicKey.Len(),
+			}).Error("Invalid signingPublicKey size")
+			return nil, oops.Errorf("signingPublicKey has invalid size: expected %d, got %d", sigKeySize, signingPublicKey.Len())
+		}
 	}
 
 	// Calculate expected padding size
@@ -320,21 +346,21 @@ func NewKeysAndCert(
 			"expected_size": expectedPaddingSize,
 			"actual_size":   len(padding),
 		}).Error("Invalid padding size")
-		return nil, fmt.Errorf("invalid padding size")
+		return nil, oops.Errorf("invalid padding size")
 	}
 
 	keysAndCert := &KeysAndCert{
-		KeyCertificate:   keyCertificate,
-		publicKey:        publicKey,
-		Padding:          padding,
-		signingPublicKey: signingPublicKey,
+		KeyCertificate:  keyCertificate,
+		ReceivingPublic: publicKey,
+		Padding:         padding,
+		SigningPublic:   signingPublicKey,
 	}
 
-	log.WithFields(logrus.Fields{
+	/*log.WithFields(logrus.Fields{
 		"public_key_length":         publicKey.Len(),
 		"signing_public_key_length": signingPublicKey.Len(),
 		"padding_length":            len(padding),
-	}).Debug("Successfully created KeysAndCert")
+	}).Debug("Successfully created KeysAndCert")*/
 
 	return keysAndCert, nil
 }

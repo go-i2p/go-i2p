@@ -4,16 +4,16 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
-	"errors"
 	"io"
 	"math/big"
 
+	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	curve25519 "go.step.sm/crypto/x25519"
 )
 
-var Curve25519EncryptTooBig = errors.New("failed to encrypt data, too big for Curve25519")
+var Curve25519EncryptTooBig = oops.Errorf("failed to encrypt data, too big for Curve25519")
 
 type Curve25519PublicKey []byte
 
@@ -132,14 +132,14 @@ func (v *Curve25519Verifier) VerifyHash(h, sig []byte) (err error) {
 	}
 	if len(v.k) != curve25519.PublicKeySize {
 		log.Error("Invalid Curve25519 public key size")
-		err = errors.New("failed to verify: invalid curve25519 public key size")
+		err = oops.Errorf("failed to verify: invalid curve25519 public key size")
 		return
 	}
 
 	ok := curve25519.Verify(v.k, h, sig)
 	if !ok {
 		log.Error("Invalid signature")
-		err = errors.New("failed to verify: invalid signature")
+		err = oops.Errorf("failed to verify: invalid signature")
 	} else {
 		log.Debug("Hash verified successfully")
 	}
@@ -168,7 +168,7 @@ func (s *Curve25519Signer) Sign(data []byte) (sig []byte, err error) {
 
 	if len(s.k) != curve25519.PrivateKeySize {
 		log.Error("Invalid Curve25519 private key size")
-		err = errors.New("failed to sign: invalid curve25519 private key size")
+		err = oops.Errorf("failed to sign: invalid curve25519 private key size")
 		return
 	}
 	h := sha512.Sum512(data)

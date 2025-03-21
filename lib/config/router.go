@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 )
 
@@ -17,20 +16,12 @@ type RouterConfig struct {
 	Bootstrap *BootstrapConfig
 }
 
-func home() string {
-	h, err := os.UserHomeDir()
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-
 func defaultBase() string {
-	return filepath.Join(home(), GOI2P_BASE_DIR, "base")
+	return filepath.Join(BuildI2PDirPath(), "base")
 }
 
 func defaultConfig() string {
-	return filepath.Join(home(), GOI2P_BASE_DIR, "config")
+	return filepath.Join(BuildI2PDirPath(), "config")
 }
 
 // defaults for router

@@ -1,13 +1,11 @@
 package crypto
 
-import (
-	"errors"
-)
+import "github.com/samber/oops"
 
 var (
-	ErrBadSignatureSize = errors.New("bad signature size")
-	ErrInvalidKeyFormat = errors.New("invalid key format")
-	ErrInvalidSignature = errors.New("invalid signature")
+	ErrBadSignatureSize = oops.Errorf("bad signature size")
+	ErrInvalidKeyFormat = oops.Errorf("invalid key format")
+	ErrInvalidSignature = oops.Errorf("invalid signature")
 )
 
 // type for verifying signatures
@@ -28,7 +26,7 @@ type SigningPublicKey interface {
 	Len() int
 	Bytes() []byte
 }
-type PublicKey interface {
+type RecievingPublicKey interface {
 	Len() int
 	Bytes() []byte
 	NewEncrypter() (Encrypter, error)

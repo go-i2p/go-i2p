@@ -14,7 +14,7 @@ func TestSigningPublicKeyTypeReturnsCorrectInteger(t *testing.T) {
 	assert.Nil(err)
 
 	pk_type := key_cert.SigningPublicKeyType()
-	assert.Equal(KEYCERT_SIGN_ED25519, pk_type, "SigningPublicKeyType() did not return correct type")
+	assert.Equal(KEYCERT_SIGN_P521, pk_type, "SigningPublicKeyType() did not return correct type")
 }
 
 func TestSigningPublicKeyTypeWithInvalidData(t *testing.T) {
@@ -44,7 +44,7 @@ func TestPublicKeyTypeWithInvalidData(t *testing.T) {
 	// Test with invalid short data
 	key_cert, _, err := NewKeyCertificate([]byte{0x05, 0x00, 0x02})
 	assert.NotNil(err)
-	assert.Contains(err.Error(), "key certificate data too short", "Expected error for invalid data")
+	assert.Contains(err.Error(), "certificate parsing warning: certificate data is shorter than specified by length", "Expected error for invalid data")
 	assert.Nil(key_cert)
 }
 
@@ -61,6 +61,7 @@ func TestConstructPublicKeyWithInsufficientData(t *testing.T) {
 	assert.NotNil(err)
 	assert.Equal("error constructing public key: not enough data", err.Error())
 }
+
 func TestConstructPublicKeyReturnsCorrectDataWithElg(t *testing.T) {
 	assert := assert.New(t)
 

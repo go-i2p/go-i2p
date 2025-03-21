@@ -3,18 +3,18 @@ package noise
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"io"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
+	"github.com/samber/oops"
 )
 
 func (c *NoiseSession) RunOutgoingHandshake() error {
 	log.Debug("Starting outgoing handshake")
 
-	negData, msg, state, err := ComposeInitiatorHandshakeMessage(c.HandKey, nil, nil, nil)
+	negData, msg, state, err := c.ComposeInitiatorHandshakeMessage(nil, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to compose initiator handshake message")
 		return err
@@ -23,7 +23,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 		"negData_length": len(negData),
 		"msg_length":     len(msg),
 	}).Debug("Initiator handshake message composed")
-	c.HandshakeState = &HandshakeState{
+	c.HandshakeState = &NoiseHandshakeState{
 		HandshakeState: state,
 	}
 
@@ -40,53 +40,76 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 	log.Debug("Handshake message written successfully")
 	log.WithField("state", state).Debug("Handshake state after message write")
 	log.Println(state)
-	c.handshakeComplete = true
+	c.CompleteHandshake()
 	log.Debug("Outgoing handshake completed successfully")
 	return nil
 }
 
-func ComposeInitiatorHandshakeMessage(s noise.DHKey, rs []byte, payload []byte, ePrivate []byte) (negData, msg []byte, state *noise.HandshakeState, err error) {
+func (c *NoiseSession) ComposeInitiatorHandshakeMessage(
+	payload []byte,
+	ephemeralPrivate []byte,
+) (
+	negotiationData,
+	handshakeMessage []byte,
+	handshakeState *noise.HandshakeState,
+	err error,
+) {
 	log.Debug("Starting ComposeInitiatorHandshakeMessage")
 
-	if len(rs) != 0 && len(rs) != noise.DH25519.DHLen() {
-		return nil, nil, nil, errors.New("only 32 byte curve25519 public keys are supported")
+	remoteStatic, err := c.peerStaticKey()
+	if err != nil {
+		return nil, nil, nil, oops.Errorf("Peer static key retrieval error: %s", err)
 	}
 
-	negData = make([]byte, 6)
-	copy(negData, initNegotiationData(nil))
+	/*localStatic, err := c.localStaticKey()
+	if err != nil {
+		return nil, nil, nil, oops.Errorf("Local static key retrieval error: %s", err)
+	}
+	localStaticDH := noise.DHKey{
+		Public: localStatic[:],
+		Private: localStatic[:],
+	}*/
+	localStaticDH := *c.HandshakeKey()
+
+	if len(remoteStatic) != 0 && len(remoteStatic) != noise.DH25519.DHLen() {
+		return nil, nil, nil, oops.Errorf("only 32 byte curve25519 public keys are supported")
+	}
+
+	negotiationData = make([]byte, 6)
+	copy(negotiationData, initNegotiationData(nil))
 	pattern := noise.HandshakeXK
-	negData[5] = NOISE_PATTERN_XK
+	negotiationData[5] = NOISE_PATTERN_XK
 
 	var random io.Reader
-	if len(ePrivate) == 0 {
+	if len(ephemeralPrivate) == 0 {
 		random = rand.Reader
 	} else {
-		random = bytes.NewBuffer(ePrivate)
+		random = bytes.NewBuffer(ephemeralPrivate)
 	}
 
 	config := noise.Config{
-		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherAESGCM, noise.HashSHA256),
+		CipherSuite:   noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256),
 		Pattern:       pattern,
 		Initiator:     true,
-		StaticKeypair: s,
+		StaticKeypair: localStaticDH,
 		Random:        random,
 	}
 
-	state, err = noise.NewHandshakeState(config)
+	handshakeState, err = noise.NewHandshakeState(config)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// Write message, expecting no CipherStates yet since this is message 1
-	msg, cs0, cs1, err := state.WriteMessage(nil, payload)
+	handshakeMessage, cs0, cs1, err := handshakeState.WriteMessage(nil, payload)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// Verify no CipherStates are returned yet
 	if cs0 != nil || cs1 != nil {
-		return nil, nil, nil, errors.New("unexpected cipher states in message 1")
+		return nil, nil, nil, oops.Errorf("unexpected cipher states in message 1")
 	}
 
-	return negData, msg, state, nil
+	return negotiationData, handshakeMessage, handshakeState, nil
 }

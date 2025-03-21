@@ -1,9 +1,8 @@
 package transport
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/util/logger"
+	"github.com/go-i2p/logger"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -25,7 +24,7 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 }
 
 // set the identity for every transport
-func (tmux *TransportMuxer) SetIdentity(ident router_identity.RouterIdentity) (err error) {
+func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error) {
 	log.WithField("identity", ident).Debug("TransportMuxer: Setting identity for all transports")
 	for i, t := range tmux.trans {
 		err = t.SetIdentity(ident)
