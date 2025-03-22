@@ -130,4 +130,3 @@ func readBuildResponseRecordReply(data []byte) (byte, error) {
 	}).Debug("parsed_build_response_record_reply")
 	return reply, nil
 }
-

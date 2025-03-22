@@ -33,7 +33,7 @@ func TestCertificateWithMissingData(t *testing.T) {
 // createValidKeyCertificate creates a valid KeyCertificate for testing.
 func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Generate signing key pair (Ed25519)
-	//var ed25519_privkey crypto.Ed25519PrivateKey
+	// var ed25519_privkey crypto.Ed25519PrivateKey
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private %s", err)

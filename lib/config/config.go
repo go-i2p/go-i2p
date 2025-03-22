@@ -17,7 +17,6 @@ var (
 const GOI2P_BASE_DIR = ".go-i2p"
 
 func InitConfig() {
-
 	if CfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(CfgFile)
@@ -75,7 +74,6 @@ func UpdateRouterConfig() {
 }
 
 func createDefaultConfig(defaultConfigDir string) {
-
 	defaultConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
 	// Ensure directory exists
 	if err := os.MkdirAll(defaultConfigDir, 0o755); err != nil {
@@ -88,7 +86,6 @@ func createDefaultConfig(defaultConfigDir string) {
 	}
 
 	log.Debugf("Created default configuration at: %s", defaultConfigFile)
-
 }
 
 func handleConfigFile() {
@@ -105,7 +102,6 @@ func handleConfigFile() {
 	} else {
 		log.Debugf("Using config file: %s", viper.ConfigFileUsed())
 	}
-
 }
 
 func BuildI2PDirPath() string {

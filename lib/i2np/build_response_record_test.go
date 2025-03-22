@@ -40,7 +40,7 @@ func TestReadBuildResponseRecordRandomDataTooLittleData(t *testing.T) {
 func TestReadBuildResponseRecordRandomDataValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32) 
+	hash := make([]byte, 32)
 	hash[31] = 0x13
 	random_data := make([]byte, 495)
 	random_data[493] = 0x33
@@ -54,7 +54,7 @@ func TestReadBuildResponseRecordRandomDataValidData(t *testing.T) {
 func TestReadBuildResponseRecordReplyTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32) 
+	hash := make([]byte, 32)
 	random_data := make([]byte, 495)
 	random_data[493] = 0x33
 	random_data[494] = 0x74
@@ -65,11 +65,10 @@ func TestReadBuildResponseRecordReplyTooLittleData(t *testing.T) {
 	assert.Equal(ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA, err)
 }
 
-
 func TestReadBuildResponseRecordReplyValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32) 
+	hash := make([]byte, 32)
 	hash[31] = 0x13
 	random_data := make([]byte, 495)
 	random_data[493] = 0x33
