@@ -19,6 +19,14 @@ var (
 	ErrInvalidPublicKeySize = oops.Errorf("failed to verify: invalid ed25519 public key size")
 )
 
+func GenerateEd25519Key() (SigningPrivateKey, error) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, oops.Errorf("failed to generate ed25519")
+	}
+	return Ed25519PrivateKey(priv), nil
+}
+
 type Ed25519PublicKey []byte
 
 type Ed25519Verifier struct {

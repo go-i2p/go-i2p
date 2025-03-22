@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/crypto"
@@ -384,28 +385,28 @@ func NewRouterInfo(
 	publishedDate, _, err := ReadDate(dateBytes)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Published Date")
-		return nil, err
+		return nil, oops.Errorf("failed to create published date: %v", err)
 	}
 
 	// 2. Create Size Integer
 	sizeInt, err := NewIntegerFromInt(len(addresses), 1)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Size Integer")
-		return nil, err
+		return nil, oops.Errorf("failed to create size integer: %v", err)
 	}
 
 	// 3. Create PeerSize Integer (always 0)
 	peerSizeInt, err := NewIntegerFromInt(0, 1)
 	if err != nil {
 		log.WithError(err).Error("Failed to create PeerSize Integer")
-		return nil, err
+		return nil, oops.Errorf("failed to create peer size integer: %v", err)
 	}
 
 	// 4. Convert options map to Mapping
 	mapping, err := GoMapToMapping(options)
 	if err != nil {
 		log.WithError(err).Error("Failed to convert options map to Mapping")
-		return nil, err
+		return nil, oops.Errorf("failed to convert options to mapping: %v", err)
 	}
 
 	// 5. Assemble RouterInfo without signature
@@ -422,25 +423,47 @@ func NewRouterInfo(
 	// 6. Serialize RouterInfo without signature
 	dataBytes := routerInfo.serializeWithoutSignature()
 
-	// 7. Compute signature over serialized data
-	signer, err := signingPrivateKey.NewSigner()
-	if err != nil {
-		log.WithError(err).Error("Failed to create new signer")
-		return nil, err
-	}
-	signatureBytes, err := signer.Sign(dataBytes)
-	if err != nil {
-		log.WithError(err).Error("Failed to sign")
+	// 7. Verify signingPrivateKey is valid
+	if signingPrivateKey == nil {
+		return nil, oops.Errorf("signing private key is nil")
 	}
 
-	// 8. Create Signature struct from signatureBytes
+	// 8. Create new signer based on signature type
+	var signer crypto.Signer
+	switch sigType {
+	case signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519:
+		ed25519Key, ok := signingPrivateKey.(*crypto.Ed25519PrivateKey)
+		if !ok {
+			return nil, oops.Errorf("expected *Ed25519PrivateKey but got %T", signingPrivateKey)
+		}
+		if len(*ed25519Key) != 64 {
+			return nil, oops.Errorf("invalid Ed25519 private key size: got %d, want 64", len(*ed25519Key))
+		}
+		signer, err = ed25519Key.NewSigner()
+	default:
+		return nil, oops.Errorf("unsupported signature type: %d", sigType)
+	}
+
+	if err != nil {
+		log.WithError(err).Error("Failed to create signer")
+		return nil, oops.Errorf("failed to create signer: %v", err)
+	}
+
+	// 9. Sign the data
+	signatureBytes, err := signer.Sign(dataBytes)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign RouterInfo data")
+		return nil, oops.Errorf("failed to sign data: %v", err)
+	}
+
+	// 10. Create Signature struct from signature bytes
 	sig, _, err := ReadSignature(signatureBytes, sigType)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Signature from signature bytes")
-		return nil, err
+		return nil, oops.Errorf("failed to create signature: %v", err)
 	}
 
-	// 9. Attach signature to RouterInfo
+	// 11. Attach signature to RouterInfo
 	routerInfo.signature = &sig
 
 	log.WithFields(logrus.Fields{

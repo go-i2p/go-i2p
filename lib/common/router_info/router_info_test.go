@@ -23,10 +23,17 @@ import (
 func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo, error) {
 	// Generate signing key pair (Ed25519)
 	var ed25519_privkey crypto.Ed25519PrivateKey
-	_, err := (&ed25519_privkey).Generate()
+	ed25519_signingprivkey, err := crypto.GenerateEd25519Key() // Use direct key generation
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
+	ed25519_privkey = ed25519_signingprivkey.(crypto.Ed25519PrivateKey) // Store the generated key
+
+	// Verify key size
+	if len(ed25519_privkey) != 64 {
+		t.Fatalf("Generated Ed25519 private key has wrong size: got %d, want 64", len(ed25519_privkey))
+	}
+
 	ed25519_pubkey_raw, err := ed25519_privkey.Public()
 	if err != nil {
 		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)

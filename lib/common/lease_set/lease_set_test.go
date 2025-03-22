@@ -263,7 +263,7 @@ func generateTestDestination(t *testing.T) (*destination.Destination, crypto.Rec
 
 	// Create Destination
 	dest := &destination.Destination{
-		KeysAndCert: *kac,
+		KeysAndCert: kac,
 	}
 
 	return dest, elg_pubkey, ed25519_pubkey, &ed25519_privkey, nil
