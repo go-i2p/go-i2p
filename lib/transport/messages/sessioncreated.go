@@ -272,17 +272,17 @@ type SessionCreated struct {
 
 // Payload implements Message.
 func (s *SessionCreated) Payload() []byte {
-	panic("unimplemented")
+	return s.Options.Data()
 }
 
 // PayloadSize implements Message.
 func (s *SessionCreated) PayloadSize() int {
-	panic("unimplemented")
+	return len(s.Options.Data())
 }
 
 // Type implements Message.
 func (s *SessionCreated) Type() MessageType {
-	panic("unimplemented")
+	return MessageTypeSessionCreated
 }
 
 var exampleSessionCreated Message = &SessionCreated{}

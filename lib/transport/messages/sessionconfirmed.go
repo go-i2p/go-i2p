@@ -265,17 +265,17 @@ type SessionConfirmed struct {
 
 // Payload implements Message.
 func (s *SessionConfirmed) Payload() []byte {
-	panic("unimplemented")
+	return s.Options.Data()
 }
 
 // PayloadSize implements Message.
 func (s *SessionConfirmed) PayloadSize() int {
-	panic("unimplemented")
+	return len(s.Options.Data())
 }
 
 // Type implements Message.
 func (s *SessionConfirmed) Type() MessageType {
-	panic("unimplemented")
+	return MessageTypeSessionConfirmed
 }
 
 var exampleSessionConfirmed Message = &SessionConfirmed{}
