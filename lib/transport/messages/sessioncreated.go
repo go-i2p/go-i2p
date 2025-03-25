@@ -265,9 +265,9 @@ import "github.com/go-i2p/go-i2p/lib/common/data"
 **/
 
 type SessionCreated struct {
-	YContent [32]byte // 32 bytes ephemeral key Y
-	Options  [16]byte // Options block
-	Padding  []byte   // Random padding
+	YContent [32]byte        // 32 bytes ephemeral key Y
+	Options  *CreatedOptions // Options block
+	Padding  []byte          // Random padding
 }
 
 // Payload implements Message.

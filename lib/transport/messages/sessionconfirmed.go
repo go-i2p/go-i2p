@@ -258,7 +258,7 @@ type SessionConfirmed struct {
 	// Alice RouterInfo block
 	RouterInfo *router_info.RouterInfo
 	// Alice Options (optional)
-	Options []byte
+	Options *ConfirmedOptions
 	// Arbitrary padding (optional)
 	Padding []byte
 }

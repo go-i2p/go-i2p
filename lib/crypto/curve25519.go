@@ -48,21 +48,45 @@ func createCurve25519PublicKey(data []byte) (k *curve25519.PublicKey) {
 }
 
 func createCurve25519Encryption(pub *curve25519.PublicKey, rand io.Reader) (enc *Curve25519Encryption, err error) {
-	/*kbytes := make([]byte, 256)
-	k := new(big.Int)
-	for err == nil {
-		_, err = io.ReadFull(rand, kbytes)
-		k = new(big.Int).SetBytes(kbytes)
-		k = k.Mod(k, pub.P)
-		if k.Sign() != 0 {
-			break
-		}
+	log.Debug("Creating Curve25519 encryption session")
+
+	// Define p = 2^255 - 19 (the prime used in Curve25519)
+	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+
+	// Validate public key
+	if pub == nil || len(*pub) != curve25519.PublicKeySize {
+		return nil, oops.Errorf("invalid Curve25519 public key")
 	}
-	if err == nil {
-		enc = &Curve25519Encryption{}
-	}*/
-	log.Warn("createCurve25519Encryption is not implemented")
-	return
+
+	// Convert public key bytes to big.Int
+	a := new(big.Int).SetBytes(*pub)
+
+	// Generate random scalar for encryption
+	kbytes := make([]byte, 32)
+	if _, err = io.ReadFull(rand, kbytes); err != nil {
+		log.WithError(err).Error("Failed to generate random scalar for Curve25519")
+		return nil, err
+	}
+
+	k := new(big.Int).SetBytes(kbytes)
+	k = k.Mod(k, p)
+
+	// Ensure k is not zero
+	if k.Sign() == 0 {
+		return nil, oops.Errorf("generated zero scalar")
+	}
+
+	// Calculate b1 = k * pubKey mod p
+	b1 := new(big.Int).Exp(a, k, p)
+
+	enc = &Curve25519Encryption{
+		p:  p,
+		a:  new(big.Int).Exp(new(big.Int).SetInt64(9), k, p), // Base point for Curve25519
+		b1: b1,
+	}
+
+	log.Debug("Curve25519 encryption session created successfully")
+	return enc, nil
 }
 
 type Curve25519Encryption struct {

@@ -55,8 +55,8 @@ func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error) 
 	}
 
 	return &messages.SessionRequest{
-		// XContent: ephemeralKey,
-		Options: *requestOptions,
-		Padding: padding,
+		XContent: [32]byte(ephemeralKey),
+		Options:  *requestOptions,
+		Padding:  padding,
 	}, nil
 }
