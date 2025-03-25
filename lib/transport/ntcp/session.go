@@ -6,6 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 	"github.com/go-i2p/go-i2p/lib/transport/padding"
+	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 
 	"github.com/samber/oops"
 )
@@ -34,15 +35,31 @@ type NTCP2Session struct {
 }
 
 // NewNTCP2Session creates a new NTCP2 session using the existing noise implementation
-func NewNTCP2Session(noiseConfig router_info.RouterInfo) (*NTCP2Session, error) {
-	baseNoiseSession, err := noise.NewNoiseTransportSession(noiseConfig)
+func NewNTCP2Session(routerInfo router_info.RouterInfo) (*NTCP2Session, error) {
+	// Create base noise session
+	baseNoiseSession, err := noise.NewNoiseTransportSession(routerInfo)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to create base noise session: %w", err)
 	}
 
+	// We need a router timestamper for the NTCP2 transport
+	defaultClient := &sntp.DefaultNTPClient{}
+	timestamper := sntp.NewRouterTimestamper(defaultClient)
+
+	// Create the NTCP2Transport component
+	ntcpTransport := &NTCP2Transport{
+		NoiseTransport: &noise.NoiseTransport{
+			RouterInfo: routerInfo,
+		},
+		RouterTimestamper: timestamper,
+		transportStyle:    NTCP_PROTOCOL_NAME,
+	}
+
+	// Create and return the session with all components initialized
 	return &NTCP2Session{
 		NoiseSession:    baseNoiseSession.(*noise.NoiseSession),
-		paddingStrategy: &padding.NullPaddingStrategy{},
+		NTCP2Transport:  ntcpTransport,
+		paddingStrategy: &padding.NullPaddingStrategy{}, // Default to no padding for simplicity
 	}, nil
 }
 
