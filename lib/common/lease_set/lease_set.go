@@ -218,10 +218,6 @@ func ReadDestinationFromLeaseSet(data []byte) (dest destination.Destination, rem
 
 	remainder = data[destinationLength:]
 
-	fmt.Printf("Successfully read Destination from LeaseSet\n")
-	fmt.Printf("  destination_length: %d\n", destinationLength)
-	fmt.Printf("  remainder_length: %d\n", len(remainder))
-
 	return
 }
 
@@ -231,12 +227,6 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 	_, remainder, err := keys_and_cert.ReadKeysAndCert(lease_set)
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
-		log.WithFields(logrus.Fields{
-			"at":           "(LeaseSet) publicKey",
-			"data_len":     remainder_len,
-			"required_len": LEASE_SET_PUBKEY_SIZE,
-			"reason":       "not enough data",
-		}).Error("error parsing public key")
 		err = oops.Errorf("error parsing public key: not enough data")
 		copy(public_key[:], remainder)
 		return

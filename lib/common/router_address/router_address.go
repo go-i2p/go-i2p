@@ -291,12 +291,20 @@ func (router_address RouterAddress) Port() (string, error) {
 	return portStr, nil
 }
 
-func (router_address RouterAddress) StaticKey() ([32]byte, error) {
-	sk := router_address.StaticKeyString()
-	if len([]byte(sk)) != 32 {
-		return [32]byte{}, oops.Errorf("error: invalid static key")
+func (routerAddress RouterAddress) StaticKey() ([32]byte, error) {
+	sk := routerAddress.StaticKeyString()
+	if sk == nil {
+		return [32]byte{}, oops.Errorf("error: static key not found")
 	}
-	return [32]byte(sk), nil
+
+	skBytes := []byte(sk)
+	if len(skBytes) != 32 {
+		return [32]byte{}, oops.Errorf("error: invalid static key length: %d, expected 32", len(skBytes))
+	}
+
+	var result [32]byte
+	copy(result[:], skBytes)
+	return result, nil
 }
 
 func (router_address RouterAddress) InitializationVector() ([16]byte, error) {
@@ -312,13 +320,23 @@ func (router_address RouterAddress) ProtocolVersion() (string, error) {
 }
 
 // Options returns the options for this RouterAddress as an I2P Mapping.
-func (router_address RouterAddress) Options() Mapping {
-	return *router_address.TransportOptions
+func (routerAddress RouterAddress) Options() Mapping {
+	if routerAddress.TransportOptions == nil {
+		log.Warn("TransportOptions is nil in RouterAddress")
+		return Mapping{}
+	}
+	return *routerAddress.TransportOptions
 }
 
 // Check if the RouterAddress is empty or if it is too small to contain valid data.
-func (router_address RouterAddress) checkValid() (err error, exit bool) {
-	return
+func (routerAddress RouterAddress) checkValid() (err error, exit bool) {
+	if routerAddress.TransportType == nil {
+		return oops.Errorf("invalid router address: nil transport type"), true
+	}
+	if routerAddress.TransportOptions == nil {
+		return oops.Errorf("invalid router address: nil transport options"), true
+	}
+	return nil, false
 }
 
 // ReadRouterAddress returns RouterAddress from a []byte.
