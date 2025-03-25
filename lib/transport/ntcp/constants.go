@@ -3,6 +3,7 @@ package ntcp
 import (
 	"encoding/binary"
 	"math"
+	"time"
 
 	"github.com/flynn/noise"
 )
@@ -19,6 +20,23 @@ const (
 
 	uint16Size     = 2                                             // uint16 takes 2 bytes
 	MaxPayloadSize = math.MaxUint16 - 16 /*mac size*/ - uint16Size /*data len*/
+)
+
+// Constants for NTCP2 handshake
+const (
+	// Message 1 - SessionRequest
+	NTCP2_MSG1_SIZE   = 64
+	NTCP2_MSG1_HEADER = 0x00
+
+	// Message 2 - SessionCreated
+	NTCP2_MSG2_SIZE   = 64
+	NTCP2_MSG2_HEADER = 0x01
+
+	// Message 3 - SessionConfirmed
+	NTCP2_MSG3_HEADER = 0x02
+
+	// Timeout for handshake operations
+	NTCP2_HANDSHAKE_TIMEOUT = 15 * time.Second
 )
 
 var ciphers = map[byte]noise.CipherFunc{
