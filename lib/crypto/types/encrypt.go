@@ -1,4 +1,4 @@
-package crypto
+package types
 
 // encrypts data
 type Encrypter interface {

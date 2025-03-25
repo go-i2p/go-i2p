@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 )
 
 // KeyStore is an interface for storing and retrieving keys
 type KeyStore interface {
 	KeyID() string
 	// GetKeys returns the public and private keys
-	GetKeys() (publicKey crypto.PublicKey, privateKey crypto.PrivateKey, err error)
+	GetKeys() (publicKey types.PublicKey, privateKey types.PrivateKey, err error)
 	// StoreKeys stores the keys
 	StoreKeys() error
 }
@@ -19,10 +19,10 @@ type KeyStore interface {
 type KeyStoreImpl struct {
 	dir        string
 	name       string
-	privateKey crypto.PrivateKey
+	privateKey types.PrivateKey
 }
 
-func NewKeyStoreImpl(dir, name string, privateKey crypto.PrivateKey) *KeyStoreImpl {
+func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl {
 	return &KeyStoreImpl{
 		dir:        dir,
 		name:       name,
@@ -45,7 +45,7 @@ func (ks *KeyStoreImpl) KeyID() string {
 	return ks.name
 }
 
-func (ks *KeyStoreImpl) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error) {
+func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	public, err := ks.privateKey.Public()
 	if err != nil {
 		return nil, nil, err

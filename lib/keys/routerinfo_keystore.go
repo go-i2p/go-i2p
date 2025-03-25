@@ -2,7 +2,7 @@ package keys
 
 import (
 	"bytes"
-	"crypto/ed25519"
+	//"crypto/ed25519"
 	"crypto/rand"
 	"os"
 	"path/filepath"
@@ -16,6 +16,8 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 	"github.com/samber/oops"
 )
@@ -25,7 +27,7 @@ type RouterInfoKeystore struct {
 	*sntp.RouterTimestamper
 	dir        string
 	name       string
-	privateKey crypto.PrivateKey
+	privateKey types.PrivateKey
 }
 
 var riks KeyStore = &RouterInfoKeystore{}
@@ -40,7 +42,7 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 			return nil, err
 		}
 	}
-	var privateKey crypto.PrivateKey
+	var privateKey types.PrivateKey
 	fullPath := filepath.Join(dir, name)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		privateKey, err = generateNewKey()
@@ -67,7 +69,7 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 	}, nil
 }
 
-func generateNewKey() (crypto.Ed25519PrivateKey, error) {
+func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
 	// Generate a new key pair
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -75,7 +77,7 @@ func generateNewKey() (crypto.Ed25519PrivateKey, error) {
 	}
 
 	// Convert to our type
-	return crypto.Ed25519PrivateKey(priv), nil
+	return ed25519.Ed25519PrivateKey(priv), nil
 }
 
 func loadExistingKey(keyData []byte) (crypto.Ed25519PrivateKey, error) {
@@ -85,7 +87,7 @@ func loadExistingKey(keyData []byte) (crypto.Ed25519PrivateKey, error) {
 	}
 
 	// Convert to our type
-	return crypto.Ed25519PrivateKey(keyData), nil
+	return ed25519.Ed25519PrivateKey(keyData), nil
 }
 
 func (ks *RouterInfoKeystore) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error) {
@@ -164,7 +166,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 
 	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(
-		crypto.RecievingPublicKey(nil),
+		types.RecievingPublicKey(nil),
 		publicKey.(crypto.SigningPublicKey),
 		*cert,
 		padding,

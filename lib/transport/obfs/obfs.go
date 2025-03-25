@@ -1,12 +1,12 @@
 package obfs
 
 import (
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/samber/oops"
 )
 
 // ObfuscateEphemeralKey encrypts the ephemeral public key in the message using AES-256-CBC without padding
-func ObfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]byte, error) {
+func ObfuscateEphemeralKey(message []byte, aesKey *aes.AESSymmetricKey) ([]byte, error) {
 	if len(message) < 32 {
 		return nil, oops.Errorf("message is too short to contain ephemeral public key")
 	}
@@ -15,7 +15,7 @@ func ObfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]by
 	ephemeralPubKey := message[:32]
 
 	// Create AES encrypter
-	encrypter := &crypto.AESSymmetricEncrypter{
+	encrypter := &aes.AESSymmetricEncrypter{
 		Key: aesKey.Key,
 		IV:  aesKey.IV,
 	}
@@ -33,7 +33,7 @@ func ObfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]by
 }
 
 // DeobfuscateEphemeralKey decrypts the ephemeral public key in the message using AES-256-CBC without padding
-func DeobfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]byte, error) {
+func DeobfuscateEphemeralKey(message []byte, aesKey *aes.AESSymmetricKey) ([]byte, error) {
 	if len(message) < 32 {
 		return nil, oops.Errorf("message is too short to contain ephemeral public key")
 	}
@@ -42,7 +42,7 @@ func DeobfuscateEphemeralKey(message []byte, aesKey *crypto.AESSymmetricKey) ([]
 	encryptedKey := message[:32]
 
 	// Create AES decrypter
-	decrypter := &crypto.AESSymmetricDecrypter{
+	decrypter := &aes.AESSymmetricDecrypter{
 		Key: aesKey.Key,
 		IV:  aesKey.IV,
 	}

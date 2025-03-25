@@ -2,7 +2,7 @@ package ntcp
 
 import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 	"github.com/go-i2p/go-i2p/lib/transport/padding"
@@ -110,7 +110,7 @@ func (s *NTCP2Session) DeobfuscateEphemeral(obfuscatedEphemeralKey []byte) ([]by
 	return obfs.DeobfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
 }
 
-func (s *NTCP2Session) buildAesStaticKey() (*crypto.AESSymmetricKey, error) {
+func (s *NTCP2Session) buildAesStaticKey() (*aes.AESSymmetricKey, error) {
 	staticKey, err := s.peerStaticKey()
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (s *NTCP2Session) buildAesStaticKey() (*crypto.AESSymmetricKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	var AESStaticKey crypto.AESSymmetricKey
+	var AESStaticKey aes.AESSymmetricKey
 	AESStaticKey.Key = staticKey[:]
 	AESStaticKey.IV = staticIV[:]
 	return &AESStaticKey, nil

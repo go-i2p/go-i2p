@@ -1,4 +1,4 @@
-package crypto
+package elgamal
 
 import (
 	"crypto/rand"
@@ -7,11 +7,15 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/openpgp/elgamal"
 )
+
+var log = logger.GetGoI2PLogger()
 
 var elgp = new(big.Int).SetBytes([]byte{
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xC9, 0x0F, 0xDA, 0xA2, 0x21, 0x68, 0xC2, 0x34,
@@ -241,7 +245,7 @@ func (elg ElgPublicKey) Bytes() []byte {
 	return elg[:]
 }
 
-func (elg ElgPublicKey) NewEncrypter() (enc Encrypter, err error) {
+func (elg ElgPublicKey) NewEncrypter() (enc types.Encrypter, err error) {
 	log.Debug("Creating new ElGamal encrypter")
 	k := createElgamalPublicKey(elg[:])
 	enc, err = createElgamalEncryption(k, rand.Reader)
@@ -257,7 +261,7 @@ func (elg ElgPrivateKey) Len() int {
 	return len(elg)
 }
 
-func (elg ElgPrivateKey) NewDecrypter() (dec Decrypter, err error) {
+func (elg ElgPrivateKey) NewDecrypter() (dec types.Decrypter, err error) {
 	log.Debug("Creating new ElGamal decrypter")
 	dec = &elgDecrypter{
 		k: createElgamalPrivateKey(elg[:]),

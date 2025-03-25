@@ -1,13 +1,12 @@
 package noise
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
 	"testing"
 
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 
 	"github.com/flynn/noise"
@@ -464,7 +463,7 @@ func TestEncryptDecryptPacketObfsOfflineWithFunc(t *testing.T) {
 	rand.Read(bobIV)
 
 	// Create AES symmetric key
-	aesKey := &crypto.AESSymmetricKey{
+	aesKey := &aes.AESSymmetricKey{
 		Key: bobRouterHash,
 		IV:  bobIV,
 	}

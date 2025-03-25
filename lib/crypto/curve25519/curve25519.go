@@ -1,27 +1,40 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
 	"io"
 	"math/big"
 
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	curve25519 "go.step.sm/crypto/x25519"
 )
+
+var log = logger.GetGoI2PLogger()
 
 var Curve25519EncryptTooBig = oops.Errorf("failed to encrypt data, too big for Curve25519")
 
 type Curve25519PublicKey []byte
 
+func GenerateX25519KeyPair() (types.PublicEncryptionKey, types.PrivateEncryptionKey, error) {
+	pub, priv, err := curve25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, oops.Errorf("failed to generate curve25519")
+	}
+	return Curve25519PublicKey(pub), Curve25519PrivateKey(priv), nil
+}
+
 type Curve25519Verifier struct {
 	k []byte
 }
 
-func (k Curve25519PublicKey) NewVerifier() (v Verifier, err error) {
+func (k Curve25519PublicKey) NewVerifier() (v types.Verifier, err error) {
 	temp := new(Curve25519Verifier)
 	temp.k = k
 	v = temp
@@ -131,7 +144,7 @@ func (curve25519 *Curve25519Encryption) EncryptPadding(data []byte, zeroPadding 
 	return
 }
 
-func (elg Curve25519PublicKey) NewEncrypter() (enc Encrypter, err error) {
+func (elg Curve25519PublicKey) NewEncrypter() (enc types.Encrypter, err error) {
 	log.Debug("Creating new Curve25519 Encrypter")
 	k := createCurve25519PublicKey(elg[:])
 	enc, err = createCurve25519Encryption(k, rand.Reader)
@@ -151,7 +164,7 @@ func (v *Curve25519Verifier) VerifyHash(h, sig []byte) (err error) {
 
 	if len(sig) != curve25519.SignatureSize {
 		log.Error("Bad signature size")
-		err = ErrBadSignatureSize
+		err = types.ErrBadSignatureSize
 		return
 	}
 	if len(v.k) != curve25519.PublicKeySize {
@@ -183,8 +196,66 @@ func (v *Curve25519Verifier) Verify(data, sig []byte) (err error) {
 
 type Curve25519PrivateKey curve25519.PrivateKey
 
+// NewDecrypter implements PrivateEncryptionKey.
+func (c Curve25519PrivateKey) NewDecrypter() (types.Decrypter, error) {
+	log.Debug("Creating new Curve25519 Decrypter")
+	if len(c) != curve25519.PrivateKeySize {
+		log.Error("Invalid Curve25519 private key size")
+		return nil, oops.Errorf("invalid curve25519 private key size")
+	}
+	return &Curve25519Decrypter{
+		privateKey: c,
+	}, nil
+}
+
 type Curve25519Signer struct {
 	k []byte
+}
+
+type Curve25519Decrypter struct {
+	privateKey Curve25519PrivateKey
+}
+
+// Decrypt implements Decrypter.
+func (c *Curve25519Decrypter) Decrypt(data []byte) ([]byte, error) {
+	log.WithField("data_length", len(data)).Debug("Decrypting data with Curve25519")
+
+	if len(data) != 514 && len(data) != 512 {
+		return nil, oops.Errorf("invalid data length for curve25519 decryption")
+	}
+
+	// Handle zero padding if present
+	offset := 0
+	if len(data) == 514 {
+		offset = 1
+	}
+
+	// Extract the ephemeral public key and encrypted data
+	ephemeralPub := data[offset : offset+256]
+	encryptedData := data[offset+257 : len(data)]
+
+	// Convert private key to the correct format
+	var privKey [32]byte
+	copy(privKey[:], c.privateKey)
+
+	// Perform X25519 key exchange
+	var shared [32]byte
+	curve25519.X25519(&shared, &privKey, ephemeralPub)
+
+	// Decrypt the data using the shared secret
+	decrypted := make([]byte, len(encryptedData))
+	for i := 0; i < len(encryptedData); i++ {
+		decrypted[i] = encryptedData[i] ^ shared[i%32]
+	}
+
+	// Verify the SHA256 hash in the decrypted data
+	hash := sha256.Sum256(decrypted[33:])
+	if !bytes.Equal(hash[:], decrypted[1:33]) {
+		return nil, oops.Errorf("invalid hash in decrypted data")
+	}
+
+	log.Debug("Data decrypted successfully")
+	return decrypted[33:], nil
 }
 
 func (s *Curve25519Signer) Sign(data []byte) (sig []byte, err error) {

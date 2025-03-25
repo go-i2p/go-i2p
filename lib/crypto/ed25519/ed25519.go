@@ -1,4 +1,4 @@
-package crypto
+package ed25519
 
 import (
 	"bytes"
@@ -10,16 +10,20 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetGoI2PLogger()
 
 var (
 	Ed25519EncryptTooBig    = oops.Errorf("failed to encrypt data, too big for Ed25519")
 	ErrInvalidPublicKeySize = oops.Errorf("failed to verify: invalid ed25519 public key size")
 )
 
-func GenerateEd25519Key() (SigningPrivateKey, error) {
+func GenerateEd25519Key() (types.SigningPrivateKey, error) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ed25519")
@@ -33,7 +37,7 @@ type Ed25519Verifier struct {
 	k []byte
 }
 
-func (k Ed25519PublicKey) NewVerifier() (v Verifier, err error) {
+func (k Ed25519PublicKey) NewVerifier() (v types.Verifier, err error) {
 	temp := new(Ed25519Verifier)
 	temp.k = k
 	v = temp
@@ -137,7 +141,7 @@ func (ed25519 *Ed25519Encryption) EncryptPadding(data []byte, zeroPadding bool) 
 	return
 }
 
-func (elg Ed25519PublicKey) NewEncrypter() (enc Encrypter, err error) {
+func (elg Ed25519PublicKey) NewEncrypter() (enc types.Encrypter, err error) {
 	log.Debug("Creating new Ed25519 encrypter")
 	k := createEd25519PublicKey(elg[:])
 	if k == nil {
@@ -162,7 +166,7 @@ func (v *Ed25519Verifier) VerifyHash(h, sig []byte) (err error) {
 
 	if len(sig) != ed25519.SignatureSize {
 		log.Error("Bad Ed25519 signature size")
-		err = ErrBadSignatureSize
+		err = types.ErrBadSignatureSize
 		return
 	}
 	if len(v.k) != ed25519.PublicKeySize {
@@ -204,7 +208,7 @@ func (k Ed25519PrivateKey) Zero() {
 	}
 }
 
-func (k Ed25519PrivateKey) NewDecrypter() (Decrypter, error) {
+func (k Ed25519PrivateKey) NewDecrypter() (types.Decrypter, error) {
 	if len(k) != ed25519.PrivateKeySize {
 		return nil, oops.Errorf("invalid ed25519 private key size")
 	}
@@ -269,7 +273,7 @@ func (d *Ed25519Decrypter) DecryptPadding(data []byte, zeroPadding bool) ([]byte
 	return message, nil
 }
 
-func (k Ed25519PrivateKey) NewSigner() (Signer, error) {
+func (k Ed25519PrivateKey) NewSigner() (types.Signer, error) {
 	if len(k) != ed25519.PrivateKeySize {
 		return nil, oops.Errorf("invalid ed25519 private key size")
 	}
@@ -280,7 +284,7 @@ func (k Ed25519PrivateKey) Len() int {
 	return len(k)
 }
 
-func (k Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
+func (k Ed25519PrivateKey) Generate() (types.SigningPrivateKey, error) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ed25519 key: %v", err)
@@ -291,7 +295,7 @@ func (k Ed25519PrivateKey) Generate() (SigningPrivateKey, error) {
 	return newKey, nil
 }
 
-func (k Ed25519PrivateKey) Public() (SigningPublicKey, error) {
+func (k Ed25519PrivateKey) Public() (types.SigningPublicKey, error) {
 	fmt.Printf("Ed25519PrivateKey.Public(): len(k) = %d\n", len(k))
 	if len(k) != ed25519.PrivateKeySize {
 		return nil, oops.Errorf("invalid ed25519 private key size: expected %d, got %d",

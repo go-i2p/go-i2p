@@ -1,4 +1,4 @@
-package crypto
+package types
 
 // PrivateKey is an interface for private keys
 type PrivateKey interface {

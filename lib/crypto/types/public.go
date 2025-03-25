@@ -1,4 +1,4 @@
-package crypto
+package types
 
 type PublicKey interface {
 	Len() int

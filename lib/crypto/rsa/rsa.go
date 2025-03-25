@@ -1,4 +1,6 @@
-package crypto
+package rsa
+
+import "github.com/go-i2p/go-i2p/lib/crypto/types"
 
 type (
 	RSA2048PublicKey  [256]byte
@@ -16,7 +18,7 @@ func (r RSA2048PublicKey) Len() int {
 }
 
 // NewVerifier implements SigningPublicKey.
-func (r RSA2048PublicKey) NewVerifier() (Verifier, error) {
+func (r RSA2048PublicKey) NewVerifier() (types.Verifier, error) {
 	panic("unimplemented")
 }
 
@@ -36,7 +38,7 @@ func (r RSA3072PublicKey) Len() int {
 }
 
 // NewVerifier implements SigningPublicKey.
-func (r RSA3072PublicKey) NewVerifier() (Verifier, error) {
+func (r RSA3072PublicKey) NewVerifier() (types.Verifier, error) {
 	panic("unimplemented")
 }
 
@@ -56,6 +58,6 @@ func (r RSA4096PublicKey) Len() int {
 }
 
 // NewVerifier implements SigningPublicKey.
-func (r RSA4096PublicKey) NewVerifier() (Verifier, error) {
+func (r RSA4096PublicKey) NewVerifier() (types.Verifier, error) {
 	panic("unimplemented")
 }

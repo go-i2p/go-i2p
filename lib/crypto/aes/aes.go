@@ -1,10 +1,11 @@
-package crypto
+package aes
 
 import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
@@ -79,7 +80,7 @@ func (d *AESSymmetricDecrypter) Decrypt(data []byte) ([]byte, error) {
 }
 
 // NewEncrypter creates a new AESSymmetricEncrypter
-func (k *AESSymmetricKey) NewEncrypter() (Encrypter, error) {
+func (k *AESSymmetricKey) NewEncrypter() (types.Encrypter, error) {
 	log.Debug("Creating new AESSymmetricEncrypter")
 	return &AESSymmetricEncrypter{
 		Key: k.Key,
@@ -93,7 +94,7 @@ func (k *AESSymmetricKey) Len() int {
 }
 
 // NewDecrypter creates a new AESSymmetricDecrypter
-func (k *AESSymmetricKey) NewDecrypter() (Decrypter, error) {
+func (k *AESSymmetricKey) NewDecrypter() (types.Decrypter, error) {
 	return &AESSymmetricDecrypter{
 		Key: k.Key,
 		IV:  k.IV,
@@ -174,4 +175,8 @@ func (d *AESSymmetricDecrypter) DecryptNoPadding(data []byte) ([]byte, error) {
 	mode.CryptBlocks(plaintext, data)
 
 	return plaintext, nil
+}
+
+func NewCipher(c []byte) (cipher.Block, error) {
+	return aes.NewCipher(c)
 }
