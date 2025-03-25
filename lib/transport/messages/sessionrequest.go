@@ -1,4 +1,6 @@
-package ntcp
+package messages
+
+import "github.com/go-i2p/go-i2p/lib/common/data"
 
 /**
 	1) SessionRequest
@@ -247,8 +249,8 @@ package ntcp
 **/
 
 type SessionRequest struct {
-	XContent []byte // 32-byte X value
-	payload  []byte // payload of message 1
+	XContent [32]byte // 32-byte X value
+	Options  RequestOptions
 	Padding  []byte // padding of message 1
 }
 
@@ -259,12 +261,47 @@ func (sr *SessionRequest) Type() MessageType {
 
 // Payload returns the message payload
 func (sr *SessionRequest) Payload() []byte {
-	return sr.payload
+	return sr.Options.Data()
 }
 
 // PayloadSize returns the message payload size
 func (sr *SessionRequest) PayloadSize() int {
-	return len(sr.payload)
+	return len(sr.Options.Data())
 }
 
 var exampleSessionRequest Message = &SessionRequest{}
+
+// RequestOptions implements the Options block for a SessionRequest
+type RequestOptions struct {
+	// NetworkID is the network ID (currently 2, except for test networks)
+	NetworkID *data.Integer
+	// ProtocolVersion is the protocol version (currently 2)
+	ProtocolVersion *data.Integer
+	// PaddingLength is the length of the padding, 0 or more
+	PaddingLength *data.Integer
+	// Message3Part2Length is the length of the the second AEAD frame in SessionConfirmed
+	Message3Part2Length *data.Integer
+	// Timestamp is the Unix timestamp, unsigned seconds
+	Timestamp *data.Date
+}
+
+// Set message 3 part 2 length (bytes 4-5) - placeholder for now
+// This is the size of the second AEAD frame in SessionConfirmed
+// binary.BigEndian.PutUint16(options[4:6], 0) // Will need to be updated with actual size
+
+// Set timestamp (bytes 8-11, big endian)
+// binary.BigEndian.PutUint32(options[8:12], request.Timestamp)
+
+// Data implements Options for RequestOptions
+func (r RequestOptions) Data() []byte {
+	// Reserved bytes (6-7, 12-15) should be set to 0
+	bytes := make([]byte, 16)
+	copy(bytes[0:1], r.NetworkID.Bytes())
+	copy(bytes[1:2], r.ProtocolVersion.Bytes())
+	copy(bytes[2:4], r.PaddingLength.Bytes())
+	copy(bytes[4:6], r.Message3Part2Length.Bytes())
+	copy(bytes[8:12], r.Timestamp.Bytes())
+	return bytes
+}
+
+var exampleRequestOptions Options = RequestOptions{}

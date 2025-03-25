@@ -3,7 +3,6 @@ package ntcp
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/binary"
 
 	"github.com/flynn/noise"
 	"github.com/go-i2p/logger"
@@ -40,34 +39,21 @@ func (c *NTCP2Session) ComposeInitiatorHandshakeMessage(
 	// Buffer for the complete message
 	buf := new(bytes.Buffer)
 
-	// Write obfuscated key - this has already been obfuscated in CreateSessionRequest()
-	if _, err := buf.Write(request.ObfuscatedKey); err != nil {
+	obfuscatedKey, err := c.ObfuscateEphemeral(request.XContent[:])
+	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	// Create options block - 16 bytes
-	options := make([]byte, 16)
-
-	// Set network ID (2 for production I2P)
-	options[0] = 2
-	// Set protocol version (2 for NTCP2)
-	options[1] = NTCP_PROTOCOL_VERSION
-
-	// Set padding length (bytes 2-3, big endian)
-	binary.BigEndian.PutUint16(options[2:4], uint16(len(request.Padding)))
-
-	// Set message 3 part 2 length (bytes 4-5) - placeholder for now
-	// This is the size of the second AEAD frame in SessionConfirmed
-	binary.BigEndian.PutUint16(options[4:6], 0) // Will need to be updated with actual size
-
-	// Set timestamp (bytes 8-11, big endian)
-	binary.BigEndian.PutUint32(options[8:12], request.Timestamp)
-
-	// Reserved bytes (6-7, 12-15) should be set to 0
+	if wrote, err := buf.Write(obfuscatedKey); err != nil {
+		return nil, nil, nil, err
+	} else {
+		log.Debugf("Wrote %d bytes of obfuscated key", wrote)
+	}
 
 	// Write options block
-	if _, err := buf.Write(options); err != nil {
+	if wrote, err := buf.Write(request.Options.Data()); err != nil {
 		return nil, nil, nil, err
+	} else {
+		log.Debugf("Wrote %d bytes of obfuscated key", wrote)
 	}
 
 	// Initialize Noise

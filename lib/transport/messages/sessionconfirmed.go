@@ -1,4 +1,9 @@
-package ntcp
+package messages
+
+import (
+	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/common/router_info"
+)
 
 /**
 	3) SessionConfirmed
@@ -246,3 +251,49 @@ package ntcp
 	// overwrite the temp_key in memory, no longer needed
 	temp_key = (all zeros)
 **/
+
+type SessionConfirmed struct {
+	// ChaChaPoly encrypted Alice's X25519 static key
+	StaticKey [32]byte
+	// Alice RouterInfo block
+	RouterInfo *router_info.RouterInfo
+	// Alice Options (optional)
+	Options []byte
+	// Arbitrary padding (optional)
+	Padding []byte
+}
+
+// Payload implements Message.
+func (s *SessionConfirmed) Payload() []byte {
+	panic("unimplemented")
+}
+
+// PayloadSize implements Message.
+func (s *SessionConfirmed) PayloadSize() int {
+	panic("unimplemented")
+}
+
+// Type implements Message.
+func (s *SessionConfirmed) Type() MessageType {
+	panic("unimplemented")
+}
+
+var exampleSessionConfirmed Message = &SessionConfirmed{}
+
+// ConfirmedOptions is the interface for SessionConfirmed options.
+// It is 16 bytes long.
+// It contains the following fields:
+// - 1 byte: padding length
+// - 15 bytes: reserved
+type ConfirmedOptions struct {
+	PaddingLength *data.Integer
+}
+
+// Data implements Options.
+func (c *ConfirmedOptions) Data() []byte {
+	data := make([]byte, 16)
+	copy(data[0:1], c.PaddingLength.Bytes())
+	return data
+}
+
+var exampleConfirmedOptions Options = &ConfirmedOptions{}

@@ -1,4 +1,4 @@
-package ntcp
+package messages
 
 /**
 	Messages
@@ -52,6 +52,10 @@ const (
 	MessageTypeSessionConfirmed = 0x02
 	MessageTypeData             = 0x03
 )
+
+type Options interface {
+	Data() []byte
+}
 
 type Message interface {
 	// Type returns the message type

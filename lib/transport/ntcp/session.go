@@ -1,10 +1,6 @@
 package ntcp
 
 import (
-	"crypto/rand"
-	"math/big"
-	"time"
-
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
@@ -35,45 +31,6 @@ type NTCP2Session struct {
 	*noise.NoiseSession
 	*NTCP2Transport
 	paddingStrategy padding.PaddingStrategy
-}
-
-type SessionRequest struct {
-	ObfuscatedKey []byte // 32 bytes
-	Timestamp     uint32 // 4 bytes
-	Padding       []byte // Random padding
-}
-
-func (s *NTCP2Session) CreateSessionRequest() (*SessionRequest, error) {
-	// Get our ephemeral key pair
-	ephemeralKey := make([]byte, 32)
-	if _, err := rand.Read(ephemeralKey); err != nil {
-		return nil, err
-	}
-
-	// Obfuscate the ephemeral key using Bob's static key
-	obfuscatedKey, err := s.ObfuscateEphemeral(ephemeralKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create timestamp (current time in seconds)
-	timestamp := uint32(time.Now().Unix())
-
-	// Add random padding (implementation specific)
-	randomInt, err := rand.Int(rand.Reader, big.NewInt(16))
-	if err != nil {
-		return nil, err
-	}
-	padding := make([]byte, randomInt.Int64()) // Up to 16 bytes of padding
-	if _, err := rand.Read(padding); err != nil {
-		return nil, err
-	}
-
-	return &SessionRequest{
-		ObfuscatedKey: obfuscatedKey,
-		Timestamp:     timestamp,
-		Padding:       padding,
-	}, nil
 }
 
 // NewNTCP2Session creates a new NTCP2 session using the existing noise implementation

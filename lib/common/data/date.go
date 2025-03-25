@@ -85,3 +85,25 @@ func NewDate(data []byte) (date *Date, remainder []byte, err error) {
 	}).Debug("Successfully created new Date")
 	return
 }
+
+// DateFromTime takes a time.Time and returns a data.Date
+func DateFromTime(t time.Time) (date *Date, err error) {
+	// Create a new Date
+	date = new(Date)
+
+	// Convert time to milliseconds since Unix epoch
+	msec := t.UnixNano() / int64(1000000)
+
+	// Convert to big-endian bytes
+	for i := 7; i >= 0; i-- {
+		date[i] = byte(msec & 0xff)
+		msec >>= 8
+	}
+
+	log.WithFields(logrus.Fields{
+		"date_value": date.Int(),
+		"time":       t,
+	}).Debug("Successfully created Date from time.Time")
+
+	return
+}

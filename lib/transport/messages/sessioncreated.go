@@ -1,4 +1,6 @@
-package ntcp
+package messages
+
+import "github.com/go-i2p/go-i2p/lib/common/data"
 
 /**
 	2) SessionCreated
@@ -261,3 +263,47 @@ package ntcp
 	// overwrite the temp_key in memory, no longer needed
 	temp_key = (all zeros)
 **/
+
+type SessionCreated struct {
+	YContent [32]byte // 32 bytes ephemeral key Y
+	Options  [16]byte // Options block
+	Padding  []byte   // Random padding
+}
+
+// Payload implements Message.
+func (s *SessionCreated) Payload() []byte {
+	panic("unimplemented")
+}
+
+// PayloadSize implements Message.
+func (s *SessionCreated) PayloadSize() int {
+	panic("unimplemented")
+}
+
+// Type implements Message.
+func (s *SessionCreated) Type() MessageType {
+	panic("unimplemented")
+}
+
+var exampleSessionCreated Message = &SessionCreated{}
+
+// CreatedOptions is the options block for SessionCreated.
+// It is 16 bytes long.
+// It contains the following fields:
+// - 2 bytes padding length
+// - 4 bytes timestamp
+// - 10 bytes reserved
+type CreatedOptions struct {
+	PaddingLength *data.Integer
+	Timestamp     *data.Date
+}
+
+// Data implements Options.
+func (c *CreatedOptions) Data() []byte {
+	data := make([]byte, 16)
+	copy(data[0:2], c.PaddingLength.Bytes())
+	copy(data[2:6], c.Timestamp.Bytes())
+	return data
+}
+
+var exampleCreatedOptions Options = &CreatedOptions{}
