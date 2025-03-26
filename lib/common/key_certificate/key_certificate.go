@@ -28,9 +28,14 @@ payload :: data
 */
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/go-i2p/go-i2p/lib/crypto/dsa"
+	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
@@ -38,7 +43,6 @@ import (
 
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -133,7 +137,7 @@ func (keyCertificate KeyCertificate) PublicKeyType() (pubkey_type int) {
 
 // ConstructPublicKey returns a publicKey constructed using any excess data that may be stored in the KeyCertififcate.
 // Returns enr errors encountered while parsing.
-func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key crypto.RecievingPublicKey, err error) {
+func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key types.RecievingPublicKey, err error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Constructing publicKey from keyCertificate")
@@ -154,12 +158,12 @@ func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key
 	}
 	switch key_type {
 	case KEYCERT_CRYPTO_ELG:
-		var elg_key crypto.ElgPublicKey
+		var elg_key elgamal.ElgPublicKey
 		copy(elg_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = elg_key
 		log.Debug("Constructed ElgPublicKey")
 	case KEYCERT_CRYPTO_X25519:
-		var ed25519_key crypto.Ed25519PublicKey
+		var ed25519_key ed25519.Ed25519PublicKey
 		copy(ed25519_key[:], data[KEYCERT_PUBKEY_SIZE-KEYCERT_CRYPTO_ELG_SIZE:KEYCERT_PUBKEY_SIZE])
 		public_key = ed25519_key
 		log.Debug("Constructed Ed25519PublicKey")
@@ -225,7 +229,7 @@ func (keyCertificate *KeyCertificate) SigningPublicKeySize() int {
 
 // ConstructSigningPublicKey returns a SingingPublicKey constructed using any excess data that may be stored in the KeyCertificate.
 // Returns any errors encountered while parsing.
-func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (signing_public_key crypto.SigningPublicKey, err error) {
+func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (signing_public_key types.SigningPublicKey, err error) {
 	log.WithFields(logrus.Fields{
 		"input_length": len(data),
 	}).Debug("Constructing signingPublicKey from keyCertificate")
@@ -246,17 +250,17 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 	}
 	switch signing_key_type {
 	case KEYCERT_SIGN_DSA_SHA1:
-		var dsa_key crypto.DSAPublicKey
+		var dsa_key dsa.DSAPublicKey
 		copy(dsa_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_DSA_SHA1_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = dsa_key
 		log.Debug("Constructed DSAPublicKey")
 	case KEYCERT_SIGN_P256:
-		var ec_p256_key crypto.ECP256PublicKey
+		var ec_p256_key ecdsa.ECP256PublicKey
 		copy(ec_p256_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P256_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ec_p256_key
 		log.Debug("Constructed P256PublicKey")
 	case KEYCERT_SIGN_P384:
-		var ec_p384_key crypto.ECP384PublicKey
+		var ec_p384_key ecdsa.ECP384PublicKey
 		copy(ec_p384_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_P384_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ec_p384_key
 		log.Debug("Constructed P384PublicKey")
@@ -285,12 +289,12 @@ func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (sig
 		log.Debug("Constructed RSA4096PublicKey")*/
 		panic("unimplemented RSA4096SigningPublicKey")
 	case KEYCERT_SIGN_ED25519:
-		var ed25519_key crypto.Ed25519PublicKey
+		var ed25519_key ed25519.Ed25519PublicKey
 		copy(ed25519_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_ED25519_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ed25519_key
 		log.Debug("Constructed Ed25519PublicKey")
 	case KEYCERT_SIGN_ED25519PH:
-		var ed25519ph_key crypto.Ed25519PublicKey
+		var ed25519ph_key ed25519.Ed25519PublicKey
 		copy(ed25519ph_key[:], data[KEYCERT_SPK_SIZE-KEYCERT_SIGN_ED25519PH_SIZE:KEYCERT_SPK_SIZE])
 		signing_public_key = ed25519ph_key
 		log.Debug("Constructed Ed25519PHPublicKey")

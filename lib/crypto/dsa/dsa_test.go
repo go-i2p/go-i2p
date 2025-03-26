@@ -1,9 +1,11 @@
-package crypto
+package dsa
 
 import (
 	"crypto/rand"
 	"io"
 	"testing"
+
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 )
 
 func TestDSA(t *testing.T) {
@@ -27,13 +29,13 @@ func TestDSA(t *testing.T) {
 		io.ReadFull(rand.Reader, data)
 		if err == nil {
 			var sig []byte
-			var signer Signer
+			var signer types.Signer
 			signer, err = sk.NewSigner()
 			if err == nil {
 				sig, err = signer.Sign(data)
 				if err == nil {
 					t.Logf("sig=%q", sig)
-					var verify Verifier
+					var verify types.Verifier
 					verify, err = pk.NewVerifier()
 					if err == nil {
 						err = verify.Verify(data, sig)

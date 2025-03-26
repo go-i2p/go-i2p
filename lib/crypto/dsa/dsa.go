@@ -1,4 +1,4 @@
-package crypto
+package dsa
 
 import (
 	"crypto/dsa"
@@ -7,8 +7,12 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetGoI2PLogger()
 
 var dsap = new(big.Int).SetBytes([]byte{
 	0x9c, 0x05, 0xb2, 0xaa, 0x96, 0x0d, 0x9b, 0x97, 0xb8, 0x93, 0x19, 0x63, 0xc9, 0xcc, 0x9e, 0x8c,
@@ -100,7 +104,7 @@ func (k DSAPublicKey) Bytes() []byte {
 }
 
 // create a new dsa verifier
-func (k DSAPublicKey) NewVerifier() (v Verifier, err error) {
+func (k DSAPublicKey) NewVerifier() (v types.Verifier, err error) {
 	log.Debug("Creating new DSA verifier")
 	v = &DSAVerifier{
 		k: createDSAPublicKey(new(big.Int).SetBytes(k[:])),
@@ -134,11 +138,11 @@ func (v *DSAVerifier) VerifyHash(h, sig []byte) (err error) {
 		} else {
 			// invalid signature
 			log.Warn("Invalid DSA signature")
-			err = ErrInvalidSignature
+			err = types.ErrInvalidSignature
 		}
 	} else {
 		log.Error("Bad DSA signature size")
-		err = ErrBadSignatureSize
+		err = types.ErrBadSignatureSize
 	}
 	return
 }
@@ -154,7 +158,7 @@ type DSASigner struct {
 type DSAPrivateKey [20]byte
 
 // create a new dsa signer
-func (k DSAPrivateKey) NewSigner() (s Signer, err error) {
+func (k DSAPrivateKey) NewSigner() (s types.Signer, err error) {
 	log.Debug("Creating new DSA signer")
 	s = &DSASigner{
 		k: createDSAPrivkey(new(big.Int).SetBytes(k[:])),
@@ -166,7 +170,7 @@ func (k DSAPrivateKey) Public() (pk DSAPublicKey, err error) {
 	p := createDSAPrivkey(new(big.Int).SetBytes(k[:]))
 	if p == nil {
 		log.Error("Invalid DSA private key format")
-		err = ErrInvalidKeyFormat
+		err = types.ErrInvalidKeyFormat
 	} else {
 		copy(pk[:], p.Y.Bytes())
 		log.Debug("DSA public key derived successfully")
