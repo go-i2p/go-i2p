@@ -1,12 +1,16 @@
-package crypto
+package ecdsa
 
 import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetGoI2PLogger()
 
 type ECDSAVerifier struct {
 	k *ecdsa.PublicKey
@@ -24,7 +28,7 @@ func (v *ECDSAVerifier) VerifyHash(h, sig []byte) (err error) {
 	r, s := elliptic.Unmarshal(v.c, sig)
 	if r == nil || s == nil || !ecdsa.Verify(v.k, h, r, s) {
 		log.Warn("Invalid ECDSA signature")
-		err = ErrInvalidSignature
+		err = types.ErrInvalidSignature
 	} else {
 		log.Debug("ECDSA signature verified successfully")
 	}
@@ -52,7 +56,7 @@ func createECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerif
 	x, y := elliptic.Unmarshal(c, k[:])
 	if x == nil {
 		log.Error("Invalid ECDSA key format")
-		err = ErrInvalidKeyFormat
+		err = types.ErrInvalidKeyFormat
 	} else {
 		ev = &ECDSAVerifier{
 			c: c,
@@ -77,7 +81,7 @@ func (k ECP256PublicKey) Bytes() []byte {
 	return k[:]
 }
 
-func (k ECP256PublicKey) NewVerifier() (Verifier, error) {
+func (k ECP256PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating new P256 ECDSA verifier")
 	// return createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
 	v, err := createECVerifier(elliptic.P256(), crypto.SHA256, k[:])
@@ -100,7 +104,7 @@ func (k ECP384PublicKey) Len() int {
 	return len(k)
 }
 
-func (k ECP384PublicKey) NewVerifier() (Verifier, error) {
+func (k ECP384PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating new P384 ECDSA verifier")
 	v, err := createECVerifier(elliptic.P384(), crypto.SHA384, k[:])
 	if err != nil {
@@ -123,7 +127,7 @@ func (k ECP521PublicKey) Len() int {
 	return len(k)
 }
 
-func (k ECP521PublicKey) NewVerifier() (Verifier, error) {
+func (k ECP521PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating new P521 ECDSA verifier")
 	v, err := createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
 	if err != nil {
