@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
 )
 
@@ -15,13 +17,13 @@ type HandshakeState struct {
 	// isInitiator indicates whether this side initiated the handshake
 	isInitiator bool
 	// localStaticKey is this router's long-term private key
-	localStaticKey crypto.PrivateKey
+	localStaticKey types.PrivateKey
 	// remoteStaticKey is the remote router's long-term public key
-	remoteStaticKey crypto.PublicKey
+	remoteStaticKey types.PublicKey
 	// localEphemeral is the temporary private key generated for this handshake
-	localEphemeral crypto.PrivateKey
+	localEphemeral types.PrivateKey
 	// remoteEphemeral is the temporary public key received from remote party
-	remoteEphemeral crypto.PublicKey
+	remoteEphemeral types.PublicKey
 	// localPaddingLen is the length of padding bytes we send
 	localPaddingLen int
 	// remotePaddingLen is the length of padding bytes we received
@@ -37,7 +39,7 @@ type HandshakeState struct {
 }
 
 // NewHandshakeState creates a new handshake state for initiating a connection
-func NewHandshakeState(localKey crypto.PrivateKey, remoteKey crypto.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error) {
+func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error) {
 	hs := &HandshakeState{
 		isInitiator:     true,
 		localStaticKey:  localKey,
@@ -48,7 +50,7 @@ func NewHandshakeState(localKey crypto.PrivateKey, remoteKey crypto.PublicKey, r
 
 	// Generate ephemeral keypair
 	var err error
-	hs.localEphemeral, err = crypto.GenerateX25519KeyPair()
+	hs.localEphemeral, _, err = curve25519.GenerateX25519KeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}
@@ -91,7 +93,7 @@ func PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error {
 }
 
 // PerformInboundHandshake handles a handshake initiated by a remote peer
-func PerformInboundHandshake(conn net.Conn, localKey crypto.PrivateKey) (*HandshakeState, error) {
+func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*HandshakeState, error) {
 	// Set deadline for the entire handshake process
 	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
 		return nil, oops.Errorf("failed to set deadline: %v", err)
@@ -107,7 +109,7 @@ func PerformInboundHandshake(conn net.Conn, localKey crypto.PrivateKey) (*Handsh
 
 	// Generate ephemeral keypair
 	var err error
-	hs.localEphemeral, err = crypto.GenerateX25519KeyPair()
+	hs.localEphemeral, _, err = crypto.GenerateX25519KeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}
