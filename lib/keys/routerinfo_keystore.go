@@ -15,7 +15,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
@@ -80,7 +79,7 @@ func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
 	return ed25519.Ed25519PrivateKey(priv), nil
 }
 
-func loadExistingKey(keyData []byte) (crypto.Ed25519PrivateKey, error) {
+func loadExistingKey(keyData []byte) (ed25519.Ed25519PrivateKey, error) {
 	// Validate key length
 	if len(keyData) != ed25519.PrivateKeySize {
 		return nil, oops.Errorf("invalid key length")
@@ -90,7 +89,7 @@ func loadExistingKey(keyData []byte) (crypto.Ed25519PrivateKey, error) {
 	return ed25519.Ed25519PrivateKey(keyData), nil
 }
 
-func (ks *RouterInfoKeystore) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error) {
+func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	public, err := ks.privateKey.Public()
 	if err != nil {
 		return nil, nil, err
@@ -167,7 +166,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(
 		types.RecievingPublicKey(nil),
-		publicKey.(crypto.SigningPublicKey),
+		publicKey.(types.SigningPublicKey),
 		*cert,
 		padding,
 	)
@@ -189,7 +188,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		publishedTime,
 		addresses,
 		options,
-		privateKey.(crypto.SigningPrivateKey),
+		privateKey.(types.SigningPrivateKey),
 		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
 	)
 	if err != nil {
