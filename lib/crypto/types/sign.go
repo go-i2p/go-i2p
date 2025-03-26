@@ -26,11 +26,6 @@ type SigningPublicKey interface {
 	Len() int
 	Bytes() []byte
 }
-type RecievingPublicKey interface {
-	Len() int
-	Bytes() []byte
-	NewEncrypter() (Encrypter, error)
-}
 
 // type for signing data
 type Signer interface {
