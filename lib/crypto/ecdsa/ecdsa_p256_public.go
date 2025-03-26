@@ -8,8 +8,7 @@ import (
 )
 
 type (
-	ECP256PublicKey  [64]byte
-	ECP256PrivateKey [32]byte
+	ECP256PublicKey [64]byte
 )
 
 func (k ECP256PublicKey) Len() int {

@@ -8,8 +8,7 @@ import (
 )
 
 type (
-	ECP384PublicKey  [96]byte
-	ECP384PrivateKey [48]byte
+	ECP384PublicKey [96]byte
 )
 
 func (k ECP384PublicKey) Bytes() []byte {

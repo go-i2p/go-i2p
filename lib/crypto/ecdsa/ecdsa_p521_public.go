@@ -8,8 +8,7 @@ import (
 )
 
 type (
-	ECP521PublicKey  [132]byte
-	ECP521PrivateKey [66]byte
+	ECP521PublicKey [132]byte
 )
 
 func (k ECP521PublicKey) Bytes() []byte {
