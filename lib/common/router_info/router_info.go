@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
-
-	"github.com/go-i2p/go-i2p/lib/crypto"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -373,7 +374,7 @@ func NewRouterInfo(
 	publishedTime time.Time,
 	addresses []*RouterAddress,
 	options map[string]string,
-	signingPrivateKey crypto.SigningPrivateKey,
+	signingPrivateKey types.SigningPrivateKey,
 	sigType int,
 ) (*RouterInfo, error) {
 	log.Debug("Creating new RouterInfo")
@@ -429,10 +430,10 @@ func NewRouterInfo(
 	}
 
 	// 8. Create new signer based on signature type
-	var signer crypto.Signer
+	var signer types.Signer
 	switch sigType {
 	case signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519:
-		ed25519Key, ok := signingPrivateKey.(*crypto.Ed25519PrivateKey)
+		ed25519Key, ok := signingPrivateKey.(*ed25519.Ed25519PrivateKey)
 		if !ok {
 			return nil, oops.Errorf("expected *Ed25519PrivateKey but got %T", signingPrivateKey)
 		}

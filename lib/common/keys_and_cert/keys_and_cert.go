@@ -2,12 +2,15 @@
 package keys_and_cert
 
 import (
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 
 	. "github.com/go-i2p/go-i2p/lib/common/certificate"
 	. "github.com/go-i2p/go-i2p/lib/common/key_certificate"
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/sirupsen/logrus"
 )
 
@@ -78,9 +81,9 @@ total length: 387+ bytes
 // https://geti2p.net/spec/common-structures#keysandcert
 type KeysAndCert struct {
 	KeyCertificate  *KeyCertificate
-	ReceivingPublic crypto.RecievingPublicKey
+	ReceivingPublic types.RecievingPublicKey
 	Padding         []byte
-	SigningPublic   crypto.SigningPublicKey
+	SigningPublic   types.SigningPublicKey
 }
 
 // Bytes returns the entire keyCertificate in []byte form, trims payload to specified length.
@@ -122,13 +125,13 @@ func (keys_and_cert KeysAndCert) Bytes() []byte {
 	return bytes
 }
 
-// publicKey returns the public key as a crypto.publicKey.
-func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.RecievingPublicKey) {
+// publicKey returns the public key as a types.publicKey.
+func (keys_and_cert *KeysAndCert) PublicKey() (key types.RecievingPublicKey) {
 	return keys_and_cert.ReceivingPublic
 }
 
 // signingPublicKey returns the signing public key.
-func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey) {
+func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key types.SigningPublicKey) {
 	return keys_and_cert.SigningPublic
 }
 
@@ -233,7 +236,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 		log.WithError(err).Error("Invalid ElGamal public key length")
 		return
 	}
-	var elgPublicKey crypto.ElgPublicKey
+	var elgPublicKey elgamal.ElgPublicKey
 	copy(elgPublicKey[:], publicKeyData)
 	keysAndCert.ReceivingPublic = elgPublicKey
 
@@ -249,7 +252,7 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 		log.WithError(err).Error("Invalid Ed25519 public key length")
 		return
 	}
-	edPublicKey := crypto.Ed25519PublicKey(signingPubKeyData)
+	edPublicKey := ed25519.Ed25519PublicKey(signingPubKeyData)
 	keysAndCert.SigningPublic = edPublicKey
 
 	// Extract the certificate
@@ -270,13 +273,13 @@ func ReadKeysAndCertElgAndEd25519(data []byte) (keysAndCert *KeysAndCert, remain
 	return
 }
 
-func constructPublicKey(data []byte, cryptoType uint16) (crypto.RecievingPublicKey, error) {
+func constructPublicKey(data []byte, cryptoType uint16) (types.RecievingPublicKey, error) {
 	switch cryptoType {
 	case CRYPTO_KEY_TYPE_ELGAMAL:
 		if len(data) != 256 {
 			return nil, oops.Errorf("invalid ElGamal public key length")
 		}
-		var elgPublicKey crypto.ElgPublicKey
+		var elgPublicKey elgamal.ElgPublicKey
 		copy(elgPublicKey[:], data)
 		return elgPublicKey, nil
 	// Handle other crypto types...
@@ -285,13 +288,13 @@ func constructPublicKey(data []byte, cryptoType uint16) (crypto.RecievingPublicK
 	}
 }
 
-func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPublicKey, error) {
+func constructSigningPublicKey(data []byte, sigType uint16) (types.SigningPublicKey, error) {
 	switch sigType {
 	case SIGNATURE_TYPE_ED25519_SHA512:
 		if len(data) != 32 {
 			return nil, oops.Errorf("invalid Ed25519 public key length")
 		}
-		return crypto.Ed25519PublicKey(data), nil
+		return ed25519.Ed25519PublicKey(data), nil
 	// Handle other signature types...
 	default:
 		return nil, oops.Errorf("unsupported signature key type: %d", sigType)
@@ -302,9 +305,9 @@ func constructSigningPublicKey(data []byte, sigType uint16) (crypto.SigningPubli
 // It validates the sizes of the provided keys and padding before assembling the struct.
 func NewKeysAndCert(
 	keyCertificate *KeyCertificate,
-	publicKey crypto.RecievingPublicKey,
+	publicKey types.RecievingPublicKey,
 	padding []byte,
-	signingPublicKey crypto.SigningPublicKey,
+	signingPublicKey types.SigningPublicKey,
 ) (*KeysAndCert, error) {
 	log.Debug("Creating new KeysAndCert with provided parameters")
 

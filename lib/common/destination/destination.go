@@ -8,10 +8,10 @@ import (
 	"github.com/sirupsen/logrus"
 
 	. "github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 
 	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/common/base64"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -40,7 +40,7 @@ func (destination Destination) Base32Address() (str string) {
 
 	cert := destination.KeysAndCert.Certificate()
 	dest := cert.Bytes()
-	hash := crypto.SHA256(dest)
+	hash := types.SHA256(dest)
 	str = strings.Trim(base32.EncodeToString(hash[:]), "=")
 	str = str + ".b32.i2p"
 

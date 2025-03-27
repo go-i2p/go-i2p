@@ -2,15 +2,16 @@ package keys_and_cert
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
+
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
-	"github.com/go-i2p/go-i2p/lib/crypto"
-	"golang.org/x/crypto/openpgp/elgamal"
+	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -34,12 +35,12 @@ func TestCertificateWithMissingData(t *testing.T) {
 func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Generate signing key pair (Ed25519)
 	// var ed25519_privkey crypto.Ed25519PrivateKey
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ed25519.GenerateEd25519Key()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private %s", err)
 	}
 	// Copy the full private key (includes public key)
-	ed25519_privkey := make(crypto.Ed25519PrivateKey, ed25519.PrivateKeySize)
+	ed25519_privkey := make(ed25519.Ed25519PrivateKey, ed25519.PrivateKeySize)
 	copy(ed25519_privkey, priv)
 	//_, err = (ed25519_privkey).Generate()
 	if err != nil {
@@ -49,20 +50,20 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	if err != nil {
 		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
 	}
-	ed25519_pubkey, ok := ed25519_pubkey_raw.(crypto.SigningPublicKey)
+	ed25519_pubkey, ok := ed25519_pubkey_raw.(types.SigningPublicKey)
 	if !ok {
 		t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
 	}
 
 	// Generate encryption key pair (ElGamal)
 	var elgamal_privkey elgamal.PrivateKey
-	err = crypto.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	err = elgamal.ElgamalGenerate(&elgamal_privkey, rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
 	}
 
 	// Convert elgamal public key to crypto.ElgPublicKey
-	var elg_pubkey crypto.ElgPublicKey
+	var elg_pubkey elgamal.ElgPublicKey
 	yBytes := elgamal_privkey.PublicKey.Y.Bytes()
 	if len(yBytes) > 256 {
 		t.Fatalf("ElGamal public key Y too large")

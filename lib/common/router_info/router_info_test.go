@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
 	"github.com/go-i2p/go-i2p/lib/common/certificate"
@@ -14,16 +16,16 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto"
+	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/openpgp/elgamal"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_address"
 )
 
 func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo, error) {
 	// Generate signing key pair (Ed25519)
-	var ed25519_privkey crypto.Ed25519PrivateKey
-	ed25519_signingprivkey, err := crypto.GenerateEd25519Key() // Use direct key generation
+	var ed25519_privkey ed25519.Ed25519PrivateKey
+	ed25519_signingprivkey, err := ed25519.GenerateEd25519Key() // Use direct key generation
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
@@ -45,21 +47,21 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 
 	// Generate encryption key pair (ElGamal)
 	var elgamal_privkey elgamal.PrivateKey
-	err = crypto.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	err = elgamal.ElgamalGenerate(&elgamal_privkey, rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
 	}
 
-	// Convert elgamal private key to crypto.ElgPrivateKey
-	var elg_privkey crypto.ElgPrivateKey
+	// Convert elgamal private key to elgamal.ElgPrivateKey
+	var elg_privkey elgamal.ElgPrivateKey
 	xBytes := elgamal_privkey.X.Bytes()
 	if len(xBytes) > 256 {
 		t.Fatalf("ElGamal private key X too large")
 	}
 	copy(elg_privkey[256-len(xBytes):], xBytes)
 
-	// Convert elgamal public key to crypto.ElgPublicKey
-	var elg_pubkey crypto.ElgPublicKey
+	// Convert elgamal public key to elgamal.ElgPublicKey
+	var elg_pubkey elgamal.ElgPublicKey
 	yBytes := elgamal_privkey.PublicKey.Y.Bytes()
 	if len(yBytes) > 256 {
 		t.Fatalf("ElGamal public key Y too large")

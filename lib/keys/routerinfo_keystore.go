@@ -70,13 +70,13 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 
 func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
 	// Generate a new key pair
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ed25519.GenerateEd25519Key()
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert to our type
-	return ed25519.Ed25519PrivateKey(priv), nil
+	// Convert to our type using type assertion
+	return priv.(ed25519.Ed25519PrivateKey), nil
 }
 
 func loadExistingKey(keyData []byte) (ed25519.Ed25519PrivateKey, error) {

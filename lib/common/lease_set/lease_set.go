@@ -10,13 +10,15 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/lease"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
+	"github.com/go-i2p/go-i2p/lib/crypto/dsa"
+	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -223,7 +225,7 @@ func ReadDestinationFromLeaseSet(data []byte) (dest destination.Destination, rem
 
 // PublicKey returns the public key as crypto.ElgPublicKey.
 // Returns errors encountered during parsing.
-func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error) {
+func (lease_set LeaseSet) PublicKey() (public_key elgamal.ElgPublicKey, err error) {
 	_, remainder, err := keys_and_cert.ReadKeysAndCert(lease_set)
 	remainder_len := len(remainder)
 	if remainder_len < LEASE_SET_PUBKEY_SIZE {
@@ -238,7 +240,7 @@ func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error
 
 // SigningKey returns the signing public key as crypto.SigningPublicKey.
 // returns errors encountered during parsing.
-func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error) {
+func (lease_set LeaseSet) SigningKey() (signing_public_key types.SigningPublicKey, err error) {
 	log.Debug("Retrieving SigningKey from LeaseSet")
 	destination, err := lease_set.Destination()
 	if err != nil {
@@ -266,7 +268,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 	if cert_len == 0 {
 		// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
 		// signingPublicKey space as legacy DSA SHA1 signingPublicKey.
-		var dsa_pk crypto.DSAPublicKey
+		var dsa_pk dsa.DSAPublicKey
 		copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 		signing_public_key = dsa_pk
 		log.Debug("Retrieved legacy DSA SHA1 signingPublicKey")
@@ -292,7 +294,7 @@ func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicK
 		} else {
 			// No Certificate is present, return the LEASE_SET_SPK_SIZE byte
 			// signingPublicKey space as legacy DSA SHA1 signingPublicKey.
-			var dsa_pk crypto.DSAPublicKey
+			var dsa_pk dsa.DSAPublicKey
 			copy(dsa_pk[:], lease_set[offset:offset+LEASE_SET_SPK_SIZE])
 			signing_public_key = dsa_pk
 			log.Debug("Retrieved legacy DSA SHA1 signingPublicKey (Certificate present but not Key Certificate)")
@@ -482,10 +484,10 @@ func (lease_set LeaseSet) OldestExpiration() (earliest data.Date, err error) {
 
 func NewLeaseSet(
 	dest destination.Destination,
-	encryptionKey crypto.RecievingPublicKey,
-	signingKey crypto.SigningPublicKey,
+	encryptionKey types.RecievingPublicKey,
+	signingKey types.SigningPublicKey,
 	leases []lease.Lease,
-	signingPrivateKey crypto.SigningPrivateKey,
+	signingPrivateKey types.SigningPrivateKey,
 ) (LeaseSet, error) {
 	log.Debug("Creating new LeaseSet")
 	// Validate destination size

@@ -3,7 +3,11 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+
+	"github.com/go-i2p/logger"
 )
+
+var log = logger.GetGoI2PLogger()
 
 type TunnelData [1028]byte
 

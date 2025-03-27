@@ -28,12 +28,12 @@ payload :: data
 */
 
 import (
-	"crypto/ecdsa"
-	"crypto/ed25519"
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/common/signature"
 	"github.com/go-i2p/go-i2p/lib/crypto/dsa"
+	"github.com/go-i2p/go-i2p/lib/crypto/ecdsa"
+	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
 	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"

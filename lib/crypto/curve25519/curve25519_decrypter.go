@@ -28,7 +28,7 @@ func (c *Curve25519Decrypter) Decrypt(data []byte) ([]byte, error) {
 
 	// Extract the ephemeral public key and encrypted data
 	ephemeralPub := data[offset : offset+256]
-	encryptedData := data[offset+257 : len(data)]
+	encryptedData := data[offset+257:]
 
 	// Convert private key to the correct format
 	var privKey [32]byte
