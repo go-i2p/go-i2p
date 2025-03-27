@@ -36,13 +36,14 @@ func (elg Curve25519PublicKey) NewEncrypter() (enc types.Encrypter, err error) {
 
 func createCurve25519PublicKey(data []byte) (k *curve25519.PublicKey) {
 	log.WithField("data_length", len(data)).Debug("Creating Curve25519PublicKey")
-	if len(data) == 256 {
+	if len(data) == curve25519.PublicKeySize { // 32 bytes
 		k2 := curve25519.PublicKey{}
 		copy(k2[:], data)
 		k = &k2
 		log.Debug("Curve25519PublicKey created successfully")
 	} else {
-		log.Warn("Invalid data length for Curve25519PublicKey")
+		log.WithField("expected_length", curve25519.PublicKeySize).
+			Warn("Invalid data length for Curve25519PublicKey")
 	}
 	return
 }

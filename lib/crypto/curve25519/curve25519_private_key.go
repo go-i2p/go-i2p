@@ -16,6 +16,6 @@ func (c Curve25519PrivateKey) NewDecrypter() (types.Decrypter, error) {
 		return nil, oops.Errorf("invalid curve25519 private key size")
 	}
 	return &Curve25519Decrypter{
-		privateKey: c,
+		privateKey: curve25519.PrivateKey(c),
 	}, nil
 }

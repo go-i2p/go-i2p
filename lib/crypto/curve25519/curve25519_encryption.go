@@ -1,95 +1,96 @@
 package curve25519
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"io"
-	"math/big"
 
 	"github.com/samber/oops"
-	"github.com/sirupsen/logrus"
 	curve25519 "go.step.sm/crypto/x25519"
 )
 
 type Curve25519Encryption struct {
-	p, a, b1 *big.Int
+	publicKey curve25519.PublicKey
+	ephemeral curve25519.PrivateKey
 }
 
-func (curve25519 *Curve25519Encryption) Encrypt(data []byte) (enc []byte, err error) {
+func (c *Curve25519Encryption) Encrypt(data []byte) ([]byte, error) {
+	return c.EncryptPadding(data, true)
+}
+
+func (c *Curve25519Encryption) EncryptPadding(data []byte, zeroPadding bool) ([]byte, error) {
 	log.WithField("data_length", len(data)).Debug("Encrypting data with Curve25519")
-	return curve25519.EncryptPadding(data, true)
-}
 
-func (curve25519 *Curve25519Encryption) EncryptPadding(data []byte, zeroPadding bool) (encrypted []byte, err error) {
-	log.WithFields(logrus.Fields{
-		"data_length":  len(data),
-		"zero_padding": zeroPadding,
-	}).Debug("Encrypting data with padding using Curve25519")
 	if len(data) > 222 {
 		log.Error("Data too big for Curve25519 encryption")
-		err = Curve25519EncryptTooBig
-		return
+		return nil, Curve25519EncryptTooBig
 	}
-	mbytes := make([]byte, 255)
-	mbytes[0] = 0xFF
-	copy(mbytes[33:], data)
-	// do sha256 of payload
-	d := sha256.Sum256(mbytes[33 : len(data)+33])
-	copy(mbytes[1:], d[:])
-	m := new(big.Int).SetBytes(mbytes)
-	// do encryption
-	b := new(big.Int).Mod(new(big.Int).Mul(curve25519.b1, m), curve25519.p).Bytes()
+
+	// Perform X25519 key exchange
+	sharedSecret, err := c.ephemeral.SharedKey(c.publicKey)
+	if err != nil {
+		return nil, oops.Errorf("failed to derive shared secret: %w", err)
+	}
+
+	// Derive encryption key using SHA-256
+	key := sha256.Sum256(sharedSecret)
+
+	// Create AES-GCM cipher
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, oops.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, oops.Errorf("failed to create GCM: %w", err)
+	}
+
+	// Create nonce
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, oops.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Encrypt data
+	ciphertext := aesGCM.Seal(nil, nonce, data, nil)
+
+	// Format output as: [ephemeral public key][nonce][ciphertext]
+	ephemeralPub := c.ephemeral.Public().(curve25519.PublicKey)
+	result := make([]byte, 0, curve25519.PublicKeySize+len(nonce)+len(ciphertext))
+	result = append(result, ephemeralPub...)
+	result = append(result, nonce...)
+	result = append(result, ciphertext...)
 
 	if zeroPadding {
-		encrypted = make([]byte, 514)
-		copy(encrypted[1:], curve25519.a.Bytes())
-		copy(encrypted[258:], b)
-	} else {
-		encrypted = make([]byte, 512)
-		copy(encrypted, curve25519.a.Bytes())
-		copy(encrypted[256:], b)
+		// Add a zero byte prefix if requested
+		paddedResult := make([]byte, 1+len(result))
+		paddedResult[0] = 0x00
+		copy(paddedResult[1:], result)
+		result = paddedResult
 	}
-	log.WithField("encrypted_length", len(encrypted)).Debug("Data encrypted successfully")
-	return
+
+	log.WithField("encrypted_length", len(result)).Debug("Data encrypted successfully")
+	return result, nil
 }
 
-func createCurve25519Encryption(pub *curve25519.PublicKey, rand io.Reader) (enc *Curve25519Encryption, err error) {
+func createCurve25519Encryption(pub *curve25519.PublicKey, rand io.Reader) (*Curve25519Encryption, error) {
 	log.Debug("Creating Curve25519 encryption session")
 
-	// Define p = 2^255 - 19 (the prime used in Curve25519)
-	p := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
-
-	// Validate public key
 	if pub == nil || len(*pub) != curve25519.PublicKeySize {
 		return nil, oops.Errorf("invalid Curve25519 public key")
 	}
 
-	// Convert public key bytes to big.Int
-	a := new(big.Int).SetBytes(*pub)
-
-	// Generate random scalar for encryption
-	kbytes := make([]byte, 32)
-	if _, err = io.ReadFull(rand, kbytes); err != nil {
-		log.WithError(err).Error("Failed to generate random scalar for Curve25519")
-		return nil, err
+	// Generate ephemeral key pair
+	_, ephemeralPriv, err := curve25519.GenerateKey(rand)
+	if err != nil {
+		return nil, oops.Errorf("failed to generate ephemeral key: %w", err)
 	}
 
-	k := new(big.Int).SetBytes(kbytes)
-	k = k.Mod(k, p)
-
-	// Ensure k is not zero
-	if k.Sign() == 0 {
-		return nil, oops.Errorf("generated zero scalar")
-	}
-
-	// Calculate b1 = k * pubKey mod p
-	b1 := new(big.Int).Exp(a, k, p)
-
-	enc = &Curve25519Encryption{
-		p:  p,
-		a:  new(big.Int).Exp(new(big.Int).SetInt64(9), k, p), // Base point for Curve25519
-		b1: b1,
-	}
-
-	log.Debug("Curve25519 encryption session created successfully")
-	return enc, nil
+	return &Curve25519Encryption{
+		publicKey: *pub,
+		ephemeral: ephemeralPriv,
+	}, nil
 }
