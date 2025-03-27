@@ -1,65 +1,65 @@
 package curve25519
 
 import (
-	"bytes"
 	"crypto/sha256"
 
 	"github.com/samber/oops"
-	x25519 "go.step.sm/crypto/x25519"
+	"go.step.sm/crypto/x25519"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
+// Curve25519Decrypter handles Curve25519-based decryption
 type Curve25519Decrypter struct {
 	privateKey x25519.PrivateKey
 }
 
-// Decrypt implements Decrypter.
+// Decrypt decrypts data encrypted with Curve25519 and ChaCha20-Poly1305
 func (c *Curve25519Decrypter) Decrypt(data []byte) ([]byte, error) {
 	log.WithField("data_length", len(data)).Debug("Decrypting data with Curve25519")
 
-	if len(data) != 514 && len(data) != 512 {
-		return nil, oops.Errorf("invalid data length for curve25519 decryption: got %d bytes", len(data))
+	// Validate data length - must be at least public key + minimum nonce + tag size
+	minSize := x25519.PublicKeySize + 12 + 16 // 12 is ChaCha20-Poly1305 nonce size, 16 is tag size
+	if len(data) < minSize {
+		return nil, oops.Errorf("data too short for Curve25519 decryption: %d bytes", len(data))
 	}
 
-	// Handle zero padding if present
-	offset := 0
-	if len(data) == 514 {
-		offset = 2 // Adjust for padding
-	}
+	// Extract the ephemeral public key
+	ephemeralPub := data[:x25519.PublicKeySize]
 
-	// Extract the ephemeral public key (should be 32 bytes for X25519)
-	if offset+32 > len(data) {
-		return nil, oops.Errorf("data too short to extract ephemeral key")
-	}
-	ephemeralPub := data[offset : offset+32]
+	// Create a proper public key
+	var pubKey x25519.PublicKey
+	copy(pubKey[:], ephemeralPub)
 
-	// Skip one byte separator and extract encrypted data
-	if offset+33 >= len(data) {
-		return nil, oops.Errorf("data too short to extract encrypted content")
-	}
-	encryptedData := data[offset+33:]
-
-	// Perform X25519 key exchange using smallstep's implementation
-	shared, err := c.privateKey.SharedKey(ephemeralPub)
+	// Derive shared secret using X25519 key exchange
+	sharedSecret, err := c.privateKey.SharedKey(pubKey[:])
 	if err != nil {
-		return nil, oops.Errorf("curve25519 key exchange failed: %w", err)
+		return nil, oops.Errorf("Curve25519 key exchange failed: %w", err)
 	}
 
-	// Decrypt the data using the shared secret
-	decrypted := make([]byte, len(encryptedData))
-	for i := 0; i < len(encryptedData); i++ {
-		decrypted[i] = encryptedData[i] ^ shared[i%32]
+	// Derive decryption key using SHA-256
+	key := sha256.Sum256(sharedSecret)
+
+	// Create ChaCha20-Poly1305 cipher
+	aead, err := chacha20poly1305.New(key[:])
+	if err != nil {
+		return nil, oops.Errorf("failed to create ChaCha20-Poly1305 cipher: %w", err)
 	}
 
-	// Verify the SHA256 hash in the decrypted data
-	if len(decrypted) < 33 {
-		return nil, oops.Errorf("decrypted data too short to verify hash")
+	nonceSize := aead.NonceSize()
+	if len(data) < x25519.PublicKeySize+nonceSize {
+		return nil, oops.Errorf("data too short to extract nonce")
 	}
 
-	hash := sha256.Sum256(decrypted[33:])
-	if !bytes.Equal(hash[:], decrypted[1:33]) {
-		return nil, oops.Errorf("invalid hash in decrypted data")
+	// Extract nonce and ciphertext
+	nonce := data[x25519.PublicKeySize : x25519.PublicKeySize+nonceSize]
+	ciphertext := data[x25519.PublicKeySize+nonceSize:]
+
+	// Decrypt the data
+	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, oops.Errorf("failed to decrypt data: %w", err)
 	}
 
 	log.Debug("Data decrypted successfully")
-	return decrypted[33:], nil
+	return plaintext, nil
 }

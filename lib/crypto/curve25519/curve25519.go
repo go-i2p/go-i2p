@@ -7,17 +7,25 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
-	curve25519 "go.step.sm/crypto/x25519"
+	"go.step.sm/crypto/x25519"
 )
 
 var log = logger.GetGoI2PLogger()
 
-var Curve25519EncryptTooBig = oops.Errorf("failed to encrypt data, too big for Curve25519")
+var (
+	ErrDataTooBig        = oops.Errorf("data too big for Curve25519 encryption")
+	ErrInvalidPublicKey  = oops.Errorf("invalid public key for Curve25519")
+	ErrInvalidPrivateKey = oops.Errorf("invalid private key for Curve25519")
+	ErrInvalidSignature  = oops.Errorf("invalid signature for Curve25519")
+	ErrDecryptionFailed  = oops.Errorf("failed to decrypt data with Curve25519")
+)
 
-func GenerateX25519KeyPair() (types.PublicEncryptionKey, types.PrivateEncryptionKey, error) {
-	pub, priv, err := curve25519.GenerateKey(rand.Reader)
+// GenerateKeyPair generates a new Curve25519 key pair
+func GenerateKeyPair() (types.PublicEncryptionKey, types.PrivateEncryptionKey, error) {
+	log.Debug("Generating new Curve25519 key pair")
+	pub, priv, err := x25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, nil, oops.Errorf("failed to generate curve25519 key pair: %w", err)
+		return nil, nil, oops.Errorf("failed to generate Curve25519 key pair: %w", err)
 	}
-	return Curve25519PublicKey(pub), Curve25519PrivateKey(priv), nil
+	return Curve25519PublicKey(pub[:]), Curve25519PrivateKey(priv), nil
 }

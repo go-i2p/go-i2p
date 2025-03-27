@@ -5,40 +5,38 @@ import (
 	"crypto/sha512"
 
 	"github.com/samber/oops"
-
-	curve25519 "go.step.sm/crypto/x25519"
+	"go.step.sm/crypto/x25519"
 )
 
+// Curve25519Signer handles Curve25519-based signing operations
 type Curve25519Signer struct {
 	k []byte
 }
 
-func (s *Curve25519Signer) Sign(data []byte) (sig []byte, err error) {
+// Sign signs data using Curve25519
+func (s *Curve25519Signer) Sign(data []byte) ([]byte, error) {
 	log.WithField("data_length", len(data)).Debug("Signing data with Curve25519")
 
-	if len(s.k) != curve25519.PrivateKeySize {
+	if len(s.k) != x25519.PrivateKeySize {
 		log.Error("Invalid Curve25519 private key size")
-		err = oops.Errorf("failed to sign: invalid curve25519 private key size")
-		return
+		return nil, ErrInvalidPrivateKey
 	}
+
+	// Hash the data using SHA-512
 	h := sha512.Sum512(data)
-	sig, err = s.SignHash(h[:])
-	if err != nil {
-		log.WithError(err).Error("Failed to sign data")
-	} else {
-		log.WithField("signature_length", len(sig)).Debug("Data signed successfully")
-	}
-	return
+	return s.SignHash(h[:])
 }
 
-func (s *Curve25519Signer) SignHash(h []byte) (sig []byte, err error) {
+// SignHash signs a pre-computed hash using Curve25519
+func (s *Curve25519Signer) SignHash(h []byte) ([]byte, error) {
 	log.WithField("hash_length", len(h)).Debug("Signing hash with Curve25519")
-	sig, err = curve25519.Sign(rand.Reader, s.k, h)
+
+	sig, err := x25519.Sign(rand.Reader, s.k, h)
 	if err != nil {
 		log.WithError(err).Error("Failed to sign hash")
-	} else {
-		log.WithField("signature_length", len(sig)).Debug("Hash signed successfully")
+		return nil, oops.Errorf("failed to sign: %w", err)
 	}
-	// return curve25519.Sign(rand.Reader, s.k, h)
-	return
+
+	log.WithField("signature_length", len(sig)).Debug("Hash signed successfully")
+	return sig, nil
 }
