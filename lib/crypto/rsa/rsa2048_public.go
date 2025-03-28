@@ -6,6 +6,16 @@ type (
 	RSA2048PublicKey [256]byte
 )
 
+// Verify implements types.Verifier.
+func (r RSA2048PublicKey) Verify(data []byte, sig []byte) error {
+	panic("unimplemented")
+}
+
+// VerifyHash implements types.Verifier.
+func (r RSA2048PublicKey) VerifyHash(h []byte, sig []byte) error {
+	panic("unimplemented")
+}
+
 // Bytes implements SigningPublicKey.
 func (r RSA2048PublicKey) Bytes() []byte {
 	panic("unimplemented")
@@ -20,3 +30,6 @@ func (r RSA2048PublicKey) Len() int {
 func (r RSA2048PublicKey) NewVerifier() (types.Verifier, error) {
 	panic("unimplemented")
 }
+
+var _ types.PublicKey = RSA2048PublicKey{}
+var _ types.Verifier = RSA2048PublicKey{}
