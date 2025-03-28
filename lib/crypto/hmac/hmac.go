@@ -1,12 +1,8 @@
 package hmac
 
 import (
+	"crypto/hmac"
 	"crypto/md5"
-)
-
-const (
-	IPAD = byte(0x36)
-	OPAD = byte(0x5C)
 )
 
 type (
@@ -14,31 +10,18 @@ type (
 	HMACDigest [16]byte
 )
 
-func (hk HMACKey) xor(p byte) (i []byte) {
-	i = make([]byte, 64)
-	for idx, b := range hk {
-		i[idx] = b ^ p
-	}
-	c := 32
-	for c > 0 {
-		c--
-		i[c+32] = p
-	}
-	return
-}
-
-// do i2p hmac
+// I2PHMAC computes HMAC-MD5 using the provided key and data
 func I2PHMAC(data []byte, k HMACKey) (d HMACDigest) {
-	buff := make([]byte, 64+len(data))
-	ip := k.xor(IPAD)
-	copy(buff, ip)
-	copy(buff[64:], data)
-	h := md5.Sum(buff)
+	// Create a new HMAC instance using MD5 hash and our key
+	mac := hmac.New(md5.New, k[:])
 
-	buff = make([]byte, 96)
-	copy(buff, k.xor(OPAD))
-	copy(buff[64:], h[:])
-	// go zeros slices so we do not have to zero
-	d = md5.Sum(buff)
+	// Write data to HMAC
+	mac.Write(data)
+
+	// Calculate the HMAC and extract the digest
+	digest := mac.Sum(nil)
+
+	// Copy to our fixed-size return type
+	copy(d[:], digest)
 	return
 }

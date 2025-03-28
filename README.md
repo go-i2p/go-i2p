@@ -32,10 +32,10 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] RSA_SHA512_4096
     - [ ] Ed25519
     - [ ] Red25519
-  - [ ] ElGamal
-  - [ ] AES256
+  - [X] ElGamal
+  - [X] AES256
   - [X] X25519
-  - [ ] ChaCha20/Poly1305
+  - [X] ChaCha20/Poly1305
   - [ ] Elligator2
   - [ ] HKDF
   - [X] HMAC
