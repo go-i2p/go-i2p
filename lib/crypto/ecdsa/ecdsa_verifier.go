@@ -45,7 +45,7 @@ func (v *ECDSAVerifier) Verify(data, sig []byte) (err error) {
 	return
 }
 
-func createECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerifier, err error) {
+func CreateECVerifier(c elliptic.Curve, h crypto.Hash, k []byte) (ev *ECDSAVerifier, err error) {
 	log.WithFields(logrus.Fields{
 		"curve": c.Params().Name,
 		"hash":  h.String(),

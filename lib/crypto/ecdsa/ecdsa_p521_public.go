@@ -11,6 +11,16 @@ type (
 	ECP521PublicKey [132]byte
 )
 
+// Verify implements types.Verifier.
+func (k ECP521PublicKey) Verify(data []byte, sig []byte) error {
+	panic("unimplemented")
+}
+
+// VerifyHash implements types.Verifier.
+func (k ECP521PublicKey) VerifyHash(h []byte, sig []byte) error {
+	panic("unimplemented")
+}
+
 func (k ECP521PublicKey) Bytes() []byte {
 	return k[:]
 }
@@ -21,7 +31,7 @@ func (k ECP521PublicKey) Len() int {
 
 func (k ECP521PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating new P521 ECDSA verifier")
-	v, err := createECVerifier(elliptic.P521(), crypto.SHA512, k[:])
+	v, err := CreateECVerifier(elliptic.P521(), crypto.SHA512, k[:])
 	if err != nil {
 		log.WithError(err).Error("Failed to create P521 ECDSA verifier")
 	}

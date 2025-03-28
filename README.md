@@ -21,9 +21,9 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] ECDSA_SHA256_P256
     - [ ] ECDSA_SHA384_P384
     - [ ] ECDSA_SHA512_P521
-    - [ ] Ed25519
+    - [X] Ed25519
   - Verifying
-    - [ ] DSA
+    - [X] DSA
     - [ ] ECDSA_SHA256_P256
     - [ ] ECDSA_SHA384_P384
     - [ ] ECDSA_SHA512_P521
@@ -34,11 +34,11 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Red25519
   - [ ] ElGamal
   - [ ] AES256
-  - [ ] X25519
+  - [X] X25519
   - [ ] ChaCha20/Poly1305
   - [ ] Elligator2
   - [ ] HKDF
-  - [ ] HMAC
+  - [X] HMAC
   - [X] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
