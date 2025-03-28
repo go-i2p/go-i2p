@@ -25,7 +25,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]&#10;at fuzz.go:11: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]&#10;at fuzz.go:9: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:9: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString]&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]&#10;at fuzz.go:11: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M58,-130C58,-130 28,-130 28,-130 22,-130 16,-124 16,-118 16,-118 16,-106 16,-106 16,-100 22,-94 28,-94 28,-94 58,-94 58,-94 64,-94 70,-100 70,-106 70,-106 70,-118 70,-118 70,-124 64,-130 58,-130"/>
 <text text-anchor="middle" x="43" y="-107.8" font-family="Verdana" font-size="14.00" fill="#000000">Fuzz</text>
 </a>
@@ -42,9 +42,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString -->
-<g id="edge3" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString</title>
-<g id="a_edge3"><a xlink:title="at fuzz.go:9: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString]">
+<g id="a_edge1"><a xlink:title="at fuzz.go:9: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/data.ToI2PString]">
 <path fill="none" stroke="#8b4513" d="M70.0043,-97.129C89.2049,-86.6594 115.8894,-72.3156 146.6535,-56.7465"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="148.5211,-59.7249 155.8799,-52.1027 145.374,-53.4722 148.5211,-59.7249"/>
 </a>
@@ -61,9 +61,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data -->
-<g id="edge1" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data</title>
-<g id="a_edge1"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]">
+<g id="a_edge2"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Data]">
 <path fill="none" stroke="#8b4513" d="M70.1048,-112C94.3917,-112 130.2444,-112 157.2471,-112"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="157.4848,-115.5001 167.4848,-112 157.4847,-108.5001 157.4848,-115.5001"/>
 </a>
@@ -80,9 +80,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length -->
-<g id="edge2" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/string.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length</title>
-<g id="a_edge2"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]&#10;at fuzz.go:11: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]">
+<g id="a_edge3"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]&#10;at fuzz.go:11: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.I2PString).Length]">
 <path fill="none" stroke="#8b4513" d="M70.1048,-122.9056C93.2412,-132.2144 126.8736,-145.7464 153.3522,-156.4"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="152.1674,-159.6959 162.7511,-160.1816 154.7804,-153.2018 152.1674,-159.6959"/>
 </a>

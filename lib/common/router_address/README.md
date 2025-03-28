@@ -60,6 +60,12 @@ Bytes returns the router address as a []byte.
 func (router_address RouterAddress) CapsString() I2PString
 ```
 
+#### func (RouterAddress) CheckOption
+
+```go
+func (router_address RouterAddress) CheckOption(key string) bool
+```
+
 #### func (RouterAddress) Cost
 
 ```go
@@ -80,6 +86,12 @@ Expiration returns the expiration for this RouterAddress as an I2P Date.
 func (router_address RouterAddress) GetOption(key I2PString) I2PString
 ```
 GetOption returns the value of the option specified by the key
+
+#### func (RouterAddress) HasOption
+
+```go
+func (router_address RouterAddress) HasOption(key I2PString) bool
+```
 
 #### func (RouterAddress) Host
 
@@ -140,7 +152,7 @@ Network implements net.Addr. It returns the transport type plus 4 or 6
 #### func (RouterAddress) Options
 
 ```go
-func (router_address RouterAddress) Options() Mapping
+func (routerAddress RouterAddress) Options() Mapping
 ```
 Options returns the options for this RouterAddress as an I2P Mapping.
 
@@ -171,7 +183,7 @@ func (router_address RouterAddress) ProtocolVersionString() I2PString
 #### func (RouterAddress) StaticKey
 
 ```go
-func (router_address RouterAddress) StaticKey() ([32]byte, error)
+func (routerAddress RouterAddress) StaticKey() ([32]byte, error)
 ```
 
 #### func (RouterAddress) StaticKeyString
@@ -203,6 +215,6 @@ func (router_address *RouterAddress) UDP() bool
 
 
 
-router_address
+router_address 
 
 github.com/go-i2p/go-i2p/lib/common/router_address

@@ -22,68 +22,49 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey -->
-<g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey | defined in session_key.go:25&#10;at session_key.go:27: calling [github.com/sirupsen/logrus.Warn]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M312.3221,-52C312.3221,-52 217.5939,-52 217.5939,-52 211.5939,-52 205.5939,-46 205.5939,-40 205.5939,-40 205.5939,-28 205.5939,-28 205.5939,-22 211.5939,-16 217.5939,-16 217.5939,-16 312.3221,-16 312.3221,-16 318.3221,-16 324.3221,-22 324.3221,-28 324.3221,-28 324.3221,-40 324.3221,-40 324.3221,-46 318.3221,-52 312.3221,-52"/>
-<text text-anchor="middle" x="264.958" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSessionKey</text>
-</a>
-</g>
-</g>
-<!-- github.com/sirupsen/logrus.Warn -->
-<g id="node2" class="node">
-<title>github.com/sirupsen/logrus.Warn</title>
-<g id="a_node2"><a xlink:title="github.com/sirupsen/logrus.Warn | defined in exported.go:113">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M444.3837,-52C444.3837,-52 409.3921,-52 409.3921,-52 403.3921,-52 397.3921,-46 397.3921,-40 397.3921,-40 397.3921,-28 397.3921,-28 397.3921,-22 403.3921,-16 409.3921,-16 409.3921,-16 444.3837,-16 444.3837,-16 450.3837,-16 456.3837,-22 456.3837,-28 456.3837,-28 456.3837,-40 456.3837,-40 456.3837,-46 450.3837,-52 444.3837,-52"/>
-<text text-anchor="middle" x="426.8879" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="426.8879" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey&#45;&gt;github.com/sirupsen/logrus.Warn -->
-<g id="edge7" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey&#45;&gt;github.com/sirupsen/logrus.Warn</title>
-<g id="a_edge7"><a xlink:title="at session_key.go:27: calling [github.com/sirupsen/logrus.Warn]">
-<path fill="none" stroke="#8b4513" d="M324.3352,-34C345.2029,-34 368.1346,-34 387.0117,-34"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="387.0431,-37.5001 397.043,-34 387.043,-30.5001 387.0431,-37.5001"/>
-</a>
-</g>
-</g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey -->
-<g id="node3" class="node">
+<g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey | defined in session_key.go:33&#10;at session_key.go:34: calling [github.com/sirupsen/logrus.WithField]&#10;at session_key.go:34: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at session_key.go:35: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey]&#10;at session_key.go:37: calling [github.com/sirupsen/logrus.WithError]&#10;at session_key.go:37: calling [(*github.com/sirupsen/logrus.Entry).Error]&#10;at session_key.go:41: calling [github.com/sirupsen/logrus.Debug]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey | defined in session_key.go:33&#10;at session_key.go:35: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey]&#10;at session_key.go:37: calling [github.com/sirupsen/logrus.WithError]&#10;at session_key.go:37: calling [(*github.com/sirupsen/logrus.Entry).Error]&#10;at session_key.go:41: calling [github.com/sirupsen/logrus.Debug]&#10;at session_key.go:34: calling [github.com/sirupsen/logrus.WithField]&#10;at session_key.go:34: calling [(*github.com/sirupsen/logrus.Entry).Debug]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M120.29,-204C120.29,-204 28.236,-204 28.236,-204 22.236,-204 16.236,-198 16.236,-192 16.236,-192 16.236,-180 16.236,-180 16.236,-174 22.236,-168 28.236,-168 28.236,-168 120.29,-168 120.29,-168 126.29,-168 132.29,-174 132.29,-180 132.29,-180 132.29,-192 132.29,-192 132.29,-198 126.29,-204 120.29,-204"/>
 <text text-anchor="middle" x="74.263" y="-181.8" font-family="Verdana" font-size="14.00" fill="#000000">NewSessionKey</text>
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey -->
-<g id="edge3" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey</title>
-<g id="a_edge3"><a xlink:title="at session_key.go:35: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey]">
-<path fill="none" stroke="#000000" d="M90.8252,-167.9829C114.5635,-142.8336 160.3942,-96.7292 205.526,-65 209.4263,-62.258 213.6003,-59.5997 217.8606,-57.0685"/>
-<polygon fill="#000000" stroke="#000000" points="219.7007,-60.0485 226.6664,-52.0653 216.2427,-53.9622 219.7007,-60.0485"/>
-</a>
-</g>
-</g>
 <!-- github.com/sirupsen/logrus.WithField -->
-<g id="node4" class="node">
+<g id="node2" class="node">
 <title>github.com/sirupsen/logrus.WithField</title>
-<g id="a_node4"><a xlink:title="github.com/sirupsen/logrus.WithField | defined in exported.go:69">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M293.2325,-113C293.2325,-113 236.6835,-113 236.6835,-113 230.6835,-113 224.6835,-107 224.6835,-101 224.6835,-101 224.6835,-89 224.6835,-89 224.6835,-83 230.6835,-77 236.6835,-77 236.6835,-77 293.2325,-77 293.2325,-77 299.2325,-77 305.2325,-83 305.2325,-89 305.2325,-89 305.2325,-101 305.2325,-101 305.2325,-107 299.2325,-113 293.2325,-113"/>
-<text text-anchor="middle" x="264.958" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="264.958" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
+<g id="a_node2"><a xlink:title="github.com/sirupsen/logrus.WithField | defined in exported.go:69">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M293.2325,-52C293.2325,-52 236.6835,-52 236.6835,-52 230.6835,-52 224.6835,-46 224.6835,-40 224.6835,-40 224.6835,-28 224.6835,-28 224.6835,-22 230.6835,-16 236.6835,-16 236.6835,-16 293.2325,-16 293.2325,-16 299.2325,-16 305.2325,-22 305.2325,-28 305.2325,-28 305.2325,-40 305.2325,-40 305.2325,-46 299.2325,-52 293.2325,-52"/>
+<text text-anchor="middle" x="264.958" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="264.958" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.WithField -->
-<g id="edge1" class="edge">
+<g id="edge5" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.WithField</title>
-<g id="a_edge1"><a xlink:title="at session_key.go:34: calling [github.com/sirupsen/logrus.WithField]">
-<path fill="none" stroke="#8b4513" d="M112.3947,-167.8035C142.7648,-153.3108 185.4246,-132.9535 217.9151,-117.449"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="219.7002,-120.4753 227.2178,-113.0097 216.6854,-114.1577 219.7002,-120.4753"/>
+<g id="a_edge5"><a xlink:title="at session_key.go:34: calling [github.com/sirupsen/logrus.WithField]">
+<path fill="none" stroke="#8b4513" d="M90.8252,-167.9829C114.5635,-142.8336 160.3942,-96.7292 205.526,-65 209.4263,-62.258 213.6003,-59.5997 217.8606,-57.0685"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="219.7007,-60.0485 226.6664,-52.0653 216.2427,-53.9622 219.7007,-60.0485"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey -->
+<g id="node3" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey</title>
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey | defined in session_key.go:25&#10;at session_key.go:27: calling [github.com/sirupsen/logrus.Warn]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M312.3221,-113C312.3221,-113 217.5939,-113 217.5939,-113 211.5939,-113 205.5939,-107 205.5939,-101 205.5939,-101 205.5939,-89 205.5939,-89 205.5939,-83 211.5939,-77 217.5939,-77 217.5939,-77 312.3221,-77 312.3221,-77 318.3221,-77 324.3221,-83 324.3221,-89 324.3221,-89 324.3221,-101 324.3221,-101 324.3221,-107 318.3221,-113 312.3221,-113"/>
+<text text-anchor="middle" x="264.958" y="-90.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSessionKey</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey -->
+<g id="edge1" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey</title>
+<g id="a_edge1"><a xlink:title="at session_key.go:35: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey]">
+<path fill="none" stroke="#000000" d="M112.3947,-167.8035C142.7648,-153.3108 185.4246,-132.9535 217.9151,-117.449"/>
+<polygon fill="#000000" stroke="#000000" points="219.7002,-120.4753 227.2178,-113.0097 216.6854,-114.1577 219.7002,-120.4753"/>
 </a>
 </g>
 </g>
@@ -98,9 +79,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.WithError -->
-<g id="edge4" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.WithError</title>
-<g id="a_edge4"><a xlink:title="at session_key.go:37: calling [github.com/sirupsen/logrus.WithError]">
+<g id="a_edge2"><a xlink:title="at session_key.go:37: calling [github.com/sirupsen/logrus.WithError]">
 <path fill="none" stroke="#8b4513" d="M132.514,-176.836C158.6025,-172.7318 189.0807,-167.937 214.2186,-163.9823"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="214.9448,-167.4112 224.2794,-162.3995 213.8569,-160.4962 214.9448,-167.4112"/>
 </a>
@@ -117,9 +98,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.Debug -->
-<g id="edge6" class="edge">
+<g id="edge4" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;github.com/sirupsen/logrus.Debug</title>
-<g id="a_edge6"><a xlink:title="at session_key.go:41: calling [github.com/sirupsen/logrus.Debug]">
+<g id="a_edge4"><a xlink:title="at session_key.go:41: calling [github.com/sirupsen/logrus.Debug]">
 <path fill="none" stroke="#8b4513" d="M132.514,-195.4695C162.1028,-200.2795 197.3383,-206.0075 224.025,-210.3458"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="223.7352,-213.8446 234.1673,-211.9946 224.8585,-206.9353 223.7352,-213.8446"/>
 </a>
@@ -136,9 +117,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug -->
-<g id="edge2" class="edge">
+<g id="edge6" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug</title>
-<g id="a_edge2"><a xlink:title="at session_key.go:34: calling [(*github.com/sirupsen/logrus.Entry).Debug]">
+<g id="a_edge6"><a xlink:title="at session_key.go:34: calling [(*github.com/sirupsen/logrus.Entry).Debug]">
 <path fill="none" stroke="#8b4513" d="M97.9151,-204.1135C123.4419,-223.0678 165.7928,-252.8208 205.526,-273 211.5896,-276.0795 218.19,-278.9545 224.7143,-281.5442"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="223.5564,-284.8483 234.1476,-285.1249 226.0405,-278.3039 223.5564,-284.8483"/>
 </a>
@@ -155,11 +136,30 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;(*github.com/sirupsen/logrus.Entry).Error -->
-<g id="edge5" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.NewSessionKey&#45;&gt;(*github.com/sirupsen/logrus.Entry).Error</title>
-<g id="a_edge5"><a xlink:title="at session_key.go:37: calling [(*github.com/sirupsen/logrus.Entry).Error]">
+<g id="a_edge3"><a xlink:title="at session_key.go:37: calling [(*github.com/sirupsen/logrus.Entry).Error]">
 <path fill="none" stroke="#8b4513" d="M87.925,-204.2759C110.108,-233.0122 156.4463,-289.2647 205.526,-326 211.902,-330.7723 219.1515,-335.1491 226.3422,-338.9974"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="224.849,-342.1646 235.349,-343.5794 228.023,-335.9256 224.849,-342.1646"/>
+</a>
+</g>
+</g>
+<!-- github.com/sirupsen/logrus.Warn -->
+<g id="node4" class="node">
+<title>github.com/sirupsen/logrus.Warn</title>
+<g id="a_node4"><a xlink:title="github.com/sirupsen/logrus.Warn | defined in exported.go:113">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M444.3837,-113C444.3837,-113 409.3921,-113 409.3921,-113 403.3921,-113 397.3921,-107 397.3921,-101 397.3921,-101 397.3921,-89 397.3921,-89 397.3921,-83 403.3921,-77 409.3921,-77 409.3921,-77 444.3837,-77 444.3837,-77 450.3837,-77 456.3837,-83 456.3837,-89 456.3837,-89 456.3837,-101 456.3837,-101 456.3837,-107 450.3837,-113 444.3837,-113"/>
+<text text-anchor="middle" x="426.8879" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="426.8879" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey&#45;&gt;github.com/sirupsen/logrus.Warn -->
+<g id="edge7" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/session_key.ReadSessionKey&#45;&gt;github.com/sirupsen/logrus.Warn</title>
+<g id="a_edge7"><a xlink:title="at session_key.go:27: calling [github.com/sirupsen/logrus.Warn]">
+<path fill="none" stroke="#8b4513" d="M324.3352,-95C345.2029,-95 368.1346,-95 387.0117,-95"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="387.0431,-98.5001 397.043,-95 387.043,-91.5001 387.0431,-98.5001"/>
 </a>
 </g>
 </g>

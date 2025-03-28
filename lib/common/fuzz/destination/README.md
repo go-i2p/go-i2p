@@ -16,6 +16,6 @@ func Fuzz(data []byte) int
 
 
 
-exportable
+exportable 
 
 github.com/go-i2p/go-i2p/lib/common/fuzz/destination

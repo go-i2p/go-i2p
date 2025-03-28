@@ -127,7 +127,7 @@ returned. Returns a list of errors that occurred during parsing.
 #### func (KeyCertificate) ConstructPublicKey
 
 ```go
-func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key crypto.RecievingPublicKey, err error)
+func (keyCertificate KeyCertificate) ConstructPublicKey(data []byte) (public_key types.RecievingPublicKey, err error)
 ```
 ConstructPublicKey returns a publicKey constructed using any excess data that
 may be stored in the KeyCertififcate. Returns enr errors encountered while
@@ -136,7 +136,7 @@ parsing.
 #### func (KeyCertificate) ConstructSigningPublicKey
 
 ```go
-func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (signing_public_key crypto.SigningPublicKey, err error)
+func (keyCertificate KeyCertificate) ConstructSigningPublicKey(data []byte) (signing_public_key types.SigningPublicKey, err error)
 ```
 ConstructSigningPublicKey returns a SingingPublicKey constructed using any
 excess data that may be stored in the KeyCertificate. Returns any errors
@@ -193,6 +193,6 @@ SigningPublicKeyType returns the signingPublicKey type as a Go integer.
 
 
 
-key_certificate
+key_certificate 
 
 github.com/go-i2p/go-i2p/lib/common/key_certificate

@@ -186,6 +186,6 @@ get the skiplist file that a RouterInfo with this hash would go in
 
 
 
-netdb
+netdb 
 
 github.com/go-i2p/go-i2p/lib/netdb

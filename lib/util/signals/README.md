@@ -34,6 +34,6 @@ type Handler func()
 
 
 
-signals
+signals 
 
 github.com/go-i2p/go-i2p/lib/util/signals

@@ -25,7 +25,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle]&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress]&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost]&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration]&#10;at fuzz.go:9: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration]&#10;at fuzz.go:9: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options]&#10;at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle]&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress]&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M58,-191C58,-191 28,-191 28,-191 22,-191 16,-185 16,-179 16,-179 16,-167 16,-167 16,-161 22,-155 28,-155 28,-155 58,-155 58,-155 64,-155 70,-161 70,-167 70,-167 70,-179 70,-179 70,-185 64,-191 58,-191"/>
 <text text-anchor="middle" x="43" y="-168.8" font-family="Verdana" font-size="14.00" fill="#000000">Fuzz</text>
 </a>
@@ -34,7 +34,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress -->
 <g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress | defined in router_address.go:317">
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress | defined in router_address.go:345">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M269.609,-52C269.609,-52 157.1302,-52 157.1302,-52 151.1302,-52 145.1302,-46 145.1302,-40 145.1302,-40 145.1302,-28 145.1302,-28 145.1302,-22 151.1302,-16 157.1302,-16 157.1302,-16 269.609,-16 269.609,-16 275.609,-16 281.609,-22 281.609,-28 281.609,-28 281.609,-40 281.609,-40 281.609,-46 275.609,-52 269.609,-52"/>
 <text text-anchor="middle" x="213.3696" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
 <text text-anchor="middle" x="213.3696" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">ReadRouterAddress</text>
@@ -42,9 +42,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress -->
-<g id="edge2" class="edge">
+<g id="edge4" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress</title>
-<g id="a_edge2"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress]">
+<g id="a_edge4"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.ReadRouterAddress]">
 <path fill="none" stroke="#8b4513" d="M54.2,-154.8153C69.8891,-130.7191 100.687,-88.1071 143.143,-57.8152"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="145.2054,-60.6453 151.4961,-52.1202 141.2621,-54.8616 145.2054,-60.6453"/>
 </a>
@@ -61,9 +61,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost -->
-<g id="edge3" class="edge">
+<g id="edge5" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost</title>
-<g id="a_edge3"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost]">
+<g id="a_edge5"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Cost]">
 <path fill="none" stroke="#8b4513" d="M70.3728,-163.1993C92.7676,-155.181 125.2557,-143.5488 153.6076,-133.3975"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="154.8086,-136.6851 163.0435,-130.019 152.4489,-130.0948 154.8086,-136.6851"/>
 </a>
@@ -80,9 +80,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration -->
-<g id="edge4" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration</title>
-<g id="a_edge4"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration]">
+<g id="a_edge1"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Expiration]">
 <path fill="none" stroke="#8b4513" d="M70.3728,-173C91.7248,-173 122.2521,-173 149.6217,-173"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="149.9311,-176.5001 159.931,-173 149.931,-169.5001 149.9311,-176.5001"/>
 </a>
@@ -91,7 +91,7 @@
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options -->
 <g id="node5" class="node">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options</title>
-<g id="a_node5"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options | defined in router_address.go:305">
+<g id="a_node5"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options | defined in router_address.go:323">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M254.7758,-252C254.7758,-252 171.9634,-252 171.9634,-252 165.9634,-252 159.9634,-246 159.9634,-240 159.9634,-240 159.9634,-228 159.9634,-228 159.9634,-222 165.9634,-216 171.9634,-216 171.9634,-216 254.7758,-216 254.7758,-216 260.7758,-216 266.7758,-222 266.7758,-228 266.7758,-228 266.7758,-240 266.7758,-240 266.7758,-246 260.7758,-252 254.7758,-252"/>
 <text text-anchor="middle" x="213.3696" y="-238.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
 <text text-anchor="middle" x="213.3696" y="-221.4" font-family="Verdana" font-size="14.00" fill="#000000">Options</text>
@@ -99,9 +99,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options -->
-<g id="edge5" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options</title>
-<g id="a_edge5"><a xlink:title="at fuzz.go:9: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options]">
+<g id="a_edge2"><a xlink:title="at fuzz.go:9: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).Options]">
 <path fill="none" stroke="#8b4513" d="M70.3728,-182.8007C92.7676,-190.819 125.2557,-202.4512 153.6076,-212.6025"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="152.4489,-215.9052 163.0435,-215.981 154.8086,-209.3149 152.4489,-215.9052"/>
 </a>
@@ -118,9 +118,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle -->
-<g id="edge1" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_address.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle</title>
-<g id="a_edge1"><a xlink:title="at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle]">
+<g id="a_edge3"><a xlink:title="at fuzz.go:10: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/router_address.RouterAddress).TransportStyle]">
 <path fill="none" stroke="#8b4513" d="M59.628,-191.1509C78.7338,-211.2098 111.7512,-243.5148 145,-265 149.0077,-267.5898 153.2766,-270.0551 157.6487,-272.3782"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="156.211,-275.5729 166.7171,-276.9412 159.3574,-269.3198 156.211,-275.5729"/>
 </a>

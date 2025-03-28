@@ -23,9 +23,9 @@ Sizes of various KeysAndCert structures and requirements
 ```go
 type KeysAndCert struct {
 	KeyCertificate  *KeyCertificate
-	ReceivingPublic crypto.RecievingPublicKey
+	ReceivingPublic types.RecievingPublicKey
 	Padding         []byte
-	SigningPublic   crypto.SigningPublicKey
+	SigningPublic   types.SigningPublicKey
 }
 ```
 
@@ -38,9 +38,9 @@ https://geti2p.net/spec/common-structures#keysandcert
 ```go
 func NewKeysAndCert(
 	keyCertificate *KeyCertificate,
-	publicKey crypto.RecievingPublicKey,
+	publicKey types.RecievingPublicKey,
 	padding []byte,
-	signingPublicKey crypto.SigningPublicKey,
+	signingPublicKey types.SigningPublicKey,
 ) (*KeysAndCert, error)
 ```
 NewKeysAndCert creates a new KeysAndCert instance with the provided parameters.
@@ -50,7 +50,7 @@ struct.
 #### func  ReadKeysAndCert
 
 ```go
-func ReadKeysAndCert(data []byte) (keys_and_cert KeysAndCert, remainder []byte, err error)
+func ReadKeysAndCert(data []byte) (*KeysAndCert, []byte, error)
 ```
 ReadKeysAndCert creates a new *KeysAndCert from []byte using ReadKeysAndCert.
 Returns a pointer to KeysAndCert unlike ReadKeysAndCert.
@@ -79,14 +79,14 @@ Certfificate returns the certificate.
 #### func (*KeysAndCert) PublicKey
 
 ```go
-func (keys_and_cert *KeysAndCert) PublicKey() (key crypto.RecievingPublicKey)
+func (keys_and_cert *KeysAndCert) PublicKey() (key types.RecievingPublicKey)
 ```
-publicKey returns the public key as a crypto.publicKey.
+publicKey returns the public key as a types.publicKey.
 
 #### func (*KeysAndCert) SigningPublicKey
 
 ```go
-func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key crypto.SigningPublicKey)
+func (keys_and_cert *KeysAndCert) SigningPublicKey() (signing_public_key types.SigningPublicKey)
 ```
 signingPublicKey returns the signing public key.
 
@@ -111,6 +111,6 @@ func NewPrivateKeysAndCert() (*PrivateKeysAndCert, error)
 
 
 
-keys_and_cert
+keys_and_cert 
 
 github.com/go-i2p/go-i2p/lib/common/keys_and_cert

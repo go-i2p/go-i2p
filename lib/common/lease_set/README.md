@@ -20,7 +20,7 @@ Sizes of various structures in an I2P LeaseSet
 #### func  ReadDestinationFromLeaseSet
 
 ```go
-func ReadDestinationFromLeaseSet(data []byte) (destination Destination, remainder []byte, err error)
+func ReadDestinationFromLeaseSet(data []byte) (dest destination.Destination, remainder []byte, err error)
 ```
 
 #### type LeaseSet
@@ -37,25 +37,25 @@ https://geti2p.net/spec/common-structures#leaseset
 
 ```go
 func NewLeaseSet(
-	destination Destination,
-	encryptionKey crypto.RecievingPublicKey,
-	signingKey crypto.SigningPublicKey,
-	leases []Lease,
-	signingPrivateKey crypto.SigningPrivateKey,
+	dest destination.Destination,
+	encryptionKey types.RecievingPublicKey,
+	signingKey types.SigningPublicKey,
+	leases []lease.Lease,
+	signingPrivateKey types.SigningPrivateKey,
 ) (LeaseSet, error)
 ```
 
 #### func (LeaseSet) Destination
 
 ```go
-func (lease_set LeaseSet) Destination() (destination Destination, err error)
+func (lease_set LeaseSet) Destination() (dest destination.Destination, err error)
 ```
 Destination returns the Destination as []byte.
 
 #### func (LeaseSet) DestinationDeux
 
 ```go
-func (lease_set LeaseSet) DestinationDeux() (destination Destination, err error)
+func (lease_set LeaseSet) DestinationDeux() (dest destination.Destination, err error)
 ```
 
 #### func (LeaseSet) LeaseCount
@@ -69,14 +69,14 @@ int. returns errors encountered during parsing.
 #### func (LeaseSet) Leases
 
 ```go
-func (lease_set LeaseSet) Leases() (leases []Lease, err error)
+func (lease_set LeaseSet) Leases() (leases []lease.Lease, err error)
 ```
 Leases returns the leases as []Lease. returns errors encountered during parsing.
 
 #### func (LeaseSet) NewestExpiration
 
 ```go
-func (lease_set LeaseSet) NewestExpiration() (newest Date, err error)
+func (lease_set LeaseSet) NewestExpiration() (newest data.Date, err error)
 ```
 NewestExpiration returns the newest lease expiration as an I2P Date. Returns
 errors encountered during parsing.
@@ -84,7 +84,7 @@ errors encountered during parsing.
 #### func (LeaseSet) OldestExpiration
 
 ```go
-func (lease_set LeaseSet) OldestExpiration() (earliest Date, err error)
+func (lease_set LeaseSet) OldestExpiration() (earliest data.Date, err error)
 ```
 OldestExpiration returns the oldest lease expiration as an I2P Date. Returns
 errors encountered during parsing.
@@ -92,7 +92,7 @@ errors encountered during parsing.
 #### func (LeaseSet) PublicKey
 
 ```go
-func (lease_set LeaseSet) PublicKey() (public_key crypto.ElgPublicKey, err error)
+func (lease_set LeaseSet) PublicKey() (public_key elgamal.ElgPublicKey, err error)
 ```
 PublicKey returns the public key as crypto.ElgPublicKey. Returns errors
 encountered during parsing.
@@ -108,7 +108,7 @@ parsing.
 #### func (LeaseSet) SigningKey
 
 ```go
-func (lease_set LeaseSet) SigningKey() (signing_public_key crypto.SigningPublicKey, err error)
+func (lease_set LeaseSet) SigningKey() (signing_public_key types.SigningPublicKey, err error)
 ```
 SigningKey returns the signing public key as crypto.SigningPublicKey. returns
 errors encountered during parsing.
@@ -122,6 +122,6 @@ Verify returns nil
 
 
 
-lease_set
+lease_set 
 
 github.com/go-i2p/go-i2p/lib/common/lease_set

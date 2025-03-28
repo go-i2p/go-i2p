@@ -12,7 +12,7 @@ Package destination implements the I2P Destination common data structure
 
 ```go
 type Destination struct {
-	KeysAndCert
+	*KeysAndCert
 }
 ```
 
@@ -45,6 +45,6 @@ Base64 returns the I2P base64 address for this Destination.
 
 
 
-destination
+destination 
 
 github.com/go-i2p/go-i2p/lib/common/destination

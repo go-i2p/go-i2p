@@ -30,7 +30,7 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] RSA_SHA256_2048
     - [ ] RSA_SHA384_3072
     - [ ] RSA_SHA512_4096
-    - [ ] Ed25519
+    - [X] Ed25519
     - [ ] Red25519
   - [X] ElGamal
   - [X] AES256

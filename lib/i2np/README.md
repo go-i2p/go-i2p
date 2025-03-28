@@ -30,6 +30,10 @@ var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np buil
 ```
 
 ```go
+var ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
+```
+
+```go
 var ERR_I2NP_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np header data")
 ```
 
@@ -119,12 +123,20 @@ type BuildRequestRecordElGamalAES [528]byte
 
 ```go
 type BuildResponseRecord struct {
-	Hash    common.Hash
-	Padding [495]byte
-	Reply   byte
+	Hash       common.Hash
+	RandomData [495]byte
+	Reply      byte
 }
 ```
 
+BuildResponseRecord struct contains a response to BuildRequestRecord concerning
+the creation of one hop in the tunnel
+
+#### func  ReadBuildResponseRecord
+
+```go
+func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error)
+```
 
 #### type BuildResponseRecordELGamal
 
@@ -347,6 +359,6 @@ type VariableTunnelBuildReply struct {
 
 
 
-i2np
+i2np 
 
 github.com/go-i2p/go-i2p/lib/i2np

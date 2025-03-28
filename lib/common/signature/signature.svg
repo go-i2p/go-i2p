@@ -17,8 +17,8 @@
 <g id="clust3" class="cluster">
 <title>cluster_*github.com/sirupsen/logrus.Logger</title>
 <g id="a_clust3"><a xlink:title="type: *github.com/sirupsen/logrus.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M227.0155,-190C227.0155,-190 281.3367,-190 281.3367,-190 287.3367,-190 293.3367,-196 293.3367,-202 293.3367,-202 293.3367,-256 293.3367,-256 293.3367,-262 287.3367,-268 281.3367,-268 281.3367,-268 227.0155,-268 227.0155,-268 221.0155,-268 215.0155,-262 215.0155,-256 215.0155,-256 215.0155,-202 215.0155,-202 215.0155,-196 221.0155,-190 227.0155,-190"/>
-<text text-anchor="middle" x="254.1761" y="-198.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M227.0155,-243C227.0155,-243 281.3367,-243 281.3367,-243 287.3367,-243 293.3367,-249 293.3367,-255 293.3367,-255 293.3367,-309 293.3367,-309 293.3367,-315 287.3367,-321 281.3367,-321 281.3367,-321 227.0155,-321 227.0155,-321 221.0155,-321 215.0155,-315 215.0155,-309 215.0155,-309 215.0155,-255 215.0155,-255 215.0155,-249 221.0155,-243 227.0155,-243"/>
+<text text-anchor="middle" x="254.1761" y="-251.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
 </a>
 </g>
 </g>
@@ -30,160 +30,19 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init -->
-<g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init | defined in .:0&#10;at signature.go:10: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M83.0407,-321C83.0407,-321 53.0407,-321 53.0407,-321 47.0407,-321 41.0407,-315 41.0407,-309 41.0407,-309 41.0407,-297 41.0407,-297 41.0407,-291 47.0407,-285 53.0407,-285 53.0407,-285 83.0407,-285 83.0407,-285 89.0407,-285 95.0407,-291 95.0407,-297 95.0407,-297 95.0407,-309 95.0407,-309 95.0407,-315 89.0407,-321 83.0407,-321"/>
-<text text-anchor="middle" x="68.0407" y="-298.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="node2" class="node">
-<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M302.3656,-321C302.3656,-321 204.9866,-321 204.9866,-321 198.9866,-321 192.9866,-315 192.9866,-309 192.9866,-309 192.9866,-297 192.9866,-297 192.9866,-291 198.9866,-285 204.9866,-285 204.9866,-285 302.3656,-285 302.3656,-285 308.3656,-285 314.3656,-291 314.3656,-297 314.3656,-297 314.3656,-309 314.3656,-309 314.3656,-315 308.3656,-321 302.3656,-321"/>
-<text text-anchor="middle" x="253.6761" y="-307.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="253.6761" y="-290.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge7" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge7"><a xlink:title="at signature.go:10: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M95.4318,-303C118.3566,-303 152.1155,-303 182.5704,-303"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="182.7516,-306.5001 192.7515,-303 182.7515,-299.5001 182.7516,-306.5001"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature -->
-<g id="node3" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature | defined in signature.go:106&#10;at signature.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at signature.go:114: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at signature.go:107: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at signature.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M108.1221,-158C108.1221,-158 27.9593,-158 27.9593,-158 21.9593,-158 15.9593,-152 15.9593,-146 15.9593,-146 15.9593,-134 15.9593,-134 15.9593,-128 21.9593,-122 27.9593,-122 27.9593,-122 108.1221,-122 108.1221,-122 114.1221,-122 120.1221,-128 120.1221,-134 120.1221,-134 120.1221,-146 120.1221,-146 120.1221,-152 114.1221,-158 108.1221,-158"/>
-<text text-anchor="middle" x="68.0407" y="-135.8" font-family="Verdana" font-size="14.00" fill="#000000">NewSignature</text>
-</a>
-</g>
-</g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature -->
-<g id="node4" class="node">
+<g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature | defined in signature.go:66&#10;at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at signature.go:90: calling [github.com/samber/oops.Errorf]&#10;at signature.go:95: calling [github.com/samber/oops.Errorf]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M295.0963,-69C295.0963,-69 212.2559,-69 212.2559,-69 206.2559,-69 200.2559,-63 200.2559,-57 200.2559,-57 200.2559,-45 200.2559,-45 200.2559,-39 206.2559,-33 212.2559,-33 212.2559,-33 295.0963,-33 295.0963,-33 301.0963,-33 307.0963,-39 307.0963,-45 307.0963,-45 307.0963,-57 307.0963,-57 307.0963,-63 301.0963,-69 295.0963,-69"/>
-<text text-anchor="middle" x="253.6761" y="-46.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSignature</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature -->
-<g id="edge10" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature</title>
-<g id="a_edge10"><a xlink:title="at signature.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature]">
-<path fill="none" stroke="#000000" d="M100.3187,-121.9311C116.8289,-112.9038 137.3448,-102.0133 156.0814,-93 170.2625,-86.1781 185.8305,-79.2387 200.2859,-73.0176"/>
-<polygon fill="#000000" stroke="#000000" points="201.7762,-76.1871 209.5989,-69.0417 199.0277,-69.7492 201.7762,-76.1871"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="node6" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithField | defined in log.go:54">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M458.6547,-313C458.6547,-313 402.1057,-313 402.1057,-313 396.1057,-313 390.1057,-307 390.1057,-301 390.1057,-301 390.1057,-289 390.1057,-289 390.1057,-283 396.1057,-277 402.1057,-277 402.1057,-277 458.6547,-277 458.6547,-277 464.6547,-277 470.6547,-283 470.6547,-289 470.6547,-289 470.6547,-301 470.6547,-301 470.6547,-307 464.6547,-313 458.6547,-313"/>
-<text text-anchor="middle" x="430.3802" y="-299.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="430.3802" y="-282.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge8" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge8"><a xlink:title="at signature.go:107: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
-<path fill="none" stroke="#8b4513" d="M120.3668,-148.8384C190.1516,-160.7623 305.9394,-181.0792 314.2708,-186 353.4204,-209.1229 344.6875,-235.4814 379.2708,-265 381.775,-267.1375 384.4518,-269.2094 387.2188,-271.1986"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="385.4558,-274.2306 395.7084,-276.9015 389.3591,-268.4199 385.4558,-274.2306"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).WithError -->
-<g id="node7" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).WithError</title>
-<g id="a_node7"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithError | defined in log.go:66">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M458.9117,-130C458.9117,-130 401.8487,-130 401.8487,-130 395.8487,-130 389.8487,-124 389.8487,-118 389.8487,-118 389.8487,-106 389.8487,-106 389.8487,-100 395.8487,-94 401.8487,-94 401.8487,-94 458.9117,-94 458.9117,-94 464.9117,-94 470.9117,-100 470.9117,-106 470.9117,-106 470.9117,-118 470.9117,-118 470.9117,-124 464.9117,-130 458.9117,-130"/>
-<text text-anchor="middle" x="430.3802" y="-116.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="430.3802" y="-99.4" font-family="Verdana" font-size="14.00" fill="#000000">WithError</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError -->
-<g id="edge4" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
-<g id="a_edge4"><a xlink:title="at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
-<path fill="none" stroke="#8b4513" d="M120.3499,-126.3642C132.0338,-123.81 144.4193,-121.4804 156.0814,-120 233.5606,-110.1646 324.2917,-109.6452 379.5304,-110.5437"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="379.6922,-114.0472 389.7553,-110.7329 379.8218,-107.0484 379.6922,-114.0472"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="node8" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Error | defined in log.go:42">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M448.1465,-191C448.1465,-191 412.6139,-191 412.6139,-191 406.6139,-191 400.6139,-185 400.6139,-179 400.6139,-179 400.6139,-167 400.6139,-167 400.6139,-161 406.6139,-155 412.6139,-155 412.6139,-155 448.1465,-155 448.1465,-155 454.1465,-155 460.1465,-161 460.1465,-167 460.1465,-167 460.1465,-179 460.1465,-179 460.1465,-185 454.1465,-191 448.1465,-191"/>
-<text text-anchor="middle" x="430.3802" y="-177.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="430.3802" y="-160.4" font-family="Verdana" font-size="14.00" fill="#000000">Error</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge5" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge5"><a xlink:title="at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="none" stroke="#8b4513" d="M120.1671,-136.7629C177.3282,-134.2601 271.5401,-133.2214 351.2708,-147 364.4226,-149.2728 378.3769,-153.2877 390.8445,-157.4926"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="389.886,-160.8654 400.4808,-160.8759 392.205,-154.2607 389.886,-160.8654"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="node9" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithFields | defined in log.go:60">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M461.5993,-252C461.5993,-252 399.1611,-252 399.1611,-252 393.1611,-252 387.1611,-246 387.1611,-240 387.1611,-240 387.1611,-228 387.1611,-228 387.1611,-222 393.1611,-216 399.1611,-216 399.1611,-216 461.5993,-216 461.5993,-216 467.5993,-216 473.5993,-222 473.5993,-228 473.5993,-228 473.5993,-240 473.5993,-240 473.5993,-246 467.5993,-252 461.5993,-252"/>
-<text text-anchor="middle" x="430.3802" y="-238.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="430.3802" y="-221.4" font-family="Verdana" font-size="14.00" fill="#000000">WithFields</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge6" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge6"><a xlink:title="at signature.go:114: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M120.2493,-142.0043C190.7307,-145.4303 312.0216,-154.0791 351.2708,-174 367.5344,-182.2546 365.0356,-192.5982 379.2708,-204 382.0037,-206.1889 384.9131,-208.326 387.9039,-210.3864"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="386.1803,-213.4407 396.469,-215.9692 390.0027,-207.5765 386.1803,-213.4407"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="node10" class="node">
-<title>(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_node10"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Debug | defined in logger.go:221">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M272.4981,-260C272.4981,-260 234.8541,-260 234.8541,-260 228.8541,-260 222.8541,-254 222.8541,-248 222.8541,-248 222.8541,-236 222.8541,-236 222.8541,-230 228.8541,-224 234.8541,-224 234.8541,-224 272.4981,-224 272.4981,-224 278.4981,-224 284.4981,-230 284.4981,-236 284.4981,-236 284.4981,-248 284.4981,-248 284.4981,-254 278.4981,-260 272.4981,-260"/>
-<text text-anchor="middle" x="253.6761" y="-246.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="253.6761" y="-229.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge1" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge1"><a xlink:title="at signature.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M92.9329,-158.2683C117.4985,-175.7221 156.5722,-201.9699 193.0814,-220 199.419,-223.1298 206.3176,-226.0544 213.1146,-228.6844"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="212.33,-232.1261 222.9231,-232.3166 214.7609,-225.5617 212.33,-232.1261"/>
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature | defined in signature.go:66&#10;at signature.go:90: calling [github.com/samber/oops.Errorf]&#10;at signature.go:95: calling [github.com/samber/oops.Errorf]&#10;at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M295.0963,-124C295.0963,-124 212.2559,-124 212.2559,-124 206.2559,-124 200.2559,-118 200.2559,-112 200.2559,-112 200.2559,-100 200.2559,-100 200.2559,-94 206.2559,-88 212.2559,-88 212.2559,-88 295.0963,-88 295.0963,-88 301.0963,-88 307.0963,-94 307.0963,-100 307.0963,-100 307.0963,-112 307.0963,-112 307.0963,-118 301.0963,-124 295.0963,-124"/>
+<text text-anchor="middle" x="253.6761" y="-101.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadSignature</text>
 </a>
 </g>
 </g>
 <!-- github.com/samber/oops.Errorf -->
-<g id="node5" class="node">
+<g id="node2" class="node">
 <title>github.com/samber/oops.Errorf</title>
-<g id="a_node5"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
+<g id="a_node2"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M447.5755,-52C447.5755,-52 413.1849,-52 413.1849,-52 407.1849,-52 401.1849,-46 401.1849,-40 401.1849,-40 401.1849,-28 401.1849,-28 401.1849,-22 407.1849,-16 413.1849,-16 413.1849,-16 447.5755,-16 447.5755,-16 453.5755,-16 459.5755,-22 459.5755,-28 459.5755,-28 459.5755,-40 459.5755,-40 459.5755,-46 453.5755,-52 447.5755,-52"/>
 <text text-anchor="middle" x="430.3802" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
 <text text-anchor="middle" x="430.3802" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">Errorf</text>
@@ -191,29 +50,170 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge9" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge9"><a xlink:title="at signature.go:90: calling [github.com/samber/oops.Errorf]&#10;at signature.go:95: calling [github.com/samber/oops.Errorf]">
-<path fill="none" stroke="#8b4513" d="M307.0076,-43.7814C321.0603,-42.042 336.2212,-40.3099 350.2708,-39 363.518,-37.7649 378.0268,-36.7556 391.0136,-35.9755"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="391.2664,-39.4668 401.0492,-35.399 390.8649,-32.4783 391.2664,-39.4668"/>
+<g id="a_edge2"><a xlink:title="at signature.go:90: calling [github.com/samber/oops.Errorf]&#10;at signature.go:95: calling [github.com/samber/oops.Errorf]">
+<path fill="none" stroke="#8b4513" d="M298.266,-87.8314C327.0751,-76.0928 364.1891,-60.9703 391.7412,-49.7439"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="393.1185,-52.9621 401.0586,-45.9474 390.4771,-46.4796 393.1185,-52.9621"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Logger).WithError -->
+<g id="node6" class="node">
+<title>(*github.com/go&#45;i2p/logger.Logger).WithError</title>
+<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithError | defined in log.go:66">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M458.9117,-130C458.9117,-130 401.8487,-130 401.8487,-130 395.8487,-130 389.8487,-124 389.8487,-118 389.8487,-118 389.8487,-106 389.8487,-106 389.8487,-100 395.8487,-94 401.8487,-94 401.8487,-94 458.9117,-94 458.9117,-94 464.9117,-94 470.9117,-100 470.9117,-106 470.9117,-106 470.9117,-118 470.9117,-118 470.9117,-124 464.9117,-130 458.9117,-130"/>
+<text text-anchor="middle" x="430.3802" y="-116.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="430.3802" y="-99.4" font-family="Verdana" font-size="14.00" fill="#000000">WithError</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError -->
-<g id="edge2" class="edge">
+<g id="edge8" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
-<g id="a_edge2"><a xlink:title="at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
-<path fill="none" stroke="#8b4513" d="M306.8913,-53.7663C321.7462,-55.9635 337.5623,-59.7036 351.2708,-66 366.1652,-72.8411 365.3628,-81.3277 379.2708,-90 379.7831,-90.3195 380.3009,-90.6364 380.8236,-90.9509"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="379.1809,-94.0419 389.6271,-95.8101 382.5636,-87.9135 379.1809,-94.0419"/>
+<g id="a_edge8"><a xlink:title="at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
+<path fill="none" stroke="#8b4513" d="M307.1727,-107.8165C330.1637,-108.5971 356.9049,-109.5051 379.5878,-110.2753"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="379.583,-113.7771 389.696,-110.6186 379.8206,-106.7811 379.583,-113.7771"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Logger).Error -->
+<g id="node7" class="node">
+<title>(*github.com/go&#45;i2p/logger.Logger).Error</title>
+<g id="a_node7"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Error | defined in log.go:42">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M448.1465,-191C448.1465,-191 412.6139,-191 412.6139,-191 406.6139,-191 400.6139,-185 400.6139,-179 400.6139,-179 400.6139,-167 400.6139,-167 400.6139,-161 406.6139,-155 412.6139,-155 412.6139,-155 448.1465,-155 448.1465,-155 454.1465,-155 460.1465,-161 460.1465,-167 460.1465,-167 460.1465,-179 460.1465,-179 460.1465,-185 454.1465,-191 448.1465,-191"/>
+<text text-anchor="middle" x="430.3802" y="-177.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="430.3802" y="-160.4" font-family="Verdana" font-size="14.00" fill="#000000">Error</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge3" class="edge">
+<g id="edge9" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge3"><a xlink:title="at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="none" stroke="#8b4513" d="M280.561,-69.2323C300.376,-82.8562 327.8411,-102.1316 351.2708,-120 364.0764,-129.766 366.0636,-133.7844 379.2708,-143 383.2286,-145.7617 387.452,-148.5185 391.7106,-151.1795"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="390.0647,-154.2749 400.4279,-156.4779 393.7004,-148.2931 390.0647,-154.2749"/>
+<g id="a_edge9"><a xlink:title="at signature.go:96: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<path fill="none" stroke="#8b4513" d="M301.4948,-124.1312C329.5,-134.7498 364.442,-147.9986 390.8762,-158.0215"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="389.9672,-161.4199 400.5586,-161.6927 392.449,-154.8746 389.9672,-161.4199"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature -->
+<g id="node3" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature</title>
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature | defined in signature.go:106&#10;at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at signature.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature]&#10;at signature.go:114: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at signature.go:107: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M108.1221,-211C108.1221,-211 27.9593,-211 27.9593,-211 21.9593,-211 15.9593,-205 15.9593,-199 15.9593,-199 15.9593,-187 15.9593,-187 15.9593,-181 21.9593,-175 27.9593,-175 27.9593,-175 108.1221,-175 108.1221,-175 114.1221,-175 120.1221,-181 120.1221,-187 120.1221,-187 120.1221,-199 120.1221,-199 120.1221,-205 114.1221,-211 108.1221,-211"/>
+<text text-anchor="middle" x="68.0407" y="-188.8" font-family="Verdana" font-size="14.00" fill="#000000">NewSignature</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature -->
+<g id="edge6" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature</title>
+<g id="a_edge6"><a xlink:title="at signature.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.ReadSignature]">
+<path fill="none" stroke="#000000" d="M100.2528,-174.7926C116.7462,-165.73 137.267,-154.8498 156.0814,-146 169.2752,-139.794 183.7031,-133.5789 197.321,-127.9607"/>
+<polygon fill="#000000" stroke="#000000" points="198.6596,-131.1947 206.5943,-124.1739 196.0132,-124.7142 198.6596,-131.1947"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError -->
+<g id="edge3" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
+<g id="a_edge3"><a xlink:title="at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
+<path fill="none" stroke="#8b4513" d="M120.341,-181.3084C189.5934,-165.8272 310.9326,-138.7022 379.4763,-123.3794"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="380.6053,-126.7135 389.6008,-121.1161 379.0781,-119.8821 380.6053,-126.7135"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
+<g id="edge4" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
+<g id="a_edge4"><a xlink:title="at signature.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<path fill="none" stroke="#8b4513" d="M120.341,-190.1132C193.3004,-186.0861 324.0721,-178.8679 390.0137,-175.2281"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="390.6108,-178.7006 400.4027,-174.6547 390.2249,-171.7112 390.6108,-178.7006"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Logger).WithField -->
+<g id="node8" class="node">
+<title>(*github.com/go&#45;i2p/logger.Logger).WithField</title>
+<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithField | defined in log.go:54">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M458.6547,-252C458.6547,-252 402.1057,-252 402.1057,-252 396.1057,-252 390.1057,-246 390.1057,-240 390.1057,-240 390.1057,-228 390.1057,-228 390.1057,-222 396.1057,-216 402.1057,-216 402.1057,-216 458.6547,-216 458.6547,-216 464.6547,-216 470.6547,-222 470.6547,-228 470.6547,-228 470.6547,-240 470.6547,-240 470.6547,-246 464.6547,-252 458.6547,-252"/>
+<text text-anchor="middle" x="430.3802" y="-238.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="430.3802" y="-221.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
+<g id="edge10" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
+<g id="a_edge10"><a xlink:title="at signature.go:107: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<path fill="none" stroke="#8b4513" d="M120.341,-198.918C189.6866,-206.7647 311.2593,-220.521 379.7528,-228.2713"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="379.5371,-231.7692 389.8672,-229.4158 380.3242,-224.8136 379.5371,-231.7692"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="node9" class="node">
+<title>(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithFields | defined in log.go:60">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M461.5993,-313C461.5993,-313 399.1611,-313 399.1611,-313 393.1611,-313 387.1611,-307 387.1611,-301 387.1611,-301 387.1611,-289 387.1611,-289 387.1611,-283 393.1611,-277 399.1611,-277 399.1611,-277 461.5993,-277 461.5993,-277 467.5993,-277 473.5993,-283 473.5993,-289 473.5993,-289 473.5993,-301 473.5993,-301 473.5993,-307 467.5993,-313 461.5993,-313"/>
+<text text-anchor="middle" x="430.3802" y="-299.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="430.3802" y="-282.4" font-family="Verdana" font-size="14.00" fill="#000000">WithFields</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge7" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge7"><a xlink:title="at signature.go:114: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M120.2271,-204.9654C142.6007,-209.9142 169.0645,-215.5281 193.0814,-220 246.6801,-229.9799 262.2256,-222.7606 314.2708,-239 340.6288,-247.2243 368.5487,-260.5281 390.4032,-272.1051"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="388.9124,-275.2776 399.3758,-276.9412 392.2336,-269.1156 388.9124,-275.2776"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/sirupsen/logrus.Logger).Debug -->
+<g id="node10" class="node">
+<title>(*github.com/sirupsen/logrus.Logger).Debug</title>
+<g id="a_node10"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Debug | defined in logger.go:221">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M272.4981,-313C272.4981,-313 234.8541,-313 234.8541,-313 228.8541,-313 222.8541,-307 222.8541,-301 222.8541,-301 222.8541,-289 222.8541,-289 222.8541,-283 228.8541,-277 234.8541,-277 234.8541,-277 272.4981,-277 272.4981,-277 278.4981,-277 284.4981,-283 284.4981,-289 284.4981,-289 284.4981,-301 284.4981,-301 284.4981,-307 278.4981,-313 272.4981,-313"/>
+<text text-anchor="middle" x="253.6761" y="-299.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="253.6761" y="-282.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
+<g id="edge5" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.NewSignature&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
+<g id="a_edge5"><a xlink:title="at signature.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at signature.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<path fill="none" stroke="#8b4513" d="M92.9329,-211.2683C117.4985,-228.7221 156.5722,-254.9699 193.0814,-273 199.419,-276.1298 206.3176,-279.0544 213.1146,-281.6844"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="212.33,-285.1261 222.9231,-285.3166 214.7609,-278.5617 212.33,-285.1261"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init -->
+<g id="node4" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init</title>
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init | defined in .:0&#10;at signature.go:10: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M83.0407,-56C83.0407,-56 53.0407,-56 53.0407,-56 47.0407,-56 41.0407,-50 41.0407,-44 41.0407,-44 41.0407,-32 41.0407,-32 41.0407,-26 47.0407,-20 53.0407,-20 53.0407,-20 83.0407,-20 83.0407,-20 89.0407,-20 95.0407,-26 95.0407,-32 95.0407,-32 95.0407,-44 95.0407,-44 95.0407,-50 89.0407,-56 83.0407,-56"/>
+<text text-anchor="middle" x="68.0407" y="-33.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="node5" class="node">
+<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M302.3656,-56C302.3656,-56 204.9866,-56 204.9866,-56 198.9866,-56 192.9866,-50 192.9866,-44 192.9866,-44 192.9866,-32 192.9866,-32 192.9866,-26 198.9866,-20 204.9866,-20 204.9866,-20 302.3656,-20 302.3656,-20 308.3656,-20 314.3656,-26 314.3656,-32 314.3656,-32 314.3656,-44 314.3656,-44 314.3656,-50 308.3656,-56 302.3656,-56"/>
+<text text-anchor="middle" x="253.6761" y="-42.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="253.6761" y="-25.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="edge1" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/signature.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_edge1"><a xlink:title="at signature.go:10: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M95.4318,-38C118.3566,-38 152.1155,-38 182.5704,-38"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="182.7516,-41.5001 192.7515,-38 182.7515,-34.5001 182.7516,-41.5001"/>
 </a>
 </g>
 </g>

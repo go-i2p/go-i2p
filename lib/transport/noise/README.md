@@ -45,10 +45,10 @@ var (
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error)
 ```
 
-#### type HandshakeState
+#### type NoiseHandshakeState
 
 ```go
-type HandshakeState struct {
+type NoiseHandshakeState struct {
 	*noise.HandshakeState
 }
 ```
@@ -57,35 +57,47 @@ type HandshakeState struct {
 #### func  NewHandshakeState
 
 ```go
-func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*HandshakeState, error)
+func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*NoiseHandshakeState, error)
 ```
 
-#### func (*HandshakeState) GenerateEphemeral
+#### func (*NoiseHandshakeState) CompleteHandshake
 
 ```go
-func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error)
+func (h *NoiseHandshakeState) CompleteHandshake() error
+```
+
+#### func (*NoiseHandshakeState) GenerateEphemeral
+
+```go
+func (h *NoiseHandshakeState) GenerateEphemeral() (*noise.DHKey, error)
 ```
 GenerateEphemeral creates the ephemeral keypair that will be used in handshake
 This needs to be separate so NTCP2 can obfuscate it
 
-#### func (*HandshakeState) ReadMessage
+#### func (*NoiseHandshakeState) HandshakeComplete
 
 ```go
-func (h *HandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+func (h *NoiseHandshakeState) HandshakeComplete() bool
 ```
 
-#### func (*HandshakeState) SetEphemeral
+#### func (*NoiseHandshakeState) ReadMessage
 
 ```go
-func (h *HandshakeState) SetEphemeral(key *noise.DHKey) error
+func (h *NoiseHandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+```
+
+#### func (*NoiseHandshakeState) SetEphemeral
+
+```go
+func (h *NoiseHandshakeState) SetEphemeral(key *noise.DHKey) error
 ```
 SetEphemeral allows setting a potentially modified ephemeral key This is needed
 for NTCP2's obfuscation layer
 
-#### func (*HandshakeState) WriteMessage
+#### func (*NoiseHandshakeState) WriteMessage
 
 ```go
-func (h *HandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
+func (h *NoiseHandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
 ```
 
 #### type NoiseSession
@@ -96,7 +108,7 @@ type NoiseSession struct {
 	*noise.CipherState
 	*sync.Cond
 	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
-	*HandshakeState
+	handshake.HandshakeState
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
 	VerifyCallback VerifyCallbackFunc
@@ -322,6 +334,6 @@ type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 
 
 
-noise
+noise 
 
 github.com/go-i2p/go-i2p/lib/transport/noise

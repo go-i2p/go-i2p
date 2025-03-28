@@ -41,8 +41,14 @@ Panicf allows passing formated string to panic()
 func RegisterCloser(c io.Closer)
 ```
 
+#### func  UserHome
+
+```go
+func UserHome() string
+```
 
 
-util
+
+util 
 
 github.com/go-i2p/go-i2p/lib/util

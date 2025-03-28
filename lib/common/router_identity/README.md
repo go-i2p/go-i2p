@@ -12,7 +12,7 @@ Package router_identity implements the I2P RouterIdentity common data structure
 
 ```go
 type RouterIdentity struct {
-	KeysAndCert
+	*KeysAndCert
 }
 ```
 
@@ -23,13 +23,13 @@ https://geti2p.net/spec/common-structures#routeridentity
 #### func  NewRouterIdentity
 
 ```go
-func NewRouterIdentity(publicKey crypto.RecievingPublicKey, signingPublicKey crypto.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error)
+func NewRouterIdentity(publicKey types.RecievingPublicKey, signingPublicKey types.SigningPublicKey, cert certificate.Certificate, padding []byte) (*RouterIdentity, error)
 ```
 
 #### func  ReadRouterIdentity
 
 ```go
-func ReadRouterIdentity(data []byte) (router_identity RouterIdentity, remainder []byte, err error)
+func ReadRouterIdentity(data []byte) (router_identity *RouterIdentity, remainder []byte, err error)
 ```
 ReadRouterIdentity returns RouterIdentity from a []byte. The remaining bytes
 after the specified length are also returned. Returns a list of errors that
@@ -43,6 +43,6 @@ func (router_identity *RouterIdentity) AsDestination() destination.Destination
 
 
 
-router_identity
+router_identity 
 
 github.com/go-i2p/go-i2p/lib/common/router_identity

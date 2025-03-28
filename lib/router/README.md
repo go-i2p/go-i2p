@@ -66,6 +66,6 @@ Wait blocks until router is fully stopped
 
 
 
-router
+router 
 
 github.com/go-i2p/go-i2p/lib/router

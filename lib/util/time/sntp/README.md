@@ -119,6 +119,6 @@ func (z *Zones) GetZone(countryCode string) string
 
 
 
-sntp
+sntp 
 
 github.com/go-i2p/go-i2p/lib/util/time/sntp

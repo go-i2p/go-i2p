@@ -14,7 +14,7 @@
 type KeyStore interface {
 	KeyID() string
 	// GetKeys returns the public and private keys
-	GetKeys() (publicKey crypto.PublicKey, privateKey crypto.PrivateKey, err error)
+	GetKeys() (publicKey types.PublicKey, privateKey types.PrivateKey, err error)
 	// StoreKeys stores the keys
 	StoreKeys() error
 }
@@ -33,13 +33,13 @@ type KeyStoreImpl struct {
 #### func  NewKeyStoreImpl
 
 ```go
-func NewKeyStoreImpl(dir, name string, privateKey crypto.PrivateKey) *KeyStoreImpl
+func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl
 ```
 
 #### func (*KeyStoreImpl) GetKeys
 
 ```go
-func (ks *KeyStoreImpl) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error)
+func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error)
 ```
 
 #### func (*KeyStoreImpl) KeyID
@@ -83,7 +83,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 #### func (*RouterInfoKeystore) GetKeys
 
 ```go
-func (ks *RouterInfoKeystore) GetKeys() (crypto.PublicKey, crypto.PrivateKey, error)
+func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error)
 ```
 
 #### func (*RouterInfoKeystore) KeyID
@@ -100,6 +100,6 @@ func (ks *RouterInfoKeystore) StoreKeys() error
 
 
 
-keys
+keys 
 
 github.com/go-i2p/go-i2p/lib/keys

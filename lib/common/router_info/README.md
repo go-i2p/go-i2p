@@ -38,7 +38,7 @@ func NewRouterInfo(
 	publishedTime time.Time,
 	addresses []*RouterAddress,
 	options map[string]string,
-	signingPrivateKey crypto.SigningPrivateKey,
+	signingPrivateKey types.SigningPrivateKey,
 	sigType int,
 ) (*RouterInfo, error)
 ```
@@ -174,6 +174,6 @@ func (router_info *RouterInfo) UnCongested() bool
 
 
 
-router_info
+router_info 
 
 github.com/go-i2p/go-i2p/lib/common/router_info

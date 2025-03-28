@@ -25,11 +25,60 @@ const (
 
 ```go
 const (
+	// Message 1 - SessionRequest
+	NTCP2_MSG1_SIZE   = 64
+	NTCP2_MSG1_HEADER = 0x00
+
+	// Message 2 - SessionCreated
+	NTCP2_MSG2_SIZE   = 64
+	NTCP2_MSG2_HEADER = 0x01
+
+	// Message 3 - SessionConfirmed
+	NTCP2_MSG3_HEADER = 0x02
+
+	// Timeout for handshake operations
+	NTCP2_HANDSHAKE_TIMEOUT = 15 * time.Second
+)
+```
+Constants for NTCP2 handshake
+
+```go
+const (
 	NTCP_PROTOCOL_VERSION = 2
 	NTCP_PROTOCOL_NAME    = "NTCP2"
 	NTCP_MESSAGE_MAX_SIZE = 65537
 )
 ```
+
+#### func  PerformOutboundHandshake
+
+```go
+func PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error
+```
+PerformOutboundHandshake initiates and completes a handshake as the initiator
+
+#### type HandshakeState
+
+```go
+type HandshakeState struct {
+}
+```
+
+HandshakeState maintains the state for an in-progress handshake
+
+#### func  NewHandshakeState
+
+```go
+func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error)
+```
+NewHandshakeState creates a new handshake state for initiating a connection
+
+#### func  PerformInboundHandshake
+
+```go
+func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*HandshakeState, error)
+```
+PerformInboundHandshake handles a handshake initiated by a remote peer
 
 #### type NTCP2Session
 
@@ -46,7 +95,7 @@ functionality
 #### func  NewNTCP2Session
 
 ```go
-func NewNTCP2Session(noiseConfig router_info.RouterInfo) (*NTCP2Session, error)
+func NewNTCP2Session(routerInfo router_info.RouterInfo) (*NTCP2Session, error)
 ```
 NewNTCP2Session creates a new NTCP2 session using the existing noise
 implementation
@@ -75,10 +124,32 @@ we:
     - A: get the localStatic out of the parent NTCP2Transport's routerInfo, which is the "local" routerInfo
     - B: get the remoteStatic out of the NTCP2Session router, which is the "remote" routerInfo
 
+#### func (*NTCP2Session) CreateSessionConfirmed
+
+```go
+func (c *NTCP2Session) CreateSessionConfirmed(
+	handshakeState *noise.HandshakeState,
+	localRouterInfo *router_info.RouterInfo,
+) (*messages.SessionConfirmed, error)
+```
+CreateSessionConfirmed builds the SessionConfirmed message (Message 3 in NTCP2
+handshake) This is sent by Alice to Bob after receiving SessionCreated
+
+#### func (*NTCP2Session) CreateSessionCreated
+
+```go
+func (s *NTCP2Session) CreateSessionCreated(
+	handshakeState *noise.HandshakeState,
+	localRouterInfo *router_info.RouterInfo,
+) (*messages.SessionCreated, error)
+```
+CreateSessionCreated builds the SessionCreated message (Message 2 in NTCP2
+handshake) This is sent by Bob to Alice after receiving SessionRequest
+
 #### func (*NTCP2Session) CreateSessionRequest
 
 ```go
-func (s *NTCP2Session) CreateSessionRequest() (*SessionRequest, error)
+func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error)
 ```
 
 #### func (*NTCP2Session) DeobfuscateEphemeral
@@ -143,28 +214,8 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 func (t *NTCP2Transport) Name() string
 ```
 
-#### type PaddingStrategy
-
-```go
-type PaddingStrategy interface {
-	AddPadding(message []byte) []byte
-	RemovePadding(message []byte) []byte
-}
-```
 
 
-#### type SessionRequest
-
-```go
-type SessionRequest struct {
-	ObfuscatedKey []byte // 32 bytes
-	Timestamp     uint32 // 4 bytes
-	Padding       []byte // Random padding
-}
-```
-
-
-
-ntcp
+ntcp 
 
 github.com/go-i2p/go-i2p/lib/transport/ntcp

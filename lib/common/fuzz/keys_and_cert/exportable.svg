@@ -34,7 +34,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.ReadKeysAndCert -->
 <g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.ReadKeysAndCert</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.ReadKeysAndCert | defined in keys_and_cert.go:142">
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.ReadKeysAndCert | defined in keys_and_cert.go:145">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M260.6112,-52C260.6112,-52 155.1294,-52 155.1294,-52 149.1294,-52 143.1294,-46 143.1294,-40 143.1294,-40 143.1294,-28 143.1294,-28 143.1294,-22 149.1294,-16 155.1294,-16 155.1294,-16 260.6112,-16 260.6112,-16 266.6112,-16 272.6112,-22 272.6112,-28 272.6112,-28 272.6112,-40 272.6112,-40 272.6112,-46 266.6112,-52 260.6112,-52"/>
 <text text-anchor="middle" x="207.8703" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">keys_and_cert</text>
 <text text-anchor="middle" x="207.8703" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">ReadKeysAndCert</text>
@@ -53,7 +53,7 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate -->
 <g id="node3" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate</title>
-<g id="a_node3"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate | defined in keys_and_cert.go:136">
+<g id="a_node3"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate | defined in keys_and_cert.go:139">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M248.2246,-130C248.2246,-130 167.516,-130 167.516,-130 161.516,-130 155.516,-124 155.516,-118 155.516,-118 155.516,-106 155.516,-106 155.516,-100 161.516,-94 167.516,-94 167.516,-94 248.2246,-94 248.2246,-94 254.2246,-94 260.2246,-100 260.2246,-106 260.2246,-106 260.2246,-118 260.2246,-118 260.2246,-124 254.2246,-130 248.2246,-130"/>
 <text text-anchor="middle" x="207.8703" y="-116.2" font-family="Verdana" font-size="14.00" fill="#000000">keys_and_cert</text>
 <text text-anchor="middle" x="207.8703" y="-99.4" font-family="Verdana" font-size="14.00" fill="#000000">Certificate</text>
@@ -72,7 +72,7 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).PublicKey -->
 <g id="node4" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).PublicKey</title>
-<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).PublicKey | defined in keys_and_cert.go:126">
+<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).PublicKey | defined in keys_and_cert.go:129">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M248.2246,-191C248.2246,-191 167.516,-191 167.516,-191 161.516,-191 155.516,-185 155.516,-179 155.516,-179 155.516,-167 155.516,-167 155.516,-161 161.516,-155 167.516,-155 167.516,-155 248.2246,-155 248.2246,-155 254.2246,-155 260.2246,-161 260.2246,-167 260.2246,-167 260.2246,-179 260.2246,-179 260.2246,-185 254.2246,-191 248.2246,-191"/>
 <text text-anchor="middle" x="207.8703" y="-177.2" font-family="Verdana" font-size="14.00" fill="#000000">keys_and_cert</text>
 <text text-anchor="middle" x="207.8703" y="-160.4" font-family="Verdana" font-size="14.00" fill="#000000">PublicKey</text>
@@ -91,7 +91,7 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).SigningPublicKey -->
 <g id="node5" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).SigningPublicKey</title>
-<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).SigningPublicKey | defined in keys_and_cert.go:131">
+<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).SigningPublicKey | defined in keys_and_cert.go:134">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M259.0341,-252C259.0341,-252 156.7065,-252 156.7065,-252 150.7065,-252 144.7065,-246 144.7065,-240 144.7065,-240 144.7065,-228 144.7065,-228 144.7065,-222 150.7065,-216 156.7065,-216 156.7065,-216 259.0341,-216 259.0341,-216 265.0341,-216 271.0341,-222 271.0341,-228 271.0341,-228 271.0341,-240 271.0341,-240 271.0341,-246 265.0341,-252 259.0341,-252"/>
 <text text-anchor="middle" x="207.8703" y="-238.2" font-family="Verdana" font-size="14.00" fill="#000000">keys_and_cert</text>
 <text text-anchor="middle" x="207.8703" y="-221.4" font-family="Verdana" font-size="14.00" fill="#000000">SigningPublicKey</text>

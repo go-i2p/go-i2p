@@ -75,6 +75,6 @@ be modified accordingly to handle the correct signature length.
 
 
 
-signature
+signature 
 
 github.com/go-i2p/go-i2p/lib/common/signature

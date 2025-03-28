@@ -38,6 +38,12 @@ default settings for netdb
 var RouterConfigProperties = DefaultRouterConfig()
 ```
 
+#### func  BuildI2PDirPath
+
+```go
+func BuildI2PDirPath() string
+```
+
 #### func  InitConfig
 
 ```go
@@ -111,6 +117,6 @@ func DefaultRouterConfig() *RouterConfig
 
 
 
-config
+config 
 
 github.com/go-i2p/go-i2p/lib/config

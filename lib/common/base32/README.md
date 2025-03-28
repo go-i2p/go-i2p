@@ -4,7 +4,7 @@
 
 ![base32.svg](base32.svg)
 
-Package base32 implmenets utilities for encoding and decoding text using I2P's
+Package base32 implements utilities for encoding and decoding text using I2P's
 ### alphabet
 
 ## Usage
@@ -25,7 +25,7 @@ I2PEncoding is the standard base32 encoding used through I2P.
 ```go
 func DecodeString(data string) ([]byte, error)
 ```
-DecodeString decodes base64 string to []byte I2PEncoding
+DecodeString decodes base32 string to []byte I2PEncoding
 
 #### func  EncodeToString
 
@@ -36,6 +36,6 @@ EncodeToString encodes []byte to a base32 string using I2PEncoding
 
 
 
-base32
+base32 
 
 github.com/go-i2p/go-i2p/lib/common/base32
