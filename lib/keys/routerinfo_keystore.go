@@ -79,10 +79,6 @@ func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
 }
 
 func loadExistingKey(keyData []byte) (ed25519.Ed25519PrivateKey, error) {
-	// Validate key length
-	if len(keyData) != ed25519.PrivateKeySize {
-		return nil, oops.Errorf("invalid key length")
-	}
 
 	// Convert to our type
 	return ed25519.Ed25519PrivateKey(keyData), nil
