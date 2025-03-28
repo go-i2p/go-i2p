@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
+	"github.com/go-i2p/go-i2p/lib/crypto/types"
 
 	"github.com/go-i2p/go-i2p/lib/common/keys_and_cert"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/key_certificate"
 	"github.com/go-i2p/go-i2p/lib/common/router_identity"
 	"github.com/go-i2p/go-i2p/lib/common/signature"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 	elgamal "github.com/go-i2p/go-i2p/lib/crypto/elg"
 	"github.com/stretchr/testify/assert"
 
@@ -29,7 +29,7 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
 	}
-	ed25519_privkey = ed25519_signingprivkey.(crypto.Ed25519PrivateKey) // Store the generated key
+	ed25519_privkey = ed25519_signingprivkey.(ed25519.Ed25519PrivateKey) // Store the generated key
 
 	// Verify key size
 	if len(ed25519_privkey) != 64 {
@@ -40,14 +40,14 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 	if err != nil {
 		t.Fatalf("Failed to derive Ed25519 public key: %v\n", err)
 	}
-	ed25519_pubkey, ok := ed25519_pubkey_raw.(crypto.SigningPublicKey)
+	ed25519_pubkey, ok := ed25519_pubkey_raw.(types.SigningPublicKey)
 	if !ok {
 		t.Fatalf("Failed to get SigningPublicKey from Ed25519 public key")
 	}
 
 	// Generate encryption key pair (ElGamal)
 	var elgamal_privkey elgamal.PrivateKey
-	err = elgamal.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	err = elgamal.ElgamalGenerate(&elgamal_privkey.PrivateKey, rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
 	}
@@ -69,7 +69,7 @@ func generateTestRouterInfo(t *testing.T, publishedTime time.Time) (*RouterInfo,
 	copy(elg_pubkey[256-len(yBytes):], yBytes)
 
 	// Ensure that elg_pubkey implements crypto.PublicKey interface
-	var _ crypto.RecievingPublicKey = elg_pubkey
+	var _ types.RecievingPublicKey = elg_pubkey
 
 	// Create KeyCertificate specifying key types
 	var payload bytes.Buffer

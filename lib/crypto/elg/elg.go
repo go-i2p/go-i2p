@@ -25,6 +25,10 @@ var (
 	ElgEncryptTooBig = oops.Errorf("failed to encrypt data, too big for elgamal")
 )
 
+type PrivateKey struct {
+	elgamal.PrivateKey
+}
+
 // generate an elgamal key pair
 func ElgamalGenerate(priv *elgamal.PrivateKey, rand io.Reader) (err error) {
 	log.Debug("Generating ElGamal key pair")

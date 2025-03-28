@@ -35,13 +35,13 @@ func TestCertificateWithMissingData(t *testing.T) {
 func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 	// Generate signing key pair (Ed25519)
 	// var ed25519_privkey crypto.Ed25519PrivateKey
-	priv, err := ed25519.GenerateEd25519Key()
+	ed25519_privkey, err := ed25519.GenerateEd25519Key()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private %s", err)
 	}
 	// Copy the full private key (includes public key)
-	ed25519_privkey := make(ed25519.Ed25519PrivateKey, ed25519.PrivateKeySize)
-	copy(ed25519_privkey, priv)
+	//ed25519_privkey := make(ed25519.Ed25519PrivateKey, ed25519.PrivateKeySize)
+	//copy(ed25519_privkey, priv)
 	//_, err = (ed25519_privkey).Generate()
 	if err != nil {
 		t.Fatalf("Failed to generate Ed25519 private key: %v\n", err)
@@ -57,7 +57,7 @@ func createValidKeyAndCert(t *testing.T) *KeysAndCert {
 
 	// Generate encryption key pair (ElGamal)
 	var elgamal_privkey elgamal.PrivateKey
-	err = elgamal.ElgamalGenerate(&elgamal_privkey, rand.Reader)
+	err = elgamal.ElgamalGenerate(&elgamal_privkey.PrivateKey, rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate ElGamal private key: %v\n", err)
 	}

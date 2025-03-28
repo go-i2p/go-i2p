@@ -2,7 +2,6 @@ package keys
 
 import (
 	"bytes"
-	//"crypto/ed25519"
 	"crypto/rand"
 	"os"
 	"path/filepath"
