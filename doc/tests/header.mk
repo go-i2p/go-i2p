@@ -1,5 +1,5 @@
 
-test-i2np-header-all: test-i2np-type test-i2np-message test-i2np-expiration test-i2np-ntcp-components test-i2np-data test-i2np-regression test-i2np-build-request-record test-i2np-build-response-record
+test-i2np-header-all: test-i2np-type test-i2np-message test-i2np-expiration test-i2np-ntcp-components test-i2np-data test-i2np-regression test-i2np-build-request-record test-i2np-build-response-record test-i2np-database-lookup
 
 test-i2np-type:
 	$(GO) test -v ./lib/i2np -run TestReadI2NPTypeWith
@@ -37,6 +37,31 @@ test-i2np-build-response-record:
 	$(GO) test -v ./lib/i2np -run TestReadBuildResponseRecordTooLittleData
 	$(GO) test -v ./lib/i2np -run TestReadBuildResponseRecordValidData
 
+test-i2np-database-lookup:
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupKeyTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupKeyValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupFromTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupFromValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupFlagsTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupFlagsValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTunnelIDTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTunnelIDNotIncluded
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTunnelIDValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupSizeTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupSizeValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupExcludedPeersTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupExcludedPeersZeroSize
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupExcludedPeersValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyKeyTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyKeyValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupTagsTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupTagsValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTagsTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTagsZeroTags
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupReplyTagsValidData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupTooLittleData
+	$(GO) test -v ./lib/i2np -run TestReadDatabaseLookupValidData
+
 .PHONY: test-i2np-header-all \
         test-i2np-type \
         test-i2np-message \
@@ -45,4 +70,5 @@ test-i2np-build-response-record:
         test-i2np-data \
         test-i2np-regression \
         test-i2np-build-request-record \
-        test-i2np-build-response-record
+        test-i2np-build-response-record \
+        test-i2np-database-lookup
