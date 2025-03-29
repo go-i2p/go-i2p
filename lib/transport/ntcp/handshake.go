@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/crypto"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
@@ -50,7 +49,8 @@ func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri 
 
 	// Generate ephemeral keypair
 	var err error
-	hs.localEphemeral, _, err = curve25519.GenerateX25519KeyPair()
+	_, hs.localEphemeral, err = curve25519.GenerateKeyPair()
+	//GenerateX25519KeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}
@@ -109,7 +109,7 @@ func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*Handsha
 
 	// Generate ephemeral keypair
 	var err error
-	hs.localEphemeral, _, err = crypto.GenerateX25519KeyPair()
+	_, hs.localEphemeral, err = curve25519.GenerateKeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}

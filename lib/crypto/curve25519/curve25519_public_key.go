@@ -11,6 +11,10 @@ import (
 // Curve25519PublicKey represents a Curve25519 public key
 type Curve25519PublicKey []byte
 
+func (k *Curve25519PublicKey) Bytes() []byte {
+	return *k
+}
+
 // NewVerifier creates a Curve25519 verifier
 func (k Curve25519PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating Curve25519 verifier")
