@@ -70,6 +70,37 @@ func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) err
 	// Implement according to NTCP2 spec
 	// 1. Create and send X (ephemeral key) | Padding
 	// uses CreateSessionRequest from session_request.go
+	sessionRequestMessage, err := c.CreateSessionRequest()
+	if err != nil {
+		return oops.Errorf("failed to create session request: %v", err)
+	}
+	// 2. Set deadline for the connection
+	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
+		return oops.Errorf("failed to set deadline: %v", err)
+	}
+	// 3. Obfuscate the session request message
+	obfuscatedX, err := c.ObfuscateEphemeral(sessionRequestMessage.XContent[:])
+	if err != nil {
+		return oops.Errorf("failed to obfuscate ephemeral key: %v", err)
+	}
+	// 4. ChaChaPoly Frame
+	// Encrypt options block and authenticate both options and padding
+	ciphertext, err := c.encryptSessionRequestOptions(sessionRequestMessage, obfuscatedX)
+	if err != nil {
+		return err
+	}
+
+	// Combine all components into final message
+	// 1. Obfuscated X (already in obfuscatedX)
+	// 2. ChaCha20-Poly1305 encrypted options with auth tag
+	// 3. Authenticated but unencrypted padding
+	message := append(obfuscatedX, ciphertext...)
+	message = append(message, sessionRequestMessage.Padding...)
+
+	// 5. Write the message to the connection
+	if _, err := conn.Write(message); err != nil {
+		return oops.Errorf("failed to send session request: %v", err)
+	}
 	return nil
 }
 
@@ -77,6 +108,7 @@ func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) err
 func (c *NTCP2Session) receiveSessionRequest(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
 	// TODO: Implement Message 1 processing
+
 	return nil
 }
 

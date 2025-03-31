@@ -10,20 +10,20 @@ import (
 type Curve25519PrivateKey []byte
 
 // Bytes implements types.PrivateKey.
-func (k *Curve25519PrivateKey) Bytes() []byte {
-	return []byte(*k) // Return the byte slice representation of the private key
+func (k Curve25519PrivateKey) Bytes() []byte {
+	return k // Return the byte slice representation of the private key
 }
 
 // Public implements types.PrivateKey.
-func (k *Curve25519PrivateKey) Public() (types.SigningPublicKey, error) {
+func (k Curve25519PrivateKey) Public() (types.SigningPublicKey, error) {
 	// Create a proper x25519.PrivateKey from the byte slice
-	if len(*k) != x25519.PrivateKeySize {
+	if len(k) != x25519.PrivateKeySize {
 		// Handle invalid private key length
 		return nil, ErrInvalidPrivateKey
 	}
 	// Create a proper x25519.PrivateKey from the byte slice
 	privKey := make(x25519.PrivateKey, x25519.PrivateKeySize)
-	copy(privKey, *k)
+	copy(privKey, k)
 	// Derive the public key from the private key
 	pubKey := privKey.Public() // This will return the corresponding public key
 	x25519PubKey := pubKey.(curve25519.PublicKey)
@@ -32,10 +32,10 @@ func (k *Curve25519PrivateKey) Public() (types.SigningPublicKey, error) {
 }
 
 // Zero implements types.PrivateKey.
-func (k *Curve25519PrivateKey) Zero() {
+func (k Curve25519PrivateKey) Zero() {
 	// replace the slice with zeroes
-	for i := range *k {
-		(*k)[i] = 0
+	for i := range k {
+		(k)[i] = 0
 	}
 }
 
