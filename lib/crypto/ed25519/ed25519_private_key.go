@@ -13,7 +13,14 @@ type Ed25519PrivateKey ed25519.PrivateKey
 
 // NewVerifier implements types.SigningPublicKey.
 func (k *Ed25519PrivateKey) NewVerifier() (types.Verifier, error) {
-	panic("unimplemented")
+	if len(*k) != ed25519.PrivateKeySize {
+		return nil, oops.Errorf("invalid ed25519 private key size")
+	}
+	pub, err := k.Public()
+	if err != nil {
+		return nil, oops.Errorf("failed to get public key: %v", err)
+	}
+	return pub.NewVerifier()
 }
 
 func (k Ed25519PrivateKey) Bytes() []byte {
