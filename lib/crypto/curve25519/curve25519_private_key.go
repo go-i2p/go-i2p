@@ -34,8 +34,8 @@ func (k *Curve25519PrivateKey) Public() (types.SigningPublicKey, error) {
 // Zero implements types.PrivateKey.
 func (k *Curve25519PrivateKey) Zero() {
 	// replace the slice with zeroes
-	for _, i := range k {
-
+	for i := range *k {
+		(*k)[i] = 0
 	}
 }
 

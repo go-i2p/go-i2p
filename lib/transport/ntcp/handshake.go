@@ -66,7 +66,7 @@ func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri 
 }
 
 // PerformOutboundHandshake initiates and completes a handshake as the initiator
-func PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error {
 	// Set deadline for the entire handshake process
 	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
 		return oops.Errorf("failed to set deadline: %v", err)
@@ -74,26 +74,26 @@ func PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error {
 	defer conn.SetDeadline(time.Time{}) // Clear deadline after handshake
 
 	// 1. Send SessionRequest
-	if err := sendSessionRequest(conn, hs); err != nil {
+	if err := c.sendSessionRequest(conn, hs); err != nil {
 		return oops.Errorf("failed to send session request: %v", err)
 	}
 
 	// 2. Receive SessionCreated
-	if err := receiveSessionCreated(conn, hs); err != nil {
+	if err := c.receiveSessionCreated(conn, hs); err != nil {
 		return oops.Errorf("failed to receive session created: %v", err)
 	}
 
 	// 3. Send SessionConfirm
-	if err := sendSessionConfirm(conn, hs); err != nil {
+	if err := c.sendSessionConfirm(conn, hs); err != nil {
 		return oops.Errorf("failed to send session confirm: %v", err)
 	}
 
 	// Handshake complete, derive session keys
-	return deriveSessionKeys(hs)
+	return c.deriveSessionKeys(hs)
 }
 
 // PerformInboundHandshake handles a handshake initiated by a remote peer
-func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*HandshakeState, error) {
+func (c *NTCP2Session) PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*HandshakeState, error) {
 	// Set deadline for the entire handshake process
 	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
 		return nil, oops.Errorf("failed to set deadline: %v", err)
@@ -115,22 +115,22 @@ func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*Handsha
 	}
 
 	// 1. Receive SessionRequest
-	if err := receiveSessionRequest(conn, hs); err != nil {
+	if err := c.receiveSessionRequest(conn, hs); err != nil {
 		return nil, oops.Errorf("failed to receive session request: %v", err)
 	}
 
 	// 2. Send SessionCreated
-	if err := sendSessionCreated(conn, hs); err != nil {
+	if err := c.sendSessionCreated(conn, hs); err != nil {
 		return nil, oops.Errorf("failed to send session created: %v", err)
 	}
 
 	// 3. Receive SessionConfirm
-	if err := receiveSessionConfirm(conn, hs); err != nil {
+	if err := c.receiveSessionConfirm(conn, hs); err != nil {
 		return nil, oops.Errorf("failed to receive session confirm: %v", err)
 	}
 
 	// Handshake complete, derive session keys
-	if err := deriveSessionKeys(hs); err != nil {
+	if err := c.deriveSessionKeys(hs); err != nil {
 		return nil, err
 	}
 
@@ -138,50 +138,50 @@ func PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*Handsha
 }
 
 // sendSessionRequest sends Message 1 (SessionRequest) to the remote peer
-func sendSessionRequest(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
 	// 1. Create and send X (ephemeral key) | Padding
-	// TODO: Implement detailed Message 1 construction
+	// uses CreateSessionRequest from session_request.go
 	return nil
 }
 
 // receiveSessionRequest processes Message 1 (SessionRequest) from remote
-func receiveSessionRequest(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) receiveSessionRequest(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
 	// TODO: Implement Message 1 processing
 	return nil
 }
 
 // sendSessionCreated sends Message 2 (SessionCreated) to the remote peer
-func sendSessionCreated(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) sendSessionCreated(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
-	// TODO: Implement Message 2 construction and sending
+	// uses CreateSessionCreated from session_created.go
 	return nil
 }
 
 // receiveSessionCreated processes Message 2 (SessionCreated) from remote
-func receiveSessionCreated(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) receiveSessionCreated(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
 	// TODO: Implement Message 2 processing
 	return nil
 }
 
 // sendSessionConfirm sends Message 3 (SessionConfirm) to the remote peer
-func sendSessionConfirm(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) sendSessionConfirm(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
-	// TODO: Implement Message 3 construction and sending
+	// uses CreateSessionConfirmed from session_confirm.go
 	return nil
 }
 
 // receiveSessionConfirm processes Message 3 (SessionConfirm) from remote
-func receiveSessionConfirm(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) receiveSessionConfirm(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
 	// TODO: Implement Message 3 processing
 	return nil
 }
 
 // deriveSessionKeys computes the session keys from the completed handshake
-func deriveSessionKeys(hs *HandshakeState) error {
+func (c *NTCP2Session) deriveSessionKeys(hs *HandshakeState) error {
 	// Use shared secrets to derive session keys
 	// TODO: Implement key derivation according to NTCP2 spec
 	return nil

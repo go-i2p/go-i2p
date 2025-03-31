@@ -16,8 +16,8 @@ package padding
  * - However, it also narrows the class of messages that can exist within a quantum.
  * - SO, the padding is a mix of random and fixed padding, which first buckets the messages by padding them to the same quantum
  * - Then adding a random amount of padding greater than the quantum.
- * - 8 and 16 byte quantums have specific alignment advantages, 32 bytes of padding in the scheme above results in most messages being uncategorizable by size.
- * - 16 byte quantum with 48 bytes of padding is sufficient to make almost all messages uncategorizable by size.
+ * - 8 and 16 byte quantums have specific alignment advantages, 32 bytes of padding in the scheme above results in most small messages being uncategorizable by size.
+ * - 16 byte quantum with 48 bytes of padding is sufficient to make almost all small messages uncategorizable by size.
  *
  * Math to be published elsewhere, later.
  */

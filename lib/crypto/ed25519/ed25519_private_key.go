@@ -11,6 +11,11 @@ import (
 
 type Ed25519PrivateKey ed25519.PrivateKey
 
+// NewVerifier implements types.SigningPublicKey.
+func (k *Ed25519PrivateKey) NewVerifier() (types.Verifier, error) {
+	panic("unimplemented")
+}
+
 func (k Ed25519PrivateKey) Bytes() []byte {
 	return k
 }
