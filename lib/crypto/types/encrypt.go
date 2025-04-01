@@ -13,4 +13,5 @@ type PublicEncryptionKey interface {
 
 	// length of this public key in bytes
 	Len() int
+	Bytes() []byte
 }

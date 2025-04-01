@@ -101,13 +101,45 @@ func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) err
 	if _, err := conn.Write(message); err != nil {
 		return oops.Errorf("failed to send session request: %v", err)
 	}
-	return nil
+	return oops.Errorf("receiveSessionRequest is not yet implemented")
 }
 
 // receiveSessionRequest processes Message 1 (SessionRequest) from remote
 func (c *NTCP2Session) receiveSessionRequest(conn net.Conn, hs *HandshakeState) error {
 	// Implement according to NTCP2 spec
-	// TODO: Implement Message 1 processing
+	// Reference: https://geti2p.net/spec/ntcp2
+
+	// 1. Read the message off the connection
+	// Placeholder: Read a fixed-size buffer to simulate message reading
+	buffer := make([]byte, 1024)
+	if _, err := conn.Read(buffer); err != nil {
+		return oops.Errorf("failed to read session request: %v", err)
+	}
+
+	// 2. De-obfuscate the ephemeral key
+	// Placeholder: Simulate de-obfuscation using a dummy function
+	ephemeralKey := buffer[:32] // Assume the first 32 bytes are the ephemeral key
+	if deobfuscatedEphemeral, err := c.DeobfuscateEphemeral(ephemeralKey); err != nil {
+		return oops.Errorf("failed to de-obfuscate ephemeral key: %v", err)
+	} else {
+		// Update handshake state with received ephemeral key
+		pubKey := curve25519.Curve25519PublicKey(deobfuscatedEphemeral)
+		hs.remoteEphemeral = pubKey
+	}
+
+	// 3. Decrypt the options block
+	// Placeholder: Simulate decryption using a dummy function
+	//optionsBlock := buffer[32:64] // Assume the next 32 bytes are the options block
+	//if err := c.DecryptOptionsBlock(optionsBlock, hs); err != nil {
+	//return oops.Errorf("failed to decrypt options block: %v", err)
+	//}
+
+	// 4. Validate the padding
+	// Placeholder: Simulate padding validation
+	padding := buffer[64:] // Assume the rest is padding
+	if len(padding) < hs.remotePaddingLen {
+		return oops.Errorf("invalid padding length: expected %d, got %d", hs.remotePaddingLen, len(padding))
+	}
 
 	return nil
 }

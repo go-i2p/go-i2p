@@ -11,8 +11,8 @@ import (
 // Curve25519PublicKey represents a Curve25519 public key
 type Curve25519PublicKey []byte
 
-func (k *Curve25519PublicKey) Bytes() []byte {
-	return *k
+func (k Curve25519PublicKey) Bytes() []byte {
+	return k
 }
 
 // NewVerifier creates a Curve25519 verifier
