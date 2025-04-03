@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"math/big"
 
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
@@ -25,7 +24,7 @@ func (r RSA2048PublicKey) Verify(data []byte, sig []byte) error {
 // VerifyHash implements types.Verifier.
 // This method verifies a pre-computed hash against the signature
 func (r RSA2048PublicKey) VerifyHash(h []byte, sig []byte) error {
-	pubKey, err := rsaPublicKeyFromBytes2048(r[:])
+	pubKey, err := rsaPublicKeyFromBytes(r[:], 2048)
 	if err != nil {
 		return oops.Errorf("failed to parse RSA2048 public key: %w", err)
 	}
@@ -62,21 +61,6 @@ func (r RSA2048PublicKey) Len() int {
 func (r RSA2048PublicKey) NewVerifier() (types.Verifier, error) {
 	log.Debug("Creating new RSA-2048 verifier")
 	return r, nil
-}
-
-// rsaPublicKeyFromBytes2048 converts raw bytes to an rsa.PublicKey
-func rsaPublicKeyFromBytes2048(data []byte) (*rsa.PublicKey, error) {
-	if len(data) != 256 {
-		return nil, oops.Errorf("invalid RSA2048 public key length: %d", len(data))
-	}
-
-	// The format is expected to be a big-endian modulus
-	modulus := new(big.Int).SetBytes(data)
-
-	return &rsa.PublicKey{
-		N: modulus,
-		E: 65537, // Standard RSA public exponent
-	}, nil
 }
 
 var _ types.PublicKey = RSA2048PublicKey{}
