@@ -17,12 +17,12 @@ type (
 
 // Len implements types.SigningPrivateKey.
 func (r *RSA3072PrivateKey) Len() int {
-	panic("unimplemented")
+	return len(r)
 }
 
 // NewSigner implements types.SigningPrivateKey.
 func (r *RSA3072PrivateKey) NewSigner() (types.Signer, error) {
-	panic("unimplemented")
+	return r, nil
 }
 
 // Sign implements types.Signer - signs data with SHA512 hash
