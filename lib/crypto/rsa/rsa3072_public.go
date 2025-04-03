@@ -3,6 +3,7 @@ package rsa
 import (
 	"crypto"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/sha512"
 
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
@@ -30,8 +31,8 @@ func (r RSA3072PublicKey) VerifyHash(h []byte, sig []byte) error {
 	// For RSA3072, SHA512 is often used
 	hashed := h
 	if len(h) != sha512.Size {
-		// If we received a different hash size, warn but continue
-		log.Warnf("RSA3072 verification received unexpected hash size: %d", len(h))
+		return oops.Errorf("RSA3072 verification requires SHA-256 hash (expected %d bytes, got %d)",
+			sha256.Size, len(h))
 	}
 
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA512, hashed, sig)

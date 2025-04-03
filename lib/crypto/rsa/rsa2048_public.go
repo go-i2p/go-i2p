@@ -30,13 +30,12 @@ func (r RSA2048PublicKey) VerifyHash(h []byte, sig []byte) error {
 	}
 
 	// For RSA2048, we use SHA-256
-	hashed := h
 	if len(h) != sha256.Size {
-		// If we received a different hash size, warn but continue
-		log.Warnf("RSA2048 verification received unexpected hash size: %d", len(h))
+		return oops.Errorf("RSA2048 verification requires SHA-256 hash (expected %d bytes, got %d)",
+			sha256.Size, len(h))
 	}
 
-	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hashed, sig)
+	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, h, sig)
 	if err != nil {
 		return oops.Errorf("RSA signature verification failed: %w", err)
 	}
