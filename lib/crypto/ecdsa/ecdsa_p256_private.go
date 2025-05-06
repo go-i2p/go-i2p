@@ -17,7 +17,7 @@ type (
 
 // Len implements types.SigningPrivateKey.
 func (e *ECP256PrivateKey) Len() int {
-	panic("unimplemented")
+	return 32
 }
 
 // Sign implements types.Signer.

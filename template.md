@@ -11,3 +11,5 @@
 {{ .Name }} 
 
 {{ .ImportPath }}
+
+[go-i2p template file](/template.md)

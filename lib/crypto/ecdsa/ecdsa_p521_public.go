@@ -13,12 +13,24 @@ type (
 
 // Verify implements types.Verifier.
 func (k ECP521PublicKey) Verify(data []byte, sig []byte) error {
-	panic("unimplemented")
+	log.WithField("data_length", len(data)).Debug("Verifying data with ECDSA-P521")
+	verifier, err := k.NewVerifier()
+	if err != nil {
+		log.WithError(err).Error("Failed to create verifier")
+		return err
+	}
+	return verifier.Verify(data, sig)
 }
 
 // VerifyHash implements types.Verifier.
 func (k ECP521PublicKey) VerifyHash(h []byte, sig []byte) error {
-	panic("unimplemented")
+	log.WithField("hash_length", len(h)).Debug("Verifying hash with ECDSA-P521")
+	verifier, err := k.NewVerifier()
+	if err != nil {
+		log.WithError(err).Error("Failed to create verifier")
+		return err
+	}
+	return verifier.VerifyHash(h, sig)
 }
 
 func (k ECP521PublicKey) Bytes() []byte {

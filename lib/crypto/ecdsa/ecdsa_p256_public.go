@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/samber/oops"
 )
 
 type (
@@ -13,17 +14,30 @@ type (
 
 // Verify implements types.Verifier.
 func (k ECP256PublicKey) Verify(data []byte, sig []byte) error {
-	panic("unimplemented")
+	log.WithField("data_length", len(data)).Debug("Verifying data with ECDSA-P256")
+	verifier, err := k.NewVerifier()
+	if err != nil {
+		log.WithError(err).Error("Failed to create verifier")
+		return err
+	}
+	return verifier.Verify(data, sig)
 }
 
 // VerifyHash implements types.Verifier.
 func (k ECP256PublicKey) VerifyHash(h []byte, sig []byte) error {
-	panic("unimplemented")
+	log.WithField("hash_length", len(h)).Debug("Verifying hash with ECDSA-P256")
+	verifier, err := k.NewVerifier()
+	if err != nil {
+		log.WithError(err).Error("Failed to create verifier")
+		return err
+	}
+	return verifier.VerifyHash(h, sig)
 }
 
 // Encrypt implements types.Encrypter.
 func (k *ECP256PublicKey) Encrypt(data []byte) (enc []byte, err error) {
-	panic("unimplemented")
+	log.Error("Encryption not supported with ECDSA keys")
+	return nil, oops.Errorf("encryption not supported with ECDSA keys; ECDSA is for signing/verification only")
 }
 
 func (k ECP256PublicKey) Len() int {
