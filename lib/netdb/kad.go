@@ -12,7 +12,7 @@ import (
 )
 
 // resolves router infos with recursive kademlia lookup
-type kadResolver struct {
+type KademliaResolver struct {
 	// netdb to store result into
 	NetworkDatabase
 	// what tunnel pool to use when doing lookup
@@ -20,7 +20,7 @@ type kadResolver struct {
 	pool *tunnel.Pool
 }
 
-func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
 	log.WithFields(logrus.Fields{
 		"hash":    h,
 		"timeout": timeout,
@@ -98,7 +98,7 @@ func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (*router_inf
 }
 
 // findClosestPeers returns peers closest to the target hash using XOR distance
-func (kr *kadResolver) findClosestPeers(target common.Hash) []common.Hash {
+func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	// This would be implemented to find the closest peers by XOR distance
 	// For now return a simplified implementation that just returns some known peers
 
@@ -113,7 +113,7 @@ func (kr *kadResolver) findClosestPeers(target common.Hash) []common.Hash {
 }
 
 // queryPeer sends a lookup request to a specific peer through the tunnel
-func (kr *kadResolver) queryPeer(ctx context.Context, peer common.Hash, target common.Hash) (*router_info.RouterInfo, error) {
+func (kr *KademliaResolver) queryPeer(ctx context.Context, peer common.Hash, target common.Hash) (*router_info.RouterInfo, error) {
 	// This would send a DatabaseLookup message through the tunnel to the peer
 	// The implementation would:
 	// 1. Create an I2NP DatabaseLookup message
@@ -125,9 +125,9 @@ func (kr *kadResolver) queryPeer(ctx context.Context, peer common.Hash, target c
 }
 
 // create a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup
-func KademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
+func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
 	if pool != nil && netDb != nil {
-		r = &kadResolver{
+		r = &KademliaResolver{
 			NetworkDatabase: netDb,
 			pool:            pool,
 		}
