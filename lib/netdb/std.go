@@ -73,6 +73,17 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	return
 }
 
+func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
+	log.Debug("Getting all RouterInfos")
+	ri = make([]router_info.RouterInfo, 0, len(db.RouterInfos))
+	for _, e := range db.RouterInfos {
+		if e.RouterInfo != nil {
+			ri = append(ri, *e.RouterInfo)
+		}
+	}
+	return
+}
+
 // get the skiplist file that a RouterInfo with this hash would go in
 func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])

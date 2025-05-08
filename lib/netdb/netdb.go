@@ -22,6 +22,10 @@ type NetworkDatabase interface {
 	// return nil if the RouterInfo cannot be found locally
 	GetRouterInfo(hash common.Hash) router_info.RouterInfo
 
+	// obtain all routerInfos, ordered by their hash
+	// return a slice of routerInfos
+	GetAllRouterInfos() []router_info.RouterInfo
+
 	// store a router info locally
 	StoreRouterInfo(ri router_info.RouterInfo)
 

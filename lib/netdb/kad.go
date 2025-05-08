@@ -3,6 +3,7 @@ package netdb
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	common "github.com/go-i2p/go-i2p/lib/common/data"
@@ -99,17 +100,80 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 
 // findClosestPeers returns peers closest to the target hash using XOR distance
 func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
-	// This would be implemented to find the closest peers by XOR distance
-	// For now return a simplified implementation that just returns some known peers
+	const K = 8 // Standard Kademlia parameter for number of closest peers to return
 
-	// In a real implementation, we would:
-	// 1. Get all known peers from the netDB
-	// 2. Calculate XOR distance between target and all peers
-	// 3. Sort by XOR distance
-	// 4. Return the K closest peers (where K is typically 8 or 16)
+	// Get all known router infos from the network database
+	allRouterInfos := kr.NetworkDatabase.GetAllRouterInfos()
+	if len(allRouterInfos) == 0 {
+		log.Debug("No peers available in network database")
+		return []common.Hash{}
+	}
 
-	// Placeholder implementation that would need to be completed
-	return []common.Hash{}
+	// Calculate XOR distance for each peer
+	type peerDistance struct {
+		hash     common.Hash
+		distance []byte
+	}
+
+	peers := make([]peerDistance, 0, len(allRouterInfos))
+
+	for _, ri := range allRouterInfos {
+		peerHash := ri.IdentHash()
+
+		// Skip self or target if it's in our database
+		if peerHash == target {
+			continue
+		}
+
+		// Calculate XOR distance between target and peer
+		distance := make([]byte, len(target))
+		for i := 0; i < len(target); i++ {
+			distance[i] = target[i] ^ peerHash[i]
+		}
+
+		peers = append(peers, peerDistance{
+			hash:     peerHash,
+			distance: distance,
+		})
+	}
+
+	if len(peers) == 0 {
+		log.Debug("No suitable peers found after filtering")
+		return []common.Hash{}
+	}
+
+	// Sort peers by XOR distance (closest first)
+	sort.Slice(peers, func(i, j int) bool {
+		// Compare distances byte by byte (big endian comparison)
+		for k := 0; k < len(peers[i].distance); k++ {
+			if peers[i].distance[k] < peers[j].distance[k] {
+				return true
+			}
+			if peers[i].distance[k] > peers[j].distance[k] {
+				return false
+			}
+		}
+		return false // Equal distances
+	})
+
+	// Take up to K closest peers
+	count := K
+	if len(peers) < count {
+		count = len(peers)
+	}
+
+	result := make([]common.Hash, count)
+	for i := 0; i < count; i++ {
+		result[i] = peers[i].hash
+	}
+
+	log.WithFields(logrus.Fields{
+		"target":        target,
+		"total_peers":   len(peers),
+		"closest_peers": len(result),
+	}).Debug("Found closest peers by XOR distance")
+
+	return result
 }
 
 // queryPeer sends a lookup request to a specific peer through the tunnel
