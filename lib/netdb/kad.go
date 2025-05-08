@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"fmt"
 	"time"
 
 	common "github.com/go-i2p/go-i2p/lib/common/data"
@@ -18,8 +19,8 @@ type kadResolver struct {
 }
 
 // TODO: implement
-func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (chnl chan router_info.RouterInfo) {
-	return
+func (kr *kadResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // create a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup

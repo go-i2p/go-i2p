@@ -12,7 +12,7 @@ import (
 type Resolver interface {
 	// resolve a router info by hash
 	// return a chan that yields the found RouterInfo or nil if it could not be found after timeout
-	Lookup(hash common.Hash, timeout time.Duration) chan router_info.RouterInfo
+	Lookup(hash common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 }
 
 // i2p network database, storage of i2p RouterInfos
