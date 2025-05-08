@@ -62,5 +62,7 @@ func (r RSA2048PublicKey) NewVerifier() (types.Verifier, error) {
 	return r, nil
 }
 
-var _ types.PublicKey = RSA2048PublicKey{}
-var _ types.Verifier = RSA2048PublicKey{}
+var (
+	_ types.PublicKey = RSA2048PublicKey{}
+	_ types.Verifier  = RSA2048PublicKey{}
+)

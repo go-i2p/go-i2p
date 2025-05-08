@@ -79,7 +79,6 @@ func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
 }
 
 func loadExistingKey(keyData []byte) (ed25519.Ed25519PrivateKey, error) {
-
 	// Convert to our type
 	return ed25519.Ed25519PrivateKey(keyData), nil
 }

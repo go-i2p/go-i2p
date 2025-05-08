@@ -277,75 +277,75 @@ func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
 
 	key := common.Hash(data[:32])
 	log.WithFields(logrus.Fields{
-		"at":    "i2np.readDatabaseLookupKey",
-		"key":   key,
+		"at":  "i2np.readDatabaseLookupKey",
+		"key": key,
 	}).Debug("parsed_database_lookup_key")
 	return 32, key, nil
 }
 
 func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
-	if len(data) < length + 32 {
+	if len(data) < length+32 {
 		return length, common.Hash{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 
-	from := common.Hash(data[length:length + 32])
+	from := common.Hash(data[length : length+32])
 	log.WithFields(logrus.Fields{
-		"at":    "i2np.database_lookup.readDatabaseLookupFrom",
-		"from":   from,
+		"at":   "i2np.database_lookup.readDatabaseLookupFrom",
+		"from": from,
 	}).Debug("parsed_database_lookup_from")
 	return length + 32, from, nil
 }
 
 func readDatabaseLookupFlags(length int, data []byte) (int, byte, error) {
-	if len(data) < length + 1 {
+	if len(data) < length+1 {
 		return length, byte(0), ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 	flags := data[length]
 
 	log.WithFields(logrus.Fields{
 		"at":    "i2np.database_lookup.readDatabaseLookupFlags",
-		"flags":   flags,
+		"flags": flags,
 	}).Debug("parsed_database_lookup_flags")
 	return length + 1, flags, nil
 }
 
 func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, [4]byte, error) {
-	if flags & 1 != 1 {
+	if flags&1 != 1 {
 		return length, [4]byte{}, nil
 	}
-	if len(data) < length + 4 {
+	if len(data) < length+4 {
 		return length, [4]byte{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 
-	replyTunnelID := [4]byte(data[length:length + 4])
+	replyTunnelID := [4]byte(data[length : length+4])
 	log.WithFields(logrus.Fields{
-		"at":          "i2np.database_lookup.readDatabaseLookupReplyTunnelID",
-		"reply_tunnel_id":   replyTunnelID,
+		"at":              "i2np.database_lookup.readDatabaseLookupReplyTunnelID",
+		"reply_tunnel_id": replyTunnelID,
 	}).Debug("parsed_database_lookup_reply_tunnel_id")
 	return length + 4, replyTunnelID, nil
 }
 
 func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
-	if len(data) < length + 2 {
+	if len(data) < length+2 {
 		return length, 0, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 
-	size := common.Integer(data[length:length + 2]).Int()
+	size := common.Integer(data[length : length+2]).Int()
 	log.WithFields(logrus.Fields{
-		"at":      "i2np.database_lookup.readDatabaseLookupSize",
-		"size":    size,
+		"at":   "i2np.database_lookup.readDatabaseLookupSize",
+		"size": size,
 	}).Debug("parsed_database_lookup_size")
 	return length + 2, size, nil
 }
 
 func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []common.Hash, error) {
-	if len(data) < length + size * 32 {
+	if len(data) < length+size*32 {
 		return length, []common.Hash{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 	var excludedPeers []common.Hash
 	for i := 0; i < size; i++ {
-		offset := length + i * 32
-		peer := common.Hash(data[offset:offset + 32])
+		offset := length + i*32
+		peer := common.Hash(data[offset : offset+32])
 		excludedPeers = append(excludedPeers, peer)
 	}
 
@@ -353,49 +353,49 @@ func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []
 		"at":             "i2np.database_lookup.readDatabaseLookupExcludedPeers",
 		"excluded_peers": excludedPeers,
 	}).Debug("parsed_database_lookup_excluded_peers")
-	return length + size * 32, excludedPeers, nil
+	return length + size*32, excludedPeers, nil
 }
 
 func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.SessionKey, error) {
-	if len(data) < length + 32 {
+	if len(data) < length+32 {
 		return length, session_key.SessionKey{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
-	replyKey := session_key.SessionKey(data[length:length + 32])
+	replyKey := session_key.SessionKey(data[length : length+32])
 
 	log.WithFields(logrus.Fields{
-		"at":          "i2np.database_lookup.readDatabaseLookupReplyKey",
+		"at":        "i2np.database_lookup.readDatabaseLookupReplyKey",
 		"reply_key": replyKey,
 	}).Debug("parsed_database_lookup_reply_key")
 	return length + 32, replyKey, nil
 }
 
 func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
-	if len(data) < length + 1 {
+	if len(data) < length+1 {
 		return length, 0, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 	tags := int(data[length])
 
 	log.WithFields(logrus.Fields{
-		"at":     "i2np.database_lookup.readDatabaseLookupTags",
-		"tags":   tags,
+		"at":   "i2np.database_lookup.readDatabaseLookupTags",
+		"tags": tags,
 	}).Debug("parsed_database_lookup_tags")
 	return length + 1, tags, nil
 }
 
 func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []session_tag.SessionTag, error) {
-	if len(data) < length + tags * 32 {
+	if len(data) < length+tags*32 {
 		return length, []session_tag.SessionTag{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
 	}
 	var reply_tags []session_tag.SessionTag
 	for i := 0; i < tags; i++ {
-		offset := length + i * 32
-		tag := session_tag.SessionTag(data[offset:offset + 32])
+		offset := length + i*32
+		tag := session_tag.SessionTag(data[offset : offset+32])
 		reply_tags = append(reply_tags, tag)
 	}
 
 	log.WithFields(logrus.Fields{
-		"at":     "i2np.database_lookup.readDatabaseLookupReplyTags",
-		"reply_tags":   reply_tags,
+		"at":         "i2np.database_lookup.readDatabaseLookupReplyTags",
+		"reply_tags": reply_tags,
 	}).Debug("parsed_database_lookup_reply_tags")
-	return length + tags * 32, reply_tags, nil
+	return length + tags*32, reply_tags, nil
 }

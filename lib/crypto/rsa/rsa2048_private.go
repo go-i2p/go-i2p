@@ -94,5 +94,7 @@ func (r RSA2048PrivateKey) toRSAPrivateKey() (*rsa.PrivateKey, error) {
 	return privKey, nil
 }
 
-var _ types.PrivateKey = RSA2048PrivateKey{}
-var _ types.Signer = RSA2048PrivateKey{}
+var (
+	_ types.PrivateKey = RSA2048PrivateKey{}
+	_ types.Signer     = RSA2048PrivateKey{}
+)

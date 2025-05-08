@@ -50,7 +50,7 @@ func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri 
 	// Generate ephemeral keypair
 	var err error
 	_, hs.localEphemeral, err = curve25519.GenerateKeyPair()
-	//GenerateX25519KeyPair()
+	// GenerateX25519KeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}

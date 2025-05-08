@@ -164,7 +164,6 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 				return err
 			}
 			ih := ri.IdentHash().Bytes()
-			log.WithError(err).Error("Failed to parse RouterInfo")
 			log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
 			for _, addr := range ri.RouterAddresses() {
 				log.Println(string(addr.Bytes()))
@@ -267,7 +266,38 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 		return nil
 	}
 	log.Warn("NetDB size below minimum, reseed required")
-	return
+
+	// Get peers from the bootstrap provider
+	peersChan, err := b.GetPeers(0) // Get as many peers as possible
+	if err != nil {
+		log.WithError(err).Error("Failed to get peers from bootstrap provider")
+		return fmt.Errorf("bootstrap failed: %w", err)
+	}
+
+	// Process the received peers
+	count := 0
+	for peers := range peersChan {
+		for _, ri := range peers {
+			hash := ri.IdentHash()
+			if _, exists := db.RouterInfos[hash]; !exists {
+				log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
+				db.RouterInfos[hash] = Entry{
+					RouterInfo: &ri,
+				}
+				count++
+			}
+		}
+	}
+
+	log.WithField("added_routers", count).Info("Reseed completed successfully")
+
+	// Update the size cache
+	err = db.RecalculateSize()
+	if err != nil {
+		log.WithError(err).Warn("Failed to update NetDB size cache after reseed")
+	}
+
+	return nil
 }
 
 // ensure that the network database exists

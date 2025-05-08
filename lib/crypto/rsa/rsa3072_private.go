@@ -124,5 +124,7 @@ func (r *RSA3072PrivateKey) Generate() (types.SigningPrivateKey, error) {
 	return &newKey, nil
 }
 
-var _ types.PrivateKey = RSA3072PrivateKey{}
-var _ types.Signer = RSA3072PrivateKey{}
+var (
+	_ types.PrivateKey = RSA3072PrivateKey{}
+	_ types.Signer     = RSA3072PrivateKey{}
+)

@@ -138,6 +138,10 @@ type LeaseSet struct {
 }
 */
 
+func (lease_set LeaseSet) Bytes() ([]byte, error) {
+	return []byte(lease_set), nil
+}
+
 // Destination returns the Destination as []byte.
 func (lease_set LeaseSet) Destination() (dest destination.Destination, err error) {
 	keys_and_cert, _, err := keys_and_cert.ReadKeysAndCertElgAndEd25519(lease_set)
@@ -571,4 +575,13 @@ func NewLeaseSet(
 	}).Debug("Successfully created new LeaseSet")
 
 	return LeaseSet(dbytes), nil
+}
+
+func ReadLeaseSet(data []byte) (LeaseSet, error) {
+	log.Debug("Reading LeaseSet")
+	lease_set := LeaseSet(data)
+	if len(lease_set) < 387 {
+		return nil, oops.Errorf("LeaseSet data too short to contain Destination")
+	}
+	return lease_set, nil
 }

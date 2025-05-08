@@ -89,6 +89,7 @@ func TestReadDatabaseLookupFlagsValidData(t *testing.T) {
 	assert.Equal(flags, expected)
 	assert.Equal(nil, err)
 }
+
 func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -159,7 +160,7 @@ func TestReadDatabaseLookupSizeValidData(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	expectedSizeData := []byte{0x16,0x9}
+	expectedSizeData := []byte{0x16, 0x9}
 	data = append(data, expectedSizeData...)
 
 	length, size, err := readDatabaseLookupSize(length, data)
@@ -173,7 +174,7 @@ func TestReadDatabaseLookupExcludedPeersTooLittleData(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	sizeData := []byte{0x0,0x3}
+	sizeData := []byte{0x0, 0x3}
 	data = append(data, sizeData...)
 	data = append(data, 0x23)
 
@@ -189,7 +190,7 @@ func TestReadDatabaseLookupExcludedPeersZeroSize(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	sizeData := []byte{0x0,0x0}
+	sizeData := []byte{0x0, 0x0}
 	data = append(data, sizeData...)
 	data = append(data, 0x23)
 
@@ -208,7 +209,7 @@ func TestReadDatabaseLookupExcludedPeersValidData(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	sizeData := []byte{0x0,0x3}
+	sizeData := []byte{0x0, 0x3}
 	data = append(data, sizeData...)
 
 	length, size, err := readDatabaseLookupSize(length, data)
@@ -217,15 +218,15 @@ func TestReadDatabaseLookupExcludedPeersValidData(t *testing.T) {
 	for i := range size {
 		peer := make([]byte, 32)
 		// random data:
-		peer[i + 1] = 0x43
-		peer[i + 23] = 0x89
+		peer[i+1] = 0x43
+		peer[i+23] = 0x89
 		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
 		data = append(data, peer...)
 	}
 
 	length, excludedPeers, err := readDatabaseLookupExcludedPeers(length, data, size)
 	assert.Equal(expectedExcludedPeers, excludedPeers)
-	assert.Equal(67 + 32 * size, length)
+	assert.Equal(67+32*size, length)
 	assert.Equal(nil, err)
 }
 
@@ -253,7 +254,7 @@ func TestReadDatabaseLookupReplyKeyValidData(t *testing.T) {
 	data = append(data, expectedReplyKeyData...)
 
 	length, replyKey, err := readDatabaseLookupReplyKey(length, data)
-	assert.Equal(67 + 32, length)
+	assert.Equal(67+32, length)
 	assert.Equal(expectedReplyKey, replyKey)
 	assert.Equal(nil, err)
 }
@@ -333,15 +334,15 @@ func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
 	for i := range tags {
 		tag := make([]byte, 32)
 		// random data:
-		tag[i + 1] = 0x43
-		tag[i + 5] = 0x89
+		tag[i+1] = 0x43
+		tag[i+5] = 0x89
 		expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
 		data = append(data, tag...)
 	}
 
 	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
 	assert.Equal(expectedReplyTags, replyTags)
-	assert.Equal(100 + 32 * tags, length)
+	assert.Equal(100+32*tags, length)
 	assert.Equal(nil, err)
 }
 
@@ -384,7 +385,7 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	data = append(data, tunnelIDData...)
 	expectedTunnelID := [4]byte(tunnelIDData)
 
-	sizeData := []byte{0x0,0xf}
+	sizeData := []byte{0x0, 0xf}
 	data = append(data, sizeData...)
 	expectedSize := common.Integer(sizeData).Int()
 
@@ -392,8 +393,8 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	for i := range expectedSize {
 		peer := make([]byte, 32)
 		// random data:
-		peer[i + 5] = 0xdd
-		peer[i + 13] = 0x35
+		peer[i+5] = 0xdd
+		peer[i+13] = 0x35
 		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
 		data = append(data, peer...)
 	}
@@ -411,8 +412,8 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	for i := range expectedTags {
 		tag := make([]byte, 32)
 		// random data:
-		tag[i + 3] = 0x22
-		tag[i + 13] = 0x11
+		tag[i+3] = 0x22
+		tag[i+13] = 0x11
 		expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
 		data = append(data, tag...)
 	}

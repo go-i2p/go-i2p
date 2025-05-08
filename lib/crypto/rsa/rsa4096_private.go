@@ -89,5 +89,7 @@ func (r RSA4096PrivateKey) Zero() {
 	}
 }
 
-var _ types.PrivateKey = RSA4096PrivateKey{}
-var _ types.Signer = RSA4096PrivateKey{}
+var (
+	_ types.PrivateKey = RSA4096PrivateKey{}
+	_ types.Signer     = RSA4096PrivateKey{}
+)

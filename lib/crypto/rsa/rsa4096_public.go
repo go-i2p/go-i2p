@@ -63,5 +63,7 @@ func (r RSA4096PublicKey) NewVerifier() (types.Verifier, error) {
 	return r, nil
 }
 
-var _ types.PublicKey = RSA4096PublicKey{}
-var _ types.Verifier = RSA4096PublicKey{}
+var (
+	_ types.PublicKey = RSA4096PublicKey{}
+	_ types.Verifier  = RSA4096PublicKey{}
+)
