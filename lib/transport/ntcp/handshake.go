@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
 	"github.com/samber/oops"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // HandshakeState maintains the state for an in-progress handshake
@@ -101,7 +102,7 @@ func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) err
 	if _, err := conn.Write(message); err != nil {
 		return oops.Errorf("failed to send session request: %v", err)
 	}
-	return oops.Errorf("receiveSessionRequest is not yet implemented")
+	return nil
 }
 
 // receiveSessionRequest processes Message 1 (SessionRequest) from remote
@@ -177,4 +178,31 @@ func (c *NTCP2Session) deriveSessionKeys(hs *HandshakeState) error {
 	// Use shared secrets to derive session keys
 	// TODO: Implement key derivation according to NTCP2 spec
 	return nil
+}
+
+// DecryptOptionsBlock decrypts the options block from a SessionRequest message
+func (c *NTCP2Session) DecryptOptionsBlock(encryptedOptions []byte, obfuscatedX []byte, deobfuscatedX []byte) ([]byte, error) {
+	// 1. Derive the ChaCha20-Poly1305 key using the deobfuscated ephemeral key
+	chacha20Key, err := c.deriveChacha20Key(deobfuscatedX)
+	if err != nil {
+		return nil, oops.Errorf("failed to derive ChaCha20 key: %w", err)
+	}
+
+	// 2. Create the AEAD cipher for decryption
+	aead, err := chacha20poly1305.New(chacha20Key)
+	if err != nil {
+		return nil, oops.Errorf("failed to create AEAD cipher: %w", err)
+	}
+
+	// 3. Nonce for Message 1 is all zeros
+	nonce := make([]byte, 12)
+
+	// 4. Decrypt the options data
+	// The associated data is the obfuscated ephemeral key
+	decryptedOptions, err := aead.Open(nil, nonce, encryptedOptions, obfuscatedX)
+	if err != nil {
+		return nil, oops.Errorf("failed to decrypt options block: %w", err)
+	}
+
+	return decryptedOptions, nil
 }

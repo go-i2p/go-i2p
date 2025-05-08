@@ -7,7 +7,7 @@ import (
 	"github.com/flynn/noise"
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/transport/messages"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
 

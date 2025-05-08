@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/transport/messages"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 )
 
 func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error) {
