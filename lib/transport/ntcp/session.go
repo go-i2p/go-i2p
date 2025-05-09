@@ -4,14 +4,12 @@ import (
 	"crypto"
 	"crypto/hmac"
 
-	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 	"github.com/go-i2p/go-i2p/lib/transport/padding"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
@@ -171,32 +169,6 @@ func (c *NTCP2Session) computeSharedSecret(ephemeralKey, param []byte) ([]byte, 
 	copy(sharedSecret[:], shared)
 
 	return sharedSecret[:], nil
-}
-
-func (c *NTCP2Session) encryptSessionRequestOptions(sessionRequestMessage *messages.SessionRequest, obfuscatedX []byte) ([]byte, error) {
-	chacha20Key, err := c.deriveChacha20Key(sessionRequestMessage.XContent[:])
-	if err != nil {
-		return nil, oops.Errorf("failed to derive ChaCha20 key: %v", err)
-	}
-
-	// Create AEAD cipher
-	aead, err := chacha20poly1305.New(chacha20Key)
-	if err != nil {
-		return nil, oops.Errorf("failed to create ChaCha20-Poly1305 cipher: %v", err)
-	}
-
-	// Prepare the nonce (all zeros for first message)
-	nonce := make([]byte, chacha20poly1305.NonceSize)
-
-	// Create associated data (AD) according to NTCP2 spec:
-	// AD = obfuscated X value (ensures binding between the AES and ChaCha layers)
-	ad := obfuscatedX
-
-	// Encrypt options block and authenticate both options and padding
-	// ChaCha20-Poly1305 encrypts plaintext and appends auth tag
-	optionsData := sessionRequestMessage.Options.Data()
-	ciphertext := aead.Seal(nil, nonce, optionsData, ad)
-	return ciphertext, nil
 }
 
 // deriveSessionKeys computes the session keys from the completed handshake

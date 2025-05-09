@@ -19,6 +19,17 @@ SessionRequestProcessor implements NTCP2 Message 1 (SessionRequest):
 4. Encrypt options block using ChaCha20-Poly1305
 5. Assemble final message: obfuscated X + encrypted options + padding
 6. Write complete message to connection
+
+SessionRequestProcessor processes incoming NTCP2 Message 1 (SessionRequest):
+1. Read and buffer the fixed-length ephemeral key portion (X)
+2. Deobfuscate X using AES with local router hash as key
+3. Validate the ephemeral key (X) is a valid Curve25519 point
+4. Read the ChaCha20-Poly1305 encrypted options block
+5. Derive KDF for handshake message 1 using X and local static key
+6. Decrypt and authenticate the options block
+7. Extract and validate handshake parameters (timestamp, version, padding length)
+8. Read and validate any padding bytes
+9. Check timestamp for acceptable clock skew (±60 seconds?)
 */
 type SessionRequestProcessor struct {
 	*NTCP2Session
