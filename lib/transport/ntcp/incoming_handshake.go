@@ -6,11 +6,12 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/samber/oops"
 )
 
 // PerformInboundHandshake handles a handshake initiated by a remote peer
-func (c *NTCP2Session) PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*HandshakeState, error) {
+func (c *NTCP2Session) PerformInboundHandshake(conn net.Conn, localKey types.PrivateKey) (*handshake.HandshakeState, error) {
 	// Set deadline for the entire handshake process
 	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
 		return nil, oops.Errorf("failed to set deadline: %v", err)
@@ -18,15 +19,15 @@ func (c *NTCP2Session) PerformInboundHandshake(conn net.Conn, localKey types.Pri
 	defer conn.SetDeadline(time.Time{}) // Clear deadline after handshake
 
 	// Create handshake state for responder
-	hs := &HandshakeState{
-		isInitiator:    false,
-		localStaticKey: localKey,
-		timestamp:      uint32(time.Now().Unix()),
+	hs := &handshake.HandshakeState{
+		IsInitiator:    false,
+		LocalStaticKey: localKey,
+		Timestamp:      uint32(time.Now().Unix()),
 	}
 
 	// Generate ephemeral keypair
 	var err error
-	_, hs.localEphemeral, err = curve25519.GenerateKeyPair()
+	_, hs.LocalEphemeral, err = curve25519.GenerateKeyPair()
 	if err != nil {
 		return nil, oops.Errorf("failed to generate ephemeral key: %v", err)
 	}

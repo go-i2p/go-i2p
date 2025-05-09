@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
@@ -67,82 +68,15 @@ func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error) 
 	}, nil
 }
 
-// sendSessionRequest sends Message 1 (SessionRequest) to the remote peer
-func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *HandshakeState) error {
-	// Implement according to NTCP2 spec
-	// 1. Create and send X (ephemeral key) | Padding
-	// uses CreateSessionRequest from session_request.go
-	sessionRequestMessage, err := c.CreateSessionRequest()
-	if err != nil {
-		return oops.Errorf("failed to create session request: %v", err)
-	}
-	// 2. Set deadline for the connection
-	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
-		return oops.Errorf("failed to set deadline: %v", err)
-	}
-	// 3. Obfuscate the session request message
-	obfuscatedX, err := c.ObfuscateEphemeral(sessionRequestMessage.XContent[:])
-	if err != nil {
-		return oops.Errorf("failed to obfuscate ephemeral key: %v", err)
-	}
-	// 4. ChaChaPoly Frame
-	// Encrypt options block and authenticate both options and padding
-	ciphertext, err := c.encryptSessionRequestOptions(sessionRequestMessage, obfuscatedX)
-	if err != nil {
-		return err
-	}
-
-	// Combine all components into final message
-	// 1. Obfuscated X (already in obfuscatedX)
-	// 2. ChaCha20-Poly1305 encrypted options with auth tag
-	// 3. Authenticated but unencrypted padding
-	message := append(obfuscatedX, ciphertext...)
-	message = append(message, sessionRequestMessage.Padding...)
-
-	// 5. Write the message to the connection
-	if _, err := conn.Write(message); err != nil {
-		return oops.Errorf("failed to send session request: %v", err)
-	}
-	return nil
-}
-
-// receiveSessionRequest processes Message 1 (SessionRequest) from remote
-func (c *NTCP2Session) receiveSessionRequest(conn net.Conn, hs *HandshakeState) error {
-	log.Debugf("NTCP2: Processing incoming SessionRequest message")
-
-	// Read the ephemeral key (X)
-	ephemeralKey, err := c.readEphemeralKey(conn)
-	if err != nil {
-		return err
-	}
-
-	// Process the ephemeral key
-	deobfuscatedX, err := c.processEphemeralKey(ephemeralKey, hs)
-	if err != nil {
-		return err
-	}
-
-	// Read and decrypt the options block
-	optionsBlock, err := c.readOptionsBlock(conn)
-	if err != nil {
-		return err
-	}
-
-	// Process the options block
-	requestOptions, err := c.processOptionsBlock(optionsBlock, ephemeralKey, deobfuscatedX, hs)
-	if err != nil {
-		return err
-	}
-
-	// Read and validate padding if present
-	if requestOptions.PaddingLength.Int() > 0 {
-		if err := c.readAndValidatePadding(conn, requestOptions.PaddingLength.Int()); err != nil {
-			return err
-		}
-	}
-
-	log.Debugf("NTCP2: SessionRequest processed successfully")
-	return nil
+// DecryptOptionsBlock decrypts the options block from a SessionRequest message
+func (c *NTCP2Session) DecryptOptionsBlock(encryptedOptions []byte, obfuscatedX []byte, deobfuscatedX []byte) ([]byte, error) {
+	return c.PerformAEADOperation(
+		deobfuscatedX,    // Key material
+		encryptedOptions, // Data to decrypt
+		obfuscatedX,      // Associated data
+		0,                // Nonce counter (0 for first message)
+		false,            // Decrypt operation
+	)
 }
 
 // readEphemeralKey reads the ephemeral key (X) from the connection
@@ -158,7 +92,7 @@ func (c *NTCP2Session) readEphemeralKey(conn net.Conn) ([]byte, error) {
 }
 
 // processEphemeralKey deobfuscates and validates the ephemeral key
-func (c *NTCP2Session) processEphemeralKey(obfuscatedX []byte, hs *HandshakeState) ([]byte, error) {
+func (c *NTCP2Session) processEphemeralKey(obfuscatedX []byte, hs *handshake.HandshakeState) ([]byte, error) {
 	deobfuscatedX, err := c.DeobfuscateEphemeral(obfuscatedX)
 	if err != nil {
 		c.addDelayForSecurity()
@@ -174,7 +108,7 @@ func (c *NTCP2Session) processEphemeralKey(obfuscatedX []byte, hs *HandshakeStat
 
 	// Store in handshake state
 	pubKey := curve25519.Curve25519PublicKey(deobfuscatedX)
-	hs.remoteEphemeral = pubKey
+	hs.RemoteEphemeral = pubKey
 
 	return deobfuscatedX, nil
 }
@@ -197,7 +131,7 @@ func (c *NTCP2Session) processOptionsBlock(
 	encryptedOptions []byte,
 	obfuscatedX []byte,
 	deobfuscatedX []byte,
-	hs *HandshakeState,
+	hs *handshake.HandshakeState,
 ) (*messages.RequestOptions, error) {
 	// Decrypt options block
 	decryptedOptions, err := c.DecryptOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX)
@@ -256,7 +190,7 @@ func (c *NTCP2Session) processOptionsBlock(
 
 	// Update handshake state
 	timestampVal := timestamp.Time()
-	hs.timestamp = uint32(timestampVal.Unix())
+	hs.Timestamp = uint32(timestampVal.Unix())
 
 	// Construct the RequestOptions object
 	requestOptions := &messages.RequestOptions{

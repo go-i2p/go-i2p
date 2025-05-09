@@ -4,11 +4,12 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/samber/oops"
 )
 
 // PerformOutboundHandshake initiates and completes a handshake as the initiator
-func (c *NTCP2Session) PerformOutboundHandshake(conn net.Conn, hs *HandshakeState) error {
+func (c *NTCP2Session) PerformOutboundHandshake(conn net.Conn, hs *handshake.HandshakeState) error {
 	// Set deadline for the entire handshake process
 	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
 		return oops.Errorf("failed to set deadline: %v", err)

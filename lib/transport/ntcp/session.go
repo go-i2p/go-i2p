@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/go-i2p/go-i2p/lib/transport/obfs"
 	"github.com/go-i2p/go-i2p/lib/transport/padding"
@@ -196,4 +197,11 @@ func (c *NTCP2Session) encryptSessionRequestOptions(sessionRequestMessage *messa
 	optionsData := sessionRequestMessage.Options.Data()
 	ciphertext := aead.Seal(nil, nonce, optionsData, ad)
 	return ciphertext, nil
+}
+
+// deriveSessionKeys computes the session keys from the completed handshake
+func (c *NTCP2Session) deriveSessionKeys(hs *handshake.HandshakeState) error {
+	// Use shared secrets to derive session keys
+	// TODO: Implement key derivation according to NTCP2 spec
+	return nil
 }
