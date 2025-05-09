@@ -80,7 +80,7 @@ type HandshakeMessageProcessor interface {
 	ReadMessage(conn net.Conn, hs *HandshakeState) (messages.Message, error)
 	ProcessMessage(message messages.Message, hs *HandshakeState) error
 	ObfuscateKey(msg messages.Message, hs *HandshakeState) ([]byte, error)
-	Encrypt(msg messages.Message, obfuscatedKey []byte, hs *HandshakeState) ([]byte, error)
+	EncryptPayload(msg messages.Message, obfuscatedKey []byte, hs *HandshakeState) ([]byte, error)
 	GetPadding(msg messages.Message) []byte
 	MessageType() messages.MessageType
 }

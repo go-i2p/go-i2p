@@ -16,9 +16,8 @@ func (s *SessionCreatedProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 	panic("unimplemented")
 }
 
-// Encrypt implements handshake.HandshakeMessageProcessor.
-// Subtle: this method shadows the method (*NTCP2Session).Encrypt of SessionCreatedProcessor.NTCP2Session.
-func (s *SessionCreatedProcessor) Encrypt(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
+// EncryptPayload implements handshake.HandshakeMessageProcessor.
+func (s *SessionCreatedProcessor) EncryptPayload(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
 	panic("unimplemented")
 }
 
@@ -29,7 +28,7 @@ func (s *SessionCreatedProcessor) GetPadding(msg messages.Message) []byte {
 
 // MessageType implements handshake.HandshakeMessageProcessor.
 func (s *SessionCreatedProcessor) MessageType() messages.MessageType {
-	panic("unimplemented")
+	return messages.MessageTypeSessionCreated
 }
 
 // ObfuscateKey implements handshake.HandshakeMessageProcessor.

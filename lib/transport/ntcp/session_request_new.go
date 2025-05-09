@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
+	"github.com/samber/oops"
 )
 
 /*
@@ -23,10 +24,18 @@ type SessionRequestProcessor struct {
 	*NTCP2Session
 }
 
-// Encrypt implements handshake.HandshakeMessageProcessor.
-// Subtle: this method shadows the method (*NTCP2Session).Encrypt of SessionRequestProcessor.NTCP2Session.
-func (s *SessionRequestProcessor) Encrypt(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
-	panic("unimplemented")
+// EncryptPayload encrypts the payload portion of the message
+func (p *SessionRequestProcessor) EncryptPayload(
+	message messages.Message,
+	obfuscatedKey []byte,
+	hs *handshake.HandshakeState,
+) ([]byte, error) {
+	req, ok := message.(*messages.SessionRequest)
+	if !ok {
+		return nil, oops.Errorf("expected SessionRequest message")
+	}
+
+	return p.NTCP2Session.encryptSessionRequestOptions(req, obfuscatedKey)
 }
 
 // MessageType implements handshake.HandshakeMessageProcessor.
@@ -39,9 +48,46 @@ func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *h
 	panic("unimplemented")
 }
 
-// ReadMessage implements handshake.HandshakeMessageProcessor.
-func (s *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
-	panic("unimplemented")
+// ReadMessage reads a SessionRequest message from the connection
+func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
+	// 1. Read ephemeral key
+	obfuscatedX, err := p.NTCP2Session.readEphemeralKey(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Process ephemeral key
+	deobfuscatedX, err := p.NTCP2Session.processEphemeralKey(obfuscatedX, hs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Read options block
+	encryptedOptions, err := p.NTCP2Session.readOptionsBlock(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Process options block
+	options, err := p.NTCP2Session.processOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX, hs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Read padding if present
+	paddingLen := options.PaddingLength.Int()
+	if paddingLen > 0 {
+		if err := p.NTCP2Session.readAndValidatePadding(conn, paddingLen); err != nil {
+			return nil, err
+		}
+	}
+
+	// Construct the full message
+	return &messages.SessionRequest{
+		XContent: [32]byte{}, // We've already processed this
+		Options:  *options,
+		Padding:  make([]byte, paddingLen), // Padding content doesn't matter after validation
+	}, nil
 }
 
 // CreateMessage implements HandshakeMessageProcessor.
@@ -98,14 +144,24 @@ func (s *SessionRequestProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 	}, nil
 }
 
-// GetPadding implements HandshakeMessageProcessor.
-func (s *SessionRequestProcessor) GetPadding(msg messages.Message) []byte {
-	panic("unimplemented")
+// GetPadding retrieves padding from a message
+func (p *SessionRequestProcessor) GetPadding(message messages.Message) []byte {
+	req, ok := message.(*messages.SessionRequest)
+	if !ok {
+		return nil
+	}
+
+	return req.Padding
 }
 
-// ObfuscateKey implements HandshakeMessageProcessor.
-func (s *SessionRequestProcessor) ObfuscateKey(msg messages.Message, hs *handshake.HandshakeState) ([]byte, error) {
-	return s.ObfuscateEphemeral(msg.(*messages.SessionRequest).XContent[:])
+// ObfuscateKey obfuscates the ephemeral key for transmission
+func (p *SessionRequestProcessor) ObfuscateKey(message messages.Message, handshake *handshake.HandshakeState) ([]byte, error) {
+	req, ok := message.(*messages.SessionRequest)
+	if !ok {
+		return nil, oops.Errorf("expected SessionRequest message")
+	}
+
+	return p.NTCP2Session.ObfuscateEphemeral(req.XContent[:])
 }
 
 var _ handshake.HandshakeMessageProcessor = (*SessionRequestProcessor)(nil)

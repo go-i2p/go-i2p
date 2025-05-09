@@ -8,53 +8,9 @@ import (
 	"github.com/samber/oops"
 )
 
-func (c *NTCP2Session) sendHandshakeMessage(conn net.Conn, hs *handshake.HandshakeState, processor handshake.HandshakeMessageProcessor) error {
-	// 1. Create message
-	message, err := processor.CreateMessage(hs)
-	if err != nil {
-		return oops.Errorf("failed to create message: %w", err)
-	}
-
-	// 2. Set deadline
-	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
-		return oops.Errorf("failed to set deadline: %w", err)
-	}
-
-	// 3. Obfuscate key
-	obfuscatedKey, err := processor.ObfuscateKey(message, hs)
-	if err != nil {
-		return oops.Errorf("failed to obfuscate key: %w", err)
-	}
-
-	// 4. Encrypt options
-	ciphertext, err := processor.Encrypt(message, obfuscatedKey, hs)
-	if err != nil {
-		return oops.Errorf("failed to encrypt options: %w", err)
-	}
-
-	// 5. Assemble message
-	fullMessage := append(obfuscatedKey, ciphertext...)
-	fullMessage = append(fullMessage, processor.GetPadding(message)...)
-
-	// 6. Write message
-	if _, err := conn.Write(fullMessage); err != nil {
-		return oops.Errorf("failed to send message: %w", err)
-	}
-
-	return nil
-}
-
 // sendSessionRequest sends Message 1 (SessionRequest) to the remote peer
 func (c *NTCP2Session) sendSessionRequest(conn net.Conn, hs *handshake.HandshakeState) error {
-	/*
-		sendSessionRequest implements NTCP2 Message 1 (SessionRequest):
-		1. Create session request message with options block (version, padding length, etc.)
-		2. Set timeout deadline for the connection
-		3. Obfuscate ephemeral key (X) using AES with Bob's router hash as key
-		4. Encrypt options block using ChaCha20-Poly1305
-		5. Assemble final message: obfuscated X + encrypted options + padding
-		6. Write complete message to connection
-	*/
+
 	log.Debugf("NTCP2: Sending SessionRequest message")
 	// 1. Create and send X (ephemeral key) | Padding
 	// uses CreateSessionRequest from session_request.go

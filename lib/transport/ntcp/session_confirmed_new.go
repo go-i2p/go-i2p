@@ -16,9 +16,8 @@ func (s *SessionConfirmedProcessor) CreateMessage(hs *handshake.HandshakeState) 
 	panic("unimplemented")
 }
 
-// Encrypt implements handshake.HandshakeMessageProcessor.
-// Subtle: this method shadows the method (*NTCP2Session).Encrypt of SessionConfirmedProcessor.NTCP2Session.
-func (s *SessionConfirmedProcessor) Encrypt(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
+// EncryptPayload implements handshake.HandshakeMessageProcessor.
+func (s *SessionConfirmedProcessor) EncryptPayload(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
 	panic("unimplemented")
 }
 
