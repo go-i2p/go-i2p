@@ -3,14 +3,45 @@ package ntcp
 import (
 	"crypto/rand"
 	"math/big"
+	"net"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 )
 
+/*
+SessionRequestProcessor implements NTCP2 Message 1 (SessionRequest):
+1. Create session request message with options block (version, padding length, etc.)
+2. Set timeout deadline for the connection
+3. Obfuscate ephemeral key (X) using AES with Bob's router hash as key
+4. Encrypt options block using ChaCha20-Poly1305
+5. Assemble final message: obfuscated X + encrypted options + padding
+6. Write complete message to connection
+*/
 type SessionRequestProcessor struct {
 	*NTCP2Session
+}
+
+// Encrypt implements handshake.HandshakeMessageProcessor.
+// Subtle: this method shadows the method (*NTCP2Session).Encrypt of SessionRequestProcessor.NTCP2Session.
+func (s *SessionRequestProcessor) Encrypt(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
+	panic("unimplemented")
+}
+
+// MessageType implements handshake.HandshakeMessageProcessor.
+func (s *SessionRequestProcessor) MessageType() messages.MessageType {
+	return messages.MessageTypeSessionRequest
+}
+
+// ProcessMessage implements handshake.HandshakeMessageProcessor.
+func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *handshake.HandshakeState) error {
+	panic("unimplemented")
+}
+
+// ReadMessage implements handshake.HandshakeMessageProcessor.
+func (s *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
+	panic("unimplemented")
 }
 
 // CreateMessage implements HandshakeMessageProcessor.
@@ -65,11 +96,6 @@ func (s *SessionRequestProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 		Options:  *requestOptions,
 		Padding:  padding,
 	}, nil
-}
-
-// EncryptOptions implements HandshakeMessageProcessor.
-func (s *SessionRequestProcessor) EncryptOptions(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
-	panic("unimplemented")
 }
 
 // GetPadding implements HandshakeMessageProcessor.

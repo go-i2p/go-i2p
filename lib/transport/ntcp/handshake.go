@@ -27,7 +27,7 @@ func (c *NTCP2Session) sendHandshakeMessage(conn net.Conn, hs *handshake.Handsha
 	}
 
 	// 4. Encrypt options
-	ciphertext, err := processor.EncryptOptions(message, obfuscatedKey, hs)
+	ciphertext, err := processor.Encrypt(message, obfuscatedKey, hs)
 	if err != nil {
 		return oops.Errorf("failed to encrypt options: %w", err)
 	}
