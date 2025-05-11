@@ -51,7 +51,7 @@ func (s *NTCP2Session) PerformClientHandshake(conn net.Conn) error {
 	}
 
 	// Encrypt payload
-	//encryptedPayload
+	// encryptedPayload
 	_, err = processor.EncryptPayload(msg, obfuscatedKey, s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return err
