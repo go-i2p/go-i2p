@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	mrand "math/rand"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
@@ -301,7 +300,7 @@ func (s *SessionConfirmedProcessor) calculatePaddingLength(ri *router_info.Route
 	}
 
 	// Add random additional padding between minPadding and minPadding+maxExtraPadding
-	padding += mrand.Intn(maxExtraPadding) + minPadding
+	padding += Intn(maxExtraPadding) + minPadding
 
 	return padding
 }

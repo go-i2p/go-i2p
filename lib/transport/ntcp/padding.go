@@ -3,7 +3,6 @@ package ntcp
 import (
 	"crypto/rand"
 	"io"
-	mrand "math/rand"
 	"net"
 
 	"github.com/samber/oops"
@@ -73,7 +72,7 @@ func CalculatePaddingLength(contentSize int, minSize int, minPadding int, maxExt
 	}
 
 	// Add random additional padding
-	padding += mrand.Intn(maxExtraPadding) + minPadding
+	padding += Intn(maxExtraPadding) + minPadding
 
 	return padding
 }

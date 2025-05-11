@@ -1,7 +1,9 @@
 package ntcp
 
 import (
+	"crypto/rand"
 	"io"
+	"math/big"
 	"net"
 	"time"
 
@@ -98,4 +100,17 @@ func (c *NTCP2Session) readAndValidatePadding(conn net.Conn, paddingLen int) err
 
 	// No need to validate padding content - it's random data
 	return nil
+}
+
+// Intn generates a random integer in the range [0, n)
+// This is a secure alternative to math/rand.Intn
+// It uses crypto/rand to generate a cryptographically secure random number
+// Which might be dumb and or pointless for padding.
+func Intn(n int) int {
+	// implementation of Intn function using crypto/rand
+	cryptoRand, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		return 0
+	}
+	return int(cryptoRand.Int64())
 }
