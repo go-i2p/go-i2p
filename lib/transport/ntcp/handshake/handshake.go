@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/transport/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
@@ -39,6 +40,8 @@ type HandshakeState struct {
 	// routerInfo contains the local router's information
 	RouterInfo *router_info.RouterInfo
 }
+
+var _ handshake.HandshakeState = &HandshakeState{}
 
 // NewHandshakeState creates a new handshake state for initiating a connection
 func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error) {

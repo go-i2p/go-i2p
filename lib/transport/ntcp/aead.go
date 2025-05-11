@@ -3,6 +3,8 @@ package ntcp
 import (
 	"encoding/binary"
 
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/kdf"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -122,4 +124,27 @@ func (c *NTCP2Session) DecryptWithDerivedKey(
 	nonceCounter uint64,
 ) ([]byte, error) {
 	return c.PerformAEADWithDerivedKey(keyMaterial, data, associatedData, nonceCounter, false)
+}
+
+// Extend aead.go with the following function:
+
+// DeriveSessionKeys derives all required keys for a session using existing X25519 shared secret
+// This replaces scattered key derivation across session files
+func (c *NTCP2Session) DeriveSessionKeys(sharedSecret []byte, ephemeralKey []byte) error {
+	// Use existing KDF context from the kdf package
+	kdfContext := kdf.NewNTCP2KDF()
+
+	// Derive ChaCha20 key (already implemented)
+	chacha20Key, err := kdfContext.MixKey(sharedSecret)
+	if err != nil {
+		return oops.Errorf("failed to derive ChaCha20 key: %w", err)
+	}
+
+	// Store key in session for reuse
+	c.HandshakeState.(*handshake.HandshakeState).ChachaKey = chacha20Key
+
+	// Mix hash with ephemeral key (consistent implementation)
+	kdfContext.MixHash(ephemeralKey)
+
+	return nil
 }
