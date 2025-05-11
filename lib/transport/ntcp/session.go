@@ -1,9 +1,6 @@
 package ntcp
 
 import (
-	"crypto"
-	"crypto/hmac"
-
 	"golang.org/x/crypto/curve25519"
 
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
@@ -138,26 +135,6 @@ func (s *NTCP2Session) buildAesStaticKey() (*aes.AESSymmetricKey, error) {
 	AESStaticKey.Key = staticKey[:]
 	AESStaticKey.IV = staticIV[:]
 	return &AESStaticKey, nil
-}
-
-func (s *NTCP2Session) deriveChacha20Key(ephemeralKey []byte) ([]byte, error) {
-	remoteStaticKey, err := s.peerStaticKey()
-	if err != nil {
-		return nil, err
-	}
-	// Perform DH between Alice's ephemeral key and Bob's static key
-	// This is the "es" operation in Noise XK
-	sharedSecret, err := s.computeSharedSecret(ephemeralKey, remoteStaticKey[:])
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply KDF to derive the key
-	// This typically involves HKDF with appropriate info string
-	hashProtocol := crypto.SHA256
-	h := hmac.New(hashProtocol.New, []byte("NTCP2-KDF1"))
-	h.Write(sharedSecret)
-	return h.Sum(nil)[:32], nil // ChaCha20 requires a 32-byte key
 }
 
 func (c *NTCP2Session) computeSharedSecret(ephemeralKey, param []byte) ([]byte, error) {

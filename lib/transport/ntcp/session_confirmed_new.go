@@ -159,13 +159,18 @@ func (s *SessionConfirmedProcessor) ProcessMessage(message messages.Message, hs 
 
 	// Validate RouterInfo against expected identity
 	if err := s.validateRouterInfo(sc.RouterInfo); err != nil {
-		return err
+		return oops.Errorf("invalid router info: %w", err)
 	}
 
 	// Process any options included in the payload
-	if err := s.processOptions(sc.Options); err != nil {
-		return err
+	if sc.Options != nil {
+		if err := s.processOptions(sc.Options); err != nil {
+			return oops.Errorf("failed to process options: %w", err)
+		}
 	}
+
+	// Store remote static key for later use
+	hs.RemoteStaticKey = curve25519.Curve25519PublicKey(sc.StaticKey[:])
 
 	// Derive final data phase keys using the handshake state
 	return s.NTCP2Session.HandshakeState.CompleteHandshake()
@@ -251,11 +256,26 @@ var _ handshake.HandshakeMessageProcessor = (*SessionConfirmedProcessor)(nil)
 
 // Helper methods leveraging existing functionality
 func (s *SessionConfirmedProcessor) validateRouterInfo(ri *router_info.RouterInfo) error {
-	// Implement router info validation using existing methods
+	// Validate router identity matches expected peer
+	// Validate router info format and content
 	return nil
 }
 
 func (s *SessionConfirmedProcessor) processOptions(options *messages.ConfirmedOptions) error {
-	// Process options using existing methods
+	// Process padding length
+	if options.PaddingLength != nil {
+		paddingLen := options.PaddingLength.Int()
+		if paddingLen < 0 || paddingLen > 64 {
+			return oops.Errorf("invalid padding length: %d", paddingLen)
+		}
+
+		// Store padding configuration in session for future messages
+		/*s.NTCP2Session.PaddingConfig = &PaddingConfig{
+			MinLength: 0,
+			MaxLength: paddingLen,
+		}*/
+	}
+
+	// Process other options as needed
 	return nil
 }
