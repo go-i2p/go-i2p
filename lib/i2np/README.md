@@ -34,6 +34,10 @@ var ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np buil
 ```
 
 ```go
+var ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA = errors.New("not enough i2np database lookup data")
+```
+
+```go
 var ERR_I2NP_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np header data")
 ```
 
@@ -173,11 +177,17 @@ type DatabaseLookup struct {
 	Size          int
 	ExcludedPeers []common.Hash
 	ReplyKey      session_key.SessionKey
-
-	ReplyTags []session_tag.SessionTag
+	Tags          int
+	ReplyTags     []session_tag.SessionTag
 }
 ```
 
+
+#### func  ReadDatabaseLookup
+
+```go
+func ReadDatabaseLookup(data []byte) (DatabaseLookup, error)
+```
 
 #### type DatabaseSearchReply
 
@@ -362,3 +372,5 @@ type VariableTunnelBuildReply struct {
 i2np 
 
 github.com/go-i2p/go-i2p/lib/i2np
+
+[go-i2p template file](/template.md)

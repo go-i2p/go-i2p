@@ -40,3 +40,5 @@ during parsing.
 session_key 
 
 github.com/go-i2p/go-i2p/lib/common/session_key
+
+[go-i2p template file](/template.md)

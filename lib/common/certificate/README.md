@@ -123,3 +123,5 @@ Certificate,
 certificate 
 
 github.com/go-i2p/go-i2p/lib/common/certificate
+
+[go-i2p template file](/template.md)

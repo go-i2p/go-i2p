@@ -45,6 +45,18 @@ func NewLeaseSet(
 ) (LeaseSet, error)
 ```
 
+#### func  ReadLeaseSet
+
+```go
+func ReadLeaseSet(data []byte) (LeaseSet, error)
+```
+
+#### func (LeaseSet) Bytes
+
+```go
+func (lease_set LeaseSet) Bytes() ([]byte, error)
+```
+
 #### func (LeaseSet) Destination
 
 ```go
@@ -125,3 +137,5 @@ Verify returns nil
 lease_set 
 
 github.com/go-i2p/go-i2p/lib/common/lease_set
+
+[go-i2p template file](/template.md)

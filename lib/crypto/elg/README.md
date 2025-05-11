@@ -99,3 +99,5 @@ type PrivateKey struct {
 elgamal 
 
 github.com/go-i2p/go-i2p/lib/crypto/elg
+
+[go-i2p template file](/template.md)

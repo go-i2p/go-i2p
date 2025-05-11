@@ -85,6 +85,13 @@ type Curve25519PrivateKey []byte
 
 Curve25519PrivateKey represents a Curve25519 private key
 
+#### func (Curve25519PrivateKey) Bytes
+
+```go
+func (k Curve25519PrivateKey) Bytes() []byte
+```
+Bytes implements types.PrivateKey.
+
 #### func (Curve25519PrivateKey) NewDecrypter
 
 ```go
@@ -99,6 +106,20 @@ func (k Curve25519PrivateKey) NewSigner() (types.Signer, error)
 ```
 NewSigner creates a new Curve25519 signer
 
+#### func (Curve25519PrivateKey) Public
+
+```go
+func (k Curve25519PrivateKey) Public() (types.SigningPublicKey, error)
+```
+Public implements types.PrivateKey.
+
+#### func (Curve25519PrivateKey) Zero
+
+```go
+func (k Curve25519PrivateKey) Zero()
+```
+Zero implements types.PrivateKey.
+
 #### type Curve25519PublicKey
 
 ```go
@@ -106,6 +127,12 @@ type Curve25519PublicKey []byte
 ```
 
 Curve25519PublicKey represents a Curve25519 public key
+
+#### func (Curve25519PublicKey) Bytes
+
+```go
+func (k Curve25519PublicKey) Bytes() []byte
+```
 
 #### func (Curve25519PublicKey) Len
 
@@ -179,3 +206,5 @@ VerifyHash verifies a signature against a pre-computed hash
 curve25519 
 
 github.com/go-i2p/go-i2p/lib/crypto/curve25519
+
+[go-i2p template file](/template.md)

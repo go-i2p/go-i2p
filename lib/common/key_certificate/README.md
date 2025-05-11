@@ -196,3 +196,5 @@ SigningPublicKeyType returns the signingPublicKey type as a Go integer.
 key_certificate 
 
 github.com/go-i2p/go-i2p/lib/common/key_certificate
+
+[go-i2p template file](/template.md)

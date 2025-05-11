@@ -52,3 +52,5 @@ func UserHome() string
 util 
 
 github.com/go-i2p/go-i2p/lib/util
+
+[go-i2p template file](/template.md)

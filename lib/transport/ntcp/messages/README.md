@@ -1,6 +1,6 @@
 # messages
 --
-    import "github.com/go-i2p/go-i2p/lib/transport/messages"
+    import "github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 
 ![messages.svg](messages.svg)
 
@@ -217,4 +217,6 @@ Type returns the message type
 
 messages 
 
-github.com/go-i2p/go-i2p/lib/transport/messages
+github.com/go-i2p/go-i2p/lib/transport/ntcp/messages
+
+[go-i2p template file](/template.md)

@@ -39,3 +39,5 @@ I2PEncoding is the standard base64 encoding used through I2P.
 base64 
 
 github.com/go-i2p/go-i2p/lib/common/base64
+
+[go-i2p template file](/template.md)

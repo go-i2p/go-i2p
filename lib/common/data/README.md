@@ -320,3 +320,5 @@ func (m MappingValues) Get(key I2PString) I2PString
 data 
 
 github.com/go-i2p/go-i2p/lib/common/data
+
+[go-i2p template file](/template.md)

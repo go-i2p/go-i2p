@@ -101,3 +101,5 @@ NewEncrypter creates a new AESSymmetricEncrypter
 aes 
 
 github.com/go-i2p/go-i2p/lib/crypto/aes
+
+[go-i2p template file](/template.md)

@@ -63,3 +63,5 @@ A symetric key for encrypting tunnel messages
 crypto 
 
 github.com/go-i2p/go-i2p/lib/crypto
+
+[go-i2p template file](/template.md)

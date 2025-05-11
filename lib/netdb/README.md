@@ -36,6 +36,23 @@ func (e *Entry) ReadFrom(r io.Reader) (err error)
 func (e *Entry) WriteTo(w io.Writer) (err error)
 ```
 
+#### type KademliaResolver
+
+```go
+type KademliaResolver struct {
+	// netdb to store result into
+	NetworkDatabase
+}
+```
+
+resolves router infos with recursive kademlia lookup
+
+#### func (*KademliaResolver) Lookup
+
+```go
+func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
+```
+
 #### type NetworkDatabase
 
 ```go
@@ -44,6 +61,10 @@ type NetworkDatabase interface {
 	// return a RouterInfo if we found it locally
 	// return nil if the RouterInfo cannot be found locally
 	GetRouterInfo(hash common.Hash) router_info.RouterInfo
+
+	// obtain all routerInfos, ordered by their hash
+	// return a slice of routerInfos
+	GetAllRouterInfos() []router_info.RouterInfo
 
 	// store a router info locally
 	StoreRouterInfo(ri router_info.RouterInfo)
@@ -71,16 +92,16 @@ i2p network database, storage of i2p RouterInfos
 type Resolver interface {
 	// resolve a router info by hash
 	// return a chan that yields the found RouterInfo or nil if it could not be found after timeout
-	Lookup(hash common.Hash, timeout time.Duration) chan router_info.RouterInfo
+	Lookup(hash common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 }
 ```
 
 resolves unknown RouterInfos given the hash of their RouterIdentity
 
-#### func  KademliaResolver
+#### func  NewKademliaResolver
 
 ```go
-func KademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver)
+func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver)
 ```
 create a new resolver that stores result into a NetworkDatabase and uses a
 tunnel pool for the lookup
@@ -129,6 +150,12 @@ ensure that the network database exists
 func (db *StdNetDB) Exists() bool
 ```
 return true if the network db directory exists and is writable
+
+#### func (*StdNetDB) GetAllRouterInfos
+
+```go
+func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo)
+```
 
 #### func (*StdNetDB) GetRouterInfo
 
@@ -189,3 +216,5 @@ get the skiplist file that a RouterInfo with this hash would go in
 netdb 
 
 github.com/go-i2p/go-i2p/lib/netdb
+
+[go-i2p template file](/template.md)

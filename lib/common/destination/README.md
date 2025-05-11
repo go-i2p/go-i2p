@@ -48,3 +48,5 @@ Base64 returns the I2P base64 address for this Destination.
 destination 
 
 github.com/go-i2p/go-i2p/lib/common/destination
+
+[go-i2p template file](/template.md)

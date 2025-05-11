@@ -69,3 +69,5 @@ Wait blocks until router is fully stopped
 router 
 
 github.com/go-i2p/go-i2p/lib/router
+
+[go-i2p template file](/template.md)

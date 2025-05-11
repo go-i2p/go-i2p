@@ -337,3 +337,5 @@ type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 noise 
 
 github.com/go-i2p/go-i2p/lib/transport/noise
+
+[go-i2p template file](/template.md)

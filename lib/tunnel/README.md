@@ -265,3 +265,5 @@ type TunnelID uint32
 tunnel 
 
 github.com/go-i2p/go-i2p/lib/tunnel
+
+[go-i2p template file](/template.md)

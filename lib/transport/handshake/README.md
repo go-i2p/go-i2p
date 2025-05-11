@@ -33,3 +33,5 @@ HandshakeState manages the Noise handshake state
 handshake 
 
 github.com/go-i2p/go-i2p/lib/transport/handshake
+
+[go-i2p template file](/template.md)

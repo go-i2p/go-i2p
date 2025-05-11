@@ -104,6 +104,13 @@ func (k Ed25519PrivateKey) NewDecrypter() (types.Decrypter, error)
 func (k Ed25519PrivateKey) NewSigner() (types.Signer, error)
 ```
 
+#### func (*Ed25519PrivateKey) NewVerifier
+
+```go
+func (k *Ed25519PrivateKey) NewVerifier() (types.Verifier, error)
+```
+NewVerifier implements types.SigningPublicKey.
+
 #### func (Ed25519PrivateKey) Public
 
 ```go
@@ -198,3 +205,5 @@ func (v *Ed25519Verifier) VerifyHash(h, sig []byte) (err error)
 ed25519 
 
 github.com/go-i2p/go-i2p/lib/crypto/ed25519
+
+[go-i2p template file](/template.md)

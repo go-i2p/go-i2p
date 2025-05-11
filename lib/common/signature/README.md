@@ -78,3 +78,5 @@ be modified accordingly to handle the correct signature length.
 signature 
 
 github.com/go-i2p/go-i2p/lib/common/signature
+
+[go-i2p template file](/template.md)

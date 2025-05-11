@@ -128,3 +128,5 @@ a session between 2 routers for tranmitting i2np messages securly
 transport 
 
 github.com/go-i2p/go-i2p/lib/transport
+
+[go-i2p template file](/template.md)

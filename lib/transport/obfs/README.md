@@ -29,3 +29,5 @@ AES-256-CBC without padding
 obfs 
 
 github.com/go-i2p/go-i2p/lib/transport/obfs
+
+[go-i2p template file](/template.md)

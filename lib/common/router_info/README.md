@@ -177,3 +177,5 @@ func (router_info *RouterInfo) UnCongested() bool
 router_info 
 
 github.com/go-i2p/go-i2p/lib/common/router_info
+
+[go-i2p template file](/template.md)

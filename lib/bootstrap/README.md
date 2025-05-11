@@ -29,3 +29,5 @@ interface defining a way to bootstrap into the i2p network
 bootstrap 
 
 github.com/go-i2p/go-i2p/lib/bootstrap
+
+[go-i2p template file](/template.md)

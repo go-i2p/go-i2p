@@ -58,6 +58,27 @@ func (e *ECP256PrivateKey) Decrypt(data []byte) ([]byte, error)
 ```
 Decrypt implements types.Decrypter.
 
+#### func (*ECP256PrivateKey) Generate
+
+```go
+func (e *ECP256PrivateKey) Generate() (types.SigningPrivateKey, error)
+```
+Generate implements SigningPrivateKey.Generate
+
+#### func (*ECP256PrivateKey) Len
+
+```go
+func (e *ECP256PrivateKey) Len() int
+```
+Len implements types.SigningPrivateKey.
+
+#### func (*ECP256PrivateKey) NewSigner
+
+```go
+func (e *ECP256PrivateKey) NewSigner() (types.Signer, error)
+```
+NewSigner implements SigningPrivateKey.NewSigner
+
 #### func (*ECP256PrivateKey) Public
 
 ```go
@@ -313,3 +334,5 @@ VerifyHash implements types.Verifier.
 ecdsa 
 
 github.com/go-i2p/go-i2p/lib/crypto/ecdsa
+
+[go-i2p template file](/template.md)

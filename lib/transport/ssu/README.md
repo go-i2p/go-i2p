@@ -13,3 +13,5 @@ i2p ssu transport implementation
 ssu 
 
 github.com/go-i2p/go-i2p/lib/transport/ssu
+
+[go-i2p template file](/template.md)

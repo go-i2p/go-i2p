@@ -39,3 +39,5 @@ EncodeToString encodes []byte to a base32 string using I2PEncoding
 base32 
 
 github.com/go-i2p/go-i2p/lib/common/base32
+
+[go-i2p template file](/template.md)

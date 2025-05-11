@@ -195,3 +195,5 @@ const (
 su3 
 
 github.com/go-i2p/go-i2p/lib/su3
+
+[go-i2p template file](/template.md)

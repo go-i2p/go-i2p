@@ -143,3 +143,5 @@ additional authenticated data
 chacha20 
 
 github.com/go-i2p/go-i2p/lib/crypto/chacha20
+
+[go-i2p template file](/template.md)

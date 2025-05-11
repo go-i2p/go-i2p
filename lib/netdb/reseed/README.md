@@ -34,3 +34,5 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error)
 reseed 
 
 github.com/go-i2p/go-i2p/lib/netdb/reseed
+
+[go-i2p template file](/template.md)

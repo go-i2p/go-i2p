@@ -33,3 +33,5 @@ type HMACKey [32]byte
 hmac 
 
 github.com/go-i2p/go-i2p/lib/crypto/hmac
+
+[go-i2p template file](/template.md)

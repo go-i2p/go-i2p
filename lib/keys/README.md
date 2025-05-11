@@ -103,3 +103,5 @@ func (ks *RouterInfoKeystore) StoreKeys() error
 keys 
 
 github.com/go-i2p/go-i2p/lib/keys
+
+[go-i2p template file](/template.md)

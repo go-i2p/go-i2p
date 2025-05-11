@@ -113,3 +113,5 @@ verify hash of data with a dsa public key
 dsa 
 
 github.com/go-i2p/go-i2p/lib/crypto/dsa
+
+[go-i2p template file](/template.md)
