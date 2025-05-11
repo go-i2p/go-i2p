@@ -5,8 +5,66 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
+
+// CreateHandshakeProcessors initializes all the handshake message processors
+func (s *NTCP2Session) CreateHandshakeProcessors() {
+	s.Processors = map[messages.MessageType]handshake.HandshakeMessageProcessor{
+		messages.MessageTypeSessionRequest:   &SessionRequestProcessor{NTCP2Session: s},
+		messages.MessageTypeSessionCreated:   &SessionCreatedProcessor{NTCP2Session: s},
+		messages.MessageTypeSessionConfirmed: &SessionConfirmedProcessor{NTCP2Session: s},
+	}
+}
+
+// GetProcessor returns the appropriate processor for a message type
+func (s *NTCP2Session) GetProcessor(messageType messages.MessageType) (handshake.HandshakeMessageProcessor, error) {
+	processor, exists := s.Processors[messageType]
+	if !exists {
+		return nil, oops.Errorf("no processor for message type: %v", messageType)
+	}
+	return processor, nil
+}
+
+// PerformClientHandshake performs the NTCP2 handshake as a client
+func (s *NTCP2Session) PerformClientHandshake(conn net.Conn) error {
+	// Initialize processors
+	s.CreateHandshakeProcessors()
+
+	// Get request processor
+	processor, err := s.GetProcessor(messages.MessageTypeSessionRequest)
+	if err != nil {
+		return err
+	}
+
+	// Create and send SessionRequest
+	msg, err := processor.CreateMessage(s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return err
+	}
+
+	// Obfuscate key
+	obfuscatedKey, err := processor.ObfuscateKey(msg, s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return err
+	}
+
+	// Encrypt payload
+	//encryptedPayload
+	_, err = processor.EncryptPayload(msg, obfuscatedKey, s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return err
+	}
+
+	// Write message to connection
+	// ... implementation ...
+
+	// Continue with rest of handshake
+	// ... implementation ...
+
+	return nil
+}
 
 // receiveSessionRequest processes Message 1 (SessionRequest) from remote
 func (c *NTCP2Session) receiveSessionRequest(conn net.Conn, hs *handshake.HandshakeState) error {

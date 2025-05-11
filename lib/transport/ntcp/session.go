@@ -8,7 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/kdf"
-	"github.com/go-i2p/go-i2p/lib/transport/obfs"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/go-i2p/go-i2p/lib/transport/padding"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 
@@ -44,6 +44,8 @@ type NTCP2Session struct {
 	// Key for frame obfuscation in data phase
 	framingKey      []byte
 	paddingStrategy padding.PaddingStrategy
+	// Processors for handling handshake messages
+	Processors map[messages.MessageType]handshake.HandshakeMessageProcessor
 }
 
 // NewNTCP2Session creates a new NTCP2 session using the existing noise implementation
@@ -100,26 +102,6 @@ func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
 		}
 	}
 	return [16]byte{}, oops.Errorf("Remote static IV error")
-}
-
-// ObfuscateEphemeral implements NTCP2's key obfuscation using AES-256-CBC
-func (s *NTCP2Session) ObfuscateEphemeral(ephemeralKey []byte) ([]byte, error) {
-	AESStaticKey, err := s.buildAesStaticKey()
-	if err != nil {
-		return nil, err
-	}
-
-	return obfs.ObfuscateEphemeralKey(ephemeralKey, AESStaticKey)
-}
-
-// DeobfuscateEphemeral reverses the key obfuscation
-func (s *NTCP2Session) DeobfuscateEphemeral(obfuscatedEphemeralKey []byte) ([]byte, error) {
-	AESStaticKey, err := s.buildAesStaticKey()
-	if err != nil {
-		return nil, err
-	}
-
-	return obfs.DeobfuscateEphemeralKey(obfuscatedEphemeralKey, AESStaticKey)
 }
 
 func (s *NTCP2Session) buildAesStaticKey() (*aes.AESSymmetricKey, error) {
