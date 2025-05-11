@@ -90,19 +90,6 @@ func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *h
 	return nil
 }
 
-// readOptionsBlock reads the encrypted options block from the connection
-func (c *SessionRequestProcessor) readOptionsBlock(conn net.Conn) ([]byte, error) {
-	// Options block with auth tag is 16 bytes minimum
-	optionsBlock := make([]byte, 16)
-	if _, err := io.ReadFull(conn, optionsBlock); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, oops.Errorf("incomplete options block: connection closed prematurely")
-		}
-		return nil, oops.Errorf("failed to read options block: %w", err)
-	}
-	return optionsBlock, nil
-}
-
 // ReadMessage reads a SessionRequest message from the connection
 func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
 	// 1. Read ephemeral key
@@ -301,3 +288,16 @@ func (p *SessionRequestProcessor) processOptionsBlock(
 }
 
 var _ handshake.HandshakeMessageProcessor = (*SessionRequestProcessor)(nil)
+
+// readOptionsBlock reads the encrypted options block from the connection
+func (c *SessionRequestProcessor) readOptionsBlock(conn net.Conn) ([]byte, error) {
+	// Options block with auth tag is 16 bytes minimum
+	optionsBlock := make([]byte, 16)
+	if _, err := io.ReadFull(conn, optionsBlock); err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return nil, oops.Errorf("incomplete options block: connection closed prematurely")
+		}
+		return nil, oops.Errorf("failed to read options block: %w", err)
+	}
+	return optionsBlock, nil
+}
