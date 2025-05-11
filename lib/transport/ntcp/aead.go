@@ -131,20 +131,28 @@ func (c *NTCP2Session) DecryptWithDerivedKey(
 // DeriveSessionKeys derives all required keys for a session using existing X25519 shared secret
 // This replaces scattered key derivation across session files
 func (c *NTCP2Session) DeriveSessionKeys(sharedSecret []byte, ephemeralKey []byte) error {
-	// Use existing KDF context from the kdf package
 	kdfContext := kdf.NewNTCP2KDF()
 
-	// Derive ChaCha20 key (already implemented)
+	// Derive ChaCha20 key
 	chacha20Key, err := kdfContext.MixKey(sharedSecret)
 	if err != nil {
 		return oops.Errorf("failed to derive ChaCha20 key: %w", err)
 	}
 
-	// Store key in session for reuse
+	// Store key in handshake state for session-wide access
 	c.HandshakeState.(*handshake.HandshakeState).ChachaKey = chacha20Key
 
-	// Mix hash with ephemeral key (consistent implementation)
+	// Mix hash with ephemeral key
 	kdfContext.MixHash(ephemeralKey)
 
 	return nil
+}
+
+// deriveChacha20Key derives a ChaCha20 key from raw key material using the NTCP2 KDF
+func (c *NTCP2Session) deriveChacha20Key(keyMaterial []byte) ([]byte, error) {
+	// Create KDF context
+	kdfContext := kdf.NewNTCP2KDF()
+
+	// Derive chacha20 key using mixKey
+	return kdfContext.MixKey(keyMaterial)
 }

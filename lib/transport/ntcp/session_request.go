@@ -11,7 +11,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp/kdf"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
@@ -252,26 +251,22 @@ func (c *NTCP2Session) encryptSessionRequestOptions(
 	sessionRequestMessage *messages.SessionRequest,
 	obfuscatedX []byte,
 ) ([]byte, error) {
-	// Create KDF context
-	kdfContext := kdf.NewNTCP2KDF()
-
-	// Perform DH and mix key
+	// Compute shared secret
 	sharedSecret, err := c.computeSharedSecret(sessionRequestMessage.XContent[:], c.remoteStaticKey)
 	if err != nil {
 		return nil, oops.Errorf("failed to compute shared secret: %v", err)
 	}
 
-	chacha20Key, err := kdfContext.MixKey(sharedSecret)
-	if err != nil {
-		return nil, oops.Errorf("failed to derive ChaCha20 key: %v", err)
+	// Use centralized key derivation
+	if err := c.DeriveSessionKeys(sharedSecret, obfuscatedX); err != nil {
+		return nil, oops.Errorf("failed to derive session keys: %v", err)
 	}
 
-	// Mix hash with ephemeral key
-	kdfContext.MixHash(obfuscatedX)
-
-	// Create AEAD cipher
-	optionsData := sessionRequestMessage.Options.Data()
-	ciphertext, err := c.EncryptWithAssociatedData(chacha20Key, optionsData, obfuscatedX, 0)
-
-	return ciphertext, nil
+	// Use the consolidated AEAD encryption method
+	return c.EncryptWithAssociatedData(
+		c.HandshakeState.(*handshake.HandshakeState).ChachaKey,
+		sessionRequestMessage.Options.Data(),
+		obfuscatedX,
+		0,
+	)
 }

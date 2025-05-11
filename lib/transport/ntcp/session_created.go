@@ -9,7 +9,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // CreateSessionCreated builds the SessionCreated message (Message 2 in NTCP2 handshake)
@@ -66,6 +65,7 @@ func (s *NTCP2Session) CreateSessionCreated(
 // encryptSessionCreatedOptions encrypts the SessionCreated options block using the
 // Noise protocol's ChaCha20-Poly1305 AEAD construction as defined in the NTCP2 spec.
 // It returns the encrypted options with authentication tag.
+// Replace existing encryptSessionCreatedOptions with:
 func (s *NTCP2Session) encryptSessionCreatedOptions(
 	sessionCreated *messages.SessionCreated,
 	obfuscatedY []byte,
@@ -74,25 +74,11 @@ func (s *NTCP2Session) encryptSessionCreatedOptions(
 	// Serialize options to bytes for encryption
 	optionsBytes := sessionCreated.Options.Data()
 
-	// We need to derive encryption key from handshakeState
-	// This is done using the shared secret established after processing the X key
-	// and using the obfuscatedY as associated data
-
-	// Using message2CipherKey method from the handshakeState if available
-	// or we can use the chachaKey directly with appropriate nonce construction
-	nonce := make([]byte, 12) // ChaCha20-Poly1305 uses 12-byte nonces
-
-	// In NTCP2, the nonce for message 2 would typically be 0 (first message with this key)
-	// Create AEAD cipher with the key from handshake state
-	aead, err := chacha20poly1305.New(handshakeState.ChachaKey)
-	if err != nil {
-		return nil, oops.Errorf("failed to create AEAD cipher: %w", err)
-	}
-
-	// Encrypt and authenticate the options block
-	// Using the obfuscatedY as associated data ensures cryptographic binding
-	// between the key and the encrypted data
-	ciphertext := aead.Seal(nil, nonce, optionsBytes, obfuscatedY)
-
-	return ciphertext, nil
+	// Use the centralized AEAD encryption method
+	return s.EncryptWithAssociatedData(
+		handshakeState.ChachaKey,
+		optionsBytes,
+		obfuscatedY,
+		0,
+	)
 }

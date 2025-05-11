@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
@@ -173,11 +174,14 @@ func (p *SessionRequestProcessor) GetPadding(message messages.Message) []byte {
 }
 
 // ObfuscateKey obfuscates the ephemeral key for transmission
-func (p *SessionRequestProcessor) ObfuscateKey(message messages.Message, handshake *handshake.HandshakeState) ([]byte, error) {
+func (p *SessionRequestProcessor) ObfuscateKey(message messages.Message, hs *handshake.HandshakeState) ([]byte, error) {
 	req, ok := message.(*messages.SessionRequest)
 	if !ok {
 		return nil, oops.Errorf("expected SessionRequest message")
 	}
+
+	// Store the ephemeral key in the handshake state for reuse
+	hs.LocalEphemeral = curve25519.Curve25519PrivateKey(req.XContent[:])
 
 	return p.NTCP2Session.ObfuscateEphemeral(req.XContent[:])
 }

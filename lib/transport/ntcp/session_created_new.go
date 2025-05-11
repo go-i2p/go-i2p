@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
+	"github.com/samber/oops"
 )
 
 /*
@@ -43,8 +44,22 @@ func (s *SessionCreatedProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 }
 
 // EncryptPayload implements handshake.HandshakeMessageProcessor.
-func (s *SessionCreatedProcessor) EncryptPayload(msg messages.Message, obfuscatedKey []byte, hs *handshake.HandshakeState) ([]byte, error) {
-	panic("unimplemented")
+func (s *SessionCreatedProcessor) EncryptPayload(
+	msg messages.Message,
+	obfuscatedKey []byte,
+	hs *handshake.HandshakeState,
+) ([]byte, error) {
+	created, ok := msg.(*messages.SessionCreated)
+	if !ok {
+		return nil, oops.Errorf("expected SessionCreated message, got %T", msg)
+	}
+
+	return s.NTCP2Session.EncryptWithAssociatedData(
+		hs.ChachaKey,
+		created.Options.Data(),
+		obfuscatedKey,
+		0,
+	)
 }
 
 // GetPadding implements handshake.HandshakeMessageProcessor.
