@@ -30,6 +30,8 @@ type HandshakeState struct {
 	RemotePaddingLen int
 	// chachaKey is the derived ChaCha20 symmetric key for the session
 	ChachaKey []byte
+	// HandshakeHash is the cumulative hash of the handshake
+	HandshakeHash []byte
 	// sharedSecret is the Diffie-Hellman shared secret computed during handshake
 	SharedSecret []byte
 	// timestamp is the Unix timestamp when handshake was initiated

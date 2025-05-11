@@ -43,10 +43,17 @@ func (p *SessionRequestProcessor) EncryptPayload(
 ) ([]byte, error) {
 	req, ok := message.(*messages.SessionRequest)
 	if !ok {
-		return nil, oops.Errorf("expected SessionRequest message")
+		return nil, oops.Errorf("expected SessionRequest message, got %T", message)
 	}
 
-	return p.NTCP2Session.encryptSessionRequestOptions(req, obfuscatedKey)
+	// Use the central AEAD operation instead of custom encryption
+	// The key material would be derived in this case
+	return p.NTCP2Session.EncryptWithDerivedKey(
+		hs.LocalEphemeral.Bytes(),
+		req.Options.Data(),
+		obfuscatedKey, // Using obfuscated key as associated data
+		0,             // First message uses nonce counter 0
+	)
 }
 
 // MessageType implements handshake.HandshakeMessageProcessor.

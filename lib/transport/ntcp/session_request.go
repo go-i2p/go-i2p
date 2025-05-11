@@ -14,7 +14,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/kdf"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error) {
@@ -271,17 +270,8 @@ func (c *NTCP2Session) encryptSessionRequestOptions(
 	kdfContext.MixHash(obfuscatedX)
 
 	// Create AEAD cipher
-	aead, err := chacha20poly1305.New(chacha20Key)
-	if err != nil {
-		return nil, oops.Errorf("failed to create ChaCha20-Poly1305 cipher: %v", err)
-	}
-
-	// Prepare the nonce (all zeros for first message)
-	nonce := make([]byte, chacha20poly1305.NonceSize)
-
-	// Encrypt options block using associated data
 	optionsData := sessionRequestMessage.Options.Data()
-	ciphertext := aead.Seal(nil, nonce, optionsData, obfuscatedX)
+	ciphertext, err := c.EncryptWithAssociatedData(chacha20Key, optionsData, obfuscatedX, 0)
 
 	return ciphertext, nil
 }
