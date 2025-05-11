@@ -39,6 +39,12 @@ type HandshakeState struct {
 	Timestamp uint32
 	// routerInfo contains the local router's information
 	RouterInfo *router_info.RouterInfo
+	// Message3Part1 is the first part of the message 3
+	Message3Part1 []byte
+	// Message3Part2 is the second part of the message 3
+	Message3Part2 []byte
+	// Message3Length is the length of message 3
+	Message3Length int
 }
 
 var _ handshake.HandshakeState = &HandshakeState{}
