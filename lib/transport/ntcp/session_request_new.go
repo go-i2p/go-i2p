@@ -2,6 +2,7 @@ package ntcp
 
 import (
 	"crypto/rand"
+	"io"
 	"math/big"
 	"net"
 
@@ -64,7 +65,42 @@ func (s *SessionRequestProcessor) MessageType() messages.MessageType {
 
 // ProcessMessage implements handshake.HandshakeMessageProcessor.
 func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *handshake.HandshakeState) error {
-	panic("unimplemented")
+	req, ok := message.(*messages.SessionRequest)
+	if !ok {
+		return oops.Errorf("expected SessionRequest message, got %T", message)
+	}
+
+	// Validate timestamp using existing method
+	if err := s.validateTimestamp(*req.Options.Timestamp); err != nil {
+		return err
+	}
+
+	// Store padding length for message 3 if provided
+	if req.Options.PaddingLength != nil {
+		paddingLen := req.Options.PaddingLength.Int()
+		hs.RemotePaddingLen = paddingLen
+	}
+
+	// Store message 3 part 2 length if provided
+	if req.Options.Message3Part2Length != nil {
+		hs.Message3Length = req.Options.Message3Part2Length.Int()
+	}
+
+	log.Debugf("NTCP2: Session request processed successfully")
+	return nil
+}
+
+// readOptionsBlock reads the encrypted options block from the connection
+func (c *SessionRequestProcessor) readOptionsBlock(conn net.Conn) ([]byte, error) {
+	// Options block with auth tag is 16 bytes minimum
+	optionsBlock := make([]byte, 16)
+	if _, err := io.ReadFull(conn, optionsBlock); err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return nil, oops.Errorf("incomplete options block: connection closed prematurely")
+		}
+		return nil, oops.Errorf("failed to read options block: %w", err)
+	}
+	return optionsBlock, nil
 }
 
 // ReadMessage reads a SessionRequest message from the connection
@@ -76,19 +112,19 @@ func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.Hands
 	}
 
 	// 2. Process ephemeral key
-	deobfuscatedX, err := p.NTCP2Session.processEphemeralKey(obfuscatedX, hs)
+	deobfuscatedX, err := p.processEphemeralKey(obfuscatedX, hs)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Read options block
-	encryptedOptions, err := p.NTCP2Session.readOptionsBlock(conn)
+	encryptedOptions, err := p.readOptionsBlock(conn)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Process options block
-	options, err := p.NTCP2Session.processOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX, hs)
+	options, err := p.processOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX, hs)
 	if err != nil {
 		return nil, err
 	}
@@ -184,6 +220,84 @@ func (p *SessionRequestProcessor) ObfuscateKey(message messages.Message, hs *han
 	hs.LocalEphemeral = curve25519.Curve25519PrivateKey(req.XContent[:])
 
 	return p.NTCP2Session.ObfuscateEphemeral(req.XContent[:])
+}
+
+// processOptionsBlock decrypts and processes the options block from the session request
+func (p *SessionRequestProcessor) processOptionsBlock(
+	encryptedOptions []byte,
+	obfuscatedX []byte,
+	deobfuscatedX []byte,
+	hs *handshake.HandshakeState,
+) (*messages.RequestOptions, error) {
+	// Decrypt options block
+	decryptedOptions, err := p.NTCP2Session.DecryptOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX)
+	if err != nil {
+		p.addDelayForSecurity()
+		return nil, oops.Errorf("failed to decrypt options block: %w", err)
+	}
+
+	// Minimum size for valid options
+	if len(decryptedOptions) < 9 {
+		return nil, oops.Errorf("options block too small: %d bytes", len(decryptedOptions))
+	}
+
+	// Parse network ID
+	networkID, _, err := data.NewInteger([]byte{decryptedOptions[0]}, 1)
+	if err != nil {
+		return nil, oops.Errorf("failed to parse network ID: %w", err)
+	}
+
+	if networkID.Int() != 2 {
+		return nil, oops.Errorf("invalid network ID: %d", networkID.Int())
+	}
+
+	// Parse protocol version
+	protocolVersion, _, err := data.NewInteger([]byte{decryptedOptions[1]}, 1)
+	if err != nil {
+		return nil, oops.Errorf("failed to parse protocol version: %w", err)
+	}
+
+	if protocolVersion.Int() != 2 {
+		return nil, oops.Errorf("unsupported protocol version: %d", protocolVersion.Int())
+	}
+
+	// Parse padding length
+	paddingLength, _, err := data.NewInteger([]byte{decryptedOptions[2]}, 1)
+	if err != nil {
+		return nil, oops.Errorf("failed to parse padding length: %w", err)
+	}
+
+	// Parse message 3 part 2 length (2 bytes)
+	msg3p2Len, _, err := data.NewInteger(decryptedOptions[3:5], 2)
+	if err != nil {
+		return nil, oops.Errorf("failed to parse message 3 part 2 length: %w", err)
+	}
+
+	// Parse timestamp (4 bytes)
+	timestamp, _, err := data.NewDate(decryptedOptions[5:9])
+	if err != nil {
+		return nil, oops.Errorf("failed to parse timestamp: %w", err)
+	}
+
+	// Validate timestamp
+	if err := p.validateTimestamp(*timestamp); err != nil {
+		return nil, err
+	}
+
+	// Update handshake state
+	timestampVal := timestamp.Time()
+	hs.Timestamp = uint32(timestampVal.Unix())
+
+	// Construct the RequestOptions object
+	requestOptions := &messages.RequestOptions{
+		NetworkID:           networkID,
+		ProtocolVersion:     protocolVersion,
+		PaddingLength:       paddingLength,
+		Message3Part2Length: msg3p2Len,
+		Timestamp:           timestamp,
+	}
+
+	return requestOptions, nil
 }
 
 var _ handshake.HandshakeMessageProcessor = (*SessionRequestProcessor)(nil)
