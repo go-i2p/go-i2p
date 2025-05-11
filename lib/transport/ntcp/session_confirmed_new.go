@@ -1,8 +1,11 @@
 package ntcp
 
 import (
+	"crypto/rand"
+	"fmt"
 	"net"
 
+	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 )
@@ -45,7 +48,47 @@ type SessionConfirmedProcessor struct {
 
 // CreateMessage implements handshake.HandshakeMessageProcessor.
 func (s *SessionConfirmedProcessor) CreateMessage(hs *handshake.HandshakeState) (messages.Message, error) {
-	panic("unimplemented")
+	// Create the SessionConfirmed message
+	sc := &messages.SessionConfirmed{}
+
+	// Step 1: Get our static key from the handshake state
+	// Note: The static key must be encrypted using the handshakeState's WriteMessage
+	// but we need to extract it first to store in the result structure
+	localKeyPair, err := s.NTCP2Session.localStaticKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local static keypair: %w", err)
+	}
+
+	// Copy the 32-byte static key
+	copy(sc.StaticKey[:], localKeyPair[:])
+
+	// Step 2: Set the RouterInfo
+	sc.RouterInfo = &s.NTCP2Session.RouterInfo
+
+	// Step 3: Create options with padding settings
+	// Use default padding for now - we should make this something we can configure
+	paddingLength, err := data.NewIntegerFromInt(calculatePaddingLength(sc.RouterInfo), 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create padding length: %w", err)
+	}
+
+	sc.Options = &messages.ConfirmedOptions{
+		PaddingLength: paddingLength,
+	}
+
+	// Step 4: Generate padding data according to the specified length
+	// In a real implementation, this should be cryptographically secure random data
+	if paddingLength.Int() > 0 {
+		sc.Padding = make([]byte, paddingLength.Int())
+		if _, err := rand.Read(sc.Padding); err != nil {
+			return nil, fmt.Errorf("failed to generate padding: %w", err)
+		}
+	}
+
+	// The actual encryption of the message will happen in the calling function
+	// using the handshakeState.WriteMessage() method, as it needs to maintain the
+	// proper noise protocol state
+	return sc, nil
 }
 
 // EncryptPayload implements handshake.HandshakeMessageProcessor.

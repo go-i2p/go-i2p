@@ -1,8 +1,12 @@
 package ntcp
 
 import (
+	"crypto/rand"
+	"math/big"
 	"net"
 
+	"github.com/go-i2p/go-i2p/lib/common/data"
+	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
@@ -40,7 +44,46 @@ type SessionCreatedProcessor struct {
 
 // CreateMessage implements handshake.HandshakeMessageProcessor.
 func (s *SessionCreatedProcessor) CreateMessage(hs *handshake.HandshakeState) (messages.Message, error) {
-	panic("unimplemented")
+	// 1. Generate ephemeral key (handshakeState has already done this, we just need to extract it)
+	ephemeralKey, err := s.NTCP2Session.HandshakeState.(*handshake.HandshakeState).LocalEphemeral.Public()
+	if err != nil {
+		return nil, oops.Errorf("failed to get local ephemeral key: %w", err)
+	}
+
+	// 2. Create padding according to NTCP2 spec
+	// NTCP2 spec recommends 0-31 bytes of random padding
+	paddingSize, err := rand.Int(rand.Reader, big.NewInt(32))
+	if err != nil {
+		return nil, oops.Errorf("failed to generate random padding size: %w", err)
+	}
+
+	padding := make([]byte, paddingSize.Int64())
+	if _, err := rand.Read(padding); err != nil {
+		return nil, oops.Errorf("failed to generate padding: %w", err)
+	}
+
+	// 3. Create response options
+	timestamp, err := data.DateFromTime(s.GetCurrentTime())
+	if err != nil {
+		return nil, oops.Errorf("failed to create timestamp: %w", err)
+	}
+	paddingLen, err := data.NewIntegerFromInt(len(padding), 1)
+	if err != nil {
+		return nil, oops.Errorf("failed to create padding length: %w", err)
+	}
+
+	// Create response options with appropriate fields
+	responseOptions := &messages.CreatedOptions{
+		PaddingLength: paddingLen,
+		Timestamp:     timestamp,
+	}
+
+	// 4. Return the complete SessionCreated message
+	return &messages.SessionCreated{
+		YContent: [32]byte(ephemeralKey.Bytes()), // Y is the obfuscated ephemeral key
+		Options:  responseOptions,
+		Padding:  padding,
+	}, nil
 }
 
 // EncryptPayload implements handshake.HandshakeMessageProcessor.
@@ -62,19 +105,32 @@ func (s *SessionCreatedProcessor) EncryptPayload(
 	)
 }
 
-// GetPadding implements handshake.HandshakeMessageProcessor.
+// ObfuscateKey should follow the same pattern as in SessionRequestProcessor
+func (s *SessionCreatedProcessor) ObfuscateKey(msg messages.Message, hs *handshake.HandshakeState) ([]byte, error) {
+	created, ok := msg.(*messages.SessionCreated)
+	if !ok {
+		return nil, oops.Errorf("expected SessionCreated message")
+	}
+
+	// Store the ephemeral key in the handshake state for reuse
+	hs.LocalEphemeral = curve25519.Curve25519PrivateKey(created.YContent[:])
+
+	return s.NTCP2Session.ObfuscateEphemeral(created.YContent[:])
+}
+
+// GetPadding retrieves padding from a message
 func (s *SessionCreatedProcessor) GetPadding(msg messages.Message) []byte {
-	panic("unimplemented")
+	created, ok := msg.(*messages.SessionCreated)
+	if !ok {
+		return nil
+	}
+
+	return created.Padding
 }
 
 // MessageType implements handshake.HandshakeMessageProcessor.
 func (s *SessionCreatedProcessor) MessageType() messages.MessageType {
 	return messages.MessageTypeSessionCreated
-}
-
-// ObfuscateKey implements handshake.HandshakeMessageProcessor.
-func (s *SessionCreatedProcessor) ObfuscateKey(msg messages.Message, hs *handshake.HandshakeState) ([]byte, error) {
-	panic("unimplemented")
 }
 
 // ProcessMessage implements handshake.HandshakeMessageProcessor.
