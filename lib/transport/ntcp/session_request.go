@@ -252,7 +252,7 @@ func (c *NTCP2Session) encryptSessionRequestOptions(
 	obfuscatedX []byte,
 ) ([]byte, error) {
 	// Compute shared secret
-	sharedSecret, err := c.computeSharedSecret(sessionRequestMessage.XContent[:], c.remoteStaticKey)
+	sharedSecret, err := c.computeSharedSecret(sessionRequestMessage.XContent[:], c.HandshakeState.(*handshake.HandshakeState).RemoteStaticKey.Bytes())
 	if err != nil {
 		return nil, oops.Errorf("failed to compute shared secret: %v", err)
 	}
