@@ -75,6 +75,15 @@ func GenerateRandomPadding(length int) ([]byte, error)
 ```
 GenerateRandomPadding creates a byte slice of random data with the given length
 
+#### func  Intn
+
+```go
+func Intn(n int) int
+```
+Intn generates a random integer in the range [0, n) This is a secure alternative
+to math/rand.Intn It uses crypto/rand to generate a cryptographically secure
+random number Which might be dumb and or pointless for padding.
+
 #### func  ReadAndValidatePadding
 
 ```go
@@ -131,12 +140,6 @@ implementation
 func (s *NTCP2Session) CreateHandshakeProcessors()
 ```
 CreateHandshakeProcessors initializes all the handshake message processors
-
-#### func (*NTCP2Session) CreateSessionRequest
-
-```go
-func (s *NTCP2Session) CreateSessionRequest() (*messages.SessionRequest, error)
-```
 
 #### func (*NTCP2Session) DecryptOptionsBlock
 

@@ -14,5 +14,6 @@ for dir in $dirs; do
     echo "Generating callgraph for $package"
     #go-callvis -nostd -focus "$package" -group type -format svg -file $dir/$package "github.com/go-i2p/go-i2p/$dir"
     godocdown -template template.md -o "$dir/README.md" "./$dir"
+    git add -v "$dir/README.md"
     #git add -v "$dir/$package.svg" "$dir/README.md"
 done

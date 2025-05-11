@@ -95,32 +95,32 @@ func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.Hands
 	// 1. Read ephemeral key
 	obfuscatedX, err := p.NTCP2Session.readEphemeralKey(conn)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to read ephemeral key: %w", err)
 	}
 
 	// 2. Process ephemeral key
 	deobfuscatedX, err := p.processEphemeralKey(obfuscatedX, hs)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to process ephemeral key: %w", err)
 	}
 
 	// 3. Read options block
 	encryptedOptions, err := p.readOptionsBlock(conn)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to read options block: %w", err)
 	}
 
 	// 4. Process options block
 	options, err := p.processOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX, hs)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to process options block: %w", err)
 	}
 
 	// 5. Read padding if present
 	paddingLen := options.PaddingLength.Int()
 	if paddingLen > 0 {
 		if err := p.NTCP2Session.readAndValidatePadding(conn, paddingLen); err != nil {
-			return nil, err
+			return nil, oops.Errorf("failed to read and validate padding: %w", err)
 		}
 	}
 
@@ -137,31 +137,31 @@ func (s *SessionRequestProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 	// Get our ephemeral key pair
 	ephemeralKey := make([]byte, 32)
 	if _, err := rand.Read(ephemeralKey); err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to generate ephemeral key: %w", err)
 	}
 
 	// Add random padding (implementation specific)
 	randomInt, err := rand.Int(rand.Reader, big.NewInt(16))
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to generate random padding length: %w", err)
 	}
 
 	padding := make([]byte, randomInt.Int64()) // Up to 16 bytes of padding
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to generate random padding: %w", err)
 	}
 
 	netId, err := data.NewIntegerFromInt(2, 1)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to parse network ID: %w", err)
 	}
 	version, err := data.NewIntegerFromInt(2, 1)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to parse protocol version: %w", err)
 	}
 	paddingLen, _, err := data.NewInteger([]byte{byte(len(padding))}, 1)
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to parse padding length: %w", err)
 	}
 	//message3Part2Len, err := data.NewInteger()
 	//if err != nil {
@@ -169,7 +169,7 @@ func (s *SessionRequestProcessor) CreateMessage(hs *handshake.HandshakeState) (m
 	//}
 	timestamp, err := data.DateFromTime(s.GetCurrentTime())
 	if err != nil {
-		return nil, err
+		return nil, oops.Errorf("failed to get current time: %w", err)
 	}
 	requestOptions := &messages.RequestOptions{
 		NetworkID:       netId,
