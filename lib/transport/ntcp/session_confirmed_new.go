@@ -2,6 +2,7 @@ package ntcp
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -213,7 +214,6 @@ func (s *SessionConfirmedProcessor) ReadMessage(conn net.Conn, hs *handshake.Han
 	}
 
 	// Step 7: Parse the RouterInfo and options from the decrypted payload
-	// This is simplified - actual implementation would need to parse RouterInfo properly
 	sc := &messages.SessionConfirmed{
 		StaticKey: [32]byte{}, // Already processed
 	}
@@ -222,6 +222,27 @@ func (s *SessionConfirmedProcessor) ReadMessage(conn net.Conn, hs *handshake.Han
 	copy(sc.StaticKey[:], deobfuscatedKey)
 
 	// Parse RouterInfo and options from decrypted payload
+	// This would need proper RouterInfo parsing implementation
+	offset := 0
+	routerInfoSize := binary.BigEndian.Uint16(decryptedPayload[offset : offset+2])
+	offset += 2
+
+	routerInfoBytes := decryptedPayload[offset : offset+int(routerInfoSize)]
+	offset += int(routerInfoSize)
+
+	routerInfo, _, err := router_info.ReadRouterInfo(routerInfoBytes)
+	if err != nil {
+		return nil, oops.Errorf("failed to parse RouterInfo: %w", err)
+	}
+	sc.RouterInfo = &routerInfo
+
+	// Parse options if available
+	if offset < len(decryptedPayload) {
+		options := &messages.ConfirmedOptions{}
+		// Parse options from remaining data
+		// Implementation depends on options format
+		sc.Options = options
+	}
 
 	return sc, nil
 }
