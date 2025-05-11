@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contributing - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 610 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" class="active">Contributing</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>Contributing - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="contributing">Contributing</h1>
+
+<p>Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we&rsquo;re reachable here at github.com/go-i2p also.</p>
+
+<h2 id="getting-started">Getting Started</h2>
+
+<p>Install required dependencies</p>
+
+<p>This example assumes Ubuntu or Debian based Linux, a reasonably modern version.
+The instructions will be similar for other Linux distributions with slightly different package managers and package names.</p>
+
+<pre><code class="language-sh"># For obtaining, modifying, compiling, and tracking changes to go-i2p, install:
+sudo apt-get install golang-go make git
+# If you want to generate markdown versions of the godoc locally, also install:
+go install github.com/robertkrimen/godocdown/godocdown@master
+# If you want to generate call graphs locally, also install:
+go install github.com/ofabry/go-callvis@master
+</code></pre>
+
+<p>On Windows, one must install the latest versions of Go and Git Bash from their respective sources.</p>
+
+<h2 id="set-up-your-workspace">Set up your workspace:</h2>
+
+<pre><code class="language-sh">github_username=yourusername
+cd $(go env GOPATH)
+git clone git@github.com:$github_username/go-i2p github.com/go-i2p/go-i2p
+github.com/go-i2p/go-i2p
+</code></pre>
+
+<p>Fork go-i2p and clone it into your workspace.  Make sure you can execute <code>go test ./...</code> in the project&rsquo;s root directory.  At that point you should have everything you need to start making changes and opening pull requests.</p>
+
+<h2 id="i2p-specifications">I2P Specifications</h2>
+
+<p>The I2P community maintains up-to-date <a href="https://geti2p.net/spec" target="_blank">specifications</a> of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in <code>lib/common/</code>) have been implemented and tested, and serve as good examples.</p>
+
+<h2 id="testing">Testing</h2>
+
+<p><code>go test ./...</code></p>
+
+<h2 id="conventions">Conventions</h2>
+
+<h4 id="errors">Errors</h4>
+
+<p>We use oops to provide context to the errors we return. Do not use <code>errors.New</code> or <code>fmt.Errorf</code> when returning errors from functions. Instead, wrap raw errors in oops errors. When an error is recieved, used oops to supplement the log output.</p>
+
+<p>It is OK to use <code>fmt.Errorf</code> for declaring custom error types.</p>
+
+<h4 id="logging">Logging</h4>
+
+<p>Logrus is used for logging across all of go-i2p. We have a small extension of logrus at <a href="https://github.com/go-i2p/logger" target="_blank">https://github.com/go-i2p/logger</a> which we use to add a &ldquo;Fail Fast mode.&rdquo; We are mostly converted over to using it.</p>
+
+<p>All log statements should contain an <code>at</code> fields and a <code>reason</code> field.  Here is a good example from the go-i2p implementation of a LeaseSet:</p>
+
+<pre><code class="language-go">log.WithFields(log.Fields{
+	&quot;at&quot;:           &quot;(LeaseSet) PublicKey&quot;,
+	&quot;data_len&quot;:     remainer_len,
+	&quot;required_len&quot;: LEASE_SET_PUBKEY_SIZE,
+	&quot;reason&quot;:       &quot;not enough data&quot;,
+}).Error(&quot;error parsing public key&quot;)
+</code></pre>
+
+<h4 id="testing-1">Testing</h4>
+
+<p>Testify is used to assert test cases in all tests in go-i2p for simplicity.  Here is an example from the RouterInfo tests:</p>
+
+<pre><code class="language-go">func TestRouterAddressCountReturnsCorrectCount(t *testing.T) {
+	assert := assert.New(t)
+
+	router_info := buildFullRouterInfo()
+	count, err := router_info.RouterAddressCount()
+	assert.Nil(err)
+	assert.Equal(1, count, &quot;RouterInfo.RouterAddressCount() did not return correct count&quot;)
+}
+</code></pre>
+
+<h2 id="pull-requests">Pull Requests</h2>
+
+<p>Pull requests should pass all tests, test all new behavior, and be correctly formatted by <code>gofumpt -w -s -extra</code> before merge.  Feel free to open incomplete pull requests and ask for help and advice.</p>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-05-11 03:21:07 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 610 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="docs/CONTRIBUTING.html">Contributing</a></li>
+        
+          <li><a href="docs/template.html">Template</a></li>
+        
+          <li><a href="docs/ROADMAP.html">go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="repo-header">
+      <h1>go-i2p/go-i2p</h1>
+      <div class="repo-description">A pure Go implementation of the I2P router.</div>
+      
+      <div class="repo-stats">
+        
+        <div class="repo-stat">
+          <span>📝</span> <span>610 commits</span>
+        </div>
+        
+        
+        <div class="repo-stat">
+          <span>📅</span> <span>Last updated: May 10, 2025</span>
+        </div>
+        
+        
+        <div class="repo-stat">
+          <span>📜</span> <span>MIT License</span>
+        </div>
+        
+      </div>
+    </header>
+    
+    <main>
+      
+      <section id="readme" class="repo-section">
+        <h2>README</h2>
+        <div class="readme-content">
+          <h1 id="go-i2p">go-i2p</h1>
+
+<p>A pure Go implementation of the I2P router.</p>
+
+<h2 id="status">Status</h2>
+
+<p>go-i2p is in early development. The master branch is being refactored and API&rsquo;s are
+definitely going to change. If you choose to use any part of this code right now,
+please keep up with these changes, as they will not be backward compatible and require
+<strong>Fundamentally</strong> changing any code that treats this as a dependency.</p>
+
+<h3 id="implemented-features">Implemented Features</h3>
+
+<ul>
+<li>Clients
+
+<ul>
+<li>[ ] Datagrams</li>
+<li>[ ] I2CP</li>
+<li>[ ] Message routing</li>
+<li>[ ] Streaming</li>
+</ul></li>
+<li>Cryptographic primitives
+
+<ul>
+<li>Signing
+
+<ul>
+<li>[ ] ECDSA_SHA256_P256</li>
+<li>[ ] ECDSA_SHA384_P384</li>
+<li>[ ] ECDSA_SHA512_P521</li>
+<li>[X] Ed25519</li>
+</ul></li>
+<li>Verifying
+
+<ul>
+<li>[X] DSA</li>
+<li>[ ] ECDSA_SHA256_P256</li>
+<li>[ ] ECDSA_SHA384_P384</li>
+<li>[ ] ECDSA_SHA512_P521</li>
+<li>[ ] RSA_SHA256_2048</li>
+<li>[ ] RSA_SHA384_3072</li>
+<li>[ ] RSA_SHA512_4096</li>
+<li>[X] Ed25519</li>
+<li>[ ] Red25519</li>
+</ul></li>
+<li>[X] ElGamal</li>
+<li>[X] AES256</li>
+<li>[X] X25519</li>
+<li>[X] ChaCha20/Poly1305</li>
+<li>[ ] Elligator2</li>
+<li>[ ] HKDF</li>
+<li>[X] HMAC</li>
+<li>[X] Noise subsystem</li>
+</ul></li>
+<li>End-to-End Crypto
+
+<ul>
+<li>[ ] Garlic messages</li>
+<li>[ ] ElGamal/AES+SessionTag</li>
+<li>[ ] Ratchet/X25519</li>
+</ul></li>
+<li>I2NP
+
+<ul>
+<li>[ ] Message parsing</li>
+<li>[ ] Message handling</li>
+</ul></li>
+<li>NetDB
+
+<ul>
+<li>[/] Local storage</li>
+<li>[/] Persistence to disk</li>
+<li>[X] Reseeding</li>
+<li>[ ] Lookups</li>
+<li>[ ] Expiry</li>
+<li>[ ] Exploration</li>
+<li>[ ] Publishing</li>
+<li>[ ] Floodfill</li>
+<li>[ ] LS2 and Encrypted Leasesets</li>
+</ul></li>
+<li>Transports
+
+<ul>
+<li>[X] Transport manager</li>
+<li>NTCP2
+
+<ul>
+<li>[ ] Handshake</li>
+<li>[ ] Session tracking</li>
+<li>[ ] Automatic session creation</li>
+</ul></li>
+<li>SSU2
+
+<ul>
+<li>[ ] Handshake</li>
+<li>[ ] Session tracking</li>
+<li>[ ] Automatic session creation</li>
+<li>[ ] Peer Tests</li>
+<li>[ ] Introducers</li>
+</ul></li>
+</ul></li>
+<li>Tunnels
+
+<ul>
+<li>[ ] Building</li>
+<li>[ ] Build Message Crypto (ElGamal)</li>
+<li>[ ] Build Message Crypto (ECIES)</li>
+<li>[ ] Participating</li>
+<li>[ ] Tunnel Message Crypto</li>
+<li>[ ] Tunnel Message Fragmentation/Reassembly</li>
+</ul></li>
+<li>Common Data Structures
+
+<ul>
+<li>[X] Keys and Cert</li>
+<li>[X] Key Certificates</li>
+<li>[X] Certificate</li>
+<li>[X] Lease</li>
+<li>[X] Lease Set</li>
+<li>[X] Router Info</li>
+<li>[X] Router Identity</li>
+<li>[X] Router Address</li>
+<li>[X] Session Key</li>
+<li>[X] Signature Types</li>
+<li>[X] Destination</li>
+<li>[X] Data Types</li>
+<li>[X] Session Tag</li>
+</ul></li>
+</ul>
+
+<h2 id="verbosity">Verbosity</h2>
+
+<p>Logging can be enabled and configured using the <code>DEBUG_I2P</code> environment variable. By default, logging is disabled.</p>
+
+<p>There are three available log levels:</p>
+
+<ul>
+<li>Debug</li>
+</ul>
+
+<pre><code class="language-shell">export DEBUG_I2P=debug
+</code></pre>
+
+<ul>
+<li>Warn</li>
+</ul>
+
+<pre><code class="language-shell">export DEBUG_I2P=warn
+</code></pre>
+
+<ul>
+<li>Error</li>
+</ul>
+
+<pre><code class="language-shell">export DEBUG_I2P=error
+</code></pre>
+
+<p>If DEBUG_I2P is set to an unrecognized variable, it will fall back to &ldquo;debug&rdquo;.</p>
+
+<h2 id="fast-fail-mode">Fast-Fail mode</h2>
+
+<p>Fast-Fail mode can be activated by setting <code>WARNFAIL_I2P</code> to any non-empty value. When set, every warning or error is Fatal.
+It is unsafe for production use, and intended only for debugging and testing purposes.</p>
+
+<pre><code class="language-shell">export WARNFAIL_I2P=true
+</code></pre>
+
+<p>If <code>WARNFAIL_I2P</code> is set and <code>DEBUG_I2P</code> is unset, <code>DEBUG_I2P</code> will be set to <code>debug</code>.</p>
+
+<h2 id="contributing">Contributing</h2>
+
+<p>See CONTRIBUTING.md for more information.</p>
+
+<h2 id="license">License</h2>
+
+<p>This project is licensed under the MIT license, see LICENSE for more information.</p>
+
+        </div>
+      </section>
+      
+      
+      
+      <section id="contributors" class="repo-section">
+        <h2>Top Contributors</h2>
+        <div class="contributors-list">
+          
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              e
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                eyedeekay
+              </div>
+              <div class="contributor-commits">
+                256 commits
+              </div>
+            </div>
+          </div>
+          
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              H
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                Haris Khan
+              </div>
+              <div class="contributor-commits">
+                176 commits
+              </div>
+            </div>
+          </div>
+          
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              H
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                Hayden Parker
+              </div>
+              <div class="contributor-commits">
+                65 commits
+              </div>
+            </div>
+          </div>
+          
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              J
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                Jeff Becker
+              </div>
+              <div class="contributor-commits">
+                35 commits
+              </div>
+            </div>
+          </div>
+          
+          <div class="contributor-item">
+            <!-- Use first letter as avatar if no image available -->
+            <div class="contributor-avatar">
+              H
+            </div>
+            <div class="contributor-info">
+              <div class="contributor-name">
+                Hayden Parker
+              </div>
+              <div class="contributor-commits">
+                28 commits
+              </div>
+            </div>
+          </div>
+          
+        </div>
+        <a href="https://github.com/go-i2p/go-i2p/graphs/contributors" target="_blank">View all contributors on GitHub →</a>
+      </section>
+      
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-05-11 03:21:07 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

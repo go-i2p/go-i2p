@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>go-i2p Implementation Roadmap - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 610 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" class="active">go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>go-i2p Implementation Roadmap - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="go-i2p-implementation-roadmap">go-i2p Implementation Roadmap</h1>
+
+<h2 id="transport-layer-ntcp2">Transport Layer (NTCP2)</h2>
+
+<ul>
+<li>Build on existing lib/transport/noise implementation</li>
+<li>Core NTCP2 components:
+
+<ul>
+<li>Session handshake using noise protocol</li>
+<li>Connection management</li>
+<li>I2NP message transport</li>
+</ul></li>
+</ul>
+
+<h2 id="reseed-system">Reseed System</h2>
+
+<ul>
+<li>SU3 file format implementation:
+
+<ul>
+<li>Format parsing and validation(Much of this work is done in reseed-tools, may need to be moved here)</li>
+<li>Signature verification system(Much of this work is done in reseed-tools, may need to be moved here)</li>
+</ul></li>
+<li>Local reseed functionality:
+
+<ul>
+<li>File-based reseed operations</li>
+</ul></li>
+<li>Self-signed/Package-pinned X.509 certificate handling for reseed validation</li>
+</ul>
+
+<h2 id="netdb-and-database-store">NetDb and Database Store</h2>
+
+<ul>
+<li>Database Store message handling:
+
+<ul>
+<li>Message structure implementation</li>
+<li>Message handling implementation</li>
+</ul></li>
+<li>NetDb core implementation:
+
+<ul>
+<li>RouterInfo management</li>
+<li>LeaseSet management</li>
+<li>Lookup system</li>
+<li>Storage interface</li>
+<li>Peer selection logic?(Maybe do something very basic for now like i2pd used to do, and then improve it later, the important part will be interface design at first)</li>
+</ul></li>
+</ul>
+
+<h2 id="tunnel-implementation">Tunnel Implementation</h2>
+
+<ul>
+<li>Tunnel cryptography:
+
+<ul>
+<li>Key generation and management</li>
+<li>Layered encryption scheme</li>
+</ul></li>
+<li>Message processing:
+
+<ul>
+<li>Build request/response handling</li>
+<li>Gateway implementation</li>
+<li>Message forwarding logic</li>
+</ul></li>
+</ul>
+
+<p>Notes:</p>
+
+<ul>
+<li>Excluding legacy protocols (SSU1, NTCP1, elgamal, DSA)</li>
+<li>Leveraging existing noise protocol implementation</li>
+<li>SSU2 is not on this roadmap but is fair game for implementation as soon as NTCP2 is done. We&rsquo;re focused on NTCP2 to get this thing sending I2NP messages.</li>
+</ul>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-05-11 03:21:07 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>
