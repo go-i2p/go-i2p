@@ -60,7 +60,7 @@ please keep up with these changes, as they will not be backward compatible and r
 - Transports
   - [X] Transport manager
   - NTCP2
-    - [ ] Handshake
+    - [X] Handshake
     - [ ] Session tracking
     - [ ] Automatic session creation
   - SSU2
