@@ -31,7 +31,8 @@ jobs:
       - name: Build Site Generator
         run: |
           go install github.com/go-i2p/go-gh-page/cmd/github-site-gen@latest
-          cp -v "$GOPATH/bin/github-site-gen" ./github-site-gen
+          export GOBIN=$(go env GOPATH)/bin
+          cp -v "$GOBIN/github-site-gen" ./github-site-gen
           # Ensure the binary is executable
           chmod +x github-site-gen
 
