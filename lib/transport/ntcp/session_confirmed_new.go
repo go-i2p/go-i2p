@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	mrand "math/rand"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
@@ -72,7 +73,7 @@ func (s *SessionConfirmedProcessor) CreateMessage(hs *handshake.HandshakeState) 
 
 	// Step 3: Create options with padding settings
 	// Use default padding for now - we should make this something we can configure
-	paddingLength, err := data.NewIntegerFromInt(calculatePaddingLength(sc.RouterInfo), 1)
+	paddingLength, err := data.NewIntegerFromInt(s.calculatePaddingLength(sc.RouterInfo), 1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create padding length: %w", err)
 	}
@@ -278,4 +279,29 @@ func (s *SessionConfirmedProcessor) processOptions(options *messages.ConfirmedOp
 
 	// Process other options as needed
 	return nil
+}
+
+// calculatePaddingLength determines an appropriate padding length based on the RouterInfo
+func (s *SessionConfirmedProcessor) calculatePaddingLength(ri *router_info.RouterInfo) int {
+	rib, _ := ri.Bytes()
+	// Base size of the RouterInfo
+	riSize := len(rib)
+
+	// For this implementation, we'll use a simple padding scheme:
+	// - Add enough padding to make the total size at least 128 bytes
+	// - Add random padding between 16 and 64 bytes
+
+	minSize := 128
+	minPadding := 1
+	maxExtraPadding := 30 // Total max padding: 1+30=31
+
+	padding := 0
+	if riSize < minSize {
+		padding = minSize - riSize
+	}
+
+	// Add random additional padding between minPadding and minPadding+maxExtraPadding
+	padding += mrand.Intn(maxExtraPadding) + minPadding
+
+	return padding
 }

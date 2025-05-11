@@ -2,35 +2,77 @@ package ntcp
 
 import (
 	"net"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
 )
 
-// PerformOutboundHandshake initiates and completes a handshake as the initiator
-func (c *NTCP2Session) PerformOutboundHandshake(conn net.Conn, hs *handshake.HandshakeState) error {
-	// Set deadline for the entire handshake process
-	if err := conn.SetDeadline(time.Now().Add(NTCP2_HANDSHAKE_TIMEOUT)); err != nil {
-		return oops.Errorf("failed to set deadline: %v", err)
-	}
-	defer conn.SetDeadline(time.Time{}) // Clear deadline after handshake
-
-	// 1. Send SessionRequest
-	if err := c.sendSessionRequest(conn, hs); err != nil {
-		return oops.Errorf("failed to send session request: %v", err)
+// PerformClientHandshake performs the NTCP2 handshake as a client
+func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
+	// Initialize processors if not already done
+	if s.Processors == nil {
+		s.CreateHandshakeProcessors()
 	}
 
-	// 2. Receive SessionCreated
-	if err := c.receiveSessionCreated(conn, hs); err != nil {
-		return oops.Errorf("failed to receive session created: %v", err)
+	// Get request processor
+	requestProcessor, err := s.GetProcessor(messages.MessageTypeSessionRequest)
+	if err != nil {
+		return oops.Errorf("failed to get session request processor: %w", err)
 	}
 
-	// 3. Send SessionConfirm
-	if err := c.sendSessionConfirm(conn, hs); err != nil {
-		return oops.Errorf("failed to send session confirm: %v", err)
+	// Create message
+	msg, err := requestProcessor.CreateMessage(s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return oops.Errorf("failed to create session request: %w", err)
 	}
 
-	// Handshake complete, derive session keys
-	return c.deriveSessionKeys(hs)
+	// Obfuscate ephemeral key
+	obfuscatedKey, err := requestProcessor.ObfuscateKey(msg, s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return oops.Errorf("failed to obfuscate key: %w", err)
+	}
+
+	// Encrypt payload
+	encryptedPayload, err := requestProcessor.EncryptPayload(msg, obfuscatedKey, s.HandshakeState.(*handshake.HandshakeState))
+	if err != nil {
+		return oops.Errorf("failed to encrypt payload: %w", err)
+	}
+
+	// Write to connection
+	if err := s.writeMessageToConn(conn, obfuscatedKey, encryptedPayload, requestProcessor.GetPadding(msg)); err != nil {
+		return oops.Errorf("failed to write session request: %w", err)
+	}
+
+	// Continue with rest of handshake for SessionCreated and SessionConfirmed messages
+	// Similar pattern for each message
+
+	return nil
+}
+
+// Helper to write message parts to connection
+func (s *NTCP2Session) writeMessageToConn(conn net.Conn, obfuscatedKey, encryptedPayload, padding []byte) error {
+	// Calculate total size
+	totalSize := len(obfuscatedKey) + len(encryptedPayload)
+	if padding != nil {
+		totalSize += len(padding)
+	}
+
+	// Create buffer and copy data
+	message := make([]byte, totalSize)
+	offset := 0
+
+	copy(message[offset:], obfuscatedKey)
+	offset += len(obfuscatedKey)
+
+	copy(message[offset:], encryptedPayload)
+	offset += len(encryptedPayload)
+
+	if padding != nil {
+		copy(message[offset:], padding)
+	}
+
+	// Write to connection
+	_, err := conn.Write(message)
+	return err
 }

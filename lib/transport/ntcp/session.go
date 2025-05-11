@@ -1,8 +1,6 @@
 package ntcp
 
 import (
-	"golang.org/x/crypto/curve25519"
-
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
@@ -117,26 +115,6 @@ func (s *NTCP2Session) buildAesStaticKey() (*aes.AESSymmetricKey, error) {
 	AESStaticKey.Key = staticKey[:]
 	AESStaticKey.IV = staticIV[:]
 	return &AESStaticKey, nil
-}
-
-func (c *NTCP2Session) computeSharedSecret(ephemeralKey, param []byte) ([]byte, error) {
-	if len(ephemeralKey) != 32 || len(param) != 32 {
-		return nil, oops.Errorf("invalid key length, expected 32 bytes")
-	}
-
-	// Convert byte slices to X25519 keys
-	var ephKey, staticKey [32]byte
-	copy(ephKey[:], ephemeralKey)
-	copy(staticKey[:], param)
-	// Compute the shared secret using X25519
-	var sharedSecret [32]byte
-	shared, err := curve25519.X25519(ephKey[:], staticKey[:])
-	if err != nil {
-		return nil, err
-	}
-	copy(sharedSecret[:], shared)
-
-	return sharedSecret[:], nil
 }
 
 // deriveSessionKeys computes the session keys from the completed handshake

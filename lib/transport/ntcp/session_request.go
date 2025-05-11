@@ -246,27 +246,3 @@ func (c *NTCP2Session) addDelayForSecurity() {
 	delay := time.Duration(50+mrand.Intn(200)) * time.Millisecond
 	time.Sleep(delay)
 }
-
-func (c *NTCP2Session) encryptSessionRequestOptions(
-	sessionRequestMessage *messages.SessionRequest,
-	obfuscatedX []byte,
-) ([]byte, error) {
-	// Compute shared secret
-	sharedSecret, err := c.computeSharedSecret(sessionRequestMessage.XContent[:], c.HandshakeState.(*handshake.HandshakeState).RemoteStaticKey.Bytes())
-	if err != nil {
-		return nil, oops.Errorf("failed to compute shared secret: %v", err)
-	}
-
-	// Use centralized key derivation
-	if err := c.DeriveSessionKeys(sharedSecret, obfuscatedX); err != nil {
-		return nil, oops.Errorf("failed to derive session keys: %v", err)
-	}
-
-	// Use the consolidated AEAD encryption method
-	return c.EncryptWithAssociatedData(
-		c.HandshakeState.(*handshake.HandshakeState).ChachaKey,
-		sessionRequestMessage.Options.Data(),
-		obfuscatedX,
-		0,
-	)
-}
