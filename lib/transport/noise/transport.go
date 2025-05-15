@@ -143,7 +143,7 @@ func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transpor
 	for {
 		if session.(*NoiseSession).HandshakeComplete() {
 			log.Debug("NoiseTransport: Handshake complete")
-			return nil, nil
+			return session, nil
 		}
 		if session.(*NoiseSession).Cond == nil {
 			log.Debug("NoiseTransport: No condition variable, breaking")
