@@ -156,16 +156,6 @@ func (c *NoiseTransport) getSession(routerInfo router_info.RouterInfo) (transpor
 	return session, nil
 }
 
-// Compatable return true if a routerInfo is compatable with this transport
-func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool {
-	_, ok := noopt.peerConnections[routerInfo.IdentHash()]
-	log.WithFields(logrus.Fields{
-		"router_info": routerInfo.String(),
-		"compatible":  ok,
-	}).Debug("NoiseTransport: Checking compatibility")
-	return ok
-}
-
 // close the transport cleanly
 // blocks until done
 // returns an error if one happens

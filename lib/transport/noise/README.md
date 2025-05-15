@@ -45,70 +45,17 @@ var (
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error)
 ```
 
-#### type NoiseHandshakeState
-
-```go
-type NoiseHandshakeState struct {
-	*noise.HandshakeState
-}
-```
-
-
-#### func  NewHandshakeState
-
-```go
-func NewHandshakeState(staticKey noise.DHKey, isInitiator bool) (*NoiseHandshakeState, error)
-```
-
-#### func (*NoiseHandshakeState) CompleteHandshake
-
-```go
-func (h *NoiseHandshakeState) CompleteHandshake() error
-```
-
-#### func (*NoiseHandshakeState) GenerateEphemeral
-
-```go
-func (h *NoiseHandshakeState) GenerateEphemeral() (*noise.DHKey, error)
-```
-GenerateEphemeral creates the ephemeral keypair that will be used in handshake
-This needs to be separate so NTCP2 can obfuscate it
-
-#### func (*NoiseHandshakeState) HandshakeComplete
-
-```go
-func (h *NoiseHandshakeState) HandshakeComplete() bool
-```
-
-#### func (*NoiseHandshakeState) ReadMessage
-
-```go
-func (h *NoiseHandshakeState) ReadMessage(message []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
-```
-
-#### func (*NoiseHandshakeState) SetEphemeral
-
-```go
-func (h *NoiseHandshakeState) SetEphemeral(key *noise.DHKey) error
-```
-SetEphemeral allows setting a potentially modified ephemeral key This is needed
-for NTCP2's obfuscation layer
-
-#### func (*NoiseHandshakeState) WriteMessage
-
-```go
-func (h *NoiseHandshakeState) WriteMessage(payload []byte) ([]byte, *noise.CipherState, *noise.CipherState, error)
-```
-
 #### type NoiseSession
 
 ```go
 type NoiseSession struct {
 	router_info.RouterInfo
+	handshake.HandshakeState
+
 	*noise.CipherState
 	*sync.Cond
 	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
-	handshake.HandshakeState
+
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
 	VerifyCallback VerifyCallbackFunc
@@ -274,13 +221,6 @@ listening on, but this might actually be the router identity
 func (noopt *NoiseTransport) Close() error
 ```
 close the transport cleanly blocks until done returns an error if one happens
-
-#### func (*NoiseTransport) Compatable
-
-```go
-func (noopt *NoiseTransport) Compatable(routerInfo router_info.RouterInfo) bool
-```
-Compatable return true if a routerInfo is compatable with this transport
 
 #### func (*NoiseTransport) Compatible
 

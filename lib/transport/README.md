@@ -79,7 +79,7 @@ close every transport that this transport muxer has
 ```go
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compat bool)
 ```
-is there a transport that we mux that is compatable with this router info?
+is there a transport that we mux that is compatible with this router info?
 
 #### func (*TransportMuxer) GetSession
 

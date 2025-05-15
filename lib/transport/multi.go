@@ -74,7 +74,7 @@ func (tmux *TransportMuxer) Name() string {
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	log.WithField("router_info", routerInfo.String()).Debug("TransportMuxer: Attempting to get session")
 	for i, t := range tmux.trans {
-		// pick the first one that is compatable
+		// pick the first one that is compatible
 		if t.Compatible(routerInfo) {
 			log.WithField("transport_index", i).Debug("TransportMuxer: Found compatible transport, attempting to get session")
 			// try to get a session
@@ -96,7 +96,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 	return
 }
 
-// is there a transport that we mux that is compatable with this router info?
+// is there a transport that we mux that is compatible with this router info?
 func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compat bool) {
 	log.WithField("router_info", routerInfo.String()).Debug("TransportMuxer: Checking compatibility")
 	for i, t := range tmux.trans {

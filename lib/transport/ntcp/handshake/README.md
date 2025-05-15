@@ -83,12 +83,47 @@ func (h *HandshakeState) GenerateEphemeral() (*noise.DHKey, error)
 ```
 GenerateEphemeral implements handshake.HandshakeState.
 
+#### func (*HandshakeState) GetHandshakeHash
+
+```go
+func (h *HandshakeState) GetHandshakeHash() []byte
+```
+GetHandshakeHash implements handshake.HandshakeState.
+
 #### func (*HandshakeState) HandshakeComplete
 
 ```go
 func (h *HandshakeState) HandshakeComplete() bool
 ```
 HandshakeComplete implements handshake.HandshakeState.
+
+#### func (*HandshakeState) MixHash
+
+```go
+func (h *HandshakeState) MixHash(data []byte) error
+```
+MixHash implements handshake.HandshakeState.
+
+#### func (*HandshakeState) MixKey
+
+```go
+func (h *HandshakeState) MixKey(input []byte) ([]byte, error)
+```
+MixKey implements handshake.HandshakeState.
+
+#### func (*HandshakeState) SetEphemeralTransformer
+
+```go
+func (h *HandshakeState) SetEphemeralTransformer(transformer handshake.KeyTransformer)
+```
+SetEphemeralTransformer implements handshake.HandshakeState.
+
+#### func (*HandshakeState) SetPrologue
+
+```go
+func (h *HandshakeState) SetPrologue(prologue []byte) error
+```
+SetPrologue implements handshake.HandshakeState.
 
 #### func (*HandshakeState) WriteMessage
 

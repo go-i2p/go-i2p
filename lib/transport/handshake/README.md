@@ -23,10 +23,47 @@ type HandshakeState interface {
 
 	// CompleteHandshake completes the handshake
 	CompleteHandshake() error
+
+	SetEphemeralTransformer(transformer KeyTransformer)
+	GetHandshakeHash() []byte
+	SetPrologue(prologue []byte) error
+	MixHash(data []byte) error
+	MixKey(input []byte) ([]byte, error)
 }
 ```
 
 HandshakeState manages the Noise handshake state
+
+#### type KeyTransformer
+
+```go
+type KeyTransformer interface {
+	ObfuscateKey(publicKey []byte) ([]byte, error)
+	DeobfuscateKey(obfuscatedKey []byte) ([]byte, error)
+}
+```
+
+KeyTransformer defines operations for transforming keys during handshake
+
+#### type NoOpTransformer
+
+```go
+type NoOpTransformer struct{}
+```
+
+NoOpTransformer is a default implementation that doesn't transform keys
+
+#### func (*NoOpTransformer) DeobfuscateKey
+
+```go
+func (t *NoOpTransformer) DeobfuscateKey(obfuscatedKey []byte) ([]byte, error)
+```
+
+#### func (*NoOpTransformer) ObfuscateKey
+
+```go
+func (t *NoOpTransformer) ObfuscateKey(publicKey []byte) ([]byte, error)
+```
 
 
 

@@ -134,6 +134,13 @@ func NewNTCP2Session(routerInfo router_info.RouterInfo) (*NTCP2Session, error)
 NewNTCP2Session creates a new NTCP2 session using the existing noise
 implementation
 
+#### func (*NTCP2Session) AddDelayForSecurity
+
+```go
+func (c *NTCP2Session) AddDelayForSecurity()
+```
+addDelayForSecurity adds a small random delay to resist probing
+
 #### func (*NTCP2Session) CreateHandshakeProcessors
 
 ```go
@@ -279,6 +286,35 @@ SessionRequest (Message 1) 2. Receives and processes SessionCreated (Message 2)
 3. Creates and sends SessionConfirmed (Message 3) After successful completion,
 the session is established and ready for data exchange.
 
+#### func (*NTCP2Session) ProcessEphemeralKey
+
+```go
+func (c *NTCP2Session) ProcessEphemeralKey(obfuscatedX []byte, hs *handshake.HandshakeState) ([]byte, error)
+```
+processEphemeralKey deobfuscates and validates the ephemeral key
+
+#### func (*NTCP2Session) ReadAndValidatePadding
+
+```go
+func (c *NTCP2Session) ReadAndValidatePadding(conn net.Conn, paddingLen int) error
+```
+readAndValidatePadding reads the padding from the connection
+
+#### func (*NTCP2Session) ReadEphemeralKey
+
+```go
+func (c *NTCP2Session) ReadEphemeralKey(conn net.Conn) ([]byte, error)
+```
+readEphemeralKey reads the ephemeral key (X) from the connection
+
+#### func (*NTCP2Session) ValidateTimestamp
+
+```go
+func (s *NTCP2Session) ValidateTimestamp(timestamp time.Time) error
+```
+Add this method to NTCP2Session ValidateTimestamp validates a timestamp is
+within acceptable range
+
 #### type NTCP2Transport
 
 ```go
@@ -320,6 +356,13 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool
 ```go
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error)
 ```
+
+#### func (*NTCP2Transport) LocalStaticKey
+
+```go
+func (s *NTCP2Transport) LocalStaticKey() ([32]byte, error)
+```
+LocalStaticKey is equal to the NTCP2 static public key, found in our router info
 
 #### func (*NTCP2Transport) Name
 
