@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/flynn/noise"
+	"github.com/go-i2p/go-i2p/lib/transport/noise/handshake"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
@@ -18,7 +19,7 @@ func (c *NoiseSession) RunIncomingHandshake() error {
 		log.WithError(err).Error("Failed to compose receiver handshake message")
 		return err
 	}
-	c.HandshakeState = &NoiseHandshakeState{
+	c.HandshakeState = &handshake.NoiseHandshakeState{
 		HandshakeState: state,
 	}
 	log.WithFields(logrus.Fields{

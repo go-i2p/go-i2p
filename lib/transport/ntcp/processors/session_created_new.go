@@ -1,4 +1,4 @@
-package ntcp
+package processors
 
 import (
 	"crypto/rand"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
@@ -39,7 +40,7 @@ SessionCreatedProcessor processes incoming NTCP2 Message 2 (SessionCreated):
 */
 
 type SessionCreatedProcessor struct {
-	*NTCP2Session
+	*ntcp.NTCP2Session
 }
 
 // CreateMessage implements handshake.HandshakeMessageProcessor.

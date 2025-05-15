@@ -81,16 +81,15 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 		return oops.Errorf("failed to create session confirmed message: %w", err)
 	}
 
-	// Obfuscate static key
-	obfuscatedStaticKey, err := confirmedProcessor.ObfuscateKey(confirmedMsg, s.HandshakeState.(*handshake.HandshakeState))
+	staticKey, err := s.LocalStaticKey()
 	if err != nil {
-		return oops.Errorf("failed to obfuscate static key: %w", err)
+		return oops.Errorf("failed to get local static key: %w", err)
 	}
 
 	// Encrypt RouterInfo payload
 	encryptedConfirmedPayload, err := confirmedProcessor.EncryptPayload(
 		confirmedMsg,
-		obfuscatedStaticKey,
+		staticKey[:],
 		s.HandshakeState.(*handshake.HandshakeState),
 	)
 	if err != nil {
@@ -100,7 +99,7 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 	// Write SessionConfirmed to connection
 	if err := s.writeMessageToConn(
 		conn,
-		obfuscatedStaticKey,
+		staticKey[:],
 		encryptedConfirmedPayload,
 		confirmedProcessor.GetPadding(confirmedMsg),
 	); err != nil {

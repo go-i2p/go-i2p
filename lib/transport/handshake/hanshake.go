@@ -15,4 +15,10 @@ type HandshakeState interface {
 
 	// CompleteHandshake completes the handshake
 	CompleteHandshake() error
+
+	SetEphemeralTransformer(transformer KeyTransformer)
+	GetHandshakeHash() []byte
+	SetPrologue(prologue []byte) error
+	MixHash(data []byte) error
+	MixKey(input []byte) ([]byte, error)
 }

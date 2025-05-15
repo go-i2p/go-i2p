@@ -95,7 +95,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 }
 
 // LocalStaticKey is equal to the NTCP2 static public key, found in our router info
-func (s *NTCP2Transport) localStaticKey() ([32]byte, error) {
+func (s *NTCP2Transport) LocalStaticKey() ([32]byte, error) {
 	// s.RouterIdentity
 	for _, addr := range s.RouterInfo.RouterAddresses() {
 		transportStyle, err := addr.TransportStyle().Data()

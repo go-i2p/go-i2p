@@ -1,4 +1,4 @@
-package ntcp
+package processors
 
 import (
 	"crypto/rand"
@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	"github.com/samber/oops"
@@ -48,7 +49,7 @@ SessionConfirmedProcessor processes incoming NTCP2 Message 3 (SessionConfirmed):
 */
 
 type SessionConfirmedProcessor struct {
-	*NTCP2Session
+	*ntcp.NTCP2Session
 }
 
 // CreateMessage implements handshake.HandshakeMessageProcessor.
@@ -59,7 +60,7 @@ func (s *SessionConfirmedProcessor) CreateMessage(hs *handshake.HandshakeState) 
 	// Step 1: Get our static key from the handshake state
 	// Note: The static key must be encrypted using the handshakeState's WriteMessage
 	// but we need to extract it first to store in the result structure
-	localKeyPair, err := s.NTCP2Session.localStaticKey()
+	localKeyPair, err := s.NTCP2Session.LocalStaticKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get local static keypair: %w", err)
 	}
@@ -300,7 +301,7 @@ func (s *SessionConfirmedProcessor) calculatePaddingLength(ri *router_info.Route
 	}
 
 	// Add random additional padding between minPadding and minPadding+maxExtraPadding
-	padding += Intn(maxExtraPadding) + minPadding
+	padding += ntcp.Intn(maxExtraPadding) + minPadding
 
 	return padding
 }

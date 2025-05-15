@@ -47,6 +47,31 @@ type HandshakeState struct {
 	Message3Length int
 }
 
+// GetHandshakeHash implements handshake.HandshakeState.
+func (h *HandshakeState) GetHandshakeHash() []byte {
+	panic("unimplemented")
+}
+
+// MixHash implements handshake.HandshakeState.
+func (h *HandshakeState) MixHash(data []byte) error {
+	panic("unimplemented")
+}
+
+// MixKey implements handshake.HandshakeState.
+func (h *HandshakeState) MixKey(input []byte) ([]byte, error) {
+	panic("unimplemented")
+}
+
+// SetEphemeralTransformer implements handshake.HandshakeState.
+func (h *HandshakeState) SetEphemeralTransformer(transformer handshake.KeyTransformer) {
+	panic("unimplemented")
+}
+
+// SetPrologue implements handshake.HandshakeState.
+func (h *HandshakeState) SetPrologue(prologue []byte) error {
+	panic("unimplemented")
+}
+
 var _ handshake.HandshakeState = &HandshakeState{}
 
 // NewHandshakeState creates a new handshake state for initiating a connection

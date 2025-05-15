@@ -1,4 +1,4 @@
-package ntcp
+package processors
 
 import (
 	"crypto/rand"
@@ -8,8 +8,10 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
+	_ "github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -34,7 +36,7 @@ SessionRequestProcessor processes incoming NTCP2 Message 1 (SessionRequest):
 9. Check timestamp for acceptable clock skew (±60 seconds?)
 */
 type SessionRequestProcessor struct {
-	*NTCP2Session
+	*ntcp.NTCP2Session
 }
 
 // EncryptPayload encrypts the payload portion of the message
@@ -71,7 +73,7 @@ func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *h
 	}
 
 	// Validate timestamp using existing method
-	if err := s.validateTimestamp(*req.Options.Timestamp); err != nil {
+	if err := s.NTCP2Session.ValidateTimestamp(req.Options.Timestamp.Time()); err != nil {
 		return err
 	}
 
@@ -86,20 +88,19 @@ func (s *SessionRequestProcessor) ProcessMessage(message messages.Message, hs *h
 		hs.Message3Length = req.Options.Message3Part2Length.Int()
 	}
 
-	log.Debugf("NTCP2: Session request processed successfully")
 	return nil
 }
 
 // ReadMessage reads a SessionRequest message from the connection
 func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
 	// 1. Read ephemeral key
-	obfuscatedX, err := p.NTCP2Session.readEphemeralKey(conn)
+	obfuscatedX, err := p.NTCP2Session.ReadEphemeralKey(conn)
 	if err != nil {
 		return nil, oops.Errorf("failed to read ephemeral key: %w", err)
 	}
 
 	// 2. Process ephemeral key
-	deobfuscatedX, err := p.processEphemeralKey(obfuscatedX, hs)
+	deobfuscatedX, err := p.ProcessEphemeralKey(obfuscatedX, hs)
 	if err != nil {
 		return nil, oops.Errorf("failed to process ephemeral key: %w", err)
 	}
@@ -119,7 +120,7 @@ func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.Hands
 	// 5. Read padding if present
 	paddingLen := options.PaddingLength.Int()
 	if paddingLen > 0 {
-		if err := p.NTCP2Session.readAndValidatePadding(conn, paddingLen); err != nil {
+		if err := p.NTCP2Session.ReadAndValidatePadding(conn, paddingLen); err != nil {
 			return nil, oops.Errorf("failed to read and validate padding: %w", err)
 		}
 	}
@@ -219,7 +220,7 @@ func (p *SessionRequestProcessor) processOptionsBlock(
 	// Decrypt options block
 	decryptedOptions, err := p.NTCP2Session.DecryptOptionsBlock(encryptedOptions, obfuscatedX, deobfuscatedX)
 	if err != nil {
-		p.addDelayForSecurity()
+		p.AddDelayForSecurity()
 		return nil, oops.Errorf("failed to decrypt options block: %w", err)
 	}
 
@@ -267,7 +268,7 @@ func (p *SessionRequestProcessor) processOptionsBlock(
 	}
 
 	// Validate timestamp
-	if err := p.validateTimestamp(*timestamp); err != nil {
+	if err := p.ValidateTimestamp(timestamp.Time()); err != nil {
 		return nil, err
 	}
 

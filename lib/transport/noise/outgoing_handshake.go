@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 
+	"github.com/go-i2p/go-i2p/lib/transport/noise/handshake"
 	"github.com/sirupsen/logrus"
 
 	"github.com/flynn/noise"
@@ -23,7 +24,7 @@ func (c *NoiseSession) RunOutgoingHandshake() error {
 		"negData_length": len(negData),
 		"msg_length":     len(msg),
 	}).Debug("Initiator handshake message composed")
-	c.HandshakeState = &NoiseHandshakeState{
+	c.HandshakeState = &handshake.NoiseHandshakeState{
 		HandshakeState: state,
 	}
 

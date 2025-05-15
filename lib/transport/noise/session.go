@@ -18,14 +18,20 @@ import (
 
 type NoiseSession struct {
 	router_info.RouterInfo
+	handshake.HandshakeState
+
 	*noise.CipherState
 	*sync.Cond
 	*NoiseTransport // The parent transport, which "Dialed" the connection to the peer with whom we established the session
-	handshake.HandshakeState
+
+	sendCipherState *noise.CipherState
+	recvCipherState *noise.CipherState
+
 	RecvQueue      *cb.Queue
 	SendQueue      *cb.Queue
 	VerifyCallback VerifyCallbackFunc
 	activeCall     int32
+	mutex          sync.Mutex
 	Conn           net.Conn
 }
 
