@@ -1,6 +1,7 @@
 package ntcp
 
 import (
+	"github.com/go-i2p/go-i2p/lib/common/router_address"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
@@ -74,44 +75,55 @@ func NewNTCP2Session(routerInfo router_info.RouterInfo) (*NTCP2Session, error) {
 	}, nil
 }
 
-// PeerStaticKey is equal to the NTCP2 peer's static public key, found in their router info
-func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
+// findNTCP2Address finds the first NTCP2 address in router info
+func (s *NTCP2Session) findNTCP2Address() (*router_address.RouterAddress, error) {
 	for _, addr := range s.RouterInfo.RouterAddresses() {
 		transportStyle, err := addr.TransportStyle().Data()
 		if err != nil {
 			continue
 		}
 		if transportStyle == NTCP_PROTOCOL_NAME {
-			return addr.StaticKey()
+			return addr, nil
 		}
 	}
-	return [32]byte{}, oops.Errorf("Remote static key error")
+	return nil, oops.Errorf("no NTCP2 address found")
+}
+
+// peerStaticKey is equal to the NTCP2 peer's static public key, found in their router info
+func (s *NTCP2Session) peerStaticKey() ([32]byte, error) {
+	addr, err := s.findNTCP2Address()
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return addr.StaticKey()
 }
 
 func (s *NTCP2Session) peerStaticIV() ([16]byte, error) {
-	for _, addr := range s.RouterInfo.RouterAddresses() {
-		transportStyle, err := addr.TransportStyle().Data()
-		if err != nil {
-			continue
-		}
-		if transportStyle == NTCP_PROTOCOL_NAME {
-			return addr.InitializationVector()
-		}
+	addr, err := s.findNTCP2Address()
+	if err != nil {
+		return [16]byte{}, err
 	}
-	return [16]byte{}, oops.Errorf("Remote static IV error")
+	return addr.InitializationVector()
 }
 
 func (s *NTCP2Session) buildAesStaticKey() (*aes.AESSymmetricKey, error) {
-	staticKey, err := s.peerStaticKey()
+	addr, err := s.findNTCP2Address()
 	if err != nil {
 		return nil, err
 	}
-	staticIV, err := s.peerStaticIV()
+
+	staticKey, err := addr.StaticKey()
 	if err != nil {
 		return nil, err
 	}
-	var AESStaticKey aes.AESSymmetricKey
-	AESStaticKey.Key = staticKey[:]
-	AESStaticKey.IV = staticIV[:]
-	return &AESStaticKey, nil
+
+	staticIV, err := addr.InitializationVector()
+	if err != nil {
+		return nil, err
+	}
+
+	return &aes.AESSymmetricKey{
+		Key: staticKey[:],
+		IV:  staticIV[:],
+	}, nil
 }
