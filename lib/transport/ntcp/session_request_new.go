@@ -1,4 +1,4 @@
-package processors
+package ntcp
 
 import (
 	"crypto/rand"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	_ "github.com/go-i2p/logger"
@@ -36,7 +35,7 @@ SessionRequestProcessor processes incoming NTCP2 Message 1 (SessionRequest):
 9. Check timestamp for acceptable clock skew (±60 seconds?)
 */
 type SessionRequestProcessor struct {
-	*ntcp.NTCP2Session
+	*NTCP2Session
 }
 
 // EncryptPayload encrypts the payload portion of the message
@@ -100,7 +99,7 @@ func (p *SessionRequestProcessor) ReadMessage(conn net.Conn, hs *handshake.Hands
 	}
 
 	// 2. Process ephemeral key
-	deobfuscatedX, err := p.ProcessEphemeralKey(obfuscatedX, hs)
+	deobfuscatedX, err := p.NTCP2Session.ProcessEphemeralKey(obfuscatedX, hs)
 	if err != nil {
 		return nil, oops.Errorf("failed to process ephemeral key: %w", err)
 	}
