@@ -25,7 +25,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address]&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64]&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination]&#10;at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address]&#10;at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M58,-130C58,-130 28,-130 28,-130 22,-130 16,-124 16,-118 16,-118 16,-106 16,-106 16,-100 22,-94 28,-94 28,-94 58,-94 58,-94 64,-94 70,-100 70,-106 70,-106 70,-118 70,-118 70,-124 64,-130 58,-130"/>
 <text text-anchor="middle" x="43" y="-107.8" font-family="Verdana" font-size="14.00" fill="#000000">Fuzz</text>
 </a>
@@ -42,9 +42,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination -->
-<g id="edge3" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination</title>
-<g id="a_edge3"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination]">
+<g id="a_edge1"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.ReadDestination]">
 <path fill="none" stroke="#8b4513" d="M70.1001,-94.0845C88.7169,-82.2726 114.281,-67.0087 138.1136,-56 138.2063,-55.9572 138.2992,-55.9144 138.3921,-55.8716"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="139.5119,-59.2012 147.2891,-52.0063 136.7226,-52.7809 139.5119,-59.2012"/>
 </a>
@@ -61,9 +61,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address -->
-<g id="edge1" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address</title>
-<g id="a_edge1"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address]">
+<g id="a_edge2"><a xlink:title="at fuzz.go:7: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base32Address]">
 <path fill="none" stroke="#8b4513" d="M70.2736,-112C88.3329,-112 112.8362,-112 135.7903,-112"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="135.853,-115.5001 145.853,-112 135.8529,-108.5001 135.853,-115.5001"/>
 </a>
@@ -80,9 +80,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64 -->
-<g id="edge2" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/destination.Fuzz&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64</title>
-<g id="a_edge2"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64]">
+<g id="a_edge3"><a xlink:title="at fuzz.go:8: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/destination.Destination).Base64]">
 <path fill="none" stroke="#8b4513" d="M70.2736,-122.4863C91.973,-130.8293 122.976,-142.7495 149.4161,-152.9153"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="148.3351,-156.2494 158.9251,-156.5713 150.8473,-149.7157 148.3351,-156.2494"/>
 </a>

@@ -10,6 +10,13 @@
 
 ```go
 const (
+	DefaultDialTimeout = 5 * 1000 // 5 seconds
+	DefaultKeepAlive   = 5 * 1000 // 5 seconds
+)
+```
+
+```go
+const (
 	I2pUserAgent = "Wget/1.11.4"
 )
 ```
@@ -22,6 +29,12 @@ type Reseed struct {
 }
 ```
 
+
+#### func  NewReseed
+
+```go
+func NewReseed() *Reseed
+```
 
 #### func (Reseed) SingleReseed
 

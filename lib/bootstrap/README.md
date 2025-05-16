@@ -18,11 +18,35 @@ type Bootstrap interface {
 	// if n is 0 then try obtaining as many router infos as possible
 	// returns nil and error if we cannot fetch ANY router infos
 	// returns a channel that yields 1 slice of router infos containing n or fewer router infos, caller must close channel after use
-	GetPeers(n int) (chan []router_info.RouterInfo, error)
+	GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
 }
 ```
 
 interface defining a way to bootstrap into the i2p network
+
+#### type ReseedBootstrap
+
+```go
+type ReseedBootstrap struct {
+}
+```
+
+ReseedBootstrap implements the Bootstrap interface using HTTP reseeding
+
+#### func  NewReseedBootstrap
+
+```go
+func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap
+```
+NewReseedBootstrap creates a new reseeder with the provided configuration
+
+#### func (*ReseedBootstrap) GetPeers
+
+```go
+func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+```
+GetPeers implements the Bootstrap interface by obtaining RouterInfos from
+configured reseed servers
 
 
 

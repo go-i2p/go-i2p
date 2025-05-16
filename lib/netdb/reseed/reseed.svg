@@ -54,38 +54,10 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init -->
-<g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init | defined in .:0&#10;at reseed.go:21: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M89.1017,-52C89.1017,-52 59.1017,-52 59.1017,-52 53.1017,-52 47.1017,-46 47.1017,-40 47.1017,-40 47.1017,-28 47.1017,-28 47.1017,-22 53.1017,-16 59.1017,-16 59.1017,-16 89.1017,-16 89.1017,-16 95.1017,-16 101.1017,-22 101.1017,-28 101.1017,-28 101.1017,-40 101.1017,-40 101.1017,-46 95.1017,-52 89.1017,-52"/>
-<text text-anchor="middle" x="74.1017" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="node2" class="node">
-<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M306.4876,-52C306.4876,-52 209.1086,-52 209.1086,-52 203.1086,-52 197.1086,-46 197.1086,-40 197.1086,-40 197.1086,-28 197.1086,-28 197.1086,-22 203.1086,-16 209.1086,-16 209.1086,-16 306.4876,-16 306.4876,-16 312.4876,-16 318.4876,-22 318.4876,-28 318.4876,-28 318.4876,-40 318.4876,-40 318.4876,-46 312.4876,-52 306.4876,-52"/>
-<text text-anchor="middle" x="257.7981" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="257.7981" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge6" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge6"><a xlink:title="at reseed.go:21: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M101.2067,-34C123.8024,-34 157.0344,-34 187.0776,-34"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="187.124,-37.5001 197.124,-34 187.124,-30.5001 187.124,-37.5001"/>
-</a>
-</g>
-</g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read -->
-<g id="node3" class="node">
+<g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read | defined in su3.go:208">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read | defined in su3.go:208">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M272.7981,-113C272.7981,-113 242.7981,-113 242.7981,-113 236.7981,-113 230.7981,-107 230.7981,-101 230.7981,-101 230.7981,-89 230.7981,-89 230.7981,-83 236.7981,-77 242.7981,-77 242.7981,-77 272.7981,-77 272.7981,-77 278.7981,-77 284.7981,-83 284.7981,-89 284.7981,-89 284.7981,-101 284.7981,-101 284.7981,-107 278.7981,-113 272.7981,-113"/>
 <text text-anchor="middle" x="257.7981" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">su3</text>
 <text text-anchor="middle" x="257.7981" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">Read</text>
@@ -93,9 +65,9 @@
 </g>
 </g>
 <!-- github.com/samber/oops.Errorf -->
-<g id="node4" class="node">
+<g id="node2" class="node">
 <title>github.com/samber/oops.Errorf</title>
-<g id="a_node4"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
+<g id="a_node2"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M274.9934,-174C274.9934,-174 240.6028,-174 240.6028,-174 234.6028,-174 228.6028,-168 228.6028,-162 228.6028,-162 228.6028,-150 228.6028,-150 228.6028,-144 234.6028,-138 240.6028,-138 240.6028,-138 274.9934,-138 274.9934,-138 280.9934,-138 286.9934,-144 286.9934,-150 286.9934,-150 286.9934,-162 286.9934,-162 286.9934,-168 280.9934,-174 274.9934,-174"/>
 <text text-anchor="middle" x="257.7981" y="-160.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
 <text text-anchor="middle" x="257.7981" y="-143.4" font-family="Verdana" font-size="14.00" fill="#000000">Errorf</text>
@@ -103,9 +75,9 @@
 </g>
 </g>
 <!-- github.com/eyedeekay/go&#45;unzip/pkg/unzip.New -->
-<g id="node5" class="node">
+<g id="node3" class="node">
 <title>github.com/eyedeekay/go&#45;unzip/pkg/unzip.New</title>
-<g id="a_node5"><a xlink:title="github.com/eyedeekay/go&#45;unzip/pkg/unzip.New | defined in unzip.go:18">
+<g id="a_node3"><a xlink:title="github.com/eyedeekay/go&#45;unzip/pkg/unzip.New | defined in unzip.go:18">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M273.4034,-235C273.4034,-235 242.1928,-235 242.1928,-235 236.1928,-235 230.1928,-229 230.1928,-223 230.1928,-223 230.1928,-211 230.1928,-211 230.1928,-205 236.1928,-199 242.1928,-199 242.1928,-199 273.4034,-199 273.4034,-199 279.4034,-199 285.4034,-205 285.4034,-211 285.4034,-211 285.4034,-223 285.4034,-223 285.4034,-229 279.4034,-235 273.4034,-235"/>
 <text text-anchor="middle" x="257.7981" y="-221.2" font-family="Verdana" font-size="14.00" fill="#000000">unzip</text>
 <text text-anchor="middle" x="257.7981" y="-204.4" font-family="Verdana" font-size="14.00" fill="#000000">New</text>
@@ -113,12 +85,40 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo -->
-<g id="node6" class="node">
+<g id="node4" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo</title>
-<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo | defined in router_info.go:235">
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo | defined in router_info.go:235">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M302.9877,-296C302.9877,-296 212.6085,-296 212.6085,-296 206.6085,-296 200.6085,-290 200.6085,-284 200.6085,-284 200.6085,-272 200.6085,-272 200.6085,-266 206.6085,-260 212.6085,-260 212.6085,-260 302.9877,-260 302.9877,-260 308.9877,-260 314.9877,-266 314.9877,-272 314.9877,-272 314.9877,-284 314.9877,-284 314.9877,-290 308.9877,-296 302.9877,-296"/>
 <text text-anchor="middle" x="257.7981" y="-282.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
 <text text-anchor="middle" x="257.7981" y="-265.4" font-family="Verdana" font-size="14.00" fill="#000000">ReadRouterInfo</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init -->
+<g id="node5" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init</title>
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init | defined in .:0&#10;at reseed.go:21: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M89.1017,-52C89.1017,-52 59.1017,-52 59.1017,-52 53.1017,-52 47.1017,-46 47.1017,-40 47.1017,-40 47.1017,-28 47.1017,-28 47.1017,-22 53.1017,-16 59.1017,-16 59.1017,-16 89.1017,-16 89.1017,-16 95.1017,-16 101.1017,-22 101.1017,-28 101.1017,-28 101.1017,-40 101.1017,-40 101.1017,-46 95.1017,-52 89.1017,-52"/>
+<text text-anchor="middle" x="74.1017" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="node6" class="node">
+<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M306.4876,-52C306.4876,-52 209.1086,-52 209.1086,-52 203.1086,-52 197.1086,-46 197.1086,-40 197.1086,-40 197.1086,-28 197.1086,-28 197.1086,-22 203.1086,-16 209.1086,-16 209.1086,-16 306.4876,-16 306.4876,-16 312.4876,-16 318.4876,-22 318.4876,-28 318.4876,-28 318.4876,-40 318.4876,-40 318.4876,-46 312.4876,-52 306.4876,-52"/>
+<text text-anchor="middle" x="257.7981" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="257.7981" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="edge7" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_edge7"><a xlink:title="at reseed.go:21: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M101.2067,-34C123.8024,-34 157.0344,-34 187.0776,-34"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="187.124,-37.5001 197.124,-34 187.124,-30.5001 187.124,-37.5001"/>
 </a>
 </g>
 </g>
@@ -225,43 +225,43 @@
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed -->
 <g id="node17" class="node">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed</title>
-<g id="a_node17"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed | defined in reseed.go:31&#10;at reseed.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:99: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:119: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:57: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:68: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:99: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:59: calling [github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read]&#10;at reseed.go:74: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature]&#10;at reseed.go:89: calling [github.com/eyedeekay/go&#45;unzip/pkg/unzip.New]&#10;at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:123: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:65: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at reseed.go:89: calling [(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract]&#10;at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:124: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:96: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:79: calling [(*github.com/sirupsen/logrus.Logger).Println]&#10;at reseed.go:80: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:72: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Content]&#10;at reseed.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo]">
+<g id="a_node17"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed | defined in reseed.go:31&#10;at reseed.go:74: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature]&#10;at reseed.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo]&#10;at reseed.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:57: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:68: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:99: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:123: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:79: calling [(*github.com/sirupsen/logrus.Logger).Println]&#10;at reseed.go:80: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:65: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at reseed.go:124: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:96: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:89: calling [(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract]&#10;at reseed.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:99: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:119: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:59: calling [github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read]&#10;at reseed.go:72: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Content]&#10;at reseed.go:89: calling [github.com/eyedeekay/go&#45;unzip/pkg/unzip.New]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M112.3053,-551C112.3053,-551 35.8981,-551 35.8981,-551 29.8981,-551 23.8981,-545 23.8981,-539 23.8981,-539 23.8981,-527 23.8981,-527 23.8981,-521 29.8981,-515 35.8981,-515 35.8981,-515 112.3053,-515 112.3053,-515 118.3053,-515 124.3053,-521 124.3053,-527 124.3053,-527 124.3053,-539 124.3053,-539 124.3053,-545 118.3053,-551 112.3053,-551"/>
 <text text-anchor="middle" x="74.1017" y="-528.8" font-family="Verdana" font-size="14.00" fill="#000000">SingleReseed</text>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read -->
-<g id="edge3" class="edge">
+<g id="edge13" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read</title>
-<g id="a_edge3"><a xlink:title="at reseed.go:59: calling [github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read]">
+<g id="a_edge13"><a xlink:title="at reseed.go:59: calling [github.com/go&#45;i2p/go&#45;i2p/lib/su3.Read]">
 <path fill="none" stroke="#8b4513" d="M124.4105,-518.2617C127.3001,-516.1559 129.9431,-513.7496 132.2034,-511 159.7529,-477.4869 171.5539,-160.9886 197.2034,-126 203.2816,-117.7087 212.2268,-111.4726 221.3884,-106.8524"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="222.8323,-110.0408 230.5239,-102.7546 219.9673,-103.6539 222.8323,-110.0408"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge11" class="edge">
+<g id="edge10" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge11"><a xlink:title="at reseed.go:124: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:96: calling [github.com/samber/oops.Errorf]">
+<g id="a_edge10"><a xlink:title="at reseed.go:124: calling [github.com/samber/oops.Errorf]&#10;at reseed.go:96: calling [github.com/samber/oops.Errorf]">
 <path fill="none" stroke="#8b4513" d="M124.315,-518.1818C127.2269,-516.0948 129.9011,-513.7145 132.2034,-511 155.953,-482.9979 175.0425,-216.2755 197.2034,-187 202.9124,-179.4582 210.9755,-173.6019 219.3625,-169.1144"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="220.9695,-172.2258 228.4942,-164.7673 217.9607,-165.9054 220.9695,-172.2258"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/eyedeekay/go&#45;unzip/pkg/unzip.New -->
-<g id="edge5" class="edge">
+<g id="edge15" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/eyedeekay/go&#45;unzip/pkg/unzip.New</title>
-<g id="a_edge5"><a xlink:title="at reseed.go:89: calling [github.com/eyedeekay/go&#45;unzip/pkg/unzip.New]">
+<g id="a_edge15"><a xlink:title="at reseed.go:89: calling [github.com/eyedeekay/go&#45;unzip/pkg/unzip.New]">
 <path fill="none" stroke="#8b4513" d="M124.4464,-517.8762C127.2876,-515.8626 129.9131,-513.5822 132.2034,-511 152.1774,-488.4803 178.5084,-271.5922 197.2034,-248 203.3584,-240.2327 211.9839,-234.2276 220.8007,-229.6636"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="222.3624,-232.7975 229.9624,-225.4157 219.4178,-226.4469 222.3624,-232.7975"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo -->
-<g id="edge15" class="edge">
+<g id="edge2" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo</title>
-<g id="a_edge15"><a xlink:title="at reseed.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo]">
+<g id="a_edge2"><a xlink:title="at reseed.go:108: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_info.ReadRouterInfo]">
 <path fill="none" stroke="#8b4513" d="M124.2808,-517.7252C127.1614,-515.7475 129.841,-513.5164 132.2034,-511 163.8166,-477.3253 163.5368,-351.553 195.117,-304.0394"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="197.9276,-306.1281 201.3993,-296.1182 192.4431,-301.7783 197.9276,-306.1281"/>
 </a>
@@ -277,81 +277,81 @@
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature -->
-<g id="edge4" class="edge">
+<g id="edge1" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature</title>
-<g id="a_edge4"><a xlink:title="at reseed.go:74: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature]">
+<g id="a_edge1"><a xlink:title="at reseed.go:74: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/su3.SU3).Signature]">
 <path fill="none" stroke="#8b4513" d="M124.249,-515.6554C127.0012,-514.2 129.6731,-512.6487 132.2034,-511 166.6974,-488.5238 163.5277,-468.6846 197.2034,-445 201.1431,-442.2291 205.4008,-439.6199 209.7694,-437.193"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="211.5749,-440.1988 218.8257,-432.4738 208.3401,-433.9911 211.5749,-440.1988"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge1" class="edge">
+<g id="edge12" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge1"><a xlink:title="at reseed.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:99: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:119: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<g id="a_edge12"><a xlink:title="at reseed.go:32: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:99: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed.go:119: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
 <path fill="none" stroke="#8b4513" d="M124.2975,-524.8024C150.0871,-520.5906 181.435,-515.4711 207.2718,-511.2516"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="207.9384,-514.6892 217.2435,-509.6231 206.8101,-507.7807 207.9384,-514.6892"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError -->
-<g id="edge10" class="edge">
+<g id="edge8" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
-<g id="a_edge10"><a xlink:title="at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
+<g id="a_edge8"><a xlink:title="at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
 <path fill="none" stroke="#8b4513" d="M124.2975,-541.4709C150.0871,-545.823 181.435,-551.1132 207.2718,-555.4733"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="206.8005,-558.9432 217.2435,-557.1561 207.9654,-552.0408 206.8005,-558.9432"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge7" class="edge">
+<g id="edge4" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge7"><a xlink:title="at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:123: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<g id="a_edge4"><a xlink:title="at reseed.go:42: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:61: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:123: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:76: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:85: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at reseed.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
 <path fill="none" stroke="#8b4513" d="M109.8907,-551.1062C134.4382,-563.5052 167.7666,-580.3004 197.2034,-595 204.0625,-598.4252 211.3659,-602.0554 218.4403,-605.563"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="217.3675,-608.9374 227.8821,-610.2394 220.4744,-602.6646 217.3675,-608.9374"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge8" class="edge">
+<g id="edge9" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge8"><a xlink:title="at reseed.go:65: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_edge9"><a xlink:title="at reseed.go:65: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
 <path fill="none" stroke="#8b4513" d="M88.8873,-551.133C110.5855,-576.9001 153.2635,-624.4748 197.2034,-656 200.5833,-658.425 204.1887,-660.7535 207.8922,-662.9657"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="206.2227,-666.0424 216.6522,-667.9073 209.6621,-659.9455 206.2227,-666.0424"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="edge13" class="edge">
+<g id="edge6" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_edge13"><a xlink:title="at reseed.go:80: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
+<g id="a_edge6"><a xlink:title="at reseed.go:80: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:105: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:110: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed.go:117: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
 <path fill="none" stroke="#8b4513" d="M82.2749,-551.2166C99.1511,-587.092 141.0238,-667.6832 197.2034,-717 203.4682,-722.4995 210.9203,-727.2565 218.4187,-731.2596"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="217.3403,-734.6309 227.8557,-735.9263 220.4433,-728.3562 217.3403,-734.6309"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge2" class="edge">
+<g id="edge3" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge2"><a xlink:title="at reseed.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:57: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:68: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:99: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<g id="a_edge3"><a xlink:title="at reseed.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:57: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:68: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:99: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
 <path fill="none" stroke="#8b4513" d="M80.5099,-551.3118C96.0286,-594.0599 138.7033,-702.5924 197.2034,-779 205.3145,-789.594 215.7152,-799.7387 225.6021,-808.317"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="223.4591,-811.0879 233.3674,-814.8396 227.9613,-805.7278 223.4591,-811.0879"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/sirupsen/logrus.Logger).Println -->
-<g id="edge12" class="edge">
+<g id="edge5" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(*github.com/sirupsen/logrus.Logger).Println</title>
-<g id="a_edge12"><a xlink:title="at reseed.go:79: calling [(*github.com/sirupsen/logrus.Logger).Println]">
+<g id="a_edge5"><a xlink:title="at reseed.go:79: calling [(*github.com/sirupsen/logrus.Logger).Println]">
 <path fill="none" stroke="#8b4513" d="M76.1468,-551.1797C83.1258,-605.3574 110.5897,-767.9085 197.2034,-864 202.7295,-870.1308 209.7911,-875.1569 217.1278,-879.2228"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="215.9609,-882.5513 226.4734,-883.8701 219.0778,-876.2835 215.9609,-882.5513"/>
 </a>
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract -->
-<g id="edge9" class="edge">
+<g id="edge11" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed&#45;&gt;(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract</title>
-<g id="a_edge9"><a xlink:title="at reseed.go:89: calling [(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract]">
+<g id="a_edge11"><a xlink:title="at reseed.go:89: calling [(github.com/eyedeekay/go&#45;unzip/pkg/unzip.Unzip).Extract]">
 <path fill="none" stroke="#8b4513" d="M76.0723,-551.003C83.2139,-609.681 111.9703,-798.9326 197.2034,-926 204.5121,-936.8959 214.52,-947.0093 224.2969,-955.468"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="222.0997,-958.1929 232.0322,-961.8803 226.5671,-952.8038 222.0997,-958.1929"/>
 </a>

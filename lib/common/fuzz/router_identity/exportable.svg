@@ -25,7 +25,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity]&#10;at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate]">
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz | defined in fuzz.go:5&#10;at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate]&#10;at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M58,-65C58,-65 28,-65 28,-65 22,-65 16,-59 16,-53 16,-53 16,-41 16,-41 16,-35 22,-29 28,-29 28,-29 58,-29 58,-29 64,-29 70,-35 70,-41 70,-41 70,-53 70,-53 70,-59 64,-65 58,-65"/>
 <text text-anchor="middle" x="43" y="-42.8" font-family="Verdana" font-size="14.00" fill="#000000">Fuzz</text>
 </a>
@@ -42,9 +42,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity -->
-<g id="edge1" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity</title>
-<g id="a_edge1"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity]">
+<g id="a_edge2"><a xlink:title="at fuzz.go:6: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/router_identity.ReadRouterIdentity]">
 <path fill="none" stroke="#8b4513" d="M70.2369,-44.8824C87.33,-43.5534 110.3072,-41.767 132.6983,-40.0262"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="133.223,-43.496 142.9216,-39.2313 132.6803,-36.5171 133.223,-43.496"/>
 </a>
@@ -61,9 +61,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate -->
-<g id="edge2" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/fuzz/router_identity.Fuzz&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate</title>
-<g id="a_edge2"><a xlink:title="at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate]">
+<g id="a_edge1"><a xlink:title="at fuzz.go:7: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/common/keys_and_cert.KeysAndCert).Certificate]">
 <path fill="none" stroke="#8b4513" d="M70.3186,-59.5347C90.2689,-68.4946 118.0733,-80.5827 143,-90 144.6187,-90.6115 146.2628,-91.2224 147.9247,-91.8308"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="146.9887,-95.2129 157.5834,-95.2765 149.3408,-88.6199 146.9887,-95.2129"/>
 </a>
