@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/common/base32"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
 
@@ -163,6 +164,18 @@ func (r *Router) mainloop() {
 		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.Warn("Unable to determine NetDB size")
+	}
+	if r.ndb.Size() < r.cfg.Bootstrap.LowPeerThreshold {
+		log.Info("NetDB below threshold, initiating reseed")
+
+		// Create a bootstrap instance
+		bootstrapper := bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
+
+		// Reseed the network database
+		if err := r.ndb.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+			log.WithError(err).Warn("Initial reseed failed, continuing with limited NetDB")
+			// Continue anyway, we might have some peers
+		}
 	}
 	if e == nil {
 		// netdb ready

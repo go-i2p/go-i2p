@@ -3,9 +3,8 @@ package noise
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	cb "github.com/emirpasic/gods/queues/circularbuffer"
 	"github.com/flynn/noise"
@@ -67,33 +66,31 @@ var (
 func (s *NoiseSession) LocalAddr() net.Addr {
 	localAddr := s.Conn.LocalAddr()
 	log.WithField("local_addr", localAddr.String()).Debug("Getting LocalAddr")
-	return s.Conn.LocalAddr()
+	return localAddr
 }
 
 func (s *NoiseSession) Close() error {
 	log.Debug("Closing NoiseSession")
+
+	// Set the closed flag for atomic interlocking with Write
+	atomic.StoreInt32(&s.activeCall, 1)
+
+	// Clear the queues
 	s.SendQueue.Clear()
 	s.RecvQueue.Clear()
 	log.Debug("SendQueue and RecvQueue cleared")
-	return nil
-}
 
-func (c *NoiseSession) processCallback(publicKey []byte, payload []byte) error {
-	log.WithFields(logrus.Fields{
-		"public_key_length": len(publicKey),
-		"payload_length":    len(payload),
-	}).Debug("Processing callback")
+	// Close the underlying TCP connection
+	var err error
+	if s.Conn != nil {
+		err = s.Conn.Close()
+		if err != nil {
+			log.WithError(err).Warn("Error closing underlying connection")
+		} else {
+			log.Debug("Underlying connection closed successfully")
+		}
+	}
 
-	if c.VerifyCallback == nil {
-		log.Debug("VerifyCallback is nil, skipping verification")
-		return nil
-	}
-	err := c.VerifyCallback(publicKey, payload)
-	if err != nil {
-		log.WithError(err).Error("VerifyCallback failed")
-	} else {
-		log.Debug("VerifyCallback succeeded")
-	}
 	return err
 }
 
@@ -111,38 +108,23 @@ func (s *NoiseSession) peerStaticKey() ([32]byte, error) {
 	return [32]byte{}, oops.Errorf("Remote static key error")
 }
 
-func (s *NoiseSession) peerStaticIV() ([16]byte, error) {
-	for _, addr := range s.RouterInfo.RouterAddresses() {
-		transportStyle, err := addr.TransportStyle().Data()
-		if err != nil {
-			continue
-		}
-		if transportStyle == NOISE_PROTOCOL_NAME {
-			return addr.InitializationVector()
-		}
-	}
-	return [16]byte{}, oops.Errorf("Remote static IV error")
-}
-
-// newBlock allocates a new packet, from hc's free list if possible.
-func newBlock() []byte {
-	// return make([]byte, MaxPayloadSize)
-	block := make([]byte, MaxPayloadSize)
-	log.WithField("block_size", MaxPayloadSize).Debug("Created new block")
-	return block
-}
-
 type VerifyCallbackFunc func(publicKey []byte, data []byte) error
 
 func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSession, error) {
 	log.WithField("router_info", ri.String()).Debug("Creating new NoiseTransportSession")
-	// socket, err := DialNoise("noise", ri)
-	for _, addr := range ri.RouterAddresses() {
+
+	addresses := ri.RouterAddresses()
+	for i, addr := range addresses {
 		log.WithField("address", string(addr.Bytes())).Debug("Attempting to dial")
 		socket, err := net.Dial("tcp", string(addr.Bytes()))
 		if err != nil {
 			log.WithError(err).Error("Failed to dial address")
-			return nil, err
+			// Only return error if this is the last address to try
+			if i == len(addresses)-1 {
+				log.Error("Failed to create NoiseTransportSession, all addresses failed")
+				return nil, oops.Errorf("Transport constructor error")
+			}
+			continue
 		}
 		session := &NoiseSession{
 			SendQueue:  cb.New(1024),
@@ -153,8 +135,10 @@ func NewNoiseTransportSession(ri router_info.RouterInfo) (transport.TransportSes
 		log.WithField("local_addr", socket.LocalAddr().String()).Debug("NoiseTransportSession created successfully")
 		return session, nil
 	}
-	log.Error("Failed to create NoiseTransportSession, all addresses failed")
-	return nil, oops.Errorf("Transport constructor error")
+
+	// If we get here, it means there were no addresses to try
+	log.Error("No addresses available to create NoiseTransportSession")
+	return nil, oops.Errorf("No router addresses available")
 }
 
 func NewNoiseSession(ri router_info.RouterInfo) (*NoiseSession, error) {

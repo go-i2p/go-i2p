@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/common/base64"
 	common "github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/go-i2p/lib/util"
 )
 
@@ -278,8 +280,11 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 	}
 	log.Warn("NetDB size below minimum, reseed required")
 
+	ctx, cancel := context.WithTimeout(context.Background(), reseed.DefaultDialTimeout)
+	defer cancel()
+
 	// Get peers from the bootstrap provider
-	peersChan, err := b.GetPeers(0) // Get as many peers as possible
+	peersChan, err := b.GetPeers(ctx, 0) // Get as many peers as possible
 	if err != nil {
 		log.WithError(err).Error("Failed to get peers from bootstrap provider")
 		return fmt.Errorf("bootstrap failed: %w", err)
@@ -287,16 +292,14 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 
 	// Process the received peers
 	count := 0
-	for peers := range peersChan {
-		for _, ri := range peers {
-			hash := ri.IdentHash()
-			if _, exists := db.RouterInfos[hash]; !exists {
-				log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
-				db.RouterInfos[hash] = Entry{
-					RouterInfo: &ri,
-				}
-				count++
+	for _, ri := range peersChan {
+		hash := ri.IdentHash()
+		if _, exists := db.RouterInfos[hash]; !exists {
+			log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
+			db.RouterInfos[hash] = Entry{
+				RouterInfo: &ri,
 			}
+			count++
 		}
 	}
 
