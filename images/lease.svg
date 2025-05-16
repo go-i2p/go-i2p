@@ -54,10 +54,38 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease -->
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init -->
 <g id="node1" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init</title>
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init | defined in .:0&#10;at lease.go:59: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M103.6445,-649C103.6445,-649 73.6445,-649 73.6445,-649 67.6445,-649 61.6445,-643 61.6445,-637 61.6445,-637 61.6445,-625 61.6445,-625 61.6445,-619 67.6445,-613 73.6445,-613 73.6445,-613 103.6445,-613 103.6445,-613 109.6445,-613 115.6445,-619 115.6445,-625 115.6445,-625 115.6445,-637 115.6445,-637 115.6445,-643 109.6445,-649 103.6445,-649"/>
+<text text-anchor="middle" x="88.6445" y="-626.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="node2" class="node">
+<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M343.5732,-649C343.5732,-649 246.1942,-649 246.1942,-649 240.1942,-649 234.1942,-643 234.1942,-637 234.1942,-637 234.1942,-625 234.1942,-625 234.1942,-619 240.1942,-613 246.1942,-613 246.1942,-613 343.5732,-613 343.5732,-613 349.5732,-613 355.5732,-619 355.5732,-625 355.5732,-625 355.5732,-637 355.5732,-637 355.5732,-643 349.5732,-649 343.5732,-649"/>
+<text text-anchor="middle" x="294.8837" y="-635.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="294.8837" y="-618.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="edge15" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_edge15"><a xlink:title="at lease.go:59: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M116.0315,-631C143.3741,-631 186.5488,-631 223.628,-631"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="223.9065,-634.5001 233.9064,-631 223.9064,-627.5001 223.9065,-634.5001"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease -->
+<g id="node3" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease | defined in lease.go:111&#10;at lease.go:112: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:133: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:130: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease | defined in lease.go:111&#10;at lease.go:130: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:112: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:133: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M324.4525,-560C324.4525,-560 265.3149,-560 265.3149,-560 259.3149,-560 253.3149,-554 253.3149,-548 253.3149,-548 253.3149,-536 253.3149,-536 253.3149,-530 259.3149,-524 265.3149,-524 265.3149,-524 324.4525,-524 324.4525,-524 330.4525,-524 336.4525,-530 336.4525,-536 336.4525,-536 336.4525,-548 336.4525,-548 336.4525,-554 330.4525,-560 324.4525,-560"/>
 <text text-anchor="middle" x="294.8837" y="-537.8" font-family="Verdana" font-size="14.00" fill="#000000">NewLease</text>
 </a>
@@ -74,9 +102,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge18" class="edge">
+<g id="edge10" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge18"><a xlink:title="at lease.go:130: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_edge10"><a xlink:title="at lease.go:130: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
 <path fill="none" stroke="#8b4513" d="M302.7566,-523.8891C327.3124,-467.6446 401.9637,-298.575 420.4784,-279 421.6733,-277.7366 422.9382,-276.5167 424.2582,-275.3401"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="426.572,-277.9746 432.3185,-269.0735 422.2754,-272.4482 426.572,-277.9746"/>
 </a>
@@ -93,46 +121,18 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge17" class="edge">
+<g id="edge19" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLease&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge17"><a xlink:title="at lease.go:112: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:133: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<g id="a_edge19"><a xlink:title="at lease.go:112: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:133: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
 <path fill="none" stroke="#8b4513" d="M334.5395,-560.178C363.4283,-573.4204 402.4181,-591.293 431.4242,-604.5893"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="430.3004,-607.9243 440.8493,-608.9097 433.2173,-601.561 430.3004,-607.9243"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init -->
-<g id="node2" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init | defined in .:0&#10;at lease.go:59: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M103.6445,-649C103.6445,-649 73.6445,-649 73.6445,-649 67.6445,-649 61.6445,-643 61.6445,-637 61.6445,-637 61.6445,-625 61.6445,-625 61.6445,-619 67.6445,-613 73.6445,-613 73.6445,-613 103.6445,-613 103.6445,-613 109.6445,-613 115.6445,-619 115.6445,-625 115.6445,-625 115.6445,-637 115.6445,-637 115.6445,-643 109.6445,-649 103.6445,-649"/>
-<text text-anchor="middle" x="88.6445" y="-626.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="node3" class="node">
-<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:120">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M343.5732,-649C343.5732,-649 246.1942,-649 246.1942,-649 240.1942,-649 234.1942,-643 234.1942,-637 234.1942,-637 234.1942,-625 234.1942,-625 234.1942,-619 240.1942,-613 246.1942,-613 246.1942,-613 343.5732,-613 343.5732,-613 349.5732,-613 355.5732,-619 355.5732,-625 355.5732,-625 355.5732,-637 355.5732,-637 355.5732,-643 349.5732,-649 343.5732,-649"/>
-<text text-anchor="middle" x="294.8837" y="-635.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="294.8837" y="-618.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge10" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge10"><a xlink:title="at lease.go:59: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M116.0315,-631C143.3741,-631 186.5488,-631 223.628,-631"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="223.9065,-634.5001 233.9064,-631 223.9064,-627.5001 223.9065,-634.5001"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease -->
 <g id="node4" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease | defined in lease.go:86&#10;at lease.go:87: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at lease.go:87: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:105: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]&#10;at lease.go:94: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at lease.go:102: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]&#10;at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]&#10;at lease.go:90: calling [github.com/samber/oops.Errorf]&#10;at lease.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:101: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease | defined in lease.go:86&#10;at lease.go:87: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:105: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:94: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at lease.go:102: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]&#10;at lease.go:90: calling [github.com/samber/oops.Errorf]&#10;at lease.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:101: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:87: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]&#10;at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M325.7915,-387C325.7915,-387 263.9759,-387 263.9759,-387 257.9759,-387 251.9759,-381 251.9759,-375 251.9759,-375 251.9759,-363 251.9759,-363 251.9759,-357 257.9759,-351 263.9759,-351 263.9759,-351 325.7915,-351 325.7915,-351 331.7915,-351 337.7915,-357 337.7915,-363 337.7915,-363 337.7915,-375 337.7915,-375 337.7915,-381 331.7915,-387 325.7915,-387"/>
 <text text-anchor="middle" x="294.8837" y="-364.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadLease</text>
 </a>
@@ -149,18 +149,18 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge20" class="edge">
+<g id="edge11" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge20"><a xlink:title="at lease.go:90: calling [github.com/samber/oops.Errorf]">
+<g id="a_edge11"><a xlink:title="at lease.go:90: calling [github.com/samber/oops.Errorf]">
 <path fill="none" stroke="#8b4513" d="M337.6588,-376.0201C366.587,-380.7677 404.4919,-386.9885 432.5907,-391.5999"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="432.0296,-395.0546 442.4644,-393.2204 433.1633,-388.147 432.0296,-395.0546"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge21" class="edge">
+<g id="edge12" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge21"><a xlink:title="at lease.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:101: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_edge12"><a xlink:title="at lease.go:91: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:101: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
 <path fill="none" stroke="#8b4513" d="M318.3701,-350.8669C343.1701,-332.0326 383.6938,-302.138 420.4784,-279 423.0503,-277.3822 425.7221,-275.7587 428.4351,-274.153"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="430.2552,-277.1437 437.1676,-269.1144 426.7568,-271.0806 430.2552,-277.1437"/>
 </a>
@@ -177,9 +177,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge1" class="edge">
+<g id="edge16" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge1"><a xlink:title="at lease.go:87: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<g id="a_edge16"><a xlink:title="at lease.go:87: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
 <path fill="none" stroke="#8b4513" d="M307.2224,-350.978C328.0967,-321.3722 372.7872,-261.6747 420.4784,-221 423.4579,-218.4588 426.6695,-215.9933 429.98,-213.6363"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="431.9897,-216.5027 438.337,-208.0196 428.085,-210.6929 431.9897,-216.5027"/>
 </a>
@@ -196,9 +196,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge11" class="edge">
+<g id="edge5" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge11"><a xlink:title="at lease.go:94: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<g id="a_edge5"><a xlink:title="at lease.go:94: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
 <path fill="none" stroke="#8b4513" d="M302.195,-350.8225C318.5463,-311.936 361.3321,-219.39 420.4784,-160 424.323,-156.1395 428.7403,-152.5587 433.3336,-149.3051"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="435.2645,-152.2244 441.706,-143.8125 431.4248,-146.3714 435.2645,-152.2244"/>
 </a>
@@ -224,9 +224,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time -->
-<g id="edge5" class="edge">
+<g id="edge17" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time</title>
-<g id="a_edge5"><a xlink:title="at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]">
+<g id="a_edge17"><a xlink:title="at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]">
 <path fill="none" stroke="#8b4513" d="M337.6588,-361.2537C367.2238,-355.8997 406.165,-348.8477 434.4318,-343.7287"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="435.1096,-347.163 444.3258,-341.937 433.8621,-340.275 435.1096,-347.163"/>
 </a>
@@ -242,9 +242,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID -->
-<g id="edge12" class="edge">
+<g id="edge7" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID</title>
-<g id="a_edge12"><a xlink:title="at lease.go:102: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]">
+<g id="a_edge7"><a xlink:title="at lease.go:102: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]">
 <path fill="none" stroke="#000000" d="M331.0643,-387.2334C350.0917,-397.5256 373.3679,-411.2598 392.4784,-426 406.4138,-436.7486 405.913,-444.1219 420.4784,-454 421.3978,-454.6235 422.3378,-455.2355 423.2946,-455.8356"/>
 <polygon fill="#000000" stroke="#000000" points="421.8337,-459.0304 432.2603,-460.9108 425.2821,-452.9387 421.8337,-459.0304"/>
 </a>
@@ -260,9 +260,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date -->
-<g id="edge15" class="edge">
+<g id="edge20" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date</title>
-<g id="a_edge15"><a xlink:title="at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]">
+<g id="a_edge20"><a xlink:title="at lease.go:103: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]">
 <path fill="none" stroke="#000000" d="M310.1973,-387.1448C338.0609,-419.931 396.3908,-487.4572 420.4784,-507 425.1874,-510.8206 430.4372,-514.472 435.7291,-517.8298"/>
 <polygon fill="#000000" stroke="#000000" points="434.2176,-521.0058 444.5867,-523.1814 437.8375,-515.0144 434.2176,-521.0058"/>
 </a>
@@ -271,43 +271,43 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes -->
 <g id="node6" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes</title>
-<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes | defined in lease.go:140&#10;at lease.go:141: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:156: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at lease.go:141: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at lease.go:144: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease]&#10;at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]&#10;at lease.go:152: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at lease.go:153: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]&#10;at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]">
+<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes | defined in lease.go:140&#10;at lease.go:153: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]&#10;at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]&#10;at lease.go:152: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at lease.go:144: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease]&#10;at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]&#10;at lease.go:141: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:156: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at lease.go:141: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M149.4338,-343C149.4338,-343 27.8552,-343 27.8552,-343 21.8552,-343 15.8552,-337 15.8552,-331 15.8552,-331 15.8552,-319 15.8552,-319 15.8552,-313 21.8552,-307 27.8552,-307 27.8552,-307 149.4338,-307 149.4338,-307 155.4338,-307 161.4338,-313 161.4338,-319 161.4338,-319 161.4338,-331 161.4338,-331 161.4338,-337 155.4338,-343 149.4338,-343"/>
 <text text-anchor="middle" x="88.6445" y="-320.8" font-family="Verdana" font-size="14.00" fill="#000000">NewLeaseFromBytes</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease -->
-<g id="edge7" class="edge">
+<g id="edge8" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease</title>
-<g id="a_edge7"><a xlink:title="at lease.go:144: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease]">
+<g id="a_edge8"><a xlink:title="at lease.go:144: calling [github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.ReadLease]">
 <path fill="none" stroke="#000000" d="M161.3567,-340.5128C187.96,-346.1884 217.5285,-352.4967 242.065,-357.7314"/>
 <polygon fill="#000000" stroke="#000000" points="241.3891,-361.1659 251.8993,-359.8295 242.8497,-354.32 241.3891,-361.1659"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge9" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge9"><a xlink:title="at lease.go:152: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_edge3"><a xlink:title="at lease.go:152: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
 <path fill="none" stroke="#8b4513" d="M161.5746,-310.907C236.6049,-296.4081 351.6733,-274.1723 418.4891,-261.2608"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="419.2313,-264.6822 428.3856,-259.3484 417.9032,-257.8093 419.2313,-264.6822"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge6" class="edge">
+<g id="edge18" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge6"><a xlink:title="at lease.go:141: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<g id="a_edge18"><a xlink:title="at lease.go:141: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
 <path fill="none" stroke="#8b4513" d="M131.6983,-306.9985C160.5438,-295.1498 199.4725,-279.5661 234.289,-267 298.3208,-243.8894 373.1745,-220.1322 421.4259,-205.2336"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="422.4801,-208.5713 431.0074,-202.2837 420.4203,-201.8812 422.4801,-208.5713"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge3" class="edge">
+<g id="edge21" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge3"><a xlink:title="at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
+<g id="a_edge21"><a xlink:title="at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
 <path fill="none" stroke="#8b4513" d="M110.1613,-306.7367C137.5881,-284.1253 187.1201,-245.4882 234.289,-220 300.4279,-184.2611 383.6425,-155.7852 431.9066,-140.7353"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="433.1312,-144.0204 441.6564,-137.7298 431.0691,-137.331 433.1312,-144.0204"/>
 </a>
@@ -324,45 +324,45 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError -->
-<g id="edge13" class="edge">
+<g id="edge14" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithError</title>
-<g id="a_edge13"><a xlink:title="at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
+<g id="a_edge14"><a xlink:title="at lease.go:146: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]">
 <path fill="none" stroke="#8b4513" d="M100.3322,-306.9586C122.6518,-273.7923 174.4797,-202.7183 234.289,-161 292.4697,-120.4177 370.8398,-94.1922 421.2975,-80.2568"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="422.2627,-83.6217 431.0026,-77.633 420.4357,-76.8642 422.2627,-83.6217"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge2" class="edge">
+<g id="edge13" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge2"><a xlink:title="at lease.go:141: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:156: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<g id="a_edge13"><a xlink:title="at lease.go:141: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at lease.go:156: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
 <path fill="none" stroke="#8b4513" d="M93.688,-343.148C107.5783,-389.5488 151.0006,-513.0699 234.289,-573 242.2772,-578.7479 365.2091,-602.7768 430.9004,-615.3129"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="430.4474,-618.7895 440.9256,-617.2217 431.7567,-611.913 430.4474,-618.7895"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time -->
-<g id="edge16" class="edge">
+<g id="edge9" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time</title>
-<g id="a_edge16"><a xlink:title="at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]">
+<g id="a_edge9"><a xlink:title="at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Time]">
 <path fill="none" stroke="#8b4513" d="M161.5746,-327.2854C242.8097,-329.831 370.9788,-333.8473 434.0257,-335.8229"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="434.1875,-339.3296 444.2922,-336.1447 434.4068,-332.3331 434.1875,-339.3296"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID -->
-<g id="edge14" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID</title>
-<g id="a_edge14"><a xlink:title="at lease.go:153: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]">
+<g id="a_edge1"><a xlink:title="at lease.go:153: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID]">
 <path fill="none" stroke="#000000" d="M120.0301,-343.0897C149.0494,-359.3469 193.693,-383.1825 234.289,-400 297.7185,-426.2766 373.7071,-449.1832 422.303,-462.7987"/>
 <polygon fill="#000000" stroke="#000000" points="421.6706,-466.2555 432.2426,-465.561 423.5449,-459.5111 421.6706,-466.2555"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date -->
-<g id="edge8" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.NewLeaseFromBytes&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date</title>
-<g id="a_edge8"><a xlink:title="at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]">
+<g id="a_edge2"><a xlink:title="at lease.go:154: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).Date]">
 <path fill="none" stroke="#000000" d="M111.4694,-343.1579C139.4194,-364.9089 188.6801,-401.7 234.289,-428 302.488,-467.3264 387.3499,-503.4535 434.8903,-522.6271"/>
 <polygon fill="#000000" stroke="#000000" points="433.8645,-525.9865 444.449,-526.4562 436.4676,-519.4885 433.8645,-525.9865"/>
 </a>
@@ -379,9 +379,9 @@
 </g>
 </g>
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Int -->
-<g id="edge19" class="edge">
+<g id="edge6" class="edge">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/common/lease.Lease).TunnelID&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Int</title>
-<g id="a_edge19"><a xlink:title="at lease.go:73: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Int]">
+<g id="a_edge6"><a xlink:title="at lease.go:73: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Int]">
 <path fill="none" stroke="#8b4513" d="M511.1557,-476C534.257,-476 563.2443,-476 586.0141,-476"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="586.3165,-479.5001 596.3164,-476 586.3164,-472.5001 586.3165,-479.5001"/>
 </a>
