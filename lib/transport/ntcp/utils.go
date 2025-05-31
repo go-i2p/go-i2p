@@ -97,3 +97,30 @@ func Intn(n int) int {
 	}
 	return int(cryptoRand.Int64())
 }
+
+// Helper to write message parts to connection
+func (s *NTCP2Session) WriteMessageToConn(conn net.Conn, obfuscatedKey, encryptedPayload, padding []byte) error {
+	// Calculate total size
+	totalSize := len(obfuscatedKey) + len(encryptedPayload)
+	if padding != nil {
+		totalSize += len(padding)
+	}
+
+	// Create buffer and copy data
+	message := make([]byte, totalSize)
+	offset := 0
+
+	copy(message[offset:], obfuscatedKey)
+	offset += len(obfuscatedKey)
+
+	copy(message[offset:], encryptedPayload)
+	offset += len(encryptedPayload)
+
+	if padding != nil {
+		copy(message[offset:], padding)
+	}
+
+	// Write to connection
+	_, err := conn.Write(message)
+	return err
+}

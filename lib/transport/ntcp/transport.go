@@ -6,7 +6,10 @@ package ntcp
 
 import (
 	"net"
+	"sync"
+	"time"
 
+	"github.com/go-i2p/go-i2p/lib/common/data"
 	"github.com/go-i2p/go-i2p/lib/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
@@ -28,6 +31,17 @@ type NTCP2Transport struct {
 	*noise.NoiseTransport
 	*sntp.RouterTimestamper
 	transportStyle string
+
+	activeSessions     map[data.Hash]*NTCP2Session
+	activeSessionsLock sync.RWMutex
+
+	// Configuration
+	dialTimeout        time.Duration
+	readTimeout        time.Duration
+	writeTimeout       time.Duration
+	maxQueueSize       int
+	minDesiredSessions int
+	maxSessions        int
 }
 
 func (t *NTCP2Transport) Name() string {

@@ -48,7 +48,7 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 	}
 
 	// Write complete SessionRequest message to connection
-	if err := s.writeMessageToConn(conn, obfuscatedKey, encryptedPayload, requestProcessor.GetPadding(msg)); err != nil {
+	if err := s.WriteMessageToConn(conn, obfuscatedKey, encryptedPayload, requestProcessor.GetPadding(msg)); err != nil {
 		return oops.Errorf("failed to write session request: %w", err)
 	}
 
@@ -97,7 +97,7 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 	}
 
 	// Write SessionConfirmed to connection
-	if err := s.writeMessageToConn(
+	if err := s.WriteMessageToConn(
 		conn,
 		staticKey[:],
 		encryptedConfirmedPayload,
@@ -108,31 +108,4 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 
 	// Handshake complete, mark session as established
 	return s.HandshakeState.CompleteHandshake()
-}
-
-// Helper to write message parts to connection
-func (s *NTCP2Session) writeMessageToConn(conn net.Conn, obfuscatedKey, encryptedPayload, padding []byte) error {
-	// Calculate total size
-	totalSize := len(obfuscatedKey) + len(encryptedPayload)
-	if padding != nil {
-		totalSize += len(padding)
-	}
-
-	// Create buffer and copy data
-	message := make([]byte, totalSize)
-	offset := 0
-
-	copy(message[offset:], obfuscatedKey)
-	offset += len(obfuscatedKey)
-
-	copy(message[offset:], encryptedPayload)
-	offset += len(encryptedPayload)
-
-	if padding != nil {
-		copy(message[offset:], padding)
-	}
-
-	// Write to connection
-	_, err := conn.Write(message)
-	return err
 }

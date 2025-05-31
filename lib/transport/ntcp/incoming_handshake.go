@@ -69,7 +69,7 @@ func (s *NTCP2Session) PerformIncomingHandshake(conn net.Conn) error {
 	}
 
 	// Write SessionCreated to connection
-	if err := s.writeMessageToConn(
+	if err := s.WriteMessageToConn(
 		conn,
 		obfuscatedKey,
 		encryptedPayload,
