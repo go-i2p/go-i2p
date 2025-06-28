@@ -333,7 +333,7 @@ func (keyCertificate KeyCertificate) SignatureSize() (size int) {
 		"key_type":       key_type,
 		"signature_size": size,
 	}).Debug("Retrieved signature size")
-	return sizes[int(key_type)]
+	return size
 }
 
 // CryptoSize return the size of a Public Key corresponding to the Key Certificate's publicKey type.
@@ -351,7 +351,7 @@ func (keyCertificate KeyCertificate) CryptoSize() (size int) {
 		"key_type":    key_type,
 		"crypto_size": size,
 	}).Debug("Retrieved crypto size")
-	return sizes[int(key_type)]
+	return size
 }
 
 // NewKeyCertificate creates a new *KeyCertificate from []byte using ReadCertificate.
