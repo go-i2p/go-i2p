@@ -3,7 +3,7 @@ package i2np
 import (
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/common/certificate"
+	"github.com/go-i2p/common/certificate"
 )
 
 /*

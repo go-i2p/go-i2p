@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/su3"
 )

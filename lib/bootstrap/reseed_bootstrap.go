@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/logger"

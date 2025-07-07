@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"

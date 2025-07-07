@@ -1,8 +1,8 @@
 package messages
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 )
 
 /**

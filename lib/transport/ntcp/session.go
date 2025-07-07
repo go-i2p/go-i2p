@@ -1,8 +1,8 @@
 package ntcp
 
 import (
-	"github.com/go-i2p/go-i2p/lib/common/router_address"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/transport/noise"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"

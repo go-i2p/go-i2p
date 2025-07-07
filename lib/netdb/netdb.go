@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
-	common "github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 )
 
 // resolves unknown RouterInfos given the hash of their RouterIdentity

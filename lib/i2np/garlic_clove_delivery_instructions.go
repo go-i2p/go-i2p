@@ -1,8 +1,8 @@
 package i2np
 
 import (
-	common "github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/session_key"
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 

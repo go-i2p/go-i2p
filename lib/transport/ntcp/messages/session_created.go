@@ -1,6 +1,6 @@
 package messages
 
-import "github.com/go-i2p/go-i2p/lib/common/data"
+import "github.com/go-i2p/common/data"
 
 /**
 	2) SessionCreated

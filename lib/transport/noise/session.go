@@ -10,7 +10,7 @@ import (
 	"github.com/flynn/noise"
 	"github.com/samber/oops"
 
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/transport/handshake"
 )

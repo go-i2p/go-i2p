@@ -6,7 +6,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
-	datalib "github.com/go-i2p/go-i2p/lib/common/data"
+	datalib "github.com/go-i2p/common/data"
 )
 
 /*

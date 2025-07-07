@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	common "github.com/go-i2p/go-i2p/lib/common/data"
-	"github.com/go-i2p/go-i2p/lib/common/router_info"
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/sirupsen/logrus"
 )
