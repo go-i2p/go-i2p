@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/go-i2p/lib/crypto"
+	"github.com/go-i2p/crypto"
 )
 
 type Participant struct {

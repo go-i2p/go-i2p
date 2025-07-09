@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/samber/oops"
 )

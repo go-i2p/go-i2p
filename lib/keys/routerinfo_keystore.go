@@ -14,8 +14,8 @@ import (
 	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/signature"
-	"github.com/go-i2p/go-i2p/lib/crypto/ed25519"
-	"github.com/go-i2p/go-i2p/lib/crypto/types"
+	"github.com/go-i2p/crypto/ed25519"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/util/time/sntp"
 	"github.com/samber/oops"
 )

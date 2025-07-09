@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/go-i2p/common/data"
-	"github.com/go-i2p/go-i2p/lib/crypto/curve25519"
+	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/handshake"
 	"github.com/go-i2p/go-i2p/lib/transport/ntcp/messages"
 	_ "github.com/go-i2p/logger"

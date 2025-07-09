@@ -1,7 +1,7 @@
 package obfs
 
 import (
-	"github.com/go-i2p/go-i2p/lib/crypto/aes"
+	"github.com/go-i2p/crypto/aes"
 	"github.com/samber/oops"
 )
 
