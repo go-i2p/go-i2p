@@ -418,12 +418,12 @@ func TestEncryptDecryptPacketObfsOffline(t *testing.T) {
 	}
 
 	originalData := []byte("This is a test message.")
-	_, encryptedPacket, err := initiatorSession.encryptPacket(originalData)
+	_, encryptedPacket, err := initiatorSession.testEncryptPacket(originalData)
 	if err != nil {
 		t.Fatalf("Encryption failed: %v", err)
 	}
 
-	_, decryptedData, err := responderSession.decryptPacket(encryptedPacket)
+	_, decryptedData, err := responderSession.testPacketDeux(encryptedPacket)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
@@ -439,12 +439,12 @@ func TestEncryptDecryptPacketObfsOffline(t *testing.T) {
 	}
 
 	responseData := []byte("This is a response message.")
-	_, encryptedResponse, err := responderSession.encryptPacket(responseData)
+	_, encryptedResponse, err := responderSession.testEncryptPacket(responseData)
 	if err != nil {
 		t.Fatalf("Responder encryption failed: %v", err)
 	}
 
-	_, decryptedResponse, err := initiatorSession.decryptPacket(encryptedResponse)
+	_, decryptedResponse, err := initiatorSession.testPacketDeux(encryptedResponse)
 	if err != nil {
 		t.Fatalf("Initiator decryption failed: %v", err)
 	}
