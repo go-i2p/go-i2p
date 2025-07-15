@@ -336,7 +336,13 @@ func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
 		// random data:
 		tag[i+1] = 0x43
 		tag[i+5] = 0x89
-		expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
+		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
+		if err != nil {
+			assert.Fail("Failed to create session tag from bytes: %v", err)
+			return
+		}
+		expectedReplyTags = append(expectedReplyTags, sessionTag)
+		//expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
 		data = append(data, tag...)
 	}
 
@@ -414,7 +420,12 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 		// random data:
 		tag[i+3] = 0x22
 		tag[i+13] = 0x11
-		expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
+		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
+		if err != nil {
+			assert.Fail("Failed to create session tag from bytes: %v", err)
+			return
+		}
+		expectedReplyTags = append(expectedReplyTags, sessionTag)
 		data = append(data, tag...)
 	}
 	databaseLookup, err := ReadDatabaseLookup(data)

@@ -389,7 +389,10 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 	var reply_tags []session_tag.SessionTag
 	for i := 0; i < tags; i++ {
 		offset := length + i*32
-		tag := session_tag.SessionTag(data[offset : offset+32])
+		tag, err := session_tag.NewSessionTagFromBytes(data[offset : offset+32])
+		if err != nil {
+			return length, []session_tag.SessionTag{}, err
+		}
 		reply_tags = append(reply_tags, tag)
 	}
 

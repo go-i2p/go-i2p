@@ -1,9 +1,9 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto"
+	"github.com/go-i2p/crypto/tunnel"
 )
 
 type Participant struct {
-	decryption *crypto.Tunnel
+	decryption *tunnel.Tunnel
 }

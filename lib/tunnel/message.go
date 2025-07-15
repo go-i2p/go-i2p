@@ -5,7 +5,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/go-i2p/crypto"
+	"github.com/go-i2p/crypto/tunnel"
 )
 
 /*
@@ -119,7 +119,7 @@ total size: 1028 Bytes
 
 type TunnelID uint32
 
-type EncryptedTunnelMessage crypto.TunnelData
+type EncryptedTunnelMessage tunnel.TunnelData
 
 type DeliveryInstructionsWithFragment struct {
 	DeliveryInstructions DeliveryInstructions
@@ -131,11 +131,11 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID) {
 	return
 }
 
-func (tm EncryptedTunnelMessage) IV() crypto.TunnelIV {
+func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return tm[4:20]
 }
 
-func (tm EncryptedTunnelMessage) Data() crypto.TunnelIV {
+func (tm EncryptedTunnelMessage) Data() tunnel.TunnelIV {
 	return tm[24:]
 }
 
@@ -147,11 +147,11 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID {
 	))
 }
 
-func (decrypted_tunnel_message DecryptedTunnelMessage) IV() crypto.TunnelIV {
+func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return decrypted_tunnel_message[4 : 4+16]
 }
 
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() crypto.TunnelIV {
+func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() tunnel.TunnelIV {
 	return decrypted_tunnel_message[4+16 : 4+4+16]
 }
 

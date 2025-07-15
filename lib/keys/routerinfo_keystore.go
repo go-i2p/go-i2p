@@ -159,7 +159,7 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 
 	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(
-		types.RecievingPublicKey(nil),
+		types.ReceivingPublicKey(nil),
 		publicKey.(types.SigningPublicKey),
 		*cert,
 		padding,
