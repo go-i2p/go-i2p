@@ -45,7 +45,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] ElGamal/AES+SessionTag
   - [ ] Ratchet/X25519
 - I2NP
-  - [ ] Message parsing
+  - [X] Message parsing
   - [ ] Message handling
 - NetDB
   - [~] Local storage
