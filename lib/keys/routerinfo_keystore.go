@@ -3,6 +3,7 @@ package keys
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 
@@ -107,7 +108,13 @@ func (ks *RouterInfoKeystore) KeyID() string {
 	if ks.name == "" {
 		public, err := ks.privateKey.Public()
 		if err != nil {
-			return "error"
+			// Generate a random fallback ID instead of returning "error"
+			randomBytes := make([]byte, 4)
+			if _, randErr := rand.Read(randomBytes); randErr != nil {
+				// If random generation also fails, use a timestamped fallback
+				return "fallback-key"
+			}
+			return "fallback-" + hex.EncodeToString(randomBytes)
 		}
 		if len(public.Bytes()) > 10 {
 			return string(public.Bytes()[:10])
