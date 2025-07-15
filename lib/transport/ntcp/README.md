@@ -315,6 +315,13 @@ func (s *NTCP2Session) ValidateTimestamp(timestamp time.Time) error
 Add this method to NTCP2Session ValidateTimestamp validates a timestamp is
 within acceptable range
 
+#### func (*NTCP2Session) WriteMessageToConn
+
+```go
+func (s *NTCP2Session) WriteMessageToConn(conn net.Conn, obfuscatedKey, encryptedPayload, padding []byte) error
+```
+Helper to write message parts to connection
+
 #### type NTCP2Transport
 
 ```go

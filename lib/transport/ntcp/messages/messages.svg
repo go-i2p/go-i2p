@@ -23,16 +23,16 @@
 </g>
 </g>
 <g id="clust8" class="cluster">
-<title>cluster_github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer</title>
-<g id="a_clust8"><a xlink:title="type: github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer">
+<title>cluster_github.com/go&#45;i2p/common/data.Integer</title>
+<g id="a_clust8"><a xlink:title="type: github.com/go&#45;i2p/common/data.Integer">
 <path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M519.2048,-224C519.2048,-224 567.0912,-224 567.0912,-224 573.0912,-224 579.0912,-230 579.0912,-236 579.0912,-236 579.0912,-290 579.0912,-290 579.0912,-296 573.0912,-302 567.0912,-302 567.0912,-302 519.2048,-302 519.2048,-302 513.2048,-302 507.2048,-296 507.2048,-290 507.2048,-290 507.2048,-236 507.2048,-236 507.2048,-230 513.2048,-224 519.2048,-224"/>
 <text text-anchor="middle" x="543.148" y="-232.5" font-family="Arial" font-size="15.00" fill="#222222">(Integer)</text>
 </a>
 </g>
 </g>
 <g id="clust7" class="cluster">
-<title>cluster_github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date</title>
-<g id="a_clust7"><a xlink:title="type: github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date">
+<title>cluster_github.com/go&#45;i2p/common/data.Date</title>
+<g id="a_clust7"><a xlink:title="type: github.com/go&#45;i2p/common/data.Date">
 <path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M519.2048,-310C519.2048,-310 567.0912,-310 567.0912,-310 573.0912,-310 579.0912,-316 579.0912,-322 579.0912,-322 579.0912,-376 579.0912,-376 579.0912,-382 573.0912,-388 567.0912,-388 567.0912,-388 519.2048,-388 519.2048,-388 513.2048,-388 507.2048,-382 507.2048,-376 507.2048,-376 507.2048,-322 507.2048,-322 507.2048,-316 513.2048,-310 519.2048,-310"/>
 <text text-anchor="middle" x="543.148" y="-318.5" font-family="Arial" font-size="15.00" fill="#222222">(Date)</text>
 </a>
@@ -81,26 +81,26 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data -->
 <g id="node1" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data</title>
-<g id="a_node1"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data | defined in session_confirmed.go:293&#10;at session_confirmed.go:295: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]">
+<g id="a_node1"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data | defined in session_confirmed.go:293&#10;at session_confirmed.go:295: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M357.2048,-147C357.2048,-147 327.2048,-147 327.2048,-147 321.2048,-147 315.2048,-141 315.2048,-135 315.2048,-135 315.2048,-123 315.2048,-123 315.2048,-117 321.2048,-111 327.2048,-111 327.2048,-111 357.2048,-111 357.2048,-111 363.2048,-111 369.2048,-117 369.2048,-123 369.2048,-123 369.2048,-135 369.2048,-135 369.2048,-141 363.2048,-147 357.2048,-147"/>
 <text text-anchor="middle" x="342.2048" y="-124.8" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
 </a>
 </g>
 </g>
-<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes -->
+<!-- (github.com/go&#45;i2p/common/data.Integer).Bytes -->
 <g id="node10" class="node">
-<title>(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes</title>
-<g id="a_node10"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes | defined in integer.go:27">
+<title>(github.com/go&#45;i2p/common/data.Integer).Bytes</title>
+<g id="a_node10"><a xlink:title="(github.com/go&#45;i2p/common/data.Integer).Bytes | defined in integer.go:27">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M559.0345,-294C559.0345,-294 527.2615,-294 527.2615,-294 521.2615,-294 515.2615,-288 515.2615,-282 515.2615,-282 515.2615,-270 515.2615,-270 515.2615,-264 521.2615,-258 527.2615,-258 527.2615,-258 559.0345,-258 559.0345,-258 565.0345,-258 571.0345,-264 571.0345,-270 571.0345,-270 571.0345,-282 571.0345,-282 571.0345,-288 565.0345,-294 559.0345,-294"/>
 <text text-anchor="middle" x="543.148" y="-280.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
 <text text-anchor="middle" x="543.148" y="-263.4" font-family="Verdana" font-size="14.00" fill="#000000">Bytes</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes -->
-<g id="edge6" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes</title>
-<g id="a_edge6"><a xlink:title="at session_confirmed.go:295: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]">
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes -->
+<g id="edge5" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes</title>
+<g id="a_edge5"><a xlink:title="at session_confirmed.go:295: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]">
 <path fill="none" stroke="#8b4513" d="M366.8444,-147.0251C402.8497,-173.3648 469.9184,-222.4289 510.1501,-251.8604"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="508.1694,-254.748 518.3069,-257.8275 512.3025,-249.0983 508.1694,-254.748"/>
 </a>
@@ -109,73 +109,73 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data -->
 <g id="node2" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data</title>
-<g id="a_node2"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data | defined in session_created.go:302&#10;at session_created.go:304: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_created.go:305: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes]">
+<g id="a_node2"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data | defined in session_created.go:302&#10;at session_created.go:305: calling [(github.com/go&#45;i2p/common/data.Date).Bytes]&#10;at session_created.go:304: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M357.2048,-294C357.2048,-294 327.2048,-294 327.2048,-294 321.2048,-294 315.2048,-288 315.2048,-282 315.2048,-282 315.2048,-270 315.2048,-270 315.2048,-264 321.2048,-258 327.2048,-258 327.2048,-258 357.2048,-258 357.2048,-258 363.2048,-258 369.2048,-264 369.2048,-270 369.2048,-270 369.2048,-282 369.2048,-282 369.2048,-288 363.2048,-294 357.2048,-294"/>
 <text text-anchor="middle" x="342.2048" y="-271.8" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
 </a>
 </g>
 </g>
-<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes -->
+<!-- (github.com/go&#45;i2p/common/data.Date).Bytes -->
 <g id="node9" class="node">
-<title>(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes</title>
-<g id="a_node9"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes | defined in date.go:35">
+<title>(github.com/go&#45;i2p/common/data.Date).Bytes</title>
+<g id="a_node9"><a xlink:title="(github.com/go&#45;i2p/common/data.Date).Bytes | defined in date.go:29">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M559.0345,-380C559.0345,-380 527.2615,-380 527.2615,-380 521.2615,-380 515.2615,-374 515.2615,-368 515.2615,-368 515.2615,-356 515.2615,-356 515.2615,-350 521.2615,-344 527.2615,-344 527.2615,-344 559.0345,-344 559.0345,-344 565.0345,-344 571.0345,-350 571.0345,-356 571.0345,-356 571.0345,-368 571.0345,-368 571.0345,-374 565.0345,-380 559.0345,-380"/>
 <text text-anchor="middle" x="543.148" y="-366.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
 <text text-anchor="middle" x="543.148" y="-349.4" font-family="Verdana" font-size="14.00" fill="#000000">Bytes</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes -->
-<g id="edge11" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes</title>
-<g id="a_edge11"><a xlink:title="at session_created.go:305: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes]">
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Date).Bytes -->
+<g id="edge4" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Date).Bytes</title>
+<g id="a_edge4"><a xlink:title="at session_created.go:305: calling [(github.com/go&#45;i2p/common/data.Date).Bytes]">
 <path fill="none" stroke="#8b4513" d="M369.4973,-285.4462C384.0646,-290.6407 402.2331,-297.3637 418.2048,-304 448.1661,-316.449 481.4616,-331.9926 506.1426,-343.8544"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="504.6281,-347.0097 515.1552,-348.2062 507.6719,-340.7061 504.6281,-347.0097"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes -->
-<g id="edge10" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes</title>
-<g id="a_edge10"><a xlink:title="at session_created.go:304: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]">
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes -->
+<g id="edge7" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes</title>
+<g id="a_edge7"><a xlink:title="at session_created.go:304: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]">
 <path fill="none" stroke="#8b4513" d="M369.3049,-276C404.3136,-276 465.4548,-276 505.1066,-276"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="505.1879,-279.5001 515.1879,-276 505.1879,-272.5001 505.1879,-279.5001"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize -->
-<g id="node3" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize</title>
-<g id="a_node3"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize | defined in session_confirmed.go:272&#10;at session_confirmed.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M119.3074,-86C119.3074,-86 49.8974,-86 49.8974,-86 43.8974,-86 37.8974,-80 37.8974,-74 37.8974,-74 37.8974,-62 37.8974,-62 37.8974,-56 43.8974,-50 49.8974,-50 49.8974,-50 119.3074,-50 119.3074,-50 125.3074,-50 131.3074,-56 131.3074,-62 131.3074,-62 131.3074,-74 131.3074,-74 131.3074,-80 125.3074,-86 119.3074,-86"/>
-<text text-anchor="middle" x="84.6024" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">PayloadSize</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data -->
-<g id="edge7" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data</title>
-<g id="a_edge7"><a xlink:title="at session_confirmed.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
-<path fill="none" stroke="#000000" d="M131.2523,-79.0466C181.1259,-90.8567 259.2036,-109.3454 305.0761,-120.208"/>
-<polygon fill="#000000" stroke="#000000" points="304.368,-123.637 314.9054,-122.5355 305.9811,-116.8254 304.368,-123.637"/>
-</a>
-</g>
-</g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload -->
-<g id="node4" class="node">
+<g id="node3" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload</title>
-<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload | defined in session_confirmed.go:267&#10;at session_confirmed.go:268: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M107.2049,-147C107.2049,-147 61.9999,-147 61.9999,-147 55.9999,-147 49.9999,-141 49.9999,-135 49.9999,-135 49.9999,-123 49.9999,-123 49.9999,-117 55.9999,-111 61.9999,-111 61.9999,-111 107.2049,-111 107.2049,-111 113.2049,-111 119.2049,-117 119.2049,-123 119.2049,-123 119.2049,-135 119.2049,-135 119.2049,-141 113.2049,-147 107.2049,-147"/>
-<text text-anchor="middle" x="84.6024" y="-124.8" font-family="Verdana" font-size="14.00" fill="#000000">Payload</text>
+<g id="a_node3"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload | defined in session_confirmed.go:267&#10;at session_confirmed.go:268: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M107.2049,-86C107.2049,-86 61.9999,-86 61.9999,-86 55.9999,-86 49.9999,-80 49.9999,-74 49.9999,-74 49.9999,-62 49.9999,-62 49.9999,-56 55.9999,-50 61.9999,-50 61.9999,-50 107.2049,-50 107.2049,-50 113.2049,-50 119.2049,-56 119.2049,-62 119.2049,-62 119.2049,-74 119.2049,-74 119.2049,-80 113.2049,-86 107.2049,-86"/>
+<text text-anchor="middle" x="84.6024" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">Payload</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data -->
-<g id="edge4" class="edge">
+<g id="edge2" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).Payload&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data</title>
-<g id="a_edge4"><a xlink:title="at session_confirmed.go:268: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
-<path fill="none" stroke="#000000" d="M119.3438,-129C167.8084,-129 255.3391,-129 305.0588,-129"/>
-<polygon fill="#000000" stroke="#000000" points="305.0669,-132.5001 315.0668,-129 305.0668,-125.5001 305.0669,-132.5001"/>
+<g id="a_edge2"><a xlink:title="at session_confirmed.go:268: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
+<path fill="none" stroke="#000000" d="M119.3438,-76.2267C167.8084,-87.7031 255.3391,-108.4303 305.0588,-120.2039"/>
+<polygon fill="#000000" stroke="#000000" points="304.5294,-123.6752 315.0668,-122.5738 306.1425,-116.8636 304.5294,-123.6752"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize -->
+<g id="node4" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize</title>
+<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize | defined in session_confirmed.go:272&#10;at session_confirmed.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M119.3074,-147C119.3074,-147 49.8974,-147 49.8974,-147 43.8974,-147 37.8974,-141 37.8974,-135 37.8974,-135 37.8974,-123 37.8974,-123 37.8974,-117 43.8974,-111 49.8974,-111 49.8974,-111 119.3074,-111 119.3074,-111 125.3074,-111 131.3074,-117 131.3074,-123 131.3074,-123 131.3074,-135 131.3074,-135 131.3074,-141 125.3074,-147 119.3074,-147"/>
+<text text-anchor="middle" x="84.6024" y="-124.8" font-family="Verdana" font-size="14.00" fill="#000000">PayloadSize</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data -->
+<g id="edge6" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionConfirmed).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data</title>
+<g id="a_edge6"><a xlink:title="at session_confirmed.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.ConfirmedOptions).Data]">
+<path fill="none" stroke="#000000" d="M131.2523,-129C181.0211,-129 258.8757,-129 304.7866,-129"/>
+<polygon fill="#000000" stroke="#000000" points="304.9055,-132.5001 314.9054,-129 304.9054,-125.5001 304.9055,-132.5001"/>
 </a>
 </g>
 </g>
@@ -189,9 +189,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionCreated).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data -->
-<g id="edge1" class="edge">
+<g id="edge8" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionCreated).PayloadSize&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data</title>
-<g id="a_edge1"><a xlink:title="at session_created.go:280: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data]">
+<g id="a_edge8"><a xlink:title="at session_created.go:280: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.CreatedOptions).Data]">
 <path fill="none" stroke="#000000" d="M131.2523,-226.0466C181.1259,-237.8567 259.2036,-256.3454 305.0761,-267.208"/>
 <polygon fill="#000000" stroke="#000000" points="304.368,-270.637 314.9054,-269.5355 305.9811,-263.8254 304.368,-270.637"/>
 </a>
@@ -227,16 +227,16 @@
 <!-- (github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data -->
 <g id="node11" class="node">
 <title>(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data</title>
-<g id="a_node11"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data | defined in session_request.go:296&#10;at session_request.go:303: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes]&#10;at session_request.go:299: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:300: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:301: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:302: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]">
+<g id="a_node11"><a xlink:title="(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data | defined in session_request.go:296&#10;at session_request.go:299: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:300: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:301: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:302: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:303: calling [(github.com/go&#45;i2p/common/data.Date).Bytes]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M357.2048,-380C357.2048,-380 327.2048,-380 327.2048,-380 321.2048,-380 315.2048,-374 315.2048,-368 315.2048,-368 315.2048,-356 315.2048,-356 315.2048,-350 321.2048,-344 327.2048,-344 327.2048,-344 357.2048,-344 357.2048,-344 363.2048,-344 369.2048,-350 369.2048,-356 369.2048,-356 369.2048,-368 369.2048,-368 369.2048,-374 363.2048,-380 357.2048,-380"/>
 <text text-anchor="middle" x="342.2048" y="-357.8" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionRequest).PayloadSize&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data -->
-<g id="edge2" class="edge">
+<g id="edge11" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionRequest).PayloadSize&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data</title>
-<g id="a_edge2"><a xlink:title="at session_request.go:269: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data]">
+<g id="a_edge11"><a xlink:title="at session_request.go:269: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data]">
 <path fill="none" stroke="#000000" d="M131.2523,-362C181.0211,-362 258.8757,-362 304.7866,-362"/>
 <polygon fill="#000000" stroke="#000000" points="304.9055,-365.5001 314.9054,-362 304.9054,-358.5001 304.9055,-365.5001"/>
 </a>
@@ -252,27 +252,27 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionRequest).Payload&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data -->
-<g id="edge8" class="edge">
+<g id="edge1" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.SessionRequest).Payload&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data</title>
-<g id="a_edge8"><a xlink:title="at session_request.go:264: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data]">
+<g id="a_edge1"><a xlink:title="at session_request.go:264: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data]">
 <path fill="none" stroke="#000000" d="M119.3438,-414.7733C167.8084,-403.2969 255.3391,-382.5697 305.0588,-370.7961"/>
 <polygon fill="#000000" stroke="#000000" points="306.1425,-374.1364 315.0668,-368.4262 304.5294,-367.3248 306.1425,-374.1364"/>
 </a>
 </g>
 </g>
-<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes -->
-<g id="edge5" class="edge">
-<title>(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes</title>
-<g id="a_edge5"><a xlink:title="at session_request.go:303: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Date).Bytes]">
+<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Date).Bytes -->
+<g id="edge10" class="edge">
+<title>(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Date).Bytes</title>
+<g id="a_edge10"><a xlink:title="at session_request.go:303: calling [(github.com/go&#45;i2p/common/data.Date).Bytes]">
 <path fill="none" stroke="#8b4513" d="M369.3049,-362C404.3136,-362 465.4548,-362 505.1066,-362"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="505.1879,-365.5001 515.1879,-362 505.1879,-358.5001 505.1879,-365.5001"/>
 </a>
 </g>
 </g>
-<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes -->
+<!-- (github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes -->
 <g id="edge9" class="edge">
-<title>(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes</title>
-<g id="a_edge9"><a xlink:title="at session_request.go:299: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:300: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:301: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]&#10;at session_request.go:302: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/common/data.Integer).Bytes]">
+<title>(github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/messages.RequestOptions).Data&#45;&gt;(github.com/go&#45;i2p/common/data.Integer).Bytes</title>
+<g id="a_edge9"><a xlink:title="at session_request.go:299: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:300: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:301: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]&#10;at session_request.go:302: calling [(github.com/go&#45;i2p/common/data.Integer).Bytes]">
 <path fill="none" stroke="#8b4513" d="M369.3049,-350.4017C404.537,-335.3229 466.2363,-308.9168 505.8633,-291.9572"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="507.3716,-295.1188 515.1879,-287.9664 504.6173,-288.6834 507.3716,-295.1188"/>
 </a>

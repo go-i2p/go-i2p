@@ -32,20 +32,20 @@
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey -->
 <g id="node2" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey</title>
-<g id="a_node2"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey | defined in kdf.go:112&#10;at kdf.go:116: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:119: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:126: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:129: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:135: calling [github.com/samber/oops.Errorf]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M176.6377,-86C176.6377,-86 67.9431,-86 67.9431,-86 61.9431,-86 55.9431,-80 55.9431,-74 55.9431,-74 55.9431,-62 55.9431,-62 55.9431,-56 61.9431,-50 67.9431,-50 67.9431,-50 176.6377,-50 176.6377,-50 182.6377,-50 188.6377,-56 188.6377,-62 188.6377,-62 188.6377,-74 188.6377,-74 188.6377,-80 182.6377,-86 176.6377,-86"/>
-<text text-anchor="middle" x="122.2904" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveSipHashKey</text>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey</title>
+<g id="a_node2"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey | defined in kdf.go:102&#10;at kdf.go:105: calling [github.com/samber/oops.Errorf]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M208.3716,-86C208.3716,-86 36.2092,-86 36.2092,-86 30.2092,-86 24.2092,-80 24.2092,-74 24.2092,-74 24.2092,-62 24.2092,-62 24.2092,-56 30.2092,-50 36.2092,-50 36.2092,-50 208.3716,-50 208.3716,-50 214.3716,-50 220.3716,-56 220.3716,-62 220.3716,-62 220.3716,-74 220.3716,-74 220.3716,-80 214.3716,-86 208.3716,-86"/>
+<text text-anchor="middle" x="122.2904" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveHandshakeMessageKey</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey&#45;&gt;github.com/samber/oops.Errorf -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey&#45;&gt;github.com/samber/oops.Errorf -->
 <g id="edge1" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge1"><a xlink:title="at kdf.go:116: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:119: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:126: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:129: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:135: calling [github.com/samber/oops.Errorf]">
-<path fill="none" stroke="#8b4513" d="M188.6745,-80.4262C202.5959,-84.8824 216.6564,-90.8979 228.5808,-99 264.375,-123.3205 292.6637,-165.5676 308.539,-193.1531"/>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey&#45;&gt;github.com/samber/oops.Errorf</title>
+<g id="a_edge1"><a xlink:title="at kdf.go:105: calling [github.com/samber/oops.Errorf]">
+<path fill="none" stroke="#8b4513" d="M204.2063,-86.0966C212.7967,-89.6648 221.1082,-93.9227 228.5808,-99 264.375,-123.3205 292.6637,-165.5676 308.539,-193.1531"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="305.4981,-194.8862 313.4398,-201.899 311.6047,-191.4643 305.4981,-194.8862"/>
 </a>
 </g>
@@ -68,19 +68,19 @@
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey -->
 <g id="node4" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey</title>
-<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey | defined in kdf.go:144&#10;at kdf.go:148: calling [github.com/samber/oops.Errorf]">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey</title>
+<g id="a_node4"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey | defined in kdf.go:112&#10;at kdf.go:116: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:119: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:126: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:129: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:135: calling [github.com/samber/oops.Errorf]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M176.6377,-208C176.6377,-208 67.9431,-208 67.9431,-208 61.9431,-208 55.9431,-202 55.9431,-196 55.9431,-196 55.9431,-184 55.9431,-184 55.9431,-178 61.9431,-172 67.9431,-172 67.9431,-172 176.6377,-172 176.6377,-172 182.6377,-172 188.6377,-178 188.6377,-184 188.6377,-184 188.6377,-196 188.6377,-196 188.6377,-202 182.6377,-208 176.6377,-208"/>
-<text text-anchor="middle" x="122.2904" y="-185.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveFramingKey</text>
+<text text-anchor="middle" x="122.2904" y="-185.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveSipHashKey</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey&#45;&gt;github.com/samber/oops.Errorf -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey&#45;&gt;github.com/samber/oops.Errorf -->
 <g id="edge3" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge3"><a xlink:title="at kdf.go:148: calling [github.com/samber/oops.Errorf]">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveSipHashKey&#45;&gt;github.com/samber/oops.Errorf</title>
+<g id="a_edge3"><a xlink:title="at kdf.go:116: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:119: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:126: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:129: calling [github.com/samber/oops.Errorf]&#10;at kdf.go:135: calling [github.com/samber/oops.Errorf]">
 <path fill="none" stroke="#8b4513" d="M188.7383,-199.9479C220.0178,-204.6307 256.2655,-210.0574 283.1586,-214.0835"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="282.9322,-217.5886 293.3403,-215.6078 283.9687,-210.6657 282.9322,-217.5886"/>
 </a>
@@ -104,20 +104,20 @@
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey -->
 <g id="node6" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey</title>
-<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey | defined in kdf.go:102&#10;at kdf.go:105: calling [github.com/samber/oops.Errorf]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M208.3716,-330C208.3716,-330 36.2092,-330 36.2092,-330 30.2092,-330 24.2092,-324 24.2092,-318 24.2092,-318 24.2092,-306 24.2092,-306 24.2092,-300 30.2092,-294 36.2092,-294 36.2092,-294 208.3716,-294 208.3716,-294 214.3716,-294 220.3716,-300 220.3716,-306 220.3716,-306 220.3716,-318 220.3716,-318 220.3716,-324 214.3716,-330 208.3716,-330"/>
-<text text-anchor="middle" x="122.2904" y="-307.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveHandshakeMessageKey</text>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey</title>
+<g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey | defined in kdf.go:144&#10;at kdf.go:148: calling [github.com/samber/oops.Errorf]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M176.6377,-330C176.6377,-330 67.9431,-330 67.9431,-330 61.9431,-330 55.9431,-324 55.9431,-318 55.9431,-318 55.9431,-306 55.9431,-306 55.9431,-300 61.9431,-294 67.9431,-294 67.9431,-294 176.6377,-294 176.6377,-294 182.6377,-294 188.6377,-300 188.6377,-306 188.6377,-306 188.6377,-318 188.6377,-318 188.6377,-324 182.6377,-330 176.6377,-330"/>
+<text text-anchor="middle" x="122.2904" y="-307.8" font-family="Verdana" font-size="14.00" fill="#000000">DeriveFramingKey</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey&#45;&gt;github.com/samber/oops.Errorf -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey&#45;&gt;github.com/samber/oops.Errorf -->
 <g id="edge5" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveHandshakeMessageKey&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge5"><a xlink:title="at kdf.go:105: calling [github.com/samber/oops.Errorf]">
-<path fill="none" stroke="#8b4513" d="M197.3838,-293.9461C208.0475,-290.4824 218.7284,-286.5047 228.5808,-282 250.7515,-271.863 273.6334,-256.9048 291.2812,-244.2206"/>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp/kdf.NTCP2KDF).DeriveFramingKey&#45;&gt;github.com/samber/oops.Errorf</title>
+<g id="a_edge5"><a xlink:title="at kdf.go:148: calling [github.com/samber/oops.Errorf]">
+<path fill="none" stroke="#8b4513" d="M188.91,-296.5964C202.3179,-292.5572 216.1127,-287.7007 228.5808,-282 250.7515,-271.863 273.6334,-256.9048 291.2812,-244.2206"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="293.495,-246.9377 299.4981,-238.2076 289.3611,-241.2886 293.495,-246.9377"/>
 </a>
 </g>

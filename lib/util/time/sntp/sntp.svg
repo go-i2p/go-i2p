@@ -38,30 +38,13 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones -->
+<!-- github.com/beevik/ntp.QueryWithOptions -->
 <g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones | defined in zones.go:19&#10;at zones.go:24: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M929.0586,-121C929.0586,-121 868.7778,-121 868.7778,-121 862.7778,-121 856.7778,-115 856.7778,-109 856.7778,-109 856.7778,-97 856.7778,-97 856.7778,-91 862.7778,-85 868.7778,-85 868.7778,-85 929.0586,-85 929.0586,-85 935.0586,-85 941.0586,-91 941.0586,-97 941.0586,-97 941.0586,-109 941.0586,-109 941.0586,-115 935.0586,-121 929.0586,-121"/>
-<text text-anchor="middle" x="898.9182" y="-98.8" font-family="Verdana" font-size="14.00" fill="#000000">NewZones</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize -->
-<g id="node19" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize</title>
-<g id="a_node19"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize | defined in zones.go:36&#10;at zones.go:51: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1148.3215,-86C1148.3215,-86 1099.3467,-86 1099.3467,-86 1093.3467,-86 1087.3467,-80 1087.3467,-74 1087.3467,-74 1087.3467,-62 1087.3467,-62 1087.3467,-56 1093.3467,-50 1099.3467,-50 1099.3467,-50 1148.3215,-50 1148.3215,-50 1154.3215,-50 1160.3215,-56 1160.3215,-62 1160.3215,-62 1160.3215,-74 1160.3215,-74 1160.3215,-80 1154.3215,-86 1148.3215,-86"/>
-<text text-anchor="middle" x="1123.8341" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">initialize</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize -->
-<g id="edge17" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize</title>
-<g id="a_edge17"><a xlink:title="at zones.go:24: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize]">
-<path fill="none" stroke="#000000" d="M941.2232,-96.4168C979.9704,-90.3872 1037.2175,-81.4787 1077.2557,-75.2482"/>
-<polygon fill="#000000" stroke="#000000" points="1077.9539,-78.6818 1087.2968,-73.6857 1076.8775,-71.765 1077.9539,-78.6818"/>
+<title>github.com/beevik/ntp.QueryWithOptions</title>
+<g id="a_node1"><a xlink:title="github.com/beevik/ntp.QueryWithOptions | defined in ntp.go:432">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M355.7754,-494C355.7754,-494 248.1546,-494 248.1546,-494 242.1546,-494 236.1546,-488 236.1546,-482 236.1546,-482 236.1546,-470 236.1546,-470 236.1546,-464 242.1546,-458 248.1546,-458 248.1546,-458 355.7754,-458 355.7754,-458 361.7754,-458 367.7754,-464 367.7754,-470 367.7754,-470 367.7754,-482 367.7754,-482 367.7754,-488 361.7754,-494 355.7754,-494"/>
+<text text-anchor="middle" x="301.965" y="-480.2" font-family="Verdana" font-size="14.00" fill="#000000">ntp</text>
+<text text-anchor="middle" x="301.965" y="-463.4" font-family="Verdana" font-size="14.00" fill="#000000">QueryWithOptions</text>
 </a>
 </g>
 </g>
@@ -92,13 +75,30 @@
 </a>
 </g>
 </g>
-<!-- github.com/beevik/ntp.QueryWithOptions -->
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones -->
 <g id="node5" class="node">
-<title>github.com/beevik/ntp.QueryWithOptions</title>
-<g id="a_node5"><a xlink:title="github.com/beevik/ntp.QueryWithOptions | defined in ntp.go:432">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M355.7754,-494C355.7754,-494 248.1546,-494 248.1546,-494 242.1546,-494 236.1546,-488 236.1546,-482 236.1546,-482 236.1546,-470 236.1546,-470 236.1546,-464 242.1546,-458 248.1546,-458 248.1546,-458 355.7754,-458 355.7754,-458 361.7754,-458 367.7754,-464 367.7754,-470 367.7754,-470 367.7754,-482 367.7754,-482 367.7754,-488 361.7754,-494 355.7754,-494"/>
-<text text-anchor="middle" x="301.965" y="-480.2" font-family="Verdana" font-size="14.00" fill="#000000">ntp</text>
-<text text-anchor="middle" x="301.965" y="-463.4" font-family="Verdana" font-size="14.00" fill="#000000">QueryWithOptions</text>
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones</title>
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones | defined in zones.go:19&#10;at zones.go:24: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M929.0586,-121C929.0586,-121 868.7778,-121 868.7778,-121 862.7778,-121 856.7778,-115 856.7778,-109 856.7778,-109 856.7778,-97 856.7778,-97 856.7778,-91 862.7778,-85 868.7778,-85 868.7778,-85 929.0586,-85 929.0586,-85 935.0586,-85 941.0586,-91 941.0586,-97 941.0586,-97 941.0586,-109 941.0586,-109 941.0586,-115 935.0586,-121 929.0586,-121"/>
+<text text-anchor="middle" x="898.9182" y="-98.8" font-family="Verdana" font-size="14.00" fill="#000000">NewZones</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize -->
+<g id="node20" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize</title>
+<g id="a_node20"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize | defined in zones.go:36&#10;at zones.go:51: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1148.3215,-86C1148.3215,-86 1099.3467,-86 1099.3467,-86 1093.3467,-86 1087.3467,-80 1087.3467,-74 1087.3467,-74 1087.3467,-62 1087.3467,-62 1087.3467,-56 1093.3467,-50 1099.3467,-50 1099.3467,-50 1148.3215,-50 1148.3215,-50 1154.3215,-50 1160.3215,-56 1160.3215,-62 1160.3215,-62 1160.3215,-74 1160.3215,-74 1160.3215,-80 1154.3215,-86 1148.3215,-86"/>
+<text text-anchor="middle" x="1123.8341" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">initialize</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize -->
+<g id="edge8" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize</title>
+<g id="a_edge8"><a xlink:title="at zones.go:24: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).initialize]">
+<path fill="none" stroke="#000000" d="M941.2232,-96.4168C979.9704,-90.3872 1037.2175,-81.4787 1077.2557,-75.2482"/>
+<polygon fill="#000000" stroke="#000000" points="1077.9539,-78.6818 1087.2968,-73.6857 1076.8775,-71.765 1077.9539,-78.6818"/>
 </a>
 </g>
 </g>
@@ -112,9 +112,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones -->
-<g id="edge2" class="edge">
+<g id="edge13" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones</title>
-<g id="a_edge2"><a xlink:title="at router_timestamper.go:61: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones]">
+<g id="a_edge13"><a xlink:title="at router_timestamper.go:61: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewZones]">
 <path fill="none" stroke="#000000" d="M748.4483,-114.0303C780.9942,-111.6445 817.5321,-108.9661 846.4526,-106.846"/>
 <polygon fill="#000000" stroke="#000000" points="847.024,-110.3136 856.7413,-106.0918 846.5122,-103.3324 847.024,-110.3136"/>
 </a>
@@ -123,16 +123,16 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig -->
 <g id="node8" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig</title>
-<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig | defined in router_timestamper.go:331&#10;at router_timestamper.go:357: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone]&#10;at router_timestamper.go:348: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode]">
+<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig | defined in router_timestamper.go:331&#10;at router_timestamper.go:348: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode]&#10;at router_timestamper.go:357: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M937.126,-286C937.126,-286 860.7104,-286 860.7104,-286 854.7104,-286 848.7104,-280 848.7104,-274 848.7104,-274 848.7104,-262 848.7104,-262 848.7104,-256 854.7104,-250 860.7104,-250 860.7104,-250 937.126,-250 937.126,-250 943.126,-250 949.126,-256 949.126,-262 949.126,-262 949.126,-274 949.126,-274 949.126,-280 943.126,-286 937.126,-286"/>
 <text text-anchor="middle" x="898.9182" y="-263.8" font-family="Verdana" font-size="14.00" fill="#000000">updateConfig</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig -->
-<g id="edge16" class="edge">
+<g id="edge18" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig</title>
-<g id="a_edge16"><a xlink:title="at router_timestamper.go:65: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]">
+<g id="a_edge18"><a xlink:title="at router_timestamper.go:65: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]">
 <path fill="none" stroke="#000000" d="M684.2314,-138.2078C711.018,-165.5021 765.4158,-216.9173 821.2106,-246 826.759,-248.8921 832.7343,-251.4444 838.8191,-253.6875"/>
 <polygon fill="#000000" stroke="#000000" points="837.8309,-257.0483 848.4253,-256.9623 840.0896,-250.4227 837.8309,-257.0483"/>
 </a>
@@ -157,27 +157,27 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode -->
-<g id="edge10" class="edge">
+<g id="edge1" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode</title>
-<g id="a_edge10"><a xlink:title="at router_timestamper.go:348: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode]">
+<g id="a_edge1"><a xlink:title="at router_timestamper.go:348: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.getLocalCountryCode]">
 <path fill="none" stroke="#000000" d="M949.2861,-282.535C959.0176,-286.82 968.6526,-292.2328 976.6258,-299 1022.0787,-337.5781 1002.2441,-377.3308 1047.4553,-417.4837"/>
 <polygon fill="#000000" stroke="#000000" points="1045.3444,-420.2793 1055.2899,-423.9314 1049.7925,-414.8743 1045.3444,-420.2793"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone -->
-<g id="node21" class="node">
+<g id="node19" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone</title>
-<g id="a_node21"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone | defined in zones.go:28">
+<g id="a_node19"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone | defined in zones.go:28">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M1148.3131,-147C1148.3131,-147 1099.3551,-147 1099.3551,-147 1093.3551,-147 1087.3551,-141 1087.3551,-135 1087.3551,-135 1087.3551,-123 1087.3551,-123 1087.3551,-117 1093.3551,-111 1099.3551,-111 1099.3551,-111 1148.3131,-111 1148.3131,-111 1154.3131,-111 1160.3131,-117 1160.3131,-123 1160.3131,-123 1160.3131,-135 1160.3131,-135 1160.3131,-141 1154.3131,-147 1148.3131,-147"/>
 <text text-anchor="middle" x="1123.8341" y="-124.8" font-family="Verdana" font-size="14.00" fill="#000000">GetZone</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone -->
-<g id="edge7" class="edge">
+<g id="edge9" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone</title>
-<g id="a_edge7"><a xlink:title="at router_timestamper.go:357: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone]">
+<g id="a_edge9"><a xlink:title="at router_timestamper.go:357: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).GetZone]">
 <path fill="none" stroke="#000000" d="M949.0305,-264.8332C971.0415,-261.1253 995.8619,-253.4902 1013.6258,-238 1045.1651,-210.4976 1018.5362,-179.0098 1049.6258,-151 1057.338,-144.0518 1067.153,-139.2936 1077.0995,-136.0365"/>
 <polygon fill="#000000" stroke="#000000" points="1078.334,-139.3254 1087.0168,-133.2543 1076.4431,-132.5856 1078.334,-139.3254"/>
 </a>
@@ -186,27 +186,27 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery -->
 <g id="node9" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery</title>
-<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery | defined in router_timestamper.go:129&#10;at router_timestamper.go:130: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]&#10;at router_timestamper.go:141: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]&#10;at router_timestamper.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]&#10;at router_timestamper.go:149: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool]&#10;at router_timestamper.go:131: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M721.6312,-362C721.6312,-362 612.3958,-362 612.3958,-362 606.3958,-362 600.3958,-356 600.3958,-350 600.3958,-350 600.3958,-338 600.3958,-338 600.3958,-332 606.3958,-326 612.3958,-326 612.3958,-326 721.6312,-326 721.6312,-326 727.6312,-326 733.6312,-332 733.6312,-338 733.6312,-338 733.6312,-350 733.6312,-350 733.6312,-356 727.6312,-362 721.6312,-362"/>
-<text text-anchor="middle" x="667.0135" y="-339.8" font-family="Verdana" font-size="14.00" fill="#000000">performTimeQuery</text>
+<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery | defined in router_timestamper.go:129&#10;at router_timestamper.go:131: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity]&#10;at router_timestamper.go:130: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]&#10;at router_timestamper.go:149: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool]&#10;at router_timestamper.go:141: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]&#10;at router_timestamper.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M721.6312,-373C721.6312,-373 612.3958,-373 612.3958,-373 606.3958,-373 600.3958,-367 600.3958,-361 600.3958,-361 600.3958,-349 600.3958,-349 600.3958,-343 606.3958,-337 612.3958,-337 612.3958,-337 721.6312,-337 721.6312,-337 727.6312,-337 733.6312,-343 733.6312,-349 733.6312,-349 733.6312,-361 733.6312,-361 733.6312,-367 727.6312,-373 721.6312,-373"/>
+<text text-anchor="middle" x="667.0135" y="-350.8" font-family="Verdana" font-size="14.00" fill="#000000">performTimeQuery</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity -->
-<g id="edge18" class="edge">
+<g id="edge2" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity</title>
-<g id="a_edge18"><a xlink:title="at router_timestamper.go:131: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity]">
-<path fill="none" stroke="#000000" d="M700.1887,-362.133C731.0725,-378.6876 778.615,-403.3472 821.2106,-422 826.8372,-424.4639 832.7462,-426.9119 838.6872,-429.2808"/>
-<polygon fill="#000000" stroke="#000000" points="837.4258,-432.5455 848.0137,-432.9293 839.976,-426.0266 837.4258,-432.5455"/>
+<g id="a_edge2"><a xlink:title="at router_timestamper.go:131: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.checkIPv6Connectivity]">
+<path fill="none" stroke="#000000" d="M707.0278,-373.0762C738.0115,-386.9049 782.098,-406.2171 821.2106,-422 827.1696,-424.4046 833.4124,-426.8521 839.6589,-429.2544"/>
+<polygon fill="#000000" stroke="#000000" points="838.8467,-432.6904 849.4376,-432.9798 841.3388,-426.149 838.8467,-432.6904"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig -->
-<g id="edge4" class="edge">
+<g id="edge5" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig</title>
-<g id="a_edge4"><a xlink:title="at router_timestamper.go:130: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]">
-<path fill="none" stroke="#000000" d="M734.0434,-326.2901C738.8505,-324.8816 743.6124,-323.4442 748.2106,-322 779.4019,-312.2034 813.7485,-300.0084 841.7651,-289.6876"/>
-<polygon fill="#000000" stroke="#000000" points="843.2327,-292.8765 851.3954,-286.1221 840.8022,-286.3119 843.2327,-292.8765"/>
+<g id="a_edge5"><a xlink:title="at router_timestamper.go:130: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).updateConfig]">
+<path fill="none" stroke="#000000" d="M733.7716,-337.905C738.6888,-336.3431 743.5464,-334.7038 748.2106,-333 781.8287,-320.7195 788.3537,-313.1921 821.2106,-299 828.086,-296.0303 835.3442,-292.9992 842.5522,-290.052"/>
+<polygon fill="#000000" stroke="#000000" points="844.3555,-293.0978 852.3093,-286.0988 841.7268,-286.6101 844.3555,-293.0978"/>
 </a>
 </g>
 </g>
@@ -220,11 +220,11 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime -->
-<g id="edge12" class="edge">
+<g id="edge10" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime</title>
-<g id="a_edge12"><a xlink:title="at router_timestamper.go:141: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]&#10;at router_timestamper.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]">
-<path fill="none" stroke="#000000" d="M733.7788,-339.6815C769.4301,-337.3755 812.6965,-334.577 845.998,-332.423"/>
-<polygon fill="#000000" stroke="#000000" points="846.2404,-335.9147 855.9936,-331.7764 845.7885,-328.9293 846.2404,-335.9147"/>
+<g id="a_edge10"><a xlink:title="at router_timestamper.go:141: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]&#10;at router_timestamper.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime]">
+<path fill="none" stroke="#000000" d="M733.7788,-347.5146C769.4301,-343.5176 812.6965,-338.6668 845.998,-334.9332"/>
+<polygon fill="#000000" stroke="#000000" points="846.4458,-338.405 855.9936,-333.8125 845.6658,-331.4485 846.4458,-338.405"/>
 </a>
 </g>
 </g>
@@ -238,18 +238,18 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool -->
-<g id="edge13" class="edge">
+<g id="edge7" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool</title>
-<g id="a_edge13"><a xlink:title="at router_timestamper.go:149: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool]">
-<path fill="none" stroke="#000000" d="M733.7788,-357.2434C764.1938,-363.2764 800.1513,-370.4089 830.7354,-376.4754"/>
-<polygon fill="#000000" stroke="#000000" points="830.3957,-379.9762 840.8856,-378.4888 831.7577,-373.11 830.3957,-379.9762"/>
+<g id="a_edge7"><a xlink:title="at router_timestamper.go:149: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).secureRandBool]">
+<path fill="none" stroke="#000000" d="M733.7788,-365.0765C764.1938,-369.6668 800.1513,-375.0937 830.7354,-379.7096"/>
+<polygon fill="#000000" stroke="#000000" points="830.4753,-383.2099 840.8856,-381.2415 831.5199,-376.2883 830.4753,-383.2099"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration -->
-<g id="edge5" class="edge">
+<g id="edge6" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration</title>
-<g id="a_edge5"><a xlink:title="at router_timestamper.go:303: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]&#10;at router_timestamper.go:312: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]&#10;at router_timestamper.go:304: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
+<g id="a_edge6"><a xlink:title="at router_timestamper.go:303: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]&#10;at router_timestamper.go:312: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]&#10;at router_timestamper.go:304: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
 <path fill="none" stroke="#000000" d="M942.0155,-316.7584C953.8548,-312.2574 966.2725,-306.4 976.6258,-299 1017.6903,-269.6493 1007.4174,-239.6803 1049.6258,-212 1055.2126,-208.3362 1061.4284,-205.2657 1067.8181,-202.6962"/>
 <polygon fill="#000000" stroke="#000000" points="1069.0411,-205.9758 1077.2513,-199.2794 1066.6571,-199.3943 1069.0411,-205.9758"/>
 </a>
@@ -265,130 +265,130 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).stampTime -->
-<g id="edge11" class="edge">
+<g id="edge15" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).queryTime&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).stampTime</title>
-<g id="a_edge11"><a xlink:title="at router_timestamper.go:319: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).stampTime]">
+<g id="a_edge15"><a xlink:title="at router_timestamper.go:319: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).stampTime]">
 <path fill="none" stroke="#000000" d="M941.7526,-329C978.1397,-329 1030.5595,-329 1069.8194,-329"/>
 <polygon fill="#000000" stroke="#000000" points="1070.0083,-332.5001 1080.0083,-329 1070.0083,-325.5001 1070.0083,-332.5001"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run -->
 <g id="node13" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run</title>
+<g id="a_node13"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run | defined in router_timestamper.go:215&#10;at router_timestamper.go:218: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M491.7182,-408C491.7182,-408 461.7182,-408 461.7182,-408 455.7182,-408 449.7182,-402 449.7182,-396 449.7182,-396 449.7182,-384 449.7182,-384 449.7182,-378 455.7182,-372 461.7182,-372 461.7182,-372 491.7182,-372 491.7182,-372 497.7182,-372 503.7182,-378 503.7182,-384 503.7182,-384 503.7182,-396 503.7182,-396 503.7182,-402 497.7182,-408 491.7182,-408"/>
+<text text-anchor="middle" x="476.7182" y="-385.8" font-family="Verdana" font-size="14.00" fill="#000000">run</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery -->
+<g id="edge11" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery</title>
+<g id="a_edge11"><a xlink:title="at router_timestamper.go:218: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
+<path fill="none" stroke="#000000" d="M503.9829,-384.9854C526.512,-380.8417 559.6361,-374.7494 590.1523,-369.1367"/>
+<polygon fill="#000000" stroke="#000000" points="591.1804,-372.5064 600.3823,-367.2551 589.9141,-365.6218 591.1804,-372.5064"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce -->
+<g id="node14" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce</title>
-<g id="a_node13"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce | defined in router_timestamper.go:272&#10;at router_timestamper.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M500.9149,-386C500.9149,-386 452.5215,-386 452.5215,-386 446.5215,-386 440.5215,-380 440.5215,-374 440.5215,-374 440.5215,-362 440.5215,-362 440.5215,-356 446.5215,-350 452.5215,-350 452.5215,-350 500.9149,-350 500.9149,-350 506.9149,-350 512.9149,-356 512.9149,-362 512.9149,-362 512.9149,-374 512.9149,-374 512.9149,-380 506.9149,-386 500.9149,-386"/>
-<text text-anchor="middle" x="476.7182" y="-363.8" font-family="Verdana" font-size="14.00" fill="#000000">runOnce</text>
+<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce | defined in router_timestamper.go:272&#10;at router_timestamper.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M500.9149,-347C500.9149,-347 452.5215,-347 452.5215,-347 446.5215,-347 440.5215,-341 440.5215,-335 440.5215,-335 440.5215,-323 440.5215,-323 440.5215,-317 446.5215,-311 452.5215,-311 452.5215,-311 500.9149,-311 500.9149,-311 506.9149,-311 512.9149,-317 512.9149,-323 512.9149,-323 512.9149,-335 512.9149,-335 512.9149,-341 506.9149,-347 500.9149,-347"/>
+<text text-anchor="middle" x="476.7182" y="-324.8" font-family="Verdana" font-size="14.00" fill="#000000">runOnce</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery -->
-<g id="edge8" class="edge">
+<g id="edge12" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery</title>
-<g id="a_edge8"><a xlink:title="at router_timestamper.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
-<path fill="none" stroke="#000000" d="M512.9592,-363.4293C534.7608,-360.6797 563.365,-357.0721 590.0004,-353.7129"/>
-<polygon fill="#000000" stroke="#000000" points="590.6105,-357.1637 600.0939,-352.4399 589.7346,-350.2188 590.6105,-357.1637"/>
+<g id="a_edge12"><a xlink:title="at router_timestamper.go:273: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
+<path fill="none" stroke="#000000" d="M512.9592,-333.9516C534.7608,-336.9303 563.365,-340.8385 590.0004,-344.4777"/>
+<polygon fill="#000000" stroke="#000000" points="589.7122,-347.9708 600.0939,-345.8568 590.6598,-341.0352 589.7122,-347.9708"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start -->
+<g id="node15" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start</title>
+<g id="a_node15"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start | defined in router_timestamper.go:69&#10;at router_timestamper.go:75: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M316.965,-408C316.965,-408 286.965,-408 286.965,-408 280.965,-408 274.965,-402 274.965,-396 274.965,-396 274.965,-384 274.965,-384 274.965,-378 280.965,-372 286.965,-372 286.965,-372 316.965,-372 316.965,-372 322.965,-372 328.965,-378 328.965,-384 328.965,-384 328.965,-396 328.965,-396 328.965,-402 322.965,-408 316.965,-408"/>
+<text text-anchor="middle" x="301.965" y="-385.8" font-family="Verdana" font-size="14.00" fill="#000000">Start</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run -->
+<g id="edge16" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run</title>
+<g id="a_edge16"><a xlink:title="at router_timestamper.go:75: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run]">
+<path fill="none" stroke="#000000" d="M329.2702,-390C355.1753,-390 394.7342,-390 426.3574,-390"/>
+<polygon fill="#000000" stroke="#000000" points="439.6048,-393.5 449.6048,-390 439.6047,-386.5 439.6048,-393.5"/>
+<polyline fill="none" stroke="#000000" points="439.6048,-390 434.6048,-390.0001 "/>
+<ellipse fill="none" stroke="#000000" cx="430.6048" cy="-390.0001" rx="4" ry="4"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow -->
-<g id="node14" class="node">
+<g id="node16" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow</title>
-<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow | defined in router_timestamper.go:119&#10;at router_timestamper.go:121: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M347.1672,-386C347.1672,-386 256.7628,-386 256.7628,-386 250.7628,-386 244.7628,-380 244.7628,-374 244.7628,-374 244.7628,-362 244.7628,-362 244.7628,-356 250.7628,-350 256.7628,-350 256.7628,-350 347.1672,-350 347.1672,-350 353.1672,-350 359.1672,-356 359.1672,-362 359.1672,-362 359.1672,-374 359.1672,-374 359.1672,-380 353.1672,-386 347.1672,-386"/>
-<text text-anchor="middle" x="301.965" y="-363.8" font-family="Verdana" font-size="14.00" fill="#000000">TimestampNow</text>
+<g id="a_node16"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow | defined in router_timestamper.go:119&#10;at router_timestamper.go:121: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M347.1672,-347C347.1672,-347 256.7628,-347 256.7628,-347 250.7628,-347 244.7628,-341 244.7628,-335 244.7628,-335 244.7628,-323 244.7628,-323 244.7628,-317 250.7628,-311 256.7628,-311 256.7628,-311 347.1672,-311 347.1672,-311 353.1672,-311 359.1672,-317 359.1672,-323 359.1672,-323 359.1672,-335 359.1672,-335 359.1672,-341 353.1672,-347 347.1672,-347"/>
+<text text-anchor="middle" x="301.965" y="-324.8" font-family="Verdana" font-size="14.00" fill="#000000">TimestampNow</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce -->
-<g id="edge19" class="edge">
+<g id="edge4" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce</title>
-<g id="a_edge19"><a xlink:title="at router_timestamper.go:121: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce]">
-<path fill="none" stroke="#000000" d="M359.1857,-368C377.8039,-368 398.5042,-368 417.2807,-368"/>
-<polygon fill="#000000" stroke="#000000" points="430.5192,-371.5 440.5192,-368 430.5192,-364.5 430.5192,-371.5"/>
-<polyline fill="none" stroke="#000000" points="430.5192,-368 425.5192,-368.0001 "/>
-<ellipse fill="none" stroke="#000000" cx="421.5192" cy="-368.0001" rx="4" ry="4"/>
+<g id="a_edge4"><a xlink:title="at router_timestamper.go:121: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).runOnce]">
+<path fill="none" stroke="#000000" d="M359.1857,-329C377.8039,-329 398.5042,-329 417.2807,-329"/>
+<polygon fill="#000000" stroke="#000000" points="430.5192,-332.5 440.5192,-329 430.5192,-325.5 430.5192,-332.5"/>
+<polyline fill="none" stroke="#000000" points="430.5192,-329 425.5192,-329.0001 "/>
+<ellipse fill="none" stroke="#000000" cx="421.5192" cy="-329.0001" rx="4" ry="4"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime -->
-<g id="node15" class="node">
+<g id="node17" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime</title>
-<g id="a_node15"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime | defined in router_timestamper.go:397&#10;at router_timestamper.go:400: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M135.6792,-386C135.6792,-386 43.6308,-386 43.6308,-386 37.6308,-386 31.6308,-380 31.6308,-374 31.6308,-374 31.6308,-362 31.6308,-362 31.6308,-356 37.6308,-350 43.6308,-350 43.6308,-350 135.6792,-350 135.6792,-350 141.6792,-350 147.6792,-356 147.6792,-362 147.6792,-362 147.6792,-374 147.6792,-374 147.6792,-380 141.6792,-386 135.6792,-386"/>
-<text text-anchor="middle" x="89.655" y="-363.8" font-family="Verdana" font-size="14.00" fill="#000000">GetCurrentTime</text>
+<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime | defined in router_timestamper.go:397&#10;at router_timestamper.go:400: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M135.6792,-347C135.6792,-347 43.6308,-347 43.6308,-347 37.6308,-347 31.6308,-341 31.6308,-335 31.6308,-335 31.6308,-323 31.6308,-323 31.6308,-317 37.6308,-311 43.6308,-311 43.6308,-311 135.6792,-311 135.6792,-311 141.6792,-311 147.6792,-317 147.6792,-323 147.6792,-323 147.6792,-335 147.6792,-335 147.6792,-341 141.6792,-347 135.6792,-347"/>
+<text text-anchor="middle" x="89.655" y="-324.8" font-family="Verdana" font-size="14.00" fill="#000000">GetCurrentTime</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow -->
-<g id="edge1" class="edge">
+<g id="edge17" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow</title>
-<g id="a_edge1"><a xlink:title="at router_timestamper.go:400: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow]">
-<path fill="none" stroke="#000000" d="M147.9505,-368C174.7367,-368 206.6648,-368 234.487,-368"/>
-<polygon fill="#000000" stroke="#000000" points="234.5344,-371.5001 244.5344,-368 234.5343,-364.5001 234.5344,-371.5001"/>
+<g id="a_edge17"><a xlink:title="at router_timestamper.go:400: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).TimestampNow]">
+<path fill="none" stroke="#000000" d="M147.9505,-329C174.7367,-329 206.6648,-329 234.487,-329"/>
+<polygon fill="#000000" stroke="#000000" points="234.5344,-332.5001 244.5344,-329 234.5343,-325.5001 234.5344,-332.5001"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse -->
-<g id="node16" class="node">
+<g id="node18" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse</title>
-<g id="a_node16"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse | defined in verification.go:10&#10;at verification.go:28: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
+<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse | defined in verification.go:10&#10;at verification.go:28: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M138.6256,-286C138.6256,-286 40.6844,-286 40.6844,-286 34.6844,-286 28.6844,-280 28.6844,-274 28.6844,-274 28.6844,-262 28.6844,-262 28.6844,-256 34.6844,-250 40.6844,-250 40.6844,-250 138.6256,-250 138.6256,-250 144.6256,-250 150.6256,-256 150.6256,-262 150.6256,-262 150.6256,-274 150.6256,-274 150.6256,-280 144.6256,-286 138.6256,-286"/>
 <text text-anchor="middle" x="89.655" y="-263.8" font-family="Verdana" font-size="14.00" fill="#000000">validateResponse</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration -->
-<g id="edge9" class="edge">
+<g id="edge19" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).validateResponse&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration</title>
-<g id="a_edge9"><a xlink:title="at verification.go:28: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
+<g id="a_edge19"><a xlink:title="at verification.go:28: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.absDuration]">
 <path fill="none" stroke="#000000" d="M125.453,-249.8939C166.855,-230.6609 237.5896,-203 301.965,-203 301.965,-203 301.965,-203 898.9182,-203 956.2509,-203 1021.6676,-198.7379 1067.1138,-195.0945"/>
 <polygon fill="#000000" stroke="#000000" points="1067.6758,-198.5603 1077.3571,-194.2567 1067.1051,-191.5836 1067.6758,-198.5603"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run -->
-<g id="node17" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run</title>
-<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run | defined in router_timestamper.go:215&#10;at router_timestamper.go:218: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M491.7182,-325C491.7182,-325 461.7182,-325 461.7182,-325 455.7182,-325 449.7182,-319 449.7182,-313 449.7182,-313 449.7182,-301 449.7182,-301 449.7182,-295 455.7182,-289 461.7182,-289 461.7182,-289 491.7182,-289 491.7182,-289 497.7182,-289 503.7182,-295 503.7182,-301 503.7182,-301 503.7182,-313 503.7182,-313 503.7182,-319 497.7182,-325 491.7182,-325"/>
-<text text-anchor="middle" x="476.7182" y="-302.8" font-family="Verdana" font-size="14.00" fill="#000000">run</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery -->
-<g id="edge6" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery</title>
-<g id="a_edge6"><a xlink:title="at router_timestamper.go:218: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).performTimeQuery]">
-<path fill="none" stroke="#000000" d="M503.9829,-312.3012C526.61,-316.7007 559.9243,-323.1782 590.5502,-329.1329"/>
-<polygon fill="#000000" stroke="#000000" points="589.8981,-332.5716 600.3823,-331.0446 591.2341,-325.7002 589.8981,-332.5716"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start -->
-<g id="node18" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start</title>
-<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start | defined in router_timestamper.go:69&#10;at router_timestamper.go:75: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M316.965,-325C316.965,-325 286.965,-325 286.965,-325 280.965,-325 274.965,-319 274.965,-313 274.965,-313 274.965,-301 274.965,-301 274.965,-295 280.965,-289 286.965,-289 286.965,-289 316.965,-289 316.965,-289 322.965,-289 328.965,-295 328.965,-301 328.965,-301 328.965,-313 328.965,-313 328.965,-319 322.965,-325 316.965,-325"/>
-<text text-anchor="middle" x="301.965" y="-302.8" font-family="Verdana" font-size="14.00" fill="#000000">Start</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run -->
-<g id="edge15" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).Start&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run</title>
-<g id="a_edge15"><a xlink:title="at router_timestamper.go:75: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).run]">
-<path fill="none" stroke="#000000" d="M329.2702,-307C355.1753,-307 394.7342,-307 426.3574,-307"/>
-<polygon fill="#000000" stroke="#000000" points="439.6048,-310.5 449.6048,-307 439.6047,-303.5 439.6048,-310.5"/>
-<polyline fill="none" stroke="#000000" points="439.6048,-307 434.6048,-307.0001 "/>
-<ellipse fill="none" stroke="#000000" cx="430.6048" cy="-307.0001" rx="4" ry="4"/>
-</a>
-</g>
-</g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile -->
-<g id="node20" class="node">
+<g id="node21" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile</title>
-<g id="a_node20"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile | defined in zones.go:54">
+<g id="a_node21"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.Zones).readContinentFile | defined in zones.go:54">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1384.1792,-86C1384.1792,-86 1282.9968,-86 1282.9968,-86 1276.9968,-86 1270.9968,-80 1270.9968,-74 1270.9968,-74 1270.9968,-62 1270.9968,-62 1270.9968,-56 1276.9968,-50 1282.9968,-50 1282.9968,-50 1384.1792,-50 1384.1792,-50 1390.1792,-50 1396.1792,-56 1396.1792,-62 1396.1792,-62 1396.1792,-74 1396.1792,-74 1396.1792,-80 1390.1792,-86 1384.1792,-86"/>
 <text text-anchor="middle" x="1333.588" y="-63.8" font-family="Verdana" font-size="14.00" fill="#000000">readContinentFile</text>
 </a>

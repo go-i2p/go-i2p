@@ -30,11 +30,11 @@ type HandshakeState struct {
 	// isInitiator indicates whether this side initiated the handshake
 	IsInitiator bool
 	// localStaticKey is this router's long-term private key
-	LocalStaticKey types.PrivateKey
+	LocalStaticKey types.PrivateEncryptionKey
 	// remoteStaticKey is the remote router's long-term public key
 	RemoteStaticKey types.PublicKey
 	// localEphemeral is the temporary private key generated for this handshake
-	LocalEphemeral types.PrivateKey
+	LocalEphemeral types.PrivateEncryptionKey
 	// remoteEphemeral is the temporary public key received from remote party
 	RemoteEphemeral types.PublicKey
 	// localPaddingLen is the length of padding bytes we send
@@ -65,7 +65,7 @@ HandshakeState maintains the state for an in-progress handshake
 #### func  NewHandshakeState
 
 ```go
-func NewHandshakeState(localKey types.PrivateKey, remoteKey types.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error)
+func NewHandshakeState(localKey types.PrivateEncryptionKey, remoteKey types.PublicKey, ri *router_info.RouterInfo) (*HandshakeState, error)
 ```
 NewHandshakeState creates a new handshake state for initiating a connection
 

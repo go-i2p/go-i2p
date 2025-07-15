@@ -46,7 +46,7 @@ type DecryptedTunnelMessage [1028]byte
 #### func (DecryptedTunnelMessage) Checksum
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() crypto.TunnelIV
+func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() tunnel.TunnelIV
 ```
 
 #### func (DecryptedTunnelMessage) DeliveryInstructionsWithFragments
@@ -67,7 +67,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID
 #### func (DecryptedTunnelMessage) IV
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) IV() crypto.TunnelIV
+func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
 
 #### type DelayFactor
@@ -216,14 +216,14 @@ type DeliveryInstructionsWithFragment struct {
 #### type EncryptedTunnelMessage
 
 ```go
-type EncryptedTunnelMessage crypto.TunnelData
+type EncryptedTunnelMessage tunnel.TunnelData
 ```
 
 
 #### func (EncryptedTunnelMessage) Data
 
 ```go
-func (tm EncryptedTunnelMessage) Data() crypto.TunnelIV
+func (tm EncryptedTunnelMessage) Data() tunnel.TunnelIV
 ```
 
 #### func (EncryptedTunnelMessage) ID
@@ -235,7 +235,7 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID)
 #### func (EncryptedTunnelMessage) IV
 
 ```go
-func (tm EncryptedTunnelMessage) IV() crypto.TunnelIV
+func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
 
 #### type Participant
