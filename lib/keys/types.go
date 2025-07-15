@@ -3,6 +3,7 @@ package keys
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/go-i2p/crypto/types"
 )
@@ -63,5 +64,6 @@ func (ks *KeyStoreImpl) StoreKeys() error {
 	}
 	// on the disk somewhere
 	filename := fmt.Sprintf("private-%s.key", ks.KeyID())
-	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o644)
+	fullPath := filepath.Join(ks.dir, filename)
+	return os.WriteFile(fullPath, ks.privateKey.Bytes(), 0o600)
 }
