@@ -101,7 +101,7 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 	}
 	// on the disk somewhere
 	filename := filepath.Join(ks.dir, ks.KeyID()+".key")
-	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o644)
+	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o600)
 }
 
 func (ks *RouterInfoKeystore) KeyID() string {
