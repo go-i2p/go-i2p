@@ -178,36 +178,53 @@ func (s *SessionConfirmedProcessor) ProcessMessage(message messages.Message, hs 
 
 // ReadMessage implements handshake.HandshakeMessageProcessor.
 func (s *SessionConfirmedProcessor) ReadMessage(conn net.Conn, hs *handshake.HandshakeState) (messages.Message, error) {
-	// Step 1: Read the static key frame (32 bytes)
+	// Read and validate the static key frame
+	deobfuscatedKey, staticKeyFrame, err := s.readAndValidateStaticKey(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read and decrypt the payload
+	decryptedPayload, err := s.readAndDecryptPayload(conn, hs, staticKeyFrame)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the complete message from decrypted data
+	return s.parseSessionConfirmedMessage(decryptedPayload, deobfuscatedKey)
+}
+
+// readAndValidateStaticKey reads the static key frame from the connection and validates it.
+func (s *SessionConfirmedProcessor) readAndValidateStaticKey(conn net.Conn) ([]byte, []byte, error) {
 	staticKeyFrame := make([]byte, 32)
 	if _, err := io.ReadFull(conn, staticKeyFrame); err != nil {
-		return nil, oops.Errorf("failed to read static key frame: %w", err)
+		return nil, nil, oops.Errorf("failed to read static key frame: %w", err)
 	}
 
-	// Step 2: Deobfuscate the static key using existing method
 	deobfuscatedKey, err := s.NTCP2Session.DeobfuscateEphemeral(staticKeyFrame)
 	if err != nil {
-		return nil, oops.Errorf("failed to deobfuscate static key: %w", err)
+		return nil, nil, oops.Errorf("failed to deobfuscate static key: %w", err)
 	}
 
-	// Step 3: Validate the key is a valid Curve25519 point
 	if deobfuscatedKey[31]&0x80 != 0 {
-		return nil, oops.Errorf("invalid static key format")
+		return nil, nil, oops.Errorf("invalid static key format")
 	}
 
-	// Step 4: Read the payload length from handshake state
+	return deobfuscatedKey, staticKeyFrame, nil
+}
+
+// readAndDecryptPayload reads the encrypted payload and decrypts it using the handshake state.
+func (s *SessionConfirmedProcessor) readAndDecryptPayload(conn net.Conn, hs *handshake.HandshakeState, staticKeyFrame []byte) ([]byte, error) {
 	payloadLen := hs.Message3Length
 	if payloadLen <= 0 {
 		return nil, oops.Errorf("invalid message 3 payload size: %d", payloadLen)
 	}
 
-	// Step 5: Read the encrypted payload
 	encryptedPayload := make([]byte, payloadLen)
 	if _, err := io.ReadFull(conn, encryptedPayload); err != nil {
 		return nil, oops.Errorf("failed to read encrypted payload: %w", err)
 	}
 
-	// Step 6: Decrypt the payload using existing AEAD operations
 	decryptedPayload, err := s.NTCP2Session.DecryptWithAssociatedData(
 		hs.ChachaKey,
 		encryptedPayload,
@@ -218,30 +235,23 @@ func (s *SessionConfirmedProcessor) ReadMessage(conn net.Conn, hs *handshake.Han
 		return nil, oops.Errorf("failed to decrypt payload: %w", err)
 	}
 
-	// Step 7: Parse the RouterInfo and options from the decrypted payload
+	return decryptedPayload, nil
+}
+
+// parseSessionConfirmedMessage parses the RouterInfo and options from the decrypted payload.
+func (s *SessionConfirmedProcessor) parseSessionConfirmedMessage(decryptedPayload, deobfuscatedKey []byte) (*messages.SessionConfirmed, error) {
 	sc := &messages.SessionConfirmed{
-		StaticKey: [32]byte{}, // Already processed
+		StaticKey: [32]byte{},
 	}
 
-	// Copy the static key for reference
 	copy(sc.StaticKey[:], deobfuscatedKey)
 
-	// Parse RouterInfo and options from decrypted payload
-	// This would need proper RouterInfo parsing implementation
-	offset := 0
-	routerInfoSize := binary.BigEndian.Uint16(decryptedPayload[offset : offset+2])
-	offset += 2
-
-	routerInfoBytes := decryptedPayload[offset : offset+int(routerInfoSize)]
-	offset += int(routerInfoSize)
-
-	routerInfo, _, err := router_info.ReadRouterInfo(routerInfoBytes)
+	routerInfo, offset, err := s.parseRouterInfoFromPayload(decryptedPayload)
 	if err != nil {
-		return nil, oops.Errorf("failed to parse RouterInfo: %w", err)
+		return nil, err
 	}
 	sc.RouterInfo = &routerInfo
 
-	// Parse options if available
 	if offset < len(decryptedPayload) {
 		options := &messages.ConfirmedOptions{}
 		// Parse options from remaining data
@@ -250,6 +260,31 @@ func (s *SessionConfirmedProcessor) ReadMessage(conn net.Conn, hs *handshake.Han
 	}
 
 	return sc, nil
+}
+
+// parseRouterInfoFromPayload extracts and parses the RouterInfo from the decrypted payload.
+func (s *SessionConfirmedProcessor) parseRouterInfoFromPayload(decryptedPayload []byte) (router_info.RouterInfo, int, error) {
+	if len(decryptedPayload) < 2 {
+		return router_info.RouterInfo{}, 0, oops.Errorf("payload too short for RouterInfo size")
+	}
+
+	offset := 0
+	routerInfoSize := binary.BigEndian.Uint16(decryptedPayload[offset : offset+2])
+	offset += 2
+
+	if len(decryptedPayload) < offset+int(routerInfoSize) {
+		return router_info.RouterInfo{}, 0, oops.Errorf("payload too short for RouterInfo data")
+	}
+
+	routerInfoBytes := decryptedPayload[offset : offset+int(routerInfoSize)]
+	offset += int(routerInfoSize)
+
+	routerInfo, _, err := router_info.ReadRouterInfo(routerInfoBytes)
+	if err != nil {
+		return router_info.RouterInfo{}, 0, oops.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	return routerInfo, offset, nil
 }
 
 var _ handshake.HandshakeMessageProcessor = (*SessionConfirmedProcessor)(nil)

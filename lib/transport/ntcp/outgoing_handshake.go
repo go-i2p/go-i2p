@@ -15,67 +15,91 @@ import (
 // 3. Creates and sends SessionConfirmed (Message 3)
 // After successful completion, the session is established and ready for data exchange.
 func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
-	// Initialize processors if not already done
+	if err := s.initializeHandshakeProcessors(); err != nil {
+		return err
+	}
+
+	if err := s.sendSessionRequest(conn); err != nil {
+		return err
+	}
+
+	if err := s.processSessionCreated(conn); err != nil {
+		return err
+	}
+
+	if err := s.sendSessionConfirmed(conn); err != nil {
+		return err
+	}
+
+	return s.HandshakeState.CompleteHandshake()
+}
+
+// initializeHandshakeProcessors sets up the message processors if not already initialized.
+func (s *NTCP2Session) initializeHandshakeProcessors() error {
 	if s.Processors == nil {
 		s.Processors = make(map[messages.MessageType]handshake.HandshakeMessageProcessor)
 		s.Processors[messages.MessageTypeSessionRequest] = &SessionRequestProcessor{NTCP2Session: s}
 		s.Processors[messages.MessageTypeSessionCreated] = &SessionCreatedProcessor{NTCP2Session: s}
 		s.Processors[messages.MessageTypeSessionConfirmed] = &SessionConfirmedProcessor{NTCP2Session: s}
 	}
+	return nil
+}
 
-	// Step 1: Get SessionRequest processor and create Message 1
+// sendSessionRequest creates and sends the SessionRequest message (Message 1).
+func (s *NTCP2Session) sendSessionRequest(conn net.Conn) error {
 	requestProcessor, err := s.GetProcessor(messages.MessageTypeSessionRequest)
 	if err != nil {
 		return oops.Errorf("failed to get session request processor: %w", err)
 	}
 
-	// Create and prepare SessionRequest
 	msg, err := requestProcessor.CreateMessage(s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return oops.Errorf("failed to create session request: %w", err)
 	}
 
-	// Obfuscate ephemeral key
 	obfuscatedKey, err := requestProcessor.ObfuscateKey(msg, s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return oops.Errorf("failed to obfuscate ephemeral key: %w", err)
 	}
 
-	// Encrypt options payload
 	encryptedPayload, err := requestProcessor.EncryptPayload(msg, obfuscatedKey, s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return oops.Errorf("failed to encrypt session request payload: %w", err)
 	}
 
-	// Write complete SessionRequest message to connection
 	if err := s.WriteMessageToConn(conn, obfuscatedKey, encryptedPayload, requestProcessor.GetPadding(msg)); err != nil {
 		return oops.Errorf("failed to write session request: %w", err)
 	}
 
-	// Step 2: Process SessionCreated (Message 2) from responder
+	return nil
+}
+
+// processSessionCreated receives and processes the SessionCreated message (Message 2).
+func (s *NTCP2Session) processSessionCreated(conn net.Conn) error {
 	createdProcessor, err := s.GetProcessor(messages.MessageTypeSessionCreated)
 	if err != nil {
 		return oops.Errorf("failed to get session created processor: %w", err)
 	}
 
-	// Read and decode SessionCreated message
 	createdMsg, err := createdProcessor.ReadMessage(conn, s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return oops.Errorf("failed to read session created message: %w", err)
 	}
 
-	// Process SessionCreated to update handshake state
 	if err := createdProcessor.ProcessMessage(createdMsg, s.HandshakeState.(*handshake.HandshakeState)); err != nil {
 		return oops.Errorf("failed to process session created message: %w", err)
 	}
 
-	// Step 3: Create and send SessionConfirmed (Message 3)
+	return nil
+}
+
+// sendSessionConfirmed creates and sends the SessionConfirmed message (Message 3).
+func (s *NTCP2Session) sendSessionConfirmed(conn net.Conn) error {
 	confirmedProcessor, err := s.GetProcessor(messages.MessageTypeSessionConfirmed)
 	if err != nil {
 		return oops.Errorf("failed to get session confirmed processor: %w", err)
 	}
 
-	// Create SessionConfirmed message
 	confirmedMsg, err := confirmedProcessor.CreateMessage(s.HandshakeState.(*handshake.HandshakeState))
 	if err != nil {
 		return oops.Errorf("failed to create session confirmed message: %w", err)
@@ -86,7 +110,6 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 		return oops.Errorf("failed to get local static key: %w", err)
 	}
 
-	// Encrypt RouterInfo payload
 	encryptedConfirmedPayload, err := confirmedProcessor.EncryptPayload(
 		confirmedMsg,
 		staticKey[:],
@@ -96,7 +119,6 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 		return oops.Errorf("failed to encrypt session confirmed payload: %w", err)
 	}
 
-	// Write SessionConfirmed to connection
 	if err := s.WriteMessageToConn(
 		conn,
 		staticKey[:],
@@ -106,6 +128,5 @@ func (s *NTCP2Session) PerformOutboundHandshake(conn net.Conn) error {
 		return oops.Errorf("failed to write session confirmed message: %w", err)
 	}
 
-	// Handshake complete, mark session as established
-	return s.HandshakeState.CompleteHandshake()
+	return nil
 }
