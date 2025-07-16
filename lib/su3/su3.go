@@ -206,40 +206,93 @@ func (su3 *SU3) Signature() io.Reader {
 }
 
 func Read(reader io.Reader) (su3 *SU3, err error) {
-	// We will buffer everything up to the content, so that once we know
-	// the hash type being used for the signature, we can write these bytes
-	// into the hash.
 	log.Debug("Starting to read SU3 file")
 	var buff bytes.Buffer
 
-	// Magic bytes.
+	if err := readAndValidateMagicBytes(reader, &buff); err != nil {
+		return nil, err
+	}
+
+	if err := readFileFormatHeader(reader, &buff); err != nil {
+		return nil, err
+	}
+
+	su3 = &SU3{
+		mut:    sync.Mutex{},
+		reader: reader,
+	}
+
+	sigType, err := readSignatureInfo(reader, su3, &buff)
+	if err != nil {
+		return nil, err
+	}
+
+	verLen, signIDLen, err := readLengthFields(reader, su3, &buff)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := readFileMetadata(reader, su3, &buff); err != nil {
+		return nil, err
+	}
+
+	if err := readUnusedBytes28To39(reader, &buff); err != nil {
+		return nil, err
+	}
+
+	if err := readVersionAndSignerID(reader, su3, &buff, verLen, signIDLen); err != nil {
+		return nil, err
+	}
+
+	if err := initializeReaders(su3, sigType, &buff); err != nil {
+		return nil, err
+	}
+
+	log.WithFields(logrus.Fields{
+		"signature_type": su3.SignatureType,
+		"file_type":      su3.FileType,
+		"content_type":   su3.ContentType,
+		"version":        su3.Version,
+		"signer_id":      su3.SignerID,
+	}).Debug("SU3 file read successfully")
+
+	return su3, nil
+}
+
+// readAndValidateMagicBytes reads and validates the SU3 file magic bytes.
+func readAndValidateMagicBytes(reader io.Reader, buff *bytes.Buffer) error {
 	mbytes := make([]byte, len(magicBytes))
 	l, err := reader.Read(mbytes)
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read magic bytes")
-		return nil, oops.Errorf("reading magic bytes: %w", err)
+		return oops.Errorf("reading magic bytes: %w", err)
 	}
 	if l != len(mbytes) {
 		log.Error("Missing magic bytes")
-		return nil, ErrMissingMagicBytes
+		return ErrMissingMagicBytes
 	}
 	if string(mbytes) != magicBytes {
 		log.Error("Invalid magic bytes")
-		return nil, ErrMissingMagicBytes
+		return ErrMissingMagicBytes
 	}
 	buff.Write(mbytes)
 	log.Debug("Magic bytes verified")
+	return nil
+}
+
+// readFileFormatHeader reads the unused byte 6 and file format version.
+func readFileFormatHeader(reader io.Reader, buff *bytes.Buffer) error {
+	unused := [1]byte{}
 
 	// Unused byte 6.
-	unused := [1]byte{}
-	l, err = reader.Read(unused[:])
+	l, err := reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read unused byte 6")
-		return nil, oops.Errorf("reading unused byte 6: %w", err)
+		return oops.Errorf("reading unused byte 6: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing unused byte 6")
-		return nil, ErrMissingUnusedByte6
+		return ErrMissingUnusedByte6
 	}
 	buff.Write(unused[:])
 	log.Debug("Read unused byte 6")
@@ -248,39 +301,39 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read SU3 file format version")
-		return nil, oops.Errorf("reading SU3 file format version: %w", err)
+		return oops.Errorf("reading SU3 file format version: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing SU3 file format version")
-		return nil, ErrMissingFileFormatVersion
+		return ErrMissingFileFormatVersion
 	}
 	if unused[0] != 0x00 {
 		log.Error("Invalid SU3 file format version")
-		return nil, ErrMissingFileFormatVersion
+		return ErrMissingFileFormatVersion
 	}
 	buff.Write(unused[:])
 	log.Debug("SU3 file format version verified")
 
-	su3 = &SU3{
-		mut:    sync.Mutex{},
-		reader: reader,
-	}
+	return nil
+}
 
+// readSignatureInfo reads signature type and length, returning the signature type.
+func readSignatureInfo(reader io.Reader, su3 *SU3, buff *bytes.Buffer) (SignatureType, error) {
 	// Signature type.
 	sigTypeBytes := [2]byte{}
-	l, err = reader.Read(sigTypeBytes[:])
+	l, err := reader.Read(sigTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read signature type")
-		return nil, oops.Errorf("reading signature type: %w", err)
+		return "", oops.Errorf("reading signature type: %w", err)
 	}
 	if l != 2 {
 		log.Error("Missing signature type")
-		return nil, ErrMissingSignatureType
+		return "", ErrMissingSignatureType
 	}
 	sigType, ok := sigTypes[sigTypeBytes]
 	if !ok {
 		log.WithField("signature_type", sigTypeBytes).Error("Unsupported signature type")
-		return nil, ErrUnsupportedSignatureType
+		return "", ErrUnsupportedSignatureType
 	}
 	su3.SignatureType = sigType
 	buff.Write(sigTypeBytes[:])
@@ -291,11 +344,11 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(sigLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read signature length")
-		return nil, oops.Errorf("reading signature length: %w", err)
+		return "", oops.Errorf("reading signature length: %w", err)
 	}
 	if l != 2 {
 		log.Error("Missing signature length")
-		return nil, ErrMissingSignatureLength
+		return "", ErrMissingSignatureLength
 	}
 	sigLen := binary.BigEndian.Uint16(sigLengthBytes[:])
 	// TODO check that sigLen is the correct length for sigType.
@@ -303,15 +356,22 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	buff.Write(sigLengthBytes[:])
 	log.WithField("signature_length", sigLen).Debug("Signature length read")
 
+	return sigType, nil
+}
+
+// readLengthFields reads various length fields including version and signer ID lengths.
+func readLengthFields(reader io.Reader, su3 *SU3, buff *bytes.Buffer) (uint16, uint16, error) {
+	unused := [1]byte{}
+
 	// Unused byte 12.
-	l, err = reader.Read(unused[:])
+	l, err := reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read unused byte 12")
-		return nil, oops.Errorf("reading unused byte 12: %w", err)
+		return 0, 0, oops.Errorf("reading unused byte 12: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing unused byte 12")
-		return nil, ErrMissingUnusedByte12
+		return 0, 0, ErrMissingUnusedByte12
 	}
 	buff.Write(unused[:])
 	log.Debug("Read unused byte 12")
@@ -321,16 +381,16 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(verLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read version length")
-		return nil, oops.Errorf("reading version length: %w", err)
+		return 0, 0, oops.Errorf("reading version length: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing version length")
-		return nil, ErrMissingVersionLength
+		return 0, 0, ErrMissingVersionLength
 	}
 	verLen := binary.BigEndian.Uint16([]byte{0x00, verLengthBytes[0]})
 	if verLen < 16 {
 		log.WithField("version_length", verLen).Error("Version length too short")
-		return nil, ErrVersionTooShort
+		return 0, 0, ErrVersionTooShort
 	}
 	buff.Write(verLengthBytes[:])
 	log.WithField("version_length", verLen).Debug("Version length read")
@@ -339,11 +399,11 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read unused byte 14")
-		return nil, oops.Errorf("reading unused byte 14: %w", err)
+		return 0, 0, oops.Errorf("reading unused byte 14: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing unused byte 14")
-		return nil, ErrMissingUnusedByte14
+		return 0, 0, ErrMissingUnusedByte14
 	}
 	buff.Write(unused[:])
 	log.Debug("Read unused byte 14")
@@ -353,26 +413,33 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(sigIDLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read signer ID length")
-		return nil, oops.Errorf("reading signer id length: %w", err)
+		return 0, 0, oops.Errorf("reading signer id length: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing signer ID length")
-		return nil, ErrMissingSignerIDLength
+		return 0, 0, ErrMissingSignerIDLength
 	}
 	signIDLen := binary.BigEndian.Uint16([]byte{0x00, sigIDLengthBytes[0]})
 	buff.Write(sigIDLengthBytes[:])
 	log.WithField("signer_id_length", signIDLen).Debug("Signer ID length read")
 
+	return verLen, signIDLen, nil
+}
+
+// readFileMetadata reads content length, file type, and content type.
+func readFileMetadata(reader io.Reader, su3 *SU3, buff *bytes.Buffer) error {
+	unused := [1]byte{}
+
 	// Content length.
 	contentLengthBytes := [8]byte{}
-	l, err = reader.Read(contentLengthBytes[:])
+	l, err := reader.Read(contentLengthBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read content length")
-		return nil, oops.Errorf("reading content length: %w", err)
+		return oops.Errorf("reading content length: %w", err)
 	}
 	if l != 8 {
 		log.Error("Missing content length")
-		return nil, ErrMissingContentLength
+		return ErrMissingContentLength
 	}
 	contentLen := binary.BigEndian.Uint64(contentLengthBytes[:])
 	su3.ContentLength = contentLen
@@ -383,11 +450,11 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read unused byte 24")
-		return nil, oops.Errorf("reading unused byte 24: %w", err)
+		return oops.Errorf("reading unused byte 24: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing unused byte 24")
-		return nil, ErrMissingUnusedByte24
+		return ErrMissingUnusedByte24
 	}
 	buff.Write(unused[:])
 	log.Debug("Read unused byte 24")
@@ -397,16 +464,16 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(fileTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read file type")
-		return nil, oops.Errorf("reading file type: %w", err)
+		return oops.Errorf("reading file type: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing file type")
-		return nil, ErrMissingFileType
+		return ErrMissingFileType
 	}
 	fileType, ok := fileTypes[fileTypeBytes[0]]
 	if !ok {
 		log.WithField("file_type_byte", fileTypeBytes[0]).Error("Invalid file type")
-		return nil, ErrMissingFileType
+		return ErrMissingFileType
 	}
 	su3.FileType = fileType
 	buff.Write(fileTypeBytes[:])
@@ -416,11 +483,11 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(unused[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read unused byte 26")
-		return nil, oops.Errorf("reading unused byte 26: %w", err)
+		return oops.Errorf("reading unused byte 26: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing unused byte 26")
-		return nil, ErrMissingUnusedByte26
+		return ErrMissingUnusedByte26
 	}
 	buff.Write(unused[:])
 	log.Debug("Read unused byte 26")
@@ -430,46 +497,55 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(contentTypeBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read content type")
-		return nil, oops.Errorf("reading content type: %w", err)
+		return oops.Errorf("reading content type: %w", err)
 	}
 	if l != 1 {
 		log.Error("Missing content type")
-		return nil, ErrMissingContentType
+		return ErrMissingContentType
 	}
 	contentType, ok := contentTypes[contentTypeBytes[0]]
 	if !ok {
 		log.WithField("content_type_byte", contentTypeBytes[0]).Error("Invalid content type")
-		return nil, ErrMissingContentType
+		return ErrMissingContentType
 	}
 	su3.ContentType = contentType
 	buff.Write(contentTypeBytes[:])
 	log.WithField("content_type", contentType).Debug("Content type read")
 
-	// Unused bytes 28-39.
+	return nil
+}
+
+// readUnusedBytes28To39 reads the 12 unused bytes in the range 28-39.
+func readUnusedBytes28To39(reader io.Reader, buff *bytes.Buffer) error {
+	unused := [1]byte{}
 	for i := 0; i < 12; i++ {
-		l, err = reader.Read(unused[:])
+		l, err := reader.Read(unused[:])
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.WithError(err).Error("Failed to read unused bytes 28-39")
-			return nil, oops.Errorf("reading unused bytes 28-39: %w", err)
+			return oops.Errorf("reading unused bytes 28-39: %w", err)
 		}
 		if l != 1 {
 			log.WithField("byte_number", 28+i).Error("Missing unused byte")
-			return nil, ErrMissingUnusedBytes28To39
+			return ErrMissingUnusedBytes28To39
 		}
 		buff.Write(unused[:])
 	}
 	log.Debug("Read unused bytes 28-39")
+	return nil
+}
 
+// readVersionAndSignerID reads the version and signer ID strings.
+func readVersionAndSignerID(reader io.Reader, su3 *SU3, buff *bytes.Buffer, verLen, signIDLen uint16) error {
 	// Version.
 	versionBytes := make([]byte, verLen)
-	l, err = reader.Read(versionBytes[:])
+	l, err := reader.Read(versionBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		log.Debug("Read unused bytes 28-39")
-		return nil, oops.Errorf("reading version: %w", err)
+		log.WithError(err).Error("Failed to read version")
+		return oops.Errorf("reading version: %w", err)
 	}
 	if l != int(verLen) {
 		log.Error("Missing version")
-		return nil, ErrMissingVersion
+		return ErrMissingVersion
 	}
 	version := strings.TrimRight(string(versionBytes), "\x00")
 	su3.Version = version
@@ -481,21 +557,27 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 	l, err = reader.Read(signerIDBytes[:])
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.WithError(err).Error("Failed to read signer ID")
-		return nil, oops.Errorf("reading signer id: %w", err)
+		return oops.Errorf("reading signer id: %w", err)
 	}
 	if l != int(signIDLen) {
 		log.Error("Missing signer ID")
-		return nil, ErrMissingSignerID
+		return ErrMissingSignerID
 	}
 	signerID := string(signerIDBytes)
 	su3.SignerID = signerID
 	buff.Write(signerIDBytes[:])
 	log.WithField("signer_id", signerID).Debug("Signer ID read")
 
+	return nil
+}
+
+// initializeReaders creates and configures the content and signature readers.
+func initializeReaders(su3 *SU3, sigType SignatureType, buff *bytes.Buffer) error {
 	su3.contentReader = &contentReader{
 		su3: su3,
 	}
 	log.Debug("Content reader initialized")
+
 	switch sigType {
 	case RSA_SHA256_2048:
 		su3.contentReader.hash = sha256.New()
@@ -514,15 +596,7 @@ func Read(reader io.Reader) (su3 *SU3, err error) {
 		su3: su3,
 	}
 
-	log.WithFields(logrus.Fields{
-		"signature_type": su3.SignatureType,
-		"file_type":      su3.FileType,
-		"content_type":   su3.ContentType,
-		"version":        su3.Version,
-		"signer_id":      su3.SignerID,
-	}).Debug("SU3 file read successfully")
-
-	return su3, nil
+	return nil
 }
 
 type fixedLengthReader struct {
