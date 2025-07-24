@@ -18,18 +18,18 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Streaming
 - Cryptographic primitives
   - Signing
-    - [ ] ECDSA_SHA256_P256
-    - [ ] ECDSA_SHA384_P384
-    - [ ] ECDSA_SHA512_P521
+    - [X] ECDSA_SHA256_P256
+    - [X] ECDSA_SHA384_P384
+    - [X] ECDSA_SHA512_P521
     - [X] Ed25519
   - Verifying
     - [X] DSA
-    - [ ] ECDSA_SHA256_P256
-    - [ ] ECDSA_SHA384_P384
-    - [ ] ECDSA_SHA512_P521
-    - [ ] RSA_SHA256_2048
-    - [ ] RSA_SHA384_3072
-    - [ ] RSA_SHA512_4096
+    - [X] ECDSA_SHA256_P256
+    - [X] ECDSA_SHA384_P384
+    - [X] ECDSA_SHA512_P521
+    - [X] RSA_SHA256_2048
+    - [X] RSA_SHA384_3072
+    - [X] RSA_SHA512_4096
     - [X] Ed25519
     - [ ] Red25519
   - [X] ElGamal
@@ -37,7 +37,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [X] X25519
   - [X] ChaCha20/Poly1305
   - [ ] Elligator2
-  - [ ] HKDF
+  - [X] HKDF
   - [X] HMAC
   - [X] Noise subsystem
 - End-to-End Crypto
