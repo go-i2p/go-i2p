@@ -16,7 +16,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] I2CP
   - [ ] Message routing
   - [ ] Streaming
-- Cryptographic primitives
+- [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
   - Signing
     - [X] ECDSA_SHA256_P256
     - [X] ECDSA_SHA384_P384
@@ -57,7 +57,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] Publishing
   - [ ] Floodfill
   - [ ] LS2 and Encrypted Leasesets
-- Transports
+- [Transports(see also: https://github.com/go-i2p/go-noise](https://github.com/go-i2p/go-noise)
   - [X] Transport manager
   - NTCP2
     - [X] Handshake
@@ -76,7 +76,7 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Participating
     - [ ] Tunnel Message Crypto
     - [ ] Tunnel Message Fragmentation/Reassembly
-- Common Data Structures
+- [Common Data Structures(see also: https://github.com/go-i2p/common](https://github.com/go-i2p/common)
     - [X] Keys and Cert
     - [X] Key Certificates
     - [X] Certificate
