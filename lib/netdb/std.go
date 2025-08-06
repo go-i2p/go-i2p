@@ -13,11 +13,11 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/common/base32"
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/go-i2p/lib/util"
 )

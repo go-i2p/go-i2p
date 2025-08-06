@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/common/base32"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"

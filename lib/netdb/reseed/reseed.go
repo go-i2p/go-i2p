@@ -15,7 +15,7 @@ import (
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
-	"github.com/go-i2p/go-i2p/lib/su3"
+	"github.com/go-i2p/su3"
 )
 
 var log = logger.GetGoI2PLogger()

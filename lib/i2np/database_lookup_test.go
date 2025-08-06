@@ -342,7 +342,7 @@ func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
 			return
 		}
 		expectedReplyTags = append(expectedReplyTags, sessionTag)
-		//expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
+		// expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
 		data = append(data, tag...)
 	}
 

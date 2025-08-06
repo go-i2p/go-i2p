@@ -4,26 +4,27 @@ go 1.24.2
 
 require (
 	github.com/beevik/ntp v1.4.3
-	github.com/emirpasic/gods v1.18.1
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
-	github.com/flynn/noise v1.1.0
 	github.com/go-i2p/common v0.0.0-20250715213359-dfa5527ece83
 	github.com/go-i2p/crypto v0.0.0-20250716230511-565a0995440c
+	github.com/go-i2p/go-noise v0.0.0-20250805210353-74f980a2439d
 	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
 	github.com/go-i2p/su3 v0.0.0-20250716183548-497fadf45e84
+	github.com/go-i2p/util v0.0.0-20250806013618-d0b686a4f694
 	github.com/samber/oops v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
+	github.com/go-i2p/noise v0.0.0-20250805205922-091c71f48c43 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
@@ -43,6 +44,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.step.sm/crypto v0.67.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
