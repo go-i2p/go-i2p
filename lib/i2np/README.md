@@ -4,7 +4,35 @@
 
 ![i2np.svg](i2np.svg)
 
+## Interface-Based Architecture
 
+This package now features a comprehensive interface-based design that improves testability, flexibility, and maintainability while preserving full backward compatibility. See [REFACTORING.md](REFACTORING.md) for detailed documentation of the interface architecture.
+
+### Key Interfaces
+
+- **`I2NPMessage`**: Core message interface combining serialization, identification, and expiration
+- **`PayloadCarrier`**: Messages that carry payload data
+- **`TunnelCarrier`**: Messages that carry tunnel-related data  
+- **`StatusReporter`**: Messages that report delivery status
+- **`DatabaseReader`/`DatabaseWriter`**: Database operation interfaces
+- **`TunnelBuilder`/`TunnelReplyHandler`**: Tunnel management interfaces
+
+### Usage Examples
+
+```go
+// Interface-based message processing
+processor := NewMessageProcessor()
+var msg I2NPMessage = NewDataMessage([]byte("test"))
+err := processor.ProcessMessage(msg)
+
+// Factory pattern for interface types
+factory := NewI2NPMessageFactory()
+dataMsg := factory.CreateDataMessage(payload)
+
+// Specialized interface usage
+var carrier PayloadCarrier = NewDataMessageWithPayload(payload)
+payload := carrier.GetPayload()
+```
 
 ## Usage
 

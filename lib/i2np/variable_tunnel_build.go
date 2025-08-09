@@ -24,3 +24,24 @@ type VariableTunnelBuild struct {
 	Count               int
 	BuildRequestRecords []BuildRequestRecord
 }
+
+// GetBuildRecords returns the build request records
+func (v *VariableTunnelBuild) GetBuildRecords() []BuildRequestRecord {
+	return v.BuildRequestRecords
+}
+
+// GetRecordCount returns the number of build records
+func (v *VariableTunnelBuild) GetRecordCount() int {
+	return v.Count
+}
+
+// NewVariableTunnelBuilder creates a new VariableTunnelBuild and returns it as TunnelBuilder interface
+func NewVariableTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
+	return &VariableTunnelBuild{
+		Count:               len(records),
+		BuildRequestRecords: records,
+	}
+}
+
+// Compile-time interface satisfaction check
+var _ TunnelBuilder = (*VariableTunnelBuild)(nil)

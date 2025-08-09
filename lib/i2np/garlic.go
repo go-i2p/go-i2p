@@ -71,3 +71,16 @@ type Garlic struct {
 	MessageID   int
 	Expiration  time.Time
 }
+
+// GetCloves returns the garlic cloves
+func (g *Garlic) GetCloves() []GarlicClove {
+	return g.Cloves
+}
+
+// GetCloveCount returns the number of cloves
+func (g *Garlic) GetCloveCount() int {
+	return g.Count
+}
+
+// Compile-time interface satisfaction check
+var _ GarlicProcessor = (*Garlic)(nil)

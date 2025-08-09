@@ -402,3 +402,34 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 	}).Debug("parsed_database_lookup_reply_tags")
 	return length + tags*32, reply_tags, nil
 }
+
+// GetKey returns the lookup key
+func (d *DatabaseLookup) GetKey() common.Hash {
+	return d.Key
+}
+
+// GetFrom returns the from hash
+func (d *DatabaseLookup) GetFrom() common.Hash {
+	return d.From
+}
+
+// GetFlags returns the lookup flags
+func (d *DatabaseLookup) GetFlags() byte {
+	return d.Flags
+}
+
+// GetReplyTags returns the reply tags
+func (d *DatabaseLookup) GetReplyTags() []session_tag.SessionTag {
+	return d.ReplyTags
+}
+
+// GetTagCount returns the number of tags
+func (d *DatabaseLookup) GetTagCount() int {
+	return d.Tags
+}
+
+// Compile-time interface satisfaction checks
+var (
+	_ DatabaseReader     = (*DatabaseLookup)(nil)
+	_ SessionTagProvider = (*DatabaseLookup)(nil)
+)

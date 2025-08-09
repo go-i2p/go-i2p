@@ -437,3 +437,45 @@ func readBuildRequestRecordPadding(data []byte) ([29]byte, error) {
 	}).Debug("parsed_build_request_record_padding")
 	return padding, nil
 }
+
+// GetReceiveTunnel returns the receive tunnel ID
+func (b *BuildRequestRecord) GetReceiveTunnel() tunnel.TunnelID {
+	return b.ReceiveTunnel
+}
+
+// GetNextTunnel returns the next tunnel ID
+func (b *BuildRequestRecord) GetNextTunnel() tunnel.TunnelID {
+	return b.NextTunnel
+}
+
+// GetOurIdent returns our identity hash
+func (b *BuildRequestRecord) GetOurIdent() common.Hash {
+	return b.OurIdent
+}
+
+// GetNextIdent returns the next identity hash
+func (b *BuildRequestRecord) GetNextIdent() common.Hash {
+	return b.NextIdent
+}
+
+// GetReplyKey returns the reply session key
+func (b *BuildRequestRecord) GetReplyKey() session_key.SessionKey {
+	return b.ReplyKey
+}
+
+// GetLayerKey returns the layer session key
+func (b *BuildRequestRecord) GetLayerKey() session_key.SessionKey {
+	return b.LayerKey
+}
+
+// GetIVKey returns the IV session key
+func (b *BuildRequestRecord) GetIVKey() session_key.SessionKey {
+	return b.IVKey
+}
+
+// Compile-time interface satisfaction checks
+var (
+	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)
+	_ HashProvider       = (*BuildRequestRecord)(nil)
+	_ SessionKeyProvider = (*BuildRequestRecord)(nil)
+)

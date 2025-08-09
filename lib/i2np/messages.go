@@ -32,10 +32,18 @@ func NewDataMessage(payload []byte) *DataMessage {
 	return msg
 }
 
+// NewDataMessageWithPayload creates a new Data message and returns it as PayloadCarrier interface
+func NewDataMessageWithPayload(payload []byte) PayloadCarrier {
+	return NewDataMessage(payload)
+}
+
 // GetPayload returns the actual payload data
 func (d *DataMessage) GetPayload() []byte {
 	return d.Payload
 }
+
+// Compile-time interface satisfaction check
+var _ PayloadCarrier = (*DataMessage)(nil)
 
 // UnmarshalBinary deserializes a Data message
 func (d *DataMessage) UnmarshalBinary(data []byte) error {
@@ -92,6 +100,11 @@ func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatu
 	return msg
 }
 
+// NewDeliveryStatusReporter creates a new DeliveryStatus message and returns it as StatusReporter interface
+func NewDeliveryStatusReporter(messageID int, timestamp time.Time) StatusReporter {
+	return NewDeliveryStatusMessage(messageID, timestamp)
+}
+
 // UnmarshalBinary deserializes a DeliveryStatus message
 func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	// First unmarshal the base message
@@ -115,6 +128,19 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+// GetStatusMessageID returns the status message ID
+func (d *DeliveryStatusMessage) GetStatusMessageID() int {
+	return d.StatusMessageID
+}
+
+// GetTimestamp returns the timestamp
+func (d *DeliveryStatusMessage) GetTimestamp() time.Time {
+	return d.Timestamp
+}
+
+// Compile-time interface satisfaction check
+var _ StatusReporter = (*DeliveryStatusMessage)(nil)
+
 // TunnelDataMessage represents an I2NP TunnelData message
 type TunnelDataMessage struct {
 	*BaseI2NPMessage
@@ -133,6 +159,11 @@ func NewTunnelDataMessage(data [1024]byte) *TunnelDataMessage {
 	return msg
 }
 
+// NewTunnelCarrier creates a new TunnelData message and returns it as TunnelCarrier interface
+func NewTunnelCarrier(data [1024]byte) TunnelCarrier {
+	return NewTunnelDataMessage(data)
+}
+
 // UnmarshalBinary deserializes a TunnelData message
 func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 	// First unmarshal the base message
@@ -149,3 +180,11 @@ func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 	copy(t.Data[:], messageData)
 	return nil
 }
+
+// GetTunnelData returns the tunnel data
+func (t *TunnelDataMessage) GetTunnelData() []byte {
+	return t.Data[:]
+}
+
+// Compile-time interface satisfaction check
+var _ TunnelCarrier = (*TunnelDataMessage)(nil)

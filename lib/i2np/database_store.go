@@ -94,3 +94,21 @@ type DatabaseStore struct {
 	ReplyGateway  common.Hash
 	Data          []byte
 }
+
+// GetStoreKey returns the store key
+func (d *DatabaseStore) GetStoreKey() common.Hash {
+	return d.Key
+}
+
+// GetStoreData returns the store data
+func (d *DatabaseStore) GetStoreData() []byte {
+	return d.Data
+}
+
+// GetStoreType returns the store type
+func (d *DatabaseStore) GetStoreType() byte {
+	return d.Type
+}
+
+// Compile-time interface satisfaction check
+var _ DatabaseWriter = (*DatabaseStore)(nil)

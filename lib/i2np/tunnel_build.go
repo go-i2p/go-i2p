@@ -26,3 +26,22 @@ total size: 8*528 = 4224 bytes
 */
 
 type TunnelBuild [8]BuildRequestRecord
+
+// GetBuildRecords returns the build request records
+func (t *TunnelBuild) GetBuildRecords() []BuildRequestRecord {
+	return t[:]
+}
+
+// GetRecordCount returns the number of build records
+func (t *TunnelBuild) GetRecordCount() int {
+	return 8
+}
+
+// NewTunnelBuilder creates a new TunnelBuild and returns it as TunnelBuilder interface
+func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
+	tb := TunnelBuild(records)
+	return &tb
+}
+
+// Compile-time interface satisfaction check
+var _ TunnelBuilder = (*TunnelBuild)(nil)

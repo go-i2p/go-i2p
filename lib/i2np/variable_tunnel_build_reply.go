@@ -16,3 +16,18 @@ type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
 }
+
+// GetReplyRecords returns the build response records
+func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
+	return v.BuildResponseRecords
+}
+
+// ProcessReply processes the variable tunnel build reply
+func (v *VariableTunnelBuildReply) ProcessReply() error {
+	// Implementation would depend on business logic
+	// This is a placeholder for the interface requirement
+	return nil
+}
+
+// Compile-time interface satisfaction check
+var _ TunnelReplyHandler = (*VariableTunnelBuildReply)(nil)
