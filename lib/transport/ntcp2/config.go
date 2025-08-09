@@ -8,13 +8,9 @@ type Config struct {
 }
 
 func NewConfig(listenerAddress string) (*Config, error) {
-	ntcp2Config, err := ntcp2.NewNTCP2Config(nil, false)
-	if err != nil {
-		return nil, err
-	}
 	return &Config{
 		ListenerAddress: listenerAddress,
-		NTCP2Config:     ntcp2Config,
+		NTCP2Config:     nil, // Will be set when identity is provided
 	}, nil
 }
 

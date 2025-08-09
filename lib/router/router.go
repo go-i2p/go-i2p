@@ -2,6 +2,7 @@ package router
 
 import (
 	"crypto/sha256"
+	"errors"
 	"strconv"
 	"time"
 
@@ -82,22 +83,29 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 
 	// we have our keystore and our routerInfo,, so now let's set up transports
 	// add NTCP2 transport
-	ntcp2, err := ntcp.NewNTCP2Transport(ri)
+	ntcp2Config, err := ntcp.NewConfig(":0") // Use port 0 for automatic assignment
+	if err != nil {
+		log.WithError(err).Error("Failed to create NTCP2 config")
+		return nil, err
+	}
+
+	ntcp2, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")
 		return nil, err
-	} else {
-		log.Debug("NTCP2 transport created successfully")
 	}
+	log.Debug("NTCP2 transport created successfully")
+
 	r.TransportMuxer = transport.Mux(ntcp2)
-	ntcpaddr, err := ntcp2.Address()
-	if err != nil {
-		log.WithError(err).Error("Failed to get NTCP2 address")
-		return nil, err
-	} else {
-		log.Debug("NTCP2 address:", ntcpaddr)
+	ntcpaddr := ntcp2.Addr()
+	if ntcpaddr == nil {
+		log.Error("Failed to get NTCP2 address")
+		return nil, errors.New("failed to get NTCP2 address")
 	}
-	ri.AddAddress(ntcpaddr)
+	log.Debug("NTCP2 address:", ntcpaddr)
+
+	// TODO: Add the NTCP2 address to RouterInfo once RouterAddress conversion is implemented
+	// ri.AddAddress(ntcpaddr)
 
 	// create a transport address
 

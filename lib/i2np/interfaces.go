@@ -113,18 +113,34 @@ type GarlicProcessor interface {
 
 // Compile-time interface satisfaction checks for message types
 var (
-	_ MessageSerializer  = (*BaseI2NPMessage)(nil)
-	_ MessageIdentifier  = (*BaseI2NPMessage)(nil)
-	_ MessageExpiration  = (*BaseI2NPMessage)(nil)
-	_ PayloadCarrier     = (*DataMessage)(nil)
-	_ TunnelCarrier      = (*TunnelDataMessage)(nil)
-	_ StatusReporter     = (*DeliveryStatusMessage)(nil)
+	// Core message interfaces
+	_ MessageSerializer = (*BaseI2NPMessage)(nil)
+	_ MessageIdentifier = (*BaseI2NPMessage)(nil)
+	_ MessageExpiration = (*BaseI2NPMessage)(nil)
+	_ I2NPMessage       = (*BaseI2NPMessage)(nil)
+	_ I2NPMessage       = (*DataMessage)(nil)
+	_ I2NPMessage       = (*DeliveryStatusMessage)(nil)
+	_ I2NPMessage       = (*TunnelDataMessage)(nil)
+
+	// Specialized behavior interfaces
+	_ PayloadCarrier  = (*DataMessage)(nil)
+	_ TunnelCarrier   = (*TunnelDataMessage)(nil)
+	_ StatusReporter  = (*DeliveryStatusMessage)(nil)
+	_ GarlicProcessor = (*Garlic)(nil)
+
+	// Database interfaces
 	_ DatabaseReader     = (*DatabaseLookup)(nil)
-	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)
-	_ SessionKeyProvider = (*BuildRequestRecord)(nil)
-	_ HashProvider       = (*BuildRequestRecord)(nil)
+	_ DatabaseWriter     = (*DatabaseStore)(nil)
+	_ SessionTagProvider = (*DatabaseLookup)(nil)
+
+	// Tunnel interfaces
 	_ TunnelBuilder      = (*TunnelBuild)(nil)
 	_ TunnelBuilder      = (*VariableTunnelBuild)(nil)
 	_ TunnelReplyHandler = (*TunnelBuildReply)(nil)
 	_ TunnelReplyHandler = (*VariableTunnelBuildReply)(nil)
+
+	// Build record interfaces
+	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)
+	_ SessionKeyProvider = (*BuildRequestRecord)(nil)
+	_ HashProvider       = (*BuildRequestRecord)(nil)
 )
