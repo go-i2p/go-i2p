@@ -53,7 +53,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 	}
 
 	// Initialize the network listener
-	tcpListener, err := net.Listen("tcp", ":0") // Use a random port for listening
+	tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
 		return nil, err
 	}
