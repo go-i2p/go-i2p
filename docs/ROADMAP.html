@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 623 commits
+        📝 647 commits
          • 📜 MIT License
       </div>
     </div>
@@ -47,87 +47,159 @@
       <div class="doc-content">
         <h1 id="go-i2p-implementation-roadmap">go-i2p Implementation Roadmap</h1>
 
-<h2 id="transport-layer-ntcp2">Transport Layer (NTCP2)</h2>
+<h2 id="completed-components">Completed Components ✅</h2>
+
+<h3 id="transport-layer-ntcp2">Transport Layer (NTCP2)</h3>
 
 <ul>
-<li>Build on existing lib/transport/noise implementation</li>
-<li>Core NTCP2 components:
+<li>✅ <strong>Core NTCP2 Implementation</strong>: Complete functional NTCP2 transport
 
 <ul>
-<li>Session handshake using noise protocol</li>
-<li>Connection management</li>
-<li>I2NP message transport</li>
+<li>✅ Session handshake using noise protocol</li>
+<li>✅ Inbound and outbound connection management</li>
+<li>✅ I2NP message framing and unframing</li>
+<li>✅ Session lifecycle management with proper cleanup</li>
+<li>✅ Message queuing with background workers</li>
+<li>✅ RouterInfo compatibility checking</li>
+<li>✅ Error handling and session recovery</li>
 </ul></li>
 </ul>
 
-<h2 id="reseed-system">Reseed System</h2>
+<h3 id="i2np-message-system">I2NP Message System</h3>
 
 <ul>
-<li>SU3 file format implementation:
+<li>✅ <strong>Core Message Infrastructure</strong>: Complete I2NP message framework
 
 <ul>
-<li>Format parsing and validation(Much of this work is done in reseed-tools, may need to be moved here)</li>
-<li>Signature verification system(Much of this work is done in reseed-tools, may need to be moved here)</li>
-</ul></li>
-<li>Local reseed functionality:
-
-<ul>
-<li>File-based reseed operations</li>
-</ul></li>
-<li>Self-signed/Package-pinned X.509 certificate handling for reseed validation</li>
-</ul>
-
-<h2 id="netdb-and-database-store">NetDb and Database Store</h2>
-
-<ul>
-<li>Database Store message handling:
-
-<ul>
-<li>Message structure implementation</li>
-<li>Message handling implementation</li>
-</ul></li>
-<li>NetDb core implementation:
-
-<ul>
-<li>RouterInfo management</li>
-<li>LeaseSet management</li>
-<li>Lookup system</li>
-<li>Storage interface</li>
-<li>Peer selection logic?(Maybe do something very basic for now like i2pd used to do, and then improve it later, the important part will be interface design at first)</li>
+<li>✅ Message parsing and serialization (NTCP format)</li>
+<li>✅ Interface-based message system with factory patterns</li>
+<li>✅ Data, DeliveryStatus, TunnelData message implementations</li>
+<li>✅ Database Store/Lookup message structures</li>
+<li>✅ Tunnel Build/Reply message structures</li>
+<li>✅ Build Request/Response Record parsing and interfaces</li>
 </ul></li>
 </ul>
 
-<h2 id="tunnel-implementation">Tunnel Implementation</h2>
+<h3 id="tunnel-message-processing">Tunnel Message Processing</h3>
 
 <ul>
-<li>Tunnel cryptography:
+<li>✅ <strong>Message Structure Handling</strong>: Tunnel message framework
 
 <ul>
-<li>Key generation and management</li>
-<li>Layered encryption scheme</li>
-</ul></li>
-<li>Message processing:
-
-<ul>
-<li>Build request/response handling</li>
-<li>Gateway implementation</li>
-<li>Message forwarding logic</li>
+<li>✅ Delivery Instructions parsing and validation</li>
+<li>✅ Fragment handling and reassembly logic</li>
+<li>✅ Tunnel message structure parsing</li>
+<li>✅ Build record interface implementations</li>
 </ul></li>
 </ul>
 
-<p>Notes:</p>
+<h3 id="common-data-structures">Common Data Structures</h3>
 
 <ul>
-<li>Excluding legacy protocols (SSU1, NTCP1, elgamal, DSA)</li>
-<li>Leveraging existing noise protocol implementation</li>
-<li>SSU2 is not on this roadmap but is fair game for implementation as soon as NTCP2 is done. We&rsquo;re focused on NTCP2 to get this thing sending I2NP messages.</li>
+<li>✅ <strong>Complete Data Structure Support</strong>: All I2P data types implemented
+
+<ul>
+<li>✅ Keys and Certificates, Router Info/Address</li>
+<li>✅ Session Keys, Hashes, Signatures</li>
+<li>✅ Lease and LeaseSet structures</li>
+</ul></li>
 </ul>
+
+<h2 id="in-progress-components">In Progress Components 🚧</h2>
+
+<h3 id="netdb-implementation">NetDb Implementation</h3>
+
+<ul>
+<li><strong>Database Store Integration</strong>:
+
+<ul>
+<li>📋 Database Store message handling implementation</li>
+<li>📋 RouterInfo storage and retrieval</li>
+<li>📋 LeaseSet management and storage</li>
+<li>📋 Database lookup system</li>
+<li>📋 Peer selection logic (basic implementation)</li>
+</ul></li>
+</ul>
+
+<h2 id="next-priority-components">Next Priority Components 🎯</h2>
+
+<h3 id="tunnel-building-system">Tunnel Building System</h3>
+
+<ul>
+<li><strong>Active Tunnel Management</strong>:
+
+<ul>
+<li>📋 Tunnel building coordination</li>
+<li>📋 Build request/response handling</li>
+<li>📋 Gateway and endpoint implementations</li>
+<li>📋 Participant tunnel processing</li>
+</ul></li>
+</ul>
+
+<h3 id="tunnel-cryptography">Tunnel Cryptography</h3>
+
+<ul>
+<li><strong>Security Layer Implementation</strong>:
+
+<ul>
+<li>📋 Layered encryption/decryption</li>
+<li>📋 Key generation and management</li>
+<li>📋 Tunnel message forwarding logic</li>
+</ul></li>
+</ul>
+
+<h2 id="future-components">Future Components 📅</h2>
+
+<h3 id="ssu2-transport-post-ntcp2">SSU2 Transport (Post-NTCP2)</h3>
+
+<ul>
+<li><strong>Secondary Transport Protocol</strong>:
+
+<ul>
+<li>📋 SSU2 handshake implementation</li>
+<li>📋 UDP-based session management</li>
+<li>📋 Peer testing mechanisms</li>
+<li>📋 Introducer functionality</li>
+</ul></li>
+</ul>
+
+<h3 id="advanced-netdb-features">Advanced NetDb Features</h3>
+
+<ul>
+<li><strong>Enhanced Database Operations</strong>:
+
+<ul>
+<li>📋 Floodfill router functionality</li>
+<li>📋 Database exploration and publishing</li>
+<li>📋 LS2 and Encrypted LeaseSet support</li>
+<li>📋 Advanced peer selection algorithms</li>
+</ul></li>
+</ul>
+
+<h3 id="application-layer">Application Layer</h3>
+
+<ul>
+<li><strong>Client Applications</strong>:
+
+<ul>
+<li>📋 I2CP implementation</li>
+<li>📋 Streaming library</li>
+<li>📋 Datagram support</li>
+<li>📋 End-to-end encryption (Garlic routing)</li>
+</ul></li>
+</ul>
+
+<h2 id="current-status">Current Status</h2>
+
+<p><strong>Primary Goal</strong>: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. Next major milestone is implementing database operations and tunnel building.</p>
+
+<p><strong>Test Coverage</strong>: Core components have basic test coverage including NTCP2 sessions, I2NP message processing, and tunnel message parsing.</p>
 
       </div>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-08-13 07:01:15 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-08-13 07:13:30 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>

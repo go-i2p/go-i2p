@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 623 commits
+        📝 647 commits
          • 📜 MIT License
       </div>
     </div>
@@ -46,12 +46,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>623 commits</span>
+          <span>📝</span> <span>647 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: July 15, 2025</span>
+          <span>📅</span> <span>Last updated: August 13, 2025</span>
         </div>
         
         
@@ -89,27 +89,27 @@ please keep up with these changes, as they will not be backward compatible and r
 <li>[ ] Message routing</li>
 <li>[ ] Streaming</li>
 </ul></li>
-<li>Cryptographic primitives
+<li><a href="https://github.com/go-i2p/crypto" target="_blank">Cryptographic primitives(see also: https://github.com/go-i2p/crypto)</a>
 
 <ul>
 <li>Signing
 
 <ul>
-<li>[ ] ECDSA_SHA256_P256</li>
-<li>[ ] ECDSA_SHA384_P384</li>
-<li>[ ] ECDSA_SHA512_P521</li>
+<li>[X] ECDSA_SHA256_P256</li>
+<li>[X] ECDSA_SHA384_P384</li>
+<li>[X] ECDSA_SHA512_P521</li>
 <li>[X] Ed25519</li>
 </ul></li>
 <li>Verifying
 
 <ul>
 <li>[X] DSA</li>
-<li>[ ] ECDSA_SHA256_P256</li>
-<li>[ ] ECDSA_SHA384_P384</li>
-<li>[ ] ECDSA_SHA512_P521</li>
-<li>[ ] RSA_SHA256_2048</li>
-<li>[ ] RSA_SHA384_3072</li>
-<li>[ ] RSA_SHA512_4096</li>
+<li>[X] ECDSA_SHA256_P256</li>
+<li>[X] ECDSA_SHA384_P384</li>
+<li>[X] ECDSA_SHA512_P521</li>
+<li>[X] RSA_SHA256_2048</li>
+<li>[X] RSA_SHA384_3072</li>
+<li>[X] RSA_SHA512_4096</li>
 <li>[X] Ed25519</li>
 <li>[ ] Red25519</li>
 </ul></li>
@@ -118,7 +118,7 @@ please keep up with these changes, as they will not be backward compatible and r
 <li>[X] X25519</li>
 <li>[X] ChaCha20/Poly1305</li>
 <li>[ ] Elligator2</li>
-<li>[ ] HKDF</li>
+<li>[X] HKDF</li>
 <li>[X] HMAC</li>
 <li>[X] Noise subsystem</li>
 </ul></li>
@@ -132,15 +132,22 @@ please keep up with these changes, as they will not be backward compatible and r
 <li>I2NP
 
 <ul>
-<li>[ ] Message parsing</li>
-<li>[ ] Message handling</li>
+<li>[X] Message parsing and serialization</li>
+<li>[X] Message interfaces and factory patterns</li>
+<li>[X] Database Store/Lookup message structures</li>
+<li>[X] Tunnel Build message structures</li>
+<li>[X] Data, DeliveryStatus, TunnelData messages</li>
+<li>[X] Build Request/Response Record parsing</li>
+<li>[ ] Message routing and handling</li>
 </ul></li>
 <li>NetDB
 
 <ul>
-<li>[~] Local storage</li>
+<li>[X] Local storage interface</li>
+<li>[X] Reseed functionality (basic implementation)</li>
 <li>[~] Persistence to disk</li>
-<li>[X] Reseeding</li>
+<li>[ ] RouterInfo management</li>
+<li>[ ] LeaseSet management</li>
 <li>[ ] Lookups</li>
 <li>[ ] Expiry</li>
 <li>[ ] Exploration</li>
@@ -148,23 +155,24 @@ please keep up with these changes, as they will not be backward compatible and r
 <li>[ ] Floodfill</li>
 <li>[ ] LS2 and Encrypted Leasesets</li>
 </ul></li>
-<li>Transports
+<li>Transport Layer
 
 <ul>
-<li>[X] Transport manager</li>
+<li>[X] Transport manager and interfaces</li>
 <li>NTCP2
 
 <ul>
-<li>[X] Handshake</li>
-<li>[ ] Session tracking</li>
-<li>[ ] Automatic session creation</li>
+<li>[X] Session handshake using noise protocol</li>
+<li>[X] Connection management</li>
+<li>[X] I2NP message framing and unframing</li>
+<li>[X] Session lifecycle management</li>
+<li>[X] Message queuing and worker threads</li>
 </ul></li>
 <li>SSU2
 
 <ul>
-<li>[ ] Handshake</li>
-<li>[ ] Session tracking</li>
-<li>[ ] Automatic session creation</li>
+<li>[ ] Session handshake</li>
+<li>[ ] Connection management</li>
 <li>[ ] Peer Tests</li>
 <li>[ ] Introducers</li>
 </ul></li>
@@ -172,14 +180,15 @@ please keep up with these changes, as they will not be backward compatible and r
 <li>Tunnels
 
 <ul>
-<li>[ ] Building</li>
-<li>[ ] Build Message Crypto (ElGamal)</li>
-<li>[ ] Build Message Crypto (ECIES)</li>
-<li>[ ] Participating</li>
-<li>[ ] Tunnel Message Crypto</li>
-<li>[ ] Tunnel Message Fragmentation/Reassembly</li>
+<li>[X] Message structure parsing (delivery instructions)</li>
+<li>[X] Fragment handling and reassembly</li>
+<li>[X] Build Request/Response record interfaces</li>
+<li>[ ] Tunnel building and management</li>
+<li>[ ] Tunnel cryptography (layered encryption)</li>
+<li>[ ] Gateway and endpoint implementation</li>
+<li>[ ] Participant functionality</li>
 </ul></li>
-<li>Common Data Structures
+<li><a href="https://github.com/go-i2p/common" target="_blank">Common Data Structures(see also: https://github.com/go-i2p/common</a>
 
 <ul>
 <li>[X] Keys and Cert</li>
@@ -264,7 +273,7 @@ It is unsafe for production use, and intended only for debugging and testing pur
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                269 commits
+                293 commits
               </div>
             </div>
           </div>
@@ -336,7 +345,7 @@ It is unsafe for production use, and intended only for debugging and testing pur
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-08-13 07:01:15 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-08-13 07:13:30 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
