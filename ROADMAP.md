@@ -1,41 +1,89 @@
 # go-i2p Implementation Roadmap
 
-## Transport Layer (NTCP2)
-- Build on existing lib/transport/noise implementation
-- Core NTCP2 components:
-  * Session handshake using noise protocol
-  * Connection management
-  * I2NP message transport
+## Completed Components ✅
 
-## Reseed System
-- SU3 file format implementation:
-  * Format parsing and validation(Much of this work is done in reseed-tools, may need to be moved here)
-  * Signature verification system(Much of this work is done in reseed-tools, may need to be moved here)
-- Local reseed functionality:
-  * File-based reseed operations
-- Self-signed/Package-pinned X.509 certificate handling for reseed validation
+### Transport Layer (NTCP2)
+- ✅ **Core NTCP2 Implementation**: Complete functional NTCP2 transport
+  * ✅ Session handshake using noise protocol
+  * ✅ Inbound and outbound connection management
+  * ✅ I2NP message framing and unframing
+  * ✅ Session lifecycle management with proper cleanup
+  * ✅ Message queuing with background workers
+  * ✅ RouterInfo compatibility checking
+  * ✅ Error handling and session recovery
 
-## NetDb and Database Store
-- Database Store message handling:
-  * Message structure implementation
-  * Message handling implementation
-- NetDb core implementation:
-  * RouterInfo management
-  * LeaseSet management
-  * Lookup system
-  * Storage interface
-  * Peer selection logic?(Maybe do something very basic for now like i2pd used to do, and then improve it later, the important part will be interface design at first)
+### I2NP Message System
+- ✅ **Core Message Infrastructure**: Complete I2NP message framework
+  * ✅ Message parsing and serialization (NTCP format)
+  * ✅ Interface-based message system with factory patterns
+  * ✅ Data, DeliveryStatus, TunnelData message implementations
+  * ✅ Database Store/Lookup message structures
+  * ✅ Tunnel Build/Reply message structures
+  * ✅ Build Request/Response Record parsing and interfaces
 
-## Tunnel Implementation
-- Tunnel cryptography:
-  * Key generation and management
-  * Layered encryption scheme
-- Message processing:
-  * Build request/response handling
-  * Gateway implementation
-  * Message forwarding logic
+### Tunnel Message Processing
+- ✅ **Message Structure Handling**: Tunnel message framework
+  * ✅ Delivery Instructions parsing and validation
+  * ✅ Fragment handling and reassembly logic
+  * ✅ Tunnel message structure parsing
+  * ✅ Build record interface implementations
 
-Notes:
-- Excluding legacy protocols (SSU1, NTCP1, elgamal, DSA)
-- Leveraging existing noise protocol implementation
-- SSU2 is not on this roadmap but is fair game for implementation as soon as NTCP2 is done. We're focused on NTCP2 to get this thing sending I2NP messages.
+### Common Data Structures
+- ✅ **Complete Data Structure Support**: All I2P data types implemented
+  * ✅ Keys and Certificates, Router Info/Address
+  * ✅ Session Keys, Hashes, Signatures
+  * ✅ Lease and LeaseSet structures
+
+## In Progress Components 🚧
+
+### NetDb Implementation
+- **Database Store Integration**:
+  * 📋 Database Store message handling implementation
+  * 📋 RouterInfo storage and retrieval
+  * 📋 LeaseSet management and storage
+  * 📋 Database lookup system
+  * 📋 Peer selection logic (basic implementation)
+
+## Next Priority Components 🎯
+
+### Tunnel Building System
+- **Active Tunnel Management**:
+  * 📋 Tunnel building coordination
+  * 📋 Build request/response handling
+  * 📋 Gateway and endpoint implementations
+  * 📋 Participant tunnel processing
+
+### Tunnel Cryptography
+- **Security Layer Implementation**:
+  * 📋 Layered encryption/decryption
+  * 📋 Key generation and management
+  * 📋 Tunnel message forwarding logic
+
+## Future Components 📅
+
+### SSU2 Transport (Post-NTCP2)
+- **Secondary Transport Protocol**:
+  * 📋 SSU2 handshake implementation
+  * 📋 UDP-based session management
+  * 📋 Peer testing mechanisms
+  * 📋 Introducer functionality
+
+### Advanced NetDb Features
+- **Enhanced Database Operations**:
+  * 📋 Floodfill router functionality
+  * 📋 Database exploration and publishing
+  * 📋 LS2 and Encrypted LeaseSet support
+  * 📋 Advanced peer selection algorithms
+
+### Application Layer
+- **Client Applications**:
+  * 📋 I2CP implementation
+  * 📋 Streaming library
+  * 📋 Datagram support
+  * 📋 End-to-end encryption (Garlic routing)
+
+## Current Status
+
+**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. Next major milestone is implementing database operations and tunnel building.
+
+**Test Coverage**: Core components have basic test coverage including NTCP2 sessions, I2NP message processing, and tunnel message parsing.

@@ -45,37 +45,46 @@ please keep up with these changes, as they will not be backward compatible and r
   - [ ] ElGamal/AES+SessionTag
   - [ ] Ratchet/X25519
 - I2NP
-  - [X] Message parsing
-  - [ ] Message handling
+  - [X] Message parsing and serialization
+  - [X] Message interfaces and factory patterns
+  - [X] Database Store/Lookup message structures
+  - [X] Tunnel Build message structures
+  - [X] Data, DeliveryStatus, TunnelData messages
+  - [X] Build Request/Response Record parsing
+  - [ ] Message routing and handling
 - NetDB
-  - [~] Local storage
+  - [X] Local storage interface
+  - [X] Reseed functionality (basic implementation)
   - [~] Persistence to disk
-  - [X] Reseeding
+  - [ ] RouterInfo management
+  - [ ] LeaseSet management
   - [ ] Lookups
   - [ ] Expiry
   - [ ] Exploration
   - [ ] Publishing
   - [ ] Floodfill
   - [ ] LS2 and Encrypted Leasesets
-- [Transports(see also: https://github.com/go-i2p/go-noise](https://github.com/go-i2p/go-noise)
-  - [X] Transport manager
+- Transport Layer
+  - [X] Transport manager and interfaces
   - NTCP2
-    - [X] Handshake
-    - [ ] Session tracking
-    - [ ] Automatic session creation
+    - [X] Session handshake using noise protocol
+    - [X] Connection management
+    - [X] I2NP message framing and unframing
+    - [X] Session lifecycle management
+    - [X] Message queuing and worker threads
   - SSU2
-    - [ ] Handshake
-    - [ ] Session tracking
-    - [ ] Automatic session creation
+    - [ ] Session handshake
+    - [ ] Connection management
     - [ ] Peer Tests
     - [ ] Introducers
 - Tunnels
-    - [ ] Building
-    - [ ] Build Message Crypto (ElGamal)
-    - [ ] Build Message Crypto (ECIES)
-    - [ ] Participating
-    - [ ] Tunnel Message Crypto
-    - [ ] Tunnel Message Fragmentation/Reassembly
+  - [X] Message structure parsing (delivery instructions)
+  - [X] Fragment handling and reassembly
+  - [X] Build Request/Response record interfaces
+  - [ ] Tunnel building and management
+  - [ ] Tunnel cryptography (layered encryption)
+  - [ ] Gateway and endpoint implementation
+  - [ ] Participant functionality
 - [Common Data Structures(see also: https://github.com/go-i2p/common](https://github.com/go-i2p/common)
     - [X] Keys and Cert
     - [X] Key Certificates
