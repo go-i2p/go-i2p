@@ -2,7 +2,6 @@ package ntcp2
 
 import (
 	"context"
-	"encoding/base64"
 	"net"
 	"sync"
 
@@ -120,25 +119,51 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 // GetSession obtains a transport session with a router given its RouterInfo.
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
-	// Check if router supports NTCP2
-	if !t.Compatible(routerInfo) {
-		return nil, ErrNTCP2NotSupported
-	}
+	t.logger.WithField("router_hash", routerInfo.IdentHash()).Debug("Getting NTCP2 session")
 
-	// Use router hash as session key
-	routerHashBytes := routerInfo.IdentHash().Bytes()
-	routerHash := base64.StdEncoding.EncodeToString(routerHashBytes[:])
-
-	// Check if session already exists
-	if existingSession, ok := t.sessions.Load(routerHash); ok {
-		if session, ok := existingSession.(*NTCP2Session); ok {
-			return session, nil
+	// Check if we already have a session with this router
+	routerHash := routerInfo.IdentHash()
+	if session, exists := t.sessions.Load(routerHash); exists {
+		if ntcp2Session, ok := session.(*NTCP2Session); ok {
+			t.logger.Debug("Found existing NTCP2 session")
+			return ntcp2Session, nil
 		}
 	}
 
-	// TODO: Implement outbound connection creation
-	// For now, return an error indicating outbound connections are not yet implemented
-	return nil, WrapNTCP2Error(ErrNTCP2NotSupported, "outbound connections not yet implemented")
+	// Create outbound connection
+	t.logger.Debug("Creating new outbound NTCP2 connection")
+
+	// Extract NTCP2 address from RouterInfo
+	tcpAddr, err := ExtractNTCP2Addr(routerInfo)
+	if err != nil {
+		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
+	}
+
+	// Create NTCP2 config for outbound connection
+	identityBytes := t.identity.IdentHash().Bytes()
+	config, err := ntcp2.NewNTCP2Config(identityBytes[:], true)
+	if err != nil {
+		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
+	}
+
+	// Set remote router hash
+	remoteHashBytes := routerInfo.IdentHash().Bytes()
+	config = config.WithRemoteRouterHash(remoteHashBytes[:])
+
+	// Dial the outbound connection using go-noise
+	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
+	if err != nil {
+		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
+	}
+
+	// Create session wrapper
+	session := NewNTCP2Session(conn, t.ctx, t.logger)
+
+	// Store the session
+	t.sessions.Store(routerHash, session)
+
+	t.logger.Debug("Successfully created outbound NTCP2 session")
+	return session, nil
 } // Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	return SupportsNTCP2(&routerInfo)

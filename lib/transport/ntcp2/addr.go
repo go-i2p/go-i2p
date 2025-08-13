@@ -19,8 +19,25 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 			continue
 		}
 		if str == "ntcp2" {
+			// Extract host and port from RouterAddress options
+			host, err := addr.Host()
+			if err != nil {
+				continue
+			}
+			port, err := addr.Port()
+			if err != nil {
+				continue
+			}
+
+			// Create a proper TCP address
+			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host.String(), port))
+			if err != nil {
+				continue
+			}
+
+			// Now wrap the TCP address with NTCP2 metadata
 			hash := routerInfo.IdentHash().Bytes()
-			return WrapNTCP2Addr(addr, hash[:])
+			return WrapNTCP2Addr(tcpAddr, hash[:])
 		}
 	}
 	return nil, ErrInvalidRouterInfo
