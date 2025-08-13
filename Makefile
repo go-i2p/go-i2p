@@ -26,30 +26,6 @@ build: clean $(EXE)
 $(EXE):
 	$(GO) build --tags netgo,osusergo -v -o $(EXE)
 
-# Include test definitions
--include doc/tests/*.mk
-
-test: 		   test-string-all \
-               test-mapping-all \
-               test-crypto-aes-all \
-               test-crypto-dsa-all \
-               test-crypto-ed25519-all \
-               test-crypto-elg-all \
-               test-crypto-hmac-all \
-               test-i2np-header-all \
-               test-key-cert-all \
-               test-keys-cert-all \
-               test-lease-set-all \
-               test-noise-transport-all \
-               test-router-address-all \
-               test-router-info-all \
-               test-su3-all \
-               test-tunnel-all \
-               test-base32-encode-decode-not-mangled \
-               test-base64-encode-decode-not-mangled \
-               test-lease-all \
-               test-date-time-from-milliseconds
-
 clean:
 	$(GO) clean -v
 

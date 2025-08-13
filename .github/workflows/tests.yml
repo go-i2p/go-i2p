@@ -22,33 +22,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false  # Ensure all matrix jobs run even if some fail
-      matrix:
-        test_target:
-          - "test-string-all"
-          - "test-mapping-all"
-          - "test-crypto-aes-all"
-          - "test-crypto-dsa-all"
-          - "test-crypto-ed25519-all"
-          - "test-crypto-elg-all"
-          - "test-crypto-hmac-all"
-          - "test-i2np-header-all"
-          - "test-key-cert-all"
-          - "test-keys-cert-all"
-          - "test-lease-set-all"
-          - "test-noise-transport-all"
-          - "test-router-address-all"
-          - "test-router-info-all"
-          - "test-su3-all"
-          - "test-tunnel-all"
-          - "test-base32-encode-decode-not-mangled"
-          - "test-base64-encode-decode-not-mangled"
-          - "test-lease-all"
-          - "test-date-time-from-milliseconds"
-          - "test-cert-all"
-          - "test-signatures"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -74,8 +47,8 @@ jobs:
       - name: Go mod tidy
         run: go mod tidy
 
-      - name: Run ${{ matrix.test_target }}
-        run: make ${{ matrix.test_target }}
+      - name: Run all tests
+        run: go test -v ./...
         env:
           GO: go
           DEBUG_I2P: debug
