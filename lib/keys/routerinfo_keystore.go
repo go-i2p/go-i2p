@@ -117,9 +117,9 @@ func (ks *RouterInfoKeystore) KeyID() string {
 			return "fallback-" + hex.EncodeToString(randomBytes)
 		}
 		if len(public.Bytes()) > 10 {
-			return string(public.Bytes()[:10])
+			return hex.EncodeToString(public.Bytes()[:10])
 		}
-		return string(public.Bytes())
+		return hex.EncodeToString(public.Bytes())
 	}
 	return ks.name
 }
