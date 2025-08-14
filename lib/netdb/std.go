@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -28,15 +29,19 @@ var log = logger.GetGoI2PLogger()
 type StdNetDB struct {
 	DB          string
 	RouterInfos map[common.Hash]Entry
+	riMutex     sync.Mutex // mutex for RouterInfos
 	LeaseSets   map[common.Hash]Entry
+	lsMutex     sync.Mutex // mutex for LeaseSets
 }
 
-func NewStdNetDB(db string) StdNetDB {
+func NewStdNetDB(db string) *StdNetDB {
 	log.WithField("db_path", db).Debug("Creating new StdNetDB")
-	return StdNetDB{
+	return &StdNetDB{
 		DB:          db,
 		RouterInfos: make(map[common.Hash]Entry),
+		riMutex:     sync.Mutex{},
 		LeaseSets:   make(map[common.Hash]Entry),
+		lsMutex:     sync.Mutex{},
 	}
 }
 

@@ -27,10 +27,10 @@ type Router struct {
 	*keys.RouterInfoKeystore
 	// multi-transport manager
 	*transport.TransportMuxer
+	// netdb
+	*netdb.StdNetDB
 	// router configuration
 	cfg *config.RouterConfig
-	// netdb
-	ndb netdb.StdNetDB
 	// close channel
 	closeChnl chan bool
 	// running flag
@@ -160,27 +160,27 @@ func (r *Router) Start() {
 // run i2p router mainloop
 func (r *Router) mainloop() {
 	log.Debug("Entering router mainloop")
-	r.ndb = netdb.NewStdNetDB(r.cfg.NetDb.Path)
+	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
 	// make sure the netdb is ready
 	var e error
-	if err := r.ndb.Ensure(); err != nil {
+	if err := r.StdNetDB.Ensure(); err != nil {
 		e = err
 		log.WithError(err).Error("Failed to ensure NetDB")
 	}
-	if sz := r.ndb.Size(); sz >= 0 {
+	if sz := r.StdNetDB.Size(); sz >= 0 {
 		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.Warn("Unable to determine NetDB size")
 	}
-	if r.ndb.Size() < r.cfg.Bootstrap.LowPeerThreshold {
+	if r.StdNetDB.Size() < r.cfg.Bootstrap.LowPeerThreshold {
 		log.Info("NetDB below threshold, initiating reseed")
 
 		// Create a bootstrap instance
 		bootstrapper := bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
 
 		// Reseed the network database
-		if err := r.ndb.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+		if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
 			log.WithError(err).Warn("Initial reseed failed, continuing with limited NetDB")
 			// Continue anyway, we might have some peers
 		}
