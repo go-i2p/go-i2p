@@ -206,19 +206,7 @@ func (db *StdNetDB) RecalculateSize() (err error) {
 func (db *StdNetDB) countValidRouterInfos() (int, error) {
 	count := 0
 	err := filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return db.handleDirectoryWalk(fname, err)
-		}
-
-		if db.CheckFilePathValid(fname) {
-			if err := db.processRouterInfoFile(fname, &count); err != nil {
-				return err
-			}
-		} else {
-			log.WithField("file_path", fname).Warn("Invalid file path")
-			log.Println("Invalid path error")
-		}
-		return err
+		return db.processWalkEntry(fname, info, err, &count)
 	})
 
 	if err == nil {
@@ -226,6 +214,23 @@ func (db *StdNetDB) countValidRouterInfos() (int, error) {
 	}
 
 	return count, err
+}
+
+// processWalkEntry handles each entry encountered during the directory walk.
+func (db *StdNetDB) processWalkEntry(fname string, info os.FileInfo, err error, count *int) error {
+	if info.IsDir() {
+		return db.handleDirectoryWalk(fname, err)
+	}
+
+	if db.CheckFilePathValid(fname) {
+		if err := db.processRouterInfoFile(fname, count); err != nil {
+			return err
+		}
+	} else {
+		log.WithField("file_path", fname).Warn("Invalid file path")
+		log.Println("Invalid path error")
+	}
+	return err
 }
 
 // handleDirectoryWalk processes directory entries during the walk.
@@ -365,26 +370,50 @@ func (db *StdNetDB) Save() (err error) {
 // reseed if we have less than minRouters known routers
 // returns error if reseed failed
 func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
+	if !db.isReseedRequired(minRouters) {
+		return nil
+	}
+
+	peers, err := db.retrievePeersFromBootstrap(b)
+	if err != nil {
+		return err
+	}
+
+	count := db.addNewRouterInfos(peers)
+	log.WithField("added_routers", count).Info("Reseed completed successfully")
+
+	return db.updateCacheAfterReseed()
+}
+
+// isReseedRequired checks if reseed is necessary based on current database size.
+func (db *StdNetDB) isReseedRequired(minRouters int) bool {
 	log.WithField("min_routers", minRouters).Debug("Checking if reseed is necessary")
 	if db.Size() > minRouters {
 		log.Debug("Reseed not necessary")
-		return nil
+		return false
 	}
 	log.Warn("NetDB size below minimum, reseed required")
+	return true
+}
 
+// retrievePeersFromBootstrap gets peers from the bootstrap provider with timeout.
+func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_info.RouterInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reseed.DefaultDialTimeout)
 	defer cancel()
 
-	// Get peers from the bootstrap provider
 	peersChan, err := b.GetPeers(ctx, 0) // Get as many peers as possible
 	if err != nil {
 		log.WithError(err).Error("Failed to get peers from bootstrap provider")
-		return fmt.Errorf("bootstrap failed: %w", err)
+		return nil, fmt.Errorf("bootstrap failed: %w", err)
 	}
 
-	// Process the received peers
+	return peersChan, nil
+}
+
+// addNewRouterInfos processes and adds new RouterInfos from peers to the database.
+func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 	count := 0
-	for _, ri := range peersChan {
+	for _, ri := range peers {
 		hash := ri.IdentHash()
 		if _, exists := db.RouterInfos[hash]; !exists {
 			log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
@@ -394,15 +423,15 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 			count++
 		}
 	}
+	return count
+}
 
-	log.WithField("added_routers", count).Info("Reseed completed successfully")
-
-	// Update the size cache
-	err = db.RecalculateSize()
+// updateCacheAfterReseed updates the size cache after successful reseed operation.
+func (db *StdNetDB) updateCacheAfterReseed() error {
+	err := db.RecalculateSize()
 	if err != nil {
 		log.WithError(err).Warn("Failed to update NetDB size cache after reseed")
 	}
-
 	return nil
 }
 
