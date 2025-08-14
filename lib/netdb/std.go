@@ -155,71 +155,128 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 func (db *StdNetDB) RecalculateSize() (err error) {
 	log.Debug("Recalculating NetDB size")
 	count := 0
-	err = filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
+
+	// Walk through all files and count valid RouterInfos
+	count, err = db.countValidRouterInfos()
+	if err != nil {
+		log.WithError(err).Error("Failed to count RouterInfos")
+		return err
+	}
+
+	// Update the cache file with the count
+	err = db.updateSizeCache(count)
+	if err != nil {
+		log.WithError(err).Error("Failed to update NetDB size cache file")
+	}
+
+	return err
+}
+
+// countValidRouterInfos walks through the database directory and counts valid RouterInfo files.
+func (db *StdNetDB) countValidRouterInfos() (int, error) {
+	count := 0
+	err := filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
 		if info.IsDir() {
-			if !strings.HasPrefix(fname, db.Path()) {
-				if db.Path() == fname {
-					log.Debug("Reached end of NetDB directory")
-					log.Debug("path==name time to exit")
-					return nil
-				}
-				log.Debug("Outside of netDb dir time to exit", db.Path(), " ", fname)
-				return err
-			}
-			return err
+			return db.handleDirectoryWalk(fname, err)
 		}
+
 		if db.CheckFilePathValid(fname) {
-			log.WithField("file_name", fname).Debug("Reading RouterInfo file")
-			log.Println("Reading in file:", fname)
-			b, err := os.ReadFile(fname)
-			if err != nil {
-				log.WithError(err).Error("Failed to read RouterInfo file")
+			if err := db.processRouterInfoFile(fname, &count); err != nil {
 				return err
 			}
-			ri, _, err := router_info.ReadRouterInfo(b)
-			if err != nil {
-				log.WithError(err).Error("Failed to parse RouterInfo")
-				return err
-			}
-			ih := ri.IdentHash().Bytes()
-			log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
-			for _, addr := range ri.RouterAddresses() {
-				log.Println(string(addr.Bytes()))
-				log.WithField("address", string(addr.Bytes())).Debug("RouterInfo address")
-			}
-			if ent, ok := db.RouterInfos[ih]; !ok {
-				log.Debug("Adding new RouterInfo to memory cache")
-				db.RouterInfos[ri.IdentHash()] = Entry{
-					RouterInfo: &ri,
-				}
-			} else {
-				log.Debug("RouterInfo already in memory cache")
-				log.Println("entry previously found in table", ent, fname)
-			}
-			ri = router_info.RouterInfo{}
-			count++
 		} else {
 			log.WithField("file_path", fname).Warn("Invalid file path")
 			log.Println("Invalid path error")
 		}
 		return err
 	})
+
 	if err == nil {
-		log.WithField("count", count).Debug("Finished recalculating NetDB size")
-		str := fmt.Sprintf("%d", count)
-		var f *os.File
-		f, err = os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, err = io.WriteString(f, str)
-			f.Close()
-			log.Debug("Updated NetDB size cache file")
-		} else {
-			log.WithError(err).Error("Failed to update NetDB size cache file")
+		log.WithField("count", count).Debug("Finished counting RouterInfos")
+	}
+
+	return count, err
+}
+
+// handleDirectoryWalk processes directory entries during the walk.
+func (db *StdNetDB) handleDirectoryWalk(fname string, err error) error {
+	if !strings.HasPrefix(fname, db.Path()) {
+		if db.Path() == fname {
+			log.Debug("Reached end of NetDB directory")
+			log.Debug("path==name time to exit")
+			return nil
+		}
+		log.Debug("Outside of netDb dir time to exit", db.Path(), " ", fname)
+		return err
+	}
+	return err
+}
+
+// processRouterInfoFile reads and validates a single RouterInfo file.
+func (db *StdNetDB) processRouterInfoFile(fname string, count *int) error {
+	log.WithField("file_name", fname).Debug("Reading RouterInfo file")
+	log.Println("Reading in file:", fname)
+
+	b, err := os.ReadFile(fname)
+	if err != nil {
+		log.WithError(err).Error("Failed to read RouterInfo file")
+		return err
+	}
+
+	ri, _, err := router_info.ReadRouterInfo(b)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse RouterInfo")
+		return err
+	}
+
+	// Process the RouterInfo
+	db.logRouterInfoDetails(ri)
+	db.cacheRouterInfo(ri, fname)
+	(*count)++
+
+	return nil
+}
+
+// logRouterInfoDetails logs details about the RouterInfo for debugging.
+func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
+	ih := ri.IdentHash().Bytes()
+	log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
+
+	for _, addr := range ri.RouterAddresses() {
+		log.Println(string(addr.Bytes()))
+		log.WithField("address", string(addr.Bytes())).Debug("RouterInfo address")
+	}
+}
+
+// cacheRouterInfo adds the RouterInfo to the in-memory cache if not already present.
+func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
+	ih := ri.IdentHash()
+	if ent, ok := db.RouterInfos[ih]; !ok {
+		log.Debug("Adding new RouterInfo to memory cache")
+		db.RouterInfos[ri.IdentHash()] = Entry{
+			RouterInfo: &ri,
 		}
 	} else {
-		log.WithError(err).Error("Failed to update NetDB size cache file")
+		log.Debug("RouterInfo already in memory cache")
+		log.Println("entry previously found in table", ent, fname)
 	}
-	return
+}
+
+// updateSizeCache writes the count to the cache file.
+func (db *StdNetDB) updateSizeCache(count int) error {
+	str := fmt.Sprintf("%d", count)
+	f, err := os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.WriteString(f, str)
+	if err == nil {
+		log.Debug("Updated NetDB size cache file")
+	}
+
+	return err
 }
 
 // return true if the network db directory exists and is writable

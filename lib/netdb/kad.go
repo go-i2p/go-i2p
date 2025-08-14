@@ -21,6 +21,12 @@ type KademliaResolver struct {
 	pool *tunnel.Pool
 }
 
+// peerDistance represents a peer with its calculated XOR distance
+type peerDistance struct {
+	hash     common.Hash
+	distance []byte
+}
+
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
 	log.WithFields(logrus.Fields{
 		"hash":    h,
@@ -32,24 +38,48 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 	defer cancel()
 
 	// Try local lookup first
-	ri := kr.NetworkDatabase.GetRouterInfo(h)
-	if &ri == nil {
-		log.WithField("hash", h).Debug("RouterInfo found locally")
-		return &ri, nil
+	if ri := kr.attemptLocalLookup(h); ri != nil {
+		return ri, nil
 	}
 
-	// If we don't have a tunnel pool, we can't do remote lookups
-	// Technically, we could do a direct lookup, but that would require
-	// the transport anyway which is what I'm working on now.
-	if kr.pool == nil {
-		return nil, fmt.Errorf("tunnel pool required for remote lookups")
+	// Validate remote lookup capability
+	if err := kr.validateRemoteLookupCapability(); err != nil {
+		return nil, err
 	}
 
 	// Set up channels for the result and errors
 	resultChan := make(chan *router_info.RouterInfo, 1)
 	errChan := make(chan error, 1)
 
-	// Start the Kademlia lookup in a goroutine
+	// Start the remote lookup process
+	kr.performRemoteLookup(ctx, h, timeout, resultChan, errChan)
+
+	// Wait for result, error, or timeout
+	return kr.collectLookupResult(resultChan, errChan, ctx, timeout)
+}
+
+// attemptLocalLookup tries to find the RouterInfo locally first.
+func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.RouterInfo {
+	ri := kr.NetworkDatabase.GetRouterInfo(h)
+	// Check if the RouterInfo is valid by comparing with an empty hash
+	var emptyHash common.Hash
+	if ri.IdentHash() != emptyHash {
+		log.WithField("hash", h).Debug("RouterInfo found locally")
+		return &ri
+	}
+	return nil
+}
+
+// validateRemoteLookupCapability checks if remote lookups are possible.
+func (kr *KademliaResolver) validateRemoteLookupCapability() error {
+	if kr.pool == nil {
+		return fmt.Errorf("tunnel pool required for remote lookups")
+	}
+	return nil
+}
+
+// performRemoteLookup starts the Kademlia lookup process in a goroutine.
+func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Hash, timeout time.Duration, resultChan chan *router_info.RouterInfo, errChan chan error) {
 	go func() {
 		// Find the closest peers we know to the target hash
 		closestPeers := kr.findClosestPeers(h)
@@ -59,33 +89,45 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 		}
 
 		// Query each closest peer in parallel
-		for _, peer := range closestPeers {
-			go func(p common.Hash) {
-				ri, err := kr.queryPeer(ctx, p, h)
-				if err != nil {
-					log.WithFields(logrus.Fields{
-						"peer":  p,
-						"error": err,
-					}).Debug("Peer query failed")
-					return
-				}
-
-				if ri != nil {
-					resultChan <- ri
-				}
-			}(peer)
-		}
+		kr.queryClosestPeers(ctx, closestPeers, h, resultChan)
 
 		// Allow some time for queries to complete, but eventually give up
-		select {
-		case <-time.After(timeout - time.Second): // Leave 1s buffer for the main select
-			errChan <- fmt.Errorf("kademlia lookup failed to find router info")
-		case <-ctx.Done():
-			// Context was already canceled, main select will handle it
-		}
+		kr.handleLookupTimeout(ctx, timeout, errChan)
 	}()
+}
 
-	// Wait for result, error, or timeout
+// queryClosestPeers queries each of the closest peers in parallel.
+func (kr *KademliaResolver) queryClosestPeers(ctx context.Context, peers []common.Hash, target common.Hash, resultChan chan *router_info.RouterInfo) {
+	for _, peer := range peers {
+		go func(p common.Hash) {
+			ri, err := kr.queryPeer(ctx, p, target)
+			if err != nil {
+				log.WithFields(logrus.Fields{
+					"peer":  p,
+					"error": err,
+				}).Debug("Peer query failed")
+				return
+			}
+
+			if ri != nil {
+				resultChan <- ri
+			}
+		}(peer)
+	}
+}
+
+// handleLookupTimeout manages the timeout for the lookup operation.
+func (kr *KademliaResolver) handleLookupTimeout(ctx context.Context, timeout time.Duration, errChan chan error) {
+	select {
+	case <-time.After(timeout - time.Second): // Leave 1s buffer for the main select
+		errChan <- fmt.Errorf("kademlia lookup failed to find router info")
+	case <-ctx.Done():
+		// Context was already canceled, main select will handle it
+	}
+}
+
+// collectLookupResult waits for and processes the lookup result.
+func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.RouterInfo, errChan chan error, ctx context.Context, timeout time.Duration) (*router_info.RouterInfo, error) {
 	select {
 	case result := <-resultChan:
 		// Store the result in our local database
@@ -109,12 +151,19 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 		return []common.Hash{}
 	}
 
-	// Calculate XOR distance for each peer
-	type peerDistance struct {
-		hash     common.Hash
-		distance []byte
+	// Calculate XOR distances for all peers
+	peers := kr.calculatePeerDistances(allRouterInfos, target)
+	if len(peers) == 0 {
+		log.Debug("No suitable peers found after filtering")
+		return []common.Hash{}
 	}
 
+	// Sort and select closest peers
+	return kr.selectClosestPeers(peers, target, K)
+}
+
+// calculatePeerDistances calculates XOR distances for all router infos.
+func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.RouterInfo, target common.Hash) []peerDistance {
 	peers := make([]peerDistance, 0, len(allRouterInfos))
 
 	for _, ri := range allRouterInfos {
@@ -126,10 +175,7 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 		}
 
 		// Calculate XOR distance between target and peer
-		distance := make([]byte, len(target))
-		for i := 0; i < len(target); i++ {
-			distance[i] = target[i] ^ peerHash[i]
-		}
+		distance := kr.calculateXORDistance(target, peerHash)
 
 		peers = append(peers, peerDistance{
 			hash:     peerHash,
@@ -137,23 +183,23 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 		})
 	}
 
-	if len(peers) == 0 {
-		log.Debug("No suitable peers found after filtering")
-		return []common.Hash{}
-	}
+	return peers
+}
 
+// calculateXORDistance calculates the XOR distance between two hashes.
+func (kr *KademliaResolver) calculateXORDistance(target, peer common.Hash) []byte {
+	distance := make([]byte, len(target))
+	for i := 0; i < len(target); i++ {
+		distance[i] = target[i] ^ peer[i]
+	}
+	return distance
+}
+
+// selectClosestPeers sorts peers by distance and returns the K closest ones.
+func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target common.Hash, K int) []common.Hash {
 	// Sort peers by XOR distance (closest first)
 	sort.Slice(peers, func(i, j int) bool {
-		// Compare distances byte by byte (big endian comparison)
-		for k := 0; k < len(peers[i].distance); k++ {
-			if peers[i].distance[k] < peers[j].distance[k] {
-				return true
-			}
-			if peers[i].distance[k] > peers[j].distance[k] {
-				return false
-			}
-		}
-		return false // Equal distances
+		return kr.compareDistances(peers[i].distance, peers[j].distance)
 	})
 
 	// Take up to K closest peers
@@ -174,6 +220,19 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	}).Debug("Found closest peers by XOR distance")
 
 	return result
+}
+
+// compareDistances compares two distance byte arrays (big endian comparison).
+func (kr *KademliaResolver) compareDistances(dist1, dist2 []byte) bool {
+	for k := 0; k < len(dist1); k++ {
+		if dist1[k] < dist2[k] {
+			return true
+		}
+		if dist1[k] > dist2[k] {
+			return false
+		}
+	}
+	return false // Equal distances
 }
 
 // queryPeer sends a lookup request to a specific peer through the tunnel
