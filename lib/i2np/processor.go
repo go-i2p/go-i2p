@@ -241,7 +241,8 @@ func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
 
 // CreateTunnelRecord creates a build request record with interface methods
 func CreateTunnelRecord(receiveTunnel, nextTunnel tunnel.TunnelID,
-	ourIdent, nextIdent common.Hash) TunnelIdentifier {
+	ourIdent, nextIdent common.Hash,
+) TunnelIdentifier {
 	return &BuildRequestRecord{
 		ReceiveTunnel: receiveTunnel,
 		NextTunnel:    nextTunnel,
