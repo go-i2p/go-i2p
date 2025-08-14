@@ -16,65 +16,100 @@ type Entry struct {
 	*lease_set.LeaseSet
 }
 
-func (e *Entry) WriteTo(w io.Writer) (err error) {
-	// Check if we have a RouterInfo to write
+// WriteTo writes the Entry to the provided writer.
+func (e *Entry) WriteTo(w io.Writer) error {
 	if e.RouterInfo != nil {
-		// Get the serialized bytes of the RouterInfo
-		data, err := e.RouterInfo.Bytes()
-		if err != nil {
-			return fmt.Errorf("failed to serialize RouterInfo: %w", err)
-		}
-		// Check if the data is empty
-		if len(data) == 0 {
-			return fmt.Errorf("RouterInfo data is empty")
-		}
-
-		// Write the entry type indicator (1 for RouterInfo)
-		if _, err = w.Write([]byte{1}); err != nil {
-			return fmt.Errorf("failed to write entry type: %w", err)
-		}
-
-		// Write the length as a 2-byte big-endian value
-		lenBytes := make([]byte, 2)
-		binary.BigEndian.PutUint16(lenBytes, uint16(len(data)))
-		if _, err = w.Write(lenBytes); err != nil {
-			return fmt.Errorf("failed to write length: %w", err)
-		}
-
-		// Write the actual RouterInfo data
-		if _, err = w.Write(data); err != nil {
-			return fmt.Errorf("failed to write RouterInfo data: %w", err)
-		}
-
-		return nil
+		return e.writeRouterInfo(w)
 	}
 
-	// Check if we have a LeaseSet to write
 	if e.LeaseSet != nil {
-		// Get the serialized bytes of the LeaseSet
-		data, err := e.LeaseSet.Bytes()
-
-		// Write the entry type indicator (2 for LeaseSet)
-		if _, err = w.Write([]byte{2}); err != nil {
-			return fmt.Errorf("failed to write entry type: %w", err)
-		}
-
-		// Write the length as a 2-byte big-endian value
-		lenBytes := make([]byte, 2)
-		binary.BigEndian.PutUint16(lenBytes, uint16(len(data)))
-		if _, err = w.Write(lenBytes); err != nil {
-			return fmt.Errorf("failed to write length: %w", err)
-		}
-
-		// Write the actual LeaseSet data
-		if _, err = w.Write(data); err != nil {
-			return fmt.Errorf("failed to write LeaseSet data: %w", err)
-		}
-
-		return nil
+		return e.writeLeaseSet(w)
 	}
 
 	return fmt.Errorf("entry contains neither RouterInfo nor LeaseSet")
+}
+
+// writeRouterInfo writes a RouterInfo entry to the writer.
+func (e *Entry) writeRouterInfo(w io.Writer) error {
+	data, err := e.serializeRouterInfo()
+	if err != nil {
+		return err
+	}
+
+	return e.writeEntryData(w, 1, data)
+}
+
+// writeLeaseSet writes a LeaseSet entry to the writer.
+func (e *Entry) writeLeaseSet(w io.Writer) error {
+	data, err := e.serializeLeaseSet()
+	if err != nil {
+		return err
+	}
+
+	return e.writeEntryData(w, 2, data)
+}
+
+// serializeRouterInfo serializes the RouterInfo and validates the result.
+func (e *Entry) serializeRouterInfo() ([]byte, error) {
+	data, err := e.RouterInfo.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize RouterInfo: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("RouterInfo data is empty")
+	}
+
+	return data, nil
+}
+
+// serializeLeaseSet serializes the LeaseSet and validates the result.
+func (e *Entry) serializeLeaseSet() ([]byte, error) {
+	data, err := e.LeaseSet.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize LeaseSet: %w", err)
+	}
+
+	return data, nil
+}
+
+// writeEntryData writes entry data with type indicator and length prefix.
+func (e *Entry) writeEntryData(w io.Writer, entryType byte, data []byte) error {
+	if err := e.writeEntryType(w, entryType); err != nil {
+		return err
+	}
+
+	if err := e.writeDataLength(w, len(data)); err != nil {
+		return err
+	}
+
+	return e.writeData(w, data)
+}
+
+// writeEntryType writes the entry type indicator.
+func (e *Entry) writeEntryType(w io.Writer, entryType byte) error {
+	if _, err := w.Write([]byte{entryType}); err != nil {
+		return fmt.Errorf("failed to write entry type: %w", err)
+	}
+	return nil
+}
+
+// writeDataLength writes the data length as a 2-byte big-endian value.
+func (e *Entry) writeDataLength(w io.Writer, length int) error {
+	lenBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(lenBytes, uint16(length))
+	if _, err := w.Write(lenBytes); err != nil {
+		return fmt.Errorf("failed to write length: %w", err)
+	}
+	return nil
+}
+
+// writeData writes the actual entry data.
+func (e *Entry) writeData(w io.Writer, data []byte) error {
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("failed to write data: %w", err)
+	}
+	return nil
 }
 
 func (e *Entry) ReadFrom(r io.Reader) (err error) {
