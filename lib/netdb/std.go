@@ -47,37 +47,67 @@ func NewStdNetDB(db string) *StdNetDB {
 
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
 	log.WithField("hash", hash).Debug("Getting RouterInfo")
+
+	// Check memory cache first
 	if ri, ok := db.RouterInfos[hash]; ok {
 		log.Debug("RouterInfo found in memory cache")
+		chnl = make(chan router_info.RouterInfo)
 		chnl <- *ri.RouterInfo
 		return
 	}
+
+	// Load from file
+	data, err := db.loadRouterInfoFromFile(hash)
+	if err != nil {
+		log.WithError(err).Error("Failed to load RouterInfo from file")
+		return nil
+	}
+
+	chnl = make(chan router_info.RouterInfo)
+	ri, err := db.parseAndCacheRouterInfo(hash, data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse RouterInfo")
+		return
+	}
+
+	chnl <- ri
+	return
+}
+
+// loadRouterInfoFromFile loads RouterInfo data from the skiplist file.
+func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 	fname := db.SkiplistFile(hash)
 	buff := new(bytes.Buffer)
-	if f, err := os.Open(fname); err != nil {
-		log.WithError(err).Error("Failed to open RouterInfo file")
-		return nil
-	} else {
-		if _, err := io.Copy(buff, f); err != nil {
-			log.WithError(err).Error("Failed to read RouterInfo file")
-			return nil
-		}
-		defer f.Close()
+
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open RouterInfo file: %w", err)
 	}
-	chnl = make(chan router_info.RouterInfo)
-	ri, _, err := router_info.ReadRouterInfo(buff.Bytes())
-	if err == nil {
-		if _, ok := db.RouterInfos[hash]; !ok {
-			log.Debug("Adding RouterInfo to memory cache")
-			db.RouterInfos[hash] = Entry{
-				RouterInfo: &ri,
-			}
-		}
-		chnl <- ri
-	} else {
-		log.WithError(err).Error("Failed to parse RouterInfo")
+	defer f.Close()
+
+	if _, err := io.Copy(buff, f); err != nil {
+		return nil, fmt.Errorf("failed to read RouterInfo file: %w", err)
 	}
-	return
+
+	return buff.Bytes(), nil
+}
+
+// parseAndCacheRouterInfo parses RouterInfo data and adds it to the memory cache.
+func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (router_info.RouterInfo, error) {
+	ri, _, err := router_info.ReadRouterInfo(data)
+	if err != nil {
+		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	// Add to cache if not already present
+	if _, ok := db.RouterInfos[hash]; !ok {
+		log.Debug("Adding RouterInfo to memory cache")
+		db.RouterInfos[hash] = Entry{
+			RouterInfo: &ri,
+		}
+	}
+
+	return ri, nil
 }
 
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {

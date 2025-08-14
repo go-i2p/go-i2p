@@ -113,46 +113,82 @@ func (e *Entry) writeData(w io.Writer, data []byte) error {
 }
 
 func (e *Entry) ReadFrom(r io.Reader) (err error) {
-	// Read the entry type indicator
+	entryType, err := e.readEntryType(r)
+	if err != nil {
+		return err
+	}
+
+	data, err := e.readEntryData(r)
+	if err != nil {
+		return err
+	}
+
+	return e.processEntryData(entryType, data)
+}
+
+// readEntryType reads and returns the entry type indicator from the reader.
+func (e *Entry) readEntryType(r io.Reader) (byte, error) {
 	typeBytes := make([]byte, 1)
-	if _, err = r.Read(typeBytes); err != nil {
-		return fmt.Errorf("failed to read entry type: %w", err)
+	if _, err := r.Read(typeBytes); err != nil {
+		return 0, fmt.Errorf("failed to read entry type: %w", err)
+	}
+	return typeBytes[0], nil
+}
+
+// readEntryData reads the length and data from the reader.
+func (e *Entry) readEntryData(r io.Reader) ([]byte, error) {
+	dataLen, err := e.readDataLength(r)
+	if err != nil {
+		return nil, err
 	}
 
-	// Read the length
-	lenBytes := make([]byte, 2)
-	if _, err = r.Read(lenBytes); err != nil {
-		return fmt.Errorf("failed to read length: %w", err)
-	}
-	dataLen := binary.BigEndian.Uint16(lenBytes)
-
-	// Read the entry data
 	data := make([]byte, dataLen)
 	if _, err = io.ReadFull(r, data); err != nil {
-		return fmt.Errorf("failed to read entry data: %w", err)
+		return nil, fmt.Errorf("failed to read entry data: %w", err)
 	}
 
-	// Process based on entry type
-	switch typeBytes[0] {
+	return data, nil
+}
+
+// readDataLength reads and returns the data length from the reader.
+func (e *Entry) readDataLength(r io.Reader) (uint16, error) {
+	lenBytes := make([]byte, 2)
+	if _, err := r.Read(lenBytes); err != nil {
+		return 0, fmt.Errorf("failed to read length: %w", err)
+	}
+	return binary.BigEndian.Uint16(lenBytes), nil
+}
+
+// processEntryData processes the entry data based on the entry type.
+func (e *Entry) processEntryData(entryType byte, data []byte) error {
+	switch entryType {
 	case 1: // RouterInfo
-		ri, _, err := router_info.ReadRouterInfo(data)
-		if err != nil {
-			return fmt.Errorf("failed to parse RouterInfo: %w", err)
-		}
-		e.RouterInfo = &ri
-		e.LeaseSet = nil
-
+		return e.processRouterInfoData(data)
 	case 2: // LeaseSet
-		ls, err := lease_set.ReadLeaseSet(data)
-		if err != nil {
-			return fmt.Errorf("failed to parse LeaseSet: %w", err)
-		}
-		e.LeaseSet = &ls
-		e.RouterInfo = nil
-
+		return e.processLeaseSetData(data)
 	default:
-		return fmt.Errorf("unknown entry type: %d", typeBytes[0])
+		return fmt.Errorf("unknown entry type: %d", entryType)
 	}
+}
 
+// processRouterInfoData processes RouterInfo data and sets the entry.
+func (e *Entry) processRouterInfoData(data []byte) error {
+	ri, _, err := router_info.ReadRouterInfo(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+	e.RouterInfo = &ri
+	e.LeaseSet = nil
+	return nil
+}
+
+// processLeaseSetData processes LeaseSet data and sets the entry.
+func (e *Entry) processLeaseSetData(data []byte) error {
+	ls, err := lease_set.ReadLeaseSet(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse LeaseSet: %w", err)
+	}
+	e.LeaseSet = &ls
+	e.RouterInfo = nil
 	return nil
 }
