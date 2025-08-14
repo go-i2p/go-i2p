@@ -136,18 +136,22 @@ func (rt *RouterTimestamper) performTimeQuery() bool {
 
 	lastFailed := true
 
-	if rt.priorityServers != nil {
-		for _, servers := range rt.priorityServers {
-			lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
-			if !lastFailed {
-				break
-			}
+	// Read configuration safely by creating copies under mutex protection
+	rt.mutex.Lock()
+	priorityServers := rt.priorityServers
+	servers := rt.servers
+	rt.mutex.Unlock()
+
+	for _, serverList := range priorityServers {
+		lastFailed = !rt.queryTime(serverList, shortTimeout, preferIPv6)
+		if !lastFailed {
+			break
 		}
 	}
 
-	if rt.priorityServers == nil || lastFailed {
+	if len(priorityServers) == 0 || lastFailed {
 		prefIPv6 := preferIPv6 && rt.secureRandBool(0.75)
-		lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
+		lastFailed = !rt.queryTime(servers, defaultTimeout, prefIPv6)
 	}
 
 	rt.mutex.Lock()
@@ -329,6 +333,10 @@ func (rt *RouterTimestamper) stampTime(now time.Time) {
 }
 
 func (rt *RouterTimestamper) updateConfig() {
+	// Protect configuration updates with mutex to prevent race conditions
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+
 	serverList := defaultServerList
 	rt.servers = strings.Split(serverList, ",")
 	for i, server := range rt.servers {
@@ -412,4 +420,31 @@ func (rt *RouterTimestamper) GetCurrentTime() time.Time {
 		return t
 	}
 	return time.Now() // Fallback to system time
+}
+
+// GetServers returns a copy of the current server list safely
+func (rt *RouterTimestamper) GetServers() []string {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+
+	servers := make([]string, len(rt.servers))
+	copy(servers, rt.servers)
+	return servers
+}
+
+// GetPriorityServers returns a copy of the current priority server lists safely
+func (rt *RouterTimestamper) GetPriorityServers() [][]string {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+
+	if rt.priorityServers == nil {
+		return nil
+	}
+
+	priorityServers := make([][]string, len(rt.priorityServers))
+	for i, serverList := range rt.priorityServers {
+		priorityServers[i] = make([]string, len(serverList))
+		copy(priorityServers[i], serverList)
+	}
+	return priorityServers
 }

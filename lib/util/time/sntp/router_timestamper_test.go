@@ -139,8 +139,8 @@ func TestTimestampNowWithRealNTP(t *testing.T) {
 		}
 	}
 
-	t.Logf("NTP Servers: %v", timestamper.servers)
-	t.Logf("Priority Servers: %v", timestamper.priorityServers)
+	t.Logf("NTP Servers: %v", timestamper.GetServers())
+	t.Logf("Priority Servers: %v", timestamper.GetPriorityServers())
 }
 
 func TestWaitForInitialization(t *testing.T) {
