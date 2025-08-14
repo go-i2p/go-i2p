@@ -246,14 +246,3 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer common.Hash, tar
 	// Placeholder implementation that would need to be completed
 	return nil, fmt.Errorf("peer query not implemented")
 }
-
-// create a new resolver that stores result into a NetworkDatabase and uses a tunnel pool for the lookup
-func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) {
-	if pool != nil && netDb != nil {
-		r = &KademliaResolver{
-			NetworkDatabase: netDb,
-			pool:            pool,
-		}
-	}
-	return
-}

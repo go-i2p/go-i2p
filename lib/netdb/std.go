@@ -162,9 +162,6 @@ func (db *StdNetDB) Size() (routers int) {
 	return
 }
 
-// name of file to hold precomputed size of netdb
-const CacheFileName = "sizecache.txt"
-
 // get filepath for storing netdb info cache
 func (db *StdNetDB) cacheFilePath() string {
 	return filepath.Join(db.Path(), CacheFileName)

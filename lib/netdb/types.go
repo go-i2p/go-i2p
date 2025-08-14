@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
 
+// Moved from: netdb.go
 // resolves unknown RouterInfos given the hash of their RouterIdentity
 type Resolver interface {
 	// resolve a router info by hash
@@ -15,6 +16,7 @@ type Resolver interface {
 	Lookup(hash common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 }
 
+// Moved from: netdb.go
 // i2p network database, storage of i2p RouterInfos
 type NetworkDatabase interface {
 	// obtain a RouterInfo by its hash locally
