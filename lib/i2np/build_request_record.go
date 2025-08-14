@@ -177,94 +177,122 @@ var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np buil
 
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	log.Debug("Reading BuildRequestRecord")
-	build_request_record := BuildRequestRecord{}
 
+	record := BuildRequestRecord{}
+
+	if err := parseTunnelIdentifiers(data, &record); err != nil {
+		return record, err
+	}
+
+	if err := parseSessionKeys(data, &record); err != nil {
+		return record, err
+	}
+
+	if err := parseMetadata(data, &record); err != nil {
+		return record, err
+	}
+
+	log.Debug("BuildRequestRecord read successfully")
+	return record, nil
+}
+
+// parseTunnelIdentifiers extracts tunnel and identity information from the record data.
+func parseTunnelIdentifiers(data []byte, record *BuildRequestRecord) error {
 	receive_tunnel, err := readBuildRequestRecordReceiveTunnel(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read ReceiveTunnel")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.ReceiveTunnel = receive_tunnel
+	record.ReceiveTunnel = receive_tunnel
 
 	our_ident, err := readBuildRequestRecordOurIdent(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read OurIdent")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.OurIdent = our_ident
+	record.OurIdent = our_ident
 
 	next_tunnel, err := readBuildRequestRecordNextTunnel(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read NextTunnel")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.NextTunnel = next_tunnel
+	record.NextTunnel = next_tunnel
 
 	next_ident, err := readBuildRequestRecordNextIdent(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read NextIdent")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.NextIdent = next_ident
+	record.NextIdent = next_ident
 
+	return nil
+}
+
+// parseSessionKeys extracts all cryptographic keys from the record data.
+func parseSessionKeys(data []byte, record *BuildRequestRecord) error {
 	layer_key, err := readBuildRequestRecordLayerKey(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read LayerKey")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.LayerKey = layer_key
+	record.LayerKey = layer_key
 
 	iv_key, err := readBuildRequestRecordIVKey(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read IVKey")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.IVKey = iv_key
+	record.IVKey = iv_key
 
 	reply_key, err := readBuildRequestRecordReplyKey(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read ReplyKey")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.ReplyKey = reply_key
+	record.ReplyKey = reply_key
 
 	reply_iv, err := readBuildRequestRecordReplyIV(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read ReplyIV")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.ReplyIV = reply_iv
+	record.ReplyIV = reply_iv
 
+	return nil
+}
+
+// parseMetadata extracts flags, timestamps, and padding from the record data.
+func parseMetadata(data []byte, record *BuildRequestRecord) error {
 	flag, err := readBuildRequestRecordFlag(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Flag")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.Flag = flag
+	record.Flag = flag
 
 	request_time, err := readBuildRequestRecordRequestTime(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read RequestTime")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.RequestTime = request_time
+	record.RequestTime = request_time
 
 	send_message_id, err := readBuildRequestRecordSendMessageID(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read SendMessageID")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.SendMessageID = send_message_id
+	record.SendMessageID = send_message_id
 
 	padding, err := readBuildRequestRecordPadding(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to read Padding")
-		return build_request_record, err
+		return err
 	}
-	build_request_record.Padding = padding
+	record.Padding = padding
 
-	log.Debug("BuildRequestRecord read successfully")
-	return build_request_record, nil
+	return nil
 }
 
 func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
