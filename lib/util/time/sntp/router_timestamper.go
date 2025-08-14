@@ -233,7 +233,13 @@ func (rt *RouterTimestamper) run() {
 			rt.consecutiveFails = 0
 			randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
 			sleepTime = rt.queryFrequency + randomDelay
-			if rt.wellSynced {
+
+			// Safely read wellSynced with mutex protection
+			rt.mutex.Lock()
+			wellSynced := rt.wellSynced
+			rt.mutex.Unlock()
+
+			if wellSynced {
 				sleepTime *= 3
 			}
 		}
@@ -280,7 +286,11 @@ func (rt *RouterTimestamper) runOnce() {
 func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, preferIPv6 bool) bool {
 	found := make([]time.Duration, rt.concurringServers)
 	var expectedDelta time.Duration
+
+	// Safely set wellSynced to false with mutex protection
+	rt.mutex.Lock()
 	rt.wellSynced = false
+	rt.mutex.Unlock()
 
 	for i := 0; i < rt.concurringServers; i++ {
 		server := servers[rand.Intn(len(servers))]
@@ -306,7 +316,10 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 		if i == 0 {
 			if absDuration(delta) < maxVariance {
 				if absDuration(delta) < 500*time.Millisecond {
+					// Safely set wellSynced to true with mutex protection
+					rt.mutex.Lock()
 					rt.wellSynced = true
+					rt.mutex.Unlock()
 				}
 				break
 			} else {
