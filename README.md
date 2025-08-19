@@ -12,9 +12,9 @@ please keep up with these changes, as they will not be backward compatible and r
 ### Implemented Features
 
 - Clients
-  - [ ] Datagrams
   - [ ] I2CP
   - [ ] Message routing
+  - [ ] Datagrams
   - [ ] Streaming
 - [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
   - Signing
