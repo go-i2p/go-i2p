@@ -95,6 +95,18 @@ type DatabaseStore struct {
 	Data          []byte
 }
 
+// NewDatabaseStore creates a new DatabaseStore message
+func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStore {
+	return &DatabaseStore{
+		Key:           key,
+		Type:          dataType,
+		ReplyToken:    [4]byte{0, 0, 0, 0}, // No reply token
+		ReplyTunnelID: [4]byte{0, 0, 0, 0}, // Direct response
+		ReplyGateway:  common.Hash{},       // No gateway
+		Data:          data,
+	}
+}
+
 // GetStoreKey returns the store key
 func (d *DatabaseStore) GetStoreKey() common.Hash {
 	return d.Key
@@ -108,6 +120,45 @@ func (d *DatabaseStore) GetStoreData() []byte {
 // GetStoreType returns the store type
 func (d *DatabaseStore) GetStoreType() byte {
 	return d.Type
+}
+
+// MarshalBinary serializes the DatabaseStore message
+func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
+	// Calculate the size: key(32) + type(1) + replyToken(4) + data
+	// If replyToken > 0, add replyTunnelID(4) + replyGateway(32)
+	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
+	baseSize := 32 + 1 + 4 + len(d.Data) // key + type + replyToken + data
+	if hasReply {
+		baseSize += 4 + 32 // replyTunnelID + replyGateway
+	}
+
+	result := make([]byte, baseSize)
+	offset := 0
+
+	// Key (32 bytes)
+	copy(result[offset:offset+32], d.Key[:])
+	offset += 32
+
+	// Type (1 byte)
+	result[offset] = d.Type
+	offset++
+
+	// Reply Token (4 bytes)
+	copy(result[offset:offset+4], d.ReplyToken[:])
+	offset += 4
+
+	// If reply token > 0, include reply tunnel ID and gateway
+	if hasReply {
+		copy(result[offset:offset+4], d.ReplyTunnelID[:])
+		offset += 4
+		copy(result[offset:offset+32], d.ReplyGateway[:])
+		offset += 32
+	}
+
+	// Data
+	copy(result[offset:], d.Data)
+
+	return result, nil
 }
 
 // Compile-time interface satisfaction check

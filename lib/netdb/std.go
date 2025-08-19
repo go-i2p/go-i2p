@@ -523,3 +523,45 @@ func (db *StdNetDB) Create() (err error) {
 	}
 	return
 }
+
+// GetRouterInfoBytes retrieves RouterInfo data as bytes from the database
+func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
+	log.WithField("hash", hash).Debug("Getting RouterInfo bytes")
+
+	// Check memory cache first
+	db.riMutex.Lock()
+	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
+		db.riMutex.Unlock()
+		log.Debug("RouterInfo found in memory cache")
+
+		// Serialize the RouterInfo to bytes
+		data, err := ri.RouterInfo.Bytes()
+		if err != nil {
+			log.WithError(err).Error("Failed to serialize cached RouterInfo")
+			return nil, fmt.Errorf("failed to serialize RouterInfo: %w", err)
+		}
+		return data, nil
+	}
+	db.riMutex.Unlock()
+
+	// Load from file if not in memory
+	data, err := db.loadRouterInfoFromFile(hash)
+	if err != nil {
+		log.WithError(err).Debug("RouterInfo not found in filesystem")
+		return nil, fmt.Errorf("RouterInfo not found: %w", err)
+	}
+
+	// Parse and cache for future use
+	_, err = db.parseAndCacheRouterInfo(hash, data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse RouterInfo from file")
+		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	return data, nil
+}
+
+// GetRouterInfoCount returns the total number of RouterInfo entries in the database
+func (db *StdNetDB) GetRouterInfoCount() int {
+	return db.Size()
+}

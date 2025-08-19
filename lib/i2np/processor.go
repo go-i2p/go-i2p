@@ -100,7 +100,10 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error {
 
 // DatabaseManager demonstrates database-related interface usage
 type DatabaseManager struct {
-	netdb NetDBStore
+	netdb           NetDBStore
+	retriever       NetDBRetriever
+	sessionProvider SessionProvider
+	factory         *I2NPMessageFactory
 }
 
 // NetDBStore defines the interface for storing RouterInfo entries
@@ -108,14 +111,44 @@ type NetDBStore interface {
 	StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
 }
 
+// NetDBRetriever defines the interface for retrieving RouterInfo entries
+type NetDBRetriever interface {
+	GetRouterInfoBytes(hash common.Hash) ([]byte, error)
+	GetRouterInfoCount() int
+}
+
+// TransportSession defines the interface for sending I2NP messages back to requesters
+type TransportSession interface {
+	QueueSendI2NP(msg I2NPMessage)
+	SendQueueSize() int
+}
+
+// SessionProvider defines the interface for obtaining transport sessions
+type SessionProvider interface {
+	GetSessionByHash(hash common.Hash) (TransportSession, error)
+}
+
 // NewDatabaseManager creates a new database manager with NetDB integration
 func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
 	return &DatabaseManager{
-		netdb: netdb,
+		netdb:           netdb,
+		retriever:       nil, // Will be set later via SetRetriever
+		sessionProvider: nil, // Will be set later via SetSessionProvider
+		factory:         NewI2NPMessageFactory(),
 	}
 }
 
-// PerformLookup performs a database lookup using DatabaseReader interface
+// SetRetriever sets the NetDB retriever for database operations
+func (dm *DatabaseManager) SetRetriever(retriever NetDBRetriever) {
+	dm.retriever = retriever
+}
+
+// SetSessionProvider sets the session provider for sending responses
+func (dm *DatabaseManager) SetSessionProvider(provider SessionProvider) {
+	dm.sessionProvider = provider
+}
+
+// PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	key := reader.GetKey()
 	from := reader.GetFrom()
@@ -124,7 +157,112 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	fmt.Printf("Performing lookup for key %x from %x with flags %d\n",
 		key[:8], from[:8], flags)
 
+	// If no session provider is available, just perform the lookup logic without sending responses
+	// This maintains backward compatibility with existing tests
+	if dm.sessionProvider == nil {
+		fmt.Println("No session provider available, performing lookup without sending response")
+		if dm.retriever != nil {
+			if data, err := dm.retrieveRouterInfo(key); err == nil {
+				fmt.Printf("RouterInfo found locally: %d bytes\n", len(data))
+			} else {
+				fmt.Printf("RouterInfo not found locally: %v\n", err)
+			}
+		} else {
+			fmt.Println("No retriever available, cannot perform lookup")
+		}
+		return nil
+	}
+
+	// Attempt to retrieve RouterInfo from NetDB
+	if dm.retriever != nil {
+		if data, err := dm.retrieveRouterInfo(key); err == nil {
+			// RouterInfo found - send DatabaseStore response
+			return dm.sendDatabaseStoreResponse(key, data, from)
+		} else {
+			fmt.Printf("RouterInfo not found locally: %v\n", err)
+		}
+	} else {
+		fmt.Println("No retriever available, cannot perform lookup")
+	}
+
+	// RouterInfo not found - send DatabaseSearchReply response
+	return dm.sendDatabaseSearchReply(key, from)
+}
+
+// retrieveRouterInfo attempts to retrieve RouterInfo data from the NetDB
+func (dm *DatabaseManager) retrieveRouterInfo(key common.Hash) ([]byte, error) {
+	data, err := dm.retriever.GetRouterInfoBytes(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve RouterInfo: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("RouterInfo not found for key %x", key[:8])
+	}
+	return data, nil
+}
+
+// sendDatabaseStoreResponse sends a DatabaseStore message back to the requester
+func (dm *DatabaseManager) sendDatabaseStoreResponse(key common.Hash, data []byte, to common.Hash) error {
+	// Create DatabaseStore message with the found RouterInfo
+	response := NewDatabaseStore(key, data, 0) // RouterInfo type is 0
+	return dm.sendResponse(response, to)
+}
+
+// sendDatabaseSearchReply sends a DatabaseSearchReply when RouterInfo is not found
+func (dm *DatabaseManager) sendDatabaseSearchReply(key common.Hash, to common.Hash) error {
+	// Create DatabaseSearchReply with empty peer list (we're not implementing peer suggestions for MVP)
+	response := NewDatabaseSearchReply(key, common.Hash{}, []common.Hash{}) // TODO: Should use our router hash as from
+	return dm.sendResponse(response, to)
+}
+
+// sendResponse sends an I2NP message response using the session provider
+func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) error {
+	if dm.sessionProvider == nil {
+		return fmt.Errorf("no session provider available for sending response")
+	}
+
+	session, err := dm.sessionProvider.GetSessionByHash(to)
+	if err != nil {
+		return fmt.Errorf("failed to get session for %x: %w", to[:8], err)
+	}
+
+	// Convert response to I2NPMessage interface
+	var msg I2NPMessage
+	switch r := response.(type) {
+	case *DatabaseStore:
+		msg = dm.createDatabaseStoreMessage(r)
+	case *DatabaseSearchReply:
+		msg = dm.createDatabaseSearchReplyMessage(r)
+	default:
+		return fmt.Errorf("unsupported response type: %T", response)
+	}
+
+	// Send the response
+	session.QueueSendI2NP(msg)
+	fmt.Printf("Queued response message type %d for %x\n", msg.Type(), to[:8])
 	return nil
+}
+
+// createDatabaseStoreMessage creates an I2NP message from DatabaseStore
+func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NPMessage {
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	if data, err := store.MarshalBinary(); err == nil {
+		msg.SetData(data)
+	} else {
+		fmt.Printf("Failed to marshal DatabaseStore: %v\n", err)
+	}
+	return msg
+}
+
+// createDatabaseSearchReplyMessage creates an I2NP message from DatabaseSearchReply
+func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearchReply) I2NPMessage {
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY)
+	if data, err := reply.MarshalBinary(); err == nil {
+		msg.SetData(data)
+	} else {
+		fmt.Printf("Failed to marshal DatabaseSearchReply: %v\n", err)
+	}
+	return msg
 }
 
 // StoreData stores data using DatabaseWriter interface and NetDB integration

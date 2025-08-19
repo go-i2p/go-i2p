@@ -61,3 +61,40 @@ type DatabaseSearchReply struct {
 	PeerHashes []common.Hash
 	From       common.Hash
 }
+
+// NewDatabaseSearchReply creates a new DatabaseSearchReply message
+func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *DatabaseSearchReply {
+	return &DatabaseSearchReply{
+		Key:        key,
+		Count:      len(peerHashes),
+		PeerHashes: peerHashes,
+		From:       from,
+	}
+}
+
+// MarshalBinary serializes the DatabaseSearchReply message
+func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
+	// Calculate size: key(32) + count(1) + peerHashes(count*32) + from(32)
+	size := 32 + 1 + (d.Count * 32) + 32
+	result := make([]byte, size)
+	offset := 0
+
+	// Key (32 bytes)
+	copy(result[offset:offset+32], d.Key[:])
+	offset += 32
+
+	// Count (1 byte)
+	result[offset] = byte(d.Count)
+	offset++
+
+	// Peer hashes (count * 32 bytes)
+	for i := 0; i < d.Count && i < len(d.PeerHashes); i++ {
+		copy(result[offset:offset+32], d.PeerHashes[i][:])
+		offset += 32
+	}
+
+	// From (32 bytes)
+	copy(result[offset:offset+32], d.From[:])
+
+	return result, nil
+}
