@@ -895,61 +895,105 @@ func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []
 	return
 }
 
-func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, remainder []byte, err error) {
-	log.Debug("Reading DeliveryInstructions")
+// validateDeliveryInstructionInput checks if the provided data is valid for processing.
+func validateDeliveryInstructionInput(data []byte) error {
 	if len(data) < 1 {
 		log.Error("No data provided")
-		err = oops.Errorf("no data provided")
-		return
+		return oops.Errorf("no data provided")
 	}
+	return nil
+}
 
+// initializeDeliveryInstructionData creates initial data structure for delivery instructions processing.
+func initializeDeliveryInstructionData(data []byte) (DeliveryInstructions, int, []byte) {
 	di_flag := DeliveryInstructions(data[:1])
 	di_type, _ := di_flag.Type()
 
 	di_data := make([]byte, 0)
 	di_data = append(di_data, data[0])
 
+	return di_flag, di_type, di_data
+}
+
+// processFirstFragment handles the processing of FIRST_FRAGMENT delivery instruction type.
+func processFirstFragment(di_flag DeliveryInstructions, data []byte, di_data []byte) ([]byte, error) {
+	log.Debug("Processing FIRST_FRAGMENT")
+
+	var err error
+	di_data, err = maybeAppendTunnelID(data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append TunnelID")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendHash(di_flag, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append Hash")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendDelay(di_flag, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append Delay")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendMessageID(di_flag, FIRST_FRAGMENT, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append MessageID")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendExtendedOptions(di_flag, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append ExtendedOptions")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendSize(di_flag, FIRST_FRAGMENT, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append Size")
+		return nil, err
+	}
+
+	return di_data, nil
+}
+
+// processFollowOnFragment handles the processing of FOLLOW_ON_FRAGMENT delivery instruction type.
+func processFollowOnFragment(di_flag DeliveryInstructions, data []byte, di_data []byte) ([]byte, error) {
+	var err error
+	di_data, err = maybeAppendMessageID(di_flag, FOLLOW_ON_FRAGMENT, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append MessageID")
+		return nil, err
+	}
+
+	di_data, err = maybeAppendSize(di_flag, FOLLOW_ON_FRAGMENT, data, di_data)
+	if err != nil {
+		log.WithError(err).Error("Failed to append Size")
+		return nil, err
+	}
+
+	return di_data, nil
+}
+
+func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, remainder []byte, err error) {
+	log.Debug("Reading DeliveryInstructions")
+
+	if err = validateDeliveryInstructionInput(data); err != nil {
+		return
+	}
+
+	di_flag, di_type, di_data := initializeDeliveryInstructionData(data)
+
 	if di_type == FIRST_FRAGMENT {
-		log.Debug("Processing FIRST_FRAGMENT")
-		di_data, err = maybeAppendTunnelID(data, di_data)
+		di_data, err = processFirstFragment(di_flag, data, di_data)
 		if err != nil {
-			log.WithError(err).Error("Failed to append TunnelID")
-			return
-		}
-		di_data, err = maybeAppendHash(di_flag, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append Hash")
-			return
-		}
-		di_data, err = maybeAppendDelay(di_flag, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append Delay")
-			return
-		}
-		di_data, err = maybeAppendMessageID(di_flag, di_type, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append MessageID")
-			return
-		}
-		di_data, err = maybeAppendExtendedOptions(di_flag, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append ExtendedOptions")
-			return
-		}
-		di_data, err = maybeAppendSize(di_flag, di_type, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append Size")
 			return
 		}
 	} else if di_type == FOLLOW_ON_FRAGMENT {
-		di_data, err = maybeAppendMessageID(di_flag, di_type, data, di_data)
+		di_data, err = processFollowOnFragment(di_flag, data, di_data)
 		if err != nil {
-			log.WithError(err).Error("Failed to append MessageID")
-			return
-		}
-		di_data, err = maybeAppendSize(di_flag, di_type, data, di_data)
-		if err != nil {
-			log.WithError(err).Error("Failed to append Size")
 			return
 		}
 	}
