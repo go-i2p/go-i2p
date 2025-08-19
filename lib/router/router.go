@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/common/base32"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 
 	"github.com/go-i2p/logger"
@@ -30,6 +31,8 @@ type Router struct {
 	*transport.TransportMuxer
 	// netdb
 	*netdb.StdNetDB
+	// message router for processing I2NP messages
+	messageRouter *i2np.MessageRouter
 	// router configuration
 	cfg *config.RouterConfig
 	// close channel
@@ -199,6 +202,17 @@ func (r *Router) mainloop() {
 	log.Debug("Entering router mainloop")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
+
+	// Initialize message router and connect to NetDB
+	messageConfig := i2np.MessageRouterConfig{
+		MaxRetries:     3,
+		DefaultTimeout: 30 * time.Second,
+		EnableLogging:  true,
+	}
+	r.messageRouter = i2np.NewMessageRouter(messageConfig)
+	r.messageRouter.SetNetDB(r.StdNetDB)
+	log.Debug("Message router initialized with NetDB integration")
+
 	// make sure the netdb is ready
 	var e error
 	if err := r.StdNetDB.Ensure(); err != nil {
@@ -226,7 +240,7 @@ func (r *Router) mainloop() {
 		// netdb ready
 		log.WithFields(logrus.Fields{
 			"at": "(Router) mainloop",
-		}).Debug("Router ready")
+		}).Debug("Router ready with database message processing enabled")
 		for r.running && e == nil {
 			time.Sleep(time.Second)
 		}

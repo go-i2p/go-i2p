@@ -99,11 +99,20 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error {
 }
 
 // DatabaseManager demonstrates database-related interface usage
-type DatabaseManager struct{}
+type DatabaseManager struct {
+	netdb NetDBStore
+}
 
-// NewDatabaseManager creates a new database manager
-func NewDatabaseManager() *DatabaseManager {
-	return &DatabaseManager{}
+// NetDBStore defines the interface for storing RouterInfo entries
+type NetDBStore interface {
+	StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+}
+
+// NewDatabaseManager creates a new database manager with NetDB integration
+func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
+	return &DatabaseManager{
+		netdb: netdb,
+	}
 }
 
 // PerformLookup performs a database lookup using DatabaseReader interface
@@ -118,7 +127,7 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	return nil
 }
 
-// StoreData stores data using DatabaseWriter interface
+// StoreData stores data using DatabaseWriter interface and NetDB integration
 func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	key := writer.GetStoreKey()
 	data := writer.GetStoreData()
@@ -127,7 +136,11 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	fmt.Printf("Storing %d bytes of type %d for key %x\n",
 		len(data), dataType, key[:8])
 
-	return nil
+	if dm.netdb != nil {
+		return dm.netdb.StoreRouterInfo(key, data, dataType)
+	}
+
+	return fmt.Errorf("no NetDB available for storage")
 }
 
 // SessionManager demonstrates session-related interface usage
@@ -189,10 +202,15 @@ func NewMessageRouter(config MessageRouterConfig) *MessageRouter {
 	return &MessageRouter{
 		config:     config,
 		processor:  NewMessageProcessor(),
-		dbManager:  NewDatabaseManager(),
+		dbManager:  NewDatabaseManager(nil), // Will be set later via SetNetDB
 		tunnelMgr:  NewTunnelManager(),
 		sessionMgr: NewSessionManager(),
 	}
+}
+
+// SetNetDB sets the NetDB store for database operations
+func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
+	mr.dbManager = NewDatabaseManager(netdb)
 }
 
 // RouteMessage routes messages based on their interfaces

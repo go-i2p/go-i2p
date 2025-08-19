@@ -112,7 +112,7 @@ func TestTunnelManager(t *testing.T) {
 }
 
 func TestDatabaseManager(t *testing.T) {
-	manager := NewDatabaseManager()
+	manager := NewDatabaseManager(nil)
 
 	// Test database lookup
 	key := common.Hash{}
@@ -141,7 +141,7 @@ func TestDatabaseManager(t *testing.T) {
 	}
 
 	err = manager.StoreData(store)
-	assert.NoError(t, err)
+	assert.Error(t, err) // Expect error since NetDB is nil
 	assert.Equal(t, key, store.GetStoreKey())
 	assert.Equal(t, storeData, store.GetStoreData())
 	assert.Equal(t, byte(0x00), store.GetStoreType())

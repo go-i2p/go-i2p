@@ -432,6 +432,65 @@ func (db *StdNetDB) updateCacheAfterReseed() error {
 	return nil
 }
 
+// StoreRouterInfo stores a RouterInfo entry in the database from I2NP DatabaseStore message
+func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")
+
+	// Validate data type - should be RouterInfo (type 0)
+	if dataType != 0 {
+		log.WithField("type", dataType).Warn("Invalid data type for RouterInfo, expected 0")
+		return fmt.Errorf("invalid data type for RouterInfo: expected 0, got %d", dataType)
+	}
+
+	// Parse the RouterInfo from the data
+	ri, _, err := router_info.ReadRouterInfo(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse RouterInfo from DatabaseStore data")
+		return fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	// Verify the key matches the RouterInfo identity hash
+	expectedHash := ri.IdentHash()
+	if key != expectedHash {
+		log.WithFields(logrus.Fields{
+			"expected_hash": expectedHash,
+			"provided_key":  key,
+		}).Error("RouterInfo hash mismatch")
+		return fmt.Errorf("RouterInfo hash mismatch: expected %x, got %x", expectedHash, key)
+	}
+
+	// Check if we already have this RouterInfo in memory
+	db.riMutex.Lock()
+	if _, exists := db.RouterInfos[key]; exists {
+		db.riMutex.Unlock()
+		log.WithField("hash", key).Debug("RouterInfo already exists in memory, skipping")
+		return nil
+	}
+
+	// Add to in-memory cache
+	db.RouterInfos[key] = Entry{
+		RouterInfo: &ri,
+	}
+	db.riMutex.Unlock()
+
+	// Save to filesystem
+	entry := &Entry{
+		RouterInfo: &ri,
+	}
+
+	if err := db.SaveEntry(entry); err != nil {
+		log.WithError(err).Error("Failed to save RouterInfo to filesystem")
+		// Remove from memory if filesystem save failed
+		db.riMutex.Lock()
+		delete(db.RouterInfos, key)
+		db.riMutex.Unlock()
+		return fmt.Errorf("failed to save RouterInfo to filesystem: %w", err)
+	}
+
+	log.WithField("hash", key).Debug("Successfully stored RouterInfo")
+	return nil
+}
+
 // ensure that the network database exists
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {

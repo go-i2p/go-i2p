@@ -416,7 +416,7 @@ DatabaseManager demonstrates database-related interface usage
 #### func  NewDatabaseManager
 
 ```go
-func NewDatabaseManager() *DatabaseManager
+func NewDatabaseManager(netdb NetDBStore) *DatabaseManager
 ```
 NewDatabaseManager creates a new database manager
 
