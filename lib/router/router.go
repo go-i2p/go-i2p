@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/base32"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 
@@ -40,76 +41,112 @@ type Router struct {
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	log.Debug("Creating router with provided configuration")
+
 	r, err := FromConfig(cfg)
 	if err != nil {
 		log.WithError(err).Error("Failed to create router from configuration")
 		return nil, err
-	} else {
-		log.Debug("Router created successfully with provided configuration")
 	}
-	r.RouterInfoKeystore, err = keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
+	log.Debug("Router created successfully with provided configuration")
+
+	if err := initializeRouterKeystore(r, cfg); err != nil {
+		return nil, err
+	}
+
+	if err := validateRouterKeys(r); err != nil {
+		return nil, err
+	}
+
+	ri, err := constructRouterInfo(r)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := setupNTCP2Transport(r, ri); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+// initializeRouterKeystore creates and stores the router keystore
+func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 	log.Debug("Working directory is:", cfg.WorkingDir)
+
+	keystore, err := keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
 	if err != nil {
 		log.WithError(err).Error("Failed to create RouterInfoKeystore")
-		return nil, err
-	} else {
-		log.Debug("RouterInfoKeystore created successfully")
-		if err = r.RouterInfoKeystore.StoreKeys(); err != nil {
-			log.WithError(err).Error("Failed to store RouterInfoKeystore")
-			return nil, err
-		} else {
-			log.Debug("RouterInfoKeystore stored successfully")
-		}
+		return err
 	}
+	log.Debug("RouterInfoKeystore created successfully")
+
+	if err = keystore.StoreKeys(); err != nil {
+		log.WithError(err).Error("Failed to store RouterInfoKeystore")
+		return err
+	}
+	log.Debug("RouterInfoKeystore stored successfully")
+
+	r.RouterInfoKeystore = keystore
+	return nil
+}
+
+// validateRouterKeys extracts and validates the router's public key
+func validateRouterKeys(r *Router) error {
 	pub, _, err := r.RouterInfoKeystore.GetKeys()
 	if err != nil {
 		log.WithError(err).Error("Failed to get keys from RouterInfoKeystore")
-		return nil, err
-	} else {
-		// sha256 hash of public key
-		pubHash := sha256.Sum256(pub.Bytes())
-		b32PubHash := base32.EncodeToString(pubHash[:])
-		log.Debug("Router public key hash:", b32PubHash)
+		return err
 	}
 
+	// sha256 hash of public key
+	pubHash := sha256.Sum256(pub.Bytes())
+	b32PubHash := base32.EncodeToString(pubHash[:])
+	log.Debug("Router public key hash:", b32PubHash)
+
+	return nil
+}
+
+// constructRouterInfo builds the router info from the keystore
+func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to construct RouterInfo")
 		return nil, err
-	} else {
-		log.Debug("RouterInfo constructed successfully")
-		log.Debug("RouterInfo:", ri)
 	}
 
-	// we have our keystore and our routerInfo,, so now let's set up transports
+	log.Debug("RouterInfo constructed successfully")
+	log.Debug("RouterInfo:", ri)
+	return ri, nil
+}
+
+// setupNTCP2Transport configures and initializes the NTCP2 transport layer
+func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 	// add NTCP2 transport
 	ntcp2Config, err := ntcp.NewConfig(":0") // Use port 0 for automatic assignment
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
-		return nil, err
+		return err
 	}
 
-	ntcp2, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config)
+	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")
-		return nil, err
+		return err
 	}
 	log.Debug("NTCP2 transport created successfully")
 
-	r.TransportMuxer = transport.Mux(ntcp2)
-	ntcpaddr := ntcp2.Addr()
+	r.TransportMuxer = transport.Mux(ntcp2Transport)
+	ntcpaddr := ntcp2Transport.Addr()
 	if ntcpaddr == nil {
 		log.Error("Failed to get NTCP2 address")
-		return nil, errors.New("failed to get NTCP2 address")
+		return errors.New("failed to get NTCP2 address")
 	}
 	log.Debug("NTCP2 address:", ntcpaddr)
 
 	// TODO: Add the NTCP2 address to RouterInfo once RouterAddress conversion is implemented
 	// ri.AddAddress(ntcpaddr)
 
-	// create a transport address
-
-	return r, err
+	return nil
 }
 
 // create router from configuration
@@ -137,7 +174,7 @@ func (r *Router) Stop() {
 	log.Debug("Router stop signal sent")
 }
 
-// Close closes any internal state and finallizes router resources so that nothing can start up again
+// Close closes any internal state and finalizes router resources so that nothing can start up again
 func (r *Router) Close() error {
 	log.Warn("Closing router not implemented(?)")
 	return nil
@@ -190,7 +227,7 @@ func (r *Router) mainloop() {
 		log.WithFields(logrus.Fields{
 			"at": "(Router) mainloop",
 		}).Debug("Router ready")
-		for e == nil {
+		for r.running && e == nil {
 			time.Sleep(time.Second)
 		}
 	} else {
