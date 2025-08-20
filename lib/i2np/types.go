@@ -28,6 +28,15 @@ type I2NPSSUHeader struct {
 	Expiration time.Time
 }
 
+/*
+When transmitted over [NTCP2] or [SSU2], the 16-byte standard header is not used. Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds are included. The size is incorporated in the NTCP2 and SSU2 data packet formats. The checksum is not required since errors are caught in decryption.
+*/
+type I2NPSecondGenTransportHeader struct {
+	Type       int
+	MessageID  int
+	Expiration time.Time
+}
+
 // Interface Definitions
 
 // MessageSerializer represents types that can be marshaled and unmarshaled

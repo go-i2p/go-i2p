@@ -70,6 +70,41 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 	return header, nil
 }
 
+// ReadI2NPSecondGenTransportHeader reads an I2NP NTCP2 or SSU2 header
+// When transmitted over [NTCP2] or [SSU2], the 16-byte standard header is not used.
+// Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds are included.
+// The size is incorporated in the NTCP2 and SSU2 data packet formats.
+// The checksum is not required since errors are caught in decryption.
+func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader, error) {
+	header := I2NPSecondGenTransportHeader{}
+
+	if len(dat) < 9 {
+		return header, ERR_I2NP_NOT_ENOUGH_DATA
+	}
+
+	messageType, err := ReadI2NPType(dat)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP type")
+		return header, err
+	}
+	header.Type = messageType
+
+	messageID := datalib.Integer(dat[1:5])
+	header.MessageID = messageID.Int()
+
+	expiration := datalib.Date(dat[5:9])
+	header.Expiration = expiration.Time()
+
+	log.WithFields(logrus.Fields{
+		"at":         "i2np.ReadI2NPSecondGenTransportHeader",
+		"type":       header.Type,
+		"messageID":  header.MessageID,
+		"expiration": header.Expiration,
+	}).Debug("parsed_i2np_second_gen_transport_header")
+
+	return header, nil
+}
+
 // ReadI2NPSSUHeader reads an I2NP SSU header
 func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
 	header := I2NPSSUHeader{}
