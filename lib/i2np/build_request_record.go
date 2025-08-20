@@ -3,7 +3,6 @@ package i2np
 import (
 	"time"
 
-	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 
 	common "github.com/go-i2p/common/data"
@@ -172,8 +171,6 @@ type BuildRequestRecord struct {
 	SendMessageID int
 	Padding       [29]byte
 }
-
-var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
 
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	log.Debug("Reading BuildRequestRecord")

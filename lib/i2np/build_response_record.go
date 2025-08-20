@@ -1,11 +1,8 @@
 package i2np
 
 import (
-	"errors"
-
-	"github.com/sirupsen/logrus"
-
 	common "github.com/go-i2p/common/data"
+	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -56,8 +53,6 @@ type BuildResponseRecord struct {
 	RandomData [495]byte
 	Reply      byte
 }
-
-var ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
 
 func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 	log.Debug("Reading BuildResponseRecord")

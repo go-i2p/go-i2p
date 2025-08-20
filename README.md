@@ -58,7 +58,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [~] Persistence to disk
   - [ ] RouterInfo management
   - [ ] LeaseSet management
-  - [ ] Lookups
+  - [X] Lookups
   - [ ] Expiry
   - [ ] Exploration
   - [ ] Publishing

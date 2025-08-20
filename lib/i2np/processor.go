@@ -5,7 +5,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // MessageProcessor demonstrates interface-based message processing
@@ -393,34 +392,4 @@ func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
 	return fmt.Errorf("message does not implement tunnel interfaces")
 }
 
-// Helper functions for creating common interface combinations
-
-// CreateTunnelRecord creates a build request record with interface methods
-func CreateTunnelRecord(receiveTunnel, nextTunnel tunnel.TunnelID,
-	ourIdent, nextIdent common.Hash,
-) TunnelIdentifier {
-	return &BuildRequestRecord{
-		ReceiveTunnel: receiveTunnel,
-		NextTunnel:    nextTunnel,
-		OurIdent:      ourIdent,
-		NextIdent:     nextIdent,
-	}
-}
-
-// CreateDatabaseQuery creates a database lookup with interface methods
-func CreateDatabaseQuery(key, from common.Hash, flags byte) DatabaseReader {
-	return &DatabaseLookup{
-		Key:   key,
-		From:  from,
-		Flags: flags,
-	}
-}
-
-// CreateDatabaseEntry creates a database store with interface methods
-func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWriter {
-	return &DatabaseStore{
-		Key:  key,
-		Data: data,
-		Type: dataType,
-	}
-}
+// Helper functions have been moved to utils.go

@@ -1,5 +1,11 @@
 package i2np
 
+import (
+	"errors"
+
+	"github.com/samber/oops"
+)
+
 // I2NP Message Type Constants
 // Moved from: header.go
 const (
@@ -15,4 +21,13 @@ const (
 	I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY          = 22
 	I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD       = 23
 	I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY = 24
+)
+
+// I2NP Error Constants
+// Moved from: header.go, build_request_record.go, build_response_record.go, database_lookup.go
+var (
+	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
+	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
+	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
+	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
 )

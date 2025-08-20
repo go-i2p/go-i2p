@@ -1,8 +1,6 @@
 package i2np
 
 import (
-	"errors"
-
 	"github.com/sirupsen/logrus"
 
 	common "github.com/go-i2p/common/data"
@@ -196,8 +194,6 @@ type DatabaseLookup struct {
 	Tags          int
 	ReplyTags     []session_tag.SessionTag
 }
-
-var ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA = errors.New("not enough i2np database lookup data")
 
 func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 	log.Debug("Reading DatabaseLookup")

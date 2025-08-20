@@ -9,6 +9,27 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
+// I2NP Header Types
+// Moved from: header.go
+
+// I2NPNTCPHeader represents a parsed I2NP message header for NTCP transport
+type I2NPNTCPHeader struct {
+	Type       int
+	MessageID  int
+	Expiration time.Time
+	Size       int
+	Checksum   int
+	Data       []byte
+}
+
+// I2NPSSUHeader represents a parsed I2NP message header for SSU transport
+type I2NPSSUHeader struct {
+	Type       int
+	Expiration time.Time
+}
+
+// Interface Definitions
+
 // MessageSerializer represents types that can be marshaled and unmarshaled
 type MessageSerializer interface {
 	MarshalBinary() ([]byte, error)
