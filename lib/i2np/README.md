@@ -24,64 +24,67 @@ const (
 	I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY = 24
 )
 ```
+I2NP Message Type Constants Moved from: header.go
 
 ```go
-var ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
+var (
+	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
+	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
+	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
+	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
+)
 ```
-
-```go
-var ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
-```
-
-```go
-var ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA = errors.New("not enough i2np database lookup data")
-```
-
-```go
-var ERR_I2NP_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np header data")
-```
+I2NP Error Constants Moved from: header.go, build_request_record.go,
+build_response_record.go, database_lookup.go
 
 #### func  ReadI2NPNTCPData
 
 ```go
 func ReadI2NPNTCPData(data []byte, size int) ([]byte, error)
 ```
+ReadI2NPNTCPData reads the message data from NTCP payload
 
 #### func  ReadI2NPNTCPMessageChecksum
 
 ```go
 func ReadI2NPNTCPMessageChecksum(data []byte) (int, error)
 ```
+ReadI2NPNTCPMessageChecksum reads the message checksum from NTCP data
 
 #### func  ReadI2NPNTCPMessageExpiration
 
 ```go
 func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error)
 ```
+ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data
 
 #### func  ReadI2NPNTCPMessageID
 
 ```go
 func ReadI2NPNTCPMessageID(data []byte) (int, error)
 ```
+ReadI2NPNTCPMessageID reads the message ID from NTCP data
 
 #### func  ReadI2NPNTCPMessageSize
 
 ```go
 func ReadI2NPNTCPMessageSize(data []byte) (int, error)
 ```
+ReadI2NPNTCPMessageSize reads the message size from NTCP data
 
 #### func  ReadI2NPSSUMessageExpiration
 
 ```go
 func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error)
 ```
+ReadI2NPSSUMessageExpiration reads the expiration from SSU data
 
 #### func  ReadI2NPType
 
 ```go
 func ReadI2NPType(data []byte) (int, error)
 ```
+ReadI2NPType reads the I2NP message type from data
 
 #### type BaseI2NPMessage
 
@@ -324,7 +327,7 @@ type DataMessage struct {
 }
 ```
 
-DataMessage represents an I2NP Data message
+DataMessage represents an I2NP Data message Moved from: messages.go
 
 #### func  NewDataMessage
 
@@ -408,7 +411,8 @@ GetTagCount returns the number of tags
 #### type DatabaseManager
 
 ```go
-type DatabaseManager struct{}
+type DatabaseManager struct {
+}
 ```
 
 DatabaseManager demonstrates database-related interface usage
@@ -418,21 +422,36 @@ DatabaseManager demonstrates database-related interface usage
 ```go
 func NewDatabaseManager(netdb NetDBStore) *DatabaseManager
 ```
-NewDatabaseManager creates a new database manager
+NewDatabaseManager creates a new database manager with NetDB integration
 
 #### func (*DatabaseManager) PerformLookup
 
 ```go
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error
 ```
-PerformLookup performs a database lookup using DatabaseReader interface
+PerformLookup performs a database lookup using DatabaseReader interface and
+generates appropriate responses
+
+#### func (*DatabaseManager) SetRetriever
+
+```go
+func (dm *DatabaseManager) SetRetriever(retriever NetDBRetriever)
+```
+SetRetriever sets the NetDB retriever for database operations
+
+#### func (*DatabaseManager) SetSessionProvider
+
+```go
+func (dm *DatabaseManager) SetSessionProvider(provider SessionProvider)
+```
+SetSessionProvider sets the session provider for sending responses
 
 #### func (*DatabaseManager) StoreData
 
 ```go
 func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error
 ```
-StoreData stores data using DatabaseWriter interface
+StoreData stores data using DatabaseWriter interface and NetDB integration
 
 #### type DatabaseReader
 
@@ -465,6 +484,20 @@ type DatabaseSearchReply struct {
 ```
 
 
+#### func  NewDatabaseSearchReply
+
+```go
+func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *DatabaseSearchReply
+```
+NewDatabaseSearchReply creates a new DatabaseSearchReply message
+
+#### func (*DatabaseSearchReply) MarshalBinary
+
+```go
+func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the DatabaseSearchReply message
+
 #### type DatabaseStore
 
 ```go
@@ -478,6 +511,13 @@ type DatabaseStore struct {
 }
 ```
 
+
+#### func  NewDatabaseStore
+
+```go
+func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStore
+```
+NewDatabaseStore creates a new DatabaseStore message
 
 #### func (*DatabaseStore) GetStoreData
 
@@ -499,6 +539,13 @@ GetStoreKey returns the store key
 func (d *DatabaseStore) GetStoreType() byte
 ```
 GetStoreType returns the store type
+
+#### func (*DatabaseStore) MarshalBinary
+
+```go
+func (d *DatabaseStore) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the DatabaseStore message
 
 #### type DatabaseWriter
 
@@ -539,7 +586,8 @@ type DeliveryStatusMessage struct {
 }
 ```
 
-DeliveryStatusMessage represents an I2NP DeliveryStatus message
+DeliveryStatusMessage represents an I2NP DeliveryStatus message Moved from:
+messages.go
 
 #### func  NewDeliveryStatusMessage
 
@@ -722,14 +770,15 @@ type I2NPNTCPHeader struct {
 }
 ```
 
+I2NPNTCPHeader represents a parsed I2NP message header for NTCP transport
 
 #### func  ReadI2NPNTCPHeader
 
 ```go
 func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error)
 ```
-Read an entire I2NP message and return the parsed header with embedded encrypted
-data
+ReadI2NPNTCPHeader reads an entire I2NP message and returns the parsed header
+with embedded encrypted data
 
 #### type I2NPSSUHeader
 
@@ -740,12 +789,40 @@ type I2NPSSUHeader struct {
 }
 ```
 
+I2NPSSUHeader represents a parsed I2NP message header for SSU transport
 
 #### func  ReadI2NPSSUHeader
 
 ```go
 func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error)
 ```
+ReadI2NPSSUHeader reads an I2NP SSU header
+
+#### type I2NPSecondGenTransportHeader
+
+```go
+type I2NPSecondGenTransportHeader struct {
+	Type       int
+	MessageID  int
+	Expiration time.Time
+}
+```
+
+When transmitted over [NTCP2] or [SSU2], the 16-byte standard header is not
+used. Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds
+are included. The size is incorporated in the NTCP2 and SSU2 data packet
+formats. The checksum is not required since errors are caught in decryption.
+
+#### func  ReadI2NPSecondGenTransportHeader
+
+```go
+func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader, error)
+```
+ReadI2NPSecondGenTransportHeader reads an I2NP NTCP2 or SSU2 header When
+transmitted over [NTCP2] or [SSU2], the 16-byte standard header is not used.
+Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds are
+included. The size is incorporated in the NTCP2 and SSU2 data packet formats.
+The checksum is not required since errors are caught in decryption.
 
 #### type MessageExpiration
 
@@ -830,6 +907,13 @@ func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error
 ```
 RouteTunnelMessage routes tunnel-related messages
 
+#### func (*MessageRouter) SetNetDB
+
+```go
+func (mr *MessageRouter) SetNetDB(netdb NetDBStore)
+```
+SetNetDB sets the NetDB store for database operations
+
 #### type MessageRouterConfig
 
 ```go
@@ -852,6 +936,27 @@ type MessageSerializer interface {
 ```
 
 MessageSerializer represents types that can be marshaled and unmarshaled
+
+#### type NetDBRetriever
+
+```go
+type NetDBRetriever interface {
+	GetRouterInfoBytes(hash common.Hash) ([]byte, error)
+	GetRouterInfoCount() int
+}
+```
+
+NetDBRetriever defines the interface for retrieving RouterInfo entries
+
+#### type NetDBStore
+
+```go
+type NetDBStore interface {
+	StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+}
+```
+
+NetDBStore defines the interface for storing RouterInfo entries
 
 #### type PayloadCarrier
 
@@ -912,6 +1017,16 @@ func (sm *SessionManager) ProcessTags(provider SessionTagProvider) error
 ```
 ProcessTags processes session tags using SessionTagProvider interface
 
+#### type SessionProvider
+
+```go
+type SessionProvider interface {
+	GetSessionByHash(hash common.Hash) (TransportSession, error)
+}
+```
+
+SessionProvider defines the interface for obtaining transport sessions
+
 #### type SessionTagProvider
 
 ```go
@@ -941,6 +1056,18 @@ func NewDeliveryStatusReporter(messageID int, timestamp time.Time) StatusReporte
 ```
 NewDeliveryStatusReporter creates a new DeliveryStatus message and returns it as
 StatusReporter interface
+
+#### type TransportSession
+
+```go
+type TransportSession interface {
+	QueueSendI2NP(msg I2NPMessage)
+	SendQueueSize() int
+}
+```
+
+TransportSession defines the interface for sending I2NP messages back to
+requesters
 
 #### type TunnelBuild
 
@@ -1045,7 +1172,7 @@ type TunnelDataMessage struct {
 }
 ```
 
-TunnelDataMessage represents an I2NP TunnelData message
+TunnelDataMessage represents an I2NP TunnelData message Moved from: messages.go
 
 #### func  NewTunnelDataMessage
 
@@ -1094,7 +1221,8 @@ TunnelIdentifier represents types that identify tunnel endpoints
 
 ```go
 func CreateTunnelRecord(receiveTunnel, nextTunnel tunnel.TunnelID,
-	ourIdent, nextIdent common.Hash) TunnelIdentifier
+	ourIdent, nextIdent common.Hash,
+) TunnelIdentifier
 ```
 CreateTunnelRecord creates a build request record with interface methods
 

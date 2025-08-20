@@ -17,80 +17,80 @@
 <g id="clust11" class="cluster">
 <title>cluster_github.com/go&#45;i2p/common/router_address.RouterAddress</title>
 <g id="a_clust11"><a xlink:title="type: github.com/go&#45;i2p/common/router_address.RouterAddress">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M739.5206,-343C739.5206,-343 840.7226,-343 840.7226,-343 846.7226,-343 852.7226,-349 852.7226,-355 852.7226,-355 852.7226,-531 852.7226,-531 852.7226,-537 846.7226,-543 840.7226,-543 840.7226,-543 739.5206,-543 739.5206,-543 733.5206,-543 727.5206,-537 727.5206,-531 727.5206,-531 727.5206,-355 727.5206,-355 727.5206,-349 733.5206,-343 739.5206,-343"/>
-<text text-anchor="middle" x="790.1216" y="-351.5" font-family="Arial" font-size="15.00" fill="#222222">(RouterAddress)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M739.5206,-813C739.5206,-813 840.7226,-813 840.7226,-813 846.7226,-813 852.7226,-819 852.7226,-825 852.7226,-825 852.7226,-1001 852.7226,-1001 852.7226,-1007 846.7226,-1013 840.7226,-1013 840.7226,-1013 739.5206,-1013 739.5206,-1013 733.5206,-1013 727.5206,-1007 727.5206,-1001 727.5206,-1001 727.5206,-825 727.5206,-825 727.5206,-819 733.5206,-813 739.5206,-813"/>
+<text text-anchor="middle" x="790.1216" y="-821.5" font-family="Arial" font-size="15.00" fill="#222222">(RouterAddress)</text>
 </a>
 </g>
 </g>
 <g id="clust10" class="cluster">
 <title>cluster_github.com/go&#45;i2p/common/data.I2PString</title>
 <g id="a_clust10"><a xlink:title="type: github.com/go&#45;i2p/common/data.I2PString">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M759.1216,-257C759.1216,-257 822.1216,-257 822.1216,-257 828.1216,-257 834.1216,-263 834.1216,-269 834.1216,-269 834.1216,-323 834.1216,-323 834.1216,-329 828.1216,-335 822.1216,-335 822.1216,-335 759.1216,-335 759.1216,-335 753.1216,-335 747.1216,-329 747.1216,-323 747.1216,-323 747.1216,-269 747.1216,-269 747.1216,-263 753.1216,-257 759.1216,-257"/>
-<text text-anchor="middle" x="790.6216" y="-265.5" font-family="Arial" font-size="15.00" fill="#222222">(I2PString)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M759.1216,-727C759.1216,-727 822.1216,-727 822.1216,-727 828.1216,-727 834.1216,-733 834.1216,-739 834.1216,-739 834.1216,-793 834.1216,-793 834.1216,-799 828.1216,-805 822.1216,-805 822.1216,-805 759.1216,-805 759.1216,-805 753.1216,-805 747.1216,-799 747.1216,-793 747.1216,-793 747.1216,-739 747.1216,-739 747.1216,-733 753.1216,-727 759.1216,-727"/>
+<text text-anchor="middle" x="790.6216" y="-735.5" font-family="Arial" font-size="15.00" fill="#222222">(I2PString)</text>
 </a>
 </g>
 </g>
 <g id="clust9" class="cluster">
 <title>cluster_github.com/go&#45;i2p/common/data.Hash</title>
 <g id="a_clust9"><a xlink:title="type: github.com/go&#45;i2p/common/data.Hash">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M548.8957,-594C548.8957,-594 596.7821,-594 596.7821,-594 602.7821,-594 608.7821,-600 608.7821,-606 608.7821,-606 608.7821,-660 608.7821,-660 608.7821,-666 602.7821,-672 596.7821,-672 596.7821,-672 548.8957,-672 548.8957,-672 542.8957,-672 536.8957,-666 536.8957,-660 536.8957,-660 536.8957,-606 536.8957,-606 536.8957,-600 542.8957,-594 548.8957,-594"/>
-<text text-anchor="middle" x="572.8389" y="-602.5" font-family="Arial" font-size="15.00" fill="#222222">(Hash)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M548.8957,-303C548.8957,-303 596.7821,-303 596.7821,-303 602.7821,-303 608.7821,-309 608.7821,-315 608.7821,-315 608.7821,-369 608.7821,-369 608.7821,-375 602.7821,-381 596.7821,-381 596.7821,-381 548.8957,-381 548.8957,-381 542.8957,-381 536.8957,-375 536.8957,-369 536.8957,-369 536.8957,-315 536.8957,-315 536.8957,-309 542.8957,-303 548.8957,-303"/>
+<text text-anchor="middle" x="572.8389" y="-311.5" font-family="Arial" font-size="15.00" fill="#222222">(Hash)</text>
 </a>
 </g>
 </g>
 <g id="clust8" class="cluster">
 <title>cluster_*github.com/sirupsen/logrus.Entry</title>
 <g id="a_clust8"><a xlink:title="type: *github.com/sirupsen/logrus.Entry">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M296.4005,-527C296.4005,-527 369.9307,-527 369.9307,-527 375.9307,-527 381.9307,-533 381.9307,-539 381.9307,-539 381.9307,-776 381.9307,-776 381.9307,-782 375.9307,-788 369.9307,-788 369.9307,-788 296.4005,-788 296.4005,-788 290.4005,-788 284.4005,-782 284.4005,-776 284.4005,-776 284.4005,-539 284.4005,-539 284.4005,-533 290.4005,-527 296.4005,-527"/>
-<text text-anchor="middle" x="333.1656" y="-535.5" font-family="Arial" font-size="15.00" fill="#222222">(*Entry)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M296.4005,-747C296.4005,-747 369.9307,-747 369.9307,-747 375.9307,-747 381.9307,-753 381.9307,-759 381.9307,-759 381.9307,-996 381.9307,-996 381.9307,-1002 375.9307,-1008 369.9307,-1008 369.9307,-1008 296.4005,-1008 296.4005,-1008 290.4005,-1008 284.4005,-1002 284.4005,-996 284.4005,-996 284.4005,-759 284.4005,-759 284.4005,-753 290.4005,-747 296.4005,-747"/>
+<text text-anchor="middle" x="333.1656" y="-755.5" font-family="Arial" font-size="15.00" fill="#222222">(*Entry)</text>
 </a>
 </g>
 </g>
 <g id="clust7" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config</title>
 <g id="a_clust7"><a xlink:title="type: *github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M255.9601,-842C255.9601,-842 410.3711,-842 410.3711,-842 416.3711,-842 422.3711,-848 422.3711,-854 422.3711,-854 422.3711,-908 422.3711,-908 422.3711,-914 416.3711,-920 410.3711,-920 410.3711,-920 255.9601,-920 255.9601,-920 249.9601,-920 243.9601,-914 243.9601,-908 243.9601,-908 243.9601,-854 243.9601,-854 243.9601,-848 249.9601,-842 255.9601,-842"/>
-<text text-anchor="middle" x="333.1656" y="-850.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Config)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M255.9601,-581C255.9601,-581 410.3711,-581 410.3711,-581 416.3711,-581 422.3711,-587 422.3711,-593 422.3711,-593 422.3711,-647 422.3711,-647 422.3711,-653 416.3711,-659 410.3711,-659 410.3711,-659 255.9601,-659 255.9601,-659 249.9601,-659 243.9601,-653 243.9601,-647 243.9601,-647 243.9601,-593 243.9601,-593 243.9601,-587 249.9601,-581 255.9601,-581"/>
+<text text-anchor="middle" x="333.1656" y="-589.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Config)</text>
 </a>
 </g>
 </g>
 <g id="clust6" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport</title>
 <g id="a_clust6"><a xlink:title="type: *github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport">
-<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M30.1508,-466C30.1508,-466 150.479,-466 150.479,-466 156.479,-466 162.479,-472 162.479,-478 162.479,-478 162.479,-715 162.479,-715 162.479,-721 156.479,-727 150.479,-727 150.479,-727 30.1508,-727 30.1508,-727 24.1508,-727 18.1508,-721 18.1508,-715 18.1508,-715 18.1508,-478 18.1508,-478 18.1508,-472 24.1508,-466 30.1508,-466"/>
-<text text-anchor="middle" x="90.3149" y="-474.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Transport)</text>
+<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M30.1508,-323C30.1508,-323 150.479,-323 150.479,-323 156.479,-323 162.479,-329 162.479,-335 162.479,-335 162.479,-572 162.479,-572 162.479,-578 156.479,-584 150.479,-584 150.479,-584 30.1508,-584 30.1508,-584 24.1508,-584 18.1508,-578 18.1508,-572 18.1508,-572 18.1508,-335 18.1508,-335 18.1508,-329 24.1508,-323 30.1508,-323"/>
+<text text-anchor="middle" x="90.3149" y="-331.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Transport)</text>
 </a>
 </g>
 </g>
 <g id="clust5" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session</title>
 <g id="a_clust5"><a xlink:title="type: *github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session">
-<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M523.2589,-844C523.2589,-844 820.6637,-844 820.6637,-844 826.6637,-844 832.6637,-850 832.6637,-856 832.6637,-856 832.6637,-971 832.6637,-971 832.6637,-977 826.6637,-983 820.6637,-983 820.6637,-983 523.2589,-983 523.2589,-983 517.2589,-983 511.2589,-977 511.2589,-971 511.2589,-971 511.2589,-856 511.2589,-856 511.2589,-850 517.2589,-844 523.2589,-844"/>
-<text text-anchor="middle" x="671.9613" y="-852.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Session)</text>
+<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M523.2589,-389C523.2589,-389 820.6637,-389 820.6637,-389 826.6637,-389 832.6637,-395 832.6637,-401 832.6637,-401 832.6637,-516 832.6637,-516 832.6637,-522 826.6637,-528 820.6637,-528 820.6637,-528 523.2589,-528 523.2589,-528 517.2589,-528 511.2589,-522 511.2589,-516 511.2589,-516 511.2589,-401 511.2589,-401 511.2589,-395 517.2589,-389 523.2589,-389"/>
+<text text-anchor="middle" x="671.9613" y="-397.5" font-family="Arial" font-size="15.00" fill="#222222">(*NTCP2Session)</text>
 </a>
 </g>
 </g>
 <g id="clust4" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer</title>
 <g id="a_clust4"><a xlink:title="type: *github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer">
-<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M729.644,-594C729.644,-594 1044.3559,-594 1044.3559,-594 1050.3559,-594 1056.3559,-600 1056.3559,-606 1056.3559,-606 1056.3559,-660 1056.3559,-660 1056.3559,-666 1050.3559,-672 1044.3559,-672 1044.3559,-672 729.644,-672 729.644,-672 723.644,-672 717.644,-666 717.644,-660 717.644,-660 717.644,-606 717.644,-606 717.644,-600 723.644,-594 729.644,-594"/>
-<text text-anchor="middle" x="887" y="-602.5" font-family="Arial" font-size="15.00" fill="#222222">(*I2NPUnframer)</text>
+<path fill="#b0c4de" stroke="#000000" stroke-width=".5" d="M729.644,-185C729.644,-185 1044.3559,-185 1044.3559,-185 1050.3559,-185 1056.3559,-191 1056.3559,-197 1056.3559,-197 1056.3559,-251 1056.3559,-251 1056.3559,-257 1050.3559,-263 1044.3559,-263 1044.3559,-263 729.644,-263 729.644,-263 723.644,-263 717.644,-257 717.644,-251 717.644,-251 717.644,-197 717.644,-197 717.644,-191 723.644,-185 729.644,-185"/>
+<text text-anchor="middle" x="887" y="-193.5" font-family="Arial" font-size="15.00" fill="#222222">(*I2NPUnframer)</text>
 </a>
 </g>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage</title>
 <g id="a_clust3"><a xlink:title="type: *github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M945.2668,-680C945.2668,-680 1080.7914,-680 1080.7914,-680 1086.7914,-680 1092.7914,-686 1092.7914,-692 1092.7914,-692 1092.7914,-746 1092.7914,-746 1092.7914,-752 1086.7914,-758 1080.7914,-758 1080.7914,-758 945.2668,-758 945.2668,-758 939.2668,-758 933.2668,-752 933.2668,-746 933.2668,-746 933.2668,-692 933.2668,-692 933.2668,-686 939.2668,-680 945.2668,-680"/>
-<text text-anchor="middle" x="1013.0291" y="-688.5" font-family="Arial" font-size="15.00" fill="#222222">(*BaseI2NPMessage)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M945.2668,-99C945.2668,-99 1080.7914,-99 1080.7914,-99 1086.7914,-99 1092.7914,-105 1092.7914,-111 1092.7914,-111 1092.7914,-165 1092.7914,-165 1092.7914,-171 1086.7914,-177 1080.7914,-177 1080.7914,-177 945.2668,-177 945.2668,-177 939.2668,-177 933.2668,-171 933.2668,-165 933.2668,-165 933.2668,-111 933.2668,-111 933.2668,-105 939.2668,-99 945.2668,-99"/>
+<text text-anchor="middle" x="1013.0291" y="-107.5" font-family="Arial" font-size="15.00" fill="#222222">(*BaseI2NPMessage)</text>
 </a>
 </g>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/common/router_info.RouterInfo</title>
 <g id="a_clust2"><a xlink:title="type: *github.com/go&#45;i2p/common/router_info.RouterInfo">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M734.3053,-110C734.3053,-110 845.9379,-110 845.9379,-110 851.9379,-110 857.9379,-116 857.9379,-122 857.9379,-122 857.9379,-237 857.9379,-237 857.9379,-243 851.9379,-249 845.9379,-249 845.9379,-249 734.3053,-249 734.3053,-249 728.3053,-249 722.3053,-243 722.3053,-237 722.3053,-237 722.3053,-122 722.3053,-122 722.3053,-116 728.3053,-110 734.3053,-110"/>
-<text text-anchor="middle" x="790.1216" y="-118.5" font-family="Arial" font-size="15.00" fill="#222222">(*RouterInfo)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M734.3053,-580C734.3053,-580 845.9379,-580 845.9379,-580 851.9379,-580 857.9379,-586 857.9379,-592 857.9379,-592 857.9379,-707 857.9379,-707 857.9379,-713 851.9379,-719 845.9379,-719 845.9379,-719 734.3053,-719 734.3053,-719 728.3053,-719 722.3053,-713 722.3053,-707 722.3053,-707 722.3053,-592 722.3053,-592 722.3053,-586 728.3053,-580 734.3053,-580"/>
+<text text-anchor="middle" x="790.1216" y="-588.5" font-family="Arial" font-size="15.00" fill="#222222">(*RouterInfo)</text>
 </a>
 </g>
 </g>
@@ -98,8 +98,8 @@
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage</title>
 <g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage | defined in framing.go:10">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M847.4123,-1027C847.4123,-1027 732.8309,-1027 732.8309,-1027 726.8309,-1027 720.8309,-1021 720.8309,-1015 720.8309,-1015 720.8309,-1003 720.8309,-1003 720.8309,-997 726.8309,-991 732.8309,-991 732.8309,-991 847.4123,-991 847.4123,-991 853.4123,-991 859.4123,-997 859.4123,-1003 859.4123,-1003 859.4123,-1015 859.4123,-1015 859.4123,-1021 853.4123,-1027 847.4123,-1027"/>
-<text text-anchor="middle" x="790.1216" y="-1004.8" font-family="Verdana" font-size="14.00" fill="#000000">FrameI2NPMessage</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M847.4123,-572C847.4123,-572 732.8309,-572 732.8309,-572 726.8309,-572 720.8309,-566 720.8309,-560 720.8309,-560 720.8309,-548 720.8309,-548 720.8309,-542 726.8309,-536 732.8309,-536 732.8309,-536 847.4123,-536 847.4123,-536 853.4123,-536 859.4123,-542 859.4123,-548 859.4123,-548 859.4123,-560 859.4123,-560 859.4123,-566 853.4123,-572 847.4123,-572"/>
+<text text-anchor="middle" x="790.1216" y="-549.8" font-family="Verdana" font-size="14.00" fill="#000000">FrameI2NPMessage</text>
 </a>
 </g>
 </g>
@@ -107,8 +107,8 @@
 <g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
 <g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error | defined in errors.go:18&#10;at errors.go:19: calling [github.com/samber/oops.Wrapf]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M842.0248,-836C842.0248,-836 738.2184,-836 738.2184,-836 732.2184,-836 726.2184,-830 726.2184,-824 726.2184,-824 726.2184,-812 726.2184,-812 726.2184,-806 732.2184,-800 738.2184,-800 738.2184,-800 842.0248,-800 842.0248,-800 848.0248,-800 854.0248,-806 854.0248,-812 854.0248,-812 854.0248,-824 854.0248,-824 854.0248,-830 848.0248,-836 842.0248,-836"/>
-<text text-anchor="middle" x="790.1216" y="-813.8" font-family="Verdana" font-size="14.00" fill="#000000">WrapNTCP2Error</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M842.0248,-316C842.0248,-316 738.2184,-316 738.2184,-316 732.2184,-316 726.2184,-310 726.2184,-304 726.2184,-304 726.2184,-292 726.2184,-292 726.2184,-286 732.2184,-280 738.2184,-280 738.2184,-280 842.0248,-280 842.0248,-280 848.0248,-280 854.0248,-286 854.0248,-292 854.0248,-292 854.0248,-304 854.0248,-304 854.0248,-310 848.0248,-316 842.0248,-316"/>
+<text text-anchor="middle" x="790.1216" y="-293.8" font-family="Verdana" font-size="14.00" fill="#000000">WrapNTCP2Error</text>
 </a>
 </g>
 </g>
@@ -116,393 +116,114 @@
 <g id="node3" class="node">
 <title>github.com/samber/oops.Wrapf</title>
 <g id="a_node3"><a xlink:title="github.com/samber/oops.Wrapf | defined in oops.go:20">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1030.78,-836C1030.78,-836 995.2782,-836 995.2782,-836 989.2782,-836 983.2782,-830 983.2782,-824 983.2782,-824 983.2782,-812 983.2782,-812 983.2782,-806 989.2782,-800 995.2782,-800 995.2782,-800 1030.78,-800 1030.78,-800 1036.78,-800 1042.78,-806 1042.78,-812 1042.78,-812 1042.78,-824 1042.78,-824 1042.78,-830 1036.78,-836 1030.78,-836"/>
-<text text-anchor="middle" x="1013.0291" y="-822.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
-<text text-anchor="middle" x="1013.0291" y="-805.4" font-family="Verdana" font-size="14.00" fill="#000000">Wrapf</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1030.78,-316C1030.78,-316 995.2782,-316 995.2782,-316 989.2782,-316 983.2782,-310 983.2782,-304 983.2782,-304 983.2782,-292 983.2782,-292 983.2782,-286 989.2782,-280 995.2782,-280 995.2782,-280 1030.78,-280 1030.78,-280 1036.78,-280 1042.78,-286 1042.78,-292 1042.78,-292 1042.78,-304 1042.78,-304 1042.78,-310 1036.78,-316 1030.78,-316"/>
+<text text-anchor="middle" x="1013.0291" y="-302.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
+<text text-anchor="middle" x="1013.0291" y="-285.4" font-family="Verdana" font-size="14.00" fill="#000000">Wrapf</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error&#45;&gt;github.com/samber/oops.Wrapf -->
-<g id="edge24" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error&#45;&gt;github.com/samber/oops.Wrapf</title>
-<g id="a_edge24"><a xlink:title="at errors.go:19: calling [github.com/samber/oops.Wrapf]">
-<path fill="none" stroke="#8b4513" d="M853.9979,-818C892.3065,-818 939.8469,-818 972.9233,-818"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="973.1241,-821.5001 983.1241,-818 973.1241,-814.5001 973.1241,-821.5001"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 -->
-<g id="node4" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 | defined in addr.go:48&#10;at addr.go:54: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]&#10;at addr.go:52: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at addr.go:53: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M618.8965,-315C618.8965,-315 526.7813,-315 526.7813,-315 520.7813,-315 514.7813,-309 514.7813,-303 514.7813,-303 514.7813,-291 514.7813,-291 514.7813,-285 520.7813,-279 526.7813,-279 526.7813,-279 618.8965,-279 618.8965,-279 624.8965,-279 630.8965,-285 630.8965,-291 630.8965,-291 630.8965,-303 630.8965,-303 630.8965,-309 624.8965,-315 618.8965,-315"/>
-<text text-anchor="middle" x="572.8389" y="-292.8" font-family="Verdana" font-size="14.00" fill="#000000">SupportsNTCP2</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
-<g id="node18" class="node">
-<title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
-<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses | defined in router_info_struct.go:336">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M837.7548,-241C837.7548,-241 742.4884,-241 742.4884,-241 736.4884,-241 730.4884,-235 730.4884,-229 730.4884,-229 730.4884,-217 730.4884,-217 730.4884,-211 736.4884,-205 742.4884,-205 742.4884,-205 837.7548,-205 837.7548,-205 843.7548,-205 849.7548,-211 849.7548,-217 849.7548,-217 849.7548,-229 849.7548,-229 849.7548,-235 843.7548,-241 837.7548,-241"/>
-<text text-anchor="middle" x="790.1216" y="-227.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
-<text text-anchor="middle" x="790.1216" y="-210.4" font-family="Verdana" font-size="14.00" fill="#000000">RouterAddresses</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
 <g id="edge25" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
-<g id="a_edge25"><a xlink:title="at addr.go:52: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
-<path fill="none" stroke="#8b4513" d="M629.04,-278.9305C647.2389,-272.9964 667.493,-266.3046 685.9764,-260 700.5013,-255.0457 716.1158,-249.5755 730.7213,-244.3954"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="731.9028,-247.6901 740.152,-241.0416 729.5573,-241.0947 731.9028,-247.6901"/>
-</a>
-</g>
-</g>
-<!-- (github.com/go&#45;i2p/common/data.I2PString).Data -->
-<g id="node35" class="node">
-<title>(github.com/go&#45;i2p/common/data.I2PString).Data</title>
-<g id="a_node35"><a xlink:title="(github.com/go&#45;i2p/common/data.I2PString).Data | defined in string.go:70">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M805.1216,-327C805.1216,-327 775.1216,-327 775.1216,-327 769.1216,-327 763.1216,-321 763.1216,-315 763.1216,-315 763.1216,-303 763.1216,-303 763.1216,-297 769.1216,-291 775.1216,-291 775.1216,-291 805.1216,-291 805.1216,-291 811.1216,-291 817.1216,-297 817.1216,-303 817.1216,-303 817.1216,-315 817.1216,-315 817.1216,-321 811.1216,-327 805.1216,-327"/>
-<text text-anchor="middle" x="790.1216" y="-313.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
-<text text-anchor="middle" x="790.1216" y="-296.4" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data -->
-<g id="edge3" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data</title>
-<g id="a_edge3"><a xlink:title="at addr.go:54: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
-<path fill="none" stroke="#8b4513" d="M631.0667,-300.2158C669.7465,-302.352 719.3811,-305.0932 752.8334,-306.9407"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="752.9137,-310.4503 763.0915,-307.5072 753.2998,-303.461 752.9137,-310.4503"/>
-</a>
-</g>
-</g>
-<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
-<g id="node36" class="node">
-<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
-<g id="a_node36"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle | defined in router_address_methods.go:104">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.8238,-474C831.8238,-474 748.4194,-474 748.4194,-474 742.4194,-474 736.4194,-468 736.4194,-462 736.4194,-462 736.4194,-450 736.4194,-450 736.4194,-444 742.4194,-438 748.4194,-438 748.4194,-438 831.8238,-438 831.8238,-438 837.8238,-438 843.8238,-444 843.8238,-450 843.8238,-450 843.8238,-462 843.8238,-462 843.8238,-468 837.8238,-474 831.8238,-474"/>
-<text text-anchor="middle" x="790.1216" y="-460.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
-<text text-anchor="middle" x="790.1216" y="-443.4" font-family="Verdana" font-size="14.00" fill="#000000">TransportStyle</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
-<g id="edge26" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
-<g id="a_edge26"><a xlink:title="at addr.go:53: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
-<path fill="none" stroke="#8b4513" d="M589.5486,-315.3924C615.0056,-342.5437 666.015,-393.6245 717.644,-426 721.9327,-428.6893 726.504,-431.2302 731.1855,-433.609"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="729.7495,-436.8021 740.2787,-437.9802 732.7824,-430.4932 729.7495,-436.8021"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr -->
-<g id="node5" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr</title>
-<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr | defined in addr.go:11&#10;at addr.go:16: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]&#10;at addr.go:17: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]&#10;at addr.go:15: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at addr.go:12: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]&#10;at addr.go:39: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at addr.go:23: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Host]&#10;at addr.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr]&#10;at addr.go:27: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Port]&#10;at addr.go:39: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M389.1348,-404C389.1348,-404 277.1964,-404 277.1964,-404 271.1964,-404 265.1964,-398 265.1964,-392 265.1964,-392 265.1964,-380 265.1964,-380 265.1964,-374 271.1964,-368 277.1964,-368 277.1964,-368 389.1348,-368 389.1348,-368 395.1348,-368 401.1348,-374 401.1348,-380 401.1348,-380 401.1348,-392 401.1348,-392 401.1348,-398 395.1348,-404 389.1348,-404"/>
-<text text-anchor="middle" x="333.1656" y="-381.8" font-family="Verdana" font-size="14.00" fill="#000000">ExtractNTCP2Addr</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 -->
-<g id="edge15" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2</title>
-<g id="a_edge15"><a xlink:title="at addr.go:12: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
-<path fill="none" stroke="#000000" d="M394.2971,-367.8683C404.2755,-364.3063 414.3881,-360.3194 423.7014,-356 440.7121,-348.1106 442.6754,-341.8562 459.7014,-334 473.9396,-327.4302 489.677,-321.5044 504.7738,-316.418"/>
-<polygon fill="#000000" stroke="#000000" points="506.1708,-319.6433 514.58,-313.1984 503.9872,-312.9925 506.1708,-319.6433"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr -->
-<g id="node6" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr</title>
-<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr | defined in addr.go:66">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M623.9748,-504C623.9748,-504 521.703,-504 521.703,-504 515.703,-504 509.703,-498 509.703,-492 509.703,-492 509.703,-480 509.703,-480 509.703,-474 515.703,-468 521.703,-468 521.703,-468 623.9748,-468 623.9748,-468 629.9748,-468 635.9748,-474 635.9748,-480 635.9748,-480 635.9748,-492 635.9748,-492 635.9748,-498 629.9748,-504 623.9748,-504"/>
-<text text-anchor="middle" x="572.8389" y="-481.8" font-family="Verdana" font-size="14.00" fill="#000000">WrapNTCP2Addr</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr -->
-<g id="edge33" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr</title>
-<g id="a_edge33"><a xlink:title="at addr.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr]">
-<path fill="none" stroke="#000000" d="M383.4947,-404.0957C396.8617,-409.5633 411.0821,-415.9954 423.7014,-423 440.9578,-432.5785 442.1119,-440.0479 459.7014,-449 472.2246,-455.3736 486.0769,-460.9718 499.6688,-465.7567"/>
-<polygon fill="#000000" stroke="#000000" points="498.9026,-469.1929 509.497,-469.0966 501.155,-462.5651 498.9026,-469.1929"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="node17" class="node">
-<title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash | defined in router_info_struct.go:314">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M821.5992,-180C821.5992,-180 758.644,-180 758.644,-180 752.644,-180 746.644,-174 746.644,-168 746.644,-168 746.644,-156 746.644,-156 746.644,-150 752.644,-144 758.644,-144 758.644,-144 821.5992,-144 821.5992,-144 827.5992,-144 833.5992,-150 833.5992,-156 833.5992,-156 833.5992,-168 833.5992,-168 833.5992,-174 827.5992,-180 821.5992,-180"/>
-<text text-anchor="middle" x="790.1216" y="-166.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
-<text text-anchor="middle" x="790.1216" y="-149.4" font-family="Verdana" font-size="14.00" fill="#000000">IdentHash</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge46" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge46"><a xlink:title="at addr.go:39: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M401.2329,-369.4937C409.2745,-365.8407 416.9931,-361.3979 423.7014,-356 473.2282,-316.148 444.3754,-269.0981 496.7014,-233 566.9895,-184.5104 603.4825,-222.0547 685.9764,-200 702.7601,-195.5129 720.656,-189.4657 736.7931,-183.5164"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="738.4557,-186.6308 746.5878,-179.8396 735.9956,-180.0773 738.4557,-186.6308"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
-<g id="edge9" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
-<g id="a_edge9"><a xlink:title="at addr.go:15: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
-<path fill="none" stroke="#8b4513" d="M401.433,-368.0926C409.265,-364.6889 416.8772,-360.6878 423.7014,-356 465.8698,-327.0327 452.2117,-292.2577 496.7014,-267 515.7908,-256.1626 639.5511,-240.2494 720.1269,-230.8249"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="720.688,-234.2833 730.217,-229.6521 719.8798,-227.3301 720.688,-234.2833"/>
-</a>
-</g>
-</g>
-<!-- (github.com/go&#45;i2p/common/data.Hash).Bytes -->
-<g id="node34" class="node">
-<title>(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
-<g id="a_node34"><a xlink:title="(github.com/go&#45;i2p/common/data.Hash).Bytes | defined in hash.go:25">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M588.7254,-664C588.7254,-664 556.9524,-664 556.9524,-664 550.9524,-664 544.9524,-658 544.9524,-652 544.9524,-652 544.9524,-640 544.9524,-640 544.9524,-634 550.9524,-628 556.9524,-628 556.9524,-628 588.7254,-628 588.7254,-628 594.7254,-628 600.7254,-634 600.7254,-640 600.7254,-640 600.7254,-652 600.7254,-652 600.7254,-658 594.7254,-664 588.7254,-664"/>
-<text text-anchor="middle" x="572.8389" y="-650.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
-<text text-anchor="middle" x="572.8389" y="-633.4" font-family="Verdana" font-size="14.00" fill="#000000">Bytes</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
-<g id="edge16" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
-<g id="a_edge16"><a xlink:title="at addr.go:39: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
-<path fill="none" stroke="#8b4513" d="M396.6485,-404.1913C406.5703,-409.1076 416.053,-415.28 423.7014,-423 455.0098,-454.6014 445.4394,-474.2156 460.7014,-516 478.0604,-563.5254 460.2079,-588.954 496.7014,-624 506.9029,-633.7969 521.1882,-639.2732 534.6327,-642.3192"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="534.1937,-645.7979 544.6682,-644.206 535.4872,-638.9184 534.1937,-645.7979"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data -->
-<g id="edge5" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data</title>
-<g id="a_edge5"><a xlink:title="at addr.go:17: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
-<path fill="none" stroke="#8b4513" d="M401.5765,-374.4723C499.4275,-357.9838 675.9949,-328.2311 752.7765,-315.2929"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="753.6505,-318.695 762.9298,-313.582 752.4873,-311.7924 753.6505,-318.695"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
-<g id="edge4" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
-<g id="a_edge4"><a xlink:title="at addr.go:16: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
-<path fill="none" stroke="#8b4513" d="M401.3202,-394.2139C472.5195,-403.0876 587.3669,-418.2265 685.9764,-435 699.0898,-437.2306 713.0798,-439.871 726.4119,-442.5133"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="725.9602,-445.9923 736.4533,-444.5274 727.3369,-439.129 725.9602,-445.9923"/>
-</a>
-</g>
-</g>
-<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).Host -->
-<g id="node37" class="node">
-<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).Host</title>
-<g id="a_node37"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).Host | defined in router_address_methods.go:195">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.5278,-413C831.5278,-413 748.7154,-413 748.7154,-413 742.7154,-413 736.7154,-407 736.7154,-401 736.7154,-401 736.7154,-389 736.7154,-389 736.7154,-383 742.7154,-377 748.7154,-377 748.7154,-377 831.5278,-377 831.5278,-377 837.5278,-377 843.5278,-383 843.5278,-389 843.5278,-389 843.5278,-401 843.5278,-401 843.5278,-407 837.5278,-413 831.5278,-413"/>
-<text text-anchor="middle" x="790.1216" y="-399.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
-<text text-anchor="middle" x="790.1216" y="-382.4" font-family="Verdana" font-size="14.00" fill="#000000">Host</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Host -->
-<g id="edge20" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Host</title>
-<g id="a_edge20"><a xlink:title="at addr.go:23: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Host]">
-<path fill="none" stroke="#8b4513" d="M401.5765,-387.3474C489.5008,-389.0791 640.9806,-392.0626 726.5142,-393.7472"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="726.5425,-397.2484 736.6096,-393.9461 726.6805,-390.2497 726.5425,-397.2484"/>
-</a>
-</g>
-</g>
-<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).Port -->
-<g id="node38" class="node">
-<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).Port</title>
-<g id="a_node38"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).Port | defined in router_address_methods.go:218">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.5278,-535C831.5278,-535 748.7154,-535 748.7154,-535 742.7154,-535 736.7154,-529 736.7154,-523 736.7154,-523 736.7154,-511 736.7154,-511 736.7154,-505 742.7154,-499 748.7154,-499 748.7154,-499 831.5278,-499 831.5278,-499 837.5278,-499 843.5278,-505 843.5278,-511 843.5278,-511 843.5278,-523 843.5278,-523 843.5278,-529 837.5278,-535 831.5278,-535"/>
-<text text-anchor="middle" x="790.1216" y="-521.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
-<text text-anchor="middle" x="790.1216" y="-504.4" font-family="Verdana" font-size="14.00" fill="#000000">Port</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Port -->
-<g id="edge41" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Port</title>
-<g id="a_edge41"><a xlink:title="at addr.go:27: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Port]">
-<path fill="none" stroke="#8b4513" d="M401.5204,-402.2234C430.7993,-409.0843 465.3955,-417.0742 496.7014,-424 564.2248,-438.9382 583.2359,-434.5352 648.9764,-456 680.8075,-466.3931 686.9111,-473.7063 717.644,-487 723.7744,-489.6517 730.2161,-492.3886 736.6249,-495.0806"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="735.3745,-498.3513 745.9508,-498.9775 738.0734,-491.8925 735.3745,-498.3513"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
-<g id="node7" class="node">
-<title>github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
-<g id="a_node7"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config | defined in config.go:97">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M387.2596,-282C387.2596,-282 279.0716,-282 279.0716,-282 273.0716,-282 267.0716,-276 267.0716,-270 267.0716,-270 267.0716,-258 267.0716,-258 267.0716,-252 273.0716,-246 279.0716,-246 279.0716,-246 387.2596,-246 387.2596,-246 393.2596,-246 399.2596,-252 399.2596,-258 399.2596,-258 399.2596,-270 399.2596,-270 399.2596,-276 393.2596,-282 387.2596,-282"/>
-<text text-anchor="middle" x="333.1656" y="-268.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
-<text text-anchor="middle" x="333.1656" y="-251.4" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Config</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake -->
-<g id="node8" class="node">
-<title>github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake</title>
-<g id="a_node8"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake | defined in transport.go:35">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M411.7372,-492C411.7372,-492 254.594,-492 254.594,-492 248.594,-492 242.594,-486 242.594,-480 242.594,-480 242.594,-468 242.594,-468 242.594,-462 248.594,-456 254.594,-456 254.594,-456 411.7372,-456 411.7372,-456 417.7372,-456 423.7372,-462 423.7372,-468 423.7372,-468 423.7372,-480 423.7372,-480 423.7372,-486 417.7372,-492 411.7372,-492"/>
-<text text-anchor="middle" x="333.1656" y="-478.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
-<text text-anchor="middle" x="333.1656" y="-461.4" font-family="Verdana" font-size="14.00" fill="#000000">DialNTCP2WithHandshake</text>
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error&#45;&gt;github.com/samber/oops.Wrapf</title>
+<g id="a_edge25"><a xlink:title="at errors.go:19: calling [github.com/samber/oops.Wrapf]">
+<path fill="none" stroke="#8b4513" d="M853.9979,-298C892.3065,-298 939.8469,-298 972.9233,-298"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="973.1241,-301.5001 983.1241,-298 973.1241,-294.5001 973.1241,-301.5001"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session -->
-<g id="node9" class="node">
+<g id="node4" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session</title>
-<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session | defined in session.go:40&#10;at session.go:58: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker]&#10;at session.go:59: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M389.1488,-1027C389.1488,-1027 277.1824,-1027 277.1824,-1027 271.1824,-1027 265.1824,-1021 265.1824,-1015 265.1824,-1015 265.1824,-1003 265.1824,-1003 265.1824,-997 271.1824,-991 277.1824,-991 277.1824,-991 389.1488,-991 389.1488,-991 395.1488,-991 401.1488,-997 401.1488,-1003 401.1488,-1003 401.1488,-1015 401.1488,-1015 401.1488,-1021 395.1488,-1027 389.1488,-1027"/>
-<text text-anchor="middle" x="333.1656" y="-1004.8" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Session</text>
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session | defined in session.go:40&#10;at session.go:58: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker]&#10;at session.go:59: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M389.1488,-512C389.1488,-512 277.1824,-512 277.1824,-512 271.1824,-512 265.1824,-506 265.1824,-500 265.1824,-500 265.1824,-488 265.1824,-488 265.1824,-482 271.1824,-476 277.1824,-476 277.1824,-476 389.1488,-476 389.1488,-476 395.1488,-476 401.1488,-482 401.1488,-488 401.1488,-488 401.1488,-500 401.1488,-500 401.1488,-506 395.1488,-512 389.1488,-512"/>
+<text text-anchor="middle" x="333.1656" y="-489.8" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Session</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker -->
 <g id="node22" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker</title>
-<g id="a_node22"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker | defined in session.go:108&#10;at session.go:119: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:126: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:117: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage]&#10;at session.go:119: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:126: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M607.2494,-975C607.2494,-975 538.4284,-975 538.4284,-975 532.4284,-975 526.4284,-969 526.4284,-963 526.4284,-963 526.4284,-951 526.4284,-951 526.4284,-945 532.4284,-939 538.4284,-939 538.4284,-939 607.2494,-939 607.2494,-939 613.2494,-939 619.2494,-945 619.2494,-951 619.2494,-951 619.2494,-963 619.2494,-963 619.2494,-969 613.2494,-975 607.2494,-975"/>
-<text text-anchor="middle" x="572.8389" y="-952.8" font-family="Verdana" font-size="14.00" fill="#000000">sendWorker</text>
+<g id="a_node22"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker | defined in session.go:108&#10;at session.go:117: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage]&#10;at session.go:119: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:126: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:119: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:126: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M607.2494,-520C607.2494,-520 538.4284,-520 538.4284,-520 532.4284,-520 526.4284,-514 526.4284,-508 526.4284,-508 526.4284,-496 526.4284,-496 526.4284,-490 532.4284,-484 538.4284,-484 538.4284,-484 607.2494,-484 607.2494,-484 613.2494,-484 619.2494,-490 619.2494,-496 619.2494,-496 619.2494,-508 619.2494,-508 619.2494,-514 613.2494,-520 607.2494,-520"/>
+<text text-anchor="middle" x="572.8389" y="-497.8" font-family="Verdana" font-size="14.00" fill="#000000">sendWorker</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker -->
-<g id="edge6" class="edge">
+<g id="edge18" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker</title>
-<g id="a_edge6"><a xlink:title="at session.go:58: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker]">
-<path fill="none" stroke="#000000" d="M401.2053,-994.238C433.2333,-987.2891 471.3737,-979.0141 503.5574,-972.0315"/>
-<polygon fill="#000000" stroke="#000000" points="517.255,-972.6411 526.2855,-967.1003 515.7707,-965.8002 517.255,-972.6411"/>
-<polyline fill="none" stroke="#000000" points="516.5129,-969.2206 511.6265,-970.2808 "/>
-<ellipse fill="none" stroke="#000000" cx="507.7175" cy="-971.1289" rx="4" ry="4"/>
+<g id="a_edge18"><a xlink:title="at session.go:58: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker]">
+<path fill="none" stroke="#000000" d="M401.2053,-496.2711C433.0771,-497.3349 471.0018,-498.6008 503.086,-499.6717"/>
+<polygon fill="#000000" stroke="#000000" points="516.1743,-503.6105 526.2855,-500.4461 516.4078,-496.6144 516.1743,-503.6105"/>
+<polyline fill="none" stroke="#000000" points="516.2911,-500.1125 511.2938,-499.9456 "/>
+<ellipse fill="none" stroke="#000000" cx="507.2961" cy="-499.8122" rx="4" ry="4"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker -->
 <g id="node24" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker</title>
-<g id="a_node24"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker | defined in session.go:137&#10;at session.go:150: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:148: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]&#10;at session.go:140: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M614.499,-914C614.499,-914 531.1788,-914 531.1788,-914 525.1788,-914 519.1788,-908 519.1788,-902 519.1788,-902 519.1788,-890 519.1788,-890 519.1788,-884 525.1788,-878 531.1788,-878 531.1788,-878 614.499,-878 614.499,-878 620.499,-878 626.499,-884 626.499,-890 626.499,-890 626.499,-902 626.499,-902 626.499,-908 620.499,-914 614.499,-914"/>
-<text text-anchor="middle" x="572.8389" y="-891.8" font-family="Verdana" font-size="14.00" fill="#000000">receiveWorker</text>
+<g id="a_node24"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker | defined in session.go:137&#10;at session.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:140: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]&#10;at session.go:150: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:148: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M614.499,-459C614.499,-459 531.1788,-459 531.1788,-459 525.1788,-459 519.1788,-453 519.1788,-447 519.1788,-447 519.1788,-435 519.1788,-435 519.1788,-429 525.1788,-423 531.1788,-423 531.1788,-423 614.499,-423 614.499,-423 620.499,-423 626.499,-429 626.499,-435 626.499,-435 626.499,-447 626.499,-447 626.499,-453 620.499,-459 614.499,-459"/>
+<text text-anchor="middle" x="572.8389" y="-436.8" font-family="Verdana" font-size="14.00" fill="#000000">receiveWorker</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker -->
-<g id="edge8" class="edge">
+<g id="edge34" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker</title>
-<g id="a_edge8"><a xlink:title="at session.go:59: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker]">
-<path fill="none" stroke="#000000" d="M381.7517,-990.8569C395.5197,-985.2574 410.3806,-978.7697 423.7014,-972 457.6789,-954.7324 462.7126,-944.2455 496.7014,-927 498.9287,-925.8699 501.2073,-924.7494 503.5197,-923.6426"/>
-<polygon fill="#000000" stroke="#000000" points="517.0704,-921.4272 524.7755,-914.1552 514.2172,-915.035 517.0704,-921.4272"/>
-<polyline fill="none" stroke="#000000" points="515.6438,-918.2311 511.078,-920.269 "/>
-<ellipse fill="none" stroke="#000000" cx="507.4253" cy="-921.8994" rx="4" ry="4"/>
+<g id="a_edge34"><a xlink:title="at session.go:59: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker]">
+<path fill="none" stroke="#000000" d="M401.2053,-478.9541C430.8357,-472.4018 465.6977,-464.6926 496.2346,-457.9398"/>
+<polygon fill="#000000" stroke="#000000" points="510.0898,-458.4606 519.0982,-452.8839 508.5783,-451.6257 510.0898,-458.4606"/>
+<polyline fill="none" stroke="#000000" points="509.3341,-455.0431 504.452,-456.1227 "/>
+<ellipse fill="none" stroke="#000000" cx="500.5464" cy="-456.9864" rx="4" ry="4"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer -->
-<g id="node10" class="node">
+<g id="node5" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer</title>
-<g id="a_node10"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer | defined in framing.go:43">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M845.508,-763C845.508,-763 734.7352,-763 734.7352,-763 728.7352,-763 722.7352,-757 722.7352,-751 722.7352,-751 722.7352,-739 722.7352,-739 722.7352,-733 728.7352,-727 734.7352,-727 734.7352,-727 845.508,-727 845.508,-727 851.508,-727 857.508,-733 857.508,-739 857.508,-739 857.508,-751 857.508,-751 857.508,-757 851.508,-763 845.508,-763"/>
-<text text-anchor="middle" x="790.1216" y="-740.8" font-family="Verdana" font-size="14.00" fill="#000000">NewI2NPUnframer</text>
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer | defined in framing.go:43">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M845.508,-177C845.508,-177 734.7352,-177 734.7352,-177 728.7352,-177 722.7352,-171 722.7352,-165 722.7352,-165 722.7352,-153 722.7352,-153 722.7352,-147 728.7352,-141 734.7352,-141 734.7352,-141 845.508,-141 845.508,-141 851.508,-141 857.508,-147 857.508,-153 857.508,-153 857.508,-165 857.508,-165 857.508,-171 851.508,-177 845.508,-177"/>
+<text text-anchor="middle" x="790.1216" y="-154.8" font-family="Verdana" font-size="14.00" fill="#000000">NewI2NPUnframer</text>
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport -->
-<g id="node11" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport</title>
-<g id="a_node11"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport | defined in transport.go:34&#10;at transport.go:62: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]&#10;at transport.go:37: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:37: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:36: calling [github.com/sirupsen/logrus.WithField]&#10;at transport.go:39: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M151.4452,-211C151.4452,-211 28.1846,-211 28.1846,-211 22.1846,-211 16.1846,-205 16.1846,-199 16.1846,-199 16.1846,-187 16.1846,-187 16.1846,-181 22.1846,-175 28.1846,-175 28.1846,-175 151.4452,-175 151.4452,-175 157.4452,-175 163.4452,-181 163.4452,-187 163.4452,-187 163.4452,-199 163.4452,-199 163.4452,-205 157.4452,-211 151.4452,-211"/>
-<text text-anchor="middle" x="89.8149" y="-188.8" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Transport</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
-<g id="edge36" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
-<g id="a_edge36"><a xlink:title="at transport.go:39: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
-<path fill="none" stroke="#8b4513" d="M151.5371,-211.0081C185.0017,-220.7717 226.5326,-232.8887 261.4313,-243.0708"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="260.5063,-246.4468 271.0864,-245.8878 262.467,-239.727 260.5063,-246.4468"/>
-</a>
-</g>
-</g>
-<!-- github.com/sirupsen/logrus.WithField -->
-<g id="node12" class="node">
-<title>github.com/sirupsen/logrus.WithField</title>
-<g id="a_node12"><a xlink:title="github.com/sirupsen/logrus.WithField | defined in exported.go:69">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.4401,-113C361.4401,-113 304.8911,-113 304.8911,-113 298.8911,-113 292.8911,-107 292.8911,-101 292.8911,-101 292.8911,-89 292.8911,-89 292.8911,-83 298.8911,-77 304.8911,-77 304.8911,-77 361.4401,-77 361.4401,-77 367.4401,-77 373.4401,-83 373.4401,-89 373.4401,-89 373.4401,-101 373.4401,-101 373.4401,-107 367.4401,-113 361.4401,-113"/>
-<text text-anchor="middle" x="333.1656" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="333.1656" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/sirupsen/logrus.WithField -->
-<g id="edge35" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/sirupsen/logrus.WithField</title>
-<g id="a_edge35"><a xlink:title="at transport.go:36: calling [github.com/sirupsen/logrus.WithField]">
-<path fill="none" stroke="#8b4513" d="M119.9751,-174.9454C142.8883,-161.77 175.4942,-144.1615 205.6298,-132 230.51,-121.9593 259.1251,-113.4013 282.9379,-107.0529"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="284.0342,-110.384 292.8245,-104.4695 282.2645,-103.6114 284.0342,-110.384"/>
+<!-- github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
+<g id="node6" class="node">
+<title>github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
+<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config | defined in config.go:97">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M387.2596,-397C387.2596,-397 279.0716,-397 279.0716,-397 273.0716,-397 267.0716,-391 267.0716,-385 267.0716,-385 267.0716,-373 267.0716,-373 267.0716,-367 273.0716,-361 279.0716,-361 279.0716,-361 387.2596,-361 387.2596,-361 393.2596,-361 399.2596,-367 399.2596,-373 399.2596,-373 399.2596,-385 399.2596,-385 399.2596,-391 393.2596,-397 387.2596,-397"/>
+<text text-anchor="middle" x="333.1656" y="-383.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
+<text text-anchor="middle" x="333.1656" y="-366.4" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Config</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener -->
-<g id="node13" class="node">
+<g id="node7" class="node">
 <title>github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener</title>
-<g id="a_node13"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener | defined in listener.go:43">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M390.74,-343C390.74,-343 275.5912,-343 275.5912,-343 269.5912,-343 263.5912,-337 263.5912,-331 263.5912,-331 263.5912,-319 263.5912,-319 263.5912,-313 269.5912,-307 275.5912,-307 275.5912,-307 390.74,-307 390.74,-307 396.74,-307 402.74,-313 402.74,-319 402.74,-319 402.74,-331 402.74,-331 402.74,-337 396.74,-343 390.74,-343"/>
-<text text-anchor="middle" x="333.1656" y="-329.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
-<text text-anchor="middle" x="333.1656" y="-312.4" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Listener</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener -->
-<g id="edge11" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener</title>
-<g id="a_edge11"><a xlink:title="at transport.go:62: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]">
-<path fill="none" stroke="#8b4513" d="M112.705,-211.1569C141.5965,-233.3762 193.4737,-270.9956 242.6298,-295 248.628,-297.9291 254.9821,-300.6796 261.4313,-303.2351"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="260.3266,-306.5594 270.9178,-306.8379 262.8119,-300.0155 260.3266,-306.5594"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge29" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge29"><a xlink:title="at transport.go:37: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M140.8304,-174.8686C189.5729,-159.181 265.4386,-139 333.1656,-139 333.1656,-139 333.1656,-139 572.8389,-139 628.8522,-139 692.5389,-146.6522 736.4109,-153.1289"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="736.1563,-156.63 746.5662,-154.6594 737.1995,-149.7082 736.1563,-156.63"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
-<g id="edge30" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
-<g id="a_edge30"><a xlink:title="at transport.go:37: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
-<path fill="none" stroke="#8b4513" d="M96.3417,-211.2997C113.0153,-255.1276 161.6648,-366.2316 242.6298,-417 311.5647,-460.2251 359.7619,-393.6794 423.7014,-444 457.6211,-470.6949 464.6345,-595.1058 496.7014,-624 507.2089,-633.4679 521.5545,-638.8795 534.9615,-641.9657"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="534.4686,-645.4352 544.9518,-643.9012 535.8001,-638.563 534.4686,-645.4352"/>
+<g id="a_node7"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener | defined in listener.go:43">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M390.74,-228C390.74,-228 275.5912,-228 275.5912,-228 269.5912,-228 263.5912,-222 263.5912,-216 263.5912,-216 263.5912,-204 263.5912,-204 263.5912,-198 269.5912,-192 275.5912,-192 275.5912,-192 390.74,-192 390.74,-192 396.74,-192 402.74,-198 402.74,-204 402.74,-204 402.74,-216 402.74,-216 402.74,-222 396.74,-228 390.74,-228"/>
+<text text-anchor="middle" x="333.1656" y="-214.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
+<text text-anchor="middle" x="333.1656" y="-197.4" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Listener</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage -->
-<g id="node14" class="node">
+<g id="node8" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage</title>
-<g id="a_node14"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage | defined in framing.go:32&#10;at framing.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]&#10;at framing.go:35: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M637.1141,-586C637.1141,-586 508.5637,-586 508.5637,-586 502.5637,-586 496.5637,-580 496.5637,-574 496.5637,-574 496.5637,-562 496.5637,-562 496.5637,-556 502.5637,-550 508.5637,-550 508.5637,-550 637.1141,-550 637.1141,-550 643.1141,-550 649.1141,-556 649.1141,-562 649.1141,-562 649.1141,-574 649.1141,-574 649.1141,-580 643.1141,-586 637.1141,-586"/>
-<text text-anchor="middle" x="572.8389" y="-563.8" font-family="Verdana" font-size="14.00" fill="#000000">UnframeI2NPMessage</text>
+<g id="a_node8"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage | defined in framing.go:32&#10;at framing.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]&#10;at framing.go:35: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M637.1141,-191C637.1141,-191 508.5637,-191 508.5637,-191 502.5637,-191 496.5637,-185 496.5637,-179 496.5637,-179 496.5637,-167 496.5637,-167 496.5637,-161 502.5637,-155 508.5637,-155 508.5637,-155 637.1141,-155 637.1141,-155 643.1141,-155 649.1141,-161 649.1141,-167 649.1141,-167 649.1141,-179 649.1141,-179 649.1141,-185 643.1141,-191 637.1141,-191"/>
+<text text-anchor="middle" x="572.8389" y="-168.8" font-family="Verdana" font-size="14.00" fill="#000000">UnframeI2NPMessage</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer -->
-<g id="edge13" class="edge">
+<g id="edge20" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer</title>
-<g id="a_edge13"><a xlink:title="at framing.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]">
-<path fill="none" stroke="#000000" d="M642.5809,-586.0909C644.7857,-587.3111 646.925,-588.6124 648.9764,-590 690.0677,-617.7955 684.0601,-641.4869 717.644,-678 731.123,-692.6546 747.2975,-707.8091 760.9438,-719.9906"/>
-<polygon fill="#000000" stroke="#000000" points="758.8344,-722.7972 768.6468,-726.7931 763.4679,-717.5503 758.8344,-722.7972"/>
+<g id="a_edge20"><a xlink:title="at framing.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]">
+<path fill="none" stroke="#000000" d="M649.1391,-168.0838C669.7358,-166.7567 692.0389,-165.3197 712.6965,-163.9887"/>
+<polygon fill="#000000" stroke="#000000" points="712.9365,-167.4806 722.6907,-163.3447 712.4863,-160.495 712.9365,-167.4806"/>
 </a>
 </g>
 </g>
@@ -510,33 +231,33 @@
 <g id="node20" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage</title>
 <g id="a_node20"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage | defined in framing.go:49&#10;at framing.go:52: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]&#10;at framing.go:61: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]&#10;at framing.go:67: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M842.5768,-664C842.5768,-664 737.6664,-664 737.6664,-664 731.6664,-664 725.6664,-658 725.6664,-652 725.6664,-652 725.6664,-640 725.6664,-640 725.6664,-634 731.6664,-628 737.6664,-628 737.6664,-628 842.5768,-628 842.5768,-628 848.5768,-628 854.5768,-634 854.5768,-640 854.5768,-640 854.5768,-652 854.5768,-652 854.5768,-658 848.5768,-664 842.5768,-664"/>
-<text text-anchor="middle" x="790.1216" y="-641.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadNextMessage</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M842.5768,-255C842.5768,-255 737.6664,-255 737.6664,-255 731.6664,-255 725.6664,-249 725.6664,-243 725.6664,-243 725.6664,-231 725.6664,-231 725.6664,-225 731.6664,-219 737.6664,-219 737.6664,-219 842.5768,-219 842.5768,-219 848.5768,-219 854.5768,-225 854.5768,-231 854.5768,-231 854.5768,-243 854.5768,-243 854.5768,-249 848.5768,-255 842.5768,-255"/>
+<text text-anchor="middle" x="790.1216" y="-232.8" font-family="Verdana" font-size="14.00" fill="#000000">ReadNextMessage</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage -->
-<g id="edge21" class="edge">
+<g id="edge47" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.UnframeI2NPMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage</title>
-<g id="a_edge21"><a xlink:title="at framing.go:35: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
-<path fill="none" stroke="#000000" d="M636.9529,-586.0417C641.0349,-587.3397 645.0707,-588.6644 648.9764,-590 678.8571,-600.2181 711.6783,-613.135 738.1456,-623.9878"/>
-<polygon fill="#000000" stroke="#000000" points="737.0129,-627.3066 747.592,-627.884 739.682,-620.8354 737.0129,-627.3066"/>
+<g id="a_edge47"><a xlink:title="at framing.go:35: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
+<path fill="none" stroke="#000000" d="M634.2322,-191.0832C660.6094,-198.8526 691.6016,-207.9812 718.9743,-216.0438"/>
+<polygon fill="#000000" stroke="#000000" points="718.2985,-219.4933 728.88,-218.9615 720.2764,-212.7786 718.2985,-219.4933"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init -->
-<g id="node15" class="node">
+<g id="node9" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init</title>
-<g id="a_node15"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init | defined in .:0&#10;at errors.go:8: calling [github.com/samber/oops.New]&#10;at errors.go:9: calling [github.com/samber/oops.New]&#10;at errors.go:10: calling [github.com/samber/oops.New]&#10;at errors.go:11: calling [github.com/samber/oops.New]&#10;at errors.go:12: calling [github.com/samber/oops.New]&#10;at errors.go:13: calling [github.com/samber/oops.New]&#10;at errors.go:14: calling [github.com/samber/oops.New]">
+<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init | defined in .:0&#10;at errors.go:8: calling [github.com/samber/oops.New]&#10;at errors.go:9: calling [github.com/samber/oops.New]&#10;at errors.go:10: calling [github.com/samber/oops.New]&#10;at errors.go:11: calling [github.com/samber/oops.New]&#10;at errors.go:12: calling [github.com/samber/oops.New]&#10;at errors.go:13: calling [github.com/samber/oops.New]&#10;at errors.go:14: calling [github.com/samber/oops.New]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M104.8149,-52C104.8149,-52 74.8149,-52 74.8149,-52 68.8149,-52 62.8149,-46 62.8149,-40 62.8149,-40 62.8149,-28 62.8149,-28 62.8149,-22 68.8149,-16 74.8149,-16 74.8149,-16 104.8149,-16 104.8149,-16 110.8149,-16 116.8149,-22 116.8149,-28 116.8149,-28 116.8149,-40 116.8149,-40 116.8149,-46 110.8149,-52 104.8149,-52"/>
 <text text-anchor="middle" x="89.8149" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
 </a>
 </g>
 </g>
 <!-- github.com/samber/oops.New -->
-<g id="node16" class="node">
+<g id="node10" class="node">
 <title>github.com/samber/oops.New</title>
-<g id="a_node16"><a xlink:title="github.com/samber/oops.New | defined in oops.go:29">
+<g id="a_node10"><a xlink:title="github.com/samber/oops.New | defined in oops.go:29">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M348.1656,-52C348.1656,-52 318.1656,-52 318.1656,-52 312.1656,-52 306.1656,-46 306.1656,-40 306.1656,-40 306.1656,-28 306.1656,-28 306.1656,-22 312.1656,-16 318.1656,-16 318.1656,-16 348.1656,-16 348.1656,-16 354.1656,-16 360.1656,-22 360.1656,-28 360.1656,-28 360.1656,-40 360.1656,-40 360.1656,-46 354.1656,-52 348.1656,-52"/>
 <text text-anchor="middle" x="333.1656" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
 <text text-anchor="middle" x="333.1656" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">New</text>
@@ -544,11 +265,290 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init&#45;&gt;github.com/samber/oops.New -->
-<g id="edge14" class="edge">
+<g id="edge21" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.init&#45;&gt;github.com/samber/oops.New</title>
-<g id="a_edge14"><a xlink:title="at errors.go:8: calling [github.com/samber/oops.New]&#10;at errors.go:9: calling [github.com/samber/oops.New]&#10;at errors.go:10: calling [github.com/samber/oops.New]&#10;at errors.go:11: calling [github.com/samber/oops.New]&#10;at errors.go:12: calling [github.com/samber/oops.New]&#10;at errors.go:13: calling [github.com/samber/oops.New]&#10;at errors.go:14: calling [github.com/samber/oops.New]">
+<g id="a_edge21"><a xlink:title="at errors.go:8: calling [github.com/samber/oops.New]&#10;at errors.go:9: calling [github.com/samber/oops.New]&#10;at errors.go:10: calling [github.com/samber/oops.New]&#10;at errors.go:11: calling [github.com/samber/oops.New]&#10;at errors.go:12: calling [github.com/samber/oops.New]&#10;at errors.go:13: calling [github.com/samber/oops.New]&#10;at errors.go:14: calling [github.com/samber/oops.New]">
 <path fill="none" stroke="#8b4513" d="M117.2573,-34C160.9155,-34 246.2788,-34 295.5834,-34"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="295.8235,-37.5001 305.8235,-34 295.8235,-30.5001 295.8235,-37.5001"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 -->
+<g id="node11" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2</title>
+<g id="a_node11"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 | defined in addr.go:48&#10;at addr.go:53: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]&#10;at addr.go:52: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at addr.go:54: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M618.8965,-815C618.8965,-815 526.7813,-815 526.7813,-815 520.7813,-815 514.7813,-809 514.7813,-803 514.7813,-803 514.7813,-791 514.7813,-791 514.7813,-785 520.7813,-779 526.7813,-779 526.7813,-779 618.8965,-779 618.8965,-779 624.8965,-779 630.8965,-785 630.8965,-791 630.8965,-791 630.8965,-803 630.8965,-803 630.8965,-809 624.8965,-815 618.8965,-815"/>
+<text text-anchor="middle" x="572.8389" y="-792.8" font-family="Verdana" font-size="14.00" fill="#000000">SupportsNTCP2</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
+<g id="node18" class="node">
+<title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
+<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses | defined in router_info_struct.go:336">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M837.7548,-711C837.7548,-711 742.4884,-711 742.4884,-711 736.4884,-711 730.4884,-705 730.4884,-699 730.4884,-699 730.4884,-687 730.4884,-687 730.4884,-681 736.4884,-675 742.4884,-675 742.4884,-675 837.7548,-675 837.7548,-675 843.7548,-675 849.7548,-681 849.7548,-687 849.7548,-687 849.7548,-699 849.7548,-699 849.7548,-705 843.7548,-711 837.7548,-711"/>
+<text text-anchor="middle" x="790.1216" y="-697.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
+<text text-anchor="middle" x="790.1216" y="-680.4" font-family="Verdana" font-size="14.00" fill="#000000">RouterAddresses</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
+<g id="edge37" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
+<g id="a_edge37"><a xlink:title="at addr.go:52: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
+<path fill="none" stroke="#8b4513" d="M604.8049,-778.8665C633.8017,-762.7457 677.9573,-739.0091 717.644,-721 722.2101,-718.928 726.9783,-716.8674 731.7936,-714.8585"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="733.1365,-718.0907 741.071,-711.0697 730.49,-711.6103 733.1365,-718.0907"/>
+</a>
+</g>
+</g>
+<!-- (github.com/go&#45;i2p/common/data.I2PString).Data -->
+<g id="node35" class="node">
+<title>(github.com/go&#45;i2p/common/data.I2PString).Data</title>
+<g id="a_node35"><a xlink:title="(github.com/go&#45;i2p/common/data.I2PString).Data | defined in string.go:70">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M805.1216,-797C805.1216,-797 775.1216,-797 775.1216,-797 769.1216,-797 763.1216,-791 763.1216,-785 763.1216,-785 763.1216,-773 763.1216,-773 763.1216,-767 769.1216,-761 775.1216,-761 775.1216,-761 805.1216,-761 805.1216,-761 811.1216,-761 817.1216,-767 817.1216,-773 817.1216,-773 817.1216,-785 817.1216,-785 817.1216,-791 811.1216,-797 805.1216,-797"/>
+<text text-anchor="middle" x="790.1216" y="-783.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
+<text text-anchor="middle" x="790.1216" y="-766.4" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data -->
+<g id="edge51" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data</title>
+<g id="a_edge51"><a xlink:title="at addr.go:54: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
+<path fill="none" stroke="#8b4513" d="M631.0667,-792.1763C669.7465,-788.972 719.3811,-784.8602 752.8334,-782.089"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="753.4146,-785.5529 763.0915,-781.2392 752.8367,-778.5768 753.4146,-785.5529"/>
+</a>
+</g>
+</g>
+<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
+<g id="node36" class="node">
+<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
+<g id="a_node36"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle | defined in router_address_methods.go:104">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.8238,-944C831.8238,-944 748.4194,-944 748.4194,-944 742.4194,-944 736.4194,-938 736.4194,-932 736.4194,-932 736.4194,-920 736.4194,-920 736.4194,-914 742.4194,-908 748.4194,-908 748.4194,-908 831.8238,-908 831.8238,-908 837.8238,-908 843.8238,-914 843.8238,-920 843.8238,-920 843.8238,-932 843.8238,-932 843.8238,-938 837.8238,-944 831.8238,-944"/>
+<text text-anchor="middle" x="790.1216" y="-930.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
+<text text-anchor="middle" x="790.1216" y="-913.4" font-family="Verdana" font-size="14.00" fill="#000000">TransportStyle</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
+<g id="edge7" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
+<g id="a_edge7"><a xlink:title="at addr.go:53: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
+<path fill="none" stroke="#8b4513" d="M595.9613,-815.0426C623.7725,-836.2052 672.3812,-871.5034 717.644,-896 722.5095,-898.6333 727.656,-901.1863 732.8718,-903.6182"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="731.7337,-906.944 742.2892,-907.856 734.6063,-900.5606 731.7337,-906.944"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr -->
+<g id="node12" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr</title>
+<g id="a_node12"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr | defined in addr.go:11&#10;at addr.go:23: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Host]&#10;at addr.go:39: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at addr.go:15: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at addr.go:16: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]&#10;at addr.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr]&#10;at addr.go:39: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at addr.go:17: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]&#10;at addr.go:27: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Port]&#10;at addr.go:12: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M389.1348,-739C389.1348,-739 277.1964,-739 277.1964,-739 271.1964,-739 265.1964,-733 265.1964,-727 265.1964,-727 265.1964,-715 265.1964,-715 265.1964,-709 271.1964,-703 277.1964,-703 277.1964,-703 389.1348,-703 389.1348,-703 395.1348,-703 401.1348,-709 401.1348,-715 401.1348,-715 401.1348,-727 401.1348,-727 401.1348,-733 395.1348,-739 389.1348,-739"/>
+<text text-anchor="middle" x="333.1656" y="-716.8" font-family="Verdana" font-size="14.00" fill="#000000">ExtractNTCP2Addr</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 -->
+<g id="edge48" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2</title>
+<g id="a_edge48"><a xlink:title="at addr.go:12: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
+<path fill="none" stroke="#000000" d="M401.6012,-736.7875C409.0907,-738.7652 416.5776,-740.8517 423.7014,-743 441.2934,-748.305 481.0728,-762.7538 515.1262,-775.3713"/>
+<polygon fill="#000000" stroke="#000000" points="513.963,-778.6729 524.556,-778.8725 516.3995,-772.1106 513.963,-778.6729"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr -->
+<g id="node13" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr</title>
+<g id="a_node13"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr | defined in addr.go:66">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M623.9748,-984C623.9748,-984 521.703,-984 521.703,-984 515.703,-984 509.703,-978 509.703,-972 509.703,-972 509.703,-960 509.703,-960 509.703,-954 515.703,-948 521.703,-948 521.703,-948 623.9748,-948 623.9748,-948 629.9748,-948 635.9748,-954 635.9748,-960 635.9748,-960 635.9748,-972 635.9748,-972 635.9748,-978 629.9748,-984 623.9748,-984"/>
+<text text-anchor="middle" x="572.8389" y="-961.8" font-family="Verdana" font-size="14.00" fill="#000000">WrapNTCP2Addr</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr -->
+<g id="edge22" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr</title>
+<g id="a_edge22"><a xlink:title="at addr.go:40: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Addr]">
+<path fill="none" stroke="#000000" d="M401.1518,-728.3008C409.6,-731.7059 417.4492,-736.4455 423.7014,-743 481.819,-803.9272 403.9939,-865.8616 459.7014,-929 470.3445,-941.0628 484.976,-949.2107 500.1862,-954.7092"/>
+<polygon fill="#000000" stroke="#000000" points="499.1089,-958.0392 509.7011,-957.8017 501.2727,-951.382 499.1089,-958.0392"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="node17" class="node">
+<title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash | defined in router_info_struct.go:314">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M821.5992,-650C821.5992,-650 758.644,-650 758.644,-650 752.644,-650 746.644,-644 746.644,-638 746.644,-638 746.644,-626 746.644,-626 746.644,-620 752.644,-614 758.644,-614 758.644,-614 821.5992,-614 821.5992,-614 827.5992,-614 833.5992,-620 833.5992,-626 833.5992,-626 833.5992,-638 833.5992,-638 833.5992,-644 827.5992,-650 821.5992,-650"/>
+<text text-anchor="middle" x="790.1216" y="-636.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
+<text text-anchor="middle" x="790.1216" y="-619.4" font-family="Verdana" font-size="14.00" fill="#000000">IdentHash</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge11" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge11"><a xlink:title="at addr.go:39: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M401.5765,-707.6758C492.9966,-689.8702 653.1263,-658.6822 736.3955,-642.4641"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="737.2566,-645.8622 746.403,-640.5149 735.9183,-638.9913 737.2566,-645.8622"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
+<g id="edge12" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
+<g id="a_edge12"><a xlink:title="at addr.go:15: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
+<path fill="none" stroke="#8b4513" d="M401.1558,-717.5507C472.2219,-713.8505 586.9627,-707.6087 685.9764,-701 697.1019,-700.2574 708.8912,-699.41 720.3836,-698.551"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="720.6745,-702.0391 730.3823,-697.7955 720.147,-695.059 720.6745,-702.0391"/>
+</a>
+</g>
+</g>
+<!-- (github.com/go&#45;i2p/common/data.Hash).Bytes -->
+<g id="node34" class="node">
+<title>(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
+<g id="a_node34"><a xlink:title="(github.com/go&#45;i2p/common/data.Hash).Bytes | defined in hash.go:25">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M588.7254,-373C588.7254,-373 556.9524,-373 556.9524,-373 550.9524,-373 544.9524,-367 544.9524,-361 544.9524,-361 544.9524,-349 544.9524,-349 544.9524,-343 550.9524,-337 556.9524,-337 556.9524,-337 588.7254,-337 588.7254,-337 594.7254,-337 600.7254,-343 600.7254,-349 600.7254,-349 600.7254,-361 600.7254,-361 600.7254,-367 594.7254,-373 588.7254,-373"/>
+<text text-anchor="middle" x="572.8389" y="-359.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
+<text text-anchor="middle" x="572.8389" y="-342.4" font-family="Verdana" font-size="14.00" fill="#000000">Bytes</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
+<g id="edge26" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
+<g id="a_edge26"><a xlink:title="at addr.go:39: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
+<path fill="none" stroke="#8b4513" d="M376.617,-702.8533C393.5632,-693.7768 411.7504,-681.2174 423.7014,-665 462.1033,-612.8889 453.252,-430.9836 496.7014,-383 506.5904,-372.079 521.1109,-365.4079 534.8264,-361.337"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="535.7897,-364.7031 544.5935,-358.8087 534.0355,-357.9264 535.7897,-364.7031"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data -->
+<g id="edge38" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data</title>
+<g id="a_edge38"><a xlink:title="at addr.go:17: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
+<path fill="none" stroke="#8b4513" d="M401.5765,-729.6832C499.4275,-742.1031 675.9949,-764.5143 752.7765,-774.2599"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="752.5687,-777.7615 762.9298,-775.5486 753.4502,-770.8172 752.5687,-777.7615"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
+<g id="edge13" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
+<g id="a_edge13"><a xlink:title="at addr.go:16: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
+<path fill="none" stroke="#8b4513" d="M401.4178,-728.6646C409.7219,-732.0287 417.4603,-736.66 423.7014,-743 474.5309,-794.6347 404.7692,-854.7535 459.7014,-902 498.3039,-935.2016 641.5596,-933.9578 726.2449,-930.0331"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="726.4538,-933.5271 736.2711,-929.5433 726.1122,-926.5355 726.4538,-933.5271"/>
+</a>
+</g>
+</g>
+<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).Host -->
+<g id="node37" class="node">
+<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).Host</title>
+<g id="a_node37"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).Host | defined in router_address_methods.go:195">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.5278,-1005C831.5278,-1005 748.7154,-1005 748.7154,-1005 742.7154,-1005 736.7154,-999 736.7154,-993 736.7154,-993 736.7154,-981 736.7154,-981 736.7154,-975 742.7154,-969 748.7154,-969 748.7154,-969 831.5278,-969 831.5278,-969 837.5278,-969 843.5278,-975 843.5278,-981 843.5278,-981 843.5278,-993 843.5278,-993 843.5278,-999 837.5278,-1005 831.5278,-1005"/>
+<text text-anchor="middle" x="790.1216" y="-991.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
+<text text-anchor="middle" x="790.1216" y="-974.4" font-family="Verdana" font-size="14.00" fill="#000000">Host</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Host -->
+<g id="edge10" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Host</title>
+<g id="a_edge10"><a xlink:title="at addr.go:23: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Host]">
+<path fill="none" stroke="#8b4513" d="M401.3796,-731.5888C409.3072,-734.5179 416.9574,-738.249 423.7014,-743 447.8368,-760.0026 474.3633,-834.6968 496.7014,-854 533.8097,-886.0666 657.7802,-936.6163 732.1855,-965.2757"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="731.3051,-968.6866 741.8953,-968.9999 733.812,-962.1508 731.3051,-968.6866"/>
+</a>
+</g>
+</g>
+<!-- (github.com/go&#45;i2p/common/router_address.RouterAddress).Port -->
+<g id="node38" class="node">
+<title>(github.com/go&#45;i2p/common/router_address.RouterAddress).Port</title>
+<g id="a_node38"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).Port | defined in router_address_methods.go:218">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M831.5278,-883C831.5278,-883 748.7154,-883 748.7154,-883 742.7154,-883 736.7154,-877 736.7154,-871 736.7154,-871 736.7154,-859 736.7154,-859 736.7154,-853 742.7154,-847 748.7154,-847 748.7154,-847 831.5278,-847 831.5278,-847 837.5278,-847 843.5278,-853 843.5278,-859 843.5278,-859 843.5278,-871 843.5278,-871 843.5278,-877 837.5278,-883 831.5278,-883"/>
+<text text-anchor="middle" x="790.1216" y="-869.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
+<text text-anchor="middle" x="790.1216" y="-852.4" font-family="Verdana" font-size="14.00" fill="#000000">Port</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Port -->
+<g id="edge44" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).Port</title>
+<g id="a_edge44"><a xlink:title="at addr.go:27: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).Port]">
+<path fill="none" stroke="#8b4513" d="M401.2938,-732.601C409.1497,-735.3597 416.8055,-738.7741 423.7014,-743 466.1606,-769.0197 452.8414,-804.4182 496.7014,-828 568.6686,-866.6939 664.5493,-871.5785 726.8012,-869.7355"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="727.0089,-873.2304 736.8753,-869.3699 726.7549,-866.235 727.0089,-873.2304"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport -->
+<g id="node14" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport</title>
+<g id="a_node14"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport | defined in transport.go:34&#10;at transport.go:62: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]&#10;at transport.go:36: calling [github.com/sirupsen/logrus.WithField]&#10;at transport.go:37: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:37: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:39: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M151.4452,-184C151.4452,-184 28.1846,-184 28.1846,-184 22.1846,-184 16.1846,-178 16.1846,-172 16.1846,-172 16.1846,-160 16.1846,-160 16.1846,-154 22.1846,-148 28.1846,-148 28.1846,-148 151.4452,-148 151.4452,-148 157.4452,-148 163.4452,-154 163.4452,-160 163.4452,-160 163.4452,-172 163.4452,-172 163.4452,-178 157.4452,-184 151.4452,-184"/>
+<text text-anchor="middle" x="89.8149" y="-161.8" font-family="Verdana" font-size="14.00" fill="#000000">NewNTCP2Transport</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
+<g id="edge46" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
+<g id="a_edge46"><a xlink:title="at transport.go:39: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
+<path fill="none" stroke="#8b4513" d="M110.5628,-184.1603C154.1141,-222.2798 255.1192,-310.6876 304.6886,-354.0746"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="302.6402,-356.9331 312.4702,-360.8857 307.2506,-351.6658 302.6402,-356.9331"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener -->
+<g id="edge1" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener</title>
+<g id="a_edge1"><a xlink:title="at transport.go:62: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]">
+<path fill="none" stroke="#8b4513" d="M163.4885,-179.3209C191.8947,-184.4569 224.4578,-190.3446 253.4125,-195.5799"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="253.0277,-199.067 263.4909,-197.4022 254.2732,-192.1787 253.0277,-199.067"/>
+</a>
+</g>
+</g>
+<!-- github.com/sirupsen/logrus.WithField -->
+<g id="node15" class="node">
+<title>github.com/sirupsen/logrus.WithField</title>
+<g id="a_node15"><a xlink:title="github.com/sirupsen/logrus.WithField | defined in exported.go:69">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.4401,-113C361.4401,-113 304.8911,-113 304.8911,-113 298.8911,-113 292.8911,-107 292.8911,-101 292.8911,-101 292.8911,-89 292.8911,-89 292.8911,-83 298.8911,-77 304.8911,-77 304.8911,-77 361.4401,-77 361.4401,-77 367.4401,-77 373.4401,-83 373.4401,-89 373.4401,-89 373.4401,-101 373.4401,-101 373.4401,-107 367.4401,-113 361.4401,-113"/>
+<text text-anchor="middle" x="333.1656" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="333.1656" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/sirupsen/logrus.WithField -->
+<g id="edge23" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;github.com/sirupsen/logrus.WithField</title>
+<g id="a_edge23"><a xlink:title="at transport.go:36: calling [github.com/sirupsen/logrus.WithField]">
+<path fill="none" stroke="#8b4513" d="M151.1118,-147.9654C168.7105,-142.7983 187.9276,-137.1663 205.6298,-132 231.0947,-124.5683 259.4329,-116.3425 282.9172,-109.5378"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="284.0309,-112.8591 292.6622,-106.7149 282.0833,-106.1355 284.0309,-112.8591"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge28" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge28"><a xlink:title="at transport.go:37: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M163.5296,-164.3738C255.8646,-163.0543 404.3919,-163.5811 423.7014,-180 546.084,-284.0621 386.1889,-417.4093 496.7014,-534 544.8388,-584.785 583.7348,-548.7046 648.9764,-574 681.1048,-586.4568 685.7569,-596.9379 717.644,-610 723.7758,-612.5118 730.3018,-614.8872 736.8292,-617.0825"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="735.7561,-620.4138 746.348,-620.165 737.9127,-613.7543 735.7561,-620.4138"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
+<g id="edge29" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Transport&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
+<g id="a_edge29"><a xlink:title="at transport.go:37: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
+<path fill="none" stroke="#8b4513" d="M163.6455,-154.9226C248.8916,-143.7536 382.6627,-131.7133 423.7014,-159 493.5369,-205.4337 434.0646,-277.2351 496.7014,-333 507.1834,-342.332 521.3996,-347.7202 534.7102,-350.8257"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="534.1473,-354.282 544.6356,-352.7831 535.5018,-347.4143 534.1473,-354.282"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake -->
+<g id="node16" class="node">
+<title>github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake</title>
+<g id="a_node16"><a xlink:title="github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake | defined in transport.go:35">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M411.7372,-573C411.7372,-573 254.594,-573 254.594,-573 248.594,-573 242.594,-567 242.594,-561 242.594,-561 242.594,-549 242.594,-549 242.594,-543 248.594,-537 254.594,-537 254.594,-537 411.7372,-537 411.7372,-537 417.7372,-537 423.7372,-543 423.7372,-549 423.7372,-549 423.7372,-561 423.7372,-561 423.7372,-567 417.7372,-573 411.7372,-573"/>
+<text text-anchor="middle" x="333.1656" y="-559.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
+<text text-anchor="middle" x="333.1656" y="-542.4" font-family="Verdana" font-size="14.00" fill="#000000">DialNTCP2WithHandshake</text>
 </a>
 </g>
 </g>
@@ -556,18 +556,18 @@
 <g id="node19" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary</title>
 <g id="a_node19"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary | defined in i2np.go:143">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1062.5546,-750C1062.5546,-750 963.5036,-750 963.5036,-750 957.5036,-750 951.5036,-744 951.5036,-738 951.5036,-738 951.5036,-726 951.5036,-726 951.5036,-720 957.5036,-714 963.5036,-714 963.5036,-714 1062.5546,-714 1062.5546,-714 1068.5546,-714 1074.5546,-720 1074.5546,-726 1074.5546,-726 1074.5546,-738 1074.5546,-738 1074.5546,-744 1068.5546,-750 1062.5546,-750"/>
-<text text-anchor="middle" x="1013.0291" y="-736.2" font-family="Verdana" font-size="14.00" fill="#000000">i2np</text>
-<text text-anchor="middle" x="1013.0291" y="-719.4" font-family="Verdana" font-size="14.00" fill="#000000">UnmarshalBinary</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1062.5546,-169C1062.5546,-169 963.5036,-169 963.5036,-169 957.5036,-169 951.5036,-163 951.5036,-157 951.5036,-157 951.5036,-145 951.5036,-145 951.5036,-139 957.5036,-133 963.5036,-133 963.5036,-133 1062.5546,-133 1062.5546,-133 1068.5546,-133 1074.5546,-139 1074.5546,-145 1074.5546,-145 1074.5546,-157 1074.5546,-157 1074.5546,-163 1068.5546,-169 1062.5546,-169"/>
+<text text-anchor="middle" x="1013.0291" y="-155.2" font-family="Verdana" font-size="14.00" fill="#000000">i2np</text>
+<text text-anchor="middle" x="1013.0291" y="-138.4" font-family="Verdana" font-size="14.00" fill="#000000">UnmarshalBinary</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary -->
-<g id="edge34" class="edge">
+<g id="edge32" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary</title>
-<g id="a_edge34"><a xlink:title="at framing.go:67: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary]">
-<path fill="none" stroke="#8b4513" d="M848.344,-664.1244C852.0519,-665.4021 855.7183,-666.6998 859.2668,-668 894.2994,-680.8367 933.0809,-696.9928 962.9318,-709.8606"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="961.7263,-713.1527 972.2937,-713.9146 964.5079,-706.729 961.7263,-713.1527"/>
+<g id="a_edge32"><a xlink:title="at framing.go:67: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/i2np.BaseI2NPMessage).UnmarshalBinary]">
+<path fill="none" stroke="#8b4513" d="M848.8046,-218.9826C852.3639,-217.6879 855.8747,-216.3565 859.2668,-215 893.2265,-201.4199 899.5115,-193.0805 933.2668,-179 938.3461,-176.8812 943.6489,-174.7824 949.0006,-172.7431"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="950.5021,-175.9187 958.649,-169.1452 948.0563,-169.3598 950.5021,-175.9187"/>
 </a>
 </g>
 </g>
@@ -575,35 +575,35 @@
 <g id="node21" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull</title>
 <g id="a_node21"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull | defined in framing.go:74">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1036.1835,-664C1036.1835,-664 989.8747,-664 989.8747,-664 983.8747,-664 977.8747,-658 977.8747,-652 977.8747,-652 977.8747,-640 977.8747,-640 977.8747,-634 983.8747,-628 989.8747,-628 989.8747,-628 1036.1835,-628 1036.1835,-628 1042.1835,-628 1048.1835,-634 1048.1835,-640 1048.1835,-640 1048.1835,-652 1048.1835,-652 1048.1835,-658 1042.1835,-664 1036.1835,-664"/>
-<text text-anchor="middle" x="1013.0291" y="-641.8" font-family="Verdana" font-size="14.00" fill="#000000">readFull</text>
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1036.1835,-255C1036.1835,-255 989.8747,-255 989.8747,-255 983.8747,-255 977.8747,-249 977.8747,-243 977.8747,-243 977.8747,-231 977.8747,-231 977.8747,-225 983.8747,-219 989.8747,-219 989.8747,-219 1036.1835,-219 1036.1835,-219 1042.1835,-219 1048.1835,-225 1048.1835,-231 1048.1835,-231 1048.1835,-243 1048.1835,-243 1048.1835,-249 1042.1835,-255 1036.1835,-255"/>
+<text text-anchor="middle" x="1013.0291" y="-232.8" font-family="Verdana" font-size="14.00" fill="#000000">readFull</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull -->
-<g id="edge17" class="edge">
+<g id="edge14" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull</title>
-<g id="a_edge17"><a xlink:title="at framing.go:52: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]&#10;at framing.go:61: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]">
-<path fill="none" stroke="#000000" d="M854.5957,-646C890.795,-646 935.0875,-646 967.6279,-646"/>
-<polygon fill="#000000" stroke="#000000" points="967.7549,-649.5001 977.7549,-646 967.7549,-642.5001 967.7549,-649.5001"/>
+<g id="a_edge14"><a xlink:title="at framing.go:52: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]&#10;at framing.go:61: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).readFull]">
+<path fill="none" stroke="#000000" d="M854.5957,-237C890.795,-237 935.0875,-237 967.6279,-237"/>
+<polygon fill="#000000" stroke="#000000" points="967.7549,-240.5001 977.7549,-237 967.7549,-233.5001 967.7549,-240.5001"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage -->
-<g id="edge38" class="edge">
+<g id="edge8" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage</title>
-<g id="a_edge38"><a xlink:title="at session.go:117: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage]">
-<path fill="none" stroke="#000000" d="M619.185,-968.0915C645.839,-974.4704 680.049,-982.6575 710.8527,-990.0294"/>
-<polygon fill="#000000" stroke="#000000" points="710.1803,-993.4672 720.7203,-992.3909 711.8095,-986.6595 710.1803,-993.4672"/>
+<g id="a_edge8"><a xlink:title="at session.go:117: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.FrameI2NPMessage]">
+<path fill="none" stroke="#000000" d="M619.185,-513.0915C645.839,-519.4704 680.049,-527.6575 710.8527,-535.0294"/>
+<polygon fill="#000000" stroke="#000000" points="710.1803,-538.4672 720.7203,-537.3909 711.8095,-531.6595 710.1803,-538.4672"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
-<g id="edge32" class="edge">
+<g id="edge39" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
-<g id="a_edge32"><a xlink:title="at session.go:119: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:126: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="none" stroke="#000000" d="M619.1774,-943.2435C629.5381,-938.9756 640.081,-933.609 648.9764,-927 686.1232,-899.4012 678.1643,-871.3742 717.9119,-840.8248"/>
-<polygon fill="#000000" stroke="#000000" points="720.118,-843.5501 726.2162,-834.8862 716.0462,-837.8562 720.118,-843.5501"/>
+<g id="a_edge39"><a xlink:title="at session.go:119: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at session.go:126: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="none" stroke="#000000" d="M619.2304,-488.3144C629.5889,-484.0437 640.1176,-478.6579 648.9764,-472 688.9149,-441.984 686.1672,-421.7977 717.644,-383 734.0243,-362.81 753.1249,-340.4557 767.6045,-323.7408"/>
+<polygon fill="#000000" stroke="#000000" points="770.3935,-325.8672 774.3093,-316.0225 765.109,-321.2765 770.3935,-325.8672"/>
 </a>
 </g>
 </g>
@@ -611,182 +611,145 @@
 <g id="node23" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError</title>
 <g id="a_node23"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError | defined in session.go:166">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M812.7059,-956C812.7059,-956 767.5373,-956 767.5373,-956 761.5373,-956 755.5373,-950 755.5373,-944 755.5373,-944 755.5373,-932 755.5373,-932 755.5373,-926 761.5373,-920 767.5373,-920 767.5373,-920 812.7059,-920 812.7059,-920 818.7059,-920 824.7059,-926 824.7059,-932 824.7059,-932 824.7059,-944 824.7059,-944 824.7059,-950 818.7059,-956 812.7059,-956"/>
-<text text-anchor="middle" x="790.1216" y="-933.8" font-family="Verdana" font-size="14.00" fill="#000000">setError</text>
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M812.7059,-482C812.7059,-482 767.5373,-482 767.5373,-482 761.5373,-482 755.5373,-476 755.5373,-470 755.5373,-470 755.5373,-458 755.5373,-458 755.5373,-452 761.5373,-446 767.5373,-446 767.5373,-446 812.7059,-446 812.7059,-446 818.7059,-446 824.7059,-452 824.7059,-458 824.7059,-458 824.7059,-470 824.7059,-470 824.7059,-476 818.7059,-482 812.7059,-482"/>
+<text text-anchor="middle" x="790.1216" y="-459.8" font-family="Verdana" font-size="14.00" fill="#000000">setError</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError -->
-<g id="edge39" class="edge">
+<g id="edge17" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).sendWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError</title>
-<g id="a_edge39"><a xlink:title="at session.go:119: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:126: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]">
-<path fill="none" stroke="#000000" d="M619.185,-952.9473C656.4384,-949.6897 708.452,-945.1415 745.2961,-941.9197"/>
-<polygon fill="#000000" stroke="#000000" points="745.6038,-945.4063 755.2608,-941.0484 744.9939,-938.4329 745.6038,-945.4063"/>
+<g id="a_edge17"><a xlink:title="at session.go:119: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]&#10;at session.go:126: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]">
+<path fill="none" stroke="#000000" d="M619.185,-493.8947C656.4384,-487.3795 708.452,-478.283 745.2961,-471.8394"/>
+<polygon fill="#000000" stroke="#000000" points="746.0133,-475.2672 755.2608,-470.0967 744.8073,-468.3718 746.0133,-475.2672"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
-<g id="edge7" class="edge">
+<g id="edge33" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
-<g id="a_edge7"><a xlink:title="at session.go:150: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="none" stroke="#000000" d="M626.4894,-881.8063C634.1109,-879.4121 641.7942,-876.79 648.9764,-874 680.7205,-861.6686 685.9833,-852.544 717.644,-840 717.9649,-839.8729 718.2869,-839.746 718.6098,-839.6195"/>
-<polygon fill="#000000" stroke="#000000" points="720.0556,-842.8158 728.2011,-836.0407 717.6085,-836.2574 720.0556,-842.8158"/>
+<g id="a_edge33"><a xlink:title="at session.go:150: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="none" stroke="#000000" d="M600.3579,-422.889C639.3525,-397.2255 710.742,-350.242 753.9701,-321.7923"/>
+<polygon fill="#000000" stroke="#000000" points="756.0546,-324.6105 762.4837,-316.1893 752.2063,-318.7632 756.0546,-324.6105"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer -->
-<g id="edge49" class="edge">
+<g id="edge31" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer</title>
-<g id="a_edge49"><a xlink:title="at session.go:140: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]">
-<path fill="none" stroke="#000000" d="M595.8672,-877.6391C623.9858,-855.5001 673.2873,-817.5804 717.644,-788 727.6234,-781.3449 738.6444,-774.5423 749.0163,-768.3693"/>
-<polygon fill="#000000" stroke="#000000" points="751.08,-771.2159 757.9214,-763.126 747.5283,-765.1838 751.08,-771.2159"/>
+<g id="a_edge31"><a xlink:title="at session.go:140: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewI2NPUnframer]">
+<path fill="none" stroke="#000000" d="M607.7498,-422.805C622.2449,-413.7403 638.169,-401.5816 648.9764,-387 704.4218,-312.1918 652.4181,-252.6325 715.3962,-184.1657"/>
+<polygon fill="#000000" stroke="#000000" points="718.261,-186.2421 722.7492,-176.6449 713.2557,-181.3485 718.261,-186.2421"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage -->
-<g id="edge18" class="edge">
+<g id="edge40" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage</title>
-<g id="a_edge18"><a xlink:title="at session.go:148: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
-<path fill="none" stroke="#000000" d="M576.4146,-877.8265C585.8779,-834.7505 615.7526,-725.9483 684.9764,-671 693.956,-663.8722 704.6389,-658.7227 715.7006,-655.0133"/>
-<polygon fill="#000000" stroke="#000000" points="716.894,-658.3101 725.4856,-652.1106 714.9032,-651.5991 716.894,-658.3101"/>
+<g id="a_edge40"><a xlink:title="at session.go:148: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.I2NPUnframer).ReadNextMessage]">
+<path fill="none" stroke="#000000" d="M603.1913,-422.8639C617.9186,-413.2521 635.3299,-400.6257 648.9764,-387 669.0484,-366.9586 672.2134,-359.8017 685.9764,-335 702.3448,-305.5033 692.3843,-286.6646 718.1732,-259.9871"/>
+<polygon fill="#000000" stroke="#000000" points="720.6756,-262.4379 725.5378,-253.0245 715.8666,-257.3512 720.6756,-262.4379"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError -->
-<g id="edge10" class="edge">
+<g id="edge19" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).receiveWorker&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError</title>
-<g id="a_edge10"><a xlink:title="at session.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]">
-<path fill="none" stroke="#000000" d="M626.5614,-909.3393C645.0139,-913.6855 665.8398,-918.3311 684.9764,-922 704.7144,-925.7842 726.6755,-929.2428 745.4012,-931.9687"/>
-<polygon fill="#000000" stroke="#000000" points="745.0418,-935.4529 755.4369,-933.4051 746.0337,-928.5235 745.0418,-935.4529"/>
+<g id="a_edge19"><a xlink:title="at session.go:150: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Session).setError]">
+<path fill="none" stroke="#000000" d="M626.5492,-446.6854C662.9939,-450.5432 710.6302,-455.5856 745.0881,-459.2331"/>
+<polygon fill="#000000" stroke="#000000" points="745.019,-462.7452 755.3319,-460.3174 745.7559,-455.7841 745.019,-462.7452"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity -->
 <g id="node25" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession</title>
-<g id="a_node25"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession | defined in transport.go:121&#10;at transport.go:122: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:143: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:150: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).WithField]&#10;at transport.go:151: calling [(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash]&#10;at transport.go:154: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake]&#10;at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:134: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:128: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:165: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:137: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr]&#10;at transport.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:146: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:156: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:143: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:150: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:144: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]&#10;at transport.go:160: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M121.3037,-658C121.3037,-658 58.3261,-658 58.3261,-658 52.3261,-658 46.3261,-652 46.3261,-646 46.3261,-646 46.3261,-634 46.3261,-634 46.3261,-628 52.3261,-622 58.3261,-622 58.3261,-622 121.3037,-622 121.3037,-622 127.3037,-622 133.3037,-628 133.3037,-634 133.3037,-634 133.3037,-646 133.3037,-646 133.3037,-652 127.3037,-658 121.3037,-658"/>
-<text text-anchor="middle" x="89.8149" y="-635.8" font-family="Verdana" font-size="14.00" fill="#000000">GetSession</text>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity</title>
+<g id="a_node25"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity | defined in transport.go:88&#10;at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).WithError]&#10;at transport.go:92: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:93: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]&#10;at transport.go:110: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]&#10;at transport.go:92: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:95: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:107: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:112: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).Warn]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M120.7508,-454C120.7508,-454 58.879,-454 58.879,-454 52.879,-454 46.879,-448 46.879,-442 46.879,-442 46.879,-430 46.879,-430 46.879,-424 52.879,-418 58.879,-418 58.879,-418 120.7508,-418 120.7508,-418 126.7508,-418 132.7508,-424 132.7508,-430 132.7508,-430 132.7508,-442 132.7508,-442 132.7508,-448 126.7508,-454 120.7508,-454"/>
+<text text-anchor="middle" x="89.8149" y="-431.8" font-family="Verdana" font-size="14.00" fill="#000000">SetIdentity</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
-<g id="edge43" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
-<g id="a_edge43"><a xlink:title="at transport.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:146: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:156: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="none" stroke="#000000" d="M133.3768,-650.8481C144.5294,-655.4584 155.6202,-661.9406 163.6298,-671 242.2179,-759.8884 145.8918,-857.3051 242.6298,-926 308.2453,-972.5944 351.7802,-962.1078 423.7014,-926 472.2392,-901.6317 448.5857,-853.1915 496.7014,-828 564.6062,-792.4477 653.9811,-795.2128 716.1713,-803.5464"/>
-<polygon fill="#000000" stroke="#000000" points="715.9037,-807.0434 726.2965,-804.9843 716.888,-800.1129 715.9037,-807.0434"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
 <g id="edge42" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr</title>
-<g id="a_edge42"><a xlink:title="at transport.go:137: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr]">
-<path fill="none" stroke="#000000" d="M133.5224,-628.8854C144.4155,-624.4453 155.3386,-618.3372 163.6298,-610 199.0718,-574.3617 183.1873,-549.9728 205.6298,-505 219.7881,-476.6279 220.4852,-466.6947 242.6298,-444 255.7071,-430.5979 272.4369,-418.7934 287.949,-409.3923"/>
-<polygon fill="#000000" stroke="#000000" points="290.0487,-412.2184 296.9047,-404.1409 286.5079,-406.18 290.0487,-412.2184"/>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
+<g id="a_edge42"><a xlink:title="at transport.go:95: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:107: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:112: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="none" stroke="#000000" d="M132.6601,-423.3309C143.435,-418.915 154.5154,-413.2074 163.6298,-406 207.2416,-371.5128 192.3862,-332.8106 242.6298,-309 331.7694,-266.7565 587.4702,-281.8122 685.9764,-287 695.7807,-287.5163 706.0828,-288.3043 716.2363,-289.2263"/>
+<polygon fill="#000000" stroke="#000000" points="716.0292,-292.7223 726.3164,-290.1879 716.694,-285.754 716.0292,-292.7223"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
-<g id="edge48" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
-<g id="a_edge48"><a xlink:title="at transport.go:144: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
-<path fill="none" stroke="#8b4513" d="M133.5301,-629.9179C144.6842,-625.4604 155.7374,-619.0854 163.6298,-610 258.2856,-501.0364 144.9533,-401.2642 242.6298,-295 247.0568,-290.1838 252.2638,-286.1158 257.9061,-282.6797"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="259.9066,-285.5794 267.0814,-277.7836 256.6111,-279.4036 259.9066,-285.5794"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
+<g id="edge35" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
+<g id="a_edge35"><a xlink:title="at transport.go:93: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
+<path fill="none" stroke="#8b4513" d="M132.7609,-425.9408C167.0477,-417.9098 215.9509,-406.4552 256.8649,-396.8719"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="257.8714,-400.231 266.8096,-394.5425 256.2749,-393.4154 257.8714,-400.231"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake -->
-<g id="edge28" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake</title>
-<g id="a_edge28"><a xlink:title="at transport.go:154: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake]">
-<path fill="none" stroke="#8b4513" d="M133.4074,-628.7698C144.3007,-624.3299 155.2526,-618.2508 163.6298,-610 197.6824,-576.461 169.8852,-542.7297 205.6298,-511 213.7482,-503.7935 223.1947,-497.9863 233.2061,-493.3074"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="234.717,-496.468 242.5371,-489.3199 231.9662,-490.0311 234.717,-496.468"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener -->
+<g id="edge36" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener</title>
+<g id="a_edge36"><a xlink:title="at transport.go:110: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]">
+<path fill="none" stroke="#8b4513" d="M132.7805,-425.7437C144.0589,-421.2743 155.3642,-414.9366 163.6298,-406 205.4327,-360.8033 165.646,-320.8136 205.6298,-274 221.3268,-255.6218 243.5827,-241.9562 265.1185,-232.0805"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="266.5199,-235.2878 274.2828,-228.0774 263.7178,-228.873 266.5199,-235.2878"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session -->
-<g id="edge50" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session</title>
-<g id="a_edge50"><a xlink:title="at transport.go:160: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session]">
-<path fill="none" stroke="#000000" d="M133.4364,-649.8492C144.8649,-654.4628 156.0853,-661.1966 163.6298,-671 246.0095,-778.0445 117.2224,-869.8772 205.6298,-972 218.351,-986.6947 236.5246,-995.7236 255.1801,-1001.2248"/>
-<polygon fill="#000000" stroke="#000000" points="254.3922,-1004.6365 264.9532,-1003.7913 256.1702,-997.8661 254.3922,-1004.6365"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge41" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge41"><a xlink:title="at transport.go:92: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M132.8885,-421.5491C143.3198,-417.2339 154.1796,-412.0201 163.6298,-406 202.2172,-381.4186 199.1319,-354.1834 242.6298,-340 261.7577,-333.7629 408.3925,-326.9458 423.7014,-340 500.761,-405.7102 389.5891,-491.9229 459.7014,-565 478.7282,-584.8314 647.6819,-611.6263 736.3346,-624.4931"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="736.0759,-627.9919 746.473,-625.9547 737.0748,-621.0635 736.0759,-627.9919"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge1" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge1"><a xlink:title="at transport.go:122: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:143: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:150: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M133.6809,-630.9629C145.1147,-626.5089 156.2768,-619.8744 163.6298,-610 222.1614,-531.3981 134.4131,-238.3229 205.6298,-171 215.9354,-161.2578 318.9841,-166 333.1656,-166 333.1656,-166 333.1656,-166 572.8389,-166 628.5505,-166 692.2834,-164.6692 736.2488,-163.5428"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="736.5222,-167.0369 746.4273,-163.2766 736.3392,-160.0393 736.5222,-167.0369"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash -->
-<g id="node29" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash</title>
-<g id="a_node29"><a xlink:title="(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash | defined in config.go:147">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M402.5771,-912C402.5771,-912 263.7541,-912 263.7541,-912 257.7541,-912 251.7541,-906 251.7541,-900 251.7541,-900 251.7541,-888 251.7541,-888 251.7541,-882 257.7541,-876 263.7541,-876 263.7541,-876 402.5771,-876 402.5771,-876 408.5771,-876 414.5771,-882 414.5771,-888 414.5771,-888 414.5771,-900 414.5771,-900 414.5771,-906 408.5771,-912 402.5771,-912"/>
-<text text-anchor="middle" x="333.1656" y="-898.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
-<text text-anchor="middle" x="333.1656" y="-881.4" font-family="Verdana" font-size="14.00" fill="#000000">WithRemoteRouterHash</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash -->
-<g id="edge27" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash</title>
-<g id="a_edge27"><a xlink:title="at transport.go:151: calling [(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash]">
-<path fill="none" stroke="#8b4513" d="M133.6856,-651.0753C144.7079,-655.6755 155.655,-662.0957 163.6298,-671 207.5379,-720.0259 165.9961,-760.4583 205.6298,-813 224.7758,-838.3815 254.3821,-857.8864 280.2513,-871.3896"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="278.7177,-874.5361 289.2224,-875.9153 281.8706,-868.2863 278.7177,-874.5361"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/sirupsen/logrus.Entry).WithField -->
+<!-- (*github.com/sirupsen/logrus.Entry).WithError -->
 <g id="node30" class="node">
-<title>(*github.com/sirupsen/logrus.Entry).WithField</title>
-<g id="a_node30"><a xlink:title="(*github.com/sirupsen/logrus.Entry).WithField | defined in entry.go:120">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.4401,-719C361.4401,-719 304.8911,-719 304.8911,-719 298.8911,-719 292.8911,-713 292.8911,-707 292.8911,-707 292.8911,-695 292.8911,-695 292.8911,-689 298.8911,-683 304.8911,-683 304.8911,-683 361.4401,-683 361.4401,-683 367.4401,-683 373.4401,-689 373.4401,-695 373.4401,-695 373.4401,-707 373.4401,-707 373.4401,-713 367.4401,-719 361.4401,-719"/>
-<text text-anchor="middle" x="333.1656" y="-705.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="333.1656" y="-688.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
+<title>(*github.com/sirupsen/logrus.Entry).WithError</title>
+<g id="a_node30"><a xlink:title="(*github.com/sirupsen/logrus.Entry).WithError | defined in entry.go:106">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.6971,-817C361.6971,-817 304.6341,-817 304.6341,-817 298.6341,-817 292.6341,-811 292.6341,-805 292.6341,-805 292.6341,-793 292.6341,-793 292.6341,-787 298.6341,-781 304.6341,-781 304.6341,-781 361.6971,-781 361.6971,-781 367.6971,-781 373.6971,-787 373.6971,-793 373.6971,-793 373.6971,-805 373.6971,-805 373.6971,-811 367.6971,-817 361.6971,-817"/>
+<text text-anchor="middle" x="333.1656" y="-803.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="333.1656" y="-786.4" font-family="Verdana" font-size="14.00" fill="#000000">WithError</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithField -->
-<g id="edge2" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithField</title>
-<g id="a_edge2"><a xlink:title="at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).WithField]">
-<path fill="none" stroke="#8b4513" d="M133.3211,-650.9056C175.3025,-661.4289 238.8137,-677.3491 282.9276,-688.407"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="282.3129,-691.8611 292.8639,-690.8977 284.015,-685.0712 282.3129,-691.8611"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithError -->
+<g id="edge9" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithError</title>
+<g id="a_edge9"><a xlink:title="at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).WithError]">
+<path fill="none" stroke="#8b4513" d="M132.8002,-445.8917C144.3543,-450.5146 155.8015,-457.2428 163.6298,-467 229.2046,-548.7331 173.5628,-599.24 205.6298,-699 217.3716,-735.5285 212.8705,-752.7806 242.6298,-777 253.8357,-786.1198 268.2434,-791.5539 282.2546,-794.764"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="281.8504,-798.251 292.3353,-796.7293 283.1899,-791.3803 281.8504,-798.251"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/sirupsen/logrus.Entry).Debug -->
+<!-- (*github.com/sirupsen/logrus.Entry).Warn -->
 <g id="node31" class="node">
-<title>(*github.com/sirupsen/logrus.Entry).Debug</title>
-<g id="a_node31"><a xlink:title="(*github.com/sirupsen/logrus.Entry).Debug | defined in entry.go:312">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M351.9876,-780C351.9876,-780 314.3436,-780 314.3436,-780 308.3436,-780 302.3436,-774 302.3436,-768 302.3436,-768 302.3436,-756 302.3436,-756 302.3436,-750 308.3436,-744 314.3436,-744 314.3436,-744 351.9876,-744 351.9876,-744 357.9876,-744 363.9876,-750 363.9876,-756 363.9876,-756 363.9876,-768 363.9876,-768 363.9876,-774 357.9876,-780 351.9876,-780"/>
-<text text-anchor="middle" x="333.1656" y="-766.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="333.1656" y="-749.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
+<title>(*github.com/sirupsen/logrus.Entry).Warn</title>
+<g id="a_node31"><a xlink:title="(*github.com/sirupsen/logrus.Entry).Warn | defined in entry.go:324">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M350.6614,-878C350.6614,-878 315.6698,-878 315.6698,-878 309.6698,-878 303.6698,-872 303.6698,-866 303.6698,-866 303.6698,-854 303.6698,-854 303.6698,-848 309.6698,-842 315.6698,-842 315.6698,-842 350.6614,-842 350.6614,-842 356.6614,-842 362.6614,-848 362.6614,-854 362.6614,-854 362.6614,-866 362.6614,-866 362.6614,-872 356.6614,-878 350.6614,-878"/>
+<text text-anchor="middle" x="333.1656" y="-864.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="333.1656" y="-847.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug -->
-<g id="edge40" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug</title>
-<g id="a_edge40"><a xlink:title="at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:134: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:128: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:165: calling [(*github.com/sirupsen/logrus.Entry).Debug]">
-<path fill="none" stroke="#8b4513" d="M133.6616,-656.204C143.7506,-660.5322 154.2624,-665.5421 163.6298,-671 201.9583,-693.3322 203.4635,-711.172 242.6298,-732 258.2479,-740.3055 276.5968,-746.9033 292.6778,-751.7725"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="291.7734,-755.1544 302.3527,-754.5806 293.7247,-748.4318 291.7734,-755.1544"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).Warn -->
+<g id="edge43" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).Warn</title>
+<g id="a_edge43"><a xlink:title="at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).Warn]">
+<path fill="none" stroke="#8b4513" d="M132.8362,-445.8628C144.3913,-450.485 155.8301,-457.2199 163.6298,-467 266.5768,-596.0858 127.5119,-711.6399 242.6298,-830 255.9479,-843.6932 275.6474,-851.1373 293.2727,-855.1837"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="292.8548,-858.6693 303.3466,-857.1951 294.2255,-851.8048 292.8548,-858.6693"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
-<g id="edge47" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
-<g id="a_edge47"><a xlink:title="at transport.go:143: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:150: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
-<path fill="none" stroke="#8b4513" d="M133.646,-625.9447C143.9474,-621.644 154.5579,-616.3377 163.6298,-610 206.4457,-580.0884 194.8714,-544.1432 242.6298,-523 261.0266,-514.8555 405.7865,-513.844 423.7014,-523 473.0199,-548.2059 451.4032,-592.1295 496.7014,-624 507.8893,-631.8715 521.8709,-636.9472 534.7888,-640.2114"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="534.3242,-643.6938 544.8469,-642.4597 535.8513,-636.8624 534.3242,-643.6938"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
+<g id="edge15" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
+<g id="a_edge15"><a xlink:title="at transport.go:92: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
+<path fill="none" stroke="#8b4513" d="M132.7098,-422.7331C143.3679,-418.3453 154.3793,-412.8008 163.6298,-406 203.3838,-376.7735 195.7193,-343.2962 242.6298,-328 319.1413,-303.0518 343.5476,-320.8029 423.7014,-328 461.7968,-331.4206 504.7142,-339.6619 534.6949,-346.1465"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="534.2121,-349.624 544.7308,-348.3561 535.7173,-342.7877 534.2121,-349.624"/>
 </a>
 </g>
 </g>
@@ -794,17 +757,17 @@
 <g id="node26" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Close</title>
 <g id="a_node26"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Close | defined in transport.go:173&#10;at transport.go:198: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M105.7014,-719C105.7014,-719 73.9284,-719 73.9284,-719 67.9284,-719 61.9284,-713 61.9284,-707 61.9284,-707 61.9284,-695 61.9284,-695 61.9284,-689 67.9284,-683 73.9284,-683 73.9284,-683 105.7014,-683 105.7014,-683 111.7014,-683 117.7014,-689 117.7014,-695 117.7014,-695 117.7014,-707 117.7014,-707 117.7014,-713 111.7014,-719 105.7014,-719"/>
-<text text-anchor="middle" x="89.8149" y="-696.8" font-family="Verdana" font-size="14.00" fill="#000000">Close</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M105.7014,-393C105.7014,-393 73.9284,-393 73.9284,-393 67.9284,-393 61.9284,-387 61.9284,-381 61.9284,-381 61.9284,-369 61.9284,-369 61.9284,-363 67.9284,-357 73.9284,-357 73.9284,-357 105.7014,-357 105.7014,-357 111.7014,-357 117.7014,-363 117.7014,-369 117.7014,-369 117.7014,-381 117.7014,-381 117.7014,-387 111.7014,-393 105.7014,-393"/>
+<text text-anchor="middle" x="89.8149" y="-370.8" font-family="Verdana" font-size="14.00" fill="#000000">Close</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Close&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
-<g id="edge12" class="edge">
+<g id="edge45" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Close&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
-<g id="a_edge12"><a xlink:title="at transport.go:198: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="none" stroke="#000000" d="M107.5223,-719.0569C134.0684,-744.6924 187.0306,-790.4699 242.6298,-808 319.3815,-832.1993 343.45,-814.0124 423.7014,-808 456.4204,-805.5487 464.1917,-801.4342 496.7014,-797 580.2279,-785.6073 600.8322,-779.1206 684.9764,-774 710.1552,-772.4678 736.3299,-783.3717 756.2654,-794.7064"/>
-<polygon fill="#000000" stroke="#000000" points="754.5803,-797.7767 764.9599,-799.9015 758.1708,-791.7677 754.5803,-797.7767"/>
+<g id="a_edge45"><a xlink:title="at transport.go:198: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="none" stroke="#000000" d="M117.8583,-371.9302C132.7928,-369.0803 150.6948,-363.587 163.6298,-353 194.4015,-327.814 172.1218,-295.4115 205.6298,-274 250.623,-245.2496 633.3968,-250.7071 685.9764,-260 696.2025,-261.8074 716.3123,-268.843 736.1564,-276.378"/>
+<polygon fill="#000000" stroke="#000000" points="734.9342,-279.6578 745.5242,-279.9768 737.4445,-273.1234 734.9342,-279.6578"/>
 </a>
 </g>
 </g>
@@ -812,109 +775,146 @@
 <g id="node27" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Compatible</title>
 <g id="a_node27"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Compatible | defined in transport.go:168&#10;at transport.go:169: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M122.6437,-536C122.6437,-536 56.9861,-536 56.9861,-536 50.9861,-536 44.9861,-530 44.9861,-524 44.9861,-524 44.9861,-512 44.9861,-512 44.9861,-506 50.9861,-500 56.9861,-500 56.9861,-500 122.6437,-500 122.6437,-500 128.6437,-500 134.6437,-506 134.6437,-512 134.6437,-512 134.6437,-524 134.6437,-524 134.6437,-530 128.6437,-536 122.6437,-536"/>
-<text text-anchor="middle" x="89.8149" y="-513.8" font-family="Verdana" font-size="14.00" fill="#000000">Compatible</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M122.6437,-576C122.6437,-576 56.9861,-576 56.9861,-576 50.9861,-576 44.9861,-570 44.9861,-564 44.9861,-564 44.9861,-552 44.9861,-552 44.9861,-546 50.9861,-540 56.9861,-540 56.9861,-540 122.6437,-540 122.6437,-540 128.6437,-540 134.6437,-546 134.6437,-552 134.6437,-552 134.6437,-564 134.6437,-564 134.6437,-570 128.6437,-576 122.6437,-576"/>
+<text text-anchor="middle" x="89.8149" y="-553.8" font-family="Verdana" font-size="14.00" fill="#000000">Compatible</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Compatible&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2 -->
-<g id="edge31" class="edge">
+<g id="edge27" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).Compatible&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2</title>
-<g id="a_edge31"><a xlink:title="at transport.go:169: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
-<path fill="none" stroke="#000000" d="M134.7928,-512.3497C145.4228,-509.0769 155.8997,-503.9643 163.6298,-496 248.3372,-408.726 143.2562,-304.1212 242.6298,-234 333.0335,-170.2083 470.6343,-235.4505 535.948,-273.5974"/>
-<polygon fill="#000000" stroke="#000000" points="534.2876,-276.682 544.6718,-278.784 537.8648,-270.6651 534.2876,-276.682"/>
+<g id="a_edge27"><a xlink:title="at transport.go:169: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.SupportsNTCP2]">
+<path fill="none" stroke="#000000" d="M93.0111,-576.0678C107.1911,-653.9671 167.063,-959.6267 242.6298,-1014 307.9533,-1061.0028 352.481,-1051.4712 423.7014,-1014 463.2966,-993.1677 529.5361,-877.3204 558.5233,-823.942"/>
+<polygon fill="#000000" stroke="#000000" points="561.6598,-825.4997 563.3279,-815.037 555.4993,-822.1758 561.6598,-825.4997"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession -->
 <g id="node28" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity</title>
-<g id="a_node28"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity | defined in transport.go:88&#10;at transport.go:92: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:92: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:110: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]&#10;at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).WithError]&#10;at transport.go:93: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]&#10;at transport.go:95: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:107: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:112: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).Warn]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M120.7508,-597C120.7508,-597 58.879,-597 58.879,-597 52.879,-597 46.879,-591 46.879,-585 46.879,-585 46.879,-573 46.879,-573 46.879,-567 52.879,-561 58.879,-561 58.879,-561 120.7508,-561 120.7508,-561 126.7508,-561 132.7508,-567 132.7508,-573 132.7508,-573 132.7508,-585 132.7508,-585 132.7508,-591 126.7508,-597 120.7508,-597"/>
-<text text-anchor="middle" x="89.8149" y="-574.8" font-family="Verdana" font-size="14.00" fill="#000000">SetIdentity</text>
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession</title>
+<g id="a_node28"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession | defined in transport.go:121&#10;at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:134: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:128: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:165: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:137: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr]&#10;at transport.go:143: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:150: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:144: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]&#10;at transport.go:154: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake]&#10;at transport.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:146: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:156: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:160: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session]&#10;at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).WithField]&#10;at transport.go:122: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:143: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:150: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:151: calling [(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M121.3037,-515C121.3037,-515 58.3261,-515 58.3261,-515 52.3261,-515 46.3261,-509 46.3261,-503 46.3261,-503 46.3261,-491 46.3261,-491 46.3261,-485 52.3261,-479 58.3261,-479 58.3261,-479 121.3037,-479 121.3037,-479 127.3037,-479 133.3037,-485 133.3037,-491 133.3037,-491 133.3037,-503 133.3037,-503 133.3037,-509 127.3037,-515 121.3037,-515"/>
+<text text-anchor="middle" x="89.8149" y="-492.8" font-family="Verdana" font-size="14.00" fill="#000000">GetSession</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
-<g id="edge45" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
-<g id="a_edge45"><a xlink:title="at transport.go:95: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:107: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:112: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
-<path fill="none" stroke="#000000" d="M132.7849,-589.3787C144.1991,-594.004 155.5749,-600.6114 163.6298,-610 257.8934,-719.8718 128.5238,-836.9087 242.6298,-926 306.0616,-975.5261 350.3613,-959.1309 423.7014,-926 446.3724,-915.7585 444.6,-902.9633 460.7014,-884 477.0552,-864.7394 474.2892,-851.6667 496.7014,-840 515.6853,-830.1179 635.553,-823.7463 716.0885,-820.5238"/>
-<polygon fill="#000000" stroke="#000000" points="716.34,-824.0167 726.1952,-820.1276 716.0657,-817.0221 716.34,-824.0167"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error -->
+<g id="edge16" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error</title>
+<g id="a_edge16"><a xlink:title="at transport.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:146: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]&#10;at transport.go:156: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.WrapNTCP2Error]">
+<path fill="none" stroke="#000000" d="M133.4615,-480.365C163.7648,-469.2576 205.2508,-454.9222 242.6298,-445 321.8521,-423.9706 355.5925,-455.6025 423.7014,-410 472.7651,-377.1493 444.7775,-327.1127 496.7014,-299 515.4693,-288.8387 635.4039,-291.5524 716.0112,-294.6391"/>
+<polygon fill="#000000" stroke="#000000" points="715.9975,-298.1411 726.1271,-295.0362 716.2721,-291.1465 715.9975,-298.1411"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
-<g id="edge44" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
-<g id="a_edge44"><a xlink:title="at transport.go:93: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
-<path fill="none" stroke="#8b4513" d="M132.5373,-569.5104C144.084,-565.039 155.5931,-558.5083 163.6298,-549 239.9464,-458.709 151.5713,-370.3993 242.6298,-295 247.2205,-291.1987 252.3026,-287.8541 257.6481,-284.9127"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="259.4581,-287.9215 266.8526,-280.3339 256.3404,-281.6541 259.4581,-287.9215"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session -->
+<g id="edge24" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session</title>
+<g id="a_edge24"><a xlink:title="at transport.go:160: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NewNTCP2Session]">
+<path fill="none" stroke="#000000" d="M133.3211,-496.4637C166.9714,-496.0488 214.4543,-495.4635 254.6928,-494.9674"/>
+<polygon fill="#000000" stroke="#000000" points="254.798,-498.4665 264.7541,-494.8434 254.7116,-491.467 254.798,-498.4665"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener -->
-<g id="edge23" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener</title>
-<g id="a_edge23"><a xlink:title="at transport.go:110: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Listener]">
-<path fill="none" stroke="#8b4513" d="M132.709,-568.1515C143.855,-563.6865 155.1094,-557.4993 163.6298,-549 229.25,-483.543 175.1985,-419.5896 242.6298,-356 246.2181,-352.6161 250.1918,-349.6001 254.4131,-346.9123"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="256.3982,-349.8107 263.3817,-341.8432 252.9538,-343.7167 256.3982,-349.8107"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config -->
+<g id="edge5" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config</title>
+<g id="a_edge5"><a xlink:title="at transport.go:144: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.NewNTCP2Config]">
+<path fill="none" stroke="#8b4513" d="M133.5972,-481.3103C143.689,-477.1221 154.218,-472.2761 163.6298,-467 183.8675,-455.655 186.0434,-448.4356 205.6298,-436 221.4108,-425.9804 225.7312,-423.9919 242.6298,-416 253.5426,-410.839 265.3766,-405.691 276.7785,-400.9467"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="278.3055,-404.1033 286.2248,-397.0652 275.645,-397.6286 278.3055,-404.1033"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge22" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge22"><a xlink:title="at transport.go:92: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M132.7001,-570.101C144.3943,-565.6412 155.9433,-558.9688 163.6298,-549 252.2942,-434.0084 131.6418,-349.9409 205.6298,-225 216.0027,-207.4836 223.3492,-204.5328 242.6298,-198 288.4339,-182.4802 411.8394,-193 460.2014,-193 460.2014,-193 460.2014,-193 572.8389,-193 629.047,-193 692.6215,-182.7074 736.4112,-173.9837"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="737.1689,-177.4013 746.2711,-171.9792 735.7743,-170.5416 737.1689,-177.4013"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr -->
+<g id="edge3" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr</title>
+<g id="a_edge3"><a xlink:title="at transport.go:137: calling [github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.ExtractNTCP2Addr]">
+<path fill="none" stroke="#000000" d="M133.4466,-507.7868C144.5999,-512.3965 155.6736,-518.8937 163.6298,-528 210.8721,-582.0714 155.352,-632.7389 205.6298,-684 218.9718,-697.6029 236.9915,-706.2791 255.2781,-711.7918"/>
+<polygon fill="#000000" stroke="#000000" points="254.5703,-715.2262 265.1379,-714.4678 256.4038,-708.4706 254.5703,-715.2262"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/sirupsen/logrus.Entry).WithError -->
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake -->
+<g id="edge6" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake</title>
+<g id="a_edge6"><a xlink:title="at transport.go:154: calling [github.com/go&#45;i2p/go&#45;noise/ntcp2.DialNTCP2WithHandshake]">
+<path fill="none" stroke="#8b4513" d="M133.3211,-507.3692C164.9463,-514.9068 208.7894,-525.3563 247.3542,-534.5478"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="247.0148,-538.0649 257.5539,-536.9788 248.6378,-531.2556 247.0148,-538.0649"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge49" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge49"><a xlink:title="at transport.go:122: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:143: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at transport.go:150: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M133.5644,-509.8431C144.211,-514.3889 155.0031,-520.3404 163.6298,-528 216.1889,-574.6667 181.6294,-630.083 242.6298,-665 277.5516,-684.9894 384.7498,-675.0934 423.7014,-665 441.4196,-660.4088 442.0769,-649.9387 459.7014,-645 554.2831,-618.4965 670.0325,-621.6131 736.4065,-626.5956"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="736.3786,-630.1043 746.6243,-627.407 736.9328,-623.1263 736.3786,-630.1043"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash -->
+<g id="node29" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash</title>
+<g id="a_node29"><a xlink:title="(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash | defined in config.go:147">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M402.5771,-651C402.5771,-651 263.7541,-651 263.7541,-651 257.7541,-651 251.7541,-645 251.7541,-639 251.7541,-639 251.7541,-627 251.7541,-627 251.7541,-621 257.7541,-615 263.7541,-615 263.7541,-615 402.5771,-615 402.5771,-615 408.5771,-615 414.5771,-621 414.5771,-627 414.5771,-627 414.5771,-639 414.5771,-639 414.5771,-645 408.5771,-651 402.5771,-651"/>
+<text text-anchor="middle" x="333.1656" y="-637.2" font-family="Verdana" font-size="14.00" fill="#000000">ntcp2</text>
+<text text-anchor="middle" x="333.1656" y="-620.4" font-family="Verdana" font-size="14.00" fill="#000000">WithRemoteRouterHash</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash -->
+<g id="edge50" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash</title>
+<g id="a_edge50"><a xlink:title="at transport.go:151: calling [(*github.com/go&#45;i2p/go&#45;noise/ntcp2.NTCP2Config).WithRemoteRouterHash]">
+<path fill="none" stroke="#8b4513" d="M133.3379,-510.1039C143.9875,-514.6462 154.8377,-520.5308 163.6298,-528 190.4141,-550.7544 178.9659,-572.1047 205.6298,-595 219.2225,-606.6716 225.6417,-605.3087 242.6298,-611 243.5021,-611.2922 244.3804,-611.5824 245.2639,-611.8703"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="244.31,-615.239 254.8984,-614.8698 246.3908,-608.5554 244.31,-615.239"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/sirupsen/logrus.Entry).WithField -->
 <g id="node32" class="node">
-<title>(*github.com/sirupsen/logrus.Entry).WithError</title>
-<g id="a_node32"><a xlink:title="(*github.com/sirupsen/logrus.Entry).WithError | defined in entry.go:106">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.6971,-597C361.6971,-597 304.6341,-597 304.6341,-597 298.6341,-597 292.6341,-591 292.6341,-585 292.6341,-585 292.6341,-573 292.6341,-573 292.6341,-567 298.6341,-561 304.6341,-561 304.6341,-561 361.6971,-561 361.6971,-561 367.6971,-561 373.6971,-567 373.6971,-573 373.6971,-573 373.6971,-585 373.6971,-585 373.6971,-591 367.6971,-597 361.6971,-597"/>
-<text text-anchor="middle" x="333.1656" y="-583.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="333.1656" y="-566.4" font-family="Verdana" font-size="14.00" fill="#000000">WithError</text>
+<title>(*github.com/sirupsen/logrus.Entry).WithField</title>
+<g id="a_node32"><a xlink:title="(*github.com/sirupsen/logrus.Entry).WithField | defined in entry.go:120">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M361.4401,-939C361.4401,-939 304.8911,-939 304.8911,-939 298.8911,-939 292.8911,-933 292.8911,-927 292.8911,-927 292.8911,-915 292.8911,-915 292.8911,-909 298.8911,-903 304.8911,-903 304.8911,-903 361.4401,-903 361.4401,-903 367.4401,-903 373.4401,-909 373.4401,-915 373.4401,-915 373.4401,-927 373.4401,-927 373.4401,-933 367.4401,-939 361.4401,-939"/>
+<text text-anchor="middle" x="333.1656" y="-925.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="333.1656" y="-908.4" font-family="Verdana" font-size="14.00" fill="#000000">WithField</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithError -->
-<g id="edge37" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithError</title>
-<g id="a_edge37"><a xlink:title="at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).WithError]">
-<path fill="none" stroke="#8b4513" d="M132.7609,-579C174.4468,-579 237.7382,-579 282.0093,-579"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="282.2691,-582.5001 292.2691,-579 282.2691,-575.5001 282.2691,-582.5001"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithField -->
+<g id="edge30" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).WithField</title>
+<g id="a_edge30"><a xlink:title="at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).WithField]">
+<path fill="none" stroke="#8b4513" d="M133.4874,-506.8101C144.917,-511.4229 156.1252,-518.166 163.6298,-528 250.65,-642.0311 147.0716,-717.0552 205.6298,-848 215.9223,-871.0156 221.6816,-876.9705 242.6298,-891 254.6971,-899.0818 269.1233,-905.1472 282.8754,-909.6294"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="282.1411,-913.0641 292.7266,-912.6194 284.1742,-906.3658 282.1411,-913.0641"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/sirupsen/logrus.Entry).Warn -->
+<!-- (*github.com/sirupsen/logrus.Entry).Debug -->
 <g id="node33" class="node">
-<title>(*github.com/sirupsen/logrus.Entry).Warn</title>
-<g id="a_node33"><a xlink:title="(*github.com/sirupsen/logrus.Entry).Warn | defined in entry.go:324">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M350.6614,-658C350.6614,-658 315.6698,-658 315.6698,-658 309.6698,-658 303.6698,-652 303.6698,-646 303.6698,-646 303.6698,-634 303.6698,-634 303.6698,-628 309.6698,-622 315.6698,-622 315.6698,-622 350.6614,-622 350.6614,-622 356.6614,-622 362.6614,-628 362.6614,-634 362.6614,-634 362.6614,-646 362.6614,-646 362.6614,-652 356.6614,-658 350.6614,-658"/>
-<text text-anchor="middle" x="333.1656" y="-644.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="333.1656" y="-627.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
+<title>(*github.com/sirupsen/logrus.Entry).Debug</title>
+<g id="a_node33"><a xlink:title="(*github.com/sirupsen/logrus.Entry).Debug | defined in entry.go:312">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M351.9876,-1000C351.9876,-1000 314.3436,-1000 314.3436,-1000 308.3436,-1000 302.3436,-994 302.3436,-988 302.3436,-988 302.3436,-976 302.3436,-976 302.3436,-970 308.3436,-964 314.3436,-964 314.3436,-964 351.9876,-964 351.9876,-964 357.9876,-964 363.9876,-970 363.9876,-976 363.9876,-976 363.9876,-988 363.9876,-988 363.9876,-994 357.9876,-1000 351.9876,-1000"/>
+<text text-anchor="middle" x="333.1656" y="-986.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="333.1656" y="-969.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).Warn -->
-<g id="edge51" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Entry).Warn</title>
-<g id="a_edge51"><a xlink:title="at transport.go:102: calling [(*github.com/sirupsen/logrus.Entry).Warn]">
-<path fill="none" stroke="#8b4513" d="M132.7609,-589.7652C178.3323,-601.1884 249.7248,-619.0841 293.8602,-630.1474"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="293.1018,-633.5656 303.6528,-632.6021 294.8039,-626.7756 293.1018,-633.5656"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug -->
+<g id="edge2" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Entry).Debug</title>
+<g id="a_edge2"><a xlink:title="at transport.go:122: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:134: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:128: calling [(*github.com/sirupsen/logrus.Entry).Debug]&#10;at transport.go:165: calling [(*github.com/sirupsen/logrus.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M133.5048,-506.7969C144.9347,-511.4093 156.1388,-518.1556 163.6298,-528 207.9952,-586.3032 187.7829,-783.9434 205.6298,-855 216.8697,-899.751 209.2865,-920.1063 242.6298,-952 256.1334,-964.9166 275.3252,-972.275 292.566,-976.4657"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="291.9219,-979.9071 302.4339,-978.5851 293.3918,-973.0631 291.9219,-979.9071"/>
 </a>
 </g>
 </g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
-<g id="edge19" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).SetIdentity&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
-<g id="a_edge19"><a xlink:title="at transport.go:92: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
-<path fill="none" stroke="#8b4513" d="M132.6252,-590.5578C143.7704,-595.1751 155.0453,-601.4834 163.6298,-610 226.8094,-672.6796 168.3157,-745.0325 242.6298,-794 276.2295,-816.1397 388.839,-814.0928 423.7014,-794 479.7747,-761.6825 445.7121,-707.8589 496.7014,-668 507.6719,-659.4243 521.8675,-654.1907 535.0237,-650.9971"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="535.7497,-654.4211 544.8112,-648.931 534.3039,-647.572 535.7497,-654.4211"/>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes -->
+<g id="edge4" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport/ntcp2.NTCP2Transport).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.Hash).Bytes</title>
+<g id="a_edge4"><a xlink:title="at transport.go:143: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]&#10;at transport.go:150: calling [(github.com/go&#45;i2p/common/data.Hash).Bytes]">
+<path fill="none" stroke="#8b4513" d="M133.3714,-485.1079C155.3442,-479.0986 182.4066,-471.6821 206.6298,-465 222.6377,-460.5841 226.2318,-457.6191 242.6298,-455 266.5818,-451.1743 439.9632,-457.5803 460.7014,-445 487.9445,-428.4736 472.3012,-403.4924 496.7014,-383 507.6161,-373.8334 521.7999,-367.5385 534.9625,-363.2773"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="536.1488,-366.5768 544.7578,-360.4014 534.1768,-359.8603 536.1488,-366.5768"/>
 </a>
 </g>
 </g>

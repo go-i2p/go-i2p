@@ -56,6 +56,20 @@ func (rt *RouterTimestamper) AddListener(listener UpdateListener)
 func (rt *RouterTimestamper) GetCurrentTime() time.Time
 ```
 
+#### func (*RouterTimestamper) GetPriorityServers
+
+```go
+func (rt *RouterTimestamper) GetPriorityServers() [][]string
+```
+GetPriorityServers returns a copy of the current priority server lists safely
+
+#### func (*RouterTimestamper) GetServers
+
+```go
+func (rt *RouterTimestamper) GetServers() []string
+```
+GetServers returns a copy of the current server list safely
+
 #### func (*RouterTimestamper) RemoveListener
 
 ```go

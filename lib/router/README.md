@@ -16,6 +16,8 @@ type Router struct {
 	*keys.RouterInfoKeystore
 	// multi-transport manager
 	*transport.TransportMuxer
+	// netdb
+	*netdb.StdNetDB
 }
 ```
 
@@ -40,7 +42,7 @@ create router from configuration
 ```go
 func (r *Router) Close() error
 ```
-Close closes any internal state and finallizes router resources so that nothing
+Close closes any internal state and finalizes router resources so that nothing
 can start up again
 
 #### func (*Router) Start

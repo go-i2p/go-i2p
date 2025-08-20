@@ -832,35 +832,52 @@ func maybeAppendDelay(di_flag DeliveryInstructions, data, current []byte) (now [
 func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
 	log.Debug("Attempting to append MessageID")
 	if di_type == FIRST_FRAGMENT {
-		if fragmented, _ := di_flag.Fragmented(); fragmented {
-			message_id_index := 1
-			if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL {
-				message_id_index += 4
-			}
-			if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL || dtype == DT_ROUTER {
-				message_id_index += 32
-			}
-			if delay, _ := di_flag.HasDelay(); delay {
-				message_id_index += 1
-			}
-			if len(data) < message_id_index+4 {
-				log.Error("Data is too short to contain message ID in FIRST_FRAGMENT")
-				err = oops.Errorf("data is too short to contain message ID in FIRST_FRAGMENT")
-			} else {
-				now = append(current, data[message_id_index:message_id_index+4]...)
-				log.Debug("MessageID appended for FIRST_FRAGMENT")
-			}
-		}
+		return processFirstFragmentMessageID(di_flag, data, current)
 	} else if di_type == FOLLOW_ON_FRAGMENT {
-		if len(data) < 5 {
-			log.Error("Data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
-			err = oops.Errorf("data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
-		} else {
-			now = append(current, data[1:5]...)
-			log.Debug("MessageID appended for FOLLOW_ON_FRAGMENT")
-		}
+		return processFollowOnFragmentMessageID(data, current)
 	}
-	return
+	return current, nil
+}
+
+// calculateMessageIDIndex computes the message ID index offset based on delivery type and options.
+func calculateMessageIDIndex(di_flag DeliveryInstructions) int {
+	message_id_index := 1
+	if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL {
+		message_id_index += 4
+	}
+	if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL || dtype == DT_ROUTER {
+		message_id_index += 32
+	}
+	if delay, _ := di_flag.HasDelay(); delay {
+		message_id_index += 1
+	}
+	return message_id_index
+}
+
+// processFirstFragmentMessageID handles message ID extraction for FIRST_FRAGMENT delivery instructions.
+func processFirstFragmentMessageID(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
+	if fragmented, _ := di_flag.Fragmented(); fragmented {
+		message_id_index := calculateMessageIDIndex(di_flag)
+		if len(data) < message_id_index+4 {
+			log.Error("Data is too short to contain message ID in FIRST_FRAGMENT")
+			return current, oops.Errorf("data is too short to contain message ID in FIRST_FRAGMENT")
+		}
+		now = append(current, data[message_id_index:message_id_index+4]...)
+		log.Debug("MessageID appended for FIRST_FRAGMENT")
+		return now, nil
+	}
+	return current, nil
+}
+
+// processFollowOnFragmentMessageID handles message ID extraction for FOLLOW_ON_FRAGMENT delivery instructions.
+func processFollowOnFragmentMessageID(data, current []byte) (now []byte, err error) {
+	if len(data) < 5 {
+		log.Error("Data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
+		return current, oops.Errorf("data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
+	}
+	now = append(current, data[1:5]...)
+	log.Debug("MessageID appended for FOLLOW_ON_FRAGMENT")
+	return now, nil
 }
 
 func maybeAppendExtendedOptions(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {

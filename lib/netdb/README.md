@@ -11,7 +11,7 @@
 ```go
 const CacheFileName = "sizecache.txt"
 ```
-name of file to hold precomputed size of netdb
+Moved from: std.go name of file to hold precomputed size of netdb
 
 #### type Entry
 
@@ -33,8 +33,9 @@ func (e *Entry) ReadFrom(r io.Reader) (err error)
 #### func (*Entry) WriteTo
 
 ```go
-func (e *Entry) WriteTo(w io.Writer) (err error)
+func (e *Entry) WriteTo(w io.Writer) error
 ```
+WriteTo writes the Entry to the provided writer.
 
 #### type KademliaResolver
 
@@ -84,7 +85,7 @@ type NetworkDatabase interface {
 }
 ```
 
-i2p network database, storage of i2p RouterInfos
+Moved from: netdb.go i2p network database, storage of i2p RouterInfos
 
 #### type Resolver
 
@@ -96,15 +97,16 @@ type Resolver interface {
 }
 ```
 
-resolves unknown RouterInfos given the hash of their RouterIdentity
+Moved from: netdb.go resolves unknown RouterInfos given the hash of their
+RouterIdentity
 
 #### func  NewKademliaResolver
 
 ```go
 func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver)
 ```
-create a new resolver that stores result into a NetworkDatabase and uses a
-tunnel pool for the lookup
+Moved from: kad.go NewKademliaResolver creates a new resolver that stores result
+into a NetworkDatabase and uses a tunnel pool for the lookup
 
 #### type StdNetDB
 
@@ -112,7 +114,8 @@ tunnel pool for the lookup
 type StdNetDB struct {
 	DB          string
 	RouterInfos map[common.Hash]Entry
-	LeaseSets   map[common.Hash]Entry
+
+	LeaseSets map[common.Hash]Entry
 }
 ```
 
@@ -121,7 +124,7 @@ standard network database implementation using local filesystem skiplist
 #### func  NewStdNetDB
 
 ```go
-func NewStdNetDB(db string) StdNetDB
+func NewStdNetDB(db string) *StdNetDB
 ```
 
 #### func (*StdNetDB) CheckFilePathValid
@@ -162,6 +165,21 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo)
 ```go
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo)
 ```
+
+#### func (*StdNetDB) GetRouterInfoBytes
+
+```go
+func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error)
+```
+GetRouterInfoBytes retrieves RouterInfo data as bytes from the database
+
+#### func (*StdNetDB) GetRouterInfoCount
+
+```go
+func (db *StdNetDB) GetRouterInfoCount() int
+```
+GetRouterInfoCount returns the total number of RouterInfo entries in the
+database
 
 #### func (*StdNetDB) Path
 
@@ -210,6 +228,14 @@ return how many routers we know about in our network database
 func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string)
 ```
 get the skiplist file that a RouterInfo with this hash would go in
+
+#### func (*StdNetDB) StoreRouterInfo
+
+```go
+func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+```
+StoreRouterInfo stores a RouterInfo entry in the database from I2NP
+DatabaseStore message
 
 
 
