@@ -66,9 +66,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge1" class="edge">
+<g id="edge7" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge1"><a xlink:title="at reseed_bootstrap.go:15: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<g id="a_edge7"><a xlink:title="at reseed_bootstrap.go:15: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
 <path fill="none" stroke="#8b4513" d="M108.3076,-34C135.736,-34 179.3573,-34 216.7663,-34"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="217.1342,-37.5001 227.1342,-34 217.1341,-30.5001 217.1342,-37.5001"/>
 </a>
@@ -97,16 +97,16 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers -->
 <g id="node5" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers</title>
-<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers | defined in reseed_bootstrap.go:32&#10;at reseed_bootstrap.go:40: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:52: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:72: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:46: calling [github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.NewReseed]&#10;at reseed_bootstrap.go:49: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed_bootstrap.go:58: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at reseed_bootstrap.go:62: calling [(*github.com/sirupsen/logrus.Logger).Info]&#10;at reseed_bootstrap.go:43: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:43: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
+<g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers | defined in reseed_bootstrap.go:32&#10;at reseed_bootstrap.go:43: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:43: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at reseed_bootstrap.go:46: calling [github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.NewReseed]&#10;at reseed_bootstrap.go:49: calling [(github.com/go&#45;i2p/go&#45;i2p/lib/netdb/reseed.Reseed).SingleReseed]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithError]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at reseed_bootstrap.go:40: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:52: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:72: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:58: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at reseed_bootstrap.go:62: calling [(*github.com/sirupsen/logrus.Logger).Info]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M106.2947,-374C106.2947,-374 56.2341,-374 56.2341,-374 50.2341,-374 44.2341,-368 44.2341,-362 44.2341,-362 44.2341,-350 44.2341,-350 44.2341,-344 50.2341,-338 56.2341,-338 56.2341,-338 106.2947,-338 106.2947,-338 112.2947,-338 118.2947,-344 118.2947,-350 118.2947,-350 118.2947,-362 118.2947,-362 118.2947,-368 112.2947,-374 106.2947,-374"/>
 <text text-anchor="middle" x="81.2644" y="-351.8" font-family="Verdana" font-size="14.00" fill="#000000">GetPeers</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge2" class="edge">
+<g id="edge8" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge2"><a xlink:title="at reseed_bootstrap.go:40: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:52: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:72: calling [github.com/samber/oops.Errorf]">
+<g id="a_edge8"><a xlink:title="at reseed_bootstrap.go:40: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:52: calling [github.com/samber/oops.Errorf]&#10;at reseed_bootstrap.go:72: calling [github.com/samber/oops.Errorf]">
 <path fill="none" stroke="#8b4513" d="M118.4074,-352.073C131.5385,-349.0001 145.5161,-343.5697 155.5288,-334 190.8891,-300.2044 195.4391,-162.9154 227.5288,-126 233.5557,-119.0668 241.5102,-113.4857 249.6658,-109.0748"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="251.4166,-112.115 258.8672,-104.5824 248.3454,-105.8247 251.4166,-112.115"/>
 </a>
@@ -132,9 +132,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField -->
-<g id="edge8" class="edge">
+<g id="edge1" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithField</title>
-<g id="a_edge8"><a xlink:title="at reseed_bootstrap.go:43: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
+<g id="a_edge1"><a xlink:title="at reseed_bootstrap.go:43: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]&#10;at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).WithField]">
 <path fill="none" stroke="#8b4513" d="M118.5683,-348.6617C130.8549,-345.2944 144.2489,-340.5496 155.5288,-334 193.8581,-311.7444 191.4175,-290.6986 227.5288,-265 231.4159,-262.2337 235.5842,-259.5689 239.8482,-257.0424"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="241.6859,-260.0242 248.6757,-252.0623 238.2464,-253.9275 241.6859,-260.0242"/>
 </a>
@@ -170,9 +170,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="edge10" class="edge">
+<g id="edge6" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_edge10"><a xlink:title="at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
+<g id="a_edge6"><a xlink:title="at reseed_bootstrap.go:51: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
 <path fill="none" stroke="#8b4513" d="M118.725,-356C155.3343,-356 210.8683,-356 248.2746,-356"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="248.3136,-359.5001 258.3136,-356 248.3135,-352.5001 248.3136,-359.5001"/>
 </a>
@@ -189,9 +189,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge6" class="edge">
+<g id="edge9" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge6"><a xlink:title="at reseed_bootstrap.go:58: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<g id="a_edge9"><a xlink:title="at reseed_bootstrap.go:58: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
 <path fill="none" stroke="#8b4513" d="M118.725,-367.0466C151.1839,-376.6183 198.5195,-390.577 234.9071,-401.3072"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="234.2768,-404.7703 244.8585,-404.2417 236.2568,-398.0561 234.2768,-404.7703"/>
 </a>
@@ -208,9 +208,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge9" class="edge">
+<g id="edge2" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge9"><a xlink:title="at reseed_bootstrap.go:43: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
+<g id="a_edge2"><a xlink:title="at reseed_bootstrap.go:43: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
 <path fill="none" stroke="#8b4513" d="M106.6294,-374.0251C143.6948,-400.3648 212.738,-449.4289 254.1541,-478.8604"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="252.3722,-481.8878 262.551,-484.8275 256.427,-476.1818 252.3722,-481.8878"/>
 </a>
@@ -227,9 +227,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/sirupsen/logrus.Logger).Info -->
-<g id="edge7" class="edge">
+<g id="edge10" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/bootstrap.ReseedBootstrap).GetPeers&#45;&gt;(*github.com/sirupsen/logrus.Logger).Info</title>
-<g id="a_edge7"><a xlink:title="at reseed_bootstrap.go:62: calling [(*github.com/sirupsen/logrus.Logger).Info]">
+<g id="a_edge10"><a xlink:title="at reseed_bootstrap.go:62: calling [(*github.com/sirupsen/logrus.Logger).Info]">
 <path fill="none" stroke="#8b4513" d="M92.3256,-374.0399C114.3749,-408.7975 166.9292,-485.8578 227.5288,-534 234.1285,-539.243 241.7932,-543.9051 249.4061,-547.8995"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="248.0753,-551.1458 258.5915,-552.435 251.1745,-544.8692 248.0753,-551.1458"/>
 </a>

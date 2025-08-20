@@ -14,75 +14,75 @@
 <polygon fill="#e6ecfa" stroke="#000000" stroke-width=".5" points="8,-8 8,-212 284.9384,-212 284.9384,-8 8,-8"/>
 <text text-anchor="middle" x="146.4692" y="-191.8" font-family="Arial" font-size="18.00" fill="#000000">signals</text>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle -->
-<g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle | defined in unix.go:15&#10;at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]&#10;at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M68.641,-143C68.641,-143 27.7854,-143 27.7854,-143 21.7854,-143 15.7854,-137 15.7854,-131 15.7854,-131 15.7854,-119 15.7854,-119 15.7854,-113 21.7854,-107 27.7854,-107 27.7854,-107 68.641,-107 68.641,-107 74.641,-107 80.641,-113 80.641,-119 80.641,-119 80.641,-131 80.641,-131 80.641,-137 74.641,-143 68.641,-143"/>
-<text text-anchor="middle" x="48.2132" y="-120.8" font-family="Verdana" font-size="14.00" fill="#000000">Handle</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload -->
-<g id="node2" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload | defined in signals.go:17">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M253.6586,-113C253.6586,-113 176.7062,-113 176.7062,-113 170.7062,-113 164.7062,-107 164.7062,-101 164.7062,-101 164.7062,-89 164.7062,-89 164.7062,-83 170.7062,-77 176.7062,-77 176.7062,-77 253.6586,-77 253.6586,-77 259.6586,-77 265.6586,-83 265.6586,-89 265.6586,-89 265.6586,-101 265.6586,-101 265.6586,-107 259.6586,-113 253.6586,-113"/>
-<text text-anchor="middle" x="215.1824" y="-90.8" font-family="Verdana" font-size="14.00" fill="#000000">handleReload</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload -->
-<g id="edge1" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload</title>
-<g id="a_edge1"><a xlink:title="at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]">
-<path fill="none" stroke="#000000" d="M80.8029,-119.1445C101.7394,-115.3827 129.5814,-110.3803 154.4915,-105.9046"/>
-<polygon fill="#000000" stroke="#000000" points="155.3715,-109.3026 164.5949,-104.0892 154.1336,-102.4129 155.3715,-109.3026"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted -->
-<g id="node3" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted</title>
-<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted | defined in signals.go:29">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M264.6954,-174C264.6954,-174 165.6694,-174 165.6694,-174 159.6694,-174 153.6694,-168 153.6694,-162 153.6694,-162 153.6694,-150 153.6694,-150 153.6694,-144 159.6694,-138 165.6694,-138 165.6694,-138 264.6954,-138 264.6954,-138 270.6954,-138 276.6954,-144 276.6954,-150 276.6954,-150 276.6954,-162 276.6954,-162 276.6954,-168 270.6954,-174 264.6954,-174"/>
-<text text-anchor="middle" x="215.1824" y="-151.8" font-family="Verdana" font-size="14.00" fill="#000000">handleInterrupted</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted -->
-<g id="edge2" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted</title>
-<g id="a_edge2"><a xlink:title="at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
-<path fill="none" stroke="#000000" d="M80.8029,-131.0507C98.7443,-134.3818 121.7569,-138.6543 143.6498,-142.719"/>
-<polygon fill="#000000" stroke="#000000" points="143.1368,-146.1835 153.6077,-144.5679 144.4146,-139.3011 143.1368,-146.1835"/>
-</a>
-</g>
-</g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init -->
-<g id="node4" class="node">
+<g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init | defined in .:0&#10;at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M63.2132,-52C63.2132,-52 33.2132,-52 33.2132,-52 27.2132,-52 21.2132,-46 21.2132,-40 21.2132,-40 21.2132,-28 21.2132,-28 21.2132,-22 27.2132,-16 33.2132,-16 33.2132,-16 63.2132,-16 63.2132,-16 69.2132,-16 75.2132,-22 75.2132,-28 75.2132,-28 75.2132,-40 75.2132,-40 75.2132,-46 69.2132,-52 63.2132,-52"/>
-<text text-anchor="middle" x="48.2132" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init | defined in .:0&#10;at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M63.2132,-174C63.2132,-174 33.2132,-174 33.2132,-174 27.2132,-174 21.2132,-168 21.2132,-162 21.2132,-162 21.2132,-150 21.2132,-150 21.2132,-144 27.2132,-138 33.2132,-138 33.2132,-138 63.2132,-138 63.2132,-138 69.2132,-138 75.2132,-144 75.2132,-150 75.2132,-150 75.2132,-162 75.2132,-162 75.2132,-168 69.2132,-174 63.2132,-174"/>
+<text text-anchor="middle" x="48.2132" y="-151.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1 -->
-<g id="node5" class="node">
+<g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1</title>
-<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1 | defined in unix.go:11">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M231.3551,-52C231.3551,-52 199.0097,-52 199.0097,-52 193.0097,-52 187.0097,-46 187.0097,-40 187.0097,-40 187.0097,-28 187.0097,-28 187.0097,-22 193.0097,-16 199.0097,-16 199.0097,-16 231.3551,-16 231.3551,-16 237.3551,-16 243.3551,-22 243.3551,-28 243.3551,-28 243.3551,-40 243.3551,-40 243.3551,-46 237.3551,-52 231.3551,-52"/>
-<text text-anchor="middle" x="215.1824" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">init#1</text>
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1 | defined in unix.go:11">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M231.3551,-174C231.3551,-174 199.0097,-174 199.0097,-174 193.0097,-174 187.0097,-168 187.0097,-162 187.0097,-162 187.0097,-150 187.0097,-150 187.0097,-144 193.0097,-138 199.0097,-138 199.0097,-138 231.3551,-138 231.3551,-138 237.3551,-138 243.3551,-144 243.3551,-150 243.3551,-150 243.3551,-162 243.3551,-162 243.3551,-168 237.3551,-174 231.3551,-174"/>
+<text text-anchor="middle" x="215.1824" y="-151.8" font-family="Verdana" font-size="14.00" fill="#000000">init#1</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1 -->
-<g id="edge3" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1</title>
-<g id="a_edge3"><a xlink:title="at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
-<path fill="none" stroke="#000000" d="M75.4113,-34C102.9748,-34 145.8607,-34 176.8609,-34"/>
-<polygon fill="#000000" stroke="#000000" points="176.8791,-37.5001 186.879,-34 176.879,-30.5001 176.8791,-37.5001"/>
+<g id="a_edge1"><a xlink:title="at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
+<path fill="none" stroke="#000000" d="M75.4113,-156C102.9748,-156 145.8607,-156 176.8609,-156"/>
+<polygon fill="#000000" stroke="#000000" points="176.8791,-159.5001 186.879,-156 176.879,-152.5001 176.8791,-159.5001"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle -->
+<g id="node3" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle</title>
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle | defined in unix.go:15&#10;at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]&#10;at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M68.641,-83C68.641,-83 27.7854,-83 27.7854,-83 21.7854,-83 15.7854,-77 15.7854,-71 15.7854,-71 15.7854,-59 15.7854,-59 15.7854,-53 21.7854,-47 27.7854,-47 27.7854,-47 68.641,-47 68.641,-47 74.641,-47 80.641,-53 80.641,-59 80.641,-59 80.641,-71 80.641,-71 80.641,-77 74.641,-83 68.641,-83"/>
+<text text-anchor="middle" x="48.2132" y="-60.8" font-family="Verdana" font-size="14.00" fill="#000000">Handle</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload -->
+<g id="node4" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload</title>
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload | defined in signals.go:17">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M253.6586,-52C253.6586,-52 176.7062,-52 176.7062,-52 170.7062,-52 164.7062,-46 164.7062,-40 164.7062,-40 164.7062,-28 164.7062,-28 164.7062,-22 170.7062,-16 176.7062,-16 176.7062,-16 253.6586,-16 253.6586,-16 259.6586,-16 265.6586,-22 265.6586,-28 265.6586,-28 265.6586,-40 265.6586,-40 265.6586,-46 259.6586,-52 253.6586,-52"/>
+<text text-anchor="middle" x="215.1824" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">handleReload</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload -->
+<g id="edge2" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload</title>
+<g id="a_edge2"><a xlink:title="at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]">
+<path fill="none" stroke="#000000" d="M80.8029,-58.9493C101.7394,-55.0622 129.5814,-49.8929 154.4915,-45.2681"/>
+<polygon fill="#000000" stroke="#000000" points="155.4019,-48.6589 164.5949,-43.3922 154.124,-41.7765 155.4019,-48.6589"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted -->
+<g id="node5" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted</title>
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted | defined in signals.go:29">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M264.6954,-113C264.6954,-113 165.6694,-113 165.6694,-113 159.6694,-113 153.6694,-107 153.6694,-101 153.6694,-101 153.6694,-89 153.6694,-89 153.6694,-83 159.6694,-77 165.6694,-77 165.6694,-77 264.6954,-77 264.6954,-77 270.6954,-77 276.6954,-83 276.6954,-89 276.6954,-89 276.6954,-101 276.6954,-101 276.6954,-107 270.6954,-113 264.6954,-113"/>
+<text text-anchor="middle" x="215.1824" y="-90.8" font-family="Verdana" font-size="14.00" fill="#000000">handleInterrupted</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted -->
+<g id="edge3" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted</title>
+<g id="a_edge3"><a xlink:title="at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
+<path fill="none" stroke="#000000" d="M80.8029,-70.8555C98.7443,-74.0791 121.7569,-78.2139 143.6498,-82.1475"/>
+<polygon fill="#000000" stroke="#000000" points="143.1463,-85.613 153.6077,-83.9366 144.3842,-78.7233 143.1463,-85.613"/>
 </a>
 </g>
 </g>
