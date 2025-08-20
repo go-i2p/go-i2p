@@ -42,5 +42,5 @@ release:
 
 godoc:
 	./callgraph.sh
-	find . -name 'README.md' git add -v {} \;
+	find . -name 'README.md' -exec git add -v {} \;
 	git commit -am "GODOC UPDATE CHECKIN"
