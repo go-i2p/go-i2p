@@ -49,12 +49,16 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	log.WithField("hash", hash).Debug("Getting RouterInfo")
 
 	// Check memory cache first
+	db.riMutex.Lock()
 	if ri, ok := db.RouterInfos[hash]; ok {
+		db.riMutex.Unlock()
 		log.Debug("RouterInfo found in memory cache")
-		chnl = make(chan router_info.RouterInfo)
+		chnl = make(chan router_info.RouterInfo, 1)
 		chnl <- *ri.RouterInfo
+		close(chnl)
 		return
 	}
+	db.riMutex.Unlock()
 
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
@@ -63,14 +67,16 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		return nil
 	}
 
-	chnl = make(chan router_info.RouterInfo)
+	chnl = make(chan router_info.RouterInfo, 1)
 	ri, err := db.parseAndCacheRouterInfo(hash, data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse RouterInfo")
+		close(chnl)
 		return
 	}
 
 	chnl <- ri
+	close(chnl)
 	return
 }
 
@@ -100,24 +106,28 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 	}
 
 	// Add to cache if not already present
+	db.riMutex.Lock()
 	if _, ok := db.RouterInfos[hash]; !ok {
 		log.Debug("Adding RouterInfo to memory cache")
 		db.RouterInfos[hash] = Entry{
 			RouterInfo: &ri,
 		}
 	}
+	db.riMutex.Unlock()
 
 	return ri, nil
 }
 
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 	log.Debug("Getting all RouterInfos")
+	db.riMutex.Lock()
 	ri = make([]router_info.RouterInfo, 0, len(db.RouterInfos))
 	for _, e := range db.RouterInfos {
 		if e.RouterInfo != nil {
 			ri = append(ri, *e.RouterInfo)
 		}
 	}
+	db.riMutex.Unlock()
 	return
 }
 
@@ -283,6 +293,7 @@ func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
 // cacheRouterInfo adds the RouterInfo to the in-memory cache if not already present.
 func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
 	ih := ri.IdentHash()
+	db.riMutex.Lock()
 	if ent, ok := db.RouterInfos[ih]; !ok {
 		log.Debug("Adding new RouterInfo to memory cache")
 		db.RouterInfos[ri.IdentHash()] = Entry{
@@ -292,6 +303,7 @@ func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
 		log.Debug("RouterInfo already in memory cache")
 		log.Println("entry previously found in table", ent, fname)
 	}
+	db.riMutex.Unlock()
 }
 
 // updateSizeCache writes the count to the cache file.
@@ -355,12 +367,14 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 
 func (db *StdNetDB) Save() (err error) {
 	log.Debug("Saving all NetDB entries")
+	db.riMutex.Lock()
 	for _, dbe := range db.RouterInfos {
 		if e := db.SaveEntry(&dbe); e != nil {
 			err = e
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
+	db.riMutex.Unlock()
 	return
 }
 
@@ -410,6 +424,7 @@ func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_
 // addNewRouterInfos processes and adds new RouterInfos from peers to the database.
 func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 	count := 0
+	db.riMutex.Lock()
 	for _, ri := range peers {
 		hash := ri.IdentHash()
 		if _, exists := db.RouterInfos[hash]; !exists {
@@ -420,6 +435,7 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 			count++
 		}
 	}
+	db.riMutex.Unlock()
 	return count
 }
 
