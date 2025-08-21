@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
@@ -159,6 +160,11 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 	// Create session wrapper
 	session := NewNTCP2Session(conn, t.ctx, t.logger)
 
+	// Set up cleanup callback so session can remove itself from map when it closes
+	session.SetCleanupCallback(func() {
+		t.removeSession(routerHash)
+	})
+
 	// Store the session
 	t.sessions.Store(routerHash, session)
 
@@ -167,6 +173,12 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 } // Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	return SupportsNTCP2(&routerInfo)
+}
+
+// removeSession removes a session from the session map (called by session cleanup callback)
+func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
+	t.sessions.Delete(routerHash)
+	t.logger.WithField("router_hash", routerHash).Debug("Removed session from transport session map")
 }
 
 // Close closes the transport cleanly.

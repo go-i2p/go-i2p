@@ -33,6 +33,10 @@ type NTCP2Session struct {
 	// Background workers
 	wg sync.WaitGroup
 
+	// Cleanup callback (called when session closes)
+	cleanupCallback func()
+	cleanupOnce     sync.Once
+
 	// Logging
 	logger *logrus.Entry
 }
@@ -100,8 +104,25 @@ func (s *NTCP2Session) Close() error {
 			err = s.conn.Close()
 		}
 		s.wg.Wait()
+
+		// Call cleanup callback to remove session from transport map
+		s.callCleanupCallback()
 	})
 	return err
+}
+
+// SetCleanupCallback sets a callback function that will be called when the session closes
+func (s *NTCP2Session) SetCleanupCallback(callback func()) {
+	s.cleanupCallback = callback
+}
+
+// callCleanupCallback calls the cleanup callback (once) if it's set
+func (s *NTCP2Session) callCleanupCallback() {
+	s.cleanupOnce.Do(func() {
+		if s.cleanupCallback != nil {
+			s.cleanupCallback()
+		}
+	})
 }
 
 // sendWorker handles sending I2NP messages over the NTCP2 connection.
@@ -168,5 +189,8 @@ func (s *NTCP2Session) setError(err error) {
 		s.lastError = err
 		s.logger.WithError(err).Error("Session error")
 		s.cancel()
+
+		// Call cleanup callback to remove session from transport map
+		s.callCleanupCallback()
 	})
 }
