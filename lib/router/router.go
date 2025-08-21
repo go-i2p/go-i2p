@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-i2p/common/base32"
@@ -37,8 +38,9 @@ type Router struct {
 	cfg *config.RouterConfig
 	// close channel
 	closeChnl chan bool
-	// running flag
+	// running flag and mutex for thread-safe access
 	running bool
+	runMux  sync.RWMutex
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -172,9 +174,23 @@ func (r *Router) Wait() {
 // Stop starts stopping internal state of router
 func (r *Router) Stop() {
 	log.Debug("Stopping router")
-	r.closeChnl <- true
+	r.runMux.Lock()
+	defer r.runMux.Unlock()
+
+	if !r.running {
+		log.Debug("Router already stopped")
+		return
+	}
+
 	r.running = false
-	log.Debug("Router stop signal sent")
+
+	// Send close signal without blocking - use select with default case
+	select {
+	case r.closeChnl <- true:
+		log.Debug("Router stop signal sent")
+	default:
+		log.Debug("Router stop signal already sent or channel full")
+	}
 }
 
 // Close closes any internal state and finalizes router resources so that nothing can start up again
@@ -185,6 +201,9 @@ func (r *Router) Close() error {
 
 // Start starts router mainloop
 func (r *Router) Start() {
+	r.runMux.Lock()
+	defer r.runMux.Unlock()
+
 	if r.running {
 		log.WithFields(logrus.Fields{
 			"at":     "(Router) Start",
@@ -241,8 +260,25 @@ func (r *Router) mainloop() {
 		log.WithFields(logrus.Fields{
 			"at": "(Router) mainloop",
 		}).Debug("Router ready with database message processing enabled")
-		for r.running && e == nil {
-			time.Sleep(time.Second)
+
+		for {
+			// Check if we should continue running in a thread-safe way
+			r.runMux.RLock()
+			shouldRun := r.running
+			r.runMux.RUnlock()
+
+			if !shouldRun {
+				break
+			}
+
+			// Use select to make shutdown more responsive
+			select {
+			case <-r.closeChnl:
+				log.Debug("Router received close signal in mainloop")
+				return
+			case <-time.After(time.Second):
+				// Continue loop after 1 second timeout
+			}
 		}
 	} else {
 		// netdb failed
