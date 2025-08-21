@@ -138,15 +138,15 @@ func ReadI2NPType(data []byte) (int, error) {
 
 	message_type := datalib.Integer([]byte{data[0]})
 
-	if (message_type.Int() >= 4 || message_type.Int() <= 9) ||
-		(message_type.Int() >= 12 || message_type.Int() <= 17) {
+	if (message_type.Int() >= 4 && message_type.Int() <= 9) ||
+		(message_type.Int() >= 12 && message_type.Int() <= 17) {
 		log.WithFields(logrus.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("unknown_i2np_type")
 	}
 
-	if message_type.Int() >= 224 || message_type.Int() <= 254 {
+	if message_type.Int() >= 224 && message_type.Int() <= 254 {
 		log.WithFields(logrus.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
