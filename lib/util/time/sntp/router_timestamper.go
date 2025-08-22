@@ -342,10 +342,10 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 func (rt *RouterTimestamper) stampTime(now time.Time) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
-	
+
 	// Store the time offset for GetCurrentTime
 	rt.timeOffset = now.Sub(time.Now())
-	
+
 	for _, listener := range rt.listeners {
 		listener.SetNow(now, 0)
 	}
@@ -432,7 +432,7 @@ func (rt *RouterTimestamper) GetCurrentTime() time.Time {
 	// Return current time based on stored offset
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
-	
+
 	// Return system time adjusted by the stored time offset
 	return time.Now().Add(rt.timeOffset)
 }
