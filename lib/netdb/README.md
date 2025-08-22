@@ -215,6 +215,14 @@ func (db *StdNetDB) Save() (err error)
 func (db *StdNetDB) SaveEntry(e *Entry) (err error)
 ```
 
+#### func (*StdNetDB) SelectPeers
+
+```go
+func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+```
+SelectPeers selects a random subset of peers for tunnel building Filters out
+unreachable routers and excludes specified hashes
+
 #### func (*StdNetDB) Size
 
 ```go

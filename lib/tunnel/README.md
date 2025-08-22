@@ -36,6 +36,18 @@ const (
 )
 ```
 
+#### type BuildResponse
+
+```go
+type BuildResponse struct {
+	HopIndex int    // Index of the hop that responded
+	Success  bool   // Whether the hop accepted the tunnel
+	Reply    []byte // Raw response data
+}
+```
+
+BuildResponse represents a response from a tunnel hop
+
 #### type DecryptedTunnelMessage
 
 ```go
@@ -246,19 +258,104 @@ type Participant struct {
 ```
 
 
+#### type PeerSelector
+
+```go
+type PeerSelector interface {
+	SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+}
+```
+
+PeerSelector defines interface for selecting peers for tunnel building
+
 #### type Pool
 
 ```go
-type Pool struct{}
+type Pool struct {
+}
 ```
 
-a pool of tunnels which we have created
+Pool manages a collection of tunnels
+
+#### func  NewTunnelPool
+
+```go
+func NewTunnelPool(selector PeerSelector) *Pool
+```
+NewTunnelPool creates a new tunnel pool with the given peer selector
+
+#### func (*Pool) AddTunnel
+
+```go
+func (p *Pool) AddTunnel(tunnel *TunnelState)
+```
+AddTunnel adds a new tunnel to the pool
+
+#### func (*Pool) CleanupExpiredTunnels
+
+```go
+func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration)
+```
+CleanupExpiredTunnels removes tunnels that have been building for too long
+
+#### func (*Pool) GetActiveTunnels
+
+```go
+func (p *Pool) GetActiveTunnels() []*TunnelState
+```
+GetActiveTunnels returns all active tunnels
+
+#### func (*Pool) GetTunnel
+
+```go
+func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool)
+```
+GetTunnel retrieves a tunnel by ID
+
+#### func (*Pool) RemoveTunnel
+
+```go
+func (p *Pool) RemoveTunnel(id TunnelID)
+```
+RemoveTunnel removes a tunnel from the pool
+
+#### type TunnelBuildState
+
+```go
+type TunnelBuildState int
+```
+
+TunnelBuildState represents different states during tunnel building
+
+```go
+const (
+	TunnelBuilding TunnelBuildState = iota // Tunnel is being built
+	TunnelReady                            // Tunnel is ready for use
+	TunnelFailed                           // Tunnel build failed
+)
+```
 
 #### type TunnelID
 
 ```go
 type TunnelID uint32
 ```
+
+
+#### type TunnelState
+
+```go
+type TunnelState struct {
+	ID            TunnelID
+	Hops          []common.Hash    // Router hashes for each hop
+	State         TunnelBuildState // Current build state
+	CreatedAt     time.Time        // When tunnel building started
+	ResponseCount int              // Number of responses received
+	Responses     []BuildResponse  // Responses from each hop
+}
+```
+
+TunnelState represents the current state of a tunnel during building
 
 
 

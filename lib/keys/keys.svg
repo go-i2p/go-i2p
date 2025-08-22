@@ -46,38 +46,10 @@
 </a>
 </g>
 </g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey -->
-<g id="node1" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey | defined in routerinfo_keystore.go:71&#10;at routerinfo_keystore.go:73: calling [github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M397.9478,-52C397.9478,-52 300.6304,-52 300.6304,-52 294.6304,-52 288.6304,-46 288.6304,-40 288.6304,-40 288.6304,-28 288.6304,-28 288.6304,-22 294.6304,-16 300.6304,-16 300.6304,-16 397.9478,-16 397.9478,-16 403.9478,-16 409.9478,-22 409.9478,-28 409.9478,-28 409.9478,-40 409.9478,-40 409.9478,-46 403.9478,-52 397.9478,-52"/>
-<text text-anchor="middle" x="349.2891" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">generateNewKey</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key -->
-<g id="node2" class="node">
-<title>github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key | defined in utils.go:18">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M656.7807,-52C656.7807,-52 531.9997,-52 531.9997,-52 525.9997,-52 519.9997,-46 519.9997,-40 519.9997,-40 519.9997,-28 519.9997,-28 519.9997,-22 525.9997,-16 531.9997,-16 531.9997,-16 656.7807,-16 656.7807,-16 662.7807,-16 668.7807,-22 668.7807,-28 668.7807,-28 668.7807,-40 668.7807,-40 668.7807,-46 662.7807,-52 656.7807,-52"/>
-<text text-anchor="middle" x="594.3902" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">ed25519</text>
-<text text-anchor="middle" x="594.3902" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">GenerateEd25519Key</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey&#45;&gt;github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key -->
-<g id="edge12" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey&#45;&gt;github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key</title>
-<g id="a_edge12"><a xlink:title="at routerinfo_keystore.go:73: calling [github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key]">
-<path fill="none" stroke="#8b4513" d="M409.8759,-34C440.0665,-34 477.0656,-34 509.9856,-34"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="510.0592,-37.5001 520.0592,-34 510.0591,-30.5001 510.0592,-37.5001"/>
-</a>
-</g>
-</g>
 <!-- github.com/samber/oops.Errorf -->
-<g id="node3" class="node">
+<g id="node1" class="node">
 <title>github.com/samber/oops.Errorf</title>
-<g id="a_node3"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
+<g id="a_node1"><a xlink:title="github.com/samber/oops.Errorf | defined in oops.go:34">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M366.4844,-460C366.4844,-460 332.0938,-460 332.0938,-460 326.0938,-460 320.0938,-454 320.0938,-448 320.0938,-448 320.0938,-436 320.0938,-436 320.0938,-430 326.0938,-424 332.0938,-424 332.0938,-424 366.4844,-424 366.4844,-424 372.4844,-424 378.4844,-430 378.4844,-436 378.4844,-436 378.4844,-448 378.4844,-448 378.4844,-454 372.4844,-460 366.4844,-460"/>
 <text text-anchor="middle" x="349.2891" y="-446.2" font-family="Verdana" font-size="14.00" fill="#000000">oops</text>
 <text text-anchor="middle" x="349.2891" y="-429.4" font-family="Verdana" font-size="14.00" fill="#000000">Errorf</text>
@@ -85,9 +57,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/common/data.NewIntegerFromInt -->
-<g id="node4" class="node">
+<g id="node2" class="node">
 <title>github.com/go&#45;i2p/common/data.NewIntegerFromInt</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/common/data.NewIntegerFromInt | defined in integer.go:61">
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/common/data.NewIntegerFromInt | defined in integer.go:61">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M405.2429,-521C405.2429,-521 293.3353,-521 293.3353,-521 287.3353,-521 281.3353,-515 281.3353,-509 281.3353,-509 281.3353,-497 281.3353,-497 281.3353,-491 287.3353,-485 293.3353,-485 293.3353,-485 405.2429,-485 405.2429,-485 411.2429,-485 417.2429,-491 417.2429,-497 417.2429,-497 417.2429,-509 417.2429,-509 417.2429,-515 411.2429,-521 405.2429,-521"/>
 <text text-anchor="middle" x="349.2891" y="-507.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
 <text text-anchor="middle" x="349.2891" y="-490.4" font-family="Verdana" font-size="14.00" fill="#000000">NewIntegerFromInt</text>
@@ -95,9 +67,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/common/certificate.NewCertificateWithType -->
-<g id="node5" class="node">
+<g id="node3" class="node">
 <title>github.com/go&#45;i2p/common/certificate.NewCertificateWithType</title>
-<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/common/certificate.NewCertificateWithType | defined in certificate_struct.go:79">
+<g id="a_node3"><a xlink:title="github.com/go&#45;i2p/common/certificate.NewCertificateWithType | defined in certificate_struct.go:79">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M420.5587,-582C420.5587,-582 278.0195,-582 278.0195,-582 272.0195,-582 266.0195,-576 266.0195,-570 266.0195,-570 266.0195,-558 266.0195,-558 266.0195,-552 272.0195,-546 278.0195,-546 278.0195,-546 420.5587,-546 420.5587,-546 426.5587,-546 432.5587,-552 432.5587,-558 432.5587,-558 432.5587,-570 432.5587,-570 432.5587,-576 426.5587,-582 420.5587,-582"/>
 <text text-anchor="middle" x="349.2891" y="-568.2" font-family="Verdana" font-size="14.00" fill="#000000">certificate</text>
 <text text-anchor="middle" x="349.2891" y="-551.4" font-family="Verdana" font-size="14.00" fill="#000000">NewCertificateWithType</text>
@@ -105,9 +77,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate -->
-<g id="node6" class="node">
+<g id="node4" class="node">
 <title>github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate</title>
-<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate | defined in key_certificate_struct.go:116">
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate | defined in key_certificate_struct.go:116">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M435.1014,-643C435.1014,-643 263.4768,-643 263.4768,-643 257.4768,-643 251.4768,-637 251.4768,-631 251.4768,-631 251.4768,-619 251.4768,-619 251.4768,-613 257.4768,-607 263.4768,-607 263.4768,-607 435.1014,-607 435.1014,-607 441.1014,-607 447.1014,-613 447.1014,-619 447.1014,-619 447.1014,-631 447.1014,-631 447.1014,-637 441.1014,-643 435.1014,-643"/>
 <text text-anchor="middle" x="349.2891" y="-629.2" font-family="Verdana" font-size="14.00" fill="#000000">key_certificate</text>
 <text text-anchor="middle" x="349.2891" y="-612.4" font-family="Verdana" font-size="14.00" fill="#000000">KeyCertificateFromCertificate</text>
@@ -115,9 +87,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/common/router_identity.NewRouterIdentity -->
-<g id="node7" class="node">
+<g id="node5" class="node">
 <title>github.com/go&#45;i2p/common/router_identity.NewRouterIdentity</title>
-<g id="a_node7"><a xlink:title="github.com/go&#45;i2p/common/router_identity.NewRouterIdentity | defined in router_identity_struct.go:37">
+<g id="a_node5"><a xlink:title="github.com/go&#45;i2p/common/router_identity.NewRouterIdentity | defined in router_identity_struct.go:37">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M403.3663,-704C403.3663,-704 295.2119,-704 295.2119,-704 289.2119,-704 283.2119,-698 283.2119,-692 283.2119,-692 283.2119,-680 283.2119,-680 283.2119,-674 289.2119,-668 295.2119,-668 295.2119,-668 403.3663,-668 403.3663,-668 409.3663,-668 415.3663,-674 415.3663,-680 415.3663,-680 415.3663,-692 415.3663,-692 415.3663,-698 409.3663,-704 403.3663,-704"/>
 <text text-anchor="middle" x="349.2891" y="-690.2" font-family="Verdana" font-size="14.00" fill="#000000">router_identity</text>
 <text text-anchor="middle" x="349.2891" y="-673.4" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterIdentity</text>
@@ -125,28 +97,56 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/common/router_info.NewRouterInfo -->
-<g id="node8" class="node">
+<g id="node6" class="node">
 <title>github.com/go&#45;i2p/common/router_info.NewRouterInfo</title>
-<g id="a_node8"><a xlink:title="github.com/go&#45;i2p/common/router_info.NewRouterInfo | defined in router_info_struct.go:116">
+<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/common/router_info.NewRouterInfo | defined in router_info_struct.go:116">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M393.1406,-765C393.1406,-765 305.4376,-765 305.4376,-765 299.4376,-765 293.4376,-759 293.4376,-753 293.4376,-753 293.4376,-741 293.4376,-741 293.4376,-735 299.4376,-729 305.4376,-729 305.4376,-729 393.1406,-729 393.1406,-729 399.1406,-729 405.1406,-735 405.1406,-741 405.1406,-741 405.1406,-753 405.1406,-753 405.1406,-759 399.1406,-765 393.1406,-765"/>
 <text text-anchor="middle" x="349.2891" y="-751.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
 <text text-anchor="middle" x="349.2891" y="-734.4" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterInfo</text>
 </a>
 </g>
 </g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey -->
+<g id="node7" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey</title>
+<g id="a_node7"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey | defined in routerinfo_keystore.go:71&#10;at routerinfo_keystore.go:73: calling [github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M397.9478,-52C397.9478,-52 300.6304,-52 300.6304,-52 294.6304,-52 288.6304,-46 288.6304,-40 288.6304,-40 288.6304,-28 288.6304,-28 288.6304,-22 294.6304,-16 300.6304,-16 300.6304,-16 397.9478,-16 397.9478,-16 403.9478,-16 409.9478,-22 409.9478,-28 409.9478,-28 409.9478,-40 409.9478,-40 409.9478,-46 403.9478,-52 397.9478,-52"/>
+<text text-anchor="middle" x="349.2891" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">generateNewKey</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key -->
+<g id="node8" class="node">
+<title>github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key</title>
+<g id="a_node8"><a xlink:title="github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key | defined in utils.go:18">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M656.7807,-52C656.7807,-52 531.9997,-52 531.9997,-52 525.9997,-52 519.9997,-46 519.9997,-40 519.9997,-40 519.9997,-28 519.9997,-28 519.9997,-22 525.9997,-16 531.9997,-16 531.9997,-16 656.7807,-16 656.7807,-16 662.7807,-16 668.7807,-22 668.7807,-28 668.7807,-28 668.7807,-40 668.7807,-40 668.7807,-46 662.7807,-52 656.7807,-52"/>
+<text text-anchor="middle" x="594.3902" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">ed25519</text>
+<text text-anchor="middle" x="594.3902" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">GenerateEd25519Key</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey&#45;&gt;github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key -->
+<g id="edge7" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey&#45;&gt;github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key</title>
+<g id="a_edge7"><a xlink:title="at routerinfo_keystore.go:73: calling [github.com/go&#45;i2p/crypto/ed25519.GenerateEd25519Key]">
+<path fill="none" stroke="#8b4513" d="M409.8759,-34C440.0665,-34 477.0656,-34 509.9856,-34"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="510.0592,-37.5001 520.0592,-34 510.0591,-30.5001 510.0592,-37.5001"/>
+</a>
+</g>
+</g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore -->
 <g id="node9" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore</title>
-<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore | defined in routerinfo_keystore.go:37&#10;at routerinfo_keystore.go:56: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey]&#10;at routerinfo_keystore.go:47: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey]&#10;at routerinfo_keystore.go:62: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper]">
+<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore | defined in routerinfo_keystore.go:37&#10;at routerinfo_keystore.go:47: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey]&#10;at routerinfo_keystore.go:62: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper]&#10;at routerinfo_keystore.go:56: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M166.575,-113C166.575,-113 27.808,-113 27.808,-113 21.808,-113 15.808,-107 15.808,-101 15.808,-101 15.808,-89 15.808,-89 15.808,-83 21.808,-77 27.808,-77 27.808,-77 166.575,-77 166.575,-77 172.575,-77 178.575,-83 178.575,-89 178.575,-89 178.575,-101 178.575,-101 178.575,-107 172.575,-113 166.575,-113"/>
 <text text-anchor="middle" x="97.1915" y="-90.8" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterInfoKeystore</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey -->
-<g id="edge9" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey</title>
-<g id="a_edge9"><a xlink:title="at routerinfo_keystore.go:47: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey]">
+<g id="a_edge1"><a xlink:title="at routerinfo_keystore.go:47: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.generateNewKey]">
 <path fill="none" stroke="#000000" d="M171.8059,-76.9456C205.49,-68.795 245.0892,-59.2132 278.3268,-51.1707"/>
 <polygon fill="#000000" stroke="#000000" points="279.5277,-54.4812 288.424,-48.7275 277.8814,-47.6776 279.5277,-54.4812"/>
 </a>
@@ -155,7 +155,7 @@
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper -->
 <g id="node10" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper</title>
-<g id="a_node10"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper | defined in router_timestamper.go:55">
+<g id="a_node10"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper | defined in router_timestamper.go:57">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M418.6838,-113C418.6838,-113 279.8944,-113 279.8944,-113 273.8944,-113 267.8944,-107 267.8944,-101 267.8944,-101 267.8944,-89 267.8944,-89 267.8944,-83 273.8944,-77 279.8944,-77 279.8944,-77 418.6838,-77 418.6838,-77 424.6838,-77 430.6838,-83 430.6838,-89 430.6838,-89 430.6838,-101 430.6838,-101 430.6838,-107 424.6838,-113 418.6838,-113"/>
 <text text-anchor="middle" x="349.2891" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">sntp</text>
 <text text-anchor="middle" x="349.2891" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterTimestamper</text>
@@ -163,9 +163,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper -->
-<g id="edge16" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper</title>
-<g id="a_edge16"><a xlink:title="at routerinfo_keystore.go:62: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper]">
+<g id="a_edge2"><a xlink:title="at routerinfo_keystore.go:62: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.NewRouterTimestamper]">
 <path fill="none" stroke="#8b4513" d="M178.6922,-95C203.9647,-95 231.9791,-95 257.8783,-95"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="258.069,-98.5001 268.069,-95 258.0689,-91.5001 258.069,-98.5001"/>
 </a>
@@ -181,9 +181,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey -->
-<g id="edge5" class="edge">
+<g id="edge16" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/keys.NewRouterInfoKeystore&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey</title>
-<g id="a_edge5"><a xlink:title="at routerinfo_keystore.go:56: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey]">
+<g id="a_edge16"><a xlink:title="at routerinfo_keystore.go:56: calling [github.com/go&#45;i2p/go&#45;i2p/lib/keys.loadExistingKey]">
 <path fill="none" stroke="#000000" d="M171.8059,-113.0544C206.1638,-121.368 246.6757,-131.1707 280.3135,-139.31"/>
 <polygon fill="#000000" stroke="#000000" points="279.5188,-142.7186 290.0615,-141.6687 281.1651,-135.915 279.5188,-142.7186"/>
 </a>
@@ -208,9 +208,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).StoreKeys&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).KeyID -->
-<g id="edge6" class="edge">
+<g id="edge11" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).StoreKeys&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).KeyID</title>
-<g id="a_edge6"><a xlink:title="at types.go:66: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).KeyID]">
+<g id="a_edge11"><a xlink:title="at types.go:66: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.KeyStoreImpl).KeyID]">
 <path fill="none" stroke="#000000" d="M138.538,-234C185.2893,-234 260.9744,-234 307.789,-234"/>
 <polygon fill="#000000" stroke="#000000" points="307.8904,-237.5001 317.8903,-234 307.8903,-230.5001 307.8904,-237.5001"/>
 </a>
@@ -219,61 +219,61 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo -->
 <g id="node14" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo</title>
-<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo | defined in routerinfo_keystore.go:127&#10;at routerinfo_keystore.go:129: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys]&#10;at routerinfo_keystore.go:147: calling [github.com/go&#45;i2p/common/certificate.NewCertificateWithType]&#10;at routerinfo_keystore.go:179: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime]&#10;at routerinfo_keystore.go:187: calling [github.com/go&#45;i2p/common/router_info.NewRouterInfo]&#10;at routerinfo_keystore.go:131: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:138: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:142: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:149: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:155: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:164: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:175: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:196: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:168: calling [github.com/go&#45;i2p/common/router_identity.NewRouterIdentity]&#10;at routerinfo_keystore.go:136: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:140: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:153: calling [github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate]&#10;at routerinfo_keystore.go:158: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize]&#10;at routerinfo_keystore.go:159: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize]">
+<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo | defined in routerinfo_keystore.go:127&#10;at routerinfo_keystore.go:131: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:138: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:142: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:149: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:155: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:164: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:175: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:196: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:136: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:140: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:158: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize]&#10;at routerinfo_keystore.go:179: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime]&#10;at routerinfo_keystore.go:153: calling [github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate]&#10;at routerinfo_keystore.go:159: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize]&#10;at routerinfo_keystore.go:168: calling [github.com/go&#45;i2p/common/router_identity.NewRouterIdentity]&#10;at routerinfo_keystore.go:129: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys]&#10;at routerinfo_keystore.go:187: calling [github.com/go&#45;i2p/common/router_info.NewRouterInfo]&#10;at routerinfo_keystore.go:147: calling [github.com/go&#45;i2p/common/certificate.NewCertificateWithType]">
 <path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M155.0528,-399C155.0528,-399 39.3302,-399 39.3302,-399 33.3302,-399 27.3302,-393 27.3302,-387 27.3302,-387 27.3302,-375 27.3302,-375 27.3302,-369 33.3302,-363 39.3302,-363 39.3302,-363 155.0528,-363 155.0528,-363 161.0528,-363 167.0528,-369 167.0528,-375 167.0528,-375 167.0528,-387 167.0528,-387 167.0528,-393 161.0528,-399 155.0528,-399"/>
 <text text-anchor="middle" x="97.1915" y="-376.8" font-family="Verdana" font-size="14.00" fill="#000000">ConstructRouterInfo</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge7" class="edge">
+<g id="edge3" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge7"><a xlink:title="at routerinfo_keystore.go:131: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:138: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:142: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:149: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:155: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:164: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:175: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:196: calling [github.com/samber/oops.Errorf]">
+<g id="a_edge3"><a xlink:title="at routerinfo_keystore.go:131: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:138: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:142: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:149: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:155: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:164: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:175: calling [github.com/samber/oops.Errorf]&#10;at routerinfo_keystore.go:196: calling [github.com/samber/oops.Errorf]">
 <path fill="none" stroke="#8b4513" d="M167.08,-397.9109C213.1652,-409.0621 271.84,-423.2597 309.9668,-432.4852"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="309.6054,-435.9987 320.1481,-434.9488 311.2518,-429.195 309.6054,-435.9987"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/data.NewIntegerFromInt -->
-<g id="edge10" class="edge">
+<g id="edge4" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/data.NewIntegerFromInt</title>
-<g id="a_edge10"><a xlink:title="at routerinfo_keystore.go:136: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:140: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]">
+<g id="a_edge4"><a xlink:title="at routerinfo_keystore.go:136: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]&#10;at routerinfo_keystore.go:140: calling [github.com/go&#45;i2p/common/data.NewIntegerFromInt]">
 <path fill="none" stroke="#8b4513" d="M123.1572,-399.1526C152.9874,-419.3634 203.9423,-451.9481 251.383,-473 258.3525,-476.0928 265.735,-478.9913 273.1963,-481.6739"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="272.0695,-484.9875 282.6643,-484.9547 274.3614,-478.3734 272.0695,-484.9875"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/certificate.NewCertificateWithType -->
-<g id="edge2" class="edge">
+<g id="edge15" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/certificate.NewCertificateWithType</title>
-<g id="a_edge2"><a xlink:title="at routerinfo_keystore.go:147: calling [github.com/go&#45;i2p/common/certificate.NewCertificateWithType]">
+<g id="a_edge15"><a xlink:title="at routerinfo_keystore.go:147: calling [github.com/go&#45;i2p/common/certificate.NewCertificateWithType]">
 <path fill="none" stroke="#8b4513" d="M110.5872,-399.178C135.0387,-431.0938 190.0671,-497.2932 251.383,-534 256.3177,-536.9541 261.5687,-539.6407 266.9773,-542.0802"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="265.6254,-545.3085 276.2004,-545.9561 268.3373,-538.8552 265.6254,-545.3085"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate -->
-<g id="edge13" class="edge">
+<g id="edge8" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate</title>
-<g id="a_edge13"><a xlink:title="at routerinfo_keystore.go:153: calling [github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate]">
+<g id="a_edge8"><a xlink:title="at routerinfo_keystore.go:153: calling [github.com/go&#45;i2p/common/key_certificate.KeyCertificateFromCertificate]">
 <path fill="none" stroke="#8b4513" d="M105.2684,-399.2715C124.4441,-440.5391 176.7586,-541.5127 251.383,-595 255.2437,-597.7672 259.365,-600.2835 263.6505,-602.5712"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="262.1237,-605.7207 272.6467,-606.9531 265.1891,-599.4275 262.1237,-605.7207"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/router_identity.NewRouterIdentity -->
-<g id="edge8" class="edge">
+<g id="edge10" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/router_identity.NewRouterIdentity</title>
-<g id="a_edge8"><a xlink:title="at routerinfo_keystore.go:168: calling [github.com/go&#45;i2p/common/router_identity.NewRouterIdentity]">
+<g id="a_edge10"><a xlink:title="at routerinfo_keystore.go:168: calling [github.com/go&#45;i2p/common/router_identity.NewRouterIdentity]">
 <path fill="none" stroke="#8b4513" d="M102.1769,-399.1952C116.5795,-448.3171 162.9659,-584.7115 251.383,-656 258.0476,-661.3735 265.6693,-665.787 273.6522,-669.4114"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="272.5737,-672.7521 283.1536,-673.314 275.2333,-666.277 272.5737,-672.7521"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/router_info.NewRouterInfo -->
-<g id="edge4" class="edge">
+<g id="edge13" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;github.com/go&#45;i2p/common/router_info.NewRouterInfo</title>
-<g id="a_edge4"><a xlink:title="at routerinfo_keystore.go:187: calling [github.com/go&#45;i2p/common/router_info.NewRouterInfo]">
+<g id="a_edge13"><a xlink:title="at routerinfo_keystore.go:187: calling [github.com/go&#45;i2p/common/router_info.NewRouterInfo]">
 <path fill="none" stroke="#8b4513" d="M100.1446,-399.0269C110.2618,-454.9599 148.7515,-627.1761 251.383,-717 260.5801,-725.0494 271.8986,-730.9391 283.5356,-735.2484"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="282.7525,-738.6764 293.346,-738.5094 284.9605,-732.0337 282.7525,-738.6764"/>
 </a>
@@ -289,9 +289,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys -->
-<g id="edge1" class="edge">
+<g id="edge12" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys</title>
-<g id="a_edge1"><a xlink:title="at routerinfo_keystore.go:129: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys]">
+<g id="a_edge12"><a xlink:title="at routerinfo_keystore.go:129: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).GetKeys]">
 <path fill="none" stroke="#000000" d="M167.08,-381C210.2349,-381 264.4294,-381 302.4534,-381"/>
 <polygon fill="#000000" stroke="#000000" points="302.7267,-384.5001 312.7267,-381 302.7266,-377.5001 302.7267,-384.5001"/>
 </a>
@@ -300,7 +300,7 @@
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime -->
 <g id="node18" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime</title>
-<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime | defined in router_timestamper.go:418">
+<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime | defined in router_timestamper.go:424">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M395.3133,-843C395.3133,-843 303.2649,-843 303.2649,-843 297.2649,-843 291.2649,-837 291.2649,-831 291.2649,-831 291.2649,-819 291.2649,-819 291.2649,-813 297.2649,-807 303.2649,-807 303.2649,-807 395.3133,-807 395.3133,-807 401.3133,-807 407.3133,-813 407.3133,-819 407.3133,-819 407.3133,-831 407.3133,-831 407.3133,-837 401.3133,-843 395.3133,-843"/>
 <text text-anchor="middle" x="349.2891" y="-829.2" font-family="Verdana" font-size="14.00" fill="#000000">sntp</text>
 <text text-anchor="middle" x="349.2891" y="-812.4" font-family="Verdana" font-size="14.00" fill="#000000">GetCurrentTime</text>
@@ -308,9 +308,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime -->
-<g id="edge3" class="edge">
+<g id="edge6" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime</title>
-<g id="a_edge3"><a xlink:title="at routerinfo_keystore.go:179: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime]">
+<g id="a_edge6"><a xlink:title="at routerinfo_keystore.go:179: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/util/time/sntp.RouterTimestamper).GetCurrentTime]">
 <path fill="none" stroke="#8b4513" d="M98.3907,-399.4173C103.1159,-459.3916 124.8601,-652.392 214.383,-777 229.877,-798.5663 255.9295,-810.4922 281.0313,-817.0679"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="280.4133,-820.5182 290.9504,-819.4138 282.0244,-813.7061 280.4133,-820.5182"/>
 </a>
@@ -327,9 +327,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize -->
-<g id="edge14" class="edge">
+<g id="edge5" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize</title>
-<g id="a_edge14"><a xlink:title="at routerinfo_keystore.go:158: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize]">
+<g id="a_edge5"><a xlink:title="at routerinfo_keystore.go:158: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).CryptoSize]">
 <path fill="none" stroke="#8b4513" d="M100.8634,-399.2164C117.0358,-477.8466 184.1015,-787.3271 251.383,-857 263.5568,-869.6065 279.3207,-880.0373 294.6285,-888.2592"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="293.0637,-891.3901 303.5582,-892.8446 296.2613,-885.1631 293.0637,-891.3901"/>
 </a>
@@ -346,9 +346,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize -->
-<g id="edge15" class="edge">
+<g id="edge9" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).ConstructRouterInfo&#45;&gt;(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize</title>
-<g id="a_edge15"><a xlink:title="at routerinfo_keystore.go:159: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize]">
+<g id="a_edge9"><a xlink:title="at routerinfo_keystore.go:159: calling [(github.com/go&#45;i2p/common/key_certificate.KeyCertificate).SignatureSize]">
 <path fill="none" stroke="#8b4513" d="M99.814,-399.2223C112.7051,-486.4192 171.9458,-860.2164 251.383,-942 260.7106,-951.6031 273.0223,-958.1524 285.7555,-962.6135"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="284.9448,-966.0262 295.5324,-965.634 287.011,-959.3381 284.9448,-966.0262"/>
 </a>
@@ -373,9 +373,9 @@
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).StoreKeys&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).KeyID -->
-<g id="edge11" class="edge">
+<g id="edge14" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).StoreKeys&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).KeyID</title>
-<g id="a_edge11"><a xlink:title="at routerinfo_keystore.go:103: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).KeyID]">
+<g id="a_edge14"><a xlink:title="at routerinfo_keystore.go:103: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/keys.RouterInfoKeystore).KeyID]">
 <path fill="none" stroke="#000000" d="M138.538,-320C185.2893,-320 260.9744,-320 307.789,-320"/>
 <polygon fill="#000000" stroke="#000000" points="307.8904,-323.5001 317.8903,-320 307.8903,-316.5001 307.8904,-323.5001"/>
 </a>

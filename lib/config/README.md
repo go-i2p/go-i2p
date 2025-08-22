@@ -22,7 +22,20 @@ var (
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
 
-	ReseedServers: []*ReseedConfig{},
+	ReseedServers: []*ReseedConfig{
+		{
+			Url:            "https://reseed.i2p-projekt.de/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
+		},
+		{
+			Url:            "https://i2p.mooo.com/netDb/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_2",
+		},
+		{
+			Url:            "https://netdb.i2p2.no/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
+		},
+	},
 }
 ```
 default configuration for network bootstrap
@@ -37,6 +50,10 @@ default settings for netdb
 ```go
 var RouterConfigProperties = DefaultRouterConfig()
 ```
+RouterConfigProperties is a global mutable configuration object DEPRECATED: This
+global variable is mutated by UpdateRouterConfig() creating hidden dependencies
+and making testing difficult. Use NewRouterConfigFromViper() instead to get a
+fresh config object without global state issues.
 
 #### func  BuildI2PDirPath
 
@@ -55,6 +72,9 @@ func InitConfig()
 ```go
 func UpdateRouterConfig()
 ```
+UpdateRouterConfig updates the global RouterConfigProperties from viper settings
+DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state
+mutation
 
 #### type BootstrapConfig
 
@@ -114,6 +134,15 @@ router.config options
 ```go
 func DefaultRouterConfig() *RouterConfig
 ```
+
+#### func  NewRouterConfigFromViper
+
+```go
+func NewRouterConfigFromViper() *RouterConfig
+```
+NewRouterConfigFromViper creates a new RouterConfig from current viper settings
+This is the preferred way to get config instead of using the global
+RouterConfigProperties
 
 
 

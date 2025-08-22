@@ -30,8 +30,8 @@ I2NP Message Type Constants Moved from: header.go
 var (
 	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
 	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
-	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build request record data")
-	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
+	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
+	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = oops.Errorf("not enough i2np database lookup data")
 )
 ```
 I2NP Error Constants Moved from: header.go, build_request_record.go,
@@ -914,6 +914,13 @@ func (mr *MessageRouter) SetNetDB(netdb NetDBStore)
 ```
 SetNetDB sets the NetDB store for database operations
 
+#### func (*MessageRouter) SetPeerSelector
+
+```go
+func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector)
+```
+SetPeerSelector sets the peer selector for the TunnelManager
+
 #### type MessageRouterConfig
 
 ```go
@@ -1229,15 +1236,16 @@ CreateTunnelRecord creates a build request record with interface methods
 #### type TunnelManager
 
 ```go
-type TunnelManager struct{}
+type TunnelManager struct {
+}
 ```
 
-TunnelManager demonstrates tunnel-related interface usage
+TunnelManager coordinates tunnel building and management
 
 #### func  NewTunnelManager
 
 ```go
-func NewTunnelManager() *TunnelManager
+func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager
 ```
 NewTunnelManager creates a new tunnel manager
 
@@ -1255,6 +1263,13 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error
 ```
 ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler
 interface
+
+#### func (*TunnelManager) SetSessionProvider
+
+```go
+func (tm *TunnelManager) SetSessionProvider(provider SessionProvider)
+```
+SetSessionProvider sets the session provider for sending tunnel build messages
 
 #### type TunnelReplyHandler
 

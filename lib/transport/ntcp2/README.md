@@ -150,6 +150,14 @@ func (s *NTCP2Session) SendQueueSize() int
 ```
 SendQueueSize returns how many I2NP messages are not completely sent yet.
 
+#### func (*NTCP2Session) SetCleanupCallback
+
+```go
+func (s *NTCP2Session) SetCleanupCallback(callback func())
+```
+SetCleanupCallback sets a callback function that will be called when the session
+closes
+
 #### type NTCP2Transport
 
 ```go
