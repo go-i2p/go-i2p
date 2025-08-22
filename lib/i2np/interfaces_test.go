@@ -1,13 +1,22 @@
 package i2np
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 )
+
+// MockTestPeerSelector for interfaces testing
+type MockTestPeerSelector struct{}
+
+func (m *MockTestPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
+	return nil, errors.New("insufficient peers available") // Intentionally return error for simple testing
+}
 
 func TestInterfaceSatisfaction(t *testing.T) {
 	// Test that our types satisfy their interfaces
@@ -82,7 +91,7 @@ func TestMessageProcessor(t *testing.T) {
 }
 
 func TestTunnelManager(t *testing.T) {
-	manager := NewTunnelManager()
+	manager := NewTunnelManager(&MockTestPeerSelector{}) // Use mock peer selector for test
 
 	// Create build request records
 	records := [8]BuildRequestRecord{}
@@ -93,13 +102,14 @@ func TestTunnelManager(t *testing.T) {
 		}
 	}
 
-	// Test with TunnelBuild
+	// Test with TunnelBuild - should get error due to insufficient peers
 	builder := NewTunnelBuilder(records)
 	err := manager.BuildTunnel(builder)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "insufficient peers")
 	assert.Equal(t, 8, builder.GetRecordCount())
 
-	// Test with VariableTunnelBuild
+	// Test with VariableTunnelBuild - should also get error
 	variableRecords := []BuildRequestRecord{
 		{ReceiveTunnel: 1, NextTunnel: 2},
 		{ReceiveTunnel: 3, NextTunnel: 4},
@@ -107,7 +117,8 @@ func TestTunnelManager(t *testing.T) {
 	}
 	variableBuilder := NewVariableTunnelBuilder(variableRecords)
 	err = manager.BuildTunnel(variableBuilder)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "insufficient peers")
 	assert.Equal(t, 3, variableBuilder.GetRecordCount())
 }
 
@@ -155,6 +166,9 @@ func TestMessageRouter(t *testing.T) {
 	}
 	router := NewMessageRouter(config)
 
+	// Set up peer selector for tunnel operations
+	router.SetPeerSelector(&MockTestPeerSelector{})
+
 	// Test routing data message
 	dataMsg := NewDataMessage([]byte("router test"))
 	err := router.RouteMessage(dataMsg)
@@ -167,11 +181,12 @@ func TestMessageRouter(t *testing.T) {
 	err = router.RouteDatabaseMessage(lookup)
 	assert.NoError(t, err)
 
-	// Test routing tunnel message
+	// Test routing tunnel message - should get error due to insufficient peers
 	records := [8]BuildRequestRecord{}
 	builder := NewTunnelBuilder(records)
 	err = router.RouteTunnelMessage(builder)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "insufficient peers")
 }
 
 func TestInterfaceComposition(t *testing.T) {

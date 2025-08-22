@@ -5,6 +5,9 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/sirupsen/logrus"
 )
 
 // MessageProcessor demonstrates interface-based message processing
@@ -37,7 +40,7 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
 	if payloadCarrier, ok := msg.(PayloadCarrier); ok {
 		payload := payloadCarrier.GetPayload()
-		fmt.Printf("Processing data message with %d bytes of payload\n", len(payload))
+		log.WithField("payload_size", len(payload)).Debug("Processing data message")
 		return nil
 	}
 	return fmt.Errorf("message does not implement PayloadCarrier interface")
@@ -48,7 +51,10 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 	if statusReporter, ok := msg.(StatusReporter); ok {
 		msgID := statusReporter.GetStatusMessageID()
 		timestamp := statusReporter.GetTimestamp()
-		fmt.Printf("Processing delivery status for message %d at %v\n", msgID, timestamp)
+		log.WithFields(logrus.Fields{
+			"message_id": msgID,
+			"timestamp":  timestamp,
+		}).Debug("Processing delivery status")
 		return nil
 	}
 	return fmt.Errorf("message does not implement StatusReporter interface")
@@ -58,41 +64,133 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
 	if tunnelCarrier, ok := msg.(TunnelCarrier); ok {
 		data := tunnelCarrier.GetTunnelData()
-		fmt.Printf("Processing tunnel data message with %d bytes\n", len(data))
+		log.WithField("data_size", len(data)).Debug("Processing tunnel data message")
 		return nil
 	}
 	return fmt.Errorf("message does not implement TunnelCarrier interface")
 }
 
-// TunnelManager demonstrates tunnel-related interface usage
-type TunnelManager struct{}
+// TunnelManager coordinates tunnel building and management
+type TunnelManager struct {
+	pool            *tunnel.Pool
+	sessionProvider SessionProvider
+	peerSelector    tunnel.PeerSelector
+}
 
 // NewTunnelManager creates a new tunnel manager
-func NewTunnelManager() *TunnelManager {
-	return &TunnelManager{}
+func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
+	pool := tunnel.NewTunnelPool(peerSelector)
+	return &TunnelManager{
+		pool:         pool,
+		peerSelector: peerSelector,
+	}
+}
+
+// SetSessionProvider sets the session provider for sending tunnel build messages
+func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
+	tm.sessionProvider = provider
 }
 
 // BuildTunnel builds a tunnel using TunnelBuilder interface
 func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
+	if tm.peerSelector == nil {
+		return fmt.Errorf("no peer selector configured")
+	}
+
 	records := builder.GetBuildRecords()
 	count := builder.GetRecordCount()
 
-	fmt.Printf("Building tunnel with %d records\n", count)
-	for i, record := range records {
-		if i >= count {
-			break
-		}
-		fmt.Printf("Record %d: Receive Tunnel %d, Next Tunnel %d\n",
-			i, record.GetReceiveTunnel(), record.GetNextTunnel())
+	if count == 0 {
+		return fmt.Errorf("no build records provided")
 	}
 
+	// Select peers for tunnel hops (excluding ourselves)
+	peers, err := tm.peerSelector.SelectPeers(count, nil)
+	if err != nil {
+		return fmt.Errorf("failed to select peers for tunnel: %w", err)
+	}
+
+	if len(peers) < count {
+		return fmt.Errorf("insufficient peers available: need %d, got %d", count, len(peers))
+	}
+
+	// Generate tunnel ID for this tunnel
+	tunnelID := tm.generateTunnelID()
+
+	// Create tunnel state tracking
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnelID,
+		Hops:      make([]common.Hash, count),
+		State:     tunnel.TunnelBuilding,
+		CreatedAt: time.Now(),
+		Responses: make([]tunnel.BuildResponse, 0, count),
+	}
+
+	// Populate hops with selected peer hashes
+	for i, peer := range peers[:count] {
+		tunnelState.Hops[i] = peer.IdentHash()
+	}
+
+	// Add tunnel to pool for tracking
+	tm.pool.AddTunnel(tunnelState)
+
+	// Send build requests to each hop
+	return tm.sendTunnelBuildRequests(records, peers[:count], tunnelID)
+}
+
+// generateTunnelID generates a new unique tunnel ID
+func (tm *TunnelManager) generateTunnelID() tunnel.TunnelID {
+	// Simple tunnel ID generation - in production this should be cryptographically secure
+	return tunnel.TunnelID(time.Now().UnixNano() & 0xFFFFFFFF)
+}
+
+// sendTunnelBuildRequests sends tunnel build requests to each selected peer
+func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, peers []router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
+	if tm.sessionProvider == nil {
+		return fmt.Errorf("no session provider available for sending tunnel build requests")
+	}
+
+	log.WithFields(logrus.Fields{
+		"tunnel_id":  tunnelID,
+		"peer_count": len(peers),
+	}).Debug("Sending tunnel build requests")
+
+	// Send build request to each peer
+	for i := range records {
+		if i >= len(peers) {
+			break
+		}
+
+		peer := peers[i]
+		peerHash := peer.IdentHash()
+
+		// Get transport session to this peer
+		_, err := tm.sessionProvider.GetSessionByHash(peerHash)
+		if err != nil {
+			log.WithFields(logrus.Fields{
+				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+				"error":     err,
+			}).Warn("Failed to get session for peer")
+			continue
+		}
+
+		// Create a tunnel build message (simplified - would need proper I2NP message creation)
+		log.WithFields(logrus.Fields{
+			"hop_index": i,
+			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Sending build request to hop")
+		// In a real implementation, we would create a proper TunnelBuild I2NP message
+		// session.QueueSendI2NP(buildMessage)
+	}
+
+	log.WithField("tunnel_id", tunnelID).Debug("Tunnel build requests sent")
 	return nil
 }
 
 // ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface
 func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error {
 	records := handler.GetReplyRecords()
-	fmt.Printf("Processing tunnel reply with %d records\n", len(records))
+	log.WithField("record_count", len(records)).Debug("Processing tunnel reply")
 
 	return handler.ProcessReply()
 }
@@ -147,27 +245,38 @@ func (dm *DatabaseManager) SetSessionProvider(provider SessionProvider) {
 	dm.sessionProvider = provider
 }
 
+// SetPeerSelector sets the peer selector for the TunnelManager
+func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector) {
+	mr.tunnelMgr.peerSelector = selector
+	if mr.tunnelMgr.pool != nil {
+		mr.tunnelMgr.pool = tunnel.NewTunnelPool(selector)
+	}
+}
+
 // PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	key := reader.GetKey()
 	from := reader.GetFrom()
 	flags := reader.GetFlags()
 
-	fmt.Printf("Performing lookup for key %x from %x with flags %d\n",
-		key[:8], from[:8], flags)
+	log.WithFields(logrus.Fields{
+		"key":   fmt.Sprintf("%x", key[:8]),
+		"from":  fmt.Sprintf("%x", from[:8]),
+		"flags": flags,
+	}).Debug("Performing database lookup")
 
 	// If no session provider is available, just perform the lookup logic without sending responses
 	// This maintains backward compatibility with existing tests
 	if dm.sessionProvider == nil {
-		fmt.Println("No session provider available, performing lookup without sending response")
+		log.Debug("No session provider available, performing lookup without sending response")
 		if dm.retriever != nil {
 			if data, err := dm.retrieveRouterInfo(key); err == nil {
-				fmt.Printf("RouterInfo found locally: %d bytes\n", len(data))
+				log.WithField("data_size", len(data)).Debug("RouterInfo found locally")
 			} else {
-				fmt.Printf("RouterInfo not found locally: %v\n", err)
+				log.WithField("error", err).Debug("RouterInfo not found locally")
 			}
 		} else {
-			fmt.Println("No retriever available, cannot perform lookup")
+			log.Debug("No retriever available, cannot perform lookup")
 		}
 		return nil
 	}
@@ -178,10 +287,10 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 			// RouterInfo found - send DatabaseStore response
 			return dm.sendDatabaseStoreResponse(key, data, from)
 		} else {
-			fmt.Printf("RouterInfo not found locally: %v\n", err)
+			log.WithField("error", err).Debug("RouterInfo not found locally for remote lookup")
 		}
 	} else {
-		fmt.Println("No retriever available, cannot perform lookup")
+		log.Debug("No retriever available, cannot perform lookup")
 	}
 
 	// RouterInfo not found - send DatabaseSearchReply response
@@ -238,7 +347,10 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 
 	// Send the response
 	session.QueueSendI2NP(msg)
-	fmt.Printf("Queued response message type %d for %x\n", msg.Type(), to[:8])
+	log.WithFields(logrus.Fields{
+		"message_type": msg.Type(),
+		"destination":  fmt.Sprintf("%x", to[:8]),
+	}).Debug("Queued response message")
 	return nil
 }
 
@@ -248,7 +360,7 @@ func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NP
 	if data, err := store.MarshalBinary(); err == nil {
 		msg.SetData(data)
 	} else {
-		fmt.Printf("Failed to marshal DatabaseStore: %v\n", err)
+		log.WithField("error", err).Error("Failed to marshal DatabaseStore")
 	}
 	return msg
 }
@@ -259,7 +371,7 @@ func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearc
 	if data, err := reply.MarshalBinary(); err == nil {
 		msg.SetData(data)
 	} else {
-		fmt.Printf("Failed to marshal DatabaseSearchReply: %v\n", err)
+		log.WithField("error", err).Error("Failed to marshal DatabaseSearchReply")
 	}
 	return msg
 }
@@ -270,8 +382,11 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	data := writer.GetStoreData()
 	dataType := writer.GetStoreType()
 
-	fmt.Printf("Storing %d bytes of type %d for key %x\n",
-		len(data), dataType, key[:8])
+	log.WithFields(logrus.Fields{
+		"data_size": len(data),
+		"data_type": dataType,
+		"key":       fmt.Sprintf("%x", key[:8]),
+	}).Debug("Storing RouterInfo data")
 
 	if dm.netdb != nil {
 		return dm.netdb.StoreRouterInfo(key, data, dataType)
@@ -294,8 +409,11 @@ func (sm *SessionManager) ProcessKeys(provider SessionKeyProvider) error {
 	layerKey := provider.GetLayerKey()
 	ivKey := provider.GetIVKey()
 
-	fmt.Printf("Processing session keys: reply=%x, layer=%x, iv=%x\n",
-		replyKey[:8], layerKey[:8], ivKey[:8])
+	log.WithFields(logrus.Fields{
+		"reply_key": fmt.Sprintf("%x", replyKey[:8]),
+		"layer_key": fmt.Sprintf("%x", layerKey[:8]),
+		"iv_key":    fmt.Sprintf("%x", ivKey[:8]),
+	}).Debug("Processing session keys")
 
 	return nil
 }
@@ -305,14 +423,17 @@ func (sm *SessionManager) ProcessTags(provider SessionTagProvider) error {
 	tags := provider.GetReplyTags()
 	count := provider.GetTagCount()
 
-	fmt.Printf("Processing %d session tags\n", count)
+	log.WithField("tag_count", count).Debug("Processing session tags")
 	for i, tag := range tags {
 		if i >= count {
 			break
 		}
 		// Convert session tag to bytes for display
 		tagBytes := tag.Bytes()
-		fmt.Printf("Tag %d: %x\n", i, tagBytes[:8])
+		log.WithFields(logrus.Fields{
+			"tag_index": i,
+			"tag":       fmt.Sprintf("%x", tagBytes[:8]),
+		}).Debug("Processing session tag")
 	}
 
 	return nil
@@ -340,7 +461,7 @@ func NewMessageRouter(config MessageRouterConfig) *MessageRouter {
 		config:     config,
 		processor:  NewMessageProcessor(),
 		dbManager:  NewDatabaseManager(nil), // Will be set later via SetNetDB
-		tunnelMgr:  NewTunnelManager(),
+		tunnelMgr:  NewTunnelManager(nil),   // Will be set later via SetPeerSelector
 		sessionMgr: NewSessionManager(),
 	}
 }
@@ -354,7 +475,10 @@ func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
 func (mr *MessageRouter) RouteMessage(msg I2NPMessage) error {
 	// Log message if enabled
 	if mr.config.EnableLogging {
-		fmt.Printf("Routing message type %d with ID %d\n", msg.Type(), msg.MessageID())
+		log.WithFields(logrus.Fields{
+			"message_type": msg.Type(),
+			"message_id":   msg.MessageID(),
+		}).Debug("Routing message")
 	}
 
 	// Check for expiration

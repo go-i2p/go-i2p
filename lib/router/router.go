@@ -230,7 +230,9 @@ func (r *Router) mainloop() {
 	}
 	r.messageRouter = i2np.NewMessageRouter(messageConfig)
 	r.messageRouter.SetNetDB(r.StdNetDB)
-	log.Debug("Message router initialized with NetDB integration")
+	// Set peer selector for tunnel building (StdNetDB implements PeerSelector)
+	r.messageRouter.SetPeerSelector(r.StdNetDB)
+	log.Debug("Message router initialized with NetDB integration and peer selection")
 
 	// make sure the netdb is ready
 	var e error

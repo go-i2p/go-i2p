@@ -6,7 +6,7 @@ require (
 	github.com/beevik/ntp v1.4.3
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.0.0-20250715213359-dfa5527ece83
-	github.com/go-i2p/crypto v0.0.0-20250716230511-565a0995440c
+	github.com/go-i2p/crypto v0.0.0-20250728221606-06ae9eeb4fda
 	github.com/go-i2p/go-noise v0.0.0-20250805210353-74f980a2439d
 	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
 	github.com/go-i2p/su3 v0.0.0-20250716183548-497fadf45e84

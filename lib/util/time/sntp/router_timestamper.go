@@ -2,11 +2,12 @@ package sntp
 
 import (
 	"fmt"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/beevik/ntp"
 )

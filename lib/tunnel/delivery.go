@@ -4,12 +4,9 @@ import (
 	"encoding/binary"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"github.com/sirupsen/logrus"
 )
-
-var log = logger.GetGoI2PLogger()
 
 /*
 I2P First Fragment Delivery Instructions
@@ -172,7 +169,7 @@ func (delivery_instructions DeliveryInstructions) Type() (int, error) {
 			  follow-on fragment	initial I2NP message
 						fragment or a complete fragment
 		*/
-		if (delivery_instructions[0] & 0x08) == 0x08 {
+		if (delivery_instructions[0] & 0x80) == 0x80 {
 			log.Debug("DeliveryInstructions type: FOLLOW_ON_FRAGMENT")
 			return FOLLOW_ON_FRAGMENT, nil
 		}

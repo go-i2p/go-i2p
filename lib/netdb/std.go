@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"github.com/go-i2p/crypto/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -129,6 +130,68 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 	}
 	db.riMutex.Unlock()
 	return
+}
+
+// SelectPeers selects a random subset of peers for tunnel building
+// Filters out unreachable routers and excludes specified hashes
+func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
+	log.WithFields(logrus.Fields{
+		"count":   count,
+		"exclude": len(exclude),
+	}).Debug("Selecting peers for tunnel building")
+
+	allRouterInfos := db.GetAllRouterInfos()
+	if len(allRouterInfos) == 0 {
+		return nil, fmt.Errorf("no router infos available for peer selection")
+	}
+
+	// Create exclude map for fast lookup
+	excludeMap := make(map[common.Hash]bool)
+	for _, hash := range exclude {
+		excludeMap[hash] = true
+	}
+
+	// Filter available peers (exclude specified hashes and our own identity)
+	var available []router_info.RouterInfo
+	for _, ri := range allRouterInfos {
+		riHash := ri.IdentHash()
+		if !excludeMap[riHash] {
+			// Basic reachability check - router should have valid addresses
+			if len(ri.RouterAddresses()) > 0 {
+				available = append(available, ri)
+			}
+		}
+	}
+
+	if len(available) == 0 {
+		return nil, fmt.Errorf("no suitable peers available after filtering")
+	}
+
+	// If we have fewer available peers than requested, return all
+	if len(available) <= count {
+		log.WithField("available_peers", len(available)).Debug("Returning all available peers")
+		return available, nil
+	}
+
+	// Randomly select the requested number of peers
+	selected := make([]router_info.RouterInfo, count)
+	selectedIndices := make(map[int]bool)
+
+	for i := 0; i < count; i++ {
+		// Find a random index that hasn't been selected yet
+		var idx int
+		for {
+			idx = rand.Intn(len(available))
+			if !selectedIndices[idx] {
+				selectedIndices[idx] = true
+				break
+			}
+		}
+		selected[i] = available[idx]
+	}
+
+	log.WithField("selected_peers", count).Debug("Peer selection completed")
+	return selected, nil
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in
@@ -368,8 +431,8 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 func (db *StdNetDB) Save() (err error) {
 	log.Debug("Saving all NetDB entries")
 	db.riMutex.Lock()
-	for _, dbe := range db.RouterInfos {
-		if e := db.SaveEntry(&dbe); e != nil {
+	for _, entry := range db.RouterInfos {
+		if e := db.SaveEntry(&entry); e != nil {
 			err = e
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
