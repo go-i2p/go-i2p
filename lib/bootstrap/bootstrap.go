@@ -12,6 +12,6 @@ type Bootstrap interface {
 	// try obtaining at most n router infos
 	// if n is 0 then try obtaining as many router infos as possible
 	// returns nil and error if we cannot fetch ANY router infos
-	// returns a channel that yields 1 slice of router infos containing n or fewer router infos, caller must close channel after use
+	// returns a slice of router infos containing n or fewer router infos
 	GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
 }

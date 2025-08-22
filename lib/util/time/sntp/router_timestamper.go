@@ -38,6 +38,7 @@ type RouterTimestamper struct {
 	stopChan          chan struct{}
 	waitGroup         sync.WaitGroup
 	ntpClient         NTPClient
+	timeOffset        time.Duration // Store the current time offset from system time
 }
 
 const (
@@ -341,6 +342,10 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 func (rt *RouterTimestamper) stampTime(now time.Time) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
+	
+	// Store the time offset for GetCurrentTime
+	rt.timeOffset = now.Sub(time.Now())
+	
 	for _, listener := range rt.listeners {
 		listener.SetNow(now, 0)
 	}
@@ -424,16 +429,12 @@ func (rt *RouterTimestamper) GetCurrentTime() time.Time {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Return current time based on latest offset
+	// Return current time based on stored offset
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
-	if len(rt.listeners) > 0 {
-		// Use first listener's time if available
-		var t time.Time
-		rt.listeners[0].SetNow(t, 0) // Get current time from listener
-		return t
-	}
-	return time.Now() // Fallback to system time
+	
+	// Return system time adjusted by the stored time offset
+	return time.Now().Add(rt.timeOffset)
 }
 
 // GetServers returns a copy of the current server list safely
