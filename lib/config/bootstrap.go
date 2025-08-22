@@ -18,6 +18,21 @@ type BootstrapConfig struct {
 // default configuration for network bootstrap
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
-	// TODO: add reseed servers
-	ReseedServers: []*ReseedConfig{},
+	// Standard I2P reseed servers for network bootstrap
+	// These are example reseed servers - in production, use actual I2P reseed servers
+	// with their correct SU3 signing key fingerprints
+	ReseedServers: []*ReseedConfig{
+		{
+			Url:            "https://reseed.i2p-projekt.de/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
+		},
+		{
+			Url:            "https://i2p.mooo.com/netDb/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_2",
+		},
+		{
+			Url:            "https://netdb.i2p2.no/",
+			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
+		},
+	},
 }

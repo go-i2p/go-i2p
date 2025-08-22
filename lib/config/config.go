@@ -50,6 +50,37 @@ func setDefaults() {
 	viper.SetDefault("bootstrap.reseed_servers", []ReseedConfig{})
 }
 
+// NewRouterConfigFromViper creates a new RouterConfig from current viper settings
+// This is the preferred way to get config instead of using the global RouterConfigProperties
+func NewRouterConfigFromViper() *RouterConfig {
+	// Create NetDb configuration
+	netDbConfig := &NetDbConfig{
+		Path: viper.GetString("netdb.path"),
+	}
+
+	// Create Bootstrap configuration
+	var reseedServers []*ReseedConfig
+	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
+		log.Warnf("Error parsing reseed servers: %s", err)
+		reseedServers = []*ReseedConfig{}
+	}
+
+	bootstrapConfig := &BootstrapConfig{
+		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
+		ReseedServers:    reseedServers,
+	}
+
+	// Create and return new RouterConfig
+	return &RouterConfig{
+		BaseDir:    viper.GetString("base_dir"),
+		WorkingDir: viper.GetString("working_dir"),
+		NetDb:      netDbConfig,
+		Bootstrap:  bootstrapConfig,
+	}
+}
+
+// UpdateRouterConfig updates the global RouterConfigProperties from viper settings
+// DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state mutation
 func UpdateRouterConfig() {
 	// Update Router configuration
 	RouterConfigProperties.BaseDir = viper.GetString("base_dir")

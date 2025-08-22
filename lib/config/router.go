@@ -36,4 +36,8 @@ func DefaultRouterConfig() *RouterConfig {
 	return defaultRouterConfig
 }
 
+// RouterConfigProperties is a global mutable configuration object
+// DEPRECATED: This global variable is mutated by UpdateRouterConfig() creating
+// hidden dependencies and making testing difficult. Use NewRouterConfigFromViper()
+// instead to get a fresh config object without global state issues.
 var RouterConfigProperties = DefaultRouterConfig()
