@@ -124,14 +124,37 @@ func (ks *RouterInfoKeystore) KeyID() string {
 	return ks.name
 }
 
+// ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress) (*router_info.RouterInfo, error) {
-	// Get signing keys
-	publicKey, privateKey, err := ks.GetKeys()
+	publicKey, privateKey, err := ks.validateAndGetKeys()
 	if err != nil {
-		return nil, oops.Errorf("failed to get keys: %w", err)
+		return nil, err
 	}
 
-	// Create certificate with Ed25519 key type
+	cert, err := ks.createEd25519Certificate()
+	if err != nil {
+		return nil, err
+	}
+
+	routerIdentity, err := ks.buildRouterIdentity(publicKey, cert)
+	if err != nil {
+		return nil, err
+	}
+
+	return ks.assembleRouterInfo(routerIdentity, addresses, privateKey)
+}
+
+// validateAndGetKeys retrieves and validates the signing keys from the keystore
+func (ks *RouterInfoKeystore) validateAndGetKeys() (types.PublicKey, types.PrivateKey, error) {
+	publicKey, privateKey, err := ks.GetKeys()
+	if err != nil {
+		return nil, nil, oops.Errorf("failed to get keys: %w", err)
+	}
+	return publicKey, privateKey, nil
+}
+
+// createEd25519Certificate generates a certificate with Ed25519 key type configuration
+func (ks *RouterInfoKeystore) createEd25519Certificate() (*certificate.Certificate, error) {
 	payload := new(bytes.Buffer)
 	cryptoKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
 	if err != nil {
@@ -148,23 +171,21 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	if err != nil {
 		return nil, oops.Errorf("failed to create certificate: %w", err)
 	}
+	return cert, nil
+}
 
-	// Create padding
+// buildRouterIdentity constructs a RouterIdentity with proper padding and certificate
+func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cert *certificate.Certificate) (*router_identity.RouterIdentity, error) {
 	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
 	if err != nil {
 		return nil, oops.Errorf("failed to create key certificate: %w", err)
 	}
 
-	pubKeySize := keyCert.CryptoSize()
-	sigKeySize := keyCert.SignatureSize()
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
-	padding := make([]byte, paddingSize)
-	_, err = rand.Read(padding)
+	padding, err := ks.generateIdentityPadding(keyCert)
 	if err != nil {
-		return nil, oops.Errorf("failed to generate padding: %w", err)
+		return nil, err
 	}
 
-	// Create RouterIdentity
 	routerIdentity, err := router_identity.NewRouterIdentity(
 		types.ReceivingPublicKey(nil),
 		publicKey.(types.SigningPublicKey),
@@ -174,11 +195,26 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	if err != nil {
 		return nil, oops.Errorf("failed to create router identity: %w", err)
 	}
+	return routerIdentity, nil
+}
 
-	// Get timestamp
+// generateIdentityPadding creates random padding bytes for RouterIdentity structure
+func (ks *RouterInfoKeystore) generateIdentityPadding(keyCert *key_certificate.KeyCertificate) ([]byte, error) {
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
+	padding := make([]byte, paddingSize)
+	_, err := rand.Read(padding)
+	if err != nil {
+		return nil, oops.Errorf("failed to generate padding: %w", err)
+	}
+	return padding, nil
+}
+
+// assembleRouterInfo creates the final RouterInfo with all components and standard options
+func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey) (*router_info.RouterInfo, error) {
 	publishedTime := ks.RouterTimestamper.GetCurrentTime()
 
-	// Standard router options
 	options := map[string]string{
 		"caps":  "NU", // Standard capabilities - Not floodfill, Not Reachable
 		"netId": "2",  // Production network
@@ -195,6 +231,5 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 	if err != nil {
 		return nil, oops.Errorf("failed to create router info: %w", err)
 	}
-
 	return ri, nil
 }
