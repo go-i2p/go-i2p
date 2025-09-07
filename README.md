@@ -77,6 +77,10 @@ please keep up with these changes, as they will not be backward compatible and r
     - [ ] Connection management
     - [ ] Peer Tests
     - [ ] Introducers
+  - [Noise Subsystem (see also https://github.com/go-i2p/go-noise)](https://github.com/go-i2p/go-noise)
+    - [X] Noise Socket Framework
+    - [X] NTCP2 Socket Framework
+    - [ ] SSU2 Socket Framework
 - Tunnels
   - [X] Message structure parsing (delivery instructions)
   - [X] Fragment handling and reassembly

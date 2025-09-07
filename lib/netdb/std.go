@@ -5,12 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"github.com/go-i2p/crypto/rand"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -132,6 +133,49 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 	return
 }
 
+// buildExcludeMap creates a map for fast hash lookup during peer filtering
+func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool {
+	excludeMap := make(map[common.Hash]bool)
+	for _, hash := range exclude {
+		excludeMap[hash] = true
+	}
+	return excludeMap
+}
+
+// filterAvailablePeers filters router infos excluding specified hashes and checking reachability
+func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
+	var available []router_info.RouterInfo
+	for _, ri := range allRouterInfos {
+		riHash := ri.IdentHash()
+		if !excludeMap[riHash] {
+			// Basic reachability check - router should have valid addresses
+			if len(ri.RouterAddresses()) > 0 {
+				available = append(available, ri)
+			}
+		}
+	}
+	return available
+}
+
+// selectRandomPeers randomly selects the requested number of peers from available pool
+func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count int) []router_info.RouterInfo {
+	selected := make([]router_info.RouterInfo, count)
+	selectedIndices := make(map[int]bool)
+
+	for i := 0; i < count; i++ {
+		var idx int
+		for {
+			idx = rand.Intn(len(available))
+			if !selectedIndices[idx] {
+				selectedIndices[idx] = true
+				break
+			}
+		}
+		selected[i] = available[idx]
+	}
+	return selected
+}
+
 // SelectPeers selects a random subset of peers for tunnel building
 // Filters out unreachable routers and excludes specified hashes
 func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
@@ -145,23 +189,8 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 		return nil, fmt.Errorf("no router infos available for peer selection")
 	}
 
-	// Create exclude map for fast lookup
-	excludeMap := make(map[common.Hash]bool)
-	for _, hash := range exclude {
-		excludeMap[hash] = true
-	}
-
-	// Filter available peers (exclude specified hashes and our own identity)
-	var available []router_info.RouterInfo
-	for _, ri := range allRouterInfos {
-		riHash := ri.IdentHash()
-		if !excludeMap[riHash] {
-			// Basic reachability check - router should have valid addresses
-			if len(ri.RouterAddresses()) > 0 {
-				available = append(available, ri)
-			}
-		}
-	}
+	excludeMap := db.buildExcludeMap(exclude)
+	available := db.filterAvailablePeers(allRouterInfos, excludeMap)
 
 	if len(available) == 0 {
 		return nil, fmt.Errorf("no suitable peers available after filtering")
@@ -173,23 +202,7 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 		return available, nil
 	}
 
-	// Randomly select the requested number of peers
-	selected := make([]router_info.RouterInfo, count)
-	selectedIndices := make(map[int]bool)
-
-	for i := 0; i < count; i++ {
-		// Find a random index that hasn't been selected yet
-		var idx int
-		for {
-			idx = rand.Intn(len(available))
-			if !selectedIndices[idx] {
-				selectedIndices[idx] = true
-				break
-			}
-		}
-		selected[i] = available[idx]
-	}
-
+	selected := db.selectRandomPeers(available, count)
 	log.WithField("selected_peers", count).Debug("Peer selection completed")
 	return selected, nil
 }

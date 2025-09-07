@@ -216,13 +216,16 @@ func (r *Router) Start() {
 	go r.mainloop()
 }
 
-// run i2p router mainloop
-func (r *Router) mainloop() {
+// initializeNetDB creates and configures the network database
+func (r *Router) initializeNetDB() error {
 	log.Debug("Entering router mainloop")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
+	return nil
+}
 
-	// Initialize message router and connect to NetDB
+// initializeMessageRouter sets up message routing with NetDB integration
+func (r *Router) initializeMessageRouter() {
 	messageConfig := i2np.MessageRouterConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
@@ -230,65 +233,86 @@ func (r *Router) mainloop() {
 	}
 	r.messageRouter = i2np.NewMessageRouter(messageConfig)
 	r.messageRouter.SetNetDB(r.StdNetDB)
-	// Set peer selector for tunnel building (StdNetDB implements PeerSelector)
 	r.messageRouter.SetPeerSelector(r.StdNetDB)
 	log.Debug("Message router initialized with NetDB integration and peer selection")
+}
 
-	// make sure the netdb is ready
-	var e error
+// ensureNetDBReady validates NetDB state and performs reseed if needed
+func (r *Router) ensureNetDBReady() error {
 	if err := r.StdNetDB.Ensure(); err != nil {
-		e = err
 		log.WithError(err).Error("Failed to ensure NetDB")
+		return err
 	}
+
 	if sz := r.StdNetDB.Size(); sz >= 0 {
 		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
 		log.Warn("Unable to determine NetDB size")
 	}
+
 	if r.StdNetDB.Size() < r.cfg.Bootstrap.LowPeerThreshold {
-		log.Info("NetDB below threshold, initiating reseed")
+		return r.performReseed()
+	}
+	return nil
+}
 
-		// Create a bootstrap instance
-		bootstrapper := bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
+// performReseed executes network database reseeding process
+func (r *Router) performReseed() error {
+	log.Info("NetDB below threshold, initiating reseed")
 
-		// Reseed the network database
-		if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
-			log.WithError(err).Warn("Initial reseed failed, continuing with limited NetDB")
-			// Continue anyway, we might have some peers
+	bootstrapper := bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
+
+	if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
+		log.WithError(err).Warn("Initial reseed failed, continuing with limited NetDB")
+		return err
+	}
+	return nil
+}
+
+// runMainLoop executes the primary router event loop
+func (r *Router) runMainLoop() {
+	log.WithFields(logrus.Fields{
+		"at": "(Router) mainloop",
+	}).Debug("Router ready with database message processing enabled")
+
+	for {
+		r.runMux.RLock()
+		shouldRun := r.running
+		r.runMux.RUnlock()
+
+		if !shouldRun {
+			break
+		}
+
+		select {
+		case <-r.closeChnl:
+			log.Debug("Router received close signal in mainloop")
+			return
+		case <-time.After(time.Second):
+			// Continue loop after 1 second timeout
 		}
 	}
-	if e == nil {
-		// netdb ready
-		log.WithFields(logrus.Fields{
-			"at": "(Router) mainloop",
-		}).Debug("Router ready with database message processing enabled")
+}
 
-		for {
-			// Check if we should continue running in a thread-safe way
-			r.runMux.RLock()
-			shouldRun := r.running
-			r.runMux.RUnlock()
+// run i2p router mainloop
+func (r *Router) mainloop() {
+	if err := r.initializeNetDB(); err != nil {
+		log.WithError(err).Error("Failed to initialize NetDB")
+		r.Stop()
+		return
+	}
 
-			if !shouldRun {
-				break
-			}
+	r.initializeMessageRouter()
 
-			// Use select to make shutdown more responsive
-			select {
-			case <-r.closeChnl:
-				log.Debug("Router received close signal in mainloop")
-				return
-			case <-time.After(time.Second):
-				// Continue loop after 1 second timeout
-			}
-		}
-	} else {
-		// netdb failed
+	if err := r.ensureNetDBReady(); err != nil {
 		log.WithFields(logrus.Fields{
 			"at":     "(Router) mainloop",
-			"reason": e.Error(),
+			"reason": err.Error(),
 		}).Error("Netdb Startup failed")
 		r.Stop()
+		return
 	}
+
+	r.runMainLoop()
 	log.Debug("Exiting router mainloop")
 }
