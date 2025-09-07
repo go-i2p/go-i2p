@@ -626,144 +626,143 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 	return
 }
 
-// Find the correct index for the Message ID in a FIRST_FRAGMENT DeliveryInstructions
-func (delivery_instructions DeliveryInstructions) message_id_index() (message_id int, err error) {
-	log.Debug("Calculating message_id_index")
+// calculateBaseOffset computes the base offset for delivery instruction components
+// based on delivery type and flags.
+func (delivery_instructions DeliveryInstructions) calculateBaseOffset() (offset int, err error) {
+	log.Debug("Calculating base offset for delivery instruction components")
+
+	// Start counting after the flags
+	offset = 1
+
+	// Add the Tunnel ID and Hash if present
+	di_type, err := delivery_instructions.DeliveryType()
+	if err != nil {
+		log.WithError(err).Error("Failed to get DeliveryType")
+		return 0, err
+	}
+
+	if di_type == DT_TUNNEL {
+		offset += 36 // TUNNEL_ID_SIZE (4) + HASH_SIZE (32)
+	} else if di_type == DT_ROUTER {
+		offset += 32 // HASH_SIZE (32)
+	}
+
+	// Add the Delay if present
+	delay, err := delivery_instructions.HasDelay()
+	if err != nil {
+		log.WithError(err).Error("Failed to check HasDelay")
+		return 0, err
+	}
+	if delay {
+		offset++
+	}
+
+	log.WithField("base_offset", offset).Debug("Base offset calculated")
+	return offset, nil
+}
+
+// validateFragmentedForMessageID checks if delivery instructions are fragmented,
+// which is required for message ID access.
+func (delivery_instructions DeliveryInstructions) validateFragmentedForMessageID() error {
 	fragmented, err := delivery_instructions.Fragmented()
 	if err != nil {
 		log.WithError(err).Error("Failed to check if DeliveryInstructions are fragmented")
-		return
+		return err
 	}
-	if fragmented {
-		// Start counting after the flags
-		message_id = 1
-
-		// Add the Tunnel ID and Hash if present
-		var di_type byte
-		di_type, err = delivery_instructions.DeliveryType()
-		if err != nil {
-			log.WithError(err).Error("Failed to get DeliveryType")
-			return
-		}
-		if di_type == DT_TUNNEL {
-			message_id += 36
-		} else if di_type == DT_ROUTER {
-			message_id += 32
-		}
-
-		// Add the Delay if present
-		var delay bool
-		delay, err = delivery_instructions.HasDelay()
-		if err != nil {
-			log.WithError(err).Error("Failed to check HasDelay")
-			return
-		}
-		if delay {
-			message_id++
-		}
-		log.WithField("message_id_index", message_id).Debug("message_id_index calculated")
-		return message_id, nil
-	} else {
+	if !fragmented {
 		log.Error("DeliveryInstruction must be fragmented to have a Message ID")
-		return 0, oops.Errorf("DeliveryInstruction must be fragmented to have a Message ID")
+		return oops.Errorf("DeliveryInstruction must be fragmented to have a Message ID")
 	}
+	return nil
+}
+
+// Find the correct index for the Message ID in a FIRST_FRAGMENT DeliveryInstructions
+func (delivery_instructions DeliveryInstructions) message_id_index() (message_id int, err error) {
+	log.Debug("Calculating message_id_index")
+
+	if err := delivery_instructions.validateFragmentedForMessageID(); err != nil {
+		return 0, err
+	}
+
+	message_id, err = delivery_instructions.calculateBaseOffset()
+	if err != nil {
+		return 0, err
+	}
+
+	log.WithField("message_id_index", message_id).Debug("message_id_index calculated")
+	return message_id, nil
+}
+
+// validateExtendedOptionsPresent checks if extended options are enabled.
+func (delivery_instructions DeliveryInstructions) validateExtendedOptionsPresent() error {
+	ops, err := delivery_instructions.HasExtendedOptions()
+	if err != nil {
+		log.WithError(err).Error("Failed to check HasExtendedOptions")
+		return err
+	}
+	if !ops {
+		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
+		return oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
+	}
+	return nil
+}
+
+// calculateExtendedOptionsOffset computes the extended options offset including message ID.
+func (delivery_instructions DeliveryInstructions) calculateExtendedOptionsOffset(baseOffset int) int {
+	// Add message ID if present (4 bytes)
+	if _, err := delivery_instructions.MessageID(); err == nil {
+		baseOffset += 4
+	}
+	return baseOffset
 }
 
 // Find the index of the extended options in this Delivery Instruction, if they exist.
 func (delivery_instructions DeliveryInstructions) extended_options_index() (extended_options int, err error) {
 	log.Debug("Calculating extended_options_index")
-	ops, err := delivery_instructions.HasExtendedOptions()
+
+	if err := delivery_instructions.validateExtendedOptionsPresent(); err != nil {
+		return 0, err
+	}
+
+	baseOffset, err := delivery_instructions.calculateBaseOffset()
 	if err != nil {
-		log.WithError(err).Error("Failed to check HasExtendedOptions")
-		return
+		return 0, err
 	}
-	if ops {
-		// Start counting after the flags
-		extended_options = 1
 
-		// Add the Tunnel ID and Hash if present
-		var di_type byte
-		di_type, err = delivery_instructions.DeliveryType()
-		if err != nil {
-			log.WithError(err).Error("Failed to get DeliveryType")
-			return
-		}
-		if di_type == DT_TUNNEL {
-			extended_options += 36
-		} else if di_type == DT_ROUTER {
-			extended_options += 32
-		}
+	extended_options = delivery_instructions.calculateExtendedOptionsOffset(baseOffset)
 
-		// Add the Delay if present
-		var delay bool
-		delay, err = delivery_instructions.HasDelay()
-		if err != nil {
-			log.WithError(err).Error("Failed to check HasDelay")
-			return
-		}
-		if delay {
-			extended_options++
-		}
+	log.WithField("extended_options_index", extended_options).Debug("extended_options_index calculated")
+	return extended_options, nil
+}
 
-		// add message id if present
-		if _, err = delivery_instructions.MessageID(); err == nil {
-			extended_options += 4
-		} else {
-			err = nil
-		}
-		log.WithField("extended_options_index", extended_options).Debug("extended_options_index calculated")
-		return extended_options, nil
-
-	} else {
-		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
-		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
+// calculateFragmentSizeOffset computes fragment size offset including message ID and extended options.
+func (delivery_instructions DeliveryInstructions) calculateFragmentSizeOffset(baseOffset int) int {
+	// Add the message ID if present (4 bytes)
+	if _, err := delivery_instructions.MessageID(); err == nil {
+		baseOffset += 4
 	}
-	return
+
+	// Add extended options if present
+	if opts, err := delivery_instructions.HasExtendedOptions(); opts && err == nil {
+		if extended_opts, err := delivery_instructions.ExtendedOptions(); err == nil {
+			baseOffset += len(extended_opts) + 1 // +1 for length byte
+		}
+	}
+
+	return baseOffset
 }
 
 // Find the index of the Fragment Size data in this Delivery Instruction.
 func (delivery_instructions DeliveryInstructions) fragment_size_index() (fragment_size int, err error) {
 	log.Debug("Calculating fragment_size_index")
-	// Start counting after the flags
-	fragment_size = 1
 
-	// Add the Tunnel ID and Hash if present
-	var di_type byte
-	di_type, err = delivery_instructions.DeliveryType()
+	baseOffset, err := delivery_instructions.calculateBaseOffset()
 	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return
-	}
-	if di_type == DT_TUNNEL {
-		fragment_size += 36
-	} else if di_type == DT_ROUTER {
-		fragment_size += 32
+		return 0, err
 	}
 
-	// Add the Delay if present
-	var delay bool
-	delay, err = delivery_instructions.HasDelay()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasDelay")
-		return
-	}
-	if delay {
-		fragment_size++
-	}
+	fragment_size = delivery_instructions.calculateFragmentSizeOffset(baseOffset)
 
-	// add the message id if present
-	if _, err = delivery_instructions.MessageID(); err == nil {
-		fragment_size += 4
-	} else {
-		err = nil
-	}
-
-	// add extended options if present
-	if opts, err := delivery_instructions.HasExtendedOptions(); opts && err != nil {
-		if extended_opts, err := delivery_instructions.ExtendedOptions(); err == nil {
-			fragment_size += len(extended_opts) + 1
-		}
-	}
 	log.WithField("fragment_size_index", fragment_size).Debug("fragment_size_index calculated")
 	return fragment_size, nil
 }
