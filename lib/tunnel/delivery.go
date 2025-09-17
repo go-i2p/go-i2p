@@ -534,6 +534,48 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 	return
 }
 
+// extractMessageIDFromFollowOnFragment extracts the message ID from a follow-on fragment.
+// Follow-on fragments store the message ID in bytes 1-5 of the delivery instructions.
+func (delivery_instructions DeliveryInstructions) extractMessageIDFromFollowOnFragment() (uint32, error) {
+	if len(delivery_instructions) < 5 {
+		log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
+		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
+	}
+
+	msgid := binary.BigEndian.Uint32(delivery_instructions[1:5])
+	log.WithField("message_id", msgid).Debug("MessageID retrieved for FOLLOW_ON_FRAGMENT")
+	return msgid, nil
+}
+
+// extractMessageIDFromFirstFragment extracts the message ID from a first fragment.
+// First fragments store the message ID at a variable offset that depends on delivery type and flags.
+func (delivery_instructions DeliveryInstructions) extractMessageIDFromFirstFragment() (uint32, error) {
+	message_id_index, err := delivery_instructions.message_id_index()
+	if err != nil {
+		log.WithError(err).Error("Failed to get message_id_index")
+		return 0, err
+	}
+
+	if len(delivery_instructions) < message_id_index+4 {
+		log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
+		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
+	}
+
+	msgid := binary.BigEndian.Uint32(delivery_instructions[message_id_index : message_id_index+4])
+	log.WithField("message_id", msgid).Debug("MessageID retrieved for FIRST_FRAGMENT")
+	return msgid, nil
+}
+
+// validateMessageIDFragmentType validates that the delivery instructions are of a type
+// that supports message IDs (FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT).
+func (delivery_instructions DeliveryInstructions) validateMessageIDFragmentType(di_type int) error {
+	if di_type != FIRST_FRAGMENT && di_type != FOLLOW_ON_FRAGMENT {
+		log.Error("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+		return oops.Errorf("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+	}
+	return nil
+}
+
 // Return the I2NP Message ID or 0 and an error if the data is not available for this
 // DeliveryInstructions.
 func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err error) {
@@ -543,33 +585,16 @@ func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err
 		log.WithError(err).Error("Failed to get DeliveryInstructions type")
 		return
 	}
-	if di_type == FOLLOW_ON_FRAGMENT {
-		if len(delivery_instructions) >= 5 {
-			msgid = binary.BigEndian.Uint32(delivery_instructions[1:5])
-			log.WithField("message_id", msgid).Debug("MessageID retrieved for FOLLOW_ON_FRAGMENT")
-		} else {
-			log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
-		}
-	} else if di_type == FIRST_FRAGMENT {
-		var message_id_index int
-		message_id_index, err = delivery_instructions.message_id_index()
-		if err != nil {
-			log.WithError(err).Error("Failed to get message_id_index")
-			return
-		}
-		if len(delivery_instructions) >= message_id_index+4 {
-			msgid = binary.BigEndian.Uint32(delivery_instructions[message_id_index : message_id_index+4])
-			log.WithField("message_id", msgid).Debug("MessageID retrieved for FIRST_FRAGMENT")
-		} else {
-			log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
-		}
-	} else {
-		log.Error("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		err = oops.Errorf("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+
+	if err = delivery_instructions.validateMessageIDFragmentType(di_type); err != nil {
+		return
 	}
-	return
+
+	if di_type == FOLLOW_ON_FRAGMENT {
+		return delivery_instructions.extractMessageIDFromFollowOnFragment()
+	}
+
+	return delivery_instructions.extractMessageIDFromFirstFragment()
 }
 
 // Return the Extended Options data if present, or an error if not present.  Extended Options in unimplemented
