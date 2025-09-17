@@ -470,6 +470,40 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 }
 
 // Return the DelayFactor if present and any errors encountered parsing the DeliveryInstructions.
+// extractDelayFromTunnel extracts the delay factor from tunnel-type delivery instructions.
+func (delivery_instructions DeliveryInstructions) extractDelayFromTunnel() (DelayFactor, error) {
+	if len(delivery_instructions) < FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE {
+		log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+		return DelayFactor(0), oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+	}
+
+	delay_factor := DelayFactor(delivery_instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE])
+	log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_TUNNEL")
+	return delay_factor, nil
+}
+
+// extractDelayFromRouter extracts the delay factor from router-type delivery instructions.
+func (delivery_instructions DeliveryInstructions) extractDelayFromRouter() (DelayFactor, error) {
+	if len(delivery_instructions) < FLAG_SIZE+HASH_SIZE {
+		log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+		return DelayFactor(0), oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+	}
+
+	delay_factor := DelayFactor(delivery_instructions[FLAG_SIZE+HASH_SIZE])
+	log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_ROUTER")
+	return delay_factor, nil
+}
+
+// validateDelaySupport checks if the delivery type supports delay and logs warnings for unsupported types.
+func (delivery_instructions DeliveryInstructions) validateDelaySupport(di_type byte) error {
+	if di_type != DT_TUNNEL && di_type != DT_ROUTER {
+		log.WithFields(logrus.Fields{
+			"at": "(DeliveryInstructions) Delay",
+		}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
+	}
+	return nil
+}
+
 func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFactor, err error) {
 	log.Debug("Getting Delay")
 	delay, err := delivery_instructions.HasDelay()
@@ -477,37 +511,26 @@ func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFac
 		log.WithError(err).Error("Failed to check HasDelay")
 		return
 	}
-	if delay {
-		var di_type byte
-		di_type, err = delivery_instructions.DeliveryType()
-		if err != nil {
-			log.WithError(err).Error("Failed to get DeliveryType")
-			return
-		}
-		if di_type == DT_TUNNEL {
-			if len(delivery_instructions) >= FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE {
-				delay_factor = DelayFactor(delivery_instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE])
-				log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_TUNNEL")
-			} else {
-				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				return
-			}
-		} else if di_type == DT_ROUTER {
-			if len(delivery_instructions) >= FLAG_SIZE+HASH_SIZE {
-				delay_factor = DelayFactor(delivery_instructions[FLAG_SIZE+HASH_SIZE])
-				log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_ROUTER")
-			} else {
-				log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				err = oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-				return
-			}
-		} else {
-			log.WithFields(logrus.Fields{
-				"at": "(DeliveryInstructions) Delay",
-			}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
-		}
+
+	if !delay {
+		return
 	}
+
+	di_type, err := delivery_instructions.DeliveryType()
+	if err != nil {
+		log.WithError(err).Error("Failed to get DeliveryType")
+		return
+	}
+
+	switch di_type {
+	case DT_TUNNEL:
+		delay_factor, err = delivery_instructions.extractDelayFromTunnel()
+	case DT_ROUTER:
+		delay_factor, err = delivery_instructions.extractDelayFromRouter()
+	default:
+		err = delivery_instructions.validateDelaySupport(di_type)
+	}
+
 	return
 }
 
