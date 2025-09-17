@@ -289,47 +289,23 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 	found := make([]time.Duration, rt.concurringServers)
 	var expectedDelta time.Duration
 
-	// Safely set wellSynced to false with mutex protection
-	rt.mutex.Lock()
-	rt.wellSynced = false
-	rt.mutex.Unlock()
+	rt.resetSyncStatus()
 
 	for i := 0; i < rt.concurringServers; i++ {
-		server := servers[rand.Intn(len(servers))]
-		options := ntp.QueryOptions{
-			Timeout: timeout,
-			// TTL:     5,
-		}
-
-		if preferIPv6 {
-			server = fmt.Sprintf("[%s]:123", server)
-		}
-
-		response, err := rt.ntpClient.QueryWithOptions(server, options)
+		delta, err := rt.performSingleNTPQuery(servers, timeout, preferIPv6)
 		if err != nil {
-			fmt.Printf("NTP query failed: %v\n", err)
 			return false
 		}
 
-		now := time.Now().Add(response.ClockOffset)
-		delta := now.Sub(time.Now())
 		found[i] = delta
 
 		if i == 0 {
-			if absDuration(delta) < maxVariance {
-				if absDuration(delta) < 500*time.Millisecond {
-					// Safely set wellSynced to true with mutex protection
-					rt.mutex.Lock()
-					rt.wellSynced = true
-					rt.mutex.Unlock()
-				}
+			if rt.validateFirstSample(delta) {
 				break
-			} else {
-				expectedDelta = delta
 			}
+			expectedDelta = delta
 		} else {
-			if absDuration(delta-expectedDelta) > maxVariance {
-				// Variance too high, fail this attempt
+			if !rt.validateAdditionalSample(delta, expectedDelta) {
 				return false
 			}
 		}
@@ -337,6 +313,64 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 
 	rt.stampTime(time.Now().Add(found[0]))
 	return true
+}
+
+// resetSyncStatus safely sets wellSynced to false with mutex protection.
+func (rt *RouterTimestamper) resetSyncStatus() {
+	rt.mutex.Lock()
+	rt.wellSynced = false
+	rt.mutex.Unlock()
+}
+
+// performSingleNTPQuery executes a single NTP query against a randomly selected server.
+func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout time.Duration, preferIPv6 bool) (time.Duration, error) {
+	server := rt.selectRandomServer(servers, preferIPv6)
+	options := ntp.QueryOptions{
+		Timeout: timeout,
+		// TTL:     5,
+	}
+
+	response, err := rt.ntpClient.QueryWithOptions(server, options)
+	if err != nil {
+		fmt.Printf("NTP query failed: %v\n", err)
+		return 0, err
+	}
+
+	now := time.Now().Add(response.ClockOffset)
+	delta := now.Sub(time.Now())
+	return delta, nil
+}
+
+// selectRandomServer chooses a random server from the list and formats it for IPv6 if needed.
+func (rt *RouterTimestamper) selectRandomServer(servers []string, preferIPv6 bool) string {
+	server := servers[rand.Intn(len(servers))]
+	if preferIPv6 {
+		server = fmt.Sprintf("[%s]:123", server)
+	}
+	return server
+}
+
+// validateFirstSample checks if the first time sample is within acceptable variance.
+func (rt *RouterTimestamper) validateFirstSample(delta time.Duration) bool {
+	if absDuration(delta) < maxVariance {
+		if absDuration(delta) < 500*time.Millisecond {
+			rt.setSyncedStatus(true)
+		}
+		return true
+	}
+	return false
+}
+
+// validateAdditionalSample checks if subsequent samples are consistent with the expected delta.
+func (rt *RouterTimestamper) validateAdditionalSample(delta, expectedDelta time.Duration) bool {
+	return absDuration(delta-expectedDelta) <= maxVariance
+}
+
+// setSyncedStatus safely sets wellSynced status with mutex protection.
+func (rt *RouterTimestamper) setSyncedStatus(synced bool) {
+	rt.mutex.Lock()
+	rt.wellSynced = synced
+	rt.mutex.Unlock()
 }
 
 func (rt *RouterTimestamper) stampTime(now time.Time) {
