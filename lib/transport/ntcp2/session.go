@@ -158,28 +158,58 @@ func (s *NTCP2Session) sendWorker() {
 func (s *NTCP2Session) receiveWorker() {
 	defer s.wg.Done()
 
-	unframer := NewI2NPUnframer(s.conn)
+	unframer := s.createMessageUnframer()
 
 	for {
-		select {
-		case <-s.ctx.Done():
+		if s.shouldStopReceiving() {
 			return
-		default:
-			// Read next message
-			msg, err := unframer.ReadNextMessage()
-			if err != nil {
-				s.setError(WrapNTCP2Error(err, "reading message"))
-				return
-			}
-
-			// Send to receive channel
-			select {
-			case s.recvChan <- msg:
-				// Message queued successfully
-			case <-s.ctx.Done():
-				return
-			}
 		}
+
+		msg, err := s.readNextMessage(unframer)
+		if err != nil {
+			s.handleReceiveError(err)
+			return
+		}
+
+		if !s.queueReceivedMessage(msg) {
+			return
+		}
+	}
+}
+
+// createMessageUnframer creates and returns a new I2NP unframer for this session's connection.
+func (s *NTCP2Session) createMessageUnframer() *I2NPUnframer {
+	return NewI2NPUnframer(s.conn)
+}
+
+// shouldStopReceiving checks if the session context is done and receiving should stop.
+func (s *NTCP2Session) shouldStopReceiving() bool {
+	select {
+	case <-s.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// readNextMessage reads the next I2NP message from the unframer.
+func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage, error) {
+	return unframer.ReadNextMessage()
+}
+
+// handleReceiveError handles errors that occur during message receiving.
+func (s *NTCP2Session) handleReceiveError(err error) {
+	s.setError(WrapNTCP2Error(err, "reading message"))
+}
+
+// queueReceivedMessage attempts to queue a received message to the receive channel.
+// Returns false if the session context is done, true if message was queued successfully.
+func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
+	select {
+	case s.recvChan <- msg:
+		return true
+	case <-s.ctx.Done():
+		return false
 	}
 }
 
