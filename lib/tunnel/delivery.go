@@ -637,6 +637,47 @@ func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte
 	return
 }
 
+// extractFragmentSizeFromFollowOn extracts fragment size from follow-on fragment delivery instructions.
+// Follow-on fragments store the fragment size at bytes 5-7.
+func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFollowOn() (uint16, error) {
+	if len(delivery_instructions) < 7 {
+		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
+		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
+	}
+	
+	fragSize := binary.BigEndian.Uint16(delivery_instructions[5:7])
+	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FOLLOW_ON_FRAGMENT")
+	return fragSize, nil
+}
+
+// extractFragmentSizeFromFirst extracts fragment size from first fragment delivery instructions.
+// First fragments store the fragment size at a variable offset determined by the fragment_size_index.
+func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFirst() (uint16, error) {
+	fragmentSizeIndex, err := delivery_instructions.fragment_size_index()
+	if err != nil {
+		log.WithError(err).Error("Failed to get fragment_size_index")
+		return 0, err
+	}
+	
+	if len(delivery_instructions) < fragmentSizeIndex+2 {
+		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
+		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
+	}
+	
+	fragSize := binary.BigEndian.Uint16(delivery_instructions[fragmentSizeIndex : fragmentSizeIndex+2])
+	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FIRST_FRAGMENT")
+	return fragSize, nil
+}
+
+// validateFragmentTypeForSize validates that the delivery instructions are of a supported fragment type.
+func (delivery_instructions DeliveryInstructions) validateFragmentTypeForSize(fragmentType int) error {
+	if fragmentType != FOLLOW_ON_FRAGMENT && fragmentType != FIRST_FRAGMENT {
+		log.Error("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+		return oops.Errorf("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+	}
+	return nil
+}
+
 // Return the size of the associated I2NP fragment and an error if the data is unavailable.
 func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint16, err error) {
 	log.Debug("Getting FragmentSize")
@@ -645,33 +686,21 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 		log.WithError(err).Error("Failed to get DeliveryInstructions type")
 		return
 	}
-	if di_type == FOLLOW_ON_FRAGMENT {
-		if len(delivery_instructions) >= 7 {
-			frag_size = binary.BigEndian.Uint16(delivery_instructions[5:7])
-			log.WithField("fragment_size", frag_size).Debug("FragmentSize retrieved for FOLLOW_ON_FRAGMENT")
-		} else {
-			log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
-		}
-	} else if di_type == FIRST_FRAGMENT {
-		var fragment_size_index int
-		fragment_size_index, err = delivery_instructions.fragment_size_index()
-		if err != nil {
-			log.WithError(err).Error("Failed to get fragment_size_index")
-			return
-		}
-		if len(delivery_instructions) >= fragment_size_index+2 {
-			frag_size = binary.BigEndian.Uint16(delivery_instructions[fragment_size_index : fragment_size_index+2])
-			log.WithField("fragment_size", frag_size).Debug("FragmentSize retrieved for FIRST_FRAGMENT")
-		} else {
-			log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-			err = oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
-		}
-	} else {
-		log.Error("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		err = oops.Errorf("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
+	
+	if err = delivery_instructions.validateFragmentTypeForSize(di_type); err != nil {
+		return
 	}
-	return
+	
+	switch di_type {
+	case FOLLOW_ON_FRAGMENT:
+		return delivery_instructions.extractFragmentSizeFromFollowOn()
+	case FIRST_FRAGMENT:
+		return delivery_instructions.extractFragmentSizeFromFirst()
+	default:
+		// This should never be reached due to validation above, but kept for safety
+		log.Error("Unexpected fragment type in FragmentSize")
+		return 0, oops.Errorf("Unexpected fragment type in FragmentSize")
+	}
 }
 
 // calculateBaseOffset computes the base offset for delivery instruction components
