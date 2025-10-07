@@ -3,11 +3,13 @@ package router
 import (
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/common/base32"
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -41,6 +43,11 @@ type Router struct {
 	// running flag and mutex for thread-safe access
 	running bool
 	runMux  sync.RWMutex
+
+	// Session tracking for NTCP2 message routing
+	activeSessions map[common.Hash]*ntcp.NTCP2Session
+	// sessionMutex protects concurrent access to activeSessions map
+	sessionMutex sync.RWMutex
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -315,4 +322,56 @@ func (r *Router) mainloop() {
 
 	r.runMainLoop()
 	log.Debug("Exiting router mainloop")
+}
+
+// Session Management Methods
+
+// addSession registers a new active session by peer hash.
+// This method is called when a new NTCP2 connection is established,
+// allowing the router to track active sessions for message routing.
+// Thread-safe for concurrent access.
+func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
+	r.sessionMutex.Lock()
+	defer r.sessionMutex.Unlock()
+
+	r.activeSessions[peerHash] = session
+	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Added active session")
+}
+
+// removeSession removes a session when it closes.
+// This method is typically called from a session's cleanup callback
+// to ensure the router doesn't attempt to send messages to closed sessions.
+// Thread-safe for concurrent access.
+func (r *Router) removeSession(peerHash common.Hash) {
+	r.sessionMutex.Lock()
+	defer r.sessionMutex.Unlock()
+
+	delete(r.activeSessions, peerHash)
+	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Removed session")
+}
+
+// getSessionByHash retrieves a session for a specific peer.
+// Returns an error if no active session exists for the given peer hash.
+// Thread-safe for concurrent read access using RWMutex.
+func (r *Router) getSessionByHash(peerHash common.Hash) (*ntcp.NTCP2Session, error) {
+	r.sessionMutex.RLock()
+	defer r.sessionMutex.RUnlock()
+
+	if session, ok := r.activeSessions[peerHash]; ok {
+		return session, nil
+	}
+	return nil, fmt.Errorf("no session found for peer %x", peerHash[:8])
+}
+
+// GetSessionByHash implements SessionProvider interface for DatabaseManager.
+// This enables the I2NP message processing layer to send responses back through
+// the router's active transport sessions.
+// NTCP2Session already implements the i2np.TransportSession interface.
+func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error) {
+	session, err := r.getSessionByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+	// NTCP2Session implements i2np.TransportSession (QueueSendI2NP, SendQueueSize)
+	return session, nil
 }

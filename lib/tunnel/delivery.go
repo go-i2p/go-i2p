@@ -644,7 +644,7 @@ func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFollowO
 		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
 		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
 	}
-	
+
 	fragSize := binary.BigEndian.Uint16(delivery_instructions[5:7])
 	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FOLLOW_ON_FRAGMENT")
 	return fragSize, nil
@@ -658,12 +658,12 @@ func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFirst()
 		log.WithError(err).Error("Failed to get fragment_size_index")
 		return 0, err
 	}
-	
+
 	if len(delivery_instructions) < fragmentSizeIndex+2 {
 		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
 		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
 	}
-	
+
 	fragSize := binary.BigEndian.Uint16(delivery_instructions[fragmentSizeIndex : fragmentSizeIndex+2])
 	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FIRST_FRAGMENT")
 	return fragSize, nil
@@ -686,11 +686,11 @@ func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint
 		log.WithError(err).Error("Failed to get DeliveryInstructions type")
 		return
 	}
-	
+
 	if err = delivery_instructions.validateFragmentTypeForSize(di_type); err != nil {
 		return
 	}
-	
+
 	switch di_type {
 	case FOLLOW_ON_FRAGMENT:
 		return delivery_instructions.extractFragmentSizeFromFollowOn()
