@@ -261,10 +261,10 @@ func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector) {
 func (mr *MessageRouter) SetSessionProvider(provider SessionProvider) {
 	// Propagate to DatabaseManager for database operation responses
 	mr.dbManager.SetSessionProvider(provider)
-	
+
 	// Propagate to TunnelManager for tunnel build responses
 	mr.tunnelMgr.SetSessionProvider(provider)
-	
+
 	log.Debug("Session provider configured for message router")
 }
 

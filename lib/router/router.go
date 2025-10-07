@@ -241,10 +241,10 @@ func (r *Router) initializeMessageRouter() {
 	r.messageRouter = i2np.NewMessageRouter(messageConfig)
 	r.messageRouter.SetNetDB(r.StdNetDB)
 	r.messageRouter.SetPeerSelector(r.StdNetDB)
-	
+
 	// Set router as SessionProvider to enable message response routing
 	r.messageRouter.SetSessionProvider(r)
-	
+
 	log.Debug("Message router initialized with NetDB, peer selection, and session provider")
 }
 
