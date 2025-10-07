@@ -253,6 +253,21 @@ func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector) {
 	}
 }
 
+// SetSessionProvider configures the session provider for message routing responses.
+// This method propagates the SessionProvider to both DatabaseManager and TunnelManager,
+// enabling them to send I2NP response messages (DatabaseStore, DatabaseSearchReply, etc.)
+// back through the appropriate transport sessions.
+// The provider must implement SessionProvider interface with GetSessionByHash method.
+func (mr *MessageRouter) SetSessionProvider(provider SessionProvider) {
+	// Propagate to DatabaseManager for database operation responses
+	mr.dbManager.SetSessionProvider(provider)
+	
+	// Propagate to TunnelManager for tunnel build responses
+	mr.tunnelMgr.SetSessionProvider(provider)
+	
+	log.Debug("Session provider configured for message router")
+}
+
 // PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	key := reader.GetKey()
