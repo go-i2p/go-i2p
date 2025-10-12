@@ -1,6 +1,10 @@
 package transport
 
 import (
+	"context"
+	"net"
+	"time"
+
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 )
@@ -108,4 +112,51 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compa
 	}
 	log.Debug("TransportMuxer: No compatible transport found")
 	return
+}
+
+// AcceptWithTimeout accepts an incoming connection with a timeout.
+// This method wraps the blocking Accept() call with a timeout context,
+// enabling graceful shutdown of session monitoring loops.
+// Returns the connection and nil on success.
+// Returns nil and context.DeadlineExceeded if the timeout expires.
+// Returns nil and any other error from the underlying transport Accept().
+func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, error) {
+	log.WithField("timeout", timeout).Debug("TransportMuxer: Accepting connection with timeout")
+
+	// Create context with timeout for the accept operation
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Channel to receive accept result
+	type acceptResult struct {
+		conn net.Conn
+		err  error
+	}
+	resultChan := make(chan acceptResult, 1)
+
+	// Run Accept in a goroutine to allow timeout
+	go func() {
+		// Use the first transport (primary) for accepting connections
+		if len(tmux.trans) == 0 {
+			resultChan <- acceptResult{conn: nil, err: ErrNoTransportAvailable}
+			return
+		}
+
+		conn, err := tmux.trans[0].Accept()
+		resultChan <- acceptResult{conn: conn, err: err}
+	}()
+
+	// Wait for either accept to complete or context timeout
+	select {
+	case res := <-resultChan:
+		if res.err != nil {
+			log.WithError(res.err).Debug("TransportMuxer: Accept failed")
+		} else {
+			log.Debug("TransportMuxer: Accept succeeded")
+		}
+		return res.conn, res.err
+	case <-ctx.Done():
+		log.Debug("TransportMuxer: Accept timed out")
+		return nil, ctx.Err()
+	}
 }

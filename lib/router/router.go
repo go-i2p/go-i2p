@@ -1,9 +1,11 @@
 package router
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 
 	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
@@ -307,6 +310,10 @@ func (r *Router) runMainLoop() {
 
 // run i2p router mainloop
 func (r *Router) mainloop() {
+	// Initialize active sessions map for tracking NTCP2 connections
+	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
+	log.Debug("Initialized active sessions map")
+
 	if err := r.initializeNetDB(); err != nil {
 		log.WithError(err).Error("Failed to initialize NetDB")
 		r.Stop()
@@ -324,8 +331,186 @@ func (r *Router) mainloop() {
 		return
 	}
 
+	// Start session monitors for inbound message processing
+	r.startSessionMonitors()
+
 	r.runMainLoop()
 	log.Debug("Exiting router mainloop")
+}
+
+// Session Monitoring and Message Processing
+
+// startSessionMonitors launches goroutines to monitor and process inbound sessions.
+// This is the entry point for the session monitoring subsystem.
+func (r *Router) startSessionMonitors() {
+	log.Debug("Starting session monitors")
+	go r.monitorInboundSessions()
+}
+
+// monitorInboundSessions continuously accepts new inbound NTCP2 connections
+// and spawns a message processor goroutine for each new session.
+// This loop runs until the router is stopped.
+func (r *Router) monitorInboundSessions() {
+	log.Debug("Starting inbound session monitor")
+
+	for {
+		// Check if router is still running
+		r.runMux.RLock()
+		shouldRun := r.running
+		r.runMux.RUnlock()
+
+		if !shouldRun {
+			log.Debug("Stopping inbound session monitor")
+			return
+		}
+
+		// Accept incoming NTCP2 connection with timeout to allow shutdown checks
+		conn, err := r.TransportMuxer.AcceptWithTimeout(5 * time.Second)
+		if err != nil {
+			// Timeout is expected behavior, continue monitoring
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			log.WithError(err).Warn("Failed to accept inbound connection")
+			continue
+		}
+
+		// Extract peer information and create session
+		session, peerHash, err := r.createSessionFromConn(conn)
+		if err != nil {
+			log.WithError(err).Error("Failed to create session from connection")
+			conn.Close()
+			continue
+		}
+
+		// Track session and start message processor
+		r.addSession(peerHash, session)
+		go r.processSessionMessages(session, peerHash)
+
+		log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
+	}
+}
+
+// createSessionFromConn creates an NTCP2Session from a net.Conn.
+// This method extracts the peer's router hash from the connection address
+// and configures a cleanup callback for session lifecycle management.
+// Returns the session, peer hash, and any error encountered.
+func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, common.Hash, error) {
+	// Type assert to NTCP2Addr to extract peer router hash
+	ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.NTCP2Addr)
+	if !ok {
+		return nil, common.Hash{}, fmt.Errorf("invalid connection type: expected NTCP2Addr, got %T", conn.RemoteAddr())
+	}
+
+	// Extract router hash from NTCP2 address
+	peerHashBytes := ntcpAddr.RouterHash()
+	if len(peerHashBytes) != 32 {
+		return nil, common.Hash{}, fmt.Errorf("invalid router hash length: expected 32, got %d", len(peerHashBytes))
+	}
+
+	var peerHash common.Hash
+	copy(peerHash[:], peerHashBytes)
+
+	// Create session with router's context
+	// TODO: Use router-level context for better lifecycle management
+	ctx := context.Background()
+	sessionLogger := logrus.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+	session := ntcp.NewNTCP2Session(conn, ctx, sessionLogger)
+
+	// Configure cleanup callback to remove session when it closes
+	session.SetCleanupCallback(func() {
+		r.removeSession(peerHash)
+	})
+
+	return session, peerHash, nil
+}
+
+// processSessionMessages reads and processes I2NP messages from a single session.
+// This method runs in a dedicated goroutine for each active session,
+// continuously reading messages until the session closes or the router stops.
+// Message processing errors are logged but don't terminate the session.
+func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash common.Hash) {
+	defer log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session message processor stopped")
+
+	for {
+		// Check if router is still running
+		r.runMux.RLock()
+		shouldRun := r.running
+		r.runMux.RUnlock()
+
+		if !shouldRun {
+			return
+		}
+
+		// Read next I2NP message from session (blocking call)
+		msg, err := session.ReadNextI2NP()
+		if err != nil {
+			// Check if session closed normally
+			if errors.Is(err, ntcp.ErrSessionClosed) {
+				log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session closed normally")
+			} else {
+				log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Warn("Error reading I2NP message from session")
+			}
+			return
+		}
+
+		// Route message through MessageRouter - errors are logged but don't close session
+		if err := r.routeMessage(msg, peerHash); err != nil {
+			log.WithError(err).WithFields(logrus.Fields{
+				"message_type": msg.Type(),
+				"message_id":   msg.MessageID(),
+				"peer_hash":    fmt.Sprintf("%x", peerHash[:8]),
+			}).Error("Failed to route I2NP message")
+		}
+	}
+}
+
+// routeMessage routes an I2NP message to the appropriate handler based on its type.
+// This method serves as the main dispatch point for all incoming I2NP messages,
+// directing them to the correct processing subsystem (database, tunnel, or general).
+// Returns an error if the message type is unsupported or routing fails.
+func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error {
+	log.WithFields(logrus.Fields{
+		"message_type": msg.Type(),
+		"message_id":   msg.MessageID(),
+		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
+	}).Debug("Routing I2NP message")
+
+	// Route based on message type to appropriate handler
+	switch msg.Type() {
+	case i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE:
+		return r.messageRouter.RouteDatabaseMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
+		return r.messageRouter.RouteDatabaseMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY:
+		return r.messageRouter.RouteDatabaseMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_DATA:
+		return r.messageRouter.RouteMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
+		return r.messageRouter.RouteMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA:
+		return r.messageRouter.RouteMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
+		return r.messageRouter.RouteTunnelMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
+		return r.messageRouter.RouteTunnelMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
+		return r.messageRouter.RouteTunnelMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
+		return r.messageRouter.RouteTunnelMessage(msg)
+
+	default:
+		return fmt.Errorf("unsupported message type: %d", msg.Type())
+	}
 }
 
 // Session Management Methods
