@@ -16,58 +16,100 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 	log.Debug("Reading I2NP NTCP Header")
 	header := I2NPNTCPHeader{}
 
-	message_type, err := ReadI2NPType(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP type")
+	if err := readHeaderType(data, &header); err != nil {
 		return header, err
-	} else {
-		header.Type = message_type
 	}
 
-	message_id, err := ReadI2NPNTCPMessageID(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP NTCP message ID")
+	if err := readHeaderMessageID(data, &header); err != nil {
 		return header, err
-	} else {
-		header.MessageID = message_id
 	}
 
-	message_date, err := ReadI2NPNTCPMessageExpiration(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP NTCP message expiration")
+	if err := readHeaderExpiration(data, &header); err != nil {
 		return header, err
-	} else {
-		header.Expiration = message_date.Time()
 	}
 
-	message_size, err := ReadI2NPNTCPMessageSize(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP NTCP message size")
+	if err := readHeaderSize(data, &header); err != nil {
 		return header, err
-	} else {
-		header.Size = message_size
 	}
 
-	message_checksum, err := ReadI2NPNTCPMessageChecksum(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP NTCP message checksum")
+	if err := readHeaderChecksum(data, &header); err != nil {
 		return header, err
-	} else {
-		header.Checksum = message_checksum
 	}
 
-	message_data, err := ReadI2NPNTCPData(data, header.Size)
-	if err != nil {
-		log.WithError(err).Error("Failed to read I2NP NTCP message data")
+	if err := readHeaderData(data, &header); err != nil {
 		return header, err
-	} else {
-		header.Data = message_data
 	}
 
 	log.WithFields(logrus.Fields{
 		"at": "i2np.ReadI2NPNTCPHeader",
 	}).Debug("parsed_i2np_ntcp_header")
 	return header, nil
+}
+
+// readHeaderType reads and validates the I2NP message type field.
+func readHeaderType(data []byte, header *I2NPNTCPHeader) error {
+	messageType, err := ReadI2NPType(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP type")
+		return err
+	}
+	header.Type = messageType
+	return nil
+}
+
+// readHeaderMessageID reads and validates the NTCP message ID field.
+func readHeaderMessageID(data []byte, header *I2NPNTCPHeader) error {
+	messageID, err := ReadI2NPNTCPMessageID(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP NTCP message ID")
+		return err
+	}
+	header.MessageID = messageID
+	return nil
+}
+
+// readHeaderExpiration reads and validates the message expiration timestamp.
+func readHeaderExpiration(data []byte, header *I2NPNTCPHeader) error {
+	messageDate, err := ReadI2NPNTCPMessageExpiration(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP NTCP message expiration")
+		return err
+	}
+	header.Expiration = messageDate.Time()
+	return nil
+}
+
+// readHeaderSize reads and validates the message size field.
+func readHeaderSize(data []byte, header *I2NPNTCPHeader) error {
+	messageSize, err := ReadI2NPNTCPMessageSize(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP NTCP message size")
+		return err
+	}
+	header.Size = messageSize
+	return nil
+}
+
+// readHeaderChecksum reads and validates the message checksum field.
+func readHeaderChecksum(data []byte, header *I2NPNTCPHeader) error {
+	messageChecksum, err := ReadI2NPNTCPMessageChecksum(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP NTCP message checksum")
+		return err
+	}
+	header.Checksum = messageChecksum
+	return nil
+}
+
+// readHeaderData reads and validates the message data payload.
+func readHeaderData(data []byte, header *I2NPNTCPHeader) error {
+	messageData, err := ReadI2NPNTCPData(data, header.Size)
+	if err != nil {
+		log.WithError(err).Error("Failed to read I2NP NTCP message data")
+		return err
+	}
+	header.Data = messageData
+	return nil
 }
 
 // ReadI2NPSecondGenTransportHeader reads an I2NP NTCP2 or SSU2 header
