@@ -398,17 +398,28 @@ func (rt *RouterTimestamper) stampTime(now time.Time) {
 	}
 }
 
+// updateConfig refreshes RouterTimestamper configuration with current settings.
 func (rt *RouterTimestamper) updateConfig() {
 	// Protect configuration updates with mutex to prevent race conditions
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 
+	rt.parseServerList()
+	rt.validateConfigBounds()
+	rt.setupPriorityServers()
+}
+
+// parseServerList splits and trims the default server list into individual server addresses.
+func (rt *RouterTimestamper) parseServerList() {
 	serverList := defaultServerList
 	rt.servers = strings.Split(serverList, ",")
 	for i, server := range rt.servers {
 		rt.servers[i] = strings.TrimSpace(server)
 	}
+}
 
+// validateConfigBounds ensures query frequency and concurrent server count are within acceptable ranges.
+func (rt *RouterTimestamper) validateConfigBounds() {
 	if rt.queryFrequency < minQueryFrequency {
 		rt.queryFrequency = minQueryFrequency
 	}
@@ -418,7 +429,10 @@ func (rt *RouterTimestamper) updateConfig() {
 	} else if rt.concurringServers > 4 {
 		rt.concurringServers = 4
 	}
+}
 
+// setupPriorityServers configures country and zone-based NTP server priorities.
+func (rt *RouterTimestamper) setupPriorityServers() {
 	country := getLocalCountryCode()
 	if country != "" && country != "a1" && country != "a2" {
 		rt.priorityServers = [][]string{}

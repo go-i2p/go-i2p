@@ -35,29 +35,49 @@ var riks KeyStore = &RouterInfoKeystore{}
 // it accepts a directory to store the keys in and a name for the keys
 // then it generates new private keys for the routerInfo if none exist
 func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
+	if err := ensureDirectoryExists(dir); err != nil {
+		return nil, err
+	}
+
+	privateKey, err := loadOrGenerateKey(dir, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return initializeKeystore(dir, name, privateKey), nil
+}
+
+// ensureDirectoryExists creates the directory if it does not exist.
+// Returns an error if directory creation fails.
+func ensureDirectoryExists(dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err := os.MkdirAll(dir, 0o755)
-		if err != nil {
-			return nil, err
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
 		}
 	}
-	var privateKey types.PrivateKey
+	return nil
+}
+
+// loadOrGenerateKey attempts to load an existing key from the specified path.
+// If no key exists, it generates a new key. Returns the loaded or generated
+// private key, or an error if the operation fails.
+func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 	fullPath := filepath.Join(dir, name)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		privateKey, err = generateNewKey()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		keyData, err := os.ReadFile(fullPath)
-		if err != nil {
-			return nil, err
-		}
-		privateKey, err = loadExistingKey(keyData)
-		if err != nil {
-			return nil, err
-		}
+		return generateNewKey()
 	}
+
+	keyData, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return loadExistingKey(keyData)
+}
+
+// initializeKeystore constructs and returns a configured RouterInfoKeystore
+// with the provided directory, name, private key, and a default NTP timestamper.
+func initializeKeystore(dir, name string, privateKey types.PrivateKey) *RouterInfoKeystore {
 	defaultClient := &sntp.DefaultNTPClient{}
 	timestamper := sntp.NewRouterTimestamper(defaultClient)
 	return &RouterInfoKeystore{
@@ -65,7 +85,7 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 		name:              name,
 		privateKey:        privateKey,
 		RouterTimestamper: timestamper,
-	}, nil
+	}
 }
 
 func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
