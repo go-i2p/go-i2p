@@ -51,14 +51,27 @@ func (z *Zones) initialize() {
 	z.readContinentFile()
 }
 
+// readContinentFile loads country-to-continent mappings from the embedded continents.txt file.
+// It parses each line in the format "country_code,continent_code" and populates the countryToZone map.
 func (z *Zones) readContinentFile() {
-	file, err := continentsFS.Open("continents.txt")
+	file, err := z.openContinentFile()
 	if err != nil {
 		log.Printf("Error opening continents.txt: %v\n", err)
 		return
 	}
 	defer file.Close()
 
+	z.parseContinentMappings(file)
+}
+
+// openContinentFile opens and returns the embedded continents.txt file.
+func (z *Zones) openContinentFile() (io.ReadCloser, error) {
+	return continentsFS.Open("continents.txt")
+}
+
+// parseContinentMappings reads and processes lines from the continent file reader.
+// Each valid line maps a country code to its continent zone.
+func (z *Zones) parseContinentMappings(file io.Reader) {
 	reader := bufio.NewReader(file)
 	for {
 		line, err := reader.ReadString('\n')
@@ -70,21 +83,33 @@ func (z *Zones) readContinentFile() {
 			break
 		}
 
-		line = strings.TrimSpace(line)
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
+		z.processLine(line)
+	}
+}
 
-		parts := strings.Split(line, ",")
-		if len(parts) < 2 {
-			continue
-		}
+// processLine parses a single line from the continent file and updates the country-to-zone mapping.
+// Lines starting with '#' or empty lines are skipped. Valid lines must contain at least two comma-separated values.
+func (z *Zones) processLine(line string) {
+	line = strings.TrimSpace(line)
+	if len(line) == 0 || strings.HasPrefix(line, "#") {
+		return
+	}
 
-		countryCode := strings.ToLower(strings.TrimSpace(parts[0]))
-		continentCode := strings.ToUpper(strings.TrimSpace(parts[1]))
+	parts := strings.Split(line, ",")
+	if len(parts) < 2 {
+		return
+	}
 
-		if zone, ok := z.continentToZone[continentCode]; ok {
-			z.countryToZone[countryCode] = zone
-		}
+	z.mapCountryToZone(parts[0], parts[1])
+}
+
+// mapCountryToZone associates a country code with its corresponding continent zone.
+// Both the country code and continent code are normalized before mapping.
+func (z *Zones) mapCountryToZone(countryCode, continentCode string) {
+	countryCode = strings.ToLower(strings.TrimSpace(countryCode))
+	continentCode = strings.ToUpper(strings.TrimSpace(continentCode))
+
+	if zone, ok := z.continentToZone[continentCode]; ok {
+		z.countryToZone[countryCode] = zone
 	}
 }
