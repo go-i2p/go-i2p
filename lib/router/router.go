@@ -158,8 +158,17 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 	}
 	log.Debug("NTCP2 address:", ntcpaddr)
 
-	// TODO: Add the NTCP2 address to RouterInfo once RouterAddress conversion is implemented
-	// ri.AddAddress(ntcpaddr)
+	// Convert NTCP2 transport address to RouterAddress and add to RouterInfo
+	routerAddress, err := ntcp.ConvertToRouterAddress(ntcp2Transport)
+	if err != nil {
+		log.WithError(err).Error("Failed to convert NTCP2 address to RouterAddress")
+		return fmt.Errorf("failed to convert NTCP2 address: %w", err)
+	}
+	ri.AddAddress(routerAddress)
+	log.WithFields(logrus.Fields{
+		"host": ntcpaddr.String(),
+		"cost": routerAddress.Cost(),
+	}).Info("NTCP2 address added to RouterInfo")
 
 	return nil
 }

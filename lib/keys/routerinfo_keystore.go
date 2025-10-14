@@ -2,10 +2,11 @@ package keys
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/certificate"
 	"github.com/go-i2p/common/data"
