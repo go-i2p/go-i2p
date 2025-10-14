@@ -524,24 +524,27 @@ func (db *StdNetDB) updateCacheAfterReseed() error {
 	return nil
 }
 
-// StoreRouterInfo stores a RouterInfo entry in the database from I2NP DatabaseStore message
-func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
-	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")
-
-	// Validate data type - should be RouterInfo (type 0)
+// validateRouterInfoDataType checks if the data type is valid for RouterInfo storage.
+func validateRouterInfoDataType(dataType byte) error {
 	if dataType != 0 {
 		log.WithField("type", dataType).Warn("Invalid data type for RouterInfo, expected 0")
 		return fmt.Errorf("invalid data type for RouterInfo: expected 0, got %d", dataType)
 	}
+	return nil
+}
 
-	// Parse the RouterInfo from the data
+// parseRouterInfoData parses RouterInfo from raw bytes.
+func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse RouterInfo from DatabaseStore data")
-		return fmt.Errorf("failed to parse RouterInfo: %w", err)
+		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}
+	return ri, nil
+}
 
-	// Verify the key matches the RouterInfo identity hash
+// verifyRouterInfoHash validates that the provided key matches the RouterInfo identity hash.
+func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
 	expectedHash := ri.IdentHash()
 	if key != expectedHash {
 		log.WithFields(logrus.Fields{
@@ -550,33 +553,66 @@ func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte)
 		}).Error("RouterInfo hash mismatch")
 		return fmt.Errorf("RouterInfo hash mismatch: expected %x, got %x", expectedHash, key)
 	}
+	return nil
+}
 
-	// Check if we already have this RouterInfo in memory
+// addRouterInfoToCache adds a RouterInfo entry to the in-memory cache if it doesn't exist.
+// Returns true if the entry was added, false if it already existed.
+func (db *StdNetDB) addRouterInfoToCache(key common.Hash, ri router_info.RouterInfo) bool {
 	db.riMutex.Lock()
+	defer db.riMutex.Unlock()
+
 	if _, exists := db.RouterInfos[key]; exists {
-		db.riMutex.Unlock()
 		log.WithField("hash", key).Debug("RouterInfo already exists in memory, skipping")
-		return nil
+		return false
 	}
 
-	// Add to in-memory cache
 	db.RouterInfos[key] = Entry{
 		RouterInfo: &ri,
 	}
-	db.riMutex.Unlock()
+	return true
+}
 
-	// Save to filesystem
+// persistRouterInfoToFilesystem saves a RouterInfo entry to the filesystem.
+// If the save fails, it removes the entry from the in-memory cache.
+func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_info.RouterInfo) error {
 	entry := &Entry{
 		RouterInfo: &ri,
 	}
 
 	if err := db.SaveEntry(entry); err != nil {
 		log.WithError(err).Error("Failed to save RouterInfo to filesystem")
-		// Remove from memory if filesystem save failed
 		db.riMutex.Lock()
 		delete(db.RouterInfos, key)
 		db.riMutex.Unlock()
 		return fmt.Errorf("failed to save RouterInfo to filesystem: %w", err)
+	}
+	return nil
+}
+
+// StoreRouterInfo stores a RouterInfo entry in the database from I2NP DatabaseStore message.
+func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")
+
+	if err := validateRouterInfoDataType(dataType); err != nil {
+		return err
+	}
+
+	ri, err := parseRouterInfoData(data)
+	if err != nil {
+		return err
+	}
+
+	if err := verifyRouterInfoHash(key, ri); err != nil {
+		return err
+	}
+
+	if !db.addRouterInfoToCache(key, ri) {
+		return nil
+	}
+
+	if err := db.persistRouterInfoToFilesystem(key, ri); err != nil {
+		return err
 	}
 
 	log.WithField("hash", key).Debug("Successfully stored RouterInfo")
