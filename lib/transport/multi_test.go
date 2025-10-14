@@ -222,7 +222,6 @@ func TestAcceptWithTimeoutConcurrent(t *testing.T) {
 
 			// Each goroutine attempts accept with timeout
 			conn, err := muxer.AcceptWithTimeout(200 * time.Millisecond)
-
 			// Note: With this mock, all will succeed since each call creates
 			// a new goroutine that doesn't block others
 			if err != nil {

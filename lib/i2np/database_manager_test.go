@@ -95,7 +95,6 @@ func TestDatabaseLookupFound(t *testing.T) {
 
 	// Execute lookup
 	err := dbManager.PerformLookup(lookup)
-
 	// Verify results
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -132,7 +131,6 @@ func TestDatabaseLookupNotFound(t *testing.T) {
 
 	// Execute lookup
 	err := dbManager.PerformLookup(lookup)
-
 	// Verify results
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -167,7 +165,6 @@ func TestDatabaseLookupWithoutRetriever(t *testing.T) {
 
 	// Execute lookup
 	err := dbManager.PerformLookup(lookup)
-
 	// Should still work - will send DatabaseSearchReply
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)

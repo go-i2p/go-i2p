@@ -14,21 +14,21 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 	if !SupportsNTCP2(&routerInfo) {
 		return nil, ErrNTCP2NotSupported
 	}
-	
+
 	for _, addr := range routerInfo.RouterAddresses() {
 		if !isNTCP2Transport(addr) {
 			continue
 		}
-		
+
 		tcpAddr, err := resolveTCPAddress(addr)
 		if err != nil {
 			continue
 		}
-		
+
 		hash := routerInfo.IdentHash().Bytes()
 		return WrapNTCP2Addr(tcpAddr, hash[:])
 	}
-	
+
 	return nil, ErrInvalidRouterInfo
 }
 
@@ -49,12 +49,12 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	port, err := addr.Port()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return net.ResolveTCPAddr("tcp", net.JoinHostPort(host.String(), port))
 }
 
