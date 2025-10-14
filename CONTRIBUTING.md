@@ -1,6 +1,8 @@
 # Contributing
 
-Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we're reachable here at github.com/go-i2p also.
+Thanks for taking a look at go-i2p! 
+
+Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we're reachable here at github.com/go-i2p also.
 
 ## Getting Started
 
@@ -20,7 +22,7 @@ go install github.com/ofabry/go-callvis@master
 
 On Windows, one must install the latest versions of Go and Git Bash from their respective sources.
 
-## Set up your workspace:
+## Set up your workspace
 
 ```sh
 github_username=yourusername
@@ -31,9 +33,19 @@ github.com/go-i2p/go-i2p
 
 Fork go-i2p and clone it into your workspace.  Make sure you can execute `go test ./...` in the project's root directory.  At that point you should have everything you need to start making changes and opening pull requests.
 
+## Standards
+
+go-i2p maintains fairly strict standards intended to improve debuggability, readability, understandability, and overall maintainability. These are not dogma, but they are generally applicable.
+
+ - Keep functions around 35 lines long or less
+ - Keep cyclomatic complexity of functions below about 10
+ - Keep nesting depth less than 3
+
+If a function requires more code than that, carefully consider the discrete tasks inside it and consider breaking them out into their own, named, private function with a documentation comment. This makes higher-level functions more readable "orchestration" style functions, and isolates complexity into smaller, readily testable functions that do one thing well.
+
 ## I2P Specifications
 
-The I2P community maintains up-to-date [specifications](https://geti2p.net/spec) of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in `lib/common/`) have been implemented and tested, and serve as good examples.
+The I2P community maintains up-to-date [specifications](https://geti2p.net/spec) of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in `github.com/go-i2p/lib/common/`) have been implemented and tested, and serve as good examples.
 
 ## Testing
 
@@ -64,18 +76,7 @@ log.WithFields(log.Fields{
 
 #### Testing
 
-Testify is used to assert test cases in all tests in go-i2p for simplicity.  Here is an example from the RouterInfo tests:
-
-```go
-func TestRouterAddressCountReturnsCorrectCount(t *testing.T) {
-	assert := assert.New(t)
-
-	router_info := buildFullRouterInfo()
-	count, err := router_info.RouterAddressCount()
-	assert.Nil(err)
-	assert.Equal(1, count, "RouterInfo.RouterAddressCount() did not return correct count")
-}
-```
+Testify is used to assert test cases in some tests in go-i2p for simplicity. In other cases, only the std library is used. Either approach is valid, what is important is that you add tests.
 
 ## Pull Requests
 

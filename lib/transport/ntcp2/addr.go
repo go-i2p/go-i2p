@@ -3,44 +3,59 @@ package ntcp2
 import (
 	"net"
 
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-noise/ntcp2"
 )
 
-// Extract NTCP2 address from RouterInfo
+// ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
+// It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 	if !SupportsNTCP2(&routerInfo) {
 		return nil, ErrNTCP2NotSupported
 	}
+	
 	for _, addr := range routerInfo.RouterAddresses() {
-		style := addr.TransportStyle()
-		str, err := style.Data()
+		if !isNTCP2Transport(addr) {
+			continue
+		}
+		
+		tcpAddr, err := resolveTCPAddress(addr)
 		if err != nil {
 			continue
 		}
-		if str == "ntcp2" {
-			// Extract host and port from RouterAddress options
-			host, err := addr.Host()
-			if err != nil {
-				continue
-			}
-			port, err := addr.Port()
-			if err != nil {
-				continue
-			}
-
-			// Create a proper TCP address
-			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(host.String(), port))
-			if err != nil {
-				continue
-			}
-
-			// Now wrap the TCP address with NTCP2 metadata
-			hash := routerInfo.IdentHash().Bytes()
-			return WrapNTCP2Addr(tcpAddr, hash[:])
-		}
+		
+		hash := routerInfo.IdentHash().Bytes()
+		return WrapNTCP2Addr(tcpAddr, hash[:])
 	}
+	
 	return nil, ErrInvalidRouterInfo
+}
+
+// isNTCP2Transport checks if a router address uses the NTCP2 transport style.
+func isNTCP2Transport(addr *router_address.RouterAddress) bool {
+	style := addr.TransportStyle()
+	str, err := style.Data()
+	if err != nil {
+		return false
+	}
+	return str == "ntcp2"
+}
+
+// resolveTCPAddress extracts host and port from a router address and resolves them to a TCP address.
+// It returns an error if host or port extraction fails, or if TCP address resolution fails.
+func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
+	host, err := addr.Host()
+	if err != nil {
+		return nil, err
+	}
+	
+	port, err := addr.Port()
+	if err != nil {
+		return nil, err
+	}
+	
+	return net.ResolveTCPAddr("tcp", net.JoinHostPort(host.String(), port))
 }
 
 // Check if RouterInfo supports NTCP2
