@@ -41,7 +41,7 @@ go-i2p maintains fairly strict standards intended to improve debuggability, read
  - Keep cyclomatic complexity of functions below about 10
  - Keep nesting depth less than 3
 
-If a function requires more code than that, carefully consider the discrete tasks inside it and consider breaking them out into their own, named, private function with a documentation comment. This makes higher-level functions more readable "orchestration" style functions, and isolates complexity into smaller, readily testable functions that do one thing well.
+If a function requires more code than that, carefully consider the discrete tasks inside it and consider breaking them out into their own, named, private function with a documentation comment. This makes higher-level functions more readable "orchestration" style functions, and isolates complexity into smaller, readily testable functions that do one thing well. All our lives will be easier if you do this.
 
 ## I2P Specifications
 
