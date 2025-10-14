@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 680 commits
+        📝 703 commits
          • 📜 MIT License
       </div>
     </div>
@@ -47,7 +47,9 @@
       <div class="doc-content">
         <h1 id="contributing">Contributing</h1>
 
-<p>Thanks for taking a look at go-i2p!  Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we&rsquo;re reachable here at github.com/go-i2p also.</p>
+<p>Thanks for taking a look at go-i2p!</p>
+
+<p>Please reach out if you have any questions or need help getting started. We have an IRC channel on IRC2P: #go-i2p-dev and we&rsquo;re reachable here at github.com/go-i2p also.</p>
 
 <h2 id="getting-started">Getting Started</h2>
 
@@ -66,7 +68,7 @@ go install github.com/ofabry/go-callvis@master
 
 <p>On Windows, one must install the latest versions of Go and Git Bash from their respective sources.</p>
 
-<h2 id="set-up-your-workspace">Set up your workspace:</h2>
+<h2 id="set-up-your-workspace">Set up your workspace</h2>
 
 <pre><code class="language-sh">github_username=yourusername
 cd $(go env GOPATH)
@@ -76,9 +78,21 @@ github.com/go-i2p/go-i2p
 
 <p>Fork go-i2p and clone it into your workspace.  Make sure you can execute <code>go test ./...</code> in the project&rsquo;s root directory.  At that point you should have everything you need to start making changes and opening pull requests.</p>
 
+<h2 id="standards">Standards</h2>
+
+<p>go-i2p maintains fairly strict standards intended to improve debuggability, readability, understandability, and overall maintainability. These are not dogma, but they are generally applicable.</p>
+
+<ul>
+<li>Keep functions around 35 lines long or less</li>
+<li>Keep cyclomatic complexity of functions below about 10</li>
+<li>Keep nesting depth less than 3</li>
+</ul>
+
+<p>If a function requires more code than that, carefully consider the discrete tasks inside it and consider breaking them out into their own, named, private function with a documentation comment. This makes higher-level functions more readable &ldquo;orchestration&rdquo; style functions, and isolates complexity into smaller, readily testable functions that do one thing well. All our lives will be easier if you do this.</p>
+
 <h2 id="i2p-specifications">I2P Specifications</h2>
 
-<p>The I2P community maintains up-to-date <a href="https://geti2p.net/spec" target="_blank">specifications</a> of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in <code>lib/common/</code>) have been implemented and tested, and serve as good examples.</p>
+<p>The I2P community maintains up-to-date <a href="https://geti2p.net/spec" target="_blank">specifications</a> of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in <code>github.com/go-i2p/lib/common/</code>) have been implemented and tested, and serve as good examples.</p>
 
 <h2 id="testing">Testing</h2>
 
@@ -108,17 +122,7 @@ github.com/go-i2p/go-i2p
 
 <h4 id="testing-1">Testing</h4>
 
-<p>Testify is used to assert test cases in all tests in go-i2p for simplicity.  Here is an example from the RouterInfo tests:</p>
-
-<pre><code class="language-go">func TestRouterAddressCountReturnsCorrectCount(t *testing.T) {
-	assert := assert.New(t)
-
-	router_info := buildFullRouterInfo()
-	count, err := router_info.RouterAddressCount()
-	assert.Nil(err)
-	assert.Equal(1, count, &quot;RouterInfo.RouterAddressCount() did not return correct count&quot;)
-}
-</code></pre>
+<p>Testify is used to assert test cases in some tests in go-i2p for simplicity. In other cases, only the std library is used. Either approach is valid, what is important is that you add tests.</p>
 
 <h2 id="pull-requests">Pull Requests</h2>
 
@@ -128,7 +132,7 @@ github.com/go-i2p/go-i2p
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-10-14 22:19:07 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-10-14 23:04:52 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
