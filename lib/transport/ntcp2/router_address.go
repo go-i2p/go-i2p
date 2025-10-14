@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/router_address"
+	ntcp2noise "github.com/go-i2p/go-noise/ntcp2"
 )
 
 // ConvertToRouterAddress converts an NTCP2Transport's listening address to a RouterAddress
@@ -25,52 +26,18 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		return nil, fmt.Errorf("transport cannot be nil")
 	}
 
-	// Get the listening address from transport
-	addr := transport.Addr()
-	if addr == nil {
-		return nil, fmt.Errorf("transport has no listening address")
+	host, port, err := extractTransportAddress(transport)
+	if err != nil {
+		return nil, err
 	}
 
-	// Extract host and port from TCP address
-	tcpAddr, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return nil, fmt.Errorf("expected *net.TCPAddr, got %T", addr)
+	staticKey, err := validateAndExtractStaticKey(transport)
+	if err != nil {
+		return nil, err
 	}
 
-	host := tcpAddr.IP.String()
-	port := fmt.Sprintf("%d", tcpAddr.Port)
+	options := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
 
-	// Get NTCP2 configuration for static key and IV
-	if transport.config == nil || transport.config.NTCP2Config == nil {
-		return nil, fmt.Errorf("transport NTCP2 configuration is not initialized")
-	}
-
-	ntcp2Config := transport.config.NTCP2Config
-
-	// Extract static key (required for NTCP2)
-	if len(ntcp2Config.StaticKey) != 32 {
-		return nil, fmt.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
-	}
-	staticKey := base64.StdEncoding.EncodeToString(ntcp2Config.StaticKey)
-
-	// Build options map for RouterAddress
-	options := map[string]string{
-		"host": host,
-		"port": port,
-		"s":    staticKey, // 's' is the standard key for static key in I2P RouterAddress
-		"v":    "2",       // NTCP2 protocol version
-	}
-
-	// Add initialization vector if configured (optional but recommended)
-	if len(ntcp2Config.ObfuscationIV) == 16 {
-		iv := base64.StdEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
-		options["i"] = iv // 'i' is the standard key for IV in I2P RouterAddress
-	}
-
-	// Create RouterAddress with standard parameters
-	// Cost: 10 (arbitrary default, can be adjusted based on network conditions)
-	// Expiration: 2 hours from now (standard I2P practice)
-	// Transport: "ntcp2"
 	expiration := time.Now().Add(2 * time.Hour)
 	routerAddress, err := router_address.NewRouterAddress(
 		10, // cost
@@ -83,4 +50,58 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 	}
 
 	return routerAddress, nil
+}
+
+// extractTransportAddress extracts and validates the host and port from the transport's listening address.
+// Returns the host IP string, port string, and any error encountered during extraction.
+func extractTransportAddress(transport *NTCP2Transport) (string, string, error) {
+	addr := transport.Addr()
+	if addr == nil {
+		return "", "", fmt.Errorf("transport has no listening address")
+	}
+
+	tcpAddr, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return "", "", fmt.Errorf("expected *net.TCPAddr, got %T", addr)
+	}
+
+	host := tcpAddr.IP.String()
+	port := fmt.Sprintf("%d", tcpAddr.Port)
+
+	return host, port, nil
+}
+
+// validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded static key.
+// Returns the base64-encoded static key string and any validation error encountered.
+func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
+	if transport.config == nil || transport.config.NTCP2Config == nil {
+		return "", fmt.Errorf("transport NTCP2 configuration is not initialized")
+	}
+
+	ntcp2Config := transport.config.NTCP2Config
+
+	if len(ntcp2Config.StaticKey) != 32 {
+		return "", fmt.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
+	}
+
+	staticKey := base64.StdEncoding.EncodeToString(ntcp2Config.StaticKey)
+	return staticKey, nil
+}
+
+// buildRouterAddressOptions constructs the options map for the RouterAddress with all required
+// NTCP2 parameters including host, port, static key, and optional obfuscation IV.
+func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) map[string]string {
+	options := map[string]string{
+		"host": host,
+		"port": port,
+		"s":    staticKey, // 's' is the standard key for static key in I2P RouterAddress
+		"v":    "2",       // NTCP2 protocol version
+	}
+
+	if len(ntcp2Config.ObfuscationIV) == 16 {
+		iv := base64.StdEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
+		options["i"] = iv // 'i' is the standard key for IV in I2P RouterAddress
+	}
+
+	return options
 }
