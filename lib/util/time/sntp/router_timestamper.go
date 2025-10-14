@@ -222,35 +222,48 @@ func (rt *RouterTimestamper) run() {
 	defer rt.waitGroup.Done()
 	for rt.isRunning {
 		lastFailed := rt.performTimeQuery()
+		sleepTime := rt.calculateSleepDuration(lastFailed)
 
-		var sleepTime time.Duration
-		if lastFailed {
-			rt.consecutiveFails++
-			if rt.consecutiveFails >= maxConsecutiveFails {
-				sleepTime = 30 * time.Minute
-			} else {
-				sleepTime = 30 * time.Second
-			}
-		} else {
-			rt.consecutiveFails = 0
-			randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
-			sleepTime = rt.queryFrequency + randomDelay
-
-			// Safely read wellSynced with mutex protection
-			rt.mutex.Lock()
-			wellSynced := rt.wellSynced
-			rt.mutex.Unlock()
-
-			if wellSynced {
-				sleepTime *= 3
-			}
-		}
-
-		select {
-		case <-time.After(sleepTime):
-		case <-rt.stopChan:
+		if !rt.waitWithCancellation(sleepTime) {
 			return
 		}
+	}
+}
+
+// calculateSleepDuration determines the appropriate sleep duration based on query results.
+// It adjusts the sleep time based on consecutive failures and synchronization status.
+func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Duration {
+	if lastFailed {
+		rt.consecutiveFails++
+		if rt.consecutiveFails >= maxConsecutiveFails {
+			return 30 * time.Minute
+		}
+		return 30 * time.Second
+	}
+
+	rt.consecutiveFails = 0
+	randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
+	sleepTime := rt.queryFrequency + randomDelay
+
+	rt.mutex.Lock()
+	wellSynced := rt.wellSynced
+	rt.mutex.Unlock()
+
+	if wellSynced {
+		sleepTime *= 3
+	}
+
+	return sleepTime
+}
+
+// waitWithCancellation waits for the specified duration or until cancellation is requested.
+// Returns true if the wait completed normally, false if cancelled.
+func (rt *RouterTimestamper) waitWithCancellation(duration time.Duration) bool {
+	select {
+	case <-time.After(duration):
+		return true
+	case <-rt.stopChan:
+		return false
 	}
 }
 
