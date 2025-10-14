@@ -132,26 +132,48 @@ func (s *NTCP2Session) sendWorker() {
 	for {
 		select {
 		case msg := <-s.sendQueue:
-			atomic.AddInt32(&s.sendQueueSize, -1)
-
-			// Frame the I2NP message
-			framedData, err := FrameI2NPMessage(msg)
-			if err != nil {
-				s.setError(WrapNTCP2Error(err, "framing message"))
+			if !s.processSendQueueMessage(msg) {
 				return
 			}
-
-			// Write to connection
-			_, err = s.conn.Write(framedData)
-			if err != nil {
-				s.setError(WrapNTCP2Error(err, "writing message"))
-				return
-			}
-
 		case <-s.ctx.Done():
 			return
 		}
 	}
+}
+
+// processSendQueueMessage processes a single I2NP message from the send queue.
+// Returns false if an error occurred and the worker should stop, true otherwise.
+func (s *NTCP2Session) processSendQueueMessage(msg i2np.I2NPMessage) bool {
+	atomic.AddInt32(&s.sendQueueSize, -1)
+
+	framedData, err := s.frameMessage(msg)
+	if err != nil {
+		return false
+	}
+
+	return s.writeFramedData(framedData)
+}
+
+// frameMessage frames an I2NP message for transmission.
+// Returns the framed data or sets an error and returns nil.
+func (s *NTCP2Session) frameMessage(msg i2np.I2NPMessage) ([]byte, error) {
+	framedData, err := FrameI2NPMessage(msg)
+	if err != nil {
+		s.setError(WrapNTCP2Error(err, "framing message"))
+		return nil, err
+	}
+	return framedData, nil
+}
+
+// writeFramedData writes framed data to the connection.
+// Returns false if an error occurred, true if write succeeded.
+func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
+	_, err := s.conn.Write(framedData)
+	if err != nil {
+		s.setError(WrapNTCP2Error(err, "writing message"))
+		return false
+	}
+	return true
 }
 
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
