@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/go-i2p/crypto/rand"
 
@@ -28,6 +29,14 @@ type RouterInfoKeystore struct {
 	dir        string
 	name       string
 	privateKey types.PrivateKey
+	// cachedKeyID stores the fallback KeyID to ensure consistency across multiple calls
+	// when privateKey.Public() fails. This prevents race conditions where KeyID()
+	// could return different values on each invocation.
+	cachedKeyID string
+	// keyIDOnce ensures thread-safe initialization of cachedKeyID
+	keyIDOnce sync.Once
+	// keyIDMutex protects concurrent access to cachedKeyID
+	keyIDMutex sync.RWMutex
 }
 
 var riks KeyStore = &RouterInfoKeystore{}
@@ -126,23 +135,71 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 }
 
 func (ks *RouterInfoKeystore) KeyID() string {
-	if ks.name == "" {
-		public, err := ks.privateKey.Public()
-		if err != nil {
-			// Generate a random fallback ID instead of returning "error"
-			randomBytes := make([]byte, 4)
-			if _, randErr := rand.Read(randomBytes); randErr != nil {
-				// If random generation also fails, use a timestamped fallback
-				return "fallback-key"
-			}
-			return "fallback-" + hex.EncodeToString(randomBytes)
-		}
-		if len(public.Bytes()) > 10 {
-			return hex.EncodeToString(public.Bytes()[:10])
-		}
-		return hex.EncodeToString(public.Bytes())
+	// If a name is explicitly set, always return it
+	if ks.name != "" {
+		return ks.name
 	}
-	return ks.name
+
+	// Check if we already have a cached KeyID (with read lock)
+	ks.keyIDMutex.RLock()
+	if ks.cachedKeyID != "" {
+		cachedID := ks.cachedKeyID
+		ks.keyIDMutex.RUnlock()
+		return cachedID
+	}
+	ks.keyIDMutex.RUnlock()
+
+	// Try to generate KeyID from the private key
+	keyID, needsFallback := ks.tryGenerateKeyIDFromPrivateKey()
+
+	if needsFallback {
+		// Use sync.Once to ensure fallback ID is generated only once
+		// This prevents race conditions in concurrent access
+		ks.keyIDOnce.Do(func() {
+			ks.keyIDMutex.Lock()
+			ks.cachedKeyID = ks.generateFallbackKeyID()
+			ks.keyIDMutex.Unlock()
+		})
+
+		// Return the cached fallback ID
+		ks.keyIDMutex.RLock()
+		cachedID := ks.cachedKeyID
+		ks.keyIDMutex.RUnlock()
+		return cachedID
+	}
+
+	return keyID
+}
+
+// tryGenerateKeyIDFromPrivateKey attempts to generate a KeyID from the private key.
+// Returns the keyID and a boolean indicating whether a fallback is needed.
+func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, needsFallback bool) {
+	// Handle nil privateKey case
+	if ks.privateKey == nil {
+		return "", true
+	}
+
+	public, err := ks.privateKey.Public()
+	if err != nil {
+		return "", true
+	}
+
+	// Generate KeyID from public key bytes
+	if len(public.Bytes()) > 10 {
+		return hex.EncodeToString(public.Bytes()[:10]), false
+	}
+	return hex.EncodeToString(public.Bytes()), false
+}
+
+// generateFallbackKeyID creates a fallback KeyID when private key is unavailable.
+// This should only be called once per keystore instance via sync.Once.
+func (ks *RouterInfoKeystore) generateFallbackKeyID() string {
+	randomBytes := make([]byte, 4)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// If random generation fails, use a fixed fallback
+		return "fallback-key"
+	}
+	return "fallback-" + hex.EncodeToString(randomBytes)
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate
