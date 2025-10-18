@@ -445,8 +445,9 @@ func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err 
 	hash_start := FLAG_SIZE
 	hash_end := FLAG_SIZE + HASH_SIZE
 	if delivery_type == DT_TUNNEL {
-		hash_start := hash_start + TUNNEL_ID_SIZE
-		hash_end := hash_end + TUNNEL_ID_SIZE
+		// Fixed: Reassign instead of shadowing to correctly adjust offsets for tunnel delivery type
+		hash_start = hash_start + TUNNEL_ID_SIZE
+		hash_end = hash_end + TUNNEL_ID_SIZE
 		if len(delivery_instructions) >= hash_end {
 			copy(hash[:], delivery_instructions[hash_start:hash_end])
 			log.WithField("hash", hash).Debug("Hash retrieved for DT_TUNNEL")
