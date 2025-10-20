@@ -31,6 +31,13 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 	}
 	ntcp2Config.StaticKey = staticKey
 
+	// Generate a test obfuscation IV (16 bytes required per I2P spec)
+	obfuscationIV := make([]byte, 16)
+	for i := range obfuscationIV {
+		obfuscationIV[i] = byte(i + 128)
+	}
+	ntcp2Config.ObfuscationIV = obfuscationIV
+
 	// Create test config
 	config := &Config{
 		ListenerAddress: listenAddr,
@@ -174,6 +181,19 @@ func TestConvertToRouterAddress_InvalidStaticKey(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, routerAddr)
 	assert.Contains(t, err.Error(), "invalid static key length")
+}
+
+// TestConvertToRouterAddress_InvalidIV tests error handling for invalid IV
+func TestConvertToRouterAddress_InvalidIV(t *testing.T) {
+	transport := createTestTransport(t, "127.0.0.1:0")
+
+	// Corrupt the IV to wrong length
+	transport.config.NTCP2Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
+
+	routerAddr, err := ConvertToRouterAddress(transport)
+	assert.Error(t, err)
+	assert.Nil(t, routerAddr)
+	assert.Contains(t, err.Error(), "invalid IV length")
 }
 
 // TestConvertToRouterAddress_SpecificPort tests conversion with specific port

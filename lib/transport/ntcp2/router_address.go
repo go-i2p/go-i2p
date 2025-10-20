@@ -36,7 +36,10 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		return nil, err
 	}
 
-	options := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
+	options, err := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
+	if err != nil {
+		return nil, err
+	}
 
 	expiration := time.Now().Add(2 * time.Hour)
 	routerAddress, err := router_address.NewRouterAddress(
@@ -89,19 +92,30 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 }
 
 // buildRouterAddressOptions constructs the options map for the RouterAddress with all required
-// NTCP2 parameters including host, port, static key, and optional obfuscation IV.
-func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) map[string]string {
+// NTCP2 parameters including host, port, static key, and IV.
+//
+// Per I2P specification (https://geti2p.net/spec/ntcp2#published-addresses):
+// - Static key 's': 32 bytes binary (little-endian X25519), 44 bytes Base64-encoded
+// - IV 'i': 16 bytes binary (big-endian), 24 bytes Base64-encoded
+//
+// Returns the options map and an error if validation fails.
+func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.NTCP2Config) (map[string]string, error) {
+	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)
+	if len(ntcp2Config.ObfuscationIV) != 16 {
+		return nil, fmt.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
+	}
+
+	// Encode IV to Base64 (big-endian per spec)
+	// Note: The ObfuscationIV is already in the correct byte order from go-noise library
+	ivB64 := base64.StdEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
+
 	options := map[string]string{
 		"host": host,
 		"port": port,
-		"s":    staticKey, // 's' is the standard key for static key in I2P RouterAddress
+		"s":    staticKey, // Static key (already validated and Base64-encoded in validateAndExtractStaticKey)
+		"i":    ivB64,     // IV for AES obfuscation (big-endian, Base64-encoded)
 		"v":    "2",       // NTCP2 protocol version
 	}
 
-	if len(ntcp2Config.ObfuscationIV) == 16 {
-		iv := base64.StdEncoding.EncodeToString(ntcp2Config.ObfuscationIV)
-		options["i"] = iv // 'i' is the standard key for IV in I2P RouterAddress
-	}
-
-	return options
+	return options, nil
 }

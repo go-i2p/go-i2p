@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/crypto/rand"
 
@@ -291,7 +292,10 @@ func (ks *RouterInfoKeystore) generateIdentityPadding(keyCert *key_certificate.K
 
 // assembleRouterInfo creates the final RouterInfo with all components and standard options
 func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey) (*router_info.RouterInfo, error) {
-	publishedTime := ks.RouterTimestamper.GetCurrentTime()
+	rawTime := ks.RouterTimestamper.GetCurrentTime()
+	// Round to nearest second per NTCP2 spec to prevent clock bias in the network
+	// Reference: https://geti2p.net/spec/ntcp2#datetime
+	publishedTime := rawTime.Round(time.Second)
 
 	options := map[string]string{
 		"caps":  "NU", // Standard capabilities - Not floodfill, Not Reachable
