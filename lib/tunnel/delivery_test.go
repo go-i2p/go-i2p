@@ -83,7 +83,8 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 	data := []byte{}
 
 	// Flag byte: bit 7=0 (first fragment), bits 6-5=01 (DT_TUNNEL), others=0
-	flag := byte(0x20) // 0b00100000 = DT_TUNNEL (0x01 << 5)
+	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
+	flag := byte(0x10) // 0b00010000 = DT_TUNNEL (0x01 << 4)
 	data = append(data, flag)
 
 	// Tunnel ID (4 bytes)
@@ -117,7 +118,8 @@ func TestDeliveryInstructionsHashRouter(t *testing.T) {
 	data := []byte{}
 
 	// Flag byte: bit 7=0 (first fragment), bits 6-5=10 (DT_ROUTER), others=0
-	flag := byte(0x40) // 0b01000000 = DT_ROUTER (0x02 << 5)
+	// DT_ROUTER (value 2) in bits 5-4: (2 << 4) = 0x20
+	flag := byte(0x20) // 0b00100000 = DT_ROUTER (0x02 << 4)
 	data = append(data, flag)
 
 	// Hash (32 bytes) - immediately after flag for DT_ROUTER
@@ -162,7 +164,7 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	// Create delivery instruction with DT_TUNNEL and all-zero hash
 	data := []byte{}
 
-	flag := byte(0x20) // DT_TUNNEL
+	flag := byte(0x10) // DT_TUNNEL (1 << 4)
 	data = append(data, flag)
 
 	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}
@@ -188,7 +190,7 @@ func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 	// Create delivery instruction with DT_TUNNEL but insufficient data
 	data := []byte{}
 
-	flag := byte(0x20) // DT_TUNNEL
+	flag := byte(0x10) // DT_TUNNEL (1 << 4)
 	data = append(data, flag)
 
 	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}
@@ -213,7 +215,7 @@ func TestDeliveryInstructionsHashInsufficientDataRouter(t *testing.T) {
 	// Create delivery instruction with DT_ROUTER but insufficient data
 	data := []byte{}
 
-	flag := byte(0x40) // DT_ROUTER
+	flag := byte(0x20) // DT_ROUTER (2 << 4)
 	data = append(data, flag)
 
 	// Only partial hash (10 bytes instead of 32)

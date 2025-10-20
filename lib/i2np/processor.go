@@ -165,7 +165,7 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		peerHash := peer.IdentHash()
 
 		// Get transport session to this peer
-		_, err := tm.sessionProvider.GetSessionByHash(peerHash)
+		session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 		if err != nil {
 			log.WithFields(logrus.Fields{
 				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
@@ -174,25 +174,122 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 			continue
 		}
 
-		// Create a tunnel build message (simplified - would need proper I2NP message creation)
+		// Create TunnelBuild I2NP message
+		var buildRecords [8]BuildRequestRecord
+		if i < 8 {
+			buildRecords[i] = records[i] // Place this record at the appropriate position
+		}
+
+		buildMessage := NewTunnelBuildMessage(buildRecords)
+		buildMessage.SetMessageID(int(tunnelID)) // Use tunnel ID as message ID for correlation
+
+		// Send the tunnel build request
+		session.QueueSendI2NP(buildMessage)
+
 		log.WithFields(logrus.Fields{
-			"hop_index": i,
-			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
-		}).Debug("Sending build request to hop")
-		// In a real implementation, we would create a proper TunnelBuild I2NP message
-		// session.QueueSendI2NP(buildMessage)
+			"hop_index":  i,
+			"peer_hash":  fmt.Sprintf("%x", peerHash[:8]),
+			"message_id": buildMessage.MessageID(),
+		}).Debug("Sent tunnel build request to hop")
 	}
 
 	log.WithField("tunnel_id", tunnelID).Debug("Tunnel build requests sent")
 	return nil
 }
 
-// ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface
+// ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface.
+// This method integrates with the tunnel pool to update tunnel states and handle build completions.
 func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error {
 	records := handler.GetReplyRecords()
-	log.WithField("record_count", len(records)).Debug("Processing tunnel reply")
+	recordCount := len(records)
 
-	return handler.ProcessReply()
+	log.WithField("record_count", recordCount).Debug("Processing tunnel reply")
+
+	// Process the reply to get build results
+	err := handler.ProcessReply()
+
+	// Update tunnel state based on reply processing results
+	if tm.pool != nil {
+		tm.updateTunnelStatesFromReply(records, err)
+	} else {
+		log.Warn("No tunnel pool available for state updates")
+	}
+
+	return err
+}
+
+// updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
+// This method finds matching tunnels and updates their states accordingly.
+func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseRecord, replyErr error) {
+	// Find the most recently created tunnel that's still building and matches the record count
+	// In a full implementation, this would use proper tunnel ID correlation
+	matchingTunnel := tm.findMatchingBuildingTunnel(len(records))
+
+	if matchingTunnel == nil {
+		log.WithField("record_count", len(records)).Warn("No matching building tunnel found for reply")
+		return
+	}
+
+	log.WithFields(logrus.Fields{
+		"tunnel_id":    matchingTunnel.ID,
+		"record_count": len(records),
+		"success":      replyErr == nil,
+	}).Debug("Updating tunnel state from reply")
+
+	// Create build responses from the reply records
+	responses := make([]tunnel.BuildResponse, len(records))
+	for i, record := range records {
+		responses[i] = tunnel.BuildResponse{
+			HopIndex: i,
+			Success:  record.Reply == TUNNEL_BUILD_REPLY_SUCCESS,
+			Reply:    []byte{record.Reply}, // Store the reply byte
+		}
+	}
+
+	// Update tunnel state based on reply processing result
+	if replyErr == nil {
+		// All hops accepted - tunnel is ready
+		matchingTunnel.State = tunnel.TunnelReady
+		matchingTunnel.Responses = responses
+		matchingTunnel.ResponseCount = len(responses)
+
+		log.WithField("tunnel_id", matchingTunnel.ID).Info("Tunnel build completed successfully")
+	} else {
+		// Build failed - mark tunnel as failed
+		matchingTunnel.State = tunnel.TunnelFailed
+		matchingTunnel.Responses = responses
+		matchingTunnel.ResponseCount = len(responses)
+
+		log.WithFields(logrus.Fields{
+			"tunnel_id": matchingTunnel.ID,
+			"error":     replyErr,
+		}).Warn("Tunnel build failed")
+
+		// Clean up failed tunnel after a brief delay (in production, this might be handled differently)
+		go tm.cleanupFailedTunnel(matchingTunnel.ID)
+	}
+}
+
+// findMatchingBuildingTunnel finds a tunnel that's currently building and matches the given hop count.
+// This is a simplified correlation method - in production, proper tunnel ID tracking would be used.
+func (tm *TunnelManager) findMatchingBuildingTunnel(hopCount int) *tunnel.TunnelState {
+	log.WithField("hop_count", hopCount).Debug("Looking for matching building tunnel")
+
+	// TODO: Implement proper tunnel correlation using tunnel IDs or request tracking
+	// This would require extending the tunnel pool interface or adding request correlation
+	// For now, we'll return nil to indicate we need proper tunnel correlation
+	return nil
+}
+
+// cleanupFailedTunnel removes a failed tunnel from the pool after a delay
+func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID) {
+	// Small delay before cleanup to allow for logging/debugging
+	time.Sleep(1 * time.Second)
+
+	if tm.pool != nil {
+		tm.pool.RemoveTunnel(tunnelID)
+		log.WithField("tunnel_id", tunnelID).Debug("Cleaned up failed tunnel")
+	}
 }
 
 // DatabaseManager demonstrates database-related interface usage

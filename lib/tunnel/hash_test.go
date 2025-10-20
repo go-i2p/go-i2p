@@ -48,9 +48,9 @@ func TestHashDTTunnel(t *testing.T) {
 	}
 
 	// Build DT_TUNNEL delivery instructions
-	// Flag byte: delivery type = 0x01 (DT_TUNNEL) << 5 = 0x20
-	// But DT_TUNNEL is value 1, so (1 << 5) = 0x20
-	flag := byte(0x20)
+	// Flag byte: delivery type = 0x01 (DT_TUNNEL) in bits 5-4
+	// DT_TUNNEL is value 1, so (1 << 4) = 0x10
+	flag := byte(0x10)
 	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 
@@ -207,7 +207,8 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Build DT_TUNNEL delivery instructions
-			flag := byte(0x20)
+			// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
+			flag := byte(0x10)
 			instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 			instructions[0] = flag
 
@@ -262,7 +263,8 @@ func BenchmarkHashDTTunnel(b *testing.B) {
 	expectedHash := common.Hash{}
 	rand.Read(expectedHash[:])
 
-	flag := byte(0x20)
+	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
+	flag := byte(0x10)
 	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 	instructions[1] = 0x12

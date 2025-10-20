@@ -39,6 +39,11 @@ func (f *I2NPMessageFactory) CreateTunnelDataMessage(data [1024]byte) I2NPMessag
 	return NewTunnelDataMessage(data)
 }
 
+// CreateTunnelBuildMessage creates a new tunnel build message
+func (f *I2NPMessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) I2NPMessage {
+	return NewTunnelBuildMessage(records)
+}
+
 // BaseI2NPMessage provides a basic implementation of I2NPMessage
 type BaseI2NPMessage struct {
 	type_      int

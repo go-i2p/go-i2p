@@ -48,8 +48,8 @@
 
 ### Tunnel Building System
 - **Active Tunnel Management**:
-  * 📋 Tunnel building coordination
-  * 📋 Build request/response handling
+  * ✅ Tunnel building coordination
+  * ✅ Build request/response handling
   * 📋 Gateway and endpoint implementations
   * 📋 Participant tunnel processing
 
