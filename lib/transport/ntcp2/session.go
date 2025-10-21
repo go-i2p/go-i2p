@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 type NTCP2Session struct {
@@ -38,10 +38,10 @@ type NTCP2Session struct {
 	cleanupOnce     sync.Once
 
 	// Logging
-	logger *logrus.Entry
+	logger *logger.Entry
 }
 
-func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logrus.Entry) *NTCP2Session {
+func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
 	sessionCtx, cancel := context.WithCancel(ctx)
 	session := &NTCP2Session{
 		conn:          conn,

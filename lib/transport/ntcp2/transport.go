@@ -9,7 +9,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 type NTCP2Transport struct {
@@ -29,12 +29,12 @@ type NTCP2Transport struct {
 	wg     sync.WaitGroup
 
 	// Logging
-	logger *logrus.Entry
+	logger *logger.Entry
 }
 
 func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	logger := logrus.WithField("component", "ntcp2")
+	logger := logger.WithField("component", "ntcp2")
 	identityBytes := identity.IdentHash().Bytes()
 	// Create a new NTCP2 configuration
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)

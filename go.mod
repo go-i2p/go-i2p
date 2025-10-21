@@ -5,10 +5,10 @@ go 1.24.2
 require (
 	github.com/beevik/ntp v1.4.3
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
-	github.com/go-i2p/common v0.0.0-20250715213359-dfa5527ece83
-	github.com/go-i2p/crypto v0.0.0-20250728221606-06ae9eeb4fda
+	github.com/go-i2p/common v0.0.0-20251021023740-1812f37de037
+	github.com/go-i2p/crypto v0.0.0-20251021023429-0d868ff0e313
 	github.com/go-i2p/go-noise v0.0.0-20250805210353-74f980a2439d
-	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
+	github.com/go-i2p/logger v0.0.0-20251021001827-b7cf9a3377d9
 	github.com/go-i2p/su3 v0.0.0-20250716183548-497fadf45e84
 	github.com/samber/oops v1.19.0
 	github.com/sirupsen/logrus v1.9.3
@@ -41,6 +41,6 @@ require (
 	go.step.sm/crypto v0.67.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )

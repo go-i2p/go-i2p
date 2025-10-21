@@ -14,7 +14,6 @@ import (
 	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/logger"
-	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/common/base32"
 	"github.com/go-i2p/common/base64"
@@ -180,7 +179,7 @@ func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count 
 // SelectPeers selects a random subset of peers for tunnel building
 // Filters out unreachable routers and excludes specified hashes
 func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"count":   count,
 		"exclude": len(exclude),
 	}).Debug("Selecting peers for tunnel building")
@@ -258,7 +257,7 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 	// TODO: make this better
 	// return strings.HasSuffix(fpath, ".dat")
 	isValid := strings.HasSuffix(fpath, ".dat")
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"file_path": fpath,
 		"is_valid":  isValid,
 	}).Debug("Checking file path validity")
@@ -548,7 +547,7 @@ func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
 	expectedHash := ri.IdentHash()
 	if key != expectedHash {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
 			"provided_key":  key,
 		}).Error("RouterInfo hash mismatch")
@@ -781,7 +780,7 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 	// Calculate hash from destination bytes
 	expectedHash := common.HashData(dest.Bytes())
 	if key != expectedHash {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
 			"provided_key":  key,
 		}).Error("LeaseSet hash mismatch")

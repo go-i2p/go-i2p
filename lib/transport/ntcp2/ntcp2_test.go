@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ func TestNTCP2Session_Basic(t *testing.T) {
 	// Test NTCP2Session basic functionality
 	conn := &mockConn{data: []byte{}}
 	ctx := context.Background()
-	logger := logrus.WithField("test", "session")
+	logger := logger.WithField("test", "session")
 
 	session := NewNTCP2Session(conn, ctx, logger)
 	require.NotNil(t, session)
@@ -36,7 +36,7 @@ func TestNTCP2Session_QueueMessage(t *testing.T) {
 	conn := &mockConn{data: []byte{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := logrus.WithField("test", "queue")
+	logger := logger.WithField("test", "queue")
 
 	session := NewNTCP2Session(conn, ctx, logger)
 	defer session.Close()

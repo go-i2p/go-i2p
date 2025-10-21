@@ -3,7 +3,7 @@ package tunnel
 import (
 	"encoding/binary"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	"github.com/go-i2p/crypto/tunnel"
 )
@@ -180,7 +180,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 	for {
 		instructions, remainder, err := readDeliveryInstructions(data)
 		if err != nil {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error reading delivery instructions")
@@ -189,7 +189,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 
 		fragment_size, err := instructions.FragmentSize()
 		if err != nil {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error getting delivery instructions fragment size")

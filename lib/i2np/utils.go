@@ -4,7 +4,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 // I2NP Header Reading Utilities
@@ -40,7 +40,7 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 		return header, err
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.ReadI2NPNTCPHeader",
 	}).Debug("parsed_i2np_ntcp_header")
 	return header, nil
@@ -137,7 +137,7 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	expiration := datalib.Date(dat[5:9])
 	header.Expiration = expiration.Time()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":         "i2np.ReadI2NPSecondGenTransportHeader",
 		"type":       header.Type,
 		"messageID":  header.MessageID,
@@ -166,7 +166,7 @@ func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
 	} else {
 		header.Expiration = message_date.Time()
 	}
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"type": header.Type,
 	}).Debug("Parsed I2NP SSU header")
 	return header, nil
@@ -182,27 +182,27 @@ func ReadI2NPType(data []byte) (int, error) {
 
 	if (message_type.Int() >= 4 && message_type.Int() <= 9) ||
 		(message_type.Int() >= 12 && message_type.Int() <= 17) {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("unknown_i2np_type")
 	}
 
 	if message_type.Int() >= 224 && message_type.Int() <= 254 {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("experimental_i2np_type")
 	}
 
 	if message_type.Int() == 255 {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
 		}).Warn("reserved_i2np_type")
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPType",
 		"type": message_type,
 	}).Debug("parsed_i2np_type")
@@ -217,7 +217,7 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 
 	message_id := datalib.Integer(data[1:5])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageID",
 		"type": message_id,
 	}).Debug("parsed_i2np_message_id")
@@ -233,7 +233,7 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 	date := datalib.Date{}
 	copy(date[:], data[5:13])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageExpiration",
 		"date": date,
 	}).Debug("parsed_i2np_message_date")
@@ -249,7 +249,7 @@ func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 	date := datalib.Date{}
 	copy(date[4:], data[1:5])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPSSUMessageExpiration",
 		"date": date,
 	}).Debug("parsed_i2np_message_date")
@@ -264,7 +264,7 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 
 	size := datalib.Integer(data[13:15])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageSize",
 		"size": size,
 	}).Debug("parsed_i2np_message_size")
@@ -279,7 +279,7 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 
 	checksum := datalib.Integer(data[15:16])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":       "i2np.ReadI2NPNTCPMessageCHecksum",
 		"checksum": checksum,
 	}).Debug("parsed_i2np_message_checksum")

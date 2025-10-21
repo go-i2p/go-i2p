@@ -7,7 +7,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/logger"
-	"github.com/sirupsen/logrus"
 
 	"github.com/samber/oops"
 )
@@ -55,7 +54,7 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 
 		// Add the retrieved RouterInfos to our collection
 		allRouterInfos = append(allRouterInfos, serverRIs...)
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"server": server.Url,
 			"count":  len(serverRIs),
 			"total":  len(allRouterInfos),

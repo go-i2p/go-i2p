@@ -5,7 +5,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/samber/oops"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 /*
@@ -292,7 +292,7 @@ func (delivery_instructions DeliveryInstructions) HasDelay() (bool, error) {
 		*/
 		delay := (delivery_instructions[0] & 0x10) == 0x10
 		if delay {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"at":   "(DeliveryInstructions) HasDelay",
 				"info": "this feature is unimplemented in the Java router",
 			}).Warn("DeliveryInstructions found with delay bit set")
@@ -356,7 +356,7 @@ func (delivery_instructions DeliveryInstructions) HasExtendedOptions() (bool, er
 		*/
 		extended_options := (delivery_instructions[0] & 0x04) == 0x04
 		if extended_options {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"at":   "(DeliveryInstructions) ExtendedOptions",
 				"info": "this feature is unimplemented in the Java router",
 			}).Warn("DeliveryInstructions found with extended_options bit set")
@@ -498,7 +498,7 @@ func (delivery_instructions DeliveryInstructions) extractDelayFromRouter() (Dela
 // validateDelaySupport checks if the delivery type supports delay and logs warnings for unsupported types.
 func (delivery_instructions DeliveryInstructions) validateDelaySupport(di_type byte) error {
 	if di_type != DT_TUNNEL && di_type != DT_ROUTER {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at": "(DeliveryInstructions) Delay",
 		}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 	}
@@ -1092,7 +1092,7 @@ func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, r
 	remainder = data[len(di_data):]
 	instructions = DeliveryInstructions(di_data)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"instructions_length": len(instructions),
 		"remainder_length":    len(remainder),
 	}).Debug("Successfully read DeliveryInstructions")

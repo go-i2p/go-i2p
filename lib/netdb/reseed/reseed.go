@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
-	"github.com/sirupsen/logrus"
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/common/router_info"
@@ -96,7 +95,7 @@ func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 		return nil, err
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"file_type":    su3file.FileType,
 		"content_type": su3file.ContentType,
 	}).Debug("Successfully read SU3 file")
@@ -127,7 +126,7 @@ func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 		return nil, err
 	}
 	log.Println("warning: this doesn't validate the signature yet", signature)
-	log.Warn("Doesn't validate the signature yet", logrus.Fields{"signature": signature})
+	log.Warn("Doesn't validate the signature yet", logger.Fields{"signature": signature})
 
 	return content, nil
 }

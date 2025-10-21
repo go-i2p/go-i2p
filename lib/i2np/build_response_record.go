@@ -2,7 +2,7 @@ package i2np
 
 import (
 	common "github.com/go-i2p/common/data"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 /*
@@ -90,7 +90,7 @@ func readBuildResponseRecordHash(data []byte) (common.Hash, error) {
 
 	hash := common.Hash(data[0:32])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.readBuildResponseRecordHash",
 		"hash": hash,
 	}).Debug("parsed_build_response_record_hash")
@@ -105,7 +105,7 @@ func readBuildResponseRecordRandomData(data []byte) ([495]byte, error) {
 	random_data := [495]byte{}
 	copy(random_data[:], data[32:527])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":          "i2np.readBuildResponseRandomData",
 		"random_data": random_data,
 	}).Debug("parsed_build_response_record_random_data")
@@ -119,7 +119,7 @@ func readBuildResponseRecordReply(data []byte) (byte, error) {
 
 	reply := data[527]
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":    "i2np.readBuildResponseReply",
 		"reply": reply,
 	}).Debug("parsed_build_response_record_reply")

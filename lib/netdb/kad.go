@@ -9,7 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 // resolves router infos with recursive kademlia lookup
@@ -28,7 +28,7 @@ type peerDistance struct {
 }
 
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"hash":    h,
 		"timeout": timeout,
 	}).Debug("Starting Kademlia lookup")
@@ -102,7 +102,7 @@ func (kr *KademliaResolver) queryClosestPeers(ctx context.Context, peers []commo
 		go func(p common.Hash) {
 			ri, err := kr.queryPeer(ctx, p, target)
 			if err != nil {
-				log.WithFields(logrus.Fields{
+				log.WithFields(logger.Fields{
 					"peer":  p,
 					"error": err,
 				}).Debug("Peer query failed")
@@ -213,7 +213,7 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 		result[i] = peers[i].hash
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"target":        target,
 		"total_peers":   len(peers),
 		"closest_peers": len(result),

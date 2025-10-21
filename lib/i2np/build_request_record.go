@@ -3,12 +3,11 @@ package i2np
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/go-i2p/logger"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -301,7 +300,7 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 		common.Integer(data[0:4]).Int(),
 	)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":             "i2np.readBuildRequestRecordReceiveTunnel",
 		"receive_tunnel": receive_tunnel,
 	}).Debug("parsed_build_request_record_receive_tunnel")
@@ -316,7 +315,7 @@ func readBuildRequestRecordOurIdent(data []byte) (common.Hash, error) {
 	hash := common.Hash{}
 	copy(hash[:], data[4:36])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordOurIdent",
 	}).Debug("parsed_build_request_record_our_ident")
 	return hash, nil
@@ -331,7 +330,7 @@ func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 		common.Integer(data[36:40]).Int(),
 	)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":          "i2np.readBuildRequestRecordNextTunnel",
 		"next_tunnel": next_tunnel,
 	}).Debug("parsed_build_request_record_next_tunnel")
@@ -346,7 +345,7 @@ func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
 	hash := common.Hash{}
 	copy(hash[:], data[40:72])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordNextIdent",
 	}).Debug("parsed_build_request_record_next_ident")
 	return hash, nil
@@ -360,7 +359,7 @@ func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error)
 	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[72:104])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordLayerKey",
 	}).Debug("parsed_build_request_record_layer_key")
 	return session_key, nil
@@ -374,7 +373,7 @@ func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[104:136])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordIVKey",
 	}).Debug("parsed_build_request_record_iv_key")
 	return session_key, nil
@@ -388,7 +387,7 @@ func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error)
 	session_key := session_key.SessionKey{}
 	copy(session_key[:], data[136:168])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordReplyKey",
 	}).Debug("parsed_build_request_record_reply_key")
 	return session_key, nil
@@ -402,7 +401,7 @@ func readBuildRequestRecordReplyIV(data []byte) ([16]byte, error) {
 	iv := [16]byte{}
 	copy(iv[:], data[168:184])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordReplyIV",
 	}).Debug("parsed_build_request_record_reply_iv")
 	return iv, nil
@@ -415,7 +414,7 @@ func readBuildRequestRecordFlag(data []byte) (int, error) {
 
 	flag := common.Integer([]byte{data[185]}).Int()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.readBuildRequestRecordFlag",
 		"flag": flag,
 	}).Debug("parsed_build_request_record_flag")
@@ -430,7 +429,7 @@ func readBuildRequestRecordRequestTime(data []byte) (time.Time, error) {
 	count := common.Integer(data[185:189]).Int()
 	rtime := time.Unix(0, 0).Add(time.Duration(count) * time.Hour)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordRequestTime",
 	}).Debug("parsed_build_request_record_request_time")
 	return rtime, nil
@@ -443,7 +442,7 @@ func readBuildRequestRecordSendMessageID(data []byte) (int, error) {
 
 	send_message_id := common.Integer(data[189:193]).Int()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordSendMessageID",
 	}).Debug("parsed_build_request_record_send_message_id")
 	return send_message_id, nil
@@ -457,7 +456,7 @@ func readBuildRequestRecordPadding(data []byte) ([29]byte, error) {
 	padding := [29]byte{}
 	copy(padding[:], data[193:222])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordPadding",
 	}).Debug("parsed_build_request_record_padding")
 	return padding, nil

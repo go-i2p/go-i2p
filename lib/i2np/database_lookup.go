@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
@@ -311,7 +311,7 @@ func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
 	}
 
 	key := common.Hash(data[:32])
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":  "i2np.readDatabaseLookupKey",
 		"key": key,
 	}).Debug("parsed_database_lookup_key")
@@ -324,7 +324,7 @@ func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
 	}
 
 	from := common.Hash(data[length : length+32])
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.database_lookup.readDatabaseLookupFrom",
 		"from": from,
 	}).Debug("parsed_database_lookup_from")
@@ -337,7 +337,7 @@ func readDatabaseLookupFlags(length int, data []byte) (int, byte, error) {
 	}
 	flags := data[length]
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":    "i2np.database_lookup.readDatabaseLookupFlags",
 		"flags": flags,
 	}).Debug("parsed_database_lookup_flags")
@@ -353,7 +353,7 @@ func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, 
 	}
 
 	replyTunnelID := [4]byte(data[length : length+4])
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":              "i2np.database_lookup.readDatabaseLookupReplyTunnelID",
 		"reply_tunnel_id": replyTunnelID,
 	}).Debug("parsed_database_lookup_reply_tunnel_id")
@@ -366,7 +366,7 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 	}
 
 	size := common.Integer(data[length : length+2]).Int()
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.database_lookup.readDatabaseLookupSize",
 		"size": size,
 	}).Debug("parsed_database_lookup_size")
@@ -384,7 +384,7 @@ func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []
 		excludedPeers = append(excludedPeers, peer)
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":             "i2np.database_lookup.readDatabaseLookupExcludedPeers",
 		"excluded_peers": excludedPeers,
 	}).Debug("parsed_database_lookup_excluded_peers")
@@ -397,7 +397,7 @@ func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.Sessi
 	}
 	replyKey := session_key.SessionKey(data[length : length+32])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":        "i2np.database_lookup.readDatabaseLookupReplyKey",
 		"reply_key": replyKey,
 	}).Debug("parsed_database_lookup_reply_key")
@@ -410,7 +410,7 @@ func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 	}
 	tags := int(data[length])
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":   "i2np.database_lookup.readDatabaseLookupTags",
 		"tags": tags,
 	}).Debug("parsed_database_lookup_tags")
@@ -431,7 +431,7 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 		reply_tags = append(reply_tags, tag)
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at":         "i2np.database_lookup.readDatabaseLookupReplyTags",
 		"reply_tags": reply_tags,
 	}).Debug("parsed_database_lookup_reply_tags")

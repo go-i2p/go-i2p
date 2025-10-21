@@ -3,7 +3,7 @@ package i2np
 import (
 	"fmt"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 /*
@@ -43,7 +43,7 @@ func (t *TunnelBuildReply) ProcessReply() error {
 	for i, record := range t {
 		success, err := t.processHopResponse(i, record)
 		if err != nil {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"hop_index": i,
 				"error":     err,
 			}).Warn("Failed to process hop response")
@@ -59,7 +59,7 @@ func (t *TunnelBuildReply) ProcessReply() error {
 		}
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"success_count": successCount,
 		"total_hops":    len(t),
 		"success_rate":  float64(successCount) / float64(len(t)),
@@ -82,7 +82,7 @@ func (t *TunnelBuildReply) ProcessReply() error {
 // processHopResponse processes a single hop's response record.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"hop_index":  hopIndex,
 		"reply_code": record.Reply,
 	}).Debug("Processing hop response")
@@ -119,7 +119,7 @@ func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponse
 		return false, fmt.Errorf("hop %d: request expired", hopIndex)
 
 	default:
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"hop_index":  hopIndex,
 			"reply_code": record.Reply,
 		}).Warn("Hop returned unknown reply code")

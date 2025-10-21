@@ -3,7 +3,7 @@ package i2np
 import (
 	"fmt"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 /*
@@ -34,7 +34,7 @@ func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 func (v *VariableTunnelBuildReply) ProcessReply() error {
 	recordCount := len(v.BuildResponseRecords)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"record_count": recordCount,
 		"count_field":  v.Count,
 	}).Debug("Processing VariableTunnelBuildReply")
@@ -56,7 +56,7 @@ func (v *VariableTunnelBuildReply) ProcessReply() error {
 	for i, record := range v.BuildResponseRecords {
 		success, err := v.processHopResponse(i, record)
 		if err != nil {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"hop_index": i,
 				"error":     err,
 			}).Warn("Failed to process hop response")
@@ -72,7 +72,7 @@ func (v *VariableTunnelBuildReply) ProcessReply() error {
 		}
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"success_count": successCount,
 		"total_hops":    recordCount,
 		"success_rate":  float64(successCount) / float64(recordCount),
@@ -95,7 +95,7 @@ func (v *VariableTunnelBuildReply) ProcessReply() error {
 // processHopResponse processes a single hop's response record for variable tunnels.
 // Returns (success, error) where success indicates if the hop accepted the tunnel.
 func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record BuildResponseRecord) (bool, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"hop_index":  hopIndex,
 		"reply_code": record.Reply,
 	}).Debug("Processing variable tunnel hop response")
@@ -132,7 +132,7 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 		return false, fmt.Errorf("hop %d: request expired", hopIndex)
 
 	default:
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"hop_index":  hopIndex,
 			"reply_code": record.Reply,
 		}).Warn("Variable tunnel hop returned unknown reply code")

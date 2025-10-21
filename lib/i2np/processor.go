@@ -7,7 +7,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 // MessageProcessor demonstrates interface-based message processing
@@ -51,7 +51,7 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 	if statusReporter, ok := msg.(StatusReporter); ok {
 		msgID := statusReporter.GetStatusMessageID()
 		timestamp := statusReporter.GetTimestamp()
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"message_id": msgID,
 			"timestamp":  timestamp,
 		}).Debug("Processing delivery status")
@@ -150,7 +150,7 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		return fmt.Errorf("no session provider available for sending tunnel build requests")
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"tunnel_id":  tunnelID,
 		"peer_count": len(peers),
 	}).Debug("Sending tunnel build requests")
@@ -167,7 +167,7 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		// Get transport session to this peer
 		session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 		if err != nil {
-			log.WithFields(logrus.Fields{
+			log.WithFields(logger.Fields{
 				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
 				"error":     err,
 			}).Warn("Failed to get session for peer")
@@ -186,7 +186,7 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		// Send the tunnel build request
 		session.QueueSendI2NP(buildMessage)
 
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"hop_index":  i,
 			"peer_hash":  fmt.Sprintf("%x", peerHash[:8]),
 			"message_id": buildMessage.MessageID(),
@@ -230,7 +230,7 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseReco
 		return
 	}
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"tunnel_id":    matchingTunnel.ID,
 		"record_count": len(records),
 		"success":      replyErr == nil,
@@ -260,7 +260,7 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseReco
 		matchingTunnel.Responses = responses
 		matchingTunnel.ResponseCount = len(responses)
 
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"tunnel_id": matchingTunnel.ID,
 			"error":     replyErr,
 		}).Warn("Tunnel build failed")
@@ -371,7 +371,7 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	from := reader.GetFrom()
 	flags := reader.GetFlags()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"key":   fmt.Sprintf("%x", key[:8]),
 		"from":  fmt.Sprintf("%x", from[:8]),
 		"flags": flags,
@@ -459,7 +459,7 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 
 	// Send the response
 	session.QueueSendI2NP(msg)
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"message_type": msg.Type(),
 		"destination":  fmt.Sprintf("%x", to[:8]),
 	}).Debug("Queued response message")
@@ -494,7 +494,7 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	data := writer.GetStoreData()
 	dataType := writer.GetStoreType()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"data_size": len(data),
 		"data_type": dataType,
 		"key":       fmt.Sprintf("%x", key[:8]),
@@ -521,7 +521,7 @@ func (sm *SessionManager) ProcessKeys(provider SessionKeyProvider) error {
 	layerKey := provider.GetLayerKey()
 	ivKey := provider.GetIVKey()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"reply_key": fmt.Sprintf("%x", replyKey[:8]),
 		"layer_key": fmt.Sprintf("%x", layerKey[:8]),
 		"iv_key":    fmt.Sprintf("%x", ivKey[:8]),
@@ -542,7 +542,7 @@ func (sm *SessionManager) ProcessTags(provider SessionTagProvider) error {
 		}
 		// Convert session tag to bytes for display
 		tagBytes := tag.Bytes()
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"tag_index": i,
 			"tag":       fmt.Sprintf("%x", tagBytes[:8]),
 		}).Debug("Processing session tag")
@@ -587,7 +587,7 @@ func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
 func (mr *MessageRouter) RouteMessage(msg I2NPMessage) error {
 	// Log message if enabled
 	if mr.config.EnableLogging {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"message_type": msg.Type(),
 			"message_id":   msg.MessageID(),
 		}).Debug("Routing message")

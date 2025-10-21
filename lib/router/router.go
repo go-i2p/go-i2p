@@ -19,7 +19,6 @@ import (
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 
 	"github.com/go-i2p/logger"
-	"github.com/sirupsen/logrus"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/keys"
@@ -165,7 +164,7 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 		return fmt.Errorf("failed to convert NTCP2 address: %w", err)
 	}
 	ri.AddAddress(routerAddress)
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"host": ntcpaddr.String(),
 		"cost": routerAddress.Cost(),
 	}).Info("NTCP2 address added to RouterInfo")
@@ -224,7 +223,7 @@ func (r *Router) Start() {
 	defer r.runMux.Unlock()
 
 	if r.running {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at":     "(Router) Start",
 			"reason": "router is already running",
 		}).Error("Error Starting router")
@@ -294,7 +293,7 @@ func (r *Router) performReseed() error {
 
 // runMainLoop executes the primary router event loop
 func (r *Router) runMainLoop() {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"at": "(Router) mainloop",
 	}).Debug("Router ready with database message processing enabled")
 
@@ -332,7 +331,7 @@ func (r *Router) mainloop() {
 	r.initializeMessageRouter()
 
 	if err := r.ensureNetDBReady(); err != nil {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"at":     "(Router) mainloop",
 			"reason": err.Error(),
 		}).Error("Netdb Startup failed")
@@ -423,7 +422,7 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 	// Create session with router's context
 	// TODO: Use router-level context for better lifecycle management
 	ctx := context.Background()
-	sessionLogger := logrus.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
+	sessionLogger := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
 	session := ntcp.NewNTCP2Session(conn, ctx, sessionLogger)
 
 	// Configure cleanup callback to remove session when it closes
@@ -465,7 +464,7 @@ func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash com
 
 		// Route message through MessageRouter - errors are logged but don't close session
 		if err := r.routeMessage(msg, peerHash); err != nil {
-			log.WithError(err).WithFields(logrus.Fields{
+			log.WithError(err).WithFields(logger.Fields{
 				"message_type": msg.Type(),
 				"message_id":   msg.MessageID(),
 				"peer_hash":    fmt.Sprintf("%x", peerHash[:8]),
@@ -479,7 +478,7 @@ func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash com
 // directing them to the correct processing subsystem (database, tunnel, or general).
 // Returns an error if the message type is unsupported or routing fails.
 func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"message_type": msg.Type(),
 		"message_id":   msg.MessageID(),
 		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
