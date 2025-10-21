@@ -108,6 +108,8 @@ func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 }
 
 // Compile-time interface satisfaction checks
-var _ TunnelBuilder = (*TunnelBuild)(nil)
-var _ TunnelBuilder = (*TunnelBuildMessage)(nil)
-var _ I2NPMessage = (*TunnelBuildMessage)(nil)
+var (
+	_ TunnelBuilder = (*TunnelBuild)(nil)
+	_ TunnelBuilder = (*TunnelBuildMessage)(nil)
+	_ I2NPMessage   = (*TunnelBuildMessage)(nil)
+)

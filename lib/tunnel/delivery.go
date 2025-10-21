@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/samber/oops"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 /*
