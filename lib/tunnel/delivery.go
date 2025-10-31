@@ -148,7 +148,120 @@ const (
 
 type DelayFactor byte
 
-type DeliveryInstructions []byte
+// DeliveryInstructions represents I2P tunnel message delivery instructions
+type DeliveryInstructions struct {
+	// Type: FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT
+	fragmentType int
+	
+	// For FIRST_FRAGMENT
+	deliveryType   byte          // DT_LOCAL, DT_TUNNEL, DT_ROUTER
+	hasDelay       bool
+	fragmented     bool
+	hasExtOptions  bool
+	tunnelID       uint32        // Present if deliveryType == DT_TUNNEL
+	hash           common.Hash   // Present if deliveryType == DT_TUNNEL or DT_ROUTER
+	delay          DelayFactor   // Present if hasDelay
+	messageID      uint32        // Present if fragmented
+	extendedOpts   []byte        // Present if hasExtOptions
+	fragmentSize   uint16
+	
+	// For FOLLOW_ON_FRAGMENT
+	fragmentNumber int
+	lastFragment   bool
+	// messageID and fragmentSize also used for FOLLOW_ON_FRAGMENT
+}
+
+// NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
+func NewDeliveryInstructions(bytes []byte) (*DeliveryInstructions, error) {
+	return readDeliveryInstructionsStruct(bytes)
+}
+
+// Bytes serializes the DeliveryInstructions to bytes
+func (di *DeliveryInstructions) Bytes() ([]byte, error) {
+	if di == nil {
+		return nil, oops.Errorf("cannot serialize nil DeliveryInstructions")
+	}
+	
+	if di.fragmentType == FOLLOW_ON_FRAGMENT {
+		return di.serializeFollowOnFragment()
+	}
+	return di.serializeFirstFragment()
+}
+
+func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
+	result := make([]byte, 7)
+	
+	// Build flag byte: 1nnnnnnd
+	flag := byte(0x80) // Set bit 7
+	flag |= byte((di.fragmentNumber & 0x3F) << 1) // Set bits 6-1
+	if di.lastFragment {
+		flag |= 0x01 // Set bit 0
+	}
+	result[0] = flag
+	
+	// Message ID (4 bytes)
+	binary.BigEndian.PutUint32(result[1:5], di.messageID)
+	
+	// Fragment size (2 bytes)
+	binary.BigEndian.PutUint16(result[5:7], di.fragmentSize)
+	
+	return result, nil
+}
+
+func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
+	result := make([]byte, 0, 128)
+	
+	// Build flag byte
+	flag := byte(0x00) // Bit 7 = 0 for first fragment
+	flag |= (di.deliveryType & 0x03) << 4 // Bits 6-5
+	if di.hasDelay {
+		flag |= 0x10 // Bit 4
+	}
+	if di.fragmented {
+		flag |= 0x08 // Bit 3
+	}
+	if di.hasExtOptions {
+		flag |= 0x04 // Bit 2
+	}
+	result = append(result, flag)
+	
+	// Add tunnel ID if present
+	if di.deliveryType == DT_TUNNEL {
+		tunnelBytes := make([]byte, 4)
+		binary.BigEndian.PutUint32(tunnelBytes, di.tunnelID)
+		result = append(result, tunnelBytes...)
+	}
+	
+	// Add hash if present
+	if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
+		result = append(result, di.hash[:]...)
+	}
+	
+	// Add delay if present
+	if di.hasDelay {
+		result = append(result, byte(di.delay))
+	}
+	
+	// Add message ID if fragmented
+	if di.fragmented {
+		msgBytes := make([]byte, 4)
+		binary.BigEndian.PutUint32(msgBytes, di.messageID)
+		result = append(result, msgBytes...)
+	}
+	
+	// Add extended options if present
+	if di.hasExtOptions {
+		result = append(result, byte(len(di.extendedOpts)))
+		result = append(result, di.extendedOpts...)
+	}
+	
+	// Add fragment size
+	sizeBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(sizeBytes, di.fragmentSize)
+	result = append(result, sizeBytes...)
+	
+	return result, nil
+}
 
 // Return if the DeliveryInstructions are of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT.
 func (delivery_instructions DeliveryInstructions) Type() (int, error) {

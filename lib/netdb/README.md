@@ -160,6 +160,31 @@ return true if the network db directory exists and is writable
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo)
 ```
 
+#### func (*StdNetDB) GetLeaseSet
+
+```go
+func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
+```
+GetLeaseSet retrieves a LeaseSet from the database by its hash. Returns a
+channel that yields the LeaseSet or nil if not found. Checks memory cache first,
+then loads from filesystem if necessary.
+
+#### func (*StdNetDB) GetLeaseSetBytes
+
+```go
+func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+```
+GetLeaseSetBytes retrieves LeaseSet data as bytes from the database. Checks
+memory cache first, then loads from filesystem if necessary. Returns serialized
+LeaseSet bytes suitable for network transmission.
+
+#### func (*StdNetDB) GetLeaseSetCount
+
+```go
+func (db *StdNetDB) GetLeaseSetCount() int
+```
+GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
+
 #### func (*StdNetDB) GetRouterInfo
 
 ```go
@@ -237,13 +262,31 @@ func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string)
 ```
 get the skiplist file that a RouterInfo with this hash would go in
 
+#### func (*StdNetDB) SkiplistFileForLeaseSet
+
+```go
+func (db *StdNetDB) SkiplistFileForLeaseSet(hash common.Hash) string
+```
+SkiplistFileForLeaseSet generates the skiplist file path for a LeaseSet
+LeaseSets use 'l' prefix instead of 'r' for router infos
+
+#### func (*StdNetDB) StoreLeaseSet
+
+```go
+func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
+```
+StoreLeaseSet stores a LeaseSet entry in the database from I2NP DatabaseStore
+message. This method validates, parses, caches, and persists LeaseSet data.
+dataType should be 1 for standard LeaseSets (matching I2P protocol
+specification).
+
 #### func (*StdNetDB) StoreRouterInfo
 
 ```go
 func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
 ```
 StoreRouterInfo stores a RouterInfo entry in the database from I2NP
-DatabaseStore message
+DatabaseStore message.
 
 
 

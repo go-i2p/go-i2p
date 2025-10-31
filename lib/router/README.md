@@ -45,6 +45,16 @@ func (r *Router) Close() error
 Close closes any internal state and finalizes router resources so that nothing
 can start up again
 
+#### func (*Router) GetSessionByHash
+
+```go
+func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error)
+```
+GetSessionByHash implements SessionProvider interface for DatabaseManager. This
+enables the I2NP message processing layer to send responses back through the
+router's active transport sessions. NTCP2Session already implements the
+i2np.TransportSession interface.
+
 #### func (*Router) Start
 
 ```go

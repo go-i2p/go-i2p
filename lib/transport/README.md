@@ -67,6 +67,17 @@ func Mux(t ...Transport) (tmux *TransportMuxer)
 ```
 mux a bunch of transports together
 
+#### func (*TransportMuxer) AcceptWithTimeout
+
+```go
+func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, error)
+```
+AcceptWithTimeout accepts an incoming connection with a timeout. This method
+wraps the blocking Accept() call with a timeout context, enabling graceful
+shutdown of session monitoring loops. Returns the connection and nil on success.
+Returns nil and context.DeadlineExceeded if the timeout expires. Returns nil and
+any other error from the underlying transport Accept().
+
 #### func (*TransportMuxer) Close
 
 ```go

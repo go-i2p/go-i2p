@@ -82,6 +82,35 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID
 func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
 
+#### type DefaultPeerSelector
+
+```go
+type DefaultPeerSelector struct {
+}
+```
+
+DefaultPeerSelector is a simple implementation of PeerSelector that delegates
+peer selection to a NetDB-like component (for example lib/netdb.StdNetDB). It
+performs basic argument validation and propagates errors from the underlying
+selector.
+
+#### func  NewDefaultPeerSelector
+
+```go
+func NewDefaultPeerSelector(db NetDBSelector) (*DefaultPeerSelector, error)
+```
+NewDefaultPeerSelector creates a new DefaultPeerSelector backed by the provided
+db. The db must implement SelectPeers with the same signature. Returns an error
+if db is nil.
+
+#### func (*DefaultPeerSelector) SelectPeers
+
+```go
+func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+```
+SelectPeers selects peers by delegating to the underlying db selector. Returns
+an error for invalid arguments or if the underlying selector fails.
+
 #### type DelayFactor
 
 ```go
@@ -92,17 +121,31 @@ type DelayFactor byte
 #### type DeliveryInstructions
 
 ```go
-type DeliveryInstructions []byte
+type DeliveryInstructions struct {
+}
 ```
 
+DeliveryInstructions represents I2P tunnel message delivery instructions
+
+#### func  NewDeliveryInstructions
+
+```go
+func NewDeliveryInstructions(bytes []byte) (*DeliveryInstructions, error)
+```
+NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
+
+#### func (*DeliveryInstructions) Bytes
+
+```go
+func (di *DeliveryInstructions) Bytes() ([]byte, error)
+```
+Bytes serializes the DeliveryInstructions to bytes
 
 #### func (DeliveryInstructions) Delay
 
 ```go
 func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFactor, err error)
 ```
-Return the DelayFactor if present and any errors encountered parsing the
-DeliveryInstructions.
 
 #### func (DeliveryInstructions) DeliveryType
 
@@ -249,6 +292,19 @@ func (tm EncryptedTunnelMessage) ID() (tid TunnelID)
 ```go
 func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
+
+#### type NetDBSelector
+
+```go
+type NetDBSelector interface {
+	SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+}
+```
+
+NetDBSelector is a minimal interface used by DefaultPeerSelector to delegate
+peer selection. Any component that implements SelectPeers(count int, exclude
+[]common.Hash) ([]router_info.RouterInfo, error) can be used. This avoids a hard
+dependency on a concrete netdb type.
 
 #### type Participant
 

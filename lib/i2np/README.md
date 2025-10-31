@@ -27,6 +27,18 @@ const (
 I2NP Message Type Constants Moved from: header.go
 
 ```go
+const (
+	TUNNEL_BUILD_REPLY_SUCCESS   = 0x00 // Tunnel hop accepted the request
+	TUNNEL_BUILD_REPLY_REJECT    = 0x01 // General rejection
+	TUNNEL_BUILD_REPLY_OVERLOAD  = 0x02 // Router is overloaded
+	TUNNEL_BUILD_REPLY_BANDWIDTH = 0x03 // Insufficient bandwidth
+	TUNNEL_BUILD_REPLY_INVALID   = 0x04 // Invalid request data
+	TUNNEL_BUILD_REPLY_EXPIRED   = 0x05 // Request has expired
+)
+```
+TunnelBuildReply constants for processing responses
+
+```go
 var (
 	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
 	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
@@ -673,9 +685,28 @@ type GarlicCloveDeliveryInstructions struct {
 #### type GarlicElGamal
 
 ```go
-type GarlicElGamal []byte
+type GarlicElGamal struct {
+	Length uint32
+	Data   []byte
+}
 ```
 
+GarlicElGamal represents an ElGamal encrypted garlic message with proper
+structure
+
+#### func  NewGarlicElGamal
+
+```go
+func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error)
+```
+NewGarlicElGamal creates a new GarlicElGamal from raw bytes
+
+#### func (*GarlicElGamal) Bytes
+
+```go
+func (g *GarlicElGamal) Bytes() ([]byte, error)
+```
+Bytes serializes the GarlicElGamal to bytes
 
 #### type GarlicProcessor
 
@@ -749,6 +780,13 @@ CreateDataMessage creates a new data message
 func (f *I2NPMessageFactory) CreateDeliveryStatusMessage(messageID int, timestamp time.Time) I2NPMessage
 ```
 CreateDeliveryStatusMessage creates a new delivery status message
+
+#### func (*I2NPMessageFactory) CreateTunnelBuildMessage
+
+```go
+func (f *I2NPMessageFactory) CreateTunnelBuildMessage(records [8]BuildRequestRecord) I2NPMessage
+```
+CreateTunnelBuildMessage creates a new tunnel build message
 
 #### func (*I2NPMessageFactory) CreateTunnelDataMessage
 
@@ -921,6 +959,17 @@ func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector)
 ```
 SetPeerSelector sets the peer selector for the TunnelManager
 
+#### func (*MessageRouter) SetSessionProvider
+
+```go
+func (mr *MessageRouter) SetSessionProvider(provider SessionProvider)
+```
+SetSessionProvider configures the session provider for message routing
+responses. This method propagates the SessionProvider to both DatabaseManager
+and TunnelManager, enabling them to send I2NP response messages (DatabaseStore,
+DatabaseSearchReply, etc.) back through the appropriate transport sessions. The
+provider must implement SessionProvider interface with GetSessionByHash method.
+
 #### type MessageRouterConfig
 
 ```go
@@ -1082,6 +1131,7 @@ requesters
 type TunnelBuild [8]BuildRequestRecord
 ```
 
+TunnelBuild represents the raw 8 build request records
 
 #### func (*TunnelBuild) GetBuildRecords
 
@@ -1096,6 +1146,52 @@ GetBuildRecords returns the build request records
 func (t *TunnelBuild) GetRecordCount() int
 ```
 GetRecordCount returns the number of build records
+
+#### type TunnelBuildMessage
+
+```go
+type TunnelBuildMessage struct {
+	*BaseI2NPMessage
+	Records TunnelBuild
+}
+```
+
+TunnelBuildMessage wraps TunnelBuild to implement I2NPMessage interface
+
+#### func  NewTunnelBuildMessage
+
+```go
+func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage
+```
+NewTunnelBuildMessage creates a new TunnelBuild I2NP message
+
+#### func (*TunnelBuildMessage) GetBuildRecords
+
+```go
+func (msg *TunnelBuildMessage) GetBuildRecords() []BuildRequestRecord
+```
+GetBuildRecords implements TunnelBuilder interface
+
+#### func (*TunnelBuildMessage) GetRecordCount
+
+```go
+func (msg *TunnelBuildMessage) GetRecordCount() int
+```
+GetRecordCount implements TunnelBuilder interface
+
+#### func (*TunnelBuildMessage) MarshalBinary
+
+```go
+func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage
+
+#### func (*TunnelBuildMessage) UnmarshalBinary
+
+```go
+func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error
+```
+UnmarshalBinary deserializes the TunnelBuild message
 
 #### type TunnelBuildReply
 
@@ -1116,7 +1212,9 @@ GetReplyRecords returns the build response records
 ```go
 func (t *TunnelBuildReply) ProcessReply() error
 ```
-ProcessReply processes the tunnel build reply
+ProcessReply processes the tunnel build reply by analyzing each response record.
+It validates response integrity, determines tunnel build success/failure, and
+returns detailed results for each hop.
 
 #### type TunnelBuilder
 
@@ -1262,7 +1360,8 @@ BuildTunnel builds a tunnel using TunnelBuilder interface
 func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error
 ```
 ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler
-interface
+interface. This method integrates with the tunnel pool to update tunnel states
+and handle build completions.
 
 #### func (*TunnelManager) SetSessionProvider
 
@@ -1328,7 +1427,10 @@ GetReplyRecords returns the build response records
 ```go
 func (v *VariableTunnelBuildReply) ProcessReply() error
 ```
-ProcessReply processes the variable tunnel build reply
+ProcessReply processes the variable tunnel build reply by analyzing each
+response record. Similar to TunnelBuildReply but handles variable-length tunnels
+(1-8 hops). Validates response integrity and determines tunnel build
+success/failure.
 
 
 

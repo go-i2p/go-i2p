@@ -79,6 +79,8 @@ then it generates new private keys for the routerInfo if none exist
 ```go
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress) (*router_info.RouterInfo, error)
 ```
+ConstructRouterInfo creates a complete RouterInfo structure with signing keys
+and certificate
 
 #### func (*RouterInfoKeystore) GetKeys
 

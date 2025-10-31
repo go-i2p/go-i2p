@@ -20,12 +20,30 @@ var (
 )
 ```
 
+#### func  ConvertToRouterAddress
+
+```go
+func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAddress, error)
+```
+ConvertToRouterAddress converts an NTCP2Transport's listening address to a
+RouterAddress suitable for publishing in RouterInfo. This enables other routers
+to connect to this transport.
+
+The function extracts: - Host IP address from the transport's listener - Port
+number from the transport's listener - Static public key from the NTCP2
+configuration - Initialization vector (IV) for AES obfuscation
+
+Returns a RouterAddress with transport style "ntcp2" and all required options,
+or an error if address extraction or conversion fails.
+
 #### func  ExtractNTCP2Addr
 
 ```go
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error)
 ```
-Extract NTCP2 address from RouterInfo
+ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
+It validates NTCP2 support and returns a properly wrapped NTCP2 address with
+router hash metadata.
 
 #### func  FrameI2NPMessage
 
@@ -117,7 +135,7 @@ type NTCP2Session struct {
 #### func  NewNTCP2Session
 
 ```go
-func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logrus.Entry) *NTCP2Session
+func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session
 ```
 
 #### func (*NTCP2Session) Close

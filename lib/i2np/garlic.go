@@ -1,9 +1,11 @@
 package i2np
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/go-i2p/common/certificate"
+	"github.com/samber/oops"
 )
 
 /*
@@ -62,7 +64,45 @@ Message_ID :: 4 byte Integer
 Expiration :: Date (8 bytes)
 */
 
-type GarlicElGamal []byte
+// GarlicElGamal represents an ElGamal encrypted garlic message with proper structure
+type GarlicElGamal struct {
+	Length uint32
+	Data   []byte
+}
+
+// NewGarlicElGamal creates a new GarlicElGamal from raw bytes
+func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error) {
+	if len(bytes) < 4 {
+		return nil, oops.Errorf("insufficient data for GarlicElGamal: need at least 4 bytes for length, got %d", len(bytes))
+	}
+
+	length := binary.BigEndian.Uint32(bytes[0:4])
+
+	if len(bytes) < int(4+length) {
+		return nil, oops.Errorf("insufficient data for GarlicElGamal: length indicates %d bytes but only %d available", length, len(bytes)-4)
+	}
+
+	data := make([]byte, length)
+	copy(data, bytes[4:4+length])
+
+	return &GarlicElGamal{
+		Length: length,
+		Data:   data,
+	}, nil
+}
+
+// Bytes serializes the GarlicElGamal to bytes
+func (g *GarlicElGamal) Bytes() ([]byte, error) {
+	if g == nil {
+		return nil, oops.Errorf("cannot serialize nil GarlicElGamal")
+	}
+
+	result := make([]byte, 4+len(g.Data))
+	binary.BigEndian.PutUint32(result[0:4], g.Length)
+	copy(result[4:], g.Data)
+
+	return result, nil
+}
 
 type Garlic struct {
 	Count       int
