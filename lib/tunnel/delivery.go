@@ -152,19 +152,19 @@ type DelayFactor byte
 type DeliveryInstructions struct {
 	// Type: FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT
 	fragmentType int
-	
+
 	// For FIRST_FRAGMENT
-	deliveryType   byte          // DT_LOCAL, DT_TUNNEL, DT_ROUTER
-	hasDelay       bool
-	fragmented     bool
-	hasExtOptions  bool
-	tunnelID       uint32        // Present if deliveryType == DT_TUNNEL
-	hash           common.Hash   // Present if deliveryType == DT_TUNNEL or DT_ROUTER
-	delay          DelayFactor   // Present if hasDelay
-	messageID      uint32        // Present if fragmented
-	extendedOpts   []byte        // Present if hasExtOptions
-	fragmentSize   uint16
-	
+	deliveryType  byte // DT_LOCAL, DT_TUNNEL, DT_ROUTER
+	hasDelay      bool
+	fragmented    bool
+	hasExtOptions bool
+	tunnelID      uint32      // Present if deliveryType == DT_TUNNEL
+	hash          common.Hash // Present if deliveryType == DT_TUNNEL or DT_ROUTER
+	delay         DelayFactor // Present if hasDelay
+	messageID     uint32      // Present if fragmented
+	extendedOpts  []byte      // Present if hasExtOptions
+	fragmentSize  uint16
+
 	// For FOLLOW_ON_FRAGMENT
 	fragmentNumber int
 	lastFragment   bool
@@ -173,7 +173,8 @@ type DeliveryInstructions struct {
 
 // NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
 func NewDeliveryInstructions(bytes []byte) (*DeliveryInstructions, error) {
-	return readDeliveryInstructionsStruct(bytes)
+	di, _, err := readDeliveryInstructionsStruct(bytes)
+	return di, err
 }
 
 // Bytes serializes the DeliveryInstructions to bytes
@@ -181,7 +182,7 @@ func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 	if di == nil {
 		return nil, oops.Errorf("cannot serialize nil DeliveryInstructions")
 	}
-	
+
 	if di.fragmentType == FOLLOW_ON_FRAGMENT {
 		return di.serializeFollowOnFragment()
 	}
@@ -190,29 +191,29 @@ func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 
 func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
 	result := make([]byte, 7)
-	
+
 	// Build flag byte: 1nnnnnnd
-	flag := byte(0x80) // Set bit 7
+	flag := byte(0x80)                            // Set bit 7
 	flag |= byte((di.fragmentNumber & 0x3F) << 1) // Set bits 6-1
 	if di.lastFragment {
 		flag |= 0x01 // Set bit 0
 	}
 	result[0] = flag
-	
+
 	// Message ID (4 bytes)
 	binary.BigEndian.PutUint32(result[1:5], di.messageID)
-	
+
 	// Fragment size (2 bytes)
 	binary.BigEndian.PutUint16(result[5:7], di.fragmentSize)
-	
+
 	return result, nil
 }
 
 func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 	result := make([]byte, 0, 128)
-	
+
 	// Build flag byte
-	flag := byte(0x00) // Bit 7 = 0 for first fragment
+	flag := byte(0x00)                    // Bit 7 = 0 for first fragment
 	flag |= (di.deliveryType & 0x03) << 4 // Bits 6-5
 	if di.hasDelay {
 		flag |= 0x10 // Bit 4
@@ -224,991 +225,410 @@ func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 		flag |= 0x04 // Bit 2
 	}
 	result = append(result, flag)
-	
+
 	// Add tunnel ID if present
 	if di.deliveryType == DT_TUNNEL {
 		tunnelBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(tunnelBytes, di.tunnelID)
 		result = append(result, tunnelBytes...)
 	}
-	
+
 	// Add hash if present
 	if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
 		result = append(result, di.hash[:]...)
 	}
-	
+
 	// Add delay if present
 	if di.hasDelay {
 		result = append(result, byte(di.delay))
 	}
-	
+
 	// Add message ID if fragmented
 	if di.fragmented {
 		msgBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(msgBytes, di.messageID)
 		result = append(result, msgBytes...)
 	}
-	
+
 	// Add extended options if present
 	if di.hasExtOptions {
 		result = append(result, byte(len(di.extendedOpts)))
 		result = append(result, di.extendedOpts...)
 	}
-	
+
 	// Add fragment size
 	sizeBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(sizeBytes, di.fragmentSize)
 	result = append(result, sizeBytes...)
-	
+
 	return result, nil
 }
 
 // Return if the DeliveryInstructions are of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT.
-func (delivery_instructions DeliveryInstructions) Type() (int, error) {
+func (delivery_instructions *DeliveryInstructions) Type() (int, error) {
 	log.Debug("Determining DeliveryInstructions type")
-	if len(delivery_instructions) >= 1 {
-		/*
-			 Check if the 7 bit of the Delivery Instructions
-			 is set using binary AND operator to determine
-			 the Delivery Instructions type
-
-			      1xxxxxxx	      0xxxxxxx
-			     &10000000	     &10000000
-			     ---------	     ---------
-			      10000000	      00000000
-
-			  bit is set,		bit is not set,
-			  message is a		message is an
-			  follow-on fragment	initial I2NP message
-						fragment or a complete fragment
-		*/
-		if (delivery_instructions[0] & 0x80) == 0x80 {
-			log.Debug("DeliveryInstructions type: FOLLOW_ON_FRAGMENT")
-			return FOLLOW_ON_FRAGMENT, nil
-		}
-		log.Debug("DeliveryInstructions type: FIRST_FRAGMENT")
-		return FIRST_FRAGMENT, nil
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.Error("DeliveryInstructions contains no data")
-	return 0, oops.Errorf("DeliveryInstructions contains no data")
+	log.WithField("fragment_type", delivery_instructions.fragmentType).Debug("DeliveryInstructions type retrieved")
+	return delivery_instructions.fragmentType, nil
 }
 
 // Read the integer stored in the 6-1 bits of a FOLLOW_ON_FRAGMENT's flag, indicating
 // the fragment number.
-func (delivery_instructions DeliveryInstructions) FragmentNumber() (int, error) {
+func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error) {
 	log.Debug("Getting FragmentNumber")
-	di_type, err := delivery_instructions.Type()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return 0, err
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	/*
-	 Read the 6-1 bits of the Delivery Instructions
-	 to determine the FragmentNumber of Follow On Fragments
-
-	      xnnnnnnx
-	     &01111110    bit shift
-	     ---------
-	      0??????0       >> 1   =>   Integer(??????)
-	*/
-	if di_type == FOLLOW_ON_FRAGMENT {
-		/*
-			return common.Integer(
-				[]byte{((delivery_instructions[0] & 0x7e) >> 1)},
-			).Int(), nil
-		*/
-		fragNum := common.Integer([]byte{((delivery_instructions[0] & 0x7e) >> 1)}).Int()
-		log.WithField("fragment_number", fragNum).Debug("FragmentNumber retrieved")
-		return fragNum, nil
+	if delivery_instructions.fragmentType != FOLLOW_ON_FRAGMENT {
+		log.Error("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
+		return 0, oops.Errorf("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
 	}
-	log.Error("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
-	return 0, oops.Errorf("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
+	log.WithField("fragment_number", delivery_instructions.fragmentNumber).Debug("FragmentNumber retrieved")
+	return delivery_instructions.fragmentNumber, nil
 }
 
 // Read the value of the 0 bit of a FOLLOW_ON_FRAGMENT, which is set to 1 to indicate the
 // last fragment.
-func (delivery_instructions DeliveryInstructions) LastFollowOnFragment() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool, error) {
 	log.Debug("Checking if this is the LastFollowOnFragment")
-	di_type, err := delivery_instructions.Type()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return false, err
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	/*
-	 Check the 0 bit of the Delivery Instructions
-	 to determine if this is the last Follow On Fragment
-
-	      xxxxxxxx
-	     &00000001
-	     ---------
-	      0000000?   =>  n
-	*/
-	if di_type == FOLLOW_ON_FRAGMENT {
-		/*
-			if delivery_instructions[0]&0x01 == 0x01 {
-				return true, nil
-			} else {
-				return false, nil
-			}
-		*/
-		isLast := delivery_instructions[0]&0x01 == 0x01
-		log.WithField("is_last", isLast).Debug("LastFollowOnFragment status determined")
-		return isLast, nil
+	if delivery_instructions.fragmentType != FOLLOW_ON_FRAGMENT {
+		log.Error("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
 	}
-	log.Error("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
-	return false, oops.Errorf("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
+	log.WithField("is_last", delivery_instructions.lastFragment).Debug("LastFollowOnFragment status determined")
+	return delivery_instructions.lastFragment, nil
 }
 
 // Return the delivery type for these DeliveryInstructions, can be of type
 // DT_LOCAL, DT_TUNNEL, DT_ROUTER, or DT_UNUSED.
-func (delivery_instructions DeliveryInstructions) DeliveryType() (byte, error) {
+func (delivery_instructions *DeliveryInstructions) DeliveryType() (byte, error) {
 	log.Debug("Getting DeliveryType")
-	if len(delivery_instructions) >= 1 {
-		/*
-		 Check if the 6-5 bits of the Delivery Instructions
-		 are set using binary AND operator to determine
-		 the delivery type
-
-		      xx0?xxxx
-		     &00110000    bit shift
-		     ---------
-		      000?0000       >> 4   =>   n	(DT_* consts)
-		*/
-		//return ((delivery_instructions[0] & 0x30) >> 4), nil
-		deliveryType := (delivery_instructions[0] & 0x30) >> 4
-		log.WithField("delivery_type", deliveryType).Debug("DeliveryType retrieved")
-		return deliveryType, nil
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.Error("DeliveryInstructions contains no data")
-	return 0, oops.Errorf("DeliveryInstructions contains no data")
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("DeliveryType only exists for FIRST_FRAGMENT Delivery Instructions")
+		return 0, oops.Errorf("DeliveryType only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	log.WithField("delivery_type", delivery_instructions.deliveryType).Debug("DeliveryType retrieved")
+	return delivery_instructions.deliveryType, nil
 }
 
 // Check if the delay bit is set.  This feature in unimplemented in the Java router.
-func (delivery_instructions DeliveryInstructions) HasDelay() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) HasDelay() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions has delay")
-	if len(delivery_instructions) >= 1 {
-		/*
-			 Check if the 4 bit of the Delivery Instructions
-			 is set using binary AND operator to determine
-			 if the Delivery Instructions has a delay
-
-			      xxx1xxxx	      xxx0xxxx
-			     &00010000	     &00010000
-			     ---------	     ---------
-			      00010000	      00000000
-
-			  bit is set,		bit is not set,
-			  delay is included     no delay included
-
-			Delay is unimplemented in the Java router, a warning
-			is logged as this is interesting behavior.
-		*/
-		delay := (delivery_instructions[0] & 0x10) == 0x10
-		if delay {
-			log.WithFields(logger.Fields{
-				"at":   "(DeliveryInstructions) HasDelay",
-				"info": "this feature is unimplemented in the Java router",
-			}).Warn("DeliveryInstructions found with delay bit set")
-		}
-		log.WithField("has_delay", delay).Debug("HasDelay status determined")
-		return delay, nil
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.Error("DeliveryInstructions contains no data")
-	return false, oops.Errorf("DeliveryInstructions contains no data")
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("HasDelay only exists for FIRST_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("HasDelay only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	if delivery_instructions.hasDelay {
+		log.WithFields(logger.Fields{
+			"at":   "(DeliveryInstructions) HasDelay",
+			"info": "this feature is unimplemented in the Java router",
+		}).Warn("DeliveryInstructions found with delay bit set")
+	}
+	log.WithField("has_delay", delivery_instructions.hasDelay).Debug("HasDelay status determined")
+	return delivery_instructions.hasDelay, nil
 }
 
 // Returns true if the Delivery Instructions are fragmented or false
 // if the following data contains the entire message
-func (delivery_instructions DeliveryInstructions) Fragmented() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) Fragmented() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions is fragmented")
-	if len(delivery_instructions) >= 1 {
-		/*
-		 Check if the 3 bit of the Delivery Instructions
-		 is set using binary AND operator to determine
-		 if the Delivery Instructions is fragmented or if
-		 the entire message is contained in the following data
-
-		      xxxx1xxx	      xxxx0xxx
-		     &00001000	     &00001000
-		     ---------	     ---------
-		      00001000	      00000000
-
-		  bit is set,		bit is not set,
-		  message is		message is not
-		  fragmented		fragmented
-		*/
-		fragmented := (delivery_instructions[0] & 0x08) == 0x08
-		log.WithField("fragmented", fragmented).Debug("Fragmented status determined")
-		return fragmented, nil
-		// return ((delivery_instructions[0] & 0x08) == 0x08), nil
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.Error("DeliveryInstructions contains no data")
-	return false, oops.Errorf("DeliveryInstructions contains no data")
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("Fragmented only exists for FIRST_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("Fragmented only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	log.WithField("fragmented", delivery_instructions.fragmented).Debug("Fragmented status determined")
+	return delivery_instructions.fragmented, nil
 }
 
 // Check if the extended options bit is set.  This feature in unimplemented in the Java router.
-func (delivery_instructions DeliveryInstructions) HasExtendedOptions() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) HasExtendedOptions() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions has extended options")
-	if len(delivery_instructions) >= 1 {
-		/*
-			 Check if the 2 bit of the Delivery Instructions
-			 is set using binary AND operator to determine
-			 if the Delivery Instructions has a extended options
-
-			      xxxxx1xx	      xxxxx0xx
-			     &00000100	     &00000100
-			     ---------	     ---------
-			      00000100	      00000000
-
-			  bit is set,		bit is not set,
-			  extended options      extended options
-			  included		not included
-
-			Extended options is unimplemented in the Java router, a warning
-			is logged as this is interesting behavior.
-		*/
-		extended_options := (delivery_instructions[0] & 0x04) == 0x04
-		if extended_options {
-			log.WithFields(logger.Fields{
-				"at":   "(DeliveryInstructions) ExtendedOptions",
-				"info": "this feature is unimplemented in the Java router",
-			}).Warn("DeliveryInstructions found with extended_options bit set")
-		}
-		log.WithField("has_extended_options", extended_options).Debug("HasExtendedOptions status determined")
-		return extended_options, nil
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	log.Error("DeliveryInstructions contains no data")
-	return false, oops.Errorf("DeliveryInstructions contains no data")
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("HasExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("HasExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	if delivery_instructions.hasExtOptions {
+		log.WithFields(logger.Fields{
+			"at":   "(DeliveryInstructions) ExtendedOptions",
+			"info": "this feature is unimplemented in the Java router",
+		}).Warn("DeliveryInstructions found with extended_options bit set")
+	}
+	log.WithField("has_extended_options", delivery_instructions.hasExtOptions).Debug("HasExtendedOptions status determined")
+	return delivery_instructions.hasExtOptions, nil
 }
 
 // Check if the DeliveryInstructions is of type DT_TUNNEL.
-func (delivery_instructions DeliveryInstructions) HasTunnelID() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions has TunnelID")
-	di_type, err := delivery_instructions.DeliveryType()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return false, err
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	// return di_type == DT_TUNNEL, nil
-	hasTunnelID := di_type == DT_TUNNEL
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("HasTunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("HasTunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	hasTunnelID := delivery_instructions.deliveryType == DT_TUNNEL
 	log.WithField("has_tunnel_id", hasTunnelID).Debug("HasTunnelID status determined")
 	return hasTunnelID, nil
 }
 
-func (delivery_instructions DeliveryInstructions) HasHash() (bool, error) {
+func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions has Hash")
-	di_type, err := delivery_instructions.DeliveryType()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return false, err
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if di_type == DT_TUNNEL || di_type == DT_ROUTER {
-		min_size := FLAG_SIZE + HASH_SIZE
-		if di_type == DT_TUNNEL {
-			min_size += TUNNEL_ID_SIZE
-		}
-		if len(delivery_instructions) < min_size {
-			log.Error("Delivery Instructions indicates hash present but has too little data")
-			return false, oops.Errorf("Delivery Instructions indicates hash present but has too little data")
-		}
-		log.Debug("DeliveryInstructions has Hash")
-	} else {
-		log.Debug("DeliveryInstructions does not have Hash")
-		return false, nil
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("HasHash only exists for FIRST_FRAGMENT Delivery Instructions")
+		return false, oops.Errorf("HasHash only exists for FIRST_FRAGMENT Delivery Instructions")
 	}
-	log.Debug("DeliveryInstructions does not have Hash(?)")
-	return true, nil
+	hasHash := delivery_instructions.deliveryType == DT_TUNNEL || delivery_instructions.deliveryType == DT_ROUTER
+	log.WithField("has_hash", hasHash).Debug("HasHash status determined")
+	return hasHash, nil
 }
 
 // Return the tunnel ID in this DeliveryInstructions or 0 and an error if the
 // DeliveryInstructions are not of type DT_TUNNEL.
-func (delivery_instructions DeliveryInstructions) TunnelID() (tunnel_id uint32, err error) {
+func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32, err error) {
 	log.Debug("Getting TunnelID")
-	has_tunnel_id, err := delivery_instructions.HasTunnelID()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasTunnelID")
-		return
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if has_tunnel_id {
-		if len(delivery_instructions) >= FLAG_SIZE+TUNNEL_ID_SIZE {
-			tunnel_id = binary.BigEndian.Uint32(delivery_instructions[FLAG_SIZE:TUNNEL_ID_SIZE])
-			log.WithField("tunnel_id", tunnel_id).Debug("TunnelID retrieved")
-		} else {
-			log.Error("DeliveryInstructions are invalid, too little data for Tunnel ID")
-			err = oops.Errorf("DeliveryInstructions are invalid, too little data for Tunnel ID")
-		}
-	} else {
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("TunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+		return 0, oops.Errorf("TunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	if delivery_instructions.deliveryType != DT_TUNNEL {
 		log.Error("DeliveryInstructions are not of type DT_TUNNEL")
-		err = oops.Errorf("DeliveryInstructions are not of type DT_TUNNEL")
+		return 0, oops.Errorf("DeliveryInstructions are not of type DT_TUNNEL")
 	}
-	return
+	log.WithField("tunnel_id", delivery_instructions.tunnelID).Debug("TunnelID retrieved")
+	return delivery_instructions.tunnelID, nil
 }
 
 // Return the hash for these DeliveryInstructions, which varies by hash type.
 //
 //	If the type is DT_TUNNEL, hash is the SHA256 of the gateway router, if
 //	the type is DT_ROUTER it is the SHA256 of the router.
-func (delivery_instructions DeliveryInstructions) Hash() (hash common.Hash, err error) {
+func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err error) {
 	log.Debug("Getting Hash")
-	delivery_type, err := delivery_instructions.DeliveryType()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return common.Hash{}, oops.Errorf("DeliveryInstructions is nil")
 	}
-	hash_start := FLAG_SIZE
-	hash_end := FLAG_SIZE + HASH_SIZE
-	if delivery_type == DT_TUNNEL {
-		// Fixed: Reassign instead of shadowing to correctly adjust offsets for tunnel delivery type
-		hash_start = hash_start + TUNNEL_ID_SIZE
-		hash_end = hash_end + TUNNEL_ID_SIZE
-		if len(delivery_instructions) >= hash_end {
-			copy(hash[:], delivery_instructions[hash_start:hash_end])
-			log.WithField("hash", hash).Debug("Hash retrieved for DT_TUNNEL")
-		} else {
-			log.Error("DeliveryInstructions is invalid, not contain enough data for hash given type DT_TUNNEL")
-			err = oops.Errorf("DeliveryInstructions is invalid, not contain enough data for hash given type DT_TUNNEL")
-		}
-	} else if delivery_type == DT_ROUTER {
-		if len(delivery_instructions) >= hash_end {
-			copy(hash[:], delivery_instructions[hash_start:hash_end])
-			log.WithField("hash", hash).Debug("Hash retrieved for DT_ROUTER")
-		} else {
-			log.Error("DeliveryInstructions is invalid, not contain enough data for hash given type DT_ROUTER")
-			err = oops.Errorf("DeliveryInstructions is invalid, not contain enough data for hash given type DT_ROUTER")
-		}
-	} else {
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("Hash only exists for FIRST_FRAGMENT Delivery Instructions")
+		return common.Hash{}, oops.Errorf("Hash only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	if delivery_instructions.deliveryType != DT_TUNNEL && delivery_instructions.deliveryType != DT_ROUTER {
 		log.Error("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
-		err = oops.Errorf("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
+		return common.Hash{}, oops.Errorf("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 	}
-	return
+	log.WithField("hash", delivery_instructions.hash).Debug("Hash retrieved")
+	return delivery_instructions.hash, nil
 }
 
-// Return the DelayFactor if present and any errors encountered parsing the DeliveryInstructions.
-// extractDelayFromTunnel extracts the delay factor from tunnel-type delivery instructions.
-func (delivery_instructions DeliveryInstructions) extractDelayFromTunnel() (DelayFactor, error) {
-	if len(delivery_instructions) < FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE {
-		log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-		return DelayFactor(0), oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFactor, err error) {
+	log.Debug("Getting Delay")
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-
-	delay_factor := DelayFactor(delivery_instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE])
-	log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_TUNNEL")
-	return delay_factor, nil
-}
-
-// extractDelayFromRouter extracts the delay factor from router-type delivery instructions.
-func (delivery_instructions DeliveryInstructions) extractDelayFromRouter() (DelayFactor, error) {
-	if len(delivery_instructions) < FLAG_SIZE+HASH_SIZE {
-		log.Error("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
-		return DelayFactor(0), oops.Errorf("DeliveryInstructions is invalid, does not contain enough data for DelayFactor")
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("Delay only exists for FIRST_FRAGMENT Delivery Instructions")
+		return 0, oops.Errorf("Delay only exists for FIRST_FRAGMENT Delivery Instructions")
 	}
-
-	delay_factor := DelayFactor(delivery_instructions[FLAG_SIZE+HASH_SIZE])
-	log.WithField("delay_factor", delay_factor).Debug("Delay factor retrieved for DT_ROUTER")
-	return delay_factor, nil
-}
-
-// validateDelaySupport checks if the delivery type supports delay and logs warnings for unsupported types.
-func (delivery_instructions DeliveryInstructions) validateDelaySupport(di_type byte) error {
-	if di_type != DT_TUNNEL && di_type != DT_ROUTER {
+	if !delivery_instructions.hasDelay {
+		return 0, nil
+	}
+	if delivery_instructions.deliveryType != DT_TUNNEL && delivery_instructions.deliveryType != DT_ROUTER {
 		log.WithFields(logger.Fields{
 			"at": "(DeliveryInstructions) Delay",
 		}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
 	}
-	return nil
-}
-
-func (delivery_instructions DeliveryInstructions) Delay() (delay_factor DelayFactor, err error) {
-	log.Debug("Getting Delay")
-	delay, err := delivery_instructions.HasDelay()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasDelay")
-		return
-	}
-
-	if !delay {
-		return
-	}
-
-	di_type, err := delivery_instructions.DeliveryType()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return
-	}
-
-	switch di_type {
-	case DT_TUNNEL:
-		delay_factor, err = delivery_instructions.extractDelayFromTunnel()
-	case DT_ROUTER:
-		delay_factor, err = delivery_instructions.extractDelayFromRouter()
-	default:
-		err = delivery_instructions.validateDelaySupport(di_type)
-	}
-
-	return
-}
-
-// extractMessageIDFromFollowOnFragment extracts the message ID from a follow-on fragment.
-// Follow-on fragments store the message ID in bytes 1-5 of the delivery instructions.
-func (delivery_instructions DeliveryInstructions) extractMessageIDFromFollowOnFragment() (uint32, error) {
-	if len(delivery_instructions) < 5 {
-		log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
-	}
-
-	msgid := binary.BigEndian.Uint32(delivery_instructions[1:5])
-	log.WithField("message_id", msgid).Debug("MessageID retrieved for FOLLOW_ON_FRAGMENT")
-	return msgid, nil
-}
-
-// extractMessageIDFromFirstFragment extracts the message ID from a first fragment.
-// First fragments store the message ID at a variable offset that depends on delivery type and flags.
-func (delivery_instructions DeliveryInstructions) extractMessageIDFromFirstFragment() (uint32, error) {
-	message_id_index, err := delivery_instructions.message_id_index()
-	if err != nil {
-		log.WithError(err).Error("Failed to get message_id_index")
-		return 0, err
-	}
-
-	if len(delivery_instructions) < message_id_index+4 {
-		log.Error("DeliveryInstructions are invalid, not enough data for Message ID")
-		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Message ID")
-	}
-
-	msgid := binary.BigEndian.Uint32(delivery_instructions[message_id_index : message_id_index+4])
-	log.WithField("message_id", msgid).Debug("MessageID retrieved for FIRST_FRAGMENT")
-	return msgid, nil
-}
-
-// validateMessageIDFragmentType validates that the delivery instructions are of a type
-// that supports message IDs (FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT).
-func (delivery_instructions DeliveryInstructions) validateMessageIDFragmentType(di_type int) error {
-	if di_type != FIRST_FRAGMENT && di_type != FOLLOW_ON_FRAGMENT {
-		log.Error("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		return oops.Errorf("No Message ID for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-	}
-	return nil
+	log.WithField("delay_factor", delivery_instructions.delay).Debug("Delay factor retrieved")
+	return delivery_instructions.delay, nil
 }
 
 // Return the I2NP Message ID or 0 and an error if the data is not available for this
 // DeliveryInstructions.
-func (delivery_instructions DeliveryInstructions) MessageID() (msgid uint32, err error) {
+func (delivery_instructions *DeliveryInstructions) MessageID() (msgid uint32, err error) {
 	log.Debug("Getting MessageID")
-	di_type, err := delivery_instructions.Type()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-
-	if err = delivery_instructions.validateMessageIDFragmentType(di_type); err != nil {
-		return
+	// MessageID is present for both FIRST_FRAGMENT (if fragmented) and FOLLOW_ON_FRAGMENT
+	if delivery_instructions.fragmentType == FIRST_FRAGMENT && !delivery_instructions.fragmented {
+		log.Error("No Message ID for non-fragmented FIRST_FRAGMENT Delivery Instructions")
+		return 0, oops.Errorf("No Message ID for non-fragmented FIRST_FRAGMENT Delivery Instructions")
 	}
-
-	if di_type == FOLLOW_ON_FRAGMENT {
-		return delivery_instructions.extractMessageIDFromFollowOnFragment()
-	}
-
-	return delivery_instructions.extractMessageIDFromFirstFragment()
+	log.WithField("message_id", delivery_instructions.messageID).Debug("MessageID retrieved")
+	return delivery_instructions.messageID, nil
 }
 
 // Return the Extended Options data if present, or an error if not present.  Extended Options in unimplemented
 // in the Java router and the presence of extended options will generate a warning.
-func (delivery_instructions DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
+func (delivery_instructions *DeliveryInstructions) ExtendedOptions() (data []byte, err error) {
 	log.Debug("Getting ExtendedOptions")
-	ops, err := delivery_instructions.HasExtendedOptions()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasExtendedOptions")
-		return
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return nil, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if ops {
-		var extended_options_index int
-		extended_options_index, err = delivery_instructions.extended_options_index()
-		if err != nil {
-			log.WithError(err).Error("Failed to get extended_options_index")
-			return
-		}
-		if len(delivery_instructions) < extended_options_index+2 {
-			log.Error("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
-			err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than required for Extended Options")
-			return
-		} else {
-			extended_options_size := common.Integer([]byte{delivery_instructions[extended_options_index]})
-			if len(delivery_instructions) < extended_options_index+1+extended_options_size.Int() {
-				log.Error("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
-				err = oops.Errorf("DeliveryInstructions are invalid, length is shorter than specified in Extended Options")
-				return
-			} else {
-				data = delivery_instructions[extended_options_index+1 : extended_options_size.Int()]
-				log.WithField("extended_options_length", len(data)).Debug("Extended Options retrieved")
-				return
-			}
-
-		}
-	} else {
+	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
+		log.Error("ExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+		return nil, oops.Errorf("ExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+	}
+	if !delivery_instructions.hasExtOptions {
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
-		err = oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
+		return nil, oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
 	}
-	return
-}
-
-// extractFragmentSizeFromFollowOn extracts fragment size from follow-on fragment delivery instructions.
-// Follow-on fragments store the fragment size at bytes 5-7.
-func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFollowOn() (uint16, error) {
-	if len(delivery_instructions) < 7 {
-		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
-	}
-
-	fragSize := binary.BigEndian.Uint16(delivery_instructions[5:7])
-	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FOLLOW_ON_FRAGMENT")
-	return fragSize, nil
-}
-
-// extractFragmentSizeFromFirst extracts fragment size from first fragment delivery instructions.
-// First fragments store the fragment size at a variable offset determined by the fragment_size_index.
-func (delivery_instructions DeliveryInstructions) extractFragmentSizeFromFirst() (uint16, error) {
-	fragmentSizeIndex, err := delivery_instructions.fragment_size_index()
-	if err != nil {
-		log.WithError(err).Error("Failed to get fragment_size_index")
-		return 0, err
-	}
-
-	if len(delivery_instructions) < fragmentSizeIndex+2 {
-		log.Error("DeliveryInstructions are invalid, not enough data for Fragment Size")
-		return 0, oops.Errorf("DeliveryInstructions are invalid, not enough data for Fragment Size")
-	}
-
-	fragSize := binary.BigEndian.Uint16(delivery_instructions[fragmentSizeIndex : fragmentSizeIndex+2])
-	log.WithField("fragment_size", fragSize).Debug("FragmentSize retrieved for FIRST_FRAGMENT")
-	return fragSize, nil
-}
-
-// validateFragmentTypeForSize validates that the delivery instructions are of a supported fragment type.
-func (delivery_instructions DeliveryInstructions) validateFragmentTypeForSize(fragmentType int) error {
-	if fragmentType != FOLLOW_ON_FRAGMENT && fragmentType != FIRST_FRAGMENT {
-		log.Error("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-		return oops.Errorf("No Fragment Size for DeliveryInstructions not of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT")
-	}
-	return nil
+	log.WithField("extended_options_length", len(delivery_instructions.extendedOpts)).Debug("Extended Options retrieved")
+	return delivery_instructions.extendedOpts, nil
 }
 
 // Return the size of the associated I2NP fragment and an error if the data is unavailable.
-func (delivery_instructions DeliveryInstructions) FragmentSize() (frag_size uint16, err error) {
+func (delivery_instructions *DeliveryInstructions) FragmentSize() (frag_size uint16, err error) {
 	log.Debug("Getting FragmentSize")
-	di_type, err := delivery_instructions.Type()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryInstructions type")
-		return
+	if delivery_instructions == nil {
+		log.Error("DeliveryInstructions is nil")
+		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-
-	if err = delivery_instructions.validateFragmentTypeForSize(di_type); err != nil {
-		return
-	}
-
-	switch di_type {
-	case FOLLOW_ON_FRAGMENT:
-		return delivery_instructions.extractFragmentSizeFromFollowOn()
-	case FIRST_FRAGMENT:
-		return delivery_instructions.extractFragmentSizeFromFirst()
-	default:
-		// This should never be reached due to validation above, but kept for safety
-		log.Error("Unexpected fragment type in FragmentSize")
-		return 0, oops.Errorf("Unexpected fragment type in FragmentSize")
-	}
+	log.WithField("fragment_size", delivery_instructions.fragmentSize).Debug("FragmentSize retrieved")
+	return delivery_instructions.fragmentSize, nil
 }
 
-// calculateBaseOffset computes the base offset for delivery instruction components
-// based on delivery type and flags.
-func (delivery_instructions DeliveryInstructions) calculateBaseOffset() (offset int, err error) {
-	log.Debug("Calculating base offset for delivery instruction components")
+// Legacy helper functions have been removed - no longer needed with struct-based implementation
 
-	// Start counting after the flags
-	offset = 1
-
-	// Add the Tunnel ID and Hash if present
-	di_type, err := delivery_instructions.DeliveryType()
-	if err != nil {
-		log.WithError(err).Error("Failed to get DeliveryType")
-		return 0, err
-	}
-
-	if di_type == DT_TUNNEL {
-		offset += 36 // TUNNEL_ID_SIZE (4) + HASH_SIZE (32)
-	} else if di_type == DT_ROUTER {
-		offset += 32 // HASH_SIZE (32)
-	}
-
-	// Add the Delay if present
-	delay, err := delivery_instructions.HasDelay()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasDelay")
-		return 0, err
-	}
-	if delay {
-		offset++
-	}
-
-	log.WithField("base_offset", offset).Debug("Base offset calculated")
-	return offset, nil
+func readDeliveryInstructions(data []byte) (instructions *DeliveryInstructions, remainder []byte, err error) {
+	log.Debug("Reading DeliveryInstructions")
+	return readDeliveryInstructionsStruct(data)
 }
 
-// validateFragmentedForMessageID checks if delivery instructions are fragmented,
-// which is required for message ID access.
-func (delivery_instructions DeliveryInstructions) validateFragmentedForMessageID() error {
-	fragmented, err := delivery_instructions.Fragmented()
-	if err != nil {
-		log.WithError(err).Error("Failed to check if DeliveryInstructions are fragmented")
-		return err
-	}
-	if !fragmented {
-		log.Error("DeliveryInstruction must be fragmented to have a Message ID")
-		return oops.Errorf("DeliveryInstruction must be fragmented to have a Message ID")
-	}
-	return nil
-}
-
-// Find the correct index for the Message ID in a FIRST_FRAGMENT DeliveryInstructions
-func (delivery_instructions DeliveryInstructions) message_id_index() (message_id int, err error) {
-	log.Debug("Calculating message_id_index")
-
-	if err := delivery_instructions.validateFragmentedForMessageID(); err != nil {
-		return 0, err
-	}
-
-	message_id, err = delivery_instructions.calculateBaseOffset()
-	if err != nil {
-		return 0, err
-	}
-
-	log.WithField("message_id_index", message_id).Debug("message_id_index calculated")
-	return message_id, nil
-}
-
-// validateExtendedOptionsPresent checks if extended options are enabled.
-func (delivery_instructions DeliveryInstructions) validateExtendedOptionsPresent() error {
-	ops, err := delivery_instructions.HasExtendedOptions()
-	if err != nil {
-		log.WithError(err).Error("Failed to check HasExtendedOptions")
-		return err
-	}
-	if !ops {
-		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
-		return oops.Errorf("DeliveryInstruction does not have the ExtendedOptions flag set")
-	}
-	return nil
-}
-
-// calculateExtendedOptionsOffset computes the extended options offset including message ID.
-func (delivery_instructions DeliveryInstructions) calculateExtendedOptionsOffset(baseOffset int) int {
-	// Add message ID if present (4 bytes)
-	if _, err := delivery_instructions.MessageID(); err == nil {
-		baseOffset += 4
-	}
-	return baseOffset
-}
-
-// Find the index of the extended options in this Delivery Instruction, if they exist.
-func (delivery_instructions DeliveryInstructions) extended_options_index() (extended_options int, err error) {
-	log.Debug("Calculating extended_options_index")
-
-	if err := delivery_instructions.validateExtendedOptionsPresent(); err != nil {
-		return 0, err
-	}
-
-	baseOffset, err := delivery_instructions.calculateBaseOffset()
-	if err != nil {
-		return 0, err
-	}
-
-	extended_options = delivery_instructions.calculateExtendedOptionsOffset(baseOffset)
-
-	log.WithField("extended_options_index", extended_options).Debug("extended_options_index calculated")
-	return extended_options, nil
-}
-
-// calculateFragmentSizeOffset computes fragment size offset including message ID and extended options.
-func (delivery_instructions DeliveryInstructions) calculateFragmentSizeOffset(baseOffset int) int {
-	// Add the message ID if present (4 bytes)
-	if _, err := delivery_instructions.MessageID(); err == nil {
-		baseOffset += 4
-	}
-
-	// Add extended options if present
-	if opts, err := delivery_instructions.HasExtendedOptions(); opts && err == nil {
-		if extended_opts, err := delivery_instructions.ExtendedOptions(); err == nil {
-			baseOffset += len(extended_opts) + 1 // +1 for length byte
-		}
-	}
-
-	return baseOffset
-}
-
-// Find the index of the Fragment Size data in this Delivery Instruction.
-func (delivery_instructions DeliveryInstructions) fragment_size_index() (fragment_size int, err error) {
-	log.Debug("Calculating fragment_size_index")
-
-	baseOffset, err := delivery_instructions.calculateBaseOffset()
-	if err != nil {
-		return 0, err
-	}
-
-	fragment_size = delivery_instructions.calculateFragmentSizeOffset(baseOffset)
-
-	log.WithField("fragment_size_index", fragment_size).Debug("fragment_size_index calculated")
-	return fragment_size, nil
-}
-
-func maybeAppendTunnelID(data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append TunnelID")
-	if has_tunnel_id, _ := DeliveryInstructions(data).HasTunnelID(); has_tunnel_id {
-		_, err = DeliveryInstructions(data).TunnelID()
-		if err == nil {
-			now = append(current, data[1:5]...)
-			log.Debug("TunnelID appended")
-		} else {
-			log.WithError(err).Error("Failed to get TunnelID")
-			return
-		}
-	} else {
-		log.Debug("No TunnelID to append")
-	}
-	return
-}
-
-func maybeAppendHash(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append Hash")
-	delivery_type, _ := di_flag.DeliveryType()
-	if _, err := DeliveryInstructions(data).HasHash(); err == nil {
-		hash_start := 1
-		hash_end := 33
-		if delivery_type == DT_TUNNEL {
-			hash_start = hash_start + 4
-			hash_end = hash_end + 4
-		}
-		if err == nil {
-			now = append(current, data[hash_start:hash_end]...)
-			log.Debug("Hash appended")
-		}
-	} else {
-		log.Debug("No Hash to append")
-	}
-	return
-}
-
-func maybeAppendDelay(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append Delay")
-	delivery_type, _ := di_flag.DeliveryType()
-	if _, err = DeliveryInstructions(data).HasHash(); err == nil {
-		delay_start := 1
-		if delivery_type == DT_TUNNEL {
-			delay_start = delay_start + 4
-		}
-		if hash, _ := di_flag.Hash(); len(hash) == 32 {
-			delay_start = delay_start + 32
-		}
-		if err == nil {
-			now = append(current, data[delay_start])
-			log.Debug("Delay appended")
-		}
-	} else {
-		log.Debug("No Delay to append")
-	}
-	return
-}
-
-func maybeAppendMessageID(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append MessageID")
-	if di_type == FIRST_FRAGMENT {
-		return processFirstFragmentMessageID(di_flag, data, current)
-	} else if di_type == FOLLOW_ON_FRAGMENT {
-		return processFollowOnFragmentMessageID(data, current)
-	}
-	return current, nil
-}
-
-// calculateMessageIDIndex computes the message ID index offset based on delivery type and options.
-func calculateMessageIDIndex(di_flag DeliveryInstructions) int {
-	message_id_index := 1
-	if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL {
-		message_id_index += 4
-	}
-	if dtype, _ := di_flag.DeliveryType(); dtype == DT_TUNNEL || dtype == DT_ROUTER {
-		message_id_index += 32
-	}
-	if delay, _ := di_flag.HasDelay(); delay {
-		message_id_index += 1
-	}
-	return message_id_index
-}
-
-// processFirstFragmentMessageID handles message ID extraction for FIRST_FRAGMENT delivery instructions.
-func processFirstFragmentMessageID(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
-	if fragmented, _ := di_flag.Fragmented(); fragmented {
-		message_id_index := calculateMessageIDIndex(di_flag)
-		if len(data) < message_id_index+4 {
-			log.Error("Data is too short to contain message ID in FIRST_FRAGMENT")
-			return current, oops.Errorf("data is too short to contain message ID in FIRST_FRAGMENT")
-		}
-		now = append(current, data[message_id_index:message_id_index+4]...)
-		log.Debug("MessageID appended for FIRST_FRAGMENT")
-		return now, nil
-	}
-	return current, nil
-}
-
-// processFollowOnFragmentMessageID handles message ID extraction for FOLLOW_ON_FRAGMENT delivery instructions.
-func processFollowOnFragmentMessageID(data, current []byte) (now []byte, err error) {
-	if len(data) < 5 {
-		log.Error("Data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
-		return current, oops.Errorf("data is too short to contain message ID in FOLLOW_ON_FRAGMENT")
-	}
-	now = append(current, data[1:5]...)
-	log.Debug("MessageID appended for FOLLOW_ON_FRAGMENT")
-	return now, nil
-}
-
-func maybeAppendExtendedOptions(di_flag DeliveryInstructions, data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append ExtendedOptions")
-	if index, err := DeliveryInstructions(data).extended_options_index(); err != nil {
-		extended_options_length := common.Integer([]byte{data[index]})
-		now = append(current, data[index:index+extended_options_length.Int()]...)
-		log.WithField("extended_options_length", extended_options_length.Int()).Debug("ExtendedOptions appended")
-	} else {
-		log.Debug("No ExtendedOptions to append")
-	}
-	return
-}
-
-func maybeAppendSize(di_flag DeliveryInstructions, di_type int, data, current []byte) (now []byte, err error) {
-	log.Debug("Attempting to append Size")
-	if di_type == FIRST_FRAGMENT {
-		if index, err := DeliveryInstructions(data).extended_options_index(); err != nil {
-			extended_options_length := common.Integer([]byte{data[index]})
-			now = append(current, data[index+extended_options_length.Int():index+extended_options_length.Int()+2]...)
-			log.Debug("Size appended for FIRST_FRAGMENT")
-		}
-	} else if di_type == FOLLOW_ON_FRAGMENT {
-		if len(data) < 7 {
-			log.Error("Data is too short to contain size data")
-			err = oops.Errorf("data is too short to contain size data")
-		} else {
-			now = append(now, data[5:7]...)
-			log.Debug("Size appended for FOLLOW_ON_FRAGMENT")
-		}
-	}
-	return
-}
-
-// validateDeliveryInstructionInput checks if the provided data is valid for processing.
-func validateDeliveryInstructionInput(data []byte) error {
+// readDeliveryInstructionsStruct parses raw bytes into a DeliveryInstructions struct
+func readDeliveryInstructionsStruct(data []byte) (instructions *DeliveryInstructions, remainder []byte, err error) {
 	if len(data) < 1 {
 		log.Error("No data provided")
-		return oops.Errorf("no data provided")
-	}
-	return nil
-}
-
-// initializeDeliveryInstructionData creates initial data structure for delivery instructions processing.
-func initializeDeliveryInstructionData(data []byte) (DeliveryInstructions, int, []byte) {
-	di_flag := DeliveryInstructions(data[:1])
-	di_type, _ := di_flag.Type()
-
-	di_data := make([]byte, 0)
-	di_data = append(di_data, data[0])
-
-	return di_flag, di_type, di_data
-}
-
-// processFirstFragment handles the processing of FIRST_FRAGMENT delivery instruction type.
-func processFirstFragment(di_flag DeliveryInstructions, data, di_data []byte) ([]byte, error) {
-	log.Debug("Processing FIRST_FRAGMENT")
-
-	var err error
-	di_data, err = maybeAppendTunnelID(data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append TunnelID")
-		return nil, err
+		return nil, nil, oops.Errorf("no data provided")
 	}
 
-	di_data, err = maybeAppendHash(di_flag, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append Hash")
-		return nil, err
-	}
+	di := &DeliveryInstructions{}
+	offset := 0
+	flag := data[0]
+	offset++
 
-	di_data, err = maybeAppendDelay(di_flag, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append Delay")
-		return nil, err
-	}
+	// Determine fragment type from bit 7
+	if (flag & 0x80) == 0x80 {
+		// FOLLOW_ON_FRAGMENT
+		di.fragmentType = FOLLOW_ON_FRAGMENT
+		di.fragmentNumber = int((flag & 0x7e) >> 1)
+		di.lastFragment = (flag & 0x01) == 0x01
 
-	di_data, err = maybeAppendMessageID(di_flag, FIRST_FRAGMENT, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append MessageID")
-		return nil, err
-	}
-
-	di_data, err = maybeAppendExtendedOptions(di_flag, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append ExtendedOptions")
-		return nil, err
-	}
-
-	di_data, err = maybeAppendSize(di_flag, FIRST_FRAGMENT, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append Size")
-		return nil, err
-	}
-
-	return di_data, nil
-}
-
-// processFollowOnFragment handles the processing of FOLLOW_ON_FRAGMENT delivery instruction type.
-func processFollowOnFragment(di_flag DeliveryInstructions, data, di_data []byte) ([]byte, error) {
-	var err error
-	di_data, err = maybeAppendMessageID(di_flag, FOLLOW_ON_FRAGMENT, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append MessageID")
-		return nil, err
-	}
-
-	di_data, err = maybeAppendSize(di_flag, FOLLOW_ON_FRAGMENT, data, di_data)
-	if err != nil {
-		log.WithError(err).Error("Failed to append Size")
-		return nil, err
-	}
-
-	return di_data, nil
-}
-
-func readDeliveryInstructions(data []byte) (instructions DeliveryInstructions, remainder []byte, err error) {
-	log.Debug("Reading DeliveryInstructions")
-
-	if err = validateDeliveryInstructionInput(data); err != nil {
-		return
-	}
-
-	di_flag, di_type, di_data := initializeDeliveryInstructionData(data)
-
-	if di_type == FIRST_FRAGMENT {
-		di_data, err = processFirstFragment(di_flag, data, di_data)
-		if err != nil {
-			return
+		if len(data) < 7 {
+			return nil, nil, oops.Errorf("insufficient data for FOLLOW_ON_FRAGMENT")
 		}
-	} else if di_type == FOLLOW_ON_FRAGMENT {
-		di_data, err = processFollowOnFragment(di_flag, data, di_data)
-		if err != nil {
-			return
+
+		di.messageID = binary.BigEndian.Uint32(data[1:5])
+		di.fragmentSize = binary.BigEndian.Uint16(data[5:7])
+		offset = 7
+	} else {
+		// FIRST_FRAGMENT
+		di.fragmentType = FIRST_FRAGMENT
+		di.deliveryType = (flag & 0x30) >> 4
+		di.hasDelay = (flag & 0x10) == 0x10
+		di.fragmented = (flag & 0x08) == 0x08
+		di.hasExtOptions = (flag & 0x04) == 0x04
+
+		// Read tunnel ID if DT_TUNNEL
+		if di.deliveryType == DT_TUNNEL {
+			if len(data) < offset+4 {
+				return nil, nil, oops.Errorf("insufficient data for tunnel ID")
+			}
+			di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+4])
+			offset += 4
 		}
+
+		// Read hash if DT_TUNNEL or DT_ROUTER
+		if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
+			if len(data) < offset+32 {
+				return nil, nil, oops.Errorf("insufficient data for hash")
+			}
+			copy(di.hash[:], data[offset:offset+32])
+			offset += 32
+		}
+
+		// Read delay if present
+		if di.hasDelay {
+			if len(data) < offset+1 {
+				return nil, nil, oops.Errorf("insufficient data for delay")
+			}
+			di.delay = DelayFactor(data[offset])
+			offset++
+		}
+
+		// Read message ID if fragmented
+		if di.fragmented {
+			if len(data) < offset+4 {
+				return nil, nil, oops.Errorf("insufficient data for message ID")
+			}
+			di.messageID = binary.BigEndian.Uint32(data[offset : offset+4])
+			offset += 4
+		}
+
+		// Read extended options if present
+		if di.hasExtOptions {
+			if len(data) < offset+1 {
+				return nil, nil, oops.Errorf("insufficient data for extended options length")
+			}
+			extLen := int(data[offset])
+			offset++
+			if len(data) < offset+extLen {
+				return nil, nil, oops.Errorf("insufficient data for extended options")
+			}
+			di.extendedOpts = make([]byte, extLen)
+			copy(di.extendedOpts, data[offset:offset+extLen])
+			offset += extLen
+		}
+
+		// Read fragment size
+		if len(data) < offset+2 {
+			return nil, nil, oops.Errorf("insufficient data for fragment size")
+		}
+		di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+2])
+		offset += 2
 	}
 
-	remainder = data[len(di_data):]
-	instructions = DeliveryInstructions(di_data)
-
+	remainder = data[offset:]
 	log.WithFields(logger.Fields{
-		"instructions_length": len(instructions),
+		"instructions_offset": offset,
 		"remainder_length":    len(remainder),
 	}).Debug("Successfully read DeliveryInstructions")
 
-	return
+	return di, remainder, nil
 }

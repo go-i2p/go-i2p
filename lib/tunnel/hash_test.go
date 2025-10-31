@@ -26,7 +26,10 @@ func TestHashDTRouter(t *testing.T) {
 	instructions[FLAG_SIZE+HASH_SIZE] = 0x00
 	instructions[FLAG_SIZE+HASH_SIZE+1] = 0x10
 
-	di := DeliveryInstructions(instructions)
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
 	hash, err := di.Hash()
 	if err != nil {
 		t.Fatalf("Hash() failed for DT_ROUTER: %v", err)
@@ -50,8 +53,9 @@ func TestHashDTTunnel(t *testing.T) {
 	// Build DT_TUNNEL delivery instructions
 	// Flag byte: delivery type = 0x01 (DT_TUNNEL) in bits 5-4
 	// DT_TUNNEL is value 1, so (1 << 4) = 0x10
+	// Note: 0x10 also sets hasDelay bit, so we need to include a delay byte
 	flag := byte(0x10)
-	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
+	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1+SIZE_FIELD_SIZE) // +1 for delay byte
 	instructions[0] = flag
 
 	// Add tunnel ID (4 bytes)
@@ -63,11 +67,17 @@ func TestHashDTTunnel(t *testing.T) {
 	// Add hash after tunnel ID
 	copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], expectedHash[:])
 
-	// Add dummy size field
+	// Add delay byte (required because flag 0x10 has hasDelay bit set)
 	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
 
-	di := DeliveryInstructions(instructions)
+	// Add dummy size field
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x00
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+2] = 0x10
+
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
 	hash, err := di.Hash()
 	if err != nil {
 		t.Fatalf("Hash() failed for DT_TUNNEL: %v", err)
@@ -87,8 +97,11 @@ func TestHashDTLocalError(t *testing.T) {
 	instructions[1] = 0x00
 	instructions[2] = 0x10
 
-	di := DeliveryInstructions(instructions)
-	_, err := di.Hash()
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
+	_, err = di.Hash()
 	if err == nil {
 		t.Error("Expected Hash() to fail for DT_LOCAL, but it succeeded")
 	}
@@ -102,10 +115,9 @@ func TestHashInsufficientDataDTRouter(t *testing.T) {
 	instructions := make([]byte, FLAG_SIZE+10) // Only 10 bytes instead of 32
 	instructions[0] = flag
 
-	di := DeliveryInstructions(instructions)
-	_, err := di.Hash()
+	_, err := NewDeliveryInstructions(instructions)
 	if err == nil {
-		t.Error("Expected Hash() to fail for insufficient DT_ROUTER data, but it succeeded")
+		t.Error("Expected NewDeliveryInstructions to fail for insufficient DT_ROUTER data, but it succeeded")
 	}
 }
 
@@ -113,21 +125,20 @@ func TestHashInsufficientDataDTRouter(t *testing.T) {
 // delivery instructions don't contain enough data for DT_TUNNEL hash.
 func TestHashInsufficientDataDTTunnel(t *testing.T) {
 	// Build incomplete DT_TUNNEL delivery instructions
-	flag := byte(0x20)                                        // DT_TUNNEL
+	flag := byte(0x10)                                        // DT_TUNNEL (1 << 4)
 	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+10) // Only 10 bytes of hash instead of 32
 	instructions[0] = flag
 
-	di := DeliveryInstructions(instructions)
-	_, err := di.Hash()
+	_, err := NewDeliveryInstructions(instructions)
 	if err == nil {
-		t.Error("Expected Hash() to fail for insufficient DT_TUNNEL data, but it succeeded")
+		t.Error("Expected NewDeliveryInstructions to fail for insufficient DT_TUNNEL data, but it succeeded")
 	}
 }
 
 // TestHashEmptyInstructions verifies error handling for empty delivery instructions.
 func TestHashEmptyInstructions(t *testing.T) {
-	di := DeliveryInstructions([]byte{})
-	_, err := di.Hash()
+	di, err := NewDeliveryInstructions([]byte{})
+	_, err = di.Hash()
 	if err == nil {
 		t.Error("Expected Hash() to fail for empty instructions, but it succeeded")
 	}
@@ -167,7 +178,10 @@ func TestHashVariousDTRouterHashes(t *testing.T) {
 			instructions[FLAG_SIZE+HASH_SIZE] = 0x00
 			instructions[FLAG_SIZE+HASH_SIZE+1] = 0x10
 
-			di := DeliveryInstructions(instructions)
+			di, err := NewDeliveryInstructions(instructions)
+			if err != nil {
+				t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+			}
 			hash, err := di.Hash()
 			if err != nil {
 				t.Fatalf("Hash() failed: %v", err)
@@ -208,8 +222,9 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Build DT_TUNNEL delivery instructions
 			// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
+			// Note: 0x10 also sets hasDelay bit, so we need to include a delay byte
 			flag := byte(0x10)
-			instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
+			instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1+SIZE_FIELD_SIZE) // +1 for delay byte
 			instructions[0] = flag
 
 			// Add tunnel ID
@@ -221,11 +236,17 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 			// Add hash
 			copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], tc.hash[:])
 
-			// Add size field
+			// Add delay byte (required because flag 0x10 has hasDelay bit set)
 			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
 
-			di := DeliveryInstructions(instructions)
+			// Add size field
+			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x00
+			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+2] = 0x10
+
+			di, err := NewDeliveryInstructions(instructions)
+			if err != nil {
+				t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+			}
 			hash, err := di.Hash()
 			if err != nil {
 				t.Fatalf("Hash() failed: %v", err)
@@ -250,7 +271,10 @@ func BenchmarkHashDTRouter(b *testing.B) {
 	instructions[FLAG_SIZE+HASH_SIZE] = 0x00
 	instructions[FLAG_SIZE+HASH_SIZE+1] = 0x10
 
-	di := DeliveryInstructions(instructions)
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		b.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -275,7 +299,10 @@ func BenchmarkHashDTTunnel(b *testing.B) {
 	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
 	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
 
-	di := DeliveryInstructions(instructions)
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		b.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

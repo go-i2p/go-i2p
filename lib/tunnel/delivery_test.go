@@ -82,7 +82,7 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 
 	data := []byte{}
 
-	// Flag byte: bit 7=0 (first fragment), bits 6-5=01 (DT_TUNNEL), others=0
+	// Flag byte: bit 7=0 (first fragment), bits 5-4=01 (DT_TUNNEL), others=0
 	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
 	flag := byte(0x10) // 0b00010000 = DT_TUNNEL (0x01 << 4)
 	data = append(data, flag)
@@ -94,7 +94,14 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 	// Hash (32 bytes)
 	data = append(data, expectedHash...)
 
-	di := DeliveryInstructions(data)
+	// Delay byte (since flag 0x10 has both DT_TUNNEL and hasDelay bits set)
+	data = append(data, 0x00)
+
+	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
+	data = append(data, 0x00, 0x10) // size = 16
+
+	di, err := NewDeliveryInstructions(data)
+	assert.Nil(err, "Failed to create DeliveryInstructions")
 
 	// Call Hash() method
 	resultHash, err := di.Hash()
@@ -125,7 +132,11 @@ func TestDeliveryInstructionsHashRouter(t *testing.T) {
 	// Hash (32 bytes) - immediately after flag for DT_ROUTER
 	data = append(data, expectedHash...)
 
-	di := DeliveryInstructions(data)
+	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
+	data = append(data, 0x00, 0x10) // size = 16
+
+	di, err := NewDeliveryInstructions(data)
+	assert.Nil(err, "Failed to create DeliveryInstructions")
 
 	// Call Hash() method
 	resultHash, err := di.Hash()
@@ -143,14 +154,18 @@ func TestDeliveryInstructionsHashLocal(t *testing.T) {
 	// Format: flag(1) + ...
 	data := []byte{}
 
-	// Flag byte: bit 7=0 (first fragment), bits 6-5=00 (DT_LOCAL), others=0
+	// Flag byte: bit 7=0 (first fragment), bits 5-4=00 (DT_LOCAL), others=0
 	flag := byte(0x00) // 0b00000000 = DT_LOCAL
 	data = append(data, flag)
 
-	di := DeliveryInstructions(data)
+	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
+	data = append(data, 0x00, 0x10)
+
+	di, err := NewDeliveryInstructions(data)
+	assert.Nil(err)
 
 	// Call Hash() method - should return error
-	_, err := di.Hash()
+	_, err = di.Hash()
 
 	// Verify error is returned
 	assert.NotNil(err, "Hash() should return an error for DT_LOCAL type")
@@ -174,7 +189,14 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	emptyHash := make([]byte, HASH_SIZE)
 	data = append(data, emptyHash...)
 
-	di := DeliveryInstructions(data)
+	// Delay byte (since flag 0x10 has both DT_TUNNEL and hasDelay bits set)
+	data = append(data, 0x00)
+
+	// Fragment size (2 bytes)
+	data = append(data, 0x00, 0x10)
+
+	di, err := NewDeliveryInstructions(data)
+	assert.Nil(err)
 
 	resultHash, err := di.Hash()
 
@@ -200,12 +222,10 @@ func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 	partialHash := make([]byte, 10)
 	data = append(data, partialHash...)
 
-	di := DeliveryInstructions(data)
+	_, err := NewDeliveryInstructions(data)
 
-	_, err := di.Hash()
-
-	assert.NotNil(err, "Hash() should return error for insufficient data")
-	assert.Contains(err.Error(), "not contain enough data", "Error should mention insufficient data")
+	assert.NotNil(err, "NewDeliveryInstructions should return error for insufficient data")
+	assert.Contains(err.Error(), "insufficient data for hash", "Error should mention insufficient data")
 }
 
 // TestDeliveryInstructionsHashInsufficientDataRouter tests error handling for truncated ROUTER data
@@ -222,10 +242,8 @@ func TestDeliveryInstructionsHashInsufficientDataRouter(t *testing.T) {
 	partialHash := make([]byte, 10)
 	data = append(data, partialHash...)
 
-	di := DeliveryInstructions(data)
+	_, err := NewDeliveryInstructions(data)
 
-	_, err := di.Hash()
-
-	assert.NotNil(err, "Hash() should return error for insufficient data")
-	assert.Contains(err.Error(), "not contain enough data", "Error should mention insufficient data")
+	assert.NotNil(err, "NewDeliveryInstructions should return error for insufficient data")
+	assert.Contains(err.Error(), "insufficient data for hash", "Error should mention insufficient data")
 }

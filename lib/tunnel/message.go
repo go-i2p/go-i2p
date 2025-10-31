@@ -122,7 +122,7 @@ type TunnelID uint32
 type EncryptedTunnelMessage tunnel.TunnelData
 
 type DeliveryInstructionsWithFragment struct {
-	DeliveryInstructions DeliveryInstructions
+	DeliveryInstructions *DeliveryInstructions
 	MessageFragment      []byte
 }
 
