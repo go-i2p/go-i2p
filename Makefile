@@ -30,7 +30,7 @@ clean:
 	$(GO) clean -v
 
 fmt:
-	find . -name '*.go' -exec gofumpt -w {} \;
+	find . -name '*.go' -exec gofumpt -w -extra {} \;
 
 info:
 	echo "GOROOT: ${GOROOT}"

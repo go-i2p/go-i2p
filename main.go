@@ -55,7 +55,7 @@ var configCmd = &cobra.Command{
 	Short: "Show current configuration",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.WithField("config_file", viper.ConfigFileUsed()).Info("Configuration file")
-		
+
 		log.WithFields(logger.Fields{
 			"base_dir":    config.RouterConfigProperties.BaseDir,
 			"working_dir": config.RouterConfigProperties.WorkingDir,
@@ -64,7 +64,7 @@ var configCmd = &cobra.Command{
 		log.WithField("netdb_path", config.RouterConfigProperties.NetDb.Path).Info("NetDb configuration")
 
 		log.WithField("low_peer_threshold", config.RouterConfigProperties.Bootstrap.LowPeerThreshold).Info("Bootstrap configuration")
-		
+
 		log.Info("Reseed servers:")
 		for _, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {
 			log.WithFields(logger.Fields{
