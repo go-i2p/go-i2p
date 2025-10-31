@@ -1007,7 +1007,7 @@ func initializeDeliveryInstructionData(data []byte) (DeliveryInstructions, int, 
 }
 
 // processFirstFragment handles the processing of FIRST_FRAGMENT delivery instruction type.
-func processFirstFragment(di_flag DeliveryInstructions, data []byte, di_data []byte) ([]byte, error) {
+func processFirstFragment(di_flag DeliveryInstructions, data, di_data []byte) ([]byte, error) {
 	log.Debug("Processing FIRST_FRAGMENT")
 
 	var err error
@@ -1051,7 +1051,7 @@ func processFirstFragment(di_flag DeliveryInstructions, data []byte, di_data []b
 }
 
 // processFollowOnFragment handles the processing of FOLLOW_ON_FRAGMENT delivery instruction type.
-func processFollowOnFragment(di_flag DeliveryInstructions, data []byte, di_data []byte) ([]byte, error) {
+func processFollowOnFragment(di_flag DeliveryInstructions, data, di_data []byte) ([]byte, error) {
 	var err error
 	di_data, err = maybeAppendMessageID(di_flag, FOLLOW_ON_FRAGMENT, data, di_data)
 	if err != nil {

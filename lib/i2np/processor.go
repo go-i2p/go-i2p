@@ -429,7 +429,7 @@ func (dm *DatabaseManager) sendDatabaseStoreResponse(key common.Hash, data []byt
 }
 
 // sendDatabaseSearchReply sends a DatabaseSearchReply when RouterInfo is not found
-func (dm *DatabaseManager) sendDatabaseSearchReply(key common.Hash, to common.Hash) error {
+func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
 	// Create DatabaseSearchReply with empty peer list (we're not implementing peer suggestions for MVP)
 	response := NewDatabaseSearchReply(key, common.Hash{}, []common.Hash{}) // TODO: Should use our router hash as from
 	return dm.sendResponse(response, to)
