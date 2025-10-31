@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"embed"
 	"io"
-	"log"
 	"strings"
 )
 
@@ -56,7 +55,7 @@ func (z *Zones) initialize() {
 func (z *Zones) readContinentFile() {
 	file, err := z.openContinentFile()
 	if err != nil {
-		log.Printf("Error opening continents.txt: %v\n", err)
+		log.WithError(err).Warn("Failed to open continents.txt for zone mapping")
 		return
 	}
 	defer file.Close()
@@ -76,7 +75,7 @@ func (z *Zones) parseContinentMappings(file io.Reader) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			log.Printf("Error reading continents.txt: %v\n", err)
+			log.WithError(err).Warn("Failed to read line from continents.txt")
 			break
 		}
 		if err == io.EOF && line == "" {

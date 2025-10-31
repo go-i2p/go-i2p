@@ -345,7 +345,7 @@ func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout tim
 
 	response, err := rt.ntpClient.QueryWithOptions(server, options)
 	if err != nil {
-		fmt.Printf("NTP query failed: %v\n", err)
+		log.WithError(err).WithField("server", server).Debug("NTP query failed")
 		return 0, err
 	}
 

@@ -6,15 +6,14 @@ require (
 	github.com/beevik/ntp v1.4.3
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.0.0-20251021023740-1812f37de037
-	github.com/go-i2p/crypto v0.0.0-20251021023429-0d868ff0e313
-	github.com/go-i2p/go-noise v0.0.0-20250805210353-74f980a2439d
-	github.com/go-i2p/logger v0.0.0-20251021001827-b7cf9a3377d9
-	github.com/go-i2p/su3 v0.0.0-20250716183548-497fadf45e84
-	github.com/samber/oops v1.19.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/go-i2p/crypto v0.0.0-20251021023906-563014aad97d
+	github.com/go-i2p/go-noise v0.0.0-20250917221113-7f44d4f24f9f
+	github.com/go-i2p/logger v0.0.1
+	github.com/go-i2p/su3 v0.0.0-20250827230356-fa088a145af7
+	github.com/samber/oops v1.19.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -30,17 +29,18 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sagikazarmark/locafero v0.10.0 // indirect
-	github.com/samber/lo v1.51.0 // indirect
+	github.com/samber/lo v1.52.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	go.opentelemetry.io/otel v1.37.0 // indirect
-	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+	go.opentelemetry.io/otel v1.38.0 // indirect
+	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.step.sm/crypto v0.67.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/net v0.45.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 )

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -55,20 +54,23 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Show current configuration",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Configuration file: %s\n", viper.ConfigFileUsed())
-		fmt.Printf("\nRouter Configuration:")
-		fmt.Printf("  Base Directory: %s", config.RouterConfigProperties.BaseDir)
-		fmt.Printf("  Working Directory: %s", config.RouterConfigProperties.WorkingDir)
+		log.WithField("config_file", viper.ConfigFileUsed()).Info("Configuration file")
+		
+		log.WithFields(logger.Fields{
+			"base_dir":    config.RouterConfigProperties.BaseDir,
+			"working_dir": config.RouterConfigProperties.WorkingDir,
+		}).Info("Router configuration")
 
-		fmt.Printf("\nNetDb Configuration:")
-		fmt.Printf("  Path: %s", config.RouterConfigProperties.NetDb.Path)
+		log.WithField("netdb_path", config.RouterConfigProperties.NetDb.Path).Info("NetDb configuration")
 
-		fmt.Printf("\nBootstrap Configuration:")
-		fmt.Printf("  Low Peer Threshold: %d", config.RouterConfigProperties.Bootstrap.LowPeerThreshold)
-		fmt.Printf("  Reseed Servers:")
+		log.WithField("low_peer_threshold", config.RouterConfigProperties.Bootstrap.LowPeerThreshold).Info("Bootstrap configuration")
+		
+		log.Info("Reseed servers:")
 		for _, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {
-			fmt.Printf("    - URL: %s", server.Url)
-			fmt.Printf("      SU3 Fingerprint: %s", server.SU3Fingerprint)
+			log.WithFields(logger.Fields{
+				"url":             server.Url,
+				"su3_fingerprint": server.SU3Fingerprint,
+			}).Info("  Reseed server")
 		}
 	},
 }
