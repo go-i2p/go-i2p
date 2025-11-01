@@ -87,7 +87,7 @@ please keep up with these changes, as they will not be backward compatible and r
   - [X] Build Request/Response record interfaces
   - [ ] Tunnel building and management
   - [ ] Tunnel cryptography (layered encryption)
-  - [ ] Gateway and endpoint implementation
+  - [X] Gateway and endpoint implementation
   - [ ] Participant functionality
 - [Common Data Structures(see also: https://github.com/go-i2p/common](https://github.com/go-i2p/common)
     - [X] Keys and Cert

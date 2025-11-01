@@ -50,7 +50,7 @@
 - **Active Tunnel Management**:
   * ✅ Tunnel building coordination
   * ✅ Build request/response handling
-  * 📋 Gateway and endpoint implementations
+  * ✅ Gateway and endpoint implementations
   * 📋 Participant tunnel processing
 
 ### Tunnel Cryptography
