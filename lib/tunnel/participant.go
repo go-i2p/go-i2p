@@ -5,5 +5,5 @@ import (
 )
 
 type Participant struct {
-	decryption *tunnel.Tunnel
+	decryption tunnel.TunnelEncryptor
 }

@@ -18,7 +18,7 @@ import (
 // - Error handling at each step with clear error messages
 type Gateway struct {
 	tunnelID   TunnelID
-	encryption *tunnel.Tunnel
+	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
 }
 
@@ -45,7 +45,7 @@ const (
 // - nextHopID: the tunnel ID to use when forwarding to the next hop
 //
 // Returns an error if encryption is nil.
-func NewGateway(tunnelID TunnelID, encryption *tunnel.Tunnel, nextHopID TunnelID) (*Gateway, error) {
+func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID TunnelID) (*Gateway, error) {
 	if encryption == nil {
 		return nil, ErrNilEncryption
 	}
@@ -179,7 +179,7 @@ func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	copy(tunnelData[:], msg)
 
 	// Apply encryption (this modifies the tunnel data in place)
-	g.encryption.Encrypt(&tunnelData)
+	g.encryption.Encrypt(tunnelData[:])
 
 	return tunnelData[:], nil
 }

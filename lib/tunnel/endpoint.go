@@ -22,7 +22,7 @@ type MessageHandler func(msgBytes []byte) error
 // - Clear error handling and logging
 type Endpoint struct {
 	tunnelID   TunnelID
-	decryption *tunnel.Tunnel
+	decryption tunnel.TunnelEncryptor
 	handler    MessageHandler
 	// fragments maps message ID to accumulated fragments
 	fragments map[uint32]*fragmentAssembler
@@ -54,7 +54,7 @@ var (
 // - handler: callback function to process received I2NP messages
 //
 // Returns an error if decryption or handler is nil.
-func NewEndpoint(tunnelID TunnelID, decryption *tunnel.Tunnel, handler MessageHandler) (*Endpoint, error) {
+func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler MessageHandler) (*Endpoint, error) {
 	if decryption == nil {
 		return nil, ErrNilDecryption
 	}
@@ -116,7 +116,7 @@ func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 	copy(tunnelData[:], encryptedData)
 
 	// Apply decryption (this modifies the tunnel data in place)
-	e.decryption.Decrypt(&tunnelData)
+	e.decryption.Decrypt(tunnelData[:])
 
 	return tunnelData[:], nil
 }
