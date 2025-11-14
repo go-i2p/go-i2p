@@ -16,10 +16,13 @@ func TestNewEndpoint(t *testing.T) {
 		return nil
 	}
 
+	// Create a mock encryptor for testing
+	mockEncryptor := &tunnel.AESEncryptor{}
+
 	tests := []struct {
 		name        string
 		tunnelID    TunnelID
-		decryption  *tunnel.Tunnel
+		decryption  tunnel.TunnelEncryptor
 		handler     MessageHandler
 		expectError bool
 		errorType   error
@@ -27,7 +30,7 @@ func TestNewEndpoint(t *testing.T) {
 		{
 			name:        "valid endpoint creation",
 			tunnelID:    TunnelID(12345),
-			decryption:  &tunnel.Tunnel{},
+			decryption:  mockEncryptor,
 			handler:     mockHandler,
 			expectError: false,
 		},
@@ -42,7 +45,7 @@ func TestNewEndpoint(t *testing.T) {
 		{
 			name:        "nil handler",
 			tunnelID:    TunnelID(12345),
-			decryption:  &tunnel.Tunnel{},
+			decryption:  mockEncryptor,
 			handler:     nil,
 			expectError: true,
 			errorType:   ErrNilHandler,
@@ -85,7 +88,7 @@ func TestEndpointReceive(t *testing.T) {
 		return nil
 	}
 
-	mockTunnel := &tunnel.Tunnel{}
+	mockEncryptor := &tunnel.AESEncryptor{}
 
 	tests := []struct {
 		name        string
@@ -115,7 +118,7 @@ func TestEndpointReceive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ep, err := NewEndpoint(TunnelID(12345), mockTunnel, mockHandler)
+			ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
 			require.NoError(t, err)
 
 			testData := make([]byte, tt.dataSize)
@@ -304,12 +307,12 @@ func TestProcessDeliveryInstructions(t *testing.T) {
 // TestEndpointTunnelID tests the TunnelID getter
 func TestEndpointTunnelID(t *testing.T) {
 	tunnelID := TunnelID(12345)
-	mockTunnel := &tunnel.Tunnel{}
+	mockEncryptor := &tunnel.AESEncryptor{}
 	mockHandler := func(msgBytes []byte) error {
 		return nil
 	}
 
-	ep, err := NewEndpoint(tunnelID, mockTunnel, mockHandler)
+	ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
 	require.NoError(t, err)
 	require.NotNil(t, ep)
 
@@ -318,12 +321,12 @@ func TestEndpointTunnelID(t *testing.T) {
 
 // TestClearFragments tests the fragment clearing functionality
 func TestClearFragments(t *testing.T) {
-	mockTunnel := &tunnel.Tunnel{}
+	mockEncryptor := &tunnel.AESEncryptor{}
 	mockHandler := func(msgBytes []byte) error {
 		return nil
 	}
 
-	ep, err := NewEndpoint(TunnelID(12345), mockTunnel, mockHandler)
+	ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
 	require.NoError(t, err)
 
 	// Add some mock fragments

@@ -10,10 +10,13 @@ import (
 
 // TestNewGateway tests the gateway constructor
 func TestNewGateway(t *testing.T) {
+	// Create a mock encryptor for testing
+	mockEncryptor := &tunnel.AESEncryptor{}
+
 	tests := []struct {
 		name        string
 		tunnelID    TunnelID
-		encryption  *tunnel.Tunnel
+		encryption  tunnel.TunnelEncryptor
 		nextHopID   TunnelID
 		expectError bool
 		errorType   error
@@ -21,7 +24,7 @@ func TestNewGateway(t *testing.T) {
 		{
 			name:        "valid gateway creation",
 			tunnelID:    TunnelID(12345),
-			encryption:  &tunnel.Tunnel{},
+			encryption:  mockEncryptor,
 			nextHopID:   TunnelID(67890),
 			expectError: false,
 		},
@@ -36,7 +39,7 @@ func TestNewGateway(t *testing.T) {
 		{
 			name:        "zero tunnel IDs",
 			tunnelID:    TunnelID(0),
-			encryption:  &tunnel.Tunnel{},
+			encryption:  mockEncryptor,
 			nextHopID:   TunnelID(0),
 			expectError: false, // Zero IDs are technically valid
 		},
@@ -215,9 +218,9 @@ func TestBuildTunnelMessage(t *testing.T) {
 func TestGatewayGetters(t *testing.T) {
 	tunnelID := TunnelID(12345)
 	nextHopID := TunnelID(67890)
-	mockTunnel := &tunnel.Tunnel{}
+	mockEncryptor := &tunnel.AESEncryptor{}
 
-	gw, err := NewGateway(tunnelID, mockTunnel, nextHopID)
+	gw, err := NewGateway(tunnelID, mockEncryptor, nextHopID)
 	require.NoError(t, err)
 	require.NotNil(t, gw)
 
