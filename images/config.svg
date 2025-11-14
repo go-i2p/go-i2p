@@ -17,16 +17,16 @@
 <g id="clust3" class="cluster">
 <title>cluster_*github.com/sirupsen/logrus.Logger</title>
 <g id="a_clust3"><a xlink:title="type: *github.com/sirupsen/logrus.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M668.3101,-324C668.3101,-324 726.2919,-324 726.2919,-324 732.2919,-324 738.2919,-330 738.2919,-336 738.2919,-336 738.2919,-451 738.2919,-451 738.2919,-457 732.2919,-463 726.2919,-463 726.2919,-463 668.3101,-463 668.3101,-463 662.3101,-463 656.3101,-457 656.3101,-451 656.3101,-451 656.3101,-336 656.3101,-336 656.3101,-330 662.3101,-324 668.3101,-324"/>
-<text text-anchor="middle" x="697.301" y="-332.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M668.3101,-160C668.3101,-160 726.2919,-160 726.2919,-160 732.2919,-160 738.2919,-166 738.2919,-172 738.2919,-172 738.2919,-287 738.2919,-287 738.2919,-293 732.2919,-299 726.2919,-299 726.2919,-299 668.3101,-299 668.3101,-299 662.3101,-299 656.3101,-293 656.3101,-287 656.3101,-287 656.3101,-172 656.3101,-172 656.3101,-166 662.3101,-160 668.3101,-160"/>
+<text text-anchor="middle" x="697.301" y="-168.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
 </a>
 </g>
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/logger.Logger</title>
 <g id="a_clust2"><a xlink:title="type: *github.com/go&#45;i2p/logger.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M478.5548,-121C478.5548,-121 532.3206,-121 532.3206,-121 538.3206,-121 544.3206,-127 544.3206,-133 544.3206,-133 544.3206,-187 544.3206,-187 544.3206,-193 538.3206,-199 532.3206,-199 532.3206,-199 478.5548,-199 478.5548,-199 472.5548,-199 466.5548,-193 466.5548,-187 466.5548,-187 466.5548,-133 466.5548,-133 466.5548,-127 472.5548,-121 478.5548,-121"/>
-<text text-anchor="middle" x="505.4377" y="-129.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M478.5548,-463C478.5548,-463 532.3206,-463 532.3206,-463 538.3206,-463 544.3206,-469 544.3206,-475 544.3206,-475 544.3206,-529 544.3206,-529 544.3206,-535 538.3206,-541 532.3206,-541 532.3206,-541 478.5548,-541 478.5548,-541 472.5548,-541 466.5548,-535 466.5548,-529 466.5548,-529 466.5548,-475 466.5548,-475 466.5548,-469 472.5548,-463 478.5548,-463"/>
+<text text-anchor="middle" x="505.4377" y="-471.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
 </a>
 </g>
 </g>
@@ -34,8 +34,8 @@
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults</title>
 <g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults | defined in config.go:40&#10;at config.go:42: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at config.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at config.go:42: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:43: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:46: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:49: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:50: calling [github.com/spf13/viper.SetDefault]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M297.6137,-357C297.6137,-357 234.6697,-357 234.6697,-357 228.6697,-357 222.6697,-351 222.6697,-345 222.6697,-345 222.6697,-333 222.6697,-333 222.6697,-327 228.6697,-321 234.6697,-321 234.6697,-321 297.6137,-321 297.6137,-321 303.6137,-321 309.6137,-327 309.6137,-333 309.6137,-333 309.6137,-345 309.6137,-345 309.6137,-351 303.6137,-357 297.6137,-357"/>
-<text text-anchor="middle" x="266.1417" y="-334.8" font-family="Verdana" font-size="14.00" fill="#000000">setDefaults</text>
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M297.6137,-472C297.6137,-472 234.6697,-472 234.6697,-472 228.6697,-472 222.6697,-466 222.6697,-460 222.6697,-460 222.6697,-448 222.6697,-448 222.6697,-442 228.6697,-436 234.6697,-436 234.6697,-436 297.6137,-436 297.6137,-436 303.6137,-436 309.6137,-442 309.6137,-448 309.6137,-448 309.6137,-460 309.6137,-460 309.6137,-466 303.6137,-472 297.6137,-472"/>
+<text text-anchor="middle" x="266.1417" y="-449.8" font-family="Verdana" font-size="14.00" fill="#000000">setDefaults</text>
 </a>
 </g>
 </g>
@@ -43,17 +43,17 @@
 <g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig</title>
 <g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig | defined in router.go:35">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M564.9055,-550C564.9055,-550 445.9699,-550 445.9699,-550 439.9699,-550 433.9699,-544 433.9699,-538 433.9699,-538 433.9699,-526 433.9699,-526 433.9699,-520 439.9699,-514 445.9699,-514 445.9699,-514 564.9055,-514 564.9055,-514 570.9055,-514 576.9055,-520 576.9055,-526 576.9055,-526 576.9055,-538 576.9055,-538 576.9055,-544 570.9055,-550 564.9055,-550"/>
-<text text-anchor="middle" x="505.4377" y="-527.8" font-family="Verdana" font-size="14.00" fill="#000000">DefaultRouterConfig</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M564.9055,-394C564.9055,-394 445.9699,-394 445.9699,-394 439.9699,-394 433.9699,-388 433.9699,-382 433.9699,-382 433.9699,-370 433.9699,-370 433.9699,-364 439.9699,-358 445.9699,-358 445.9699,-358 564.9055,-358 564.9055,-358 570.9055,-358 576.9055,-364 576.9055,-370 576.9055,-370 576.9055,-382 576.9055,-382 576.9055,-388 570.9055,-394 564.9055,-394"/>
+<text text-anchor="middle" x="505.4377" y="-371.8" font-family="Verdana" font-size="14.00" fill="#000000">DefaultRouterConfig</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig -->
-<g id="edge20" class="edge">
+<g id="edge16" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig</title>
-<g id="a_edge20"><a xlink:title="at config.go:42: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at config.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]">
-<path fill="none" stroke="#000000" d="M309.6342,-346.0284C327.0571,-350.5672 346.4052,-357.9725 360.9538,-370 412.6236,-412.716 384.0637,-457.2184 433.9538,-502 436.5877,-504.3642 439.4347,-506.5592 442.4233,-508.5949"/>
-<polygon fill="#000000" stroke="#000000" points="440.8003,-511.7044 451.1613,-513.9181 444.4422,-505.7264 440.8003,-511.7044"/>
+<g id="a_edge16"><a xlink:title="at config.go:42: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at config.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]">
+<path fill="none" stroke="#000000" d="M310.0828,-440.2401C326.11,-435.1834 344.3668,-429.3791 360.9538,-424 387.4786,-415.3981 416.6785,-405.7343 441.8442,-397.3447"/>
+<polygon fill="#000000" stroke="#000000" points="443.2593,-400.5622 451.6369,-394.0765 441.0432,-393.9222 443.2593,-400.5622"/>
 </a>
 </g>
 </g>
@@ -61,18 +61,18 @@
 <g id="node3" class="node">
 <title>github.com/spf13/viper.SetDefault</title>
 <g id="a_node3"><a xlink:title="github.com/spf13/viper.SetDefault | defined in viper.go:1445">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M535.3032,-313C535.3032,-313 475.5722,-313 475.5722,-313 469.5722,-313 463.5722,-307 463.5722,-301 463.5722,-301 463.5722,-289 463.5722,-289 463.5722,-283 469.5722,-277 475.5722,-277 475.5722,-277 535.3032,-277 535.3032,-277 541.3032,-277 547.3032,-283 547.3032,-289 547.3032,-289 547.3032,-301 547.3032,-301 547.3032,-307 541.3032,-313 535.3032,-313"/>
-<text text-anchor="middle" x="505.4377" y="-299.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-282.4" font-family="Verdana" font-size="14.00" fill="#000000">SetDefault</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M535.3032,-455C535.3032,-455 475.5722,-455 475.5722,-455 469.5722,-455 463.5722,-449 463.5722,-443 463.5722,-443 463.5722,-431 463.5722,-431 463.5722,-425 469.5722,-419 475.5722,-419 475.5722,-419 535.3032,-419 535.3032,-419 541.3032,-419 547.3032,-425 547.3032,-431 547.3032,-431 547.3032,-443 547.3032,-443 547.3032,-449 541.3032,-455 535.3032,-455"/>
+<text text-anchor="middle" x="505.4377" y="-441.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-424.4" font-family="Verdana" font-size="14.00" fill="#000000">SetDefault</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults&#45;&gt;github.com/spf13/viper.SetDefault -->
-<g id="edge21" class="edge">
+<g id="edge18" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults&#45;&gt;github.com/spf13/viper.SetDefault</title>
-<g id="a_edge21"><a xlink:title="at config.go:42: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:43: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:46: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:49: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:50: calling [github.com/spf13/viper.SetDefault]">
-<path fill="none" stroke="#8b4513" d="M309.754,-330.9809C350.1898,-323.5458 410.409,-312.4732 453.3533,-304.5769"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="454.1274,-307.9933 463.3295,-302.7425 452.8614,-301.1087 454.1274,-307.9933"/>
+<g id="a_edge18"><a xlink:title="at config.go:42: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:43: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:46: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:49: calling [github.com/spf13/viper.SetDefault]&#10;at config.go:50: calling [github.com/spf13/viper.SetDefault]">
+<path fill="none" stroke="#8b4513" d="M309.754,-450.9017C350.1898,-448.0291 410.409,-443.751 453.3533,-440.7002"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="453.6027,-444.1914 463.3295,-439.9914 453.1066,-437.209 453.6027,-444.1914"/>
 </a>
 </g>
 </g>
@@ -80,8 +80,8 @@
 <g id="node4" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
 <g id="a_node4"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath | defined in config.go:138&#10;at config.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M552.5443,-672C552.5443,-672 458.3311,-672 458.3311,-672 452.3311,-672 446.3311,-666 446.3311,-660 446.3311,-660 446.3311,-648 446.3311,-648 446.3311,-642 452.3311,-636 458.3311,-636 458.3311,-636 552.5443,-636 552.5443,-636 558.5443,-636 564.5443,-642 564.5443,-648 564.5443,-648 564.5443,-660 564.5443,-660 564.5443,-666 558.5443,-672 552.5443,-672"/>
-<text text-anchor="middle" x="505.4377" y="-649.8" font-family="Verdana" font-size="14.00" fill="#000000">BuildI2PDirPath</text>
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M552.5443,-96C552.5443,-96 458.3311,-96 458.3311,-96 452.3311,-96 446.3311,-90 446.3311,-84 446.3311,-84 446.3311,-72 446.3311,-72 446.3311,-66 452.3311,-60 458.3311,-60 458.3311,-60 552.5443,-60 552.5443,-60 558.5443,-60 564.5443,-66 564.5443,-72 564.5443,-72 564.5443,-84 564.5443,-84 564.5443,-90 558.5443,-96 552.5443,-96"/>
+<text text-anchor="middle" x="505.4377" y="-73.8" font-family="Verdana" font-size="14.00" fill="#000000">BuildI2PDirPath</text>
 </a>
 </g>
 </g>
@@ -89,92 +89,240 @@
 <g id="node5" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome</title>
 <g id="a_node5"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome | defined in home.go:7">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M727.44,-672C727.44,-672 667.162,-672 667.162,-672 661.162,-672 655.162,-666 655.162,-660 655.162,-660 655.162,-648 655.162,-648 655.162,-642 661.162,-636 667.162,-636 667.162,-636 727.44,-636 727.44,-636 733.44,-636 739.44,-642 739.44,-648 739.44,-648 739.44,-660 739.44,-660 739.44,-666 733.44,-672 727.44,-672"/>
-<text text-anchor="middle" x="697.301" y="-658.2" font-family="Verdana" font-size="14.00" fill="#000000">util</text>
-<text text-anchor="middle" x="697.301" y="-641.4" font-family="Verdana" font-size="14.00" fill="#000000">UserHome</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M727.44,-91C727.44,-91 667.162,-91 667.162,-91 661.162,-91 655.162,-85 655.162,-79 655.162,-79 655.162,-67 655.162,-67 655.162,-61 661.162,-55 667.162,-55 667.162,-55 727.44,-55 727.44,-55 733.44,-55 739.44,-61 739.44,-67 739.44,-67 739.44,-79 739.44,-79 739.44,-85 733.44,-91 727.44,-91"/>
+<text text-anchor="middle" x="697.301" y="-77.2" font-family="Verdana" font-size="14.00" fill="#000000">util</text>
+<text text-anchor="middle" x="697.301" y="-60.4" font-family="Verdana" font-size="14.00" fill="#000000">UserHome</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome -->
-<g id="edge4" class="edge">
+<g id="edge22" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome</title>
-<g id="a_edge4"><a xlink:title="at config.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome]">
-<path fill="none" stroke="#8b4513" d="M564.5686,-654C590.1956,-654 619.9525,-654 644.7885,-654"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="645.1049,-657.5001 655.1049,-654 645.1049,-650.5001 645.1049,-657.5001"/>
+<g id="a_edge22"><a xlink:title="at config.go:139: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util.UserHome]">
+<path fill="none" stroke="#8b4513" d="M564.5686,-76.459C590.1956,-75.7912 619.9525,-75.0157 644.7885,-74.3685"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="645.1995,-77.8591 655.1049,-74.0996 645.0171,-70.8614 645.1995,-77.8591"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase -->
+<g id="node6" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase</title>
+<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase | defined in router.go:19&#10;at router.go:20: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M299.2231,-52C299.2231,-52 233.0603,-52 233.0603,-52 227.0603,-52 221.0603,-46 221.0603,-40 221.0603,-40 221.0603,-28 221.0603,-28 221.0603,-22 227.0603,-16 233.0603,-16 233.0603,-16 299.2231,-16 299.2231,-16 305.2231,-16 311.2231,-22 311.2231,-28 311.2231,-28 311.2231,-40 311.2231,-40 311.2231,-46 305.2231,-52 299.2231,-52"/>
+<text text-anchor="middle" x="266.1417" y="-29.8" font-family="Verdana" font-size="14.00" fill="#000000">defaultBase</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
+<g id="edge26" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
+<g id="a_edge26"><a xlink:title="at router.go:20: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="none" stroke="#000000" d="M311.4328,-42.3278C346.6577,-48.8047 396.1284,-57.901 436.2967,-65.2869"/>
+<polygon fill="#000000" stroke="#000000" points="435.8262,-68.7589 446.2943,-67.1251 437.0921,-61.8744 435.8262,-68.7589"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig -->
+<g id="node7" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig</title>
+<g id="a_node7"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig | defined in config.go:19&#10;at config.go:22: calling [github.com/spf13/viper.SetConfigFile]&#10;at config.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults]&#10;at config.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]&#10;at config.go:27: calling [github.com/spf13/viper.SetConfigType]&#10;at config.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile]&#10;at config.go:37: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig]&#10;at config.go:25: calling [github.com/spf13/viper.AddConfigPath]&#10;at config.go:26: calling [github.com/spf13/viper.SetConfigName]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M86.4951,-441C86.4951,-441 27.8345,-441 27.8345,-441 21.8345,-441 15.8345,-435 15.8345,-429 15.8345,-429 15.8345,-417 15.8345,-417 15.8345,-411 21.8345,-405 27.8345,-405 27.8345,-405 86.4951,-405 86.4951,-405 92.4951,-405 98.4951,-411 98.4951,-417 98.4951,-417 98.4951,-429 98.4951,-429 98.4951,-435 92.4951,-441 86.4951,-441"/>
+<text text-anchor="middle" x="57.1648" y="-418.8" font-family="Verdana" font-size="14.00" fill="#000000">InitConfig</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults -->
+<g id="edge5" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults</title>
+<g id="a_edge5"><a xlink:title="at config.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults]">
+<path fill="none" stroke="#000000" d="M98.4519,-429.1246C131.039,-433.9586 176.7632,-440.7414 212.2361,-446.0036"/>
+<polygon fill="#000000" stroke="#000000" points="212.0134,-449.5087 222.4188,-447.5141 213.0407,-442.5845 212.0134,-449.5087"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
+<g id="edge10" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
+<g id="a_edge10"><a xlink:title="at config.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="none" stroke="#000000" d="M61.2517,-404.7601C71.6031,-363.1855 103.0304,-261.3441 171.3296,-214 241.2919,-165.503 285.4449,-226.3076 360.9538,-187 382.0117,-176.0379 414.5475,-122.6748 433.9538,-109 438.1315,-106.0562 442.6331,-103.306 447.2719,-100.7566"/>
+<polygon fill="#000000" stroke="#000000" points="449.0234,-103.7916 456.3128,-96.103 445.8197,-97.5677 449.0234,-103.7916"/>
+</a>
+</g>
+</g>
+<!-- github.com/spf13/viper.SetConfigFile -->
+<g id="node8" class="node">
+<title>github.com/spf13/viper.SetConfigFile</title>
+<g id="a_node8"><a xlink:title="github.com/spf13/viper.SetConfigFile | defined in viper.go:388">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M305.1967,-411C305.1967,-411 227.0867,-411 227.0867,-411 221.0867,-411 215.0867,-405 215.0867,-399 215.0867,-399 215.0867,-387 215.0867,-387 215.0867,-381 221.0867,-375 227.0867,-375 227.0867,-375 305.1967,-375 305.1967,-375 311.1967,-375 317.1967,-381 317.1967,-387 317.1967,-387 317.1967,-399 317.1967,-399 317.1967,-405 311.1967,-411 305.1967,-411"/>
+<text text-anchor="middle" x="266.1417" y="-397.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="266.1417" y="-380.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigFile</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigFile -->
+<g id="edge1" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigFile</title>
+<g id="a_edge1"><a xlink:title="at config.go:22: calling [github.com/spf13/viper.SetConfigFile]">
+<path fill="none" stroke="#8b4513" d="M98.4519,-417.073C128.8738,-412.7057 170.7449,-406.6948 205.0362,-401.7721"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="205.5501,-405.2343 214.9512,-400.3487 204.5553,-398.3053 205.5501,-405.2343"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile -->
-<g id="node6" class="node">
+<g id="node9" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile</title>
-<g id="a_node6"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile | defined in config.go:122&#10;at config.go:134: calling [github.com/spf13/viper.ConfigFileUsed]&#10;at config.go:131: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:126: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig]&#10;at config.go:123: calling [github.com/spf13/viper.ReadInConfig]&#10;at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]&#10;at config.go:134: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M315.1277,-418C315.1277,-418 217.1557,-418 217.1557,-418 211.1557,-418 205.1557,-412 205.1557,-406 205.1557,-406 205.1557,-394 205.1557,-394 205.1557,-388 211.1557,-382 217.1557,-382 217.1557,-382 315.1277,-382 315.1277,-382 321.1277,-382 327.1277,-388 327.1277,-394 327.1277,-394 327.1277,-406 327.1277,-406 327.1277,-412 321.1277,-418 315.1277,-418"/>
-<text text-anchor="middle" x="266.1417" y="-395.8" font-family="Verdana" font-size="14.00" fill="#000000">handleConfigFile</text>
+<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile | defined in config.go:122&#10;at config.go:134: calling [github.com/spf13/viper.ConfigFileUsed]&#10;at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig]&#10;at config.go:123: calling [github.com/spf13/viper.ReadInConfig]&#10;at config.go:134: calling [(*github.com/sirupsen/logrus.Logger).Debugf]&#10;at config.go:131: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:126: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M315.1277,-262C315.1277,-262 217.1557,-262 217.1557,-262 211.1557,-262 205.1557,-256 205.1557,-250 205.1557,-250 205.1557,-238 205.1557,-238 205.1557,-232 211.1557,-226 217.1557,-226 217.1557,-226 315.1277,-226 315.1277,-226 321.1277,-226 327.1277,-232 327.1277,-238 327.1277,-238 327.1277,-250 327.1277,-250 327.1277,-256 321.1277,-262 315.1277,-262"/>
+<text text-anchor="middle" x="266.1417" y="-239.8" font-family="Verdana" font-size="14.00" fill="#000000">handleConfigFile</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile -->
+<g id="edge23" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile</title>
+<g id="a_edge23"><a xlink:title="at config.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile]">
+<path fill="none" stroke="#000000" d="M71.7304,-404.7461C92.2554,-379.7244 131.6357,-334.2127 171.3296,-302 187.1321,-289.1758 206.0065,-277.0739 222.7395,-267.2758"/>
+<polygon fill="#000000" stroke="#000000" points="224.8556,-270.0966 231.7822,-262.0795 221.3679,-264.0273 224.8556,-270.0966"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig -->
+<g id="node14" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig</title>
+<g id="a_node14"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig | defined in config.go:84&#10;at config.go:96: calling [github.com/spf13/viper.UnmarshalKey]&#10;at config.go:97: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]&#10;at config.go:102: calling [github.com/spf13/viper.GetInt]&#10;at config.go:86: calling [github.com/spf13/viper.GetString]&#10;at config.go:87: calling [github.com/spf13/viper.GetString]&#10;at config.go:91: calling [github.com/spf13/viper.GetString]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M325.0589,-533C325.0589,-533 207.2245,-533 207.2245,-533 201.2245,-533 195.2245,-527 195.2245,-521 195.2245,-521 195.2245,-509 195.2245,-509 195.2245,-503 201.2245,-497 207.2245,-497 207.2245,-497 325.0589,-497 325.0589,-497 331.0589,-497 337.0589,-503 337.0589,-509 337.0589,-509 337.0589,-521 337.0589,-521 337.0589,-527 331.0589,-533 325.0589,-533"/>
+<text text-anchor="middle" x="266.1417" y="-510.8" font-family="Verdana" font-size="14.00" fill="#000000">UpdateRouterConfig</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig -->
+<g id="edge25" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig</title>
+<g id="a_edge25"><a xlink:title="at config.go:37: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig]">
+<path fill="none" stroke="#000000" d="M86.9095,-441.1999C109.5035,-454.5144 141.6476,-472.3814 171.3296,-485 178.4795,-488.0396 186.0453,-490.9376 193.66,-493.6498"/>
+<polygon fill="#000000" stroke="#000000" points="192.7089,-497.0242 203.3037,-496.9826 194.9954,-490.4081 192.7089,-497.0242"/>
+</a>
+</g>
+</g>
+<!-- github.com/spf13/viper.AddConfigPath -->
+<g id="node18" class="node">
+<title>github.com/spf13/viper.AddConfigPath</title>
+<g id="a_node18"><a xlink:title="github.com/spf13/viper.AddConfigPath | defined in viper.go:453">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M310.024,-655C310.024,-655 222.2594,-655 222.2594,-655 216.2594,-655 210.2594,-649 210.2594,-643 210.2594,-643 210.2594,-631 210.2594,-631 210.2594,-625 216.2594,-619 222.2594,-619 222.2594,-619 310.024,-619 310.024,-619 316.024,-619 322.024,-625 322.024,-631 322.024,-631 322.024,-643 322.024,-643 322.024,-649 316.024,-655 310.024,-655"/>
+<text text-anchor="middle" x="266.1417" y="-641.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="266.1417" y="-624.4" font-family="Verdana" font-size="14.00" fill="#000000">AddConfigPath</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.AddConfigPath -->
+<g id="edge30" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.AddConfigPath</title>
+<g id="a_edge30"><a xlink:title="at config.go:25: calling [github.com/spf13/viper.AddConfigPath]">
+<path fill="none" stroke="#8b4513" d="M63.4534,-441.1303C77.1428,-477.9398 113.1633,-561.7675 171.3296,-607 179.886,-613.6538 189.9479,-618.8483 200.2622,-622.8991"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="199.1751,-626.2275 209.7696,-626.3068 201.537,-619.6379 199.1751,-626.2275"/>
+</a>
+</g>
+</g>
+<!-- github.com/spf13/viper.SetConfigName -->
+<g id="node19" class="node">
+<title>github.com/spf13/viper.SetConfigName</title>
+<g id="a_node19"><a xlink:title="github.com/spf13/viper.SetConfigName | defined in viper.go:1964">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M311.3439,-716C311.3439,-716 220.9395,-716 220.9395,-716 214.9395,-716 208.9395,-710 208.9395,-704 208.9395,-704 208.9395,-692 208.9395,-692 208.9395,-686 214.9395,-680 220.9395,-680 220.9395,-680 311.3439,-680 311.3439,-680 317.3439,-680 323.3439,-686 323.3439,-692 323.3439,-692 323.3439,-704 323.3439,-704 323.3439,-710 317.3439,-716 311.3439,-716"/>
+<text text-anchor="middle" x="266.1417" y="-702.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="266.1417" y="-685.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigName</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigName -->
+<g id="edge31" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigName</title>
+<g id="a_edge31"><a xlink:title="at config.go:26: calling [github.com/spf13/viper.SetConfigName]">
+<path fill="none" stroke="#8b4513" d="M60.4119,-441.0686C69.4656,-486.1828 99.221,-604.6804 171.3296,-668 179.4742,-675.1519 189.3263,-680.6002 199.5585,-684.7504"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="198.4304,-688.0645 209.0243,-688.2085 200.8325,-681.4895 198.4304,-688.0645"/>
+</a>
+</g>
+</g>
+<!-- github.com/spf13/viper.SetConfigType -->
+<g id="node20" class="node">
+<title>github.com/spf13/viper.SetConfigType</title>
+<g id="a_node20"><a xlink:title="github.com/spf13/viper.SetConfigType | defined in viper.go:1979">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M308.6855,-350C308.6855,-350 223.5979,-350 223.5979,-350 217.5979,-350 211.5979,-344 211.5979,-338 211.5979,-338 211.5979,-326 211.5979,-326 211.5979,-320 217.5979,-314 223.5979,-314 223.5979,-314 308.6855,-314 308.6855,-314 314.6855,-314 320.6855,-320 320.6855,-326 320.6855,-326 320.6855,-338 320.6855,-338 320.6855,-344 314.6855,-350 308.6855,-350"/>
+<text text-anchor="middle" x="266.1417" y="-336.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="266.1417" y="-319.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigType</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigType -->
+<g id="edge13" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigType</title>
+<g id="a_edge13"><a xlink:title="at config.go:27: calling [github.com/spf13/viper.SetConfigType]">
+<path fill="none" stroke="#8b4513" d="M87.9764,-404.9965C110.5704,-392.2459 142.25,-375.2927 171.3296,-363 181.0001,-358.912 191.4075,-355.0217 201.6606,-351.4647"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="203.0659,-354.6841 211.4144,-348.1609 200.8201,-348.0541 203.0659,-354.6841"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
-<g id="edge31" class="edge">
+<g id="edge32" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
-<g id="a_edge31"><a xlink:title="at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="none" stroke="#000000" d="M327.5277,-411.5043C339.6788,-416.0107 351.5628,-422.2798 360.9538,-431 428.1573,-493.4032 371.1174,-557.2014 433.9538,-624 435.9855,-626.1598 438.1969,-628.17 440.542,-630.0404"/>
-<polygon fill="#000000" stroke="#000000" points="438.7508,-633.0574 448.9641,-635.8753 442.7373,-627.3034 438.7508,-633.0574"/>
+<g id="a_edge32"><a xlink:title="at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="none" stroke="#000000" d="M327.4893,-225.8748C339.2409,-220.8382 350.9767,-214.6054 360.9538,-207 404.1468,-174.0745 391.3792,-142.7214 433.9538,-109 437.6685,-106.0578 441.7051,-103.3403 445.9059,-100.8411"/>
+<polygon fill="#000000" stroke="#000000" points="447.6222,-103.8917 454.709,-96.0159 444.2576,-97.7534 447.6222,-103.8917"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.ReadInConfig -->
-<g id="node7" class="node">
+<g id="node10" class="node">
 <title>github.com/spf13/viper.ReadInConfig</title>
-<g id="a_node7"><a xlink:title="github.com/spf13/viper.ReadInConfig | defined in viper.go:1481">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M545.2524,-489C545.2524,-489 465.623,-489 465.623,-489 459.623,-489 453.623,-483 453.623,-477 453.623,-477 453.623,-465 453.623,-465 453.623,-459 459.623,-453 465.623,-453 465.623,-453 545.2524,-453 545.2524,-453 551.2524,-453 557.2524,-459 557.2524,-465 557.2524,-465 557.2524,-477 557.2524,-477 557.2524,-483 551.2524,-489 545.2524,-489"/>
-<text text-anchor="middle" x="505.4377" y="-475.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-458.4" font-family="Verdana" font-size="14.00" fill="#000000">ReadInConfig</text>
+<g id="a_node10"><a xlink:title="github.com/spf13/viper.ReadInConfig | defined in viper.go:1481">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M545.2524,-333C545.2524,-333 465.623,-333 465.623,-333 459.623,-333 453.623,-327 453.623,-321 453.623,-321 453.623,-309 453.623,-309 453.623,-303 459.623,-297 465.623,-297 465.623,-297 545.2524,-297 545.2524,-297 551.2524,-297 557.2524,-303 557.2524,-309 557.2524,-309 557.2524,-321 557.2524,-321 557.2524,-327 551.2524,-333 545.2524,-333"/>
+<text text-anchor="middle" x="505.4377" y="-319.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-302.4" font-family="Verdana" font-size="14.00" fill="#000000">ReadInConfig</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/spf13/viper.ReadInConfig -->
-<g id="edge22" class="edge">
+<g id="edge27" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/spf13/viper.ReadInConfig</title>
-<g id="a_edge22"><a xlink:title="at config.go:123: calling [github.com/spf13/viper.ReadInConfig]">
-<path fill="none" stroke="#8b4513" d="M326.8355,-418.0081C362.6535,-428.6354 407.8688,-442.0509 443.8428,-452.7246"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="443.1462,-456.1686 453.7287,-455.6578 445.1374,-449.4578 443.1462,-456.1686"/>
+<g id="a_edge27"><a xlink:title="at config.go:123: calling [github.com/spf13/viper.ReadInConfig]">
+<path fill="none" stroke="#8b4513" d="M326.8355,-262.0081C362.6535,-272.6354 407.8688,-286.0509 443.8428,-296.7246"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="443.1462,-300.1686 453.7287,-299.6578 445.1374,-293.4578 443.1462,-300.1686"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.ConfigFileUsed -->
-<g id="node8" class="node">
+<g id="node11" class="node">
 <title>github.com/spf13/viper.ConfigFileUsed</title>
-<g id="a_node8"><a xlink:title="github.com/spf13/viper.ConfigFileUsed | defined in viper.go:448">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M550.3705,-611C550.3705,-611 460.5049,-611 460.5049,-611 454.5049,-611 448.5049,-605 448.5049,-599 448.5049,-599 448.5049,-587 448.5049,-587 448.5049,-581 454.5049,-575 460.5049,-575 460.5049,-575 550.3705,-575 550.3705,-575 556.3705,-575 562.3705,-581 562.3705,-587 562.3705,-587 562.3705,-599 562.3705,-599 562.3705,-605 556.3705,-611 550.3705,-611"/>
-<text text-anchor="middle" x="505.4377" y="-597.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-580.4" font-family="Verdana" font-size="14.00" fill="#000000">ConfigFileUsed</text>
+<g id="a_node11"><a xlink:title="github.com/spf13/viper.ConfigFileUsed | defined in viper.go:448">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M550.3705,-157C550.3705,-157 460.5049,-157 460.5049,-157 454.5049,-157 448.5049,-151 448.5049,-145 448.5049,-145 448.5049,-133 448.5049,-133 448.5049,-127 454.5049,-121 460.5049,-121 460.5049,-121 550.3705,-121 550.3705,-121 556.3705,-121 562.3705,-127 562.3705,-133 562.3705,-133 562.3705,-145 562.3705,-145 562.3705,-151 556.3705,-157 550.3705,-157"/>
+<text text-anchor="middle" x="505.4377" y="-143.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-126.4" font-family="Verdana" font-size="14.00" fill="#000000">ConfigFileUsed</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/spf13/viper.ConfigFileUsed -->
-<g id="edge5" class="edge">
+<g id="edge6" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/spf13/viper.ConfigFileUsed</title>
-<g id="a_edge5"><a xlink:title="at config.go:134: calling [github.com/spf13/viper.ConfigFileUsed]">
-<path fill="none" stroke="#8b4513" d="M327.6213,-412.9036C339.493,-417.3068 351.2418,-423.1801 360.9538,-431 413.1716,-473.0443 384.611,-517.616 433.9538,-563 436.5077,-565.349 439.2722,-567.5291 442.179,-569.5506"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="440.349,-572.5341 450.6909,-574.8358 444.0416,-566.5873 440.349,-572.5341"/>
+<g id="a_edge6"><a xlink:title="at config.go:134: calling [github.com/spf13/viper.ConfigFileUsed]">
+<path fill="none" stroke="#8b4513" d="M315.2378,-225.8838C330.0529,-220.1381 346.276,-213.5651 360.9538,-207 394.1577,-192.1485 401.0313,-185.4651 433.9538,-170 440.1234,-167.1019 446.6339,-164.1436 453.1119,-161.2611"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="454.797,-164.3434 462.5364,-157.1079 451.9741,-157.9377 454.797,-164.3434"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig -->
-<g id="node9" class="node">
+<g id="node12" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig</title>
-<g id="a_node9"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig | defined in config.go:107&#10;at config.go:111: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:116: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:115: calling [github.com/spf13/viper.WriteConfig]&#10;at config.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M562.713,-401C562.713,-401 448.1624,-401 448.1624,-401 442.1624,-401 436.1624,-395 436.1624,-389 436.1624,-389 436.1624,-377 436.1624,-377 436.1624,-371 442.1624,-365 448.1624,-365 448.1624,-365 562.713,-365 562.713,-365 568.713,-365 574.713,-371 574.713,-377 574.713,-377 574.713,-389 574.713,-389 574.713,-395 568.713,-401 562.713,-401"/>
-<text text-anchor="middle" x="505.4377" y="-378.8" font-family="Verdana" font-size="14.00" fill="#000000">createDefaultConfig</text>
+<g id="a_node12"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig | defined in config.go:107&#10;at config.go:111: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:116: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:115: calling [github.com/spf13/viper.WriteConfig]&#10;at config.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M562.713,-218C562.713,-218 448.1624,-218 448.1624,-218 442.1624,-218 436.1624,-212 436.1624,-206 436.1624,-206 436.1624,-194 436.1624,-194 436.1624,-188 442.1624,-182 448.1624,-182 448.1624,-182 562.713,-182 562.713,-182 568.713,-182 574.713,-188 574.713,-194 574.713,-194 574.713,-206 574.713,-206 574.713,-212 568.713,-218 562.713,-218"/>
+<text text-anchor="middle" x="505.4377" y="-195.8" font-family="Verdana" font-size="14.00" fill="#000000">createDefaultConfig</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig -->
-<g id="edge11" class="edge">
+<g id="edge17" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig</title>
-<g id="a_edge11"><a xlink:title="at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig]">
-<path fill="none" stroke="#000000" d="M327.2799,-392.4466C349.2198,-390.0036 374.1651,-387.5322 396.9538,-386 406.3715,-385.3668 416.2578,-384.8666 426.0686,-384.4715"/>
-<polygon fill="#000000" stroke="#000000" points="426.3779,-387.9625 436.2423,-384.0966 426.1201,-380.9673 426.3779,-387.9625"/>
+<g id="a_edge17"><a xlink:title="at config.go:128: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig]">
+<path fill="none" stroke="#000000" d="M327.1453,-232.7831C357.2629,-227.2453 393.9668,-220.4965 426.2262,-214.5648"/>
+<polygon fill="#000000" stroke="#000000" points="426.8806,-218.0033 436.0828,-212.7525 425.6147,-211.1187 426.8806,-218.0033"/>
 </a>
 </g>
 </g>
@@ -182,18 +330,18 @@
 <g id="node26" class="node">
 <title>(*github.com/sirupsen/logrus.Logger).Debugf</title>
 <g id="a_node26"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Debugf | defined in logger.go:163">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M718.2828,-455C718.2828,-455 676.3192,-455 676.3192,-455 670.3192,-455 664.3192,-449 664.3192,-443 664.3192,-443 664.3192,-431 664.3192,-431 664.3192,-425 670.3192,-419 676.3192,-419 676.3192,-419 718.2828,-419 718.2828,-419 724.2828,-419 730.2828,-425 730.2828,-431 730.2828,-431 730.2828,-443 730.2828,-443 730.2828,-449 724.2828,-455 718.2828,-455"/>
-<text text-anchor="middle" x="697.301" y="-441.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="697.301" y="-424.4" font-family="Verdana" font-size="14.00" fill="#000000">Debugf</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M718.2828,-230C718.2828,-230 676.3192,-230 676.3192,-230 670.3192,-230 664.3192,-224 664.3192,-218 664.3192,-218 664.3192,-206 664.3192,-206 664.3192,-200 670.3192,-194 676.3192,-194 676.3192,-194 718.2828,-194 718.2828,-194 724.2828,-194 730.2828,-200 730.2828,-206 730.2828,-206 730.2828,-218 730.2828,-218 730.2828,-224 724.2828,-230 718.2828,-230"/>
+<text text-anchor="middle" x="697.301" y="-216.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="697.301" y="-199.4" font-family="Verdana" font-size="14.00" fill="#000000">Debugf</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debugf -->
-<g id="edge34" class="edge">
+<g id="edge28" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debugf</title>
-<g id="a_edge34"><a xlink:title="at config.go:134: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
-<path fill="none" stroke="#8b4513" d="M327.4584,-405.2619C415.8332,-412.8458 576.8396,-426.6626 653.9192,-433.2772"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="653.9595,-436.7934 664.2221,-434.1613 654.558,-429.8191 653.9595,-436.7934"/>
+<g id="a_edge28"><a xlink:title="at config.go:134: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
+<path fill="none" stroke="#8b4513" d="M327.3209,-243.5098C390.1023,-242.5218 490.5399,-239.5951 576.9216,-231 602.665,-228.4385 631.279,-223.9894 654.1486,-220.0402"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="654.9781,-223.4482 664.221,-218.2695 653.766,-216.5539 654.9781,-223.4482"/>
 </a>
 </g>
 </g>
@@ -201,333 +349,112 @@
 <g id="node27" class="node">
 <title>(*github.com/sirupsen/logrus.Logger).Fatalf</title>
 <g id="a_node27"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Fatalf | defined in logger.go:189">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M714.7968,-394C714.7968,-394 679.8052,-394 679.8052,-394 673.8052,-394 667.8052,-388 667.8052,-382 667.8052,-382 667.8052,-370 667.8052,-370 667.8052,-364 673.8052,-358 679.8052,-358 679.8052,-358 714.7968,-358 714.7968,-358 720.7968,-358 726.7968,-364 726.7968,-370 726.7968,-370 726.7968,-382 726.7968,-382 726.7968,-388 720.7968,-394 714.7968,-394"/>
-<text text-anchor="middle" x="697.301" y="-380.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="697.301" y="-363.4" font-family="Verdana" font-size="14.00" fill="#000000">Fatalf</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M714.7968,-291C714.7968,-291 679.8052,-291 679.8052,-291 673.8052,-291 667.8052,-285 667.8052,-279 667.8052,-279 667.8052,-267 667.8052,-267 667.8052,-261 673.8052,-255 679.8052,-255 679.8052,-255 714.7968,-255 714.7968,-255 720.7968,-255 726.7968,-261 726.7968,-267 726.7968,-267 726.7968,-279 726.7968,-279 726.7968,-285 720.7968,-291 714.7968,-291"/>
+<text text-anchor="middle" x="697.301" y="-277.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
+<text text-anchor="middle" x="697.301" y="-260.4" font-family="Verdana" font-size="14.00" fill="#000000">Fatalf</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;(*github.com/sirupsen/logrus.Logger).Fatalf -->
-<g id="edge10" class="edge">
+<g id="edge29" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile&#45;&gt;(*github.com/sirupsen/logrus.Logger).Fatalf</title>
-<g id="a_edge10"><a xlink:title="at config.go:131: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:126: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]">
-<path fill="none" stroke="#8b4513" d="M324.096,-381.9526C363.7149,-369.9655 412.7475,-355.9136 433.9538,-353 496.9037,-344.3511 513.6632,-347.011 576.9216,-353 604.046,-355.568 634.154,-361.3215 657.4743,-366.4313"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="656.8262,-369.8728 667.3496,-368.6451 658.3574,-363.0423 656.8262,-369.8728"/>
+<g id="a_edge29"><a xlink:title="at config.go:131: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:126: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]">
+<path fill="none" stroke="#8b4513" d="M327.4584,-248.1242C417.2765,-254.1654 582.118,-265.2527 657.6279,-270.3316"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="657.4603,-273.8281 667.6726,-271.0072 657.9301,-266.8439 657.4603,-273.8281"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.WriteConfig -->
-<g id="node10" class="node">
+<g id="node13" class="node">
 <title>github.com/spf13/viper.WriteConfig</title>
-<g id="a_node10"><a xlink:title="github.com/spf13/viper.WriteConfig | defined in viper.go:1577">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M732.5601,-316C732.5601,-316 662.0419,-316 662.0419,-316 656.0419,-316 650.0419,-310 650.0419,-304 650.0419,-304 650.0419,-292 650.0419,-292 650.0419,-286 656.0419,-280 662.0419,-280 662.0419,-280 732.5601,-280 732.5601,-280 738.5601,-280 744.5601,-286 744.5601,-292 744.5601,-292 744.5601,-304 744.5601,-304 744.5601,-310 738.5601,-316 732.5601,-316"/>
-<text text-anchor="middle" x="697.301" y="-302.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="697.301" y="-285.4" font-family="Verdana" font-size="14.00" fill="#000000">WriteConfig</text>
+<g id="a_node13"><a xlink:title="github.com/spf13/viper.WriteConfig | defined in viper.go:1577">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M732.5601,-152C732.5601,-152 662.0419,-152 662.0419,-152 656.0419,-152 650.0419,-146 650.0419,-140 650.0419,-140 650.0419,-128 650.0419,-128 650.0419,-122 656.0419,-116 662.0419,-116 662.0419,-116 732.5601,-116 732.5601,-116 738.5601,-116 744.5601,-122 744.5601,-128 744.5601,-128 744.5601,-140 744.5601,-140 744.5601,-146 738.5601,-152 732.5601,-152"/>
+<text text-anchor="middle" x="697.301" y="-138.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="697.301" y="-121.4" font-family="Verdana" font-size="14.00" fill="#000000">WriteConfig</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;github.com/spf13/viper.WriteConfig -->
-<g id="edge24" class="edge">
+<g id="edge7" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;github.com/spf13/viper.WriteConfig</title>
-<g id="a_edge24"><a xlink:title="at config.go:115: calling [github.com/spf13/viper.WriteConfig]">
-<path fill="none" stroke="#8b4513" d="M546.127,-364.9737C575.6343,-351.9012 615.7194,-334.1426 647.1985,-320.1966"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="648.9452,-323.251 656.6704,-316.0003 646.1097,-316.8509 648.9452,-323.251"/>
+<g id="a_edge7"><a xlink:title="at config.go:115: calling [github.com/spf13/viper.WriteConfig]">
+<path fill="none" stroke="#8b4513" d="M557.8652,-181.9652C583.3463,-173.1998 614.0228,-162.6473 640.107,-153.6745"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="641.5411,-156.8825 649.8587,-150.3199 639.264,-150.2632 641.5411,-156.8825"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debugf -->
-<g id="edge28" class="edge">
+<g id="edge8" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debugf</title>
-<g id="a_edge28"><a xlink:title="at config.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
-<path fill="none" stroke="#8b4513" d="M569.5921,-401.0563C597.4542,-408.8981 629.3479,-417.8746 654.2929,-424.8953"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="653.6047,-428.3376 664.179,-427.6778 655.5013,-421.5994 653.6047,-428.3376"/>
+<g id="a_edge8"><a xlink:title="at config.go:119: calling [(*github.com/sirupsen/logrus.Logger).Debugf]">
+<path fill="none" stroke="#8b4513" d="M574.7048,-204.3323C601.14,-205.9857 630.5097,-207.8226 653.8743,-209.2839"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="653.9557,-212.7957 664.1547,-209.9269 654.3927,-205.8094 653.9557,-212.7957"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;(*github.com/sirupsen/logrus.Logger).Fatalf -->
-<g id="edge23" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.createDefaultConfig&#45;&gt;(*github.com/sirupsen/logrus.Logger).Fatalf</title>
-<g id="a_edge23"><a xlink:title="at config.go:111: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:116: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]">
-<path fill="none" stroke="#8b4513" d="M574.7048,-380.4728C602.5681,-379.4563 633.6915,-378.3207 657.6069,-377.4482"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="657.8509,-380.9417 667.7166,-377.0794 657.5956,-373.9464 657.8509,-380.9417"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init -->
-<g id="node11" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init</title>
-<g id="a_node11"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.init | defined in .:0&#10;at router.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at config.go:14: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]&#10;at router.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase]&#10;at netdb.go:15: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]&#10;at router.go:32: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M72.1648,-624C72.1648,-624 42.1648,-624 42.1648,-624 36.1648,-624 30.1648,-618 30.1648,-612 30.1648,-612 30.1648,-600 30.1648,-600 30.1648,-594 36.1648,-588 42.1648,-588 42.1648,-588 72.1648,-588 72.1648,-588 78.1648,-588 84.1648,-594 84.1648,-600 84.1648,-600 84.1648,-612 84.1648,-612 84.1648,-618 78.1648,-624 72.1648,-624"/>
-<text text-anchor="middle" x="57.1648" y="-601.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig -->
-<g id="edge14" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig</title>
-<g id="a_edge14"><a xlink:title="at router.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]">
-<path fill="none" stroke="#000000" d="M83.4413,-587.8603C105.7243,-573.5729 139.1134,-554.6697 171.3296,-546 255.0482,-523.4706 354.7852,-522.4617 423.3646,-525.5323"/>
-<polygon fill="#000000" stroke="#000000" points="423.5147,-529.0436 433.6734,-526.035 423.8558,-522.052 423.5147,-529.0436"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="node12" class="node">
-<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node12"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:148">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M314.8312,-594C314.8312,-594 217.4522,-594 217.4522,-594 211.4522,-594 205.4522,-588 205.4522,-582 205.4522,-582 205.4522,-570 205.4522,-570 205.4522,-564 211.4522,-558 217.4522,-558 217.4522,-558 314.8312,-558 314.8312,-558 320.8312,-558 326.8312,-564 326.8312,-570 326.8312,-570 326.8312,-582 326.8312,-582 326.8312,-588 320.8312,-594 314.8312,-594"/>
-<text text-anchor="middle" x="266.1417" y="-580.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="266.1417" y="-563.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge25" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge25"><a xlink:title="at config.go:14: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M84.4849,-602.078C112.5156,-598.054 157.2869,-591.6268 195.367,-586.1602"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="195.9975,-589.6056 205.3987,-584.7201 195.0028,-582.6767 195.9975,-589.6056"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig -->
-<g id="node13" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig</title>
-<g id="a_node13"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig | defined in router.go:23&#10;at router.go:24: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M304.9008,-655C304.9008,-655 227.3826,-655 227.3826,-655 221.3826,-655 215.3826,-649 215.3826,-643 215.3826,-643 215.3826,-631 215.3826,-631 215.3826,-625 221.3826,-619 227.3826,-619 227.3826,-619 304.9008,-619 304.9008,-619 310.9008,-619 316.9008,-625 316.9008,-631 316.9008,-631 316.9008,-643 316.9008,-643 316.9008,-649 310.9008,-655 304.9008,-655"/>
-<text text-anchor="middle" x="266.1417" y="-632.8" font-family="Verdana" font-size="14.00" fill="#000000">defaultConfig</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig -->
-<g id="edge32" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig</title>
-<g id="a_edge32"><a xlink:title="at netdb.go:15: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]&#10;at router.go:32: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]">
-<path fill="none" stroke="#000000" d="M84.4849,-610.0527C114.9807,-614.5765 165.291,-622.0396 205.2424,-627.9661"/>
-<polygon fill="#000000" stroke="#000000" points="204.7527,-631.4317 215.158,-629.437 205.7799,-624.5074 204.7527,-631.4317"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase -->
-<g id="node14" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase</title>
-<g id="a_node14"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase | defined in router.go:19&#10;at router.go:20: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M299.2231,-716C299.2231,-716 233.0603,-716 233.0603,-716 227.0603,-716 221.0603,-710 221.0603,-704 221.0603,-704 221.0603,-692 221.0603,-692 221.0603,-686 227.0603,-680 233.0603,-680 233.0603,-680 299.2231,-680 299.2231,-680 305.2231,-680 311.2231,-686 311.2231,-692 311.2231,-692 311.2231,-704 311.2231,-704 311.2231,-710 305.2231,-716 299.2231,-716"/>
-<text text-anchor="middle" x="266.1417" y="-693.8" font-family="Verdana" font-size="14.00" fill="#000000">defaultBase</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase -->
-<g id="edge26" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase</title>
-<g id="a_edge26"><a xlink:title="at router.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase]">
-<path fill="none" stroke="#000000" d="M84.575,-622.8204C107.2526,-636.2586 140.6098,-654.9401 171.3296,-668 183.8642,-673.3288 197.6773,-678.2223 210.7905,-682.4427"/>
-<polygon fill="#000000" stroke="#000000" points="210.06,-685.8816 220.6491,-685.5349 212.155,-679.2025 210.06,-685.8816"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
-<g id="edge12" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
-<g id="a_edge12"><a xlink:title="at router.go:24: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="none" stroke="#000000" d="M317.1832,-640.6261C351.6866,-643.0773 397.6866,-646.3452 435.5782,-649.0371"/>
-<polygon fill="#000000" stroke="#000000" points="435.8114,-652.5624 446.0343,-649.7799 436.3075,-645.58 435.8114,-652.5624"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
-<g id="edge1" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
-<g id="a_edge1"><a xlink:title="at router.go:20: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="none" stroke="#000000" d="M311.4328,-689.6722C346.6577,-683.1953 396.1284,-674.099 436.2967,-666.7131"/>
-<polygon fill="#000000" stroke="#000000" points="437.0921,-670.1256 446.2943,-664.8749 435.8262,-663.2411 437.0921,-670.1256"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig -->
-<g id="node15" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig</title>
-<g id="a_node15"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig | defined in config.go:19&#10;at config.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults]&#10;at config.go:22: calling [github.com/spf13/viper.SetConfigFile]&#10;at config.go:26: calling [github.com/spf13/viper.SetConfigName]&#10;at config.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]&#10;at config.go:25: calling [github.com/spf13/viper.AddConfigPath]&#10;at config.go:27: calling [github.com/spf13/viper.SetConfigType]&#10;at config.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile]&#10;at config.go:37: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M86.4951,-332C86.4951,-332 27.8345,-332 27.8345,-332 21.8345,-332 15.8345,-326 15.8345,-320 15.8345,-320 15.8345,-308 15.8345,-308 15.8345,-302 21.8345,-296 27.8345,-296 27.8345,-296 86.4951,-296 86.4951,-296 92.4951,-296 98.4951,-302 98.4951,-308 98.4951,-308 98.4951,-320 98.4951,-320 98.4951,-326 92.4951,-332 86.4951,-332"/>
-<text text-anchor="middle" x="57.1648" y="-309.8" font-family="Verdana" font-size="14.00" fill="#000000">InitConfig</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults -->
-<g id="edge6" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults</title>
-<g id="a_edge6"><a xlink:title="at config.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.setDefaults]">
-<path fill="none" stroke="#000000" d="M98.4519,-318.9392C131.039,-322.8376 176.7632,-328.3076 212.2361,-332.5513"/>
-<polygon fill="#000000" stroke="#000000" points="212.0738,-336.0567 222.4188,-333.7694 212.9054,-329.1063 212.0738,-336.0567"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
-<g id="edge17" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
-<g id="a_edge17"><a xlink:title="at config.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
-<path fill="none" stroke="#000000" d="M63.7334,-332.2308C77.7033,-368.3753 113.8636,-449.3061 171.3296,-492 241.6696,-544.2586 286.1556,-500.3501 360.9538,-546 401.4827,-570.7351 394.98,-596.8806 433.9538,-624 437.6582,-626.5777 441.6186,-628.9947 445.7043,-631.2491"/>
-<polygon fill="#000000" stroke="#000000" points="444.3044,-634.4648 454.7983,-635.9235 447.5045,-628.2391 444.3044,-634.4648"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile -->
-<g id="edge27" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile</title>
-<g id="a_edge27"><a xlink:title="at config.go:34: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.handleConfigFile]">
-<path fill="none" stroke="#000000" d="M90.5325,-332.0147C112.9828,-343.7225 143.4614,-358.829 171.3296,-370 179.0468,-373.0934 187.2155,-376.0846 195.3929,-378.9026"/>
-<polygon fill="#000000" stroke="#000000" points="194.3758,-382.2531 204.9699,-382.1268 196.6093,-375.619 194.3758,-382.2531"/>
-</a>
-</g>
-</g>
-<!-- github.com/spf13/viper.SetConfigFile -->
-<g id="node16" class="node">
-<title>github.com/spf13/viper.SetConfigFile</title>
-<g id="a_node16"><a xlink:title="github.com/spf13/viper.SetConfigFile | defined in viper.go:388">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M305.1967,-479C305.1967,-479 227.0867,-479 227.0867,-479 221.0867,-479 215.0867,-473 215.0867,-467 215.0867,-467 215.0867,-455 215.0867,-455 215.0867,-449 221.0867,-443 227.0867,-443 227.0867,-443 305.1967,-443 305.1967,-443 311.1967,-443 317.1967,-449 317.1967,-455 317.1967,-455 317.1967,-467 317.1967,-467 317.1967,-473 311.1967,-479 305.1967,-479"/>
-<text text-anchor="middle" x="266.1417" y="-465.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="266.1417" y="-448.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigFile</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigFile -->
-<g id="edge13" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigFile</title>
-<g id="a_edge13"><a xlink:title="at config.go:22: calling [github.com/spf13/viper.SetConfigFile]">
-<path fill="none" stroke="#8b4513" d="M70.1973,-332.1564C89.4935,-357.7712 128.0754,-404.3582 171.3296,-431 181.6656,-437.3663 193.4762,-442.4986 205.1717,-446.5945"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="204.3412,-450.0055 214.9339,-449.7957 206.5223,-443.354 204.3412,-450.0055"/>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig -->
-<g id="node17" class="node">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig</title>
-<g id="a_node17"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig | defined in config.go:84&#10;at config.go:97: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]&#10;at config.go:102: calling [github.com/spf13/viper.GetInt]&#10;at config.go:96: calling [github.com/spf13/viper.UnmarshalKey]&#10;at config.go:86: calling [github.com/spf13/viper.GetString]&#10;at config.go:87: calling [github.com/spf13/viper.GetString]&#10;at config.go:91: calling [github.com/spf13/viper.GetString]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M325.0589,-296C325.0589,-296 207.2245,-296 207.2245,-296 201.2245,-296 195.2245,-290 195.2245,-284 195.2245,-284 195.2245,-272 195.2245,-272 195.2245,-266 201.2245,-260 207.2245,-260 207.2245,-260 325.0589,-260 325.0589,-260 331.0589,-260 337.0589,-266 337.0589,-272 337.0589,-272 337.0589,-284 337.0589,-284 337.0589,-290 331.0589,-296 325.0589,-296"/>
-<text text-anchor="middle" x="266.1417" y="-273.8" font-family="Verdana" font-size="14.00" fill="#000000">UpdateRouterConfig</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig -->
-<g id="edge33" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig</title>
-<g id="a_edge33"><a xlink:title="at config.go:37: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig]">
-<path fill="none" stroke="#000000" d="M98.4519,-306.8876C123.2455,-302.6164 155.6438,-297.0352 185.3459,-291.9185"/>
-<polygon fill="#000000" stroke="#000000" points="186.0399,-295.3506 195.3006,-290.2037 184.8515,-288.4522 186.0399,-295.3506"/>
-</a>
-</g>
-</g>
-<!-- github.com/spf13/viper.AddConfigPath -->
-<g id="node21" class="node">
-<title>github.com/spf13/viper.AddConfigPath</title>
-<g id="a_node21"><a xlink:title="github.com/spf13/viper.AddConfigPath | defined in viper.go:453">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M310.024,-52C310.024,-52 222.2594,-52 222.2594,-52 216.2594,-52 210.2594,-46 210.2594,-40 210.2594,-40 210.2594,-28 210.2594,-28 210.2594,-22 216.2594,-16 222.2594,-16 222.2594,-16 310.024,-16 310.024,-16 316.024,-16 322.024,-22 322.024,-28 322.024,-28 322.024,-40 322.024,-40 322.024,-46 316.024,-52 310.024,-52"/>
-<text text-anchor="middle" x="266.1417" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="266.1417" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">AddConfigPath</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.AddConfigPath -->
-<g id="edge18" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.AddConfigPath</title>
-<g id="a_edge18"><a xlink:title="at config.go:25: calling [github.com/spf13/viper.AddConfigPath]">
-<path fill="none" stroke="#8b4513" d="M60.3559,-295.6837C69.2798,-249.9423 98.7592,-129.7427 171.3296,-65 179.6405,-57.5855 189.7595,-51.9399 200.2535,-47.6424"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="201.7851,-50.8079 209.9552,-44.0625 199.3618,-44.2407 201.7851,-50.8079"/>
-</a>
-</g>
-</g>
-<!-- github.com/spf13/viper.SetConfigName -->
-<g id="node22" class="node">
-<title>github.com/spf13/viper.SetConfigName</title>
-<g id="a_node22"><a xlink:title="github.com/spf13/viper.SetConfigName | defined in viper.go:1964">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M311.3439,-113C311.3439,-113 220.9395,-113 220.9395,-113 214.9395,-113 208.9395,-107 208.9395,-101 208.9395,-101 208.9395,-89 208.9395,-89 208.9395,-83 214.9395,-77 220.9395,-77 220.9395,-77 311.3439,-77 311.3439,-77 317.3439,-77 323.3439,-83 323.3439,-89 323.3439,-89 323.3439,-101 323.3439,-101 323.3439,-107 317.3439,-113 311.3439,-113"/>
-<text text-anchor="middle" x="266.1417" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="266.1417" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigName</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigName -->
-<g id="edge15" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigName</title>
-<g id="a_edge15"><a xlink:title="at config.go:26: calling [github.com/spf13/viper.SetConfigName]">
-<path fill="none" stroke="#8b4513" d="M63.2722,-295.8099C76.7387,-258.4393 112.5405,-172.6267 171.3296,-126 179.5555,-119.4759 189.2026,-114.3033 199.1364,-110.2079"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="200.5862,-113.402 208.7114,-106.6026 198.1195,-106.851 200.5862,-113.402"/>
-</a>
-</g>
-</g>
-<!-- github.com/spf13/viper.SetConfigType -->
-<g id="node23" class="node">
-<title>github.com/spf13/viper.SetConfigType</title>
-<g id="a_node23"><a xlink:title="github.com/spf13/viper.SetConfigType | defined in viper.go:1979">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M308.6855,-235C308.6855,-235 223.5979,-235 223.5979,-235 217.5979,-235 211.5979,-229 211.5979,-223 211.5979,-223 211.5979,-211 211.5979,-211 211.5979,-205 217.5979,-199 223.5979,-199 223.5979,-199 308.6855,-199 308.6855,-199 314.6855,-199 320.6855,-205 320.6855,-211 320.6855,-211 320.6855,-223 320.6855,-223 320.6855,-229 314.6855,-235 308.6855,-235"/>
-<text text-anchor="middle" x="266.1417" y="-221.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="266.1417" y="-204.4" font-family="Verdana" font-size="14.00" fill="#000000">SetConfigType</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigType -->
-<g id="edge19" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.InitConfig&#45;&gt;github.com/spf13/viper.SetConfigType</title>
-<g id="a_edge19"><a xlink:title="at config.go:27: calling [github.com/spf13/viper.SetConfigType]">
-<path fill="none" stroke="#8b4513" d="M84.9187,-295.7586C107.5195,-281.4502 140.6015,-261.7256 171.3296,-248 180.9157,-243.7181 191.2788,-239.7257 201.5133,-236.1258"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="202.9247,-239.3423 211.2567,-232.798 200.6621,-232.718 202.9247,-239.3423"/>
+<g id="a_edge2"><a xlink:title="at config.go:111: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]&#10;at config.go:116: calling [(*github.com/sirupsen/logrus.Logger).Fatalf]">
+<path fill="none" stroke="#8b4513" d="M552.8646,-218.0449C585.3075,-230.3888 627.7942,-246.5541 658.2762,-258.1519"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="657.1322,-261.4613 667.7232,-261.7463 659.6215,-254.9189 657.1322,-261.4613"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.GetString -->
-<g id="node18" class="node">
+<g id="node15" class="node">
 <title>github.com/spf13/viper.GetString</title>
-<g id="a_node18"><a xlink:title="github.com/spf13/viper.GetString | defined in viper.go:785">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M532.8751,-52C532.8751,-52 478.0003,-52 478.0003,-52 472.0003,-52 466.0003,-46 466.0003,-40 466.0003,-40 466.0003,-28 466.0003,-28 466.0003,-22 472.0003,-16 478.0003,-16 478.0003,-16 532.8751,-16 532.8751,-16 538.8751,-16 544.8751,-22 544.8751,-28 544.8751,-28 544.8751,-40 544.8751,-40 544.8751,-46 538.8751,-52 532.8751,-52"/>
-<text text-anchor="middle" x="505.4377" y="-38.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-21.4" font-family="Verdana" font-size="14.00" fill="#000000">GetString</text>
+<g id="a_node15"><a xlink:title="github.com/spf13/viper.GetString | defined in viper.go:785">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M532.8751,-594C532.8751,-594 478.0003,-594 478.0003,-594 472.0003,-594 466.0003,-588 466.0003,-582 466.0003,-582 466.0003,-570 466.0003,-570 466.0003,-564 472.0003,-558 478.0003,-558 478.0003,-558 532.8751,-558 532.8751,-558 538.8751,-558 544.8751,-564 544.8751,-570 544.8751,-570 544.8751,-582 544.8751,-582 544.8751,-588 538.8751,-594 532.8751,-594"/>
+<text text-anchor="middle" x="505.4377" y="-580.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-563.4" font-family="Verdana" font-size="14.00" fill="#000000">GetString</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.GetString -->
-<g id="edge29" class="edge">
+<g id="edge33" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.GetString</title>
-<g id="a_edge29"><a xlink:title="at config.go:86: calling [github.com/spf13/viper.GetString]&#10;at config.go:87: calling [github.com/spf13/viper.GetString]&#10;at config.go:91: calling [github.com/spf13/viper.GetString]">
-<path fill="none" stroke="#8b4513" d="M337.3222,-263.2967C345.9583,-259.3512 354.1249,-254.347 360.9538,-248 425.0938,-188.3862 372.9593,-127.8286 433.9538,-65 440.389,-58.3713 448.4784,-53.073 456.8813,-48.8672"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="458.3869,-52.0277 466.059,-44.7208 455.5048,-45.6485 458.3869,-52.0277"/>
+<g id="a_edge33"><a xlink:title="at config.go:86: calling [github.com/spf13/viper.GetString]&#10;at config.go:87: calling [github.com/spf13/viper.GetString]&#10;at config.go:91: calling [github.com/spf13/viper.GetString]">
+<path fill="none" stroke="#8b4513" d="M336.9671,-533.0544C375.3504,-542.8389 421.825,-554.6859 456.2308,-563.4565"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="455.4928,-566.8802 466.0475,-565.9589 457.2219,-560.0971 455.4928,-566.8802"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.UnmarshalKey -->
-<g id="node19" class="node">
+<g id="node16" class="node">
 <title>github.com/spf13/viper.UnmarshalKey</title>
-<g id="a_node19"><a xlink:title="github.com/spf13/viper.UnmarshalKey | defined in viper.go:920">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M547.6814,-252C547.6814,-252 463.194,-252 463.194,-252 457.194,-252 451.194,-246 451.194,-240 451.194,-240 451.194,-228 451.194,-228 451.194,-222 457.194,-216 463.194,-216 463.194,-216 547.6814,-216 547.6814,-216 553.6814,-216 559.6814,-222 559.6814,-228 559.6814,-228 559.6814,-240 559.6814,-240 559.6814,-246 553.6814,-252 547.6814,-252"/>
-<text text-anchor="middle" x="505.4377" y="-238.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-221.4" font-family="Verdana" font-size="14.00" fill="#000000">UnmarshalKey</text>
+<g id="a_node16"><a xlink:title="github.com/spf13/viper.UnmarshalKey | defined in viper.go:920">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M547.6814,-716C547.6814,-716 463.194,-716 463.194,-716 457.194,-716 451.194,-710 451.194,-704 451.194,-704 451.194,-692 451.194,-692 451.194,-686 457.194,-680 463.194,-680 463.194,-680 547.6814,-680 547.6814,-680 553.6814,-680 559.6814,-686 559.6814,-692 559.6814,-692 559.6814,-704 559.6814,-704 559.6814,-710 553.6814,-716 547.6814,-716"/>
+<text text-anchor="middle" x="505.4377" y="-702.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-685.4" font-family="Verdana" font-size="14.00" fill="#000000">UnmarshalKey</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.UnmarshalKey -->
-<g id="edge16" class="edge">
+<g id="edge9" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.UnmarshalKey</title>
-<g id="a_edge16"><a xlink:title="at config.go:96: calling [github.com/spf13/viper.UnmarshalKey]">
-<path fill="none" stroke="#8b4513" d="M337.0619,-267.406C356.8117,-264.2644 378.2493,-260.6752 397.9538,-257 411.917,-254.3956 426.8471,-251.3613 441.0013,-248.3673"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="442.0971,-251.7122 451.1457,-246.201 440.6352,-244.8666 442.0971,-251.7122"/>
+<g id="a_edge9"><a xlink:title="at config.go:96: calling [github.com/spf13/viper.UnmarshalKey]">
+<path fill="none" stroke="#8b4513" d="M336.9145,-531.7606C345.5146,-535.5886 353.7812,-540.273 360.9538,-546 410.3325,-585.4264 386.2191,-626.5984 433.9538,-668 436.7626,-670.4361 439.7976,-672.6958 442.9772,-674.7888"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="441.2891,-677.8568 451.6759,-679.9463 444.8592,-671.8356 441.2891,-677.8568"/>
 </a>
 </g>
 </g>
 <!-- github.com/spf13/viper.GetInt -->
-<g id="node20" class="node">
+<g id="node17" class="node">
 <title>github.com/spf13/viper.GetInt</title>
-<g id="a_node20"><a xlink:title="github.com/spf13/viper.GetInt | defined in viper.go:799">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M523.2012,-113C523.2012,-113 487.6742,-113 487.6742,-113 481.6742,-113 475.6742,-107 475.6742,-101 475.6742,-101 475.6742,-89 475.6742,-89 475.6742,-83 481.6742,-77 487.6742,-77 487.6742,-77 523.2012,-77 523.2012,-77 529.2012,-77 535.2012,-83 535.2012,-89 535.2012,-89 535.2012,-101 535.2012,-101 535.2012,-107 529.2012,-113 523.2012,-113"/>
-<text text-anchor="middle" x="505.4377" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
-<text text-anchor="middle" x="505.4377" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">GetInt</text>
+<g id="a_node17"><a xlink:title="github.com/spf13/viper.GetInt | defined in viper.go:799">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M523.2012,-655C523.2012,-655 487.6742,-655 487.6742,-655 481.6742,-655 475.6742,-649 475.6742,-643 475.6742,-643 475.6742,-631 475.6742,-631 475.6742,-625 481.6742,-619 487.6742,-619 487.6742,-619 523.2012,-619 523.2012,-619 529.2012,-619 535.2012,-625 535.2012,-631 535.2012,-631 535.2012,-643 535.2012,-643 535.2012,-649 529.2012,-655 523.2012,-655"/>
+<text text-anchor="middle" x="505.4377" y="-641.2" font-family="Verdana" font-size="14.00" fill="#000000">viper</text>
+<text text-anchor="middle" x="505.4377" y="-624.4" font-family="Verdana" font-size="14.00" fill="#000000">GetInt</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.GetInt -->
-<g id="edge7" class="edge">
+<g id="edge24" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;github.com/spf13/viper.GetInt</title>
-<g id="a_edge7"><a xlink:title="at config.go:102: calling [github.com/spf13/viper.GetInt]">
-<path fill="none" stroke="#8b4513" d="M337.0713,-262.2381C345.6464,-258.4607 353.8643,-253.7851 360.9538,-248 412.5945,-205.8609 382.1474,-158.9352 433.9538,-117 442.9947,-109.6818 454.461,-104.7914 465.5484,-101.5258"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="466.7277,-104.8366 475.5437,-98.9605 464.9875,-98.0564 466.7277,-104.8366"/>
+<g id="a_edge24"><a xlink:title="at config.go:102: calling [github.com/spf13/viper.GetInt]">
+<path fill="none" stroke="#8b4513" d="M332.2901,-533.0206C342.1632,-536.7309 352.0168,-541.0473 360.9538,-546 397.9354,-566.4944 397.8362,-585.0189 433.9538,-607 443.9006,-613.0536 455.2886,-618.4419 466.0077,-622.9232"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="465.0191,-626.2978 475.6031,-626.7767 467.6278,-619.8021 465.0191,-626.2978"/>
 </a>
 </g>
 </g>
@@ -535,63 +462,136 @@
 <g id="node25" class="node">
 <title>(*github.com/go&#45;i2p/logger.Logger).Warnf</title>
 <g id="a_node25"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Warnf | defined in log.go:42">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M523.204,-191C523.204,-191 487.6714,-191 487.6714,-191 481.6714,-191 475.6714,-185 475.6714,-179 475.6714,-179 475.6714,-167 475.6714,-167 475.6714,-161 481.6714,-155 487.6714,-155 487.6714,-155 523.204,-155 523.204,-155 529.204,-155 535.204,-161 535.204,-167 535.204,-167 535.204,-179 535.204,-179 535.204,-185 529.204,-191 523.204,-191"/>
-<text text-anchor="middle" x="505.4377" y="-177.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="505.4377" y="-160.4" font-family="Verdana" font-size="14.00" fill="#000000">Warnf</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M523.204,-533C523.204,-533 487.6714,-533 487.6714,-533 481.6714,-533 475.6714,-527 475.6714,-521 475.6714,-521 475.6714,-509 475.6714,-509 475.6714,-503 481.6714,-497 487.6714,-497 487.6714,-497 523.204,-497 523.204,-497 529.204,-497 535.204,-503 535.204,-509 535.204,-509 535.204,-521 535.204,-521 535.204,-527 529.204,-533 523.204,-533"/>
+<text text-anchor="middle" x="505.4377" y="-519.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="505.4377" y="-502.4" font-family="Verdana" font-size="14.00" fill="#000000">Warnf</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warnf -->
-<g id="edge2" class="edge">
+<g id="edge12" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.UpdateRouterConfig&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warnf</title>
-<g id="a_edge2"><a xlink:title="at config.go:97: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]">
-<path fill="none" stroke="#8b4513" d="M332.7662,-259.9253C342.4255,-256.4474 352.0905,-252.4712 360.9538,-248 396.7505,-229.9417 398.0862,-212.917 433.9538,-195 443.813,-190.075 454.9923,-185.9975 465.5326,-182.7468"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="466.754,-186.0366 475.3785,-179.8828 464.7989,-179.3152 466.754,-186.0366"/>
+<g id="a_edge12"><a xlink:title="at config.go:97: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]">
+<path fill="none" stroke="#8b4513" d="M336.8518,-503.0207C356.6001,-500.8925 378.0895,-499.7118 397.9538,-501 420.3414,-502.4519 445.1878,-505.5877 465.3476,-508.5242"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="465.0171,-512.0137 475.4248,-510.0317 466.0527,-505.0907 465.0171,-512.0137"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper -->
-<g id="node24" class="node">
+<g id="node21" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper</title>
-<g id="a_node24"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper | defined in config.go:55&#10;at config.go:63: calling [github.com/spf13/viper.UnmarshalKey]&#10;at config.go:64: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]&#10;at config.go:69: calling [github.com/spf13/viper.GetInt]&#10;at config.go:58: calling [github.com/spf13/viper.GetString]&#10;at config.go:75: calling [github.com/spf13/viper.GetString]&#10;at config.go:76: calling [github.com/spf13/viper.GetString]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M348.7663,-174C348.7663,-174 183.5171,-174 183.5171,-174 177.5171,-174 171.5171,-168 171.5171,-162 171.5171,-162 171.5171,-150 171.5171,-150 171.5171,-144 177.5171,-138 183.5171,-138 183.5171,-138 348.7663,-138 348.7663,-138 354.7663,-138 360.7663,-144 360.7663,-150 360.7663,-150 360.7663,-162 360.7663,-162 360.7663,-168 354.7663,-174 348.7663,-174"/>
-<text text-anchor="middle" x="266.1417" y="-151.8" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterConfigFromViper</text>
+<g id="a_node21"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper | defined in config.go:55&#10;at config.go:58: calling [github.com/spf13/viper.GetString]&#10;at config.go:75: calling [github.com/spf13/viper.GetString]&#10;at config.go:76: calling [github.com/spf13/viper.GetString]&#10;at config.go:69: calling [github.com/spf13/viper.GetInt]&#10;at config.go:64: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]&#10;at config.go:63: calling [github.com/spf13/viper.UnmarshalKey]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M348.7663,-594C348.7663,-594 183.5171,-594 183.5171,-594 177.5171,-594 171.5171,-588 171.5171,-582 171.5171,-582 171.5171,-570 171.5171,-570 171.5171,-564 177.5171,-558 183.5171,-558 183.5171,-558 348.7663,-558 348.7663,-558 354.7663,-558 360.7663,-564 360.7663,-570 360.7663,-570 360.7663,-582 360.7663,-582 360.7663,-588 354.7663,-594 348.7663,-594"/>
+<text text-anchor="middle" x="266.1417" y="-571.8" font-family="Verdana" font-size="14.00" fill="#000000">NewRouterConfigFromViper</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.GetString -->
-<g id="edge30" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.GetString</title>
-<g id="a_edge30"><a xlink:title="at config.go:58: calling [github.com/spf13/viper.GetString]&#10;at config.go:75: calling [github.com/spf13/viper.GetString]&#10;at config.go:76: calling [github.com/spf13/viper.GetString]">
-<path fill="none" stroke="#8b4513" d="M334.3044,-137.9981C343.5008,-134.5501 352.6264,-130.563 360.9538,-126 398.0329,-105.6826 397.9669,-87.1945 433.9538,-65 441.1534,-60.5598 449.1008,-56.4391 457.0012,-52.7468"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="458.516,-55.9034 466.2063,-48.6157 455.6499,-49.517 458.516,-55.9034"/>
+<g id="a_edge3"><a xlink:title="at config.go:58: calling [github.com/spf13/viper.GetString]&#10;at config.go:75: calling [github.com/spf13/viper.GetString]&#10;at config.go:76: calling [github.com/spf13/viper.GetString]">
+<path fill="none" stroke="#8b4513" d="M361.0615,-576C393.575,-576 428.6359,-576 456.0645,-576"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="456.1819,-579.5001 466.1819,-576 456.1819,-572.5001 456.1819,-579.5001"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.UnmarshalKey -->
-<g id="edge3" class="edge">
+<g id="edge34" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.UnmarshalKey</title>
-<g id="a_edge3"><a xlink:title="at config.go:63: calling [github.com/spf13/viper.UnmarshalKey]">
-<path fill="none" stroke="#8b4513" d="M321.6425,-174.0908C357.3836,-185.7409 403.9671,-200.925 441.2926,-213.0915"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="440.4706,-216.5047 451.0629,-216.2762 442.64,-209.8494 440.4706,-216.5047"/>
+<g id="a_edge34"><a xlink:title="at config.go:63: calling [github.com/spf13/viper.UnmarshalKey]">
+<path fill="none" stroke="#8b4513" d="M332.2901,-594.0206C342.1632,-597.7309 352.0168,-602.0473 360.9538,-607 397.9354,-627.4944 397.8362,-646.0189 433.9538,-668 438.2976,-670.6436 442.9162,-673.1603 447.6339,-675.5301"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="446.2504,-678.748 456.7823,-679.9007 449.2679,-672.4317 446.2504,-678.748"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.GetInt -->
-<g id="edge9" class="edge">
+<g id="edge11" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;github.com/spf13/viper.GetInt</title>
-<g id="a_edge9"><a xlink:title="at config.go:69: calling [github.com/spf13/viper.GetInt]">
-<path fill="none" stroke="#8b4513" d="M336.9671,-137.9456C378.988,-127.2338 430.7066,-114.05 465.6705,-105.1372"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="466.6839,-108.4909 475.5094,-102.6291 464.9547,-101.7078 466.6839,-108.4909"/>
+<g id="a_edge11"><a xlink:title="at config.go:69: calling [github.com/spf13/viper.GetInt]">
+<path fill="none" stroke="#8b4513" d="M336.9671,-594.0544C378.988,-604.7662 430.7066,-617.95 465.6705,-626.8628"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="464.9547,-630.2922 475.5094,-629.3709 466.6839,-623.5091 464.9547,-630.2922"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warnf -->
-<g id="edge8" class="edge">
+<g id="edge19" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/config.NewRouterConfigFromViper&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warnf</title>
-<g id="a_edge8"><a xlink:title="at config.go:64: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]">
-<path fill="none" stroke="#8b4513" d="M361.0615,-162.7433C397.2776,-165.3161 436.6544,-168.1135 465.1232,-170.136"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="465.2478,-173.6536 475.4707,-170.8711 465.7439,-166.6712 465.2478,-173.6536"/>
+<g id="a_edge19"><a xlink:title="at config.go:64: calling [(*github.com/go&#45;i2p/logger.Logger).Warnf]">
+<path fill="none" stroke="#8b4513" d="M336.9671,-557.9456C378.988,-547.2338 430.7066,-534.05 465.6705,-525.1372"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="466.6839,-528.4909 475.5094,-522.6291 464.9547,-521.7078 466.6839,-528.4909"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init -->
+<g id="node22" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init</title>
+<g id="a_node22"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.init | defined in .:0&#10;at netdb.go:15: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]&#10;at router.go:32: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]&#10;at config.go:14: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]&#10;at router.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]&#10;at router.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M72.1648,-144C72.1648,-144 42.1648,-144 42.1648,-144 36.1648,-144 30.1648,-138 30.1648,-132 30.1648,-132 30.1648,-120 30.1648,-120 30.1648,-114 36.1648,-108 42.1648,-108 42.1648,-108 72.1648,-108 72.1648,-108 78.1648,-108 84.1648,-114 84.1648,-120 84.1648,-120 84.1648,-132 84.1648,-132 84.1648,-138 78.1648,-144 72.1648,-144"/>
+<text text-anchor="middle" x="57.1648" y="-121.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig -->
+<g id="edge15" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig</title>
+<g id="a_edge15"><a xlink:title="at router.go:43: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.DefaultRouterConfig]">
+<path fill="none" stroke="#000000" d="M65.2371,-144.1157C80.6893,-176.4536 117.7414,-243.6579 171.3296,-275 244.8117,-317.9774 280.7545,-273.4559 360.9538,-302 396.6429,-314.7023 400.1774,-328.8473 433.9538,-346 439.1814,-348.6547 444.6998,-351.2747 450.2587,-353.7948"/>
+<polygon fill="#000000" stroke="#000000" points="449.0467,-357.0858 459.6079,-357.9302 451.8785,-350.6841 449.0467,-357.0858"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase -->
+<g id="edge21" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase</title>
+<g id="a_edge21"><a xlink:title="at router.go:31: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultBase]">
+<path fill="none" stroke="#000000" d="M84.1855,-109.8265C106.9113,-96.6509 140.5333,-78.1428 171.3296,-65 183.8954,-59.6374 197.7204,-54.636 210.8353,-50.2824"/>
+<polygon fill="#000000" stroke="#000000" points="212.2614,-53.4994 220.6933,-47.0842 210.1012,-46.841 212.2614,-53.4994"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="node23" class="node">
+<title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_node23"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:148">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M314.8312,-174C314.8312,-174 217.4522,-174 217.4522,-174 211.4522,-174 205.4522,-168 205.4522,-162 205.4522,-162 205.4522,-150 205.4522,-150 205.4522,-144 211.4522,-138 217.4522,-138 217.4522,-138 314.8312,-138 314.8312,-138 320.8312,-138 326.8312,-144 326.8312,-150 326.8312,-150 326.8312,-162 326.8312,-162 326.8312,-168 320.8312,-174 314.8312,-174"/>
+<text text-anchor="middle" x="266.1417" y="-160.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="266.1417" y="-143.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
+<g id="edge14" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
+<g id="a_edge14"><a xlink:title="at config.go:14: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M84.4849,-129.922C112.5156,-133.946 157.2869,-140.3732 195.367,-145.8398"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="195.0028,-149.3233 205.3987,-147.2799 195.9975,-142.3944 195.0028,-149.3233"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig -->
+<g id="node24" class="node">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig</title>
+<g id="a_node24"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig | defined in router.go:23&#10;at router.go:24: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M304.9008,-113C304.9008,-113 227.3826,-113 227.3826,-113 221.3826,-113 215.3826,-107 215.3826,-101 215.3826,-101 215.3826,-89 215.3826,-89 215.3826,-83 221.3826,-77 227.3826,-77 227.3826,-77 304.9008,-77 304.9008,-77 310.9008,-77 316.9008,-83 316.9008,-89 316.9008,-89 316.9008,-101 316.9008,-101 316.9008,-107 310.9008,-113 304.9008,-113"/>
+<text text-anchor="middle" x="266.1417" y="-90.8" font-family="Verdana" font-size="14.00" fill="#000000">defaultConfig</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig -->
+<g id="edge4" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig</title>
+<g id="a_edge4"><a xlink:title="at netdb.go:15: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]&#10;at router.go:32: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig]">
+<path fill="none" stroke="#000000" d="M84.4849,-121.9473C114.9807,-117.4235 165.291,-109.9604 205.2424,-104.0339"/>
+<polygon fill="#000000" stroke="#000000" points="205.7799,-107.4926 215.158,-102.563 204.7527,-100.5683 205.7799,-107.4926"/>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath -->
+<g id="edge20" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/config.defaultConfig&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath</title>
+<g id="a_edge20"><a xlink:title="at router.go:24: calling [github.com/go&#45;i2p/go&#45;i2p/lib/config.BuildI2PDirPath]">
+<path fill="none" stroke="#000000" d="M317.1832,-91.3739C351.6866,-88.9227 397.6866,-85.6548 435.5782,-82.9629"/>
+<polygon fill="#000000" stroke="#000000" points="436.3075,-86.42 446.0343,-82.2201 435.8114,-79.4376 436.3075,-86.42"/>
 </a>
 </g>
 </g>
