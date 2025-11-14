@@ -1,12 +1,12 @@
 module github.com/go-i2p/go-i2p
 
-go 1.24.2
+go 1.24.4
 
 require (
 	github.com/beevik/ntp v1.4.3
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.0.1
-	github.com/go-i2p/crypto v0.0.1
+	github.com/go-i2p/crypto v0.0.2
 	github.com/go-i2p/go-noise v0.0.1
 	github.com/go-i2p/logger v0.0.1
 	github.com/go-i2p/su3 v0.0.1
@@ -22,6 +22,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/go-i2p/elgamal v0.0.2 // indirect
 	github.com/go-i2p/noise v0.0.0-20250805205922-091c71f48c43 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -45,6 +46,16 @@ require (
 	golang.org/x/text v0.30.0 // indirect
 )
 
+// Preserve these commented-out replace directives for local development.
+// This makes it easier to test changes across multiple modules without needing to
+// publish intermediate versions.
+
+// Group 1: common, crypto, elgamal
 replace github.com/go-i2p/common => ../common
 
-replace github.com/go-i2p/crypto => ../crypto
+//replace github.com/go-i2p/crypto => ../crypto
+//replace github.com/go-i2p/elgamal => ../elgamal
+
+// Group 2: noise, go-noise
+//replace github.com/go-i2p/noise => ../noise
+//replace github.com/go-i2p/go-noise => ../go-noise
