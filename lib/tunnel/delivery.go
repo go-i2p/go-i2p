@@ -663,64 +663,87 @@ func readDeliveryInstructionsStruct(data []byte) (instructions *DeliveryInstruct
 
 	// Determine fragment type from bit 7
 	if (flag & 0x80) == 0x80 {
-		di, offset, err := parseFollowOnFragment(data, flag)
-		if err != nil {
-			return nil, nil, err
-		}
-		remainder = data[offset:]
-		log.WithFields(logger.Fields{
-			"instructions_offset": offset,
-			"remainder_length":    len(remainder),
-		}).Debug("Successfully read DeliveryInstructions")
-		return di, remainder, nil
+		return readFollowOnFragmentInstructions(data, flag)
 	}
 
-	// FIRST_FRAGMENT
+	return readFirstFragmentInstructions(data, flag)
+}
+
+// readFollowOnFragmentInstructions parses follow-on fragment delivery instructions from the provided data.
+// It extracts the fragment details and returns the parsed instructions with remaining data.
+func readFollowOnFragmentInstructions(data []byte, flag byte) (*DeliveryInstructions, []byte, error) {
+	di, offset, err := parseFollowOnFragment(data, flag)
+	if err != nil {
+		return nil, nil, err
+	}
+	remainder := data[offset:]
+	log.WithFields(logger.Fields{
+		"instructions_offset": offset,
+		"remainder_length":    len(remainder),
+	}).Debug("Successfully read DeliveryInstructions")
+	return di, remainder, nil
+}
+
+// readFirstFragmentInstructions parses first fragment delivery instructions from the provided data.
+// It processes all required and optional fields in sequence and returns the parsed instructions.
+func readFirstFragmentInstructions(data []byte, flag byte) (*DeliveryInstructions, []byte, error) {
 	di := &DeliveryInstructions{}
 	parseFirstFragmentFlags(di, flag)
-	offset := 1
 
-	// Read tunnel ID if DT_TUNNEL
-	offset, err = readTunnelID(data, offset, di)
+	offset, err := parseFirstFragmentFields(data, di)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Read hash if DT_TUNNEL or DT_ROUTER
-	offset, err = readDestinationHash(data, offset, di)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Read delay if present
-	offset, err = readDelayIfPresent(data, offset, di)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Read message ID if fragmented
-	offset, err = readMessageIDIfFragmented(data, offset, di)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Read extended options if present
-	offset, err = readExtendedOptions(data, offset, di)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Read fragment size
-	offset, err = readFragmentSize(data, offset, di)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	remainder = data[offset:]
+	remainder := data[offset:]
 	log.WithFields(logger.Fields{
 		"instructions_offset": offset,
 		"remainder_length":    len(remainder),
 	}).Debug("Successfully read DeliveryInstructions")
 
 	return di, remainder, nil
+}
+
+// parseFirstFragmentFields reads all variable-length fields from first fragment delivery instructions.
+// It processes tunnel ID, hash, delay, message ID, extended options, and fragment size in sequence.
+func parseFirstFragmentFields(data []byte, di *DeliveryInstructions) (int, error) {
+	offset := 1
+
+	// Read tunnel ID if DT_TUNNEL
+	offset, err := readTunnelID(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	// Read hash if DT_TUNNEL or DT_ROUTER
+	offset, err = readDestinationHash(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	// Read delay if present
+	offset, err = readDelayIfPresent(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	// Read message ID if fragmented
+	offset, err = readMessageIDIfFragmented(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	// Read extended options if present
+	offset, err = readExtendedOptions(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	// Read fragment size
+	offset, err = readFragmentSize(data, offset, di)
+	if err != nil {
+		return offset, err
+	}
+
+	return offset, nil
 }
