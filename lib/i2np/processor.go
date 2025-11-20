@@ -2,10 +2,12 @@ package i2np
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -70,25 +72,254 @@ func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
 	return fmt.Errorf("message does not implement TunnelCarrier interface")
 }
 
+// buildRequest tracks a pending tunnel build request for correlation with replies.
+// This enables matching build replies to the original request and managing timeouts.
+type buildRequest struct {
+	tunnelID      tunnel.TunnelID          // Unique tunnel ID for this request
+	messageID     int                      // I2NP message ID for correlation
+	hopCount      int                      // Number of hops in the tunnel
+	replyKeys     []session_key.SessionKey // Reply decryption keys for each hop
+	replyIVs      [][16]byte               // Reply IVs for each hop
+	createdAt     time.Time                // When the request was created
+	retryCount    int                      // Number of retry attempts
+	useShortBuild bool                     // True if using STBM, false for legacy VTB
+}
+
 // TunnelManager coordinates tunnel building and management
 type TunnelManager struct {
 	pool            *tunnel.Pool
 	sessionProvider SessionProvider
 	peerSelector    tunnel.PeerSelector
+	pendingBuilds   map[int]*buildRequest // Track pending builds by message ID
+	buildMutex      sync.RWMutex          // Protect pending builds map
+	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
+	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
 }
 
-// NewTunnelManager creates a new tunnel manager
+// NewTunnelManager creates a new tunnel manager with build request tracking.
+// Starts a background goroutine for cleaning up expired build requests.
 func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	pool := tunnel.NewTunnelPool(peerSelector)
-	return &TunnelManager{
-		pool:         pool,
-		peerSelector: peerSelector,
+	tm := &TunnelManager{
+		pool:          pool,
+		peerSelector:  peerSelector,
+		pendingBuilds: make(map[int]*buildRequest),
+		cleanupStop:   make(chan struct{}),
 	}
+
+	// Start periodic cleanup of expired build requests (every 30 seconds)
+	tm.cleanupTicker = time.NewTicker(30 * time.Second)
+	go tm.cleanupExpiredBuilds()
+
+	return tm
+}
+
+// Stop gracefully stops the tunnel manager and cleans up resources.
+// Should be called when shutting down the router.
+func (tm *TunnelManager) Stop() {
+	if tm.cleanupTicker != nil {
+		tm.cleanupTicker.Stop()
+	}
+	close(tm.cleanupStop)
+	log.Debug("Tunnel manager stopped")
 }
 
 // SetSessionProvider sets the session provider for sending tunnel build messages
 func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
+}
+
+// BuildTunnelFromRequest builds a tunnel from a BuildTunnelRequest using the tunnel.TunnelBuilder.
+// This is the recommended method for building tunnels with proper request tracking and retry support.
+//
+// The method:
+// 1. Uses tunnel.TunnelBuilder to create encrypted build records
+// 2. Generates a unique message ID for request/reply correlation
+// 3. Tracks the pending build request with reply decryption keys
+// 4. Sends the build request via appropriate transport
+// 5. Returns the tunnel ID for tracking
+func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
+	if tm.peerSelector == nil {
+		return 0, fmt.Errorf("no peer selector configured")
+	}
+
+	// Create tunnel builder
+	builder, err := tunnel.NewTunnelBuilder(tm.peerSelector)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create tunnel builder: %w", err)
+	}
+
+	// Generate build request with encrypted records
+	result, err := builder.CreateBuildRequest(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create build request: %w", err)
+	}
+
+	// Generate message ID for this build request
+	messageID := tm.generateMessageID()
+
+	// Create tunnel state tracking
+	tunnelState := &tunnel.TunnelState{
+		ID:        result.TunnelID,
+		Hops:      make([]common.Hash, len(result.Hops)),
+		State:     tunnel.TunnelBuilding,
+		CreatedAt: time.Now(),
+		Responses: make([]tunnel.BuildResponse, 0, len(result.Hops)),
+	}
+
+	// Populate hops with selected peer hashes
+	for i, peer := range result.Hops {
+		tunnelState.Hops[i] = peer.IdentHash()
+	}
+
+	// Add tunnel to pool for tracking
+	tm.pool.AddTunnel(tunnelState)
+
+	// Track the pending build request for reply correlation
+	tm.buildMutex.Lock()
+	tm.pendingBuilds[messageID] = &buildRequest{
+		tunnelID:      result.TunnelID,
+		messageID:     messageID,
+		hopCount:      len(result.Hops),
+		replyKeys:     result.ReplyKeys,
+		replyIVs:      result.ReplyIVs,
+		createdAt:     time.Now(),
+		retryCount:    0,
+		useShortBuild: result.UseShortBuild,
+	}
+	tm.buildMutex.Unlock()
+
+	// Send the tunnel build request
+	err = tm.sendBuildMessage(result, messageID)
+	if err != nil {
+		// Clean up on failure
+		tm.pool.RemoveTunnel(result.TunnelID)
+		tm.buildMutex.Lock()
+		delete(tm.pendingBuilds, messageID)
+		tm.buildMutex.Unlock()
+		return 0, fmt.Errorf("failed to send build request: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"tunnel_id":  result.TunnelID,
+		"message_id": messageID,
+		"hop_count":  len(result.Hops),
+		"use_stbm":   result.UseShortBuild,
+	}).Info("Tunnel build request sent")
+
+	return result.TunnelID, nil
+}
+
+// sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.
+func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, messageID int) error {
+	if tm.sessionProvider == nil {
+		return fmt.Errorf("no session provider available")
+	}
+
+	// For now, send to the first hop (gateway)
+	// In a full implementation, this would be sent through an existing outbound tunnel
+	if len(result.Hops) == 0 {
+		return fmt.Errorf("no hops in tunnel build result")
+	}
+
+	firstHop := result.Hops[0]
+	peerHash := firstHop.IdentHash()
+
+	// Get transport session to the gateway
+	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
+	if err != nil {
+		return fmt.Errorf("failed to get session for gateway %x: %w", peerHash[:8], err)
+	}
+
+	// Create the appropriate build message based on UseShortBuild flag
+	var buildMsg I2NPMessage
+	if result.UseShortBuild {
+		// Use Short Tunnel Build Message (modern)
+		buildMsg = tm.createShortTunnelBuildMessage(result, messageID)
+	} else {
+		// Use Variable Tunnel Build Message (legacy)
+		buildMsg = tm.createVariableTunnelBuildMessage(result, messageID)
+	}
+
+	// Queue the message for sending
+	session.QueueSendI2NP(buildMsg)
+
+	log.WithFields(logger.Fields{
+		"message_id":   messageID,
+		"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
+		"message_type": buildMsg.Type(),
+		"use_stbm":     result.UseShortBuild,
+	}).Debug("Queued tunnel build message")
+
+	return nil
+}
+
+// createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
+func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
+	// Convert tunnel.BuildRequestRecord to i2np.BuildRequestRecord
+	i2npRecords := make([]BuildRequestRecord, len(result.Records))
+	for i, rec := range result.Records {
+		i2npRecords[i] = BuildRequestRecord{
+			ReceiveTunnel: rec.ReceiveTunnel,
+			OurIdent:      rec.OurIdent,
+			NextTunnel:    rec.NextTunnel,
+			NextIdent:     rec.NextIdent,
+			LayerKey:      rec.LayerKey,
+			IVKey:         rec.IVKey,
+			ReplyKey:      rec.ReplyKey,
+			ReplyIV:       rec.ReplyIV,
+			Flag:          rec.Flag,
+			RequestTime:   rec.RequestTime,
+			SendMessageID: rec.SendMessageID,
+			Padding:       rec.Padding,
+		}
+	}
+
+	// Create Short Tunnel Build (STBM) using the builder constructor
+	_ = NewShortTunnelBuilder(i2npRecords) // Will be used for serialization later
+
+	// Wrap in I2NP message
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD)
+	msg.SetMessageID(messageID)
+
+	// TODO: Serialize ShortTunnelBuild to bytes and set as message data
+	// For now, we'll create a basic message structure
+
+	return msg
+}
+
+// createVariableTunnelBuildMessage creates a Variable Tunnel Build Message (legacy).
+func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
+	// Convert to fixed 8-record array (pad with empty records if needed)
+	var records [8]BuildRequestRecord
+	for i := 0; i < 8 && i < len(result.Records); i++ {
+		rec := result.Records[i]
+		records[i] = BuildRequestRecord{
+			ReceiveTunnel: rec.ReceiveTunnel,
+			OurIdent:      rec.OurIdent,
+			NextTunnel:    rec.NextTunnel,
+			NextIdent:     rec.NextIdent,
+			LayerKey:      rec.LayerKey,
+			IVKey:         rec.IVKey,
+			ReplyKey:      rec.ReplyKey,
+			ReplyIV:       rec.ReplyIV,
+			Flag:          rec.Flag,
+			RequestTime:   rec.RequestTime,
+			SendMessageID: rec.SendMessageID,
+			Padding:       rec.Padding,
+		}
+	}
+
+	msg := NewTunnelBuildMessage(records)
+	msg.SetMessageID(messageID)
+	return msg
+}
+
+// generateMessageID generates a unique message ID for tracking build requests.
+func (tm *TunnelManager) generateMessageID() int {
+	// Use time-based ID with some randomness
+	// In production, this should be more sophisticated to avoid collisions
+	return int(time.Now().UnixNano() & 0x7FFFFFFF)
 }
 
 // BuildTunnel builds a tunnel using TunnelBuilder interface
@@ -199,39 +430,62 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 
 // ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface.
 // This method integrates with the tunnel pool to update tunnel states and handle build completions.
-func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler) error {
+// Uses message ID to correlate the reply with the original build request.
+func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageID int) error {
 	records := handler.GetReplyRecords()
 	recordCount := len(records)
 
-	log.WithField("record_count", recordCount).Debug("Processing tunnel reply")
+	log.WithFields(logger.Fields{
+		"record_count": recordCount,
+		"message_id":   messageID,
+	}).Debug("Processing tunnel reply")
+
+	// Get the pending build request for decryption keys (currently unused but will be needed)
+	tm.buildMutex.RLock()
+	_, exists := tm.pendingBuilds[messageID]
+	tm.buildMutex.RUnlock()
+
+	if !exists {
+		log.WithField("message_id", messageID).Warn("No pending build request found for reply")
+		return fmt.Errorf("no pending build request for message ID %d", messageID)
+	}
 
 	// Process the reply to get build results
+	// TODO: Pass decryption keys (req.replyKeys, req.replyIVs) to handler once interface is updated
 	err := handler.ProcessReply()
 
 	// Update tunnel state based on reply processing results
 	if tm.pool != nil {
-		tm.updateTunnelStatesFromReply(records, err)
+		tm.updateTunnelStatesFromReply(messageID, records, err)
 	} else {
 		log.Warn("No tunnel pool available for state updates")
 	}
+
+	// Remove the pending build request after processing
+	tm.buildMutex.Lock()
+	delete(tm.pendingBuilds, messageID)
+	tm.buildMutex.Unlock()
 
 	return err
 }
 
 // updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
-// This method finds matching tunnels and updates their states accordingly.
-func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseRecord, replyErr error) {
-	// Find the most recently created tunnel that's still building and matches the record count
-	// In a full implementation, this would use proper tunnel ID correlation
-	matchingTunnel := tm.findMatchingBuildingTunnel(len(records))
+// Uses message ID to find the matching tunnel via the pending build request.
+func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []BuildResponseRecord, replyErr error) {
+	// Find the matching tunnel using message ID
+	matchingTunnel := tm.findMatchingBuildingTunnel(messageID)
 
 	if matchingTunnel == nil {
-		log.WithField("record_count", len(records)).Warn("No matching building tunnel found for reply")
+		log.WithFields(logger.Fields{
+			"message_id":   messageID,
+			"record_count": len(records),
+		}).Warn("No matching building tunnel found for reply")
 		return
 	}
 
 	log.WithFields(logger.Fields{
 		"tunnel_id":    matchingTunnel.ID,
+		"message_id":   messageID,
 		"record_count": len(records),
 		"success":      replyErr == nil,
 	}).Debug("Updating tunnel state from reply")
@@ -253,7 +507,10 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseReco
 		matchingTunnel.Responses = responses
 		matchingTunnel.ResponseCount = len(responses)
 
-		log.WithField("tunnel_id", matchingTunnel.ID).Info("Tunnel build completed successfully")
+		log.WithFields(logger.Fields{
+			"tunnel_id":  matchingTunnel.ID,
+			"message_id": messageID,
+		}).Info("Tunnel build completed successfully")
 	} else {
 		// Build failed - mark tunnel as failed
 		matchingTunnel.State = tunnel.TunnelFailed
@@ -261,24 +518,42 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(records []BuildResponseReco
 		matchingTunnel.ResponseCount = len(responses)
 
 		log.WithFields(logger.Fields{
-			"tunnel_id": matchingTunnel.ID,
-			"error":     replyErr,
+			"tunnel_id":  matchingTunnel.ID,
+			"message_id": messageID,
+			"error":      replyErr,
 		}).Warn("Tunnel build failed")
 
-		// Clean up failed tunnel after a brief delay (in production, this might be handled differently)
+		// Clean up failed tunnel after a brief delay
 		go tm.cleanupFailedTunnel(matchingTunnel.ID)
 	}
 }
 
-// findMatchingBuildingTunnel finds a tunnel that's currently building and matches the given hop count.
-// This is a simplified correlation method - in production, proper tunnel ID tracking would be used.
-func (tm *TunnelManager) findMatchingBuildingTunnel(hopCount int) *tunnel.TunnelState {
-	log.WithField("hop_count", hopCount).Debug("Looking for matching building tunnel")
+// findMatchingBuildingTunnel finds a tunnel that's currently building based on the message ID.
+// Uses the pending builds map to correlate build replies with their original requests.
+func (tm *TunnelManager) findMatchingBuildingTunnel(messageID int) *tunnel.TunnelState {
+	tm.buildMutex.RLock()
+	req, exists := tm.pendingBuilds[messageID]
+	tm.buildMutex.RUnlock()
 
-	// TODO: Implement proper tunnel correlation using tunnel IDs or request tracking
-	// This would require extending the tunnel pool interface or adding request correlation
-	// For now, we'll return nil to indicate we need proper tunnel correlation
-	return nil
+	if !exists {
+		log.WithField("message_id", messageID).Warn("No pending build request found for message ID")
+		return nil
+	}
+
+	// Look up the tunnel state from the pool
+	tunnelState, exists := tm.pool.GetTunnel(req.tunnelID)
+	if !exists {
+		log.WithField("tunnel_id", req.tunnelID).Warn("Tunnel state not found in pool")
+		return nil
+	}
+
+	log.WithFields(logger.Fields{
+		"tunnel_id":  req.tunnelID,
+		"message_id": messageID,
+		"hop_count":  req.hopCount,
+	}).Debug("Found matching building tunnel")
+
+	return tunnelState
 }
 
 // cleanupFailedTunnel removes a failed tunnel from the pool after a delay
@@ -289,6 +564,58 @@ func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID) {
 	if tm.pool != nil {
 		tm.pool.RemoveTunnel(tunnelID)
 		log.WithField("tunnel_id", tunnelID).Debug("Cleaned up failed tunnel")
+	}
+}
+
+// cleanupExpiredBuilds periodically removes expired build requests.
+// Build requests timeout after 90 seconds per I2P specification.
+func (tm *TunnelManager) cleanupExpiredBuilds() {
+	for {
+		select {
+		case <-tm.cleanupTicker.C:
+			tm.removeExpiredBuildRequests()
+		case <-tm.cleanupStop:
+			return
+		}
+	}
+}
+
+// removeExpiredBuildRequests removes build requests older than 90 seconds.
+// Also marks corresponding tunnels as failed and removes them from the pool.
+func (tm *TunnelManager) removeExpiredBuildRequests() {
+	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+
+	now := time.Now()
+	const buildTimeout = 90 * time.Second
+	var expired []int
+
+	for msgID, req := range tm.pendingBuilds {
+		if now.Sub(req.createdAt) > buildTimeout {
+			expired = append(expired, msgID)
+
+			// Mark tunnel as failed in pool
+			if tunnelState, exists := tm.pool.GetTunnel(req.tunnelID); exists {
+				tunnelState.State = tunnel.TunnelFailed
+				log.WithFields(logger.Fields{
+					"tunnel_id":  req.tunnelID,
+					"message_id": msgID,
+					"age":        now.Sub(req.createdAt),
+				}).Warn("Tunnel build timed out")
+
+				// Schedule cleanup
+				go tm.cleanupFailedTunnel(req.tunnelID)
+			}
+		}
+	}
+
+	// Remove expired requests from map
+	for _, msgID := range expired {
+		delete(tm.pendingBuilds, msgID)
+	}
+
+	if len(expired) > 0 {
+		log.WithField("expired_count", len(expired)).Info("Cleaned up expired build requests")
 	}
 }
 
@@ -622,7 +949,12 @@ func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
 	}
 
 	if handler, ok := msg.(TunnelReplyHandler); ok {
-		return mr.tunnelMgr.ProcessTunnelReply(handler)
+		// Extract message ID from the message interface
+		var messageID int
+		if i2npMsg, ok := msg.(I2NPMessage); ok {
+			messageID = i2npMsg.MessageID()
+		}
+		return mr.tunnelMgr.ProcessTunnelReply(handler, messageID)
 	}
 
 	return fmt.Errorf("message does not implement tunnel interfaces")

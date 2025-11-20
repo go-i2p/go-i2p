@@ -17,7 +17,7 @@ func TestTunnelManager_ProcessTunnelReply_WithPool(t *testing.T) {
 	reply := createSuccessfulTunnelBuildReply()
 
 	// Process the reply
-	err := tm.ProcessTunnelReply(reply)
+	err := tm.ProcessTunnelReply(reply, 12345)
 
 	// Should succeed (even without tunnel correlation, the ProcessReply method should work)
 	assert.NoError(t, err, "ProcessTunnelReply should succeed with successful reply")
@@ -33,7 +33,7 @@ func TestTunnelManager_ProcessTunnelReply_WithFailure(t *testing.T) {
 	reply := createRejectedTunnelBuildReply()
 
 	// Process the reply
-	err := tm.ProcessTunnelReply(reply)
+	err := tm.ProcessTunnelReply(reply, 23456)
 
 	// Should fail due to rejections
 	assert.Error(t, err, "ProcessTunnelReply should fail with rejected reply")
@@ -50,7 +50,7 @@ func TestTunnelManager_ProcessTunnelReply_VariableTunnel(t *testing.T) {
 	reply := createSuccessfulVariableTunnelBuildReply(3)
 
 	// Process the reply
-	err := tm.ProcessTunnelReply(reply)
+	err := tm.ProcessTunnelReply(reply, 34567)
 
 	// Should succeed
 	assert.NoError(t, err, "ProcessTunnelReply should succeed with successful variable reply")
@@ -65,7 +65,7 @@ func TestTunnelManager_ProcessTunnelReply_NoPool(t *testing.T) {
 	reply := createSuccessfulTunnelBuildReply()
 
 	// Process the reply
-	err := tm.ProcessTunnelReply(reply)
+	err := tm.ProcessTunnelReply(reply, 45678)
 
 	// Should succeed (ProcessReply still works without pool)
 	assert.NoError(t, err, "ProcessTunnelReply should succeed even without pool")
@@ -84,11 +84,11 @@ func TestTunnelManager_UpdateTunnelStatesFromReply(t *testing.T) {
 	}
 
 	// Test with successful reply (no error)
-	tm.updateTunnelStatesFromReply(records, nil)
+	tm.updateTunnelStatesFromReply(11111, records, nil)
 	// This should not panic even without matching tunnel
 
 	// Test with failed reply (error)
-	tm.updateTunnelStatesFromReply(records, assert.AnError)
+	tm.updateTunnelStatesFromReply(22222, records, assert.AnError)
 	// This should not panic even without matching tunnel
 }
 
