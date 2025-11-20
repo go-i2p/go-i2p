@@ -76,7 +76,7 @@
 ## Next Priority Components 🎯
 
 ### End-to-End Garlic Encryption
-- **ECIES-X25519-AEAD-Ratchet Implementation**:
+- **ECIES-X25519-AEAD-Ratchet Implementation(Crypto lives in github.com/go-i2p/crypto)**:
   * 📋 Garlic message construction and decryption
   * 📋 New Session and Existing Session message handling
   * 📋 Ratchet protocol for forward secrecy
