@@ -42,8 +42,8 @@ please keep up with these changes, as they will not be backward compatible and r
   - [X] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
-  - [ ] ElGamal/AES+SessionTag
-  - [ ] Ratchet/X25519
+  - [ ] ECIES-X25519-AEAD-Ratchet (primary)
+  - [ ] ElGamal/AES+SessionTag (legacy compatibility)
 - I2NP
   - [X] Message parsing and serialization
   - [X] Message interfaces and factory patterns
