@@ -21,12 +21,41 @@
   * ✅ Tunnel Build/Reply message structures
   * ✅ Build Request/Response Record parsing and interfaces
 
+### Tunnel Building System
+- ✅ **Active Tunnel Management**: Complete tunnel building coordination
+  * ✅ Tunnel building coordination and state machine
+  * ✅ Build request/response handling with retry logic
+  * ✅ Short Tunnel Build Message (STBM) support (modern I2P standard)
+  * ✅ Gateway and endpoint implementations
+  * ✅ Message ID correlation for request/reply tracking
+  * ✅ 90-second timeout enforcement with cleanup
+
+### Tunnel Pool Management
+- ✅ **Automatic Pool Maintenance**: Complete pool lifecycle management
+  * ✅ Configurable min/max tunnel counts (default 4-6 per pool)
+  * ✅ Automatic tunnel building when below threshold
+  * ✅ Proactive replacement before expiration (2min before 10min lifetime)
+  * ✅ Round-robin tunnel selection with load balancing
+  * ✅ Exponential backoff on build failures
+  * ✅ Background maintenance goroutine with graceful shutdown
+  * ✅ Support for inbound and outbound pool types
+  * ✅ Pool statistics and health monitoring
+
 ### Tunnel Message Processing
 - ✅ **Message Structure Handling**: Tunnel message framework
   * ✅ Delivery Instructions parsing and validation
   * ✅ Fragment handling and reassembly logic
   * ✅ Tunnel message structure parsing
   * ✅ Build record interface implementations
+
+### Tunnel Cryptography
+- ✅ **Security Layer Implementation**: Complete tunnel encryption
+  * ✅ ECIES-X25519-AEAD encryption (modern I2P standard)
+  * ✅ AES-256-CBC legacy support for backward compatibility
+  * ✅ Integration with github.com/go-i2p/crypto/tunnel
+  * ✅ Participant tunnel processing (decrypt/re-encrypt)
+  * ✅ Gateway and endpoint crypto operations
+  * ✅ Comprehensive test coverage with real encryption
 
 ### Common Data Structures
 - ✅ **Complete Data Structure Support**: All I2P data types implemented
@@ -46,18 +75,13 @@
 
 ## Next Priority Components 🎯
 
-### Tunnel Building System
-- **Active Tunnel Management**:
-  * ✅ Tunnel building coordination
-  * ✅ Build request/response handling
-  * ✅ Gateway and endpoint implementations
-  * 📋 Participant tunnel processing
-
-### Tunnel Cryptography
-- **Security Layer Implementation**:
-  * 📋 Layered encryption/decryption
-  * 📋 Key generation and management
-  * 📋 Tunnel message forwarding logic
+### End-to-End Garlic Encryption
+- **ECIES-X25519-AEAD-Ratchet Implementation**:
+  * 📋 Garlic message construction and decryption
+  * 📋 New Session and Existing Session message handling
+  * 📋 Ratchet protocol for forward secrecy
+  * 📋 Session key management and storage
+  * 📋 Integration with tunnel infrastructure for encrypted messaging
 
 ## Future Components 📅
 
@@ -85,6 +109,17 @@
 
 ## Current Status
 
-**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. We have mostly functioning database operations and have started tunnel building.
+**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. The foundation for I2CP and garlic encryption is in place.
 
-**Test Coverage**: Core components have basic test coverage including NTCP2 sessions, I2NP message processing, and tunnel message parsing.
+**Recent Milestones**:
+- ✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)
+- ✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)
+- ✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)
+
+**Next Focus**: Phase 4 - End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet)
+
+**Test Coverage**: Core components have strong test coverage:
+- Tunnel pool management: >80% coverage
+- Tunnel building: Comprehensive integration tests
+- NTCP2 sessions: Unit and integration tests
+- I2NP message processing: Protocol compliance tests

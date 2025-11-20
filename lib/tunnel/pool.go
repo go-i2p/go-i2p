@@ -1,11 +1,15 @@
 package tunnel
 
 import (
+	"context"
+	"fmt"
+	"sort"
 	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/logger"
 )
 
 // TunnelState represents the current state of a tunnel during building
@@ -39,19 +43,85 @@ type PeerSelector interface {
 	SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
 }
 
-// Pool manages a collection of tunnels
-type Pool struct {
-	tunnels      map[TunnelID]*TunnelState
-	mutex        sync.RWMutex
-	peerSelector PeerSelector
+// BuilderInterface defines interface for building tunnels
+type BuilderInterface interface {
+	// BuildTunnel initiates building a new tunnel with the specified parameters
+	BuildTunnel(req BuildTunnelRequest) (TunnelID, error)
 }
 
-// NewTunnelPool creates a new tunnel pool with the given peer selector
-func NewTunnelPool(selector PeerSelector) *Pool {
-	return &Pool{
-		tunnels:      make(map[TunnelID]*TunnelState),
-		peerSelector: selector,
+// PoolConfig defines configuration parameters for a tunnel pool
+type PoolConfig struct {
+	// MinTunnels is the minimum number of tunnels to maintain
+	MinTunnels int
+	// MaxTunnels is the maximum number of tunnels to allow
+	MaxTunnels int
+	// TunnelLifetime is how long tunnels should live before expiring
+	TunnelLifetime time.Duration
+	// RebuildThreshold is when to start building replacement tunnels (before expiry)
+	RebuildThreshold time.Duration
+	// BuildRetryDelay is the initial delay before retrying failed builds
+	BuildRetryDelay time.Duration
+	// MaxBuildRetries is the maximum number of build retries before giving up
+	MaxBuildRetries int
+	// HopCount is the number of hops for tunnels in this pool
+	HopCount int
+	// IsInbound indicates if this pool manages inbound tunnels
+	IsInbound bool
+}
+
+// DefaultPoolConfig returns a configuration with sensible defaults
+func DefaultPoolConfig() PoolConfig {
+	return PoolConfig{
+		MinTunnels:       4,
+		MaxTunnels:       6,
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		BuildRetryDelay:  5 * time.Second,
+		MaxBuildRetries:  3,
+		HopCount:         3,
+		IsInbound:        false,
 	}
+}
+
+// Pool manages a collection of tunnels with automatic maintenance
+type Pool struct {
+	tunnels        map[TunnelID]*TunnelState
+	mutex          sync.RWMutex
+	peerSelector   PeerSelector
+	tunnelBuilder  BuilderInterface
+	config         PoolConfig
+	selectionIndex int       // For round-robin selection
+	lastBuildTime  time.Time // Track last build attempt for backoff
+	buildFailures  int       // Consecutive build failures
+	ctx            context.Context
+	cancel         context.CancelFunc
+	maintWg        sync.WaitGroup // Track maintenance goroutine
+}
+
+// NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration
+func NewTunnelPool(selector PeerSelector) *Pool {
+	return NewTunnelPoolWithConfig(selector, DefaultPoolConfig())
+}
+
+// NewTunnelPoolWithConfig creates a new tunnel pool with custom configuration
+func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Pool{
+		tunnels:       make(map[TunnelID]*TunnelState),
+		peerSelector:  selector,
+		config:        config,
+		lastBuildTime: time.Time{}, // Zero time
+		ctx:           ctx,
+		cancel:        cancel,
+	}
+}
+
+// SetTunnelBuilder sets the tunnel builder for this pool.
+// Must be called before starting pool maintenance.
+func (p *Pool) SetTunnelBuilder(builder BuilderInterface) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.tunnelBuilder = builder
 }
 
 // GetTunnel retrieves a tunnel by ID
@@ -93,6 +163,15 @@ func (p *Pool) GetActiveTunnels() []*TunnelState {
 	return active
 }
 
+// Stop gracefully stops the pool maintenance goroutine
+func (p *Pool) Stop() {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	p.maintWg.Wait() // Wait for maintenance goroutine to exit
+	log.Debug("Tunnel pool stopped")
+}
+
 // CleanupExpiredTunnels removes tunnels that have been building for too long
 func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 	p.mutex.Lock()
@@ -114,4 +193,280 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 	if len(expired) > 0 {
 		log.WithField("expired_count", len(expired)).Warn("Cleaned up expired tunnels")
 	}
+}
+
+// StartMaintenance begins the pool maintenance goroutine.
+// This monitors tunnel health and builds new tunnels as needed.
+func (p *Pool) StartMaintenance() error {
+	if p.tunnelBuilder == nil {
+		return fmt.Errorf("tunnel builder not set")
+	}
+
+	p.maintWg.Add(1)
+	go p.maintenanceLoop()
+	log.WithField("min_tunnels", p.config.MinTunnels).Info("Started tunnel pool maintenance")
+	return nil
+}
+
+// maintenanceLoop is the background goroutine that maintains the tunnel pool
+func (p *Pool) maintenanceLoop() {
+	defer p.maintWg.Done()
+
+	// Check pool health every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Perform initial check immediately
+	p.maintainPool()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			log.Debug("Pool maintenance loop stopped")
+			return
+		case <-ticker.C:
+			p.maintainPool()
+		}
+	}
+}
+
+// maintainPool checks pool health and builds tunnels if needed
+func (p *Pool) maintainPool() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	// Clean up expired tunnels
+	p.cleanupExpiredTunnelsLocked()
+
+	// Count active and near-expiry tunnels
+	activeCount, nearExpiry := p.countTunnelsLocked()
+
+	// Determine how many new tunnels to build
+	needed := p.calculateNeededTunnels(activeCount, nearExpiry)
+
+	if needed > 0 {
+		log.WithFields(logger.Fields{
+			"active":      activeCount,
+			"near_expiry": nearExpiry,
+			"needed":      needed,
+		}).Info("Building replacement tunnels")
+
+		// Build tunnels with exponential backoff on failures
+		p.buildTunnelsWithBackoff(needed)
+	}
+}
+
+// cleanupExpiredTunnelsLocked removes expired tunnels (must hold mutex)
+func (p *Pool) cleanupExpiredTunnelsLocked() {
+	now := time.Now()
+	var expired []TunnelID
+
+	for id, tunnel := range p.tunnels {
+		age := now.Sub(tunnel.CreatedAt)
+
+		// Remove tunnels that exceeded lifetime
+		if tunnel.State == TunnelReady && age > p.config.TunnelLifetime {
+			expired = append(expired, id)
+			log.WithFields(logger.Fields{
+				"tunnel_id": id,
+				"age":       age,
+			}).Debug("Tunnel expired")
+		}
+
+		// Remove failed tunnels
+		if tunnel.State == TunnelFailed {
+			expired = append(expired, id)
+		}
+	}
+
+	for _, id := range expired {
+		delete(p.tunnels, id)
+	}
+
+	if len(expired) > 0 {
+		log.WithField("count", len(expired)).Debug("Cleaned up expired/failed tunnels")
+	}
+}
+
+// countTunnelsLocked counts active tunnels and those near expiry (must hold mutex)
+func (p *Pool) countTunnelsLocked() (active, nearExpiry int) {
+	now := time.Now()
+	expiryThreshold := p.config.TunnelLifetime - p.config.RebuildThreshold
+
+	for _, tunnel := range p.tunnels {
+		if tunnel.State == TunnelReady {
+			active++
+			age := now.Sub(tunnel.CreatedAt)
+			if age > expiryThreshold {
+				nearExpiry++
+			}
+		}
+	}
+	return
+}
+
+// calculateNeededTunnels determines how many tunnels to build
+func (p *Pool) calculateNeededTunnels(activeCount, nearExpiry int) int {
+	// Account for tunnels that will soon expire
+	usableCount := activeCount - nearExpiry
+
+	// Build to reach minimum, but don't exceed maximum
+	needed := p.config.MinTunnels - usableCount
+	if needed < 0 {
+		needed = 0
+	}
+
+	// Don't build more than would exceed maximum including currently building
+	// Note: activeCount includes only ready tunnels, not building ones
+	totalAfterBuild := activeCount + needed
+	if totalAfterBuild > p.config.MaxTunnels {
+		needed = p.config.MaxTunnels - activeCount
+		if needed < 0 {
+			needed = 0
+		}
+	}
+
+	return needed
+}
+
+// buildTunnelsWithBackoff builds tunnels with exponential backoff on failures
+func (p *Pool) buildTunnelsWithBackoff(count int) {
+	now := time.Now()
+
+	// Calculate backoff delay based on consecutive failures
+	backoffDelay := p.config.BuildRetryDelay * time.Duration(1<<uint(p.buildFailures))
+	if backoffDelay > 5*time.Minute {
+		backoffDelay = 5 * time.Minute // Cap at 5 minutes
+	}
+
+	// Check if we need to wait due to backoff
+	if !p.lastBuildTime.IsZero() && now.Sub(p.lastBuildTime) < backoffDelay {
+		log.WithFields(logger.Fields{
+			"backoff":  backoffDelay,
+			"failures": p.buildFailures,
+		}).Debug("Skipping build due to backoff")
+		return
+	}
+
+	p.lastBuildTime = now
+
+	// Attempt to build tunnels in separate goroutine to avoid blocking with lock held
+	go p.attemptBuildTunnelsAsync(count)
+}
+
+// attemptBuildTunnelsAsync builds tunnels asynchronously and updates failure count
+func (p *Pool) attemptBuildTunnelsAsync(count int) {
+	success := p.attemptBuildTunnels(count)
+
+	// Update failure count with lock
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if success {
+		p.buildFailures = 0 // Reset on success
+	} else {
+		p.buildFailures++
+		if p.buildFailures > p.config.MaxBuildRetries {
+			log.WithField("failures", p.buildFailures).Warn("Max build retries exceeded")
+			p.buildFailures = p.config.MaxBuildRetries // Cap failures
+		}
+	}
+}
+
+// attemptBuildTunnels attempts to build the specified number of tunnels
+func (p *Pool) attemptBuildTunnels(count int) bool {
+	if p.tunnelBuilder == nil {
+		log.Error("Cannot build tunnels: tunnel builder not set")
+		return false
+	}
+
+	var successCount int
+	for i := 0; i < count; i++ {
+		req := BuildTunnelRequest{
+			HopCount:      p.config.HopCount,
+			IsInbound:     p.config.IsInbound,
+			UseShortBuild: true, // Use modern STBM by default
+		}
+
+		tunnelID, err := p.tunnelBuilder.BuildTunnel(req)
+		if err != nil {
+			log.WithError(err).Warn("Failed to build tunnel")
+			continue
+		}
+
+		log.WithField("tunnel_id", tunnelID).Debug("Initiated tunnel build")
+		successCount++
+	}
+
+	return successCount > 0
+}
+
+// SelectTunnel selects a tunnel from the pool using round-robin strategy.
+// Returns nil if no active tunnels are available.
+func (p *Pool) SelectTunnel() *TunnelState {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	active := p.getActiveTunnelsLocked()
+	if len(active) == 0 {
+		return nil
+	}
+
+	// Round-robin selection - select first, then increment
+	selected := active[p.selectionIndex%len(active)]
+	p.selectionIndex++
+	return selected
+}
+
+// getActiveTunnelsLocked returns active tunnels sorted by ID for deterministic order (must hold mutex)
+func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
+	var active []*TunnelState
+	for _, tunnel := range p.tunnels {
+		if tunnel.State == TunnelReady {
+			active = append(active, tunnel)
+		}
+	}
+
+	// Sort by tunnel ID to ensure deterministic round-robin selection
+	sort.Slice(active, func(i, j int) bool {
+		return active[i].ID < active[j].ID
+	})
+
+	return active
+}
+
+// GetPoolStats returns statistics about the pool
+func (p *Pool) GetPoolStats() PoolStats {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	var stats PoolStats
+	now := time.Now()
+
+	for _, tunnel := range p.tunnels {
+		switch tunnel.State {
+		case TunnelBuilding:
+			stats.Building++
+		case TunnelReady:
+			stats.Active++
+			age := now.Sub(tunnel.CreatedAt)
+			if age > p.config.TunnelLifetime-p.config.RebuildThreshold {
+				stats.NearExpiry++
+			}
+		case TunnelFailed:
+			stats.Failed++
+		}
+	}
+
+	stats.Total = len(p.tunnels)
+	return stats
+}
+
+// PoolStats contains statistics about a tunnel pool
+type PoolStats struct {
+	Total      int // Total tunnels in pool
+	Active     int // Ready for use
+	Building   int // Currently building
+	Failed     int // Failed builds
+	NearExpiry int // Active but near expiration
 }

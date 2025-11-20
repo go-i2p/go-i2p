@@ -1,0 +1,567 @@
+package tunnel
+
+import (
+	"testing"
+	"time"
+
+	common "github.com/go-i2p/common/data"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// MockTunnelBuilder for testing pool maintenance
+type MockTunnelBuilder struct {
+	buildCount   int
+	shouldFail   bool
+	lastRequest  BuildTunnelRequest
+	builtTunnels []TunnelID
+	callbackPool *Pool // Allow builder to add tunnels to pool
+}
+
+func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error) {
+	m.buildCount++
+	m.lastRequest = req
+
+	if m.shouldFail {
+		return 0, assert.AnError
+	}
+
+	// Generate a tunnel ID
+	tunnelID := TunnelID(1000 + m.buildCount)
+	m.builtTunnels = append(m.builtTunnels, tunnelID)
+
+	// Simulate adding tunnel to pool if callback is set
+	if m.callbackPool != nil {
+		tunnel := &TunnelState{
+			ID:        tunnelID,
+			Hops:      make([]common.Hash, 0),
+			State:     TunnelReady, // Simulate successful build
+			CreatedAt: time.Now(),
+		}
+		m.callbackPool.AddTunnel(tunnel)
+	}
+
+	return tunnelID, nil
+}
+
+func TestPoolConfig(t *testing.T) {
+	config := DefaultPoolConfig()
+
+	assert.Equal(t, 4, config.MinTunnels)
+	assert.Equal(t, 6, config.MaxTunnels)
+	assert.Equal(t, 10*time.Minute, config.TunnelLifetime)
+	assert.Equal(t, 2*time.Minute, config.RebuildThreshold)
+	assert.Equal(t, 3, config.HopCount)
+	assert.False(t, config.IsInbound)
+}
+
+func TestPoolWithConfig(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:       2,
+		MaxTunnels:       4,
+		TunnelLifetime:   5 * time.Minute,
+		RebuildThreshold: 1 * time.Minute,
+		BuildRetryDelay:  2 * time.Second,
+		MaxBuildRetries:  5,
+		HopCount:         4,
+		IsInbound:        true,
+	}
+
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	require.NotNil(t, pool)
+	assert.Equal(t, 2, pool.config.MinTunnels)
+	assert.Equal(t, 4, pool.config.MaxTunnels)
+	assert.Equal(t, 4, pool.config.HopCount)
+	assert.True(t, pool.config.IsInbound)
+}
+
+func TestSetTunnelBuilder(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	builder := &MockTunnelBuilder{}
+	pool.SetTunnelBuilder(builder)
+
+	assert.NotNil(t, pool.tunnelBuilder)
+}
+
+func TestPoolMaintenanceRequiresBuilder(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	err := pool.StartMaintenance()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "tunnel builder not set")
+}
+
+func TestSelectTunnelRoundRobin(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	// Add multiple ready tunnels
+	tunnel1 := &TunnelState{
+		ID:        TunnelID(1),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	tunnel2 := &TunnelState{
+		ID:        TunnelID(2),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	tunnel3 := &TunnelState{
+		ID:        TunnelID(3),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	}
+
+	pool.AddTunnel(tunnel1)
+	pool.AddTunnel(tunnel2)
+	pool.AddTunnel(tunnel3)
+
+	// Select enough times to verify fair distribution
+	// With round-robin, each tunnel should get equal selections
+	counts := make(map[TunnelID]int)
+	numSelections := 30 // 10 per tunnel
+	for i := 0; i < numSelections; i++ {
+		tunnel := pool.SelectTunnel()
+		require.NotNil(t, tunnel)
+		counts[tunnel.ID]++
+	}
+
+	// Verify all tunnels were selected
+	assert.Equal(t, 3, len(counts), "All 3 tunnels should be selected")
+
+	// Each tunnel should be selected exactly 10 times (30 / 3)
+	for id, count := range counts {
+		assert.Equal(t, 10, count, "Tunnel %d should be selected exactly 10 times", id)
+	}
+}
+
+func TestSelectTunnelNoActive(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	// Add only building tunnels (not ready)
+	tunnel := &TunnelState{
+		ID:        TunnelID(1),
+		State:     TunnelBuilding,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnel)
+
+	// Should return nil when no active tunnels
+	selected := pool.SelectTunnel()
+	assert.Nil(t, selected)
+}
+
+func TestGetPoolStats(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:       4,
+		MaxTunnels:       6,
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		HopCount:         3,
+		IsInbound:        false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	// Add tunnels in various states
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(1),
+		State:     TunnelReady,
+		CreatedAt: time.Now().Add(-9 * time.Minute), // Near expiry
+	})
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(2),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	})
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(3),
+		State:     TunnelBuilding,
+		CreatedAt: time.Now(),
+	})
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(4),
+		State:     TunnelFailed,
+		CreatedAt: time.Now(),
+	})
+
+	stats := pool.GetPoolStats()
+	assert.Equal(t, 4, stats.Total)
+	assert.Equal(t, 2, stats.Active)
+	assert.Equal(t, 1, stats.Building)
+	assert.Equal(t, 1, stats.Failed)
+	assert.Equal(t, 1, stats.NearExpiry)
+}
+
+func TestCleanupExpiredTunnelsLocked(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:     4,
+		MaxTunnels:     6,
+		TunnelLifetime: 5 * time.Minute,
+		HopCount:       3,
+		IsInbound:      false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	// Add old ready tunnel (should be expired)
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(1),
+		State:     TunnelReady,
+		CreatedAt: time.Now().Add(-6 * time.Minute),
+	})
+
+	// Add recent ready tunnel (should not be expired)
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(2),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	})
+
+	// Add failed tunnel (should be removed)
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(3),
+		State:     TunnelFailed,
+		CreatedAt: time.Now(),
+	})
+
+	// Perform cleanup
+	pool.mutex.Lock()
+	pool.cleanupExpiredTunnelsLocked()
+	pool.mutex.Unlock()
+
+	// Check results
+	_, exists := pool.GetTunnel(TunnelID(1))
+	assert.False(t, exists, "Old tunnel should be removed")
+
+	_, exists = pool.GetTunnel(TunnelID(2))
+	assert.True(t, exists, "Recent tunnel should remain")
+
+	_, exists = pool.GetTunnel(TunnelID(3))
+	assert.False(t, exists, "Failed tunnel should be removed")
+}
+
+func TestCountTunnelsLocked(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:       4,
+		MaxTunnels:       6,
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		HopCount:         3,
+		IsInbound:        false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	// Add active tunnel not near expiry
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(1),
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+	})
+
+	// Add active tunnel near expiry
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(2),
+		State:     TunnelReady,
+		CreatedAt: time.Now().Add(-9 * time.Minute), // 9 minutes old, near 10 minute lifetime
+	})
+
+	// Add building tunnel (not counted as active)
+	pool.AddTunnel(&TunnelState{
+		ID:        TunnelID(3),
+		State:     TunnelBuilding,
+		CreatedAt: time.Now(),
+	})
+
+	pool.mutex.Lock()
+	active, nearExpiry := pool.countTunnelsLocked()
+	pool.mutex.Unlock()
+
+	assert.Equal(t, 2, active)
+	assert.Equal(t, 1, nearExpiry)
+}
+
+func TestCalculateNeededTunnels(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels: 4,
+		MaxTunnels: 6,
+		HopCount:   3,
+		IsInbound:  false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	tests := []struct {
+		name        string
+		activeCount int
+		nearExpiry  int
+		expected    int
+	}{
+		{
+			name:        "Need tunnels",
+			activeCount: 2,
+			nearExpiry:  0,
+			expected:    2, // Need 2 to reach min of 4
+		},
+		{
+			name:        "Need replacements",
+			activeCount: 4,
+			nearExpiry:  2,
+			expected:    2, // Need 2 to replace expiring ones
+		},
+		{
+			name:        "At capacity",
+			activeCount: 6,
+			nearExpiry:  0,
+			expected:    0, // At max, don't build more
+		},
+		{
+			name:        "Exceeds max with expiry",
+			activeCount: 5,
+			nearExpiry:  1,
+			expected:    0, // 5-1=4 usable, at min, no need to exceed max
+		},
+		{
+			name:        "Above min",
+			activeCount: 5,
+			nearExpiry:  1,
+			expected:    0, // 5-1=4 usable, at min, no need
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			needed := pool.calculateNeededTunnels(tt.activeCount, tt.nearExpiry)
+			assert.Equal(t, tt.expected, needed)
+		})
+	}
+}
+
+func TestAttemptBuildTunnels(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	// Test without builder
+	success := pool.attemptBuildTunnels(2)
+	assert.False(t, success)
+
+	// Test with successful builder
+	builder := &MockTunnelBuilder{}
+	pool.SetTunnelBuilder(builder)
+
+	success = pool.attemptBuildTunnels(3)
+	assert.True(t, success)
+	assert.Equal(t, 3, builder.buildCount)
+	assert.Equal(t, 3, len(builder.builtTunnels))
+}
+
+func TestAttemptBuildTunnelsWithFailures(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+	defer pool.Stop()
+
+	builder := &MockTunnelBuilder{shouldFail: true}
+	pool.SetTunnelBuilder(builder)
+
+	success := pool.attemptBuildTunnels(2)
+	assert.False(t, success) // All builds failed
+	assert.Equal(t, 2, builder.buildCount)
+	assert.Empty(t, builder.builtTunnels)
+}
+
+func TestBuildTunnelsWithBackoff(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:      4,
+		MaxTunnels:      6,
+		BuildRetryDelay: 100 * time.Millisecond,
+		MaxBuildRetries: 3,
+		HopCount:        3,
+		IsInbound:       false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	builder := &MockTunnelBuilder{callbackPool: pool}
+	pool.SetTunnelBuilder(builder)
+
+	// Test that builds work asynchronously
+	pool.mutex.Lock()
+	pool.buildTunnelsWithBackoff(2)
+	pool.mutex.Unlock()
+
+	// Wait for async build to complete
+	time.Sleep(100 * time.Millisecond)
+
+	assert.Equal(t, 2, builder.buildCount)
+
+	// Test backoff mechanism
+	builder.shouldFail = true
+	pool.mutex.Lock()
+	pool.buildTunnelsWithBackoff(2)
+	initialTime := pool.lastBuildTime
+	pool.mutex.Unlock()
+
+	// Wait for async build to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Immediate retry should be skipped due to backoff
+	pool.mutex.Lock()
+	pool.buildTunnelsWithBackoff(2)
+	skippedTime := pool.lastBuildTime
+	pool.mutex.Unlock()
+
+	// Time should not have been updated (build was skipped)
+	assert.Equal(t, initialTime, skippedTime, "Build should have been skipped due to backoff")
+
+	// After backoff period, retry should work
+	time.Sleep(250 * time.Millisecond) // Wait for backoff
+	pool.mutex.Lock()
+	pool.buildTunnelsWithBackoff(1)
+	finalTime := pool.lastBuildTime
+	pool.mutex.Unlock()
+
+	// Time should be updated (build was attempted)
+	assert.True(t, finalTime.After(initialTime), "Build should have been attempted after backoff")
+}
+
+func TestMaintainPoolIntegration(t *testing.T) {
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:       3,
+		MaxTunnels:       5,
+		TunnelLifetime:   1 * time.Second, // Short for testing
+		RebuildThreshold: 500 * time.Millisecond,
+		BuildRetryDelay:  100 * time.Millisecond,
+		MaxBuildRetries:  3,
+		HopCount:         3,
+		IsInbound:        false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	builder := &MockTunnelBuilder{callbackPool: pool}
+	pool.SetTunnelBuilder(builder)
+
+	// Run maintenance without lock (it will acquire internally)
+	pool.maintainPool()
+
+	// Wait for async builds to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Should build min tunnels
+	assert.GreaterOrEqual(t, builder.buildCount, config.MinTunnels)
+
+	// Wait for tunnels to near expiry
+	time.Sleep(600 * time.Millisecond)
+
+	oldBuildCount := builder.buildCount
+
+	// Run maintenance again
+	pool.maintainPool()
+
+	// Wait for async builds
+	time.Sleep(100 * time.Millisecond)
+
+	// Should build replacement tunnels
+	assert.Greater(t, builder.buildCount, oldBuildCount)
+}
+
+func TestPoolStopGracefully(t *testing.T) {
+	selector := &MockPeerSelector{}
+	pool := NewTunnelPool(selector)
+
+	builder := &MockTunnelBuilder{}
+	pool.SetTunnelBuilder(builder)
+
+	err := pool.StartMaintenance()
+	require.NoError(t, err)
+
+	// Give goroutine time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop should complete without hanging
+	done := make(chan struct{})
+	go func() {
+		pool.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(2 * time.Second):
+		t.Fatal("Pool.Stop() did not complete within timeout")
+	}
+}
+
+func TestMaintenanceLoop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping maintenance loop test in short mode")
+	}
+
+	selector := &MockPeerSelector{}
+	config := PoolConfig{
+		MinTunnels:       2,
+		MaxTunnels:       4,
+		TunnelLifetime:   5 * time.Second,
+		RebuildThreshold: 1 * time.Second,
+		BuildRetryDelay:  100 * time.Millisecond,
+		MaxBuildRetries:  3,
+		HopCount:         3,
+		IsInbound:        false,
+	}
+	pool := NewTunnelPoolWithConfig(selector, config)
+	defer pool.Stop()
+
+	builder := &MockTunnelBuilder{callbackPool: pool}
+	pool.SetTunnelBuilder(builder)
+
+	err := pool.StartMaintenance()
+	require.NoError(t, err)
+
+	// Wait for initial maintenance
+	time.Sleep(200 * time.Millisecond)
+
+	// Should have built min tunnels
+	stats := pool.GetPoolStats()
+	assert.GreaterOrEqual(t, stats.Active, config.MinTunnels)
+
+	initialCount := builder.buildCount
+
+	// Mark some tunnels as near expiry
+	pool.mutex.Lock()
+	for _, tunnel := range pool.tunnels {
+		if tunnel.State == TunnelReady {
+			tunnel.CreatedAt = time.Now().Add(-4 * time.Second) // 4 seconds old
+			break
+		}
+	}
+	pool.mutex.Unlock()
+
+	// Trigger maintenance manually
+	pool.maintainPool()
+
+	// Wait for builds
+	time.Sleep(200 * time.Millisecond)
+
+	// Should have built replacement
+	assert.Greater(t, builder.buildCount, initialCount)
+}
