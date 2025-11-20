@@ -18,6 +18,8 @@ type MessageHandler func(msgBytes []byte) error
 // Design decisions:
 // - Simple callback-based message delivery
 // - Works with raw bytes to avoid import cycles
+// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
+// - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 // - Handles fragment reassembly for large messages
 // - Clear error handling and logging
 type Endpoint struct {
@@ -111,14 +113,18 @@ func (e *Endpoint) Receive(encryptedData []byte) error {
 }
 
 // decryptTunnelMessage applies tunnel decryption to the encrypted data.
+// Supports both modern ECIES-X25519 and legacy AES-256-CBC decryption.
 func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
-	var tunnelData tunnel.TunnelData
-	copy(tunnelData[:], encryptedData)
+	// The TunnelEncryptor interface now returns errors for better error handling
+	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD for authenticated decryption
+	// Legacy AES uses AES-256-CBC with dual-layer decryption
+	decrypted, err := e.decryption.Decrypt(encryptedData)
+	if err != nil {
+		log.WithError(err).Error("Failed to decrypt tunnel message")
+		return nil, err
+	}
 
-	// Apply decryption (this modifies the tunnel data in place)
-	e.decryption.Decrypt(tunnelData[:])
-
-	return tunnelData[:], nil
+	return decrypted, nil
 }
 
 // validateChecksum verifies the tunnel message checksum.

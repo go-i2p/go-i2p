@@ -13,7 +13,8 @@ import (
 //
 // Design decisions:
 // - Works with raw bytes to avoid import cycles with i2np package
-// - Uses existing crypto/tunnel package for encryption
+// - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
+// - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 // - Simple interface focused on core functionality
 // - Error handling at each step with clear error messages
 type Gateway struct {
@@ -171,17 +172,20 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 }
 
 // encryptTunnelMessage applies tunnel encryption to the message.
+// Supports both modern ECIES-X25519 and legacy AES-256-CBC encryption.
 func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	// Use the crypto/tunnel package to encrypt
-	// The encryption layer handles IV generation and layered encryption
+	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD
+	// Legacy AES uses AES-256-CBC with dual-layer encryption
 
-	var tunnelData tunnel.TunnelData
-	copy(tunnelData[:], msg)
+	// The TunnelEncryptor interface now returns errors for better error handling
+	encrypted, err := g.encryption.Encrypt(msg)
+	if err != nil {
+		log.WithError(err).Error("Failed to encrypt tunnel message")
+		return nil, err
+	}
 
-	// Apply encryption (this modifies the tunnel data in place)
-	g.encryption.Encrypt(tunnelData[:])
-
-	return tunnelData[:], nil
+	return encrypted, nil
 }
 
 // TunnelID returns the ID of this gateway's tunnel
