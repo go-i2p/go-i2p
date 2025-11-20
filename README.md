@@ -39,8 +39,8 @@ go-i2p is in early development. We recently completed several significant milest
   - [X] Noise subsystem
 - End-to-End Crypto
   - [ ] Garlic messages
-  - [ ] ECIES-X25519-AEAD-Ratchet (primary)
-  - [ ] ElGamal/AES+SessionTag (legacy compatibility)
+  - [X] ECIES-X25519-AEAD-Ratchet (primary)
+  - [X] ElGamal/AES+SessionTag (legacy compatibility)
 - I2NP
   - [X] Message parsing and serialization
   - [X] Message interfaces and factory patterns

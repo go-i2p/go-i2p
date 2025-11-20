@@ -155,57 +155,81 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 
 // processDeliveryInstructions parses delivery instructions and extracts messages.
 func (e *Endpoint) processDeliveryInstructions(decrypted []byte) error {
-	// Find the zero byte that separates padding from delivery instructions
-	dataStart := -1
+	dataStart, err := e.findDataStart(decrypted)
+	if err != nil {
+		return err
+	}
+
+	return e.processInstructionLoop(decrypted[dataStart:])
+}
+
+// findDataStart locates the zero byte separator in tunnel message.
+// It searches for the zero byte that separates padding from delivery instructions.
+// Returns the position immediately after the zero byte, or an error if not found.
+func (e *Endpoint) findDataStart(decrypted []byte) (int, error) {
 	for i := 24; i < len(decrypted); i++ {
 		if decrypted[i] == 0x00 {
-			dataStart = i + 1
-			break
+			return i + 1, nil
 		}
 	}
+	log.Error("No zero byte separator found in tunnel message")
+	return -1, ErrInvalidTunnelData
+}
 
-	if dataStart == -1 {
-		log.Error("No zero byte separator found in tunnel message")
-		return ErrInvalidTunnelData
-	}
-
-	// Process all delivery instructions and their fragments
-	data := decrypted[dataStart:]
+// processInstructionLoop iterates through all delivery instructions in the data.
+// It processes each instruction, handling both complete and fragmented messages.
+// Returns an error if message processing fails.
+func (e *Endpoint) processInstructionLoop(data []byte) error {
 	for len(data) >= 3 {
-		// Parse delivery instruction
 		flags := data[0]
-		deliveryType := flags & 0x03      // Low 2 bits
-		fragmented := (flags & 0x08) != 0 // Bit 3
+		fragmented := (flags & 0x08) != 0
 
 		if !fragmented {
-			// Simple case: complete message
-			msgSize := binary.BigEndian.Uint16(data[1:3])
-
-			// Validate message size
-			if msgSize == 0 || len(data) < 3+int(msgSize) {
-				// No more valid messages or corrupted data
+			processed, err := e.processCompleteMessage(data, flags)
+			if err != nil {
+				return err
+			}
+			if processed == 0 {
 				break
 			}
-
-			msgBytes := data[3 : 3+msgSize]
-
-			// Deliver message based on delivery type
-			if deliveryType == DT_LOCAL {
-				if err := e.handler(msgBytes); err != nil {
-					log.WithError(err).Error("Handler failed to process message")
-					return err
-				}
-			}
-
-			// Move to next delivery instruction
-			data = data[3+msgSize:]
+			data = data[processed:]
 		} else {
-			// Fragmented message - not implemented in this basic version
 			log.Warn("Fragmented messages not yet supported")
 			break
 		}
 	}
+	return nil
+}
 
+// processCompleteMessage handles a single non-fragmented message.
+// It extracts the message, validates size, and delivers it to the handler.
+// Returns the number of bytes processed, or 0 if no valid message remains.
+func (e *Endpoint) processCompleteMessage(data []byte, flags byte) (int, error) {
+	msgSize := binary.BigEndian.Uint16(data[1:3])
+
+	if msgSize == 0 || len(data) < 3+int(msgSize) {
+		return 0, nil
+	}
+
+	msgBytes := data[3 : 3+msgSize]
+	if err := e.deliverMessage(msgBytes, flags); err != nil {
+		return 0, err
+	}
+
+	return 3 + int(msgSize), nil
+}
+
+// deliverMessage sends the message to the handler if it's a local delivery.
+// It checks the delivery type from flags and invokes the handler callback.
+// Returns an error if the handler fails to process the message.
+func (e *Endpoint) deliverMessage(msgBytes []byte, flags byte) error {
+	deliveryType := flags & 0x03
+	if deliveryType == DT_LOCAL {
+		if err := e.handler(msgBytes); err != nil {
+			log.WithError(err).Error("Handler failed to process message")
+			return err
+		}
+	}
 	return nil
 }
 
