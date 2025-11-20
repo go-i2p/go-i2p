@@ -333,7 +333,22 @@ func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
 func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 	result := make([]byte, 0, 128)
 
-	// Build flag byte
+	flag := di.buildFlagByte()
+	result = append(result, flag)
+
+	result = di.appendTunnelIDIfPresent(result)
+	result = di.appendHashIfPresent(result)
+	result = di.appendDelayIfPresent(result)
+	result = di.appendMessageIDIfFragmented(result)
+	result = di.appendExtendedOptionsIfPresent(result)
+	result = di.appendFragmentSize(result)
+
+	return result, nil
+}
+
+// buildFlagByte constructs the flag byte for first fragment delivery instructions.
+// It encodes delivery type, delay flag, fragmentation flag, and extended options flag.
+func (di *DeliveryInstructions) buildFlagByte() byte {
 	flag := byte(0x00)                    // Bit 7 = 0 for first fragment
 	flag |= (di.deliveryType & 0x03) << 4 // Bits 6-5
 	if di.hasDelay {
@@ -345,44 +360,60 @@ func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 	if di.hasExtOptions {
 		flag |= 0x04 // Bit 2
 	}
-	result = append(result, flag)
+	return flag
+}
 
-	// Add tunnel ID if present
+// appendTunnelIDIfPresent adds the tunnel ID to the result if delivery type is DT_TUNNEL.
+func (di *DeliveryInstructions) appendTunnelIDIfPresent(result []byte) []byte {
 	if di.deliveryType == DT_TUNNEL {
 		tunnelBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(tunnelBytes, di.tunnelID)
 		result = append(result, tunnelBytes...)
 	}
+	return result
+}
 
-	// Add hash if present
+// appendHashIfPresent adds the destination hash to the result if delivery type requires it.
+func (di *DeliveryInstructions) appendHashIfPresent(result []byte) []byte {
 	if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
 		result = append(result, di.hash[:]...)
 	}
+	return result
+}
 
-	// Add delay if present
+// appendDelayIfPresent adds the delay byte to the result if the delay flag is set.
+func (di *DeliveryInstructions) appendDelayIfPresent(result []byte) []byte {
 	if di.hasDelay {
 		result = append(result, byte(di.delay))
 	}
+	return result
+}
 
-	// Add message ID if fragmented
+// appendMessageIDIfFragmented adds the message ID to the result if the message is fragmented.
+func (di *DeliveryInstructions) appendMessageIDIfFragmented(result []byte) []byte {
 	if di.fragmented {
 		msgBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(msgBytes, di.messageID)
 		result = append(result, msgBytes...)
 	}
+	return result
+}
 
-	// Add extended options if present
+// appendExtendedOptionsIfPresent adds extended options to the result if the flag is set.
+func (di *DeliveryInstructions) appendExtendedOptionsIfPresent(result []byte) []byte {
 	if di.hasExtOptions {
 		result = append(result, byte(len(di.extendedOpts)))
 		result = append(result, di.extendedOpts...)
 	}
+	return result
+}
 
-	// Add fragment size
+// appendFragmentSize adds the fragment size field to the result.
+func (di *DeliveryInstructions) appendFragmentSize(result []byte) []byte {
 	sizeBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(sizeBytes, di.fragmentSize)
 	result = append(result, sizeBytes...)
-
-	return result, nil
+	return result
 }
 
 // Return if the DeliveryInstructions are of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT.

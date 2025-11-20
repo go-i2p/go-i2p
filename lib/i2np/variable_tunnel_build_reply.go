@@ -34,22 +34,45 @@ func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 func (v *VariableTunnelBuildReply) ProcessReply() error {
 	recordCount := len(v.BuildResponseRecords)
 
+	v.logReplyStart(recordCount)
+
+	if err := v.validateRecordCount(recordCount); err != nil {
+		return err
+	}
+
+	successCount, firstError := v.processAllHops()
+
+	v.logReplyCompletion(successCount, recordCount)
+
+	return v.determineBuildResult(successCount, recordCount, firstError)
+}
+
+// logReplyStart logs the initial processing information.
+func (v *VariableTunnelBuildReply) logReplyStart(recordCount int) {
 	log.WithFields(logger.Fields{
 		"record_count": recordCount,
 		"count_field":  v.Count,
 	}).Debug("Processing VariableTunnelBuildReply")
+}
 
-	// Validate that Count field matches actual record count
+// validateRecordCount validates that Count field matches actual record count.
+// Returns an error if count mismatch or no records present.
+func (v *VariableTunnelBuildReply) validateRecordCount(recordCount int) error {
 	if v.Count != recordCount {
 		return fmt.Errorf("count mismatch: Count field is %d but have %d records", v.Count, recordCount)
 	}
 
-	// Handle empty tunnel (edge case)
 	if recordCount == 0 {
 		log.Warn("VariableTunnelBuildReply has no response records")
 		return fmt.Errorf("tunnel build failed: no response records")
 	}
 
+	return nil
+}
+
+// processAllHops processes each hop response and counts successes.
+// Returns the success count and the first error encountered (if any).
+func (v *VariableTunnelBuildReply) processAllHops() (int, error) {
 	successCount := 0
 	var firstError error
 
@@ -72,19 +95,26 @@ func (v *VariableTunnelBuildReply) ProcessReply() error {
 		}
 	}
 
+	return successCount, firstError
+}
+
+// logReplyCompletion logs the final processing results with success rate.
+func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount int) {
 	log.WithFields(logger.Fields{
 		"success_count": successCount,
 		"total_hops":    recordCount,
 		"success_rate":  float64(successCount) / float64(recordCount),
 	}).Info("VariableTunnelBuildReply processing completed")
+}
 
-	// Tunnel is considered successful if all hops accepted
+// determineBuildResult determines the final result based on success count.
+// Returns nil if all hops accepted, otherwise returns an appropriate error.
+func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
 	if successCount == recordCount {
 		log.Debug("Variable tunnel build successful - all hops accepted")
 		return nil
 	}
 
-	// Return first error encountered, or generic failure if no specific error
 	if firstError != nil {
 		return fmt.Errorf("variable tunnel build failed: %w", firstError)
 	}
