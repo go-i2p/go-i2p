@@ -189,6 +189,127 @@ func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 	return di.serializeFirstFragment()
 }
 
+// parseFollowOnFragment reads a follow-on fragment delivery instruction from the provided data.
+// It extracts the fragment number, last fragment flag, message ID, and fragment size.
+// Returns the parsed DeliveryInstructions and the number of bytes consumed.
+func parseFollowOnFragment(data []byte, flag byte) (*DeliveryInstructions, int, error) {
+	di := &DeliveryInstructions{}
+	di.fragmentType = FOLLOW_ON_FRAGMENT
+	di.fragmentNumber = int((flag & 0x7e) >> 1)
+	di.lastFragment = (flag & 0x01) == 0x01
+
+	if len(data) < 7 {
+		return nil, 0, oops.Errorf("insufficient data for FOLLOW_ON_FRAGMENT")
+	}
+
+	di.messageID = binary.BigEndian.Uint32(data[1:5])
+	di.fragmentSize = binary.BigEndian.Uint16(data[5:7])
+	return di, 7, nil
+}
+
+// parseFirstFragmentFlags extracts delivery type and feature flags from the first fragment flag byte.
+func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
+	di.fragmentType = FIRST_FRAGMENT
+	di.deliveryType = (flag & 0x30) >> 4
+	di.hasDelay = (flag & 0x10) == 0x10
+	di.fragmented = (flag & 0x08) == 0x08
+	di.hasExtOptions = (flag & 0x04) == 0x04
+}
+
+// readTunnelID reads the tunnel ID field if present in the delivery instructions.
+// Returns the updated offset and any error encountered.
+func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if di.deliveryType != DT_TUNNEL {
+		return offset, nil
+	}
+
+	if len(data) < offset+4 {
+		return offset, oops.Errorf("insufficient data for tunnel ID")
+	}
+
+	di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+4])
+	return offset + 4, nil
+}
+
+// readDestinationHash reads the destination hash field if present in the delivery instructions.
+// Returns the updated offset and any error encountered.
+func readDestinationHash(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if di.deliveryType != DT_TUNNEL && di.deliveryType != DT_ROUTER {
+		return offset, nil
+	}
+
+	if len(data) < offset+32 {
+		return offset, oops.Errorf("insufficient data for hash")
+	}
+
+	copy(di.hash[:], data[offset:offset+32])
+	return offset + 32, nil
+}
+
+// readDelayIfPresent reads the optional delay field from the delivery instructions.
+// Returns the updated offset and any error encountered.
+func readDelayIfPresent(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if !di.hasDelay {
+		return offset, nil
+	}
+
+	if len(data) < offset+1 {
+		return offset, oops.Errorf("insufficient data for delay")
+	}
+
+	di.delay = DelayFactor(data[offset])
+	return offset + 1, nil
+}
+
+// readMessageIDIfFragmented reads the message ID field if the message is fragmented.
+// Returns the updated offset and any error encountered.
+func readMessageIDIfFragmented(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if !di.fragmented {
+		return offset, nil
+	}
+
+	if len(data) < offset+4 {
+		return offset, oops.Errorf("insufficient data for message ID")
+	}
+
+	di.messageID = binary.BigEndian.Uint32(data[offset : offset+4])
+	return offset + 4, nil
+}
+
+// readExtendedOptions reads extended options from the delivery instructions if present.
+// Returns the updated offset and any error encountered.
+func readExtendedOptions(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if !di.hasExtOptions {
+		return offset, nil
+	}
+
+	if len(data) < offset+1 {
+		return offset, oops.Errorf("insufficient data for extended options length")
+	}
+
+	extLen := int(data[offset])
+	offset++
+
+	if len(data) < offset+extLen {
+		return offset, oops.Errorf("insufficient data for extended options")
+	}
+
+	di.extendedOpts = make([]byte, extLen)
+	copy(di.extendedOpts, data[offset:offset+extLen])
+	return offset + extLen, nil
+}
+
+// readFragmentSize reads the fragment size field from the delivery instructions.
+// Returns the updated offset and any error encountered.
+func readFragmentSize(data []byte, offset int, di *DeliveryInstructions) (int, error) {
+	if len(data) < offset+2 {
+		return offset, oops.Errorf("insufficient data for fragment size")
+	}
+
+	di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+2])
+	return offset + 2, nil
+}
+
 func (di *DeliveryInstructions) serializeFollowOnFragment() ([]byte, error) {
 	result := make([]byte, 7)
 
@@ -538,90 +659,61 @@ func readDeliveryInstructionsStruct(data []byte) (instructions *DeliveryInstruct
 		return nil, nil, oops.Errorf("no data provided")
 	}
 
-	di := &DeliveryInstructions{}
-	offset := 0
 	flag := data[0]
-	offset++
 
 	// Determine fragment type from bit 7
 	if (flag & 0x80) == 0x80 {
-		// FOLLOW_ON_FRAGMENT
-		di.fragmentType = FOLLOW_ON_FRAGMENT
-		di.fragmentNumber = int((flag & 0x7e) >> 1)
-		di.lastFragment = (flag & 0x01) == 0x01
-
-		if len(data) < 7 {
-			return nil, nil, oops.Errorf("insufficient data for FOLLOW_ON_FRAGMENT")
+		di, offset, err := parseFollowOnFragment(data, flag)
+		if err != nil {
+			return nil, nil, err
 		}
+		remainder = data[offset:]
+		log.WithFields(logger.Fields{
+			"instructions_offset": offset,
+			"remainder_length":    len(remainder),
+		}).Debug("Successfully read DeliveryInstructions")
+		return di, remainder, nil
+	}
 
-		di.messageID = binary.BigEndian.Uint32(data[1:5])
-		di.fragmentSize = binary.BigEndian.Uint16(data[5:7])
-		offset = 7
-	} else {
-		// FIRST_FRAGMENT
-		di.fragmentType = FIRST_FRAGMENT
-		di.deliveryType = (flag & 0x30) >> 4
-		di.hasDelay = (flag & 0x10) == 0x10
-		di.fragmented = (flag & 0x08) == 0x08
-		di.hasExtOptions = (flag & 0x04) == 0x04
+	// FIRST_FRAGMENT
+	di := &DeliveryInstructions{}
+	parseFirstFragmentFlags(di, flag)
+	offset := 1
 
-		// Read tunnel ID if DT_TUNNEL
-		if di.deliveryType == DT_TUNNEL {
-			if len(data) < offset+4 {
-				return nil, nil, oops.Errorf("insufficient data for tunnel ID")
-			}
-			di.tunnelID = binary.BigEndian.Uint32(data[offset : offset+4])
-			offset += 4
-		}
+	// Read tunnel ID if DT_TUNNEL
+	offset, err = readTunnelID(data, offset, di)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		// Read hash if DT_TUNNEL or DT_ROUTER
-		if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
-			if len(data) < offset+32 {
-				return nil, nil, oops.Errorf("insufficient data for hash")
-			}
-			copy(di.hash[:], data[offset:offset+32])
-			offset += 32
-		}
+	// Read hash if DT_TUNNEL or DT_ROUTER
+	offset, err = readDestinationHash(data, offset, di)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		// Read delay if present
-		if di.hasDelay {
-			if len(data) < offset+1 {
-				return nil, nil, oops.Errorf("insufficient data for delay")
-			}
-			di.delay = DelayFactor(data[offset])
-			offset++
-		}
+	// Read delay if present
+	offset, err = readDelayIfPresent(data, offset, di)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		// Read message ID if fragmented
-		if di.fragmented {
-			if len(data) < offset+4 {
-				return nil, nil, oops.Errorf("insufficient data for message ID")
-			}
-			di.messageID = binary.BigEndian.Uint32(data[offset : offset+4])
-			offset += 4
-		}
+	// Read message ID if fragmented
+	offset, err = readMessageIDIfFragmented(data, offset, di)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		// Read extended options if present
-		if di.hasExtOptions {
-			if len(data) < offset+1 {
-				return nil, nil, oops.Errorf("insufficient data for extended options length")
-			}
-			extLen := int(data[offset])
-			offset++
-			if len(data) < offset+extLen {
-				return nil, nil, oops.Errorf("insufficient data for extended options")
-			}
-			di.extendedOpts = make([]byte, extLen)
-			copy(di.extendedOpts, data[offset:offset+extLen])
-			offset += extLen
-		}
+	// Read extended options if present
+	offset, err = readExtendedOptions(data, offset, di)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		// Read fragment size
-		if len(data) < offset+2 {
-			return nil, nil, oops.Errorf("insufficient data for fragment size")
-		}
-		di.fragmentSize = binary.BigEndian.Uint16(data[offset : offset+2])
-		offset += 2
+	// Read fragment size
+	offset, err = readFragmentSize(data, offset, di)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	remainder = data[offset:]
