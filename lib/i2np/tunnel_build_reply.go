@@ -35,8 +35,23 @@ func (t *TunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 // It validates response integrity, determines tunnel build success/failure,
 // and returns detailed results for each hop.
 func (t *TunnelBuildReply) ProcessReply() error {
-	log.WithField("record_count", len(t)).Debug("Processing TunnelBuildReply")
+	t.logProcessingStart()
 
+	successCount, firstError := t.processAllHopResponses()
+
+	t.logProcessingComplete(successCount)
+
+	return t.determineTunnelBuildResult(successCount, firstError)
+}
+
+// logProcessingStart logs the start of tunnel build reply processing.
+func (t *TunnelBuildReply) logProcessingStart() {
+	log.WithField("record_count", len(t)).Debug("Processing TunnelBuildReply")
+}
+
+// processAllHopResponses processes each hop's response record.
+// Returns the success count and the first error encountered (if any).
+func (t *TunnelBuildReply) processAllHopResponses() (int, error) {
 	successCount := 0
 	var firstError error
 
@@ -59,19 +74,26 @@ func (t *TunnelBuildReply) ProcessReply() error {
 		}
 	}
 
+	return successCount, firstError
+}
+
+// logProcessingComplete logs the completion of tunnel build reply processing.
+func (t *TunnelBuildReply) logProcessingComplete(successCount int) {
 	log.WithFields(logger.Fields{
 		"success_count": successCount,
 		"total_hops":    len(t),
 		"success_rate":  float64(successCount) / float64(len(t)),
 	}).Info("TunnelBuildReply processing completed")
+}
 
-	// Tunnel is considered successful if all hops accepted
+// determineTunnelBuildResult determines the final result based on success count.
+// Returns nil if all hops accepted, otherwise returns an appropriate error.
+func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstError error) error {
 	if successCount == len(t) {
 		log.Debug("Tunnel build successful - all hops accepted")
 		return nil
 	}
 
-	// Return first error encountered, or generic failure if no specific error
 	if firstError != nil {
 		return fmt.Errorf("tunnel build failed: %w", firstError)
 	}

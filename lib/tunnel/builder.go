@@ -80,12 +80,45 @@ type TunnelBuildResult struct {
 // - Peer selection fails
 // - Cryptographic key generation fails
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error) {
-	// Validate hop count (I2P spec allows 1-8 hops for variable tunnels)
-	if req.HopCount < 1 || req.HopCount > 8 {
-		return nil, fmt.Errorf("hop count must be between 1 and 8, got %d", req.HopCount)
+	if err := tb.validateHopCount(req.HopCount); err != nil {
+		return nil, err
 	}
 
-	// Select peers for tunnel hops
+	peers, err := tb.selectTunnelPeers(req)
+	if err != nil {
+		return nil, err
+	}
+
+	tunnelID, err := generateTunnelID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tunnel ID: %w", err)
+	}
+
+	records, replyKeys, replyIVs, err := tb.createAllHopRecords(req, tunnelID, peers)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TunnelBuildResult{
+		TunnelID:      tunnelID,
+		Hops:          peers,
+		Records:       records,
+		ReplyKeys:     replyKeys,
+		ReplyIVs:      replyIVs,
+		UseShortBuild: req.UseShortBuild,
+	}, nil
+}
+
+// validateHopCount validates that the hop count is within I2P spec limits (1-8).
+func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
+	if hopCount < 1 || hopCount > 8 {
+		return fmt.Errorf("hop count must be between 1 and 8, got %d", hopCount)
+	}
+	return nil
+}
+
+// selectTunnelPeers selects and validates peers for tunnel hops.
+func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_info.RouterInfo, error) {
 	peers, err := tb.peerSelector.SelectPeers(req.HopCount, req.ExcludePeers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select peers: %w", err)
@@ -95,13 +128,16 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		return nil, fmt.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
-	// Generate unique tunnel ID
-	tunnelID, err := generateTunnelID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tunnel ID: %w", err)
-	}
+	return peers, nil
+}
 
-	// Create build records for each hop
+// createAllHopRecords creates build request records for all tunnel hops.
+// Returns the records, reply keys, and reply IVs for each hop.
+func (tb *TunnelBuilder) createAllHopRecords(
+	req BuildTunnelRequest,
+	tunnelID TunnelID,
+	peers []router_info.RouterInfo,
+) ([]BuildRequestRecord, []session_key.SessionKey, [][16]byte, error) {
 	records := make([]BuildRequestRecord, req.HopCount)
 	replyKeys := make([]session_key.SessionKey, req.HopCount)
 	replyIVs := make([][16]byte, req.HopCount)
@@ -109,7 +145,7 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 	for i := 0; i < req.HopCount; i++ {
 		record, replyKey, replyIV, err := tb.createHopRecord(i, req, tunnelID, peers)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
+			return nil, nil, nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
 		}
 
 		records[i] = record
@@ -117,14 +153,7 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		replyIVs[i] = replyIV
 	}
 
-	return &TunnelBuildResult{
-		TunnelID:      tunnelID,
-		Hops:          peers,
-		Records:       records,
-		ReplyKeys:     replyKeys,
-		ReplyIVs:      replyIVs,
-		UseShortBuild: req.UseShortBuild, // Pass through the format preference
-	}, nil
+	return records, replyKeys, replyIVs, nil
 }
 
 // createHopRecord creates a build request record for a single tunnel hop.
