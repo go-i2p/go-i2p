@@ -61,19 +61,13 @@
 
 ## Future Components 📅
 
-### SSU2 Transport (Post-NTCP2)
-- **Secondary Transport Protocol**:
-  * 📋 SSU2 handshake implementation
-  * 📋 UDP-based session management
-  * 📋 Peer testing mechanisms
-  * 📋 Introducer functionality
-
 ### Advanced NetDb Features
 - **Enhanced Database Operations**:
   * 📋 Floodfill router functionality
   * 📋 Database exploration and publishing
   * 📋 LS2 and Encrypted LeaseSet support
   * 📋 Advanced peer selection algorithms
+  - 📋 Client/Router NetDb isolation
 
 ### Application Layer
 - **Client Applications**:
@@ -82,8 +76,15 @@
   * 📋 Datagram support
   * 📋 End-to-end encryption (Garlic routing)
 
+### SSU2 Transport (Post-NTCP2)
+- **Secondary Transport Protocol**:
+  * 📋 SSU2 handshake implementation
+  * 📋 UDP-based session management
+  * 📋 Peer testing mechanisms
+  * 📋 Introducer functionality
+
 ## Current Status
 
-**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. Next major milestone is implementing database operations and tunnel building.
+**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. We have mostly functioning database operations and have started tunnel building.
 
 **Test Coverage**: Core components have basic test coverage including NTCP2 sessions, I2NP message processing, and tunnel message parsing.
