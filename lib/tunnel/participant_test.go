@@ -151,15 +151,15 @@ func TestParticipantProcess(t *testing.T) {
 				// For valid tunnel messages, create proper 1008-byte payload
 				// The payload contains: [Tunnel ID (4)] [IV placeholder (16)] [Checksum (4)] [Padding + Data (984)]
 				payload := make([]byte, 1008)
-				
+
 				// Set tunnel ID at start of payload
 				binary.BigEndian.PutUint32(payload[:4], uint32(tt.nextHopID))
-				
+
 				// Fill rest with test pattern
 				for i := 4; i < len(payload); i++ {
 					payload[i] = byte(i % 256)
 				}
-				
+
 				// Encrypt to get full 1028-byte tunnel message
 				encryptedData, err = aesEncryptor.Encrypt(payload)
 				if err != nil {
