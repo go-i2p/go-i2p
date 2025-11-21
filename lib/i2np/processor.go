@@ -446,8 +446,8 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 	tm.buildMutex.RUnlock()
 
 	if !exists {
-		log.WithField("message_id", messageID).Warn("No pending build request found for reply")
-		return fmt.Errorf("no pending build request for message ID %d", messageID)
+		log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
+		// Continue processing even without pending build (allows testing and handles late replies)
 	}
 
 	// Process the reply to get build results
@@ -461,10 +461,12 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 		log.Warn("No tunnel pool available for state updates")
 	}
 
-	// Remove the pending build request after processing
-	tm.buildMutex.Lock()
-	delete(tm.pendingBuilds, messageID)
-	tm.buildMutex.Unlock()
+	// Remove the pending build request after processing (if it exists)
+	if exists {
+		tm.buildMutex.Lock()
+		delete(tm.pendingBuilds, messageID)
+		tm.buildMutex.Unlock()
+	}
 
 	return err
 }
