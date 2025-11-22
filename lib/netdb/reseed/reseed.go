@@ -61,7 +61,7 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 // performReseedRequest creates and executes an HTTP request to the reseed server.
 func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
-	
+
 	transport := http.Transport{
 		DialContext: r.DialContext,
 	}
@@ -73,13 +73,13 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 		log.WithError(err).WithField("uri", uri).Error("Failed to parse reseed URI")
 		return nil, err
 	}
-	
+
 	log.WithFields(logger.Fields{
 		"host":       URL.Host,
 		"scheme":     URL.Scheme,
 		"user_agent": I2pUserAgent,
 	}).Debug("Reseed request configured")
-	
+
 	header := http.Header{}
 	header.Add("user-agent", I2pUserAgent)
 	request := http.Request{
@@ -119,12 +119,12 @@ func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 // validateSU3FileType checks if the SU3 file is a valid ZIP reseed file.
 func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 	log.WithFields(logger.Fields{
-		"file_type":    su3file.FileType,
-		"content_type": su3file.ContentType,
+		"file_type":             su3file.FileType,
+		"content_type":          su3file.ContentType,
 		"expected_file_type":    su3.ZIP,
 		"expected_content_type": su3.RESEED,
 	}).Debug("Validating SU3 file type")
-	
+
 	if su3file.FileType != su3.ZIP || su3file.ContentType != su3.RESEED {
 		log.WithFields(logger.Fields{
 			"file_type":    su3file.FileType,
@@ -139,7 +139,7 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 // extractSU3Content extracts the content from the SU3 file and validates the signature.
 func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	log.Debug("Extracting content from SU3 file")
-	
+
 	content, err := io.ReadAll(su3file.Content(""))
 	if err != nil {
 		log.WithError(err).Error("Failed to read SU3 content")
@@ -177,10 +177,10 @@ func (r Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, erro
 func (r Reseed) writeZipFile(content []byte) (string, error) {
 	zipPath := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
 	log.WithFields(logger.Fields{
-		"path": zipPath,
+		"path":       zipPath,
 		"size_bytes": len(content),
 	}).Debug("Writing reseed zip file to disk")
-	
+
 	err := os.WriteFile(zipPath, content, 0o644)
 	if err != nil {
 		log.WithError(err).WithField("path", zipPath).Error("Failed to write reseed zip file")
@@ -197,7 +197,7 @@ func (r Reseed) extractZipFile(zipPath string) ([]string, error) {
 		"zip_path":  zipPath,
 		"dest_path": destPath,
 	}).Info("Extracting reseed zip file")
-	
+
 	files, err := unzip.New().Extract(zipPath, destPath)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
@@ -218,11 +218,11 @@ func (r Reseed) extractZipFile(zipPath string) ([]string, error) {
 // parseRouterInfoFiles reads and parses router info files from the extracted files.
 func (r Reseed) parseRouterInfoFiles(files []string) ([]router_info.RouterInfo, error) {
 	log.WithField("total_files", len(files)).Info("Parsing router info files")
-	
+
 	var routerInfos []router_info.RouterInfo
 	var parseErrors int
 	var readErrors int
-	
+
 	for _, f := range files {
 		riB, err := os.ReadFile(f)
 		if err != nil {
@@ -238,14 +238,14 @@ func (r Reseed) parseRouterInfoFiles(files []string) ([]router_info.RouterInfo, 
 		}
 		routerInfos = append(routerInfos, ri)
 	}
-	
+
 	log.WithFields(logger.Fields{
-		"total_files":     len(files),
-		"parsed_success":  len(routerInfos),
-		"read_errors":     readErrors,
-		"parse_errors":    parseErrors,
+		"total_files":    len(files),
+		"parsed_success": len(routerInfos),
+		"read_errors":    readErrors,
+		"parse_errors":   parseErrors,
 	}).Info("Completed parsing router info files")
-	
+
 	return routerInfos, nil
 }
 

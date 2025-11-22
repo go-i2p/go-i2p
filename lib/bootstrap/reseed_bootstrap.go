@@ -37,10 +37,10 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 // from configured reseed servers
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"requested_peers":  n,
-		"server_count":     len(rb.config.ReseedServers),
+		"requested_peers": n,
+		"server_count":    len(rb.config.ReseedServers),
 	}).Info("Starting bootstrap peer acquisition")
-	
+
 	var allRouterInfos []router_info.RouterInfo
 	var lastErr error
 	var attemptedServers int
@@ -60,8 +60,8 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 		}
 
 		log.WithFields(logger.Fields{
-			"server": server.Url,
-			"attempt": attemptedServers,
+			"server":        server.Url,
+			"attempt":       attemptedServers,
 			"total_servers": len(rb.config.ReseedServers),
 		}).Info("Attempting to reseed from server")
 
@@ -72,7 +72,7 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 		serverRIs, err := reseeder.SingleReseed(server.Url)
 		if err != nil {
 			log.WithError(err).WithFields(logger.Fields{
-				"server": server.Url,
+				"server":  server.Url,
 				"attempt": attemptedServers,
 			}).Warn("Reseed attempt failed")
 			lastErr = oops.Errorf("reseed from %s failed: %v", server.Url, err)
@@ -83,9 +83,9 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 		successfulServers++
 		allRouterInfos = append(allRouterInfos, serverRIs...)
 		log.WithFields(logger.Fields{
-			"server": server.Url,
-			"count":  len(serverRIs),
-			"total":  len(allRouterInfos),
+			"server":             server.Url,
+			"count":              len(serverRIs),
+			"total":              len(allRouterInfos),
 			"successful_servers": successfulServers,
 		}).Info("Successfully obtained router infos from reseed server")
 
@@ -102,7 +102,7 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 	// If we couldn't get any RouterInfos from any server, return the last error
 	if len(allRouterInfos) == 0 && lastErr != nil {
 		log.WithFields(logger.Fields{
-			"attempted_servers": attemptedServers,
+			"attempted_servers":  attemptedServers,
 			"successful_servers": successfulServers,
 		}).Error("All reseed attempts failed, no peers obtained")
 		return nil, oops.Errorf("all reseed attempts failed: %w", lastErr)
@@ -114,6 +114,6 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 		"successful_servers": successfulServers,
 		"requested_peers":    n,
 	}).Info("Bootstrap peer acquisition completed")
-	
+
 	return allRouterInfos, nil
 }
