@@ -57,6 +57,24 @@
   * ✅ Gateway and endpoint crypto operations
   * ✅ Comprehensive test coverage with real encryption
 
+### End-to-End Garlic Encryption
+- ✅ **ECIES-X25519-AEAD-Ratchet Implementation**: Modern garlic encryption
+  * ✅ Garlic message construction with delivery instructions
+  * ✅ ECIES-X25519 key agreement integration
+  * ✅ ChaCha20/Poly1305 AEAD encryption via crypto library
+  * ✅ Ratchet protocol for forward secrecy (DH, Symmetric, Tag ratchets)
+  * ✅ Session management with automatic cleanup
+  * ✅ New Session and Existing Session message handling
+  * ✅ Comprehensive test coverage (>80% for session logic)
+
+### NetDb Implementation
+- ✅ **Database Store Integration**:
+  * ✅ Database Store message handling implementation
+  * ✅ RouterInfo storage and retrieval
+  * ✅ LeaseSet management and storage
+  * ✅ Database lookup system
+  * ✅ Peer selection logic (basic implementation)
+
 ### Common Data Structures
 - ✅ **Complete Data Structure Support**: All I2P data types implemented
   * ✅ Keys and Certificates, Router Info/Address
@@ -65,23 +83,22 @@
 
 ## In Progress Components 🚧
 
-### NetDb Implementation
-- **Database Store Integration**:
-  * ✅ Database Store message handling implementation
-  * ✅ RouterInfo storage and retrieval
-  * ✅ LeaseSet management and storage
-  * ✅ Database lookup system
-  * ✅ Peer selection logic (basic implementation)
+### I2CP Implementation
+- **Client Protocol Server**:
+  * 📋 I2CP server socket (localhost:7654)
+  * 📋 Protocol message handling (CreateSession, SendMessage, etc.)
+  * 📋 Session management and authentication
+  * 📋 LeaseSet creation and publishing
+  * 📋 Message delivery to/from client applications
 
 ## Next Priority Components 🎯
 
-### End-to-End Garlic Encryption
-- **ECIES-X25519-AEAD-Ratchet Implementation(Crypto lives in github.com/go-i2p/crypto)**:
-  * 📋 Garlic message construction and decryption
-  * 📋 New Session and Existing Session message handling
-  * 📋 Ratchet protocol for forward secrecy
-  * 📋 Session key management and storage
-  * 📋 Integration with tunnel infrastructure for encrypted messaging
+### I2CP Client Tunnel Lifecycle
+- **Application Layer Integration**:
+  * 📋 CreateLeaseSet implementation
+  * 📋 SendMessage and ReceiveMessage handlers
+  * 📋 LeaseSet maintenance and rotation
+  * 📋 End-to-end integration testing
 
 ## Future Components 📅
 
@@ -109,16 +126,19 @@
 
 ## Current Status
 
-**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. The foundation for I2CP and garlic encryption is in place.
+**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. The foundation for I2CP is in place.
 
 **Recent Milestones**:
 - ✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)
 - ✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)
 - ✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)
+- ✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)
 
-**Next Focus**: Phase 4 - End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet)
+**Next Focus**: Phase 5 - I2CP Protocol Server (client application support)
 
 **Test Coverage**: Core components have strong test coverage:
+- Garlic session management: >80% coverage
+- Garlic message construction: >95% coverage
 - Tunnel pool management: >80% coverage
 - Tunnel building: Comprehensive integration tests
 - NTCP2 sessions: Unit and integration tests
