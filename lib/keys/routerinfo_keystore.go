@@ -99,20 +99,25 @@ func initializeKeystore(dir, name string, privateKey types.PrivateKey) *RouterIn
 	}
 }
 
-func generateNewKey() (ed25519.Ed25519PrivateKey, error) {
-	// Generate a new key pair
-	priv, err := ed25519.GenerateEd25519Key()
+func generateNewKey() (types.PrivateKey, error) {
+	// Generate a new key pair - returns types.SigningPrivateKey interface
+	privInterface, err := ed25519.GenerateEd25519Key()
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert to our type using type assertion
-	return priv.(ed25519.Ed25519PrivateKey), nil
+	// GenerateEd25519Key returns ed25519.Ed25519PrivateKey as types.SigningPrivateKey
+	// Convert to concrete type and return pointer (required for interface compliance)
+	priv := privInterface.(ed25519.Ed25519PrivateKey)
+	return &priv, nil
 }
 
-func loadExistingKey(keyData []byte) (ed25519.Ed25519PrivateKey, error) {
-	// Convert to our type
-	return ed25519.Ed25519PrivateKey(keyData), nil
+func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
+	// Convert raw bytes to Ed25519PrivateKey type
+	key := ed25519.Ed25519PrivateKey(keyData)
+	// Return pointer to ensure it implements all interface methods
+	// (NewVerifier has a pointer receiver)
+	return &key, nil
 }
 
 func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error) {
