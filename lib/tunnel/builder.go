@@ -170,7 +170,6 @@ func (tb *TunnelBuilder) createHopRecord(
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
 ) (BuildRequestRecord, session_key.SessionKey, [16]byte, error) {
-
 	// Generate cryptographic keys for this hop
 	layerKey, err := generateSessionKey()
 	if err != nil {
@@ -244,7 +243,6 @@ func (tb *TunnelBuilder) determineRoutingParams(
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash) {
-
 	isLastHop := hopIndex == len(peers)-1
 	isFirstHop := hopIndex == 0
 

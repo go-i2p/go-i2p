@@ -190,7 +190,9 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 
 	t.logger.Debug("Successfully created outbound NTCP2 session")
 	return session, nil
-} // Compatible returns true if a routerInfo is compatible with this transport.
+}
+
+// Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	return SupportsNTCP2(&routerInfo)
 }
