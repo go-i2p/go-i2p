@@ -63,9 +63,20 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		return "", "", fmt.Errorf("transport has no listening address")
 	}
 
-	tcpAddr, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return "", "", fmt.Errorf("expected *net.TCPAddr, got %T", addr)
+	// Handle both *ntcp2.NTCP2Addr (wrapped) and *net.TCPAddr (direct)
+	var tcpAddr *net.TCPAddr
+	if ntcpAddr, ok := addr.(*ntcp2noise.NTCP2Addr); ok {
+		// Extract underlying TCP address from NTCP2Addr wrapper
+		underlying := ntcpAddr.UnderlyingAddr()
+		var ok2 bool
+		tcpAddr, ok2 = underlying.(*net.TCPAddr)
+		if !ok2 {
+			return "", "", fmt.Errorf("NTCP2Addr underlying address is not *net.TCPAddr, got %T", underlying)
+		}
+	} else if directTCP, ok := addr.(*net.TCPAddr); ok {
+		tcpAddr = directTCP
+	} else {
+		return "", "", fmt.Errorf("expected *net.TCPAddr or *ntcp2.NTCP2Addr, got %T", addr)
 	}
 
 	host := tcpAddr.IP.String()

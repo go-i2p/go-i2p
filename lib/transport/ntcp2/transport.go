@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
@@ -42,6 +43,25 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 		cancel()
 		return nil, err
 	}
+
+	// Initialize StaticKey and ObfuscationIV if not already set
+	// TODO: These should be loaded from persistent storage or derived from router identity
+	// For now, generate random values for startup
+	if len(ntcp2Config.StaticKey) == 0 {
+		ntcp2Config.StaticKey = make([]byte, 32)
+		if _, err := rand.Read(ntcp2Config.StaticKey); err != nil {
+			cancel()
+			return nil, WrapNTCP2Error(err, "generating static key")
+		}
+	}
+	if len(ntcp2Config.ObfuscationIV) == 0 {
+		ntcp2Config.ObfuscationIV = make([]byte, 16)
+		if _, err := rand.Read(ntcp2Config.ObfuscationIV); err != nil {
+			cancel()
+			return nil, WrapNTCP2Error(err, "generating obfuscation IV")
+		}
+	}
+
 	config.NTCP2Config = ntcp2Config
 
 	transport := &NTCP2Transport{
