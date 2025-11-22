@@ -14,6 +14,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
@@ -50,6 +51,9 @@ type Router struct {
 	activeSessions map[common.Hash]*ntcp.NTCP2Session
 	// sessionMutex protects concurrent access to activeSessions map
 	sessionMutex sync.RWMutex
+
+	// I2CP server for client applications
+	i2cpServer *i2cp.Server
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -202,6 +206,15 @@ func (r *Router) Stop() {
 
 	r.running = false
 
+	// Stop I2CP server if running
+	if r.i2cpServer != nil {
+		if err := r.i2cpServer.Stop(); err != nil {
+			log.WithError(err).Error("Failed to stop I2CP server")
+		} else {
+			log.Debug("I2CP server stopped")
+		}
+	}
+
 	// Send close signal without blocking - use select with default case
 	select {
 	case r.closeChnl <- true:
@@ -231,6 +244,14 @@ func (r *Router) Start() {
 	}
 	log.Debug("Starting router")
 	r.running = true
+
+	// Start I2CP server if enabled
+	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
+		if err := r.startI2CPServer(); err != nil {
+			log.WithError(err).Error("Failed to start I2CP server")
+		}
+	}
+
 	go r.mainloop()
 }
 
@@ -533,6 +554,34 @@ func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
 
 	r.activeSessions[peerHash] = session
 	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Added active session")
+}
+
+// startI2CPServer initializes and starts the I2CP server
+func (r *Router) startI2CPServer() error {
+	serverConfig := &i2cp.ServerConfig{
+		ListenAddr:  r.cfg.I2CP.Address,
+		Network:     r.cfg.I2CP.Network,
+		MaxSessions: r.cfg.I2CP.MaxSessions,
+	}
+
+	server, err := i2cp.NewServer(serverConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create I2CP server: %w", err)
+	}
+
+	if err := server.Start(); err != nil {
+		return fmt.Errorf("failed to start I2CP server: %w", err)
+	}
+
+	r.i2cpServer = server
+
+	log.WithFields(logger.Fields{
+		"address":      r.cfg.I2CP.Address,
+		"network":      r.cfg.I2CP.Network,
+		"max_sessions": r.cfg.I2CP.MaxSessions,
+	}).Info("I2CP server started")
+
+	return nil
 }
 
 // removeSession removes a session when it closes.

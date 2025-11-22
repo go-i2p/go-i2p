@@ -42,11 +42,25 @@ func init() {
 	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
 
+	// I2CP flags
+	RootCmd.PersistentFlags().Bool("i2cp.enabled", config.DefaultI2CPConfig.Enabled,
+		"Enable I2CP server for client applications")
+	RootCmd.PersistentFlags().String("i2cp.address", config.DefaultI2CPConfig.Address,
+		"I2CP server listen address")
+	RootCmd.PersistentFlags().String("i2cp.network", config.DefaultI2CPConfig.Network,
+		"I2CP network type (tcp or unix)")
+	RootCmd.PersistentFlags().Int("i2cp.max-sessions", config.DefaultI2CPConfig.MaxSessions,
+		"Maximum number of concurrent I2CP sessions")
+
 	// Bind flags to viper
 	viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir"))
 	viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir"))
 	viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path"))
 	viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold"))
+	viper.BindPFlag("i2cp.enabled", RootCmd.PersistentFlags().Lookup("i2cp.enabled"))
+	viper.BindPFlag("i2cp.address", RootCmd.PersistentFlags().Lookup("i2cp.address"))
+	viper.BindPFlag("i2cp.network", RootCmd.PersistentFlags().Lookup("i2cp.network"))
+	viper.BindPFlag("i2cp.max_sessions", RootCmd.PersistentFlags().Lookup("i2cp.max-sessions"))
 }
 
 // configCmd shows current configuration

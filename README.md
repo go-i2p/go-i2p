@@ -9,7 +9,8 @@ go-i2p is in early development. We recently completed several significant milest
 ### Implemented Features
 
 - Clients
-  - [ ] I2CP
+  - [X] I2CP Protocol Server (protocol messages, session management, TCP server)
+  - [ ] I2CP Client Tunnel Lifecycle (CreateLeaseSet, SendMessage)
   - [ ] Message routing
   - [ ] Datagrams
   - [ ] Streaming
@@ -131,6 +132,37 @@ export WARNFAIL_I2P=true
 ```
 
 If `WARNFAIL_I2P` is set and `DEBUG_I2P` is unset, `DEBUG_I2P` will be set to `debug`.
+
+## I2CP Server
+
+The I2CP (I2P Client Protocol) server allows client applications to communicate with the I2P router. It is enabled by default and listens on `localhost:7654`.
+
+### Configuration
+
+You can configure the I2CP server using command-line flags:
+
+```shell
+# Disable I2CP server
+go-i2p --i2cp.enabled=false
+
+# Change listen address
+go-i2p --i2cp.address=0.0.0.0:7654
+
+# Adjust maximum sessions
+go-i2p --i2cp.max-sessions=200
+
+# Use Unix domain socket instead of TCP
+go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
+```
+
+### Features
+
+- **Session Management**: Create, reconfigure, and destroy client sessions
+- **Message Protocol**: Full I2CP v2.10.0 protocol implementation
+- **Multi-client Support**: Handle multiple concurrent client sessions (default: 100)
+- **Thread-safe**: Concurrent session access with proper synchronization
+
+For more details, see `lib/i2cp/README.md`.
 
 ## Contributing
 
