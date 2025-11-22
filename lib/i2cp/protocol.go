@@ -1,0 +1,204 @@
+// Package i2cp implements the I2P Client Protocol (I2CP) v2.10.0.
+//
+// I2CP is the protocol used by client applications to communicate with the I2P router.
+// It allows clients to create sessions, send messages, and receive messages through the I2P network.
+//
+// Protocol Overview:
+// - TCP-based client-server protocol (default port: 7654)
+// - Each message has: type (1 byte), session ID (2 bytes), length (4 bytes), payload
+// - Session IDs 0x0000 and 0xFFFF are reserved
+// - Supports authentication, tunnel management, and message delivery
+package i2cp
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+)
+
+// Message type constants as defined in I2CP v2.10.0
+const (
+	// Session management
+	MessageTypeCreateSession      = 1 // Client -> Router: Create new session
+	MessageTypeSessionStatus      = 2 // Router -> Client: Session creation result
+	MessageTypeReconfigureSession = 3 // Client -> Router: Update session config
+	MessageTypeDestroySession     = 4 // Client -> Router: Terminate session
+
+	// LeaseSet management
+	MessageTypeCreateLeaseSet  = 5 // Client -> Router: Publish LeaseSet
+	MessageTypeRequestLeaseSet = 6 // Router -> Client: Request LeaseSet update
+
+	// Message delivery
+	MessageTypeSendMessage    = 7 // Client -> Router: Send message to destination
+	MessageTypeMessagePayload = 8 // Router -> Client: Received message
+
+	// Status and information
+	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
+	MessageTypeBandwidthLimits    = 10 // Router -> Client: Bandwidth limits response
+	MessageTypeGetDate            = 11 // Client -> Router: Query router time
+	MessageTypeSetDate            = 12 // Router -> Client: Current router time
+
+	// Deprecated/legacy message types
+	MessageTypeHostLookup = 13 // Deprecated in v2.10.0
+	MessageTypeHostReply  = 14 // Deprecated in v2.10.0
+)
+
+// Reserved session IDs
+const (
+	SessionIDReservedControl   = 0x0000 // Control messages (pre-session)
+	SessionIDReservedBroadcast = 0xFFFF // Broadcast to all sessions
+)
+
+// Protocol version constants
+const (
+	ProtocolVersionMajor = 2
+	ProtocolVersionMinor = 10
+	ProtocolVersionPatch = 0
+)
+
+// Message represents a generic I2CP message
+type Message struct {
+	Type      uint8  // Message type
+	SessionID uint16 // Session identifier
+	Payload   []byte // Message payload
+}
+
+// MarshalBinary serializes the I2CP message to wire format
+// Format: type(1) + sessionID(2) + length(4) + payload(variable)
+func (m *Message) MarshalBinary() ([]byte, error) {
+	if m.Payload == nil {
+		m.Payload = []byte{}
+	}
+
+	// Calculate total message size
+	payloadLen := len(m.Payload)
+	totalLen := 1 + 2 + 4 + payloadLen
+
+	result := make([]byte, totalLen)
+
+	// Type (1 byte)
+	result[0] = m.Type
+
+	// Session ID (2 bytes, big endian)
+	binary.BigEndian.PutUint16(result[1:3], m.SessionID)
+
+	// Payload length (4 bytes, big endian)
+	binary.BigEndian.PutUint32(result[3:7], uint32(payloadLen))
+
+	// Payload
+	if payloadLen > 0 {
+		copy(result[7:], m.Payload)
+	}
+
+	return result, nil
+}
+
+// UnmarshalBinary deserializes an I2CP message from wire format
+func (m *Message) UnmarshalBinary(data []byte) error {
+	if len(data) < 7 {
+		return fmt.Errorf("i2cp message too short: need at least 7 bytes, got %d", len(data))
+	}
+
+	// Parse type
+	m.Type = data[0]
+
+	// Parse session ID
+	m.SessionID = binary.BigEndian.Uint16(data[1:3])
+
+	// Parse payload length
+	payloadLen := binary.BigEndian.Uint32(data[3:7])
+
+	// Validate total length
+	expectedTotal := 7 + payloadLen
+	if uint32(len(data)) < expectedTotal {
+		return fmt.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
+	}
+
+	// Extract payload
+	if payloadLen > 0 {
+		m.Payload = make([]byte, payloadLen)
+		copy(m.Payload, data[7:7+payloadLen])
+	} else {
+		m.Payload = []byte{}
+	}
+
+	return nil
+}
+
+// ReadMessage reads a complete I2CP message from a reader
+func ReadMessage(r io.Reader) (*Message, error) {
+	// Read header: type(1) + sessionID(2) + length(4) = 7 bytes
+	header := make([]byte, 7)
+	if _, err := io.ReadFull(r, header); err != nil {
+		return nil, fmt.Errorf("failed to read I2CP header: %w", err)
+	}
+
+	// Parse header
+	msgType := header[0]
+	sessionID := binary.BigEndian.Uint16(header[1:3])
+	payloadLen := binary.BigEndian.Uint32(header[3:7])
+
+	// Read payload
+	payload := make([]byte, payloadLen)
+	if payloadLen > 0 {
+		if _, err := io.ReadFull(r, payload); err != nil {
+			return nil, fmt.Errorf("failed to read I2CP payload: %w", err)
+		}
+	}
+
+	return &Message{
+		Type:      msgType,
+		SessionID: sessionID,
+		Payload:   payload,
+	}, nil
+}
+
+// WriteMessage writes a complete I2CP message to a writer
+func WriteMessage(w io.Writer, msg *Message) error {
+	data, err := msg.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal I2CP message: %w", err)
+	}
+
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("failed to write I2CP message: %w", err)
+	}
+
+	return nil
+}
+
+// MessageTypeName returns a human-readable name for the message type
+func MessageTypeName(msgType uint8) string {
+	switch msgType {
+	case MessageTypeCreateSession:
+		return "CreateSession"
+	case MessageTypeSessionStatus:
+		return "SessionStatus"
+	case MessageTypeReconfigureSession:
+		return "ReconfigureSession"
+	case MessageTypeDestroySession:
+		return "DestroySession"
+	case MessageTypeCreateLeaseSet:
+		return "CreateLeaseSet"
+	case MessageTypeRequestLeaseSet:
+		return "RequestLeaseSet"
+	case MessageTypeSendMessage:
+		return "SendMessage"
+	case MessageTypeMessagePayload:
+		return "MessagePayload"
+	case MessageTypeGetBandwidthLimits:
+		return "GetBandwidthLimits"
+	case MessageTypeBandwidthLimits:
+		return "BandwidthLimits"
+	case MessageTypeGetDate:
+		return "GetDate"
+	case MessageTypeSetDate:
+		return "SetDate"
+	case MessageTypeHostLookup:
+		return "HostLookup (deprecated)"
+	case MessageTypeHostReply:
+		return "HostReply (deprecated)"
+	default:
+		return fmt.Sprintf("Unknown(%d)", msgType)
+	}
+}
