@@ -123,20 +123,17 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compa
 func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, error) {
 	log.WithField("timeout", timeout).Debug("TransportMuxer: Accepting connection with timeout")
 
-	// Create context with timeout for the accept operation
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Channel to receive accept result
-	type acceptResult struct {
-		conn net.Conn
-		err  error
-	}
+	resultChan := tmux.startAcceptGoroutine()
+	return tmux.waitForAcceptResult(ctx, resultChan)
+}
+
+func (tmux *TransportMuxer) startAcceptGoroutine() chan acceptResult {
 	resultChan := make(chan acceptResult, 1)
 
-	// Run Accept in a goroutine to allow timeout
 	go func() {
-		// Use the first transport (primary) for accepting connections
 		if len(tmux.trans) == 0 {
 			resultChan <- acceptResult{conn: nil, err: ErrNoTransportAvailable}
 			return
@@ -146,17 +143,29 @@ func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, 
 		resultChan <- acceptResult{conn: conn, err: err}
 	}()
 
-	// Wait for either accept to complete or context timeout
+	return resultChan
+}
+
+func (tmux *TransportMuxer) waitForAcceptResult(ctx context.Context, resultChan chan acceptResult) (net.Conn, error) {
 	select {
 	case res := <-resultChan:
-		if res.err != nil {
-			log.WithError(res.err).Debug("TransportMuxer: Accept failed")
-		} else {
-			log.Debug("TransportMuxer: Accept succeeded")
-		}
-		return res.conn, res.err
+		return tmux.handleAcceptResult(res)
 	case <-ctx.Done():
 		log.Debug("TransportMuxer: Accept timed out")
 		return nil, ctx.Err()
 	}
+}
+
+func (tmux *TransportMuxer) handleAcceptResult(res acceptResult) (net.Conn, error) {
+	if res.err != nil {
+		log.WithError(res.err).Debug("TransportMuxer: Accept failed")
+	} else {
+		log.Debug("TransportMuxer: Accept succeeded")
+	}
+	return res.conn, res.err
+}
+
+type acceptResult struct {
+	conn net.Conn
+	err  error
 }
