@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/go-i2p/common/router_address"
@@ -11,7 +12,11 @@ import (
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
+	routerHashBytes := routerInfo.IdentHash().Bytes()
+	log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Extracting NTCP2 address from RouterInfo")
+
 	if !SupportsNTCP2(&routerInfo) {
+		log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("RouterInfo does not support NTCP2")
 		return nil, ErrNTCP2NotSupported
 	}
 
@@ -20,15 +25,22 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 			continue
 		}
 
+		log.Debug("Found NTCP2 transport address, resolving TCP address")
 		tcpAddr, err := resolveTCPAddress(addr)
 		if err != nil {
+			log.WithError(err).Warn("Failed to resolve TCP address from NTCP2 router address")
 			continue
 		}
 
 		hash := routerInfo.IdentHash().Bytes()
+		log.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", hash[:8]),
+			"tcp_addr":    tcpAddr.String(),
+		}).Info("Successfully extracted NTCP2 address")
 		return WrapNTCP2Addr(tcpAddr, hash[:])
 	}
 
+	log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Error("No valid NTCP2 address found in RouterInfo")
 	return nil, ErrInvalidRouterInfo
 }
 
@@ -62,6 +74,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 // TODO: This should be moved to router_info package
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
+		log.Debug("RouterInfo is nil, NTCP2 not supported")
 		return false
 	}
 	for _, addr := range routerInfo.RouterAddresses() {
@@ -71,9 +84,11 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 			continue
 		}
 		if str == "ntcp2" {
+			log.Debug("RouterInfo supports NTCP2")
 			return true
 		}
 	}
+	log.Debug("RouterInfo does not support NTCP2")
 	return false
 }
 

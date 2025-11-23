@@ -8,9 +8,12 @@ import (
 
 // Frame an I2NP message for transmission over NTCP2
 func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error) {
+	log.WithField("message_type", msg.Type()).Debug("Framing I2NP message")
+
 	// Convert I2NP message to bytes
 	data, err := msg.MarshalBinary()
 	if err != nil {
+		log.WithError(err).Error("Failed to marshal I2NP message")
 		return nil, err
 	}
 
@@ -25,6 +28,11 @@ func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error) {
 	framedMessage[2] = byte(length >> 8)
 	framedMessage[3] = byte(length)
 
+	log.WithFields(map[string]interface{}{
+		"message_type":   msg.Type(),
+		"message_length": length,
+		"framed_length":  len(framedMessage),
+	}).Debug("I2NP message framed successfully")
 	return framedMessage, nil
 }
 
@@ -47,27 +55,37 @@ func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 }
 
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
+	log.Debug("Reading next framed message from connection")
+
 	// Read the NTCP2 length prefix (4 bytes)
 	lengthBuf := make([]byte, 4)
 	if err := u.readFull(lengthBuf); err != nil {
+		log.WithError(err).Error("Failed to read message length prefix")
 		return nil, err
 	}
 
 	// Extract length from big-endian bytes
 	length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
+	log.WithField("message_length", length).Debug("Read message length prefix")
 
 	// Read the I2NP message data
 	messageBuf := make([]byte, length)
 	if err := u.readFull(messageBuf); err != nil {
+		log.WithError(err).WithField("expected_length", length).Error("Failed to read message data")
 		return nil, err
 	}
 
 	// Unmarshal the I2NP message
 	msg := &i2np.BaseI2NPMessage{}
 	if err := msg.UnmarshalBinary(messageBuf); err != nil {
+		log.WithError(err).WithField("message_length", length).Error("Failed to unmarshal I2NP message")
 		return nil, err
 	}
 
+	log.WithFields(map[string]interface{}{
+		"message_type":   msg.Type(),
+		"message_length": length,
+	}).Debug("Successfully read and unframed I2NP message")
 	return msg, nil
 }
 

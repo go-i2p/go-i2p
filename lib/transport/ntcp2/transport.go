@@ -2,6 +2,7 @@ package ntcp2
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
@@ -37,23 +38,34 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")
 
+	identHashBytes := identity.IdentHash().Bytes()
+	logger.WithFields(map[string]interface{}{
+		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
+		"listener_address": config.ListenerAddress,
+	}).Info("Initializing NTCP2 transport")
+
 	ntcp2Config, err := createNTCP2Config(identity, cancel)
 	if err != nil {
+		logger.WithError(err).Error("Failed to create NTCP2 config")
 		return nil, err
 	}
 
 	if err := initializeCryptoKeys(ntcp2Config, cancel); err != nil {
+		logger.WithError(err).Error("Failed to initialize crypto keys")
 		return nil, err
 	}
 
+	logger.Debug("Crypto keys initialized successfully")
 	config.NTCP2Config = ntcp2Config
 
 	transport := buildTransportInstance(config, identity, ctx, cancel, logger)
 
 	if err := setupNetworkListener(transport, config, ntcp2Config); err != nil {
+		logger.WithError(err).Error("Failed to setup network listener")
 		return nil, err
 	}
 
+	logger.WithField("address", transport.Addr().String()).Info("NTCP2 transport initialized successfully")
 	return transport, nil
 }
 
@@ -133,9 +145,17 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 // Accept accepts an incoming session.
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	if t.listener == nil {
+		t.logger.Error("Accept called but listener is nil")
 		return nil, ErrSessionClosed
 	}
-	return t.listener.Accept()
+	t.logger.Debug("Accepting incoming NTCP2 connection")
+	conn, err := t.listener.Accept()
+	if err != nil {
+		t.logger.WithError(err).Warn("Failed to accept incoming connection")
+		return nil, err
+	}
+	t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Info("Accepted incoming NTCP2 connection")
+	return conn, nil
 }
 
 // Addr returns the network address the transport is bound to.
@@ -148,42 +168,54 @@ func (t *NTCP2Transport) Addr() net.Addr {
 
 // SetIdentity sets the router identity for this transport.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
+	identHashBytes := ident.IdentHash().Bytes()
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
 	t.identity = ident
 
 	// Update the NTCP2 configuration with new identity
 	identityBytes := ident.IdentHash().Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
+		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
 		return WrapNTCP2Error(err, "updating identity")
 	}
 	t.config.NTCP2Config = ntcp2Config
 
 	// If listener is already created, we need to recreate it with new identity
 	if t.listener != nil {
+		t.logger.Info("Recreating listener with new identity")
 		if err := t.listener.Close(); err != nil {
 			t.logger.WithError(err).Warn("Error closing existing listener during identity update")
 		}
 
 		tcpListener, err := net.Listen("tcp", t.config.ListenerAddress)
 		if err != nil {
+			t.logger.WithError(err).Error("Failed to rebind listener")
 			return WrapNTCP2Error(err, "rebinding listener")
 		}
 
 		listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 		if err != nil {
+			t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
 			return WrapNTCP2Error(err, "creating new listener")
 		}
 		t.listener = listener
+		t.logger.WithField("address", t.listener.Addr().String()).Info("Listener recreated successfully")
 	}
 
+	t.logger.Info("Identity updated successfully")
 	return nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
-	t.logger.WithField("router_hash", routerInfo.IdentHash()).Debug("Getting NTCP2 session")
-
 	routerHash := routerInfo.IdentHash()
+	routerHashBytes := routerHash.Bytes()
+	t.logger.WithFields(map[string]interface{}{
+		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"operation":   "get_session",
+	}).Debug("Getting NTCP2 session")
+
 	if session, found := t.findExistingSession(routerHash); found {
 		return session, nil
 	}
@@ -194,42 +226,60 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, exists := t.sessions.Load(routerHash); exists {
 		if ntcp2Session, ok := session.(*NTCP2Session); ok {
-			t.logger.Debug("Found existing NTCP2 session")
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash":     fmt.Sprintf("%x", routerHashBytes[:8]),
+				"send_queue_size": ntcp2Session.SendQueueSize(),
+			}).Info("Reusing existing NTCP2 session")
 			return ntcp2Session, true
 		}
 	}
+	routerHashBytes := routerHash.Bytes()
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("No existing session found")
 	return nil, false
 }
 
 func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
-	t.logger.Debug("Creating new outbound NTCP2 connection")
+	routerHashBytes := routerHash.Bytes()
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Creating new outbound NTCP2 session")
 
 	conn, err := t.dialNTCP2Connection(routerInfo)
 	if err != nil {
+		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Error("Failed to dial NTCP2 connection")
 		return nil, err
 	}
 
 	session := t.setupSession(conn, routerHash)
-	t.logger.Debug("Successfully created outbound NTCP2 session")
+	t.logger.WithFields(map[string]interface{}{
+		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"remote_addr": conn.RemoteAddr().String(),
+	}).Info("Successfully created outbound NTCP2 session")
 	return session, nil
 }
 
 func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Conn, error) {
 	tcpAddr, err := ExtractNTCP2Addr(routerInfo)
 	if err != nil {
+		t.logger.WithError(err).Error("Failed to extract NTCP2 address from RouterInfo")
 		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
 
+	t.logger.WithField("remote_addr", tcpAddr.String()).Debug("Extracted NTCP2 address")
+
 	config, err := t.createNTCP2Config(routerInfo)
 	if err != nil {
+		t.logger.WithError(err).Error("Failed to create NTCP2 config for outbound connection")
 		return nil, err
 	}
 
+	t.logger.WithField("remote_addr", tcpAddr.String()).Info("Dialing NTCP2 connection")
 	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
 	if err != nil {
+		t.logger.WithError(err).WithField("remote_addr", tcpAddr.String()).Error("Failed to dial NTCP2 connection")
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
 	}
 
+	t.logger.WithField("remote_addr", tcpAddr.String()).Info("NTCP2 connection established")
 	return conn, nil
 }
 
@@ -257,44 +307,68 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 
 // Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
-	return SupportsNTCP2(&routerInfo)
+	supported := SupportsNTCP2(&routerInfo)
+	routerHashBytes := routerInfo.IdentHash().Bytes()
+	t.logger.WithFields(map[string]interface{}{
+		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		"supported":   supported,
+	}).Debug("Checking NTCP2 compatibility")
+	return supported
 }
 
 // removeSession removes a session from the session map (called by session cleanup callback)
 func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
+	routerHashBytes := routerHash.Bytes()
 	t.sessions.Delete(routerHash)
-	t.logger.WithField("router_hash", routerHash).Debug("Removed session from transport session map")
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
 }
 
 // Close closes the transport cleanly.
 func (t *NTCP2Transport) Close() error {
+	t.logger.Info("Closing NTCP2 transport")
+
 	// Cancel context to stop all operations
+	t.logger.Debug("Canceling transport context")
 	t.cancel()
 
 	// Close listener
 	var listenerErr error
 	if t.listener != nil {
+		t.logger.Debug("Closing network listener")
 		listenerErr = t.listener.Close()
+		if listenerErr != nil {
+			t.logger.WithError(listenerErr).Warn("Error closing listener")
+		}
 	}
 
 	// Close all sessions
+	t.logger.Debug("Closing all active sessions")
+	sessionCount := 0
 	t.sessions.Range(func(key, value interface{}) bool {
+		sessionCount++
 		if session, ok := value.(*NTCP2Session); ok {
-			if err := session.Close(); err != nil {
-				t.logger.WithError(err).WithField("session", key).Warn("Error closing session")
+			if routerHash, ok := key.(data.Hash); ok {
+				routerHashBytes := routerHash.Bytes()
+				if err := session.Close(); err != nil {
+					t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+				}
 			}
 		}
 		t.sessions.Delete(key)
 		return true
 	})
+	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
 
 	// Wait for background operations to complete
+	t.logger.Debug("Waiting for background operations to complete")
 	t.wg.Wait()
 
 	if listenerErr != nil {
+		t.logger.WithError(listenerErr).Error("Transport closed with listener error")
 		return WrapNTCP2Error(listenerErr, "closing listener")
 	}
 
+	t.logger.Info("NTCP2 transport closed successfully")
 	return nil
 }
 

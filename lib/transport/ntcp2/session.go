@@ -43,13 +43,20 @@ type NTCP2Session struct {
 
 func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
 	sessionCtx, cancel := context.WithCancel(ctx)
+
+	sessionLogger := logger.WithFields(map[string]interface{}{
+		"component":   "ntcp2_session",
+		"remote_addr": conn.RemoteAddr().String(),
+	})
+	sessionLogger.Info("Creating new NTCP2 session")
+
 	session := &NTCP2Session{
 		conn:          conn,
 		sendQueue:     make(chan i2np.I2NPMessage, 100), // Buffered channel for send queue
 		recvChan:      make(chan i2np.I2NPMessage, 100), // Buffered channel for receive messages
 		ctx:           sessionCtx,
 		cancel:        cancel,
-		logger:        logger,
+		logger:        sessionLogger,
 		sendQueueSize: 0,
 		lastError:     nil,
 		errorOnce:     sync.Once{},
@@ -58,20 +65,29 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 	}
 
 	// Start background workers for send and receive
+	sessionLogger.Debug("Starting send and receive workers")
 	session.wg.Add(2)
 	go session.sendWorker()
 	go session.receiveWorker()
 
+	sessionLogger.Info("NTCP2 session created successfully")
 	return session
 }
 
 // QueueSendI2NP queues an I2NP message to be sent over the session.
 // Will block as long as the send queue is full.
 func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) {
+	s.logger.WithFields(map[string]interface{}{
+		"message_type":       msg.Type(),
+		"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
+	}).Debug("Queueing I2NP message for send")
+
 	select {
 	case s.sendQueue <- msg:
-		atomic.AddInt32(&s.sendQueueSize, 1)
+		newSize := atomic.AddInt32(&s.sendQueueSize, 1)
+		s.logger.WithField("queue_size", newSize).Debug("Message queued successfully")
 	case <-s.ctx.Done():
+		s.logger.Warn("Cannot queue message - session is closed")
 		// Session is closed, ignore the message
 		return
 	}
@@ -86,8 +102,10 @@ func (s *NTCP2Session) SendQueueSize() int {
 func (s *NTCP2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
 	select {
 	case msg := <-s.recvChan:
+		s.logger.WithField("message_type", msg.Type()).Debug("Read I2NP message from session")
 		return msg, nil
 	case <-s.ctx.Done():
+		s.logger.Debug("ReadNextI2NP returning due to session close")
 		if s.lastError != nil {
 			return nil, s.lastError
 		}
@@ -99,14 +117,20 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
 func (s *NTCP2Session) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
+		s.logger.Info("Closing NTCP2 session")
 		s.cancel()
 		if s.conn != nil {
 			err = s.conn.Close()
+			if err != nil {
+				s.logger.WithError(err).Warn("Error closing connection")
+			}
 		}
+		s.logger.Debug("Waiting for session workers to complete")
 		s.wg.Wait()
 
 		// Call cleanup callback to remove session from transport map
 		s.callCleanupCallback()
+		s.logger.Info("NTCP2 session closed successfully")
 	})
 	return err
 }
@@ -128,6 +152,8 @@ func (s *NTCP2Session) callCleanupCallback() {
 // sendWorker handles sending I2NP messages over the NTCP2 connection.
 func (s *NTCP2Session) sendWorker() {
 	defer s.wg.Done()
+	s.logger.Debug("Send worker started")
+	defer s.logger.Debug("Send worker stopped")
 
 	for {
 		select {
@@ -144,7 +170,11 @@ func (s *NTCP2Session) sendWorker() {
 // processSendQueueMessage processes a single I2NP message from the send queue.
 // Returns false if an error occurred and the worker should stop, true otherwise.
 func (s *NTCP2Session) processSendQueueMessage(msg i2np.I2NPMessage) bool {
-	atomic.AddInt32(&s.sendQueueSize, -1)
+	newSize := atomic.AddInt32(&s.sendQueueSize, -1)
+	s.logger.WithFields(map[string]interface{}{
+		"message_type":       msg.Type(),
+		"remaining_in_queue": newSize,
+	}).Debug("Processing message from send queue")
 
 	framedData, err := s.frameMessage(msg)
 	if err != nil {
@@ -168,17 +198,21 @@ func (s *NTCP2Session) frameMessage(msg i2np.I2NPMessage) ([]byte, error) {
 // writeFramedData writes framed data to the connection.
 // Returns false if an error occurred, true if write succeeded.
 func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
-	_, err := s.conn.Write(framedData)
+	bytesWritten, err := s.conn.Write(framedData)
 	if err != nil {
+		s.logger.WithError(err).WithField("bytes_written", bytesWritten).Error("Failed to write message to connection")
 		s.setError(WrapNTCP2Error(err, "writing message"))
 		return false
 	}
+	s.logger.WithField("bytes_written", bytesWritten).Debug("Message written successfully")
 	return true
 }
 
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
 func (s *NTCP2Session) receiveWorker() {
 	defer s.wg.Done()
+	s.logger.Debug("Receive worker started")
+	defer s.logger.Debug("Receive worker stopped")
 
 	unframer := s.createMessageUnframer()
 
@@ -221,16 +255,20 @@ func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage
 
 // handleReceiveError handles errors that occur during message receiving.
 func (s *NTCP2Session) handleReceiveError(err error) {
+	s.logger.WithError(err).Error("Failed to read message from connection")
 	s.setError(WrapNTCP2Error(err, "reading message"))
 }
 
 // queueReceivedMessage attempts to queue a received message to the receive channel.
 // Returns false if the session context is done, true if message was queued successfully.
 func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
+	s.logger.WithField("message_type", msg.Type()).Debug("Received message, queueing to receive channel")
 	select {
 	case s.recvChan <- msg:
+		s.logger.Debug("Message queued to receive channel successfully")
 		return true
 	case <-s.ctx.Done():
+		s.logger.Warn("Cannot queue received message - session is closed")
 		return false
 	}
 }
