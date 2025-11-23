@@ -401,51 +401,83 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 		return fmt.Errorf("no session provider available for sending tunnel build requests")
 	}
 
-	log.WithFields(logger.Fields{
-		"tunnel_id":  tunnelID,
-		"peer_count": len(peers),
-	}).Debug("Sending tunnel build requests")
+	tm.logSendingBuildRequests(tunnelID, len(peers))
 
-	// Send build request to each peer
 	for i := range records {
 		if i >= len(peers) {
 			break
 		}
 
-		peer := peers[i]
-		peerHash := peer.IdentHash()
-
-		// Get transport session to this peer
-		session, err := tm.sessionProvider.GetSessionByHash(peerHash)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
-				"error":     err,
-			}).Warn("Failed to get session for peer")
+		if err := tm.sendBuildRequestToHop(i, records[i], peers[i], tunnelID); err != nil {
 			continue
 		}
-
-		// Create TunnelBuild I2NP message
-		var buildRecords [8]BuildRequestRecord
-		if i < 8 {
-			buildRecords[i] = records[i] // Place this record at the appropriate position
-		}
-
-		buildMessage := NewTunnelBuildMessage(buildRecords)
-		buildMessage.SetMessageID(int(tunnelID)) // Use tunnel ID as message ID for correlation
-
-		// Send the tunnel build request
-		session.QueueSendI2NP(buildMessage)
-
-		log.WithFields(logger.Fields{
-			"hop_index":  i,
-			"peer_hash":  fmt.Sprintf("%x", peerHash[:8]),
-			"message_id": buildMessage.MessageID(),
-		}).Debug("Sent tunnel build request to hop")
 	}
 
-	log.WithField("tunnel_id", tunnelID).Debug("Tunnel build requests sent")
+	tm.logBuildRequestsCompleted(tunnelID)
 	return nil
+}
+
+// logSendingBuildRequests logs the start of tunnel build request sending.
+func (tm *TunnelManager) logSendingBuildRequests(tunnelID tunnel.TunnelID, peerCount int) {
+	log.WithFields(logger.Fields{
+		"tunnel_id":  tunnelID,
+		"peer_count": peerCount,
+	}).Debug("Sending tunnel build requests")
+}
+
+// sendBuildRequestToHop sends a build request to a specific hop in the tunnel.
+func (tm *TunnelManager) sendBuildRequestToHop(hopIndex int, record BuildRequestRecord, peer router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
+	peerHash := peer.IdentHash()
+
+	session, err := tm.getSessionForPeer(peerHash)
+	if err != nil {
+		return err
+	}
+
+	buildMessage := tm.createBuildMessage(hopIndex, record, tunnelID)
+	session.QueueSendI2NP(buildMessage)
+
+	tm.logHopRequestSent(hopIndex, peerHash, buildMessage.MessageID())
+	return nil
+}
+
+// getSessionForPeer retrieves a transport session for the specified peer.
+func (tm *TunnelManager) getSessionForPeer(peerHash common.Hash) (TransportSession, error) {
+	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+			"error":     err,
+		}).Warn("Failed to get session for peer")
+		return nil, err
+	}
+	return session, nil
+}
+
+// createBuildMessage constructs a TunnelBuild I2NP message with the given record.
+func (tm *TunnelManager) createBuildMessage(hopIndex int, record BuildRequestRecord, tunnelID tunnel.TunnelID) *TunnelBuildMessage {
+	var buildRecords [8]BuildRequestRecord
+	if hopIndex < 8 {
+		buildRecords[hopIndex] = record
+	}
+
+	buildMessage := NewTunnelBuildMessage(buildRecords)
+	buildMessage.SetMessageID(int(tunnelID))
+	return buildMessage
+}
+
+// logHopRequestSent logs successful transmission of a build request to a hop.
+func (tm *TunnelManager) logHopRequestSent(hopIndex int, peerHash common.Hash, messageID int) {
+	log.WithFields(logger.Fields{
+		"hop_index":  hopIndex,
+		"peer_hash":  fmt.Sprintf("%x", peerHash[:8]),
+		"message_id": messageID,
+	}).Debug("Sent tunnel build request to hop")
+}
+
+// logBuildRequestsCompleted logs completion of all build request transmissions.
+func (tm *TunnelManager) logBuildRequestsCompleted(tunnelID tunnel.TunnelID) {
+	log.WithField("tunnel_id", tunnelID).Debug("Tunnel build requests sent")
 }
 
 // ProcessTunnelReply processes tunnel build replies using TunnelReplyHandler interface.
