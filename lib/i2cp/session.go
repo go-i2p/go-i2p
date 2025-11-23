@@ -456,42 +456,64 @@ func (s *Session) StartLeaseSetMaintenance() error {
 // It periodically checks if the LeaseSet needs regeneration and publishes updates.
 func (s *Session) leaseSetMaintenanceLoop() {
 	defer s.maintWg.Done()
-	defer func() {
-		s.mu.Lock()
-		if s.maintTicker != nil {
-			s.maintTicker.Stop()
-			s.maintTicker = nil
-		}
-		s.mu.Unlock()
-	}()
+	defer s.cleanupMaintenanceTicker()
 
-	// Generate initial LeaseSet immediately
+	s.generateInitialLeaseSet()
+	s.runMaintenanceTickerLoop()
+}
+
+// cleanupMaintenanceTicker stops and clears the maintenance ticker during shutdown.
+func (s *Session) cleanupMaintenanceTicker() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.maintTicker != nil {
+		s.maintTicker.Stop()
+		s.maintTicker = nil
+	}
+}
+
+// generateInitialLeaseSet creates the first LeaseSet immediately upon maintenance start.
+func (s *Session) generateInitialLeaseSet() {
 	if err := s.maintainLeaseSet(); err != nil {
 		log.WithFields(logger.Fields{
-			"at":        "i2cp.Session.leaseSetMaintenanceLoop",
+			"at":        "i2cp.Session.generateInitialLeaseSet",
 			"sessionID": s.ID(),
 			"error":     err,
 		}).Error("failed_initial_leaseset_generation")
 	}
+}
 
+// runMaintenanceTickerLoop executes the main maintenance event loop until stopped.
+func (s *Session) runMaintenanceTickerLoop() {
 	for {
 		select {
 		case <-s.stopCh:
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Session.leaseSetMaintenanceLoop",
-				"sessionID": s.ID(),
-			}).Debug("leaseset_maintenance_stopped")
+			s.logMaintenanceStopped()
 			return
 
 		case <-s.maintTicker.C:
-			if err := s.maintainLeaseSet(); err != nil {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Session.leaseSetMaintenanceLoop",
-					"sessionID": s.ID(),
-					"error":     err,
-				}).Warn("failed_to_maintain_leaseset")
-			}
+			s.handleMaintenanceTick()
 		}
+	}
+}
+
+// logMaintenanceStopped records debug information when maintenance is stopped.
+func (s *Session) logMaintenanceStopped() {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.logMaintenanceStopped",
+		"sessionID": s.ID(),
+	}).Debug("leaseset_maintenance_stopped")
+}
+
+// handleMaintenanceTick processes periodic LeaseSet maintenance tasks.
+func (s *Session) handleMaintenanceTick() {
+	if err := s.maintainLeaseSet(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.handleMaintenanceTick",
+			"sessionID": s.ID(),
+			"error":     err,
+		}).Warn("failed_to_maintain_leaseset")
 	}
 }
 
