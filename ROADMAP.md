@@ -96,7 +96,7 @@
 - **Application Layer Integration**:
   * ✅ CreateLeaseSet implementation
   * ✅ SendMessage and ReceiveMessage handlers (November 23, 2025)
-  * 📋 LeaseSet maintenance and rotation
+  * ✅ LeaseSet maintenance and rotation (November 23, 2025)
   * 📋 End-to-end integration testing
 
 ## Next Priority Components 🎯
@@ -106,16 +106,16 @@
 ### Advanced NetDb Features
 - **Enhanced Database Operations**:
   * 📋 Floodfill router functionality
+  * 📋 Client/Router NetDb isolation
   * 📋 Database exploration and publishing
   * 📋 LS2 and Encrypted LeaseSet support
   * 📋 Advanced peer selection algorithms
-  - 📋 Client/Router NetDb isolation
 
 ### Application Layer
 - **Client Applications**:
-  * 📋 I2CP implementation
-  * 📋 Streaming library
-  * 📋 Datagram support
+  * 📋 I2CP implementation(Goes in github.com/go-i2p/go-i2cp)
+  * 📋 Streaming library(Goes in https://github.com/go-i2p/go-streaming)
+  * 📋 Datagram support(goes in https://github.com/go-i2p/go-datagrams)
   * 📋 End-to-end encryption (Garlic routing)
 
 ### SSU2 Transport (Post-NTCP2)

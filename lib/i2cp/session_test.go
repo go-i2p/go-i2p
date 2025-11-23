@@ -402,3 +402,400 @@ type mockPeerSelector struct{}
 func (m *mockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
 	return []router_info.RouterInfo{}, nil
 }
+
+// TestSessionCurrentLeaseSet tests CurrentLeaseSet getter
+func TestSessionCurrentLeaseSet(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Initially should be nil
+	if ls := session.CurrentLeaseSet(); ls != nil {
+		t.Error("CurrentLeaseSet() should be nil for new session")
+	}
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Create LeaseSet
+	leaseSetBytes, err := session.CreateLeaseSet()
+	if err != nil {
+		t.Fatalf("CreateLeaseSet() error = %v", err)
+	}
+
+	// Now CurrentLeaseSet should return the cached value
+	cachedLS := session.CurrentLeaseSet()
+	if cachedLS == nil {
+		t.Error("CurrentLeaseSet() should not be nil after creation")
+	}
+	if string(cachedLS) != string(leaseSetBytes) {
+		t.Error("CurrentLeaseSet() should match created LeaseSet")
+	}
+}
+
+// TestSessionLeaseSetAge tests LeaseSetAge getter
+func TestSessionLeaseSetAge(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Initially should be zero
+	if age := session.LeaseSetAge(); age != 0 {
+		t.Errorf("LeaseSetAge() = %v, want 0 for new session", age)
+	}
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Create LeaseSet
+	_, err = session.CreateLeaseSet()
+	if err != nil {
+		t.Fatalf("CreateLeaseSet() error = %v", err)
+	}
+
+	// Age should be very small (just created)
+	age := session.LeaseSetAge()
+	if age < 0 || age > time.Second {
+		t.Errorf("LeaseSetAge() = %v, expected small positive duration", age)
+	}
+
+	// Wait a bit and check age increases
+	time.Sleep(100 * time.Millisecond)
+	age2 := session.LeaseSetAge()
+	if age2 <= age {
+		t.Errorf("LeaseSetAge() should increase over time: %v <= %v", age2, age)
+	}
+}
+
+// TestStartLeaseSetMaintenanceNoInboundPool tests maintenance start without pool
+func TestStartLeaseSetMaintenanceNoInboundPool(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Should fail because there's no inbound pool
+	err = session.StartLeaseSetMaintenance()
+	if err == nil {
+		t.Error("Expected error when no inbound pool, got nil")
+	}
+}
+
+// TestStartLeaseSetMaintenanceInactiveSession tests maintenance on inactive session
+func TestStartLeaseSetMaintenanceInactiveSession(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+
+	// Stop the session to make it inactive
+	session.Stop()
+
+	// Should fail because session is not active
+	err = session.StartLeaseSetMaintenance()
+	if err == nil {
+		t.Error("Expected error when session inactive, got nil")
+	}
+}
+
+// TestStartLeaseSetMaintenanceSuccess tests successful maintenance start
+func TestStartLeaseSetMaintenanceSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping maintenance test in short mode")
+	}
+
+	session, err := NewSession(1, nil, DefaultSessionConfig())
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Start maintenance
+	err = session.StartLeaseSetMaintenance()
+	if err != nil {
+		t.Fatalf("StartLeaseSetMaintenance() error = %v", err)
+	}
+
+	// Wait a bit for initial LeaseSet generation
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify LeaseSet was created
+	if session.CurrentLeaseSet() == nil {
+		t.Error("LeaseSet should be created by maintenance")
+	}
+
+	// Verify age is recent
+	age := session.LeaseSetAge()
+	if age < 0 || age > 2*time.Second {
+		t.Errorf("LeaseSetAge() = %v, expected small duration", age)
+	}
+}
+
+// TestLeaseSetMaintenanceRegeneration tests that LeaseSet is regenerated
+func TestLeaseSetMaintenanceRegeneration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping maintenance regeneration test in short mode")
+	}
+
+	// Use short tunnel lifetime for faster testing
+	config := DefaultSessionConfig()
+	config.TunnelLifetime = 2 * time.Second // Very short for testing
+
+	session, err := NewSession(1, nil, config)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Start maintenance
+	err = session.StartLeaseSetMaintenance()
+	if err != nil {
+		t.Fatalf("StartLeaseSetMaintenance() error = %v", err)
+	}
+
+	// Wait for initial generation
+	time.Sleep(200 * time.Millisecond)
+
+	firstLS := session.CurrentLeaseSet()
+	if firstLS == nil {
+		t.Fatal("First LeaseSet should be created")
+	}
+
+	// Wait for regeneration threshold (lifetime/2 = 1 second)
+	// Plus a bit more for the maintenance check interval (lifetime/4 = 0.5 seconds)
+	time.Sleep(1500 * time.Millisecond)
+
+	secondLS := session.CurrentLeaseSet()
+	if secondLS == nil {
+		t.Fatal("Second LeaseSet should be created")
+	}
+
+	// LeaseSets should be different (different timestamps)
+	if string(firstLS) == string(secondLS) {
+		t.Error("LeaseSet should be regenerated with different data")
+	}
+}
+
+// TestLeaseSetMaintenanceStopCleanup tests maintenance cleanup on stop
+func TestLeaseSetMaintenanceStopCleanup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping maintenance cleanup test in short mode")
+	}
+
+	session, err := NewSession(1, nil, DefaultSessionConfig())
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Start maintenance
+	err = session.StartLeaseSetMaintenance()
+	if err != nil {
+		t.Fatalf("StartLeaseSetMaintenance() error = %v", err)
+	}
+
+	// Wait for initial generation
+	time.Sleep(200 * time.Millisecond)
+
+	// Stop session - should cleanly shut down maintenance
+	session.Stop()
+
+	// Verify session is no longer active
+	if session.IsActive() {
+		t.Error("Session should not be active after Stop()")
+	}
+}
+
+// TestMaintainLeaseSetDirectCall tests direct call to maintainLeaseSet
+func TestMaintainLeaseSetDirectCall(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Call maintainLeaseSet directly
+	err = session.maintainLeaseSet()
+	if err != nil {
+		t.Errorf("maintainLeaseSet() error = %v", err)
+	}
+
+	// Verify LeaseSet was created
+	if session.CurrentLeaseSet() == nil {
+		t.Error("LeaseSet should be created")
+	}
+
+	// Call again - should not regenerate (not enough time passed)
+	firstLS := session.CurrentLeaseSet()
+	err = session.maintainLeaseSet()
+	if err != nil {
+		t.Errorf("maintainLeaseSet() second call error = %v", err)
+	}
+
+	secondLS := session.CurrentLeaseSet()
+	if string(firstLS) != string(secondLS) {
+		t.Error("LeaseSet should not change when below regeneration threshold")
+	}
+}
+
+// TestLeaseSetRegenerationThreshold tests regeneration based on age
+func TestLeaseSetRegenerationThreshold(t *testing.T) {
+	// Use very short tunnel lifetime for testing
+	config := DefaultSessionConfig()
+	config.TunnelLifetime = 1 * time.Second
+
+	session, err := NewSession(1, nil, config)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create a tunnel pool with active tunnel
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Generate initial LeaseSet
+	err = session.maintainLeaseSet()
+	if err != nil {
+		t.Fatalf("maintainLeaseSet() error = %v", err)
+	}
+
+	firstLS := session.CurrentLeaseSet()
+	if firstLS == nil {
+		t.Fatal("First LeaseSet should be created")
+	}
+	firstAge := session.LeaseSetAge()
+
+	// Wait for regeneration threshold (lifetime/2 = 0.5 seconds)
+	time.Sleep(600 * time.Millisecond)
+
+	// Call maintainLeaseSet again - should regenerate
+	err = session.maintainLeaseSet()
+	if err != nil {
+		t.Errorf("maintainLeaseSet() regeneration error = %v", err)
+	}
+
+	secondLS := session.CurrentLeaseSet()
+	secondAge := session.LeaseSetAge()
+
+	// Verify a new LeaseSet was generated by checking that age reset
+	if secondAge >= firstAge+500*time.Millisecond {
+		t.Errorf("LeaseSet age should reset after regeneration: first=%v second=%v", firstAge, secondAge)
+	}
+
+	// Age should be very recent (less than 100ms old)
+	if secondAge > 100*time.Millisecond {
+		t.Errorf("New LeaseSet age should be very small: %v", secondAge)
+	}
+
+	// Just verify we still have a valid LeaseSet
+	if secondLS == nil {
+		t.Error("Second LeaseSet should exist")
+	}
+}

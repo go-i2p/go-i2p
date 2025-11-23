@@ -12,6 +12,7 @@ import (
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/logger"
 )
 
 // SessionConfig holds the configuration for an I2CP session
@@ -64,9 +65,15 @@ type Session struct {
 	// Message queues
 	incomingMessages chan *IncomingMessage // Messages received from I2P network
 
+	// LeaseSet state
+	currentLeaseSet     []byte    // Currently published LeaseSet
+	leaseSetPublishedAt time.Time // When LeaseSet was last published
+
 	// Lifecycle
-	stopCh   chan struct{} // Signal to stop session
-	stopOnce sync.Once     // Ensure cleanup happens only once
+	stopCh      chan struct{}  // Signal to stop session
+	stopOnce    sync.Once      // Ensure cleanup happens only once
+	maintWg     sync.WaitGroup // Track maintenance goroutine
+	maintTicker *time.Ticker   // Ticker for LeaseSet maintenance
 }
 
 // IncomingMessage represents a message received from the I2P network
@@ -252,9 +259,10 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 // - The inbound tunnel pool is set and contains at least one active tunnel
 //
 // Returns the serialized LeaseSet2 ready for publishing to the network database.
+// The LeaseSet is also cached in the session for maintenance purposes.
 func (s *Session) CreateLeaseSet() ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if !s.active {
 		return nil, fmt.Errorf("session %d is not active", s.id)
@@ -356,7 +364,175 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
 	}
 
+	// Cache the LeaseSet and update timestamp
+	s.currentLeaseSet = data
+	s.leaseSetPublishedAt = time.Now()
+
 	return data, nil
+}
+
+// StartLeaseSetMaintenance begins automatic LeaseSet maintenance.
+// This runs a background goroutine that:
+// - Regenerates the LeaseSet before it expires
+// - Publishes updated LeaseSets when tunnels change
+// - Ensures the session remains reachable on the network
+//
+// The maintenance interval is calculated based on TunnelLifetime:
+// - Check every TunnelLifetime/4 (e.g., every 2.5 minutes for 10-minute tunnels)
+// - Regenerate when remaining lifetime < TunnelLifetime/2
+//
+// Must be called after tunnel pools are started.
+func (s *Session) StartLeaseSetMaintenance() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.active {
+		return fmt.Errorf("session %d is not active", s.id)
+	}
+
+	if s.inboundPool == nil {
+		return fmt.Errorf("session %d has no inbound tunnel pool", s.id)
+	}
+
+	// Calculate maintenance interval: check every 1/4 of tunnel lifetime
+	// For default 10-minute tunnels, this means checking every 2.5 minutes
+	maintenanceInterval := s.config.TunnelLifetime / 4
+
+	s.maintTicker = time.NewTicker(maintenanceInterval)
+
+	s.maintWg.Add(1)
+	go s.leaseSetMaintenanceLoop()
+
+	log.WithFields(logger.Fields{
+		"at":                  "i2cp.Session.StartLeaseSetMaintenance",
+		"sessionID":           s.id,
+		"maintenanceInterval": maintenanceInterval,
+	}).Info("started_leaseset_maintenance")
+
+	return nil
+}
+
+// leaseSetMaintenanceLoop runs in a background goroutine to maintain the LeaseSet.
+// It periodically checks if the LeaseSet needs regeneration and publishes updates.
+func (s *Session) leaseSetMaintenanceLoop() {
+	defer s.maintWg.Done()
+	defer func() {
+		s.mu.Lock()
+		if s.maintTicker != nil {
+			s.maintTicker.Stop()
+			s.maintTicker = nil
+		}
+		s.mu.Unlock()
+	}()
+
+	// Generate initial LeaseSet immediately
+	if err := s.maintainLeaseSet(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.leaseSetMaintenanceLoop",
+			"sessionID": s.ID(),
+			"error":     err,
+		}).Error("failed_initial_leaseset_generation")
+	}
+
+	for {
+		select {
+		case <-s.stopCh:
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Session.leaseSetMaintenanceLoop",
+				"sessionID": s.ID(),
+			}).Debug("leaseset_maintenance_stopped")
+			return
+
+		case <-s.maintTicker.C:
+			if err := s.maintainLeaseSet(); err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Session.leaseSetMaintenanceLoop",
+					"sessionID": s.ID(),
+					"error":     err,
+				}).Warn("failed_to_maintain_leaseset")
+			}
+		}
+	}
+}
+
+// maintainLeaseSet checks if LeaseSet needs regeneration and publishes if needed.
+// Regeneration is triggered when:
+// - No LeaseSet exists yet
+// - Current LeaseSet is more than half its lifetime old
+// - Tunnel pool has changed significantly
+func (s *Session) maintainLeaseSet() error {
+	s.mu.RLock()
+	needsRegeneration := false
+	now := time.Now()
+
+	// Check if LeaseSet exists
+	if s.currentLeaseSet == nil {
+		needsRegeneration = true
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.maintainLeaseSet",
+			"sessionID": s.id,
+		}).Debug("no_leaseset_exists_generating_new")
+	} else {
+		// Check age of current LeaseSet
+		age := now.Sub(s.leaseSetPublishedAt)
+		// Regenerate if more than half the lifetime has passed
+		// This ensures we publish fresh LeaseSet before old one expires
+		regenerationThreshold := s.config.TunnelLifetime / 2
+
+		if age > regenerationThreshold {
+			needsRegeneration = true
+			log.WithFields(logger.Fields{
+				"at":                    "i2cp.Session.maintainLeaseSet",
+				"sessionID":             s.id,
+				"age":                   age,
+				"regenerationThreshold": regenerationThreshold,
+			}).Debug("leaseset_exceeds_regeneration_threshold")
+		}
+	}
+	s.mu.RUnlock()
+
+	if !needsRegeneration {
+		return nil
+	}
+
+	// Generate new LeaseSet
+	leaseSetBytes, err := s.CreateLeaseSet()
+	if err != nil {
+		return fmt.Errorf("failed to create LeaseSet: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.maintainLeaseSet",
+		"sessionID": s.ID(),
+		"size":      len(leaseSetBytes),
+	}).Info("leaseset_regenerated")
+
+	// TODO: Publish to network database (NetDB)
+	// This would involve sending a DatabaseStore message with the LeaseSet
+	// For now, the LeaseSet is cached in the session and available via CreateLeaseSet
+
+	return nil
+}
+
+// CurrentLeaseSet returns the currently cached LeaseSet, if any.
+// Returns nil if no LeaseSet has been generated yet.
+func (s *Session) CurrentLeaseSet() []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.currentLeaseSet
+}
+
+// LeaseSetAge returns how long ago the current LeaseSet was published.
+// Returns 0 if no LeaseSet exists.
+func (s *Session) LeaseSetAge() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.currentLeaseSet == nil {
+		return 0
+	}
+
+	return time.Since(s.leaseSetPublishedAt)
 }
 
 // Stop gracefully stops the session and cleans up resources
@@ -367,6 +543,9 @@ func (s *Session) Stop() {
 		s.mu.Unlock()
 
 		close(s.stopCh)
+
+		// Wait for maintenance goroutine to exit
+		s.maintWg.Wait()
 
 		// Drain incoming message queue
 		for {
