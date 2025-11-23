@@ -3,10 +3,12 @@ package i2cp
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -602,5 +604,80 @@ func BenchmarkE2E_SessionCreation(b *testing.B) {
 			b.Fatalf("Failed to create session: %v", err)
 		}
 		_ = server.manager.DestroySession(session.ID())
+	}
+}
+
+// TestE2E_OutboundMessageRouting tests the complete outbound message routing flow
+func TestE2E_OutboundMessageRouting(t *testing.T) {
+	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Add outbound tunnels for routing
+	for i := 0; i < 2; i++ {
+		tunnelID := tunnel.TunnelID(3000 + i)
+		var gateway data.Hash
+		copy(gateway[:], []byte("test-outbound-gateway-hash-12345678901234567890"))
+		gateway[31] = byte(i)
+
+		tunnelState := &tunnel.TunnelState{
+			ID:        tunnelID,
+			Hops:      []data.Hash{gateway},
+			State:     tunnel.TunnelReady,
+			CreatedAt: time.Now(),
+		}
+		outboundPool.AddTunnel(tunnelState)
+	}
+
+	// Create garlic session manager
+	var privKey [32]byte
+	copy(privKey[:], "test-private-key-for-integration-test-32-bytes")
+	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
+	require.NoError(t, err)
+
+	// Track sent messages
+	sentMessages := make(map[string]i2np.I2NPMessage)
+	var sentMutex sync.Mutex
+
+	// Create transport send function
+	transportSend := func(peerHash data.Hash, msg i2np.I2NPMessage) error {
+		sentMutex.Lock()
+		defer sentMutex.Unlock()
+		sentMessages[string(peerHash[:])] = msg
+		return nil
+	}
+
+	// Create and set message router on server
+	router := NewMessageRouter(garlicMgr, transportSend)
+	server.SetMessageRouter(router)
+
+	// Create destination for routing
+	var destHash data.Hash
+	copy(destHash[:], "test-destination-hash-32-bytes-1234567890")
+
+	var destPubKey [32]byte
+	// Use a valid X25519 public key (generated once for testing)
+	// This is a base point which is valid but obviously not secure
+	copy(destPubKey[:], []byte{
+		0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	})
+
+	// Test payload
+	payload := []byte("Hello from I2CP integration test!")
+
+	// Route the message
+	err = router.RouteOutboundMessage(session, destHash, destPubKey, payload)
+	require.NoError(t, err)
+
+	// Verify message was sent
+	sentMutex.Lock()
+	defer sentMutex.Unlock()
+	assert.Len(t, sentMessages, 1, "should send one message to gateway")
+
+	// Verify sent message is a Garlic message
+	for _, msg := range sentMessages {
+		assert.Equal(t, i2np.I2NP_MESSAGE_TYPE_GARLIC, msg.Type())
 	}
 }

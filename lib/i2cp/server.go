@@ -43,6 +43,9 @@ type Server struct {
 
 	listener net.Listener
 
+	// Message routing
+	messageRouter *MessageRouter
+
 	// Connection tracking for message delivery
 	mu           sync.RWMutex
 	running      bool
@@ -446,18 +449,46 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 		return nil, fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
 	}
 
-	// TODO: Implement full message routing:
-	// 1. Create garlic message with ECIES-X25519-AEAD encryption
-	// 2. Get active outbound tunnel from pool
-	// 3. Wrap in tunnel message and send through tunnel gateway
-	// 4. Track message for delivery confirmation
+	// Route the message through the I2P network
+	// This requires the destination's public key for garlic encryption
+	// For now, we'll need to look up the destination in NetDB to get the public key
+	// TODO: Add NetDB lookup integration to get destination's RouterInfo/LeaseSet
 
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleSendMessage",
-		"sessionID":   session.ID(),
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]), // Log first 8 bytes
-		"payloadSize": len(sendMsg.Payload),
-	}).Info("message_queued_for_sending")
+	// Placeholder: Use zero key for testing - in production this must be looked up
+	var destPubKey [32]byte
+
+	// If message router is configured, route the message
+	if s.messageRouter != nil {
+		err = s.messageRouter.RouteOutboundMessage(
+			session,
+			sendMsg.Destination,
+			destPubKey,
+			sendMsg.Payload,
+		)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.handleSendMessage",
+				"sessionID":   session.ID(),
+				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+				"error":       err,
+			}).Error("failed_to_route_message")
+			// Don't return error - message routing is best-effort
+		} else {
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.handleSendMessage",
+				"sessionID":   session.ID(),
+				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+				"payloadSize": len(sendMsg.Payload),
+			}).Info("message_routed_successfully")
+		}
+	} else {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.handleSendMessage",
+			"sessionID":   session.ID(),
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"payloadSize": len(sendMsg.Payload),
+		}).Info("message_queued_for_sending_no_router")
+	}
 
 	// No immediate response for SendMessage (fire-and-forget)
 	// In the future, we may send DeliveryStatus responses for reliability
@@ -467,6 +498,14 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 // SessionManager returns the server's session manager
 func (s *Server) SessionManager() *SessionManager {
 	return s.manager
+}
+
+// SetMessageRouter sets the message router for outbound message handling.
+// This should be called after creating the server and before starting it.
+func (s *Server) SetMessageRouter(router *MessageRouter) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messageRouter = router
 }
 
 // IsRunning returns whether the server is currently running

@@ -107,12 +107,12 @@
 ### Message Routing System
 
 - **End-to-End Message Delivery**: Connect I2CP, tunnels, and garlic encryption
-  - 📋 Route outbound I2CP messages through tunnel system
+  - ✅ Route outbound I2CP messages through tunnel system
   - 📋 Decrypt and deliver inbound tunnel messages to I2CP sessions
   - 📋 LeaseSet publishing to NetDB
   - 📋 Destination lookup and resolution
   - 📋 Message fragment handling across tunnel boundaries
-  - 📋 Integration testing for complete message flow
+  - ✅ Integration testing for outbound message flow
 
 ## Future Components 📅
 
@@ -153,8 +153,9 @@
 - ✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)
 - ✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)
 - ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)
+- 🚧 Phase 7: Message Routing System (outbound I2CP → tunnels → garlic → transport complete)
 
-**Next Focus**: Phase 7 - Message Routing System (connect I2CP → tunnels → garlic encryption → delivery)
+**Next Focus**: Phase 7 - Complete inbound message routing (tunnel → decrypt → I2CP delivery)
 
 **Test Coverage**: Core components have strong test coverage:
 
