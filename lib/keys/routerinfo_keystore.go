@@ -98,16 +98,14 @@ func initializeKeystore(dir, name string, privateKey types.PrivateKey) *RouterIn
 }
 
 func generateNewKey() (types.PrivateKey, error) {
-	// Generate a new key pair - returns types.SigningPrivateKey interface
-	privInterface, err := ed25519.GenerateEd25519Key()
+	// Generate a new key pair using new concrete API - eliminates type assertion
+	_, privKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		return nil, err
 	}
 
-	// GenerateEd25519Key returns ed25519.Ed25519PrivateKey as types.SigningPrivateKey
-	// Convert to concrete type and return pointer (required for interface compliance)
-	priv := privInterface.(ed25519.Ed25519PrivateKey)
-	return &priv, nil
+	// Return pointer to private key (required for interface compliance)
+	return privKey, nil
 }
 
 func loadExistingKey(keyData []byte) (types.PrivateKey, error) {

@@ -40,10 +40,10 @@ require (
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.step.sm/crypto v0.67.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/net v0.45.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )
 
 // Preserve these commented-out replace directives for local development.
@@ -53,7 +53,8 @@ require (
 // Group 1: common, crypto, elgamal
 replace github.com/go-i2p/common => ../common
 
-//replace github.com/go-i2p/crypto => ../crypto
+replace github.com/go-i2p/crypto => ../crypto
+
 //replace github.com/go-i2p/elgamal => ../elgamal
 
 // Group 2: noise, go-noise

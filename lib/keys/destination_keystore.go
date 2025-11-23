@@ -24,23 +24,11 @@ type DestinationKeyStore struct {
 // This generates a new destination with fresh keys suitable for creating LeaseSet2s
 // using modern I2P cryptography (ECIES-X25519-AEAD-Ratchet compatible).
 func NewDestinationKeyStore() (*DestinationKeyStore, error) {
-	// Generate Ed25519 signing key pair
-	signingPrivKeyRaw, err := ed25519.GenerateEd25519Key()
+	// Generate Ed25519 signing key pair using new concrete API
+	signingPubKey, signingPrivKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate Ed25519 key: %w", err)
+		return nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
 	}
-
-	signingPrivKey, ok := signingPrivKeyRaw.(ed25519.Ed25519PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("generated key is not Ed25519PrivateKey type")
-	}
-
-	signingPubKeyRaw, err := signingPrivKey.Public()
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive Ed25519 public key: %w", err)
-	}
-
-	signingPubKey := signingPubKeyRaw
 
 	// Generate X25519 (Curve25519) encryption key pair for LeaseSet2
 	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()

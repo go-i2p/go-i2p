@@ -110,13 +110,13 @@ func TestKeyID_ConcurrentAccess(t *testing.T) {
 // when falling back due to errors.
 func TestKeyID_NormalOperationNotCached(t *testing.T) {
 	// Create a keystore with a valid private key
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		t.Fatalf("Failed to generate private key: %v", err)
 	}
 
 	ks := &RouterInfoKeystore{
-		privateKey:  privateKey.(types.PrivateKey),
+		privateKey:  privateKey,
 		name:        "",
 		cachedKeyID: "", // Cache should not be used for valid keys
 	}
@@ -223,13 +223,13 @@ func BenchmarkKeyID_WithCache(b *testing.B) {
 
 // BenchmarkKeyID_NormalOperation measures performance with valid private key
 func BenchmarkKeyID_NormalOperation(b *testing.B) {
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		b.Fatalf("Failed to generate private key: %v", err)
 	}
 
 	ks := &RouterInfoKeystore{
-		privateKey: privateKey.(types.PrivateKey),
+		privateKey: privateKey,
 		name:       "",
 	}
 

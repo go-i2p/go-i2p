@@ -8,18 +8,17 @@ import (
 	"testing"
 
 	"github.com/go-i2p/crypto/ed25519"
-	"github.com/go-i2p/crypto/types"
 )
 
 func TestRouterInfoKeystore_KeyID_NormalOperation(t *testing.T) {
 	// Test with a real private key
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		t.Fatalf("Failed to generate private key: %v", err)
 	}
 
 	ks := &RouterInfoKeystore{
-		privateKey: privateKey.(types.PrivateKey),
+		privateKey: privateKey,
 		name:       "", // Empty name to trigger public key generation
 	}
 
@@ -50,7 +49,7 @@ func TestRouterInfoKeystore_KeyID_NormalOperation(t *testing.T) {
 
 func TestRouterInfoKeystore_KeyID_WithName(t *testing.T) {
 	// Test with a predefined name
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		t.Fatalf("Failed to generate private key: %v", err)
 	}
@@ -58,7 +57,7 @@ func TestRouterInfoKeystore_KeyID_WithName(t *testing.T) {
 	expectedName := "test-router"
 
 	ks := &RouterInfoKeystore{
-		privateKey: privateKey.(types.PrivateKey),
+		privateKey: privateKey,
 		name:       expectedName,
 	}
 
@@ -110,14 +109,14 @@ func TestRouterInfoKeystore_StoreKeys_SecurePermissions(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create a test key store
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		t.Fatalf("Failed to create private key: %v", err)
 	}
 
 	ks := &RouterInfoKeystore{
 		dir:        tmpDir,
-		privateKey: privateKey.(types.PrivateKey),
+		privateKey: privateKey,
 		name:       "test-router",
 	}
 

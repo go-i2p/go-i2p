@@ -89,6 +89,11 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 
 // encryptNewSession creates a new session and encrypts using ECIES.
 // This is used for the first message to a destination.
+//
+// TODO: Once go-i2p/crypto v0.1.0+ is available with unified Session API:
+//   - Use ratchet.NewSessionFromECIES() to properly derive keys from ECIES shared secret
+//   - Replace ECIES placeholder encryption with ChaCha20-Poly1305 AEAD
+//     See: API_IMPROVEMENTS_SUMMARY.md for migration guide
 func (sm *GarlicSessionManager) encryptNewSession(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
@@ -101,6 +106,10 @@ func (sm *GarlicSessionManager) encryptNewSession(
 	}
 
 	// Initialize ratchet state for this session
+	// TODO: Once go-i2p/crypto v0.1.0+ is available:
+	//   Use kdf.NewKeyDerivation(eciesSharedSecret).DeriveSessionKeys()
+	//   to properly derive rootKey, symKey, tagKey from ECIES shared secret
+	//   See: API_IMPROVEMENTS_SUMMARY.md "For Key Derivation" section
 	// The shared secret from ECIES would be used as root key in production
 	// For now, we'll initialize with a basic state
 	var rootKey [32]byte
@@ -149,6 +158,11 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	}
 
 	// Encrypt using ChaCha20-Poly1305 AEAD (via crypto library)
+	// TODO: Once go-i2p/crypto v0.1.0+ is available with chacha20poly1305 package:
+	//   aead, _ := chacha20poly1305.NewAEAD(messageKey)
+	//   nonce, _ := chacha20poly1305.GenerateNonce()
+	//   ciphertext, tag, _ := aead.Encrypt(plaintextGarlic, sessionTag[:], nonce)
+	//   See: API_IMPROVEMENTS_SUMMARY.md "For Tunnel/Garlic Encryption" section
 	// Note: In production, this would use the proper AEAD from crypto/chacha20
 	// For now, using ECIES as a placeholder that provides AEAD
 	ciphertext, err := ecies.EncryptECIESX25519(session.RemotePublicKey[:], plaintextGarlic)
@@ -222,6 +236,13 @@ func (sm *GarlicSessionManager) decryptNewSession(ciphertext []byte) ([]byte, er
 }
 
 // decryptExistingSession decrypts an Existing Session message using ratchet state.
+//
+// TODO: Once go-i2p/crypto v0.1.0+ is available with chacha20poly1305 package:
+//
+//	Use ChaCha20-Poly1305 AEAD with the message key:
+//	aead, _ := chacha20poly1305.NewAEAD(messageKey)
+//	plaintext, _ := aead.Decrypt(ciphertext, tag[:], sessionTag[:], nonce)
+//	See: API_IMPROVEMENTS_SUMMARY.md for migration guide
 func (sm *GarlicSessionManager) decryptExistingSession(
 	session *GarlicSession,
 	ciphertext []byte,

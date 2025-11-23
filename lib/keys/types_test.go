@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/go-i2p/crypto/ed25519"
-	"github.com/go-i2p/crypto/types"
 )
 
 func TestStoreKeys_SecurePermissions(t *testing.T) {
@@ -24,14 +23,14 @@ func TestStoreKeys_SecurePermissions(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create a test key store
-	privateKey, err := ed25519.GenerateEd25519Key()
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
 		t.Fatalf("Failed to create private key: %v", err)
 	}
 
 	ks := &KeyStoreImpl{
 		dir:        tmpDir,
-		privateKey: privateKey.(types.PrivateKey),
+		privateKey: privateKey,
 		name:       "test",
 	}
 
