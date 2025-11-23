@@ -264,56 +264,81 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.validateSessionState(); err != nil {
+		return nil, err
+	}
+
+	tunnels, err := s.collectActiveTunnels()
+	if err != nil {
+		return nil, err
+	}
+
+	leases, err := s.buildLeasesFromTunnels(tunnels)
+	if err != nil {
+		return nil, err
+	}
+
+	encKey := s.prepareEncryptionKey()
+
+	leaseSetBytes, err := s.assembleLeaseSet(leases, encKey)
+	if err != nil {
+		return nil, err
+	}
+
+	s.currentLeaseSet = leaseSetBytes
+	s.leaseSetPublishedAt = time.Now()
+
+	return leaseSetBytes, nil
+}
+
+// validateSessionState checks if the session is in a valid state for LeaseSet creation.
+// Returns an error if the session is inactive or missing required components.
+func (s *Session) validateSessionState() error {
 	if !s.active {
-		return nil, fmt.Errorf("session %d is not active", s.id)
+		return fmt.Errorf("session %d is not active", s.id)
 	}
 
 	if s.inboundPool == nil {
-		return nil, fmt.Errorf("session %d has no inbound tunnel pool", s.id)
+		return fmt.Errorf("session %d has no inbound tunnel pool", s.id)
 	}
 
 	if s.destination == nil {
-		return nil, fmt.Errorf("session %d has no destination", s.id)
+		return fmt.Errorf("session %d has no destination", s.id)
 	}
 
 	if s.keys == nil {
-		return nil, fmt.Errorf("session %d has no private keys", s.id)
+		return fmt.Errorf("session %d has no private keys", s.id)
 	}
 
-	// Get active tunnels from inbound pool
+	return nil
+}
+
+// collectActiveTunnels retrieves active tunnels from the inbound pool.
+// Returns an error if no active tunnels are available.
+func (s *Session) collectActiveTunnels() ([]*tunnel.TunnelState, error) {
 	tunnels := s.inboundPool.GetActiveTunnels()
 	if len(tunnels) == 0 {
 		return nil, fmt.Errorf("session %d has no active inbound tunnels", s.id)
 	}
+	return tunnels, nil
+}
 
-	// Create leases from active tunnels
-	// Each lease represents an inbound tunnel endpoint that can receive messages
+// buildLeasesFromTunnels creates Lease2 structures from active tunnel data.
+// Each lease represents an inbound tunnel endpoint that can receive messages.
+// Returns an error if no valid leases can be created from the provided tunnels.
+func (s *Session) buildLeasesFromTunnels(tunnels []*tunnel.TunnelState) ([]lease.Lease2, error) {
 	leases := make([]lease.Lease2, 0, len(tunnels))
+
 	for _, tun := range tunnels {
 		if tun == nil || tun.State != tunnel.TunnelReady {
 			continue
 		}
 
-		// Get tunnel gateway (first hop router hash)
-		// For inbound tunnels, the gateway is the first hop in the Hops slice
 		if len(tun.Hops) == 0 {
 			continue
 		}
-		gatewayBytes := tun.Hops[0]
 
-		// Convert gateway bytes to data.Hash (32 bytes)
-		var gateway data.Hash
-		copy(gateway[:], gatewayBytes[:])
-
-		// Get tunnel ID
-		tunnelID := uint32(tun.ID)
-
-		// Calculate lease expiration based on tunnel lifetime
-		// Use tunnel creation time + configured lifetime
-		expiration := tun.CreatedAt.Add(s.config.TunnelLifetime)
-
-		// Create Lease2
-		l, err := lease.NewLease2(gateway, tunnelID, expiration)
+		l, err := s.createLeaseFromTunnel(tun)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create lease: %w", err)
 		}
@@ -325,31 +350,51 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 		return nil, fmt.Errorf("session %d has no valid leases to publish", s.id)
 	}
 
-	// Get destination and keys
-	dest := *s.destination
-	signingPrivateKey := s.keys.SigningPrivateKey()
+	return leases, nil
+}
+
+// createLeaseFromTunnel constructs a single Lease2 from tunnel metadata.
+// Extracts the gateway router hash, tunnel ID, and calculates expiration time.
+func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2, error) {
+	gatewayBytes := tun.Hops[0]
+
+	var gateway data.Hash
+	copy(gateway[:], gatewayBytes[:])
+
+	tunnelID := uint32(tun.ID)
+	expiration := tun.CreatedAt.Add(s.config.TunnelLifetime)
+
+	return lease.NewLease2(gateway, tunnelID, expiration)
+}
+
+// prepareEncryptionKey creates the EncryptionKey structure for LeaseSet2.
+// Uses X25519 public key from the session's key store.
+func (s *Session) prepareEncryptionKey() lease_set2.EncryptionKey {
 	encryptionPublicKey := s.keys.EncryptionPublicKey()
 
-	// Create EncryptionKey for LeaseSet2
-	// LeaseSet2 uses a slice of EncryptionKey structs to support multiple encryption types
-	encKey := lease_set2.EncryptionKey{
+	return lease_set2.EncryptionKey{
 		KeyType: key_certificate.KEYCERT_CRYPTO_X25519,
 		KeyLen:  32,
 		KeyData: encryptionPublicKey.Bytes(),
 	}
+}
 
-	// Set published time and expiration
+// assembleLeaseSet constructs and serializes the final LeaseSet2 structure.
+// Combines destination, leases, and encryption key into a signed LeaseSet2.
+func (s *Session) assembleLeaseSet(leases []lease.Lease2, encKey lease_set2.EncryptionKey) ([]byte, error) {
+	dest := *s.destination
+	signingPrivateKey := s.keys.SigningPrivateKey()
+
 	published := uint32(time.Now().Unix())
 	expiresOffset := uint16(s.config.TunnelLifetime.Seconds())
 
-	// Create the LeaseSet2
 	ls2, err := lease_set2.NewLeaseSet2(
 		dest,
 		published,
 		expiresOffset,
-		0,              // flags: 0 for standard published leaseset
-		nil,            // no offline signature
-		data.Mapping{}, // empty options map
+		0,
+		nil,
+		data.Mapping{},
 		[]lease_set2.EncryptionKey{encKey},
 		leases,
 		signingPrivateKey,
@@ -358,17 +403,12 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 		return nil, fmt.Errorf("failed to create LeaseSet2: %w", err)
 	}
 
-	// Serialize to bytes for network transmission
-	data, err := ls2.Bytes()
+	leaseSetBytes, err := ls2.Bytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
 	}
 
-	// Cache the LeaseSet and update timestamp
-	s.currentLeaseSet = data
-	s.leaseSetPublishedAt = time.Now()
-
-	return data, nil
+	return leaseSetBytes, nil
 }
 
 // StartLeaseSetMaintenance begins automatic LeaseSet maintenance.
