@@ -38,39 +38,53 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	rb.logReseedStart(n)
 
-	var allRouterInfos []router_info.RouterInfo
-	var lastErr error
-	var attemptedServers int
-	var successfulServers int
+	state := &reseedState{
+		allRouterInfos: make([]router_info.RouterInfo, 0),
+	}
 
 	for _, server := range rb.config.ReseedServers {
-		attemptedServers++
-
-		if shouldStop, err := rb.checkContextCancellation(ctx, attemptedServers, successfulServers, len(allRouterInfos)); shouldStop {
+		if err := rb.processReseedServer(ctx, server, n, state); err != nil {
 			return nil, err
 		}
 
-		serverRIs, err := rb.attemptReseedFromServer(server, attemptedServers)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		successfulServers++
-		allRouterInfos = append(allRouterInfos, serverRIs...)
-		rb.logServerSuccess(server, len(serverRIs), len(allRouterInfos), successfulServers)
-
-		if rb.hasEnoughPeers(n, len(allRouterInfos)) {
+		if rb.hasEnoughPeers(n, len(state.allRouterInfos)) {
 			break
 		}
 	}
 
-	if err := rb.validateResults(allRouterInfos, lastErr, attemptedServers, successfulServers); err != nil {
+	if err := rb.validateResults(state.allRouterInfos, state.lastErr, state.attemptedServers, state.successfulServers); err != nil {
 		return nil, err
 	}
 
-	rb.logReseedComplete(len(allRouterInfos), attemptedServers, successfulServers, n)
-	return allRouterInfos, nil
+	rb.logReseedComplete(len(state.allRouterInfos), state.attemptedServers, state.successfulServers, n)
+	return state.allRouterInfos, nil
+}
+
+type reseedState struct {
+	allRouterInfos    []router_info.RouterInfo
+	lastErr           error
+	attemptedServers  int
+	successfulServers int
+}
+
+func (rb *ReseedBootstrap) processReseedServer(ctx context.Context, server *config.ReseedConfig, n int, state *reseedState) error {
+	state.attemptedServers++
+
+	if shouldStop, err := rb.checkContextCancellation(ctx, state.attemptedServers, state.successfulServers, len(state.allRouterInfos)); shouldStop {
+		return err
+	}
+
+	serverRIs, err := rb.attemptReseedFromServer(server, state.attemptedServers)
+	if err != nil {
+		state.lastErr = err
+		return nil
+	}
+
+	state.successfulServers++
+	state.allRouterInfos = append(state.allRouterInfos, serverRIs...)
+	rb.logServerSuccess(server, len(serverRIs), len(state.allRouterInfos), state.successfulServers)
+
+	return nil
 }
 
 // logReseedStart logs the beginning of the bootstrap peer acquisition.

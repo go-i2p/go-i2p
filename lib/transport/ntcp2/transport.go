@@ -183,54 +183,76 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
 	t.logger.WithField("router_hash", routerInfo.IdentHash()).Debug("Getting NTCP2 session")
 
-	// Check if we already have a session with this router
 	routerHash := routerInfo.IdentHash()
+	if session, found := t.findExistingSession(routerHash); found {
+		return session, nil
+	}
+
+	return t.createOutboundSession(routerInfo, routerHash)
+}
+
+func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, exists := t.sessions.Load(routerHash); exists {
 		if ntcp2Session, ok := session.(*NTCP2Session); ok {
 			t.logger.Debug("Found existing NTCP2 session")
-			return ntcp2Session, nil
+			return ntcp2Session, true
 		}
 	}
+	return nil, false
+}
 
-	// Create outbound connection
+func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
 	t.logger.Debug("Creating new outbound NTCP2 connection")
 
-	// Extract NTCP2 address from RouterInfo
+	conn, err := t.dialNTCP2Connection(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	session := t.setupSession(conn, routerHash)
+	t.logger.Debug("Successfully created outbound NTCP2 session")
+	return session, nil
+}
+
+func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Conn, error) {
 	tcpAddr, err := ExtractNTCP2Addr(routerInfo)
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
 
-	// Create NTCP2 config for outbound connection
+	config, err := t.createNTCP2Config(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
+	if err != nil {
+		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
+	}
+
+	return conn, nil
+}
+
+func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
 	identityBytes := t.identity.IdentHash().Bytes()
 	config, err := ntcp2.NewNTCP2Config(identityBytes[:], true)
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
 
-	// Set remote router hash
 	remoteHashBytes := routerInfo.IdentHash().Bytes()
-	config = config.WithRemoteRouterHash(remoteHashBytes[:])
+	return config.WithRemoteRouterHash(remoteHashBytes[:]), nil
+}
 
-	// Dial the outbound connection using go-noise
-	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
-	if err != nil {
-		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
-	}
-
-	// Create session wrapper
+func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash) *NTCP2Session {
 	session := NewNTCP2Session(conn, t.ctx, t.logger)
 
-	// Set up cleanup callback so session can remove itself from map when it closes
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
 
-	// Store the session
 	t.sessions.Store(routerHash, session)
-
-	t.logger.Debug("Successfully created outbound NTCP2 session")
-	return session, nil
+	return session
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.
