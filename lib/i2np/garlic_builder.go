@@ -354,50 +354,75 @@ func serializeDeliveryInstructions(di *GarlicCloveDeliveryInstructions) ([]byte,
 		return nil, oops.Errorf("cannot serialize nil delivery instructions")
 	}
 
+	buf := initializeBufferWithFlag(di.Flag)
+	deliveryType := extractDeliveryType(di.Flag)
+
+	if err := appendEncryptionKeyIfNeeded(di, &buf); err != nil {
+		return nil, err
+	}
+
+	if err := appendHashForDeliveryType(di, deliveryType, &buf); err != nil {
+		return nil, err
+	}
+
+	appendTunnelIDIfNeeded(di, deliveryType, &buf)
+	appendDelayIfNeeded(di, &buf)
+
+	return buf, nil
+}
+
+// initializeBufferWithFlag creates a buffer with the flag byte.
+func initializeBufferWithFlag(flag byte) []byte {
 	buf := make([]byte, 0, 37) // Max possible size
+	return append(buf, flag)
+}
 
-	// Write flag byte
-	buf = append(buf, di.Flag)
+// extractDeliveryType extracts the delivery type from flag bits 6-5.
+func extractDeliveryType(flag byte) byte {
+	return (flag >> 5) & 0x03
+}
 
-	// Extract delivery type from flag (bits 6-5)
-	deliveryType := (di.Flag >> 5) & 0x03
-
-	// Check if encryption flag is set (bit 7)
+// appendEncryptionKeyIfNeeded adds session key to buffer if encryption flag is set.
+func appendEncryptionKeyIfNeeded(di *GarlicCloveDeliveryInstructions, buf *[]byte) error {
 	encrypted := (di.Flag >> 7) & 0x01
 	if encrypted == 1 {
-		// Session key included (32 bytes)
 		if len(di.SessionKey) != session_key.SESSION_KEY_SIZE {
-			return nil, oops.Errorf("session key must be %d bytes when encryption flag is set",
+			return oops.Errorf("session key must be %d bytes when encryption flag is set",
 				session_key.SESSION_KEY_SIZE)
 		}
-		buf = append(buf, di.SessionKey[:]...)
+		*buf = append(*buf, di.SessionKey[:]...)
 	}
+	return nil
+}
 
-	// Write hash for DESTINATION, ROUTER, or TUNNEL delivery
+// appendHashForDeliveryType adds hash to buffer for DESTINATION, ROUTER, or TUNNEL delivery.
+func appendHashForDeliveryType(di *GarlicCloveDeliveryInstructions, deliveryType byte, buf *[]byte) error {
 	if deliveryType == 0x01 || deliveryType == 0x02 || deliveryType == 0x03 {
 		if len(di.Hash) != 32 {
-			return nil, oops.Errorf("hash must be 32 bytes for delivery type %d",
-				deliveryType)
+			return oops.Errorf("hash must be 32 bytes for delivery type %d", deliveryType)
 		}
-		buf = append(buf, di.Hash[:]...)
+		*buf = append(*buf, di.Hash[:]...)
 	}
+	return nil
+}
 
-	// Write tunnel ID for TUNNEL delivery
+// appendTunnelIDIfNeeded adds tunnel ID to buffer for TUNNEL delivery type.
+func appendTunnelIDIfNeeded(di *GarlicCloveDeliveryInstructions, deliveryType byte, buf *[]byte) {
 	if deliveryType == 0x03 {
 		tunnelIDBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(tunnelIDBytes, uint32(di.TunnelID))
-		buf = append(buf, tunnelIDBytes...)
+		*buf = append(*buf, tunnelIDBytes...)
 	}
+}
 
-	// Check if delay flag is set (bit 4)
+// appendDelayIfNeeded adds delay to buffer if delay flag is set.
+func appendDelayIfNeeded(di *GarlicCloveDeliveryInstructions, buf *[]byte) {
 	delayIncluded := (di.Flag >> 4) & 0x01
 	if delayIncluded == 1 {
 		delayBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(delayBytes, uint32(di.Delay))
-		buf = append(buf, delayBytes...)
+		*buf = append(*buf, delayBytes...)
 	}
-
-	return buf, nil
 }
 
 // Helper functions for creating common delivery instruction patterns

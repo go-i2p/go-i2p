@@ -36,35 +36,74 @@ type NTCP2Transport struct {
 func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")
+
+	ntcp2Config, err := createNTCP2Config(identity, cancel)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := initializeCryptoKeys(ntcp2Config, cancel); err != nil {
+		return nil, err
+	}
+
+	config.NTCP2Config = ntcp2Config
+
+	transport := buildTransportInstance(config, identity, ctx, cancel, logger)
+
+	if err := setupNetworkListener(transport, config, ntcp2Config); err != nil {
+		return nil, err
+	}
+
+	return transport, nil
+}
+
+// createNTCP2Config creates and initializes the NTCP2 configuration from router identity.
+func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFunc) (*ntcp2.NTCP2Config, error) {
 	identityBytes := identity.IdentHash().Bytes()
-	// Create a new NTCP2 configuration
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
+	return ntcp2Config, nil
+}
 
-	// Initialize StaticKey and ObfuscationIV if not already set
-	// TODO: These should be loaded from persistent storage or derived from router identity
-	// For now, generate random values for startup
+// initializeCryptoKeys generates static key and obfuscation IV if not already set.
+// TODO: These should be loaded from persistent storage or derived from router identity.
+func initializeCryptoKeys(ntcp2Config *ntcp2.NTCP2Config, cancel context.CancelFunc) error {
+	if err := generateStaticKeyIfNeeded(ntcp2Config, cancel); err != nil {
+		return err
+	}
+	return generateObfuscationIVIfNeeded(ntcp2Config, cancel)
+}
+
+// generateStaticKeyIfNeeded creates a random 32-byte static key if not present.
+func generateStaticKeyIfNeeded(ntcp2Config *ntcp2.NTCP2Config, cancel context.CancelFunc) error {
 	if len(ntcp2Config.StaticKey) == 0 {
 		ntcp2Config.StaticKey = make([]byte, 32)
 		if _, err := rand.Read(ntcp2Config.StaticKey); err != nil {
 			cancel()
-			return nil, WrapNTCP2Error(err, "generating static key")
+			return WrapNTCP2Error(err, "generating static key")
 		}
 	}
+	return nil
+}
+
+// generateObfuscationIVIfNeeded creates a random 16-byte obfuscation IV if not present.
+func generateObfuscationIVIfNeeded(ntcp2Config *ntcp2.NTCP2Config, cancel context.CancelFunc) error {
 	if len(ntcp2Config.ObfuscationIV) == 0 {
 		ntcp2Config.ObfuscationIV = make([]byte, 16)
 		if _, err := rand.Read(ntcp2Config.ObfuscationIV); err != nil {
 			cancel()
-			return nil, WrapNTCP2Error(err, "generating obfuscation IV")
+			return WrapNTCP2Error(err, "generating obfuscation IV")
 		}
 	}
+	return nil
+}
 
-	config.NTCP2Config = ntcp2Config
-
-	transport := &NTCP2Transport{
+// buildTransportInstance constructs the NTCP2Transport struct with initialized fields.
+func buildTransportInstance(config *Config, identity router_info.RouterInfo, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
+	return &NTCP2Transport{
 		config:   config,
 		identity: identity,
 		ctx:      ctx,
@@ -73,20 +112,22 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 		wg:       sync.WaitGroup{},
 		sessions: sync.Map{},
 	}
+}
 
-	// Initialize the network listener
+// setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
+func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
 	tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	transport.listener = listener
 
-	return transport, nil
+	transport.listener = listener
+	return nil
 }
 
 // Accept accepts an incoming session.
