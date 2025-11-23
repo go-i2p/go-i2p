@@ -5,8 +5,8 @@ go 1.24.4
 require (
 	github.com/beevik/ntp v1.4.3
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
-	github.com/go-i2p/common v0.0.5
-	github.com/go-i2p/crypto v0.0.3
+	github.com/go-i2p/common v0.0.6
+	github.com/go-i2p/crypto v0.0.5
 	github.com/go-i2p/go-noise v0.0.1
 	github.com/go-i2p/logger v0.0.1
 	github.com/go-i2p/su3 v0.0.1
@@ -51,11 +51,9 @@ require (
 // publish intermediate versions.
 
 // Group 1: common, crypto, elgamal
-replace github.com/go-i2p/common => ../common
-
-replace github.com/go-i2p/crypto => ../crypto
-
-//replace github.com/go-i2p/elgamal => ../elgamal
+// replace github.com/go-i2p/common => ../common
+// replace github.com/go-i2p/crypto => ../crypto
+// replace github.com/go-i2p/elgamal => ../elgamal
 
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise

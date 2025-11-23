@@ -177,23 +177,33 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer s.wg.Done()
 	defer conn.Close()
 
+	s.logClientConnected(conn)
+
+	var session *Session
+	defer s.cleanupSessionConnection(&session)
+
+	s.runConnectionLoop(conn, &session)
+}
+
+// logClientConnected logs when a client connects to the server.
+func (s *Server) logClientConnected(conn net.Conn) {
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.Server.handleConnection",
 		"remoteAddr": conn.RemoteAddr(),
 	}).Info("client_connected")
+}
 
-	var session *Session
+// cleanupSessionConnection removes the session connection mapping on disconnect.
+func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
+	if *sessionPtr != nil {
+		s.mu.Lock()
+		delete(s.sessionConns, (*sessionPtr).ID())
+		s.mu.Unlock()
+	}
+}
 
-	// Cleanup on disconnect
-	defer func() {
-		if session != nil {
-			s.mu.Lock()
-			delete(s.sessionConns, session.ID())
-			s.mu.Unlock()
-		}
-	}()
-
-	// Connection loop
+// runConnectionLoop processes messages from the client connection.
+func (s *Server) runConnectionLoop(conn net.Conn, sessionPtr **Session) {
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -201,46 +211,76 @@ func (s *Server) handleConnection(conn net.Conn) {
 		default:
 		}
 
-		// Read message
-		msg, err := ReadMessage(conn)
+		msg, err := s.readClientMessage(conn)
 		if err != nil {
-			log.WithError(err).Debug("failed_to_read_message")
 			return
 		}
 
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleConnection",
-			"type":      MessageTypeName(msg.Type),
-			"sessionID": msg.SessionID,
-		}).Debug("received_message")
+		s.logReceivedMessage(msg)
 
-		// Process message
-		response, err := s.handleMessage(msg, &session)
+		response, err := s.processClientMessage(msg, sessionPtr)
 		if err != nil {
-			log.WithError(err).Error("failed_to_handle_message")
-			// Send error response (simplified - in real impl would send proper error message)
 			continue
 		}
 
-		// Track connection for session if session was just created
-		if session != nil && msg.Type == MessageTypeCreateSession {
-			s.mu.Lock()
-			s.sessionConns[session.ID()] = conn
-			s.mu.Unlock()
+		s.handleNewSessionTracking(msg, sessionPtr, conn)
 
-			// Start message delivery goroutine for this session
-			s.wg.Add(1)
-			go s.deliverMessagesToClient(session, conn)
-		}
-
-		// Send response if any
-		if response != nil {
-			if err := WriteMessage(conn, response); err != nil {
-				log.WithError(err).Error("failed_to_write_response")
-				return
-			}
+		if err := s.sendResponse(conn, response); err != nil {
+			return
 		}
 	}
+}
+
+// readClientMessage reads an I2CP message from the connection.
+func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
+	msg, err := ReadMessage(conn)
+	if err != nil {
+		log.WithError(err).Debug("failed_to_read_message")
+		return nil, err
+	}
+	return msg, nil
+}
+
+// logReceivedMessage logs details about a received message.
+func (s *Server) logReceivedMessage(msg *Message) {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleConnection",
+		"type":      MessageTypeName(msg.Type),
+		"sessionID": msg.SessionID,
+	}).Debug("received_message")
+}
+
+// processClientMessage handles a client message and returns a response.
+func (s *Server) processClientMessage(msg *Message, sessionPtr **Session) (*Message, error) {
+	response, err := s.handleMessage(msg, sessionPtr)
+	if err != nil {
+		log.WithError(err).Error("failed_to_handle_message")
+		return nil, err
+	}
+	return response, nil
+}
+
+// handleNewSessionTracking tracks new session connections and starts message delivery.
+func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, conn net.Conn) {
+	if *sessionPtr != nil && msg.Type == MessageTypeCreateSession {
+		s.mu.Lock()
+		s.sessionConns[(*sessionPtr).ID()] = conn
+		s.mu.Unlock()
+
+		s.wg.Add(1)
+		go s.deliverMessagesToClient(*sessionPtr, conn)
+	}
+}
+
+// sendResponse writes a response message to the connection if present.
+func (s *Server) sendResponse(conn net.Conn, response *Message) error {
+	if response != nil {
+		if err := WriteMessage(conn, response); err != nil {
+			log.WithError(err).Error("failed_to_write_response")
+			return err
+		}
+	}
+	return nil
 }
 
 // handleMessage processes a single I2CP message and returns an optional response
