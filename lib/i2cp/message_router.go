@@ -62,79 +62,129 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	destinationPubKey [32]byte,
 	payload []byte,
 ) error {
-	// Step 1: Validate session has outbound tunnel pool (fail-fast)
+	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
+	if err != nil {
+		return err
+	}
+
+	garlicMsg, err := mr.buildEncryptedGarlicMessage(session, destinationHash, destinationPubKey, payload)
+	if err != nil {
+		return err
+	}
+
+	if err := mr.sendThroughGateway(session, selectedTunnel, destinationHash, garlicMsg); err != nil {
+		return err
+	}
+
+	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
+	return nil
+}
+
+// validateAndSelectTunnel validates the session has an outbound pool and selects a tunnel.
+func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHash common.Hash) (*tunnel.TunnelState, error) {
 	outboundPool := session.OutboundPool()
 	if outboundPool == nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_outbound_pool")
-		return fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
+		return nil, fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
 	}
 
-	// Step 2: Select outbound tunnel from session pool (fail-fast)
 	selectedTunnel := outboundPool.SelectTunnel()
 	if selectedTunnel == nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_active_tunnels")
-		return fmt.Errorf("no active outbound tunnels available for session %d", session.ID())
+		return nil, fmt.Errorf("no active outbound tunnels available for session %d", session.ID())
 	}
 
-	// Step 3: Validate tunnel has hops (fail-fast)
 	if len(selectedTunnel.Hops) == 0 {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("tunnel_has_no_hops")
-		return fmt.Errorf("selected tunnel %d has no hops", selectedTunnel.ID)
+		return nil, fmt.Errorf("selected tunnel %d has no hops", selectedTunnel.ID)
 	}
 
-	// Step 4: Create Data message with the payload
+	return selectedTunnel, nil
+}
+
+// buildEncryptedGarlicMessage creates and encrypts a garlic message containing the payload.
+func (mr *MessageRouter) buildEncryptedGarlicMessage(
+	session *Session,
+	destinationHash common.Hash,
+	destinationPubKey [32]byte,
+	payload []byte,
+) (i2np.I2NPMessage, error) {
 	dataMsg := i2np.NewDataMessage(payload)
 
-	// Step 2: Build garlic message with Data clove
+	plaintextGarlic, err := mr.buildPlaintextGarlicMessage(session, destinationHash, dataMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedGarlic, err := mr.encryptGarlicMessage(session, destinationHash, destinationPubKey, plaintextGarlic)
+	if err != nil {
+		return nil, err
+	}
+
+	return mr.wrapInGarlicMessage(session, destinationHash, encryptedGarlic)
+}
+
+// buildPlaintextGarlicMessage creates a plaintext garlic message with the data clove.
+func (mr *MessageRouter) buildPlaintextGarlicMessage(
+	session *Session,
+	destinationHash common.Hash,
+	dataMsg i2np.I2NPMessage,
+) ([]byte, error) {
 	garlicBuilder, err := i2np.NewGarlicBuilderWithDefaults()
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_create_garlic_builder")
-		return fmt.Errorf("failed to create garlic builder: %w", err)
+		return nil, fmt.Errorf("failed to create garlic builder: %w", err)
 	}
 
-	// Add data message as local delivery clove
-	// The destination will decrypt the garlic and process this clove locally
 	if err := garlicBuilder.AddLocalDeliveryClove(dataMsg, 1); err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_add_garlic_clove")
-		return fmt.Errorf("failed to add garlic clove: %w", err)
+		return nil, fmt.Errorf("failed to add garlic clove: %w", err)
 	}
 
-	// Build and serialize the garlic structure (plaintext)
 	plaintextGarlic, err := garlicBuilder.BuildAndSerialize()
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.buildPlaintextGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_build_garlic")
-		return fmt.Errorf("failed to build garlic message: %w", err)
+		return nil, fmt.Errorf("failed to build garlic message: %w", err)
 	}
 
-	// Step 3: Encrypt garlic message using ECIES-X25519-AEAD
+	return plaintextGarlic, nil
+}
+
+// encryptGarlicMessage encrypts a plaintext garlic message using ECIES-X25519-AEAD.
+func (mr *MessageRouter) encryptGarlicMessage(
+	session *Session,
+	destinationHash common.Hash,
+	destinationPubKey [32]byte,
+	plaintextGarlic []byte,
+) ([]byte, error) {
 	encryptedGarlic, err := mr.garlicSessions.EncryptGarlicMessage(
 		destinationHash,
 		destinationPubKey,
@@ -142,34 +192,47 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.encryptGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_encrypt_garlic")
-		return fmt.Errorf("failed to encrypt garlic message: %w", err)
+		return nil, fmt.Errorf("failed to encrypt garlic message: %w", err)
 	}
+	return encryptedGarlic, nil
+}
 
-	// Step 4: Wrap encrypted garlic in I2NP Garlic message
+// wrapInGarlicMessage wraps encrypted garlic data in an I2NP Garlic message.
+func (mr *MessageRouter) wrapInGarlicMessage(
+	session *Session,
+	destinationHash common.Hash,
+	encryptedGarlic []byte,
+) (i2np.I2NPMessage, error) {
 	garlicMsg, err := i2np.WrapInGarlicMessage(encryptedGarlic)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.wrapInGarlicMessage",
 			"sessionID":   session.ID(),
 			"error":       err,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("failed_to_wrap_garlic")
-		return fmt.Errorf("failed to wrap garlic message: %w", err)
+		return nil, fmt.Errorf("failed to wrap garlic message: %w", err)
 	}
+	return garlicMsg, nil
+}
 
-	// Step 5: Send garlic message through tunnel gateway
-	// Gateway is the first hop in the outbound tunnel
+// sendThroughGateway sends the garlic message to the tunnel gateway.
+func (mr *MessageRouter) sendThroughGateway(
+	session *Session,
+	selectedTunnel *tunnel.TunnelState,
+	destinationHash common.Hash,
+	garlicMsg i2np.I2NPMessage,
+) error {
 	gatewayHash := selectedTunnel.Hops[0]
 
-	// Send the garlic message to the gateway router
 	if err := mr.transportSend(gatewayHash, garlicMsg); err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+			"at":          "i2cp.MessageRouter.sendThroughGateway",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
 			"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
@@ -178,17 +241,25 @@ func (mr *MessageRouter) RouteOutboundMessage(
 		}).Error("failed_to_send_to_gateway")
 		return fmt.Errorf("failed to send message to gateway: %w", err)
 	}
+	return nil
+}
 
+// logSuccessfulRouting logs successful message routing.
+func (mr *MessageRouter) logSuccessfulRouting(
+	session *Session,
+	selectedTunnel *tunnel.TunnelState,
+	destinationHash common.Hash,
+	payloadSize int,
+) {
+	gatewayHash := selectedTunnel.Hops[0]
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":   session.ID(),
 		"tunnelID":    selectedTunnel.ID,
 		"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
 		"destination": fmt.Sprintf("%x", destinationHash[:8]),
-		"payloadSize": len(payload),
+		"payloadSize": payloadSize,
 	}).Info("message_routed_successfully")
-
-	return nil
 }
 
 // SendThroughTunnel sends an I2NP message through a specific tunnel.
