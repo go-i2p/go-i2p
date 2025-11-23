@@ -36,84 +36,125 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 // GetPeers implements the Bootstrap interface by obtaining RouterInfos
 // from configured reseed servers
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.WithFields(logger.Fields{
-		"requested_peers": n,
-		"server_count":    len(rb.config.ReseedServers),
-	}).Info("Starting bootstrap peer acquisition")
+	rb.logReseedStart(n)
 
 	var allRouterInfos []router_info.RouterInfo
 	var lastErr error
 	var attemptedServers int
 	var successfulServers int
 
-	// Try each reseed server until we get enough routerInfos or exhaust all servers
 	for _, server := range rb.config.ReseedServers {
 		attemptedServers++
-		// Check if context is canceled before making request
-		if ctx.Err() != nil {
-			log.WithError(ctx.Err()).WithFields(logger.Fields{
-				"attempted_servers":  attemptedServers,
-				"successful_servers": successfulServers,
-				"collected_peers":    len(allRouterInfos),
-			}).Warn("Bootstrap reseed canceled by context")
-			return nil, oops.Errorf("reseed canceled: %v", ctx.Err())
+
+		if shouldStop, err := rb.checkContextCancellation(ctx, attemptedServers, successfulServers, len(allRouterInfos)); shouldStop {
+			return nil, err
 		}
 
-		log.WithFields(logger.Fields{
-			"server":        server.Url,
-			"attempt":       attemptedServers,
-			"total_servers": len(rb.config.ReseedServers),
-		}).Info("Attempting to reseed from server")
-
-		// Use the existing Reseed implementation with a timeout context
-		reseeder := reseed.NewReseed()
-
-		// Perform the actual reseeding operation synchronously
-		serverRIs, err := reseeder.SingleReseed(server.Url)
+		serverRIs, err := rb.attemptReseedFromServer(server, attemptedServers)
 		if err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"server":  server.Url,
-				"attempt": attemptedServers,
-			}).Warn("Reseed attempt failed")
-			lastErr = oops.Errorf("reseed from %s failed: %v", server.Url, err)
+			lastErr = err
 			continue
 		}
 
-		// Add the retrieved RouterInfos to our collection
 		successfulServers++
 		allRouterInfos = append(allRouterInfos, serverRIs...)
-		log.WithFields(logger.Fields{
-			"server":             server.Url,
-			"count":              len(serverRIs),
-			"total":              len(allRouterInfos),
-			"successful_servers": successfulServers,
-		}).Info("Successfully obtained router infos from reseed server")
+		rb.logServerSuccess(server, len(serverRIs), len(allRouterInfos), successfulServers)
 
-		// Check if we have enough RouterInfos
-		if n > 0 && len(allRouterInfos) >= n {
-			log.WithFields(logger.Fields{
-				"requested": n,
-				"obtained":  len(allRouterInfos),
-			}).Info("Reached requested peer count, stopping reseed")
+		if rb.hasEnoughPeers(n, len(allRouterInfos)) {
 			break
 		}
 	}
 
-	// If we couldn't get any RouterInfos from any server, return the last error
+	if err := rb.validateResults(allRouterInfos, lastErr, attemptedServers, successfulServers); err != nil {
+		return nil, err
+	}
+
+	rb.logReseedComplete(len(allRouterInfos), attemptedServers, successfulServers, n)
+	return allRouterInfos, nil
+}
+
+// logReseedStart logs the beginning of the bootstrap peer acquisition.
+func (rb *ReseedBootstrap) logReseedStart(n int) {
+	log.WithFields(logger.Fields{
+		"requested_peers": n,
+		"server_count":    len(rb.config.ReseedServers),
+	}).Info("Starting bootstrap peer acquisition")
+}
+
+// checkContextCancellation checks if the context has been canceled.
+func (rb *ReseedBootstrap) checkContextCancellation(ctx context.Context, attemptedServers, successfulServers, collectedPeers int) (bool, error) {
+	if ctx.Err() != nil {
+		log.WithError(ctx.Err()).WithFields(logger.Fields{
+			"attempted_servers":  attemptedServers,
+			"successful_servers": successfulServers,
+			"collected_peers":    collectedPeers,
+		}).Warn("Bootstrap reseed canceled by context")
+		return true, oops.Errorf("reseed canceled: %v", ctx.Err())
+	}
+	return false, nil
+}
+
+// attemptReseedFromServer attempts to reseed from a single server.
+func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"server":        server.Url,
+		"attempt":       attemptNumber,
+		"total_servers": len(rb.config.ReseedServers),
+	}).Info("Attempting to reseed from server")
+
+	reseeder := reseed.NewReseed()
+	serverRIs, err := reseeder.SingleReseed(server.Url)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"server":  server.Url,
+			"attempt": attemptNumber,
+		}).Warn("Reseed attempt failed")
+		return nil, oops.Errorf("reseed from %s failed: %v", server.Url, err)
+	}
+
+	return serverRIs, nil
+}
+
+// logServerSuccess logs successful retrieval of router infos from a server.
+func (rb *ReseedBootstrap) logServerSuccess(server *config.ReseedConfig, count, total, successfulServers int) {
+	log.WithFields(logger.Fields{
+		"server":             server.Url,
+		"count":              count,
+		"total":              total,
+		"successful_servers": successfulServers,
+	}).Info("Successfully obtained router infos from reseed server")
+}
+
+// hasEnoughPeers checks if we have collected enough peers.
+func (rb *ReseedBootstrap) hasEnoughPeers(requested, obtained int) bool {
+	if requested > 0 && obtained >= requested {
+		log.WithFields(logger.Fields{
+			"requested": requested,
+			"obtained":  obtained,
+		}).Info("Reached requested peer count, stopping reseed")
+		return true
+	}
+	return false
+}
+
+// validateResults checks if we obtained any router infos and returns an error if not.
+func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterInfo, lastErr error, attemptedServers, successfulServers int) error {
 	if len(allRouterInfos) == 0 && lastErr != nil {
 		log.WithFields(logger.Fields{
 			"attempted_servers":  attemptedServers,
 			"successful_servers": successfulServers,
 		}).Error("All reseed attempts failed, no peers obtained")
-		return nil, oops.Errorf("all reseed attempts failed: %w", lastErr)
+		return oops.Errorf("all reseed attempts failed: %w", lastErr)
 	}
+	return nil
+}
 
+// logReseedComplete logs the completion of bootstrap peer acquisition.
+func (rb *ReseedBootstrap) logReseedComplete(totalPeers, attemptedServers, successfulServers, requestedPeers int) {
 	log.WithFields(logger.Fields{
-		"total_peers":        len(allRouterInfos),
+		"total_peers":        totalPeers,
 		"attempted_servers":  attemptedServers,
 		"successful_servers": successfulServers,
-		"requested_peers":    n,
+		"requested_peers":    requestedPeers,
 	}).Info("Bootstrap peer acquisition completed")
-
-	return allRouterInfos, nil
 }
