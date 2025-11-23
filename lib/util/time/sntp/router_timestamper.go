@@ -360,7 +360,7 @@ func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout tim
 	}
 
 	now := time.Now().Add(response.ClockOffset)
-	delta := now.Sub(time.Now())
+	delta := time.Until(now)
 	return delta, nil
 }
 
@@ -401,7 +401,7 @@ func (rt *RouterTimestamper) stampTime(now time.Time) {
 	defer rt.mutex.Unlock()
 
 	// Store the time offset for GetCurrentTime
-	rt.timeOffset = now.Sub(time.Now())
+	rt.timeOffset = time.Until(now)
 
 	for _, listener := range rt.listeners {
 		listener.SetNow(now, 0)
