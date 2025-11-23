@@ -145,31 +145,47 @@ func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			select {
-			case <-s.ctx.Done():
-				// Server is shutting down
+			if s.handleAcceptError(err) {
 				return
-			default:
-				log.WithError(err).Error("failed_to_accept_connection")
-				continue
 			}
-		}
-
-		// Check session limit
-		if s.manager.SessionCount() >= s.config.MaxSessions {
-			log.WithFields(logger.Fields{
-				"at":           "i2cp.Server.acceptLoop",
-				"sessionCount": s.manager.SessionCount(),
-				"maxSessions":  s.config.MaxSessions,
-			}).Warn("max_sessions_reached")
-			conn.Close()
 			continue
 		}
 
-		// Handle connection
+		if s.shouldRejectConnection(conn) {
+			continue
+		}
+
 		s.wg.Add(1)
 		go s.handleConnection(conn)
 	}
+}
+
+// handleAcceptError processes errors from listener.Accept().
+// Returns true if the accept loop should terminate, false to continue.
+func (s *Server) handleAcceptError(err error) bool {
+	select {
+	case <-s.ctx.Done():
+		// Server is shutting down
+		return true
+	default:
+		log.WithError(err).Error("failed_to_accept_connection")
+		return false
+	}
+}
+
+// shouldRejectConnection checks if a connection should be rejected due to session limits.
+// Closes the connection if rejected.
+func (s *Server) shouldRejectConnection(conn net.Conn) bool {
+	if s.manager.SessionCount() >= s.config.MaxSessions {
+		log.WithFields(logger.Fields{
+			"at":           "i2cp.Server.shouldRejectConnection",
+			"sessionCount": s.manager.SessionCount(),
+			"maxSessions":  s.config.MaxSessions,
+		}).Warn("max_sessions_reached")
+		conn.Close()
+		return true
+	}
+	return false
 }
 
 // handleConnection processes a single client connection
@@ -205,30 +221,48 @@ func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 // runConnectionLoop processes messages from the client connection.
 func (s *Server) runConnectionLoop(conn net.Conn, sessionPtr **Session) {
 	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		default:
-		}
-
-		msg, err := s.readClientMessage(conn)
-		if err != nil {
+		if s.shouldStopConnectionLoop() {
 			return
 		}
 
-		s.logReceivedMessage(msg)
-
-		response, err := s.processClientMessage(msg, sessionPtr)
-		if err != nil {
-			continue
-		}
-
-		s.handleNewSessionTracking(msg, sessionPtr, conn)
-
-		if err := s.sendResponse(conn, response); err != nil {
+		if !s.processOneMessage(conn, sessionPtr) {
 			return
 		}
 	}
+}
+
+// shouldStopConnectionLoop checks if the connection loop should terminate.
+func (s *Server) shouldStopConnectionLoop() bool {
+	select {
+	case <-s.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// processOneMessage handles a single message from the client connection.
+// Returns false if the connection should be closed, true to continue.
+func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
+	msg, err := s.readClientMessage(conn)
+	if err != nil {
+		return false
+	}
+
+	s.logReceivedMessage(msg)
+
+	response, err := s.processClientMessage(msg, sessionPtr)
+	if err != nil {
+		return true // Continue despite processing error
+	}
+
+	s.handleNewSessionTracking(msg, sessionPtr, conn)
+
+	if err := s.sendResponse(conn, response); err != nil {
+		return false
+	}
+
+	return true
 }
 
 // readClientMessage reads an I2CP message from the connection.
