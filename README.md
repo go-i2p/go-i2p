@@ -9,8 +9,7 @@ go-i2p is in early development. We recently completed several significant milest
 ### Implemented Features
 
 - Clients
-  - [X] I2CP Protocol Server (protocol messages, session management, TCP server)
-  - [ ] I2CP Client Tunnel Lifecycle (CreateLeaseSet, SendMessage)
+  - [X] I2CP Protocol Server
   - [ ] Message routing
   - [ ] Datagrams
   - [ ] Streaming

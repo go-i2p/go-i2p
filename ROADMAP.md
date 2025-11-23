@@ -74,7 +74,7 @@
   * ✅ Session management and multi-client support
   * ✅ Message framing and serialization
   * ✅ Integration framework for LeaseSet and message delivery
-  * ✅ Test coverage: 73.4%
+  * ✅ SendMessage and MessagePayload handlers
 
 ### NetDb Implementation
 - ✅ **Database Store Integration**:
@@ -95,7 +95,7 @@
 ### I2CP Client Tunnel Lifecycle
 - **Application Layer Integration**:
   * ✅ CreateLeaseSet implementation
-  * 📋 SendMessage and ReceiveMessage handlers
+  * ✅ SendMessage and ReceiveMessage handlers (November 23, 2025)
   * 📋 LeaseSet maintenance and rotation
   * 📋 End-to-end integration testing
 

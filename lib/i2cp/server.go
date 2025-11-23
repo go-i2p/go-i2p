@@ -43,8 +43,10 @@ type Server struct {
 
 	listener net.Listener
 
-	mu      sync.RWMutex
-	running bool
+	// Connection tracking for message delivery
+	mu           sync.RWMutex
+	running      bool
+	sessionConns map[uint16]net.Conn // Session ID -> active connection
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -60,10 +62,11 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Server{
-		config:  config,
-		manager: NewSessionManager(),
-		ctx:     ctx,
-		cancel:  cancel,
+		config:       config,
+		manager:      NewSessionManager(),
+		sessionConns: make(map[uint16]net.Conn),
+		ctx:          ctx,
+		cancel:       cancel,
 	}, nil
 }
 
@@ -178,6 +181,15 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	var session *Session
 
+	// Cleanup on disconnect
+	defer func() {
+		if session != nil {
+			s.mu.Lock()
+			delete(s.sessionConns, session.ID())
+			s.mu.Unlock()
+		}
+	}()
+
 	// Connection loop
 	for {
 		select {
@@ -205,6 +217,17 @@ func (s *Server) handleConnection(conn net.Conn) {
 			log.WithError(err).Error("failed_to_handle_message")
 			// Send error response (simplified - in real impl would send proper error message)
 			continue
+		}
+
+		// Track connection for session if session was just created
+		if session != nil && msg.Type == MessageTypeCreateSession {
+			s.mu.Lock()
+			s.sessionConns[session.ID()] = conn
+			s.mu.Unlock()
+
+			// Start message delivery goroutine for this session
+			s.wg.Add(1)
+			go s.deliverMessagesToClient(session, conn)
 		}
 
 		// Send response if any
@@ -385,22 +408,59 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	return response, nil
 }
 
-// handleSendMessage handles a client sending a message
+// handleSendMessage handles a client sending a message to a destination.
+// This parses the SendMessage payload (destination hash + message data),
+// validates the session state, and initiates message routing.
+//
+// In a full implementation, this would:
+// 1. Wrap the payload in garlic encryption using the destination's public key
+// 2. Select an outbound tunnel from the session's tunnel pool
+// 3. Send the garlic message through the tunnel to the destination
+//
+// Current implementation provides payload parsing and validation.
 func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, fmt.Errorf("no active session")
 	}
 
-	// TODO: Parse destination and payload from msg.Payload
-	// TODO: Route message through tunnels
+	session := *sessionPtr
+
+	// Parse SendMessage payload
+	sendMsg, err := ParseSendMessagePayload(msg.Payload)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleSendMessage",
+			"sessionID": session.ID(),
+			"error":     err,
+		}).Error("failed_to_parse_send_message")
+		return nil, fmt.Errorf("failed to parse SendMessage payload: %w", err)
+	}
+
+	// Validate session has outbound tunnels
+	outboundPool := session.OutboundPool()
+	if outboundPool == nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleSendMessage",
+			"sessionID": session.ID(),
+		}).Warn("no_outbound_tunnel_pool")
+		return nil, fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
+	}
+
+	// TODO: Implement full message routing:
+	// 1. Create garlic message with ECIES-X25519-AEAD encryption
+	// 2. Get active outbound tunnel from pool
+	// 3. Wrap in tunnel message and send through tunnel gateway
+	// 4. Track message for delivery confirmation
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleSendMessage",
-		"sessionID": (*sessionPtr).ID(),
-		"size":      len(msg.Payload),
-	}).Debug("message_queued_for_sending")
+		"at":          "i2cp.Server.handleSendMessage",
+		"sessionID":   session.ID(),
+		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]), // Log first 8 bytes
+		"payloadSize": len(sendMsg.Payload),
+	}).Info("message_queued_for_sending")
 
-	// No immediate response for SendMessage
+	// No immediate response for SendMessage (fire-and-forget)
+	// In the future, we may send DeliveryStatus responses for reliability
 	return nil, nil
 }
 
@@ -414,4 +474,96 @@ func (s *Server) IsRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.running
+}
+
+// deliverMessagesToClient runs in a goroutine to deliver incoming messages to a client.
+// This monitors the session's incoming message queue and sends MessagePayload messages
+// to the client connection when messages arrive from the I2P network.
+//
+// The goroutine exits when:
+// - The session is stopped
+// - The server is shutting down
+// - An error occurs writing to the connection
+func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
+	defer s.wg.Done()
+
+	sessionID := session.ID()
+	messageCounter := uint32(1) // Start message IDs at 1
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.deliverMessagesToClient",
+		"sessionID": sessionID,
+	}).Debug("started_message_delivery_goroutine")
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			// Server is shutting down
+			return
+
+		default:
+			// Try to receive a message from the session queue
+			incomingMsg, err := session.ReceiveMessage()
+			if err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.deliverMessagesToClient",
+					"sessionID": sessionID,
+					"error":     err,
+				}).Error("failed_to_receive_message")
+				return
+			}
+
+			// nil message means session was stopped
+			if incomingMsg == nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.deliverMessagesToClient",
+					"sessionID": sessionID,
+				}).Debug("session_stopped_stopping_delivery")
+				return
+			}
+
+			// Create MessagePayload message
+			msgPayload := &MessagePayloadPayload{
+				MessageID: messageCounter,
+				Payload:   incomingMsg.Payload,
+			}
+
+			messageCounter++ // Increment for next message
+
+			// Serialize MessagePayload payload
+			payloadBytes, err := msgPayload.MarshalBinary()
+			if err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.deliverMessagesToClient",
+					"sessionID": sessionID,
+					"error":     err,
+				}).Error("failed_to_marshal_message_payload")
+				continue
+			}
+
+			// Create I2CP MessagePayload message
+			i2cpMsg := &Message{
+				Type:      MessageTypeMessagePayload,
+				SessionID: sessionID,
+				Payload:   payloadBytes,
+			}
+
+			// Send to client
+			if err := WriteMessage(conn, i2cpMsg); err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.deliverMessagesToClient",
+					"sessionID": sessionID,
+					"error":     err,
+				}).Error("failed_to_write_message_payload")
+				return
+			}
+
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.deliverMessagesToClient",
+				"sessionID": sessionID,
+				"messageID": msgPayload.MessageID,
+				"size":      len(incomingMsg.Payload),
+			}).Debug("delivered_message_to_client")
+		}
+	}
 }

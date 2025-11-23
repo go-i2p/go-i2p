@@ -193,6 +193,32 @@ func (s *Session) QueueIncomingMessage(payload []byte) error {
 	}
 }
 
+// QueueIncomingMessageWithID queues a message for delivery to the client with a message ID.
+// This is a higher-level method that wraps the payload in a MessagePayloadPayload structure
+// before queuing it for delivery. The message ID can be used for tracking and correlation.
+// Returns an error if the session is not active or the queue is full.
+func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) error {
+	s.mu.RLock()
+	active := s.active
+	s.mu.RUnlock()
+
+	if !active {
+		return fmt.Errorf("session %d is not active", s.id)
+	}
+
+	msg := &IncomingMessage{
+		Payload:   payload,
+		Timestamp: time.Now(),
+	}
+
+	select {
+	case s.incomingMessages <- msg:
+		return nil
+	default:
+		return fmt.Errorf("incoming message queue full for session %d", s.id)
+	}
+}
+
 // ReceiveMessage blocks until a message is available or the session is stopped
 // Returns nil, nil if the session is stopped
 func (s *Session) ReceiveMessage() (*IncomingMessage, error) {

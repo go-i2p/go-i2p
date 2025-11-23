@@ -1,0 +1,138 @@
+package i2cp
+
+import (
+	"encoding/binary"
+	"fmt"
+
+	"github.com/go-i2p/common/data"
+)
+
+// SendMessagePayload represents the payload structure of a SendMessage (type 7) message.
+// This structure follows the I2CP v2.10.0 specification for client-to-router message delivery.
+//
+// Format:
+//
+//	SessionID: uint16 (already in Message header)
+//	Destination: Hash (32 bytes) - SHA256 hash of target destination
+//	Payload: []byte (variable length) - actual message data to send
+//
+// The router will wrap this payload in garlic encryption and route it through
+// the outbound tunnel pool to the specified destination.
+type SendMessagePayload struct {
+	Destination data.Hash // 32-byte SHA256 hash of target destination
+	Payload     []byte    // Message data to send (variable length)
+}
+
+// ParseSendMessagePayload deserializes a SendMessage payload from wire format.
+// Returns an error if the payload is too short or malformed.
+//
+// Wire format:
+//
+//	bytes 0-31:  Destination hash (32 bytes)
+//	bytes 32+:   Message payload (variable length)
+func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error) {
+	// Minimum size: 32 bytes for destination hash
+	// Payload can be empty (0 bytes), so minimum is exactly 32
+	if len(data) < 32 {
+		return nil, fmt.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(data))
+	}
+
+	smp := &SendMessagePayload{}
+
+	// Parse destination hash (first 32 bytes)
+	copy(smp.Destination[:], data[0:32])
+
+	// Parse message payload (remaining bytes)
+	payloadLen := len(data) - 32
+	if payloadLen > 0 {
+		smp.Payload = make([]byte, payloadLen)
+		copy(smp.Payload, data[32:])
+	} else {
+		smp.Payload = []byte{}
+	}
+
+	return smp, nil
+}
+
+// MarshalBinary serializes the SendMessagePayload to wire format.
+// Returns the serialized bytes ready to be sent as an I2CP message payload.
+func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
+	// Calculate total size: 32 (destination) + len(payload)
+	totalSize := 32 + len(smp.Payload)
+	result := make([]byte, totalSize)
+
+	// Write destination hash
+	copy(result[0:32], smp.Destination[:])
+
+	// Write payload
+	if len(smp.Payload) > 0 {
+		copy(result[32:], smp.Payload)
+	}
+
+	return result, nil
+}
+
+// MessagePayloadPayload represents the payload structure of a MessagePayload (type 8) message.
+// This structure follows the I2CP v2.10.0 specification for router-to-client message delivery.
+//
+// Format:
+//
+//	SessionID: uint16 (already in Message header)
+//	MessageID: uint32 (4 bytes) - unique identifier for this message
+//	Payload: []byte (variable length) - decrypted message data
+//
+// The router sends this to the client after receiving and decrypting a message
+// from the I2P network destined for the client's destination.
+type MessagePayloadPayload struct {
+	MessageID uint32 // Unique message identifier
+	Payload   []byte // Decrypted message data (variable length)
+}
+
+// ParseMessagePayloadPayload deserializes a MessagePayload payload from wire format.
+// Returns an error if the payload is too short or malformed.
+//
+// Wire format:
+//
+//	bytes 0-3:   MessageID (4 bytes, big endian)
+//	bytes 4+:    Message payload (variable length)
+func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
+	// Minimum size: 4 bytes for message ID
+	// Payload can be empty (0 bytes), so minimum is exactly 4
+	if len(data) < 4 {
+		return nil, fmt.Errorf("message payload too short: need at least 4 bytes for message ID, got %d", len(data))
+	}
+
+	mpp := &MessagePayloadPayload{}
+
+	// Parse message ID (first 4 bytes, big endian)
+	mpp.MessageID = binary.BigEndian.Uint32(data[0:4])
+
+	// Parse message payload (remaining bytes)
+	payloadLen := len(data) - 4
+	if payloadLen > 0 {
+		mpp.Payload = make([]byte, payloadLen)
+		copy(mpp.Payload, data[4:])
+	} else {
+		mpp.Payload = []byte{}
+	}
+
+	return mpp, nil
+}
+
+// MarshalBinary serializes the MessagePayloadPayload to wire format.
+// Returns the serialized bytes ready to be sent as an I2CP message payload.
+func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
+	// Calculate total size: 4 (message ID) + len(payload)
+	totalSize := 4 + len(mpp.Payload)
+	result := make([]byte, totalSize)
+
+	// Write message ID (big endian)
+	binary.BigEndian.PutUint32(result[0:4], mpp.MessageID)
+
+	// Write payload
+	if len(mpp.Payload) > 0 {
+		copy(result[4:], mpp.Payload)
+	}
+
+	return result, nil
+}
