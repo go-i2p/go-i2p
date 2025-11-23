@@ -53,14 +53,14 @@ go-i2p is in early development. We recently completed several significant milest
   - [X] Local storage interface
   - [X] Reseed functionality (basic implementation)
   - [~] Persistence to disk
-  - [ ] RouterInfo management
-  - [ ] LeaseSet management
+  - [X] RouterInfo management
+  - [X] LeaseSet management
   - [X] Lookups
   - [ ] Expiry
   - [ ] Exploration
-  - [ ] Publishing
+  - [X] Publishing
   - [ ] Floodfill
-  - [ ] LS2 and Encrypted Leasesets
+  - [~] LS2 and Encrypted Leasesets
 - Transport Layer
   - [X] Transport manager and interfaces
   - NTCP2

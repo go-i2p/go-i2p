@@ -95,9 +95,9 @@
 ### I2CP Client Tunnel Lifecycle
 - **Application Layer Integration**:
   * ✅ CreateLeaseSet implementation
-  * ✅ SendMessage and ReceiveMessage handlers (November 23, 2025)
-  * ✅ LeaseSet maintenance and rotation (November 23, 2025)
-  * 📋 End-to-end integration testing
+  * ✅ SendMessage and ReceiveMessage handlers
+  * ✅ LeaseSet maintenance and rotation
+  * ✅ End-to-end integration testing
 
 ## Next Priority Components 🎯
 
@@ -135,8 +135,9 @@
 - ✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)
 - ✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)
 - ✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)
+- ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, end-to-end integration)
 
-**Next Focus**: Phase 6 - I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery)
+**Next Focus**: Phase 7 - TBD
 
 **Test Coverage**: Core components have strong test coverage:
 - Garlic session management: >80% coverage
