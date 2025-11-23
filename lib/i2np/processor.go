@@ -771,45 +771,56 @@ func (mr *MessageRouter) SetSessionProvider(provider SessionProvider) {
 
 // PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
+	dm.logLookupRequest(reader)
+
+	if dm.sessionProvider == nil {
+		return dm.handleLookupWithoutSession(reader.GetKey())
+	}
+
+	return dm.performLookupWithSession(reader.GetKey(), reader.GetFrom())
+}
+
+// logLookupRequest logs the incoming database lookup request details.
+func (dm *DatabaseManager) logLookupRequest(reader DatabaseReader) {
 	key := reader.GetKey()
 	from := reader.GetFrom()
-	flags := reader.GetFlags()
-
 	log.WithFields(logger.Fields{
 		"key":   fmt.Sprintf("%x", key[:8]),
 		"from":  fmt.Sprintf("%x", from[:8]),
-		"flags": flags,
+		"flags": reader.GetFlags(),
 	}).Debug("Performing database lookup")
+}
 
-	// If no session provider is available, just perform the lookup logic without sending responses
-	// This maintains backward compatibility with existing tests
-	if dm.sessionProvider == nil {
-		log.Debug("No session provider available, performing lookup without sending response")
-		if dm.retriever != nil {
-			if data, err := dm.retrieveRouterInfo(key); err == nil {
-				log.WithField("data_size", len(data)).Debug("RouterInfo found locally")
-			} else {
-				log.WithField("error", err).Debug("RouterInfo not found locally")
-			}
-		} else {
-			log.Debug("No retriever available, cannot perform lookup")
-		}
+// handleLookupWithoutSession performs lookup without sending responses for backward compatibility.
+func (dm *DatabaseManager) handleLookupWithoutSession(key common.Hash) error {
+	log.Debug("No session provider available, performing lookup without sending response")
+
+	if dm.retriever == nil {
+		log.Debug("No retriever available, cannot perform lookup")
 		return nil
 	}
 
-	// Attempt to retrieve RouterInfo from NetDB
-	if dm.retriever != nil {
-		if data, err := dm.retrieveRouterInfo(key); err == nil {
-			// RouterInfo found - send DatabaseStore response
-			return dm.sendDatabaseStoreResponse(key, data, from)
-		} else {
-			log.WithField("error", err).Debug("RouterInfo not found locally for remote lookup")
-		}
+	if data, err := dm.retrieveRouterInfo(key); err == nil {
+		log.WithField("data_size", len(data)).Debug("RouterInfo found locally")
 	} else {
+		log.WithField("error", err).Debug("RouterInfo not found locally")
+	}
+	return nil
+}
+
+// performLookupWithSession attempts lookup and sends appropriate response message.
+func (dm *DatabaseManager) performLookupWithSession(key, from common.Hash) error {
+	if dm.retriever == nil {
 		log.Debug("No retriever available, cannot perform lookup")
+		return dm.sendDatabaseSearchReply(key, from)
 	}
 
-	// RouterInfo not found - send DatabaseSearchReply response
+	data, err := dm.retrieveRouterInfo(key)
+	if err == nil {
+		return dm.sendDatabaseStoreResponse(key, data, from)
+	}
+
+	log.WithField("error", err).Debug("RouterInfo not found locally for remote lookup")
 	return dm.sendDatabaseSearchReply(key, from)
 }
 

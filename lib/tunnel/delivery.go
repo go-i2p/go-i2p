@@ -738,43 +738,29 @@ func readFirstFragmentInstructions(data []byte, flag byte) (*DeliveryInstruction
 // parseFirstFragmentFields reads all variable-length fields from first fragment delivery instructions.
 // It processes tunnel ID, hash, delay, message ID, extended options, and fragment size in sequence.
 func parseFirstFragmentFields(data []byte, di *DeliveryInstructions) (int, error) {
+	return executeFieldParsers(data, di, []fieldParser{
+		readTunnelID,
+		readDestinationHash,
+		readDelayIfPresent,
+		readMessageIDIfFragmented,
+		readExtendedOptions,
+		readFragmentSize,
+	})
+}
+
+// fieldParser defines a function that reads a field from delivery instructions.
+type fieldParser func([]byte, int, *DeliveryInstructions) (int, error)
+
+// executeFieldParsers sequentially executes field parsers starting from offset 1.
+// Returns the final offset after all parsers complete or an error if any parser fails.
+func executeFieldParsers(data []byte, di *DeliveryInstructions, parsers []fieldParser) (int, error) {
 	offset := 1
-
-	// Read tunnel ID if DT_TUNNEL
-	offset, err := readTunnelID(data, offset, di)
-	if err != nil {
-		return offset, err
+	for _, parser := range parsers {
+		newOffset, err := parser(data, offset, di)
+		if err != nil {
+			return offset, err
+		}
+		offset = newOffset
 	}
-
-	// Read hash if DT_TUNNEL or DT_ROUTER
-	offset, err = readDestinationHash(data, offset, di)
-	if err != nil {
-		return offset, err
-	}
-
-	// Read delay if present
-	offset, err = readDelayIfPresent(data, offset, di)
-	if err != nil {
-		return offset, err
-	}
-
-	// Read message ID if fragmented
-	offset, err = readMessageIDIfFragmented(data, offset, di)
-	if err != nil {
-		return offset, err
-	}
-
-	// Read extended options if present
-	offset, err = readExtendedOptions(data, offset, di)
-	if err != nil {
-		return offset, err
-	}
-
-	// Read fragment size
-	offset, err = readFragmentSize(data, offset, di)
-	if err != nil {
-		return offset, err
-	}
-
 	return offset, nil
 }

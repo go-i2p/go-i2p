@@ -523,57 +523,86 @@ func (s *Session) handleMaintenanceTick() {
 // - Current LeaseSet is more than half its lifetime old
 // - Tunnel pool has changed significantly
 func (s *Session) maintainLeaseSet() error {
-	s.mu.RLock()
-	needsRegeneration := false
-	now := time.Now()
-
-	// Check if LeaseSet exists
-	if s.currentLeaseSet == nil {
-		needsRegeneration = true
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Session.maintainLeaseSet",
-			"sessionID": s.id,
-		}).Debug("no_leaseset_exists_generating_new")
-	} else {
-		// Check age of current LeaseSet
-		age := now.Sub(s.leaseSetPublishedAt)
-		// Regenerate if more than half the lifetime has passed
-		// This ensures we publish fresh LeaseSet before old one expires
-		regenerationThreshold := s.config.TunnelLifetime / 2
-
-		if age > regenerationThreshold {
-			needsRegeneration = true
-			log.WithFields(logger.Fields{
-				"at":                    "i2cp.Session.maintainLeaseSet",
-				"sessionID":             s.id,
-				"age":                   age,
-				"regenerationThreshold": regenerationThreshold,
-			}).Debug("leaseset_exceeds_regeneration_threshold")
-		}
-	}
-	s.mu.RUnlock()
+	needsRegeneration := s.checkLeaseSetRegeneration()
 
 	if !needsRegeneration {
 		return nil
 	}
 
-	// Generate new LeaseSet
+	return s.regenerateAndPublishLeaseSet()
+}
+
+// checkLeaseSetRegeneration evaluates whether the LeaseSet requires regeneration.
+// Returns true if no LeaseSet exists or if the current LeaseSet exceeds half its lifetime.
+func (s *Session) checkLeaseSetRegeneration() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.currentLeaseSet == nil {
+		s.logLeaseSetMissing()
+		return true
+	}
+
+	return s.evaluateLeaseSetAge()
+}
+
+// logLeaseSetMissing logs debug information when no LeaseSet exists.
+func (s *Session) logLeaseSetMissing() {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.maintainLeaseSet",
+		"sessionID": s.id,
+	}).Debug("no_leaseset_exists_generating_new")
+}
+
+// evaluateLeaseSetAge determines if the current LeaseSet is too old and needs regeneration.
+// Regeneration occurs when more than half the tunnel lifetime has elapsed.
+func (s *Session) evaluateLeaseSetAge() bool {
+	now := time.Now()
+	age := now.Sub(s.leaseSetPublishedAt)
+	regenerationThreshold := s.config.TunnelLifetime / 2
+
+	if age > regenerationThreshold {
+		s.logLeaseSetExpiration(age, regenerationThreshold)
+		return true
+	}
+
+	return false
+}
+
+// logLeaseSetExpiration logs debug information when LeaseSet exceeds regeneration threshold.
+func (s *Session) logLeaseSetExpiration(age time.Duration, threshold time.Duration) {
+	log.WithFields(logger.Fields{
+		"at":                    "i2cp.Session.maintainLeaseSet",
+		"sessionID":             s.id,
+		"age":                   age,
+		"regenerationThreshold": threshold,
+	}).Debug("leaseset_exceeds_regeneration_threshold")
+}
+
+// regenerateAndPublishLeaseSet creates a new LeaseSet and prepares it for network publication.
+// Returns an error if LeaseSet creation fails.
+func (s *Session) regenerateAndPublishLeaseSet() error {
 	leaseSetBytes, err := s.CreateLeaseSet()
 	if err != nil {
 		return fmt.Errorf("failed to create LeaseSet: %w", err)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Session.maintainLeaseSet",
-		"sessionID": s.ID(),
-		"size":      len(leaseSetBytes),
-	}).Info("leaseset_regenerated")
+	s.logLeaseSetRegenerated(leaseSetBytes)
 
 	// TODO: Publish to network database (NetDB)
 	// This would involve sending a DatabaseStore message with the LeaseSet
 	// For now, the LeaseSet is cached in the session and available via CreateLeaseSet
 
 	return nil
+}
+
+// logLeaseSetRegenerated logs information about successful LeaseSet regeneration.
+func (s *Session) logLeaseSetRegenerated(leaseSetBytes []byte) {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.maintainLeaseSet",
+		"sessionID": s.ID(),
+		"size":      len(leaseSetBytes),
+	}).Info("leaseset_regenerated")
 }
 
 // CurrentLeaseSet returns the currently cached LeaseSet, if any.

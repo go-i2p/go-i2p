@@ -16,27 +16,7 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 	log.Debug("Reading I2NP NTCP Header")
 	header := I2NPNTCPHeader{}
 
-	if err := readHeaderType(data, &header); err != nil {
-		return header, err
-	}
-
-	if err := readHeaderMessageID(data, &header); err != nil {
-		return header, err
-	}
-
-	if err := readHeaderExpiration(data, &header); err != nil {
-		return header, err
-	}
-
-	if err := readHeaderSize(data, &header); err != nil {
-		return header, err
-	}
-
-	if err := readHeaderChecksum(data, &header); err != nil {
-		return header, err
-	}
-
-	if err := readHeaderData(data, &header); err != nil {
+	if err := executeHeaderParsers(data, &header); err != nil {
 		return header, err
 	}
 
@@ -44,6 +24,29 @@ func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
 		"at": "i2np.ReadI2NPNTCPHeader",
 	}).Debug("parsed_i2np_ntcp_header")
 	return header, nil
+}
+
+// headerParser defines a function that reads a field from I2NP NTCP header.
+type headerParser func([]byte, *I2NPNTCPHeader) error
+
+// executeHeaderParsers sequentially executes header field parsers.
+// Returns an error if any parser fails.
+func executeHeaderParsers(data []byte, header *I2NPNTCPHeader) error {
+	parsers := []headerParser{
+		readHeaderType,
+		readHeaderMessageID,
+		readHeaderExpiration,
+		readHeaderSize,
+		readHeaderChecksum,
+		readHeaderData,
+	}
+
+	for _, parser := range parsers {
+		if err := parser(data, header); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // readHeaderType reads and validates the I2NP message type field.
