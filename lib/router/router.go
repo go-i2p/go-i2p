@@ -467,36 +467,45 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 func (r *Router) processSessionMessages(session *ntcp.NTCP2Session, peerHash common.Hash) {
 	defer log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session message processor stopped")
 
-	for {
-		// Check if router is still running
-		r.runMux.RLock()
-		shouldRun := r.running
-		r.runMux.RUnlock()
-
-		if !shouldRun {
+	for r.shouldContinueMonitoring() {
+		if msg := r.readNextMessage(session, peerHash); msg != nil {
+			r.handleIncomingMessage(msg, peerHash)
+		} else {
 			return
 		}
+	}
+}
 
-		// Read next I2NP message from session (blocking call)
-		msg, err := session.ReadNextI2NP()
-		if err != nil {
-			// Check if session closed normally
-			if errors.Is(err, ntcp.ErrSessionClosed) {
-				log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Session closed normally")
-			} else {
-				log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Warn("Error reading I2NP message from session")
-			}
-			return
-		}
+// readNextMessage reads the next I2NP message from the session.
+// Returns nil if an error occurs or the session is closed.
+func (r *Router) readNextMessage(session *ntcp.NTCP2Session, peerHash common.Hash) i2np.I2NPMessage {
+	msg, err := session.ReadNextI2NP()
+	if err != nil {
+		r.logReadError(err, peerHash)
+		return nil
+	}
+	return msg
+}
 
-		// Route message through MessageRouter - errors are logged but don't close session
-		if err := r.routeMessage(msg, peerHash); err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"message_type": msg.Type(),
-				"message_id":   msg.MessageID(),
-				"peer_hash":    fmt.Sprintf("%x", peerHash[:8]),
-			}).Error("Failed to route I2NP message")
-		}
+// logReadError logs the appropriate error message based on error type.
+func (r *Router) logReadError(err error, peerHash common.Hash) {
+	peerHashStr := fmt.Sprintf("%x", peerHash[:8])
+	
+	if errors.Is(err, ntcp.ErrSessionClosed) {
+		log.WithField("peer_hash", peerHashStr).Debug("Session closed normally")
+	} else {
+		log.WithError(err).WithField("peer_hash", peerHashStr).Warn("Error reading I2NP message from session")
+	}
+}
+
+// handleIncomingMessage routes the message and logs any routing errors.
+func (r *Router) handleIncomingMessage(msg i2np.I2NPMessage, peerHash common.Hash) {
+	if err := r.routeMessage(msg, peerHash); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"message_type": msg.Type(),
+			"message_id":   msg.MessageID(),
+			"peer_hash":    fmt.Sprintf("%x", peerHash[:8]),
+		}).Error("Failed to route I2NP message")
 	}
 }
 
