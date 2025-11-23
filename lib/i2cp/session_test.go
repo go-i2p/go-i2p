@@ -66,7 +66,6 @@ func TestSessionGetters(t *testing.T) {
 	}
 }
 
-
 func TestNewSession(t *testing.T) {
 	config := DefaultSessionConfig()
 	config.Nickname = "test-session"
