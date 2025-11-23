@@ -88,58 +88,76 @@
 - ✅ **Complete Data Structure Support**: All I2P data types implemented
   * ✅ Keys and Certificates, Router Info/Address
   * ✅ Session Keys, Hashes, Signatures
-  * ✅ Lease and LeaseSet structures
+  - Lease and LeaseSet structures
+
+### I2CP Client Tunnel Lifecycle
+
+- ✅ **Application Layer Integration**: Complete I2CP session lifecycle (November 23, 2025)
+  - ✅ CreateLeaseSet implementation
+  - ✅ SendMessage and ReceiveMessage handlers
+  - ✅ LeaseSet maintenance and rotation
+  - ✅ End-to-end integration testing
+  - ✅ Message queue management
+  - ✅ Test coverage >85%
 
 ## In Progress Components 🚧
 
-### I2CP Client Tunnel Lifecycle
-- **Application Layer Integration**:
-  * ✅ CreateLeaseSet implementation
-  * ✅ SendMessage and ReceiveMessage handlers
-  * ✅ LeaseSet maintenance and rotation
-  * ✅ End-to-end integration testing
-
 ## Next Priority Components 🎯
+
+### Message Routing System
+
+- **End-to-End Message Delivery**: Connect I2CP, tunnels, and garlic encryption
+  - 📋 Route outbound I2CP messages through tunnel system
+  - 📋 Decrypt and deliver inbound tunnel messages to I2CP sessions
+  - 📋 LeaseSet publishing to NetDB
+  - 📋 Destination lookup and resolution
+  - 📋 Message fragment handling across tunnel boundaries
+  - 📋 Integration testing for complete message flow
 
 ## Future Components 📅
 
 ### Advanced NetDb Features
+
 - **Enhanced Database Operations**:
-  * 📋 Floodfill router functionality
-  * 📋 Client/Router NetDb isolation
-  * 📋 Database exploration and publishing
-  * 📋 LS2 and Encrypted LeaseSet support
-  * 📋 Advanced peer selection algorithms
+  - 📋 Floodfill router functionality
+  - 📋 Client/Router NetDb isolation
+  - 📋 Database exploration and publishing
+  - 📋 LS2 and Encrypted LeaseSet support
+  - 📋 Advanced peer selection algorithms
 
 ### Application Layer
+
 - **Client Applications**:
-  * 📋 I2CP implementation(Goes in github.com/go-i2p/go-i2cp)
-  * 📋 Streaming library(Goes in https://github.com/go-i2p/go-streaming)
-  * 📋 Datagram support(goes in https://github.com/go-i2p/go-datagrams)
-  * 📋 End-to-end encryption (Garlic routing)
+  - 📋 I2CP implementation (goes in github.com/go-i2p/go-i2cp)
+  - 📋 Streaming library (goes in github.com/go-i2p/go-streaming)
+  - 📋 Datagram support (goes in github.com/go-i2p/go-datagrams)
+  - 📋 End-to-end encryption (Garlic routing)
 
 ### SSU2 Transport (Post-NTCP2)
+
 - **Secondary Transport Protocol**:
-  * 📋 SSU2 handshake implementation
-  * 📋 UDP-based session management
-  * 📋 Peer testing mechanisms
-  * 📋 Introducer functionality
+  - 📋 SSU2 handshake implementation
+  - 📋 UDP-based session management
+  - 📋 Peer testing mechanisms
+  - 📋 Introducer functionality
 
 ## Current Status
 
-**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. The foundation for I2CP is in place.
+**Primary Goal**: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing.
 
 **Recent Milestones**:
+
 - ✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)
 - ✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)
 - ✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)
 - ✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)
 - ✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)
-- ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, end-to-end integration)
+- ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)
 
-**Next Focus**: Phase 7 - TBD
+**Next Focus**: Phase 7 - Message Routing System (connect I2CP → tunnels → garlic encryption → delivery)
 
 **Test Coverage**: Core components have strong test coverage:
+
 - Garlic session management: >80% coverage
 - Garlic message construction: >95% coverage
 - Tunnel pool management: >80% coverage

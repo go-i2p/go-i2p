@@ -4,13 +4,14 @@ A pure Go implementation of the I2P router.
 
 ## Status
 
-go-i2p is in early development. We recently completed several significant milestones however the most important user-facing milestone remains incomplete, we don't yet have either Client or Participating tunnels. However, we do have versioned releases that do useful things, and if you're brave and a little patient, you can get started using it.
+go-i2p is in early development. We recently completed several significant milestones including the I2CP protocol server with complete session lifecycle management. However, the most important user-facing milestone remains incomplete: we don't yet have full end-to-end message routing connecting clients through tunnels to other destinations.
 
 ### Implemented Features
 
 - Clients
   - [X] I2CP Protocol Server
-  - [ ] Message routing
+  - [ ] Message routing (outbound I2CP → tunnels → garlic encryption)
+  - [ ] Inbound message delivery (tunnel → I2CP sessions)
   - [ ] Datagrams
   - [ ] Streaming
 - [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
