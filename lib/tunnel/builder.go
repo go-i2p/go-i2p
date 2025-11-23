@@ -270,50 +270,64 @@ func (tb *TunnelBuilder) determineRoutingParams(
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash) {
-	isLastHop := hopIndex == len(peers)-1
-	isFirstHop := hopIndex == 0
-
-	// Get this hop's router identity using the IdentHash() method
 	ourIdent = peers[hopIndex].IdentHash()
 
 	if req.IsInbound {
-		// Inbound tunnel: messages flow from network toward us
-		if isFirstHop {
-			// Endpoint receives from sender (unknown tunnel ID, use 0)
-			receiveTunnel = 0
-		} else {
-			// Middle/gateway receives from previous hop
-			receiveTunnel = tunnelID
-		}
-
-		if isLastHop {
-			// Gateway sends to our specified tunnel
-			nextTunnel = req.ReplyTunnelID
-			nextIdent = req.ReplyGateway
-		} else {
-			// Endpoint/middle sends to next hop
-			nextTunnel = tunnelID
-			nextIdent = peers[hopIndex+1].IdentHash()
-		}
+		receiveTunnel, nextTunnel, nextIdent = tb.determineInboundRouting(hopIndex, req, tunnelID, peers)
 	} else {
-		// Outbound tunnel: messages flow from us toward network
-		if isFirstHop {
-			// Gateway receives from our tunnel
-			receiveTunnel = tunnelID
-		} else {
-			// Middle/endpoint receives from previous hop
-			receiveTunnel = tunnelID
-		}
+		receiveTunnel, nextTunnel, nextIdent = tb.determineOutboundRouting(hopIndex, tunnelID, peers)
+	}
 
-		if isLastHop {
-			// Endpoint sends to destination (tunnel ID set per message)
-			nextTunnel = 0
-			nextIdent = common.Hash{} // Empty hash, set per message
-		} else {
-			// Gateway/middle sends to next hop
-			nextTunnel = tunnelID
-			nextIdent = peers[hopIndex+1].IdentHash()
-		}
+	return
+}
+
+func (tb *TunnelBuilder) determineInboundRouting(
+	hopIndex int,
+	req BuildTunnelRequest,
+	tunnelID TunnelID,
+	peers []router_info.RouterInfo,
+) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash) {
+	isFirstHop := hopIndex == 0
+	isLastHop := hopIndex == len(peers)-1
+
+	// Inbound tunnel: messages flow from network toward us
+	if isFirstHop {
+		receiveTunnel = 0 // Endpoint receives from sender (unknown tunnel ID)
+	} else {
+		receiveTunnel = tunnelID // Middle/gateway receives from previous hop
+	}
+
+	if isLastHop {
+		// Gateway sends to our specified tunnel
+		nextTunnel = req.ReplyTunnelID
+		nextIdent = req.ReplyGateway
+	} else {
+		// Endpoint/middle sends to next hop
+		nextTunnel = tunnelID
+		nextIdent = peers[hopIndex+1].IdentHash()
+	}
+
+	return
+}
+
+func (tb *TunnelBuilder) determineOutboundRouting(
+	hopIndex int,
+	tunnelID TunnelID,
+	peers []router_info.RouterInfo,
+) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash) {
+	isLastHop := hopIndex == len(peers)-1
+
+	// Outbound tunnel: messages flow from us toward network
+	receiveTunnel = tunnelID // All hops receive with the tunnel ID
+
+	if isLastHop {
+		// Endpoint sends to destination (tunnel ID set per message)
+		nextTunnel = 0
+		nextIdent = common.Hash{} // Empty hash, set per message
+	} else {
+		// Gateway/middle sends to next hop
+		nextTunnel = tunnelID
+		nextIdent = peers[hopIndex+1].IdentHash()
 	}
 
 	return

@@ -146,40 +146,65 @@ func (rp *ReplyProcessor) RegisterPendingBuild(
 //
 // Returns nil on successful build, error otherwise.
 func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID tunnel.TunnelID) error {
-	rp.mutex.Lock()
-	pending, exists := rp.pendingBuilds[tunnelID]
-	if !exists {
-		rp.mutex.Unlock()
-		log.WithField("tunnel_id", tunnelID).Warn("Received reply for unknown tunnel build")
-		return fmt.Errorf("no pending build for tunnel %d", tunnelID)
+	pending, err := rp.retrieveAndRemovePendingBuild(tunnelID)
+	if err != nil {
+		return err
 	}
 
-	// Cancel timeout timer
+	rp.logReplyProcessing(tunnelID, pending)
+
+	if err := rp.decryptReplyIfEnabled(handler, tunnelID, pending); err != nil {
+		return err
+	}
+
+	if err := rp.processReplyWithHandler(handler, tunnelID, pending); err != nil {
+		return err
+	}
+
+	return rp.handleBuildSuccess(tunnelID, pending)
+}
+
+func (rp *ReplyProcessor) retrieveAndRemovePendingBuild(tunnelID tunnel.TunnelID) (*PendingBuildRequest, error) {
+	rp.mutex.Lock()
+	defer rp.mutex.Unlock()
+
+	pending, exists := rp.pendingBuilds[tunnelID]
+	if !exists {
+		log.WithField("tunnel_id", tunnelID).Warn("Received reply for unknown tunnel build")
+		return nil, fmt.Errorf("no pending build for tunnel %d", tunnelID)
+	}
+
 	if pending.TimeoutTimer != nil {
 		pending.TimeoutTimer.Stop()
 	}
 
-	// Remove from pending builds (will be re-added if retry needed)
 	delete(rp.pendingBuilds, tunnelID)
-	rp.mutex.Unlock()
+	return pending, nil
+}
 
+func (rp *ReplyProcessor) logReplyProcessing(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) {
 	log.WithFields(logger.Fields{
 		"tunnel_id":  tunnelID,
 		"latency_ms": time.Since(pending.RequestedAt).Milliseconds(),
 	}).Debug("Processing tunnel build reply")
+}
 
-	// Decrypt reply records if encryption is enabled
-	if rp.config.EnableDecryption {
-		if err := rp.decryptReplyRecords(handler, pending); err != nil {
-			log.WithFields(logger.Fields{
-				"tunnel_id": tunnelID,
-				"error":     err,
-			}).Error("Failed to decrypt reply records")
-			return rp.handleBuildFailure(tunnelID, pending, err)
-		}
+func (rp *ReplyProcessor) decryptReplyIfEnabled(handler TunnelReplyHandler, tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
+	if !rp.config.EnableDecryption {
+		return nil
 	}
 
-	// Process the reply using the handler's logic
+	if err := rp.decryptReplyRecords(handler, pending); err != nil {
+		log.WithFields(logger.Fields{
+			"tunnel_id": tunnelID,
+			"error":     err,
+		}).Error("Failed to decrypt reply records")
+		return rp.handleBuildFailure(tunnelID, pending, err)
+	}
+	return nil
+}
+
+func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
 	if err := handler.ProcessReply(); err != nil {
 		log.WithFields(logger.Fields{
 			"tunnel_id": tunnelID,
@@ -187,9 +212,7 @@ func (rp *ReplyProcessor) ProcessBuildReply(handler TunnelReplyHandler, tunnelID
 		}).Warn("Tunnel build failed")
 		return rp.handleBuildFailure(tunnelID, pending, err)
 	}
-
-	// Build succeeded - update tunnel manager
-	return rp.handleBuildSuccess(tunnelID, pending)
+	return nil
 }
 
 // decryptReplyRecords decrypts encrypted build reply records using the stored reply keys.

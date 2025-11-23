@@ -136,33 +136,43 @@ func (rt *RouterTimestamper) performTimeQuery() bool {
 		return false
 	}
 
-	lastFailed := true
-
-	// Read configuration safely by creating copies under mutex protection
-	rt.mutex.Lock()
-	priorityServers := rt.priorityServers
-	servers := rt.servers
-	rt.mutex.Unlock()
-
-	for _, serverList := range priorityServers {
-		lastFailed = !rt.queryTime(serverList, shortTimeout, preferIPv6)
-		if !lastFailed {
-			break
-		}
-	}
+	priorityServers, servers := rt.getServerLists()
+	lastFailed := rt.tryPriorityServers(priorityServers, preferIPv6)
 
 	if len(priorityServers) == 0 || lastFailed {
-		prefIPv6 := preferIPv6 && rt.secureRandBool(0.75)
-		lastFailed = !rt.queryTime(servers, defaultTimeout, prefIPv6)
+		lastFailed = rt.tryDefaultServers(servers, preferIPv6)
 	}
 
+	rt.markInitialized()
+	return lastFailed
+}
+
+func (rt *RouterTimestamper) getServerLists() ([][]string, []string) {
 	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+	return rt.priorityServers, rt.servers
+}
+
+func (rt *RouterTimestamper) tryPriorityServers(priorityServers [][]string, preferIPv6 bool) bool {
+	for _, serverList := range priorityServers {
+		if rt.queryTime(serverList, shortTimeout, preferIPv6) {
+			return false
+		}
+	}
+	return true
+}
+
+func (rt *RouterTimestamper) tryDefaultServers(servers []string, preferIPv6 bool) bool {
+	prefIPv6 := preferIPv6 && rt.secureRandBool(0.75)
+	return !rt.queryTime(servers, defaultTimeout, prefIPv6)
+}
+
+func (rt *RouterTimestamper) markInitialized() {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
 	if !rt.initialized {
 		rt.initialized = true
 	}
-	rt.mutex.Unlock()
-
-	return lastFailed
 }
 
 /*

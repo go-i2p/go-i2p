@@ -490,7 +490,7 @@ func (r *Router) readNextMessage(session *ntcp.NTCP2Session, peerHash common.Has
 // logReadError logs the appropriate error message based on error type.
 func (r *Router) logReadError(err error, peerHash common.Hash) {
 	peerHashStr := fmt.Sprintf("%x", peerHash[:8])
-	
+
 	if errors.Is(err, ntcp.ErrSessionClosed) {
 		log.WithField("peer_hash", peerHashStr).Debug("Session closed normally")
 	} else {
