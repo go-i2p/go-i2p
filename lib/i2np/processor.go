@@ -494,60 +494,83 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 // updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
 // Uses message ID to find the matching tunnel via the pending build request.
 func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []BuildResponseRecord, replyErr error) {
-	// Find the matching tunnel using message ID
 	matchingTunnel := tm.findMatchingBuildingTunnel(messageID)
 
 	if matchingTunnel == nil {
-		log.WithFields(logger.Fields{
-			"message_id":   messageID,
-			"record_count": len(records),
-		}).Warn("No matching building tunnel found for reply")
+		tm.logNoMatchingTunnel(messageID, len(records))
 		return
 	}
 
-	log.WithFields(logger.Fields{
-		"tunnel_id":    matchingTunnel.ID,
-		"message_id":   messageID,
-		"record_count": len(records),
-		"success":      replyErr == nil,
-	}).Debug("Updating tunnel state from reply")
+	tm.logTunnelUpdate(matchingTunnel.ID, messageID, len(records), replyErr == nil)
 
-	// Create build responses from the reply records
+	responses := tm.createBuildResponses(records)
+	tm.updateTunnelBasedOnReply(matchingTunnel, messageID, responses, replyErr)
+}
+
+// logNoMatchingTunnel logs a warning when no building tunnel matches the reply.
+func (tm *TunnelManager) logNoMatchingTunnel(messageID int, recordCount int) {
+	log.WithFields(logger.Fields{
+		"message_id":   messageID,
+		"record_count": recordCount,
+	}).Warn("No matching building tunnel found for reply")
+}
+
+// logTunnelUpdate logs debug information about tunnel state update.
+func (tm *TunnelManager) logTunnelUpdate(tunnelID tunnel.TunnelID, messageID int, recordCount int, success bool) {
+	log.WithFields(logger.Fields{
+		"tunnel_id":    tunnelID,
+		"message_id":   messageID,
+		"record_count": recordCount,
+		"success":      success,
+	}).Debug("Updating tunnel state from reply")
+}
+
+// createBuildResponses converts reply records to BuildResponse structures.
+func (tm *TunnelManager) createBuildResponses(records []BuildResponseRecord) []tunnel.BuildResponse {
 	responses := make([]tunnel.BuildResponse, len(records))
 	for i, record := range records {
 		responses[i] = tunnel.BuildResponse{
 			HopIndex: i,
 			Success:  record.Reply == TUNNEL_BUILD_REPLY_SUCCESS,
-			Reply:    []byte{record.Reply}, // Store the reply byte
+			Reply:    []byte{record.Reply},
 		}
 	}
+	return responses
+}
 
-	// Update tunnel state based on reply processing result
+// updateTunnelBasedOnReply updates tunnel state based on build reply result.
+func (tm *TunnelManager) updateTunnelBasedOnReply(matchingTunnel *tunnel.TunnelState, messageID int, responses []tunnel.BuildResponse, replyErr error) {
+	matchingTunnel.Responses = responses
+	matchingTunnel.ResponseCount = len(responses)
+
 	if replyErr == nil {
-		// All hops accepted - tunnel is ready
-		matchingTunnel.State = tunnel.TunnelReady
-		matchingTunnel.Responses = responses
-		matchingTunnel.ResponseCount = len(responses)
-
-		log.WithFields(logger.Fields{
-			"tunnel_id":  matchingTunnel.ID,
-			"message_id": messageID,
-		}).Info("Tunnel build completed successfully")
+		tm.handleSuccessfulBuild(matchingTunnel, messageID)
 	} else {
-		// Build failed - mark tunnel as failed
-		matchingTunnel.State = tunnel.TunnelFailed
-		matchingTunnel.Responses = responses
-		matchingTunnel.ResponseCount = len(responses)
-
-		log.WithFields(logger.Fields{
-			"tunnel_id":  matchingTunnel.ID,
-			"message_id": messageID,
-			"error":      replyErr,
-		}).Warn("Tunnel build failed")
-
-		// Clean up failed tunnel after a brief delay
-		go tm.cleanupFailedTunnel(matchingTunnel.ID)
+		tm.handleFailedBuild(matchingTunnel, messageID, replyErr)
 	}
+}
+
+// handleSuccessfulBuild processes a successful tunnel build.
+func (tm *TunnelManager) handleSuccessfulBuild(matchingTunnel *tunnel.TunnelState, messageID int) {
+	matchingTunnel.State = tunnel.TunnelReady
+
+	log.WithFields(logger.Fields{
+		"tunnel_id":  matchingTunnel.ID,
+		"message_id": messageID,
+	}).Info("Tunnel build completed successfully")
+}
+
+// handleFailedBuild processes a failed tunnel build and schedules cleanup.
+func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, messageID int, replyErr error) {
+	matchingTunnel.State = tunnel.TunnelFailed
+
+	log.WithFields(logger.Fields{
+		"tunnel_id":  matchingTunnel.ID,
+		"message_id": messageID,
+		"error":      replyErr,
+	}).Warn("Tunnel build failed")
+
+	go tm.cleanupFailedTunnel(matchingTunnel.ID)
 }
 
 // findMatchingBuildingTunnel finds a tunnel that's currently building based on the message ID.

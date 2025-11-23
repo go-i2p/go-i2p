@@ -24,50 +24,31 @@ type DestinationKeyStore struct {
 // This generates a new destination with fresh keys suitable for creating LeaseSet2s
 // using modern I2P cryptography (ECIES-X25519-AEAD-Ratchet compatible).
 func NewDestinationKeyStore() (*DestinationKeyStore, error) {
-	// Generate Ed25519 signing key pair using new concrete API
-	signingPubKey, signingPrivKey, err := ed25519.GenerateEd25519KeyPair()
+	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
+		return nil, err
 	}
 
-	// Generate X25519 (Curve25519) encryption key pair for LeaseSet2
-	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
+	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate X25519 key: %w", err)
+		return nil, err
 	}
 
-	// Create default KeyCertificate for Ed25519/X25519
-	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
+	keyCert, err := createKeyCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create KeyCertificate: %w", err)
+		return nil, err
 	}
 
-	// Calculate padding size: KEYS_AND_CERT_DATA_SIZE - (crypto_key_size + signing_key_size)
-	sizes, err := key_certificate.GetKeySizes(
-		key_certificate.KEYCERT_SIGN_ED25519,
-		key_certificate.KEYCERT_CRYPTO_X25519,
-	)
+	padding, err := calculateKeyPadding()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key sizes: %w", err)
-	}
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (sizes.CryptoPublicKeySize + sizes.SigningPublicKeySize)
-	if paddingSize < 0 {
-		return nil, fmt.Errorf("invalid key sizes: padding would be negative")
-	}
-	padding := make([]byte, paddingSize)
-
-	// Create KeysAndCert for the destination
-	keysAndCert, err := keys_and_cert.NewKeysAndCert(
-		keyCert,          // KeyCertificate specifying key types
-		encryptionPubKey, // ReceivingPublicKey
-		padding,          // padding to reach KEYS_AND_CERT_DATA_SIZE
-		signingPubKey,    // SigningPublicKey
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create KeysAndCert: %w", err)
+		return nil, err
 	}
 
-	// Create destination
+	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
+	if err != nil {
+		return nil, err
+	}
+
 	dest := &destination.Destination{
 		KeysAndCert: keysAndCert,
 	}
@@ -77,6 +58,65 @@ func NewDestinationKeyStore() (*DestinationKeyStore, error) {
 		encryptionPrivKey: encryptionPrivKey,
 		signingPrivKey:    signingPrivKey,
 	}, nil
+}
+
+// generateSigningKeyPair creates a new Ed25519 signing key pair.
+func generateSigningKeyPair() (types.SigningPublicKey, types.SigningPrivateKey, error) {
+	signingPubKey, signingPrivKey, err := ed25519.GenerateEd25519KeyPair()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
+	}
+	return signingPubKey, signingPrivKey, nil
+}
+
+// generateEncryptionKeyPair creates a new X25519 encryption key pair for LeaseSet2.
+func generateEncryptionKeyPair() (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
+	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
+	}
+	return encryptionPubKey, encryptionPrivKey, nil
+}
+
+// createKeyCertificate creates a KeyCertificate for Ed25519/X25519.
+func createKeyCertificate() (*key_certificate.KeyCertificate, error) {
+	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KeyCertificate: %w", err)
+	}
+	return keyCert, nil
+}
+
+// calculateKeyPadding computes padding needed to reach KEYS_AND_CERT_DATA_SIZE.
+func calculateKeyPadding() ([]byte, error) {
+	sizes, err := key_certificate.GetKeySizes(
+		key_certificate.KEYCERT_SIGN_ED25519,
+		key_certificate.KEYCERT_CRYPTO_X25519,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key sizes: %w", err)
+	}
+
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (sizes.CryptoPublicKeySize + sizes.SigningPublicKeySize)
+	if paddingSize < 0 {
+		return nil, fmt.Errorf("invalid key sizes: padding would be negative")
+	}
+
+	return make([]byte, paddingSize), nil
+}
+
+// assembleKeysAndCert constructs the KeysAndCert structure for the destination.
+func assembleKeysAndCert(keyCert *key_certificate.KeyCertificate, encryptionPubKey types.ReceivingPublicKey, padding []byte, signingPubKey types.SigningPublicKey) (*keys_and_cert.KeysAndCert, error) {
+	keysAndCert, err := keys_and_cert.NewKeysAndCert(
+		keyCert,
+		encryptionPubKey,
+		padding,
+		signingPubKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KeysAndCert: %w", err)
+	}
+	return keysAndCert, nil
 }
 
 // Destination returns the public destination
