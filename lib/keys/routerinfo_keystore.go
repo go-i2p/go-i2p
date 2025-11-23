@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"bytes"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/certificate"
-	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/keys_and_cert"
 	"github.com/go-i2p/common/router_address"
@@ -239,33 +237,27 @@ func (ks *RouterInfoKeystore) validateAndGetKeys() (types.PublicKey, types.Priva
 
 // createEd25519Certificate generates a certificate with Ed25519 key type configuration
 func (ks *RouterInfoKeystore) createEd25519Certificate() (*certificate.Certificate, error) {
-	payload := new(bytes.Buffer)
-	cryptoKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
+	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
 	if err != nil {
-		return nil, oops.Errorf("failed to create crypto key type: %w", err)
+		return nil, oops.Errorf("failed to create key certificate: %w", err)
 	}
-	signingKeyType, err := data.NewIntegerFromInt(7, 2) // Ed25519
-	if err != nil {
-		return nil, oops.Errorf("failed to create signing key type: %w", err)
-	}
-	payload.Write(*cryptoKeyType)
-	payload.Write(*signingKeyType)
-
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-	if err != nil {
-		return nil, oops.Errorf("failed to create certificate: %w", err)
-	}
+	// Convert KeyCertificate to Certificate - KeyCertificate embeds Certificate
+	cert := &keyCert.Certificate
 	return cert, nil
 }
 
 // buildRouterIdentity constructs a RouterIdentity with proper padding and certificate
 func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cert *certificate.Certificate) (*router_identity.RouterIdentity, error) {
-	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	// Use GetKeySizes to calculate padding without creating a KeyCertificate object
+	sizes, err := key_certificate.GetKeySizes(
+		key_certificate.KEYCERT_SIGN_ED25519,
+		key_certificate.KEYCERT_CRYPTO_X25519,
+	)
 	if err != nil {
-		return nil, oops.Errorf("failed to create key certificate: %w", err)
+		return nil, oops.Errorf("failed to get key sizes: %w", err)
 	}
 
-	padding, err := ks.generateIdentityPadding(keyCert)
+	padding, err := ks.generateIdentityPaddingFromSizes(sizes.CryptoPublicKeySize, sizes.SigningPublicKeySize)
 	if err != nil {
 		return nil, err
 	}
@@ -282,10 +274,8 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	return routerIdentity, nil
 }
 
-// generateIdentityPadding creates random padding bytes for RouterIdentity structure
-func (ks *RouterInfoKeystore) generateIdentityPadding(keyCert *key_certificate.KeyCertificate) ([]byte, error) {
-	pubKeySize := keyCert.CryptoSize()
-	sigKeySize := keyCert.SignatureSize()
+// generateIdentityPaddingFromSizes creates random padding bytes for RouterIdentity structure
+func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKeySize int) ([]byte, error) {
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
 	padding := make([]byte, paddingSize)
 	_, err := rand.Read(padding)

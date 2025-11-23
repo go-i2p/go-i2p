@@ -1,11 +1,8 @@
 package keys
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/go-i2p/common/certificate"
-	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/keys_and_cert"
@@ -52,38 +49,20 @@ func NewDestinationKeyStore() (*DestinationKeyStore, error) {
 	}
 
 	// Create default KeyCertificate for Ed25519/X25519
-	// Build the payload: 2 bytes for signing key type + 2 bytes for crypto key type
-	var payload bytes.Buffer
-
-	signingKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_SIGN_ED25519, 2)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create signing key type: %w", err)
-	}
-
-	cryptoKeyType, err := data.NewIntegerFromInt(key_certificate.KEYCERT_CRYPTO_X25519, 2)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create crypto key type: %w", err)
-	}
-
-	payload.Write(*signingKeyType)
-	payload.Write(*cryptoKeyType)
-
-	// Create certificate with key certificate type
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create certificate: %w", err)
-	}
-
-	// Convert to KeyCertificate
-	keyCert, err := key_certificate.KeyCertificateFromCertificate(*cert)
+	keyCert, err := key_certificate.NewEd25519X25519KeyCertificate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create KeyCertificate: %w", err)
 	}
 
 	// Calculate padding size: KEYS_AND_CERT_DATA_SIZE - (crypto_key_size + signing_key_size)
-	pubKeySize := keyCert.CryptoSize()    // X25519: 32 bytes
-	sigKeySize := keyCert.SignatureSize() // Ed25519: 32 bytes
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
+	sizes, err := key_certificate.GetKeySizes(
+		key_certificate.KEYCERT_SIGN_ED25519,
+		key_certificate.KEYCERT_CRYPTO_X25519,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key sizes: %w", err)
+	}
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (sizes.CryptoPublicKeySize + sizes.SigningPublicKeySize)
 	if paddingSize < 0 {
 		return nil, fmt.Errorf("invalid key sizes: padding would be negative")
 	}
