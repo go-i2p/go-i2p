@@ -5,8 +5,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
-	"github.com/go-i2p/common/keys_and_cert"
+	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/lease"
+	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -44,9 +48,10 @@ type Session struct {
 	mu sync.RWMutex
 
 	// Session identity
-	id          uint16                   // Session ID (assigned by router)
-	destination *destination.Destination // Client's I2P destination
-	config      *SessionConfig           // Session configuration
+	id          uint16                    // Session ID (assigned by router)
+	destination *destination.Destination  // Client's I2P destination
+	keys        *keys.DestinationKeyStore // Private keys for LeaseSet signing and decryption
+	config      *SessionConfig            // Session configuration
 
 	// Tunnel pools
 	inboundPool  *tunnel.Pool // Pool of inbound tunnels
@@ -77,22 +82,22 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 		config = DefaultSessionConfig()
 	}
 
-	// Generate destination if not provided
+	// Generate destination with keys if not provided
+	var keyStore *keys.DestinationKeyStore
 	if dest == nil {
-		// Create new destination with Ed25519 keys
-		privateKeys, err := keys_and_cert.NewPrivateKeysAndCert()
+		// Create new destination with Ed25519/ElGamal keys
+		var err error
+		keyStore, err = keys.NewDestinationKeyStore()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate keys: %w", err)
 		}
-
-		dest = &destination.Destination{
-			KeysAndCert: &privateKeys.KeysAndCert,
-		}
+		dest = keyStore.Destination()
 	}
 
 	return &Session{
 		id:               id,
 		destination:      dest,
+		keys:             keyStore,
 		config:           config,
 		createdAt:        time.Now(),
 		active:           true,
@@ -211,6 +216,121 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 
 	s.config = newConfig
 	return nil
+}
+
+// CreateLeaseSet generates a new LeaseSet2 for this session using active inbound tunnels.
+// The LeaseSet2 contains leases from the inbound tunnel pool and is signed by the session's
+// destination private signing key. Uses modern X25519 encryption keys. This method requires:
+// - The session is active
+// - The session has private keys (generated during session creation)
+// - The inbound tunnel pool is set and contains at least one active tunnel
+//
+// Returns the serialized LeaseSet2 ready for publishing to the network database.
+func (s *Session) CreateLeaseSet() ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.active {
+		return nil, fmt.Errorf("session %d is not active", s.id)
+	}
+
+	if s.inboundPool == nil {
+		return nil, fmt.Errorf("session %d has no inbound tunnel pool", s.id)
+	}
+
+	if s.destination == nil {
+		return nil, fmt.Errorf("session %d has no destination", s.id)
+	}
+
+	if s.keys == nil {
+		return nil, fmt.Errorf("session %d has no private keys", s.id)
+	}
+
+	// Get active tunnels from inbound pool
+	tunnels := s.inboundPool.GetActiveTunnels()
+	if len(tunnels) == 0 {
+		return nil, fmt.Errorf("session %d has no active inbound tunnels", s.id)
+	}
+
+	// Create leases from active tunnels
+	// Each lease represents an inbound tunnel endpoint that can receive messages
+	leases := make([]lease.Lease2, 0, len(tunnels))
+	for _, tun := range tunnels {
+		if tun == nil || tun.State != tunnel.TunnelReady {
+			continue
+		}
+
+		// Get tunnel gateway (first hop router hash)
+		// For inbound tunnels, the gateway is the first hop in the Hops slice
+		if len(tun.Hops) == 0 {
+			continue
+		}
+		gatewayBytes := tun.Hops[0]
+
+		// Convert gateway bytes to data.Hash (32 bytes)
+		var gateway data.Hash
+		copy(gateway[:], gatewayBytes[:])
+
+		// Get tunnel ID
+		tunnelID := uint32(tun.ID)
+
+		// Calculate lease expiration based on tunnel lifetime
+		// Use tunnel creation time + configured lifetime
+		expiration := tun.CreatedAt.Add(s.config.TunnelLifetime)
+
+		// Create Lease2
+		l, err := lease.NewLease2(gateway, tunnelID, expiration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create lease: %w", err)
+		}
+
+		leases = append(leases, *l)
+	}
+
+	if len(leases) == 0 {
+		return nil, fmt.Errorf("session %d has no valid leases to publish", s.id)
+	}
+
+	// Get destination and keys
+	dest := *s.destination
+	signingPrivateKey := s.keys.SigningPrivateKey()
+	encryptionPublicKey := s.keys.EncryptionPublicKey()
+
+	// Create EncryptionKey for LeaseSet2
+	// LeaseSet2 uses a slice of EncryptionKey structs to support multiple encryption types
+	encKey := lease_set2.EncryptionKey{
+		KeyType: key_certificate.KEYCERT_CRYPTO_X25519,
+		KeyLen:  32,
+		KeyData: encryptionPublicKey.Bytes(),
+	}
+
+	// Set published time and expiration
+	published := uint32(time.Now().Unix())
+	expiresOffset := uint16(s.config.TunnelLifetime.Seconds())
+
+	// Create the LeaseSet2
+	ls2, err := lease_set2.NewLeaseSet2(
+		dest,
+		published,
+		expiresOffset,
+		0,              // flags: 0 for standard published leaseset
+		nil,            // no offline signature
+		data.Mapping{}, // empty options map
+		[]lease_set2.EncryptionKey{encKey},
+		leases,
+		signingPrivateKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LeaseSet2: %w", err)
+	}
+
+	// Serialize to bytes for network transmission
+	data, err := ls2.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
+	}
+
+	return data, nil
 }
 
 // Stop gracefully stops the session and cleans up resources

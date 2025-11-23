@@ -306,6 +306,82 @@ func TestServerGetDate(t *testing.T) {
 	}
 }
 
+func TestServerHandleCreateLeaseSet(t *testing.T) {
+	// Setup: start server
+	config := &ServerConfig{
+		ListenAddr:  "localhost:17659",
+		Network:     "tcp",
+		MaxSessions: 100,
+	}
+
+	server, err := NewServer(config)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer server.Stop()
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Connect and create session
+	conn, err := net.Dial("tcp", "localhost:17659")
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+	// Create session first
+	createMsg := &Message{
+		Type:      MessageTypeCreateSession,
+		SessionID: SessionIDReservedControl,
+		Payload:   []byte{},
+	}
+
+	if err := WriteMessage(conn, createMsg); err != nil {
+		t.Fatalf("WriteMessage() error = %v", err)
+	}
+
+	response, err := ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("ReadMessage() error = %v", err)
+	}
+
+	if response.Type != MessageTypeSessionStatus {
+		t.Fatalf("Response type = %d, want %d", response.Type, MessageTypeSessionStatus)
+	}
+
+	sessionID := response.SessionID
+
+	// Send CreateLeaseSet - should fail because no inbound pool
+	leaseSetMsg := &Message{
+		Type:      MessageTypeCreateLeaseSet,
+		SessionID: sessionID,
+		Payload:   []byte{},
+	}
+
+	if err := WriteMessage(conn, leaseSetMsg); err != nil {
+		t.Fatalf("WriteMessage() error = %v", err)
+	}
+
+	// Server should handle it and log error but not disconnect
+	// Give it time to process
+	time.Sleep(50 * time.Millisecond)
+
+	// Connection should still be alive
+	testMsg := &Message{
+		Type:      MessageTypeGetDate,
+		SessionID: sessionID,
+		Payload:   []byte{},
+	}
+
+	if err := WriteMessage(conn, testMsg); err != nil {
+		t.Errorf("Connection should still be alive after CreateLeaseSet failure")
+	}
+}
+
 func BenchmarkServerCreateSession(b *testing.B) {
 	config := &ServerConfig{
 		ListenAddr:  "localhost:27654", // Different port for benchmark

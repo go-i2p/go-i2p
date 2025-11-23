@@ -94,7 +94,7 @@
 
 ### I2CP Client Tunnel Lifecycle
 - **Application Layer Integration**:
-  * 📋 CreateLeaseSet implementation
+  * ✅ CreateLeaseSet implementation
   * 📋 SendMessage and ReceiveMessage handlers
   * 📋 LeaseSet maintenance and rotation
   * 📋 End-to-end integration testing

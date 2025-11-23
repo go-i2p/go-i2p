@@ -3,6 +3,10 @@ package i2cp
 import (
 	"testing"
 	"time"
+
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 func TestDefaultSessionConfig(t *testing.T) {
@@ -24,6 +28,44 @@ func TestDefaultSessionConfig(t *testing.T) {
 		t.Errorf("TunnelLifetime = %v, want 10m", config.TunnelLifetime)
 	}
 }
+
+func TestSessionGetters(t *testing.T) {
+	session, err := NewSession(42, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Test Destination getter
+	if session.Destination() == nil {
+		t.Error("Destination() should not be nil")
+	}
+
+	// Test CreatedAt getter
+	createdAt := session.CreatedAt()
+	if createdAt.IsZero() {
+		t.Error("CreatedAt() should not be zero")
+	}
+	if time.Since(createdAt) > time.Second {
+		t.Error("CreatedAt() should be recent")
+	}
+
+	// Test pool getters
+	if session.InboundPool() != nil {
+		t.Error("InboundPool() should be nil for new session")
+	}
+	if session.OutboundPool() != nil {
+		t.Error("OutboundPool() should be nil for new session")
+	}
+
+	// Test SetOutboundPool
+	pool := &tunnel.Pool{}
+	session.SetOutboundPool(pool)
+	if session.OutboundPool() != pool {
+		t.Error("OutboundPool() should return the set pool")
+	}
+}
+
 
 func TestNewSession(t *testing.T) {
 	config := DefaultSessionConfig()
@@ -259,4 +301,105 @@ func BenchmarkSessionManagerCreateDestroy(b *testing.B) {
 		session, _ := manager.CreateSession(nil, nil)
 		_ = manager.DestroySession(session.ID())
 	}
+}
+
+// TestSessionCreateLeaseSetNoInboundPool tests CreateLeaseSet with no inbound pool
+func TestSessionCreateLeaseSetNoInboundPool(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Should fail because there's no inbound pool
+	_, err = session.CreateLeaseSet()
+	if err == nil {
+		t.Error("Expected error when no inbound pool, got nil")
+	}
+	if err != nil && err.Error() != "session 1 has no inbound tunnel pool" {
+		t.Errorf("Unexpected error message: %v", err)
+	}
+}
+
+// TestSessionCreateLeaseSetInactiveSession tests CreateLeaseSet on inactive session
+func TestSessionCreateLeaseSetInactiveSession(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+
+	// Stop the session to make it inactive
+	session.Stop()
+
+	// Should fail because session is not active
+	_, err = session.CreateLeaseSet()
+	if err == nil {
+		t.Error("Expected error when session inactive, got nil")
+	}
+	if err != nil && err.Error() != "session 1 is not active" {
+		t.Errorf("Unexpected error message: %v", err)
+	}
+}
+
+// TestSessionCreateLeaseSetNoActiveTunnels tests CreateLeaseSet with empty pool
+func TestSessionCreateLeaseSetNoActiveTunnels(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create an empty tunnel pool using mock peer selector
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	// Should fail because there are no active tunnels
+	_, err = session.CreateLeaseSet()
+	if err == nil {
+		t.Error("Expected error when no active tunnels, got nil")
+	}
+}
+
+// TestSessionCreateLeaseSetWithActiveTunnels tests successful LeaseSet creation
+func TestSessionCreateLeaseSetWithActiveTunnels(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create a tunnel pool with active tunnels
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	// Add a mock active tunnel to the pool
+	// Create router hash for gateway
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	// Should successfully create LeaseSet
+	leaseSetBytes, err := session.CreateLeaseSet()
+	if err != nil {
+		t.Errorf("CreateLeaseSet() error = %v", err)
+	}
+	if len(leaseSetBytes) == 0 {
+		t.Error("Expected non-empty LeaseSet bytes")
+	}
+}
+
+// mockPeerSelector is a simple peer selector for testing
+type mockPeerSelector struct{}
+
+func (m *mockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
+	return []router_info.RouterInfo{}, nil
 }

@@ -229,6 +229,9 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 	case MessageTypeReconfigureSession:
 		return s.handleReconfigureSession(msg, sessionPtr)
 
+	case MessageTypeCreateLeaseSet:
+		return s.handleCreateLeaseSet(msg, sessionPtr)
+
 	case MessageTypeGetDate:
 		return s.handleGetDate(msg)
 
@@ -317,6 +320,42 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 	}).Info("session_reconfigured")
 
 	// No response for ReconfigureSession
+	return nil, nil
+}
+
+// handleCreateLeaseSet creates and publishes a LeaseSet for the session.
+// This handler generates a LeaseSet from the session's inbound tunnel pool
+// and returns it to the client. In a full implementation, this would also
+// publish the LeaseSet to the network database.
+func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Message, error) {
+	if *sessionPtr == nil {
+		return nil, fmt.Errorf("no active session")
+	}
+
+	session := *sessionPtr
+
+	// Create LeaseSet from session's inbound tunnels
+	leaseSetBytes, err := session.CreateLeaseSet()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleCreateLeaseSet",
+			"sessionID": session.ID(),
+			"error":     err,
+		}).Error("failed_to_create_leaseset")
+		return nil, fmt.Errorf("failed to create LeaseSet: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleCreateLeaseSet",
+		"sessionID": session.ID(),
+		"size":      len(leaseSetBytes),
+	}).Info("leaseset_created")
+
+	// TODO: Publish LeaseSet to network database (NetDB)
+	// This would involve sending a DatabaseStore message with the LeaseSet
+
+	// For I2CP protocol, we don't send a response to CreateLeaseSet
+	// The client just needs to know the operation succeeded (no error)
 	return nil, nil
 }
 
