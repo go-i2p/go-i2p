@@ -570,7 +570,7 @@ func (s *Session) evaluateLeaseSetAge() bool {
 }
 
 // logLeaseSetExpiration logs debug information when LeaseSet exceeds regeneration threshold.
-func (s *Session) logLeaseSetExpiration(age time.Duration, threshold time.Duration) {
+func (s *Session) logLeaseSetExpiration(age, threshold time.Duration) {
 	log.WithFields(logger.Fields{
 		"at":                    "i2cp.Session.maintainLeaseSet",
 		"sessionID":             s.id,

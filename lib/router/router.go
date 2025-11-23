@@ -382,42 +382,48 @@ func (r *Router) startSessionMonitors() {
 func (r *Router) monitorInboundSessions() {
 	log.Debug("Starting inbound session monitor")
 
-	for {
-		// Check if router is still running
-		r.runMux.RLock()
-		shouldRun := r.running
-		r.runMux.RUnlock()
-
-		if !shouldRun {
-			log.Debug("Stopping inbound session monitor")
-			return
+	for r.shouldContinueMonitoring() {
+		if conn := r.acceptInboundConnection(); conn != nil {
+			r.handleNewConnection(conn)
 		}
-
-		// Accept incoming NTCP2 connection with timeout to allow shutdown checks
-		conn, err := r.TransportMuxer.AcceptWithTimeout(5 * time.Second)
-		if err != nil {
-			// Timeout is expected behavior, continue monitoring
-			if errors.Is(err, context.DeadlineExceeded) {
-				continue
-			}
-			log.WithError(err).Warn("Failed to accept inbound connection")
-			continue
-		}
-
-		// Extract peer information and create session
-		session, peerHash, err := r.createSessionFromConn(conn)
-		if err != nil {
-			log.WithError(err).Error("Failed to create session from connection")
-			conn.Close()
-			continue
-		}
-
-		// Track session and start message processor
-		r.addSession(peerHash, session)
-		go r.processSessionMessages(session, peerHash)
-
-		log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
 	}
+
+	log.Debug("Stopping inbound session monitor")
+}
+
+// shouldContinueMonitoring checks if the router is still running.
+func (r *Router) shouldContinueMonitoring() bool {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.running
+}
+
+// acceptInboundConnection attempts to accept a new connection with timeout.
+// Returns nil if timeout occurs or connection fails.
+func (r *Router) acceptInboundConnection() net.Conn {
+	conn, err := r.TransportMuxer.AcceptWithTimeout(5 * time.Second)
+	if err != nil {
+		if !errors.Is(err, context.DeadlineExceeded) {
+			log.WithError(err).Warn("Failed to accept inbound connection")
+		}
+		return nil
+	}
+	return conn
+}
+
+// handleNewConnection processes a new inbound connection by creating and starting a session.
+func (r *Router) handleNewConnection(conn net.Conn) {
+	session, peerHash, err := r.createSessionFromConn(conn)
+	if err != nil {
+		log.WithError(err).Error("Failed to create session from connection")
+		conn.Close()
+		return
+	}
+
+	r.addSession(peerHash, session)
+	go r.processSessionMessages(session, peerHash)
+
+	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
 }
 
 // createSessionFromConn creates an NTCP2Session from a net.Conn.

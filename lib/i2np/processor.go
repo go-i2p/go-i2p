@@ -540,7 +540,7 @@ func (tm *TunnelManager) updateTunnelStatesFromReply(messageID int, records []Bu
 }
 
 // logNoMatchingTunnel logs a warning when no building tunnel matches the reply.
-func (tm *TunnelManager) logNoMatchingTunnel(messageID int, recordCount int) {
+func (tm *TunnelManager) logNoMatchingTunnel(messageID, recordCount int) {
 	log.WithFields(logger.Fields{
 		"message_id":   messageID,
 		"record_count": recordCount,
@@ -548,7 +548,7 @@ func (tm *TunnelManager) logNoMatchingTunnel(messageID int, recordCount int) {
 }
 
 // logTunnelUpdate logs debug information about tunnel state update.
-func (tm *TunnelManager) logTunnelUpdate(tunnelID tunnel.TunnelID, messageID int, recordCount int, success bool) {
+func (tm *TunnelManager) logTunnelUpdate(tunnelID tunnel.TunnelID, messageID, recordCount int, success bool) {
 	log.WithFields(logger.Fields{
 		"tunnel_id":    tunnelID,
 		"message_id":   messageID,
@@ -663,34 +663,58 @@ func (tm *TunnelManager) removeExpiredBuildRequests() {
 	tm.buildMutex.Lock()
 	defer tm.buildMutex.Unlock()
 
+	expired := tm.identifyExpiredRequests()
+	tm.removeExpiredFromMap(expired)
+	tm.logCleanupResults(expired)
+}
+
+// identifyExpiredRequests finds and processes all build requests that have exceeded timeout.
+// Returns list of expired message IDs for cleanup.
+func (tm *TunnelManager) identifyExpiredRequests() []int {
 	now := time.Now()
 	const buildTimeout = 90 * time.Second
 	var expired []int
 
 	for msgID, req := range tm.pendingBuilds {
-		if now.Sub(req.createdAt) > buildTimeout {
+		if tm.isRequestExpired(req, now, buildTimeout) {
 			expired = append(expired, msgID)
-
-			// Mark tunnel as failed in pool
-			if tunnelState, exists := tm.pool.GetTunnel(req.tunnelID); exists {
-				tunnelState.State = tunnel.TunnelFailed
-				log.WithFields(logger.Fields{
-					"tunnel_id":  req.tunnelID,
-					"message_id": msgID,
-					"age":        now.Sub(req.createdAt),
-				}).Warn("Tunnel build timed out")
-
-				// Schedule cleanup
-				go tm.cleanupFailedTunnel(req.tunnelID)
-			}
+			tm.handleExpiredRequest(req, msgID, now)
 		}
 	}
+	return expired
+}
 
-	// Remove expired requests from map
+// isRequestExpired checks if a build request has exceeded the timeout threshold.
+func (tm *TunnelManager) isRequestExpired(req *buildRequest, now time.Time, timeout time.Duration) bool {
+	return now.Sub(req.createdAt) > timeout
+}
+
+// handleExpiredRequest marks tunnel as failed and schedules cleanup.
+func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now time.Time) {
+	tunnelState, exists := tm.pool.GetTunnel(req.tunnelID)
+	if !exists {
+		return
+	}
+
+	tunnelState.State = tunnel.TunnelFailed
+	log.WithFields(logger.Fields{
+		"tunnel_id":  req.tunnelID,
+		"message_id": msgID,
+		"age":        now.Sub(req.createdAt),
+	}).Warn("Tunnel build timed out")
+
+	go tm.cleanupFailedTunnel(req.tunnelID)
+}
+
+// removeExpiredFromMap deletes expired build requests from the pending map.
+func (tm *TunnelManager) removeExpiredFromMap(expired []int) {
 	for _, msgID := range expired {
 		delete(tm.pendingBuilds, msgID)
 	}
+}
 
+// logCleanupResults logs the number of expired requests cleaned up.
+func (tm *TunnelManager) logCleanupResults(expired []int) {
 	if len(expired) > 0 {
 		log.WithField("expired_count", len(expired)).Info("Cleaned up expired build requests")
 	}
