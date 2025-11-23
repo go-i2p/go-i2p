@@ -139,26 +139,47 @@ func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 // 4. Sends the build request via appropriate transport
 // 5. Returns the tunnel ID for tracking
 func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
-	if tm.peerSelector == nil {
-		return 0, fmt.Errorf("no peer selector configured")
+	result, messageID, err := tm.createBuildRequestAndID(req)
+	if err != nil {
+		return 0, err
 	}
 
-	// Create tunnel builder
+	tunnelState := tm.createTunnelStateFromResult(result)
+	tm.pool.AddTunnel(tunnelState)
+	tm.trackPendingBuild(result, messageID)
+
+	err = tm.sendBuildMessage(result, messageID)
+	if err != nil {
+		tm.cleanupFailedBuild(result.TunnelID, messageID)
+		return 0, fmt.Errorf("failed to send build request: %w", err)
+	}
+
+	tm.logBuildRequestSent(result, messageID)
+	return result.TunnelID, nil
+}
+
+// createBuildRequestAndID validates prerequisites and creates the build request with message ID
+func (tm *TunnelManager) createBuildRequestAndID(req tunnel.BuildTunnelRequest) (*tunnel.TunnelBuildResult, int, error) {
+	if tm.peerSelector == nil {
+		return nil, 0, fmt.Errorf("no peer selector configured")
+	}
+
 	builder, err := tunnel.NewTunnelBuilder(tm.peerSelector)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create tunnel builder: %w", err)
+		return nil, 0, fmt.Errorf("failed to create tunnel builder: %w", err)
 	}
 
-	// Generate build request with encrypted records
 	result, err := builder.CreateBuildRequest(req)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create build request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create build request: %w", err)
 	}
 
-	// Generate message ID for this build request
 	messageID := tm.generateMessageID()
+	return result, messageID, nil
+}
 
-	// Create tunnel state tracking
+// createTunnelStateFromResult creates tunnel state tracking from build result
+func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildResult) *tunnel.TunnelState {
 	tunnelState := &tunnel.TunnelState{
 		ID:        result.TunnelID,
 		Hops:      make([]common.Hash, len(result.Hops)),
@@ -167,16 +188,18 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		Responses: make([]tunnel.BuildResponse, 0, len(result.Hops)),
 	}
 
-	// Populate hops with selected peer hashes
 	for i, peer := range result.Hops {
 		tunnelState.Hops[i] = peer.IdentHash()
 	}
 
-	// Add tunnel to pool for tracking
-	tm.pool.AddTunnel(tunnelState)
+	return tunnelState
+}
 
-	// Track the pending build request for reply correlation
+// trackPendingBuild records the pending build request for reply correlation
+func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int) {
 	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+
 	tm.pendingBuilds[messageID] = &buildRequest{
 		tunnelID:      result.TunnelID,
 		messageID:     messageID,
@@ -187,27 +210,24 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		retryCount:    0,
 		useShortBuild: result.UseShortBuild,
 	}
+}
+
+// cleanupFailedBuild removes tunnel and pending build request on send failure
+func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID int) {
+	tm.pool.RemoveTunnel(tunnelID)
+	tm.buildMutex.Lock()
+	delete(tm.pendingBuilds, messageID)
 	tm.buildMutex.Unlock()
+}
 
-	// Send the tunnel build request
-	err = tm.sendBuildMessage(result, messageID)
-	if err != nil {
-		// Clean up on failure
-		tm.pool.RemoveTunnel(result.TunnelID)
-		tm.buildMutex.Lock()
-		delete(tm.pendingBuilds, messageID)
-		tm.buildMutex.Unlock()
-		return 0, fmt.Errorf("failed to send build request: %w", err)
-	}
-
+// logBuildRequestSent logs successful tunnel build request submission
+func (tm *TunnelManager) logBuildRequestSent(result *tunnel.TunnelBuildResult, messageID int) {
 	log.WithFields(logger.Fields{
 		"tunnel_id":  result.TunnelID,
 		"message_id": messageID,
 		"hop_count":  len(result.Hops),
 		"use_stbm":   result.UseShortBuild,
 	}).Info("Tunnel build request sent")
-
-	return result.TunnelID, nil
 }
 
 // sendBuildMessage sends a tunnel build message (STBM or VTB) based on the result.

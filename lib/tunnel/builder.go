@@ -170,45 +170,74 @@ func (tb *TunnelBuilder) createHopRecord(
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
 ) (BuildRequestRecord, session_key.SessionKey, [16]byte, error) {
-	// Generate cryptographic keys for this hop
-	layerKey, err := generateSessionKey()
+	layerKey, ivKey, replyKey, replyIV, err := generateHopCryptoKeys()
 	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{},
-			fmt.Errorf("failed to generate layer key: %w", err)
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
 	}
 
-	ivKey, err := generateSessionKey()
-	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{},
-			fmt.Errorf("failed to generate IV key: %w", err)
-	}
-
-	replyKey, err := generateSessionKey()
-	if err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{},
-			fmt.Errorf("failed to generate reply key: %w", err)
-	}
-
-	var replyIV [16]byte
-	if _, err := rand.Read(replyIV[:]); err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{},
-			fmt.Errorf("failed to generate reply IV: %w", err)
-	}
-
-	// Determine tunnel routing parameters based on position in chain
 	receiveTunnel, nextTunnel, ourIdent, nextIdent := tb.determineRoutingParams(
 		hopIndex, req, tunnelID, peers,
 	)
 
-	// Generate random padding
-	var padding [29]byte
-	if _, err := rand.Read(padding[:]); err != nil {
-		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{},
-			fmt.Errorf("failed to generate padding: %w", err)
+	padding, err := generateRecordPadding()
+	if err != nil {
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
 	}
 
-	// Create the build request record
-	record := BuildRequestRecord{
+	record := assembleBuildRecord(
+		receiveTunnel, nextTunnel, ourIdent, nextIdent,
+		layerKey, ivKey, replyKey, replyIV, padding,
+	)
+
+	return record, replyKey, replyIV, nil
+}
+
+// generateHopCryptoKeys generates all cryptographic keys needed for a tunnel hop.
+func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, replyIV [16]byte, err error) {
+	layerKey, err = generateSessionKey()
+	if err != nil {
+		err = fmt.Errorf("failed to generate layer key: %w", err)
+		return
+	}
+
+	ivKey, err = generateSessionKey()
+	if err != nil {
+		err = fmt.Errorf("failed to generate IV key: %w", err)
+		return
+	}
+
+	replyKey, err = generateSessionKey()
+	if err != nil {
+		err = fmt.Errorf("failed to generate reply key: %w", err)
+		return
+	}
+
+	if _, err = rand.Read(replyIV[:]); err != nil {
+		err = fmt.Errorf("failed to generate reply IV: %w", err)
+		return
+	}
+
+	return
+}
+
+// generateRecordPadding generates random padding for a build request record.
+func generateRecordPadding() ([29]byte, error) {
+	var padding [29]byte
+	if _, err := rand.Read(padding[:]); err != nil {
+		return [29]byte{}, fmt.Errorf("failed to generate padding: %w", err)
+	}
+	return padding, nil
+}
+
+// assembleBuildRecord creates a BuildRequestRecord from its components.
+func assembleBuildRecord(
+	receiveTunnel, nextTunnel TunnelID,
+	ourIdent, nextIdent common.Hash,
+	layerKey, ivKey, replyKey session_key.SessionKey,
+	replyIV [16]byte,
+	padding [29]byte,
+) BuildRequestRecord {
+	return BuildRequestRecord{
 		ReceiveTunnel: receiveTunnel,
 		OurIdent:      ourIdent,
 		NextTunnel:    nextTunnel,
@@ -217,13 +246,11 @@ func (tb *TunnelBuilder) createHopRecord(
 		IVKey:         ivKey,
 		ReplyKey:      replyKey,
 		ReplyIV:       replyIV,
-		Flag:          0, // Standard flag (no special behavior)
+		Flag:          0,
 		RequestTime:   time.Now(),
 		SendMessageID: generateMessageID(),
 		Padding:       padding,
 	}
-
-	return record, replyKey, replyIV, nil
 }
 
 // determineRoutingParams calculates the tunnel routing parameters for a specific hop.
