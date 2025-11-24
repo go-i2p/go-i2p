@@ -266,54 +266,77 @@ func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData [
 		return err
 	}
 
-	// If not fragmented, deliver immediately
+	// Handle non-fragmented messages
 	if !fragmented {
-		if deliveryType == DT_LOCAL {
-			return e.handler(fragmentData)
-		}
-		log.WithField("delivery_type", deliveryType).Debug("Non-local delivery, skipping")
-		return nil
+		return e.deliverNonFragmentedMessage(deliveryType, fragmentData)
 	}
 
-	// Handle fragmented message - store first fragment
+	// Handle fragmented messages
 	msgID, err := di.MessageID()
 	if err != nil {
 		return err
 	}
 
-	// Get or create assembler for this message
+	return e.storeFirstFragment(msgID, deliveryType, fragmentData)
+}
+
+// deliverNonFragmentedMessage delivers a complete non-fragmented message immediately.
+// Returns nil for non-local delivery types as they are not processed at this endpoint.
+func (e *Endpoint) deliverNonFragmentedMessage(deliveryType byte, fragmentData []byte) error {
+	if deliveryType == DT_LOCAL {
+		return e.handler(fragmentData)
+	}
+	log.WithField("delivery_type", deliveryType).Debug("Non-local delivery, skipping")
+	return nil
+}
+
+// storeFirstFragment stores the first fragment of a multi-fragment message.
+// Creates or updates the fragment assembler and checks for completion.
+func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentData []byte) error {
+	assembler := e.ensureAssemblerExists(msgID, deliveryType)
+	e.recordFirstFragmentData(assembler, fragmentData, msgID)
+	return e.checkFragmentCompletion(msgID, assembler)
+}
+
+// ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
+// Updates delivery type on existing assemblers to ensure correct routing.
+func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
-		// Create new assembler for this message
 		assembler = &fragmentAssembler{
 			fragments:    make(map[int][]byte),
 			deliveryType: deliveryType,
-			totalCount:   0, // Will be set when last fragment arrives
+			totalCount:   0,
 			receivedMask: 0,
 		}
 		e.fragments[msgID] = assembler
 	} else {
-		// Update delivery type if assembler already exists from follow-on fragments
 		assembler.deliveryType = deliveryType
 	}
+	return assembler
+}
 
-	// Store fragment 0
+// recordFirstFragmentData stores the first fragment (index 0) in the assembler.
+// Sets the corresponding bit in the received mask for tracking.
+func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmentData []byte, msgID uint32) {
 	assembler.fragments[0] = fragmentData
-	assembler.receivedMask |= 1 // Set bit 0
+	assembler.receivedMask |= 1
 
 	log.WithFields(map[string]interface{}{
 		"message_id": msgID,
 		"size":       len(fragmentData),
 	}).Debug("Stored first fragment")
+}
 
-	// Check if we have all fragments (in case follow-on fragments arrived first)
+// checkFragmentCompletion determines if all fragments have been received.
+// Triggers reassembly and delivery if the message is complete.
+func (e *Endpoint) checkFragmentCompletion(msgID uint32, assembler *fragmentAssembler) error {
 	if assembler.totalCount > 0 {
 		expectedMask := (uint64(1) << assembler.totalCount) - 1
 		if assembler.receivedMask == expectedMask {
 			return e.reassembleAndDeliver(msgID, assembler)
 		}
 	}
-
 	return nil
 }
 
