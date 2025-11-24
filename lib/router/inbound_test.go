@@ -142,37 +142,38 @@ func TestHandleTunnelDataSuccess(t *testing.T) {
 
 	// Track whether message handler was called
 	handlerCalled := false
-	messageReceived := make(chan []byte, 1)
+	messageReceived := make(chan []byte, 10) // Buffered to handle multiple delivery instructions
 
 	mockDecryptor := &mockTunnelEncryptor{
 		decryptFunc: func(data []byte) ([]byte, error) {
 			// Return a valid decrypted tunnel message
 			// Format: [tunnel ID (4)][IV (16)][checksum (4)][data with zero separator and delivery instructions]
-			decrypted := make([]byte, 1024)
-			
+			// Important: Only return the exact size needed to avoid spurious zero-byte delivery instructions
+			decrypted := make([]byte, 38) // Exactly enough for: tunnel_id(4) + IV(16) + checksum(4) + zero(1) + flags(1) + size(2) + message(10)
+
 			// Tunnel ID (first 4 bytes)
 			binary.BigEndian.PutUint32(decrypted[0:4], uint32(tunnelID))
-			
+
 			// IV (bytes 4-20) - use random for realism
 			rand.Read(decrypted[4:20])
 			iv := decrypted[4:20]
-			
+
 			// Set zero byte separator at position 24
 			decrypted[24] = 0x00
-			
+
 			// Add delivery instruction (local delivery, message size 10 bytes)
-			decrypted[25] = 0x00 // Flags: local delivery (0x00)
+			decrypted[25] = 0x00                             // Flags: local delivery (0x00)
 			binary.BigEndian.PutUint16(decrypted[26:28], 10) // Message size
-			
+
 			// Add 10 bytes of message data
 			copy(decrypted[28:38], []byte("testmessage")[:10])
-			
+
 			// Calculate checksum: first 4 bytes of SHA256(data_after_checksum + IV)
 			dataAfterChecksum := decrypted[24:]
 			checksumData := append(dataAfterChecksum, iv...)
 			hash := sha256.Sum256(checksumData)
 			copy(decrypted[20:24], hash[:4])
-			
+
 			return decrypted, nil
 		},
 	}
@@ -317,13 +318,13 @@ func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
 // createMockTunnelDataMessage creates a mock TunnelData I2NP message
 func createMockTunnelDataMessage(tunnelID tunnelpkg.TunnelID) i2np.I2NPMessage {
 	var data [1024]byte
-	
+
 	// Set tunnel ID
 	binary.BigEndian.PutUint32(data[0:4], uint32(tunnelID))
-	
+
 	// Fill with random encrypted data
 	rand.Read(data[4:])
-	
+
 	// Create TunnelData message
 	msg := i2np.NewTunnelDataMessage(data)
 	return msg

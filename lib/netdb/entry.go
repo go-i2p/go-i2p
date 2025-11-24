@@ -6,14 +6,16 @@ import (
 	"io"
 
 	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/router_info"
 )
 
 // netdb entry
-// wraps a router info and provides serialization
+// wraps a router info, lease set, or lease set2 and provides serialization
 type Entry struct {
 	*router_info.RouterInfo
 	*lease_set.LeaseSet
+	*lease_set2.LeaseSet2
 }
 
 // WriteTo writes the Entry to the provided writer.
@@ -26,7 +28,11 @@ func (e *Entry) WriteTo(w io.Writer) error {
 		return e.writeLeaseSet(w)
 	}
 
-	return fmt.Errorf("entry contains neither RouterInfo nor LeaseSet")
+	if e.LeaseSet2 != nil {
+		return e.writeLeaseSet2(w)
+	}
+
+	return fmt.Errorf("entry contains neither RouterInfo, LeaseSet, nor LeaseSet2")
 }
 
 // writeRouterInfo writes a RouterInfo entry to the writer.
@@ -49,6 +55,16 @@ func (e *Entry) writeLeaseSet(w io.Writer) error {
 	return e.writeEntryData(w, 2, data)
 }
 
+// writeLeaseSet2 writes a LeaseSet2 entry to the writer.
+func (e *Entry) writeLeaseSet2(w io.Writer) error {
+	data, err := e.serializeLeaseSet2()
+	if err != nil {
+		return err
+	}
+
+	return e.writeEntryData(w, 3, data)
+}
+
 // serializeRouterInfo serializes the RouterInfo and validates the result.
 func (e *Entry) serializeRouterInfo() ([]byte, error) {
 	data, err := e.RouterInfo.Bytes()
@@ -68,6 +84,16 @@ func (e *Entry) serializeLeaseSet() ([]byte, error) {
 	data, err := e.LeaseSet.Bytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize LeaseSet: %w", err)
+	}
+
+	return data, nil
+}
+
+// serializeLeaseSet2 serializes the LeaseSet2 and validates the result.
+func (e *Entry) serializeLeaseSet2() ([]byte, error) {
+	data, err := e.LeaseSet2.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
 	}
 
 	return data, nil
@@ -166,6 +192,8 @@ func (e *Entry) processEntryData(entryType byte, data []byte) error {
 		return e.processRouterInfoData(data)
 	case 2: // LeaseSet
 		return e.processLeaseSetData(data)
+	case 3: // LeaseSet2
+		return e.processLeaseSet2Data(data)
 	default:
 		return fmt.Errorf("unknown entry type: %d", entryType)
 	}
@@ -190,5 +218,18 @@ func (e *Entry) processLeaseSetData(data []byte) error {
 	}
 	e.LeaseSet = &ls
 	e.RouterInfo = nil
+	e.LeaseSet2 = nil
+	return nil
+}
+
+// processLeaseSet2Data processes LeaseSet2 data and sets the entry.
+func (e *Entry) processLeaseSet2Data(data []byte) error {
+	ls2, _, err := lease_set2.ReadLeaseSet2(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+	e.LeaseSet2 = &ls2
+	e.RouterInfo = nil
+	e.LeaseSet = nil
 	return nil
 }

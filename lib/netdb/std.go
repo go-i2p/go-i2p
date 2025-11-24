@@ -19,6 +19,7 @@ import (
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
@@ -955,4 +956,222 @@ func (db *StdNetDB) GetLeaseSetCount() int {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 	return len(db.LeaseSets)
+}
+
+// ======================================================================
+// LeaseSet2 Storage and Retrieval Methods
+// ======================================================================
+
+// StoreLeaseSet2 stores a LeaseSet2 entry in the database from I2NP DatabaseStore message.
+// This method validates, parses, caches, and persists LeaseSet2 data.
+// dataType should be 3 for LeaseSet2 (matching I2P protocol specification).
+func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("Storing LeaseSet2 from DatabaseStore message")
+
+	// Validate data type (3 = LeaseSet2 in I2P protocol)
+	if err := validateLeaseSet2DataType(dataType); err != nil {
+		return err
+	}
+
+	// Parse LeaseSet2 from raw bytes
+	ls2, err := parseLeaseSet2Data(data)
+	if err != nil {
+		return err
+	}
+
+	// Verify hash matches the LeaseSet2 destination hash
+	if err := verifyLeaseSet2Hash(key, ls2); err != nil {
+		return err
+	}
+
+	// Add to memory cache if not already present
+	if !db.addLeaseSet2ToCache(key, ls2) {
+		return nil
+	}
+
+	// Persist to filesystem
+	if err := db.persistLeaseSet2ToFilesystem(key, ls2); err != nil {
+		return err
+	}
+
+	log.WithField("hash", key).Debug("Successfully stored LeaseSet2")
+	return nil
+}
+
+// validateLeaseSet2DataType checks if the data type is valid for LeaseSet2 storage.
+func validateLeaseSet2DataType(dataType byte) error {
+	if dataType != 3 {
+		log.WithField("type", dataType).Warn("Invalid data type for LeaseSet2, expected 3")
+		return fmt.Errorf("invalid data type for LeaseSet2: expected 3, got %d", dataType)
+	}
+	return nil
+}
+
+// parseLeaseSet2Data parses LeaseSet2 from raw bytes using the common library.
+func parseLeaseSet2Data(data []byte) (lease_set2.LeaseSet2, error) {
+	ls2, _, err := lease_set2.ReadLeaseSet2(data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse LeaseSet2 from DatabaseStore data")
+		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+	return ls2, nil
+}
+
+// verifyLeaseSet2Hash validates that the provided key matches the LeaseSet2 destination hash.
+func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
+	dest := ls2.Destination()
+
+	// Calculate hash from destination bytes
+	expectedHash := common.HashData(dest.Bytes())
+	if key != expectedHash {
+		log.WithFields(logger.Fields{
+			"expected_hash": expectedHash,
+			"provided_key":  key,
+		}).Error("LeaseSet2 hash mismatch")
+		return fmt.Errorf("LeaseSet2 hash mismatch: expected %x, got %x", expectedHash, key)
+	}
+	return nil
+}
+
+// addLeaseSet2ToCache adds a LeaseSet2 entry to the in-memory cache if it doesn't exist.
+// Returns true if the entry was added, false if it already existed.
+func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet2) bool {
+	db.lsMutex.Lock()
+	defer db.lsMutex.Unlock()
+
+	if _, exists := db.LeaseSets[key]; exists {
+		log.WithField("hash", key).Debug("LeaseSet2 already exists in memory (as LeaseSet entry), skipping")
+		return false
+	}
+
+	db.LeaseSets[key] = Entry{
+		LeaseSet2: &ls2,
+	}
+	return true
+}
+
+// persistLeaseSet2ToFilesystem saves a LeaseSet2 entry to the filesystem.
+// If the save fails, it removes the entry from the in-memory cache to maintain consistency.
+func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2.LeaseSet2) error {
+	entry := &Entry{
+		LeaseSet2: &ls2,
+	}
+
+	fpath := db.SkiplistFileForLeaseSet(key)
+	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o700)
+	if err != nil {
+		log.WithError(err).Error("Failed to open file for saving LeaseSet2")
+		db.lsMutex.Lock()
+		delete(db.LeaseSets, key)
+		db.lsMutex.Unlock()
+		return fmt.Errorf("failed to open LeaseSet2 file: %w", err)
+	}
+	defer f.Close()
+
+	if err := entry.WriteTo(f); err != nil {
+		log.WithError(err).Error("Failed to write LeaseSet2 to filesystem")
+		db.lsMutex.Lock()
+		delete(db.LeaseSets, key)
+		db.lsMutex.Unlock()
+		return fmt.Errorf("failed to save LeaseSet2 to filesystem: %w", err)
+	}
+
+	return nil
+}
+
+// GetLeaseSet2 retrieves a LeaseSet2 from the database by its hash.
+// Returns a channel that yields the LeaseSet2 or nil if not found.
+// Checks memory cache first, then loads from filesystem if necessary.
+func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSet2) {
+	log.WithField("hash", hash).Debug("Getting LeaseSet2")
+
+	// Check memory cache first
+	db.lsMutex.Lock()
+	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
+		db.lsMutex.Unlock()
+		log.Debug("LeaseSet2 found in memory cache")
+		chnl = make(chan lease_set2.LeaseSet2, 1)
+		chnl <- *ls.LeaseSet2
+		close(chnl)
+		return
+	}
+	db.lsMutex.Unlock()
+
+	// Load from file
+	data, err := db.loadLeaseSetFromFile(hash)
+	if err != nil {
+		log.WithError(err).Error("Failed to load LeaseSet2 from file")
+		return nil
+	}
+
+	chnl = make(chan lease_set2.LeaseSet2, 1)
+	ls2, err := db.parseAndCacheLeaseSet2(hash, data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse LeaseSet2")
+		close(chnl)
+		return
+	}
+
+	chnl <- ls2
+	close(chnl)
+	return
+}
+
+// parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
+func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
+	ls2, _, err := lease_set2.ReadLeaseSet2(data)
+	if err != nil {
+		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+
+	// Add to cache if not already present
+	db.lsMutex.Lock()
+	if _, ok := db.LeaseSets[hash]; !ok {
+		log.Debug("Adding LeaseSet2 to memory cache")
+		db.LeaseSets[hash] = Entry{
+			LeaseSet2: &ls2,
+		}
+	}
+	db.lsMutex.Unlock()
+
+	return ls2, nil
+}
+
+// GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
+// Checks memory cache first, then loads from filesystem if necessary.
+// Returns serialized LeaseSet2 bytes suitable for network transmission.
+func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
+	log.WithField("hash", hash).Debug("Getting LeaseSet2 bytes")
+
+	// Check memory cache first
+	db.lsMutex.Lock()
+	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
+		db.lsMutex.Unlock()
+		log.Debug("LeaseSet2 found in memory cache")
+
+		// Serialize the LeaseSet2 to bytes
+		data, err := ls.LeaseSet2.Bytes()
+		if err != nil {
+			log.WithError(err).Error("Failed to serialize cached LeaseSet2")
+			return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
+		}
+		return data, nil
+	}
+	db.lsMutex.Unlock()
+
+	// Load from file if not in memory
+	data, err := db.loadLeaseSetFromFile(hash)
+	if err != nil {
+		log.WithError(err).Debug("LeaseSet2 not found in filesystem")
+		return nil, fmt.Errorf("LeaseSet2 not found: %w", err)
+	}
+
+	// Parse and cache for future use
+	_, err = db.parseAndCacheLeaseSet2(hash, data)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse LeaseSet2 from file")
+		return nil, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+
+	return data, nil
 }
