@@ -4,7 +4,14 @@ A pure Go implementation of the I2P router.
 
 ## Status
 
-go-i2p is in early development. We recently completed several significant milestones including the I2CP protocol server with complete session lifecycle management. However, the most important user-facing milestone remains incomplete: we don't yet have full end-to-end message routing connecting clients through tunnels to other destinations.
+go-i2p is in active development. We recently completed several significant milestones including:
+
+- **Complete I2CP Protocol Server**: Full session lifecycle management, message routing, and client support
+- **End-to-End Message Routing**: Complete message routing system connecting I2CP clients through tunnels to other destinations with garlic encryption
+- **Tunnel System**: Automatic tunnel building, pool management, and cryptographic processing
+- **Transport Layer**: Full NTCP2 implementation with session management
+
+The core router functionality is now operational. We are currently focused on advanced NetDB features and application layer protocols.
 
 ### Implemented Features
 
