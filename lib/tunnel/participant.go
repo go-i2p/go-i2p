@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
+	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
 )
@@ -17,6 +18,7 @@ import (
 // - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 // - No message inspection (maintains tunnel privacy)
 // - Stateless processing for better performance
+// - Tracks creation time and expiration (tunnels typically last 10 minutes)
 type Participant struct {
 	// tunnelID is this participant's tunnel ID (not used for processing,
 	// but kept for logging and debugging)
@@ -24,6 +26,13 @@ type Participant struct {
 
 	// decryption handles removing one layer of encryption
 	decryption tunnel.TunnelEncryptor
+
+	// createdAt tracks when this participant tunnel was created
+	createdAt time.Time
+
+	// lifetime is how long this participant tunnel is valid
+	// Typically 10 minutes for I2P tunnels
+	lifetime time.Duration
 }
 
 var (
@@ -45,6 +54,7 @@ var (
 // Design note: We use TunnelEncryptor interface even though it's called
 // "decryption" because the interface supports both encrypt and decrypt operations.
 // The crypto/tunnel package uses the same interface for both directions.
+// The participant is created with a default lifetime of 10 minutes (standard I2P tunnel lifetime).
 func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Participant, error) {
 	if decryption == nil {
 		return nil, ErrNilParticipantDecryption
@@ -53,6 +63,8 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 	p := &Participant{
 		tunnelID:   tunnelID,
 		decryption: decryption,
+		createdAt:  time.Now(),
+		lifetime:   10 * time.Minute, // Standard I2P tunnel lifetime
 	}
 
 	log.WithField("tunnel_id", tunnelID).Debug("Created tunnel participant")
@@ -119,4 +131,27 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 // TunnelID returns this participant's tunnel ID
 func (p *Participant) TunnelID() TunnelID {
 	return p.tunnelID
+}
+
+// IsExpired checks if this participant tunnel has expired.
+// Returns true if the current time is past createdAt + lifetime.
+//
+// Parameters:
+// - now: the current time to check against
+//
+// This is used by the tunnel manager to clean up expired participants.
+func (p *Participant) IsExpired(now time.Time) bool {
+	expirationTime := p.createdAt.Add(p.lifetime)
+	return now.After(expirationTime)
+}
+
+// SetLifetime updates the lifetime for this participant tunnel.
+// This allows customization beyond the default 10 minutes if needed.
+func (p *Participant) SetLifetime(lifetime time.Duration) {
+	p.lifetime = lifetime
+}
+
+// CreatedAt returns when this participant tunnel was created.
+func (p *Participant) CreatedAt() time.Time {
+	return p.createdAt
 }

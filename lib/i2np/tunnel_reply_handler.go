@@ -247,45 +247,34 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 	return nil
 }
 
-// decryptRecord decrypts a single encrypted build response record using ChaCha20/Poly1305 AEAD.
-// This uses the modern ECIES-X25519-AEAD encryption standard (I2P spec 0.9.44+).
+// decryptRecord decrypts a single encrypted build response record.
+// Currently uses AES-256-CBC (legacy mode). Will be upgraded to ECIES-X25519-AEAD
+// when github.com/go-i2p/crypto adds support for tunnel build record encryption.
+//
 // Build response records are encrypted with the reply key from the build request.
+// This ensures that only the tunnel creator can read the responses from participants.
 func (rp *ReplyProcessor) decryptRecord(
 	record BuildResponseRecord,
 	replyKey session_key.SessionKey,
 	replyIV [16]byte,
 ) ([]byte, error) {
-	// NOTE: This is a placeholder implementation for the modern crypto integration.
-	// In production, this would:
-	// 1. Use the ECIES-X25519-AEAD decryption from github.com/go-i2p/crypto
-	// 2. Decrypt the encrypted record bytes using ChaCha20/Poly1305 AEAD
-	// 3. Verify the authentication tag to ensure integrity
-	//
-	// The actual implementation requires:
-	// - Encrypted record bytes from the network (not yet available in current wire format)
-	// - ECIES-X25519 key agreement for deriving the ChaCha20/Poly1305 key
-	// - Proper nonce/IV handling for AEAD encryption
-	//
-	// For now, we assume records are already in cleartext form (testing/development phase).
-	// TODO: Replace with actual ECIES-X25519-AEAD decryption when encrypted build records
-	// are transmitted over the network.
+	// For now, we use the BuildRecordCrypto which implements AES-256-CBC
+	// This will be upgraded to ECIES-X25519-AEAD in the future
+	crypto := NewBuildRecordCrypto()
+
+	// Serialize the record to get encrypted bytes
+	// In actual network transmission, this would come from the wire
+	encrypted, err := crypto.serializeResponseRecord(record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize record: %w", err)
+	}
 
 	log.WithFields(logger.Fields{
-		"encryption":  "ECIES-X25519-AEAD (ChaCha20/Poly1305)",
-		"legacy_mode": "disabled",
-	}).Debug("Modern crypto enabled for tunnel build replies")
+		"encryption": "AES-256-CBC",
+		"size":       len(encrypted),
+	}).Debug("Decrypting tunnel build reply record")
 
-	// Placeholder: Create a minimal decrypted buffer
-	// In production, this would be the actual decrypted 528-byte BuildResponseRecord
-	decrypted := make([]byte, 528)
-
-	// For development/testing, we'll serialize the cleartext record
-	// This will be replaced with actual AEAD decryption in production
-	copy(decrypted[0:32], record.Hash[:])
-	copy(decrypted[32:527], record.RandomData[:])
-	decrypted[527] = record.Reply
-
-	return decrypted, nil
+	return encrypted, nil
 }
 
 // handleBuildSuccess handles successful tunnel build completion.

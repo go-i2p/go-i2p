@@ -4,10 +4,24 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
+// DatabaseStore type constants (bits 3-0 of type field)
+const (
+	// DATABASE_STORE_TYPE_ROUTER_INFO indicates a RouterInfo entry
+	DATABASE_STORE_TYPE_ROUTER_INFO = 0
+	// DATABASE_STORE_TYPE_LEASESET indicates original LeaseSet (deprecated)
+	DATABASE_STORE_TYPE_LEASESET = 1
+	// DATABASE_STORE_TYPE_LEASESET2 indicates LeaseSet2 (standard as of 0.9.38+)
+	DATABASE_STORE_TYPE_LEASESET2 = 3
+	// DATABASE_STORE_TYPE_ENCRYPTED_LEASESET indicates EncryptedLeaseSet (0.9.39+, not yet implemented)
+	DATABASE_STORE_TYPE_ENCRYPTED_LEASESET = 5
+	// DATABASE_STORE_TYPE_META_LEASESET indicates MetaLeaseSet (0.9.40+, not yet implemented)
+	DATABASE_STORE_TYPE_META_LEASESET = 7
+)
+
 /*
 I2P I2NP DatabaseStore
 https://geti2p.net/spec/i2np
-Accurate for version 0.9.28
+Accurate for version 0.9.66+
 
 with reply token:
 +----+----+----+----+----+----+----+----+
@@ -52,12 +66,14 @@ key ::
 type ::
      1 byte
      type identifier
-     bit 0:
+     bits 3-0: LeaseSet type variant
              0    RouterInfo
-             1    LeaseSet
-     bits 7-1:
-            Through release 0.9.17, must be 0
-            As of release 0.9.18, ignored, reserved for future options, set to 0 for compatibility
+             1    LeaseSet (original, deprecated)
+             3    LeaseSet2 (standard as of 0.9.38+)
+             5    EncryptedLeaseSet (0.9.39+, not yet implemented)
+             7    MetaLeaseSet (0.9.40+, not yet implemented)
+     bits 7-4:
+            Reserved for future use, set to 0 for compatibility
 
 reply token ::
             4 bytes
@@ -83,7 +99,10 @@ reply gateway ::
 data ::
      If type == 0, data is a 2-byte Integer specifying the number of bytes that follow,
                    followed by a gzip-compressed RouterInfo.
-     If type == 1, data is an uncompressed LeaseSet.
+     If type == 1, data is an uncompressed LeaseSet (original, deprecated).
+     If type == 3, data is an uncompressed LeaseSet2 (standard).
+     If type == 5, data is an uncompressed EncryptedLeaseSet (not yet implemented).
+     If type == 7, data is an uncompressed MetaLeaseSet (not yet implemented).
 */
 
 type DatabaseStore struct {
@@ -120,6 +139,35 @@ func (d *DatabaseStore) GetStoreData() []byte {
 // GetStoreType returns the store type
 func (d *DatabaseStore) GetStoreType() byte {
 	return d.Type
+}
+
+// GetLeaseSetType returns the LeaseSet type variant from bits 3-0 of the type field.
+// Returns one of: DATABASE_STORE_TYPE_ROUTER_INFO, DATABASE_STORE_TYPE_LEASESET,
+// DATABASE_STORE_TYPE_LEASESET2, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+// or DATABASE_STORE_TYPE_META_LEASESET.
+func (d *DatabaseStore) GetLeaseSetType() int {
+	// Extract bits 3-0 for LeaseSet variant
+	typeField := int(d.Type & 0x0F)
+	return typeField
+}
+
+// IsRouterInfo returns true if this DatabaseStore contains a RouterInfo
+func (d *DatabaseStore) IsRouterInfo() bool {
+	return d.GetLeaseSetType() == DATABASE_STORE_TYPE_ROUTER_INFO
+}
+
+// IsLeaseSet returns true if this DatabaseStore contains any type of LeaseSet
+func (d *DatabaseStore) IsLeaseSet() bool {
+	leaseSetType := d.GetLeaseSetType()
+	return leaseSetType == DATABASE_STORE_TYPE_LEASESET ||
+		leaseSetType == DATABASE_STORE_TYPE_LEASESET2 ||
+		leaseSetType == DATABASE_STORE_TYPE_ENCRYPTED_LEASESET ||
+		leaseSetType == DATABASE_STORE_TYPE_META_LEASESET
+}
+
+// IsLeaseSet2 returns true if this DatabaseStore contains a LeaseSet2
+func (d *DatabaseStore) IsLeaseSet2() bool {
+	return d.GetLeaseSetType() == DATABASE_STORE_TYPE_LEASESET2
 }
 
 // MarshalBinary serializes the DatabaseStore message

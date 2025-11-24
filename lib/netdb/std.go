@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/crypto/rand"
 
@@ -35,16 +36,30 @@ type StdNetDB struct {
 	riMutex     sync.Mutex // mutex for RouterInfos
 	LeaseSets   map[common.Hash]Entry
 	lsMutex     sync.Mutex // mutex for LeaseSets
+
+	// Expiration tracking for LeaseSets
+	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
+	expiryMutex    sync.RWMutex              // mutex for expiry tracking
+
+	// Cleanup goroutine management
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cleanupWg sync.WaitGroup
 }
 
 func NewStdNetDB(db string) *StdNetDB {
 	log.WithField("db_path", db).Debug("Creating new StdNetDB")
+	ctx, cancel := context.WithCancel(context.Background())
 	return &StdNetDB{
-		DB:          db,
-		RouterInfos: make(map[common.Hash]Entry),
-		riMutex:     sync.Mutex{},
-		LeaseSets:   make(map[common.Hash]Entry),
-		lsMutex:     sync.Mutex{},
+		DB:             db,
+		RouterInfos:    make(map[common.Hash]Entry),
+		riMutex:        sync.Mutex{},
+		LeaseSets:      make(map[common.Hash]Entry),
+		lsMutex:        sync.Mutex{},
+		leaseSetExpiry: make(map[common.Hash]time.Time),
+		expiryMutex:    sync.RWMutex{},
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 }
 
@@ -792,6 +807,7 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 
 // addLeaseSetToCache adds a LeaseSet entry to the in-memory cache if it doesn't exist.
 // Returns true if the entry was added, false if it already existed.
+// Also tracks the expiration time for automatic cleanup.
 func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
@@ -804,6 +820,10 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 	db.LeaseSets[key] = Entry{
 		LeaseSet: &ls,
 	}
+
+	// Track expiration time for cleanup
+	db.trackLeaseSetExpiration(key, ls)
+
 	return true
 }
 
@@ -1047,6 +1067,10 @@ func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet
 	db.LeaseSets[key] = Entry{
 		LeaseSet2: &ls2,
 	}
+
+	// Track expiration time for cleanup
+	db.trackLeaseSet2Expiration(key, ls2)
+
 	return true
 }
 
@@ -1174,4 +1198,170 @@ func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// ======================================================================
+// LeaseSet Expiration Tracking and Cleanup
+// ======================================================================
+
+// trackLeaseSetExpiration extracts the expiration time from a LeaseSet and records it.
+// Uses the NewestExpiration() method to find the latest expiration time among all leases.
+func (db *StdNetDB) trackLeaseSetExpiration(key common.Hash, ls lease_set.LeaseSet) {
+	// Get the newest expiration time from all leases in the LeaseSet
+	expiration, err := ls.NewestExpiration()
+	if err != nil {
+		log.WithError(err).WithField("hash", key).Warn("Failed to get LeaseSet expiration, using default 10 minutes")
+		// Default to 10 minutes from now if we can't determine expiration
+		db.expiryMutex.Lock()
+		db.leaseSetExpiry[key] = time.Now().Add(10 * time.Minute)
+		db.expiryMutex.Unlock()
+		return
+	}
+
+	expiryTime := expiration.Time()
+	db.expiryMutex.Lock()
+	db.leaseSetExpiry[key] = expiryTime
+	db.expiryMutex.Unlock()
+
+	log.WithFields(logger.Fields{
+		"hash":       fmt.Sprintf("%x", key[:8]),
+		"expiration": expiryTime,
+		"ttl":        time.Until(expiryTime).Round(time.Second),
+	}).Debug("Tracked LeaseSet expiration")
+}
+
+// trackLeaseSet2Expiration extracts the expiration time from a LeaseSet2 and records it.
+// Uses the ExpirationTime() method to get the expiration timestamp.
+func (db *StdNetDB) trackLeaseSet2Expiration(key common.Hash, ls2 lease_set2.LeaseSet2) {
+	expiryTime := ls2.ExpirationTime()
+	db.expiryMutex.Lock()
+	db.leaseSetExpiry[key] = expiryTime
+	db.expiryMutex.Unlock()
+
+	log.WithFields(logger.Fields{
+		"hash":       fmt.Sprintf("%x", key[:8]),
+		"expiration": expiryTime,
+		"ttl":        time.Until(expiryTime).Round(time.Second),
+	}).Debug("Tracked LeaseSet2 expiration")
+}
+
+// StartExpirationCleaner starts a background goroutine that periodically removes expired LeaseSets.
+// The cleanup runs every minute and removes any LeaseSets whose expiration time has passed.
+// This method should be called once during NetDB initialization.
+// Use Stop() to gracefully shut down the cleanup goroutine.
+func (db *StdNetDB) StartExpirationCleaner() {
+	log.Info("Starting LeaseSet expiration cleaner (runs every 1 minute)")
+
+	db.cleanupWg.Add(1)
+	go func() {
+		defer db.cleanupWg.Done()
+
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				db.cleanExpiredLeaseSets()
+			case <-db.ctx.Done():
+				log.Info("Stopping LeaseSet expiration cleaner")
+				return
+			}
+		}
+	}()
+}
+
+// Stop gracefully shuts down the expiration cleaner goroutine.
+// Blocks until the cleanup goroutine has exited.
+func (db *StdNetDB) Stop() {
+	if db.cancel != nil {
+		log.Info("Stopping StdNetDB")
+		db.cancel()
+		db.cleanupWg.Wait()
+		log.Info("StdNetDB stopped")
+	}
+}
+
+// cleanExpiredLeaseSets removes LeaseSets that have passed their expiration time.
+// This method is called periodically by the expiration cleaner goroutine.
+// It removes entries from both the in-memory cache and the filesystem.
+func (db *StdNetDB) cleanExpiredLeaseSets() {
+	now := time.Now()
+
+	// Find all expired LeaseSets
+	db.expiryMutex.RLock()
+	expired := make([]common.Hash, 0)
+	for hash, expiryTime := range db.leaseSetExpiry {
+		if now.After(expiryTime) {
+			expired = append(expired, hash)
+		}
+	}
+	db.expiryMutex.RUnlock()
+
+	if len(expired) == 0 {
+		return
+	}
+
+	// Remove expired entries
+	for _, hash := range expired {
+		db.removeExpiredLeaseSet(hash)
+	}
+
+	log.WithFields(logger.Fields{
+		"count": len(expired),
+		"time":  now.Format(time.RFC3339),
+	}).Info("Cleaned expired LeaseSets from NetDB")
+}
+
+// removeExpiredLeaseSet removes a single expired LeaseSet from cache and filesystem.
+func (db *StdNetDB) removeExpiredLeaseSet(hash common.Hash) {
+	// Remove from expiry tracking
+	db.expiryMutex.Lock()
+	delete(db.leaseSetExpiry, hash)
+	db.expiryMutex.Unlock()
+
+	// Remove from memory cache
+	db.lsMutex.Lock()
+	delete(db.LeaseSets, hash)
+	db.lsMutex.Unlock()
+
+	// Remove from filesystem
+	db.removeLeaseSetFromDisk(hash)
+
+	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removed expired LeaseSet")
+}
+
+// removeLeaseSetFromDisk deletes the LeaseSet file from the filesystem.
+func (db *StdNetDB) removeLeaseSetFromDisk(hash common.Hash) {
+	fpath := db.SkiplistFileForLeaseSet(hash)
+	if err := os.Remove(fpath); err != nil {
+		if !os.IsNotExist(err) {
+			log.WithError(err).WithField("path", fpath).Warn("Failed to remove LeaseSet file")
+		}
+	}
+}
+
+// GetLeaseSetExpirationStats returns statistics about LeaseSet expiration tracking.
+// Returns total count, expired count, and time until next expiration.
+func (db *StdNetDB) GetLeaseSetExpirationStats() (total int, expired int, nextExpiry time.Duration) {
+	now := time.Now()
+	var earliest time.Time
+
+	db.expiryMutex.RLock()
+	defer db.expiryMutex.RUnlock()
+
+	total = len(db.leaseSetExpiry)
+	for _, expiryTime := range db.leaseSetExpiry {
+		if now.After(expiryTime) {
+			expired++
+		} else if earliest.IsZero() || expiryTime.Before(earliest) {
+			earliest = expiryTime
+		}
+	}
+
+	if !earliest.IsZero() {
+		nextExpiry = time.Until(earliest)
+	}
+
+	return
 }
