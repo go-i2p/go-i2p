@@ -327,42 +327,77 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 func (t *NTCP2Transport) Close() error {
 	t.logger.Info("Closing NTCP2 transport")
 
-	// Cancel context to stop all operations
+	t.cancelTransportContext()
+	listenerErr := t.closeNetworkListener()
+	t.closeAllActiveSessions()
+	t.waitForBackgroundOperations()
+
+	return t.handleCloseCompletion(listenerErr)
+}
+
+// cancelTransportContext stops all transport operations by canceling the context.
+func (t *NTCP2Transport) cancelTransportContext() {
 	t.logger.Debug("Canceling transport context")
 	t.cancel()
+}
 
-	// Close listener
-	var listenerErr error
-	if t.listener != nil {
-		t.logger.Debug("Closing network listener")
-		listenerErr = t.listener.Close()
-		if listenerErr != nil {
-			t.logger.WithError(listenerErr).Warn("Error closing listener")
-		}
+// closeNetworkListener closes the network listener if present.
+// Returns any error encountered during closure.
+func (t *NTCP2Transport) closeNetworkListener() error {
+	if t.listener == nil {
+		return nil
 	}
 
-	// Close all sessions
+	t.logger.Debug("Closing network listener")
+	err := t.listener.Close()
+	if err != nil {
+		t.logger.WithError(err).Warn("Error closing listener")
+	}
+	return err
+}
+
+// closeAllActiveSessions iterates through all sessions and closes them.
+// Logs the total number of sessions closed.
+func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.logger.Debug("Closing all active sessions")
 	sessionCount := 0
+
 	t.sessions.Range(func(key, value interface{}) bool {
 		sessionCount++
-		if session, ok := value.(*NTCP2Session); ok {
-			if routerHash, ok := key.(data.Hash); ok {
-				routerHashBytes := routerHash.Bytes()
-				if err := session.Close(); err != nil {
-					t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
-				}
-			}
-		}
+		t.closeIndividualSession(key, value)
 		t.sessions.Delete(key)
 		return true
 	})
-	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
 
-	// Wait for background operations to complete
+	t.logger.WithField("session_count", sessionCount).Info("Closed all sessions")
+}
+
+// closeIndividualSession closes a single session and logs any errors.
+func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
+	session, ok := value.(*NTCP2Session)
+	if !ok {
+		return
+	}
+
+	routerHash, ok := key.(data.Hash)
+	if !ok {
+		return
+	}
+
+	if err := session.Close(); err != nil {
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+	}
+}
+
+// waitForBackgroundOperations blocks until all background goroutines complete.
+func (t *NTCP2Transport) waitForBackgroundOperations() {
 	t.logger.Debug("Waiting for background operations to complete")
 	t.wg.Wait()
+}
 
+// handleCloseCompletion processes the final close status and returns appropriate error.
+func (t *NTCP2Transport) handleCloseCompletion(listenerErr error) error {
 	if listenerErr != nil {
 		t.logger.WithError(listenerErr).Error("Transport closed with listener error")
 		return WrapNTCP2Error(listenerErr, "closing listener")
