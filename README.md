@@ -57,7 +57,7 @@ go-i2p is in early development. We recently completed several significant milest
   - [X] RouterInfo management
   - [X] LeaseSet management
   - [X] Lookups
-  - [ ] Expiry
+  - [X] Expiry
   - [ ] Exploration
   - [X] Publishing
   - [ ] Floodfill
