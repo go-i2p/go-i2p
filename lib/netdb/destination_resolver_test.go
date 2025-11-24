@@ -6,6 +6,8 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,6 +21,41 @@ func newMockNetDB() *mockNetDB {
 	return &mockNetDB{
 		leaseSets: make(map[common.Hash][]byte),
 	}
+}
+
+func (m *mockNetDB) GetRouterInfo(hash common.Hash) router_info.RouterInfo {
+	return router_info.RouterInfo{}
+}
+
+func (m *mockNetDB) GetAllRouterInfos() []router_info.RouterInfo {
+	return []router_info.RouterInfo{}
+}
+
+func (m *mockNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
+}
+
+func (m *mockNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) error {
+	return nil
+}
+
+func (m *mockNetDB) Size() int {
+	return 0
+}
+
+func (m *mockNetDB) RecalculateSize() error {
+	return nil
+}
+
+func (m *mockNetDB) Ensure() error {
+	return nil
+}
+
+func (m *mockNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
+	return []router_info.RouterInfo{}, nil
+}
+
+func (m *mockNetDB) GetLeaseSetCount() int {
+	return len(m.leaseSets)
 }
 
 func (m *mockNetDB) GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet {

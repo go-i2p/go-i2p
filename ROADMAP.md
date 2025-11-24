@@ -124,11 +124,12 @@
 ### Advanced NetDb Features
 
 - **Enhanced Database Operations**:
-  - ✅ Floodfill router functionality
+  - ✅ Floodfill router functionality (Kademlia XOR distance metric)
   - ✅ Client/Router NetDb isolation
-  - 📋 Database exploration and publishing
-  - 📋 LS2 and Encrypted LeaseSet support
-  - 📋 Advanced peer selection algorithms
+  - ✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)
+  - ✅ Advanced peer selection algorithms (random selection, XOR distance, floodfill routing)
+  - ✅ Database exploration and publishing (periodic discovery, LeaseSet/RouterInfo distribution)
+  - 📋 EncryptedLeaseSet and MetaLeaseSet support
 
 ### Application Layer
 
