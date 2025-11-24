@@ -199,42 +199,56 @@ func (e *Endpoint) processInstructionLoop(data []byte) error {
 			return err
 		}
 
-		// Get fragment size
-		fragSize, err := di.FragmentSize()
+		fragSize, fragmentData, remainder, err := e.extractFragmentData(di, remainder)
 		if err != nil {
-			log.WithError(err).Error("Failed to get fragment size")
+			return err
+		}
+		if fragmentData == nil {
+			break // Insufficient data
+		}
+
+		if err := e.processFragmentByType(di, fragmentData); err != nil {
 			return err
 		}
 
-		if len(remainder) < int(fragSize) {
-			log.WithFields(map[string]interface{}{
-				"expected": fragSize,
-				"actual":   len(remainder),
-			}).Warn("Insufficient data for fragment")
-			break
-		}
-
-		fragmentData := remainder[:fragSize]
-
-		// Process based on fragment type
-		fragmentType, err := di.Type()
-		if err != nil {
-			log.WithError(err).Error("Failed to determine fragment type")
-			return err
-		}
-
-		if fragmentType == FIRST_FRAGMENT {
-			if err := e.processFirstFragment(di, fragmentData); err != nil {
-				return err
-			}
-		} else if fragmentType == FOLLOW_ON_FRAGMENT {
-			if err := e.processFollowOnFragment(di, fragmentData); err != nil {
-				return err
-			}
-		}
-
-		// Move to next instruction
 		data = remainder[fragSize:]
+	}
+	return nil
+}
+
+// extractFragmentData extracts fragment data from the remainder based on delivery instructions.
+// Returns fragment size, fragment data, remainder, and error.
+// Returns nil fragmentData if there's insufficient data (not an error condition).
+func (e *Endpoint) extractFragmentData(di *DeliveryInstructions, remainder []byte) (uint16, []byte, []byte, error) {
+	fragSize, err := di.FragmentSize()
+	if err != nil {
+		log.WithError(err).Error("Failed to get fragment size")
+		return 0, nil, nil, err
+	}
+
+	if len(remainder) < int(fragSize) {
+		log.WithFields(map[string]interface{}{
+			"expected": fragSize,
+			"actual":   len(remainder),
+		}).Warn("Insufficient data for fragment")
+		return fragSize, nil, remainder, nil
+	}
+
+	return fragSize, remainder[:fragSize], remainder, nil
+}
+
+// processFragmentByType processes a fragment based on its type (first or follow-on).
+func (e *Endpoint) processFragmentByType(di *DeliveryInstructions, fragmentData []byte) error {
+	fragmentType, err := di.Type()
+	if err != nil {
+		log.WithError(err).Error("Failed to determine fragment type")
+		return err
+	}
+
+	if fragmentType == FIRST_FRAGMENT {
+		return e.processFirstFragment(di, fragmentData)
+	} else if fragmentType == FOLLOW_ON_FRAGMENT {
+		return e.processFollowOnFragment(di, fragmentData)
 	}
 	return nil
 }
