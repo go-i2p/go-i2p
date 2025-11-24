@@ -343,68 +343,110 @@ func Defaults() ConfigDefaults {
 // Validate checks if the provided configuration values are reasonable.
 // Returns an error describing the first invalid value found.
 func Validate(cfg ConfigDefaults) error {
-	// Router validation
-	if cfg.Router.MaxConcurrentSessions < 1 {
+	if err := validateRouter(cfg.Router); err != nil {
+		return err
+	}
+	if err := validateNetDB(cfg.NetDB); err != nil {
+		return err
+	}
+	if err := validateBootstrap(cfg.Bootstrap); err != nil {
+		return err
+	}
+	if err := validateI2CP(cfg.I2CP); err != nil {
+		return err
+	}
+	if err := validateTunnel(cfg.Tunnel); err != nil {
+		return err
+	}
+	if err := validateTransport(cfg.Transport); err != nil {
+		return err
+	}
+	if err := validatePerformance(cfg.Performance); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateRouter validates router configuration settings.
+func validateRouter(router RouterDefaults) error {
+	if router.MaxConcurrentSessions < 1 {
 		return newValidationError("Router.MaxConcurrentSessions must be at least 1")
 	}
-	if cfg.Router.MessageExpirationTime < 1*time.Second {
+	if router.MessageExpirationTime < 1*time.Second {
 		return newValidationError("Router.MessageExpirationTime must be at least 1 second")
 	}
+	return nil
+}
 
-	// NetDB validation
-	if cfg.NetDB.MaxRouterInfos < 10 {
+// validateNetDB validates network database configuration settings.
+func validateNetDB(netdb NetDBDefaults) error {
+	if netdb.MaxRouterInfos < 10 {
 		return newValidationError("NetDB.MaxRouterInfos must be at least 10")
 	}
-	if cfg.NetDB.MaxLeaseSets < 1 {
+	if netdb.MaxLeaseSets < 1 {
 		return newValidationError("NetDB.MaxLeaseSets must be at least 1")
 	}
+	return nil
+}
 
-	// Bootstrap validation
-	if cfg.Bootstrap.LowPeerThreshold < 1 {
+// validateBootstrap validates bootstrap configuration settings.
+func validateBootstrap(bootstrap BootstrapDefaults) error {
+	if bootstrap.LowPeerThreshold < 1 {
 		return newValidationError("Bootstrap.LowPeerThreshold must be at least 1")
 	}
-	if cfg.Bootstrap.MinimumReseedPeers < 1 {
+	if bootstrap.MinimumReseedPeers < 1 {
 		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
 	}
+	return nil
+}
 
-	// I2CP validation
-	if cfg.I2CP.MaxSessions < 1 {
+// validateI2CP validates I2CP server configuration settings.
+func validateI2CP(i2cp I2CPDefaults) error {
+	if i2cp.MaxSessions < 1 {
 		return newValidationError("I2CP.MaxSessions must be at least 1")
 	}
-	if cfg.I2CP.MessageQueueSize < 1 {
+	if i2cp.MessageQueueSize < 1 {
 		return newValidationError("I2CP.MessageQueueSize must be at least 1")
 	}
+	return nil
+}
 
-	// Tunnel validation
-	if cfg.Tunnel.MinPoolSize < 1 {
+// validateTunnel validates tunnel configuration settings.
+func validateTunnel(tunnel TunnelDefaults) error {
+	if tunnel.MinPoolSize < 1 {
 		return newValidationError("Tunnel.MinPoolSize must be at least 1")
 	}
-	if cfg.Tunnel.MaxPoolSize < cfg.Tunnel.MinPoolSize {
+	if tunnel.MaxPoolSize < tunnel.MinPoolSize {
 		return newValidationError("Tunnel.MaxPoolSize must be >= MinPoolSize")
 	}
-	if cfg.Tunnel.TunnelLength < 1 || cfg.Tunnel.TunnelLength > 8 {
+	if tunnel.TunnelLength < 1 || tunnel.TunnelLength > 8 {
 		return newValidationError("Tunnel.TunnelLength must be between 1 and 8")
 	}
-	if cfg.Tunnel.BuildRetries < 1 {
+	if tunnel.BuildRetries < 1 {
 		return newValidationError("Tunnel.BuildRetries must be at least 1")
 	}
+	return nil
+}
 
-	// Transport validation
-	if cfg.Transport.MaxMessageSize < 1024 {
+// validateTransport validates transport layer configuration settings.
+func validateTransport(transport TransportDefaults) error {
+	if transport.MaxMessageSize < 1024 {
 		return newValidationError("Transport.MaxMessageSize must be at least 1024 bytes")
 	}
-	if cfg.Transport.NTCP2MaxConnections < 1 {
+	if transport.NTCP2MaxConnections < 1 {
 		return newValidationError("Transport.NTCP2MaxConnections must be at least 1")
 	}
+	return nil
+}
 
-	// Performance validation
-	if cfg.Performance.WorkerPoolSize < 1 {
+// validatePerformance validates performance tuning configuration settings.
+func validatePerformance(performance PerformanceDefaults) error {
+	if performance.WorkerPoolSize < 1 {
 		return newValidationError("Performance.WorkerPoolSize must be at least 1")
 	}
-	if cfg.Performance.MessageQueueSize < 1 {
+	if performance.MessageQueueSize < 1 {
 		return newValidationError("Performance.MessageQueueSize must be at least 1")
 	}
-
 	return nil
 }
 
