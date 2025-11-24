@@ -222,3 +222,95 @@ func BenchmarkMessageUnmarshal(b *testing.B) {
 		_ = m.UnmarshalBinary(data)
 	}
 }
+
+// TestMessagePayloadSizeLimit verifies that I2CP enforces the 64 KB payload size limit
+// as specified in the I2CP specification.
+func TestMessagePayloadSizeLimit(t *testing.T) {
+	tests := []struct {
+		name        string
+		payloadSize int
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "Maximum allowed size (64 KB - 1)",
+			payloadSize: MaxPayloadSize,
+			wantErr:     false,
+		},
+		{
+			name:        "Just under maximum",
+			payloadSize: MaxPayloadSize - 1000,
+			wantErr:     false,
+		},
+		{
+			name:        "Exceeds maximum by 1 byte",
+			payloadSize: MaxPayloadSize + 1,
+			wantErr:     true,
+			errContains: "too large",
+		},
+		{
+			name:        "Significantly exceeds maximum",
+			payloadSize: MaxPayloadSize * 2,
+			wantErr:     true,
+			errContains: "too large",
+		},
+		{
+			name:        "Empty payload",
+			payloadSize: 0,
+			wantErr:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &Message{
+				Type:      MessageTypeSendMessage,
+				SessionID: 0x1234,
+				Payload:   make([]byte, tt.payloadSize),
+			}
+
+			_, err := msg.MarshalBinary()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error for payload size %d, got nil", tt.payloadSize)
+					return
+				}
+				if tt.errContains != "" && !bytes.Contains([]byte(err.Error()), []byte(tt.errContains)) {
+					t.Errorf("Error %q does not contain %q", err.Error(), tt.errContains)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for payload size %d: %v", tt.payloadSize, err)
+				}
+			}
+		})
+	}
+}
+
+// TestReadMessagePayloadSizeLimit verifies that reading messages enforces the size limit
+func TestReadMessagePayloadSizeLimit(t *testing.T) {
+	// Create a message header claiming an oversized payload
+	oversizedLength := uint32(MaxPayloadSize + 1000)
+
+	header := make([]byte, 7)
+	header[0] = MessageTypeSendMessage // Type
+	header[1] = 0x12                   // SessionID high byte
+	header[2] = 0x34                   // SessionID low byte
+	header[3] = byte(oversizedLength >> 24)
+	header[4] = byte(oversizedLength >> 16)
+	header[5] = byte(oversizedLength >> 8)
+	header[6] = byte(oversizedLength)
+
+	buf := bytes.NewBuffer(header)
+
+	_, err := ReadMessage(buf)
+	if err == nil {
+		t.Error("Expected error when reading oversized message, got nil")
+		return
+	}
+
+	if !bytes.Contains([]byte(err.Error()), []byte("too large")) {
+		t.Errorf("Error %q does not contain 'too large'", err.Error())
+	}
+}

@@ -1,0 +1,153 @@
+package netdb
+
+import (
+	"fmt"
+
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/common/lease_set2"
+)
+
+// DestinationResolver resolves I2P destinations to their encryption public keys.
+// It looks up LeaseSets from the NetDB and extracts the appropriate encryption key
+// based on the destination's key type (ElGamal for legacy, X25519 for modern).
+type DestinationResolver struct {
+	netdb interface {
+		GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
+		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+	}
+}
+
+// NewDestinationResolver creates a new destination resolver with the given NetDB.
+// The netdb parameter must implement GetLeaseSet and GetLeaseSetBytes methods.
+func NewDestinationResolver(netdb interface {
+	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
+	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+}) *DestinationResolver {
+	return &DestinationResolver{
+		netdb: netdb,
+	}
+}
+
+// ResolveDestination looks up a destination by its hash and returns the encryption public key.
+// This supports both legacy LeaseSets (with ElGamal keys) and modern LeaseSet2 (with X25519 keys).
+//
+// The resolution process:
+// 1. Look up the LeaseSet from NetDB using the destination hash
+// 2. Extract the encryption key based on the LeaseSet type
+// 3. Return the key in [32]byte format suitable for ECIES-X25519-AEAD encryption
+//
+// Returns:
+// - publicKey: The X25519 public key for garlic encryption (32 bytes)
+// - error: Non-nil if the destination cannot be resolved or has an unsupported key type
+func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byte, error) {
+	log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).Debug("Resolving destination")
+
+	// Try to get LeaseSet from NetDB
+	lsChan := dr.netdb.GetLeaseSet(destHash)
+
+	if lsChan == nil {
+		return [32]byte{}, fmt.Errorf("destination %x not found in NetDB", destHash[:8])
+	}
+
+	// Read from channel
+	ls, ok := <-lsChan
+	if !ok {
+		return [32]byte{}, fmt.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
+	}
+
+	// Try to extract key from LeaseSet2 first (modern format)
+	if key, err := dr.extractKeyFromLeaseSet2(destHash); err == nil {
+		return key, nil
+	}
+
+	// Fall back to legacy LeaseSet format
+	return dr.extractKeyFromLegacyLeaseSet(ls)
+}
+
+// extractKeyFromLeaseSet2 attempts to extract X25519 encryption key from LeaseSet2.
+// LeaseSet2 can have multiple encryption keys with different types.
+// We prefer X25519 (type 4) for ECIES-X25519-AEAD encryption.
+func (dr *DestinationResolver) extractKeyFromLeaseSet2(destHash common.Hash) ([32]byte, error) {
+	// Get raw LeaseSet bytes to check if it's LeaseSet2
+	lsBytes, err := dr.netdb.GetLeaseSetBytes(destHash)
+
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	// Check if this is a LeaseSet2 by attempting to parse it
+	// LeaseSet2 starts with type byte 0x07
+	if len(lsBytes) == 0 || lsBytes[0] != 0x07 {
+		return [32]byte{}, fmt.Errorf("not a LeaseSet2")
+	}
+
+	ls2, _, err := lease_set2.ReadLeaseSet2(lsBytes)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+	}
+
+	// Look for X25519 encryption key (type 4)
+	encKeys := ls2.EncryptionKeys()
+	for _, encKey := range encKeys {
+		if encKey.KeyType == key_certificate.KEYCERT_CRYPTO_X25519 {
+			if len(encKey.KeyData) != 32 {
+				return [32]byte{}, fmt.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
+			}
+
+			var pubKey [32]byte
+			copy(pubKey[:], encKey.KeyData)
+
+			log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).
+				Debug("Extracted X25519 key from LeaseSet2")
+			return pubKey, nil
+		}
+	}
+
+	return [32]byte{}, fmt.Errorf("no X25519 encryption key found in LeaseSet2")
+}
+
+// extractKeyFromLegacyLeaseSet extracts the encryption key from a legacy LeaseSet.
+// Legacy LeaseSets use ElGamal encryption, which is incompatible with ECIES-X25519-AEAD.
+// This returns an error indicating the destination uses unsupported encryption.
+//
+// Note: In a full implementation, we would need to support ElGamal for backward compatibility,
+// but the current garlic encryption system only supports ECIES-X25519-AEAD.
+func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSet) ([32]byte, error) {
+	dest, err := ls.Destination()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to get destination from LeaseSet: %w", err)
+	}
+
+	// Check if destination uses X25519 via key certificate
+	if dest.KeyCertificate != nil {
+		// Get crypto key type from certificate data
+		certData, err := dest.KeyCertificate.Data()
+		if err != nil {
+			return [32]byte{}, fmt.Errorf("failed to read key certificate data: %w", err)
+		}
+		if len(certData) >= 2 {
+			// First 2 bytes are signing key type, next 2 are crypto key type
+			if len(certData) >= 4 {
+				cryptoType := uint16(certData[2])<<8 | uint16(certData[3])
+				if cryptoType == key_certificate.KEYCERT_CRYPTO_X25519 {
+					// Extract X25519 key from destination
+					pubKeyBytes := dest.ReceivingPublic.Bytes()
+					if len(pubKeyBytes) != 32 {
+						return [32]byte{}, fmt.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
+					}
+
+					var key [32]byte
+					copy(key[:], pubKeyBytes)
+
+					log.Debug("Extracted X25519 key from legacy LeaseSet with X25519 destination")
+					return key, nil
+				}
+			}
+		}
+	}
+
+	// Legacy ElGamal key - not supported by current ECIES-X25519-AEAD implementation
+	return [32]byte{}, fmt.Errorf("destination uses ElGamal encryption, which is not supported by ECIES-X25519-AEAD")
+}

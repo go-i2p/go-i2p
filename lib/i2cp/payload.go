@@ -18,9 +18,14 @@ import (
 //
 // The router will wrap this payload in garlic encryption and route it through
 // the outbound tunnel pool to the specified destination.
+//
+// IMPORTANT: Per I2CP specification, the total payload size (destination + message data)
+// is limited to approximately 64 KB. Client applications are responsible for fragmenting
+// larger messages at the application layer. The I2CP protocol does NOT provide automatic
+// fragmentation - this must be handled by the client application itself.
 type SendMessagePayload struct {
 	Destination data.Hash // 32-byte SHA256 hash of target destination
-	Payload     []byte    // Message data to send (variable length)
+	Payload     []byte    // Message data to send (variable length, max ~64 KB total)
 }
 
 // ParseSendMessagePayload deserializes a SendMessage payload from wire format.
@@ -83,9 +88,13 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 //
 // The router sends this to the client after receiving and decrypting a message
 // from the I2P network destined for the client's destination.
+//
+// IMPORTANT: Per I2CP specification, the total payload size is limited to approximately
+// 64 KB. Messages larger than this limit cannot be delivered via I2CP and must be
+// fragmented at the application layer by the sender.
 type MessagePayloadPayload struct {
 	MessageID uint32 // Unique message identifier
-	Payload   []byte // Decrypted message data (variable length)
+	Payload   []byte // Decrypted message data (variable length, max ~64 KB total)
 }
 
 // ParseMessagePayloadPayload deserializes a MessagePayload payload from wire format.

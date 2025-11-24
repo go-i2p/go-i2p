@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"testing"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -201,109 +200,6 @@ func TestValidateChecksum(t *testing.T) {
 	}
 }
 
-// TestProcessDeliveryInstructions tests delivery instruction parsing
-func TestProcessDeliveryInstructions(t *testing.T) {
-	tests := []struct {
-		name          string
-		setupFunc     func() []byte
-		expectError   bool
-		expectedCount int
-	}{
-		{
-			name: "simple local delivery",
-			setupFunc: func() []byte {
-				msg := make([]byte, 1028)
-				// Add padding with non-zero bytes
-				for i := 24; i < 500; i++ {
-					msg[i] = byte((i % 255) + 1)
-				}
-				// Zero byte separator at position 500
-				msg[500] = 0x00
-				// Delivery instructions at 501
-				msg[501] = DT_LOCAL // flags: DT_LOCAL, not fragmented
-				testMsg := []byte("Hello, I2P!")
-				binary.BigEndian.PutUint16(msg[502:504], uint16(len(testMsg)))
-				// Message at 504
-				copy(msg[504:], testMsg)
-				return msg
-			},
-			expectError:   false,
-			expectedCount: 1,
-		},
-		{
-			name: "no zero byte separator",
-			setupFunc: func() []byte {
-				msg := make([]byte, 1028)
-				// Fill with non-zero bytes (no separator)
-				for i := 24; i < len(msg); i++ {
-					msg[i] = byte((i % 255) + 1)
-				}
-				return msg
-			},
-			expectError:   true,
-			expectedCount: 0,
-		},
-		{
-			name: "multiple messages",
-			setupFunc: func() []byte {
-				msg := make([]byte, 1028)
-				// Padding
-				for i := 24; i < 400; i++ {
-					msg[i] = byte((i % 255) + 1)
-				}
-				// Zero byte
-				msg[400] = 0x00
-				offset := 401
-
-				// First message
-				msg[offset] = DT_LOCAL
-				msg1 := []byte("First")
-				binary.BigEndian.PutUint16(msg[offset+1:offset+3], uint16(len(msg1)))
-				copy(msg[offset+3:], msg1)
-				offset += 3 + len(msg1)
-
-				// Second message
-				msg[offset] = DT_LOCAL
-				msg2 := []byte("Second")
-				binary.BigEndian.PutUint16(msg[offset+1:offset+3], uint16(len(msg2)))
-				copy(msg[offset+3:], msg2)
-
-				return msg
-			},
-			expectError:   false,
-			expectedCount: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var receivedMsgs [][]byte
-			mockHandler := func(msgBytes []byte) error {
-				msg := make([]byte, len(msgBytes))
-				copy(msg, msgBytes)
-				receivedMsgs = append(receivedMsgs, msg)
-				return nil
-			}
-
-			ep := &Endpoint{
-				tunnelID:  TunnelID(12345),
-				handler:   mockHandler,
-				fragments: make(map[uint32]*fragmentAssembler),
-			}
-
-			data := tt.setupFunc()
-			err := ep.processDeliveryInstructions(data)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedCount, len(receivedMsgs))
-			}
-		})
-	}
-}
-
 // TestEndpointTunnelID tests the TunnelID getter
 func TestEndpointTunnelID(t *testing.T) {
 	tunnelID := TunnelID(12345)
@@ -331,12 +227,20 @@ func TestClearFragments(t *testing.T) {
 
 	// Add some mock fragments
 	ep.fragments[1] = &fragmentAssembler{
-		fragments:  [][]byte{[]byte("test")},
-		totalCount: 2,
+		fragments: map[int][]byte{
+			0: []byte("test"),
+		},
+		deliveryType: DT_LOCAL,
+		totalCount:   2,
+		receivedMask: 1,
 	}
 	ep.fragments[2] = &fragmentAssembler{
-		fragments:  [][]byte{[]byte("test2")},
-		totalCount: 1,
+		fragments: map[int][]byte{
+			0: []byte("test2"),
+		},
+		deliveryType: DT_LOCAL,
+		totalCount:   1,
+		receivedMask: 1,
 	}
 
 	assert.Equal(t, 2, len(ep.fragments))
@@ -413,4 +317,354 @@ func TestGatewayEndpointStructure(t *testing.T) {
 		}
 	}
 	assert.True(t, foundZero, "Should have zero byte separator")
+}
+
+// TestFragmentReassembly tests the fragment reassembly functionality
+func TestFragmentReassembly(t *testing.T) {
+	var receivedMsg []byte
+	mockHandler := func(msgBytes []byte) error {
+		receivedMsg = make([]byte, len(msgBytes))
+		copy(receivedMsg, msgBytes)
+		return nil
+	}
+
+	mockEncryptor := &tunnel.AESEncryptor{}
+
+	tests := []struct {
+		name      string
+		fragments []struct {
+			isFirst bool
+			fragNum int
+			isLast  bool
+			data    []byte
+		}
+		expectedMsg    []byte
+		expectDelivery bool
+	}{
+		{
+			name: "two fragments in order",
+			fragments: []struct {
+				isFirst bool
+				fragNum int
+				isLast  bool
+				data    []byte
+			}{
+				{isFirst: true, fragNum: 0, isLast: false, data: []byte("Hello, ")},
+				{isFirst: false, fragNum: 1, isLast: true, data: []byte("World!")},
+			},
+			expectedMsg:    []byte("Hello, World!"),
+			expectDelivery: true,
+		},
+		{
+			name: "two fragments out of order",
+			fragments: []struct {
+				isFirst bool
+				fragNum int
+				isLast  bool
+				data    []byte
+			}{
+				{isFirst: false, fragNum: 1, isLast: true, data: []byte("World!")},
+				{isFirst: true, fragNum: 0, isLast: false, data: []byte("Hello, ")},
+			},
+			expectedMsg:    []byte("Hello, World!"),
+			expectDelivery: true,
+		},
+		{
+			name: "three fragments",
+			fragments: []struct {
+				isFirst bool
+				fragNum int
+				isLast  bool
+				data    []byte
+			}{
+				{isFirst: true, fragNum: 0, isLast: false, data: []byte("Part1")},
+				{isFirst: false, fragNum: 1, isLast: false, data: []byte("Part2")},
+				{isFirst: false, fragNum: 2, isLast: true, data: []byte("Part3")},
+			},
+			expectedMsg:    []byte("Part1Part2Part3"),
+			expectDelivery: true,
+		},
+		{
+			name: "single unfragmented message",
+			fragments: []struct {
+				isFirst bool
+				fragNum int
+				isLast  bool
+				data    []byte
+			}{
+				{isFirst: true, fragNum: 0, isLast: false, data: []byte("Complete message")},
+			},
+			expectedMsg:    []byte("Complete message"),
+			expectDelivery: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			receivedMsg = nil
+			ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+			require.NoError(t, err)
+
+			msgID := uint32(999)
+
+			for _, frag := range tt.fragments {
+				if frag.isFirst {
+					// Create first fragment delivery instructions
+					di := &DeliveryInstructions{
+						fragmentType: FIRST_FRAGMENT,
+						deliveryType: DT_LOCAL,
+						fragmented:   len(tt.fragments) > 1,
+						messageID:    msgID,
+						fragmentSize: uint16(len(frag.data)),
+					}
+					err := ep.processFirstFragment(di, frag.data)
+					require.NoError(t, err)
+				} else {
+					// Create follow-on fragment delivery instructions
+					di := &DeliveryInstructions{
+						fragmentType:   FOLLOW_ON_FRAGMENT,
+						fragmentNumber: frag.fragNum,
+						lastFragment:   frag.isLast,
+						messageID:      msgID,
+						fragmentSize:   uint16(len(frag.data)),
+					}
+					err := ep.processFollowOnFragment(di, frag.data)
+					require.NoError(t, err)
+				}
+			}
+
+			if tt.expectDelivery {
+				require.NotNil(t, receivedMsg, "Expected message to be delivered")
+				assert.Equal(t, tt.expectedMsg, receivedMsg)
+			} else {
+				assert.Nil(t, receivedMsg, "Expected no message delivery")
+			}
+		})
+	}
+}
+
+// TestFragmentErrors tests error handling in fragment processing
+func TestFragmentErrors(t *testing.T) {
+	mockHandler := func(msgBytes []byte) error {
+		return nil
+	}
+
+	mockEncryptor := &tunnel.AESEncryptor{}
+
+	t.Run("duplicate fragment", func(t *testing.T) {
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(123)
+
+		// First fragment
+		di1 := &DeliveryInstructions{
+			fragmentType: FIRST_FRAGMENT,
+			deliveryType: DT_LOCAL,
+			fragmented:   true,
+			messageID:    msgID,
+			fragmentSize: 5,
+		}
+		err = ep.processFirstFragment(di1, []byte("Hello"))
+		require.NoError(t, err)
+
+		// Second fragment
+		di2 := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 1,
+			lastFragment:   false,
+			messageID:      msgID,
+			fragmentSize:   6,
+		}
+		err = ep.processFollowOnFragment(di2, []byte("World!"))
+		require.NoError(t, err)
+
+		// Duplicate of second fragment
+		err = ep.processFollowOnFragment(di2, []byte("World!"))
+		assert.ErrorIs(t, err, ErrDuplicateFragment)
+	})
+
+	t.Run("fragment number too large", func(t *testing.T) {
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(456)
+
+		// Fragment with number > 63
+		di := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 64,
+			lastFragment:   true,
+			messageID:      msgID,
+			fragmentSize:   4,
+		}
+		err = ep.processFollowOnFragment(di, []byte("Test"))
+		assert.ErrorIs(t, err, ErrTooManyFragments)
+	})
+
+	t.Run("fragment number zero (invalid for follow-on)", func(t *testing.T) {
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(789)
+
+		// Fragment 0 in follow-on fragment (invalid)
+		di := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 0,
+			lastFragment:   false,
+			messageID:      msgID,
+			fragmentSize:   4,
+		}
+		err = ep.processFollowOnFragment(di, []byte("Test"))
+		assert.ErrorIs(t, err, ErrTooManyFragments)
+	})
+}
+
+// TestFragmentPartialReassembly tests scenarios where reassembly is incomplete
+func TestFragmentPartialReassembly(t *testing.T) {
+	var receivedMsg []byte
+	mockHandler := func(msgBytes []byte) error {
+		receivedMsg = make([]byte, len(msgBytes))
+		copy(receivedMsg, msgBytes)
+		return nil
+	}
+
+	mockEncryptor := &tunnel.AESEncryptor{}
+
+	t.Run("missing middle fragment", func(t *testing.T) {
+		receivedMsg = nil
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(111)
+
+		// First fragment
+		di1 := &DeliveryInstructions{
+			fragmentType: FIRST_FRAGMENT,
+			deliveryType: DT_LOCAL,
+			fragmented:   true,
+			messageID:    msgID,
+			fragmentSize: 5,
+		}
+		err = ep.processFirstFragment(di1, []byte("Part1"))
+		require.NoError(t, err)
+
+		// Skip fragment 1, send fragment 2 (last)
+		di3 := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 2,
+			lastFragment:   true,
+			messageID:      msgID,
+			fragmentSize:   5,
+		}
+		err = ep.processFollowOnFragment(di3, []byte("Part3"))
+		require.NoError(t, err)
+
+		// Message should not be delivered yet (missing fragment 1)
+		assert.Nil(t, receivedMsg)
+
+		// Now send the missing fragment 1
+		di2 := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 1,
+			lastFragment:   false,
+			messageID:      msgID,
+			fragmentSize:   5,
+		}
+		err = ep.processFollowOnFragment(di2, []byte("Part2"))
+		require.NoError(t, err)
+
+		// Now message should be delivered
+		require.NotNil(t, receivedMsg)
+		assert.Equal(t, []byte("Part1Part2Part3"), receivedMsg)
+	})
+
+	t.Run("follow-on fragment without first fragment", func(t *testing.T) {
+		receivedMsg = nil
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(222)
+
+		// Send follow-on fragment without first fragment
+		di := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 1,
+			lastFragment:   true,
+			messageID:      msgID,
+			fragmentSize:   5,
+		}
+		err = ep.processFollowOnFragment(di, []byte("Part2"))
+		require.NoError(t, err)
+
+		// Message should not be delivered (missing first fragment)
+		assert.Nil(t, receivedMsg)
+
+		// Verify fragment is stored
+		assert.Contains(t, ep.fragments, msgID)
+	})
+}
+
+// TestNonLocalDelivery tests that non-local messages are not delivered to handler
+func TestNonLocalDelivery(t *testing.T) {
+	var receivedMsg []byte
+	mockHandler := func(msgBytes []byte) error {
+		receivedMsg = make([]byte, len(msgBytes))
+		copy(receivedMsg, msgBytes)
+		return nil
+	}
+
+	mockEncryptor := &tunnel.AESEncryptor{}
+
+	t.Run("unfragmented router delivery", func(t *testing.T) {
+		receivedMsg = nil
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		di := &DeliveryInstructions{
+			fragmentType: FIRST_FRAGMENT,
+			deliveryType: DT_ROUTER,
+			fragmented:   false,
+			fragmentSize: 10,
+		}
+		err = ep.processFirstFragment(di, []byte("RouterData"))
+		require.NoError(t, err)
+
+		// Should not be delivered (non-local)
+		assert.Nil(t, receivedMsg)
+	})
+
+	t.Run("fragmented tunnel delivery", func(t *testing.T) {
+		receivedMsg = nil
+		ep, err := NewEndpoint(TunnelID(12345), mockEncryptor, mockHandler)
+		require.NoError(t, err)
+
+		msgID := uint32(333)
+
+		// First fragment - tunnel delivery
+		di1 := &DeliveryInstructions{
+			fragmentType: FIRST_FRAGMENT,
+			deliveryType: DT_TUNNEL,
+			fragmented:   true,
+			messageID:    msgID,
+			fragmentSize: 5,
+		}
+		err = ep.processFirstFragment(di1, []byte("Part1"))
+		require.NoError(t, err)
+
+		// Last fragment
+		di2 := &DeliveryInstructions{
+			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentNumber: 1,
+			lastFragment:   true,
+			messageID:      msgID,
+			fragmentSize:   5,
+		}
+		err = ep.processFollowOnFragment(di2, []byte("Part2"))
+		require.NoError(t, err)
+
+		// Should not be delivered (non-local)
+		assert.Nil(t, receivedMsg)
+	})
 }

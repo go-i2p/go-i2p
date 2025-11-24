@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
 )
 
@@ -25,6 +26,10 @@ type ServerConfig struct {
 
 	// Maximum number of concurrent sessions
 	MaxSessions int
+
+	// LeaseSet publisher for distributing LeaseSets to the network (optional)
+	// If nil, sessions will function but won't publish to the network
+	LeaseSetPublisher LeaseSetPublisher
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible defaults
@@ -46,10 +51,18 @@ type Server struct {
 	// Message routing
 	messageRouter *MessageRouter
 
+	// Destination resolution
+	destinationResolver interface {
+		ResolveDestination(destHash common.Hash) ([32]byte, error)
+	}
+
 	// Connection tracking for message delivery
 	mu           sync.RWMutex
 	running      bool
 	sessionConns map[uint16]net.Conn // Session ID -> active connection
+
+	// LeaseSet publishing
+	leaseSetPublisher LeaseSetPublisher
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -65,11 +78,12 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Server{
-		config:       config,
-		manager:      NewSessionManager(),
-		sessionConns: make(map[uint16]net.Conn),
-		ctx:          ctx,
-		cancel:       cancel,
+		config:            config,
+		manager:           NewSessionManager(),
+		sessionConns:      make(map[uint16]net.Conn),
+		leaseSetPublisher: config.LeaseSetPublisher,
+		ctx:               ctx,
+		cancel:            cancel,
 	}, nil
 }
 
@@ -361,6 +375,11 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
+	// Configure LeaseSet publisher if available
+	if s.leaseSetPublisher != nil {
+		session.SetLeaseSetPublisher(s.leaseSetPublisher)
+	}
+
 	*sessionPtr = session
 
 	log.WithFields(logger.Fields{
@@ -552,15 +571,43 @@ func (s *Server) validateOutboundPool(session *Session) error {
 
 // routeMessageToDestination routes the message through the I2P network.
 func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessagePayload) {
-	// Placeholder: Use zero key for testing - in production this must be looked up
-	// TODO: Add NetDB lookup integration to get destination's RouterInfo/LeaseSet
-	var destPubKey [32]byte
+	// Look up destination's encryption public key from NetDB
+	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.routeMessageToDestination",
+			"sessionID":   session.ID(),
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"error":       err,
+		}).Error("failed_to_resolve_destination_key")
+		return
+	}
 
 	if s.messageRouter != nil {
 		s.routeWithMessageRouter(session, sendMsg, destPubKey)
 	} else {
 		s.logMessageQueuedWithoutRouter(session, sendMsg)
 	}
+}
+
+// resolveDestinationKey looks up the destination's encryption public key from NetDB.
+// Returns the X25519 public key needed for ECIES-X25519-AEAD garlic encryption.
+// Falls back to zero key if no resolver is configured (for testing/development).
+func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
+	if s.destinationResolver == nil {
+		log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
+			Warn("no_destination_resolver_configured_using_zero_key")
+		return [32]byte{}, nil
+	}
+
+	pubKey, err := s.destinationResolver.ResolveDestination(destHash)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
+	log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
+		Debug("resolved_destination_public_key")
+	return pubKey, nil
 }
 
 // routeWithMessageRouter attempts to route the message using the message router.
@@ -609,6 +656,17 @@ func (s *Server) SetMessageRouter(router *MessageRouter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.messageRouter = router
+}
+
+// SetDestinationResolver sets the destination resolver for looking up encryption keys.
+// This enables the server to resolve destination hashes to X25519 public keys
+// from the NetDB for garlic encryption.
+func (s *Server) SetDestinationResolver(resolver interface {
+	ResolveDestination(destHash common.Hash) ([32]byte, error)
+}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.destinationResolver = resolver
 }
 
 // IsRunning returns whether the server is currently running

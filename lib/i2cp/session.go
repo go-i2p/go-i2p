@@ -66,8 +66,9 @@ type Session struct {
 	incomingMessages chan *IncomingMessage // Messages received from I2P network
 
 	// LeaseSet state
-	currentLeaseSet     []byte    // Currently published LeaseSet
-	leaseSetPublishedAt time.Time // When LeaseSet was last published
+	currentLeaseSet     []byte            // Currently published LeaseSet
+	leaseSetPublishedAt time.Time         // When LeaseSet was last published
+	publisher           LeaseSetPublisher // Publisher for distributing LeaseSets to network
 
 	// Lifecycle
 	stopCh      chan struct{}  // Signal to stop session
@@ -160,6 +161,16 @@ func (s *Session) SetOutboundPool(pool *tunnel.Pool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.outboundPool = pool
+}
+
+// SetLeaseSetPublisher configures the publisher for distributing LeaseSets to the network.
+// This should be called during session initialization before starting LeaseSet maintenance.
+// The publisher is responsible for storing LeaseSets in the local NetDB and distributing
+// them to floodfill routers on the I2P network.
+func (s *Session) SetLeaseSetPublisher(publisher LeaseSetPublisher) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.publisher = publisher
 }
 
 // InboundPool returns the inbound tunnel pool
@@ -579,8 +590,13 @@ func (s *Session) logLeaseSetExpiration(age, threshold time.Duration) {
 	}).Debug("leaseset_exceeds_regeneration_threshold")
 }
 
-// regenerateAndPublishLeaseSet creates a new LeaseSet and prepares it for network publication.
-// Returns an error if LeaseSet creation fails.
+// regenerateAndPublishLeaseSet creates a new LeaseSet and publishes it to the network.
+// This method:
+// 1. Creates a fresh LeaseSet from current inbound tunnels
+// 2. Publishes it to the local NetDB
+// 3. Distributes it to floodfill routers (if publisher is configured)
+//
+// Returns an error if LeaseSet creation or publication fails.
 func (s *Session) regenerateAndPublishLeaseSet() error {
 	leaseSetBytes, err := s.CreateLeaseSet()
 	if err != nil {
@@ -589,9 +605,43 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 
 	s.logLeaseSetRegenerated(leaseSetBytes)
 
-	// TODO: Publish to network database (NetDB)
-	// This would involve sending a DatabaseStore message with the LeaseSet
-	// For now, the LeaseSet is cached in the session and available via CreateLeaseSet
+	// Publish to network database if publisher is configured
+	if err := s.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
+		// Log the error but don't fail - LeaseSet is still cached locally
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.regenerateAndPublishLeaseSet",
+			"sessionID": s.ID(),
+			"error":     err,
+		}).Warn("failed_to_publish_leaseset_to_network")
+	}
+
+	return nil
+}
+
+// publishLeaseSetToNetwork publishes the LeaseSet to the network database.
+// Skips publication if no publisher is configured (allows sessions to work without network integration).
+func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
+	s.mu.RLock()
+	publisher := s.publisher
+	s.mu.RUnlock()
+
+	if publisher == nil {
+		// No publisher configured - this is acceptable for testing or standalone sessions
+		return nil
+	}
+
+	// Calculate destination hash (SHA256 of destination bytes)
+	destHash := data.HashData(s.destination.Bytes())
+
+	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {
+		return fmt.Errorf("publisher failed: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.publishLeaseSetToNetwork",
+		"sessionID": s.ID(),
+		"destHash":  fmt.Sprintf("%x", destHash[:8]),
+	}).Debug("leaseset_published_to_network")
 
 	return nil
 }

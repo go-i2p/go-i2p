@@ -132,6 +132,21 @@ Each I2CP message follows this format:
 - **Length**: Payload length in bytes (big endian)
 - **Payload**: Message-specific data
 
+### Message Size Limits
+
+Per the I2CP specification, **message payloads are limited to approximately 64 KB (65,535 bytes)**. This limit applies to:
+
+- SendMessage payloads (destination hash + message data)
+- MessagePayload payloads (message ID + decrypted data)
+
+**Important for Client Applications:**
+
+- The I2CP protocol does **NOT** provide automatic message fragmentation
+- Client applications **MUST** fragment messages larger than ~64 KB at the application layer
+- Attempting to send oversized messages will result in an error
+
+For streaming applications requiring large data transfers, use the I2P Streaming Library which handles fragmentation and reassembly automatically.
+
 ## Session Configuration
 
 Sessions can be configured with:

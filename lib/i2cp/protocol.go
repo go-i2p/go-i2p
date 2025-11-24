@@ -56,6 +56,18 @@ const (
 	ProtocolVersionPatch = 0
 )
 
+// Protocol limits as per I2CP specification
+const (
+	// MaxPayloadSize is the maximum size for I2CP message payloads.
+	// Per I2CP spec: "Actual message length limit is about 64 KB."
+	// Using 65535 (64 KB - 1) to be safe with the 4-byte length field.
+	MaxPayloadSize = 65535
+
+	// MaxMessageSize is the maximum total I2CP message size including header.
+	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
+	MaxMessageSize = 7 + MaxPayloadSize
+)
+
 // Message represents a generic I2CP message
 type Message struct {
 	Type      uint8  // Message type
@@ -70,8 +82,13 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 		m.Payload = []byte{}
 	}
 
-	// Calculate total message size
+	// Validate payload size per I2CP specification
 	payloadLen := len(m.Payload)
+	if payloadLen > MaxPayloadSize {
+		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
+
+	// Calculate total message size
 	totalLen := 1 + 2 + 4 + payloadLen
 
 	result := make([]byte, totalLen)
@@ -137,6 +154,11 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	msgType := header[0]
 	sessionID := binary.BigEndian.Uint16(header[1:3])
 	payloadLen := binary.BigEndian.Uint32(header[3:7])
+
+	// Validate payload length per I2CP specification
+	if payloadLen > MaxPayloadSize {
+		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
 
 	// Read payload
 	payload := make([]byte, payloadLen)

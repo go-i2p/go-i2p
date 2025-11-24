@@ -574,9 +574,10 @@ func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
 // startI2CPServer initializes and starts the I2CP server
 func (r *Router) startI2CPServer() error {
 	serverConfig := &i2cp.ServerConfig{
-		ListenAddr:  r.cfg.I2CP.Address,
-		Network:     r.cfg.I2CP.Network,
-		MaxSessions: r.cfg.I2CP.MaxSessions,
+		ListenAddr:        r.cfg.I2CP.Address,
+		Network:           r.cfg.I2CP.Network,
+		MaxSessions:       r.cfg.I2CP.MaxSessions,
+		LeaseSetPublisher: NewLeaseSetPublisher(r),
 	}
 
 	server, err := i2cp.NewServer(serverConfig)

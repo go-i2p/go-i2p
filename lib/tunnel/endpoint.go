@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -30,11 +29,20 @@ type Endpoint struct {
 	fragments map[uint32]*fragmentAssembler
 }
 
-// fragmentAssembler tracks fragments for a single message being reassembled
+// fragmentAssembler tracks fragments for a single message being reassembled.
+// It accumulates message fragments identified by a common message ID and
+// reassembles them into a complete I2NP message when all parts are received.
+//
+// Design rationale:
+// - Uses a map indexed by fragment number for O(1) lookup
+// - Tracks received fragments with a bitmap for efficient checking
+// - Stores delivery type from first fragment for proper routing
+// - Supports up to 63 follow-on fragments (6-bit fragment number in spec)
 type fragmentAssembler struct {
-	fragments    [][]byte
-	totalCount   int
-	receivedMask uint64 // Bitmap of received fragments (supports up to 64 fragments)
+	fragments    map[int][]byte // fragment number -> fragment data
+	deliveryType byte           // Delivery type from first fragment
+	totalCount   int            // Expected number of fragments (0 until last fragment seen)
+	receivedMask uint64         // Bitmap of received fragments (supports up to 64 fragments)
 }
 
 var (
@@ -46,6 +54,10 @@ var (
 	ErrInvalidTunnelData = errors.New("invalid tunnel data")
 	// ErrChecksumMismatch is returned when checksum validation fails
 	ErrChecksumMismatch = errors.New("tunnel message checksum mismatch")
+	// ErrTooManyFragments is returned when fragment number exceeds maximum
+	ErrTooManyFragments = errors.New("fragment number exceeds maximum (63)")
+	// ErrDuplicateFragment is returned when a fragment is received twice
+	ErrDuplicateFragment = errors.New("duplicate fragment received")
 )
 
 // NewEndpoint creates a new tunnel endpoint.
@@ -181,55 +193,232 @@ func (e *Endpoint) findDataStart(decrypted []byte) (int, error) {
 // Returns an error if message processing fails.
 func (e *Endpoint) processInstructionLoop(data []byte) error {
 	for len(data) >= 3 {
-		flags := data[0]
-		fragmented := (flags & 0x08) != 0
+		di, remainder, err := readDeliveryInstructions(data)
+		if err != nil {
+			log.WithError(err).Error("Failed to read delivery instructions")
+			return err
+		}
 
-		if !fragmented {
-			processed, err := e.processCompleteMessage(data, flags)
-			if err != nil {
-				return err
-			}
-			if processed == 0 {
-				break
-			}
-			data = data[processed:]
-		} else {
-			log.Warn("Fragmented messages not yet supported")
+		// Get fragment size
+		fragSize, err := di.FragmentSize()
+		if err != nil {
+			log.WithError(err).Error("Failed to get fragment size")
+			return err
+		}
+
+		if len(remainder) < int(fragSize) {
+			log.WithFields(map[string]interface{}{
+				"expected": fragSize,
+				"actual":   len(remainder),
+			}).Warn("Insufficient data for fragment")
 			break
 		}
+
+		fragmentData := remainder[:fragSize]
+
+		// Process based on fragment type
+		fragmentType, err := di.Type()
+		if err != nil {
+			log.WithError(err).Error("Failed to determine fragment type")
+			return err
+		}
+
+		if fragmentType == FIRST_FRAGMENT {
+			if err := e.processFirstFragment(di, fragmentData); err != nil {
+				return err
+			}
+		} else if fragmentType == FOLLOW_ON_FRAGMENT {
+			if err := e.processFollowOnFragment(di, fragmentData); err != nil {
+				return err
+			}
+		}
+
+		// Move to next instruction
+		data = remainder[fragSize:]
 	}
 	return nil
 }
 
-// processCompleteMessage handles a single non-fragmented message.
-// It extracts the message, validates size, and delivers it to the handler.
-// Returns the number of bytes processed, or 0 if no valid message remains.
-func (e *Endpoint) processCompleteMessage(data []byte, flags byte) (int, error) {
-	msgSize := binary.BigEndian.Uint16(data[1:3])
-
-	if msgSize == 0 || len(data) < 3+int(msgSize) {
-		return 0, nil
+// processFirstFragment handles the first fragment of a message.
+// If not fragmented, delivers immediately. If fragmented, starts reassembly.
+func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData []byte) error {
+	fragmented, err := di.Fragmented()
+	if err != nil {
+		return err
 	}
 
-	msgBytes := data[3 : 3+msgSize]
-	if err := e.deliverMessage(msgBytes, flags); err != nil {
-		return 0, err
+	deliveryType, err := di.DeliveryType()
+	if err != nil {
+		return err
 	}
 
-	return 3 + int(msgSize), nil
-}
+	// If not fragmented, deliver immediately
+	if !fragmented {
+		if deliveryType == DT_LOCAL {
+			return e.handler(fragmentData)
+		}
+		log.WithField("delivery_type", deliveryType).Debug("Non-local delivery, skipping")
+		return nil
+	}
 
-// deliverMessage sends the message to the handler if it's a local delivery.
-// It checks the delivery type from flags and invokes the handler callback.
-// Returns an error if the handler fails to process the message.
-func (e *Endpoint) deliverMessage(msgBytes []byte, flags byte) error {
-	deliveryType := flags & 0x03
-	if deliveryType == DT_LOCAL {
-		if err := e.handler(msgBytes); err != nil {
-			log.WithError(err).Error("Handler failed to process message")
-			return err
+	// Handle fragmented message - store first fragment
+	msgID, err := di.MessageID()
+	if err != nil {
+		return err
+	}
+
+	// Get or create assembler for this message
+	assembler, exists := e.fragments[msgID]
+	if !exists {
+		// Create new assembler for this message
+		assembler = &fragmentAssembler{
+			fragments:    make(map[int][]byte),
+			deliveryType: deliveryType,
+			totalCount:   0, // Will be set when last fragment arrives
+			receivedMask: 0,
+		}
+		e.fragments[msgID] = assembler
+	} else {
+		// Update delivery type if assembler already exists from follow-on fragments
+		assembler.deliveryType = deliveryType
+	}
+
+	// Store fragment 0
+	assembler.fragments[0] = fragmentData
+	assembler.receivedMask |= 1 // Set bit 0
+
+	log.WithFields(map[string]interface{}{
+		"message_id": msgID,
+		"size":       len(fragmentData),
+	}).Debug("Stored first fragment")
+
+	// Check if we have all fragments (in case follow-on fragments arrived first)
+	if assembler.totalCount > 0 {
+		expectedMask := (uint64(1) << assembler.totalCount) - 1
+		if assembler.receivedMask == expectedMask {
+			return e.reassembleAndDeliver(msgID, assembler)
 		}
 	}
+
+	return nil
+}
+
+// processFollowOnFragment handles subsequent fragments of a fragmented message.
+// Reassembles and delivers when all fragments are received.
+func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentData []byte) error {
+	msgID, err := di.MessageID()
+	if err != nil {
+		return err
+	}
+
+	fragmentNum, err := di.FragmentNumber()
+	if err != nil {
+		return err
+	}
+
+	isLast, err := di.LastFollowOnFragment()
+	if err != nil {
+		return err
+	}
+
+	// Validate fragment number (0-63 range, but 0 is for first fragment)
+	if fragmentNum < 1 || fragmentNum > 63 {
+		log.WithField("fragment_num", fragmentNum).Error("Invalid fragment number")
+		return ErrTooManyFragments
+	}
+
+	// Get or create assembler
+	assembler, exists := e.fragments[msgID]
+	if !exists {
+		log.WithField("message_id", msgID).Warn("Received follow-on fragment without first fragment")
+		// Create assembler anyway - might get first fragment later
+		assembler = &fragmentAssembler{
+			fragments:    make(map[int][]byte),
+			deliveryType: DT_LOCAL, // Default to local
+			totalCount:   0,
+			receivedMask: 0,
+		}
+		e.fragments[msgID] = assembler
+	}
+
+	// Check for duplicate
+	mask := uint64(1) << fragmentNum
+	if (assembler.receivedMask & mask) != 0 {
+		log.WithFields(map[string]interface{}{
+			"message_id":   msgID,
+			"fragment_num": fragmentNum,
+		}).Warn("Duplicate fragment received")
+		return ErrDuplicateFragment
+	}
+
+	// Store fragment
+	assembler.fragments[fragmentNum] = fragmentData
+	assembler.receivedMask |= mask
+
+	// If this is the last fragment, record total count
+	if isLast {
+		assembler.totalCount = fragmentNum + 1
+		log.WithFields(map[string]interface{}{
+			"message_id":   msgID,
+			"total_count":  assembler.totalCount,
+			"fragment_num": fragmentNum,
+		}).Debug("Received last fragment")
+	}
+
+	// Check if we have all fragments
+	if assembler.totalCount > 0 {
+		expectedMask := (uint64(1) << assembler.totalCount) - 1
+		if assembler.receivedMask == expectedMask {
+			return e.reassembleAndDeliver(msgID, assembler)
+		}
+	}
+
+	log.WithFields(map[string]interface{}{
+		"message_id":   msgID,
+		"fragment_num": fragmentNum,
+		"is_last":      isLast,
+	}).Debug("Stored follow-on fragment, waiting for more")
+
+	return nil
+}
+
+// reassembleAndDeliver combines all fragments and delivers the complete message.
+func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembler) error {
+	// Calculate total size
+	totalSize := 0
+	for i := 0; i < assembler.totalCount; i++ {
+		frag, exists := assembler.fragments[i]
+		if !exists {
+			log.WithFields(map[string]interface{}{
+				"message_id":   msgID,
+				"fragment_num": i,
+			}).Error("Missing fragment during reassembly")
+			return errors.New("missing fragment")
+		}
+		totalSize += len(frag)
+	}
+
+	// Reassemble
+	completeMsg := make([]byte, 0, totalSize)
+	for i := 0; i < assembler.totalCount; i++ {
+		completeMsg = append(completeMsg, assembler.fragments[i]...)
+	}
+
+	log.WithFields(map[string]interface{}{
+		"message_id":   msgID,
+		"total_size":   totalSize,
+		"fragment_cnt": assembler.totalCount,
+	}).Debug("Reassembled fragmented message")
+
+	// Clean up
+	delete(e.fragments, msgID)
+
+	// Deliver if local
+	if assembler.deliveryType == DT_LOCAL {
+		return e.handler(completeMsg)
+	}
+
+	log.WithField("delivery_type", assembler.deliveryType).Debug("Non-local delivery, skipping")
 	return nil
 }
 
