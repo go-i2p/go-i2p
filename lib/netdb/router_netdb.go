@@ -2,19 +2,20 @@ package netdb
 
 import (
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
 
 // RouterNetDB provides a router-focused interface to the network database.
-// It isolates RouterInfo operations from client operations, allowing the router
-// to manage peer information without exposing client-specific concerns.
+// It handles both RouterInfo operations (for routing/peer discovery) and LeaseSet
+// operations (for all direct router database operations), isolating these from client operations.
 //
 // Design rationale:
-// - Routers only need RouterInfo operations (peers, routing, floodfill)
-// - Prevents router code from accidentally accessing client LeaseSets
+// - Routers need RouterInfo for peer discovery and routing decisions
+// - Routers also need LeaseSet storage/retrieval for direct operations (floodfill, detached lookups, etc.)
+// - Prevents accidental mixing of router-wide and client-specific operations
 // - Enables future optimizations specific to router use cases
-// - Clearer separation between routing and client functionality
 type RouterNetDB struct {
 	db *StdNetDB
 }
@@ -108,4 +109,46 @@ func (r *RouterNetDB) Ensure() error {
 // Path returns the filesystem path where the database is stored.
 func (r *RouterNetDB) Path() string {
 	return r.db.Path()
+}
+
+// ======================================================================
+// LeaseSet Operations (for Direct Router Database Operations)
+// These handle LeaseSets for floodfill, detached lookups, and direct stores
+// ======================================================================
+
+// GetLeaseSet retrieves a LeaseSet by its hash for direct router operations.
+// Returns a channel that yields the LeaseSet if found, nil if not found or expired.
+func (r *RouterNetDB) GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet {
+	log.WithField("hash", hash).Debug("RouterNetDB: Getting LeaseSet for direct operation")
+	return r.db.GetLeaseSet(hash)
+}
+
+// GetLeaseSetBytes retrieves raw LeaseSet data by its hash for direct router operations.
+// Returns the serialized LeaseSet bytes and any error encountered.
+func (r *RouterNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
+	log.WithField("hash", hash).Debug("RouterNetDB: Getting LeaseSet bytes for direct operation")
+	return r.db.GetLeaseSetBytes(hash)
+}
+
+// StoreLeaseSet stores a LeaseSet in the database from direct router operations.
+// key is the destination hash, data is the serialized LeaseSet,
+// and dataType indicates the LeaseSet type (1 for standard LeaseSet).
+func (r *RouterNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("RouterNetDB: Storing LeaseSet from direct operation")
+	return r.db.StoreLeaseSet(key, data, dataType)
+}
+
+// StoreLeaseSet2 stores a LeaseSet2 in the database from direct router operations.
+// key is the destination hash, data is the serialized LeaseSet2,
+// and dataType should be 3 for LeaseSet2.
+func (r *RouterNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("RouterNetDB: Storing LeaseSet2 from direct operation")
+	return r.db.StoreLeaseSet2(key, data, dataType)
+}
+
+// GetLeaseSetCount returns the number of LeaseSets currently stored.
+func (r *RouterNetDB) GetLeaseSetCount() int {
+	count := r.db.GetLeaseSetCount()
+	log.WithField("count", count).Debug("RouterNetDB: LeaseSet count")
+	return count
 }

@@ -165,7 +165,7 @@ func TestRouterNetDB_ConcurrentAccess(t *testing.T) {
 }
 
 // TestRouterNetDB_IsolationFromClient tests that RouterNetDB doesn't expose LeaseSet operations.
-// This is a design validation test - RouterNetDB should not have LeaseSet methods.
+// This is a design validation test - RouterNetDB should not have LeaseSet methods accessible.
 func TestRouterNetDB_IsolationFromClient(t *testing.T) {
 	tempDir := t.TempDir()
 	stdDB := NewStdNetDB(tempDir)
@@ -178,4 +178,29 @@ func TestRouterNetDB_IsolationFromClient(t *testing.T) {
 	// We're just verifying the object exists and has expected type
 	assert.IsType(t, &RouterNetDB{}, routerDB)
 	assert.NotNil(t, routerDB.db) // Has access to underlying StdNetDB
+}
+
+// TestRouterNetDB_LeaseSetOperations tests LeaseSet storage and retrieval for direct router operations.
+func TestRouterNetDB_LeaseSetOperations(t *testing.T) {
+	tempDir := t.TempDir()
+	stdDB := NewStdNetDB(tempDir)
+	require.NoError(t, stdDB.Create())
+	defer stdDB.Stop()
+
+	routerDB := NewRouterNetDB(stdDB)
+
+	// Test GetLeaseSetCount on empty database
+	count := routerDB.GetLeaseSetCount()
+	assert.Equal(t, 0, count)
+
+	// Test GetLeaseSet for non-existent entry
+	var testHash common.Hash
+	copy(testHash[:], "test-leaseset-hash-00000000000")
+
+	chnl := routerDB.GetLeaseSet(testHash)
+	assert.Nil(t, chnl, "Non-existent LeaseSet should return nil channel")
+
+	// Test GetLeaseSetBytes for non-existent entry
+	_, err := routerDB.GetLeaseSetBytes(testHash)
+	assert.Error(t, err, "Non-existent LeaseSet should return error")
 }
