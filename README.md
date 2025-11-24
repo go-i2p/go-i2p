@@ -10,10 +10,10 @@ go-i2p is in early development. We recently completed several significant milest
 
 - Clients
   - [X] I2CP Protocol Server
-  - [ ] Message routing (outbound I2CP → tunnels → garlic encryption)
-  - [ ] Inbound message delivery (tunnel → I2CP sessions)
-  - [ ] Datagrams
-  - [ ] Streaming
+  - [X] Message routing (outbound I2CP → tunnels → garlic encryption)
+  - [X] Inbound message delivery (tunnel → I2CP sessions)
+  - [ ] Datagrams (planned for github.com/go-i2p/go-datagrams)
+  - [ ] Streaming (planned for github.com/go-i2p/go-streaming)
 - [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
   - Signing
     - [X] ECDSA_SHA256_P256

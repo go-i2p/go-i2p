@@ -85,6 +85,8 @@
   * ✅ LeaseSet2 support with type discrimination
   * ✅ Database lookup system
   * ✅ Peer selection logic (basic implementation)
+  * ✅ Floodfill router selection using Kademlia XOR distance metric
+  * ✅ LeaseSet distribution to closest floodfill routers
 
 ### Common Data Structures
 - ✅ **Complete Data Structure Support**: All I2P data types implemented

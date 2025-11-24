@@ -83,35 +83,80 @@ func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) erro
 // distributeToNetwork distributes the LeaseSet to floodfill routers on the I2P network.
 // This runs asynchronously and logs errors rather than returning them.
 //
-// Current implementation creates the DatabaseStore message structure.
-// Future enhancements will:
-// - Select appropriate floodfill routers from NetDB
-// - Send DatabaseStore messages via existing transport sessions
-// - Handle retry logic for failed distributions
+// Process:
+// 1. Select closest floodfill routers from NetDB using XOR distance
+// 2. Create DatabaseStore I2NP message with the LeaseSet
+// 3. Send the message to each floodfill router via existing transport sessions
 func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 	log.WithFields(logger.Fields{
 		"at":  "router.LeaseSetPublisher.distributeToNetwork",
 		"key": fmt.Sprintf("%x", key[:8]),
 	}).Debug("distributing_leaseset_to_network")
 
+	// Select closest floodfill routers (typically 3-5 routers for redundancy)
+	const floodfillCount = 3
+	floodfills, err := p.router.StdNetDB.SelectFloodfillRouters(key, floodfillCount)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "router.LeaseSetPublisher.distributeToNetwork",
+			"key":   fmt.Sprintf("%x", key[:8]),
+			"error": err,
+		}).Warn("failed_to_select_floodfill_routers")
+		return
+	}
+
 	// Create DatabaseStore message for network distribution
-	// dataType=1 indicates LeaseSet (bit 0 set, as per I2NP spec)
-	const leaseSetDataType = 1
-	dbStore := i2np.NewDatabaseStore(key, data, leaseSetDataType)
+	// dataType=3 indicates LeaseSet2 (bits 3-0 = 0x03, as per I2NP spec)
+	const leaseSet2DataType = 3
+	dbStore := i2np.NewDatabaseStore(key, data, leaseSet2DataType)
 
-	// TODO: Select floodfill routers from NetDB
-	// For now, we have no floodfill router selection implemented.
-	// The LeaseSet is stored locally and available for lookups.
-	// Future implementation will:
-	// 1. Query NetDB for closest floodfill routers to this key
-	// 2. Get active transport sessions to those routers
-	// 3. Send DatabaseStore message to each floodfill router
-	// 4. Handle responses and retries
+	// Send to each selected floodfill router
+	for _, ffRouter := range floodfills {
+		ffHash := ffRouter.IdentHash()
+		if err := p.sendToFloodfill(ffHash, dbStore); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "router.LeaseSetPublisher.distributeToNetwork",
+				"key":       fmt.Sprintf("%x", key[:8]),
+				"floodfill": fmt.Sprintf("%x", ffHash[:8]),
+				"error":     err,
+			}).Warn("failed_to_send_to_floodfill")
+			continue
+		}
 
-	_ = dbStore // Prevent unused variable warning
+		log.WithFields(logger.Fields{
+			"at":        "router.LeaseSetPublisher.distributeToNetwork",
+			"key":       fmt.Sprintf("%x", key[:8]),
+			"floodfill": fmt.Sprintf("%x", ffHash[:8]),
+		}).Debug("leaseset_sent_to_floodfill")
+	}
 
 	log.WithFields(logger.Fields{
-		"at":  "router.LeaseSetPublisher.distributeToNetwork",
-		"key": fmt.Sprintf("%x", key[:8]),
-	}).Debug("network_distribution_deferred")
+		"at":                "router.LeaseSetPublisher.distributeToNetwork",
+		"key":               fmt.Sprintf("%x", key[:8]),
+		"floodfills_sent":   len(floodfills),
+		"floodfills_target": floodfillCount,
+	}).Info("leaseset_distribution_completed")
+}
+
+// sendToFloodfill sends a DatabaseStore message to a specific floodfill router.
+// Uses the router's transport layer to send the message via an existing NTCP2 session.
+func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.DatabaseStore) error {
+	// Get active session to this floodfill router
+	session, err := p.router.GetSessionByHash(ffHash)
+	if err != nil {
+		return fmt.Errorf("no active session to floodfill router: %w", err)
+	}
+
+	// Wrap DatabaseStore in I2NPMessage interface
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	data, err := dbStore.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal DatabaseStore: %w", err)
+	}
+	msg.SetData(data)
+
+	// Queue the DatabaseStore message for transmission
+	session.QueueSendI2NP(msg)
+
+	return nil
 }

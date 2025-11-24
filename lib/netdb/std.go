@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -221,6 +222,137 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 	selected := db.selectRandomPeers(available, count)
 	log.WithField("selected_peers", count).Debug("Peer selection completed")
 	return selected, nil
+}
+
+// SelectFloodfillRouters selects the closest floodfill routers to a target hash
+// using XOR distance metric (Kademlia-style selection).
+//
+// This method:
+// 1. Filters all RouterInfos to find only floodfill routers (caps contains 'f')
+// 2. Calculates XOR distance between target hash and each floodfill router
+// 3. Returns up to 'count' closest floodfill routers sorted by distance
+//
+// Parameters:
+//   - targetHash: The hash to find closest floodfill routers to (e.g., LeaseSet hash)
+//   - count: Maximum number of floodfill routers to return
+//
+// Returns:
+//   - Slice of RouterInfo for closest floodfill routers (may be less than count if insufficient floodfills available)
+//   - Error if no floodfill routers are available in NetDB
+func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"target_hash": fmt.Sprintf("%x", targetHash[:8]),
+		"count":       count,
+	}).Debug("Selecting closest floodfill routers")
+
+	// Get all router infos
+	allRouterInfos := db.GetAllRouterInfos()
+	if len(allRouterInfos) == 0 {
+		return nil, fmt.Errorf("no router infos available in NetDB")
+	}
+
+	// Filter for floodfill routers
+	floodfills := db.filterFloodfillRouters(allRouterInfos)
+	if len(floodfills) == 0 {
+		return nil, fmt.Errorf("no floodfill routers available in NetDB")
+	}
+
+	log.WithField("floodfill_count", len(floodfills)).Debug("Found floodfill routers")
+
+	// Calculate XOR distances and select closest
+	return db.selectClosestByXORDistance(floodfills, targetHash, count), nil
+}
+
+// filterFloodfillRouters filters RouterInfos to return only floodfill routers.
+// A router is considered floodfill if its "caps" option contains the character 'f'.
+func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []router_info.RouterInfo {
+	var floodfills []router_info.RouterInfo
+
+	for _, ri := range routers {
+		if db.isFloodfillRouter(ri) {
+			floodfills = append(floodfills, ri)
+		}
+	}
+
+	return floodfills
+}
+
+// isFloodfillRouter checks if a RouterInfo represents a floodfill router.
+// Returns true if the router's "caps" option contains 'f'.
+func (db *StdNetDB) isFloodfillRouter(ri router_info.RouterInfo) bool {
+	options := ri.Options()
+	capsKey, _ := common.ToI2PString("caps")
+	capsValue := options.Values().Get(capsKey)
+	caps, _ := capsValue.Data()
+	return strings.Contains(caps, "f")
+}
+
+// routerDistance represents a router with its calculated XOR distance from target.
+type routerDistance struct {
+	routerInfo router_info.RouterInfo
+	distance   []byte // XOR distance as byte array for comparison
+}
+
+// selectClosestByXORDistance selects up to 'count' routers closest to targetHash
+// using XOR distance metric (Kademlia).
+func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo, targetHash common.Hash, count int) []router_info.RouterInfo {
+	// Calculate distances for all routers
+	distances := make([]routerDistance, 0, len(routers))
+	for _, ri := range routers {
+		distance := db.calculateXORDistance(targetHash, ri.IdentHash())
+		distances = append(distances, routerDistance{
+			routerInfo: ri,
+			distance:   distance,
+		})
+	}
+
+	// Sort by XOR distance (ascending)
+	sort.Slice(distances, func(i, j int) bool {
+		return db.compareXORDistances(distances[i].distance, distances[j].distance)
+	})
+
+	// Take up to count closest routers
+	resultCount := count
+	if len(distances) < count {
+		resultCount = len(distances)
+	}
+
+	result := make([]router_info.RouterInfo, resultCount)
+	for i := 0; i < resultCount; i++ {
+		result[i] = distances[i].routerInfo
+	}
+
+	log.WithFields(logger.Fields{
+		"requested": count,
+		"available": len(distances),
+		"selected":  resultCount,
+	}).Debug("Selected closest floodfill routers by XOR distance")
+
+	return result
+}
+
+// calculateXORDistance calculates the XOR distance between two hashes.
+// XOR distance is the bitwise XOR of the two hashes, used in Kademlia DHT.
+func (db *StdNetDB) calculateXORDistance(hash1, hash2 common.Hash) []byte {
+	distance := make([]byte, len(hash1))
+	for i := 0; i < len(hash1); i++ {
+		distance[i] = hash1[i] ^ hash2[i]
+	}
+	return distance
+}
+
+// compareXORDistances compares two XOR distances using big-endian byte comparison.
+// Returns true if dist1 < dist2 (dist1 is closer).
+func (db *StdNetDB) compareXORDistances(dist1, dist2 []byte) bool {
+	for i := 0; i < len(dist1); i++ {
+		if dist1[i] < dist2[i] {
+			return true
+		}
+		if dist1[i] > dist2[i] {
+			return false
+		}
+	}
+	return false // Equal distances
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in
