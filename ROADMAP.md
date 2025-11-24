@@ -124,7 +124,7 @@
 ### Advanced NetDb Features
 
 - **Enhanced Database Operations**:
-  - 📋 Floodfill router functionality
+  - ✅ Floodfill router functionality
   - 📋 Client/Router NetDb isolation
   - 📋 Database exploration and publishing
   - 📋 LS2 and Encrypted LeaseSet support

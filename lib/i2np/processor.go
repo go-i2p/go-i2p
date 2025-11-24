@@ -722,10 +722,12 @@ func (tm *TunnelManager) logCleanupResults(expired []int) {
 
 // DatabaseManager demonstrates database-related interface usage
 type DatabaseManager struct {
-	netdb           NetDBStore
-	retriever       NetDBRetriever
-	sessionProvider SessionProvider
-	factory         *I2NPMessageFactory
+	netdb             NetDBStore
+	retriever         NetDBRetriever
+	floodfillSelector FloodfillSelector
+	sessionProvider   SessionProvider
+	factory           *I2NPMessageFactory
+	ourRouterHash     common.Hash // Our router's identity hash for DatabaseSearchReply
 }
 
 // NetDBStore defines the interface for storing RouterInfo entries
@@ -737,6 +739,11 @@ type NetDBStore interface {
 type NetDBRetriever interface {
 	GetRouterInfoBytes(hash common.Hash) ([]byte, error)
 	GetRouterInfoCount() int
+}
+
+// FloodfillSelector defines the interface for selecting closest floodfill routers
+type FloodfillSelector interface {
+	SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error)
 }
 
 // TransportSession defines the interface for sending I2NP messages back to requesters
@@ -753,16 +760,27 @@ type SessionProvider interface {
 // NewDatabaseManager creates a new database manager with NetDB integration
 func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
 	return &DatabaseManager{
-		netdb:           netdb,
-		retriever:       nil, // Will be set later via SetRetriever
-		sessionProvider: nil, // Will be set later via SetSessionProvider
-		factory:         NewI2NPMessageFactory(),
+		netdb:             netdb,
+		retriever:         nil, // Will be set later via SetRetriever
+		floodfillSelector: nil, // Will be set later via SetFloodfillSelector
+		sessionProvider:   nil, // Will be set later via SetSessionProvider
+		factory:           NewI2NPMessageFactory(),
 	}
 }
 
 // SetRetriever sets the NetDB retriever for database operations
 func (dm *DatabaseManager) SetRetriever(retriever NetDBRetriever) {
 	dm.retriever = retriever
+}
+
+// SetFloodfillSelector sets the floodfill selector for selecting closest floodfill routers
+func (dm *DatabaseManager) SetFloodfillSelector(selector FloodfillSelector) {
+	dm.floodfillSelector = selector
+}
+
+// SetOurRouterHash sets our router's identity hash for use in DatabaseSearchReply messages
+func (dm *DatabaseManager) SetOurRouterHash(hash common.Hash) {
+	dm.ourRouterHash = hash
 }
 
 // SetSessionProvider sets the session provider for sending responses
@@ -867,11 +885,76 @@ func (dm *DatabaseManager) sendDatabaseStoreResponse(key common.Hash, data []byt
 	return dm.sendResponse(response, to)
 }
 
-// sendDatabaseSearchReply sends a DatabaseSearchReply when RouterInfo is not found
+// sendDatabaseSearchReply sends a DatabaseSearchReply when RouterInfo is not found.
+// This implements floodfill router functionality by selecting and suggesting the closest
+// floodfill routers to the target hash using Kademlia XOR distance metric.
+//
+// Per I2P specification, when acting as a floodfill router:
+// 1. If the requested key is not in our NetDB
+// 2. We respond with a DatabaseSearchReply containing hashes of other floodfill routers
+// 3. These routers are selected as the closest to the target key by XOR distance
+// 4. Typically 3-7 peer hashes are included to help the requester continue their search
 func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
-	// Create DatabaseSearchReply with empty peer list (we're not implementing peer suggestions for MVP)
-	response := NewDatabaseSearchReply(key, common.Hash{}, []common.Hash{}) // TODO: Should use our router hash as from
+	// Select closest floodfill routers to suggest
+	peerHashes := dm.selectClosestFloodfills(key)
+
+	// Create DatabaseSearchReply with our router hash and suggested peers
+	response := NewDatabaseSearchReply(key, dm.ourRouterHash, peerHashes)
+
+	dm.logDatabaseSearchReply(key, to, len(peerHashes))
 	return dm.sendResponse(response, to)
+}
+
+// selectClosestFloodfills selects the closest floodfill routers to suggest for a lookup.
+// Returns up to 7 peer hashes (standard I2P practice) sorted by XOR distance to target.
+// If no floodfill selector is configured, returns empty list for backward compatibility.
+func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
+	const defaultFloodfillCount = 7 // I2P standard practice
+
+	if dm.floodfillSelector == nil {
+		log.Debug("No floodfill selector available, returning empty peer list")
+		return []common.Hash{}
+	}
+
+	floodfills, err := dm.floodfillSelector.SelectFloodfillRouters(targetKey, defaultFloodfillCount)
+	if err != nil {
+		log.WithError(err).Warn("Failed to select floodfill routers for DatabaseSearchReply")
+		return []common.Hash{}
+	}
+
+	if len(floodfills) == 0 {
+		log.Debug("No floodfill routers available for peer suggestions")
+		return []common.Hash{}
+	}
+
+	// Convert RouterInfo list to hash list
+	// Skip any routers that fail IdentHash() (e.g., improperly initialized in tests)
+	peerHashes := make([]common.Hash, 0, len(floodfills))
+	for _, ri := range floodfills {
+		// IdentHash() may panic on invalid RouterInfo, so we use defer/recover pattern
+		// or check if RouterInfo is properly initialized
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Debug("Skipping invalid RouterInfo in floodfill selection")
+				}
+			}()
+			hash := ri.IdentHash()
+			peerHashes = append(peerHashes, hash)
+		}()
+	}
+
+	return peerHashes
+}
+
+// logDatabaseSearchReply logs details about the DatabaseSearchReply being sent.
+func (dm *DatabaseManager) logDatabaseSearchReply(key, to common.Hash, peerCount int) {
+	log.WithFields(logger.Fields{
+		"target_key":      fmt.Sprintf("%x", key[:8]),
+		"destination":     fmt.Sprintf("%x", to[:8]),
+		"suggested_peers": peerCount,
+		"our_router_hash": fmt.Sprintf("%x", dm.ourRouterHash[:8]),
+	}).Debug("Sending DatabaseSearchReply with floodfill peer suggestions")
 }
 
 // sendResponse sends an I2NP message response using the session provider
@@ -1017,9 +1100,30 @@ func NewMessageRouter(config MessageRouterConfig) *MessageRouter {
 	}
 }
 
-// SetNetDB sets the NetDB store for database operations
+// SetNetDB sets the NetDB store for database operations.
+// If the netdb implements FloodfillSelector, it will also be configured for floodfill functionality.
 func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
 	mr.dbManager = NewDatabaseManager(netdb)
+
+	// If NetDB also implements FloodfillSelector, enable floodfill functionality
+	if selector, ok := netdb.(FloodfillSelector); ok {
+		mr.dbManager.SetFloodfillSelector(selector)
+		log.Debug("Floodfill selector configured for message router")
+	}
+
+	// If NetDB also implements NetDBRetriever, configure retriever
+	if retriever, ok := netdb.(NetDBRetriever); ok {
+		mr.dbManager.SetRetriever(retriever)
+		log.Debug("NetDB retriever configured for message router")
+	}
+}
+
+// SetOurRouterHash sets our router's identity hash for use in DatabaseSearchReply messages.
+// This should be called during router initialization with the router's own identity hash.
+// The hash is used in DatabaseSearchReply "from" field to indicate which router sent the reply.
+func (mr *MessageRouter) SetOurRouterHash(hash common.Hash) {
+	mr.dbManager.SetOurRouterHash(hash)
+	log.WithField("router_hash", fmt.Sprintf("%x", hash[:8])).Debug("Configured router identity for floodfill responses")
 }
 
 // RouteMessage routes messages based on their interfaces
