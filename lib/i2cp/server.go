@@ -369,7 +369,8 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 	// TODO: Parse session configuration from payload
 	config := DefaultSessionConfig()
 
-	// Create session
+	// Create session with its own isolated in-memory NetDB
+	// Client NetDBs are always ephemeral (not persisted to disk)
 	session, err := s.manager.CreateSession(nil, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
@@ -663,7 +664,8 @@ func (s *Server) SetMessageRouter(router *MessageRouter) {
 // from the NetDB for garlic encryption.
 func (s *Server) SetDestinationResolver(resolver interface {
 	ResolveDestination(destHash common.Hash) ([32]byte, error)
-}) {
+},
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.destinationResolver = resolver

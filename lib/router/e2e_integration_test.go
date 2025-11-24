@@ -240,7 +240,6 @@ func TestE2E_MessageFragmentation(t *testing.T) {
 	// at lower layers.
 
 	err := env.SendMessageFromClient(env.senderSession, env.receiverDestHash, env.receiverPubKey, largePayload)
-
 	// Large messages may fail if they exceed garlic encryption limits
 	// In a production system, the I2CP layer would handle message chunking
 	if err != nil {
@@ -406,7 +405,7 @@ func (env *e2eTestEnvironment) createSessionWithPools(t *testing.T, nickname str
 }
 
 // addTunnelsToPool adds mock tunnels to a pool
-func (env *e2eTestEnvironment) addTunnelsToPool(t *testing.T, pool *tunnel.Pool, count int, startID int) {
+func (env *e2eTestEnvironment) addTunnelsToPool(t *testing.T, pool *tunnel.Pool, count, startID int) {
 	for i := 0; i < count; i++ {
 		tunnelID := tunnel.TunnelID(startID + i)
 		var gateway common.Hash

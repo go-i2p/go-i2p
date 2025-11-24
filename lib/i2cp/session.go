@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/common/lease"
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/go-i2p/lib/keys"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -58,6 +59,9 @@ type Session struct {
 	inboundPool  *tunnel.Pool // Pool of inbound tunnels
 	outboundPool *tunnel.Pool // Pool of outbound tunnels
 
+	// NetDB isolation - each client gets its own LeaseSet-only database
+	clientNetDB *netdb.ClientNetDB // Isolated NetDB for this client (LeaseSets only)
+
 	// Session state
 	createdAt time.Time // Session creation time
 	active    bool      // Session is active
@@ -83,8 +87,10 @@ type IncomingMessage struct {
 	Timestamp time.Time // When the message was received
 }
 
-// NewSession creates a new I2CP session
-// The destination parameter can be nil, in which case a new destination will be generated
+// NewSession creates a new I2CP session with its own isolated in-memory NetDB.
+// The destination parameter can be nil, in which case a new destination will be generated.
+// Each session gets a completely separate in-memory StdNetDB instance to prevent client linkability.
+// Client NetDBs are ephemeral and not persisted to disk.
 func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error) {
 	if config == nil {
 		config = DefaultSessionConfig()
@@ -102,11 +108,18 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 		dest = keyStore.Destination()
 	}
 
+	// Create isolated in-memory StdNetDB for this client (ephemeral, not persisted)
+	// Pass empty string to create in-memory only database
+	stdDB := netdb.NewStdNetDB("")
+	clientNetDB := netdb.NewClientNetDB(stdDB)
+	log.Debug("Created ephemeral in-memory NetDB for client session")
+
 	return &Session{
 		id:               id,
 		destination:      dest,
 		keys:             keyStore,
 		config:           config,
+		clientNetDB:      clientNetDB,
 		createdAt:        time.Now(),
 		active:           true,
 		incomingMessages: make(chan *IncomingMessage, 100), // Buffer 100 messages
@@ -715,7 +728,7 @@ func NewSessionManager() *SessionManager {
 	}
 }
 
-// CreateSession creates a new session with the given destination and config
+// CreateSession creates a new session with the given destination and config.
 func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig) (*Session, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -726,7 +739,7 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 		return nil, fmt.Errorf("no available session IDs")
 	}
 
-	// Create session
+	// Create session with its own isolated in-memory NetDB
 	session, err := NewSession(sessionID, dest, config)
 	if err != nil {
 		return nil, err

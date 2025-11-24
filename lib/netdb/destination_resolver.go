@@ -24,7 +24,8 @@ type DestinationResolver struct {
 func NewDestinationResolver(netdb interface {
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
-}) *DestinationResolver {
+},
+) *DestinationResolver {
 	return &DestinationResolver{
 		netdb: netdb,
 	}
@@ -72,7 +73,6 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 func (dr *DestinationResolver) extractKeyFromLeaseSet2(destHash common.Hash) ([32]byte, error) {
 	// Get raw LeaseSet bytes to check if it's LeaseSet2
 	lsBytes, err := dr.netdb.GetLeaseSetBytes(destHash)
-
 	if err != nil {
 		return [32]byte{}, err
 	}

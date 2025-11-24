@@ -1475,7 +1475,7 @@ func (db *StdNetDB) removeLeaseSetFromDisk(hash common.Hash) {
 
 // GetLeaseSetExpirationStats returns statistics about LeaseSet expiration tracking.
 // Returns total count, expired count, and time until next expiration.
-func (db *StdNetDB) GetLeaseSetExpirationStats() (total int, expired int, nextExpiry time.Duration) {
+func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry time.Duration) {
 	now := time.Now()
 	var earliest time.Time
 

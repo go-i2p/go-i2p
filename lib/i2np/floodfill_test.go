@@ -176,7 +176,6 @@ func TestDatabaseManager_SendDatabaseSearchReply(t *testing.T) {
 	targetKey := common.Hash{0xFF}
 	toHash := common.Hash{0x11}
 	err := dbManager.sendDatabaseSearchReply(targetKey, toHash)
-
 	if err != nil {
 		t.Fatalf("sendDatabaseSearchReply failed: %v", err)
 	}

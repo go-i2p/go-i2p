@@ -125,7 +125,7 @@
 
 - **Enhanced Database Operations**:
   - ✅ Floodfill router functionality
-  - 📋 Client/Router NetDb isolation
+  - ✅ Client/Router NetDb isolation
   - 📋 Database exploration and publishing
   - 📋 LS2 and Encrypted LeaseSet support
   - 📋 Advanced peer selection algorithms
@@ -161,8 +161,9 @@
 - ✅ Phase 7a: Message Fragment Reassembly (fragment handling, out-of-order assembly, comprehensive tests)
 - ✅ Phase 7b: Message Routing System (outbound complete, inbound tunnel→I2CP routing complete, full E2E integration tests)
 - ✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)
+- ✅ Phase 9: Client/Router NetDB Isolation (ClientNetDB for LeaseSets, RouterNetDB for RouterInfos, improved separation of concerns)
 
-**Next Focus**: Advanced NetDb features (floodfill, exploration) or Application Layer (I2CP client library, streaming)
+**Next Focus**: Advanced NetDb features (database exploration, publishing) or Application Layer (I2CP client library, streaming)
 
 **Test Coverage**: Core components have strong test coverage:
 
