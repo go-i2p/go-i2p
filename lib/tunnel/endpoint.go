@@ -320,42 +320,68 @@ func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData [
 // processFollowOnFragment handles subsequent fragments of a fragmented message.
 // Reassembles and delivers when all fragments are received.
 func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentData []byte) error {
-	msgID, err := di.MessageID()
+	msgID, fragmentNum, isLast, err := e.extractFollowOnFragmentInfo(di)
 	if err != nil {
 		return err
+	}
+
+	assembler := e.getOrCreateAssembler(msgID)
+
+	if err := e.storeFragmentData(msgID, fragmentNum, fragmentData, assembler); err != nil {
+		return err
+	}
+
+	if isLast {
+		e.markLastFragment(msgID, fragmentNum, assembler)
+	}
+
+	return e.attemptReassembly(msgID, fragmentNum, isLast, assembler)
+}
+
+// extractFollowOnFragmentInfo extracts message ID, fragment number, and last-fragment flag from delivery instructions.
+func (e *Endpoint) extractFollowOnFragmentInfo(di *DeliveryInstructions) (uint32, int, bool, error) {
+	msgID, err := di.MessageID()
+	if err != nil {
+		return 0, 0, false, err
 	}
 
 	fragmentNum, err := di.FragmentNumber()
 	if err != nil {
-		return err
-	}
-
-	isLast, err := di.LastFollowOnFragment()
-	if err != nil {
-		return err
+		return 0, 0, false, err
 	}
 
 	// Validate fragment number (0-63 range, but 0 is for first fragment)
 	if fragmentNum < 1 || fragmentNum > 63 {
 		log.WithField("fragment_num", fragmentNum).Error("Invalid fragment number")
-		return ErrTooManyFragments
+		return 0, 0, false, ErrTooManyFragments
 	}
 
-	// Get or create assembler
+	isLast, err := di.LastFollowOnFragment()
+	if err != nil {
+		return 0, 0, false, err
+	}
+
+	return msgID, fragmentNum, isLast, nil
+}
+
+// getOrCreateAssembler retrieves existing assembler or creates a new one for the message ID.
+func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
 		log.WithField("message_id", msgID).Warn("Received follow-on fragment without first fragment")
-		// Create assembler anyway - might get first fragment later
 		assembler = &fragmentAssembler{
 			fragments:    make(map[int][]byte),
-			deliveryType: DT_LOCAL, // Default to local
+			deliveryType: DT_LOCAL,
 			totalCount:   0,
 			receivedMask: 0,
 		}
 		e.fragments[msgID] = assembler
 	}
+	return assembler
+}
 
-	// Check for duplicate
+// storeFragmentData validates and stores fragment data in the assembler.
+func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData []byte, assembler *fragmentAssembler) error {
 	mask := uint64(1) << fragmentNum
 	if (assembler.receivedMask & mask) != 0 {
 		log.WithFields(map[string]interface{}{
@@ -365,21 +391,23 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 		return ErrDuplicateFragment
 	}
 
-	// Store fragment
 	assembler.fragments[fragmentNum] = fragmentData
 	assembler.receivedMask |= mask
+	return nil
+}
 
-	// If this is the last fragment, record total count
-	if isLast {
-		assembler.totalCount = fragmentNum + 1
-		log.WithFields(map[string]interface{}{
-			"message_id":   msgID,
-			"total_count":  assembler.totalCount,
-			"fragment_num": fragmentNum,
-		}).Debug("Received last fragment")
-	}
+// markLastFragment records that this is the final fragment in the sequence.
+func (e *Endpoint) markLastFragment(msgID uint32, fragmentNum int, assembler *fragmentAssembler) {
+	assembler.totalCount = fragmentNum + 1
+	log.WithFields(map[string]interface{}{
+		"message_id":   msgID,
+		"total_count":  assembler.totalCount,
+		"fragment_num": fragmentNum,
+	}).Debug("Received last fragment")
+}
 
-	// Check if we have all fragments
+// attemptReassembly checks if all fragments are received and triggers reassembly if complete.
+func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool, assembler *fragmentAssembler) error {
 	if assembler.totalCount > 0 {
 		expectedMask := (uint64(1) << assembler.totalCount) - 1
 		if assembler.receivedMask == expectedMask {
