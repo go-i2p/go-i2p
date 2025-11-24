@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
@@ -122,32 +123,44 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 
 	// Check if destination uses X25519 via key certificate
 	if dest.KeyCertificate != nil {
-		// Get crypto key type from certificate data
-		certData, err := dest.KeyCertificate.Data()
-		if err != nil {
-			return [32]byte{}, fmt.Errorf("failed to read key certificate data: %w", err)
-		}
-		if len(certData) >= 2 {
-			// First 2 bytes are signing key type, next 2 are crypto key type
-			if len(certData) >= 4 {
-				cryptoType := uint16(certData[2])<<8 | uint16(certData[3])
-				if cryptoType == key_certificate.KEYCERT_CRYPTO_X25519 {
-					// Extract X25519 key from destination
-					pubKeyBytes := dest.ReceivingPublic.Bytes()
-					if len(pubKeyBytes) != 32 {
-						return [32]byte{}, fmt.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
-					}
-
-					var key [32]byte
-					copy(key[:], pubKeyBytes)
-
-					log.Debug("Extracted X25519 key from legacy LeaseSet with X25519 destination")
-					return key, nil
-				}
-			}
-		}
+		return dr.extractX25519KeyFromCertificate(dest)
 	}
 
 	// Legacy ElGamal key - not supported by current ECIES-X25519-AEAD implementation
 	return [32]byte{}, fmt.Errorf("destination uses ElGamal encryption, which is not supported by ECIES-X25519-AEAD")
+}
+
+// extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
+// Returns the X25519 key if the destination uses X25519 encryption, otherwise returns an error.
+func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.Destination) ([32]byte, error) {
+	certData, err := dest.KeyCertificate.Data()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to read key certificate data: %w", err)
+	}
+
+	if len(certData) < 4 {
+		return [32]byte{}, fmt.Errorf("key certificate data too short: %d bytes", len(certData))
+	}
+
+	// First 2 bytes are signing key type, next 2 are crypto key type
+	cryptoType := uint16(certData[2])<<8 | uint16(certData[3])
+	if cryptoType != key_certificate.KEYCERT_CRYPTO_X25519 {
+		return [32]byte{}, fmt.Errorf("destination uses crypto type %d, not X25519", cryptoType)
+	}
+
+	return dr.extractX25519KeyBytes(dest)
+}
+
+// extractX25519KeyBytes extracts the X25519 key bytes from a destination's receiving public key.
+func (dr *DestinationResolver) extractX25519KeyBytes(dest destination.Destination) ([32]byte, error) {
+	pubKeyBytes := dest.ReceivingPublic.Bytes()
+	if len(pubKeyBytes) != 32 {
+		return [32]byte{}, fmt.Errorf("invalid X25519 key length in destination: %d", len(pubKeyBytes))
+	}
+
+	var key [32]byte
+	copy(key[:], pubKeyBytes)
+
+	log.Debug("Extracted X25519 key from legacy LeaseSet with X25519 destination")
+	return key, nil
 }
