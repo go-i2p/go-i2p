@@ -41,12 +41,12 @@ The core router functionality is now operational. We are currently focused on ad
   - [X] AES256
   - [X] X25519
   - [X] ChaCha20/Poly1305
-  - [ ] Elligator2
+  - [X] Elligator2
   - [X] HKDF
   - [X] HMAC
   - [X] Noise subsystem
 - End-to-End Crypto
-  - [ ] Garlic messages
+  - [X] Garlic messages
   - [X] ECIES-X25519-AEAD-Ratchet (primary)
   - [X] ElGamal/AES+SessionTag (legacy compatibility)
 - I2NP
@@ -56,18 +56,18 @@ The core router functionality is now operational. We are currently focused on ad
   - [X] Tunnel Build message structures
   - [X] Data, DeliveryStatus, TunnelData messages
   - [X] Build Request/Response Record parsing
-  - [ ] Message routing and handling
+  - [X] Message routing and handling
 - NetDB
   - [X] Local storage interface
   - [X] Reseed functionality (basic implementation)
-  - [~] Persistence to disk
+  - [X] Persistence to disk
   - [X] RouterInfo management
   - [X] LeaseSet management
   - [X] Lookups
   - [X] Expiry
-  - [ ] Exploration
+  - [X] Exploration
   - [X] Publishing
-  - [ ] Floodfill
+  - [X] Floodfill
   - [~] LS2 and Encrypted Leasesets
 - Transport Layer
   - [X] Transport manager and interfaces
@@ -90,10 +90,10 @@ The core router functionality is now operational. We are currently focused on ad
   - [X] Message structure parsing (delivery instructions)
   - [X] Fragment handling and reassembly
   - [X] Build Request/Response record interfaces
-  - [ ] Tunnel building and management
-  - [ ] Tunnel cryptography (layered encryption)
+  - [X] Tunnel building and management
+  - [X] Tunnel cryptography (layered encryption)
   - [X] Gateway and endpoint implementation
-  - [ ] Participant functionality
+  - [X] Participant functionality
 - [Common Data Structures(see also: https://github.com/go-i2p/common](https://github.com/go-i2p/common)
     - [X] Keys and Cert
     - [X] Key Certificates
