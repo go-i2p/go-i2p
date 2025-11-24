@@ -38,16 +38,70 @@ func InitConfig() {
 }
 
 func setDefaults() {
-	// Router defaults
-	viper.SetDefault("base_dir", DefaultRouterConfig().BaseDir)
-	viper.SetDefault("working_dir", DefaultRouterConfig().WorkingDir)
+	// Get comprehensive defaults from defaults.go
+	defaults := Defaults()
 
-	// NetDb defaults
-	viper.SetDefault("netdb.path", DefaultNetDbConfig.Path)
+	// Router defaults
+	viper.SetDefault("base_dir", defaults.Router.BaseDir)
+	viper.SetDefault("working_dir", defaults.Router.WorkingDir)
+	viper.SetDefault("router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval)
+	viper.SetDefault("router.message_expiration_time", defaults.Router.MessageExpirationTime)
+	viper.SetDefault("router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions)
+
+	// NetDB defaults
+	viper.SetDefault("netdb.path", defaults.NetDB.Path)
+	viper.SetDefault("netdb.max_router_infos", defaults.NetDB.MaxRouterInfos)
+	viper.SetDefault("netdb.max_lease_sets", defaults.NetDB.MaxLeaseSets)
+	viper.SetDefault("netdb.expiration_check_interval", defaults.NetDB.ExpirationCheckInterval)
+	viper.SetDefault("netdb.lease_set_refresh_threshold", defaults.NetDB.LeaseSetRefreshThreshold)
+	viper.SetDefault("netdb.exploration_interval", defaults.NetDB.ExplorationInterval)
+	viper.SetDefault("netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled)
 
 	// Bootstrap defaults
-	viper.SetDefault("bootstrap.low_peer_threshold", DefaultBootstrapConfig.LowPeerThreshold)
-	viper.SetDefault("bootstrap.reseed_servers", []ReseedConfig{})
+	viper.SetDefault("bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold)
+	viper.SetDefault("bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout)
+	viper.SetDefault("bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers)
+	viper.SetDefault("bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval)
+	viper.SetDefault("bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers)
+
+	// I2CP defaults
+	viper.SetDefault("i2cp.enabled", defaults.I2CP.Enabled)
+	viper.SetDefault("i2cp.address", defaults.I2CP.Address)
+	viper.SetDefault("i2cp.network", defaults.I2CP.Network)
+	viper.SetDefault("i2cp.max_sessions", defaults.I2CP.MaxSessions)
+	viper.SetDefault("i2cp.message_queue_size", defaults.I2CP.MessageQueueSize)
+	viper.SetDefault("i2cp.session_timeout", defaults.I2CP.SessionTimeout)
+	viper.SetDefault("i2cp.read_timeout", defaults.I2CP.ReadTimeout)
+	viper.SetDefault("i2cp.write_timeout", defaults.I2CP.WriteTimeout)
+
+	// Tunnel defaults
+	viper.SetDefault("tunnel.min_pool_size", defaults.Tunnel.MinPoolSize)
+	viper.SetDefault("tunnel.max_pool_size", defaults.Tunnel.MaxPoolSize)
+	viper.SetDefault("tunnel.length", defaults.Tunnel.TunnelLength)
+	viper.SetDefault("tunnel.lifetime", defaults.Tunnel.TunnelLifetime)
+	viper.SetDefault("tunnel.test_interval", defaults.Tunnel.TunnelTestInterval)
+	viper.SetDefault("tunnel.test_timeout", defaults.Tunnel.TunnelTestTimeout)
+	viper.SetDefault("tunnel.build_timeout", defaults.Tunnel.BuildTimeout)
+	viper.SetDefault("tunnel.build_retries", defaults.Tunnel.BuildRetries)
+	viper.SetDefault("tunnel.replace_before_expiration", defaults.Tunnel.ReplaceBeforeExpiration)
+	viper.SetDefault("tunnel.maintenance_interval", defaults.Tunnel.MaintenanceInterval)
+
+	// Transport defaults
+	viper.SetDefault("transport.ntcp2_enabled", defaults.Transport.NTCP2Enabled)
+	viper.SetDefault("transport.ntcp2_port", defaults.Transport.NTCP2Port)
+	viper.SetDefault("transport.ntcp2_max_connections", defaults.Transport.NTCP2MaxConnections)
+	viper.SetDefault("transport.ssu2_enabled", defaults.Transport.SSU2Enabled)
+	viper.SetDefault("transport.ssu2_port", defaults.Transport.SSU2Port)
+	viper.SetDefault("transport.connection_timeout", defaults.Transport.ConnectionTimeout)
+	viper.SetDefault("transport.idle_timeout", defaults.Transport.IdleTimeout)
+	viper.SetDefault("transport.max_message_size", defaults.Transport.MaxMessageSize)
+
+	// Performance defaults
+	viper.SetDefault("performance.message_queue_size", defaults.Performance.MessageQueueSize)
+	viper.SetDefault("performance.worker_pool_size", defaults.Performance.WorkerPoolSize)
+	viper.SetDefault("performance.garlic_encryption_cache_size", defaults.Performance.GarlicEncryptionCacheSize)
+	viper.SetDefault("performance.fragment_cache_size", defaults.Performance.FragmentCacheSize)
+	viper.SetDefault("performance.cleanup_interval", defaults.Performance.CleanupInterval)
 }
 
 // NewRouterConfigFromViper creates a new RouterConfig from current viper settings
