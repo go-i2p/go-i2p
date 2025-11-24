@@ -158,7 +158,7 @@
 - ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)
 - ✅ Phase 7a: Message Fragment Reassembly (fragment handling, out-of-order assembly, comprehensive tests)
 - ✅ Phase 7b: Message Routing System (outbound complete, inbound tunnel→I2CP routing complete, full E2E integration tests)
-- ✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility) - November 23, 2025
+- ✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)
 
 **Next Focus**: Advanced NetDb features (floodfill, exploration) or Application Layer (I2CP client library, streaming)
 
