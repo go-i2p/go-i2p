@@ -72,41 +72,78 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 // LeaseSet2 can have multiple encryption keys with different types.
 // We prefer X25519 (type 4) for ECIES-X25519-AEAD encryption.
 func (dr *DestinationResolver) extractKeyFromLeaseSet2(destHash common.Hash) ([32]byte, error) {
-	// Get raw LeaseSet bytes to check if it's LeaseSet2
-	lsBytes, err := dr.netdb.GetLeaseSetBytes(destHash)
+	lsBytes, err := dr.fetchLeaseSetBytes(destHash)
 	if err != nil {
 		return [32]byte{}, err
 	}
 
-	// Check if this is a LeaseSet2 by attempting to parse it
-	// LeaseSet2 starts with type byte 0x07
-	if len(lsBytes) == 0 || lsBytes[0] != 0x07 {
-		return [32]byte{}, fmt.Errorf("not a LeaseSet2")
+	ls2, err := dr.parseLeaseSet2(lsBytes)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	return dr.findX25519KeyInLeaseSet2(ls2, destHash)
+}
+
+// fetchLeaseSetBytes retrieves raw LeaseSet bytes from NetDB.
+func (dr *DestinationResolver) fetchLeaseSetBytes(destHash common.Hash) ([]byte, error) {
+	lsBytes, err := dr.netdb.GetLeaseSetBytes(destHash)
+	if err != nil {
+		return nil, err
+	}
+	return lsBytes, nil
+}
+
+// parseLeaseSet2 validates and parses LeaseSet2 format bytes.
+// Returns error if the data is not a valid LeaseSet2.
+func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseSet2, error) {
+	if err := dr.validateLeaseSet2Format(lsBytes); err != nil {
+		return lease_set2.LeaseSet2{}, err
 	}
 
 	ls2, _, err := lease_set2.ReadLeaseSet2(lsBytes)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
+		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
-	// Look for X25519 encryption key (type 4)
+	return ls2, nil
+}
+
+// validateLeaseSet2Format checks if bytes represent a valid LeaseSet2.
+// LeaseSet2 starts with type byte 0x07.
+func (dr *DestinationResolver) validateLeaseSet2Format(lsBytes []byte) error {
+	if len(lsBytes) == 0 || lsBytes[0] != 0x07 {
+		return fmt.Errorf("not a LeaseSet2")
+	}
+	return nil
+}
+
+// findX25519KeyInLeaseSet2 searches for and extracts an X25519 encryption key.
+// Returns the first X25519 key found, or an error if none exists.
+func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2, destHash common.Hash) ([32]byte, error) {
 	encKeys := ls2.EncryptionKeys()
+
 	for _, encKey := range encKeys {
 		if encKey.KeyType == key_certificate.KEYCERT_CRYPTO_X25519 {
-			if len(encKey.KeyData) != 32 {
-				return [32]byte{}, fmt.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
-			}
-
-			var pubKey [32]byte
-			copy(pubKey[:], encKey.KeyData)
-
-			log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).
-				Debug("Extracted X25519 key from LeaseSet2")
-			return pubKey, nil
+			return dr.extractValidX25519Key(encKey, destHash)
 		}
 	}
 
 	return [32]byte{}, fmt.Errorf("no X25519 encryption key found in LeaseSet2")
+}
+
+// extractValidX25519Key validates and extracts a 32-byte X25519 key from encryption key data.
+func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.EncryptionKey, destHash common.Hash) ([32]byte, error) {
+	if len(encKey.KeyData) != 32 {
+		return [32]byte{}, fmt.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
+	}
+
+	var pubKey [32]byte
+	copy(pubKey[:], encKey.KeyData)
+
+	log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).
+		Debug("Extracted X25519 key from LeaseSet2")
+	return pubKey, nil
 }
 
 // extractKeyFromLegacyLeaseSet extracts the encryption key from a legacy LeaseSet.
