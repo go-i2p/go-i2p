@@ -163,7 +163,7 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
 	for _, ri := range allRouterInfos {
-		riHash := ri.IdentHash()
+		riHash, _ := ri.IdentHash()
 		if !excludeMap[riHash] {
 			// Basic reachability check - router should have valid addresses
 			if len(ri.RouterAddresses()) > 0 {
@@ -299,7 +299,8 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 	// Calculate distances for all routers
 	distances := make([]routerDistance, 0, len(routers))
 	for _, ri := range routers {
-		distance := db.calculateXORDistance(targetHash, ri.IdentHash())
+		riHash, _ := ri.IdentHash()
+		distance := db.calculateXORDistance(targetHash, riHash)
 		distances = append(distances, routerDistance{
 			routerInfo: ri,
 			distance:   distance,
@@ -505,8 +506,9 @@ func (db *StdNetDB) processRouterInfoFile(fname string, count *int) error {
 
 // logRouterInfoDetails logs details about the RouterInfo for debugging.
 func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
-	ih := ri.IdentHash().Bytes()
-	log.Printf("Read in IdentHash: %s", base32.EncodeToString(ih[:]))
+	ih, _ := ri.IdentHash()
+	ihBytes := ih.Bytes()
+	log.Printf("Read in IdentHash: %s", base32.EncodeToString(ihBytes[:]))
 
 	for _, addr := range ri.RouterAddresses() {
 		log.Println(string(addr.Bytes()))
@@ -516,11 +518,11 @@ func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
 
 // cacheRouterInfo adds the RouterInfo to the in-memory cache if not already present.
 func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
-	ih := ri.IdentHash()
+	ih, _ := ri.IdentHash()
 	db.riMutex.Lock()
 	if ent, ok := db.RouterInfos[ih]; !ok {
 		log.Debug("Adding new RouterInfo to memory cache")
-		db.RouterInfos[ri.IdentHash()] = Entry{
+		db.RouterInfos[ih] = Entry{
 			RouterInfo: &ri,
 		}
 	} else {
@@ -565,7 +567,7 @@ func (db *StdNetDB) Exists() bool {
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
-	h := e.RouterInfo.IdentHash()
+	h, _ := e.RouterInfo.IdentHash()
 	log.WithField("hash", h).Debug("Saving NetDB entry")
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
@@ -650,7 +652,7 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 	count := 0
 	db.riMutex.Lock()
 	for _, ri := range peers {
-		hash := ri.IdentHash()
+		hash, _ := ri.IdentHash()
 		if _, exists := db.RouterInfos[hash]; !exists {
 			log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
 			db.RouterInfos[hash] = Entry{
@@ -693,7 +695,7 @@ func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 
 // verifyRouterInfoHash validates that the provided key matches the RouterInfo identity hash.
 func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
-	expectedHash := ri.IdentHash()
+	expectedHash, _ := ri.IdentHash()
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
@@ -926,7 +928,8 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 	}
 
 	// Calculate hash from destination bytes
-	expectedHash := common.HashData(dest.Bytes())
+	destBytes, _ := dest.Bytes()
+	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
@@ -1174,7 +1177,8 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	dest := ls2.Destination()
 
 	// Calculate hash from destination bytes
-	expectedHash := common.HashData(dest.Bytes())
+	destBytes, _ := dest.Bytes()
+	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,

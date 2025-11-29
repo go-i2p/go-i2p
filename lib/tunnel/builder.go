@@ -270,7 +270,7 @@ func (tb *TunnelBuilder) determineRoutingParams(
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash) {
-	ourIdent = peers[hopIndex].IdentHash()
+	ourIdent, _ = peers[hopIndex].IdentHash()
 
 	if req.IsInbound {
 		receiveTunnel, nextTunnel, nextIdent = tb.determineInboundRouting(hopIndex, req, tunnelID, peers)
@@ -304,7 +304,7 @@ func (tb *TunnelBuilder) determineInboundRouting(
 	} else {
 		// Endpoint/middle sends to next hop
 		nextTunnel = tunnelID
-		nextIdent = peers[hopIndex+1].IdentHash()
+		nextIdent, _ = peers[hopIndex+1].IdentHash()
 	}
 
 	return
@@ -327,7 +327,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	} else {
 		// Gateway/middle sends to next hop
 		nextTunnel = tunnelID
-		nextIdent = peers[hopIndex+1].IdentHash()
+		nextIdent, _ = peers[hopIndex+1].IdentHash()
 	}
 
 	return

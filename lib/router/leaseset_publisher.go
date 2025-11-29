@@ -112,7 +112,7 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 
 	// Send to each selected floodfill router
 	for _, ffRouter := range floodfills {
-		ffHash := ffRouter.IdentHash()
+		ffHash, _ := ffRouter.IdentHash()
 		if err := p.sendToFloodfill(ffHash, dbStore); err != nil {
 			log.WithFields(logger.Fields{
 				"at":        "router.LeaseSetPublisher.distributeToNetwork",

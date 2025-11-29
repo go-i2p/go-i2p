@@ -63,7 +63,8 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 	ri := kr.NetworkDatabase.GetRouterInfo(h)
 	// Check if the RouterInfo is valid by comparing with an empty hash
 	var emptyHash common.Hash
-	if ri.IdentHash() != emptyHash {
+	identHash, _ := ri.IdentHash()
+	if identHash != emptyHash {
 		log.WithField("hash", h).Debug("RouterInfo found locally")
 		return &ri
 	}
@@ -167,7 +168,7 @@ func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.
 	peers := make([]peerDistance, 0, len(allRouterInfos))
 
 	for _, ri := range allRouterInfos {
-		peerHash := ri.IdentHash()
+		peerHash, _ := ri.IdentHash()
 
 		// Skip self or target if it's in our database
 		if peerHash == target {

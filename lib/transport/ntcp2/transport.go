@@ -38,7 +38,8 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")
 
-	identHashBytes := identity.IdentHash().Bytes()
+	identHash, _ := identity.IdentHash()
+	identHashBytes := identHash.Bytes()
 	logger.WithFields(map[string]interface{}{
 		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
 		"listener_address": config.ListenerAddress,
@@ -71,7 +72,8 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 
 // createNTCP2Config creates and initializes the NTCP2 configuration from router identity.
 func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFunc) (*ntcp2.NTCP2Config, error) {
-	identityBytes := identity.IdentHash().Bytes()
+	identHash, _ := identity.IdentHash()
+	identityBytes := identHash.Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
 		cancel()
@@ -168,12 +170,14 @@ func (t *NTCP2Transport) Addr() net.Addr {
 
 // SetIdentity sets the router identity for this transport.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
-	identHashBytes := ident.IdentHash().Bytes()
+	identHash, _ := ident.IdentHash()
+	identHashBytes := identHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
 	t.identity = ident
 
 	// Update the NTCP2 configuration with new identity
-	identityBytes := ident.IdentHash().Bytes()
+	identityHash, _ := ident.IdentHash()
+	identityBytes := identityHash.Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
@@ -209,7 +213,7 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 // GetSession obtains a transport session with a router given its RouterInfo.
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
-	routerHash := routerInfo.IdentHash()
+	routerHash, _ := routerInfo.IdentHash()
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -284,13 +288,15 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
-	identityBytes := t.identity.IdentHash().Bytes()
+	identHash, _ := t.identity.IdentHash()
+	identityBytes := identHash.Bytes()
 	config, err := ntcp2.NewNTCP2Config(identityBytes[:], true)
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
 
-	remoteHashBytes := routerInfo.IdentHash().Bytes()
+	remoteHash, _ := routerInfo.IdentHash()
+	remoteHashBytes := remoteHash.Bytes()
 	return config.WithRemoteRouterHash(remoteHashBytes[:]), nil
 }
 
@@ -308,7 +314,8 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 // Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	supported := SupportsNTCP2(&routerInfo)
-	routerHashBytes := routerInfo.IdentHash().Bytes()
+	routerHash, _ := routerInfo.IdentHash()
+	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 		"supported":   supported,

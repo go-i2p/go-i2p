@@ -263,7 +263,7 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	routerIdentity, err := router_identity.NewRouterIdentity(
 		types.ReceivingPublicKey(nil),
 		publicKey.(types.SigningPublicKey),
-		*cert,
+		cert,
 		padding,
 	)
 	if err != nil {

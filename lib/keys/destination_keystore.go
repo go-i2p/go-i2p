@@ -135,11 +135,11 @@ func (dks *DestinationKeyStore) EncryptionPrivateKey() types.PrivateEncryptionKe
 }
 
 // SigningPublicKey returns the signing public key
-func (dks *DestinationKeyStore) SigningPublicKey() types.SigningPublicKey {
+func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, error) {
 	return dks.destination.SigningPublicKey()
 }
 
 // EncryptionPublicKey returns the encryption public key
-func (dks *DestinationKeyStore) EncryptionPublicKey() types.ReceivingPublicKey {
+func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey, error) {
 	return dks.destination.PublicKey()
 }

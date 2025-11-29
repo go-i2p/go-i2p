@@ -189,7 +189,7 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 	}
 
 	for i, peer := range result.Hops {
-		tunnelState.Hops[i] = peer.IdentHash()
+		tunnelState.Hops[i], _ = peer.IdentHash()
 	}
 
 	return tunnelState
@@ -243,7 +243,7 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 	}
 
 	firstHop := result.Hops[0]
-	peerHash := firstHop.IdentHash()
+	peerHash, _ := firstHop.IdentHash()
 
 	// Get transport session to the gateway
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
@@ -379,7 +379,7 @@ func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
 
 	// Populate hops with selected peer hashes
 	for i, peer := range peers[:count] {
-		tunnelState.Hops[i] = peer.IdentHash()
+		tunnelState.Hops[i], _ = peer.IdentHash()
 	}
 
 	// Add tunnel to pool for tracking
@@ -427,7 +427,7 @@ func (tm *TunnelManager) logSendingBuildRequests(tunnelID tunnel.TunnelID, peerC
 
 // sendBuildRequestToHop sends a build request to a specific hop in the tunnel.
 func (tm *TunnelManager) sendBuildRequestToHop(hopIndex int, record BuildRequestRecord, peer router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
-	peerHash := peer.IdentHash()
+	peerHash, _ := peer.IdentHash()
 
 	session, err := tm.getSessionForPeer(peerHash)
 	if err != nil {
@@ -939,7 +939,7 @@ func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []comm
 					log.Debug("Skipping invalid RouterInfo in floodfill selection")
 				}
 			}()
-			hash := ri.IdentHash()
+			hash, _ := ri.IdentHash()
 			peerHashes = append(peerHashes, hash)
 		}()
 	}
