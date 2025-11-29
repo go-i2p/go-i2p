@@ -112,7 +112,15 @@ func (p *LeaseSetPublisher) distributeToNetwork(key common.Hash, data []byte) {
 
 	// Send to each selected floodfill router
 	for _, ffRouter := range floodfills {
-		ffHash, _ := ffRouter.IdentHash()
+		ffHash, err := ffRouter.IdentHash()
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "router.LeaseSetPublisher.distributeToNetwork",
+				"key":   fmt.Sprintf("%x", key[:8]),
+				"error": err,
+			}).Warn("failed_to_get_floodfill_hash")
+			continue
+		}
 		if err := p.sendToFloodfill(ffHash, dbStore); err != nil {
 			log.WithFields(logger.Fields{
 				"at":        "router.LeaseSetPublisher.distributeToNetwork",

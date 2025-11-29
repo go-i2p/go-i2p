@@ -38,7 +38,11 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")
 
-	identHash, _ := identity.IdentHash()
+	identHash, err := identity.IdentHash()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+	}
 	identHashBytes := identHash.Bytes()
 	logger.WithFields(map[string]interface{}{
 		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
@@ -72,7 +76,10 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 
 // createNTCP2Config creates and initializes the NTCP2 configuration from router identity.
 func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFunc) (*ntcp2.NTCP2Config, error) {
-	identHash, _ := identity.IdentHash()
+	identHash, err := identity.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+	}
 	identityBytes := identHash.Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
@@ -170,13 +177,19 @@ func (t *NTCP2Transport) Addr() net.Addr {
 
 // SetIdentity sets the router identity for this transport.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
-	identHash, _ := ident.IdentHash()
+	identHash, err := ident.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router identity hash: %w", err)
+	}
 	identHashBytes := identHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
 	t.identity = ident
 
 	// Update the NTCP2 configuration with new identity
-	identityHash, _ := ident.IdentHash()
+	identityHash, err := ident.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router identity hash: %w", err)
+	}
 	identityBytes := identityHash.Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
@@ -213,7 +226,10 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 
 // GetSession obtains a transport session with a router given its RouterInfo.
 func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
-	routerHash, _ := routerInfo.IdentHash()
+	routerHash, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router hash: %w", err)
+	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -288,14 +304,20 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
-	identHash, _ := t.identity.IdentHash()
+	identHash, err := t.identity.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
+	}
 	identityBytes := identHash.Bytes()
 	config, err := ntcp2.NewNTCP2Config(identityBytes[:], true)
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
 
-	remoteHash, _ := routerInfo.IdentHash()
+	remoteHash, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
+	}
 	remoteHashBytes := remoteHash.Bytes()
 	return config.WithRemoteRouterHash(remoteHashBytes[:]), nil
 }

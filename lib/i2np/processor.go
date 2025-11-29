@@ -189,7 +189,13 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 	}
 
 	for i, peer := range result.Hops {
-		tunnelState.Hops[i], _ = peer.IdentHash()
+		hash, err := peer.IdentHash()
+		if err != nil {
+			log.WithError(err).WithField("hop_index", i).Warn("Failed to get peer hash for tunnel state, using zero hash")
+			tunnelState.Hops[i] = common.Hash{}
+		} else {
+			tunnelState.Hops[i] = hash
+		}
 	}
 
 	return tunnelState
@@ -243,7 +249,10 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 	}
 
 	firstHop := result.Hops[0]
-	peerHash, _ := firstHop.IdentHash()
+	peerHash, err := firstHop.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get first hop identity: %w", err)
+	}
 
 	// Get transport session to the gateway
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
@@ -379,7 +388,13 @@ func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
 
 	// Populate hops with selected peer hashes
 	for i, peer := range peers[:count] {
-		tunnelState.Hops[i], _ = peer.IdentHash()
+		hash, err := peer.IdentHash()
+		if err != nil {
+			log.WithError(err).WithField("hop_index", i).Warn("Failed to get peer hash, using zero hash")
+			tunnelState.Hops[i] = common.Hash{}
+		} else {
+			tunnelState.Hops[i] = hash
+		}
 	}
 
 	// Add tunnel to pool for tracking
@@ -427,7 +442,10 @@ func (tm *TunnelManager) logSendingBuildRequests(tunnelID tunnel.TunnelID, peerC
 
 // sendBuildRequestToHop sends a build request to a specific hop in the tunnel.
 func (tm *TunnelManager) sendBuildRequestToHop(hopIndex int, record BuildRequestRecord, peer router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
-	peerHash, _ := peer.IdentHash()
+	peerHash, err := peer.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get peer hash at hop %d: %w", hopIndex, err)
+	}
 
 	session, err := tm.getSessionForPeer(peerHash)
 	if err != nil {
@@ -931,17 +949,15 @@ func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []comm
 	// Skip any routers that fail IdentHash() (e.g., improperly initialized in tests)
 	peerHashes := make([]common.Hash, 0, len(floodfills))
 	for _, ri := range floodfills {
-		// IdentHash() may panic on invalid RouterInfo, so we use defer/recover pattern
-		// or check if RouterInfo is properly initialized
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Debug("Skipping invalid RouterInfo in floodfill selection")
-				}
-			}()
-			hash, _ := ri.IdentHash()
+		hash, err := ri.IdentHash()
+		if err != nil {
+			log.WithError(err).Debug("Skipping invalid RouterInfo in floodfill selection")
+			continue
+		}
+		var emptyHash common.Hash
+		if hash != emptyHash {
 			peerHashes = append(peerHashes, hash)
-		}()
+		}
 	}
 
 	return peerHashes

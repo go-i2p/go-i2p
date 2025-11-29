@@ -175,9 +175,12 @@ func (tb *TunnelBuilder) createHopRecord(
 		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
 	}
 
-	receiveTunnel, nextTunnel, ourIdent, nextIdent := tb.determineRoutingParams(
+	receiveTunnel, nextTunnel, ourIdent, nextIdent, err := tb.determineRoutingParams(
 		hopIndex, req, tunnelID, peers,
 	)
+	if err != nil {
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to determine routing params: %w", err)
+	}
 
 	padding, err := generateRecordPadding()
 	if err != nil {
@@ -269,13 +272,22 @@ func (tb *TunnelBuilder) determineRoutingParams(
 	req BuildTunnelRequest,
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
-) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash) {
-	ourIdent, _ = peers[hopIndex].IdentHash()
+) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash, err error) {
+	ourIdent, err = peers[hopIndex].IdentHash()
+	if err != nil {
+		return 0, 0, common.Hash{}, common.Hash{}, fmt.Errorf("failed to get hop %d identity: %w", hopIndex, err)
+	}
 
 	if req.IsInbound {
-		receiveTunnel, nextTunnel, nextIdent = tb.determineInboundRouting(hopIndex, req, tunnelID, peers)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineInboundRouting(hopIndex, req, tunnelID, peers)
+		if err != nil {
+			return 0, 0, common.Hash{}, common.Hash{}, err
+		}
 	} else {
-		receiveTunnel, nextTunnel, nextIdent = tb.determineOutboundRouting(hopIndex, tunnelID, peers)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, tunnelID, peers)
+		if err != nil {
+			return 0, 0, common.Hash{}, common.Hash{}, err
+		}
 	}
 
 	return
@@ -286,7 +298,7 @@ func (tb *TunnelBuilder) determineInboundRouting(
 	req BuildTunnelRequest,
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
-) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash) {
+) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
 	isFirstHop := hopIndex == 0
 	isLastHop := hopIndex == len(peers)-1
 
@@ -304,7 +316,10 @@ func (tb *TunnelBuilder) determineInboundRouting(
 	} else {
 		// Endpoint/middle sends to next hop
 		nextTunnel = tunnelID
-		nextIdent, _ = peers[hopIndex+1].IdentHash()
+		nextIdent, err = peers[hopIndex+1].IdentHash()
+		if err != nil {
+			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
+		}
 	}
 
 	return
@@ -314,7 +329,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	hopIndex int,
 	tunnelID TunnelID,
 	peers []router_info.RouterInfo,
-) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash) {
+) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
 	isLastHop := hopIndex == len(peers)-1
 
 	// Outbound tunnel: messages flow from us toward network
@@ -327,7 +342,10 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 	} else {
 		// Gateway/middle sends to next hop
 		nextTunnel = tunnelID
-		nextIdent, _ = peers[hopIndex+1].IdentHash()
+		nextIdent, err = peers[hopIndex+1].IdentHash()
+		if err != nil {
+			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
+		}
 	}
 
 	return

@@ -163,7 +163,11 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
 	for _, ri := range allRouterInfos {
-		riHash, _ := ri.IdentHash()
+		riHash, err := ri.IdentHash()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get router hash, skipping router")
+			continue
+		}
 		if !excludeMap[riHash] {
 			// Basic reachability check - router should have valid addresses
 			if len(ri.RouterAddresses()) > 0 {
@@ -299,7 +303,11 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 	// Calculate distances for all routers
 	distances := make([]routerDistance, 0, len(routers))
 	for _, ri := range routers {
-		riHash, _ := ri.IdentHash()
+		riHash, err := ri.IdentHash()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get router hash for XOR distance calculation, skipping")
+			continue
+		}
 		distance := db.calculateXORDistance(targetHash, riHash)
 		distances = append(distances, routerDistance{
 			routerInfo: ri,
@@ -498,7 +506,9 @@ func (db *StdNetDB) processRouterInfoFile(fname string, count *int) error {
 
 	// Process the RouterInfo
 	db.logRouterInfoDetails(ri)
-	db.cacheRouterInfo(ri, fname)
+	if err := db.cacheRouterInfo(ri, fname); err != nil {
+		return fmt.Errorf("failed to cache router info: %w", err)
+	}
 	(*count)++
 
 	return nil
@@ -506,7 +516,11 @@ func (db *StdNetDB) processRouterInfoFile(fname string, count *int) error {
 
 // logRouterInfoDetails logs details about the RouterInfo for debugging.
 func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
-	ih, _ := ri.IdentHash()
+	ih, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get router hash for logging")
+		return
+	}
 	ihBytes := ih.Bytes()
 	log.Printf("Read in IdentHash: %s", base32.EncodeToString(ihBytes[:]))
 
@@ -517,8 +531,11 @@ func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
 }
 
 // cacheRouterInfo adds the RouterInfo to the in-memory cache if not already present.
-func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
-	ih, _ := ri.IdentHash()
+func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) error {
+	ih, err := ri.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router hash for caching: %w", err)
+	}
 	db.riMutex.Lock()
 	if ent, ok := db.RouterInfos[ih]; !ok {
 		log.Debug("Adding new RouterInfo to memory cache")
@@ -530,6 +547,7 @@ func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) {
 		log.Println("entry previously found in table", ent, fname)
 	}
 	db.riMutex.Unlock()
+	return nil
 }
 
 // updateSizeCache writes the count to the cache file.
@@ -567,7 +585,10 @@ func (db *StdNetDB) Exists() bool {
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	var f io.WriteCloser
-	h, _ := e.RouterInfo.IdentHash()
+	h, err := e.RouterInfo.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router hash for saving: %w", err)
+	}
 	log.WithField("hash", h).Debug("Saving NetDB entry")
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
@@ -652,7 +673,11 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 	count := 0
 	db.riMutex.Lock()
 	for _, ri := range peers {
-		hash, _ := ri.IdentHash()
+		hash, err := ri.IdentHash()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get router hash during reseed, skipping")
+			continue
+		}
 		if _, exists := db.RouterInfos[hash]; !exists {
 			log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
 			db.RouterInfos[hash] = Entry{
@@ -695,7 +720,10 @@ func parseRouterInfoData(data []byte) (router_info.RouterInfo, error) {
 
 // verifyRouterInfoHash validates that the provided key matches the RouterInfo identity hash.
 func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
-	expectedHash, _ := ri.IdentHash()
+	expectedHash, err := ri.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router hash for verification: %w", err)
+	}
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,

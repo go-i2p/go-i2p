@@ -12,7 +12,10 @@ import (
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
-	routerHash, _ := routerInfo.IdentHash()
+	routerHash, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router hash: %w", err)
+	}
 	routerHashBytes := routerHash.Bytes()
 	log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Extracting NTCP2 address from RouterInfo")
 
@@ -33,7 +36,11 @@ func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
 			continue
 		}
 
-		hashVal, _ := routerInfo.IdentHash()
+		hashVal, err := routerInfo.IdentHash()
+		if err != nil {
+			log.WithError(err).Warn("Failed to get router hash for NTCP2 address wrapping")
+			continue
+		}
 		hash := hashVal.Bytes()
 		log.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", hash[:8]),

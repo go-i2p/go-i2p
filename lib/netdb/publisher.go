@@ -197,7 +197,10 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 
 // PublishRouterInfo publishes a specific RouterInfo to floodfill routers
 func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
-	hash, _ := ri.IdentHash()
+	hash, err := ri.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router hash: %w", err)
+	}
 	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Publishing RouterInfo")
 
 	// Select closest floodfill routers
@@ -281,7 +284,10 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	// 3. Sending the message through the tunnel to the floodfill router
 	// 4. Handling any errors or timeouts
 
-	ffHash, _ := floodfill.IdentHash()
+	ffHash, err := floodfill.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get floodfill hash: %w", err)
+	}
 	log.WithFields(logger.Fields{
 		"data_hash":      fmt.Sprintf("%x", hash[:8]),
 		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
