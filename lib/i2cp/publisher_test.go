@@ -84,7 +84,9 @@ func TestSessionPublishLeaseSetWithPublisher(t *testing.T) {
 	assert.Equal(t, 1, len(publisher.published), "Should have published 1 LeaseSet")
 
 	// Verify the published key matches destination hash
-	destHash := common.HashData(session.Destination().Bytes())
+	destBytes, err := session.Destination().Bytes()
+	require.NoError(t, err, "Failed to get destination bytes")
+	destHash := common.HashData(destBytes)
 	publishedData, exists := publisher.published[destHash]
 	assert.True(t, exists, "Should have published LeaseSet for this destination")
 	assert.NotEmpty(t, publishedData, "Published data should not be empty")

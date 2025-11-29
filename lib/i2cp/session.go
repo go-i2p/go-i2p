@@ -302,7 +302,10 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 		return nil, err
 	}
 
-	encKey := s.prepareEncryptionKey()
+	encKey, err := s.prepareEncryptionKey()
+	if err != nil {
+		return nil, err
+	}
 
 	leaseSetBytes, err := s.assembleLeaseSet(leases, encKey)
 	if err != nil {
@@ -393,14 +396,17 @@ func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2,
 
 // prepareEncryptionKey creates the EncryptionKey structure for LeaseSet2.
 // Uses X25519 public key from the session's key store.
-func (s *Session) prepareEncryptionKey() lease_set2.EncryptionKey {
-	encryptionPublicKey, _ := s.keys.EncryptionPublicKey()
+func (s *Session) prepareEncryptionKey() (lease_set2.EncryptionKey, error) {
+	encryptionPublicKey, err := s.keys.EncryptionPublicKey()
+	if err != nil {
+		return lease_set2.EncryptionKey{}, fmt.Errorf("failed to get encryption public key: %w", err)
+	}
 
 	return lease_set2.EncryptionKey{
 		KeyType: key_certificate.KEYCERT_CRYPTO_X25519,
 		KeyLen:  32,
 		KeyData: encryptionPublicKey.Bytes(),
-	}
+	}, nil
 }
 
 // assembleLeaseSet constructs and serializes the final LeaseSet2 structure.
@@ -644,7 +650,10 @@ func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 	}
 
 	// Calculate destination hash (SHA256 of destination bytes)
-	destBytes, _ := s.destination.Bytes()
+	destBytes, err := s.destination.Bytes()
+	if err != nil {
+		return fmt.Errorf("failed to get destination bytes: %w", err)
+	}
 	destHash := data.HashData(destBytes)
 
 	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {

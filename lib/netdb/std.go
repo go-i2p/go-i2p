@@ -956,7 +956,10 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 	}
 
 	// Calculate hash from destination bytes
-	destBytes, _ := dest.Bytes()
+	destBytes, err := dest.Bytes()
+	if err != nil {
+		return fmt.Errorf("failed to get destination bytes: %w", err)
+	}
 	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
@@ -1205,7 +1208,10 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	dest := ls2.Destination()
 
 	// Calculate hash from destination bytes
-	destBytes, _ := dest.Bytes()
+	destBytes, err := dest.Bytes()
+	if err != nil {
+		return fmt.Errorf("failed to get destination bytes: %w", err)
+	}
 	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
