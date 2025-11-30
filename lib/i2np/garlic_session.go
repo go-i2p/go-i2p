@@ -1,16 +1,18 @@
 package i2np
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"sync"
 	"time"
 
-	"github.com/go-i2p/crypto/rand"
-
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/chacha20poly1305"
 	"github.com/go-i2p/crypto/ecies"
+	"github.com/go-i2p/crypto/kdf"
 	"github.com/go-i2p/crypto/ratchet"
 	"github.com/samber/oops"
+	"go.step.sm/crypto/x25519"
 )
 
 // GarlicSessionManager manages ECIES-X25519-AEAD-Ratchet sessions for garlic encryption.
@@ -91,40 +93,66 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 // encryptNewSession creates a new session and encrypts using ECIES.
 // This is used for the first message to a destination.
 //
-// TODO: Once go-i2p/crypto v0.1.0+ is available with unified Session API:
-//   - Use ratchet.NewSessionFromECIES() to properly derive keys from ECIES shared secret
-//   - Replace ECIES placeholder encryption with ChaCha20-Poly1305 AEAD
-//     See: API_IMPROVEMENTS_SUMMARY.md for migration guide
+// Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) encryptNewSession(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
-	// Use ECIES to encrypt the garlic message
-	ciphertext, err := ecies.EncryptECIESX25519(destinationPubKey[:], plaintextGarlic)
+	// Step 1: Generate ephemeral key pair for this message
+	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to encrypt new session garlic message")
+		return nil, oops.Wrapf(err, "failed to generate ephemeral key pair")
 	}
 
-	// Initialize ratchet state for this session
-	// TODO: Once go-i2p/crypto v0.1.0+ is available:
-	//   Use kdf.NewKeyDerivation(eciesSharedSecret).DeriveSessionKeys()
-	//   to properly derive rootKey, symKey, tagKey from ECIES shared secret
-	//   See: API_IMPROVEMENTS_SUMMARY.md "For Key Derivation" section
-	// The shared secret from ECIES would be used as root key in production
-	// For now, we'll initialize with a basic state
-	var rootKey [32]byte
-	if _, err := rand.Read(rootKey[:]); err != nil {
-		return nil, oops.Wrapf(err, "failed to generate root key")
+	// Step 2: Perform X25519 key agreement to derive shared secret
+	recipientKey := x25519.PublicKey(destinationPubKey[:])
+	sharedSecret, err := ephemeralPriv.SharedKey(recipientKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive ECIES shared secret")
 	}
 
+	// Step 3: Use HKDF to derive session keys from shared secret
+	var sharedSecretArray [32]byte
+	copy(sharedSecretArray[:], sharedSecret)
+	kd := kdf.NewKeyDerivation(sharedSecretArray)
+	rootKey, symKey, tagKey, err := kd.DeriveSessionKeys()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive session keys")
+	}
+
+	// Step 4: Encrypt payload using ChaCha20-Poly1305 with derived symmetric key
+	aead, err := chacha20poly1305.NewAEAD(symKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create AEAD")
+	}
+
+	nonce := make([]byte, chacha20poly1305.NonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, oops.Wrapf(err, "failed to generate nonce")
+	}
+
+	ciphertext, tag, err := aead.Encrypt(plaintextGarlic, nil, nonce)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to encrypt garlic message")
+	}
+
+	// Step 5: Construct New Session message:
+	// [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+	newSessionMsg := make([]byte, 32+12+len(ciphertext)+16)
+	copy(newSessionMsg[0:32], ephemeralPub)
+	copy(newSessionMsg[32:44], nonce)
+	copy(newSessionMsg[44:44+len(ciphertext)], ciphertext)
+	copy(newSessionMsg[44+len(ciphertext):], tag[:])
+
+	// Step 6: Initialize ratchet state for future messages with proper root key
 	var ourPriv, theirPub [32]byte
 	copy(ourPriv[:], sm.ourPrivateKey[:])
 	copy(theirPub[:], destinationPubKey[:])
 
 	dhRatchet := ratchet.NewDHRatchet(rootKey, ourPriv, theirPub)
 	symRatchet := ratchet.NewSymmetricRatchet(rootKey)
-	tagRatchet := ratchet.NewTagRatchet(rootKey)
+	tagRatchet := ratchet.NewTagRatchet(tagKey)
 
 	// Store session for future messages
 	sm.sessions[destinationHash] = &GarlicSession{
@@ -136,51 +164,58 @@ func (sm *GarlicSessionManager) encryptNewSession(
 		MessageCounter:   1,
 	}
 
-	return ciphertext, nil
+	return newSessionMsg, nil
 }
 
 // encryptExistingSession encrypts using ratchet state for an established session.
+// Message format: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) encryptExistingSession(
 	session *GarlicSession,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
-	// Advance symmetric ratchet to get message key
-	messageKey, newChainKey, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	// Step 1: Advance symmetric ratchet to get message key
+	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to advance symmetric ratchet")
 	}
-	_ = messageKey  // Will be used with ChaCha20-Poly1305 in production
-	_ = newChainKey // Update chain key for next message
 
-	// Generate session tag for recipient to identify this message
+	// Step 2: Generate session tag for recipient to identify this message
 	sessionTag, err := session.TagRatchet.GenerateNextTag()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to generate session tag")
 	}
 
-	// Encrypt using ChaCha20-Poly1305 AEAD (via crypto library)
-	// TODO: Once go-i2p/crypto v0.1.0+ is available with chacha20poly1305 package:
-	//   aead, _ := chacha20poly1305.NewAEAD(messageKey)
-	//   nonce, _ := chacha20poly1305.GenerateNonce()
-	//   ciphertext, tag, _ := aead.Encrypt(plaintextGarlic, sessionTag[:], nonce)
-	//   See: API_IMPROVEMENTS_SUMMARY.md "For Tunnel/Garlic Encryption" section
-	// Note: In production, this would use the proper AEAD from crypto/chacha20
-	// For now, using ECIES as a placeholder that provides AEAD
-	ciphertext, err := ecies.EncryptECIESX25519(session.RemotePublicKey[:], plaintextGarlic)
+	// Step 3: Create ChaCha20-Poly1305 AEAD with message key
+	aead, err := chacha20poly1305.NewAEAD(messageKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create AEAD")
+	}
+
+	// Step 4: Generate unique nonce for this message
+	nonce := make([]byte, chacha20poly1305.NonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, oops.Wrapf(err, "failed to generate nonce")
+	}
+
+	// Step 5: Encrypt with session tag as additional authenticated data
+	ciphertext, tag, err := aead.Encrypt(plaintextGarlic, sessionTag[:], nonce)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to encrypt existing session message")
 	}
 
-	// Prepend session tag (8 bytes) to ciphertext
-	result := make([]byte, 8+len(ciphertext))
-	copy(result[0:8], sessionTag[:])
-	copy(result[8:], ciphertext)
+	// Step 6: Construct Existing Session message:
+	// [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+	existingSessionMsg := make([]byte, 8+12+len(ciphertext)+16)
+	copy(existingSessionMsg[0:8], sessionTag[:])
+	copy(existingSessionMsg[8:20], nonce)
+	copy(existingSessionMsg[20:20+len(ciphertext)], ciphertext)
+	copy(existingSessionMsg[20+len(ciphertext):], tag[:])
 
 	// Update session state
 	session.LastUsed = time.Now()
 	session.MessageCounter++
 
-	return result, nil
+	return existingSessionMsg, nil
 }
 
 // DecryptGarlicMessage decrypts an encrypted garlic message.
@@ -222,49 +257,117 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 }
 
 // decryptNewSession decrypts a New Session message using our static private key.
-func (sm *GarlicSessionManager) decryptNewSession(ciphertext []byte) ([]byte, error) {
-	// Use ECIES to decrypt
-	plaintext, err := ecies.DecryptECIESX25519(sm.ourPrivateKey[:], ciphertext)
-	if err != nil {
-		return nil, oops.Wrapf(err, "ECIES decryption failed for new session")
+// Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte, error) {
+	// Parse New Session message format
+	if len(newSessionMsg) < 32+12+16 {
+		return nil, oops.Errorf("new session message too short: %d bytes", len(newSessionMsg))
 	}
 
-	// TODO: Extract sender's public key from ECIES ephemeral key
-	// TODO: Initialize ratchet state for this new session
-	// For now, just return the plaintext
+	var ephemeralPubKey [32]byte
+	copy(ephemeralPubKey[:], newSessionMsg[0:32])
+	nonce := newSessionMsg[32:44]
+	ciphertextWithTag := newSessionMsg[44:]
+
+	if len(ciphertextWithTag) < 16 {
+		return nil, oops.Errorf("ciphertext too short for auth tag")
+	}
+
+	ciphertext := ciphertextWithTag[:len(ciphertextWithTag)-16]
+	var tag [16]byte
+	copy(tag[:], ciphertextWithTag[len(ciphertextWithTag)-16:])
+
+	// Perform ECIES key agreement with ephemeral key
+	privKey := x25519.PrivateKey(sm.ourPrivateKey[:])
+	ephemeralKey := x25519.PublicKey(ephemeralPubKey[:])
+
+	sharedSecret, err := privKey.SharedKey(ephemeralKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive shared secret")
+	}
+
+	// Derive session keys using HKDF
+	var sharedSecretArray [32]byte
+	copy(sharedSecretArray[:], sharedSecret)
+	kd := kdf.NewKeyDerivation(sharedSecretArray)
+	rootKey, symKey, tagKey, err := kd.DeriveSessionKeys()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive session keys")
+	}
+
+	// Decrypt using ChaCha20-Poly1305
+	aead, err := chacha20poly1305.NewAEAD(symKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create AEAD")
+	}
+
+	plaintext, err := aead.Decrypt(ciphertext, tag[:], nil, nonce)
+	if err != nil {
+		return nil, oops.Wrapf(err, "decryption failed (authentication error)")
+	}
+
+	// Initialize ratchet state for future messages from this sender
+	// We track the sender's ephemeral key as their current DH key
+	var ourPriv, theirPub [32]byte
+	copy(ourPriv[:], sm.ourPrivateKey[:])
+	copy(theirPub[:], ephemeralPubKey[:])
+
+	dhRatchet := ratchet.NewDHRatchet(rootKey, ourPriv, theirPub)
+	symRatchet := ratchet.NewSymmetricRatchet(rootKey)
+	tagRatchet := ratchet.NewTagRatchet(tagKey)
+
+	// Store session (Note: We would need to extract sender's destination hash from the garlic message)
+	// For now, we'll need to handle this at a higher level where we can parse the garlic content
+	_ = dhRatchet
+	_ = symRatchet
+	_ = tagRatchet
 
 	return plaintext, nil
 }
 
 // decryptExistingSession decrypts an Existing Session message using ratchet state.
-//
-// TODO: Once go-i2p/crypto v0.1.0+ is available with chacha20poly1305 package:
-//
-//	Use ChaCha20-Poly1305 AEAD with the message key:
-//	aead, _ := chacha20poly1305.NewAEAD(messageKey)
-//	plaintext, _ := aead.Decrypt(ciphertext, tag[:], sessionTag[:], nonce)
-//	See: API_IMPROVEMENTS_SUMMARY.md for migration guide
+// Message format (without session tag prefix): [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) decryptExistingSession(
 	session *GarlicSession,
-	ciphertext []byte,
+	existingSessionMsg []byte,
 	sessionTag [8]byte,
 ) ([]byte, [8]byte, error) {
-	// Decrypt using the session's ratchet state
-	// Note: In production, this would use ChaCha20-Poly1305 with the message key
-	// For now, using ECIES as placeholder
-	plaintext, err := ecies.DecryptECIESX25519(sm.ourPrivateKey[:], ciphertext)
-	if err != nil {
-		return nil, [8]byte{}, oops.Wrapf(err, "failed to decrypt existing session message")
+	// Parse Existing Session message format (session tag already extracted by caller)
+	if len(existingSessionMsg) < 12+16 {
+		return nil, [8]byte{}, oops.Errorf("existing session message too short")
 	}
 
-	// Advance ratchet state
-	_, _, err = session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
-	if err != nil {
-		return nil, [8]byte{}, oops.Wrapf(err, "failed to advance symmetric ratchet")
+	nonce := existingSessionMsg[0:12]
+	ciphertextWithTag := existingSessionMsg[12:]
+
+	if len(ciphertextWithTag) < 16 {
+		return nil, [8]byte{}, oops.Errorf("ciphertext too short for auth tag")
 	}
 
-	// Update last used timestamp
+	ciphertext := ciphertextWithTag[:len(ciphertextWithTag)-16]
+	var tag [16]byte
+	copy(tag[:], ciphertextWithTag[len(ciphertextWithTag)-16:])
+
+	// Derive message key from ratchet state
+	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	if err != nil {
+		return nil, [8]byte{}, oops.Wrapf(err, "failed to derive message key")
+	}
+
+	// Decrypt using ChaCha20-Poly1305 with session tag as AAD
+	aead, err := chacha20poly1305.NewAEAD(messageKey)
+	if err != nil {
+		return nil, [8]byte{}, oops.Wrapf(err, "failed to create AEAD")
+	}
+
+	plaintext, err := aead.Decrypt(ciphertext, tag[:], sessionTag[:], nonce)
+	if err != nil {
+		return nil, [8]byte{}, oops.Wrapf(err, "decryption failed (authentication error)")
+	}
+
+	// Update session state
 	session.LastUsed = time.Now()
+	session.MessageCounter++
 
 	return plaintext, sessionTag, nil
 }
