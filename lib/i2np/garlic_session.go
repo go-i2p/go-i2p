@@ -107,20 +107,64 @@ func (sm *GarlicSessionManager) encryptNewSession(
 	destinationPubKey [32]byte,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
-	// Step 1: Generate ephemeral key pair for this message
-	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
+	ephemeralPub, sessionKeys, err := sm.performECIESKeyExchange(destinationPubKey)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to generate ephemeral key pair")
+		return nil, err
 	}
 
-	// Step 2: Perform X25519 key agreement to derive shared secret
+	encryptedPayload, err := sm.encryptPayloadWithSessionKey(sessionKeys.symKey, plaintextGarlic)
+	if err != nil {
+		return nil, err
+	}
+
+	newSessionMsg := constructNewSessionMessage(ephemeralPub, encryptedPayload)
+
+	if err := sm.storeNewSessionState(destinationHash, destinationPubKey, sessionKeys); err != nil {
+		return nil, err
+	}
+
+	return newSessionMsg, nil
+}
+
+// sessionKeys holds the cryptographic keys derived from ECIES key exchange.
+type sessionKeys struct {
+	rootKey [32]byte
+	symKey  [32]byte
+	tagKey  [32]byte
+}
+
+// performECIESKeyExchange executes ephemeral-static key exchange and derives session keys.
+func (sm *GarlicSessionManager) performECIESKeyExchange(destinationPubKey [32]byte) ([]byte, *sessionKeys, error) {
+	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, oops.Wrapf(err, "failed to generate ephemeral key pair")
+	}
+
+	sharedSecret, err := deriveECIESSharedSecret(ephemeralPriv, destinationPubKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	keys, err := deriveSessionKeysFromSecret(sharedSecret)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ephemeralPub, keys, nil
+}
+
+// deriveECIESSharedSecret performs X25519 key agreement to derive shared secret.
+func deriveECIESSharedSecret(ephemeralPriv x25519.PrivateKey, destinationPubKey [32]byte) ([]byte, error) {
 	recipientKey := x25519.PublicKey(destinationPubKey[:])
 	sharedSecret, err := ephemeralPriv.SharedKey(recipientKey)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to derive ECIES shared secret")
 	}
+	return sharedSecret, nil
+}
 
-	// Step 3: Use HKDF to derive session keys from shared secret
+// deriveSessionKeysFromSecret uses HKDF to derive root, symmetric, and tag keys from shared secret.
+func deriveSessionKeysFromSecret(sharedSecret []byte) (*sessionKeys, error) {
 	var sharedSecretArray [32]byte
 	copy(sharedSecretArray[:], sharedSecret)
 	kd := kdf.NewKeyDerivation(sharedSecretArray)
@@ -129,7 +173,22 @@ func (sm *GarlicSessionManager) encryptNewSession(
 		return nil, oops.Wrapf(err, "failed to derive session keys")
 	}
 
-	// Step 4: Encrypt payload using ChaCha20-Poly1305 with derived symmetric key
+	return &sessionKeys{
+		rootKey: rootKey,
+		symKey:  symKey,
+		tagKey:  tagKey,
+	}, nil
+}
+
+// encryptedPayload contains the encrypted message components.
+type encryptedPayload struct {
+	nonce      []byte
+	ciphertext []byte
+	tag        [16]byte
+}
+
+// encryptPayloadWithSessionKey encrypts plaintext using ChaCha20-Poly1305 with derived symmetric key.
+func (sm *GarlicSessionManager) encryptPayloadWithSessionKey(symKey [32]byte, plaintextGarlic []byte) (*encryptedPayload, error) {
 	aead, err := chacha20poly1305.NewAEAD(symKey)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create AEAD")
@@ -145,41 +204,59 @@ func (sm *GarlicSessionManager) encryptNewSession(
 		return nil, oops.Wrapf(err, "failed to encrypt garlic message")
 	}
 
-	// Step 5: Construct New Session message:
-	// [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
-	newSessionMsg := make([]byte, 32+12+len(ciphertext)+16)
-	copy(newSessionMsg[0:32], ephemeralPub)
-	copy(newSessionMsg[32:44], nonce)
-	copy(newSessionMsg[44:44+len(ciphertext)], ciphertext)
-	copy(newSessionMsg[44+len(ciphertext):], tag[:])
+	return &encryptedPayload{
+		nonce:      nonce,
+		ciphertext: ciphertext,
+		tag:        tag,
+	}, nil
+}
 
-	// Step 6: Initialize ratchet state for future messages with proper root key
+// constructNewSessionMessage builds the New Session message from components.
+// Format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+func constructNewSessionMessage(ephemeralPub []byte, payload *encryptedPayload) []byte {
+	newSessionMsg := make([]byte, 32+12+len(payload.ciphertext)+16)
+	copy(newSessionMsg[0:32], ephemeralPub)
+	copy(newSessionMsg[32:44], payload.nonce)
+	copy(newSessionMsg[44:44+len(payload.ciphertext)], payload.ciphertext)
+	copy(newSessionMsg[44+len(payload.ciphertext):], payload.tag[:])
+	return newSessionMsg
+}
+
+// storeNewSessionState initializes and stores ratchet state for future messages.
+func (sm *GarlicSessionManager) storeNewSessionState(
+	destinationHash common.Hash,
+	destinationPubKey [32]byte,
+	keys *sessionKeys,
+) error {
+	session := createGarlicSession(destinationPubKey, keys, sm.ourPrivateKey)
+	sm.sessions[destinationHash] = session
+
+	if err := sm.generateTagWindow(session); err != nil {
+		return oops.Wrapf(err, "failed to generate tag window")
+	}
+
+	return nil
+}
+
+// createGarlicSession initializes a new GarlicSession with ratchet state.
+func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPrivateKey [32]byte) *GarlicSession {
 	var ourPriv, theirPub [32]byte
-	copy(ourPriv[:], sm.ourPrivateKey[:])
+	copy(ourPriv[:], ourPrivateKey[:])
 	copy(theirPub[:], destinationPubKey[:])
 
-	dhRatchet := ratchet.NewDHRatchet(rootKey, ourPriv, theirPub)
-	symRatchet := ratchet.NewSymmetricRatchet(rootKey)
-	tagRatchet := ratchet.NewTagRatchet(tagKey)
+	dhRatchet := ratchet.NewDHRatchet(keys.rootKey, ourPriv, theirPub)
+	symRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
+	tagRatchet := ratchet.NewTagRatchet(keys.tagKey)
 
-	// Store session for future messages
-	newSession := &GarlicSession{
+	return &GarlicSession{
 		RemotePublicKey:  destinationPubKey,
 		DHRatchet:        dhRatchet,
 		SymmetricRatchet: symRatchet,
 		TagRatchet:       tagRatchet,
 		LastUsed:         time.Now(),
 		MessageCounter:   1,
-		pendingTags:      make([][8]byte, 0, 10), // Pre-allocate for tag window
+		pendingTags:      make([][8]byte, 0, 10),
 	}
-	sm.sessions[destinationHash] = newSession
-
-	// Pre-generate tag window for this session (10 tags ahead)
-	if err := sm.generateTagWindow(newSession); err != nil {
-		return nil, oops.Wrapf(err, "failed to generate tag window")
-	}
-
-	return newSessionMsg, nil
 }
 
 // encryptExistingSession encrypts using ratchet state for an established session.
