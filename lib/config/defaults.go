@@ -335,26 +335,26 @@ func Defaults() ConfigDefaults {
 // Validate checks if the provided configuration values are reasonable.
 // Returns an error describing the first invalid value found.
 func Validate(cfg ConfigDefaults) error {
-	if err := validateRouter(cfg.Router); err != nil {
-		return err
+	return runConfigValidators(cfg)
+}
+
+// runConfigValidators executes all configuration validators in sequence.
+// Returns the first error encountered or nil if all validations pass.
+func runConfigValidators(cfg ConfigDefaults) error {
+	validators := []func() error{
+		func() error { return validateRouter(cfg.Router) },
+		func() error { return validateNetDB(cfg.NetDB) },
+		func() error { return validateBootstrap(cfg.Bootstrap) },
+		func() error { return validateI2CP(cfg.I2CP) },
+		func() error { return validateTunnel(cfg.Tunnel) },
+		func() error { return validateTransport(cfg.Transport) },
+		func() error { return validatePerformance(cfg.Performance) },
 	}
-	if err := validateNetDB(cfg.NetDB); err != nil {
-		return err
-	}
-	if err := validateBootstrap(cfg.Bootstrap); err != nil {
-		return err
-	}
-	if err := validateI2CP(cfg.I2CP); err != nil {
-		return err
-	}
-	if err := validateTunnel(cfg.Tunnel); err != nil {
-		return err
-	}
-	if err := validateTransport(cfg.Transport); err != nil {
-		return err
-	}
-	if err := validatePerformance(cfg.Performance); err != nil {
-		return err
+
+	for _, validator := range validators {
+		if err := validator(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

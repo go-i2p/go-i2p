@@ -12,45 +12,83 @@ import (
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
 // It validates NTCP2 support and returns a properly wrapped NTCP2 address with router hash metadata.
 func ExtractNTCP2Addr(routerInfo router_info.RouterInfo) (net.Addr, error) {
+	routerHashBytes, err := getRouterHashBytes(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateNTCP2Support(&routerInfo, routerHashBytes); err != nil {
+		return nil, err
+	}
+
+	return findValidNTCP2Address(routerInfo, routerHashBytes)
+}
+
+// getRouterHashBytes retrieves and returns the router hash bytes from RouterInfo.
+func getRouterHashBytes(routerInfo router_info.RouterInfo) ([]byte, error) {
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get router hash: %w", err)
 	}
-	routerHashBytes := routerHash.Bytes()
-	log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Extracting NTCP2 address from RouterInfo")
+	hashBytes := routerHash.Bytes()
+	return hashBytes[:], nil
+}
 
-	if !SupportsNTCP2(&routerInfo) {
-		log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("RouterInfo does not support NTCP2")
-		return nil, ErrNTCP2NotSupported
+// validateNTCP2Support checks if the RouterInfo supports NTCP2 transport.
+func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) error {
+	log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Debug("Extracting NTCP2 address from RouterInfo")
+
+	if !SupportsNTCP2(routerInfo) {
+		log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Warn("RouterInfo does not support NTCP2")
+		return ErrNTCP2NotSupported
 	}
+	return nil
+}
 
+// findValidNTCP2Address iterates through router addresses to find and wrap a valid NTCP2 address.
+func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) (net.Addr, error) {
 	for _, addr := range routerInfo.RouterAddresses() {
 		if !isNTCP2Transport(addr) {
 			continue
 		}
 
-		log.Debug("Found NTCP2 transport address, resolving TCP address")
-		tcpAddr, err := resolveTCPAddress(addr)
+		ntcp2Addr, err := processNTCP2Address(addr, routerInfo)
 		if err != nil {
-			log.WithError(err).Warn("Failed to resolve TCP address from NTCP2 router address")
+			log.WithError(err).Warn("Failed to process NTCP2 address")
 			continue
 		}
 
-		hashVal, err := routerInfo.IdentHash()
-		if err != nil {
-			log.WithError(err).Warn("Failed to get router hash for NTCP2 address wrapping")
-			continue
-		}
-		hash := hashVal.Bytes()
-		log.WithFields(map[string]interface{}{
-			"router_hash": fmt.Sprintf("%x", hash[:8]),
-			"tcp_addr":    tcpAddr.String(),
-		}).Info("Successfully extracted NTCP2 address")
-		return WrapNTCP2Addr(tcpAddr, hash[:])
+		logSuccessfulExtraction(ntcp2Addr, hashBytes)
+		return ntcp2Addr, nil
 	}
 
-	log.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Error("No valid NTCP2 address found in RouterInfo")
+	log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Error("No valid NTCP2 address found in RouterInfo")
 	return nil, ErrInvalidRouterInfo
+}
+
+// processNTCP2Address resolves TCP address and wraps it with router hash.
+func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_info.RouterInfo) (net.Addr, error) {
+	log.Debug("Found NTCP2 transport address, resolving TCP address")
+	tcpAddr, err := resolveTCPAddress(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve TCP address: %w", err)
+	}
+
+	hashVal, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router hash for wrapping: %w", err)
+	}
+
+	hash := hashVal.Bytes()
+	return WrapNTCP2Addr(tcpAddr, hash[:])
+}
+
+// logSuccessfulExtraction logs the successful NTCP2 address extraction.
+func logSuccessfulExtraction(addr net.Addr, hashBytes []byte) {
+	log.WithFields(map[string]interface{}{
+		"router_hash": fmt.Sprintf("%x", hashBytes[:8]),
+		"tcp_addr":    addr.String(),
+	}).Info("Successfully extracted NTCP2 address")
 }
 
 // isNTCP2Transport checks if a router address uses the NTCP2 transport style.

@@ -471,42 +471,58 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 // findSessionByTag searches for a session that expects the given tag.
 // This uses O(1) hash-based lookup for performance.
 func (sm *GarlicSessionManager) findSessionByTag(tag [8]byte) *GarlicSession {
-	// O(1) lookup in tag index
 	session, exists := sm.tagIndex[tag]
 	if !exists {
 		return nil
 	}
 
-	// Verify session is not expired
-	if time.Since(session.LastUsed) > sm.sessionTimeout {
-		// Clean up expired session
-		delete(sm.tagIndex, tag)
+	if !sm.isSessionValid(session) {
+		sm.cleanupExpiredTag(tag)
 		return nil
 	}
 
-	// Remove used tag from index (tags are single-use)
-	delete(sm.tagIndex, tag)
+	sm.consumeTag(tag, session)
+	sm.replenishTagWindowIfNeeded(session)
 
-	// Remove tag from session's pending tags
+	return session
+}
+
+// isSessionValid checks if a session has not expired.
+func (sm *GarlicSessionManager) isSessionValid(session *GarlicSession) bool {
+	return time.Since(session.LastUsed) <= sm.sessionTimeout
+}
+
+// cleanupExpiredTag removes an expired tag from the index.
+func (sm *GarlicSessionManager) cleanupExpiredTag(tag [8]byte) {
+	delete(sm.tagIndex, tag)
+}
+
+// consumeTag removes a used tag from the index and session's pending tags.
+// Tags are single-use for security.
+func (sm *GarlicSessionManager) consumeTag(tag [8]byte, session *GarlicSession) {
+	delete(sm.tagIndex, tag)
+	sm.removeTagFromPendingList(tag, session)
+}
+
+// removeTagFromPendingList removes a tag from session's pending tags list.
+func (sm *GarlicSessionManager) removeTagFromPendingList(tag [8]byte, session *GarlicSession) {
 	for i, pendingTag := range session.pendingTags {
 		if pendingTag == tag {
-			// Remove by swapping with last element and truncating
 			session.pendingTags[i] = session.pendingTags[len(session.pendingTags)-1]
 			session.pendingTags = session.pendingTags[:len(session.pendingTags)-1]
 			break
 		}
 	}
+}
 
-	// Replenish tag window if running low
+// replenishTagWindowIfNeeded generates more tags if the window is running low.
+func (sm *GarlicSessionManager) replenishTagWindowIfNeeded(session *GarlicSession) {
 	if len(session.pendingTags) < 5 {
 		if err := sm.generateTagWindow(session); err != nil {
 			// Log error but don't fail - we can still process this message
-			// Production would use proper logging here
 			_ = err
 		}
 	}
-
-	return session
 }
 
 // generateTagWindow pre-generates a window of session tags for a session.
