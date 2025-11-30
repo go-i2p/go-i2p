@@ -181,6 +181,11 @@ func (p *Publisher) publishAllLeaseSets() {
 func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error {
 	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Publishing LeaseSet")
 
+	// Validate LeaseSet before attempting serialization
+	if err := ls.Validate(); err != nil {
+		return fmt.Errorf("invalid LeaseSet: %w", err)
+	}
+
 	// Select closest floodfill routers
 	floodfills, err := p.selectFloodfillsForPublishing(hash)
 	if err != nil {

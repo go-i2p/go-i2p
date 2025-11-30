@@ -104,8 +104,9 @@ func TestPublishLeaseSetWithNoFloodfills(t *testing.T) {
 
 	err := publisher.PublishLeaseSet(hash, ls)
 
-	// Should succeed even with no floodfills (empty list)
-	assert.NoError(t, err)
+	// Should return error for invalid LeaseSet (prevents panic)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid LeaseSet")
 }
 
 // TestPublishRouterInfoWithFloodfills tests publishing RouterInfo to floodfills
