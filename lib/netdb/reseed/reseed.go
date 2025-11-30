@@ -139,7 +139,7 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 		DialContext: dialContext,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true, // I2P reseed servers often use self-signed certificates
-			//TODO: implement proper certificate pinning/validation
+			// TODO: implement proper certificate pinning/validation
 		},
 	}
 	return &http.Client{
@@ -290,7 +290,8 @@ func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 func decodePEM(data []byte) (*struct {
 	Type  string
 	Bytes []byte
-}, []byte) {
+}, []byte,
+) {
 	beginIdx, beginLineEnd, endIdx, endLineEnd := findPEMBoundaries(data)
 	if beginIdx == -1 {
 		return nil, data

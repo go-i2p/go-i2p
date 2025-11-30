@@ -329,7 +329,7 @@ func encryptWithSessionKey(messageKey [32]byte, plaintextGarlic []byte, sessionT
 }
 
 // buildExistingSessionMessage constructs the Existing Session message format.
-func buildExistingSessionMessage(sessionTag [8]byte, nonce []byte, ciphertext []byte, tag [16]byte) []byte {
+func buildExistingSessionMessage(sessionTag [8]byte, nonce, ciphertext []byte, tag [16]byte) []byte {
 	// Step 6: Construct Existing Session message:
 	// [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 	existingSessionMsg := make([]byte, 8+12+len(ciphertext)+16)
