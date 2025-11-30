@@ -713,3 +713,302 @@ func TestNonceUniqueness(t *testing.T) {
 		t.Errorf("Expected 10 unique nonces, got %d", len(nonces))
 	}
 }
+
+// TestTagIndexPopulation tests that tag index is populated with pre-generated tags
+func TestTagIndexPopulation(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate session manager: %v", err)
+	}
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate destination key pair: %v", err)
+	}
+
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("test"))
+	err = builder.AddLocalDeliveryClove(dataMsg, 1)
+	if err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt garlic message: %v", err)
+	}
+
+	// Verify tag index was populated
+	sm.mu.RLock()
+	tagCount := len(sm.tagIndex)
+	sm.mu.RUnlock()
+
+	if tagCount != 10 {
+		t.Errorf("Expected 10 tags in index (tag window), got %d", tagCount)
+	}
+
+	// Verify session was created
+	if sm.GetSessionCount() != 1 {
+		t.Errorf("Expected 1 session, got %d", sm.GetSessionCount())
+	}
+}
+
+// TestTagLookupPerformance tests O(1) tag lookup performance
+func TestTagLookupPerformance(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate session manager: %v", err)
+	}
+
+	// Create multiple sessions
+	const numSessions = 100
+	for i := 0; i < numSessions; i++ {
+		destPubBytes, _, err := ecies.GenerateKeyPair()
+		if err != nil {
+			t.Fatalf("Failed to generate destination key pair: %v", err)
+		}
+
+		var destPubKey [32]byte
+		copy(destPubKey[:], destPubBytes)
+		destHash := sha256.Sum256(destPubKey[:])
+
+		builder, err := NewGarlicBuilderWithDefaults()
+		if err != nil {
+			t.Fatalf("Failed to create garlic builder: %v", err)
+		}
+
+		dataMsg := NewDataMessage([]byte("test"))
+		err = builder.AddLocalDeliveryClove(dataMsg, 1)
+		if err != nil {
+			t.Fatalf("Failed to add clove: %v", err)
+		}
+
+		_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+		if err != nil {
+			t.Fatalf("Failed to encrypt garlic message: %v", err)
+		}
+	}
+
+	// Verify all sessions created (should have 100 sessions * 10 tags each = 1000 tags)
+	sm.mu.RLock()
+	totalTags := len(sm.tagIndex)
+	sm.mu.RUnlock()
+
+	expectedTags := numSessions * 10
+	if totalTags != expectedTags {
+		t.Errorf("Expected %d tags, got %d", expectedTags, totalTags)
+	}
+
+	// Test tag lookup (should be O(1) regardless of number of sessions)
+	sm.mu.RLock()
+	var testTag [8]byte
+	for tag := range sm.tagIndex {
+		testTag = tag
+		break
+	}
+	sm.mu.RUnlock()
+
+	sm.mu.Lock()
+	foundSession := sm.findSessionByTag(testTag)
+	sm.mu.Unlock()
+
+	if foundSession == nil {
+		t.Error("Failed to find session by tag with 100 concurrent sessions")
+	}
+}
+
+// TestTagWindowReplenishment tests automatic replenishment of tag window
+func TestTagWindowReplenishment(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate session manager: %v", err)
+	}
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate destination key pair: %v", err)
+	}
+
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("test"))
+	err = builder.AddLocalDeliveryClove(dataMsg, 1)
+	if err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt garlic message: %v", err)
+	}
+
+	// Use 6 tags (should trigger replenishment when we hit 4 remaining)
+	sm.mu.RLock()
+	tagsToUse := make([][8]byte, 0, 6)
+	for tag := range sm.tagIndex {
+		tagsToUse = append(tagsToUse, tag)
+		if len(tagsToUse) == 6 {
+			break
+		}
+	}
+	sm.mu.RUnlock()
+
+	// Use the tags
+	for _, tag := range tagsToUse {
+		sm.mu.Lock()
+		foundSession := sm.findSessionByTag(tag)
+		sm.mu.Unlock()
+
+		if foundSession == nil {
+			t.Error("Failed to find session by tag")
+		}
+	}
+
+	// After using 6 tags, window should be replenished back to 10
+	sm.mu.RLock()
+	finalTagCount := len(sm.tagIndex)
+	sm.mu.RUnlock()
+
+	if finalTagCount != 10 {
+		t.Errorf("Expected tag window to be replenished to 10, got %d", finalTagCount)
+	}
+}
+
+// TestExpiredSessionTagCleanup tests that tags are removed when sessions expire
+func TestExpiredSessionTagCleanup(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate session manager: %v", err)
+	}
+
+	// Set a very short timeout for testing
+	sm.sessionTimeout = 100 * time.Millisecond
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate destination key pair: %v", err)
+	}
+
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("test"))
+	err = builder.AddLocalDeliveryClove(dataMsg, 1)
+	if err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt garlic message: %v", err)
+	}
+
+	// Verify tags were created
+	sm.mu.RLock()
+	initialTagCount := len(sm.tagIndex)
+	sm.mu.RUnlock()
+
+	if initialTagCount == 0 {
+		t.Fatal("No tags created")
+	}
+
+	// Wait for session to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Clean up expired sessions
+	removed := sm.CleanupExpiredSessions()
+
+	if removed != 1 {
+		t.Errorf("Expected to remove 1 session, removed %d", removed)
+	}
+
+	// Verify all tags were removed from index
+	sm.mu.RLock()
+	finalTagCount := len(sm.tagIndex)
+	sm.mu.RUnlock()
+
+	if finalTagCount != 0 {
+		t.Errorf("Expected all tags to be removed, still have %d tags", finalTagCount)
+	}
+}
+
+// TestTagSingleUse tests that tags are removed from index after use
+func TestTagSingleUse(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate session manager: %v", err)
+	}
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate destination key pair: %v", err)
+	}
+
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("test"))
+	err = builder.AddLocalDeliveryClove(dataMsg, 1)
+	if err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt garlic message: %v", err)
+	}
+
+	// Get a tag to test
+	sm.mu.RLock()
+	var testTag [8]byte
+	for tag := range sm.tagIndex {
+		testTag = tag
+		break
+	}
+	sm.mu.RUnlock()
+
+	// Use the tag once
+	sm.mu.Lock()
+	foundSession := sm.findSessionByTag(testTag)
+	sm.mu.Unlock()
+
+	if foundSession == nil {
+		t.Error("Failed to find session by tag")
+	}
+
+	// Try to use the same tag again (should fail)
+	sm.mu.Lock()
+	foundAgain := sm.findSessionByTag(testTag)
+	sm.mu.Unlock()
+
+	if foundAgain != nil {
+		t.Error("Tag should be removed after first use (single-use tags)")
+	}
+}

@@ -22,9 +22,14 @@ import (
 // 1. New Session: First message uses ephemeral-static DH (ECIES)
 // 2. Existing Session: Subsequent messages use ratchet for forward secrecy
 // 3. Session Expiry: Sessions expire after inactivity timeout
+//
+// Performance:
+// - O(1) tag lookup using hash-based index
+// - Tag window tracking for out-of-order message handling
 type GarlicSessionManager struct {
 	mu             sync.RWMutex
 	sessions       map[common.Hash]*GarlicSession
+	tagIndex       map[[8]byte]*GarlicSession // O(1) lookup of session by tag
 	ourPrivateKey  [32]byte
 	ourPublicKey   [32]byte
 	sessionTimeout time.Duration
@@ -38,6 +43,8 @@ type GarlicSession struct {
 	TagRatchet       *ratchet.TagRatchet
 	LastUsed         time.Time
 	MessageCounter   uint32
+	// pendingTags tracks tags we expect to receive (tag window for out-of-order messages)
+	pendingTags      [][8]byte
 }
 
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
@@ -54,6 +61,7 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 
 	return &GarlicSessionManager{
 		sessions:       make(map[common.Hash]*GarlicSession),
+		tagIndex:       make(map[[8]byte]*GarlicSession),
 		ourPrivateKey:  privateKey,
 		ourPublicKey:   publicKey,
 		sessionTimeout: 10 * time.Minute, // Default session timeout
@@ -155,13 +163,20 @@ func (sm *GarlicSessionManager) encryptNewSession(
 	tagRatchet := ratchet.NewTagRatchet(tagKey)
 
 	// Store session for future messages
-	sm.sessions[destinationHash] = &GarlicSession{
+	newSession := &GarlicSession{
 		RemotePublicKey:  destinationPubKey,
 		DHRatchet:        dhRatchet,
 		SymmetricRatchet: symRatchet,
 		TagRatchet:       tagRatchet,
 		LastUsed:         time.Now(),
 		MessageCounter:   1,
+		pendingTags:      make([][8]byte, 0, 10), // Pre-allocate for tag window
+	}
+	sm.sessions[destinationHash] = newSession
+
+	// Pre-generate tag window for this session (10 tags ahead)
+	if err := sm.generateTagWindow(newSession); err != nil {
+		return nil, oops.Wrapf(err, "failed to generate tag window")
 	}
 
 	return newSessionMsg, nil
@@ -184,6 +199,10 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to generate session tag")
 	}
+
+	// Add tag to pending tags for the remote peer's session (they will use it to find our session)
+	// Note: In a real implementation, we would track separate inbound/outbound tag windows
+	session.pendingTags = append(session.pendingTags, sessionTag)
 
 	// Step 3: Create ChaCha20-Poly1305 AEAD with message key
 	aead, err := chacha20poly1305.NewAEAD(messageKey)
@@ -373,20 +392,77 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 }
 
 // findSessionByTag searches for a session that expects the given tag.
+// This uses O(1) hash-based lookup for performance.
 func (sm *GarlicSessionManager) findSessionByTag(tag [8]byte) *GarlicSession {
-	// In production, this would check if the tag matches any session's expected tags
-	// For now, simplified implementation
-	for _, session := range sm.sessions {
-		// Check if tag matches (simplified - production would verify against tag ratchet)
-		if session.LastUsed.Add(sm.sessionTimeout).After(time.Now()) {
-			return session
+	// O(1) lookup in tag index
+	session, exists := sm.tagIndex[tag]
+	if !exists {
+		return nil
+	}
+
+	// Verify session is not expired
+	if time.Since(session.LastUsed) > sm.sessionTimeout {
+		// Clean up expired session
+		delete(sm.tagIndex, tag)
+		return nil
+	}
+
+	// Remove used tag from index (tags are single-use)
+	delete(sm.tagIndex, tag)
+
+	// Remove tag from session's pending tags
+	for i, pendingTag := range session.pendingTags {
+		if pendingTag == tag {
+			// Remove by swapping with last element and truncating
+			session.pendingTags[i] = session.pendingTags[len(session.pendingTags)-1]
+			session.pendingTags = session.pendingTags[:len(session.pendingTags)-1]
+			break
 		}
 	}
+
+	// Replenish tag window if running low
+	if len(session.pendingTags) < 5 {
+		if err := sm.generateTagWindow(session); err != nil {
+			// Log error but don't fail - we can still process this message
+			// Production would use proper logging here
+			_ = err
+		}
+	}
+
+	return session
+}
+
+// generateTagWindow pre-generates a window of session tags for a session.
+// This allows the receiver to quickly look up which session a message belongs to.
+// Tags are generated ahead of time and indexed for O(1) lookup.
+//
+// The tag window size is 10 tags by default, which provides a good balance between:
+// - Memory usage (10 tags * 8 bytes = 80 bytes per session)
+// - Out-of-order message handling (can handle up to 10 messages out of order)
+// - Replenishment overhead (only need to generate more tags every ~5 messages)
+func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error {
+	const tagWindowSize = 10
+
+	// Generate tags up to the window size
+	for len(session.pendingTags) < tagWindowSize {
+		tag, err := session.TagRatchet.GenerateNextTag()
+		if err != nil {
+			return oops.Wrapf(err, "failed to generate session tag")
+		}
+
+		// Add tag to session's pending tags
+		session.pendingTags = append(session.pendingTags, tag)
+
+		// Index tag for O(1) lookup
+		sm.tagIndex[tag] = session
+	}
+
 	return nil
 }
 
 // CleanupExpiredSessions removes sessions that haven't been used recently.
 // Should be called periodically to prevent memory leaks.
+// This also cleans up any tags associated with expired sessions from the tag index.
 func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -396,7 +472,14 @@ func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
 
 	for hash, session := range sm.sessions {
 		if now.Sub(session.LastUsed) > sm.sessionTimeout {
+			// Remove session from sessions map
 			delete(sm.sessions, hash)
+
+			// Remove all pending tags for this session from tag index
+			for _, tag := range session.pendingTags {
+				delete(sm.tagIndex, tag)
+			}
+
 			removed++
 		}
 	}
