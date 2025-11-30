@@ -588,7 +588,7 @@ func TestLeaseSetMaintenanceRegeneration(t *testing.T) {
 	config := DefaultSessionConfig()
 	config.TunnelLifetime = 2 * time.Second // Very short for testing
 
-	session, err := NewSession(1, nil, nil)
+	session, err := NewSession(1, nil, config)
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
@@ -738,7 +738,7 @@ func TestLeaseSetRegenerationThreshold(t *testing.T) {
 	config := DefaultSessionConfig()
 	config.TunnelLifetime = 1 * time.Second
 
-	session, err := NewSession(1, nil, nil)
+	session, err := NewSession(1, nil, config)
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}

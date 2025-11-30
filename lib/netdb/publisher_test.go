@@ -128,8 +128,9 @@ func TestPublishRouterInfoWithFloodfills(t *testing.T) {
 
 	err := publisher.PublishRouterInfo(ri)
 
-	// Should succeed (mock implementation)
-	assert.NoError(t, err)
+	// Should return error for invalid RouterInfo (prevents panic)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get router hash")
 }
 
 // TestPublisherSelectFloodfills tests floodfill selection for publishing
