@@ -951,38 +951,69 @@ func (dm *DatabaseManager) sendDatabaseSearchReply(key, to common.Hash) error {
 func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []common.Hash {
 	const defaultFloodfillCount = 7 // I2P standard practice
 
-	if dm.floodfillSelector == nil {
-		log.Debug("No floodfill selector available, returning empty peer list")
+	if !dm.hasFloodfillSelector() {
 		return []common.Hash{}
 	}
 
-	floodfills, err := dm.floodfillSelector.SelectFloodfillRouters(targetKey, defaultFloodfillCount)
+	floodfills, err := dm.fetchFloodfillRouters(targetKey, defaultFloodfillCount)
+	if err != nil || len(floodfills) == 0 {
+		return []common.Hash{}
+	}
+
+	return dm.convertRoutersToHashes(floodfills)
+}
+
+// hasFloodfillSelector checks if a floodfill selector is configured.
+func (dm *DatabaseManager) hasFloodfillSelector() bool {
+	if dm.floodfillSelector == nil {
+		log.Debug("No floodfill selector available, returning empty peer list")
+		return false
+	}
+	return true
+}
+
+// fetchFloodfillRouters retrieves floodfill routers for the target key.
+func (dm *DatabaseManager) fetchFloodfillRouters(targetKey common.Hash, count int) ([]router_info.RouterInfo, error) {
+	floodfills, err := dm.floodfillSelector.SelectFloodfillRouters(targetKey, count)
 	if err != nil {
 		log.WithError(err).Warn("Failed to select floodfill routers for DatabaseSearchReply")
-		return []common.Hash{}
+		return nil, err
 	}
 
 	if len(floodfills) == 0 {
 		log.Debug("No floodfill routers available for peer suggestions")
-		return []common.Hash{}
 	}
 
-	// Convert RouterInfo list to hash list
-	// Skip any routers that fail IdentHash() (e.g., improperly initialized in tests)
+	return floodfills, nil
+}
+
+// convertRoutersToHashes converts RouterInfo list to hash list, skipping invalid entries.
+func (dm *DatabaseManager) convertRoutersToHashes(floodfills []router_info.RouterInfo) []common.Hash {
 	peerHashes := make([]common.Hash, 0, len(floodfills))
+
 	for _, ri := range floodfills {
-		hash, err := ri.IdentHash()
-		if err != nil {
-			log.WithError(err).Debug("Skipping invalid RouterInfo in floodfill selection")
-			continue
-		}
-		var emptyHash common.Hash
-		if hash != emptyHash {
+		if hash := dm.extractValidHash(ri); !dm.isEmptyHash(hash) {
 			peerHashes = append(peerHashes, hash)
 		}
 	}
 
 	return peerHashes
+}
+
+// extractValidHash extracts identity hash from RouterInfo, returning empty hash on error.
+func (dm *DatabaseManager) extractValidHash(ri router_info.RouterInfo) common.Hash {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Debug("Skipping invalid RouterInfo in floodfill selection")
+		return common.Hash{}
+	}
+	return hash
+}
+
+// isEmptyHash checks if a hash is the zero value.
+func (dm *DatabaseManager) isEmptyHash(hash common.Hash) bool {
+	var emptyHash common.Hash
+	return hash == emptyHash
 }
 
 // logDatabaseSearchReply logs details about the DatabaseSearchReply being sent.
