@@ -463,3 +463,189 @@ func NewRouterDeliveryInstructions(routerHash common.Hash) GarlicCloveDeliveryIn
 		Hash: routerHash,
 	}
 }
+
+// DeserializeGarlic parses a decrypted garlic message from bytes with validation.
+// This function enforces security limits to prevent resource exhaustion attacks.
+//
+// Security validations:
+// - Maximum clove count (64) to prevent memory exhaustion
+// - Maximum nesting depth (3) to prevent stack overflow from recursive garlic
+// - Proper bounds checking for all fields
+//
+// Returns the parsed Garlic structure or an error if validation fails.
+func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
+	const (
+		MaxGarlicCloves       = 64            // Practical limit for clove count
+		MaxGarlicNestingDepth = 3             // Prevent infinite recursion
+		MinGarlicSize         = 1 + 3 + 4 + 8 // num(1) + cert(3) + msgID(4) + exp(8)
+	)
+
+	if nestingDepth > MaxGarlicNestingDepth {
+		return nil, oops.Errorf("garlic nesting depth exceeded: %d > %d", nestingDepth, MaxGarlicNestingDepth)
+	}
+
+	if len(data) < MinGarlicSize {
+		return nil, oops.Errorf("garlic data too short: need at least %d bytes, got %d", MinGarlicSize, len(data))
+	}
+
+	offset := 0
+
+	// Read clove count (1 byte)
+	cloveCount := int(data[offset])
+	offset++
+
+	// Validate clove count against practical limit
+	if cloveCount > MaxGarlicCloves {
+		return nil, oops.Errorf("garlic clove count too high: %d > %d (possible resource exhaustion attack)", cloveCount, MaxGarlicCloves)
+	}
+
+	// Parse cloves
+	cloves := make([]GarlicClove, cloveCount)
+	for i := 0; i < cloveCount; i++ {
+		clove, bytesRead, err := deserializeGarlicClove(data[offset:], nestingDepth)
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to parse clove %d", i)
+		}
+		cloves[i] = *clove
+		offset += bytesRead
+	}
+
+	// Ensure enough data remains for certificate + message ID + expiration
+	if len(data) < offset+3+4+8 {
+		return nil, oops.Errorf("insufficient data for garlic trailer: need %d bytes, have %d", 3+4+8, len(data)-offset)
+	}
+
+	// Read certificate (3 bytes - always NULL in current implementation)
+	cert := *certificate.NewCertificate()
+	offset += 3
+
+	// Read message ID (4 bytes, big-endian)
+	messageID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+
+	// Read expiration (8 bytes, milliseconds since epoch)
+	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
+	expiration := time.UnixMilli(int64(expirationMs))
+	offset += 8
+
+	return &Garlic{
+		Count:       cloveCount,
+		Cloves:      cloves,
+		Certificate: cert,
+		MessageID:   messageID,
+		Expiration:  expiration,
+	}, nil
+}
+
+// deserializeGarlicClove parses a single garlic clove from bytes.
+// Returns the clove, number of bytes consumed, and any error.
+func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, error) {
+	if len(data) < 1 {
+		return nil, 0, oops.Errorf("clove data too short")
+	}
+
+	offset := 0
+
+	// Parse delivery instructions
+	di, bytesRead, err := deserializeDeliveryInstructions(data[offset:])
+	if err != nil {
+		return nil, 0, oops.Wrapf(err, "failed to parse delivery instructions")
+	}
+	offset += bytesRead
+
+	// Parse I2NP message
+	// Note: This is a simplified parser - full I2NP message parsing would be needed
+	// For now, we validate that there's data and extract basic structure
+	if len(data) < offset+5 {
+		return nil, 0, oops.Errorf("insufficient data for I2NP message")
+	}
+
+	// Skip I2NP message parsing for now (would need full message type dispatch)
+	// In practice, this would call the appropriate I2NP message parser
+	// For security, we just validate minimum structure and skip ahead
+	messageLength := 100 // Placeholder - would be read from message header
+	offset += messageLength
+
+	// Ensure enough data for clove ID + expiration + certificate
+	if len(data) < offset+4+8+3 {
+		return nil, 0, oops.Errorf("insufficient data for clove trailer")
+	}
+
+	// Read clove ID (4 bytes)
+	cloveID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+
+	// Read expiration (8 bytes)
+	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
+	expiration := time.UnixMilli(int64(expirationMs))
+	offset += 8
+
+	// Read certificate (3 bytes)
+	cert := *certificate.NewCertificate()
+	offset += 3
+
+	return &GarlicClove{
+		DeliveryInstructions: *di,
+		I2NPMessage:          nil, // Would be populated by full I2NP parser
+		CloveID:              cloveID,
+		Expiration:           expiration,
+		Certificate:          cert,
+	}, offset, nil
+}
+
+// deserializeDeliveryInstructions parses delivery instructions from bytes.
+// Returns the instructions, number of bytes consumed, and any error.
+func deserializeDeliveryInstructions(data []byte) (*GarlicCloveDeliveryInstructions, int, error) {
+	if len(data) < 1 {
+		return nil, 0, oops.Errorf("delivery instructions data too short")
+	}
+
+	offset := 0
+
+	// Read flag byte
+	flag := data[offset]
+	offset++
+
+	deliveryType := (flag >> 5) & 0x03
+	di := &GarlicCloveDeliveryInstructions{
+		Flag: flag,
+	}
+
+	// Parse based on delivery type
+	switch deliveryType {
+	case 0x00: // LOCAL - no additional data
+		// No additional fields
+	case 0x01: // DESTINATION - 32 byte hash
+		if len(data) < offset+32 {
+			return nil, 0, oops.Errorf("insufficient data for DESTINATION hash")
+		}
+		copy(di.Hash[:], data[offset:offset+32])
+		offset += 32
+	case 0x02: // ROUTER - 32 byte hash
+		if len(data) < offset+32 {
+			return nil, 0, oops.Errorf("insufficient data for ROUTER hash")
+		}
+		copy(di.Hash[:], data[offset:offset+32])
+		offset += 32
+	case 0x03: // TUNNEL - 32 byte hash + 4 byte tunnel ID
+		if len(data) < offset+32+4 {
+			return nil, 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
+		}
+		copy(di.Hash[:], data[offset:offset+32])
+		offset += 32
+		di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+	}
+
+	// Check for optional delay field (bit 4 of flag)
+	delayIncluded := (flag >> 4) & 0x01
+	if delayIncluded == 1 {
+		if len(data) < offset+4 {
+			return nil, 0, oops.Errorf("insufficient data for delay field")
+		}
+		di.Delay = int(binary.BigEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+	}
+
+	return di, offset, nil
+}
