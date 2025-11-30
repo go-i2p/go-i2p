@@ -162,7 +162,6 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData()
 	data_area := decrypted_tunnel_message[4+4+16:]
 	for i := 0; i < len(data_area); i++ {
 		if data_area[i] == 0x00 {
-			// return data_area[i+1:]
 			delivery_data := data_area[i+1:]
 			log.WithField("delivery_data_length", len(delivery_data)).Debug("Retrieved delivery instruction data")
 			return delivery_data
