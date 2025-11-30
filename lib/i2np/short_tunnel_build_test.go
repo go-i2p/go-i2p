@@ -55,8 +55,7 @@ func TestShortTunnelBuildReply(t *testing.T) {
 func TestShortTunnelBuildInterface(t *testing.T) {
 	records := make([]BuildRequestRecord, 1)
 
-	var builder TunnelBuilder
-	builder = NewShortTunnelBuilder(records)
+	builder := NewShortTunnelBuilder(records)
 
 	if builder == nil {
 		t.Fatal("expected non-nil builder")

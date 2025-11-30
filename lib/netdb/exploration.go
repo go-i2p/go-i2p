@@ -2,7 +2,7 @@ package netdb
 
 import (
 	"context"
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"fmt"
 	"sync"
 	"time"

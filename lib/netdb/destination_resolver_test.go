@@ -1,7 +1,7 @@
 package netdb
 
 import (
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"testing"
 
 	common "github.com/go-i2p/common/data"

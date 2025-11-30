@@ -2,7 +2,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"testing"
 
 	"github.com/go-i2p/common/session_key"

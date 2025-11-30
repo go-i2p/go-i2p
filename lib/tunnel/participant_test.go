@@ -2,7 +2,7 @@ package tunnel
 
 import (
 	"bytes"
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"encoding/binary"
 	"testing"
 
