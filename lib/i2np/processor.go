@@ -353,31 +353,54 @@ func (tm *TunnelManager) generateMessageID() int {
 
 // BuildTunnel builds a tunnel using TunnelBuilder interface
 func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
-	if tm.peerSelector == nil {
-		return fmt.Errorf("no peer selector configured")
+	if err := tm.validateTunnelBuilder(builder); err != nil {
+		return err
 	}
 
 	records := builder.GetBuildRecords()
 	count := builder.GetRecordCount()
 
-	if count == 0 {
+	peers, err := tm.selectTunnelPeers(count)
+	if err != nil {
+		return err
+	}
+
+	tunnelID := tm.generateTunnelID()
+	tunnelState := tm.createTunnelState(tunnelID, count, peers)
+	tm.pool.AddTunnel(tunnelState)
+
+	return tm.sendTunnelBuildRequests(records, peers[:count], tunnelID)
+}
+
+// validateTunnelBuilder checks if the tunnel manager and builder are properly configured.
+func (tm *TunnelManager) validateTunnelBuilder(builder TunnelBuilder) error {
+	if tm.peerSelector == nil {
+		return fmt.Errorf("no peer selector configured")
+	}
+
+	if builder.GetRecordCount() == 0 {
 		return fmt.Errorf("no build records provided")
 	}
 
-	// Select peers for tunnel hops (excluding ourselves)
+	return nil
+}
+
+// selectTunnelPeers selects the required number of peers for tunnel construction.
+func (tm *TunnelManager) selectTunnelPeers(count int) ([]router_info.RouterInfo, error) {
 	peers, err := tm.peerSelector.SelectPeers(count, nil)
 	if err != nil {
-		return fmt.Errorf("failed to select peers for tunnel: %w", err)
+		return nil, fmt.Errorf("failed to select peers for tunnel: %w", err)
 	}
 
 	if len(peers) < count {
-		return fmt.Errorf("insufficient peers available: need %d, got %d", count, len(peers))
+		return nil, fmt.Errorf("insufficient peers available: need %d, got %d", count, len(peers))
 	}
 
-	// Generate tunnel ID for this tunnel
-	tunnelID := tm.generateTunnelID()
+	return peers, nil
+}
 
-	// Create tunnel state tracking
+// createTunnelState initializes a new tunnel state with selected peers.
+func (tm *TunnelManager) createTunnelState(tunnelID tunnel.TunnelID, count int, peers []router_info.RouterInfo) *tunnel.TunnelState {
 	tunnelState := &tunnel.TunnelState{
 		ID:        tunnelID,
 		Hops:      make([]common.Hash, count),
@@ -386,8 +409,13 @@ func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
 		Responses: make([]tunnel.BuildResponse, 0, count),
 	}
 
-	// Populate hops with selected peer hashes
-	for i, peer := range peers[:count] {
+	populateTunnelHops(tunnelState, peers[:count])
+	return tunnelState
+}
+
+// populateTunnelHops fills the tunnel state hops with peer identity hashes.
+func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.RouterInfo) {
+	for i, peer := range peers {
 		hash, err := peer.IdentHash()
 		if err != nil {
 			log.WithError(err).WithField("hop_index", i).Warn("Failed to get peer hash, using zero hash")
@@ -396,12 +424,6 @@ func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
 			tunnelState.Hops[i] = hash
 		}
 	}
-
-	// Add tunnel to pool for tracking
-	tm.pool.AddTunnel(tunnelState)
-
-	// Send build requests to each hop
-	return tm.sendTunnelBuildRequests(records, peers[:count], tunnelID)
 }
 
 // generateTunnelID generates a new unique tunnel ID
