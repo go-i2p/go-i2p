@@ -291,57 +291,73 @@ func decodePEM(data []byte) (*struct {
 	Type  string
 	Bytes []byte
 }, []byte) {
-	// Find BEGIN marker
-	beginMarker := []byte("-----BEGIN")
-	endMarker := []byte("-----END")
-
-	beginIdx := bytes.Index(data, beginMarker)
+	beginIdx, beginLineEnd, endIdx, endLineEnd := findPEMBoundaries(data)
 	if beginIdx == -1 {
 		return nil, data
 	}
 
-	// Find end of BEGIN line
-	beginLineEnd := bytes.IndexByte(data[beginIdx:], '\n')
-	if beginLineEnd == -1 {
-		return nil, data
-	}
-	beginLineEnd += beginIdx
-
-	// Find END marker
-	endIdx := bytes.Index(data[beginLineEnd:], endMarker)
-	if endIdx == -1 {
-		return nil, data
-	}
-	endIdx += beginLineEnd
-
-	// Find end of END line
-	endLineEnd := bytes.IndexByte(data[endIdx:], '\n')
-	if endLineEnd == -1 {
-		endLineEnd = len(data) - endIdx
-	}
-	endLineEnd += endIdx
-
-	// Extract base64 content between BEGIN and END
-	base64Data := bytes.TrimSpace(data[beginLineEnd+1 : endIdx])
-	base64Data = bytes.ReplaceAll(base64Data, []byte("\n"), []byte(""))
-	base64Data = bytes.ReplaceAll(base64Data, []byte("\r"), []byte(""))
-
-	// Decode base64
+	base64Data := extractBase64Content(data, beginLineEnd, endIdx)
 	decoded := make([]byte, len(base64Data)*3/4+3)
 	n, err := decodeBase64(decoded, base64Data)
 	if err != nil {
 		return nil, data
 	}
 
-	block := &struct {
+	block := createPEMBlock(decoded[:n])
+	return block, data[endLineEnd:]
+}
+
+// findPEMBoundaries locates the BEGIN and END markers in PEM data.
+func findPEMBoundaries(data []byte) (beginIdx, beginLineEnd, endIdx, endLineEnd int) {
+	beginMarker := []byte("-----BEGIN")
+	endMarker := []byte("-----END")
+
+	beginIdx = bytes.Index(data, beginMarker)
+	if beginIdx == -1 {
+		return -1, -1, -1, -1
+	}
+
+	beginLineEnd = bytes.IndexByte(data[beginIdx:], '\n')
+	if beginLineEnd == -1 {
+		return -1, -1, -1, -1
+	}
+	beginLineEnd += beginIdx
+
+	endIdx = bytes.Index(data[beginLineEnd:], endMarker)
+	if endIdx == -1 {
+		return -1, -1, -1, -1
+	}
+	endIdx += beginLineEnd
+
+	endLineEnd = bytes.IndexByte(data[endIdx:], '\n')
+	if endLineEnd == -1 {
+		endLineEnd = len(data) - endIdx
+	}
+	endLineEnd += endIdx
+
+	return beginIdx, beginLineEnd, endIdx, endLineEnd
+}
+
+// extractBase64Content extracts and cleans base64 content between PEM markers.
+func extractBase64Content(data []byte, beginLineEnd, endIdx int) []byte {
+	base64Data := bytes.TrimSpace(data[beginLineEnd+1 : endIdx])
+	base64Data = bytes.ReplaceAll(base64Data, []byte("\n"), []byte(""))
+	base64Data = bytes.ReplaceAll(base64Data, []byte("\r"), []byte(""))
+	return base64Data
+}
+
+// createPEMBlock creates a PEM block structure from decoded bytes.
+func createPEMBlock(decodedBytes []byte) *struct {
+	Type  string
+	Bytes []byte
+} {
+	return &struct {
 		Type  string
 		Bytes []byte
 	}{
 		Type:  "CERTIFICATE",
-		Bytes: decoded[:n],
+		Bytes: decodedBytes,
 	}
-
-	return block, data[endLineEnd:]
 }
 
 // decodeBase64 is a simple base64 decoder

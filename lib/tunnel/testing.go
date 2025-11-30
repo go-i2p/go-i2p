@@ -225,7 +225,22 @@ func (tt *TunnelTester) HealthCheck() HealthCheckResult {
 		Results: results,
 	}
 
-	// Count tunnels by state
+	tt.countTunnelsByState(&check)
+	tt.analyzeTestResults(&check, results)
+
+	log.WithFields(map[string]interface{}{
+		"total":           check.TotalTunnels,
+		"ready":           check.ReadyTunnels,
+		"healthy":         check.HealthyTunnels,
+		"unhealthy":       check.UnhealthyTunnels,
+		"average_latency": check.AverageLatency,
+	}).Info("Tunnel pool health check completed")
+
+	return check
+}
+
+// countTunnelsByState counts tunnels by their state in the pool.
+func (tt *TunnelTester) countTunnelsByState(check *HealthCheckResult) {
 	tt.pool.mutex.RLock()
 	check.TotalTunnels = len(tt.pool.tunnels)
 	for _, tunnel := range tt.pool.tunnels {
@@ -234,8 +249,10 @@ func (tt *TunnelTester) HealthCheck() HealthCheckResult {
 		}
 	}
 	tt.pool.mutex.RUnlock()
+}
 
-	// Analyze test results
+// analyzeTestResults analyzes test results to determine tunnel health statistics.
+func (tt *TunnelTester) analyzeTestResults(check *HealthCheckResult, results []TunnelTestResult) {
 	check.TestedTunnels = len(results)
 	var totalLatency time.Duration
 
@@ -248,20 +265,9 @@ func (tt *TunnelTester) HealthCheck() HealthCheckResult {
 		}
 	}
 
-	// Calculate average latency for healthy tunnels
 	if check.HealthyTunnels > 0 {
 		check.AverageLatency = totalLatency / time.Duration(check.HealthyTunnels)
 	}
-
-	log.WithFields(map[string]interface{}{
-		"total":           check.TotalTunnels,
-		"ready":           check.ReadyTunnels,
-		"healthy":         check.HealthyTunnels,
-		"unhealthy":       check.UnhealthyTunnels,
-		"average_latency": check.AverageLatency,
-	}).Info("Tunnel pool health check completed")
-
-	return check
 }
 
 // ReplacementRecommendation analyzes test results and recommends tunnel replacements.
