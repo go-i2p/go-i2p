@@ -2,6 +2,7 @@ package reseed
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -111,22 +112,43 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
-	transport := http.Transport{
-		DialContext: r.DialContext,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // I2P reseed servers often use self-signed certificates
-			//TODO: implement proper certificate pinning/validation
-		},
-	}
-	client := http.Client{
-		Transport: &transport,
-	}
+	client := createReseedHTTPClient(r.DialContext)
 	URL, err := url.Parse(uri)
 	if err != nil {
 		log.WithError(err).WithField("uri", uri).Error("Failed to parse reseed URI")
 		return nil, err
 	}
 
+	request := buildReseedHTTPRequest(URL)
+	response, err := client.Do(&request)
+	if err != nil {
+		log.WithError(err).WithField("uri", uri).Error("Failed to perform HTTP request")
+		return nil, err
+	}
+
+	if err := validateReseedResponse(response, uri); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// createReseedHTTPClient creates an HTTP client configured for reseed operations.
+func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
+	transport := http.Transport{
+		DialContext: dialContext,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // I2P reseed servers often use self-signed certificates
+			//TODO: implement proper certificate pinning/validation
+		},
+	}
+	return &http.Client{
+		Transport: &transport,
+	}
+}
+
+// buildReseedHTTPRequest constructs the HTTP request for reseed operations.
+func buildReseedHTTPRequest(URL *url.URL) http.Request {
 	log.WithFields(logger.Fields{
 		"host":       URL.Host,
 		"scheme":     URL.Scheme,
@@ -137,7 +159,7 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	header.Add("User-Agent", I2pUserAgent)
 	header.Add("Accept", "*/*")
 	// Note: Accept-Encoding is omitted - Go's HTTP client handles compression automatically
-	request := http.Request{
+	return http.Request{
 		Method:     "GET",
 		URL:        URL,
 		Header:     header,
@@ -146,12 +168,10 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 		ProtoMinor: 1,
 		Host:       URL.Host,
 	}
-	response, err := client.Do(&request)
-	if err != nil {
-		log.WithError(err).WithField("uri", uri).Error("Failed to perform HTTP request")
-		return nil, err
-	}
+}
 
+// validateReseedResponse validates the HTTP response from reseed server.
+func validateReseedResponse(response *http.Response, uri string) error {
 	log.WithFields(logger.Fields{
 		"status_code":    response.StatusCode,
 		"content_length": response.ContentLength,
@@ -163,7 +183,7 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	if response.StatusCode != 200 {
 		response.Body.Close()
 		log.WithField("status_code", response.StatusCode).Error("Reseed server returned error status")
-		return nil, fmt.Errorf("reseed server returned status %d", response.StatusCode)
+		return fmt.Errorf("reseed server returned status %d", response.StatusCode)
 	}
 
 	// Validate content length if provided
@@ -172,13 +192,13 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 		if response.ContentLength < 100 {
 			response.Body.Close()
 			log.WithField("content_length", response.ContentLength).Error("Response too small to be valid SU3 file")
-			return nil, fmt.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
+			return fmt.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
 		}
 	} else {
 		log.Warn("Response content length not provided by server")
 	}
 
-	return response, nil
+	return nil
 }
 
 // readSU3File reads and parses the SU3 file from the response body.
