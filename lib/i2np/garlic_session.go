@@ -355,7 +355,42 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 // decryptNewSession decrypts a New Session message using our static private key.
 // Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte, error) {
-	// Parse New Session message format
+	parsedMsg, err := parseNewSessionMessage(newSessionMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	sharedSecret, err := sm.deriveSharedSecretFromEphemeral(parsedMsg.ephemeralPubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionKeys, err := deriveKeysFromSharedSecret(sharedSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	plaintext, err := decryptWithSessionKeys(parsedMsg, sessionKeys.symKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sm.initializeInboundRatchetState(parsedMsg.ephemeralPubKey, sessionKeys)
+
+	return plaintext, nil
+}
+
+// newSessionMessageComponents holds the parsed components of a New Session message.
+type newSessionMessageComponents struct {
+	ephemeralPubKey [32]byte
+	nonce           []byte
+	ciphertext      []byte
+	tag             [16]byte
+}
+
+// parseNewSessionMessage extracts components from a New Session message.
+// Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+func parseNewSessionMessage(newSessionMsg []byte) (*newSessionMessageComponents, error) {
 	if len(newSessionMsg) < 32+12+16 {
 		return nil, oops.Errorf("new session message too short: %d bytes", len(newSessionMsg))
 	}
@@ -373,7 +408,16 @@ func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte,
 	var tag [16]byte
 	copy(tag[:], ciphertextWithTag[len(ciphertextWithTag)-16:])
 
-	// Perform ECIES key agreement with ephemeral key
+	return &newSessionMessageComponents{
+		ephemeralPubKey: ephemeralPubKey,
+		nonce:           nonce,
+		ciphertext:      ciphertext,
+		tag:             tag,
+	}, nil
+}
+
+// deriveSharedSecretFromEphemeral performs X25519 key agreement with ephemeral public key.
+func (sm *GarlicSessionManager) deriveSharedSecretFromEphemeral(ephemeralPubKey [32]byte) ([]byte, error) {
 	privKey := x25519.PrivateKey(sm.ourPrivateKey[:])
 	ephemeralKey := x25519.PublicKey(ephemeralPubKey[:])
 
@@ -382,7 +426,11 @@ func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte,
 		return nil, oops.Wrapf(err, "failed to derive shared secret")
 	}
 
-	// Derive session keys using HKDF
+	return sharedSecret, nil
+}
+
+// deriveKeysFromSharedSecret derives cryptographic keys from shared secret using HKDF.
+func deriveKeysFromSharedSecret(sharedSecret []byte) (*sessionKeys, error) {
 	var sharedSecretArray [32]byte
 	copy(sharedSecretArray[:], sharedSecret)
 	kd := kdf.NewKeyDerivation(sharedSecretArray)
@@ -391,34 +439,44 @@ func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte,
 		return nil, oops.Wrapf(err, "failed to derive session keys")
 	}
 
-	// Decrypt using ChaCha20-Poly1305
+	return &sessionKeys{
+		rootKey: rootKey,
+		symKey:  symKey,
+		tagKey:  tagKey,
+	}, nil
+}
+
+// decryptWithSessionKeys decrypts ciphertext using ChaCha20-Poly1305 with session symmetric key.
+func decryptWithSessionKeys(parsedMsg *newSessionMessageComponents, symKey [32]byte) ([]byte, error) {
 	aead, err := chacha20poly1305.NewAEAD(symKey)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create AEAD")
 	}
 
-	plaintext, err := aead.Decrypt(ciphertext, tag[:], nil, nonce)
+	plaintext, err := aead.Decrypt(parsedMsg.ciphertext, parsedMsg.tag[:], nil, parsedMsg.nonce)
 	if err != nil {
 		return nil, oops.Wrapf(err, "decryption failed (authentication error)")
 	}
 
-	// Initialize ratchet state for future messages from this sender
-	// We track the sender's ephemeral key as their current DH key
+	return plaintext, nil
+}
+
+// initializeInboundRatchetState creates ratchet state for future messages from sender.
+// Note: Session storage is handled at a higher level after parsing the garlic message content.
+func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [32]byte, keys *sessionKeys) {
 	var ourPriv, theirPub [32]byte
 	copy(ourPriv[:], sm.ourPrivateKey[:])
 	copy(theirPub[:], ephemeralPubKey[:])
 
-	dhRatchet := ratchet.NewDHRatchet(rootKey, ourPriv, theirPub)
-	symRatchet := ratchet.NewSymmetricRatchet(rootKey)
-	tagRatchet := ratchet.NewTagRatchet(tagKey)
+	dhRatchet := ratchet.NewDHRatchet(keys.rootKey, ourPriv, theirPub)
+	symRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
+	tagRatchet := ratchet.NewTagRatchet(keys.tagKey)
 
 	// Store session (Note: We would need to extract sender's destination hash from the garlic message)
 	// For now, we'll need to handle this at a higher level where we can parse the garlic content
 	_ = dhRatchet
 	_ = symRatchet
 	_ = tagRatchet
-
-	return plaintext, nil
 }
 
 // decryptExistingSession decrypts an Existing Session message using ratchet state.

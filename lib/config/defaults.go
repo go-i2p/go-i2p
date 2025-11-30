@@ -256,79 +256,108 @@ func Defaults() ConfigDefaults {
 	workingDir := filepath.Join(BuildI2PDirPath(), "config")
 
 	return ConfigDefaults{
-		Router: RouterDefaults{
-			BaseDir:                   baseDir,
-			WorkingDir:                workingDir,
-			RouterInfoRefreshInterval: 30 * time.Minute,
-			MessageExpirationTime:     60 * time.Second,
-			MaxConcurrentSessions:     200,
-		},
+		Router:      buildRouterDefaults(baseDir, workingDir),
+		NetDB:       buildNetDBDefaults(workingDir),
+		Bootstrap:   buildBootstrapDefaults(),
+		I2CP:        buildI2CPDefaults(),
+		Tunnel:      buildTunnelDefaults(),
+		Transport:   buildTransportDefaults(),
+		Performance: buildPerformanceDefaults(),
+	}
+}
 
-		NetDB: NetDBDefaults{
-			Path:                     filepath.Join(workingDir, "netDb"),
-			MaxRouterInfos:           5000,
-			MaxLeaseSets:             1000,
-			ExpirationCheckInterval:  1 * time.Minute,
-			LeaseSetRefreshThreshold: 2 * time.Minute,
-			ExplorationInterval:      5 * time.Minute,
-			FloodfillEnabled:         false,
-		},
+// buildRouterDefaults creates default router configuration values.
+func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
+	return RouterDefaults{
+		BaseDir:                   baseDir,
+		WorkingDir:                workingDir,
+		RouterInfoRefreshInterval: 30 * time.Minute,
+		MessageExpirationTime:     60 * time.Second,
+		MaxConcurrentSessions:     200,
+	}
+}
 
-		Bootstrap: BootstrapDefaults{
-			LowPeerThreshold:    10,
-			ReseedTimeout:       60 * time.Second,
-			MinimumReseedPeers:  50,
-			ReseedRetryInterval: 5 * time.Minute,
-			ReseedServers: []*ReseedConfig{
-				{
-					Url:            "https://reseed.i2pgit.org/i2pseeds.su3",
-					SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
-				},
+// buildNetDBDefaults creates default network database configuration values.
+func buildNetDBDefaults(workingDir string) NetDBDefaults {
+	return NetDBDefaults{
+		Path:                     filepath.Join(workingDir, "netDb"),
+		MaxRouterInfos:           5000,
+		MaxLeaseSets:             1000,
+		ExpirationCheckInterval:  1 * time.Minute,
+		LeaseSetRefreshThreshold: 2 * time.Minute,
+		ExplorationInterval:      5 * time.Minute,
+		FloodfillEnabled:         false,
+	}
+}
+
+// buildBootstrapDefaults creates default bootstrap configuration values.
+func buildBootstrapDefaults() BootstrapDefaults {
+	return BootstrapDefaults{
+		LowPeerThreshold:    10,
+		ReseedTimeout:       60 * time.Second,
+		MinimumReseedPeers:  50,
+		ReseedRetryInterval: 5 * time.Minute,
+		ReseedServers: []*ReseedConfig{
+			{
+				Url:            "https://reseed.i2pgit.org/i2pseeds.su3",
+				SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
 			},
 		},
+	}
+}
 
-		I2CP: I2CPDefaults{
-			Enabled:          true,
-			Address:          "localhost:7654",
-			Network:          "tcp",
-			MaxSessions:      100,
-			MessageQueueSize: 64,
-			SessionTimeout:   30 * time.Minute,
-			ReadTimeout:      60 * time.Second,
-			WriteTimeout:     30 * time.Second,
-		},
+// buildI2CPDefaults creates default I2CP server configuration values.
+func buildI2CPDefaults() I2CPDefaults {
+	return I2CPDefaults{
+		Enabled:          true,
+		Address:          "localhost:7654",
+		Network:          "tcp",
+		MaxSessions:      100,
+		MessageQueueSize: 64,
+		SessionTimeout:   30 * time.Minute,
+		ReadTimeout:      60 * time.Second,
+		WriteTimeout:     30 * time.Second,
+	}
+}
 
-		Tunnel: TunnelDefaults{
-			MinPoolSize:             4,
-			MaxPoolSize:             6,
-			TunnelLength:            3,
-			TunnelLifetime:          10 * time.Minute,
-			TunnelTestInterval:      60 * time.Second,
-			TunnelTestTimeout:       5 * time.Second,
-			BuildTimeout:            90 * time.Second,
-			BuildRetries:            3,
-			ReplaceBeforeExpiration: 2 * time.Minute,
-			MaintenanceInterval:     30 * time.Second,
-		},
+// buildTunnelDefaults creates default tunnel configuration values.
+func buildTunnelDefaults() TunnelDefaults {
+	return TunnelDefaults{
+		MinPoolSize:             4,
+		MaxPoolSize:             6,
+		TunnelLength:            3,
+		TunnelLifetime:          10 * time.Minute,
+		TunnelTestInterval:      60 * time.Second,
+		TunnelTestTimeout:       5 * time.Second,
+		BuildTimeout:            90 * time.Second,
+		BuildRetries:            3,
+		ReplaceBeforeExpiration: 2 * time.Minute,
+		MaintenanceInterval:     30 * time.Second,
+	}
+}
 
-		Transport: TransportDefaults{
-			NTCP2Enabled:        true,
-			NTCP2Port:           0, // Random port
-			NTCP2MaxConnections: 200,
-			SSU2Enabled:         false,
-			SSU2Port:            0,
-			ConnectionTimeout:   30 * time.Second,
-			IdleTimeout:         5 * time.Minute,
-			MaxMessageSize:      32768, // 32 KiB
-		},
+// buildTransportDefaults creates default transport layer configuration values.
+func buildTransportDefaults() TransportDefaults {
+	return TransportDefaults{
+		NTCP2Enabled:        true,
+		NTCP2Port:           0, // Random port
+		NTCP2MaxConnections: 200,
+		SSU2Enabled:         false,
+		SSU2Port:            0,
+		ConnectionTimeout:   30 * time.Second,
+		IdleTimeout:         5 * time.Minute,
+		MaxMessageSize:      32768, // 32 KiB
+	}
+}
 
-		Performance: PerformanceDefaults{
-			MessageQueueSize:          256,
-			WorkerPoolSize:            8,
-			GarlicEncryptionCacheSize: 1000,
-			FragmentCacheSize:         500,
-			CleanupInterval:           5 * time.Minute,
-		},
+// buildPerformanceDefaults creates default performance tuning configuration values.
+func buildPerformanceDefaults() PerformanceDefaults {
+	return PerformanceDefaults{
+		MessageQueueSize:          256,
+		WorkerPoolSize:            8,
+		GarlicEncryptionCacheSize: 1000,
+		FragmentCacheSize:         500,
+		CleanupInterval:           5 * time.Minute,
 	}
 }
 

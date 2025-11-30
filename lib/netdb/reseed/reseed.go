@@ -330,36 +330,50 @@ func decodeBase64(dst, src []byte) (int, error) {
 
 	n := 0
 	for len(src) > 0 {
-		// Decode 4 characters into 3 bytes
-		var val uint32
-		bits := 0
-
-		for i := 0; i < 4 && len(src) > 0; i++ {
-			c := src[0]
-			src = src[1:]
-
-			if c == '=' {
-				break
-			}
-
-			idx := bytes.IndexByte([]byte(base64Table), c)
-			if idx == -1 {
-				continue
-			}
-
-			val = (val << 6) | uint32(idx)
-			bits += 6
-		}
-
-		// Write decoded bytes
-		for bits >= 8 {
-			bits -= 8
-			dst[n] = byte(val >> bits)
-			n++
-		}
+		val, bits, remaining := decodeBase64Block(src, base64Table)
+		src = remaining
+		n += writeDecodedBytes(dst[n:], val, bits)
 	}
 
 	return n, nil
+}
+
+// decodeBase64Block decodes a 4-character base64 block into a value and bit count.
+// Returns the decoded value, number of valid bits, and remaining source bytes.
+func decodeBase64Block(src []byte, base64Table string) (uint32, int, []byte) {
+	var val uint32
+	bits := 0
+
+	for i := 0; i < 4 && len(src) > 0; i++ {
+		c := src[0]
+		src = src[1:]
+
+		if c == '=' {
+			break
+		}
+
+		idx := bytes.IndexByte([]byte(base64Table), c)
+		if idx == -1 {
+			continue
+		}
+
+		val = (val << 6) | uint32(idx)
+		bits += 6
+	}
+
+	return val, bits, src
+}
+
+// writeDecodedBytes writes decoded bytes from a base64 value to destination buffer.
+// Returns the number of bytes written.
+func writeDecodedBytes(dst []byte, val uint32, bits int) int {
+	n := 0
+	for bits >= 8 {
+		bits -= 8
+		dst[n] = byte(val >> bits)
+		n++
+	}
+	return n
 }
 
 // extractSU3Content extracts the content from the SU3 file with signature verification.
