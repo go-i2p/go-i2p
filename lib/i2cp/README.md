@@ -1,238 +1,727 @@
-# I2CP - I2P Client Protocol
+# i2cp
+--
+    import "github.com/go-i2p/go-i2p/lib/i2cp"
 
-This package implements the I2P Client Protocol (I2CP) v2.10.0, which allows client applications to communicate with the I2P router to create sessions, send messages, and receive messages through the I2P network.
+![i2cp.svg](i2cp.svg)
 
-## Overview
+Package i2cp implements the I2P Client Protocol (I2CP) server.
 
-I2CP is a client-server protocol that enables applications to:
-- Create isolated I2P sessions with unique destinations
-- Manage inbound and outbound tunnel pools
-- Send messages to other I2P destinations
-- Receive messages from other I2P destinations
-- Configure tunnel parameters and session settings
+I2CP allows client applications to communicate with the I2P network by:
 
-## Architecture
+    - Creating sessions with destination keypairs
+    - Sending and receiving messages through tunnels
+    - Managing LeaseSet publication
 
-The package consists of three main components:
+The server listens on localhost:7654 by default (configurable via
+--i2cp.address). Protocol version: I2CP v2.10.0
 
-### 1. Protocol (`protocol.go`)
-- Message framing and serialization
-- Protocol message type definitions
-- Wire format encoding/decoding
-- Message reading and writing utilities
+Main components:
 
-### 2. Session Management (`session.go`)
-- Session lifecycle management
-- Client destination generation
-- Tunnel pool integration
-- Message queue management
-- Configuration handling
+    - Server: Handles TCP/Unix socket connections
+    - Session: Manages client sessions and tunnel pools
+    - MessageRouter: Routes messages through tunnel system
+    - Publisher: Publishes LeaseSets to NetDB
 
-### 3. Server (`server.go`)
-- TCP server on localhost:7654 (default)
-- Connection handling and routing
-- Multi-client session management
-- Message dispatching
+Package i2cp implements the I2P Client Protocol (I2CP) v2.10.0.
+
+I2CP is the protocol used by client applications to communicate with the I2P
+router. It allows clients to create sessions, send messages, and receive
+messages through the I2P network.
+
+Protocol Overview: - TCP-based client-server protocol (default port: 7654) -
+Each message has: type (1 byte), session ID (2 bytes), length (4 bytes), payload
+- Session IDs 0x0000 and 0xFFFF are reserved - Supports authentication, tunnel
+management, and message delivery
 
 ## Usage
 
-### Starting the I2CP Server
+```go
+const (
+	// Session management
+	MessageTypeCreateSession      = 1 // Client -> Router: Create new session
+	MessageTypeSessionStatus      = 2 // Router -> Client: Session creation result
+	MessageTypeReconfigureSession = 3 // Client -> Router: Update session config
+	MessageTypeDestroySession     = 4 // Client -> Router: Terminate session
+
+	// LeaseSet management
+	MessageTypeCreateLeaseSet  = 5 // Client -> Router: Publish LeaseSet
+	MessageTypeRequestLeaseSet = 6 // Router -> Client: Request LeaseSet update
+
+	// Message delivery
+	MessageTypeSendMessage    = 7 // Client -> Router: Send message to destination
+	MessageTypeMessagePayload = 8 // Router -> Client: Received message
+
+	// Status and information
+	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
+	MessageTypeBandwidthLimits    = 10 // Router -> Client: Bandwidth limits response
+	MessageTypeGetDate            = 11 // Client -> Router: Query router time
+	MessageTypeSetDate            = 12 // Router -> Client: Current router time
+
+	// Deprecated/legacy message types
+	MessageTypeHostLookup = 13 // Deprecated in v2.10.0
+	MessageTypeHostReply  = 14 // Deprecated in v2.10.0
+)
+```
+Message type constants as defined in I2CP v2.10.0
 
 ```go
-import "github.com/go-i2p/go-i2p/lib/i2cp"
-
-// Create server with default config
-server, err := i2cp.NewServer(nil)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Start listening
-if err := server.Start(); err != nil {
-    log.Fatal(err)
-}
-defer server.Stop()
+const (
+	SessionIDReservedControl   = 0x0000 // Control messages (pre-session)
+	SessionIDReservedBroadcast = 0xFFFF // Broadcast to all sessions
+)
 ```
-
-### Custom Server Configuration
+Reserved session IDs
 
 ```go
-config := &i2cp.ServerConfig{
-    ListenAddr:  "localhost:17654",  // Custom port
-    Network:     "tcp",               // or "unix" for Unix sockets
-    MaxSessions: 50,                  // Max concurrent sessions
-}
-
-server, err := i2cp.NewServer(config)
+const (
+	ProtocolVersionMajor = 2
+	ProtocolVersionMinor = 10
+	ProtocolVersionPatch = 0
+)
 ```
-
-### Creating a Session (Client Side)
+Protocol version constants
 
 ```go
-import "net"
+const (
+	// MaxPayloadSize is the maximum size for I2CP message payloads.
+	// Per I2CP spec: "Actual message length limit is about 64 KB."
+	// Using 65535 (64 KB - 1) to be safe with the 4-byte length field.
+	MaxPayloadSize = 65535
 
-// Connect to I2CP server
-conn, err := net.Dial("tcp", "localhost:7654")
-if err != nil {
-    log.Fatal(err)
-}
-defer conn.Close()
+	// MaxMessageSize is the maximum total I2CP message size including header.
+	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
+	MaxMessageSize = 7 + MaxPayloadSize
 
-// Send CreateSession message
-createMsg := &i2cp.Message{
-    Type:      i2cp.MessageTypeCreateSession,
-    SessionID: i2cp.SessionIDReservedControl,
-    Payload:   []byte{}, // Session config payload
-}
+	// DefaultPayloadSize is the typical payload size for most I2CP messages.
+	// Payloads exceeding this threshold trigger warning logs.
+	DefaultPayloadSize = 8192 // 8 KB
 
-if err := i2cp.WriteMessage(conn, createMsg); err != nil {
-    log.Fatal(err)
-}
-
-// Read SessionStatus response
-response, err := i2cp.ReadMessage(conn)
-if err != nil {
-    log.Fatal(err)
-}
-
-sessionID := response.SessionID
-fmt.Printf("Session created with ID: 0x%04X\n", sessionID)
+	// MessageReadTimeout is the maximum time allowed to read a complete message.
+	// This prevents slow-send attacks where attackers claim large payloads
+	// but drip-feed data slowly to exhaust connection resources.
+	MessageReadTimeout = 30 // seconds
+)
 ```
-
-## Protocol Message Types
-
-| Type | Name | Direction | Description |
-|------|------|-----------|-------------|
-| 1 | CreateSession | Client → Router | Create new session |
-| 2 | SessionStatus | Router → Client | Session creation result |
-| 3 | ReconfigureSession | Client → Router | Update session config |
-| 4 | DestroySession | Client → Router | Terminate session |
-| 5 | CreateLeaseSet | Client → Router | Publish LeaseSet |
-| 6 | RequestLeaseSet | Router → Client | Request LeaseSet update |
-| 7 | SendMessage | Client → Router | Send message to destination |
-| 8 | MessagePayload | Router → Client | Received message |
-| 9 | GetBandwidthLimits | Client → Router | Query bandwidth |
-| 10 | BandwidthLimits | Router → Client | Bandwidth limits response |
-| 11 | GetDate | Client → Router | Query router time |
-| 12 | SetDate | Router → Client | Current router time |
-
-## Wire Format
-
-Each I2CP message follows this format:
-
-```
-+------+----------+--------+----------+
-| Type | SessionID| Length | Payload  |
-+------+----------+--------+----------+
-  1 byte  2 bytes   4 bytes  variable
-```
-
-- **Type**: Message type identifier
-- **SessionID**: Session identifier (big endian)
-- **Length**: Payload length in bytes (big endian)
-- **Payload**: Message-specific data
-
-### Message Size Limits
-
-Per the I2CP specification, **message payloads are limited to approximately 64 KB (65,535 bytes)**. This limit applies to:
-
-- SendMessage payloads (destination hash + message data)
-- MessagePayload payloads (message ID + decrypted data)
-
-**Important for Client Applications:**
-
-- The I2CP protocol does **NOT** provide automatic message fragmentation
-- Client applications **MUST** fragment messages larger than ~64 KB at the application layer
-- Attempting to send oversized messages will result in an error
-
-For streaming applications requiring large data transfers, use the I2P Streaming Library which handles fragmentation and reassembly automatically.
-
-## Session Configuration
-
-Sessions can be configured with:
-
-- **Tunnel Parameters**:
-  - Inbound/outbound tunnel length (hops): default 3
-  - Inbound/outbound tunnel count: default 5
-  - Tunnel lifetime: default 10 minutes
-
-- **Network Parameters**:
-  - Message timeout: default 60 seconds
-  - Nickname for debugging
-
-Example:
-```go
-config := &i2cp.SessionConfig{
-    InboundTunnelLength:  3,
-    OutboundTunnelLength: 3,
-    InboundTunnelCount:   5,
-    OutboundTunnelCount:  5,
-    TunnelLifetime:       10 * time.Minute,
-    MessageTimeout:       60 * time.Second,
-    Nickname:             "my-app",
-}
-```
-
-## Reserved Session IDs
-
-- `0x0000`: Control messages (pre-session)
-- `0xFFFF`: Broadcast to all sessions (reserved)
-
-## Integration with Tunnel Pools
-
-Sessions integrate with the tunnel management system:
+Protocol limits as per I2CP specification
 
 ```go
-session, _ := manager.CreateSession(nil, nil)
+const DefaultI2CPPort = 7654
+```
+DefaultI2CPPort is the standard I2CP port
 
-// Attach tunnel pools
-session.SetInboundPool(inboundPool)
-session.SetOutboundPool(outboundPool)
+#### func  MessageTypeName
 
-// Use pools for routing
-inbound := session.InboundPool()
-outbound := session.OutboundPool()
+```go
+func MessageTypeName(msgType uint8) string
+```
+MessageTypeName returns a human-readable name for the message type
+
+#### func  WriteMessage
+
+```go
+func WriteMessage(w io.Writer, msg *Message) error
+```
+WriteMessage writes a complete I2CP message to a writer
+
+#### type IncomingMessage
+
+```go
+type IncomingMessage struct {
+	Payload   []byte    // Message data
+	Timestamp time.Time // When the message was received
+}
 ```
 
-## Testing
+IncomingMessage represents a message received from the I2P network
 
-Run the test suite:
+#### type LeaseSetPublisher
 
-```bash
-go test ./lib/i2cp -v
+```go
+type LeaseSetPublisher interface {
+	// PublishLeaseSet publishes a LeaseSet to the network database and distributed network.
+	//
+	// Parameters:
+	//   - key: The destination hash (SHA256 of the destination)
+	//   - leaseSetData: The serialized LeaseSet2 bytes
+	//
+	// Returns an error if publication fails at any stage (local storage or network distribution).
+	PublishLeaseSet(key common.Hash, leaseSetData []byte) error
+}
 ```
 
-Run with coverage:
+LeaseSetPublisher defines the interface for publishing LeaseSets to the network.
+This interface allows I2CP sessions to publish their LeaseSets without depending
+directly on the router or netdb implementations.
 
-```bash
-go test ./lib/i2cp -cover
+Implementations should: - Store the LeaseSet in the local NetDB - Send
+DatabaseStore messages to floodfill routers for network distribution - Handle
+any errors during the publication process
+
+#### type Message
+
+```go
+type Message struct {
+	Type      uint8  // Message type
+	SessionID uint16 // Session identifier
+	Payload   []byte // Message payload
+}
 ```
 
-Current test coverage: **73.4%**
+Message represents a generic I2CP message
 
-## Implementation Status
+#### func  ReadMessage
 
-### ✅ Completed
-- I2CP protocol message framing and serialization
-- TCP server with multi-client support
-- Session creation, destruction, and reconfiguration
-- Session manager with automatic ID allocation
-- Message queue management for incoming messages
-- Integration framework for tunnel pools
+```go
+func ReadMessage(r io.Reader) (*Message, error)
+```
+ReadMessage reads a complete I2CP message from a reader
 
-### 🚧 In Progress (Phase 6)
-- LeaseSet creation and publishing
-- SendMessage payload parsing and routing
-- MessagePayload delivery to clients
-- Bandwidth limit reporting
-- I2P time encoding for GetDate/SetDate
+#### func (*Message) MarshalBinary
 
-## References
+```go
+func (m *Message) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the I2CP message to wire format Format: type(1) +
+sessionID(2) + length(4) + payload(variable)
 
-- [I2CP Specification](https://geti2p.net/spec/i2cp)
-- Protocol Version: 2.10.0
-- Default Port: 7654 (TCP)
+#### func (*Message) UnmarshalBinary
 
-## License
+```go
+func (m *Message) UnmarshalBinary(data []byte) error
+```
+UnmarshalBinary deserializes an I2CP message from wire format
 
-MIT License - See LICENSE file for details
+#### type MessagePayloadPayload
+
+```go
+type MessagePayloadPayload struct {
+	MessageID uint32 // Unique message identifier
+	Payload   []byte // Decrypted message data (variable length, max ~64 KB total)
+}
+```
+
+MessagePayloadPayload represents the payload structure of a MessagePayload (type
+8) message. This structure follows the I2CP v2.10.0 specification for
+router-to-client message delivery.
+
+Format:
+
+    SessionID: uint16 (already in Message header)
+    MessageID: uint32 (4 bytes) - unique identifier for this message
+    Payload: []byte (variable length) - decrypted message data
+
+The router sends this to the client after receiving and decrypting a message
+from the I2P network destined for the client's destination.
+
+IMPORTANT: Per I2CP specification, the total payload size is limited to
+approximately 64 KB. Messages larger than this limit cannot be delivered via
+I2CP and must be fragmented at the application layer by the sender.
+
+#### func  ParseMessagePayloadPayload
+
+```go
+func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error)
+```
+ParseMessagePayloadPayload deserializes a MessagePayload payload from wire
+format. Returns an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-3:   MessageID (4 bytes, big endian)
+    bytes 4+:    Message payload (variable length)
+
+#### func (*MessagePayloadPayload) MarshalBinary
+
+```go
+func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the MessagePayloadPayload to wire format. Returns the
+serialized bytes ready to be sent as an I2CP message payload.
+
+#### type MessageRouter
+
+```go
+type MessageRouter struct {
+}
+```
+
+MessageRouter handles routing outbound I2CP messages through the I2P network. It
+coordinates garlic encryption, tunnel selection, and message transmission.
+
+Design: - Encapsulates the message routing logic in a dedicated component - Uses
+existing garlic session manager for encryption - Integrates with tunnel pools
+for outbound routing - Delegates actual transmission to transport layer
+
+#### func  NewMessageRouter
+
+```go
+func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend TransportSendFunc) *MessageRouter
+```
+NewMessageRouter creates a new message router with the given garlic session
+manager. The transportSend callback will be used to send encrypted messages to
+the network.
+
+#### func (*MessageRouter) RouteOutboundMessage
+
+```go
+func (mr *MessageRouter) RouteOutboundMessage(
+	session *Session,
+	destinationHash common.Hash,
+	destinationPubKey [32]byte,
+	payload []byte,
+) error
+```
+RouteOutboundMessage routes a message from an I2CP client through the I2P
+network. This implements the complete outbound message flow: 1. Create garlic
+message with Data clove containing the payload 2. Encrypt garlic message for
+destination using ECIES-X25519-AEAD 3. Select outbound tunnel from session's
+pool 4. Send encrypted garlic through tunnel gateway
+
+Parameters: - session: I2CP session sending the message - destinationHash: Hash
+of the target I2P destination - destinationPubKey: X25519 public key of the
+destination (for garlic encryption) - payload: Raw message data to send
+
+Returns an error if routing fails at any step.
+
+#### func (*MessageRouter) SendThroughTunnel
+
+```go
+func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.I2NPMessage) error
+```
+SendThroughTunnel sends an I2NP message through a specific tunnel. This is a
+lower-level method that can be used when the tunnel is already selected.
+
+Parameters: - tunnel: The tunnel to send through - msg: The I2NP message to send
+(already encrypted if needed)
+
+Returns an error if sending fails.
+
+#### type SendMessagePayload
+
+```go
+type SendMessagePayload struct {
+	Destination data.Hash // 32-byte SHA256 hash of target destination
+	Payload     []byte    // Message data to send (variable length, max ~64 KB total)
+}
+```
+
+SendMessagePayload represents the payload structure of a SendMessage (type 7)
+message. This structure follows the I2CP v2.10.0 specification for
+client-to-router message delivery.
+
+Format:
+
+    SessionID: uint16 (already in Message header)
+    Destination: Hash (32 bytes) - SHA256 hash of target destination
+    Payload: []byte (variable length) - actual message data to send
+
+The router will wrap this payload in garlic encryption and route it through the
+outbound tunnel pool to the specified destination.
+
+IMPORTANT: Per I2CP specification, the total payload size (destination + message
+data) is limited to approximately 64 KB. Client applications are responsible for
+fragmenting larger messages at the application layer. The I2CP protocol does NOT
+provide automatic fragmentation - this must be handled by the client application
+itself.
+
+#### func  ParseSendMessagePayload
+
+```go
+func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error)
+```
+ParseSendMessagePayload deserializes a SendMessage payload from wire format.
+Returns an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-31:  Destination hash (32 bytes)
+    bytes 32+:   Message payload (variable length)
+
+#### func (*SendMessagePayload) MarshalBinary
+
+```go
+func (smp *SendMessagePayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the SendMessagePayload to wire format. Returns the
+serialized bytes ready to be sent as an I2CP message payload.
+
+#### type Server
+
+```go
+type Server struct {
+}
+```
+
+Server is an I2CP protocol server that accepts client connections
+
+#### func  NewServer
+
+```go
+func NewServer(config *ServerConfig) (*Server, error)
+```
+NewServer creates a new I2CP server
+
+#### func (*Server) IsRunning
+
+```go
+func (s *Server) IsRunning() bool
+```
+IsRunning returns whether the server is currently running
+
+#### func (*Server) SessionManager
+
+```go
+func (s *Server) SessionManager() *SessionManager
+```
+SessionManager returns the server's session manager
+
+#### func (*Server) SetDestinationResolver
+
+```go
+func (s *Server) SetDestinationResolver(resolver interface {
+	ResolveDestination(destHash common.Hash) ([32]byte, error)
+},
+)
+```
+SetDestinationResolver sets the destination resolver for looking up encryption
+keys. This enables the server to resolve destination hashes to X25519 public
+keys from the NetDB for garlic encryption.
+
+#### func (*Server) SetMessageRouter
+
+```go
+func (s *Server) SetMessageRouter(router *MessageRouter)
+```
+SetMessageRouter sets the message router for outbound message handling. This
+should be called after creating the server and before starting it.
+
+#### func (*Server) Start
+
+```go
+func (s *Server) Start() error
+```
+Start begins listening for I2CP connections
+
+#### func (*Server) Stop
+
+```go
+func (s *Server) Stop() error
+```
+Stop gracefully stops the server
+
+#### type ServerConfig
+
+```go
+type ServerConfig struct {
+	// Address to listen on (e.g., "localhost:7654" or "/tmp/i2cp.sock" for Unix socket)
+	ListenAddr string
+
+	// Network type: "tcp" or "unix"
+	Network string
+
+	// Maximum number of concurrent sessions
+	MaxSessions int
+
+	// LeaseSet publisher for distributing LeaseSets to the network (optional)
+	// If nil, sessions will function but won't publish to the network
+	LeaseSetPublisher LeaseSetPublisher
+}
+```
+
+ServerConfig holds configuration for the I2CP server
+
+#### func  DefaultServerConfig
+
+```go
+func DefaultServerConfig() *ServerConfig
+```
+DefaultServerConfig returns a ServerConfig with sensible defaults
+
+#### type Session
+
+```go
+type Session struct {
+}
+```
+
+Session represents an active I2CP client session
+
+#### func  NewSession
+
+```go
+func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error)
+```
+NewSession creates a new I2CP session with its own isolated in-memory NetDB. The
+destination parameter can be nil, in which case a new destination will be
+generated. Each session gets a completely separate in-memory StdNetDB instance
+to prevent client linkability. Client NetDBs are ephemeral and not persisted to
+disk.
+
+#### func (*Session) Config
+
+```go
+func (s *Session) Config() *SessionConfig
+```
+Config returns the session configuration
+
+#### func (*Session) CreateLeaseSet
+
+```go
+func (s *Session) CreateLeaseSet() ([]byte, error)
+```
+CreateLeaseSet generates a new LeaseSet2 for this session using active inbound
+tunnels. The LeaseSet2 contains leases from the inbound tunnel pool and is
+signed by the session's destination private signing key. Uses modern X25519
+encryption keys. This method requires: - The session is active - The session has
+private keys (generated during session creation) - The inbound tunnel pool is
+set and contains at least one active tunnel
+
+Returns the serialized LeaseSet2 ready for publishing to the network database.
+The LeaseSet is also cached in the session for maintenance purposes.
+
+#### func (*Session) CreatedAt
+
+```go
+func (s *Session) CreatedAt() time.Time
+```
+CreatedAt returns when the session was created
+
+#### func (*Session) CurrentLeaseSet
+
+```go
+func (s *Session) CurrentLeaseSet() []byte
+```
+CurrentLeaseSet returns the currently cached LeaseSet, if any. Returns nil if no
+LeaseSet has been generated yet.
+
+#### func (*Session) Destination
+
+```go
+func (s *Session) Destination() *destination.Destination
+```
+Destination returns the session's destination
+
+#### func (*Session) ID
+
+```go
+func (s *Session) ID() uint16
+```
+ID returns the session ID
+
+#### func (*Session) InboundPool
+
+```go
+func (s *Session) InboundPool() *tunnel.Pool
+```
+InboundPool returns the inbound tunnel pool
+
+#### func (*Session) IsActive
+
+```go
+func (s *Session) IsActive() bool
+```
+IsActive returns whether the session is active
+
+#### func (*Session) LeaseSetAge
+
+```go
+func (s *Session) LeaseSetAge() time.Duration
+```
+LeaseSetAge returns how long ago the current LeaseSet was published. Returns 0
+if no LeaseSet exists.
+
+#### func (*Session) OutboundPool
+
+```go
+func (s *Session) OutboundPool() *tunnel.Pool
+```
+OutboundPool returns the outbound tunnel pool
+
+#### func (*Session) QueueIncomingMessage
+
+```go
+func (s *Session) QueueIncomingMessage(payload []byte) error
+```
+QueueIncomingMessage queues a message for delivery to the client Returns an
+error if the session is not active or the queue is full
+
+#### func (*Session) QueueIncomingMessageWithID
+
+```go
+func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) error
+```
+QueueIncomingMessageWithID queues a message for delivery to the client with a
+message ID. This is a higher-level method that wraps the payload in a
+MessagePayloadPayload structure before queuing it for delivery. The message ID
+can be used for tracking and correlation. Returns an error if the session is not
+active or the queue is full.
+
+#### func (*Session) ReceiveMessage
+
+```go
+func (s *Session) ReceiveMessage() (*IncomingMessage, error)
+```
+ReceiveMessage blocks until a message is available or the session is stopped
+Returns nil, nil if the session is stopped
+
+#### func (*Session) Reconfigure
+
+```go
+func (s *Session) Reconfigure(newConfig *SessionConfig) error
+```
+Reconfigure updates the session configuration Note: This only updates config
+values, tunnel pools need to be recreated separately
+
+#### func (*Session) SetInboundPool
+
+```go
+func (s *Session) SetInboundPool(pool *tunnel.Pool)
+```
+SetInboundPool sets the inbound tunnel pool for this session
+
+#### func (*Session) SetLeaseSetPublisher
+
+```go
+func (s *Session) SetLeaseSetPublisher(publisher LeaseSetPublisher)
+```
+SetLeaseSetPublisher configures the publisher for distributing LeaseSets to the
+network. This should be called during session initialization before starting
+LeaseSet maintenance. The publisher is responsible for storing LeaseSets in the
+local NetDB and distributing them to floodfill routers on the I2P network.
+
+#### func (*Session) SetOutboundPool
+
+```go
+func (s *Session) SetOutboundPool(pool *tunnel.Pool)
+```
+SetOutboundPool sets the outbound tunnel pool for this session
+
+#### func (*Session) StartLeaseSetMaintenance
+
+```go
+func (s *Session) StartLeaseSetMaintenance() error
+```
+StartLeaseSetMaintenance begins automatic LeaseSet maintenance. This runs a
+background goroutine that: - Regenerates the LeaseSet before it expires -
+Publishes updated LeaseSets when tunnels change - Ensures the session remains
+reachable on the network
+
+The maintenance interval is calculated based on TunnelLifetime: - Check every
+TunnelLifetime/4 (e.g., every 2.5 minutes for 10-minute tunnels) - Regenerate
+when remaining lifetime < TunnelLifetime/2
+
+Must be called after tunnel pools are started.
+
+#### func (*Session) Stop
+
+```go
+func (s *Session) Stop()
+```
+Stop gracefully stops the session and cleans up resources
+
+#### type SessionConfig
+
+```go
+type SessionConfig struct {
+	// Tunnel parameters
+	InboundTunnelLength  int           // Number of hops for inbound tunnels (default: 3)
+	OutboundTunnelLength int           // Number of hops for outbound tunnels (default: 3)
+	InboundTunnelCount   int           // Number of inbound tunnels (default: 5)
+	OutboundTunnelCount  int           // Number of outbound tunnels (default: 5)
+	TunnelLifetime       time.Duration // Tunnel lifetime before rotation (default: 10 minutes)
+
+	// Network parameters
+	MessageTimeout time.Duration // Message delivery timeout (default: 60 seconds)
+
+	// Message queue configuration
+	MessageQueueSize     int // Incoming message queue buffer size (default: 100)
+	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
+	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
+
+	// Session metadata
+	Nickname string // Optional nickname for debugging
+}
+```
+
+SessionConfig holds the configuration for an I2CP session
+
+#### func  DefaultSessionConfig
+
+```go
+func DefaultSessionConfig() *SessionConfig
+```
+DefaultSessionConfig returns a SessionConfig with sensible defaults
+
+#### type SessionManager
+
+```go
+type SessionManager struct {
+}
+```
+
+SessionManager manages all active I2CP sessions
+
+#### func  NewSessionManager
+
+```go
+func NewSessionManager() *SessionManager
+```
+NewSessionManager creates a new session manager
+
+#### func (*SessionManager) CreateSession
+
+```go
+func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig) (*Session, error)
+```
+CreateSession creates a new session with the given destination and config.
+
+#### func (*SessionManager) DestroySession
+
+```go
+func (sm *SessionManager) DestroySession(sessionID uint16) error
+```
+DestroySession removes and stops a session
+
+#### func (*SessionManager) GetSession
+
+```go
+func (sm *SessionManager) GetSession(sessionID uint16) (*Session, bool)
+```
+GetSession retrieves a session by ID
+
+#### func (*SessionManager) SessionCount
+
+```go
+func (sm *SessionManager) SessionCount() int
+```
+SessionCount returns the number of active sessions
+
+#### func (*SessionManager) StopAll
+
+```go
+func (sm *SessionManager) StopAll()
+```
+StopAll stops all active sessions
+
+#### type TransportSendFunc
+
+```go
+type TransportSendFunc func(peerHash common.Hash, msg i2np.I2NPMessage) error
+```
+
+TransportSendFunc is a callback function for sending I2NP messages to peers. The
+implementation should handle queueing the message to the appropriate transport
+session (e.g., NTCP2).
+
+Parameters: - peerHash: Hash of the destination router (gateway) - msg: I2NP
+message to send
+
+Returns an error if the message cannot be sent.
+
+
+
+i2cp 
+
+github.com/go-i2p/go-i2p/lib/i2cp
+
+[go-i2p template file](/template.md)

@@ -24,6 +24,91 @@ type Bootstrap interface {
 
 interface defining a way to bootstrap into the i2p network
 
+#### type CompositeBootstrap
+
+```go
+type CompositeBootstrap struct {
+}
+```
+
+CompositeBootstrap implements the Bootstrap interface by trying multiple
+bootstrap methods in sequence: 1. Local reseed file (if specified) - highest
+priority 2. Remote reseed servers 3. Local netDb directories - fallback
+
+#### func  NewCompositeBootstrap
+
+```go
+func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap
+```
+NewCompositeBootstrap creates a new composite bootstrap with file, reseed, and
+local netDb fallback
+
+#### func (*CompositeBootstrap) GetPeers
+
+```go
+func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+```
+GetPeers implements the Bootstrap interface by trying file first (if specified),
+then reseed, then falling back to local netDb if both fail
+
+#### type FileBootstrap
+
+```go
+type FileBootstrap struct {
+}
+```
+
+FileBootstrap implements the Bootstrap interface using a local zip or su3 file
+
+#### func  NewFileBootstrap
+
+```go
+func NewFileBootstrap(filePath string) *FileBootstrap
+```
+NewFileBootstrap creates a new file bootstrap with the provided file path
+
+#### func (*FileBootstrap) GetPeers
+
+```go
+func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+```
+GetPeers implements the Bootstrap interface by reading RouterInfos from a local
+file
+
+#### type LocalNetDbBootstrap
+
+```go
+type LocalNetDbBootstrap struct {
+}
+```
+
+LocalNetDbBootstrap implements the Bootstrap interface by reading RouterInfos
+from a local netDb directory (Java I2P or i2pd compatible)
+
+#### func  NewLocalNetDbBootstrap
+
+```go
+func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap
+```
+NewLocalNetDbBootstrap creates a new local netDb bootstrap with default search
+paths
+
+#### func  NewLocalNetDbBootstrapWithPaths
+
+```go
+func NewLocalNetDbBootstrapWithPaths(paths []string) *LocalNetDbBootstrap
+```
+NewLocalNetDbBootstrapWithPaths creates a new local netDb bootstrap with custom
+paths
+
+#### func (*LocalNetDbBootstrap) GetPeers
+
+```go
+func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+```
+GetPeers implements the Bootstrap interface by reading RouterInfos from local
+netDb
+
 #### type ReseedBootstrap
 
 ```go

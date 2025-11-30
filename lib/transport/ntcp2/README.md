@@ -216,6 +216,7 @@ Close closes the transport cleanly.
 ```go
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool
 ```
+Compatible returns true if a routerInfo is compatible with this transport.
 
 #### func (*NTCP2Transport) GetSession
 

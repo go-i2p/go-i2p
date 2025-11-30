@@ -10,8 +10,8 @@
 
 ```go
 const (
-	DefaultDialTimeout = 5 * 1000 // 5 seconds
-	DefaultKeepAlive   = 5 * 1000 // 5 seconds
+	DefaultDialTimeout = 30 * time.Second // 30 seconds for HTTP requests
+	DefaultKeepAlive   = 30 * time.Second // 30 seconds keep-alive
 )
 ```
 
@@ -35,6 +35,20 @@ type Reseed struct {
 ```go
 func NewReseed() *Reseed
 ```
+
+#### func (Reseed) ProcessLocalSU3File
+
+```go
+func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error)
+```
+ProcessLocalSU3File reads and processes a local SU3 reseed file
+
+#### func (Reseed) ProcessLocalZipFile
+
+```go
+func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error)
+```
+ProcessLocalZipFile reads and processes a local zip reseed file
 
 #### func (Reseed) SingleReseed
 

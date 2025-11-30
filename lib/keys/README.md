@@ -8,6 +8,61 @@
 
 ## Usage
 
+#### type DestinationKeyStore
+
+```go
+type DestinationKeyStore struct {
+}
+```
+
+DestinationKeyStore stores both encryption and signing private keys for an I2P
+destination, enabling LeaseSet2 creation and message encryption. Uses modern
+cryptography: Ed25519 for signing and X25519 for encryption.
+
+#### func  NewDestinationKeyStore
+
+```go
+func NewDestinationKeyStore() (*DestinationKeyStore, error)
+```
+NewDestinationKeyStore creates a new key store with generated Ed25519/X25519
+keys. This generates a new destination with fresh keys suitable for creating
+LeaseSet2s using modern I2P cryptography (ECIES-X25519-AEAD-Ratchet compatible).
+
+#### func (*DestinationKeyStore) Destination
+
+```go
+func (dks *DestinationKeyStore) Destination() *destination.Destination
+```
+Destination returns the public destination
+
+#### func (*DestinationKeyStore) EncryptionPrivateKey
+
+```go
+func (dks *DestinationKeyStore) EncryptionPrivateKey() types.PrivateEncryptionKey
+```
+EncryptionPrivateKey returns the encryption private key for decrypting messages
+
+#### func (*DestinationKeyStore) EncryptionPublicKey
+
+```go
+func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey, error)
+```
+EncryptionPublicKey returns the encryption public key
+
+#### func (*DestinationKeyStore) SigningPrivateKey
+
+```go
+func (dks *DestinationKeyStore) SigningPrivateKey() types.SigningPrivateKey
+```
+SigningPrivateKey returns the signing private key for creating LeaseSets
+
+#### func (*DestinationKeyStore) SigningPublicKey
+
+```go
+func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, error)
+```
+SigningPublicKey returns the signing public key
+
 #### type KeyStore
 
 ```go
