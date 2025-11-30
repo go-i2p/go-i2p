@@ -177,51 +177,92 @@ func (t *NTCP2Transport) Addr() net.Addr {
 
 // SetIdentity sets the router identity for this transport.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
+	if err := t.logIdentityUpdate(ident); err != nil {
+		return err
+	}
+	t.identity = ident
+
+	ntcp2Config, err := t.createNTCP2ConfigFromIdentity(ident)
+	if err != nil {
+		return err
+	}
+	t.config.NTCP2Config = ntcp2Config
+
+	if err := t.recreateListenerIfNeeded(ntcp2Config); err != nil {
+		return err
+	}
+
+	t.logger.Info("Identity updated successfully")
+	return nil
+}
+
+// logIdentityUpdate logs the identity update operation and validates the identity hash.
+func (t *NTCP2Transport) logIdentityUpdate(ident router_info.RouterInfo) error {
 	identHash, err := ident.IdentHash()
 	if err != nil {
 		return fmt.Errorf("failed to get router identity hash: %w", err)
 	}
 	identHashBytes := identHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating NTCP2 transport identity")
-	t.identity = ident
+	return nil
+}
 
-	// Update the NTCP2 configuration with new identity
+// createNTCP2ConfigFromIdentity creates a new NTCP2 configuration from the provided router identity.
+func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
 	identityHash, err := ident.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get router identity hash: %w", err)
+		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
 	}
 	identityBytes := identityHash.Bytes()
 	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
-		return WrapNTCP2Error(err, "updating identity")
+		return nil, WrapNTCP2Error(err, "updating identity")
 	}
-	t.config.NTCP2Config = ntcp2Config
+	return ntcp2Config, nil
+}
 
-	// If listener is already created, we need to recreate it with new identity
-	if t.listener != nil {
-		t.logger.Info("Recreating listener with new identity")
-		if err := t.listener.Close(); err != nil {
-			t.logger.WithError(err).Warn("Error closing existing listener during identity update")
-		}
-
-		tcpListener, err := net.Listen("tcp", t.config.ListenerAddress)
-		if err != nil {
-			t.logger.WithError(err).Error("Failed to rebind listener")
-			return WrapNTCP2Error(err, "rebinding listener")
-		}
-
-		listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
-		if err != nil {
-			t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
-			return WrapNTCP2Error(err, "creating new listener")
-		}
-		t.listener = listener
-		t.logger.WithField("address", t.listener.Addr().String()).Info("Listener recreated successfully")
+// recreateListenerIfNeeded recreates the network listener with new identity if one exists.
+func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.NTCP2Config) error {
+	if t.listener == nil {
+		return nil
 	}
 
-	t.logger.Info("Identity updated successfully")
+	t.logger.Info("Recreating listener with new identity")
+	t.closeExistingListener()
+
+	listener, err := t.createNewListenerWithConfig(ntcp2Config)
+	if err != nil {
+		return err
+	}
+
+	t.listener = listener
+	t.logger.WithField("address", t.listener.Addr().String()).Info("Listener recreated successfully")
 	return nil
+}
+
+// closeExistingListener closes the current listener and logs any errors.
+func (t *NTCP2Transport) closeExistingListener() {
+	if err := t.listener.Close(); err != nil {
+		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
+	}
+}
+
+// createNewListenerWithConfig creates a new TCP and NTCP2 listener with the provided configuration.
+func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.NTCP2Config) (net.Listener, error) {
+	tcpListener, err := net.Listen("tcp", t.config.ListenerAddress)
+	if err != nil {
+		t.logger.WithError(err).Error("Failed to rebind listener")
+		return nil, WrapNTCP2Error(err, "rebinding listener")
+	}
+
+	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
+	if err != nil {
+		t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
+		return nil, WrapNTCP2Error(err, "creating new listener")
+	}
+
+	return listener, nil
 }
 
 // GetSession obtains a transport session with a router given its RouterInfo.

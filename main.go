@@ -27,22 +27,38 @@ var RootCmd = &cobra.Command{
 
 func init() {
 	cobra.OnInitialize(config.InitConfig)
+	registerGlobalFlags()
+	registerRouterFlags()
+	registerNetDbFlags()
+	registerBootstrapFlags()
+	registerI2CPFlags()
+	bindFlagsToViper()
+}
 
-	// Global flags
+// registerGlobalFlags registers global command-line flags for the application.
+func registerGlobalFlags() {
 	RootCmd.PersistentFlags().StringVar(&config.CfgFile, "config", "", "config file (default is $HOME/.go-i2p/config.yaml)")
+}
 
-	// Router configuration flags
+// registerRouterFlags registers router-specific configuration flags.
+func registerRouterFlags() {
 	RootCmd.PersistentFlags().String("base-dir", config.DefaultRouterConfig().BaseDir, "Base directory for I2P router")
 	RootCmd.PersistentFlags().String("working-dir", config.DefaultRouterConfig().WorkingDir, "Working directory for I2P router")
+}
 
-	// NetDb flags
+// registerNetDbFlags registers NetDb configuration flags.
+func registerNetDbFlags() {
 	RootCmd.PersistentFlags().String("netdb.path", config.DefaultNetDbConfig.Path, "Path to the netDb")
+}
 
-	// Bootstrap flags
+// registerBootstrapFlags registers bootstrap configuration flags.
+func registerBootstrapFlags() {
 	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
+}
 
-	// I2CP flags
+// registerI2CPFlags registers I2CP server configuration flags.
+func registerI2CPFlags() {
 	RootCmd.PersistentFlags().Bool("i2cp.enabled", config.DefaultI2CPConfig.Enabled,
 		"Enable I2CP server for client applications")
 	RootCmd.PersistentFlags().String("i2cp.address", config.DefaultI2CPConfig.Address,
@@ -51,20 +67,42 @@ func init() {
 		"I2CP network type (tcp or unix)")
 	RootCmd.PersistentFlags().Int("i2cp.max-sessions", config.DefaultI2CPConfig.MaxSessions,
 		"Maximum number of concurrent I2CP sessions")
+}
 
-	// Bind flags to viper
+// bindFlagsToViper binds all command-line flags to viper configuration keys.
+func bindFlagsToViper() {
+	bindRouterFlagsToViper()
+	bindNetDbFlagsToViper()
+	bindBootstrapFlagsToViper()
+	bindI2CPFlagsToViper()
+}
+
+// bindRouterFlagsToViper binds router flags to viper configuration.
+func bindRouterFlagsToViper() {
 	if err := viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir")); err != nil {
 		log.WithError(err).Fatal("Failed to bind base_dir flag")
 	}
 	if err := viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir")); err != nil {
 		log.WithError(err).Fatal("Failed to bind working_dir flag")
 	}
+}
+
+// bindNetDbFlagsToViper binds NetDb flags to viper configuration.
+func bindNetDbFlagsToViper() {
 	if err := viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path")); err != nil {
 		log.WithError(err).Fatal("Failed to bind netdb.path flag")
 	}
+}
+
+// bindBootstrapFlagsToViper binds bootstrap flags to viper configuration.
+func bindBootstrapFlagsToViper() {
 	if err := viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold")); err != nil {
 		log.WithError(err).Fatal("Failed to bind bootstrap.low_peer_threshold flag")
 	}
+}
+
+// bindI2CPFlagsToViper binds I2CP flags to viper configuration.
+func bindI2CPFlagsToViper() {
 	if err := viper.BindPFlag("i2cp.enabled", RootCmd.PersistentFlags().Lookup("i2cp.enabled")); err != nil {
 		log.WithError(err).Fatal("Failed to bind i2cp.enabled flag")
 	}
