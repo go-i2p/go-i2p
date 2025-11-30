@@ -344,7 +344,7 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 }
 
 // getPublicKeyForSigner returns the public key for a known reseed signer.
-// Returns nil if the signer is not recognized.
+// Returns an error if the signer is not recognized (fail-closed security).
 func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 	var certPEM string
 
@@ -352,8 +352,10 @@ func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 	case "hankhill19580@gmail.com":
 		certPEM = reseedHankhill19580Certificate
 	default:
-		log.WithField("signer_id", signerID).Warn("Unknown reseed signer, signature verification will be skipped")
-		return nil, nil
+		// SECURITY: Reject unknown signers instead of allowing them
+		// This prevents use of untrusted/malicious certificates
+		log.WithField("signer_id", signerID).Error("Unknown reseed signer - rejecting for security")
+		return nil, oops.Errorf("unknown or untrusted reseed signer: %s", signerID)
 	}
 
 	// Parse the certificate
@@ -369,8 +371,44 @@ func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 		return nil, oops.Errorf("failed to parse certificate for signer %s: %w", signerID, err)
 	}
 
-	log.WithField("signer_id", signerID).Info("Successfully loaded certificate for reseed signer")
+	// SECURITY: Validate certificate expiration
+	if err := validateCertificate(cert, signerID); err != nil {
+		return nil, err
+	}
+
+	log.WithField("signer_id", signerID).Info("Successfully loaded and validated certificate for reseed signer")
 	return cert.PublicKey, nil
+}
+
+// validateCertificate checks certificate validity including expiration dates.
+func validateCertificate(cert *x509.Certificate, signerID string) error {
+	now := time.Now()
+
+	if now.Before(cert.NotBefore) {
+		log.WithFields(logger.Fields{
+			"signer_id":  signerID,
+			"not_before": cert.NotBefore,
+			"now":        now,
+		}).Error("Certificate not yet valid")
+		return oops.Errorf("certificate for signer %s not yet valid (NotBefore: %v)", signerID, cert.NotBefore)
+	}
+
+	if now.After(cert.NotAfter) {
+		log.WithFields(logger.Fields{
+			"signer_id": signerID,
+			"not_after": cert.NotAfter,
+			"now":       now,
+		}).Error("Certificate expired")
+		return oops.Errorf("certificate for signer %s expired (NotAfter: %v)", signerID, cert.NotAfter)
+	}
+
+	log.WithFields(logger.Fields{
+		"signer_id":  signerID,
+		"not_before": cert.NotBefore,
+		"not_after":  cert.NotAfter,
+	}).Debug("Certificate validity period verified")
+
+	return nil
 }
 
 // decodePEM is a simple PEM decoder that extracts the first PEM block
@@ -501,39 +539,38 @@ func writeDecodedBytes(dst []byte, val uint32, bits int) int {
 }
 
 // extractSU3Content extracts the content from the SU3 file with signature verification.
+// SECURITY: This function enforces signature verification - content is rejected if
+// verification fails or if the signer is unknown/untrusted.
 func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	log.Debug("Extracting content from SU3 file")
 
-	// Get the public key for the signer
+	// Get the public key for the signer - this will fail for unknown signers
 	publicKey, err := r.getPublicKeyForSigner(su3file.SignerID)
 	if err != nil {
 		log.WithError(err).Error("Failed to get public key for signer")
 		return nil, err
 	}
 
+	// At this point, publicKey should never be nil (we reject unknown signers)
+	if publicKey == nil {
+		log.Error("Internal error: publicKey is nil after successful getPublicKeyForSigner")
+		return nil, oops.Errorf("internal error: no public key available for verified signer")
+	}
+
 	// Read content with signature verification
 	contentReader := su3file.Content(publicKey)
 	content, readErr := io.ReadAll(contentReader)
 
-	// Check results
+	// SECURITY: Signature verification failure is a hard error
 	if readErr != nil {
-		// If we got content but verification failed, we can still use it
-		// (with a warning) if the signer is unknown
-		if len(content) > 0 && publicKey == nil {
-			log.WithField("content_size_bytes", len(content)).Warn("Successfully extracted SU3 content without signature verification (unknown signer)")
-			return content, nil
-		}
-
-		// Otherwise, this is a real error
-		log.WithError(readErr).Error("Failed to read SU3 content")
-		return nil, readErr
+		log.WithError(readErr).Error("Signature verification failed - rejecting SU3 content")
+		return nil, oops.Errorf("signature verification failed: %w", readErr)
 	}
 
-	if publicKey != nil {
-		log.WithField("content_size_bytes", len(content)).Info("Successfully extracted and verified SU3 content")
-	} else {
-		log.WithField("content_size_bytes", len(content)).Warn("Successfully extracted SU3 content (signature not verified - unknown signer)")
-	}
+	log.WithFields(logger.Fields{
+		"content_size_bytes": len(content),
+		"signer_id":          su3file.SignerID,
+	}).Info("Successfully extracted and verified SU3 content")
 
 	return content, nil
 }
