@@ -129,7 +129,7 @@
   - ✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)
   - ✅ Advanced peer selection algorithms (random selection, XOR distance, floodfill routing)
   - ✅ Database exploration and publishing (periodic discovery, LeaseSet/RouterInfo distribution)
-  - 📋 EncryptedLeaseSet and MetaLeaseSet support
+  - ✅ EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)
 
 ### Application Layer
 
@@ -149,7 +149,7 @@
 
 ## Current Status
 
-**Primary Goal**: Core router functionality is now operational. NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing. **Full end-to-end message routing connecting clients through tunnels to destinations is now complete.**
+**Primary Goal**: Core router functionality is now operational. NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing. **Full end-to-end message routing connecting clients through tunnels to destinations is now complete.** **All LeaseSet types (1, 3, 5, 7) are fully supported in NetDB.**
 
 **Recent Milestones**:
 
@@ -164,8 +164,9 @@
 - ✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)
 - ✅ Phase 9: Client/Router NetDB Isolation (ClientNetDB for LeaseSets, RouterNetDB for RouterInfos, improved separation of concerns)
 - ✅ Phase 10: End-to-End Message Routing Complete (Full message delivery from I2CP client through tunnels to destination, with comprehensive integration tests)
+- ✅ Phase 11: EncryptedLeaseSet and MetaLeaseSet Support (Complete support for all modern I2P LeaseSet types with storage, retrieval, and expiration tracking)
 
-**Next Focus**: Advanced NetDb features (database exploration, publishing) or Application Layer (I2CP client library, streaming)
+**Next Focus**: Application Layer (I2CP client library, streaming) or SSU2 Transport
 
 **Test Coverage**: Core components have strong test coverage:
 
@@ -175,3 +176,4 @@
 - Tunnel building: Comprehensive integration tests
 - NTCP2 sessions: Unit and integration tests
 - I2NP message processing: Protocol compliance tests
+- NetDB LeaseSet operations: Comprehensive validation and thread-safety tests for all types (LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet)

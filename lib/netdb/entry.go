@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/common/router_info"
 )
 
 // netdb entry
-// wraps a router info, lease set, or lease set2 and provides serialization
+// wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
+// and provides serialization
 type Entry struct {
 	*router_info.RouterInfo
 	*lease_set.LeaseSet
 	*lease_set2.LeaseSet2
+	*encrypted_leaseset.EncryptedLeaseSet
+	*meta_leaseset.MetaLeaseSet
 }
 
 // WriteTo writes the Entry to the provided writer.
@@ -32,7 +37,15 @@ func (e *Entry) WriteTo(w io.Writer) error {
 		return e.writeLeaseSet2(w)
 	}
 
-	return fmt.Errorf("entry contains neither RouterInfo, LeaseSet, nor LeaseSet2")
+	if e.EncryptedLeaseSet != nil {
+		return e.writeEncryptedLeaseSet(w)
+	}
+
+	if e.MetaLeaseSet != nil {
+		return e.writeMetaLeaseSet(w)
+	}
+
+	return fmt.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
 }
 
 // writeRouterInfo writes a RouterInfo entry to the writer.
@@ -65,6 +78,26 @@ func (e *Entry) writeLeaseSet2(w io.Writer) error {
 	return e.writeEntryData(w, 3, data)
 }
 
+// writeEncryptedLeaseSet writes an EncryptedLeaseSet entry to the writer.
+func (e *Entry) writeEncryptedLeaseSet(w io.Writer) error {
+	data, err := e.serializeEncryptedLeaseSet()
+	if err != nil {
+		return err
+	}
+
+	return e.writeEntryData(w, 5, data)
+}
+
+// writeMetaLeaseSet writes a MetaLeaseSet entry to the writer.
+func (e *Entry) writeMetaLeaseSet(w io.Writer) error {
+	data, err := e.serializeMetaLeaseSet()
+	if err != nil {
+		return err
+	}
+
+	return e.writeEntryData(w, 7, data)
+}
+
 // serializeRouterInfo serializes the RouterInfo and validates the result.
 func (e *Entry) serializeRouterInfo() ([]byte, error) {
 	data, err := e.RouterInfo.Bytes()
@@ -94,6 +127,26 @@ func (e *Entry) serializeLeaseSet2() ([]byte, error) {
 	data, err := e.LeaseSet2.Bytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
+	}
+
+	return data, nil
+}
+
+// serializeEncryptedLeaseSet serializes the EncryptedLeaseSet and validates the result.
+func (e *Entry) serializeEncryptedLeaseSet() ([]byte, error) {
+	data, err := e.EncryptedLeaseSet.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
+	}
+
+	return data, nil
+}
+
+// serializeMetaLeaseSet serializes the MetaLeaseSet and validates the result.
+func (e *Entry) serializeMetaLeaseSet() ([]byte, error) {
+	data, err := e.MetaLeaseSet.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize MetaLeaseSet: %w", err)
 	}
 
 	return data, nil
@@ -194,6 +247,10 @@ func (e *Entry) processEntryData(entryType byte, data []byte) error {
 		return e.processLeaseSetData(data)
 	case 3: // LeaseSet2
 		return e.processLeaseSet2Data(data)
+	case 5: // EncryptedLeaseSet
+		return e.processEncryptedLeaseSetData(data)
+	case 7: // MetaLeaseSet
+		return e.processMetaLeaseSetData(data)
 	default:
 		return fmt.Errorf("unknown entry type: %d", entryType)
 	}
@@ -207,6 +264,9 @@ func (e *Entry) processRouterInfoData(data []byte) error {
 	}
 	e.RouterInfo = &ri
 	e.LeaseSet = nil
+	e.LeaseSet2 = nil
+	e.EncryptedLeaseSet = nil
+	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -219,6 +279,8 @@ func (e *Entry) processLeaseSetData(data []byte) error {
 	e.LeaseSet = &ls
 	e.RouterInfo = nil
 	e.LeaseSet2 = nil
+	e.EncryptedLeaseSet = nil
+	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -231,5 +293,35 @@ func (e *Entry) processLeaseSet2Data(data []byte) error {
 	e.LeaseSet2 = &ls2
 	e.RouterInfo = nil
 	e.LeaseSet = nil
+	e.EncryptedLeaseSet = nil
+	e.MetaLeaseSet = nil
+	return nil
+}
+
+// processEncryptedLeaseSetData processes EncryptedLeaseSet data and sets the entry.
+func (e *Entry) processEncryptedLeaseSetData(data []byte) error {
+	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+	}
+	e.EncryptedLeaseSet = &els
+	e.RouterInfo = nil
+	e.LeaseSet = nil
+	e.LeaseSet2 = nil
+	e.MetaLeaseSet = nil
+	return nil
+}
+
+// processMetaLeaseSetData processes MetaLeaseSet data and sets the entry.
+func (e *Entry) processMetaLeaseSetData(data []byte) error {
+	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+	}
+	e.MetaLeaseSet = &mls
+	e.RouterInfo = nil
+	e.LeaseSet = nil
+	e.LeaseSet2 = nil
+	e.EncryptedLeaseSet = nil
 	return nil
 }

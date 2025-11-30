@@ -57,6 +57,22 @@ func (c *ClientNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte
 	return c.db.StoreLeaseSet2(key, data, dataType)
 }
 
+// StoreEncryptedLeaseSet stores an EncryptedLeaseSet in the database.
+// key is the blinded destination hash, data is the serialized EncryptedLeaseSet,
+// and dataType should be 5 for EncryptedLeaseSet.
+func (c *ClientNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("ClientNetDB: Storing EncryptedLeaseSet")
+	return c.db.StoreEncryptedLeaseSet(key, data, dataType)
+}
+
+// StoreMetaLeaseSet stores a MetaLeaseSet in the database.
+// key is the destination hash, data is the serialized MetaLeaseSet,
+// and dataType should be 7 for MetaLeaseSet.
+func (c *ClientNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("ClientNetDB: Storing MetaLeaseSet")
+	return c.db.StoreMetaLeaseSet(key, data, dataType)
+}
+
 // GetLeaseSetCount returns the number of LeaseSets currently stored.
 // This includes both active and not-yet-expired LeaseSets.
 func (c *ClientNetDB) GetLeaseSetCount() int {

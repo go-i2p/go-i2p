@@ -146,6 +146,22 @@ func (r *RouterNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte
 	return r.db.StoreLeaseSet2(key, data, dataType)
 }
 
+// StoreEncryptedLeaseSet stores an EncryptedLeaseSet in the database from direct router operations.
+// key is the blinded destination hash, data is the serialized EncryptedLeaseSet,
+// and dataType should be 5 for EncryptedLeaseSet.
+func (r *RouterNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("RouterNetDB: Storing EncryptedLeaseSet from direct operation")
+	return r.db.StoreEncryptedLeaseSet(key, data, dataType)
+}
+
+// StoreMetaLeaseSet stores a MetaLeaseSet in the database from direct router operations.
+// key is the destination hash, data is the serialized MetaLeaseSet,
+// and dataType should be 7 for MetaLeaseSet.
+func (r *RouterNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("RouterNetDB: Storing MetaLeaseSet from direct operation")
+	return r.db.StoreMetaLeaseSet(key, data, dataType)
+}
+
 // GetLeaseSetCount returns the number of LeaseSets currently stored.
 func (r *RouterNetDB) GetLeaseSetCount() int {
 	count := r.db.GetLeaseSetCount()
