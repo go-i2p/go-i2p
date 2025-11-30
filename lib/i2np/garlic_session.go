@@ -44,7 +44,7 @@ type GarlicSession struct {
 	LastUsed         time.Time
 	MessageCounter   uint32
 	// pendingTags tracks tags we expect to receive (tag window for out-of-order messages)
-	pendingTags      [][8]byte
+	pendingTags [][8]byte
 }
 
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
