@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
@@ -229,7 +230,7 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 
 	return &http.Client{
 		Transport: &transport,
-		Timeout:   30000000000, // 30 seconds in nanoseconds
+		Timeout:   30 * time.Second,
 	}
 }
 
