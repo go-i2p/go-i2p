@@ -14,6 +14,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
+	"time"
 )
 
 // Message type constants as defined in I2CP v2.10.0
@@ -66,6 +68,15 @@ const (
 	// MaxMessageSize is the maximum total I2CP message size including header.
 	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
 	MaxMessageSize = 7 + MaxPayloadSize
+
+	// DefaultPayloadSize is the typical payload size for most I2CP messages.
+	// Payloads exceeding this threshold trigger warning logs.
+	DefaultPayloadSize = 8192 // 8 KB
+
+	// MessageReadTimeout is the maximum time allowed to read a complete message.
+	// This prevents slow-send attacks where attackers claim large payloads
+	// but drip-feed data slowly to exhaust connection resources.
+	MessageReadTimeout = 30 // seconds
 )
 
 // Message represents a generic I2CP message
@@ -144,6 +155,16 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 
 // ReadMessage reads a complete I2CP message from a reader
 func ReadMessage(r io.Reader) (*Message, error) {
+	// Set read deadline to prevent slow-send attacks
+	// Only applies when reader is a net.Conn
+	if conn, ok := r.(net.Conn); ok {
+		deadline := time.Now().Add(MessageReadTimeout * time.Second)
+		if err := conn.SetReadDeadline(deadline); err != nil {
+			// Log but don't fail - deadline setting is defensive, not critical
+			log.WithError(err).Debug("failed_to_set_read_deadline")
+		}
+	}
+
 	// Read header: type(1) + sessionID(2) + length(4) = 7 bytes
 	header := make([]byte, 7)
 	if _, err := io.ReadFull(r, header); err != nil {
@@ -158,6 +179,16 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	// Validate payload length per I2CP specification
 	if payloadLen > MaxPayloadSize {
 		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
+
+	// Warn on unusually large payloads that may indicate attack or misconfiguration
+	if payloadLen > DefaultPayloadSize {
+		log.WithFields(map[string]interface{}{
+			"at":          "i2cp.ReadMessage",
+			"payload_len": payloadLen,
+			"msg_type":    MessageTypeName(msgType),
+			"session_id":  sessionID,
+		}).Warn("large_i2cp_payload")
 	}
 
 	// Read payload

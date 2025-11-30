@@ -209,15 +209,27 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 
 // createReseedHTTPClient creates an HTTP client configured for reseed operations.
 func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
-	transport := http.Transport{
-		DialContext: dialContext,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // I2P reseed servers often use self-signed certificates
-			// TODO: implement proper certificate pinning/validation
-		},
+	// Configure TLS with secure defaults
+	// Note: While I2P reseed servers may use self-signed certificates,
+	// completely disabling verification enables MITM attacks.
+	// This configuration uses system certificate pool by default,
+	// which validates against standard CA certificates.
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12, // Require TLS 1.2 minimum
+		// InsecureSkipVerify is intentionally NOT set to true
+		// If reseed servers use self-signed certificates, they should be
+		// added to the system certificate store or certificate pinning
+		// should be implemented for known reseed servers.
 	}
+
+	transport := http.Transport{
+		DialContext:     dialContext,
+		TLSClientConfig: tlsConfig,
+	}
+
 	return &http.Client{
 		Transport: &transport,
+		Timeout:   30000000000, // 30 seconds in nanoseconds
 	}
 }
 
