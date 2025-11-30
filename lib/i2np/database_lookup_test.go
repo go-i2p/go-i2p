@@ -117,11 +117,14 @@ func TestReadDatabaseLookupReplyTunnelIDNotIncluded(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	length, flags, err := readDatabaseLookupFlags(length, data)
+	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
+	if flagsErr != nil {
+		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
+	}
 
-	length, tunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
+	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(65, length)
-	assert.Equal([4]byte{}, tunnelID)
+	assert.Equal([4]byte{}, replyTunnelID)
 	assert.Equal(nil, err)
 }
 
@@ -137,7 +140,10 @@ func TestReadDatabaseLookupReplyTunnelIDValidData(t *testing.T) {
 	expected[1] = 0x32
 	expected[3] = 0x34
 	data = append(data, expected...)
-	length, flags, err := readDatabaseLookupFlags(length, data)
+	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
+	if flagsErr != nil {
+		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
+	}
 
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(69, length)
@@ -181,7 +187,10 @@ func TestReadDatabaseLookupExcludedPeersTooLittleData(t *testing.T) {
 	data = append(data, sizeData...)
 	data = append(data, 0x23)
 
-	length, size, err := readDatabaseLookupSize(length, data)
+	length, size, sizeErr := readDatabaseLookupSize(length, data)
+	if sizeErr != nil {
+		t.Fatalf("readDatabaseLookupSize failed: %v", sizeErr)
+	}
 	length, excludedPeers, err := readDatabaseLookupExcludedPeers(length, data, size)
 	assert.Equal([]common.Hash{}, excludedPeers)
 	assert.Equal(67, length)

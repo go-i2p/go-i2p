@@ -242,7 +242,11 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 
 	err = server.Start()
 	require.NoError(t, err)
-	defer server.Stop()
+	defer func() {
+		if stopErr := server.Stop(); stopErr != nil {
+			t.Logf("Error stopping server: %v", stopErr)
+		}
+	}()
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -421,7 +425,11 @@ func TestE2E_MultipleSessionsConcurrent(t *testing.T) {
 
 	err = server.Start()
 	require.NoError(t, err)
-	defer server.Stop()
+	defer func() {
+		if stopErr := server.Stop(); stopErr != nil {
+			t.Logf("Error stopping server: %v", stopErr)
+		}
+	}()
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -564,7 +572,11 @@ func BenchmarkE2E_MessageThroughput(b *testing.B) {
 	if err := server.Start(); err != nil {
 		b.Fatalf("Failed to start server: %v", err)
 	}
-	defer server.Stop()
+	defer func() {
+		if stopErr := server.Stop(); stopErr != nil {
+			b.Logf("Error stopping server: %v", stopErr)
+		}
+	}()
 
 	session, err := server.manager.CreateSession(nil, nil)
 	if err != nil {

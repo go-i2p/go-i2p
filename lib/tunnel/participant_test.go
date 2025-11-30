@@ -2,17 +2,20 @@ package tunnel
 
 import (
 	"bytes"
-	"github.com/go-i2p/crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
 )
 
 // Helper function to generate a random 32-byte key
 func generateRandomKey() tunnel.TunnelKey {
 	var key tunnel.TunnelKey
-	rand.Read(key[:])
+	if _, err := rand.Read(key[:]); err != nil {
+		panic(fmt.Sprintf("Failed to generate random key: %v", err))
+	}
 	return key
 }
 

@@ -263,7 +263,9 @@ func TestManagerConcurrency(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
 			p, _ := NewParticipant(TunnelID(id), &mockTunnelEncryptor{})
-			m.AddParticipant(p)
+			if err := m.AddParticipant(p); err != nil {
+				t.Errorf("Failed to add participant %d: %v", id, err)
+			}
 			done <- true
 		}(i)
 	}
@@ -304,7 +306,9 @@ func TestManagerStop(t *testing.T) {
 	// Add some participants
 	for i := TunnelID(1); i <= 5; i++ {
 		p, _ := NewParticipant(i, &mockTunnelEncryptor{})
-		m.AddParticipant(p)
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
 	}
 
 	// Stop the manager
@@ -316,5 +320,5 @@ func TestManagerStop(t *testing.T) {
 	}
 
 	// Verify we can still call methods safely (shouldn't panic)
-	m.AddParticipant(nil) // Should handle gracefully
+	_ = m.AddParticipant(nil) // Intentionally ignore error - testing nil handling after stop
 }
