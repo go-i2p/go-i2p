@@ -16,6 +16,56 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// simpleRateLimiter implements a token bucket rate limiter
+type simpleRateLimiter struct {
+	tokens    int       // Current token count
+	maxTokens int       // Maximum tokens (burst size)
+	rate      int       // Tokens added per second
+	lastCheck time.Time // Last time tokens were added
+	mu        sync.Mutex
+}
+
+// newSimpleRateLimiter creates a new rate limiter
+func newSimpleRateLimiter(rate, burst int) *simpleRateLimiter {
+	return &simpleRateLimiter{
+		tokens:    burst,
+		maxTokens: burst,
+		rate:      rate,
+		lastCheck: time.Now(),
+	}
+}
+
+// allow checks if an action is allowed under the rate limit
+func (rl *simpleRateLimiter) allow() bool {
+	if rl == nil || rl.rate == 0 {
+		return true // No rate limiting
+	}
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(rl.lastCheck)
+
+	// Add tokens based on elapsed time
+	tokensToAdd := int(elapsed.Seconds() * float64(rl.rate))
+	if tokensToAdd > 0 {
+		rl.tokens += tokensToAdd
+		if rl.tokens > rl.maxTokens {
+			rl.tokens = rl.maxTokens
+		}
+		rl.lastCheck = now
+	}
+
+	// Check if we have a token available
+	if rl.tokens > 0 {
+		rl.tokens--
+		return true
+	}
+
+	return false
+}
+
 // SessionConfig holds the configuration for an I2CP session
 type SessionConfig struct {
 	// Tunnel parameters
@@ -27,6 +77,11 @@ type SessionConfig struct {
 
 	// Network parameters
 	MessageTimeout time.Duration // Message delivery timeout (default: 60 seconds)
+
+	// Message queue configuration
+	MessageQueueSize     int // Incoming message queue buffer size (default: 100)
+	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
+	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
 
 	// Session metadata
 	Nickname string // Optional nickname for debugging
@@ -41,6 +96,9 @@ func DefaultSessionConfig() *SessionConfig {
 		OutboundTunnelCount:  5,
 		TunnelLifetime:       10 * time.Minute,
 		MessageTimeout:       60 * time.Second,
+		MessageQueueSize:     100,
+		MessageRateLimit:     100, // 100 messages/second
+		MessageRateBurstSize: 200, // Allow bursts up to 200 messages
 		Nickname:             "",
 	}
 }
@@ -68,6 +126,10 @@ type Session struct {
 
 	// Message queues
 	incomingMessages chan *IncomingMessage // Messages received from I2P network
+
+	// Rate limiting for message queue
+	messageRateLimiter *simpleRateLimiter // Rate limiter for incoming messages
+	queueHighWaterMark int                // Track when queue is getting full
 
 	// LeaseSet state
 	currentLeaseSet     []byte            // Currently published LeaseSet
@@ -114,16 +176,38 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 	clientNetDB := netdb.NewClientNetDB(stdDB)
 	log.Debug("Created ephemeral in-memory NetDB for client session")
 
+	// Determine queue size (use config or default)
+	queueSize := config.MessageQueueSize
+	if queueSize <= 0 {
+		queueSize = 100
+	}
+
+	// Create rate limiter if rate limiting is enabled
+	var rateLimiter *simpleRateLimiter
+	if config.MessageRateLimit > 0 {
+		burstSize := config.MessageRateBurstSize
+		if burstSize <= 0 {
+			burstSize = config.MessageRateLimit * 2
+		}
+		rateLimiter = newSimpleRateLimiter(config.MessageRateLimit, burstSize)
+		log.WithFields(logger.Fields{
+			"rate":  config.MessageRateLimit,
+			"burst": burstSize,
+		}).Debug("Created rate limiter for session")
+	}
+
 	return &Session{
-		id:               id,
-		destination:      dest,
-		keys:             keyStore,
-		config:           config,
-		clientNetDB:      clientNetDB,
-		createdAt:        time.Now(),
-		active:           true,
-		incomingMessages: make(chan *IncomingMessage, 100), // Buffer 100 messages
-		stopCh:           make(chan struct{}),
+		id:                 id,
+		destination:        dest,
+		keys:               keyStore,
+		config:             config,
+		clientNetDB:        clientNetDB,
+		createdAt:          time.Now(),
+		active:             true,
+		incomingMessages:   make(chan *IncomingMessage, queueSize),
+		messageRateLimiter: rateLimiter,
+		queueHighWaterMark: queueSize,
+		stopCh:             make(chan struct{}),
 	}, nil
 }
 
@@ -211,15 +295,35 @@ func (s *Session) QueueIncomingMessage(payload []byte) error {
 		return fmt.Errorf("session %d not active", s.id)
 	}
 
+	// Apply rate limiting if configured
+	if s.messageRateLimiter != nil && !s.messageRateLimiter.allow() {
+		log.WithField("session_id", s.id).Warn("Message rate limit exceeded")
+		return fmt.Errorf("message rate limit exceeded for session %d", s.id)
+	}
+
 	msg := &IncomingMessage{
 		Payload:   payload,
 		Timestamp: time.Now(),
 	}
 
+	// Try to queue with monitoring
 	select {
 	case s.incomingMessages <- msg:
+		// Check if queue is filling up (>80% full)
+		queueLen := len(s.incomingMessages)
+		if queueLen > s.queueHighWaterMark*8/10 {
+			log.WithFields(logger.Fields{
+				"session_id": s.id,
+				"queue_len":  queueLen,
+				"queue_cap":  cap(s.incomingMessages),
+			}).Warn("Incoming message queue filling up")
+		}
 		return nil
 	default:
+		log.WithFields(logger.Fields{
+			"session_id": s.id,
+			"queue_cap":  cap(s.incomingMessages),
+		}).Error("Incoming message queue full")
 		return fmt.Errorf("incoming message queue full for session %d", s.id)
 	}
 }
