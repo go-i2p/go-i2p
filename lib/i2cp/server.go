@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
@@ -41,6 +42,13 @@ func DefaultServerConfig() *ServerConfig {
 	}
 }
 
+// connectionState tracks per-connection rate limiting state
+type connectionState struct {
+	lastMessageTime time.Time
+	messageCount    int
+	bytesRead       uint64
+}
+
 // Server is an I2CP protocol server that accepts client connections
 type Server struct {
 	config  *ServerConfig
@@ -60,6 +68,10 @@ type Server struct {
 	mu           sync.RWMutex
 	running      bool
 	sessionConns map[uint16]net.Conn // Session ID -> active connection
+
+	// Connection-level rate limiting to prevent abuse before session creation
+	connMutex  sync.RWMutex
+	connStates map[net.Conn]*connectionState
 
 	// LeaseSet publishing
 	leaseSetPublisher LeaseSetPublisher
@@ -81,6 +93,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		config:            config,
 		manager:           NewSessionManager(),
 		sessionConns:      make(map[uint16]net.Conn),
+		connStates:        make(map[net.Conn]*connectionState),
 		leaseSetPublisher: config.LeaseSetPublisher,
 		ctx:               ctx,
 		cancel:            cancel,
@@ -206,6 +219,7 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer s.wg.Done()
 	defer conn.Close()
+	defer s.cleanupConnectionState(conn)
 
 	s.logClientConnected(conn)
 
@@ -230,6 +244,13 @@ func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 		delete(s.sessionConns, (*sessionPtr).ID())
 		s.mu.Unlock()
 	}
+}
+
+// cleanupConnectionState removes connection state tracking on disconnect.
+func (s *Server) cleanupConnectionState(conn net.Conn) {
+	s.connMutex.Lock()
+	delete(s.connStates, conn)
+	s.connMutex.Unlock()
 }
 
 // runConnectionLoop processes messages from the client connection.
@@ -279,14 +300,89 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 	return true
 }
 
-// readClientMessage reads an I2CP message from the connection.
+// readClientMessage reads an I2CP message from the connection with rate limiting.
 func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
+	// Check connection-level rate limits before reading
+	if !s.checkConnectionRateLimit(conn) {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.readClientMessage",
+			"remoteAddr": conn.RemoteAddr(),
+		}).Warn("connection_rate_limit_exceeded")
+		return nil, fmt.Errorf("connection rate limit exceeded")
+	}
+
 	msg, err := ReadMessage(conn)
 	if err != nil {
 		log.WithError(err).Debug("failed_to_read_message")
 		return nil, err
 	}
+
+	// Update connection state after successful read
+	s.updateConnectionState(conn, msg)
+
 	return msg, nil
+}
+
+// checkConnectionRateLimit enforces per-connection rate limits.
+// Returns true if the connection is within limits, false if rate limited.
+// Limits are set high to accommodate legitimate local client applications
+// while still preventing extreme resource exhaustion attacks.
+func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
+	const (
+		maxMessagesPerSecond = 10000                // Maximum 10,000 messages/second per connection
+		maxBytesPerSecond    = 100 * 1024 * 1024    // Maximum 100 MB/second per connection
+		minMessageInterval   = 100 * time.Microsecond // Minimum 0.1ms between messages (allows bursts)
+	)
+
+	s.connMutex.Lock()
+	state, exists := s.connStates[conn]
+	if !exists {
+		state = &connectionState{
+			lastMessageTime: time.Now(),
+			messageCount:    0,
+			bytesRead:       0,
+		}
+		s.connStates[conn] = state
+	}
+	s.connMutex.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(state.lastMessageTime)
+
+	// Rate limit: enforce minimum interval between messages
+	if elapsed < minMessageInterval {
+		return false
+	}
+
+	// Reset counters every second
+	if elapsed >= time.Second {
+		state.messageCount = 0
+		state.bytesRead = 0
+	}
+
+	// Check message rate limit
+	if state.messageCount >= maxMessagesPerSecond {
+		return false
+	}
+
+	// Check bandwidth limit
+	if state.bytesRead >= maxBytesPerSecond {
+		return false
+	}
+
+	return true
+}
+
+// updateConnectionState updates connection statistics after reading a message.
+func (s *Server) updateConnectionState(conn net.Conn, msg *Message) {
+	s.connMutex.Lock()
+	defer s.connMutex.Unlock()
+
+	if state, exists := s.connStates[conn]; exists {
+		state.lastMessageTime = time.Now()
+		state.messageCount++
+		state.bytesRead += uint64(7 + len(msg.Payload)) // Header + payload
+	}
 }
 
 // logReceivedMessage logs details about a received message.
