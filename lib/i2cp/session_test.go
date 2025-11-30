@@ -335,7 +335,7 @@ func TestSessionCreateLeaseSetInactiveSession(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when session inactive, got nil")
 	}
-	if err != nil && err.Error() != "session 1 is not active" {
+	if err != nil && err.Error() != "session 1 not active" {
 		t.Errorf("Unexpected error message: %v", err)
 	}
 }

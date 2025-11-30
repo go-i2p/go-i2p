@@ -207,14 +207,14 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 
 	allRouterInfos := db.GetAllRouterInfos()
 	if len(allRouterInfos) == 0 {
-		return nil, fmt.Errorf("no router infos available for peer selection")
+		return nil, fmt.Errorf("insufficient router infos available for peer selection")
 	}
 
 	excludeMap := db.buildExcludeMap(exclude)
 	available := db.filterAvailablePeers(allRouterInfos, excludeMap)
 
 	if len(available) == 0 {
-		return nil, fmt.Errorf("no suitable peers available after filtering")
+		return nil, fmt.Errorf("insufficient suitable peers after filtering")
 	}
 
 	// If we have fewer available peers than requested, return all

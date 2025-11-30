@@ -401,7 +401,7 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 // handleDestroySession destroys a session
 func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, fmt.Errorf("session not active")
 	}
 
 	sessionID := (*sessionPtr).ID()
@@ -424,7 +424,7 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 // handleReconfigureSession updates session configuration
 func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, fmt.Errorf("session not active")
 	}
 
 	// TODO: Parse new configuration from payload
@@ -538,7 +538,7 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 // validateSessionForSending validates that a session exists for sending.
 func (s *Server) validateSessionForSending(sessionPtr **Session) (*Session, error) {
 	if *sessionPtr == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, fmt.Errorf("session not active")
 	}
 	return *sessionPtr, nil
 }

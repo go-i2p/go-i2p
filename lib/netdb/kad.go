@@ -89,7 +89,7 @@ func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Ha
 		// Find the closest peers we know to the target hash
 		closestPeers := kr.findClosestPeers(h)
 		if len(closestPeers) == 0 {
-			errChan <- fmt.Errorf("no peers available for lookup")
+			errChan <- fmt.Errorf("insufficient peers available for lookup")
 			return
 		}
 
@@ -125,7 +125,7 @@ func (kr *KademliaResolver) queryClosestPeers(ctx context.Context, peers []commo
 func (kr *KademliaResolver) handleLookupTimeout(ctx context.Context, timeout time.Duration, errChan chan error) {
 	select {
 	case <-time.After(timeout - time.Second): // Leave 1s buffer for the main select
-		errChan <- fmt.Errorf("kademlia lookup failed to find router info")
+		errChan <- fmt.Errorf("router info not found in kademlia lookup")
 	case <-ctx.Done():
 		// Context was already canceled, main select will handle it
 	}

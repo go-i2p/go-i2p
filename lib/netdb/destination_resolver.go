@@ -50,7 +50,7 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 	lsChan := dr.netdb.GetLeaseSet(destHash)
 
 	if lsChan == nil {
-		return [32]byte{}, fmt.Errorf("destination %x not found in NetDB", destHash[:8])
+		return [32]byte{}, fmt.Errorf("destination %x not found in netdb", destHash[:8])
 	}
 
 	// Read from channel
@@ -113,7 +113,7 @@ func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseS
 // LeaseSet2 starts with type byte 0x07.
 func (dr *DestinationResolver) validateLeaseSet2Format(lsBytes []byte) error {
 	if len(lsBytes) == 0 || lsBytes[0] != 0x07 {
-		return fmt.Errorf("not a LeaseSet2")
+		return fmt.Errorf("unsupported lease set type")
 	}
 	return nil
 }
@@ -129,7 +129,7 @@ func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2
 		}
 	}
 
-	return [32]byte{}, fmt.Errorf("no X25519 encryption key found in LeaseSet2")
+	return [32]byte{}, fmt.Errorf("x25519 encryption key not found in lease set")
 }
 
 // extractValidX25519Key validates and extracts a 32-byte X25519 key from encryption key data.
@@ -164,7 +164,7 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 	}
 
 	// Legacy ElGamal key - not supported by current ECIES-X25519-AEAD implementation
-	return [32]byte{}, fmt.Errorf("destination uses ElGamal encryption, which is not supported by ECIES-X25519-AEAD")
+	return [32]byte{}, fmt.Errorf("elgamal encryption not supported by ecies-x25519-aead")
 }
 
 // extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
@@ -176,7 +176,7 @@ func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.
 	}
 
 	if len(certData) < 4 {
-		return [32]byte{}, fmt.Errorf("key certificate data too short: %d bytes", len(certData))
+		return [32]byte{}, fmt.Errorf("key certificate data too short: expected at least 1 byte, got %d", len(certData))
 	}
 
 	// First 2 bytes are signing key type, next 2 are crypto key type

@@ -55,7 +55,7 @@ var (
 	// ErrChecksumMismatch is returned when checksum validation fails
 	ErrChecksumMismatch = errors.New("tunnel message checksum mismatch")
 	// ErrTooManyFragments is returned when fragment number exceeds maximum
-	ErrTooManyFragments = errors.New("fragment number exceeds maximum (63)")
+	ErrTooManyFragments = errors.New("too many fragments: maximum 63")
 	// ErrDuplicateFragment is returned when a fragment is received twice
 	ErrDuplicateFragment = errors.New("duplicate fragment received")
 )

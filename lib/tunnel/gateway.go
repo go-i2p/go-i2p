@@ -27,7 +27,7 @@ var (
 	// ErrNilEncryption is returned when encryption is nil
 	ErrNilEncryption = errors.New("encryption tunnel cannot be nil")
 	// ErrMessageTooLarge is returned when a message exceeds maximum size
-	ErrMessageTooLarge = errors.New("message exceeds maximum tunnel message size")
+	ErrMessageTooLarge = errors.New("message too large for tunnel")
 	// ErrInvalidMessage is returned when message data is invalid
 	ErrInvalidMessage = errors.New("invalid I2NP message data")
 )

@@ -87,7 +87,7 @@ func TestRouteOutboundMessageNoPool(t *testing.T) {
 
 	err = router.RouteOutboundMessage(session, destHash, destPubKey, payload)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no outbound tunnel pool")
+	assert.Contains(t, err.Error(), "outbound tunnel pool required")
 }
 
 // TestRouteOutboundMessageNoActiveTunnels verifies error when no active tunnels
@@ -115,7 +115,7 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 
 	err = router.RouteOutboundMessage(session, destHash, destPubKey, payload)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no active outbound tunnels")
+	assert.Contains(t, err.Error(), "insufficient active outbound tunnels")
 }
 
 // TestSendThroughTunnel verifies sending through a specific tunnel
@@ -174,7 +174,7 @@ func TestSendThroughTunnelNoHops(t *testing.T) {
 
 	err = router.SendThroughTunnel(tunnel, msg)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "has no hops")
+	assert.Contains(t, err.Error(), "tunnel hops required")
 }
 
 // Helper functions

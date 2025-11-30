@@ -208,7 +208,7 @@ func (s *Session) QueueIncomingMessage(payload []byte) error {
 	s.mu.RUnlock()
 
 	if !active {
-		return fmt.Errorf("session %d is not active", s.id)
+		return fmt.Errorf("session %d not active", s.id)
 	}
 
 	msg := &IncomingMessage{
@@ -234,7 +234,7 @@ func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) e
 	s.mu.RUnlock()
 
 	if !active {
-		return fmt.Errorf("session %d is not active", s.id)
+		return fmt.Errorf("session %d not active", s.id)
 	}
 
 	msg := &IncomingMessage{
@@ -322,7 +322,7 @@ func (s *Session) CreateLeaseSet() ([]byte, error) {
 // Returns an error if the session is inactive or missing required components.
 func (s *Session) validateSessionState() error {
 	if !s.active {
-		return fmt.Errorf("session %d is not active", s.id)
+		return fmt.Errorf("session %d not active", s.id)
 	}
 
 	if s.inboundPool == nil {

@@ -89,7 +89,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_outbound_pool")
-		return nil, fmt.Errorf("session %d has no outbound tunnel pool", session.ID())
+		return nil, fmt.Errorf("outbound tunnel pool required for session %d", session.ID())
 	}
 
 	selectedTunnel := outboundPool.SelectTunnel()
@@ -99,7 +99,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("no_active_tunnels")
-		return nil, fmt.Errorf("no active outbound tunnels available for session %d", session.ID())
+		return nil, fmt.Errorf("insufficient active outbound tunnels for session %d", session.ID())
 	}
 
 	if len(selectedTunnel.Hops) == 0 {
@@ -109,7 +109,7 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"tunnelID":    selectedTunnel.ID,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		}).Error("tunnel_has_no_hops")
-		return nil, fmt.Errorf("selected tunnel %d has no hops", selectedTunnel.ID)
+		return nil, fmt.Errorf("tunnel hops required for tunnel %d", selectedTunnel.ID)
 	}
 
 	return selectedTunnel, nil
@@ -272,7 +272,7 @@ func (mr *MessageRouter) logSuccessfulRouting(
 // Returns an error if sending fails.
 func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.I2NPMessage) error {
 	if len(tunnel.Hops) == 0 {
-		return fmt.Errorf("tunnel %d has no hops", tunnel.ID)
+		return fmt.Errorf("tunnel hops required for tunnel %d", tunnel.ID)
 	}
 
 	gatewayHash := tunnel.Hops[0]

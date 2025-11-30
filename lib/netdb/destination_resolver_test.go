@@ -109,7 +109,7 @@ func TestResolveDestination_NotFound(t *testing.T) {
 	// Attempt to resolve non-existent destination
 	_, err = resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in NetDB")
+	assert.Contains(t, err.Error(), "not found in netdb")
 }
 
 // TestResolveDestination_InvalidLeaseSet tests handling of corrupted LeaseSet data
@@ -158,10 +158,10 @@ func TestExtractKeyFromLeaseSet2_NotLeaseSet2(t *testing.T) {
 	notLS2Data := []byte{0x01, 0x02, 0x03, 0x04}
 	netdb.StoreLeaseSet(destHash, notLS2Data)
 
-	// Should fail with "not a LeaseSet2"
+	// Should fail with "unsupported lease set type"
 	_, err = resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a LeaseSet2")
+	assert.Contains(t, err.Error(), "unsupported lease set type")
 }
 
 // TestExtractKeyFromLeaseSet2_EmptyData tests handling of empty data
@@ -179,7 +179,7 @@ func TestExtractKeyFromLeaseSet2_EmptyData(t *testing.T) {
 	// Should fail due to empty data
 	_, err = resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a LeaseSet2")
+	assert.Contains(t, err.Error(), "unsupported lease set type")
 }
 
 // TestExtractKeyFromLeaseSet2_WithX25519Key tests successful X25519 key extraction from LeaseSet2

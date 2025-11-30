@@ -73,7 +73,7 @@ func (e *Entry) serializeRouterInfo() ([]byte, error) {
 	}
 
 	if len(data) == 0 {
-		return nil, fmt.Errorf("RouterInfo data is empty")
+		return nil, fmt.Errorf("router info data empty")
 	}
 
 	return data, nil
