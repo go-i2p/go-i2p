@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/certificate"
@@ -25,9 +26,11 @@ import (
 // RouterInfoKeystore is an implementation of KeyStore for storing and retrieving RouterInfo private keys and exporting RouterInfos
 type RouterInfoKeystore struct {
 	*sntp.RouterTimestamper
-	dir        string
-	name       string
-	privateKey types.PrivateKey
+	dir               string
+	name              string
+	privateKey        types.PrivateKey           // Ed25519 signing private key
+	encryptionPrivKey types.PrivateEncryptionKey // X25519 encryption private key
+	encryptionPubKey  types.ReceivingPublicKey   // X25519 encryption public key
 	// cachedKeyID stores the fallback KeyID to ensure consistency across multiple calls
 	// when privateKey.Public() fails. This prevents race conditions where KeyID()
 	// could return different values on each invocation.
@@ -54,7 +57,13 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 		return nil, err
 	}
 
-	return initializeKeystore(dir, name, privateKey), nil
+	// Generate X25519 encryption key pair for router
+	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	return initializeKeystore(dir, name, privateKey, encryptionPubKey, encryptionPrivKey), nil
 }
 
 // ensureDirectoryExists creates the directory if it does not exist.
@@ -86,14 +95,16 @@ func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 }
 
 // initializeKeystore constructs and returns a configured RouterInfoKeystore
-// with the provided directory, name, private key, and a default NTP timestamper.
-func initializeKeystore(dir, name string, privateKey types.PrivateKey) *RouterInfoKeystore {
+// with the provided directory, name, private key, encryption keys, and a default NTP timestamper.
+func initializeKeystore(dir, name string, privateKey types.PrivateKey, encryptionPubKey types.ReceivingPublicKey, encryptionPrivKey types.PrivateEncryptionKey) *RouterInfoKeystore {
 	defaultClient := &sntp.DefaultNTPClient{}
 	timestamper := sntp.NewRouterTimestamper(defaultClient)
 	return &RouterInfoKeystore{
 		dir:               dir,
 		name:              name,
 		privateKey:        privateKey,
+		encryptionPubKey:  encryptionPubKey,
+		encryptionPrivKey: encryptionPrivKey,
 		RouterTimestamper: timestamper,
 	}
 }
@@ -262,7 +273,7 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	}
 
 	routerIdentity, err := router_identity.NewRouterIdentity(
-		types.ReceivingPublicKey(nil),
+		ks.encryptionPubKey,
 		publicKey.(types.SigningPublicKey),
 		cert,
 		padding,
