@@ -329,8 +329,8 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 // while still preventing extreme resource exhaustion attacks.
 func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 	const (
-		maxMessagesPerSecond = 10000                // Maximum 10,000 messages/second per connection
-		maxBytesPerSecond    = 100 * 1024 * 1024    // Maximum 100 MB/second per connection
+		maxMessagesPerSecond = 10000                  // Maximum 10,000 messages/second per connection
+		maxBytesPerSecond    = 100 * 1024 * 1024      // Maximum 100 MB/second per connection
 		minMessageInterval   = 100 * time.Microsecond // Minimum 0.1ms between messages (allows bursts)
 	)
 
