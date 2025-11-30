@@ -336,7 +336,12 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 // Compatible returns true if a routerInfo is compatible with this transport.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 	supported := SupportsNTCP2(&routerInfo)
-	routerHash, _ := routerInfo.IdentHash()
+	routerHash, err := routerInfo.IdentHash()
+	if err != nil {
+		t.logger.WithError(err).Warn("Failed to get router hash for compatibility check")
+		// Still return compatibility result based on NTCP2 support
+		return supported
+	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
