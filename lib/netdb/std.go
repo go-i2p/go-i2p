@@ -464,14 +464,13 @@ func (db *StdNetDB) processWalkEntry(fname string, info os.FileInfo, err error, 
 		return db.handleDirectoryWalk(fname, err)
 	}
 
+	// Only process files with .dat extension (RouterInfo files)
 	if db.CheckFilePathValid(fname) {
 		if err := db.processRouterInfoFile(fname, count); err != nil {
 			return err
 		}
-	} else {
-		log.WithField("file_path", fname).Warn("Invalid file path")
-		log.Println("Invalid path error")
 	}
+	// Silently skip non-.dat files (no warning needed)
 	return err
 }
 

@@ -83,6 +83,7 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	header := http.Header{}
 	header.Add("user-agent", I2pUserAgent)
 	request := http.Request{
+		Method: "GET",
 		URL:    URL,
 		Header: header,
 	}

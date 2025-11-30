@@ -1,10 +1,13 @@
 package reseed
 
-import "net"
+import (
+	"net"
+	"time"
+)
 
 const (
-	DefaultDialTimeout = 5 * 1000 // 5 seconds
-	DefaultKeepAlive   = 5 * 1000 // 5 seconds
+	DefaultDialTimeout = 30 * time.Second // 30 seconds for HTTP requests
+	DefaultKeepAlive   = 30 * time.Second // 30 seconds keep-alive
 )
 
 func NewReseed() *Reseed {
