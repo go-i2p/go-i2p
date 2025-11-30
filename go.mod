@@ -14,6 +14,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
+	go.step.sm/crypto v0.67.0
 	golang.org/x/crypto v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -40,7 +41,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
-	go.step.sm/crypto v0.67.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
@@ -60,3 +60,8 @@ replace github.com/go-i2p/crypto => ../crypto
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
 replace github.com/go-i2p/go-noise => ../go-noise
+
+// Group 3: logger, su3
+replace github.com/go-i2p/logger => ../logger
+
+replace github.com/go-i2p/su3 => ../su3

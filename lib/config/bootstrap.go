@@ -11,13 +11,19 @@ type ReseedConfig struct {
 type BootstrapConfig struct {
 	// if we have less than this many peers we should reseed
 	LowPeerThreshold int
+	// path to a local reseed file (zip or su3) - takes priority over remote reseed servers
+	ReseedFilePath string
 	// reseed servers
 	ReseedServers []*ReseedConfig
+	// local netDb paths to search for existing RouterInfo files
+	// (supports Java I2P and i2pd netDb directories)
+	LocalNetDbPaths []string
 }
 
 // default configuration for network bootstrap
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
+	ReseedFilePath:   "", // No default reseed file
 	// Standard I2P reseed servers for network bootstrap
 	// These are example reseed servers - in production, use actual I2P reseed servers
 	// with their correct SU3 signing key fingerprints
@@ -35,4 +41,6 @@ var DefaultBootstrapConfig = BootstrapConfig{
 			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
 		},
 	},
+	// Local netDb paths are populated at runtime based on OS
+	LocalNetDbPaths: []string{},
 }

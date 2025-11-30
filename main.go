@@ -55,6 +55,8 @@ func registerNetDbFlags() {
 func registerBootstrapFlags() {
 	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
+	RootCmd.PersistentFlags().String("bootstrap.reseed-file", "",
+		"Path to local reseed file (zip or su3) - takes priority over remote reseed servers")
 }
 
 // registerI2CPFlags registers I2CP server configuration flags.
@@ -98,6 +100,9 @@ func bindNetDbFlagsToViper() {
 func bindBootstrapFlagsToViper() {
 	if err := viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold")); err != nil {
 		log.WithError(err).Fatal("Failed to bind bootstrap.low_peer_threshold flag")
+	}
+	if err := viper.BindPFlag("bootstrap.reseed_file_path", RootCmd.PersistentFlags().Lookup("bootstrap.reseed-file")); err != nil {
+		log.WithError(err).Fatal("Failed to bind bootstrap.reseed_file_path flag")
 	}
 }
 

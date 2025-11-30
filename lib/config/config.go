@@ -119,9 +119,17 @@ func NewRouterConfigFromViper() *RouterConfig {
 		reseedServers = []*ReseedConfig{}
 	}
 
+	var localNetDbPaths []string
+	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
+		log.Debugf("No local netDb paths configured, will use defaults")
+		localNetDbPaths = []string{}
+	}
+
 	bootstrapConfig := &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
+		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
+		LocalNetDbPaths:  localNetDbPaths,
 	}
 
 	// Create and return new RouterConfig
@@ -152,9 +160,17 @@ func UpdateRouterConfig() {
 		reseedServers = []*ReseedConfig{}
 	}
 
+	var localNetDbPaths []string
+	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
+		log.Debugf("No local netDb paths configured, will use defaults")
+		localNetDbPaths = []string{}
+	}
+
 	RouterConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
+		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
+		LocalNetDbPaths:  localNetDbPaths,
 	}
 }
 

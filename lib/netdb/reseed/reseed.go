@@ -108,6 +108,80 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	return routerInfos, nil
 }
 
+// ProcessLocalSU3File reads and processes a local SU3 reseed file
+func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error) {
+	log.WithField("file_path", filePath).Info("Processing local SU3 file")
+
+	// Read the SU3 file from disk
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		log.WithError(err).WithField("file_path", filePath).Error("Failed to read SU3 file")
+		return nil, fmt.Errorf("failed to read SU3 file: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"file_path":  filePath,
+		"size_bytes": len(data),
+	}).Debug("Read SU3 file from disk")
+
+	// Parse the SU3 file
+	su3file, err := r.readSU3File(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.validateSU3FileType(su3file); err != nil {
+		return nil, err
+	}
+
+	content, err := r.extractSU3Content(su3file)
+	if err != nil {
+		return nil, err
+	}
+
+	routerInfos, err := r.processReseedZip(content)
+	if err != nil {
+		return nil, err
+	}
+
+	log.WithFields(logger.Fields{
+		"file_path":         filePath,
+		"router_info_count": len(routerInfos),
+	}).Info("Successfully processed local SU3 file")
+
+	return routerInfos, nil
+}
+
+// ProcessLocalZipFile reads and processes a local zip reseed file
+func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error) {
+	log.WithField("file_path", filePath).Info("Processing local zip file")
+
+	// Read the zip file from disk
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		log.WithError(err).WithField("file_path", filePath).Error("Failed to read zip file")
+		return nil, fmt.Errorf("failed to read zip file: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"file_path":  filePath,
+		"size_bytes": len(data),
+	}).Debug("Read zip file from disk")
+
+	// Process the zip file
+	routerInfos, err := r.processReseedZip(data)
+	if err != nil {
+		return nil, err
+	}
+
+	log.WithFields(logger.Fields{
+		"file_path":         filePath,
+		"router_info_count": len(routerInfos),
+	}).Info("Successfully processed local zip file")
+
+	return routerInfos, nil
+}
+
 // performReseedRequest creates and executes an HTTP request to the reseed server.
 func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")

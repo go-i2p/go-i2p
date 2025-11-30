@@ -308,12 +308,13 @@ func (r *Router) ensureNetDBReady() error {
 
 // performReseed executes network database reseeding process
 func (r *Router) performReseed() error {
-	log.Info("NetDB below threshold, initiating reseed")
+	log.Info("NetDB below threshold, initiating bootstrap")
 
-	bootstrapper := bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
+	// Use composite bootstrap which tries reseed first, then falls back to local netDb
+	bootstrapper := bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
 
 	if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
-		log.WithError(err).Warn("Initial reseed failed, continuing with limited NetDB")
+		log.WithError(err).Warn("Bootstrap failed (both reseed and local netDb), continuing with limited NetDB")
 		return err
 	}
 	return nil
