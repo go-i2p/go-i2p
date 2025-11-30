@@ -281,16 +281,8 @@ func Defaults() ConfigDefaults {
 			ReseedRetryInterval: 5 * time.Minute,
 			ReseedServers: []*ReseedConfig{
 				{
-					Url:            "https://reseed.i2p-projekt.de/",
+					Url:            "https://reseed.i2pgit.org/i2pseeds.su3",
 					SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
-				},
-				{
-					Url:            "https://i2p.mooo.com/netDb/",
-					SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_2",
-				},
-				{
-					Url:            "https://netdb.i2p2.no/",
-					SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
 				},
 			},
 		},

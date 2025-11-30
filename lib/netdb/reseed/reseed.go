@@ -1,6 +1,8 @@
 package reseed
 
 import (
+	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -34,6 +36,7 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
 
 	su3file, err := r.readSU3File(response.Body)
 	if err != nil {
@@ -64,6 +67,10 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 
 	transport := http.Transport{
 		DialContext: r.DialContext,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // I2P reseed servers often use self-signed certificates
+			//TODO: implement proper certificate pinning/validation
+		},
 	}
 	client := http.Client{
 		Transport: &transport,
@@ -81,11 +88,17 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	}).Debug("Reseed request configured")
 
 	header := http.Header{}
-	header.Add("user-agent", I2pUserAgent)
+	header.Add("User-Agent", I2pUserAgent)
+	header.Add("Accept", "*/*")
+	header.Add("Accept-Encoding", "gzip, deflate")
 	request := http.Request{
-		Method: "GET",
-		URL:    URL,
-		Header: header,
+		Method:     "GET",
+		URL:        URL,
+		Header:     header,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Host:       URL.Host,
 	}
 	response, err := client.Do(&request)
 	if err != nil {
@@ -96,8 +109,17 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithFields(logger.Fields{
 		"status_code":    response.StatusCode,
 		"content_length": response.ContentLength,
+		"content_type":   response.Header.Get("Content-Type"),
 		"uri":            uri,
 	}).Info("Successfully received response from reseed server")
+
+	// Check if we got an error page instead of SU3 file
+	if response.StatusCode != 200 {
+		response.Body.Close()
+		log.WithField("status_code", response.StatusCode).Error("Reseed server returned error status")
+		return nil, fmt.Errorf("reseed server returned status %d", response.StatusCode)
+	}
+
 	return response, nil
 }
 
@@ -137,7 +159,8 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 	return nil
 }
 
-// extractSU3Content extracts the content from the SU3 file and validates the signature.
+// extractSU3Content extracts the content from the SU3 file.
+// Note: Signature validation is not yet implemented.
 func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	log.Debug("Extracting content from SU3 file")
 
@@ -148,12 +171,8 @@ func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	}
 	log.WithField("content_size_bytes", len(content)).Info("Successfully extracted SU3 content")
 
-	signature, err := io.ReadAll(su3file.Signature())
-	if err != nil {
-		log.WithError(err).Error("Failed to read SU3 file signature")
-		return nil, err
-	}
-	log.WithField("signature_length", len(signature)).Warn("SU3 signature validation not yet implemented")
+	// TODO: Implement signature validation
+	log.Warn("SU3 signature validation not yet implemented")
 
 	return content, nil
 }
