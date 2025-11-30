@@ -291,7 +291,9 @@ func TestDatabaseManager_PerformLookup_Found(t *testing.T) {
 	// Add RouterInfo data to NetDB
 	targetKey := common.Hash{0xFF}
 	routerInfoData := []byte{1, 2, 3, 4, 5} // Mock RouterInfo bytes
-	mockNetDB.StoreRouterInfo(targetKey, routerInfoData, 0)
+	if err := mockNetDB.StoreRouterInfo(targetKey, routerInfoData, 0); err != nil {
+		t.Fatalf("Failed to store router info: %v", err)
+	}
 
 	dbManager := NewDatabaseManager(mockNetDB)
 	dbManager.SetRetriever(mockNetDB)

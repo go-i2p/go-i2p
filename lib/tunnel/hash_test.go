@@ -262,7 +262,9 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 // BenchmarkHashDTRouter measures performance of hash extraction for DT_ROUTER delivery type.
 func BenchmarkHashDTRouter(b *testing.B) {
 	expectedHash := common.Hash{}
-	rand.Read(expectedHash[:])
+	if _, err := rand.Read(expectedHash[:]); err != nil {
+		b.Fatalf("Failed to generate random hash: %v", err)
+	}
 
 	flag := byte(0x20)
 	instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
@@ -285,7 +287,9 @@ func BenchmarkHashDTRouter(b *testing.B) {
 // BenchmarkHashDTTunnel measures performance of hash extraction for DT_TUNNEL delivery type.
 func BenchmarkHashDTTunnel(b *testing.B) {
 	expectedHash := common.Hash{}
-	rand.Read(expectedHash[:])
+	if _, err := rand.Read(expectedHash[:]); err != nil {
+		b.Fatalf("Failed to generate random hash: %v", err)
+	}
 
 	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
 	flag := byte(0x10)

@@ -201,7 +201,9 @@ func BenchmarkNetDBOperations(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var destHash common.Hash
 			rand.Read(destHash[:])
-			db.StoreLeaseSet(destHash, leaseSetBytes, 1)
+			if err := db.StoreLeaseSet(destHash, leaseSetBytes, 1); err != nil {
+				b.Logf("Error storing lease set: %v", err)
+			}
 		}
 	})
 }

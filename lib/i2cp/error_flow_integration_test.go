@@ -24,7 +24,11 @@ func TestErrorFlowIntegration_SessionCreationWithErrorHandling(t *testing.T) {
 
 	err = server.Start()
 	require.NoError(t, err)
-	defer server.Stop()
+	defer func() {
+		if stopErr := server.Stop(); stopErr != nil {
+			t.Logf("Error stopping server: %v", stopErr)
+		}
+	}()
 
 	// Create session - exercises error handling in destination/keys creation
 	session, err := server.manager.CreateSession(nil, nil)
@@ -99,7 +103,11 @@ func TestErrorFlowIntegration_ConcurrentSessionsWithErrorHandling(t *testing.T) 
 
 	err = server.Start()
 	require.NoError(t, err)
-	defer server.Stop()
+	defer func() {
+		if stopErr := server.Stop(); stopErr != nil {
+			t.Logf("Error stopping server: %v", stopErr)
+		}
+	}()
 
 	// Create multiple concurrent sessions
 	numSessions := 10

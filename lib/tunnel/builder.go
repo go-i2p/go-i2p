@@ -383,7 +383,11 @@ func generateSessionKey() (session_key.SessionKey, error) {
 // Message IDs are 32-bit unsigned integers.
 func generateMessageID() int {
 	var buf [4]byte
-	rand.Read(buf[:]) // Ignore error, best effort for message ID
+	// rand.Read from crypto/rand only errors if the system's secure random
+	// number generator fails. This is extremely rare and if it happens, the
+	// system has bigger problems. Using a zero ID is safe as message IDs
+	// are used for correlation, not security.
+	_, _ = rand.Read(buf[:])
 
 	return int(uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3]))
 }

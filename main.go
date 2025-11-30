@@ -53,14 +53,30 @@ func init() {
 		"Maximum number of concurrent I2CP sessions")
 
 	// Bind flags to viper
-	viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir"))
-	viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir"))
-	viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path"))
-	viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold"))
-	viper.BindPFlag("i2cp.enabled", RootCmd.PersistentFlags().Lookup("i2cp.enabled"))
-	viper.BindPFlag("i2cp.address", RootCmd.PersistentFlags().Lookup("i2cp.address"))
-	viper.BindPFlag("i2cp.network", RootCmd.PersistentFlags().Lookup("i2cp.network"))
-	viper.BindPFlag("i2cp.max_sessions", RootCmd.PersistentFlags().Lookup("i2cp.max-sessions"))
+	if err := viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir")); err != nil {
+		log.WithError(err).Fatal("Failed to bind base_dir flag")
+	}
+	if err := viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir")); err != nil {
+		log.WithError(err).Fatal("Failed to bind working_dir flag")
+	}
+	if err := viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path")); err != nil {
+		log.WithError(err).Fatal("Failed to bind netdb.path flag")
+	}
+	if err := viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold")); err != nil {
+		log.WithError(err).Fatal("Failed to bind bootstrap.low_peer_threshold flag")
+	}
+	if err := viper.BindPFlag("i2cp.enabled", RootCmd.PersistentFlags().Lookup("i2cp.enabled")); err != nil {
+		log.WithError(err).Fatal("Failed to bind i2cp.enabled flag")
+	}
+	if err := viper.BindPFlag("i2cp.address", RootCmd.PersistentFlags().Lookup("i2cp.address")); err != nil {
+		log.WithError(err).Fatal("Failed to bind i2cp.address flag")
+	}
+	if err := viper.BindPFlag("i2cp.network", RootCmd.PersistentFlags().Lookup("i2cp.network")); err != nil {
+		log.WithError(err).Fatal("Failed to bind i2cp.network flag")
+	}
+	if err := viper.BindPFlag("i2cp.max_sessions", RootCmd.PersistentFlags().Lookup("i2cp.max-sessions")); err != nil {
+		log.WithError(err).Fatal("Failed to bind i2cp.max_sessions flag")
+	}
 }
 
 // configCmd shows current configuration

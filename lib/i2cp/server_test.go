@@ -253,10 +253,13 @@ func TestServerMaxSessions(t *testing.T) {
 	_ = WriteMessage(conn3, createMsg)
 
 	// Trying to read should get EOF or error
-	conn3.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-	_, err = ReadMessage(conn3)
+	if err := conn3.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("Failed to set read deadline: %v", err)
+	}
+	_, readErr := ReadMessage(conn3)
 	// Connection should be closed, so read should fail
 	// We don't check exact error since it could be EOF or network error
+	_ = readErr
 }
 
 func TestServerGetDate(t *testing.T) {

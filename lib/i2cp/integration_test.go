@@ -95,7 +95,9 @@ func setupTestEnvironment(t *testing.T) (*Server, *Session, *tunnel.Pool, *tunne
 		session.Stop()
 		inboundPool.Stop()
 		outboundPool.Stop()
-		server.Stop()
+		if err := server.Stop(); err != nil {
+			t.Logf("Error stopping server: %v", err)
+		}
 	}
 
 	return server, session, inboundPool, outboundPool, cleanup

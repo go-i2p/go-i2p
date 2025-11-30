@@ -38,7 +38,8 @@ type RouterInfoKeystore struct {
 	keyIDMutex sync.RWMutex
 }
 
-var riks KeyStore = &RouterInfoKeystore{}
+// Ensure RouterInfoKeystore implements KeyStore interface at compile time
+var _ KeyStore = (*RouterInfoKeystore)(nil)
 
 // NewRouterInfoKeystore creates a new RouterInfoKeystore with fresh and new private keys
 // it accepts a directory to store the keys in and a name for the keys

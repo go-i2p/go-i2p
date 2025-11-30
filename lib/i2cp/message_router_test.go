@@ -220,13 +220,6 @@ func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager,
 	return session, garlicMgr, transportSend, sentMessages
 }
 
-func createTestSessionWithActiveTunnels(t *testing.T) *Session {
-	server, session, _, _, cleanup := setupTestEnvironment(t)
-	t.Cleanup(cleanup)
-	_ = server
-	return session
-}
-
 func createTestSessionWithoutPools(t *testing.T) *Session {
 	// Create a minimal session without pools
 	config := DefaultSessionConfig()

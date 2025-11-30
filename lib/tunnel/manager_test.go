@@ -131,7 +131,10 @@ func TestRemoveParticipant(t *testing.T) {
 
 	// Add a participant
 	p, _ := NewParticipant(tunnelID, &mockTunnelEncryptor{})
-	m.AddParticipant(p)
+	err := m.AddParticipant(p)
+	if err != nil {
+		t.Fatalf("Failed to add participant: %v", err)
+	}
 
 	// Verify it exists
 	if m.ParticipantCount() != 1 {
@@ -190,7 +193,9 @@ func TestParticipantCount(t *testing.T) {
 	// Add 3 participants
 	for i := TunnelID(1); i <= 3; i++ {
 		p, _ := NewParticipant(i, &mockTunnelEncryptor{})
-		m.AddParticipant(p)
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant %d: %v", i, err)
+		}
 	}
 
 	if m.ParticipantCount() != 3 {
@@ -213,11 +218,15 @@ func TestCleanupExpiredParticipants(t *testing.T) {
 	// Create a participant that's already expired
 	p, _ := NewParticipant(11111, &mockTunnelEncryptor{})
 	p.createdAt = time.Now().Add(-11 * time.Minute) // Expired (10min lifetime)
-	m.AddParticipant(p)
+	if err := m.AddParticipant(p); err != nil {
+		t.Fatalf("Failed to add expired participant: %v", err)
+	}
 
 	// Create a participant that's not expired
 	p2, _ := NewParticipant(22222, &mockTunnelEncryptor{})
-	m.AddParticipant(p2)
+	if err := m.AddParticipant(p2); err != nil {
+		t.Fatalf("Failed to add participant: %v", err)
+	}
 
 	// Verify both were added
 	if m.ParticipantCount() != 2 {

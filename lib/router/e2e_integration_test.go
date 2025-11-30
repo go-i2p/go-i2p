@@ -315,7 +315,11 @@ func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 
 	err = env.server.Start()
 	require.NoError(t, err)
-	env.cleanupFuncs = append(env.cleanupFuncs, func() { env.server.Stop() })
+	env.cleanupFuncs = append(env.cleanupFuncs, func() {
+		if stopErr := env.server.Stop(); stopErr != nil {
+			t.Logf("Error stopping server: %v", stopErr)
+		}
+	})
 
 	// Create sender session with tunnel pools
 	env.senderSession = env.createSessionWithPools(t, "sender-session")

@@ -41,7 +41,9 @@ func TestStress_100ConcurrentSessions(t *testing.T) {
 	defer func() {
 		// Cleanup all sessions
 		for i := uint16(1); i <= numSessions; i++ {
-			sessionManager.DestroySession(i)
+			if err := sessionManager.DestroySession(i); err != nil {
+				t.Logf("Error destroying session %d: %v", i, err)
+			}
 		}
 	}()
 
