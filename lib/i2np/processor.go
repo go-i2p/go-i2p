@@ -34,6 +34,8 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 		return p.processDataMessage(msg)
 	case I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
 		return p.processDeliveryStatusMessage(msg)
+	case I2NP_MESSAGE_TYPE_GARLIC:
+		return p.processGarlicMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
 		return p.processTunnelDataMessage(msg)
 	default:
@@ -63,6 +65,60 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 		return nil
 	}
 	return fmt.Errorf("message does not implement StatusReporter interface")
+}
+
+// processGarlicMessage processes garlic messages using GarlicProcessor interface.
+// Garlic messages contain one or more cloves, each with delivery instructions
+// and a wrapped I2NP message. The processor validates the garlic structure
+// and logs the clove details for debugging.
+//
+// Full implementation would:
+// 1. Decrypt the garlic message using GarlicSessionManager
+// 2. Parse cloves and delivery instructions
+// 3. Route each clove based on delivery type (LOCAL/DESTINATION/ROUTER/TUNNEL)
+// 4. Recursively process wrapped I2NP messages
+//
+// Current implementation validates structure and logs for demonstration purposes.
+func (p *MessageProcessor) processGarlicMessage(msg I2NPMessage) error {
+	// Validate the message implements GarlicProcessor interface
+	if garlicProcessor, ok := msg.(GarlicProcessor); ok {
+		cloves := garlicProcessor.GetCloves()
+		cloveCount := garlicProcessor.GetCloveCount()
+		
+		log.WithFields(logger.Fields{
+			"clove_count": cloveCount,
+			"msg_id":      msg.MessageID(),
+		}).Debug("Processing garlic message")
+
+		// Process each clove's delivery instructions
+		for i, clove := range cloves {
+			deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03 // Extract bits 6-5
+			
+			log.WithFields(logger.Fields{
+				"clove_index":   i,
+				"clove_id":      clove.CloveID,
+				"delivery_type": deliveryType, // 0=LOCAL, 1=DESTINATION, 2=ROUTER, 3=TUNNEL
+				"wrapped_type":  clove.I2NPMessage.Type(),
+			}).Debug("Processing garlic clove")
+
+			// Defensive check: ensure wrapped message is not nil
+			if clove.I2NPMessage == nil {
+				log.WithField("clove_index", i).Warn("Garlic clove contains nil I2NP message")
+				continue
+			}
+
+			// TODO: Full implementation would decrypt, route based on delivery instructions:
+			// - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
+			// - DESTINATION (0x20): Forward to destination hash via router
+			// - ROUTER (0x40): Forward to router hash via transport
+			// - TUNNEL (0x60): Forward through tunnel to gateway
+		}
+
+		return nil
+	}
+	
+	// Message has GARLIC type but doesn't implement GarlicProcessor interface
+	return fmt.Errorf("message type GARLIC does not implement GarlicProcessor interface")
 }
 
 // processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface
