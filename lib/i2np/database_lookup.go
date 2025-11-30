@@ -369,6 +369,7 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 
 	// I2P spec: valid range is 0-512 peers
 	// Validate to prevent resource exhaustion attacks
+	// Rate limiting is enforced at the processor level
 	const MaxExcludedPeers = 512
 	if size < 0 || size > MaxExcludedPeers {
 		log.WithFields(logger.Fields{

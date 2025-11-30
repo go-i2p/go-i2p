@@ -822,6 +822,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 }
 
 // DatabaseManager demonstrates database-related interface usage
+// DatabaseManager demonstrates database-related interface usage
 type DatabaseManager struct {
 	netdb             NetDBStore
 	retriever         NetDBRetriever
@@ -829,6 +830,12 @@ type DatabaseManager struct {
 	sessionProvider   SessionProvider
 	factory           *I2NPMessageFactory
 	ourRouterHash     common.Hash // Our router's identity hash for DatabaseSearchReply
+
+	// Rate limiting for DatabaseLookup messages
+	lookupLimiter struct {
+		mu      sync.Mutex
+		lookups map[common.Hash]time.Time // Track lookup frequency by source hash
+	}
 }
 
 // NetDBStore defines the interface for storing RouterInfo entries
@@ -860,13 +867,15 @@ type SessionProvider interface {
 
 // NewDatabaseManager creates a new database manager with NetDB integration
 func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
-	return &DatabaseManager{
+	dm := &DatabaseManager{
 		netdb:             netdb,
 		retriever:         nil, // Will be set later via SetRetriever
 		floodfillSelector: nil, // Will be set later via SetFloodfillSelector
 		sessionProvider:   nil, // Will be set later via SetSessionProvider
 		factory:           NewI2NPMessageFactory(),
 	}
+	dm.lookupLimiter.lookups = make(map[common.Hash]time.Time)
+	return dm
 }
 
 // SetRetriever sets the NetDB retriever for database operations
@@ -914,6 +923,13 @@ func (mr *MessageRouter) SetSessionProvider(provider SessionProvider) {
 
 // PerformLookup performs a database lookup using DatabaseReader interface and generates appropriate responses
 func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
+	// Check rate limit before processing
+	from := reader.GetFrom()
+	if !dm.rateLimitLookup(from) {
+		log.WithField("from", fmt.Sprintf("%x", from[:8])).Warn("DatabaseLookup rate limited")
+		return fmt.Errorf("lookup rate limit exceeded")
+	}
+
 	dm.logLookupRequest(reader)
 
 	if dm.sessionProvider == nil {
@@ -921,6 +937,39 @@ func (dm *DatabaseManager) PerformLookup(reader DatabaseReader) error {
 	}
 
 	return dm.performLookupWithSession(reader.GetKey(), reader.GetFrom())
+}
+
+// rateLimitLookup enforces rate limits on DatabaseLookup messages by source.
+// Returns true if the lookup is allowed, false if rate limited.
+func (dm *DatabaseManager) rateLimitLookup(from common.Hash) bool {
+	const (
+		minLookupInterval = 100 * time.Millisecond // Minimum 100ms between lookups from same source
+		maxTrackedSources = 1000                   // Maximum number of sources to track
+		cleanupAge        = 5 * time.Minute        // Clean entries older than 5 minutes
+	)
+
+	dm.lookupLimiter.mu.Lock()
+	defer dm.lookupLimiter.mu.Unlock()
+
+	lastLookup, exists := dm.lookupLimiter.lookups[from]
+	now := time.Now()
+
+	if exists && now.Sub(lastLookup) < minLookupInterval {
+		return false // Rate limited
+	}
+
+	dm.lookupLimiter.lookups[from] = now
+
+	// Periodically clean old entries to prevent unbounded growth
+	if len(dm.lookupLimiter.lookups) > maxTrackedSources {
+		for hash, ts := range dm.lookupLimiter.lookups {
+			if now.Sub(ts) > cleanupAge {
+				delete(dm.lookupLimiter.lookups, hash)
+			}
+		}
+	}
+
+	return true
 }
 
 // logLookupRequest logs the incoming database lookup request details.
