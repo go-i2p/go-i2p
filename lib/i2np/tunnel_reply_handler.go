@@ -286,11 +286,10 @@ func (rp *ReplyProcessor) handleBuildSuccess(tunnelID tunnel.TunnelID, pending *
 		"retry_count": pending.Retries,
 	}).Info("Tunnel build completed successfully")
 
-	// Notify tunnel manager of success (if available)
-	if rp.tunnelManager != nil {
-		// Tunnel manager will update the tunnel state to TunnelReady
-		// This integration happens in ProcessTunnelReply in processor.go
-	}
+	// Note: tunnelManager is available for future enhancements.
+	// Currently, tunnel state management happens in ProcessTunnelReply in processor.go
+	// Future: Implement direct tunnel manager integration here if needed
+	_ = rp.tunnelManager // Explicitly mark as intentionally unused for now
 
 	return nil
 }

@@ -160,8 +160,8 @@ func TestSessionStop(t *testing.T) {
 		t.Error("Expected error queuing to stopped session, got nil")
 	}
 
-	// ReceiveMessage should return immediately
-	msg, err := session.ReceiveMessage()
+	// ReceiveMessage should return immediately (timeout expected)
+	msg, _ := session.ReceiveMessage()
 	if msg != nil {
 		t.Errorf("ReceiveMessage() from stopped session = %v, want nil", msg)
 	}

@@ -101,7 +101,10 @@ func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	excessData := make([]byte, 2)
 	excessData[1] = 0x32
 	data = append(data, excessData...)
-	length, flags, err := readDatabaseLookupFlags(length, data)
+	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
+	if flagsErr != nil {
+		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
+	}
 
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(65, length)

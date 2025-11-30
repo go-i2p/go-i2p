@@ -23,8 +23,7 @@ func Handle() {
 			handleReload()
 		} else if sig == syscall.SIGINT || sig == syscall.SIGTERM {
 			handleInterrupted()
-		} else {
-			// wtf?
 		}
+		// Note: other signals intentionally ignored
 	}
 }

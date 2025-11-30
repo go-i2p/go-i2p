@@ -73,8 +73,7 @@ func TestDatabaseManager_StoreData_Success(t *testing.T) {
 	}
 
 	// Verify data was stored
-	keyStr := string(testKey[:])
-	if storedData, exists := mockStore.stored[keyStr]; !exists {
+	if storedData, exists := mockStore.stored[string(testKey[:])]; !exists {
 		t.Error("Data was not stored in mock NetDB")
 	} else if string(storedData) != string(testData) {
 		t.Errorf("Stored data mismatch: expected %s, got %s", string(testData), string(storedData))
