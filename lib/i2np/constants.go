@@ -30,4 +30,5 @@ var (
 	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
 	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
 	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = oops.Errorf("not enough i2np database lookup data")
+	ERR_DATABASE_LOOKUP_INVALID_SIZE          = oops.Errorf("database lookup excluded peers size exceeds protocol limit")
 )

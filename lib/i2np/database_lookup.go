@@ -366,6 +366,18 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 	}
 
 	size := common.Integer(data[length : length+2]).Int()
+
+	// I2P spec: valid range is 0-512 peers
+	// Validate to prevent resource exhaustion attacks
+	const MaxExcludedPeers = 512
+	if size < 0 || size > MaxExcludedPeers {
+		log.WithFields(logger.Fields{
+			"at":   "i2np.database_lookup.readDatabaseLookupSize",
+			"size": size,
+		}).Error("invalid_excluded_peers_size")
+		return length, 0, ERR_DATABASE_LOOKUP_INVALID_SIZE
+	}
+
 	log.WithFields(logger.Fields{
 		"at":   "i2np.database_lookup.readDatabaseLookupSize",
 		"size": size,
