@@ -265,40 +265,71 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	session *GarlicSession,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
-	// Step 1: Advance symmetric ratchet to get message key
-	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	messageKey, sessionTag, err := advanceRatchets(session)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to advance symmetric ratchet")
+		return nil, err
+	}
+
+	ciphertext, tag, nonce, err := encryptWithSessionKey(messageKey, plaintextGarlic, sessionTag)
+	if err != nil {
+		return nil, err
+	}
+
+	existingSessionMsg := buildExistingSessionMessage(sessionTag, nonce, ciphertext, tag)
+
+	// Update session state
+	session.LastUsed = time.Now()
+	session.MessageCounter++
+
+	return existingSessionMsg, nil
+}
+
+// advanceRatchets advances the symmetric and tag ratchets to generate message key and session tag.
+func advanceRatchets(session *GarlicSession) (messageKey [32]byte, sessionTag [8]byte, err error) {
+	// Step 1: Advance symmetric ratchet to get message key
+	messageKey, _, err = session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	if err != nil {
+		return [32]byte{}, [8]byte{}, oops.Wrapf(err, "failed to advance symmetric ratchet")
 	}
 
 	// Step 2: Generate session tag for recipient to identify this message
-	sessionTag, err := session.TagRatchet.GenerateNextTag()
+	sessionTag, err = session.TagRatchet.GenerateNextTag()
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to generate session tag")
+		return [32]byte{}, [8]byte{}, oops.Wrapf(err, "failed to generate session tag")
 	}
 
 	// Add tag to pending tags for the remote peer's session (they will use it to find our session)
 	// Note: In a real implementation, we would track separate inbound/outbound tag windows
 	session.pendingTags = append(session.pendingTags, sessionTag)
 
+	return messageKey, sessionTag, nil
+}
+
+// encryptWithSessionKey encrypts plaintext using ChaCha20-Poly1305 with the message key.
+func encryptWithSessionKey(messageKey [32]byte, plaintextGarlic []byte, sessionTag [8]byte) (ciphertext []byte, tag [16]byte, nonce []byte, err error) {
 	// Step 3: Create ChaCha20-Poly1305 AEAD with message key
 	aead, err := chacha20poly1305.NewAEAD(messageKey)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to create AEAD")
+		return nil, [16]byte{}, nil, oops.Wrapf(err, "failed to create AEAD")
 	}
 
 	// Step 4: Generate unique nonce for this message
-	nonce := make([]byte, chacha20poly1305.NonceSize)
+	nonce = make([]byte, chacha20poly1305.NonceSize)
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, oops.Wrapf(err, "failed to generate nonce")
+		return nil, [16]byte{}, nil, oops.Wrapf(err, "failed to generate nonce")
 	}
 
 	// Step 5: Encrypt with session tag as additional authenticated data
-	ciphertext, tag, err := aead.Encrypt(plaintextGarlic, sessionTag[:], nonce)
+	ciphertext, tag, err = aead.Encrypt(plaintextGarlic, sessionTag[:], nonce)
 	if err != nil {
-		return nil, oops.Wrapf(err, "failed to encrypt existing session message")
+		return nil, [16]byte{}, nil, oops.Wrapf(err, "failed to encrypt existing session message")
 	}
 
+	return ciphertext, tag, nonce, nil
+}
+
+// buildExistingSessionMessage constructs the Existing Session message format.
+func buildExistingSessionMessage(sessionTag [8]byte, nonce []byte, ciphertext []byte, tag [16]byte) []byte {
 	// Step 6: Construct Existing Session message:
 	// [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 	existingSessionMsg := make([]byte, 8+12+len(ciphertext)+16)
@@ -306,12 +337,7 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	copy(existingSessionMsg[8:20], nonce)
 	copy(existingSessionMsg[20:20+len(ciphertext)], ciphertext)
 	copy(existingSessionMsg[20+len(ciphertext):], tag[:])
-
-	// Update session state
-	session.LastUsed = time.Now()
-	session.MessageCounter++
-
-	return existingSessionMsg, nil
+	return existingSessionMsg
 }
 
 // DecryptGarlicMessage decrypts an encrypted garlic message.
@@ -486,37 +512,19 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 	existingSessionMsg []byte,
 	sessionTag [8]byte,
 ) ([]byte, [8]byte, error) {
-	// Parse Existing Session message format (session tag already extracted by caller)
-	if len(existingSessionMsg) < 12+16 {
-		return nil, [8]byte{}, oops.Errorf("existing session message too short")
-	}
-
-	nonce := existingSessionMsg[0:12]
-	ciphertextWithTag := existingSessionMsg[12:]
-
-	if len(ciphertextWithTag) < 16 {
-		return nil, [8]byte{}, oops.Errorf("ciphertext too short for auth tag")
-	}
-
-	ciphertext := ciphertextWithTag[:len(ciphertextWithTag)-16]
-	var tag [16]byte
-	copy(tag[:], ciphertextWithTag[len(ciphertextWithTag)-16:])
-
-	// Derive message key from ratchet state
-	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	nonce, ciphertext, tag, err := parseExistingSessionMessage(existingSessionMsg)
 	if err != nil {
-		return nil, [8]byte{}, oops.Wrapf(err, "failed to derive message key")
+		return nil, [8]byte{}, err
 	}
 
-	// Decrypt using ChaCha20-Poly1305 with session tag as AAD
-	aead, err := chacha20poly1305.NewAEAD(messageKey)
+	messageKey, err := deriveDecryptionKey(session)
 	if err != nil {
-		return nil, [8]byte{}, oops.Wrapf(err, "failed to create AEAD")
+		return nil, [8]byte{}, err
 	}
 
-	plaintext, err := aead.Decrypt(ciphertext, tag[:], sessionTag[:], nonce)
+	plaintext, err := decryptWithSessionTag(messageKey, ciphertext, tag, sessionTag, nonce)
 	if err != nil {
-		return nil, [8]byte{}, oops.Wrapf(err, "decryption failed (authentication error)")
+		return nil, [8]byte{}, err
 	}
 
 	// Update session state
@@ -524,6 +532,49 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 	session.MessageCounter++
 
 	return plaintext, sessionTag, nil
+}
+
+// parseExistingSessionMessage parses the Existing Session message format.
+func parseExistingSessionMessage(existingSessionMsg []byte) (nonce, ciphertext []byte, tag [16]byte, err error) {
+	if len(existingSessionMsg) < 12+16 {
+		return nil, nil, [16]byte{}, oops.Errorf("existing session message too short")
+	}
+
+	nonce = existingSessionMsg[0:12]
+	ciphertextWithTag := existingSessionMsg[12:]
+
+	if len(ciphertextWithTag) < 16 {
+		return nil, nil, [16]byte{}, oops.Errorf("ciphertext too short for auth tag")
+	}
+
+	ciphertext = ciphertextWithTag[:len(ciphertextWithTag)-16]
+	copy(tag[:], ciphertextWithTag[len(ciphertextWithTag)-16:])
+
+	return nonce, ciphertext, tag, nil
+}
+
+// deriveDecryptionKey derives the message key from the session's ratchet state.
+func deriveDecryptionKey(session *GarlicSession) ([32]byte, error) {
+	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	if err != nil {
+		return [32]byte{}, oops.Wrapf(err, "failed to derive message key")
+	}
+	return messageKey, nil
+}
+
+// decryptWithSessionTag decrypts ciphertext using ChaCha20-Poly1305 with session tag as AAD.
+func decryptWithSessionTag(messageKey [32]byte, ciphertext []byte, tag [16]byte, sessionTag [8]byte, nonce []byte) ([]byte, error) {
+	aead, err := chacha20poly1305.NewAEAD(messageKey)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create AEAD")
+	}
+
+	plaintext, err := aead.Decrypt(ciphertext, tag[:], sessionTag[:], nonce)
+	if err != nil {
+		return nil, oops.Wrapf(err, "decryption failed (authentication error)")
+	}
+
+	return plaintext, nil
 }
 
 // findSessionByTag searches for a session that expects the given tag.

@@ -242,45 +242,65 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 		return fmt.Errorf("no session provider available")
 	}
 
-	// For now, send to the first hop (gateway)
-	// In a full implementation, this would be sent through an existing outbound tunnel
-	if len(result.Hops) == 0 {
-		return fmt.Errorf("no hops in tunnel build result")
+	firstHop, err := validateTunnelBuild(result)
+	if err != nil {
+		return err
 	}
 
-	firstHop := result.Hops[0]
+	session, peerHash, err := tm.getGatewaySession(firstHop)
+	if err != nil {
+		return err
+	}
+
+	buildMsg := tm.selectBuildMessage(result, messageID)
+	tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild)
+
+	return nil
+}
+
+// validateTunnelBuild validates the tunnel build result has required hops.
+func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterInfo, error) {
+	if len(result.Hops) == 0 {
+		return router_info.RouterInfo{}, fmt.Errorf("no hops in tunnel build result")
+	}
+	return result.Hops[0], nil
+}
+
+// getGatewaySession retrieves the transport session for the gateway router.
+func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (TransportSession, [32]byte, error) {
 	peerHash, err := firstHop.IdentHash()
 	if err != nil {
-		return fmt.Errorf("failed to get first hop identity: %w", err)
+		return nil, [32]byte{}, fmt.Errorf("failed to get first hop identity: %w", err)
 	}
 
-	// Get transport session to the gateway
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 	if err != nil {
-		return fmt.Errorf("failed to get session for gateway %x: %w", peerHash[:8], err)
+		return nil, [32]byte{}, fmt.Errorf("failed to get session for gateway %x: %w", peerHash[:8], err)
 	}
 
-	// Create the appropriate build message based on UseShortBuild flag
-	var buildMsg I2NPMessage
+	return session, peerHash, nil
+}
+
+// selectBuildMessage creates the appropriate build message based on UseShortBuild flag.
+func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
 	if result.UseShortBuild {
 		// Use Short Tunnel Build Message (modern)
-		buildMsg = tm.createShortTunnelBuildMessage(result, messageID)
-	} else {
-		// Use Variable Tunnel Build Message (legacy)
-		buildMsg = tm.createVariableTunnelBuildMessage(result, messageID)
+		return tm.createShortTunnelBuildMessage(result, messageID)
 	}
+	// Use Variable Tunnel Build Message (legacy)
+	return tm.createVariableTunnelBuildMessage(result, messageID)
+}
 
-	// Queue the message for sending
+// queueBuildMessageToGateway queues the build message for sending to the gateway.
+func (tm *TunnelManager) queueBuildMessageToGateway(session TransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) {
 	session.QueueSendI2NP(buildMsg)
 
 	log.WithFields(logger.Fields{
 		"message_id":   messageID,
 		"gateway_hash": fmt.Sprintf("%x", peerHash[:8]),
 		"message_type": buildMsg.Type(),
-		"use_stbm":     result.UseShortBuild,
+		"use_stbm":     useShortBuild,
 	}).Debug("Queued tunnel build message")
-
-	return nil
 }
 
 // createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
