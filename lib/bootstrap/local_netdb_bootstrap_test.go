@@ -65,8 +65,8 @@ func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 			name: "Valid Java I2P style netDb",
 			setupFunc: func() string {
 				path := filepath.Join(tmpDir, "java-i2p")
-				os.MkdirAll(filepath.Join(path, "r0"), 0755)
-				os.MkdirAll(filepath.Join(path, "ra"), 0755)
+				os.MkdirAll(filepath.Join(path, "r0"), 0o755)
+				os.MkdirAll(filepath.Join(path, "ra"), 0o755)
 				return path
 			},
 			expected: true,
@@ -75,7 +75,7 @@ func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 			name: "Valid i2pd style netDb",
 			setupFunc: func() string {
 				path := filepath.Join(tmpDir, "i2pd")
-				os.MkdirAll(path, 0755)
+				os.MkdirAll(path, 0o755)
 				// Create a dummy routerInfo file
 				f, _ := os.Create(filepath.Join(path, "routerInfo-test.dat"))
 				f.Close()
@@ -87,7 +87,7 @@ func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 			name: "Empty directory",
 			setupFunc: func() string {
 				path := filepath.Join(tmpDir, "empty")
-				os.MkdirAll(path, 0755)
+				os.MkdirAll(path, 0o755)
 				return path
 			},
 			expected: false,
@@ -187,7 +187,7 @@ func TestLocalNetDbBootstrap_ContextCancellation(t *testing.T) {
 
 	// Create a directory with many dummy files to make reading slow
 	netDbPath := filepath.Join(tmpDir, "netDb")
-	os.MkdirAll(filepath.Join(netDbPath, "r0"), 0755)
+	os.MkdirAll(filepath.Join(netDbPath, "r0"), 0o755)
 
 	// Create some dummy files (not valid RouterInfos, just for testing cancellation)
 	for i := 0; i < 100; i++ {

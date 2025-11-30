@@ -21,7 +21,7 @@ func TestFileBootstrap_ValidateFile(t *testing.T) {
 	t.Run("DirectoryInsteadOfFile", func(t *testing.T) {
 		// Create a temporary directory
 		tmpDir := t.TempDir()
-		
+
 		fb := NewFileBootstrap(tmpDir)
 		err := fb.validateFile()
 		assert.Error(t, err)
@@ -31,7 +31,7 @@ func TestFileBootstrap_ValidateFile(t *testing.T) {
 	t.Run("ValidFile", func(t *testing.T) {
 		// Create a temporary file
 		tmpFile := filepath.Join(t.TempDir(), "test.su3")
-		err := os.WriteFile(tmpFile, []byte("test content"), 0644)
+		err := os.WriteFile(tmpFile, []byte("test content"), 0o644)
 		require.NoError(t, err)
 
 		fb := NewFileBootstrap(tmpFile)
@@ -43,7 +43,7 @@ func TestFileBootstrap_ValidateFile(t *testing.T) {
 func TestFileBootstrap_GetPeers_UnsupportedFileType(t *testing.T) {
 	// Create a temporary file with unsupported extension
 	tmpFile := filepath.Join(t.TempDir(), "test.txt")
-	err := os.WriteFile(tmpFile, []byte("test content"), 0644)
+	err := os.WriteFile(tmpFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	fb := NewFileBootstrap(tmpFile)
@@ -58,11 +58,11 @@ func TestFileBootstrap_GetPeers_UnsupportedFileType(t *testing.T) {
 func TestFileBootstrap_GetPeers_ContextCanceled(t *testing.T) {
 	// Create a temporary file
 	tmpFile := filepath.Join(t.TempDir(), "test.su3")
-	err := os.WriteFile(tmpFile, []byte("test content"), 0644)
+	err := os.WriteFile(tmpFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	fb := NewFileBootstrap(tmpFile)
-	
+
 	// Create a canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -86,7 +86,7 @@ func TestFileBootstrap_GetPeers_NonExistentFile(t *testing.T) {
 func TestNewFileBootstrap(t *testing.T) {
 	testPath := "/path/to/reseed.su3"
 	fb := NewFileBootstrap(testPath)
-	
+
 	assert.NotNil(t, fb)
 	assert.Equal(t, testPath, fb.filePath)
 }
