@@ -1,9 +1,10 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/rand"
 	"fmt"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"

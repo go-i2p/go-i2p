@@ -1,11 +1,12 @@
 package router
 
 import (
-	"github.com/go-i2p/crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/i2cp"

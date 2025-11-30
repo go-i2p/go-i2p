@@ -1,8 +1,9 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/rand"
 	"testing"
+
+	"github.com/go-i2p/crypto/rand"
 
 	common "github.com/go-i2p/common/data"
 )

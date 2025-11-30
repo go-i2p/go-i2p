@@ -204,12 +204,12 @@ func TestClientNetDBStoreMetaLeaseSet(t *testing.T) {
 	tmpDir := t.TempDir()
 	stdDB := NewStdNetDB(tmpDir)
 	require.NoError(t, stdDB.Create())
-	
+
 	clientDB := NewClientNetDB(stdDB)
-	
+
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	testData := []byte{0x01, 0x02, 0x03}
-	
+
 	// Should fail with invalid data but test the wrapper
 	err := clientDB.StoreMetaLeaseSet(testHash, testData, 7)
 	assert.Error(t, err, "Should fail with invalid data")
@@ -221,12 +221,12 @@ func TestRouterNetDBStoreMetaLeaseSet(t *testing.T) {
 	tmpDir := t.TempDir()
 	stdDB := NewStdNetDB(tmpDir)
 	require.NoError(t, stdDB.Create())
-	
+
 	routerDB := NewRouterNetDB(stdDB)
-	
+
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	testData := []byte{0x01, 0x02, 0x03}
-	
+
 	// Should fail with invalid data but test the wrapper
 	err := routerDB.StoreMetaLeaseSet(testHash, testData, 7)
 	assert.Error(t, err, "Should fail with invalid data")

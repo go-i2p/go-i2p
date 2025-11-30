@@ -2,10 +2,11 @@ package netdb
 
 import (
 	"context"
-	"github.com/go-i2p/crypto/rand"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
