@@ -1,7 +1,10 @@
 package i2np
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -1137,6 +1140,33 @@ func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearc
 	return msg
 }
 
+// validateGzipSize validates gzip compressed data to prevent decompression bombs.
+// It checks that the uncompressed size doesn't exceed maxUncompressed and that
+// the compression ratio doesn't exceed maxRatio.
+// Returns the uncompressed size and an error if validation fails.
+func validateGzipSize(data []byte, maxUncompressed int, maxRatio int) (int, error) {
+	gr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return 0, fmt.Errorf("invalid gzip data: %w", err)
+	}
+	defer gr.Close()
+
+	// Use limited reader to prevent full decompression of malicious data
+	lr := &io.LimitedReader{R: gr, N: int64(maxUncompressed + 1)}
+	n, _ := io.Copy(io.Discard, lr)
+
+	if n > int64(maxUncompressed) {
+		return int(n), fmt.Errorf("uncompressed size exceeds limit (%d > %d)", n, maxUncompressed)
+	}
+
+	ratio := float64(n) / float64(len(data))
+	if ratio > float64(maxRatio) {
+		return int(n), fmt.Errorf("compression ratio too high (%.2f:1 > %d:1)", ratio, maxRatio)
+	}
+
+	return int(n), nil
+}
+
 // StoreData stores data using DatabaseWriter interface and NetDB integration
 func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	key := writer.GetStoreKey()
@@ -1163,9 +1193,20 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	if dataType == DATABASE_STORE_TYPE_ROUTER_INFO && len(data) > 2 {
 		// Check if data starts with gzip magic number (0x1f 0x8b)
 		if data[0] == 0x1f && data[1] == 0x8b {
-			log.WithField("data_size", len(data)).Debug("Detected gzip-compressed RouterInfo, validation will be performed by storage layer")
-			// Note: Actual decompression and validation should be done by the NetDB storage layer
-			// This is a preliminary check to reject obviously malicious data
+			// Validate decompression bomb risk before processing
+			uncompressedSize, err := validateGzipSize(data, MaxUncompressedSize, MaxCompressionRatio)
+			if err != nil {
+				log.WithFields(logger.Fields{
+					"compressed_size":   len(data),
+					"uncompressed_size": uncompressedSize,
+					"error":             err,
+				}).Warn("Rejecting suspicious compressed RouterInfo")
+				return fmt.Errorf("invalid compressed RouterInfo: %w", err)
+			}
+			log.WithFields(logger.Fields{
+				"compressed_size":   len(data),
+				"uncompressed_size": uncompressedSize,
+			}).Debug("Validated gzip-compressed RouterInfo")
 		}
 	}
 
