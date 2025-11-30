@@ -205,8 +205,12 @@ func (r *Router) Stop() {
 	}
 
 	r.running = false
+	r.stopI2CPServer()
+	r.sendCloseSignal()
+}
 
-	// Stop I2CP server if running
+// stopI2CPServer shuts down the I2CP server if it is running and logs the result.
+func (r *Router) stopI2CPServer() {
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {
 			log.WithError(err).Error("Failed to stop I2CP server")
@@ -214,8 +218,11 @@ func (r *Router) Stop() {
 			log.Debug("I2CP server stopped")
 		}
 	}
+}
 
-	// Send close signal without blocking - use select with default case
+// sendCloseSignal sends the close signal to the router channel without blocking.
+// It uses a non-blocking send to prevent deadlocks if the channel is full or already signaled.
+func (r *Router) sendCloseSignal() {
 	select {
 	case r.closeChnl <- true:
 		log.Debug("Router stop signal sent")
