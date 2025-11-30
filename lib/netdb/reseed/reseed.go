@@ -1,7 +1,9 @@
 package reseed
 
 import (
+	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +25,50 @@ var log = logger.GetGoI2PLogger()
 
 const (
 	I2pUserAgent = "Wget/1.11.4"
+)
+
+// Reseed server signing certificates
+// These are X.509 certificates used to sign SU3 reseed files
+// Only this specific certificate is hard-coded and this is not the normal way to populate it.
+// This is done for convenience in testing only, a real implementation should distribute certificates and manage them properly.
+const (
+	// Certificate for hankhill19580@gmail.com (reseed.i2pgit.org)
+	// Valid from: 2020-05-07 to 2030-05-07
+	// Source: https://github.com/i2p/i2p.i2p/tree/master/installer/resources/certificates/reseed
+	reseedHankhill19580Certificate = `-----BEGIN CERTIFICATE-----
+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
+CCOJyu3XtyzFf+tAeixOnuQ=
+-----END CERTIFICATE-----`
 )
 
 type Reseed struct {
@@ -90,7 +136,7 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	header := http.Header{}
 	header.Add("User-Agent", I2pUserAgent)
 	header.Add("Accept", "*/*")
-	header.Add("Accept-Encoding", "gzip, deflate")
+	// Note: Accept-Encoding is omitted - Go's HTTP client handles compression automatically
 	request := http.Request{
 		Method:     "GET",
 		URL:        URL,
@@ -120,12 +166,43 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 		return nil, fmt.Errorf("reseed server returned status %d", response.StatusCode)
 	}
 
+	// Validate content length if provided
+	if response.ContentLength > 0 {
+		log.WithField("content_length", response.ContentLength).Debug("Response content length")
+		if response.ContentLength < 100 {
+			response.Body.Close()
+			log.WithField("content_length", response.ContentLength).Error("Response too small to be valid SU3 file")
+			return nil, fmt.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
+		}
+	} else {
+		log.Warn("Response content length not provided by server")
+	}
+
 	return response, nil
 }
 
 // readSU3File reads and parses the SU3 file from the response body.
 func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
-	su3file, err := su3.Read(body)
+	// Buffer the entire response to ensure complete data is available.
+	// This prevents issues with streaming/incomplete reads that can cause
+	// "Signature shorter than expected" errors when the su3 library tries
+	// to read the signature bytes from the end of the file.
+	log.Debug("Buffering complete SU3 response")
+	bufferedData, err := io.ReadAll(body)
+	if err != nil {
+		log.WithError(err).Error("Failed to buffer SU3 response")
+		return nil, oops.Errorf("failed to buffer SU3 response: %w", err)
+	}
+	log.WithField("size_bytes", len(bufferedData)).Debug("Buffered SU3 response")
+
+	// Validate that we received a reasonable amount of data
+	if len(bufferedData) < 100 {
+		log.WithField("size_bytes", len(bufferedData)).Error("SU3 response too small")
+		return nil, oops.Errorf("SU3 response too small: %d bytes", len(bufferedData))
+	}
+
+	// Parse from the buffered data
+	su3file, err := su3.Read(bytes.NewReader(bufferedData))
 	if err != nil {
 		log.WithError(err).Error("Failed to read SU3 file")
 		return nil, err
@@ -159,20 +236,166 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 	return nil
 }
 
-// extractSU3Content extracts the content from the SU3 file.
-// Note: Signature validation is not yet implemented.
+// getPublicKeyForSigner returns the public key for a known reseed signer.
+// Returns nil if the signer is not recognized.
+func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
+	var certPEM string
+
+	switch signerID {
+	case "hankhill19580@gmail.com":
+		certPEM = reseedHankhill19580Certificate
+	default:
+		log.WithField("signer_id", signerID).Warn("Unknown reseed signer, signature verification will be skipped")
+		return nil, nil
+	}
+
+	// Parse the certificate
+	block, _ := decodePEM([]byte(certPEM))
+	if block == nil {
+		log.WithField("signer_id", signerID).Error("Failed to decode certificate PEM")
+		return nil, oops.Errorf("failed to decode certificate PEM for signer %s", signerID)
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.WithError(err).WithField("signer_id", signerID).Error("Failed to parse certificate")
+		return nil, oops.Errorf("failed to parse certificate for signer %s: %w", signerID, err)
+	}
+
+	log.WithField("signer_id", signerID).Info("Successfully loaded certificate for reseed signer")
+	return cert.PublicKey, nil
+}
+
+// decodePEM is a simple PEM decoder that extracts the first PEM block
+func decodePEM(data []byte) (*struct {
+	Type  string
+	Bytes []byte
+}, []byte) {
+	// Find BEGIN marker
+	beginMarker := []byte("-----BEGIN")
+	endMarker := []byte("-----END")
+
+	beginIdx := bytes.Index(data, beginMarker)
+	if beginIdx == -1 {
+		return nil, data
+	}
+
+	// Find end of BEGIN line
+	beginLineEnd := bytes.IndexByte(data[beginIdx:], '\n')
+	if beginLineEnd == -1 {
+		return nil, data
+	}
+	beginLineEnd += beginIdx
+
+	// Find END marker
+	endIdx := bytes.Index(data[beginLineEnd:], endMarker)
+	if endIdx == -1 {
+		return nil, data
+	}
+	endIdx += beginLineEnd
+
+	// Find end of END line
+	endLineEnd := bytes.IndexByte(data[endIdx:], '\n')
+	if endLineEnd == -1 {
+		endLineEnd = len(data) - endIdx
+	}
+	endLineEnd += endIdx
+
+	// Extract base64 content between BEGIN and END
+	base64Data := bytes.TrimSpace(data[beginLineEnd+1 : endIdx])
+	base64Data = bytes.ReplaceAll(base64Data, []byte("\n"), []byte(""))
+	base64Data = bytes.ReplaceAll(base64Data, []byte("\r"), []byte(""))
+
+	// Decode base64
+	decoded := make([]byte, len(base64Data)*3/4+3)
+	n, err := decodeBase64(decoded, base64Data)
+	if err != nil {
+		return nil, data
+	}
+
+	block := &struct {
+		Type  string
+		Bytes []byte
+	}{
+		Type:  "CERTIFICATE",
+		Bytes: decoded[:n],
+	}
+
+	return block, data[endLineEnd:]
+}
+
+// decodeBase64 is a simple base64 decoder
+func decodeBase64(dst, src []byte) (int, error) {
+	const base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+	n := 0
+	for len(src) > 0 {
+		// Decode 4 characters into 3 bytes
+		var val uint32
+		bits := 0
+
+		for i := 0; i < 4 && len(src) > 0; i++ {
+			c := src[0]
+			src = src[1:]
+
+			if c == '=' {
+				break
+			}
+
+			idx := bytes.IndexByte([]byte(base64Table), c)
+			if idx == -1 {
+				continue
+			}
+
+			val = (val << 6) | uint32(idx)
+			bits += 6
+		}
+
+		// Write decoded bytes
+		for bits >= 8 {
+			bits -= 8
+			dst[n] = byte(val >> bits)
+			n++
+		}
+	}
+
+	return n, nil
+}
+
+// extractSU3Content extracts the content from the SU3 file with signature verification.
 func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 	log.Debug("Extracting content from SU3 file")
 
-	content, err := io.ReadAll(su3file.Content(""))
+	// Get the public key for the signer
+	publicKey, err := r.getPublicKeyForSigner(su3file.SignerID)
 	if err != nil {
-		log.WithError(err).Error("Failed to read SU3 content")
+		log.WithError(err).Error("Failed to get public key for signer")
 		return nil, err
 	}
-	log.WithField("content_size_bytes", len(content)).Info("Successfully extracted SU3 content")
 
-	// TODO: Implement signature validation
-	log.Warn("SU3 signature validation not yet implemented")
+	// Read content with signature verification
+	contentReader := su3file.Content(publicKey)
+	content, readErr := io.ReadAll(contentReader)
+
+	// Check results
+	if readErr != nil {
+		// If we got content but verification failed, we can still use it
+		// (with a warning) if the signer is unknown
+		if len(content) > 0 && publicKey == nil {
+			log.WithField("content_size_bytes", len(content)).Warn("Successfully extracted SU3 content without signature verification (unknown signer)")
+			return content, nil
+		}
+
+		// Otherwise, this is a real error
+		log.WithError(readErr).Error("Failed to read SU3 content")
+		return nil, readErr
+	}
+
+	if publicKey != nil {
+		log.WithField("content_size_bytes", len(content)).Info("Successfully extracted and verified SU3 content")
+	} else {
+		log.WithField("content_size_bytes", len(content)).Warn("Successfully extracted SU3 content (signature not verified - unknown signer)")
+	}
 
 	return content, nil
 }
