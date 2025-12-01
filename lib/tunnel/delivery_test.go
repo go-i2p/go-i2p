@@ -82,9 +82,9 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 
 	data := []byte{}
 
-	// Flag byte: bit 7=0 (first fragment), bits 5-4=01 (DT_TUNNEL), others=0
-	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
-	flag := byte(0x10) // 0b00010000 = DT_TUNNEL (0x01 << 4)
+	// Flag byte: bit 7=0 (first fragment), bits 6-5=01 (DT_TUNNEL), others=0
+	// DT_TUNNEL (value 1) in bits 6-5: (1 << 5) = 0x20
+	flag := byte(0x20) // 0b00100000 = DT_TUNNEL (0x01 << 5)
 	data = append(data, flag)
 
 	// Tunnel ID (4 bytes)
@@ -93,9 +93,6 @@ func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 
 	// Hash (32 bytes)
 	data = append(data, expectedHash...)
-
-	// Delay byte (since flag 0x10 has both DT_TUNNEL and hasDelay bits set)
-	data = append(data, 0x00)
 
 	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
 	data = append(data, 0x00, 0x10) // size = 16
@@ -125,8 +122,8 @@ func TestDeliveryInstructionsHashRouter(t *testing.T) {
 	data := []byte{}
 
 	// Flag byte: bit 7=0 (first fragment), bits 6-5=10 (DT_ROUTER), others=0
-	// DT_ROUTER (value 2) in bits 5-4: (2 << 4) = 0x20
-	flag := byte(0x20) // 0b00100000 = DT_ROUTER (0x02 << 4)
+	// DT_ROUTER (value 2) in bits 6-5: (2 << 5) = 0x40
+	flag := byte(0x40) // 0b01000000 = DT_ROUTER (0x02 << 5)
 	data = append(data, flag)
 
 	// Hash (32 bytes) - immediately after flag for DT_ROUTER
