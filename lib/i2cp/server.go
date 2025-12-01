@@ -8,6 +8,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/logger"
 )
 
@@ -462,12 +463,35 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 
 // handleCreateSession creates a new session
 func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Message, error) {
-	// TODO: Parse session configuration from payload
-	config := DefaultSessionConfig()
+	var dest *destination.Destination
+	var config *SessionConfig
 
-	// Create session with its own isolated in-memory NetDB
-	// Client NetDBs are always ephemeral (not persisted to disk)
-	session, err := s.manager.CreateSession(nil, config)
+	// Parse destination and session configuration from payload (if provided)
+	if len(msg.Payload) > 0 {
+		var err error
+		dest, config, err = ParseCreateSessionPayload(msg.Payload)
+		if err != nil {
+			log.WithError(err).Warn("failed to parse create session payload, using defaults")
+			// Fall back to defaults on parse error
+			dest = nil
+			config = DefaultSessionConfig()
+		} else {
+			// Validate the parsed configuration
+			if err := ValidateSessionConfig(config); err != nil {
+				log.WithError(err).Warn("invalid session config, using defaults")
+				config = DefaultSessionConfig()
+			}
+		}
+	} else {
+		// Empty payload - use defaults (backward compatibility with tests)
+		log.Debug("Empty CreateSession payload, using defaults")
+		dest = nil
+		config = DefaultSessionConfig()
+	}
+
+	// Create session with parsed or default configuration
+	// If dest is nil, NewSession will generate a new destination
+	session, err := s.manager.CreateSession(dest, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
@@ -480,8 +504,12 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 	*sessionPtr = session
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleCreateSession",
-		"sessionID": session.ID(),
+		"at":                     "i2cp.Server.handleCreateSession",
+		"sessionID":              session.ID(),
+		"inbound_tunnel_length":  config.InboundTunnelLength,
+		"outbound_tunnel_length": config.OutboundTunnelLength,
+		"inbound_tunnel_count":   config.InboundTunnelCount,
+		"outbound_tunnel_count":  config.OutboundTunnelCount,
 	}).Info("session_created")
 
 	// Send SessionStatus response (status byte: 0 = success)
@@ -523,16 +551,30 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 		return nil, fmt.Errorf("session not active")
 	}
 
-	// TODO: Parse new configuration from payload
-	newConfig := DefaultSessionConfig()
+	// Parse new configuration from payload
+	newConfig, err := ParseReconfigureSessionPayload(msg.Payload)
+	if err != nil {
+		log.WithError(err).Error("failed to parse reconfigure session payload")
+		return nil, fmt.Errorf("failed to parse reconfigure payload: %w", err)
+	}
+
+	// Validate the new configuration
+	if err := ValidateSessionConfig(newConfig); err != nil {
+		log.WithError(err).Warn("invalid session config in reconfigure request")
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
 
 	if err := (*sessionPtr).Reconfigure(newConfig); err != nil {
 		return nil, fmt.Errorf("failed to reconfigure session: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleReconfigureSession",
-		"sessionID": (*sessionPtr).ID(),
+		"at":                     "i2cp.Server.handleReconfigureSession",
+		"sessionID":              (*sessionPtr).ID(),
+		"inbound_tunnel_length":  newConfig.InboundTunnelLength,
+		"outbound_tunnel_length": newConfig.OutboundTunnelLength,
+		"inbound_tunnel_count":   newConfig.InboundTunnelCount,
+		"outbound_tunnel_count":  newConfig.OutboundTunnelCount,
 	}).Info("session_reconfigured")
 
 	// No response for ReconfigureSession
