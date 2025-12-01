@@ -411,9 +411,11 @@ func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
 func createMockTunnels(count int) []*tunnel.TunnelState {
 	tunnels := make([]*tunnel.TunnelState, count)
 	for i := 0; i < count; i++ {
-		// Create a mock gateway hash
+		// Create a mock gateway hash - fill entire 32 bytes to avoid zero hash validation errors
 		var gateway [32]byte
-		gateway[0] = byte(i)
+		for j := 0; j < 32; j++ {
+			gateway[j] = byte((i*32 + j) % 256)
+		}
 
 		tunnels[i] = &tunnel.TunnelState{
 			ID:        tunnel.TunnelID(1000 + i),
