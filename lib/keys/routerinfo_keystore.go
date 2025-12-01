@@ -136,6 +136,13 @@ func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, erro
 	return public, ks.privateKey, nil
 }
 
+// GetEncryptionPrivateKey returns the X25519 encryption private key used for NTCP2.
+// This key is used as the static key for NTCP2 transport sessions, ensuring
+// consistent peer identification across router restarts.
+func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey {
+	return ks.encryptionPrivKey
+}
+
 func (ks *RouterInfoKeystore) StoreKeys() error {
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
 		err := os.MkdirAll(ks.dir, 0o755)

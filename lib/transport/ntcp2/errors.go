@@ -12,6 +12,7 @@ var (
 	ErrConnectionPoolFull     = oops.New("NTCP2 connection pool full")
 	ErrFramingError           = oops.New("I2NP message framing error")
 	ErrInvalidListenerAddress = oops.New("invalid listener address for NTCP2")
+	ErrInvalidConfig          = oops.New("invalid NTCP2 configuration")
 )
 
 // Wrap go-noise errors with context

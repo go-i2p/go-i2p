@@ -157,6 +157,9 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 		return err
 	}
 
+	// Set working directory for persistent key storage
+	ntcp2Config.WorkingDir = r.cfg.WorkingDir
+
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")
