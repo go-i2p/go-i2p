@@ -46,6 +46,8 @@ type Router struct {
 	cfg *config.RouterConfig
 	// close channel
 	closeChnl chan bool
+	// wg tracks goroutine completion for clean shutdown
+	wg sync.WaitGroup
 	// running flag and mutex for thread-safe access
 	running bool
 	runMux  sync.RWMutex
@@ -203,7 +205,7 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 // Wait blocks until router is fully stopped
 func (r *Router) Wait() {
 	log.Debug("Waiting for router to stop")
-	<-r.closeChnl
+	r.wg.Wait()
 	log.Debug("Router has stopped")
 }
 
@@ -285,7 +287,12 @@ func (r *Router) Start() {
 		}
 	}
 
-	go r.mainloop()
+	// Track mainloop goroutine for clean shutdown
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.mainloop()
+	}()
 }
 
 // initializeNetDB creates and configures the network database
@@ -483,7 +490,11 @@ func (r *Router) mainloop() {
 // This is the entry point for the session monitoring subsystem.
 func (r *Router) startSessionMonitors() {
 	log.Debug("Starting session monitors")
-	go r.monitorInboundSessions()
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.monitorInboundSessions()
+	}()
 }
 
 // monitorInboundSessions continuously accepts new inbound NTCP2 connections

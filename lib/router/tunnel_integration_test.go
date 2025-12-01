@@ -63,7 +63,11 @@ func TestRouter_GarlicRouterTunnelPoolIntegration(t *testing.T) {
 	router, err := CreateRouter(cfg)
 	require.NoError(t, err, "Failed to create router")
 	require.NotNil(t, router, "Router should not be nil")
-	defer router.Stop()
+	defer func() {
+		router.Stop()
+		// Give the router time to shut down its goroutines before test cleanup
+		time.Sleep(100 * time.Millisecond)
+	}()
 
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
