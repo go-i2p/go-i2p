@@ -161,18 +161,57 @@ func (p *Publisher) publishOurRouterInfo() {
 func (p *Publisher) publishAllLeaseSets() {
 	log.Debug("Publishing all LeaseSets")
 
-	// Get count of LeaseSets to publish
-	count := p.db.GetLeaseSetCount()
-	if count == 0 {
+	// Get all LeaseSets from the database
+	leaseSets := p.db.GetAllLeaseSets()
+	if len(leaseSets) == 0 {
 		log.Trace("No LeaseSets to publish")
 		return
 	}
 
-	log.WithField("count", count).Debug("Found LeaseSets to publish")
+	log.WithField("count", len(leaseSets)).Debug("Found LeaseSets to publish")
 
-	// TODO: Iterate through all LeaseSets and publish each one
-	// This requires adding a GetAllLeaseSets method to NetworkDatabase interface
-	// For now, this logs the intent
+	// Publish each LeaseSet to floodfill routers
+	for _, lsEntry := range leaseSets {
+		if err := p.publishLeaseSetEntry(lsEntry); err != nil {
+			log.WithError(err).WithField("hash", fmt.Sprintf("%x", lsEntry.Hash[:8])).Warn("Failed to publish LeaseSet")
+		}
+	}
+
+	log.WithField("count", len(leaseSets)).Debug("Completed publishing all LeaseSets")
+}
+
+// publishLeaseSetEntry publishes a single LeaseSetEntry to floodfill routers.
+// This is a helper method that determines which type of LeaseSet to publish.
+func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
+	// Determine which type of LeaseSet we have and serialize it
+	var lsBytes []byte
+	var err error
+
+	switch {
+	case lsEntry.Entry.LeaseSet != nil:
+		lsBytes, err = lsEntry.Entry.LeaseSet.Bytes()
+	case lsEntry.Entry.LeaseSet2 != nil:
+		lsBytes, err = lsEntry.Entry.LeaseSet2.Bytes()
+	case lsEntry.Entry.EncryptedLeaseSet != nil:
+		lsBytes, err = lsEntry.Entry.EncryptedLeaseSet.Bytes()
+	case lsEntry.Entry.MetaLeaseSet != nil:
+		lsBytes, err = lsEntry.Entry.MetaLeaseSet.Bytes()
+	default:
+		return fmt.Errorf("LeaseSetEntry contains no valid LeaseSet data")
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to serialize LeaseSet: %w", err)
+	}
+
+	// Select closest floodfill routers
+	floodfills, err := p.selectFloodfillsForPublishing(lsEntry.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to select floodfills: %w", err)
+	}
+
+	// Send DatabaseStore message to each selected floodfill
+	return p.sendDatabaseStoreMessages(lsEntry.Hash, lsBytes, floodfills)
 }
 
 // PublishLeaseSet publishes a specific LeaseSet to floodfill routers.

@@ -8,6 +8,13 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 )
 
+// LeaseSetEntry represents a LeaseSet with its hash for iteration.
+// Used by GetAllLeaseSets() to return all LeaseSets stored in the database.
+type LeaseSetEntry struct {
+	Hash  common.Hash // Hash of the LeaseSet destination
+	Entry Entry       // The actual LeaseSet entry (can be LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)
+}
+
 // Moved from: netdb.go
 // resolves unknown RouterInfos given the hash of their RouterIdentity
 type Resolver interface {
@@ -50,4 +57,9 @@ type NetworkDatabase interface {
 
 	// GetLeaseSetCount returns the number of LeaseSets stored in the database
 	GetLeaseSetCount() int
+
+	// GetAllLeaseSets returns all LeaseSets currently stored in the database.
+	// Returns a slice containing all LeaseSet entries (LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet).
+	// This is used for publishing all LeaseSets to floodfill routers.
+	GetAllLeaseSets() []LeaseSetEntry
 }

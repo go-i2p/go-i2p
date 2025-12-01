@@ -415,14 +415,72 @@ func (db *StdNetDB) cacheFilePath() string {
 }
 
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
-	// TODO: make this better
-	// return strings.HasSuffix(fpath, ".dat")
-	isValid := strings.HasSuffix(fpath, ".dat")
+	// Validate file extension
+	if !strings.HasSuffix(fpath, ".dat") {
+		log.WithField("file_path", fpath).Debug("Invalid file extension, expected .dat")
+		return false
+	}
+
+	// Get the absolute path to resolve any symlinks or relative paths
+	absPath, err := filepath.Abs(fpath)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"file_path": fpath,
+			"error":     err,
+		}).Warn("Failed to resolve absolute path")
+		return false
+	}
+
+	// Clean the path to remove any ".." or "." components
+	cleanPath := filepath.Clean(absPath)
+
+	// Verify the file is within the NetDB directory (path traversal prevention)
+	netdbPath, err := filepath.Abs(db.Path())
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"netdb_path": db.Path(),
+			"error":      err,
+		}).Error("Failed to resolve NetDB absolute path")
+		return false
+	}
+
+	// Ensure the clean path is within the NetDB directory
+	if !strings.HasPrefix(cleanPath, netdbPath+string(filepath.Separator)) &&
+		cleanPath != netdbPath {
+		log.WithFields(logger.Fields{
+			"file_path":  fpath,
+			"clean_path": cleanPath,
+			"netdb_path": netdbPath,
+		}).Warn("Path traversal attempt detected, file outside NetDB directory")
+		return false
+	}
+
+	// Check if it's a symlink (security: prevent symlink attacks)
+	fileInfo, err := os.Lstat(cleanPath)
+	if err != nil {
+		// File doesn't exist yet - this is OK for new files
+		if os.IsNotExist(err) {
+			log.WithField("file_path", cleanPath).Debug("File path valid (file doesn't exist yet)")
+			return true
+		}
+		log.WithFields(logger.Fields{
+			"file_path": cleanPath,
+			"error":     err,
+		}).Debug("Failed to stat file")
+		return false
+	}
+
+	// Reject symlinks for security
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		log.WithField("file_path", cleanPath).Warn("Symlink detected, rejecting for security")
+		return false
+	}
+
 	log.WithFields(logger.Fields{
-		"file_path": fpath,
-		"is_valid":  isValid,
-	}).Debug("Checking file path validity")
-	return isValid
+		"file_path": cleanPath,
+		"is_valid":  true,
+	}).Debug("File path validation successful")
+	return true
 }
 
 // recalculateSize recalculates cached size of netdb
@@ -2019,4 +2077,29 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 	}
 
 	return
+}
+
+// GetAllLeaseSets returns all LeaseSets currently stored in the database.
+// This includes all types: LeaseSet, LeaseSet2, EncryptedLeaseSet, and MetaLeaseSet.
+// The method returns a slice of LeaseSetEntry containing the hash and Entry data.
+// This is primarily used for publishing all LeaseSets to floodfill routers.
+func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
+	log.Debug("Getting all LeaseSets from database")
+
+	db.lsMutex.Lock()
+	defer db.lsMutex.Unlock()
+
+	// Pre-allocate slice with capacity to avoid reallocation
+	result := make([]LeaseSetEntry, 0, len(db.LeaseSets))
+
+	// Iterate through all cached LeaseSets
+	for hash, entry := range db.LeaseSets {
+		result = append(result, LeaseSetEntry{
+			Hash:  hash,
+			Entry: entry,
+		})
+	}
+
+	log.WithField("count", len(result)).Debug("Retrieved all LeaseSets")
+	return result
 }

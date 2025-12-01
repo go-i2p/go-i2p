@@ -59,6 +59,23 @@ func (m *mockNetDB) GetLeaseSetCount() int {
 	return len(m.leaseSets)
 }
 
+func (m *mockNetDB) GetAllLeaseSets() []LeaseSetEntry {
+	entries := make([]LeaseSetEntry, 0, len(m.leaseSets))
+	for hash, data := range m.leaseSets {
+		ls, err := lease_set.ReadLeaseSet(data)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, LeaseSetEntry{
+			Hash: hash,
+			Entry: Entry{
+				LeaseSet: &ls,
+			},
+		})
+	}
+	return entries
+}
+
 func (m *mockNetDB) GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet {
 	data, exists := m.leaseSets[hash]
 	if !exists {
