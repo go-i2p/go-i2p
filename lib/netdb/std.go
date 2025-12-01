@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +26,6 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
-	"github.com/go-i2p/go-i2p/lib/util"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -379,39 +377,15 @@ func (db *StdNetDB) Path() string {
 	return string(db.DB)
 }
 
-// return how many routers we know about in our network database
+// Size returns the count of RouterInfos currently stored in the network database.
+// This is a direct in-memory count and does not require filesystem access.
 func (db *StdNetDB) Size() (routers int) {
-	// TODO: implement this
-	log.Debug("Calculating NetDB size")
-	var err error
-	var data []byte
-	if !util.CheckFileExists(db.cacheFilePath()) || util.CheckFileAge(db.cacheFilePath(), 2) || len(db.RouterInfos) == 0 {
-		// regenerate
-		log.Debug("Recalculating NetDB size")
-		err = db.RecalculateSize()
-		if err != nil {
-			// Return 0 on recalculation failure to avoid panic while still logging error
-			log.WithError(err).Error("Failed to recalculate NetDB size, returning 0")
-			return 0
-		}
-	}
-	data, err = os.ReadFile(db.cacheFilePath())
-	if err == nil {
-		routers, err = strconv.Atoi(string(data))
-		if err != nil {
-			log.WithError(err).Error("Failed to parse NetDB size from cache")
-			return 0
-		}
-	} else {
-		log.WithError(err).Error("Failed to read NetDB size cache file")
-		return 0
-	}
-	return
-}
+	db.riMutex.Lock()
+	routers = len(db.RouterInfos)
+	db.riMutex.Unlock()
 
-// get filepath for storing netdb info cache
-func (db *StdNetDB) cacheFilePath() string {
-	return filepath.Join(db.Path(), CacheFileName)
+	log.WithField("count", routers).Debug("NetDB size calculated from in-memory RouterInfos")
+	return routers
 }
 
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
@@ -483,25 +457,11 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 	return true
 }
 
-// recalculateSize recalculates cached size of netdb
-func (db *StdNetDB) RecalculateSize() (err error) {
-	log.Debug("Recalculating NetDB size")
-	count := 0
-
-	// Walk through all files and count valid RouterInfos
-	count, err = db.countValidRouterInfos()
-	if err != nil {
-		log.WithError(err).Error("Failed to count RouterInfos")
-		return err
-	}
-
-	// Update the cache file with the count
-	err = db.updateSizeCache(count)
-	if err != nil {
-		log.WithError(err).Error("Failed to update NetDB size cache file")
-	}
-
-	return err
+// RecalculateSize is maintained for interface compatibility.
+// Since Size() now operates directly on in-memory data, this is a no-op.
+func (db *StdNetDB) RecalculateSize() error {
+	log.Debug("RecalculateSize called - Size() now uses in-memory data")
+	return nil
 }
 
 // countValidRouterInfos walks through the database directory and counts valid RouterInfo files.
@@ -609,23 +569,6 @@ func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) err
 	}
 	db.riMutex.Unlock()
 	return nil
-}
-
-// updateSizeCache writes the count to the cache file.
-func (db *StdNetDB) updateSizeCache(count int) error {
-	str := fmt.Sprintf("%d", count)
-	f, err := os.OpenFile(db.cacheFilePath(), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = io.WriteString(f, str)
-	if err == nil {
-		log.Debug("Updated NetDB size cache file")
-	}
-
-	return err
 }
 
 // return true if the network db directory exists and is writable
