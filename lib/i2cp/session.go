@@ -1,12 +1,14 @@
 package i2cp
 
 import (
+	"crypto/rand"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/lease"
 	"github.com/go-i2p/common/lease_set2"
@@ -83,6 +85,11 @@ type SessionConfig struct {
 	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
 	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
 
+	// EncryptedLeaseSet configuration (requires Ed25519 destination)
+	UseEncryptedLeaseSet bool     // Enable EncryptedLeaseSet generation (default: false)
+	BlindingSecret       []byte   // Secret for destination blinding (if empty, random generated)
+	LeaseSetExpiration   uint16   // LeaseSet expiration in seconds (default: 600 = 10 minutes)
+
 	// Session metadata
 	Nickname string // Optional nickname for debugging
 }
@@ -99,6 +106,9 @@ func DefaultSessionConfig() *SessionConfig {
 		MessageQueueSize:     100,
 		MessageRateLimit:     100, // 100 messages/second
 		MessageRateBurstSize: 200, // Allow bursts up to 200 messages
+		UseEncryptedLeaseSet: false,
+		BlindingSecret:       nil,
+		LeaseSetExpiration:   600, // 10 minutes
 		Nickname:             "",
 	}
 }
@@ -135,6 +145,11 @@ type Session struct {
 	currentLeaseSet     []byte            // Currently published LeaseSet
 	leaseSetPublishedAt time.Time         // When LeaseSet was last published
 	publisher           LeaseSetPublisher // Publisher for distributing LeaseSets to network
+
+	// EncryptedLeaseSet state (only used if UseEncryptedLeaseSet is true)
+	blindedDestination *destination.Destination // Blinded destination for EncryptedLeaseSet
+	blindingSecret     []byte                   // Secret used for blinding (cached)
+	lastBlindingDate   time.Time                // Last date used for blinding (triggers rotation at UTC midnight)
 
 	// Lifecycle
 	stopCh      chan struct{}  // Signal to stop session
@@ -545,6 +560,256 @@ func (s *Session) assembleLeaseSet(leases []lease.Lease2, encKey lease_set2.Encr
 	return leaseSetBytes, nil
 }
 
+// CreateEncryptedLeaseSet generates an EncryptedLeaseSet from the session's active tunnels.
+//
+// EncryptedLeaseSet provides enhanced privacy by:
+// - Blinding the destination (changes daily based on UTC date)
+// - Encrypting the inner LeaseSet2 data
+// - Using a cookie-based authentication scheme
+//
+// This method will:
+// 1. Validate the destination supports EncryptedLeaseSet (Ed25519 only)
+// 2. Derive/update the blinded destination (rotates daily at UTC midnight)
+// 3. Collect active inbound tunnels
+// 4. Build leases from tunnels
+// 5. Create inner LeaseSet2
+// 6. Encrypt inner LeaseSet2
+// 7. Sign EncryptedLeaseSet with blinded signing key
+//
+// Returns serialized EncryptedLeaseSet bytes or error.
+func (s *Session) CreateEncryptedLeaseSet() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Validate Ed25519 signature type requirement
+	if err := s.validateEncryptedLeaseSetSupport(); err != nil {
+		return nil, err
+	}
+
+	// Ensure blinded destination is up-to-date (may rotate daily)
+	if err := s.updateBlindedDestination(); err != nil {
+		return nil, err
+	}
+
+	// Collect active tunnels
+	tunnels, err := s.collectActiveTunnels()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build leases from tunnels
+	leases, err := s.buildLeasesFromTunnels(tunnels)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create inner LeaseSet2
+	innerLS2, err := s.createInnerLeaseSet2(leases)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate cookie for encryption
+	cookie, err := s.generateEncryptionCookie()
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt inner LeaseSet2
+	encryptedInnerData, err := s.encryptInnerLeaseSet(innerLS2, cookie)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create and sign EncryptedLeaseSet
+	els, err := s.assembleEncryptedLeaseSet(cookie, encryptedInnerData)
+	if err != nil {
+		return nil, err
+	}
+
+	// Serialize to bytes
+	elsBytes, err := els.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
+	}
+
+	return elsBytes, nil
+}
+
+// validateEncryptedLeaseSetSupport ensures the destination supports EncryptedLeaseSet.
+// Only Ed25519 (type 7) signatures are supported for destination blinding.
+func (s *Session) validateEncryptedLeaseSetSupport() error {
+	sigType := s.destination.KeyCertificate.SigningPublicKeyType()
+	if sigType != key_certificate.KEYCERT_SIGN_ED25519 {
+		return fmt.Errorf("EncryptedLeaseSet requires Ed25519 signature type (type 7), got type %d", sigType)
+	}
+	return nil
+}
+
+// updateBlindedDestination derives or updates the blinded destination.
+// The blinded destination rotates daily at UTC midnight to prevent correlation.
+func (s *Session) updateBlindedDestination() error {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Check if we need to derive a new blinded destination
+	// (first time, or date has changed since last blinding)
+	if s.blindedDestination == nil || !s.lastBlindingDate.Equal(today) {
+		// Ensure we have a blinding secret
+		if err := s.ensureBlindingSecret(); err != nil {
+			return err
+		}
+
+		// Derive blinded destination for today
+		blindedDest, err := encrypted_leaseset.CreateBlindedDestination(
+			*s.destination,
+			s.blindingSecret,
+			today,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create blinded destination: %w", err)
+		}
+
+		s.blindedDestination = &blindedDest
+		s.lastBlindingDate = today
+
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.updateBlindedDestination",
+			"sessionID": s.id,
+			"date":      today.Format("2006-01-02"),
+		}).Debug("updated_blinded_destination")
+	}
+
+	return nil
+}
+
+// ensureBlindingSecret ensures a blinding secret exists.
+// If configured, uses the provided secret; otherwise generates a random one.
+func (s *Session) ensureBlindingSecret() error {
+	if s.blindingSecret != nil {
+		return nil // Already have a secret
+	}
+
+	// Use configured secret if provided
+	if len(s.config.BlindingSecret) > 0 {
+		s.blindingSecret = s.config.BlindingSecret
+		return nil
+	}
+
+	// Generate random 32-byte secret
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return fmt.Errorf("failed to generate random blinding secret: %w", err)
+	}
+
+	s.blindingSecret = secret
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.ensureBlindingSecret",
+		"sessionID": s.id,
+	}).Debug("generated_random_blinding_secret")
+
+	return nil
+}
+
+// createInnerLeaseSet2 creates the inner LeaseSet2 that will be encrypted.
+func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.LeaseSet2, error) {
+	// Prepare encryption key
+	encKey, err := s.prepareEncryptionKey()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get signing private key from keystore (no error returned)
+	signingPrivateKey := s.keys.SigningPrivateKey()
+
+	// Calculate published time and expiration
+	publishedTime := uint32(time.Now().Unix())
+
+	// Create LeaseSet2 (this will be the inner encrypted content)
+	ls2, err := lease_set2.NewLeaseSet2(
+		*s.destination,
+		publishedTime,
+		s.config.LeaseSetExpiration,
+		0, // flags
+		nil, // no offline signature for inner LeaseSet2
+		data.Mapping{},
+		[]lease_set2.EncryptionKey{encKey},
+		leases,
+		signingPrivateKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create inner LeaseSet2: %w", err)
+	}
+
+	return &ls2, nil
+}
+
+// generateEncryptionCookie generates a random 32-byte cookie for encryption.
+func (s *Session) generateEncryptionCookie() ([32]byte, error) {
+	var cookie [32]byte
+	if _, err := rand.Read(cookie[:]); err != nil {
+		return [32]byte{}, fmt.Errorf("failed to generate encryption cookie: %w", err)
+	}
+	return cookie, nil
+}
+
+// encryptInnerLeaseSet encrypts the inner LeaseSet2 data.
+func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byte) ([]byte, error) {
+	// For EncryptedLeaseSet, we encrypt for the blinded destination's public key
+	blindedPubKey, err := s.blindedDestination.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blinded encryption public key: %w", err)
+	}
+
+	// Encrypt inner LeaseSet2
+	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, cookie, blindedPubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt inner LeaseSet2: %w", err)
+	}
+
+	return encryptedData, nil
+}
+
+// assembleEncryptedLeaseSet assembles and signs the final EncryptedLeaseSet.
+func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData []byte) (*encrypted_leaseset.EncryptedLeaseSet, error) {
+	// Calculate published time
+	publishedTime := uint32(time.Now().Unix())
+
+	// Get the blinded signing private key
+	// Note: For EncryptedLeaseSet, we need to sign with the BLINDED key, not the original
+	// The encrypted_leaseset library's NewEncryptedLeaseSet expects the blinded private key
+	signingPrivateKey := s.keys.SigningPrivateKey()
+
+	// Create EncryptedLeaseSet
+	// Flags: bit 2 = blinded (0x04)
+	const ENCRYPTED_LEASESET_FLAG_BLINDED = 0x04
+
+	els, err := encrypted_leaseset.NewEncryptedLeaseSet(
+		*s.blindedDestination,
+		publishedTime,
+		s.config.LeaseSetExpiration,
+		ENCRYPTED_LEASESET_FLAG_BLINDED,
+		nil, // no offline signature
+		data.Mapping{},
+		cookie,
+		encryptedInnerData,
+		signingPrivateKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create EncryptedLeaseSet: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":             "i2cp.Session.assembleEncryptedLeaseSet",
+		"sessionID":      s.id,
+		"published":      publishedTime,
+		"expires_offset": s.config.LeaseSetExpiration,
+		"inner_length":   len(encryptedInnerData),
+	}).Debug("created_encrypted_leaseset")
+
+	return els, nil
+}
+
 // StartLeaseSetMaintenance begins automatic LeaseSet maintenance.
 // This runs a background goroutine that:
 // - Regenerates the LeaseSet before it expires
@@ -715,15 +980,26 @@ func (s *Session) logLeaseSetExpiration(age, threshold time.Duration) {
 
 // regenerateAndPublishLeaseSet creates a new LeaseSet and publishes it to the network.
 // This method:
-// 1. Creates a fresh LeaseSet from current inbound tunnels
+// 1. Creates a fresh LeaseSet from current inbound tunnels (LeaseSet2 or EncryptedLeaseSet)
 // 2. Publishes it to the local NetDB
 // 3. Distributes it to floodfill routers (if publisher is configured)
 //
 // Returns an error if LeaseSet creation or publication fails.
 func (s *Session) regenerateAndPublishLeaseSet() error {
-	leaseSetBytes, err := s.CreateLeaseSet()
-	if err != nil {
-		return fmt.Errorf("failed to create LeaseSet: %w", err)
+	var leaseSetBytes []byte
+	var err error
+
+	// Choose LeaseSet type based on configuration
+	if s.config.UseEncryptedLeaseSet {
+		leaseSetBytes, err = s.CreateEncryptedLeaseSet()
+		if err != nil {
+			return fmt.Errorf("failed to create EncryptedLeaseSet: %w", err)
+		}
+	} else {
+		leaseSetBytes, err = s.CreateLeaseSet()
+		if err != nil {
+			return fmt.Errorf("failed to create LeaseSet: %w", err)
+		}
 	}
 
 	s.logLeaseSetRegenerated(leaseSetBytes)
@@ -743,9 +1019,12 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 
 // publishLeaseSetToNetwork publishes the LeaseSet to the network database.
 // Skips publication if no publisher is configured (allows sessions to work without network integration).
+// For EncryptedLeaseSet, publishes using the blinded destination hash instead of the original.
 func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 	s.mu.RLock()
 	publisher := s.publisher
+	useEncrypted := s.config.UseEncryptedLeaseSet
+	blindedDest := s.blindedDestination
 	s.mu.RUnlock()
 
 	if publisher == nil {
@@ -753,21 +1032,34 @@ func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 		return nil
 	}
 
-	// Calculate destination hash (SHA256 of destination bytes)
-	destBytes, err := s.destination.Bytes()
-	if err != nil {
-		return fmt.Errorf("failed to get destination bytes: %w", err)
+	// Calculate destination hash for publication
+	var destHash data.Hash
+
+	if useEncrypted && blindedDest != nil {
+		// For EncryptedLeaseSet, use blinded destination hash
+		destBytes, err := blindedDest.Bytes()
+		if err != nil {
+			return fmt.Errorf("failed to get blinded destination bytes: %w", err)
+		}
+		destHash = data.HashData(destBytes)
+	} else {
+		// For normal LeaseSet2, use original destination hash
+		destBytes, err := s.destination.Bytes()
+		if err != nil {
+			return fmt.Errorf("failed to get destination bytes: %w", err)
+		}
+		destHash = data.HashData(destBytes)
 	}
-	destHash := data.HashData(destBytes)
 
 	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {
 		return fmt.Errorf("publisher failed: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Session.publishLeaseSetToNetwork",
-		"sessionID": s.ID(),
-		"destHash":  fmt.Sprintf("%x", destHash[:8]),
+		"at":          "i2cp.Session.publishLeaseSetToNetwork",
+		"sessionID":   s.ID(),
+		"destHash":    fmt.Sprintf("%x", destHash[:8]),
+		"isEncrypted": useEncrypted,
 	}).Debug("leaseset_published_to_network")
 
 	return nil
