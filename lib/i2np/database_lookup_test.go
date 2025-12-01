@@ -169,7 +169,9 @@ func TestReadDatabaseLookupSizeValidData(t *testing.T) {
 
 	length := 65
 	data := make([]byte, length)
-	expectedSizeData := []byte{0x16, 0x9}
+	// Use valid size within I2P protocol limit (0-512 peers)
+	// 0x01, 0xFF = 511 (just under the 512 limit)
+	expectedSizeData := []byte{0x01, 0xFF}
 	data = append(data, expectedSizeData...)
 
 	length, size, err := readDatabaseLookupSize(length, data)
