@@ -23,15 +23,25 @@ type Explorer struct {
 	// tunnel pool to use for lookups
 	pool *tunnel.Pool
 
+	// exploration strategy (adaptive or random)
+	strategy ExplorationStrategy
+
+	// our router hash for bucket calculations
+	ourHash common.Hash
+
 	// exploration control
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
 	// configuration
-	interval      time.Duration // how often to explore
-	concurrency   int           // how many parallel explorations
-	lookupTimeout time.Duration // timeout for each lookup
+	interval       time.Duration // base exploration interval
+	minInterval    time.Duration // minimum interval when NetDB is sparse
+	maxInterval    time.Duration // maximum interval when NetDB is healthy
+	concurrency    int           // how many parallel explorations
+	lookupTimeout  time.Duration // timeout for each lookup
+	useAdaptive    bool          // whether to use adaptive strategy
+	statsUpdateInt time.Duration // how often to update strategy stats
 }
 
 // ExplorerConfig holds configuration for database exploration
@@ -39,19 +49,41 @@ type ExplorerConfig struct {
 	// Interval between exploration rounds (default: 5 minutes)
 	Interval time.Duration
 
+	// MinInterval is the minimum exploration interval when NetDB is sparse (default: 1 minute)
+	MinInterval time.Duration
+
+	// MaxInterval is the maximum exploration interval when NetDB is healthy (default: 15 minutes)
+	MaxInterval time.Duration
+
 	// Number of concurrent exploration lookups (default: 3)
 	Concurrency int
 
 	// Timeout for individual lookups (default: 30 seconds)
 	LookupTimeout time.Duration
+
+	// UseAdaptive enables adaptive exploration strategy (default: true)
+	// When true, uses bucket-aware exploration targeting sparse regions
+	// When false, uses simple random exploration
+	UseAdaptive bool
+
+	// OurHash is our router's identity hash for bucket calculations
+	// Required for adaptive strategy
+	OurHash common.Hash
+
+	// StatsUpdateInterval determines how often to update strategy statistics (default: 1 minute)
+	StatsUpdateInterval time.Duration
 }
 
 // DefaultExplorerConfig returns the default explorer configuration
 func DefaultExplorerConfig() ExplorerConfig {
 	return ExplorerConfig{
-		Interval:      5 * time.Minute,
-		Concurrency:   3,
-		LookupTimeout: 30 * time.Second,
+		Interval:            5 * time.Minute,
+		MinInterval:         1 * time.Minute,
+		MaxInterval:         15 * time.Minute,
+		Concurrency:         3,
+		LookupTimeout:       30 * time.Second,
+		UseAdaptive:         true,
+		StatsUpdateInterval: 1 * time.Minute,
 	}
 }
 
@@ -61,15 +93,28 @@ func DefaultExplorerConfig() ExplorerConfig {
 func NewExplorer(db NetworkDatabase, pool *tunnel.Pool, config ExplorerConfig) *Explorer {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Explorer{
-		db:            db,
-		pool:          pool,
-		ctx:           ctx,
-		cancel:        cancel,
-		interval:      config.Interval,
-		concurrency:   config.Concurrency,
-		lookupTimeout: config.LookupTimeout,
+	explorer := &Explorer{
+		db:             db,
+		pool:           pool,
+		ctx:            ctx,
+		cancel:         cancel,
+		interval:       config.Interval,
+		minInterval:    config.MinInterval,
+		maxInterval:    config.MaxInterval,
+		concurrency:    config.Concurrency,
+		lookupTimeout:  config.LookupTimeout,
+		useAdaptive:    config.UseAdaptive,
+		ourHash:        config.OurHash,
+		statsUpdateInt: config.StatsUpdateInterval,
 	}
+
+	// Initialize exploration strategy
+	if config.UseAdaptive {
+		explorer.strategy = NewAdaptiveStrategy(config.OurHash)
+	}
+	// If not adaptive, strategy remains nil and we use simple random exploration
+
+	return explorer
 }
 
 // Start begins periodic database exploration.
@@ -80,12 +125,19 @@ func (e *Explorer) Start() error {
 	}
 
 	log.WithFields(logger.Fields{
-		"interval":    e.interval,
-		"concurrency": e.concurrency,
+		"interval":     e.interval,
+		"concurrency":  e.concurrency,
+		"use_adaptive": e.useAdaptive,
 	}).Info("Starting database exploration")
 
 	e.wg.Add(1)
 	go e.explorationLoop()
+
+	// Start stats update loop if using adaptive strategy
+	if e.strategy != nil {
+		e.wg.Add(1)
+		go e.statsUpdateLoop()
+	}
 
 	return nil
 }
@@ -102,7 +154,9 @@ func (e *Explorer) Stop() {
 func (e *Explorer) explorationLoop() {
 	defer e.wg.Done()
 
-	ticker := time.NewTicker(e.interval)
+	// Calculate initial interval
+	interval := e.calculateExplorationInterval()
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Run initial exploration immediately
@@ -114,6 +168,16 @@ func (e *Explorer) explorationLoop() {
 			return
 		case <-ticker.C:
 			e.performExplorationRound()
+
+			// Recalculate interval if using adaptive strategy
+			if e.useAdaptive {
+				newInterval := e.calculateExplorationInterval()
+				if newInterval != interval {
+					interval = newInterval
+					ticker.Reset(interval)
+					log.WithField("new_interval", interval).Debug("Adjusted exploration interval")
+				}
+			}
 		}
 	}
 }
@@ -122,40 +186,50 @@ func (e *Explorer) explorationLoop() {
 func (e *Explorer) performExplorationRound() {
 	log.Debug("Starting exploration round")
 
+	// Generate exploration keys using strategy
+	var keys []common.Hash
+	var err error
+
+	if e.strategy != nil {
+		// Use adaptive strategy to generate targeted keys
+		keys, err = e.strategy.GenerateExplorationKeys(e.concurrency)
+		if err != nil {
+			log.WithError(err).Warn("Failed to generate strategic exploration keys, using random")
+			keys = e.generateRandomKeys(e.concurrency)
+		}
+	} else {
+		// Use simple random exploration
+		keys = e.generateRandomKeys(e.concurrency)
+	}
+
 	// Create semaphore for concurrency control
 	sem := make(chan struct{}, e.concurrency)
 	var wg sync.WaitGroup
 
-	// Perform multiple exploratory lookups with random keys
-	for i := 0; i < e.concurrency; i++ {
+	// Perform lookups for generated keys
+	for i, key := range keys {
 		wg.Add(1)
 		sem <- struct{}{} // acquire
 
-		go func(index int) {
+		go func(index int, hash common.Hash) {
 			defer wg.Done()
 			defer func() { <-sem }() // release
 
-			if err := e.performExploratoryLookup(index); err != nil {
+			if err := e.performExploratoryLookup(index, hash); err != nil {
 				log.WithError(err).WithField("index", index).Debug("Exploratory lookup failed")
 			}
-		}(i)
+		}(i, key)
 	}
 
 	wg.Wait()
 	log.Debug("Exploration round completed")
 }
 
-// performExploratoryLookup executes a single exploratory lookup with a random key
-func (e *Explorer) performExploratoryLookup(index int) error {
-	// Generate random hash for exploration
-	randomHash, err := e.generateRandomHash()
-	if err != nil {
-		return fmt.Errorf("failed to generate random hash: %w", err)
-	}
-
+// performExploratoryLookup executes a single exploratory lookup with the given hash
+func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) error {
 	log.WithFields(logger.Fields{
 		"index": index,
-		"hash":  fmt.Sprintf("%x", randomHash[:8]),
+		"hash":  fmt.Sprintf("%x", lookupHash[:8]),
 	}).Debug("Performing exploratory lookup")
 
 	// Create resolver for this lookup
@@ -166,7 +240,7 @@ func (e *Explorer) performExploratoryLookup(index int) error {
 
 	// Perform lookup with timeout
 	// The KademliaResolver will send DatabaseLookup messages with exploration flag
-	_, err = resolver.Lookup(randomHash, e.lookupTimeout)
+	_, err := resolver.Lookup(lookupHash, e.lookupTimeout)
 	// Note: We expect most exploratory lookups to fail (no exact match for random hash)
 	// The value is in the DatabaseSearchReply messages we receive, which contain
 	// references to non-floodfill routers that get stored in NetDB
@@ -180,7 +254,61 @@ func (e *Explorer) performExploratoryLookup(index int) error {
 	return nil
 }
 
+// generateRandomKeys creates multiple random hashes for exploration
+func (e *Explorer) generateRandomKeys(count int) []common.Hash {
+	keys := make([]common.Hash, count)
+	for i := 0; i < count; i++ {
+		rand.Read(keys[i][:])
+	}
+	return keys
+}
+
+// statsUpdateLoop periodically updates exploration strategy statistics
+func (e *Explorer) statsUpdateLoop() {
+	defer e.wg.Done()
+
+	ticker := time.NewTicker(e.statsUpdateInt)
+	defer ticker.Stop()
+
+	// Update stats immediately
+	if e.strategy != nil {
+		e.strategy.UpdateStats(e.db, e.ourHash)
+	}
+
+	for {
+		select {
+		case <-e.ctx.Done():
+			return
+		case <-ticker.C:
+			if e.strategy != nil {
+				e.strategy.UpdateStats(e.db, e.ourHash)
+			}
+		}
+	}
+}
+
+// calculateExplorationInterval determines the exploration interval based on NetDB state
+func (e *Explorer) calculateExplorationInterval() time.Duration {
+	if !e.useAdaptive || e.strategy == nil {
+		return e.interval
+	}
+
+	// Get NetDB size
+	routers := e.db.GetAllRouterInfos()
+	netdbSize := len(routers)
+
+	// Check if exploration is urgently needed
+	if e.strategy.ShouldExplore(netdbSize) {
+		// Use minimum interval for frequent exploration
+		return e.minInterval
+	}
+
+	// NetDB is healthy - use maximum interval
+	return e.maxInterval
+}
+
 // generateRandomHash creates a cryptographically random 32-byte hash for exploration
+// Deprecated: Use generateRandomKeys instead
 func (e *Explorer) generateRandomHash() (common.Hash, error) {
 	var hash common.Hash
 	_, err := rand.Read(hash[:])
@@ -204,20 +332,36 @@ func (e *Explorer) ExploreOnce() error {
 
 // GetStats returns statistics about exploration activity
 func (e *Explorer) GetStats() ExplorerStats {
-	return ExplorerStats{
+	stats := ExplorerStats{
 		Interval:      e.interval,
 		Concurrency:   e.concurrency,
 		LookupTimeout: e.lookupTimeout,
 		IsRunning:     e.ctx.Err() == nil,
+		UseAdaptive:   e.useAdaptive,
 	}
+
+	if e.strategy != nil {
+		strategyStats := e.strategy.GetStats()
+		stats.TotalRouters = strategyStats.TotalRouters
+		stats.FloodfillRouters = strategyStats.FloodfillRouters
+		stats.SparseBuckets = len(strategyStats.SparseBuckets)
+		stats.EmptyBuckets = len(strategyStats.EmptyBuckets)
+	}
+
+	return stats
 }
 
 // ExplorerStats contains statistics about explorer activity
 type ExplorerStats struct {
-	Interval      time.Duration
-	Concurrency   int
-	LookupTimeout time.Duration
-	IsRunning     bool
+	Interval         time.Duration
+	Concurrency      int
+	LookupTimeout    time.Duration
+	IsRunning        bool
+	UseAdaptive      bool
+	TotalRouters     int
+	FloodfillRouters int
+	SparseBuckets    int
+	EmptyBuckets     int
 }
 
 // Compile-time interface check
