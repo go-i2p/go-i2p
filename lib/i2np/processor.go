@@ -15,9 +15,29 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// GarlicCloveForwarder defines the interface for forwarding garlic cloves
+// to different delivery targets. This interface enables the MessageProcessor
+// to delegate non-LOCAL delivery types to router-level components that have
+// access to NetDB, transport, and tunnel infrastructure.
+type GarlicCloveForwarder interface {
+	// ForwardToDestination forwards a message to a destination hash (delivery type 0x01).
+	// The forwarder should lookup the destination's LeaseSet and route through a tunnel.
+	ForwardToDestination(destHash common.Hash, msg I2NPMessage) error
+
+	// ForwardToRouter forwards a message directly to a router hash (delivery type 0x02).
+	// The forwarder should send the message via the transport layer.
+	ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error
+
+	// ForwardThroughTunnel forwards a message through a tunnel to a gateway (delivery type 0x03).
+	// The forwarder should wrap the message in a TunnelGateway envelope and send to the gateway.
+	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
-	factory *I2NPMessageFactory
+	factory        *I2NPMessageFactory
+	garlicSessions *GarlicSessionManager
+	cloveForwarder GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
 }
 
 // NewMessageProcessor creates a new message processor
@@ -25,6 +45,19 @@ func NewMessageProcessor() *MessageProcessor {
 	return &MessageProcessor{
 		factory: NewI2NPMessageFactory(),
 	}
+}
+
+// SetGarlicSessionManager sets the garlic session manager for decrypting garlic messages.
+// This must be called before processing garlic messages, otherwise they will fail with an error.
+func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManager) {
+	p.garlicSessions = garlicMgr
+}
+
+// SetCloveForwarder sets the garlic clove forwarder for handling non-LOCAL delivery types.
+// This is optional - if not set, only LOCAL delivery (0x00) will be processed.
+// The forwarder enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) deliveries.
+func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
+	p.cloveForwarder = forwarder
 }
 
 // ProcessMessage processes any I2NP message using interfaces
@@ -67,58 +100,374 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 	return fmt.Errorf("message does not implement StatusReporter interface")
 }
 
-// processGarlicMessage processes garlic messages using GarlicProcessor interface.
-// Garlic messages contain one or more cloves, each with delivery instructions
-// and a wrapped I2NP message. The processor validates the garlic structure
-// and logs the clove details for debugging.
+// processGarlicMessage processes encrypted garlic messages by decrypting them
+// and routing the contained cloves based on their delivery instructions.
 //
-// Full implementation would:
-// 1. Decrypt the garlic message using GarlicSessionManager
-// 2. Parse cloves and delivery instructions
-// 3. Route each clove based on delivery type (LOCAL/DESTINATION/ROUTER/TUNNEL)
-// 4. Recursively process wrapped I2NP messages
+// Process:
+// 1. Extract encrypted garlic data from the message
+// 2. Decrypt using GarlicSessionManager (handles ECIES-X25519-AEAD-Ratchet)
+// 3. Parse decrypted data into Garlic structure with cloves
+// 4. For each clove, route based on delivery type:
+//   - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
+//   - DESTINATION/ROUTER/TUNNEL: Require router-level forwarding (not implemented here)
 //
-// Current implementation validates structure and logs for demonstration purposes.
+// Note: This processor handles LOCAL delivery only. Other delivery types require
+// router context and would be implemented at the router layer.
 func (p *MessageProcessor) processGarlicMessage(msg I2NPMessage) error {
-	// Validate the message implements GarlicProcessor interface
-	if garlicProcessor, ok := msg.(GarlicProcessor); ok {
-		cloves := garlicProcessor.GetCloves()
-		cloveCount := garlicProcessor.GetCloveCount()
-		
+	// Verify garlic session manager is available
+	if p.garlicSessions == nil {
+		return fmt.Errorf("garlic session manager not configured - cannot decrypt garlic messages")
+	}
+
+	// Extract the encrypted garlic data from the message
+	// For garlic messages, the entire message data is the encrypted payload
+	// Use type assertion to access the data field
+	baseMsg, ok := msg.(*BaseI2NPMessage)
+	if !ok {
+		return fmt.Errorf("garlic message does not extend BaseI2NPMessage")
+	}
+
+	encryptedData := baseMsg.GetData()
+	if len(encryptedData) == 0 {
+		return fmt.Errorf("garlic message contains no data")
+	}
+
+	log.WithFields(logger.Fields{
+		"msg_id":         msg.MessageID(),
+		"encrypted_size": len(encryptedData),
+	}).Debug("Decrypting garlic message")
+
+	// Decrypt the garlic message using our session manager
+	decryptedData, sessionTag, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt garlic message: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"msg_id":         msg.MessageID(),
+		"decrypted_size": len(decryptedData),
+		"session_tag":    fmt.Sprintf("%x", sessionTag[:8]),
+	}).Debug("Garlic message decrypted successfully")
+
+	// Parse the decrypted data into a Garlic structure
+	garlic, err := p.parseGarlicStructure(decryptedData)
+	if err != nil {
+		return fmt.Errorf("failed to parse decrypted garlic structure: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"msg_id":      msg.MessageID(),
+		"clove_count": len(garlic.Cloves),
+	}).Debug("Processing garlic cloves")
+
+	// Process each clove
+	for i, clove := range garlic.Cloves {
+		deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03 // Extract bits 6-5
+
 		log.WithFields(logger.Fields{
-			"clove_count": cloveCount,
-			"msg_id":      msg.MessageID(),
-		}).Debug("Processing garlic message")
+			"clove_index":   i,
+			"clove_id":      clove.CloveID,
+			"delivery_type": deliveryType, // 0=LOCAL, 1=DESTINATION, 2=ROUTER, 3=TUNNEL
+			"wrapped_type":  clove.I2NPMessage.Type(),
+		}).Debug("Processing garlic clove")
 
-		// Process each clove's delivery instructions
-		for i, clove := range cloves {
-			deliveryType := (clove.DeliveryInstructions.Flag >> 5) & 0x03 // Extract bits 6-5
-			
-			log.WithFields(logger.Fields{
-				"clove_index":   i,
-				"clove_id":      clove.CloveID,
-				"delivery_type": deliveryType, // 0=LOCAL, 1=DESTINATION, 2=ROUTER, 3=TUNNEL
-				"wrapped_type":  clove.I2NPMessage.Type(),
-			}).Debug("Processing garlic clove")
-
-			// Defensive check: ensure wrapped message is not nil
-			if clove.I2NPMessage == nil {
-				log.WithField("clove_index", i).Warn("Garlic clove contains nil I2NP message")
-				continue
-			}
-
-			// TODO: Full implementation would decrypt, route based on delivery instructions:
-			// - LOCAL (0x00): Process wrapped message locally via ProcessMessage()
-			// - DESTINATION (0x20): Forward to destination hash via router
-			// - ROUTER (0x40): Forward to router hash via transport
-			// - TUNNEL (0x60): Forward through tunnel to gateway
+		// Defensive check: ensure wrapped message is not nil
+		if clove.I2NPMessage == nil {
+			log.WithField("clove_index", i).Warn("Garlic clove contains nil I2NP message")
+			continue
 		}
 
-		return nil
+		// Route based on delivery instructions
+		switch deliveryType {
+		case 0x00: // LOCAL delivery - process the wrapped message locally
+			if err := p.ProcessMessage(clove.I2NPMessage); err != nil {
+				log.WithFields(logger.Fields{
+					"clove_index": i,
+					"error":       err,
+				}).Error("Failed to process LOCAL clove message")
+				// Continue processing other cloves even if one fails
+				continue
+			}
+			log.WithField("clove_index", i).Debug("Successfully processed LOCAL clove")
+
+		case 0x01: // DESTINATION delivery
+			if p.cloveForwarder != nil {
+				err := p.cloveForwarder.ForwardToDestination(
+					clove.DeliveryInstructions.Hash,
+					clove.I2NPMessage,
+				)
+				if err != nil {
+					log.WithFields(logger.Fields{
+						"clove_index": i,
+						"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+						"error":       err,
+					}).Error("Failed to forward clove to destination")
+					continue
+				}
+				log.WithFields(logger.Fields{
+					"clove_index": i,
+					"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+				}).Debug("Successfully forwarded clove to destination")
+			} else {
+				log.WithFields(logger.Fields{
+					"clove_index": i,
+					"dest_hash":   fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+				}).Warn("DESTINATION delivery requires clove forwarder")
+			}
+
+		case 0x02: // ROUTER delivery
+			if p.cloveForwarder != nil {
+				err := p.cloveForwarder.ForwardToRouter(
+					clove.DeliveryInstructions.Hash,
+					clove.I2NPMessage,
+				)
+				if err != nil {
+					log.WithFields(logger.Fields{
+						"clove_index": i,
+						"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+						"error":       err,
+					}).Error("Failed to forward clove to router")
+					continue
+				}
+				log.WithFields(logger.Fields{
+					"clove_index": i,
+					"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+				}).Debug("Successfully forwarded clove to router")
+			} else {
+				log.WithFields(logger.Fields{
+					"clove_index": i,
+					"router_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+				}).Warn("ROUTER delivery requires clove forwarder")
+			}
+
+		case 0x03: // TUNNEL delivery
+			if p.cloveForwarder != nil {
+				err := p.cloveForwarder.ForwardThroughTunnel(
+					clove.DeliveryInstructions.Hash,
+					clove.DeliveryInstructions.TunnelID,
+					clove.I2NPMessage,
+				)
+				if err != nil {
+					log.WithFields(logger.Fields{
+						"clove_index":  i,
+						"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+						"tunnel_id":    clove.DeliveryInstructions.TunnelID,
+						"error":        err,
+					}).Error("Failed to forward clove through tunnel")
+					continue
+				}
+				log.WithFields(logger.Fields{
+					"clove_index":  i,
+					"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+					"tunnel_id":    clove.DeliveryInstructions.TunnelID,
+				}).Debug("Successfully forwarded clove through tunnel")
+			} else {
+				log.WithFields(logger.Fields{
+					"clove_index":  i,
+					"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
+					"tunnel_id":    clove.DeliveryInstructions.TunnelID,
+				}).Warn("TUNNEL delivery requires clove forwarder")
+			}
+		}
 	}
-	
-	// Message has GARLIC type but doesn't implement GarlicProcessor interface
-	return fmt.Errorf("message type GARLIC does not implement GarlicProcessor interface")
+
+	return nil
+}
+
+// parseGarlicStructure parses decrypted garlic data into a Garlic structure.
+// The decrypted format is:
+//
+//	[count:1] [clove1] [clove2] ... [certificate:3] [messageID:4] [expiration:8]
+//
+// This is a simplified parser - full implementation would use the existing
+// garlic parsing code from garlic_builder.go
+func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
+	if len(data) < 1 {
+		return nil, fmt.Errorf("garlic data too short: need at least 1 byte for count")
+	}
+
+	count := int(data[0])
+	offset := 1
+
+	log.WithFields(logger.Fields{
+		"count":     count,
+		"data_size": len(data),
+	}).Debug("Parsing garlic structure")
+
+	garlic := &Garlic{
+		Count:  count,
+		Cloves: make([]GarlicClove, 0, count),
+	}
+
+	// Parse each clove
+	for i := 0; i < count; i++ {
+		clove, bytesRead, err := p.parseGarlicClove(data[offset:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse clove %d: %w", i, err)
+		}
+		garlic.Cloves = append(garlic.Cloves, *clove)
+		offset += bytesRead
+	}
+
+	// Parse certificate (3 bytes - always null in current implementation)
+	if len(data)-offset < 3 {
+		return nil, fmt.Errorf("insufficient data for certificate at offset %d", offset)
+	}
+	offset += 3 // Skip certificate
+
+	// Parse message ID (4 bytes)
+	if len(data)-offset < 4 {
+		return nil, fmt.Errorf("insufficient data for message ID at offset %d", offset)
+	}
+	// Message ID parsing would go here if needed
+	offset += 4
+
+	// Parse expiration (8 bytes)
+	if len(data)-offset < 8 {
+		return nil, fmt.Errorf("insufficient data for expiration at offset %d", offset)
+	}
+	// Expiration parsing would go here if needed
+
+	return garlic, nil
+}
+
+// parseGarlicClove parses a single garlic clove from the data.
+// Returns the clove, number of bytes consumed, and any error.
+//
+// Clove format:
+//
+//	[delivery_instructions] [i2np_message] [clove_id:4] [expiration:8] [certificate:3]
+func (p *MessageProcessor) parseGarlicClove(data []byte) (*GarlicClove, int, error) {
+	if len(data) < 1 {
+		return nil, 0, fmt.Errorf("clove data too short for delivery instructions")
+	}
+
+	offset := 0
+
+	// Parse delivery instructions
+	deliveryInstr, bytesRead, err := p.parseDeliveryInstructions(data[offset:])
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to parse delivery instructions: %w", err)
+	}
+	offset += bytesRead
+
+	// Parse the wrapped I2NP message
+	i2npMsg, bytesRead, err := p.parseI2NPMessage(data[offset:])
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to parse wrapped I2NP message: %w", err)
+	}
+	offset += bytesRead
+
+	// Parse clove ID (4 bytes)
+	if len(data)-offset < 4 {
+		return nil, 0, fmt.Errorf("insufficient data for clove ID")
+	}
+	cloveID := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
+	offset += 4
+
+	// Parse expiration (8 bytes) - skip for now
+	if len(data)-offset < 8 {
+		return nil, 0, fmt.Errorf("insufficient data for expiration")
+	}
+	offset += 8
+
+	// Parse certificate (3 bytes - always null)
+	if len(data)-offset < 3 {
+		return nil, 0, fmt.Errorf("insufficient data for certificate")
+	}
+	offset += 3
+
+	clove := &GarlicClove{
+		DeliveryInstructions: *deliveryInstr,
+		I2NPMessage:          i2npMsg,
+		CloveID:              cloveID,
+	}
+
+	return clove, offset, nil
+}
+
+// parseDeliveryInstructions parses garlic clove delivery instructions.
+// Returns the instructions, number of bytes consumed, and any error.
+//
+// Format:
+//
+//	[flag:1] [session_key:32]? [hash:32]? [tunnel_id:4]? [delay:4]?
+func (p *MessageProcessor) parseDeliveryInstructions(data []byte) (*GarlicCloveDeliveryInstructions, int, error) {
+	if len(data) < 1 {
+		return nil, 0, fmt.Errorf("no data for delivery instructions flag")
+	}
+
+	flag := data[0]
+	offset := 1
+
+	deliveryInstr := &GarlicCloveDeliveryInstructions{
+		Flag: flag,
+	}
+
+	// Check if encrypted (bit 7) - currently unimplemented
+	if (flag>>7)&0x01 == 1 {
+		if len(data)-offset < 32 {
+			return nil, 0, fmt.Errorf("insufficient data for session key")
+		}
+		copy(deliveryInstr.SessionKey[:], data[offset:offset+32])
+		offset += 32
+	}
+
+	// Extract delivery type (bits 6-5)
+	deliveryType := (flag >> 5) & 0x03
+
+	// Check if hash is present (DESTINATION=1, ROUTER=2, TUNNEL=3)
+	if deliveryType >= 1 && deliveryType <= 3 {
+		if len(data)-offset < 32 {
+			return nil, 0, fmt.Errorf("insufficient data for hash")
+		}
+		copy(deliveryInstr.Hash[:], data[offset:offset+32])
+		offset += 32
+	}
+
+	// Check if tunnel ID is present (TUNNEL=3)
+	if deliveryType == 3 {
+		if len(data)-offset < 4 {
+			return nil, 0, fmt.Errorf("insufficient data for tunnel ID")
+		}
+		tunnelID := uint32(data[offset])<<24 | uint32(data[offset+1])<<16 | uint32(data[offset+2])<<8 | uint32(data[offset+3])
+		deliveryInstr.TunnelID = tunnel.TunnelID(tunnelID)
+		offset += 4
+	}
+
+	// Check if delay is included (bit 4)
+	if (flag>>4)&0x01 == 1 {
+		if len(data)-offset < 4 {
+			return nil, 0, fmt.Errorf("insufficient data for delay")
+		}
+		delay := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
+		deliveryInstr.Delay = delay
+		offset += 4
+	}
+
+	return deliveryInstr, offset, nil
+}
+
+// parseI2NPMessage parses a wrapped I2NP message from garlic clove data.
+// Returns the message, number of bytes consumed, and any error.
+func (p *MessageProcessor) parseI2NPMessage(data []byte) (I2NPMessage, int, error) {
+	// I2NP message format: [header] [payload]
+	// Header is at least 16 bytes (type, ID, expiration, size, checksum)
+	if len(data) < 16 {
+		return nil, 0, fmt.Errorf("insufficient data for I2NP message header")
+	}
+
+	// Create a base message and unmarshal
+	msg := NewBaseI2NPMessage(0)
+	if err := msg.UnmarshalBinary(data); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal I2NP message: %w", err)
+	}
+
+	// Calculate bytes consumed: header (16) + data size
+	dataSize := len(msg.GetData())
+	bytesRead := 16 + dataSize
+
+	return msg, bytesRead, nil
 }
 
 // processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface
