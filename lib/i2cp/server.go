@@ -577,14 +577,27 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 
 // handleGetDate returns the current router time
 func (s *Server) handleGetDate(msg *Message) (*Message, error) {
-	// TODO: Implement proper I2P time format
-	// For now, return empty payload
+	// I2P time format: 8 bytes representing milliseconds since Unix epoch (big endian)
+	currentTimeMillis := time.Now().UnixMilli()
+
+	// Encode as 8-byte big endian integer
+	payload := make([]byte, 8)
+	payload[0] = byte(currentTimeMillis >> 56)
+	payload[1] = byte(currentTimeMillis >> 48)
+	payload[2] = byte(currentTimeMillis >> 40)
+	payload[3] = byte(currentTimeMillis >> 32)
+	payload[4] = byte(currentTimeMillis >> 24)
+	payload[5] = byte(currentTimeMillis >> 16)
+	payload[6] = byte(currentTimeMillis >> 8)
+	payload[7] = byte(currentTimeMillis)
+
 	response := &Message{
 		Type:      MessageTypeSetDate,
 		SessionID: msg.SessionID,
-		Payload:   []byte{}, // TODO: Encode current time
+		Payload:   payload,
 	}
 
+	log.WithField("time_millis", currentTimeMillis).Debug("Returning router time to client")
 	return response, nil
 }
 
