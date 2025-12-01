@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/go-i2p/logger"
@@ -165,9 +166,19 @@ func (t *TunnelBuildReply) validateResponseRecord(record BuildResponseRecord) er
 		return fmt.Errorf("response record has empty hash")
 	}
 
-	// TODO: In a full implementation, we would verify the SHA-256 hash
-	// hash should be SHA256(random_data + reply_byte)
-	// This requires implementing the cryptographic verification
+	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
+	data := make([]byte, 496)
+	copy(data[0:495], record.RandomData[:])
+	data[495] = record.Reply
+
+	computedHash := sha256.Sum256(data)
+	if computedHash != record.Hash {
+		log.WithFields(logger.Fields{
+			"expected": record.Hash,
+			"computed": computedHash,
+		}).Warn("Response record hash mismatch")
+		return fmt.Errorf("response record hash verification failed")
+	}
 
 	log.Debug("Response record validation passed")
 	return nil

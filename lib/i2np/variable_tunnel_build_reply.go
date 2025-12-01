@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/go-i2p/logger"
@@ -186,9 +187,19 @@ func (v *VariableTunnelBuildReply) validateResponseRecord(record BuildResponseRe
 		return fmt.Errorf("variable tunnel response record has empty hash")
 	}
 
-	// TODO: In a full implementation, we would verify the SHA-256 hash
-	// hash should be SHA256(random_data + reply_byte)
-	// This requires implementing the cryptographic verification
+	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
+	data := make([]byte, 496)
+	copy(data[0:495], record.RandomData[:])
+	data[495] = record.Reply
+
+	computedHash := sha256.Sum256(data)
+	if computedHash != record.Hash {
+		log.WithFields(logger.Fields{
+			"expected": record.Hash,
+			"computed": computedHash,
+		}).Warn("Variable tunnel response record hash mismatch")
+		return fmt.Errorf("variable tunnel response record hash verification failed")
+	}
 
 	log.Debug("Variable tunnel response record validation passed")
 	return nil
