@@ -196,19 +196,24 @@ func TestSetMessageProcessor(t *testing.T) {
 // Test ForwardToDestination with no LeaseSet in NetDB
 func TestForwardToDestination(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
 	destHash := common.Hash{10, 20, 30, 40}
 
 	err := gr.ForwardToDestination(destHash, msg)
 
-	if err == nil {
-		t.Error("Expected error when destination not found in NetDB, got nil")
+	// With async message queueing, this should succeed (message gets queued)
+	if err != nil {
+		t.Errorf("Expected message to be queued when destination not found in NetDB, got error: %v", err)
 	}
 
-	// Verify error message indicates LeaseSet lookup failure
-	expectedSubstring := "LeaseSet"
-	if !contains(err.Error(), expectedSubstring) {
-		t.Errorf("Error message should contain '%s', got: %s", expectedSubstring, err.Error())
+	// Verify message was queued for async lookup
+	gr.pendingMutex.RLock()
+	pending, exists := gr.pendingMsgs[destHash]
+	gr.pendingMutex.RUnlock()
+
+	if !exists || len(pending) != 1 {
+		t.Error("Expected message to be queued for pending LeaseSet lookup")
 	}
 }
 
