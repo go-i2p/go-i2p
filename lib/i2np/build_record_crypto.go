@@ -343,9 +343,13 @@ func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildReq
 		return BuildRequestRecord{}, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
 	}
 
-	// Step 2: Extract ciphertext portion (bytes 16-527)
-	// Bytes 0-15 contain the identity hash prefix (not needed for decryption)
-	ciphertext := encrypted[16:]
+	// Step 2: Extract ECIES ciphertext portion (bytes 16-297)
+	// Bytes 0-15: identity hash prefix (not needed for decryption)
+	// Bytes 16-297: ECIES ciphertext (ephemeral_pubkey(32) + nonce(12) + aead_ciphertext(238))
+	//   where aead_ciphertext = cleartext(222) + poly1305_tag(16)
+	// Bytes 298-527: zero padding (not needed for decryption)
+	const eciesCiphertextLen = 32 + 12 + 222 + 16 // = 282 bytes
+	ciphertext := encrypted[16 : 16+eciesCiphertextLen]
 
 	// Step 3: Decrypt using ECIES-X25519
 	// This should produce the original 222-byte cleartext
