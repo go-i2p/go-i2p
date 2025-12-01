@@ -25,6 +25,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -61,6 +62,9 @@ type Router struct {
 
 	// I2CP server for client applications
 	i2cpServer *i2cp.Server
+
+	// tunnelManager manages tunnel building and pool maintenance
+	tunnelManager *i2np.TunnelManager
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -303,10 +307,29 @@ func (r *Router) initializeMessageRouter() {
 	// Set router as SessionProvider to enable message response routing
 	r.messageRouter.SetSessionProvider(r)
 
+	// Initialize tunnel manager for building and managing tunnels
+	// Must be done before garlic router so it can access the tunnel pool
+	r.initializeTunnelManager()
+
 	// Initialize garlic message router for handling garlic clove forwarding
 	r.initializeGarlicRouter()
 
 	log.Debug("Message router initialized with NetDB, peer selection, session provider, and garlic forwarding")
+}
+
+// initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
+// The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
+func (r *Router) initializeTunnelManager() {
+	// Create tunnel manager with NetDB as peer selector
+	r.tunnelManager = i2np.NewTunnelManager(r.StdNetDB)
+
+	// Set router as session provider for sending tunnel build messages
+	r.tunnelManager.SetSessionProvider(r)
+
+	log.WithFields(logger.Fields{
+		"peer_selector": "netdb",
+		"pools_created": true,
+	}).Debug("Tunnel manager initialized with peer selection")
 }
 
 // initializeGarlicRouter sets up garlic message forwarding for non-LOCAL delivery types.
@@ -318,12 +341,17 @@ func (r *Router) initializeGarlicRouter() {
 	// Wrap StdNetDB with adapter to match GarlicNetDB interface
 	garlicNetDB := newNetDBAdapter(r.StdNetDB)
 
+	// Get tunnel pool from tunnel manager if available, otherwise nil
+	var tunnelPool *tunnel.Pool
+	if r.tunnelManager != nil {
+		tunnelPool = r.tunnelManager.GetPool()
+	}
+
 	// Create garlic message router with router infrastructure
-	// Note: tunnelPool is nil for now - TUNNEL delivery will return error until tunnel support is added
 	r.garlicRouter = NewGarlicMessageRouter(
 		garlicNetDB,      // NetDB for LeaseSet/RouterInfo lookups
 		r.TransportMuxer, // Transport for sending to peer routers
-		nil,              // Tunnel pool - TODO: add when tunnel support is implemented
+		tunnelPool,       // Tunnel pool for DESTINATION and TUNNEL delivery
 		routerHash,       // Our identity for reflexive routing
 	)
 
@@ -333,7 +361,7 @@ func (r *Router) initializeGarlicRouter() {
 
 	log.WithFields(logger.Fields{
 		"our_hash":        fmt.Sprintf("%x", routerHash[:8]),
-		"tunnel_support":  false,
+		"tunnel_support":  tunnelPool != nil,
 		"transport_ready": r.TransportMuxer != nil,
 		"netdb_ready":     r.StdNetDB != nil,
 	}).Debug("Garlic message router initialized for non-LOCAL clove forwarding")

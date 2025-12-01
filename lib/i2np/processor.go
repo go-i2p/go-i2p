@@ -541,6 +541,12 @@ func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
 }
 
+// GetPool returns the tunnel pool managed by this TunnelManager.
+// This allows the router to access the pool for message routing through tunnels.
+func (tm *TunnelManager) GetPool() *tunnel.Pool {
+	return tm.pool
+}
+
 // BuildTunnelFromRequest builds a tunnel from a BuildTunnelRequest using the tunnel.TunnelBuilder.
 // This is the recommended method for building tunnels with proper request tracking and retry support.
 //

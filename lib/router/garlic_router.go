@@ -292,14 +292,31 @@ func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 
 	// Check if we are the gateway (reflexive tunnel delivery)
 	if bytes.Equal(gatewayHash[:], gr.routerIdentity[:]) {
-		// We are the gateway - inject directly into our tunnel processing
+		// We are the gateway - process the TunnelGateway message locally
 		log.WithFields(logger.Fields{
 			"tunnel_id": tunnelID,
-		}).Debug("TUNNEL delivery is reflexive, injecting into local tunnel")
+		}).Debug("TUNNEL delivery is reflexive, processing TunnelGateway locally")
 
-		// TODO: Implement tunnel injection when tunnel pool supports it
-		// For now, return an error indicating this needs tunnel pool integration
-		return fmt.Errorf("reflexive TUNNEL delivery requires tunnel pool injection (tunnel_id=%d)", tunnelID)
+		// Create TunnelGateway message for local processing
+		msgBytes, err := msg.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshal message for local tunnel injection: %w", err)
+		}
+
+		tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, msgBytes)
+
+		// Process the TunnelGateway message through our message processor
+		// This will decrypt tunnel layers and route to final destination
+		if gr.processor == nil {
+			return fmt.Errorf("message processor not set for local tunnel injection")
+		}
+
+		if err := gr.processor.ProcessMessage(tunnelGatewayMsg); err != nil {
+			return fmt.Errorf("failed to process local tunnel injection: %w", err)
+		}
+
+		log.WithField("tunnel_id", tunnelID).Debug("Successfully injected message into local tunnel")
+		return nil
 	}
 
 	// Serialize the wrapped message for inclusion in TunnelGateway
