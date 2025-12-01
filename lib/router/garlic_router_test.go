@@ -201,7 +201,6 @@ func TestForwardToDestination(t *testing.T) {
 	destHash := common.Hash{10, 20, 30, 40}
 
 	err := gr.ForwardToDestination(destHash, msg)
-
 	// With async message queueing, this should succeed (message gets queued)
 	if err != nil {
 		t.Errorf("Expected message to be queued when destination not found in NetDB, got error: %v", err)

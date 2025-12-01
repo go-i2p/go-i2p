@@ -86,9 +86,9 @@ type SessionConfig struct {
 	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
 
 	// EncryptedLeaseSet configuration (requires Ed25519 destination)
-	UseEncryptedLeaseSet bool     // Enable EncryptedLeaseSet generation (default: false)
-	BlindingSecret       []byte   // Secret for destination blinding (if empty, random generated)
-	LeaseSetExpiration   uint16   // LeaseSet expiration in seconds (default: 600 = 10 minutes)
+	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
+	BlindingSecret       []byte // Secret for destination blinding (if empty, random generated)
+	LeaseSetExpiration   uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
 
 	// Session metadata
 	Nickname string // Optional nickname for debugging
@@ -730,7 +730,7 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 		*s.destination,
 		publishedTime,
 		s.config.LeaseSetExpiration,
-		0, // flags
+		0,   // flags
 		nil, // no offline signature for inner LeaseSet2
 		data.Mapping{},
 		[]lease_set2.EncryptionKey{encKey},

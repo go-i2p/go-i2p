@@ -172,15 +172,15 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 	// so we'll test the individual helper functions instead
 
 	session := &Session{
-		id:           1,
-		destination:  keyStore.Destination(),
-		keys:         keyStore,
-		config:       config,
-		inboundPool:  inboundPool,
-		clientNetDB:  netdb.NewClientNetDB(nil), // Pass nil for StdNetDB in test
-		createdAt:    time.Now(),
-		active:       true,
-		stopCh:       make(chan struct{}),
+		id:          1,
+		destination: keyStore.Destination(),
+		keys:        keyStore,
+		config:      config,
+		inboundPool: inboundPool,
+		clientNetDB: netdb.NewClientNetDB(nil), // Pass nil for StdNetDB in test
+		createdAt:   time.Now(),
+		active:      true,
+		stopCh:      make(chan struct{}),
 	}
 
 	// Test individual components
@@ -376,15 +376,15 @@ func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
 	inboundPool := &tunnel.Pool{}
 
 	session := &Session{
-		id:           1,
-		destination:  keyStore.Destination(),
-		keys:         keyStore,
-		config:       config,
-		inboundPool:  inboundPool,
-		clientNetDB:  netdb.NewClientNetDB(nil), // Pass nil for StdNetDB in test
-		createdAt:    time.Now(),
-		active:       true,
-		stopCh:       make(chan struct{}),
+		id:          1,
+		destination: keyStore.Destination(),
+		keys:        keyStore,
+		config:      config,
+		inboundPool: inboundPool,
+		clientNetDB: netdb.NewClientNetDB(nil), // Pass nil for StdNetDB in test
+		createdAt:   time.Now(),
+		active:      true,
+		stopCh:      make(chan struct{}),
 	}
 
 	// Note: Full integration test would require mocking tunnel pool state
