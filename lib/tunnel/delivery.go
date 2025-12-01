@@ -683,6 +683,78 @@ func readDeliveryInstructions(data []byte) (instructions *DeliveryInstructions, 
 	return readDeliveryInstructionsStruct(data)
 }
 
+// NewLocalDeliveryInstructions creates delivery instructions for LOCAL delivery.
+// LOCAL delivery means the message should be processed locally by the current router.
+// This is used for both inbound tunnels (standard) and outbound tunnels (when message
+// arrives at the final hop).
+//
+// Parameters:
+//   - fragmentSize: The size of the message fragment to deliver
+//
+// Returns:
+//   - *DeliveryInstructions: A new delivery instruction configured for LOCAL delivery
+//
+// The resulting instruction will have:
+//   - deliveryType: DT_LOCAL
+//   - fragmentType: FIRST_FRAGMENT
+//   - fragmented: false (unfragmented message)
+//   - hasDelay: false
+//   - hasExtOptions: false
+func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions {
+	return &DeliveryInstructions{
+		fragmentType:  FIRST_FRAGMENT,
+		deliveryType:  DT_LOCAL,
+		hasDelay:      false,
+		fragmented:    false,
+		hasExtOptions: false,
+		fragmentSize:  fragmentSize,
+	}
+}
+
+// NewTunnelDeliveryInstructions creates delivery instructions for TUNNEL delivery.
+// TUNNEL delivery routes the message to a specific tunnel on a gateway router.
+//
+// Parameters:
+//   - tunnelID: The destination tunnel ID
+//   - gatewayHash: SHA-256 hash of the gateway router's identity
+//   - fragmentSize: The size of the message fragment
+//
+// Returns:
+//   - *DeliveryInstructions: A new delivery instruction configured for TUNNEL delivery
+func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+	return &DeliveryInstructions{
+		fragmentType:  FIRST_FRAGMENT,
+		deliveryType:  DT_TUNNEL,
+		tunnelID:      tunnelID,
+		hash:          gatewayHash,
+		hasDelay:      false,
+		fragmented:    false,
+		hasExtOptions: false,
+		fragmentSize:  fragmentSize,
+	}
+}
+
+// NewRouterDeliveryInstructions creates delivery instructions for ROUTER delivery.
+// ROUTER delivery sends the message directly to a specific router (not through a tunnel).
+//
+// Parameters:
+//   - routerHash: SHA-256 hash of the destination router's identity
+//   - fragmentSize: The size of the message fragment
+//
+// Returns:
+//   - *DeliveryInstructions: A new delivery instruction configured for ROUTER delivery
+func NewRouterDeliveryInstructions(routerHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
+	return &DeliveryInstructions{
+		fragmentType:  FIRST_FRAGMENT,
+		deliveryType:  DT_ROUTER,
+		hash:          routerHash,
+		hasDelay:      false,
+		fragmented:    false,
+		hasExtOptions: false,
+		fragmentSize:  fragmentSize,
+	}
+}
+
 // readDeliveryInstructionsStruct parses raw bytes into a DeliveryInstructions struct
 func readDeliveryInstructionsStruct(data []byte) (instructions *DeliveryInstructions, remainder []byte, err error) {
 	if len(data) < 1 {
