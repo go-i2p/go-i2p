@@ -210,10 +210,10 @@ func parseFollowOnFragment(data []byte, flag byte) (*DeliveryInstructions, int, 
 // parseFirstFragmentFlags extracts delivery type and feature flags from the first fragment flag byte.
 func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
 	di.fragmentType = FIRST_FRAGMENT
-	di.deliveryType = (flag & 0x30) >> 4
-	di.hasDelay = (flag & 0x10) == 0x10
-	di.fragmented = (flag & 0x08) == 0x08
-	di.hasExtOptions = (flag & 0x04) == 0x04
+	di.deliveryType = (flag & 0x60) >> 5     // bits 6-5
+	di.hasDelay = (flag & 0x10) == 0x10      // bit 4
+	di.fragmented = (flag & 0x08) == 0x08    // bit 3
+	di.hasExtOptions = (flag & 0x04) == 0x04 // bit 2
 }
 
 // readTunnelID reads the tunnel ID field if present in the delivery instructions.
@@ -350,7 +350,7 @@ func (di *DeliveryInstructions) serializeFirstFragment() ([]byte, error) {
 // It encodes delivery type, delay flag, fragmentation flag, and extended options flag.
 func (di *DeliveryInstructions) buildFlagByte() byte {
 	flag := byte(0x00)                    // Bit 7 = 0 for first fragment
-	flag |= (di.deliveryType & 0x03) << 4 // Bits 6-5
+	flag |= (di.deliveryType & 0x03) << 5 // Bits 6-5
 	if di.hasDelay {
 		flag |= 0x10 // Bit 4
 	}

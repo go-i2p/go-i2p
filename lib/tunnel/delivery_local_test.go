@@ -116,8 +116,8 @@ func TestTunnelDeliveryInstructionsSerialization(t *testing.T) {
 	// TUNNEL delivery: flag(1) + tunnelID(4) + hash(32) + size(2) = 39 bytes
 	assert.Equal(39, len(bytes), "TUNNEL delivery should be 39 bytes")
 
-	// Check flag byte: DT_TUNNEL (0x01 << 4) = 0x10
-	assert.Equal(byte(0x10), bytes[0], "Flag should be 0x10 for TUNNEL delivery")
+	// Check flag byte: DT_TUNNEL (0x01 << 5) = 0x20 (bits 6-5)
+	assert.Equal(byte(0x20), bytes[0], "Flag should be 0x20 for TUNNEL delivery")
 
 	// Verify tunnel ID
 	tunnelIDParsed := uint32(bytes[1])<<24 | uint32(bytes[2])<<16 | uint32(bytes[3])<<8 | uint32(bytes[4])
@@ -142,6 +142,9 @@ func TestTunnelDeliveryInstructionsRoundTrip(t *testing.T) {
 
 	bytes, err := original.Bytes()
 	require.NoError(err)
+
+	// Debug: print length
+	t.Logf("Serialized %d bytes", len(bytes))
 
 	parsed, err := NewDeliveryInstructions(bytes)
 	require.NoError(err)
@@ -194,8 +197,8 @@ func TestRouterDeliveryInstructionsSerialization(t *testing.T) {
 	// ROUTER delivery: flag(1) + hash(32) + size(2) = 35 bytes
 	assert.Equal(35, len(bytes), "ROUTER delivery should be 35 bytes")
 
-	// Check flag byte: DT_ROUTER (0x02 << 4) = 0x20
-	assert.Equal(byte(0x20), bytes[0], "Flag should be 0x20 for ROUTER delivery")
+	// Check flag byte: DT_ROUTER (0x02 << 5) = 0x40 (bits 6-5)
+	assert.Equal(byte(0x40), bytes[0], "Flag should be 0x40 for ROUTER delivery")
 
 	// Verify hash
 	for i := 0; i < 32; i++ {
