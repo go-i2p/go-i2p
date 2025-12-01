@@ -49,5 +49,27 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 	}
 }
 
+// Bytes serializes the ShortTunnelBuild message to wire format.
+// Format: [count:1][records...]
+// Note: This returns the cleartext records. Encryption must be applied by the caller.
+func (s *ShortTunnelBuild) Bytes() []byte {
+	// 1 byte for count + 222 bytes per record (cleartext)
+	size := 1 + (s.Count * 222)
+	data := make([]byte, size)
+
+	// Write count
+	data[0] = byte(s.Count)
+
+	// Write each record
+	offset := 1
+	for _, record := range s.BuildRequestRecords {
+		recordBytes := record.Bytes()
+		copy(data[offset:offset+222], recordBytes)
+		offset += 222
+	}
+
+	return data
+}
+
 // Compile-time interface satisfaction check
 var _ TunnelBuilder = (*ShortTunnelBuild)(nil)

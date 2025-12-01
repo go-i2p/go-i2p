@@ -497,6 +497,60 @@ func (b *BuildRequestRecord) GetIVKey() session_key.SessionKey {
 	return b.IVKey
 }
 
+// Bytes serializes the BuildRequestRecord to its cleartext 222-byte representation.
+// The caller is responsible for encrypting this data.
+func (b *BuildRequestRecord) Bytes() []byte {
+	data := make([]byte, 222)
+
+	// ReceiveTunnel (4 bytes)
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), 4); err == nil {
+		copy(data[0:4], tunnelInt.Bytes())
+	}
+
+	// OurIdent (32 bytes)
+	copy(data[4:36], b.OurIdent[:])
+
+	// NextTunnel (4 bytes)
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.NextTunnel), 4); err == nil {
+		copy(data[36:40], tunnelInt.Bytes())
+	}
+
+	// NextIdent (32 bytes)
+	copy(data[40:72], b.NextIdent[:])
+
+	// LayerKey (32 bytes)
+	copy(data[72:104], b.LayerKey[:])
+
+	// IVKey (32 bytes)
+	copy(data[104:136], b.IVKey[:])
+
+	// ReplyKey (32 bytes)
+	copy(data[136:168], b.ReplyKey[:])
+
+	// ReplyIV (16 bytes)
+	copy(data[168:184], b.ReplyIV[:])
+
+	// Flag (1 byte)
+	data[184] = byte(b.Flag)
+
+	// RequestTime (4 bytes) - hours since epoch
+	hours := int(b.RequestTime.Unix() / 3600)
+	if timeInt, err := common.NewIntegerFromInt(hours, 4); err == nil {
+		copy(data[185:189], timeInt.Bytes())
+	}
+
+	// SendMessageID (4 bytes)
+	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, 4); err == nil {
+		copy(data[189:193], msgInt.Bytes())
+	}
+
+	// Padding (29 bytes)
+	copy(data[193:222], b.Padding[:])
+
+	log.Debug("BuildRequestRecord serialized to 222 bytes")
+	return data
+}
+
 // Compile-time interface satisfaction checks
 var (
 	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)

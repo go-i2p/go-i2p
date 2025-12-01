@@ -739,14 +739,14 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	}
 
 	// Create Short Tunnel Build (STBM) using the builder constructor
-	_ = NewShortTunnelBuilder(i2npRecords) // Will be used for serialization later
+	stbm := NewShortTunnelBuilder(i2npRecords)
 
 	// Wrap in I2NP message
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD)
 	msg.SetMessageID(messageID)
 
-	// TODO: Serialize ShortTunnelBuild to bytes and set as message data
-	// For now, we'll create a basic message structure
+	// Serialize ShortTunnelBuild to bytes and set as message data
+	msg.SetData(stbm.(*ShortTunnelBuild).Bytes())
 
 	return msg
 }
