@@ -2,11 +2,17 @@ package i2np
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"testing"
+	"time"
 
-	"github.com/go-i2p/crypto/rand"
-
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/keys"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestEncryptDecryptReplyRecord tests the encryption and decryption of build response records
@@ -362,5 +368,285 @@ func BenchmarkDecryptReplyRecord(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Decryption failed: %v", err)
 		}
+	}
+}
+
+// ============================================================================
+// BuildRequestRecord Encryption Tests
+// ============================================================================
+
+// TestEncryptDecryptBuildRequestRecord tests the full encryption/decryption cycle
+func TestEncryptDecryptBuildRequestRecord(t *testing.T) {
+	// Create a router with keys
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err, "Failed to create keystore")
+
+	// Construct RouterInfo
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err, "Failed to construct RouterInfo")
+
+	// Create a test BuildRequestRecord
+	originalRecord := createTestBuildRequestRecord(t)
+
+	// Encrypt the record
+	encrypted, err := EncryptBuildRequestRecord(originalRecord, *routerInfo)
+	require.NoError(t, err, "Encryption should succeed")
+
+	// Verify encrypted size
+	assert.Equal(t, 528, len(encrypted), "Encrypted record should be 528 bytes")
+
+	// Get the private key for decryption
+	privKey := keystore.GetEncryptionPrivateKey()
+
+	// Decrypt the record
+	decrypted, err := DecryptBuildRequestRecord(encrypted, privKey.Bytes())
+	require.NoError(t, err, "Decryption should succeed")
+
+	// Verify all fields match
+	assert.Equal(t, originalRecord.ReceiveTunnel, decrypted.ReceiveTunnel, "ReceiveTunnel should match")
+	assert.Equal(t, originalRecord.OurIdent, decrypted.OurIdent, "OurIdent should match")
+	assert.Equal(t, originalRecord.NextTunnel, decrypted.NextTunnel, "NextTunnel should match")
+	assert.Equal(t, originalRecord.NextIdent, decrypted.NextIdent, "NextIdent should match")
+	assert.Equal(t, originalRecord.LayerKey, decrypted.LayerKey, "LayerKey should match")
+	assert.Equal(t, originalRecord.IVKey, decrypted.IVKey, "IVKey should match")
+	assert.Equal(t, originalRecord.ReplyKey, decrypted.ReplyKey, "ReplyKey should match")
+	assert.Equal(t, originalRecord.ReplyIV, decrypted.ReplyIV, "ReplyIV should match")
+	assert.Equal(t, originalRecord.Flag, decrypted.Flag, "Flag should match")
+	assert.Equal(t, originalRecord.SendMessageID, decrypted.SendMessageID, "SendMessageID should match")
+}
+
+// TestEncryptBuildRequestRecordIdentityHash verifies the identity hash prefix
+func TestEncryptBuildRequestRecordIdentityHash(t *testing.T) {
+	// Create router with keys
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Create test record
+	record := createTestBuildRequestRecord(t)
+
+	// Encrypt
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+
+	// Calculate expected identity hash
+	identity := routerInfo.RouterIdentity()
+	identityBytes, _ := identity.KeysAndCert.Bytes()
+	expectedHash := sha256.Sum256(identityBytes)
+
+	// Verify first 16 bytes match
+	for i := 0; i < 16; i++ {
+		assert.Equal(t, expectedHash[i], encrypted[i], "Identity hash prefix byte %d should match", i)
+	}
+}
+
+// TestVerifyIdentityHash tests the identity hash verification function
+func TestVerifyIdentityHash(t *testing.T) {
+	// Create router with keys
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Create and encrypt record
+	record := createTestBuildRequestRecord(t)
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+
+	// Verify with correct RouterInfo
+	assert.True(t, VerifyIdentityHash(encrypted, *routerInfo), "Should verify successfully with correct RouterInfo")
+
+	// Create different router
+	keystore2, err := keys.NewRouterInfoKeystore(t.TempDir(), "different-router")
+	require.NoError(t, err)
+
+	routerInfo2, err := keystore2.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Verify with wrong RouterInfo
+	assert.False(t, VerifyIdentityHash(encrypted, *routerInfo2), "Should fail verification with different RouterInfo")
+}
+
+// TestDecryptWithWrongKey verifies decryption fails with wrong key
+func TestDecryptWithWrongKey(t *testing.T) {
+	// Create first router
+	keystore1, err := keys.NewRouterInfoKeystore(t.TempDir(), "router1")
+	require.NoError(t, err)
+
+	routerInfo1, err := keystore1.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Create and encrypt record for router1
+	record := createTestBuildRequestRecord(t)
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo1)
+	require.NoError(t, err)
+
+	// Create second router with different key
+	keystore2, err := keys.NewRouterInfoKeystore(t.TempDir(), "router2")
+	require.NoError(t, err)
+
+	privKey2 := keystore2.GetEncryptionPrivateKey()
+
+	// Attempt to decrypt with wrong key
+	_, err = DecryptBuildRequestRecord(encrypted, privKey2.Bytes())
+	assert.Error(t, err, "Decryption should fail with wrong key")
+}
+
+// TestEncryptBuildRequestRecordNonDeterministic verifies encryption is non-deterministic
+func TestEncryptBuildRequestRecordNonDeterministic(t *testing.T) {
+	// Create router
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Create same record
+	record := createTestBuildRequestRecord(t)
+
+	// Encrypt twice
+	encrypted1, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+
+	encrypted2, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+
+	// Identity hash prefix should be the same (first 16 bytes)
+	assert.Equal(t, encrypted1[:16], encrypted2[:16], "Identity hash prefix should match")
+
+	// Ciphertext should differ due to different ephemeral keys
+	assert.NotEqual(t, encrypted1[16:], encrypted2[16:], "Ciphertext should differ (ephemeral keys)")
+}
+
+// TestExtractIdentityHashPrefix tests the helper function
+func TestExtractIdentityHashPrefix(t *testing.T) {
+	// Create router
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	// Create and encrypt record
+	record := createTestBuildRequestRecord(t)
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+
+	// Extract prefix
+	prefix := ExtractIdentityHashPrefix(encrypted)
+
+	// Verify first 16 bytes match
+	for i := 0; i < 16; i++ {
+		assert.Equal(t, encrypted[i], prefix[i], "Prefix byte %d should match", i)
+	}
+
+	// Verify remaining bytes are zero (Hash is 32 bytes)
+	for i := 16; i < 32; i++ {
+		assert.Equal(t, byte(0), prefix[i], "Remaining byte %d should be zero", i)
+	}
+}
+
+// TestMultipleEncryptDecryptCycles tests multiple encryption/decryption rounds
+func TestMultipleEncryptDecryptCycles(t *testing.T) {
+	// Create router
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
+	require.NoError(t, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+
+	privKey := keystore.GetEncryptionPrivateKey()
+
+	// Test 10 cycles with different records
+	for i := 0; i < 10; i++ {
+		record := createTestBuildRequestRecord(t)
+		record.SendMessageID = i // Make each record unique
+
+		encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+		require.NoError(t, err, "Encryption cycle %d should succeed", i)
+
+		decrypted, err := DecryptBuildRequestRecord(encrypted, privKey.Bytes())
+		require.NoError(t, err, "Decryption cycle %d should succeed", i)
+
+		assert.Equal(t, record.SendMessageID, decrypted.SendMessageID, "Message ID should match in cycle %d", i)
+	}
+}
+
+// BenchmarkEncryptBuildRequestRecord benchmarks encryption performance
+func BenchmarkEncryptBuildRequestRecord(b *testing.B) {
+	keystore, err := keys.NewRouterInfoKeystore(b.TempDir(), "bench-router")
+	require.NoError(b, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(b, err)
+
+	record := createTestBuildRequestRecord(b)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := EncryptBuildRequestRecord(record, *routerInfo)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkDecryptBuildRequestRecord benchmarks decryption performance
+func BenchmarkDecryptBuildRequestRecord(b *testing.B) {
+	keystore, err := keys.NewRouterInfoKeystore(b.TempDir(), "bench-router")
+	require.NoError(b, err)
+
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(b, err)
+
+	privKey := keystore.GetEncryptionPrivateKey()
+
+	record := createTestBuildRequestRecord(b)
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(b, err)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := DecryptBuildRequestRecord(encrypted, privKey.Bytes())
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Helper function to create a test BuildRequestRecord with randomized data
+func createTestBuildRequestRecord(t testing.TB) BuildRequestRecord {
+	t.Helper()
+
+	var layerKey, ivKey, replyKey session_key.SessionKey
+	var replyIV [16]byte
+	var padding [29]byte
+	var ourIdent, nextIdent common.Hash
+
+	// Fill with random data
+	rand.Read(layerKey[:])
+	rand.Read(ivKey[:])
+	rand.Read(replyKey[:])
+	rand.Read(replyIV[:])
+	rand.Read(padding[:])
+	rand.Read(ourIdent[:])
+	rand.Read(nextIdent[:])
+
+	return BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(12345),
+		OurIdent:      ourIdent,
+		NextTunnel:    tunnel.TunnelID(67890),
+		NextIdent:     nextIdent,
+		LayerKey:      layerKey,
+		IVKey:         ivKey,
+		ReplyKey:      replyKey,
+		ReplyIV:       replyIV,
+		Flag:          0,
+		RequestTime:   time.Now(),
+		SendMessageID: 42,
+		Padding:       padding,
 	}
 }
