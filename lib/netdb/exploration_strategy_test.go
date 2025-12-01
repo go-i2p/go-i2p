@@ -30,34 +30,34 @@ func TestCalculateBucket(t *testing.T) {
 	strategy := NewAdaptiveStrategy(ourHash)
 
 	tests := []struct {
-		name         string
-		routerHash   common.Hash
-		expectedMin  int // Minimum expected bucket
-		expectedMax  int // Maximum expected bucket
+		name        string
+		routerHash  common.Hash
+		expectedMin int // Minimum expected bucket
+		expectedMax int // Maximum expected bucket
 	}{
 		{
-			name:         "identical hash",
-			routerHash:   ourHash,
-			expectedMin:  0,
-			expectedMax:  0,
+			name:        "identical hash",
+			routerHash:  ourHash,
+			expectedMin: 0,
+			expectedMax: 0,
 		},
 		{
-			name:         "differ in first bit",
-			routerHash:   common.Hash{0x80}, // 1000 0000 in binary
-			expectedMin:  0,
-			expectedMax:  0,
+			name:        "differ in first bit",
+			routerHash:  common.Hash{0x80}, // 1000 0000 in binary
+			expectedMin: 0,
+			expectedMax: 0,
 		},
 		{
-			name:         "differ in second bit",
-			routerHash:   common.Hash{0x40}, // 0100 0000 in binary
-			expectedMin:  1,
-			expectedMax:  1,
+			name:        "differ in second bit",
+			routerHash:  common.Hash{0x40}, // 0100 0000 in binary
+			expectedMin: 1,
+			expectedMax: 1,
 		},
 		{
-			name:         "differ in last byte",
-			routerHash:   common.Hash{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-			expectedMin:  255,
-			expectedMax:  255,
+			name:        "differ in last byte",
+			routerHash:  common.Hash{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+			expectedMin: 255,
+			expectedMax: 255,
 		},
 	}
 
@@ -130,9 +130,9 @@ func TestUpdateStats(t *testing.T) {
 	_ = NewRouterNetDB(db)
 	// TODO: Create actual test with mock NetworkDatabase
 	// For now we just verify strategy can be created
-	//strategy.UpdateStats(db, ourHash)
-	//assert.Equal(t, 0, strategy.totalRouters)
-	//assert.Equal(t, 0, strategy.floodfillRouters)
+	// strategy.UpdateStats(db, ourHash)
+	// assert.Equal(t, 0, strategy.totalRouters)
+	// assert.Equal(t, 0, strategy.floodfillRouters)
 
 	// TODO: Add routers to NetDB and verify stats update
 	// This would require creating mock RouterInfo entries
@@ -141,8 +141,8 @@ func TestUpdateStats(t *testing.T) {
 // TestShouldExplore verifies exploration decision logic
 func TestShouldExplore(t *testing.T) {
 	tests := []struct {
-		name         string
-		netdbSize    int
+		name          string
+		netdbSize     int
 		setupStrategy func(*AdaptiveStrategy)
 		shouldExplore bool
 	}{
