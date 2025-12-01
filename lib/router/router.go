@@ -49,6 +49,11 @@ type Router struct {
 	running bool
 	runMux  sync.RWMutex
 
+	// ctx is the router's lifecycle context, cancelled when Stop() is called
+	ctx context.Context
+	// cancel cancels the router's context, triggering graceful shutdown
+	cancel context.CancelFunc
+
 	// Session tracking for NTCP2 message routing
 	activeSessions map[common.Hash]*ntcp.NTCP2Session
 	// sessionMutex protects concurrent access to activeSessions map
@@ -207,6 +212,13 @@ func (r *Router) Stop() {
 	}
 
 	r.running = false
+
+	// Cancel router context to signal shutdown to all goroutines
+	if r.cancel != nil {
+		r.cancel()
+		log.Debug("Router context cancelled")
+	}
+
 	r.stopI2CPServer()
 	r.sendCloseSignal()
 }
@@ -253,6 +265,11 @@ func (r *Router) Start() {
 	}
 	log.Debug("Starting router")
 	r.running = true
+
+	// Create router-level context for lifecycle management
+	// This context is cancelled in Stop() for coordinated shutdown
+	r.ctx, r.cancel = context.WithCancel(context.Background())
+	log.Debug("Router context initialized")
 
 	// Start I2CP server if enabled
 	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
@@ -508,11 +525,10 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 	var peerHash common.Hash
 	copy(peerHash[:], peerHashBytes)
 
-	// Create session with router's context
-	// TODO: Use router-level context for better lifecycle management
-	ctx := context.Background()
+	// Create session with router's lifecycle context
+	// When the router stops, this context is cancelled, closing all sessions
 	sessionLogger := logger.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8]))
-	session := ntcp.NewNTCP2Session(conn, ctx, sessionLogger)
+	session := ntcp.NewNTCP2Session(conn, r.ctx, sessionLogger)
 
 	// Configure cleanup callback to remove session when it closes
 	session.SetCleanupCallback(func() {
