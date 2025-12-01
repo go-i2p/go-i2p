@@ -330,16 +330,16 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 // while still preventing extreme resource exhaustion attacks.
 func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 	const (
-		maxMessagesPerSecond = 10000                  // Maximum 10,000 messages/second per connection
-		maxBytesPerSecond    = 100 * 1024 * 1024      // Maximum 100 MB/second per connection
-		minMessageInterval   = 100 * time.Microsecond // Minimum 0.1ms between messages (allows bursts)
+		maxMessagesPerSecond = 10000                 // Maximum 10,000 messages/second per connection
+		maxBytesPerSecond    = 100 * 1024 * 1024     // Maximum 100 MB/second per connection
+		minMessageInterval   = 10 * time.Microsecond // Minimum 10μs between messages (prevents extreme spam)
 	)
 
 	s.connMutex.Lock()
 	state, exists := s.connStates[conn]
 	if !exists {
 		state = &connectionState{
-			lastMessageTime: time.Now(),
+			lastMessageTime: time.Time{}, // Zero value allows first message immediately
 			messageCount:    0,
 			bytesRead:       0,
 		}
@@ -349,11 +349,6 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 
 	now := time.Now()
 	elapsed := now.Sub(state.lastMessageTime)
-
-	// Rate limit: enforce minimum interval between messages
-	if elapsed < minMessageInterval {
-		return false
-	}
 
 	// Reset counters every second
 	if elapsed >= time.Second {
@@ -368,6 +363,12 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 
 	// Check bandwidth limit
 	if state.bytesRead >= maxBytesPerSecond {
+		return false
+	}
+
+	// Only enforce minimum interval if we're approaching the rate limit
+	// This allows legitimate bursts while preventing extreme abuse
+	if state.messageCount > maxMessagesPerSecond/10 && elapsed < minMessageInterval {
 		return false
 	}
 
