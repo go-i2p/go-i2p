@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/go-i2p/crypto/rand"
@@ -15,24 +16,44 @@ import (
 
 // mockNetDB implements the minimal interface needed for DestinationResolver
 type mockNetDB struct {
-	leaseSets map[common.Hash][]byte
+	mu          sync.RWMutex
+	leaseSets   map[common.Hash][]byte
+	routerInfos map[common.Hash]router_info.RouterInfo
 }
 
 func newMockNetDB() *mockNetDB {
 	return &mockNetDB{
-		leaseSets: make(map[common.Hash][]byte),
+		leaseSets:   make(map[common.Hash][]byte),
+		routerInfos: make(map[common.Hash]router_info.RouterInfo),
 	}
 }
 
 func (m *mockNetDB) GetRouterInfo(hash common.Hash) router_info.RouterInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if ri, exists := m.routerInfos[hash]; exists {
+		return ri
+	}
 	return router_info.RouterInfo{}
 }
 
 func (m *mockNetDB) GetAllRouterInfos() []router_info.RouterInfo {
-	return []router_info.RouterInfo{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	infos := make([]router_info.RouterInfo, 0, len(m.routerInfos))
+	for _, ri := range m.routerInfos {
+		infos = append(infos, ri)
+	}
+	return infos
 }
 
 func (m *mockNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
+	hash, err := ri.IdentHash()
+	if err == nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.routerInfos[hash] = ri
+	}
 }
 
 func (m *mockNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) error {

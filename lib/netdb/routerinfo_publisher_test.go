@@ -31,7 +31,7 @@ func (m *mockRouterInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error
 func TestPublishOurRouterInfo_NoProvider(t *testing.T) {
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
-	publisher := NewPublisher(db, nil, nil, config)
+	publisher := NewPublisher(db, nil, nil, nil, config)
 
 	// Should not panic with nil provider
 	publisher.publishOurRouterInfo()
@@ -50,7 +50,7 @@ func TestPublishOurRouterInfo_ProviderError(t *testing.T) {
 		err: errors.New("failed to construct RouterInfo"),
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	// Should handle error gracefully and log warning (not panic)
 	publisher.publishOurRouterInfo()
@@ -74,7 +74,7 @@ func TestPublishOurRouterInfo_InvalidRouterInfo(t *testing.T) {
 		routerInfo: invalidRI,
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	// Should skip publishing invalid RouterInfo
 	publisher.publishOurRouterInfo()
@@ -99,7 +99,7 @@ func TestPublishOurRouterInfo_Success(t *testing.T) {
 		routerInfo: validRI,
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	// Should successfully publish RouterInfo
 	publisher.publishOurRouterInfo()
@@ -121,7 +121,7 @@ func TestPublisherWithRouterInfoProvider(t *testing.T) {
 		routerInfo: validRI,
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	assert.NotNil(t, publisher)
 	assert.NotNil(t, publisher.routerInfoProvider)
@@ -138,7 +138,7 @@ func TestPublishOurRouterInfo_MultipleCallsToProvider(t *testing.T) {
 		routerInfo: validRI,
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	// Call publishOurRouterInfo multiple times
 	publisher.publishOurRouterInfo()
@@ -159,7 +159,7 @@ func TestPublishOurRouterInfo_ProviderReturnsNil(t *testing.T) {
 		err:        errors.New("RouterInfo not available"),
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 
 	// Should handle nil RouterInfo gracefully
 	publisher.publishOurRouterInfo()
@@ -200,7 +200,7 @@ func TestPublisherRouterInfoProviderNil(t *testing.T) {
 	config := DefaultPublisherConfig()
 
 	// Creating publisher with nil provider should be allowed
-	publisher := NewPublisher(db, nil, nil, config)
+	publisher := NewPublisher(db, nil, nil, nil, config)
 	require.NotNil(t, publisher)
 	assert.Nil(t, publisher.routerInfoProvider)
 }
@@ -215,7 +215,7 @@ func TestPublisherRouterInfoProviderSet(t *testing.T) {
 		routerInfo: validRI,
 	}
 
-	publisher := NewPublisher(db, nil, provider, config)
+	publisher := NewPublisher(db, nil, nil, provider, config)
 	require.NotNil(t, publisher)
 	assert.NotNil(t, publisher.routerInfoProvider)
 }
