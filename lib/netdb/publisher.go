@@ -13,6 +13,15 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// RouterInfoProvider provides access to the local router's RouterInfo.
+// This interface allows the Publisher to get the current RouterInfo without
+// tight coupling to the router implementation, enabling easier testing.
+type RouterInfoProvider interface {
+	// GetRouterInfo returns the current RouterInfo for this router.
+	// Returns an error if the RouterInfo cannot be constructed or retrieved.
+	GetRouterInfo() (*router_info.RouterInfo, error)
+}
+
 // Publisher handles publishing RouterInfo and LeaseSets to floodfill routers.
 // Publishing ensures that our router and client destinations can be found
 // by other routers in the network.
@@ -22,6 +31,9 @@ type Publisher struct {
 
 	// tunnel pool for sending DatabaseStore messages
 	pool *tunnel.Pool
+
+	// routerInfoProvider supplies our local RouterInfo for publishing
+	routerInfoProvider RouterInfoProvider
 
 	// publishing control
 	ctx    context.Context
@@ -58,12 +70,19 @@ func DefaultPublisherConfig() PublisherConfig {
 // NewPublisher creates a new database publisher.
 // The publisher periodically distributes RouterInfo and LeaseSets to
 // the closest floodfill routers based on Kademlia XOR distance.
-func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, config PublisherConfig) *Publisher {
+//
+// Parameters:
+//   - db: NetworkDatabase for floodfill router selection
+//   - pool: Tunnel pool for sending DatabaseStore messages (can be nil initially)
+//   - routerInfoProvider: Provider for accessing local RouterInfo (can be nil if not publishing RouterInfo)
+//   - config: Publisher configuration (intervals, floodfill count)
+func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Publisher{
 		db:                 db,
 		pool:               pool,
+		routerInfoProvider: routerInfoProvider,
 		ctx:                ctx,
 		cancel:             cancel,
 		routerInfoInterval: config.RouterInfoInterval,
@@ -144,17 +163,38 @@ func (p *Publisher) leaseSetPublishingLoop() {
 	}
 }
 
-// publishOurRouterInfo publishes our local RouterInfo to floodfill routers
+// publishOurRouterInfo publishes our local RouterInfo to floodfill routers.
+// This makes our router discoverable in the I2P network by distributing our
+// RouterInfo to the closest floodfill routers in the DHT.
 func (p *Publisher) publishOurRouterInfo() {
-	// TODO: Get our local RouterInfo from router identity
-	// For now, this is a placeholder that logs the intent
-	log.Debug("Publishing our RouterInfo (implementation pending)")
+	log.Debug("Publishing our RouterInfo")
 
-	// Implementation would:
-	// 1. Get our RouterInfo from router component
-	// 2. Calculate hash of our RouterInfo
-	// 3. Select closest floodfill routers using SelectFloodfillRouters
-	// 4. Send DatabaseStore messages through tunnels to each floodfill
+	// Check if RouterInfo provider is configured
+	if p.routerInfoProvider == nil {
+		log.Debug("RouterInfoProvider not configured, skipping RouterInfo publishing")
+		return
+	}
+
+	// Get our local RouterInfo from the provider
+	ri, err := p.routerInfoProvider.GetRouterInfo()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get local RouterInfo for publishing")
+		return
+	}
+
+	// Validate RouterInfo before publishing
+	if !ri.IsValid() {
+		log.Warn("Local RouterInfo is invalid, skipping publishing")
+		return
+	}
+
+	// Publish the RouterInfo using the existing PublishRouterInfo method
+	if err := p.PublishRouterInfo(*ri); err != nil {
+		log.WithError(err).Warn("Failed to publish local RouterInfo")
+		return
+	}
+
+	log.Debug("Successfully published our RouterInfo to floodfill routers")
 }
 
 // publishAllLeaseSets publishes all LeaseSets in the database

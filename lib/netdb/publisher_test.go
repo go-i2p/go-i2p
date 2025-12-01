@@ -15,12 +15,13 @@ func TestPublisherCreation(t *testing.T) {
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
 
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	assert.NotNil(t, publisher)
 	assert.Equal(t, config.RouterInfoInterval, publisher.routerInfoInterval)
 	assert.Equal(t, config.LeaseSetInterval, publisher.leaseSetInterval)
 	assert.Equal(t, config.FloodfillCount, publisher.floodfillCount)
+	assert.Nil(t, publisher.routerInfoProvider)
 }
 
 // TestPublisherStartWithoutTunnelPool tests that Start fails without a tunnel pool
@@ -28,7 +29,7 @@ func TestPublisherStartWithoutTunnelPool(t *testing.T) {
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
 
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 	err := publisher.Start()
 
 	assert.Error(t, err)
@@ -53,7 +54,7 @@ func TestPublisherGetStats(t *testing.T) {
 		FloodfillCount:     6,
 	}
 
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 	stats := publisher.GetStats()
 
 	assert.Equal(t, 20*time.Minute, stats.RouterInfoInterval)
@@ -67,7 +68,7 @@ func TestPublisherStopBeforeStart(t *testing.T) {
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
 
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	// Should not panic
 	publisher.Stop()
@@ -85,7 +86,7 @@ func TestPublisherCustomConfiguration(t *testing.T) {
 		FloodfillCount:     8,
 	}
 
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	assert.Equal(t, 45*time.Minute, publisher.routerInfoInterval)
 	assert.Equal(t, 10*time.Minute, publisher.leaseSetInterval)
@@ -96,7 +97,7 @@ func TestPublisherCustomConfiguration(t *testing.T) {
 func TestPublishLeaseSetWithNoFloodfills(t *testing.T) {
 	db := newMockNetDB() // Empty database
 	config := DefaultPublisherConfig()
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	// Create an empty LeaseSet for testing (will use zero values)
 	ls := lease_set.LeaseSet{}
@@ -121,7 +122,7 @@ func TestPublishRouterInfoWithFloodfills(t *testing.T) {
 		LeaseSetInterval:   5 * time.Minute,
 		FloodfillCount:     3,
 	}
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	// Create an empty test RouterInfo
 	ri := router_info.RouterInfo{}
@@ -145,7 +146,7 @@ func TestPublisherSelectFloodfills(t *testing.T) {
 		LeaseSetInterval:   5 * time.Minute,
 		FloodfillCount:     4,
 	}
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	hash := common.Hash{5, 6, 7, 8}
 	floodfills, err := publisher.selectFloodfillsForPublishing(hash)
@@ -159,7 +160,7 @@ func TestPublisherSelectFloodfills(t *testing.T) {
 func TestPublisherInterfaceCompliance(t *testing.T) {
 	db := newMockNetDB()
 	config := DefaultPublisherConfig()
-	publisher := NewPublisher(db, nil, config)
+	publisher := NewPublisher(db, nil, nil, config)
 
 	// Verify publisher has all expected methods
 	var _ interface {
@@ -191,7 +192,7 @@ func TestPublisherFloodfillCount(t *testing.T) {
 				FloodfillCount:     tc.floodfillCount,
 			}
 
-			publisher := NewPublisher(db, nil, config)
+			publisher := NewPublisher(db, nil, nil, config)
 			assert.Equal(t, tc.floodfillCount, publisher.floodfillCount)
 		})
 	}
@@ -218,7 +219,7 @@ func TestPublisherIntervalConfigurations(t *testing.T) {
 				FloodfillCount:     4,
 			}
 
-			publisher := NewPublisher(db, nil, config)
+			publisher := NewPublisher(db, nil, nil, config)
 			assert.Equal(t, tc.routerInfoInterval, publisher.routerInfoInterval)
 			assert.Equal(t, tc.leaseSetInterval, publisher.leaseSetInterval)
 		})
