@@ -502,6 +502,7 @@ type TunnelManager struct {
 	buildMutex      sync.RWMutex          // Protect pending builds map
 	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
 	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
+	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
@@ -514,6 +515,9 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		pendingBuilds: make(map[int]*buildRequest),
 		cleanupStop:   make(chan struct{}),
 	}
+
+	// Initialize ReplyProcessor with default config for reply decryption
+	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
 
 	// Start periodic cleanup of expired build requests (every 30 seconds)
 	tm.cleanupTicker = time.NewTicker(30 * time.Second)
@@ -555,6 +559,18 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	tunnelState := tm.createTunnelStateFromResult(result)
 	tm.pool.AddTunnel(tunnelState)
 	tm.trackPendingBuild(result, messageID)
+
+	// Register with ReplyProcessor for decryption key management
+	if regErr := tm.replyProcessor.RegisterPendingBuild(
+		result.TunnelID,
+		result.ReplyKeys,
+		result.ReplyIVs,
+		req.IsInbound,
+		len(result.Hops),
+	); regErr != nil {
+		tm.cleanupFailedBuild(result.TunnelID, messageID)
+		return 0, fmt.Errorf("failed to register pending build: %w", regErr)
+	}
 
 	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
 	// This prevents memory leaks from failed/timeout builds between periodic cleanups
@@ -966,19 +982,27 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 		"message_id":   messageID,
 	}).Debug("Processing tunnel reply")
 
-	// Get the pending build request for decryption keys (currently unused but will be needed)
+	// Get the pending build request to find tunnel ID
 	tm.buildMutex.RLock()
-	_, exists := tm.pendingBuilds[messageID]
+	req, exists := tm.pendingBuilds[messageID]
 	tm.buildMutex.RUnlock()
 
 	if !exists {
 		log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
 		// Continue processing even without pending build (allows testing and handles late replies)
+		err := handler.ProcessReply()
+		if err != nil {
+			return err
+		}
+		// Update tunnel states if possible (without decryption)
+		if tm.pool != nil {
+			tm.updateTunnelStatesFromReply(messageID, records, nil)
+		}
+		return nil
 	}
 
-	// Process the reply to get build results
-	// TODO: Pass decryption keys (req.replyKeys, req.replyIVs) to handler once interface is updated
-	err := handler.ProcessReply()
+	// Use ReplyProcessor to decrypt and process the reply with proper key handling
+	err := tm.replyProcessor.ProcessBuildReply(handler, req.tunnelID)
 
 	// Update tunnel state based on reply processing results
 	if tm.pool != nil {
