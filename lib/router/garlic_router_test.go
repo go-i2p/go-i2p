@@ -223,7 +223,6 @@ func TestForwardToRouter_Reflexive(t *testing.T) {
 
 	// Forward to ourselves (reflexive delivery)
 	err := gr.ForwardToRouter(gr.routerIdentity, msg)
-
 	// The message will fail processing because it doesn't implement the required
 	// interfaces, but we're testing that it attempts to process it locally
 	// rather than trying to send it over the network.

@@ -1622,7 +1622,7 @@ func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearc
 // It checks that the uncompressed size doesn't exceed maxUncompressed and that
 // the compression ratio doesn't exceed maxRatio.
 // Returns the uncompressed size and an error if validation fails.
-func validateGzipSize(data []byte, maxUncompressed int, maxRatio int) (int, error) {
+func validateGzipSize(data []byte, maxUncompressed, maxRatio int) (int, error) {
 	gr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return 0, fmt.Errorf("invalid gzip data: %w", err)
