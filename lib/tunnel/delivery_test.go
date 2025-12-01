@@ -176,7 +176,7 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	// Create delivery instruction with DT_TUNNEL and all-zero hash
 	data := []byte{}
 
-	flag := byte(0x10) // DT_TUNNEL (1 << 4)
+	flag := byte(0x30) // DT_TUNNEL (1 << 5) with hasDelay (1 << 4)
 	data = append(data, flag)
 
 	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}
@@ -209,7 +209,7 @@ func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 	// Create delivery instruction with DT_TUNNEL but insufficient data
 	data := []byte{}
 
-	flag := byte(0x10) // DT_TUNNEL (1 << 4)
+	flag := byte(0x20) // DT_TUNNEL (1 << 5) without hasDelay
 	data = append(data, flag)
 
 	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}

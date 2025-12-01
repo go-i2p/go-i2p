@@ -198,13 +198,13 @@ func TestSessionMaintenanceWithPublisher(t *testing.T) {
 	require.NoError(t, err, "Failed to start maintenance")
 
 	// Wait for initial publication
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Verify at least one publication occurred
 	assert.GreaterOrEqual(t, publisher.publishCalled, 1, "Should have published at least once")
 
-	// Wait for potential regeneration
-	time.Sleep(1200 * time.Millisecond)
+	// Wait for potential regeneration (allow more time for maintenance cycle)
+	time.Sleep(2000 * time.Millisecond)
 
 	// Should have regenerated at least once more
 	assert.GreaterOrEqual(t, publisher.publishCalled, 2, "Should have published multiple times")

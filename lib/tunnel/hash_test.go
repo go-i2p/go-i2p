@@ -18,8 +18,8 @@ func TestHashDTRouter(t *testing.T) {
 	}
 
 	// Build DT_ROUTER delivery instructions
-	// Flag byte: delivery type = 0x01 (DT_ROUTER) << 5 = 0x20
-	flag := byte(0x20)
+	// Flag byte: delivery type = 0x02 (DT_ROUTER) << 5 = 0x40
+	flag := byte(0x40)
 	instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 	copy(instructions[FLAG_SIZE:FLAG_SIZE+HASH_SIZE], expectedHash[:])
@@ -52,11 +52,10 @@ func TestHashDTTunnel(t *testing.T) {
 	}
 
 	// Build DT_TUNNEL delivery instructions
-	// Flag byte: delivery type = 0x01 (DT_TUNNEL) in bits 5-4
-	// DT_TUNNEL is value 1, so (1 << 4) = 0x10
-	// Note: 0x10 also sets hasDelay bit, so we need to include a delay byte
-	flag := byte(0x10)
-	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1+SIZE_FIELD_SIZE) // +1 for delay byte
+	// Flag byte: delivery type = 0x01 (DT_TUNNEL) in bits 6-5
+	// DT_TUNNEL is value 1, so (1 << 5) = 0x20
+	flag := byte(0x20)
+	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 
 	// Add tunnel ID (4 bytes)
@@ -68,12 +67,9 @@ func TestHashDTTunnel(t *testing.T) {
 	// Add hash after tunnel ID
 	copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], expectedHash[:])
 
-	// Add delay byte (required because flag 0x10 has hasDelay bit set)
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-
 	// Add dummy size field
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x00
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+2] = 0x10
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
 
 	di, err := NewDeliveryInstructions(instructions)
 	if err != nil {
@@ -112,7 +108,7 @@ func TestHashDTLocalError(t *testing.T) {
 // delivery instructions don't contain enough data for DT_ROUTER hash.
 func TestHashInsufficientDataDTRouter(t *testing.T) {
 	// Build incomplete DT_ROUTER delivery instructions (missing hash data)
-	flag := byte(0x20)                         // DT_ROUTER
+	flag := byte(0x40)                         // DT_ROUTER (2 << 5)
 	instructions := make([]byte, FLAG_SIZE+10) // Only 10 bytes instead of 32
 	instructions[0] = flag
 
@@ -126,7 +122,7 @@ func TestHashInsufficientDataDTRouter(t *testing.T) {
 // delivery instructions don't contain enough data for DT_TUNNEL hash.
 func TestHashInsufficientDataDTTunnel(t *testing.T) {
 	// Build incomplete DT_TUNNEL delivery instructions
-	flag := byte(0x10)                                        // DT_TUNNEL (1 << 4)
+	flag := byte(0x20)                                        // DT_TUNNEL (1 << 5)
 	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+10) // Only 10 bytes of hash instead of 32
 	instructions[0] = flag
 
@@ -172,7 +168,7 @@ func TestHashVariousDTRouterHashes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Build DT_ROUTER delivery instructions
-			flag := byte(0x20)
+			flag := byte(0x40) // DT_ROUTER (2 << 5)
 			instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 			instructions[0] = flag
 			copy(instructions[FLAG_SIZE:FLAG_SIZE+HASH_SIZE], tc.hash[:])
@@ -222,10 +218,9 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Build DT_TUNNEL delivery instructions
-			// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
-			// Note: 0x10 also sets hasDelay bit, so we need to include a delay byte
-			flag := byte(0x10)
-			instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1+SIZE_FIELD_SIZE) // +1 for delay byte
+			// DT_TUNNEL (value 1) in bits 6-5: (1 << 5) = 0x20
+			flag := byte(0x20)
+			instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 			instructions[0] = flag
 
 			// Add tunnel ID
@@ -237,12 +232,9 @@ func TestHashVariousDTTunnelHashes(t *testing.T) {
 			// Add hash
 			copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], tc.hash[:])
 
-			// Add delay byte (required because flag 0x10 has hasDelay bit set)
-			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-
 			// Add size field
-			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x00
-			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+2] = 0x10
+			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
+			instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
 
 			di, err := NewDeliveryInstructions(instructions)
 			if err != nil {
@@ -267,7 +259,7 @@ func BenchmarkHashDTRouter(b *testing.B) {
 		b.Fatalf("Failed to generate random hash: %v", err)
 	}
 
-	flag := byte(0x20)
+	flag := byte(0x40) // DT_ROUTER (2 << 5)
 	instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 	copy(instructions[FLAG_SIZE:FLAG_SIZE+HASH_SIZE], expectedHash[:])
@@ -292,8 +284,8 @@ func BenchmarkHashDTTunnel(b *testing.B) {
 		b.Fatalf("Failed to generate random hash: %v", err)
 	}
 
-	// DT_TUNNEL (value 1) in bits 5-4: (1 << 4) = 0x10
-	flag := byte(0x10)
+	// DT_TUNNEL (value 1) in bits 6-5: (1 << 5) = 0x20
+	flag := byte(0x20)
 	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 	instructions[1] = 0x12
