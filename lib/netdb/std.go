@@ -390,9 +390,9 @@ func (db *StdNetDB) Size() (routers int) {
 		log.Debug("Recalculating NetDB size")
 		err = db.RecalculateSize()
 		if err != nil {
-			// TODO : what now? let's panic for now
-			// util.Panicf("could not recalculate netdb size: %s", err)
-			log.WithError(err).Panic("Failed to recalculate NetDB size")
+			// Return 0 on recalculation failure to avoid panic while still logging error
+			log.WithError(err).Error("Failed to recalculate NetDB size, returning 0")
+			return 0
 		}
 	}
 	data, err = os.ReadFile(db.cacheFilePath())
@@ -400,9 +400,11 @@ func (db *StdNetDB) Size() (routers int) {
 		routers, err = strconv.Atoi(string(data))
 		if err != nil {
 			log.WithError(err).Error("Failed to parse NetDB size from cache")
+			return 0
 		}
 	} else {
 		log.WithError(err).Error("Failed to read NetDB size cache file")
+		return 0
 	}
 	return
 }
