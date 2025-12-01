@@ -48,8 +48,8 @@ func (tmux *TransportMuxer) Close() (err error) {
 	log.Debug("TransportMuxer: Closing all transports")
 	for i, t := range tmux.trans {
 		err = t.Close()
-		if t != nil {
-			// TODO: handle error (?)
+		if err != nil {
+			// Log error but continue closing remaining transports
 			log.WithError(err).WithField("transport_index", i).Warn("TransportMuxer: Error closing transport")
 		} else {
 			log.WithField("transport_index", i).Debug("TransportMuxer: Transport closed successfully")
