@@ -55,23 +55,46 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 }
 
 // NewTunnelBuildMessage creates a new TunnelBuild I2NP message
-// Serializes BuildRequestRecords into cleartext format (222 bytes each), then pads to 528 bytes.
-// Note: In production tunnel building, these cleartext records would be encrypted using ECIES-X25519
-// before transmission. This method creates the unencrypted message structure for local processing.
+//
+// SPECIFICATION COMPLIANCE NOTE:
+// According to I2P specification (https://geti2p.net/spec/i2np), BuildRequestRecords
+// MUST be encrypted before transmission using either:
+//   - ElGamal-2048 encryption (legacy format, 528 bytes)
+//   - ECIES-X25519-AEAD-Ratchet encryption (modern format, I2P 0.9.44+)
+//
+// CURRENT LIMITATION:
+// This implementation currently creates CLEARTEXT records (222 bytes + 306 padding = 528 bytes).
+// Proper encryption using ElGamal or ECIES is NOT YET IMPLEMENTED.
+//
+// For specification-compliant tunnel building, encryption must be added using:
+//  1. Recipient router's encryption public key (from RouterInfo)
+//  2. ElGamal-2048 or ECIES-X25519 encryption
+//  3. Proper padding and formatting per specification
+//
+// TODO: Implement EncryptBuildRequestRecord() function that takes:
+//   - BuildRequestRecord (cleartext)
+//   - Recipient RouterInfo (for encryption public key)
+//   - Returns encrypted 528-byte record
+//
+// This method is suitable for:
+//   - Local testing with cooperating routers that accept cleartext
+//   - Internal message structure creation before encryption
+//   - Unit testing of serialization logic
+//
+// DO NOT USE for production tunnel building without implementing encryption first.
 func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 	msg := &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
 		Records:         TunnelBuild(records),
 	}
 
-	// Serialize each record into 528-byte chunks (222 bytes cleartext + 306 bytes padding)
-	// This matches the wire format size, though encryption would happen at tunnel build time
+	// Serialize cleartext records (NOT specification-compliant for network transmission)
+	// Each record: 222 bytes cleartext + 306 bytes padding = 528 bytes total
 	data := make([]byte, 8*528)
 	for i := 0; i < 8; i++ {
-		cleartext := records[i].Bytes() // 222 bytes cleartext
+		cleartext := records[i].Bytes() // 222 bytes cleartext per I2P spec
 		copy(data[i*528:i*528+222], cleartext)
-		// Remaining 306 bytes stay as zero padding
-		// In production, this would be: encrypted = ECIES_encrypt(cleartext + padding, destPublicKey)
+		// Remaining 306 bytes: zero padding (spec requires random padding for encrypted records)
 	}
 	msg.SetData(data)
 
@@ -94,9 +117,26 @@ func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary deserializes the TunnelBuild message
-// Parses 8 build request records from 528-byte chunks.
-// Note: This expects cleartext records (not ECIES-encrypted). Decryption should happen
-// before calling this method if processing encrypted tunnel build messages.
+//
+// SPECIFICATION COMPLIANCE NOTE:
+// According to I2P specification, BuildRequestRecords in TunnelBuild messages are
+// encrypted with ElGamal-2048 or ECIES-X25519. This implementation assumes CLEARTEXT
+// records (for testing or from trusted sources).
+//
+// For specification-compliant processing of network messages:
+//  1. Decrypt each 528-byte chunk using local router's private encryption key
+//  2. Verify decryption succeeded (ElGamal padding check or AEAD authentication)
+//  3. Extract 222-byte cleartext BuildRequestRecord
+//  4. Parse using ReadBuildRequestRecord()
+//
+// CURRENT LIMITATION:
+// This method parses cleartext records directly from the 528-byte chunks without decryption.
+// Encrypted records from production I2P routers will FAIL to parse correctly.
+//
+// TODO: Implement DecryptBuildRequestRecord() that takes:
+//   - 528-byte encrypted record
+//   - Local router's decryption private key
+//   - Returns decrypted 222-byte cleartext record
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	if err := msg.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
 		return oops.Wrapf(err, "failed to unmarshal base I2NP message")
@@ -107,7 +147,8 @@ func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("invalid TunnelBuild data size: expected %d bytes, got %d", 8*528, len(recordData))
 	}
 
-	// Parse each 528-byte chunk as a BuildRequestRecord (first 222 bytes are cleartext record)
+	// Parse each 528-byte chunk as cleartext BuildRequestRecord
+	// WARNING: Does NOT handle encrypted records (non-compliant with I2P spec for network messages)
 	for i := 0; i < 8; i++ {
 		record, err := ReadBuildRequestRecord(recordData[i*528 : (i+1)*528])
 		if err != nil {
