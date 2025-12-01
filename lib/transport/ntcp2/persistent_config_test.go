@@ -15,7 +15,6 @@ func TestLoadOrGenerateObfuscationIV_NewFile(t *testing.T) {
 
 	pc := NewPersistentConfig(tempDir)
 	iv, err := pc.LoadOrGenerateObfuscationIV()
-
 	if err != nil {
 		t.Fatalf("Failed to generate obfuscation IV: %v", err)
 	}
@@ -127,7 +126,6 @@ func TestLoadOrGenerateObfuscationIV_DirectoryCreation(t *testing.T) {
 
 	pc := NewPersistentConfig(nestedDir)
 	_, err := pc.LoadOrGenerateObfuscationIV()
-
 	if err != nil {
 		t.Fatalf("Failed to generate IV with nested directory: %v", err)
 	}
