@@ -1824,4 +1824,10 @@ func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
 	return fmt.Errorf("message does not implement tunnel interfaces")
 }
 
+// GetProcessor returns the underlying MessageProcessor for direct access.
+// This is used by the router to set up garlic clove forwarding.
+func (mr *MessageRouter) GetProcessor() *MessageProcessor {
+	return mr.processor
+}
+
 // Helper functions have been moved to utils.go

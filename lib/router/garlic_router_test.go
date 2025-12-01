@@ -14,8 +14,8 @@ import (
 
 // Mock NetDB for testing
 type mockNetDB struct {
-	routers    map[common.Hash]router_info.RouterInfo
-	leaseSets  map[common.Hash]lease_set.LeaseSet
+	routers   map[common.Hash]router_info.RouterInfo
+	leaseSets map[common.Hash]lease_set.LeaseSet
 }
 
 func newMockNetDB() *mockNetDB {
@@ -193,7 +193,7 @@ func TestSetMessageProcessor(t *testing.T) {
 	}
 }
 
-// Test ForwardToDestination (not yet implemented)
+// Test ForwardToDestination with no LeaseSet in NetDB
 func TestForwardToDestination(t *testing.T) {
 	gr := createTestGarlicRouter()
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
@@ -202,11 +202,11 @@ func TestForwardToDestination(t *testing.T) {
 	err := gr.ForwardToDestination(destHash, msg)
 
 	if err == nil {
-		t.Error("Expected error for unimplemented DESTINATION delivery, got nil")
+		t.Error("Expected error when destination not found in NetDB, got nil")
 	}
 
-	// Verify error message indicates not implemented
-	expectedSubstring := "not yet implemented"
+	// Verify error message indicates LeaseSet lookup failure
+	expectedSubstring := "LeaseSet"
 	if !contains(err.Error(), expectedSubstring) {
 		t.Errorf("Error message should contain '%s', got: %s", expectedSubstring, err.Error())
 	}
@@ -256,7 +256,7 @@ func TestForwardToRouter_ReflexiveNoProcessor(t *testing.T) {
 	}
 }
 
-// Test ForwardToRouter - router not found
+// Test ForwardToRouter - router not found in NetDB
 func TestForwardToRouter_NotFound(t *testing.T) {
 	gr := createTestGarlicRouter()
 
@@ -269,9 +269,9 @@ func TestForwardToRouter_NotFound(t *testing.T) {
 		t.Error("Expected error for router not found, got nil")
 	}
 
-	expectedSubstring := "not found in NetDB"
+	expectedSubstring := "RouterInfo"
 	if !contains(err.Error(), expectedSubstring) {
-		t.Errorf("Error should mention NetDB lookup failure, got: %s", err.Error())
+		t.Errorf("Error should mention RouterInfo lookup failure, got: %s", err.Error())
 	}
 }
 
@@ -300,7 +300,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 	_ = foundRI // Use the variable to avoid unused warning
 }
 
-// Test ForwardThroughTunnel (not yet implemented)
+// Test ForwardThroughTunnel - gateway not in NetDB
 func TestForwardThroughTunnel(t *testing.T) {
 	gr := createTestGarlicRouter()
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
@@ -310,10 +310,10 @@ func TestForwardThroughTunnel(t *testing.T) {
 	err := gr.ForwardThroughTunnel(gatewayHash, tunnelID, msg)
 
 	if err == nil {
-		t.Error("Expected error for unimplemented TUNNEL delivery, got nil")
+		t.Error("Expected error when gateway not found in NetDB, got nil")
 	}
 
-	expectedSubstring := "not yet implemented"
+	expectedSubstring := "RouterInfo"
 	if !contains(err.Error(), expectedSubstring) {
 		t.Errorf("Error message should contain '%s', got: %s", expectedSubstring, err.Error())
 	}

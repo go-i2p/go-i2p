@@ -39,6 +39,8 @@ type Router struct {
 	*netdb.StdNetDB
 	// message router for processing I2NP messages
 	messageRouter *i2np.MessageRouter
+	// garlic message router for handling non-LOCAL garlic clove forwarding
+	garlicRouter *GarlicMessageRouter
 	// router configuration
 	cfg *config.RouterConfig
 	// close channel
@@ -284,7 +286,59 @@ func (r *Router) initializeMessageRouter() {
 	// Set router as SessionProvider to enable message response routing
 	r.messageRouter.SetSessionProvider(r)
 
-	log.Debug("Message router initialized with NetDB, peer selection, and session provider")
+	// Initialize garlic message router for handling garlic clove forwarding
+	r.initializeGarlicRouter()
+
+	log.Debug("Message router initialized with NetDB, peer selection, session provider, and garlic forwarding")
+}
+
+// initializeGarlicRouter sets up garlic message forwarding for non-LOCAL delivery types.
+// This enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) garlic clove deliveries.
+func (r *Router) initializeGarlicRouter() {
+	// Get our router identity hash for reflexive delivery detection
+	routerHash := r.getOurRouterHash()
+
+	// Wrap StdNetDB with adapter to match GarlicNetDB interface
+	garlicNetDB := newNetDBAdapter(r.StdNetDB)
+
+	// Create garlic message router with router infrastructure
+	// Note: tunnelPool is nil for now - TUNNEL delivery will return error until tunnel support is added
+	r.garlicRouter = NewGarlicMessageRouter(
+		garlicNetDB,      // NetDB for LeaseSet/RouterInfo lookups
+		r.TransportMuxer, // Transport for sending to peer routers
+		nil,              // Tunnel pool - TODO: add when tunnel support is implemented
+		routerHash,       // Our identity for reflexive routing
+	)
+
+	// Set bidirectional references for LOCAL delivery recursion
+	r.garlicRouter.SetMessageProcessor(r.messageRouter.GetProcessor())
+	r.messageRouter.GetProcessor().SetCloveForwarder(r.garlicRouter)
+
+	log.WithFields(logger.Fields{
+		"our_hash":        fmt.Sprintf("%x", routerHash[:8]),
+		"tunnel_support":  false,
+		"transport_ready": r.TransportMuxer != nil,
+		"netdb_ready":     r.StdNetDB != nil,
+	}).Debug("Garlic message router initialized for non-LOCAL clove forwarding")
+}
+
+// getOurRouterHash returns our router's identity hash.
+// Returns zero hash on error (garlic router will still function but won't detect reflexive routing).
+func (r *Router) getOurRouterHash() common.Hash {
+	// Try to construct a RouterInfo to get our hash
+	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
+	if err != nil {
+		log.WithError(err).Warn("Failed to construct RouterInfo for hash extraction, reflexive routing may not work")
+		return common.Hash{} // Return zero hash as fallback
+	}
+
+	hash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get IdentHash from RouterInfo, reflexive routing may not work")
+		return common.Hash{} // Return zero hash as fallback
+	}
+
+	return hash
 }
 
 // ensureNetDBReady validates NetDB state and performs reseed if needed

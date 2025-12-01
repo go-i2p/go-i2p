@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
@@ -23,6 +24,26 @@ type GarlicNetDB interface {
 	StoreRouterInfo(ri router_info.RouterInfo)
 	Size() int
 	SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error)
+}
+
+// netDBAdapter wraps netdb.StdNetDB to match the GarlicNetDB interface.
+// The main difference is StoreRouterInfo signature - StdNetDB takes (hash, data, type)
+// while GarlicNetDB takes just RouterInfo.
+type netDBAdapter struct {
+	*netdb.StdNetDB
+}
+
+// StoreRouterInfo adapts the StdNetDB.StoreRouterInfo method to match GarlicNetDB interface.
+// This is a no-op for now as garlic routing doesn't need to store RouterInfos.
+func (a *netDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
+	// No-op: garlic router doesn't need to store RouterInfos, only read them
+	// If needed in the future, this could serialize the RouterInfo and call
+	// a.StdNetDB.StoreRouterInfo(hash, data, type)
+}
+
+// newNetDBAdapter creates an adapter that wraps StdNetDB for use with GarlicMessageRouter.
+func newNetDBAdapter(netdb *netdb.StdNetDB) GarlicNetDB {
+	return &netDBAdapter{StdNetDB: netdb}
 }
 
 // GarlicMessageRouter provides router-level garlic message forwarding.
