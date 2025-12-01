@@ -610,8 +610,20 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 		"size":      len(leaseSetBytes),
 	}).Info("leaseset_created")
 
-	// TODO: Publish LeaseSet to network database (NetDB)
-	// This would involve sending a DatabaseStore message with the LeaseSet
+	// Publish LeaseSet to network database (NetDB) if publisher is configured.
+	// The session's publishLeaseSetToNetwork method:
+	// - Calculates the destination hash (SHA256 of destination)
+	// - Calls the LeaseSetPublisher.PublishLeaseSet() interface
+	// - Returns nil if no publisher configured (allows testing without network)
+	// - Logs errors but doesn't fail the operation (LeaseSet is cached locally)
+	if err := session.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
+		// Log warning but don't fail - LeaseSet creation succeeded
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleCreateLeaseSet",
+			"sessionID": session.ID(),
+			"error":     err,
+		}).Warn("failed_to_publish_leaseset_to_network")
+	}
 
 	// For I2CP protocol, we don't send a response to CreateLeaseSet
 	// The client just needs to know the operation succeeded (no error)
