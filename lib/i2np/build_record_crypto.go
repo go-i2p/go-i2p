@@ -6,8 +6,12 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/logger"
+	"github.com/samber/oops"
 )
 
 // BuildRecordCrypto provides encryption/decryption for tunnel build records.
@@ -251,4 +255,219 @@ func CreateBuildResponseRecord(reply byte, randomData [495]byte) BuildResponseRe
 		RandomData: randomData,
 		Reply:      reply,
 	}
+}
+
+// EncryptBuildRequestRecord encrypts a BuildRequestRecord using ECIES-X25519-AEAD encryption.
+//
+// This implements the I2P specification for encrypted tunnel build records.
+// The 222-byte cleartext record is encrypted using the recipient router's X25519 public key,
+// then padded to the standard 528-byte format.
+//
+// Format:
+//   - Bytes 0-15: First 16 bytes of SHA-256 hash of recipient's RouterIdentity
+//   - Bytes 16-527: ECIES-X25519 encrypted data
+//
+// The ECIES encryption produces: [ephemeral_pubkey(32)][nonce(12)][aead_ciphertext(222+16_tag=238)]
+// Total ECIES output: 32 + 12 + 238 = 282 bytes
+// Remaining padding: 512 - 282 = 230 bytes of zeros
+//
+// Parameters:
+//   - record: The cleartext BuildRequestRecord (serializes to 222 bytes)
+//   - recipientRouterInfo: The RouterInfo of the hop that will decrypt this record
+//
+// Returns:
+//   - [528]byte: Encrypted build request record ready for network transmission
+//   - error: Any encryption error encountered
+func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([528]byte, error) {
+	var encrypted [528]byte
+
+	// Step 1: Serialize the cleartext record (222 bytes)
+	cleartext := record.Bytes()
+	if len(cleartext) != 222 {
+		return encrypted, oops.Errorf("invalid cleartext size: expected 222 bytes, got %d", len(cleartext))
+	}
+
+	// Step 2: Get recipient's X25519 public encryption key from RouterInfo
+	recipientPubKey, err := extractEncryptionPublicKey(recipientRouterInfo)
+	if err != nil {
+		return encrypted, oops.Wrapf(err, "failed to extract encryption public key")
+	}
+
+	// Step 3: Calculate first 16 bytes of SHA-256 hash of RouterIdentity (toPeer field)
+	identityHash := calculateIdentityHash(recipientRouterInfo)
+	copy(encrypted[0:16], identityHash[:16])
+
+	// Step 4: Encrypt the 222-byte cleartext using ECIES-X25519
+	// This produces: ephemeral_pubkey(32) + nonce(12) + aead_ciphertext(222+16=238) = 282 bytes
+	ciphertext, err := ecies.EncryptECIESX25519(recipientPubKey, cleartext)
+	if err != nil {
+		return encrypted, oops.Wrapf(err, "ECIES encryption failed")
+	}
+
+	// Step 5: Verify ciphertext size
+	if len(ciphertext) > 512 {
+		return encrypted, oops.Errorf("ciphertext too large: %d bytes (max 512)", len(ciphertext))
+	}
+
+	// Step 6: Copy ciphertext to bytes 16-527 (remaining bytes are zero-padded)
+	copy(encrypted[16:], ciphertext)
+
+	log.WithField("record_size", 528).
+		WithField("cleartext_size", 222).
+		WithField("ciphertext_size", len(ciphertext)).
+		Debug("BuildRequestRecord encrypted successfully")
+
+	return encrypted, nil
+}
+
+// DecryptBuildRequestRecord decrypts an encrypted BuildRequestRecord using ECIES-X25519-AEAD.
+//
+// This implements the I2P specification for decrypting tunnel build records.
+// The recipient router uses its X25519 private key to decrypt the 512-byte ciphertext portion,
+// extracting the 222-byte cleartext BuildRequestRecord.
+//
+// Format:
+//   - Bytes 0-15: First 16 bytes of SHA-256 hash of our RouterIdentity (ignored during decryption)
+//   - Bytes 16-527: ECIES-X25519 encrypted data (ephemeral_pubkey + nonce + aead_ciphertext)
+//
+// Parameters:
+//   - encrypted: The 528-byte encrypted build request record
+//   - privateKey: Our router's X25519 private encryption key (32 bytes)
+//
+// Returns:
+//   - BuildRequestRecord: Decrypted and parsed build request record
+//   - error: Any decryption or parsing error encountered
+func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error) {
+	// Step 1: Validate private key size
+	if len(privateKey) != 32 {
+		return BuildRequestRecord{}, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+	}
+
+	// Step 2: Extract ciphertext portion (bytes 16-527)
+	// Bytes 0-15 contain the identity hash prefix (not needed for decryption)
+	ciphertext := encrypted[16:]
+
+	// Step 3: Decrypt using ECIES-X25519
+	// This should produce the original 222-byte cleartext
+	cleartext, err := ecies.DecryptECIESX25519(privateKey, ciphertext)
+	if err != nil {
+		return BuildRequestRecord{}, oops.Wrapf(err, "ECIES decryption failed")
+	}
+
+	// Step 4: Verify cleartext size
+	if len(cleartext) != 222 {
+		return BuildRequestRecord{}, oops.Errorf("invalid decrypted size: expected 222 bytes, got %d", len(cleartext))
+	}
+
+	// Step 5: Parse the cleartext into BuildRequestRecord structure
+	record, err := ReadBuildRequestRecord(cleartext)
+	if err != nil {
+		return BuildRequestRecord{}, oops.Wrapf(err, "failed to parse decrypted record")
+	}
+
+	log.WithField("record_size", 528).
+		WithField("cleartext_size", len(cleartext)).
+		Debug("BuildRequestRecord decrypted successfully")
+
+	return record, nil
+}
+
+// extractEncryptionPublicKey retrieves the X25519 public encryption key from a RouterInfo.
+//
+// This extracts the 32-byte X25519 public key used for ECIES encryption from the
+// RouterInfo's RouterIdentity KeysAndCert structure.
+//
+// Parameters:
+//   - routerInfo: The RouterInfo containing the encryption public key
+//
+// Returns:
+//   - []byte: 32-byte X25519 public encryption key
+//   - error: If the RouterInfo is invalid or key extraction fails
+func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, error) {
+	// Get the RouterIdentity from RouterInfo
+	identity := routerInfo.RouterIdentity()
+	if identity == nil {
+		return nil, oops.Errorf("RouterInfo has nil RouterIdentity")
+	}
+
+	// Get the KeysAndCert which contains the encryption public key
+	keysAndCert := identity.KeysAndCert
+	if keysAndCert == nil {
+		return nil, oops.Errorf("RouterIdentity has nil KeysAndCert")
+	}
+
+	// Extract the public encryption key (X25519, 32 bytes for modern I2P routers)
+	pubKey, err := keysAndCert.PublicKey()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to get PublicKey from KeysAndCert")
+	}
+	if pubKey == nil {
+		return nil, oops.Errorf("KeysAndCert has nil PublicKey")
+	}
+
+	pubKeyBytes := pubKey.Bytes()
+	if len(pubKeyBytes) != 32 {
+		return nil, oops.Errorf("invalid public key size: expected 32 bytes (X25519), got %d", len(pubKeyBytes))
+	}
+
+	return pubKeyBytes, nil
+}
+
+// calculateIdentityHash computes the SHA-256 hash of a RouterIdentity.
+//
+// This is used to create the "toPeer" field in encrypted BuildRequestRecords,
+// which helps routers quickly identify if a record is intended for them without
+// attempting full decryption.
+//
+// Parameters:
+//   - routerInfo: The RouterInfo whose identity should be hashed
+//
+// Returns:
+//   - [32]byte: SHA-256 hash of the RouterIdentity bytes
+func calculateIdentityHash(routerInfo router_info.RouterInfo) [32]byte {
+	identity := routerInfo.RouterIdentity()
+	// Get bytes from KeysAndCert (which is what RouterIdentity wraps)
+	identityBytes, _ := identity.KeysAndCert.Bytes()
+	return sha256.Sum256(identityBytes)
+}
+
+// VerifyIdentityHash checks if an encrypted BuildRequestRecord is intended for us.
+//
+// This provides a fast pre-check before attempting decryption by comparing the
+// first 16 bytes of the record (identity hash prefix) with our own identity hash.
+//
+// Parameters:
+//   - encrypted: The 528-byte encrypted build request record
+//   - ourRouterInfo: Our router's RouterInfo
+//
+// Returns:
+//   - bool: true if the record is likely intended for us, false otherwise
+func VerifyIdentityHash(encrypted [528]byte, ourRouterInfo router_info.RouterInfo) bool {
+	// Calculate our identity hash
+	ourHash := calculateIdentityHash(ourRouterInfo)
+
+	// Compare first 16 bytes
+	for i := 0; i < 16; i++ {
+		if encrypted[i] != ourHash[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ExtractIdentityHashPrefix returns the first 16 bytes of an encrypted record.
+//
+// This is useful for debugging and logging to identify which router a record
+// is intended for without performing full decryption.
+//
+// Parameters:
+//   - encrypted: The 528-byte encrypted build request record
+//
+// Returns:
+//   - common.Hash: The identity hash prefix (first 16 bytes copied to Hash type)
+func ExtractIdentityHashPrefix(encrypted [528]byte) common.Hash {
+	var hash common.Hash
+	copy(hash[:16], encrypted[0:16])
+	return hash
 }
