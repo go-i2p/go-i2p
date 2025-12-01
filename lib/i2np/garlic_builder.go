@@ -554,16 +554,33 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 	offset += bytesRead
 
 	// Parse I2NP message
-	// Note: This is a simplified parser - full I2NP message parsing would be needed
-	// For now, we validate that there's data and extract basic structure
-	if len(data) < offset+5 {
-		return nil, 0, oops.Errorf("insufficient data for I2NP message")
+	// Read the I2NP message size from the standard NTCP header
+	// Standard I2NP header structure:
+	//   - type (1 byte) at offset 0
+	//   - msg_id (4 bytes) at offset 1-4
+	//   - expiration (8 bytes) at offset 5-12
+	//   - size (2 bytes) at offset 13-14
+	//   - checksum (1 byte) at offset 15
+	//   - data (size bytes) at offset 16+
+
+	if len(data) < offset+16 {
+		return nil, 0, oops.Errorf("insufficient data for I2NP message header (need %d bytes, have %d)", offset+16, len(data))
 	}
 
-	// Skip I2NP message parsing for now (would need full message type dispatch)
-	// In practice, this would call the appropriate I2NP message parser
-	// For security, we just validate minimum structure and skip ahead
-	messageLength := 100 // Placeholder - would be read from message header
+	// Read message size from I2NP header (bytes 13-14 from start of message)
+	messageSize, err := ReadI2NPNTCPMessageSize(data[offset:])
+	if err != nil {
+		return nil, 0, oops.Wrapf(err, "failed to read I2NP message size")
+	}
+
+	// Total I2NP message length = 16-byte header + message data
+	messageLength := 16 + messageSize
+
+	// Validate we have enough data for the complete message
+	if len(data) < offset+messageLength {
+		return nil, 0, oops.Errorf("insufficient data for I2NP message (need %d bytes, have %d)", offset+messageLength, len(data))
+	}
+
 	offset += messageLength
 
 	// Ensure enough data for clove ID + expiration + certificate
