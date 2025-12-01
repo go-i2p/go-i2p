@@ -603,13 +603,40 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 
 // handleGetBandwidthLimits returns bandwidth limits
 func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
-	// TODO: Implement actual bandwidth limits
-	// For now, return empty payload
+	// I2CP BandwidthLimits format: two 4-byte integers (big endian)
+	// [inbound_limit:4][outbound_limit:4]
+	// Values are in bytes per second (0 = unlimited)
+
+	// Default bandwidth limits (in bytes per second)
+	var (
+		inboundLimit  uint32 = 100 * 1024 * 1024 // 100 MB/s inbound
+		outboundLimit uint32 = 100 * 1024 * 1024 // 100 MB/s outbound
+	)
+
+	payload := make([]byte, 8)
+
+	// Inbound limit (4 bytes, big endian)
+	payload[0] = byte(inboundLimit >> 24)
+	payload[1] = byte(inboundLimit >> 16)
+	payload[2] = byte(inboundLimit >> 8)
+	payload[3] = byte(inboundLimit)
+
+	// Outbound limit (4 bytes, big endian)
+	payload[4] = byte(outboundLimit >> 24)
+	payload[5] = byte(outboundLimit >> 16)
+	payload[6] = byte(outboundLimit >> 8)
+	payload[7] = byte(outboundLimit)
+
 	response := &Message{
 		Type:      MessageTypeBandwidthLimits,
 		SessionID: msg.SessionID,
-		Payload:   []byte{}, // TODO: Encode bandwidth limits
+		Payload:   payload,
 	}
+
+	log.WithFields(logger.Fields{
+		"inbound_bps":  inboundLimit,
+		"outbound_bps": outboundLimit,
+	}).Debug("Returning bandwidth limits to client")
 
 	return response, nil
 }
