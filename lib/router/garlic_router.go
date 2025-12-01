@@ -432,12 +432,14 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 		// Try to read LeaseSet with short timeout (non-blocking)
 		select {
 		case ls, ok := <-leaseSetChan:
-			if !ok || !ls.IsValid() {
+			if !ok {
 				gr.cleanupExpiredMessages(destHash, messages, now)
 				continue
 			}
 
 			// LeaseSet found! Process all pending messages
+			// Note: processPendingMessagesForDestination will validate the LeaseSet
+			// and handle invalid cases by cleaning up the queue
 			gr.processPendingMessagesForDestination(destHash, ls, messages)
 
 		default:
