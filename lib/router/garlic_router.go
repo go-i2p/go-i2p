@@ -2,7 +2,9 @@ package router
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -15,6 +17,23 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
+
+const (
+	// maxPendingMessages limits the number of queued messages per destination
+	maxPendingMessages = 100
+	// pendingMessageTimeout is how long to wait for a LeaseSet before discarding messages
+	pendingMessageTimeout = 30 * time.Second
+	// lookupRetryInterval is how often to retry failed lookups
+	lookupRetryInterval = 5 * time.Second
+)
+
+// pendingMessage represents a message waiting for LeaseSet resolution.
+type pendingMessage struct {
+	msg      i2np.I2NPMessage // The message to send
+	queuedAt time.Time        // When the message was queued
+	retryAt  time.Time        // When to retry the lookup
+	attempts int              // Number of lookup attempts
+}
 
 // GarlicNetDB defines the NetDB interface needed for garlic message routing.
 // This matches the actual StdNetDB implementation which returns channels for async lookups.
@@ -68,6 +87,12 @@ type GarlicMessageRouter struct {
 
 	// Message processing
 	processor *i2np.MessageProcessor // Reference to the processor for LOCAL recursion
+
+	// Destination lookup queue for async LeaseSet resolution
+	pendingMsgs  map[common.Hash][]pendingMessage // Messages waiting for LeaseSet lookup
+	pendingMutex sync.RWMutex                     // Protects pendingMsgs map
+	ctx          context.Context                  // Context for graceful shutdown
+	cancel       context.CancelFunc               // Cancel function for shutdown
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
@@ -82,12 +107,22 @@ func NewGarlicMessageRouter(
 	tunnelPool *tunnel.Pool,
 	routerIdentity common.Hash,
 ) *GarlicMessageRouter {
-	return &GarlicMessageRouter{
+	ctx, cancel := context.WithCancel(context.Background())
+
+	gr := &GarlicMessageRouter{
 		netdb:          netdb,
 		transportMgr:   transportMgr,
 		tunnelPool:     tunnelPool,
 		routerIdentity: routerIdentity,
+		pendingMsgs:    make(map[common.Hash][]pendingMessage),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
+
+	// Start background goroutine to process pending messages
+	go gr.processPendingMessages()
+
+	return gr
 }
 
 // SetMessageProcessor sets a reference to the MessageProcessor for LOCAL delivery recursion.
@@ -101,9 +136,9 @@ func (gr *GarlicMessageRouter) SetMessageProcessor(processor *i2np.MessageProces
 //
 // Process:
 //  1. Look up destination in NetDB to get LeaseSet
-//  2. Select a valid lease (inbound tunnel)
-//  3. Route through the tunnel (converts to TUNNEL delivery)
-//  4. If destination not found, return error (TODO: queue for async lookup)
+//  2. If found: Select a valid lease and route through the tunnel
+//  3. If not found: Queue message and trigger async LeaseSet lookup
+//  4. Background processor retries lookups and forwards messages when LeaseSets arrive
 //
 // Per I2P spec, destinations are identified by their 32-byte hash and are
 // reached by sending messages through one of their published inbound tunnels.
@@ -117,7 +152,10 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 	// Look up LeaseSet with timeout
 	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
 	if leaseSetChan == nil {
-		return fmt.Errorf("destination %x not found in NetDB", destHash[:8])
+		// LeaseSet not in NetDB, queue message for async lookup
+		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			Debug("LeaseSet not found, queueing message for async lookup")
+		return gr.queuePendingMessage(destHash, msg)
 	}
 
 	// Wait for LeaseSet with timeout
@@ -125,11 +163,17 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 	select {
 	case ls, ok := <-leaseSetChan:
 		if !ok {
-			return fmt.Errorf("destination %x LeaseSet channel closed", destHash[:8])
+			// Channel closed without data, queue for retry
+			log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+				Debug("LeaseSet channel closed, queueing message for async lookup")
+			return gr.queuePendingMessage(destHash, msg)
 		}
 		leaseSet = ls
 	case <-time.After(1 * time.Second):
-		return fmt.Errorf("timeout waiting for destination %x LeaseSet", destHash[:8])
+		// Timeout waiting for LeaseSet, queue for retry
+		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
+		return gr.queuePendingMessage(destHash, msg)
 	}
 
 	// Validate LeaseSet
@@ -336,4 +380,181 @@ func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 
 	// Send TunnelGateway message to gateway router using ROUTER delivery
 	return gr.ForwardToRouter(gatewayHash, tunnelGatewayMsg)
+}
+
+// Stop gracefully shuts down the garlic message router.
+// This stops the background message processing goroutine.
+func (gr *GarlicMessageRouter) Stop() {
+	if gr.cancel != nil {
+		gr.cancel()
+	}
+}
+
+// processPendingMessages runs in background and periodically processes queued messages.
+// It retries LeaseSet lookups and forwards messages once LeaseSets become available.
+func (gr *GarlicMessageRouter) processPendingMessages() {
+	ticker := time.NewTicker(lookupRetryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-gr.ctx.Done():
+			log.Debug("Stopping pending message processor")
+			return
+		case <-ticker.C:
+			gr.retryPendingLookups()
+		}
+	}
+}
+
+// retryPendingLookups attempts to resolve pending destinations and forward queued messages.
+func (gr *GarlicMessageRouter) retryPendingLookups() {
+	gr.pendingMutex.Lock()
+	defer gr.pendingMutex.Unlock()
+
+	now := time.Now()
+
+	for destHash, messages := range gr.pendingMsgs {
+		// Skip if no messages for this destination
+		if len(messages) == 0 {
+			delete(gr.pendingMsgs, destHash)
+			continue
+		}
+
+		// Try to get LeaseSet
+		leaseSetChan := gr.netdb.GetLeaseSet(destHash)
+		if leaseSetChan == nil {
+			// LeaseSet still not found, clean up expired messages
+			gr.cleanupExpiredMessages(destHash, messages, now)
+			continue
+		}
+
+		// Try to read LeaseSet with short timeout (non-blocking)
+		select {
+		case ls, ok := <-leaseSetChan:
+			if !ok || !ls.IsValid() {
+				gr.cleanupExpiredMessages(destHash, messages, now)
+				continue
+			}
+
+			// LeaseSet found! Process all pending messages
+			gr.processPendingMessagesForDestination(destHash, ls, messages)
+
+		default:
+			// LeaseSet not immediately available, clean up expired
+			gr.cleanupExpiredMessages(destHash, messages, now)
+		}
+	}
+}
+
+// cleanupExpiredMessages removes messages that have exceeded the timeout.
+func (gr *GarlicMessageRouter) cleanupExpiredMessages(destHash common.Hash, messages []pendingMessage, now time.Time) {
+	validMessages := make([]pendingMessage, 0, len(messages))
+
+	for _, pm := range messages {
+		if now.Sub(pm.queuedAt) < pendingMessageTimeout {
+			validMessages = append(validMessages, pm)
+		} else {
+			log.WithFields(logger.Fields{
+				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"msg_type":  pm.msg.Type(),
+				"queued_at": pm.queuedAt,
+			}).Warn("Discarding expired pending message")
+		}
+	}
+
+	if len(validMessages) > 0 {
+		gr.pendingMsgs[destHash] = validMessages
+	} else {
+		delete(gr.pendingMsgs, destHash)
+	}
+}
+
+// processPendingMessagesForDestination forwards all queued messages for a destination.
+func (gr *GarlicMessageRouter) processPendingMessagesForDestination(
+	destHash common.Hash,
+	leaseSet lease_set.LeaseSet,
+	messages []pendingMessage,
+) {
+	log.WithFields(logger.Fields{
+		"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+		"message_count": len(messages),
+	}).Info("LeaseSet found, processing pending messages")
+
+	// Get leases from LeaseSet
+	leases, err := leaseSet.Leases()
+	if err != nil {
+		log.WithError(err).Error("Failed to extract leases from LeaseSet")
+		delete(gr.pendingMsgs, destHash)
+		return
+	}
+
+	if len(leases) == 0 {
+		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			Warn("LeaseSet has no valid leases")
+		delete(gr.pendingMsgs, destHash)
+		return
+	}
+
+	// Select best lease
+	selectedLease := gr.selectBestLease(leases)
+	if selectedLease == nil {
+		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			Warn("No valid lease available")
+		delete(gr.pendingMsgs, destHash)
+		return
+	}
+
+	// Extract gateway and tunnel ID
+	gatewayHash := selectedLease.TunnelGateway()
+	tunnelID := tunnel.TunnelID(selectedLease.TunnelID())
+
+	// Forward all pending messages
+	for _, pm := range messages {
+		err := gr.ForwardThroughTunnel(gatewayHash, tunnelID, pm.msg)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"msg_type":  pm.msg.Type(),
+				"error":     err,
+			}).Error("Failed to forward pending message")
+		} else {
+			log.WithFields(logger.Fields{
+				"dest_hash": fmt.Sprintf("%x", destHash[:8]),
+				"msg_type":  pm.msg.Type(),
+			}).Debug("Successfully forwarded pending message")
+		}
+	}
+
+	// Remove all processed messages
+	delete(gr.pendingMsgs, destHash)
+}
+
+// queuePendingMessage adds a message to the pending queue for later delivery.
+func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2np.I2NPMessage) error {
+	gr.pendingMutex.Lock()
+	defer gr.pendingMutex.Unlock()
+
+	// Check if we already have too many pending messages for this destination
+	if existing, ok := gr.pendingMsgs[destHash]; ok && len(existing) >= maxPendingMessages {
+		return fmt.Errorf("too many pending messages for destination %x", destHash[:8])
+	}
+
+	// Add message to queue
+	pm := pendingMessage{
+		msg:      msg,
+		queuedAt: time.Now(),
+		retryAt:  time.Now().Add(lookupRetryInterval),
+		attempts: 1,
+	}
+
+	gr.pendingMsgs[destHash] = append(gr.pendingMsgs[destHash], pm)
+
+	log.WithFields(logger.Fields{
+		"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+		"message_type":  msg.Type(),
+		"pending_count": len(gr.pendingMsgs[destHash]),
+	}).Debug("Queued message for pending LeaseSet lookup")
+
+	return nil
 }
