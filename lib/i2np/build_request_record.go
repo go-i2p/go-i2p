@@ -412,7 +412,7 @@ func readBuildRequestRecordFlag(data []byte) (int, error) {
 		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
 	}
 
-	flag := common.Integer([]byte{data[185]}).Int()
+	flag := common.Integer([]byte{data[184]}).Int()
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.readBuildRequestRecordFlag",
