@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -162,8 +163,7 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("ReplyCode_%02x", tc.replyCode), func(t *testing.T) {
-			record := createValidResponseRecord()
-			record.Reply = tc.replyCode
+			record := createValidResponseRecordWithReply(tc.replyCode)
 
 			success, err := reply.processHopResponse(0, record)
 
@@ -210,8 +210,7 @@ func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
 func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecord()
-		reply[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+		reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 	}
 	return &reply
 }
@@ -220,8 +219,7 @@ func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 func createRejectedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecord()
-		reply[i].Reply = TUNNEL_BUILD_REPLY_REJECT
+		reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_REJECT)
 	}
 	return &reply
 }
@@ -241,8 +239,7 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 	}
 
 	for i, replyCode := range replyCodes {
-		reply[i] = createValidResponseRecord()
-		reply[i].Reply = replyCode
+		reply[i] = createValidResponseRecordWithReply(replyCode)
 	}
 	return &reply
 }
@@ -251,11 +248,10 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecord()
 		if i == 3 {
-			reply[i].Reply = TUNNEL_BUILD_REPLY_OVERLOAD // One failure
+			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_OVERLOAD) // One failure
 		} else {
-			reply[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 		}
 	}
 	return &reply
@@ -265,11 +261,10 @@ func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
 func createUnknownReplyCodeTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecord()
 		if i == 0 {
-			reply[i].Reply = 0xFF // Unknown reply code
+			reply[i] = createValidResponseRecordWithReply(0xFF) // Unknown reply code
 		} else {
-			reply[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 		}
 	}
 	return &reply
@@ -297,8 +292,7 @@ func createEmptyHashTunnelBuildReply() *TunnelBuildReply {
 func createSuccessfulVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
-		records[i] = createValidResponseRecord()
-		records[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+		records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 	}
 
 	return &VariableTunnelBuildReply{
@@ -318,8 +312,7 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 	}
 
 	for i := 0; i < hopCount; i++ {
-		records[i] = createValidResponseRecord()
-		records[i].Reply = replyCodes[i%len(replyCodes)]
+		records[i] = createValidResponseRecordWithReply(replyCodes[i%len(replyCodes)])
 	}
 
 	return &VariableTunnelBuildReply{
@@ -330,16 +323,25 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 
 // createValidResponseRecord creates a valid BuildResponseRecord for testing
 func createValidResponseRecord() BuildResponseRecord {
-	var hash common.Hash
-	copy(hash[:], "test_hash_value_1234567890123456") // Non-zero hash
+	return createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+}
 
+// createValidResponseRecordWithReply creates a valid BuildResponseRecord with a specific reply code
+func createValidResponseRecordWithReply(replyCode byte) BuildResponseRecord {
 	var randomData [495]byte
 	copy(randomData[:], "test_random_data_for_response_record")
+
+	// Compute the correct hash: SHA256(randomData + reply)
+	data := make([]byte, 496)
+	copy(data[0:495], randomData[:])
+	data[495] = replyCode
+
+	hash := sha256.Sum256(data)
 
 	return BuildResponseRecord{
 		Hash:       hash,
 		RandomData: randomData,
-		Reply:      TUNNEL_BUILD_REPLY_SUCCESS,
+		Reply:      replyCode,
 	}
 }
 
