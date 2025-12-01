@@ -228,10 +228,10 @@ func TestRouterDeliveryInstructionsRoundTrip(t *testing.T) {
 // TestDeliveryInstructionsVariousSizes tests different fragment sizes
 func TestDeliveryInstructionsVariousSizes(t *testing.T) {
 	testCases := []uint16{
-		1,      // Minimum
-		512,    // Common
-		1000,   // Near maximum
-		65535,  // Maximum uint16
+		1,     // Minimum
+		512,   // Common
+		1000,  // Near maximum
+		65535, // Maximum uint16
 	}
 
 	for _, size := range testCases {
