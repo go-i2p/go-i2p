@@ -1,0 +1,176 @@
+# go-i2p Configuration File
+#
+# This is the main configuration file for go-i2p router.
+# Location: $HOME/.go-i2p/config.yaml
+#
+# See RESEED.md for detailed documentation on configuring reseed servers.
+
+# Base directory for router files (read-only data)
+base_dir: /home/user/.go-i2p/base
+
+# Working directory for router runtime files (read-write data)
+working_dir: /home/user/.go-i2p/config
+
+# Router Configuration
+router:
+  # How often to update our RouterInfo
+  info_refresh_interval: 30m
+  # How long messages stay valid
+  message_expiration_time: 60s
+  # Maximum number of active transport sessions
+  max_concurrent_sessions: 200
+
+# Network Database Configuration
+netdb:
+  # Directory for storing network database files
+  path: /home/user/.go-i2p/config/netDb
+  # Maximum RouterInfos to store locally
+  max_router_infos: 5000
+  # Maximum LeaseSets to cache
+  max_lease_sets: 1000
+  # How often to check for expired entries
+  expiration_check_interval: 1m
+  # When to refresh LeaseSets before expiration
+  lease_set_refresh_threshold: 2m
+  # How often to explore the network
+  exploration_interval: 5m
+  # Whether this router acts as floodfill
+  floodfill_enabled: false
+
+# Bootstrap Configuration
+bootstrap:
+  # Trigger reseeding when peer count falls below this threshold
+  low_peer_threshold: 10
+  
+  # Maximum time to wait for reseed operations
+  reseed_timeout: 60s
+  
+  # Minimum peers to get from reseed
+  minimum_reseed_peers: 50
+  
+  # Time between reseed attempts
+  reseed_retry_interval: 5m
+  
+  # Path to local reseed file (zip or su3) - takes priority over remote reseed servers
+  # reseed_file_path: ""
+  
+  # Reseed server configurations
+  # By default, only reseed.i2pgit.org (maintained by go-i2p dev team) is configured.
+  # Additional servers should be verified against the official I2P repository:
+  # https://github.com/i2p/i2p.i2p/tree/master/installer/resources/certificates/reseed
+  reseed_servers:
+    - url: "https://reseed.i2pgit.org/"
+      su3_fingerprint: "hankhill19580_at_gmail.com.crt"
+    
+    # Additional reseed servers from the I2P network (uncomment to enable):
+    
+    # - url: "https://reseed.diva.exchange/"
+    #   su3_fingerprint: "reseed_at_diva.exchange.crt"
+    
+    # - url: "https://reseed-fr.i2pd.xyz/"
+    #   su3_fingerprint: "r4sas-reseed_at_mail.i2p.crt"
+    
+    # - url: "https://www2.mk16.de/"
+    #   su3_fingerprint: "i2p-reseed_at_mk16.de.crt"
+    
+    # - url: "https://reseed2.i2p.net/"
+    #   su3_fingerprint: "echelon3_at_mail.i2p.crt"
+    
+    # - url: "https://reseed.stormycloud.org/"
+    #   su3_fingerprint: "admin_at_stormycloud.org.crt"
+    
+    # - url: "https://reseed-pl.i2pd.xyz/"
+    #   su3_fingerprint: "r4sas-reseed_at_mail.i2p.crt"
+    
+    # - url: "https://i2p.novg.net/"
+    #   su3_fingerprint: "igor_at_novg.net.crt"
+    
+    # - url: "https://i2pseed.creativecowpat.net:8443/"
+    #   su3_fingerprint: "creativecowpat_at_mail.i2p.crt"
+    
+    # - url: "https://coconut.incognet.io/"
+    #   su3_fingerprint: "rambler_at_mail.i2p.crt"
+    
+    # - url: "https://i2p.diyarciftci.xyz/"
+    #   su3_fingerprint: "diyarciftci_at_protonmail.com.crt"
+    
+    # - url: "https://reseed.onion.im/"
+    #   su3_fingerprint: "lazygravy_at_mail.i2p.crt"
+  
+  # Local netDb paths to search for existing RouterInfo files
+  # Supports Java I2P and i2pd netDb directories for importing peers
+  # local_netdb_paths:
+  #   - /home/user/.i2p/netDb
+  #   - /home/user/.i2pd/netDb
+
+# I2CP Server Configuration
+# I2CP (I2P Client Protocol) allows client applications to connect to the router
+i2cp:
+  # Enable I2CP server
+  enabled: true
+  # Listen address (host:port)
+  address: "localhost:7654"
+  # Network type: "tcp" or "unix"
+  network: "tcp"
+  # Maximum concurrent I2CP sessions
+  max_sessions: 100
+  # Buffer size for outbound messages per session
+  message_queue_size: 64
+  # How long idle sessions stay alive
+  session_timeout: 30m
+  # Maximum time to wait for client reads
+  read_timeout: 60s
+  # Maximum time to wait for client writes
+  write_timeout: 30s
+
+# Tunnel Configuration
+tunnel:
+  # Minimum tunnels to maintain per pool
+  min_pool_size: 2
+  # Maximum tunnels to maintain per pool
+  max_pool_size: 6
+  # Hops per tunnel (I2P protocol standard is 3)
+  length: 3
+  # How long tunnels stay active
+  lifetime: 10m
+  # How often to test tunnel health
+  test_interval: 60s
+  # Maximum time to wait for test response
+  test_timeout: 5s
+  # Maximum time to wait for tunnel build
+  build_timeout: 90s
+  # Maximum attempts to build a tunnel
+  build_retries: 3
+  # When to build replacement tunnel before expiration
+  replace_before_expiration: 2m
+  # How often to run pool maintenance
+  maintenance_interval: 30s
+
+# Transport Configuration
+transport:
+  # NTCP2 transport settings
+  ntcp2_enabled: true
+  ntcp2_port: 0  # 0 = random port assigned by OS
+  ntcp2_max_connections: 200
+  
+  # SSU2 transport settings (not yet implemented)
+  ssu2_enabled: false
+  ssu2_port: 0
+  
+  # Connection parameters
+  connection_timeout: 30s
+  idle_timeout: 5m
+  max_message_size: 32768  # 32 KiB
+
+# Performance Tuning
+performance:
+  # Buffer for router message processing
+  message_queue_size: 256
+  # Concurrent message processing workers (0 = use GOMAXPROCS)
+  worker_pool_size: 8
+  # Cache size for garlic sessions
+  garlic_encryption_cache_size: 1000
+  # Cache size for message fragment reassembly
+  fragment_cache_size: 500
+  # How often to run cleanup tasks
+  cleanup_interval: 5m

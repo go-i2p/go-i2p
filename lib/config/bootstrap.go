@@ -21,24 +21,18 @@ type BootstrapConfig struct {
 }
 
 // default configuration for network bootstrap
+// Note: Reseed servers should be configured via config file.
+// Only reseed.i2pgit.org is included by default as it is maintained by the go-i2p dev team.
+// Additional reseed servers from the I2P network can be added via configuration.
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
 	ReseedFilePath:   "", // No default reseed file
-	// Standard I2P reseed servers for network bootstrap
-	// These are example reseed servers - in production, use actual I2P reseed servers
-	// with their correct SU3 signing key fingerprints
+	// Default reseed server (run by go-i2p dev team)
+	// Additional reseed servers should be configured via config file
 	ReseedServers: []*ReseedConfig{
 		{
-			Url:            "https://reseed.i2p-projekt.de/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
-		},
-		{
-			Url:            "https://i2p.mooo.com/netDb/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_2",
-		},
-		{
-			Url:            "https://netdb.i2p2.no/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
+			Url:            "https://reseed.i2pgit.org/",
+			SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
 		},
 	},
 	// Local netDb paths are populated at runtime based on OS

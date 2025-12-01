@@ -109,7 +109,8 @@ type BootstrapDefaults struct {
 	ReseedRetryInterval time.Duration
 
 	// ReseedServers are the default reseed server configurations
-	// Note: These contain placeholder fingerprints - production should use real values
+	// Only reseed.i2pgit.org is included by default (maintained by go-i2p dev team)
+	// Additional reseed servers should be configured via config file
 	ReseedServers []*ReseedConfig
 }
 
@@ -291,6 +292,8 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 }
 
 // buildBootstrapDefaults creates default bootstrap configuration values.
+// Note: Only reseed.i2pgit.org is included by default as it is maintained by the go-i2p dev team.
+// Additional reseed servers from the I2P network should be configured via config file.
 func buildBootstrapDefaults() BootstrapDefaults {
 	return BootstrapDefaults{
 		LowPeerThreshold:    10,
@@ -299,8 +302,8 @@ func buildBootstrapDefaults() BootstrapDefaults {
 		ReseedRetryInterval: 5 * time.Minute,
 		ReseedServers: []*ReseedConfig{
 			{
-				Url:            "https://reseed.i2pgit.org/i2pseeds.su3",
-				SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
+				Url:            "https://reseed.i2pgit.org/",
+				SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
 			},
 		},
 	}
