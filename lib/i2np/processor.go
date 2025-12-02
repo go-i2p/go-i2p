@@ -380,7 +380,7 @@ func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
 
 // parseGarlicCloves parses all garlic cloves from the data and appends them to the garlic structure.
 // Returns the updated offset after parsing all cloves.
-func (p *MessageProcessor) parseGarlicCloves(garlic *Garlic, data []byte, offset int, count int) (int, error) {
+func (p *MessageProcessor) parseGarlicCloves(garlic *Garlic, data []byte, offset, count int) (int, error) {
 	for i := 0; i < count; i++ {
 		clove, bytesRead, err := p.parseGarlicClove(data[offset:])
 		if err != nil {

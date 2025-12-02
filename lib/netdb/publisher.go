@@ -477,7 +477,6 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DATABASE_STORE_TYPE_ROUTER_INFO (0): For RouterInfo entries
 //   - DATABASE_STORE_TYPE_LEASESET2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.I2NPMessage, error) {
-
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
 	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
 

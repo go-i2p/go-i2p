@@ -610,7 +610,7 @@ func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet 
 }
 
 // forwardPendingMessages forwards all messages through the specified tunnel.
-func (gr *GarlicMessageRouter) forwardPendingMessages(destHash common.Hash, gatewayHash common.Hash, tunnelID tunnel.TunnelID, messages []pendingMessage) {
+func (gr *GarlicMessageRouter) forwardPendingMessages(destHash, gatewayHash common.Hash, tunnelID tunnel.TunnelID, messages []pendingMessage) {
 	for _, pm := range messages {
 		err := gr.ForwardThroughTunnel(gatewayHash, tunnelID, pm.msg)
 		if err != nil {

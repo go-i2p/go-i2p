@@ -94,7 +94,6 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.Info("Attempting local netDb bootstrap")
 	peers, err := lb.GetPeers(ctx, n)
-
 	if err != nil {
 		log.WithError(err).Error("Local netDb bootstrap also failed")
 		return nil, fmt.Errorf("all bootstrap methods failed - file, reseed, and local netDb: %w", err)

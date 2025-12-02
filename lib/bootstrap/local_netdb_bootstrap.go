@@ -170,7 +170,7 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 }
 
 // shouldStopWalk determines if the walk should be terminated based on context or count
-func shouldStopWalk(ctx context.Context, count int, maxCount int) bool {
+func shouldStopWalk(ctx context.Context, count, maxCount int) bool {
 	select {
 	case <-ctx.Done():
 		return true
