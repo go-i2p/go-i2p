@@ -587,53 +587,19 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 	}
 	offset += bytesRead
 
-	// Parse I2NP message
-	// Read the I2NP message size from the standard NTCP header
-	// Standard I2NP header structure:
-	//   - type (1 byte) at offset 0
-	//   - msg_id (4 bytes) at offset 1-4
-	//   - expiration (8 bytes) at offset 5-12
-	//   - size (2 bytes) at offset 13-14
-	//   - checksum (1 byte) at offset 15
-	//   - data (size bytes) at offset 16+
-
-	if len(data) < offset+16 {
-		return nil, 0, oops.Errorf("insufficient data for I2NP message header (need %d bytes, have %d)", offset+16, len(data))
-	}
-
-	// Read message size from I2NP header (bytes 13-14 from start of message)
-	messageSize, err := ReadI2NPNTCPMessageSize(data[offset:])
+	// Parse and skip I2NP message
+	messageLength, err := readI2NPMessageLength(data, offset)
 	if err != nil {
-		return nil, 0, oops.Wrapf(err, "failed to read I2NP message size")
+		return nil, 0, err
 	}
-
-	// Total I2NP message length = 16-byte header + message data
-	messageLength := 16 + messageSize
-
-	// Validate we have enough data for the complete message
-	if len(data) < offset+messageLength {
-		return nil, 0, oops.Errorf("insufficient data for I2NP message (need %d bytes, have %d)", offset+messageLength, len(data))
-	}
-
 	offset += messageLength
 
-	// Ensure enough data for clove ID + expiration + certificate
-	if len(data) < offset+4+8+3 {
-		return nil, 0, oops.Errorf("insufficient data for clove trailer")
+	// Parse clove metadata
+	cloveID, expiration, cert, err := parseCloveMetadata(data, offset)
+	if err != nil {
+		return nil, 0, err
 	}
-
-	// Read clove ID (4 bytes)
-	cloveID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-	offset += 4
-
-	// Read expiration (8 bytes)
-	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
-	expiration := time.UnixMilli(int64(expirationMs))
-	offset += 8
-
-	// Read certificate (3 bytes)
-	cert := *certificate.NewCertificate()
-	offset += 3
+	offset += 4 + 8 + 3 // clove ID + expiration + certificate
 
 	return &GarlicClove{
 		DeliveryInstructions: *di,
@@ -642,6 +608,56 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 		Expiration:           expiration,
 		Certificate:          cert,
 	}, offset, nil
+}
+
+// readI2NPMessageLength validates I2NP message header and returns total message length.
+// Standard I2NP header structure:
+//   - type (1 byte) at offset 0
+//   - msg_id (4 bytes) at offset 1-4
+//   - expiration (8 bytes) at offset 5-12
+//   - size (2 bytes) at offset 13-14
+//   - checksum (1 byte) at offset 15
+//   - data (size bytes) at offset 16+
+func readI2NPMessageLength(data []byte, offset int) (int, error) {
+	if len(data) < offset+16 {
+		return 0, oops.Errorf("insufficient data for I2NP message header (need %d bytes, have %d)", offset+16, len(data))
+	}
+
+	// Read message size from I2NP header (bytes 13-14 from start of message)
+	messageSize, err := ReadI2NPNTCPMessageSize(data[offset:])
+	if err != nil {
+		return 0, oops.Wrapf(err, "failed to read I2NP message size")
+	}
+
+	// Total I2NP message length = 16-byte header + message data
+	messageLength := 16 + messageSize
+
+	// Validate we have enough data for the complete message
+	if len(data) < offset+messageLength {
+		return 0, oops.Errorf("insufficient data for I2NP message (need %d bytes, have %d)", offset+messageLength, len(data))
+	}
+
+	return messageLength, nil
+}
+
+// parseCloveMetadata extracts clove ID, expiration, and certificate from clove trailer.
+func parseCloveMetadata(data []byte, offset int) (int, time.Time, certificate.Certificate, error) {
+	// Ensure enough data for clove ID + expiration + certificate
+	if len(data) < offset+4+8+3 {
+		return 0, time.Time{}, certificate.Certificate{}, oops.Errorf("insufficient data for clove trailer")
+	}
+
+	// Read clove ID (4 bytes)
+	cloveID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+
+	// Read expiration (8 bytes)
+	expirationMs := binary.BigEndian.Uint64(data[offset+4 : offset+12])
+	expiration := time.UnixMilli(int64(expirationMs))
+
+	// Read certificate (3 bytes)
+	cert := *certificate.NewCertificate()
+
+	return cloveID, expiration, cert, nil
 }
 
 // deserializeDeliveryInstructions parses delivery instructions from bytes.
