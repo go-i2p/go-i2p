@@ -88,34 +88,43 @@ func (lb *LocalNetDbBootstrap) isValidNetDbDirectory(path string) bool {
 		return false
 	}
 
-	// Check for netDb subdirectories (r0-r9, ra-rz for Java I2P style)
-	// or routerInfo-* files (for i2pd style)
+	// Check for netDb subdirectories or routerInfo files
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false
 	}
 
-	// Look for netDb subdirectories or routerInfo files
-	hasSubdirs := false
-	hasRouterInfoFiles := false
+	return lb.hasValidNetDbStructure(entries)
+}
 
+// hasValidNetDbStructure checks if entries contain valid netDb structure.
+func (lb *LocalNetDbBootstrap) hasValidNetDbStructure(entries []os.DirEntry) bool {
+	// Look for netDb subdirectories or routerInfo files
 	for _, entry := range entries {
 		name := entry.Name()
 
 		// Java I2P style: directories like r0, r1, ra, rb, etc.
-		if entry.IsDir() && len(name) == 2 && name[0] == 'r' {
-			hasSubdirs = true
-			break
+		if lb.isJavaI2PSubdirectory(entry, name) {
+			return true
 		}
 
 		// i2pd or direct style: routerInfo-*.dat files
-		if !entry.IsDir() && strings.HasPrefix(name, "routerInfo-") && strings.HasSuffix(name, ".dat") {
-			hasRouterInfoFiles = true
-			break
+		if lb.isRouterInfoFile(entry, name) {
+			return true
 		}
 	}
 
-	return hasSubdirs || hasRouterInfoFiles
+	return false
+}
+
+// isJavaI2PSubdirectory checks if an entry is a Java I2P style subdirectory.
+func (lb *LocalNetDbBootstrap) isJavaI2PSubdirectory(entry os.DirEntry, name string) bool {
+	return entry.IsDir() && len(name) == 2 && name[0] == 'r'
+}
+
+// isRouterInfoFile checks if an entry is a routerInfo file.
+func (lb *LocalNetDbBootstrap) isRouterInfoFile(entry os.DirEntry, name string) bool {
+	return !entry.IsDir() && strings.HasPrefix(name, "routerInfo-") && strings.HasSuffix(name, ".dat")
 }
 
 // readRouterInfosFromDirectory reads RouterInfo files from a netDb directory
