@@ -279,45 +279,27 @@ func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.
 	}).Debug("Forwarding garlic clove to router")
 
 	// Check for reflexive delivery (sending to ourselves)
-	if bytes.Equal(routerHash[:], gr.routerIdentity[:]) {
-		log.Debug("ROUTER delivery is reflexive, processing locally")
-		if gr.processor != nil {
-			return gr.processor.ProcessMessage(msg)
+	if err := gr.handleReflexiveDelivery(routerHash, msg); err != nil {
+		if err == errNotReflexive {
+			// Continue with normal routing
+		} else {
+			return err
 		}
-		return fmt.Errorf("reflexive delivery failed: processor not configured")
+	} else {
+		// Successfully handled reflexively
+		return nil
 	}
 
-	// Look up router in NetDB
-	routerInfoChan := gr.netdb.GetRouterInfo(routerHash)
-	if routerInfoChan == nil {
-		return fmt.Errorf("router %x not found in NetDB", routerHash[:8])
-	}
-
-	// Wait for RouterInfo with timeout
-	var routerInfo router_info.RouterInfo
-	select {
-	case ri, ok := <-routerInfoChan:
-		if !ok {
-			return fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
-		}
-		routerInfo = ri
-	case <-time.After(1 * time.Second):
-		return fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
-	}
-
-	// Validate RouterInfo
-	if !routerInfo.IsValid() {
-		return fmt.Errorf("router %x has invalid RouterInfo", routerHash[:8])
-	}
-
-	// Get transport session and send message
-	session, err := gr.transportMgr.GetSession(routerInfo)
+	// Look up and validate router information
+	routerInfo, err := gr.lookupRouterInfo(routerHash)
 	if err != nil {
-		return fmt.Errorf("failed to get session for router %x: %w", routerHash[:8], err)
+		return err
 	}
 
-	// Queue message for sending
-	session.QueueSendI2NP(msg)
+	// Send message through transport layer
+	if err := gr.sendMessageToRouter(routerHash, routerInfo, msg); err != nil {
+		return err
+	}
 
 	log.WithFields(logger.Fields{
 		"router_hash":  fmt.Sprintf("%x", routerHash[:8]),
@@ -325,6 +307,66 @@ func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.
 		"message_id":   msg.MessageID(),
 	}).Debug("Successfully queued message to router")
 
+	return nil
+}
+
+// errNotReflexive indicates the delivery is not reflexive and should continue normal routing.
+var errNotReflexive = fmt.Errorf("not reflexive")
+
+// handleReflexiveDelivery checks if the message is being sent to ourselves and processes it locally.
+// Returns nil if the message was successfully processed reflexively.
+// Returns errNotReflexive if the delivery is not reflexive and should continue normal routing.
+// Returns other errors if reflexive processing failed.
+func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, msg i2np.I2NPMessage) error {
+	if !bytes.Equal(routerHash[:], gr.routerIdentity[:]) {
+		return errNotReflexive
+	}
+
+	log.Debug("ROUTER delivery is reflexive, processing locally")
+	if gr.processor == nil {
+		return fmt.Errorf("reflexive delivery failed: processor not configured")
+	}
+
+	return gr.processor.ProcessMessage(msg)
+}
+
+// lookupRouterInfo retrieves and validates RouterInfo from NetDB.
+// Returns the RouterInfo if found and valid, or an error otherwise.
+func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_info.RouterInfo, error) {
+	routerInfoChan := gr.netdb.GetRouterInfo(routerHash)
+	if routerInfoChan == nil {
+		return router_info.RouterInfo{}, fmt.Errorf("router %x not found in NetDB", routerHash[:8])
+	}
+
+	// Wait for RouterInfo with timeout
+	var routerInfo router_info.RouterInfo
+	select {
+	case ri, ok := <-routerInfoChan:
+		if !ok {
+			return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
+		}
+		routerInfo = ri
+	case <-time.After(1 * time.Second):
+		return router_info.RouterInfo{}, fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
+	}
+
+	// Validate RouterInfo
+	if !routerInfo.IsValid() {
+		return router_info.RouterInfo{}, fmt.Errorf("router %x has invalid RouterInfo", routerHash[:8])
+	}
+
+	return routerInfo, nil
+}
+
+// sendMessageToRouter establishes a transport session and queues the message for delivery.
+// Returns an error if session establishment fails.
+func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, routerInfo router_info.RouterInfo, msg i2np.I2NPMessage) error {
+	session, err := gr.transportMgr.GetSession(routerInfo)
+	if err != nil {
+		return fmt.Errorf("failed to get session for router %x: %w", routerHash[:8], err)
+	}
+
+	session.QueueSendI2NP(msg)
 	return nil
 }
 
