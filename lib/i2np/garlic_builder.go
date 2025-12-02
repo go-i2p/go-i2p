@@ -617,52 +617,78 @@ func deserializeDeliveryInstructions(data []byte) (*GarlicCloveDeliveryInstructi
 		return nil, 0, oops.Errorf("delivery instructions data too short")
 	}
 
-	offset := 0
+	flag := data[0]
+	offset := 1
 
-	// Read flag byte
-	flag := data[offset]
-	offset++
-
-	deliveryType := (flag >> 5) & 0x03
 	di := &GarlicCloveDeliveryInstructions{
 		Flag: flag,
 	}
 
-	// Parse based on delivery type
-	switch deliveryType {
-	case 0x00: // LOCAL - no additional data
-		// No additional fields
-	case 0x01: // DESTINATION - 32 byte hash
-		if len(data) < offset+32 {
-			return nil, 0, oops.Errorf("insufficient data for DESTINATION hash")
-		}
-		copy(di.Hash[:], data[offset:offset+32])
-		offset += 32
-	case 0x02: // ROUTER - 32 byte hash
-		if len(data) < offset+32 {
-			return nil, 0, oops.Errorf("insufficient data for ROUTER hash")
-		}
-		copy(di.Hash[:], data[offset:offset+32])
-		offset += 32
-	case 0x03: // TUNNEL - 32 byte hash + 4 byte tunnel ID
-		if len(data) < offset+32+4 {
-			return nil, 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
-		}
-		copy(di.Hash[:], data[offset:offset+32])
-		offset += 32
-		di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(data[offset : offset+4]))
-		offset += 4
+	deliveryType := (flag >> 5) & 0x03
+	bytesRead, err := parseDeliveryTypeData(di, deliveryType, data[offset:])
+	if err != nil {
+		return nil, 0, err
 	}
+	offset += bytesRead
 
-	// Check for optional delay field (bit 4 of flag)
-	delayIncluded := (flag >> 4) & 0x01
-	if delayIncluded == 1 {
-		if len(data) < offset+4 {
-			return nil, 0, oops.Errorf("insufficient data for delay field")
-		}
-		di.Delay = int(binary.BigEndian.Uint32(data[offset : offset+4]))
-		offset += 4
+	bytesRead, err = parseOptionalDelayField(di, flag, data[offset:])
+	if err != nil {
+		return nil, 0, err
 	}
+	offset += bytesRead
 
 	return di, offset, nil
+}
+
+// parseDeliveryTypeData parses the delivery type specific data from bytes.
+// Returns the number of bytes consumed and any error.
+func parseDeliveryTypeData(di *GarlicCloveDeliveryInstructions, deliveryType byte, data []byte) (int, error) {
+	switch deliveryType {
+	case 0x00: // LOCAL - no additional data
+		return 0, nil
+	case 0x01: // DESTINATION - 32 byte hash
+		return parseHashData(di, data, "DESTINATION")
+	case 0x02: // ROUTER - 32 byte hash
+		return parseHashData(di, data, "ROUTER")
+	case 0x03: // TUNNEL - 32 byte hash + 4 byte tunnel ID
+		return parseTunnelData(di, data)
+	default:
+		return 0, nil
+	}
+}
+
+// parseHashData parses a 32-byte hash for DESTINATION or ROUTER delivery types.
+// Returns the number of bytes consumed and any error.
+func parseHashData(di *GarlicCloveDeliveryInstructions, data []byte, deliveryTypeName string) (int, error) {
+	if len(data) < 32 {
+		return 0, oops.Errorf("insufficient data for %s hash", deliveryTypeName)
+	}
+	copy(di.Hash[:], data[0:32])
+	return 32, nil
+}
+
+// parseTunnelData parses TUNNEL delivery type data (32-byte hash + 4-byte tunnel ID).
+// Returns the number of bytes consumed and any error.
+func parseTunnelData(di *GarlicCloveDeliveryInstructions, data []byte) (int, error) {
+	if len(data) < 36 {
+		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
+	}
+	copy(di.Hash[:], data[0:32])
+	di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(data[32:36]))
+	return 36, nil
+}
+
+// parseOptionalDelayField parses the optional delay field if present.
+// Returns the number of bytes consumed and any error.
+func parseOptionalDelayField(di *GarlicCloveDeliveryInstructions, flag byte, data []byte) (int, error) {
+	delayIncluded := (flag >> 4) & 0x01
+	if delayIncluded != 1 {
+		return 0, nil
+	}
+
+	if len(data) < 4 {
+		return 0, oops.Errorf("insufficient data for delay field")
+	}
+	di.Delay = int(binary.BigEndian.Uint32(data[0:4]))
+	return 4, nil
 }
