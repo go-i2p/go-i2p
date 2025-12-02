@@ -480,15 +480,26 @@ func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
 		MinGarlicSize         = 1 + 3 + 4 + 8 // num(1) + cert(3) + msgID(4) + exp(8)
 	)
 
-	if err := validateGarlicNestingDepth(nestingDepth, MaxGarlicNestingDepth); err != nil {
+	// Validate garlic structure
+	if err := validateGarlicStructure(data, nestingDepth, MinGarlicSize, MaxGarlicNestingDepth); err != nil {
 		return nil, err
 	}
 
-	if err := validateGarlicDataSize(data, MinGarlicSize); err != nil {
-		return nil, err
-	}
+	// Parse garlic components
+	return parseGarlicStructure(data, nestingDepth, MaxGarlicCloves)
+}
 
-	cloveCount, offset, err := parseGarlicCloveCount(data, MaxGarlicCloves)
+// validateGarlicStructure validates nesting depth and data size.
+func validateGarlicStructure(data []byte, nestingDepth, minSize, maxDepth int) error {
+	if err := validateGarlicNestingDepth(nestingDepth, maxDepth); err != nil {
+		return err
+	}
+	return validateGarlicDataSize(data, minSize)
+}
+
+// parseGarlicStructure parses all garlic components and builds the structure.
+func parseGarlicStructure(data []byte, nestingDepth, maxCloves int) (*Garlic, error) {
+	cloveCount, offset, err := parseGarlicCloveCount(data, maxCloves)
 	if err != nil {
 		return nil, err
 	}
