@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 // MockTunnelBuilder for testing pool maintenance
 type MockTunnelBuilder struct {
+	mu           sync.Mutex
 	buildCount   int
 	shouldFail   bool
 	lastRequest  BuildTunnelRequest
@@ -19,6 +21,9 @@ type MockTunnelBuilder struct {
 }
 
 func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.buildCount++
 	m.lastRequest = req
 
@@ -42,6 +47,13 @@ func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error
 	}
 
 	return tunnelID, nil
+}
+
+// GetBuildCount returns the current build count in a thread-safe manner.
+func (m *MockTunnelBuilder) GetBuildCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.buildCount
 }
 
 func TestPoolConfig(t *testing.T) {
@@ -368,7 +380,7 @@ func TestAttemptBuildTunnels(t *testing.T) {
 
 	success = pool.attemptBuildTunnels(3)
 	assert.True(t, success)
-	assert.Equal(t, 3, builder.buildCount)
+	assert.Equal(t, 3, builder.GetBuildCount())
 	assert.Equal(t, 3, len(builder.builtTunnels))
 }
 
@@ -382,7 +394,7 @@ func TestAttemptBuildTunnelsWithFailures(t *testing.T) {
 
 	success := pool.attemptBuildTunnels(2)
 	assert.False(t, success) // All builds failed
-	assert.Equal(t, 2, builder.buildCount)
+	assert.Equal(t, 2, builder.GetBuildCount())
 	assert.Empty(t, builder.builtTunnels)
 }
 
@@ -410,7 +422,7 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	// Wait for async build to complete
 	time.Sleep(100 * time.Millisecond)
 
-	assert.Equal(t, 2, builder.buildCount)
+	assert.Equal(t, 2, builder.GetBuildCount())
 
 	// Test backoff mechanism
 	builder.shouldFail = true
@@ -467,12 +479,12 @@ func TestMaintainPoolIntegration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should build min tunnels
-	assert.GreaterOrEqual(t, builder.buildCount, config.MinTunnels)
+	assert.GreaterOrEqual(t, builder.GetBuildCount(), config.MinTunnels)
 
 	// Wait for tunnels to near expiry
 	time.Sleep(600 * time.Millisecond)
 
-	oldBuildCount := builder.buildCount
+	oldBuildCount := builder.GetBuildCount()
 
 	// Run maintenance again
 	pool.maintainPool()
@@ -481,7 +493,7 @@ func TestMaintainPoolIntegration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should build replacement tunnels
-	assert.Greater(t, builder.buildCount, oldBuildCount)
+	assert.Greater(t, builder.GetBuildCount(), oldBuildCount)
 }
 
 func TestPoolStopGracefully(t *testing.T) {
@@ -544,7 +556,7 @@ func TestMaintenanceLoop(t *testing.T) {
 	stats := pool.GetPoolStats()
 	assert.GreaterOrEqual(t, stats.Active, config.MinTunnels)
 
-	initialCount := builder.buildCount
+	initialCount := builder.GetBuildCount()
 
 	// Mark some tunnels as near expiry
 	pool.mutex.Lock()
@@ -563,5 +575,5 @@ func TestMaintenanceLoop(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Should have built replacement
-	assert.Greater(t, builder.buildCount, initialCount)
+	assert.Greater(t, builder.GetBuildCount(), initialCount)
 }

@@ -331,10 +331,15 @@ func (r *Router) initializeMessageRouter() {
 // The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
 func (r *Router) initializeTunnelManager() {
 	// Create tunnel manager with NetDB as peer selector
-	r.tunnelManager = i2np.NewTunnelManager(r.StdNetDB)
+	tm := i2np.NewTunnelManager(r.StdNetDB)
 
 	// Set router as session provider for sending tunnel build messages
-	r.tunnelManager.SetSessionProvider(r)
+	tm.SetSessionProvider(r)
+
+	// Assign to router field with lock protection
+	r.runMux.Lock()
+	r.tunnelManager = tm
+	r.runMux.Unlock()
 
 	log.WithFields(logger.Fields{
 		"peer_selector": "netdb",
@@ -358,7 +363,7 @@ func (r *Router) initializeGarlicRouter() {
 	}
 
 	// Create garlic message router with router infrastructure
-	r.garlicRouter = NewGarlicMessageRouter(
+	gr := NewGarlicMessageRouter(
 		garlicNetDB,      // NetDB for LeaseSet/RouterInfo lookups
 		r.TransportMuxer, // Transport for sending to peer routers
 		tunnelPool,       // Tunnel pool for DESTINATION and TUNNEL delivery
@@ -366,8 +371,13 @@ func (r *Router) initializeGarlicRouter() {
 	)
 
 	// Set bidirectional references for LOCAL delivery recursion
-	r.garlicRouter.SetMessageProcessor(r.messageRouter.GetProcessor())
-	r.messageRouter.GetProcessor().SetCloveForwarder(r.garlicRouter)
+	gr.SetMessageProcessor(r.messageRouter.GetProcessor())
+	r.messageRouter.GetProcessor().SetCloveForwarder(gr)
+
+	// Protect write to garlicRouter field
+	r.runMux.Lock()
+	r.garlicRouter = gr
+	r.runMux.Unlock()
 
 	log.WithFields(logger.Fields{
 		"our_hash":        fmt.Sprintf("%x", routerHash[:8]),
@@ -394,6 +404,22 @@ func (r *Router) getOurRouterHash() common.Hash {
 	}
 
 	return hash
+}
+
+// GetTunnelManager returns the tunnel manager in a thread-safe manner.
+// Returns nil if the tunnel manager has not been initialized yet.
+func (r *Router) GetTunnelManager() *i2np.TunnelManager {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.tunnelManager
+}
+
+// GetGarlicRouter returns the garlic router in a thread-safe manner.
+// Returns nil if the garlic router has not been initialized yet.
+func (r *Router) GetGarlicRouter() *GarlicMessageRouter {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.garlicRouter
 }
 
 // ensureNetDBReady validates NetDB state and performs reseed if needed

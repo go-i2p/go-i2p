@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 // mockLeaseSetPublisher implements LeaseSetPublisher for testing
 type mockLeaseSetPublisher struct {
+	mu            sync.Mutex
 	published     map[common.Hash][]byte
 	publishErr    error
 	publishCalled int
@@ -24,12 +26,22 @@ func newMockLeaseSetPublisher() *mockLeaseSetPublisher {
 }
 
 func (m *mockLeaseSetPublisher) PublishLeaseSet(key common.Hash, data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.publishCalled++
 	if m.publishErr != nil {
 		return m.publishErr
 	}
 	m.published[key] = data
 	return nil
+}
+
+// GetPublishCount returns the number of times PublishLeaseSet was called.
+func (m *mockLeaseSetPublisher) GetPublishCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.publishCalled
 }
 
 // TestSessionSetLeaseSetPublisher tests setting the publisher on a session
@@ -80,7 +92,7 @@ func TestSessionPublishLeaseSetWithPublisher(t *testing.T) {
 	require.NoError(t, err, "Failed to regenerate and publish LeaseSet")
 
 	// Verify publisher was called
-	assert.Equal(t, 1, publisher.publishCalled, "Publisher should be called once")
+	assert.Equal(t, 1, publisher.GetPublishCount(), "Publisher should be called once")
 	assert.Equal(t, 1, len(publisher.published), "Should have published 1 LeaseSet")
 
 	// Verify the published key matches destination hash
@@ -158,7 +170,7 @@ func TestSessionPublishLeaseSetPublisherError(t *testing.T) {
 	assert.NoError(t, err, "Should not fail even if publisher errors")
 
 	// Verify publisher was called
-	assert.Equal(t, 1, publisher.publishCalled, "Publisher should be called")
+	assert.Equal(t, 1, publisher.GetPublishCount(), "Publisher should be called")
 }
 
 // TestSessionMaintenanceWithPublisher tests LeaseSet maintenance with publisher
@@ -201,13 +213,13 @@ func TestSessionMaintenanceWithPublisher(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify at least one publication occurred
-	assert.GreaterOrEqual(t, publisher.publishCalled, 1, "Should have published at least once")
+	assert.GreaterOrEqual(t, publisher.GetPublishCount(), 1, "Should have published at least once")
 
 	// Wait for potential regeneration (allow more time for maintenance cycle)
 	time.Sleep(2000 * time.Millisecond)
 
 	// Should have regenerated at least once more
-	assert.GreaterOrEqual(t, publisher.publishCalled, 2, "Should have published multiple times")
+	assert.GreaterOrEqual(t, publisher.GetPublishCount(), 2, "Should have published multiple times")
 }
 
 // TestServerWithLeaseSetPublisher tests I2CP server with publisher

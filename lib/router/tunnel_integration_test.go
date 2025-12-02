@@ -29,7 +29,7 @@ func createTestRouterConfig(tmpDir string) *config.RouterConfig {
 func waitForRouterReady(router *Router, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if router.tunnelManager != nil && router.garlicRouter != nil {
+		if router.GetTunnelManager() != nil && router.GetGarlicRouter() != nil {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -50,8 +50,8 @@ func TestRouter_TunnelManagerInitialization(t *testing.T) {
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
 
-	assert.NotNil(t, router.tunnelManager, "Tunnel manager should be initialized")
-	pool := router.tunnelManager.GetPool()
+	assert.NotNil(t, router.GetTunnelManager(), "Tunnel manager should be initialized")
+	pool := router.GetTunnelManager().GetPool()
 	assert.NotNil(t, pool, "Tunnel manager should have a pool")
 }
 
@@ -72,7 +72,7 @@ func TestRouter_GarlicRouterTunnelPoolIntegration(t *testing.T) {
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
 
-	assert.NotNil(t, router.garlicRouter, "Garlic router should be initialized")
+	assert.NotNil(t, router.GetGarlicRouter(), "Garlic router should be initialized")
 }
 
 // TestRouter_TunnelPoolAccessibility verifies that the tunnel pool is accessible
@@ -88,7 +88,7 @@ func TestRouter_TunnelPoolAccessibility(t *testing.T) {
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
 
-	pool := router.tunnelManager.GetPool()
+	pool := router.GetTunnelManager().GetPool()
 	require.NotNil(t, pool, "Tunnel pool should be accessible")
 
 	stats := pool.GetPoolStats()
@@ -109,7 +109,7 @@ func TestRouter_TunnelManagerCleanupOnStop(t *testing.T) {
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
 
-	assert.NotNil(t, router.tunnelManager, "Tunnel manager should exist")
+	assert.NotNil(t, router.GetTunnelManager(), "Tunnel manager should exist")
 
 	router.Stop()
 	// Test passes if no panics occur during shutdown
@@ -128,9 +128,9 @@ func TestRouter_InitializationOrder(t *testing.T) {
 	router.Start()
 	require.True(t, waitForRouterReady(router, 2*time.Second), "Router should complete initialization")
 
-	assert.NotNil(t, router.tunnelManager, "Tunnel manager should be initialized")
-	assert.NotNil(t, router.garlicRouter, "Garlic router should be initialized")
+	assert.NotNil(t, router.GetTunnelManager(), "Tunnel manager should be initialized")
+	assert.NotNil(t, router.GetGarlicRouter(), "Garlic router should be initialized")
 
-	pool := router.tunnelManager.GetPool()
+	pool := router.GetTunnelManager().GetPool()
 	assert.NotNil(t, pool, "Tunnel manager should provide access to tunnel pool")
 }
