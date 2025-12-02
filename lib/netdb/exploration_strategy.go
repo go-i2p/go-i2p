@@ -285,19 +285,34 @@ func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, erro
 		return common.Hash{}, fmt.Errorf("invalid bucket index: %d", bucketIdx)
 	}
 
-	// Start with our hash
+	// Start with our hash and flip the target bit
+	key := s.createKeyWithFlippedBit(bucketIdx)
+
+	// Randomize all less significant bits
+	if err := s.randomizeLowerBits(&key, bucketIdx); err != nil {
+		return common.Hash{}, err
+	}
+
+	return key, nil
+}
+
+// createKeyWithFlippedBit creates a key with the bit at bucketIdx flipped.
+func (s *AdaptiveStrategy) createKeyWithFlippedBit(bucketIdx int) common.Hash {
 	var key common.Hash
 	copy(key[:], s.ourHash[:])
 
 	// Flip the bit at position bucketIdx to create distance
 	byteIdx := bucketIdx / 8
 	bitIdx := 7 - (bucketIdx % 8)
-
-	// Flip the target bit
 	key[byteIdx] ^= (1 << uint(bitIdx))
 
-	// Randomize all less significant bits (bits after bucketIdx)
-	// This ensures the key falls in the target bucket but is still random
+	return key
+}
+
+// randomizeLowerBits randomizes all bits less significant than bucketIdx.
+func (s *AdaptiveStrategy) randomizeLowerBits(key *common.Hash, bucketIdx int) error {
+	byteIdx := bucketIdx / 8
+	bitIdx := 7 - (bucketIdx % 8)
 
 	// Randomize remaining bits in the target byte
 	for bit := bitIdx - 1; bit >= 0; bit-- {
@@ -313,12 +328,12 @@ func (s *AdaptiveStrategy) generateKeyInBucket(bucketIdx int) (common.Hash, erro
 		var b [1]byte
 		_, err := rand.Read(b[:])
 		if err != nil {
-			return common.Hash{}, fmt.Errorf("failed to generate random byte: %w", err)
+			return fmt.Errorf("failed to generate random byte: %w", err)
 		}
 		key[i] = b[0]
 	}
 
-	return key, nil
+	return nil
 }
 
 // randomBit returns a random boolean value
