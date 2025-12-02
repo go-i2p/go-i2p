@@ -510,18 +510,29 @@ func (p *MessageProcessor) parseDeliveryInstructions(data []byte) (*GarlicCloveD
 		return nil, 0, fmt.Errorf("no data for delivery instructions flag")
 	}
 
-	flag := data[0]
-	offset := 1
-
 	deliveryInstr := &GarlicCloveDeliveryInstructions{
-		Flag: flag,
+		Flag: data[0],
 	}
+
+	// Parse all instruction fields sequentially
+	offset, err := p.parseInstructionFields(data, deliveryInstr)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return deliveryInstr, offset, nil
+}
+
+// parseInstructionFields parses all delivery instruction fields.
+func (p *MessageProcessor) parseInstructionFields(data []byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
+	offset := 1
+	flag := deliveryInstr.Flag
 
 	// Parse optional session key (bit 7)
 	var err error
 	offset, err = parseSessionKey(data, offset, flag, deliveryInstr)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 
 	// Extract delivery type for subsequent parsing
@@ -530,22 +541,22 @@ func (p *MessageProcessor) parseDeliveryInstructions(data []byte) (*GarlicCloveD
 	// Parse optional hash field
 	offset, err = parseDeliveryHash(data, offset, deliveryType, deliveryInstr)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 
 	// Parse optional tunnel ID
 	offset, err = parseTunnelID(data, offset, deliveryType, deliveryInstr)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 
 	// Parse optional delay field
 	offset, err = parseDelay(data, offset, flag, deliveryInstr)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 
-	return deliveryInstr, offset, nil
+	return offset, nil
 }
 
 // parseSessionKey extracts the optional session key from delivery instructions.
