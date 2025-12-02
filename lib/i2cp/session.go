@@ -333,6 +333,20 @@ func (s *Session) OutboundPool() *tunnel.Pool {
 // QueueIncomingMessage queues a message for delivery to the client
 // Returns an error if the session is not active or the queue is full
 func (s *Session) QueueIncomingMessage(payload []byte) error {
+	if err := s.checkSessionActive(); err != nil {
+		return err
+	}
+
+	if err := s.checkRateLimit(); err != nil {
+		return err
+	}
+
+	msg := s.createIncomingMessage(payload)
+	return s.enqueueMessageWithMonitoring(msg)
+}
+
+// checkSessionActive verifies that the session is currently active.
+func (s *Session) checkSessionActive() error {
 	s.mu.RLock()
 	active := s.active
 	s.mu.RUnlock()
@@ -340,38 +354,56 @@ func (s *Session) QueueIncomingMessage(payload []byte) error {
 	if !active {
 		return fmt.Errorf("session %d not active", s.id)
 	}
+	return nil
+}
 
-	// Apply rate limiting if configured
+// checkRateLimit applies rate limiting if configured for this session.
+func (s *Session) checkRateLimit() error {
 	if s.messageRateLimiter != nil && !s.messageRateLimiter.allow() {
 		log.WithField("session_id", s.id).Warn("Message rate limit exceeded")
 		return fmt.Errorf("message rate limit exceeded for session %d", s.id)
 	}
+	return nil
+}
 
-	msg := &IncomingMessage{
+// createIncomingMessage constructs a new IncomingMessage with the given payload.
+func (s *Session) createIncomingMessage(payload []byte) *IncomingMessage {
+	return &IncomingMessage{
 		Payload:   payload,
 		Timestamp: time.Now(),
 	}
+}
 
-	// Try to queue with monitoring
+// enqueueMessageWithMonitoring attempts to queue the message and monitors queue health.
+func (s *Session) enqueueMessageWithMonitoring(msg *IncomingMessage) error {
 	select {
 	case s.incomingMessages <- msg:
-		// Check if queue is filling up (>80% full)
-		queueLen := len(s.incomingMessages)
-		if queueLen > s.queueHighWaterMark*8/10 {
-			log.WithFields(logger.Fields{
-				"session_id": s.id,
-				"queue_len":  queueLen,
-				"queue_cap":  cap(s.incomingMessages),
-			}).Warn("Incoming message queue filling up")
-		}
+		s.checkQueueHighWaterMark()
 		return nil
 	default:
+		return s.handleQueueFull()
+	}
+}
+
+// checkQueueHighWaterMark logs a warning if the queue is filling up (>80% full).
+func (s *Session) checkQueueHighWaterMark() {
+	queueLen := len(s.incomingMessages)
+	if queueLen > s.queueHighWaterMark*8/10 {
 		log.WithFields(logger.Fields{
 			"session_id": s.id,
+			"queue_len":  queueLen,
 			"queue_cap":  cap(s.incomingMessages),
-		}).Error("Incoming message queue full")
-		return fmt.Errorf("incoming message queue full for session %d", s.id)
+		}).Warn("Incoming message queue filling up")
 	}
+}
+
+// handleQueueFull logs an error and returns an error when the incoming message queue is full.
+func (s *Session) handleQueueFull() error {
+	log.WithFields(logger.Fields{
+		"session_id": s.id,
+		"queue_cap":  cap(s.incomingMessages),
+	}).Error("Incoming message queue full")
+	return fmt.Errorf("incoming message queue full for session %d", s.id)
 }
 
 // QueueIncomingMessageWithID queues a message for delivery to the client with a message ID.
