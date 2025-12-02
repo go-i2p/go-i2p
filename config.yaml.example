@@ -2,8 +2,6 @@
 #
 # This is the main configuration file for go-i2p router.
 # Location: $HOME/.go-i2p/config.yaml
-#
-# See RESEED.md for detailed documentation on configuring reseed servers.
 
 # Base directory for router files (read-only data)
 base_dir: /home/user/.go-i2p/base

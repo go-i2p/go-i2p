@@ -155,48 +155,24 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 
 // ReadMessage reads a complete I2CP message from a reader
 func ReadMessage(r io.Reader) (*Message, error) {
-	// Set read deadline to prevent slow-send attacks
-	// Only applies when reader is a net.Conn
-	if conn, ok := r.(net.Conn); ok {
-		deadline := time.Now().Add(MessageReadTimeout * time.Second)
-		if err := conn.SetReadDeadline(deadline); err != nil {
-			// Log but don't fail - deadline setting is defensive, not critical
-			log.WithError(err).Debug("failed_to_set_read_deadline")
-		}
+	setReaderDeadline(r)
+
+	header, err := readMessageHeader(r)
+	if err != nil {
+		return nil, err
 	}
 
-	// Read header: type(1) + sessionID(2) + length(4) = 7 bytes
-	header := make([]byte, 7)
-	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, fmt.Errorf("failed to read I2CP header: %w", err)
+	msgType, sessionID, payloadLen := parseMessageHeader(header)
+
+	if err := validatePayloadSize(payloadLen); err != nil {
+		return nil, err
 	}
 
-	// Parse header
-	msgType := header[0]
-	sessionID := binary.BigEndian.Uint16(header[1:3])
-	payloadLen := binary.BigEndian.Uint32(header[3:7])
+	logLargePayload(payloadLen, msgType, sessionID)
 
-	// Validate payload length per I2CP specification
-	if payloadLen > MaxPayloadSize {
-		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
-	}
-
-	// Warn on unusually large payloads that may indicate attack or misconfiguration
-	if payloadLen > DefaultPayloadSize {
-		log.WithFields(map[string]interface{}{
-			"at":          "i2cp.ReadMessage",
-			"payload_len": payloadLen,
-			"msg_type":    MessageTypeName(msgType),
-			"session_id":  sessionID,
-		}).Warn("large_i2cp_payload")
-	}
-
-	// Read payload
-	payload := make([]byte, payloadLen)
-	if payloadLen > 0 {
-		if _, err := io.ReadFull(r, payload); err != nil {
-			return nil, fmt.Errorf("failed to read I2CP payload: %w", err)
-		}
+	payload, err := readMessagePayload(r, payloadLen)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Message{
@@ -204,6 +180,73 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		SessionID: sessionID,
 		Payload:   payload,
 	}, nil
+}
+
+// setReaderDeadline sets a read deadline on the connection to prevent slow-send attacks.
+// The deadline is only applied when the reader is a net.Conn.
+func setReaderDeadline(r io.Reader) {
+	conn, ok := r.(net.Conn)
+	if !ok {
+		return
+	}
+
+	deadline := time.Now().Add(MessageReadTimeout * time.Second)
+	if err := conn.SetReadDeadline(deadline); err != nil {
+		// Log but don't fail - deadline setting is defensive, not critical
+		log.WithError(err).Debug("failed_to_set_read_deadline")
+	}
+}
+
+// readMessageHeader reads the I2CP message header from the reader.
+// The header consists of type(1) + sessionID(2) + length(4) = 7 bytes.
+func readMessageHeader(r io.Reader) ([]byte, error) {
+	header := make([]byte, 7)
+	if _, err := io.ReadFull(r, header); err != nil {
+		return nil, fmt.Errorf("failed to read I2CP header: %w", err)
+	}
+	return header, nil
+}
+
+// parseMessageHeader extracts the message type, session ID, and payload length from the header bytes.
+func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payloadLen uint32) {
+	msgType = header[0]
+	sessionID = binary.BigEndian.Uint16(header[1:3])
+	payloadLen = binary.BigEndian.Uint32(header[3:7])
+	return
+}
+
+// validatePayloadSize checks if the payload length exceeds the maximum allowed size per I2CP specification.
+func validatePayloadSize(payloadLen uint32) error {
+	if payloadLen > MaxPayloadSize {
+		return fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
+	}
+	return nil
+}
+
+// logLargePayload logs a warning when the payload size exceeds the default threshold,
+// which may indicate an attack or misconfiguration.
+func logLargePayload(payloadLen uint32, msgType uint8, sessionID uint16) {
+	if payloadLen <= DefaultPayloadSize {
+		return
+	}
+
+	log.WithFields(map[string]interface{}{
+		"at":          "i2cp.ReadMessage",
+		"payload_len": payloadLen,
+		"msg_type":    MessageTypeName(msgType),
+		"session_id":  sessionID,
+	}).Warn("large_i2cp_payload")
+}
+
+// readMessagePayload reads the message payload from the reader based on the specified length.
+func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
+	payload := make([]byte, payloadLen)
+	if payloadLen > 0 {
+		if _, err := io.ReadFull(r, payload); err != nil {
+			return nil, fmt.Errorf("failed to read I2CP payload: %w", err)
+		}
+	}
+	return payload, nil
 }
 
 // WriteMessage writes a complete I2CP message to a writer
