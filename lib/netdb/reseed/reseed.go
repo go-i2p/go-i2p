@@ -114,6 +114,29 @@ func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, 
 	log.WithField("file_path", filePath).Info("Processing local SU3 file")
 
 	// Read the SU3 file from disk
+	data, err := r.readSU3FileFromDisk(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse and extract SU3 content
+	content, err := r.parseSU3File(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process the reseed zip content
+	routerInfos, err := r.processReseedZip(content)
+	if err != nil {
+		return nil, err
+	}
+
+	r.logSU3ProcessingSuccess(filePath, len(routerInfos))
+	return routerInfos, nil
+}
+
+// readSU3FileFromDisk reads a SU3 file from the filesystem.
+func (r Reseed) readSU3FileFromDisk(filePath string) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		log.WithError(err).WithField("file_path", filePath).Error("Failed to read SU3 file")
@@ -125,7 +148,11 @@ func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, 
 		"size_bytes": len(data),
 	}).Debug("Read SU3 file from disk")
 
-	// Parse the SU3 file
+	return data, nil
+}
+
+// parseSU3File parses SU3 data and extracts the content.
+func (r Reseed) parseSU3File(data []byte) ([]byte, error) {
 	su3file, err := r.readSU3File(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -135,22 +162,15 @@ func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, 
 		return nil, err
 	}
 
-	content, err := r.extractSU3Content(su3file)
-	if err != nil {
-		return nil, err
-	}
+	return r.extractSU3Content(su3file)
+}
 
-	routerInfos, err := r.processReseedZip(content)
-	if err != nil {
-		return nil, err
-	}
-
+// logSU3ProcessingSuccess logs successful SU3 file processing.
+func (r Reseed) logSU3ProcessingSuccess(filePath string, count int) {
 	log.WithFields(logger.Fields{
 		"file_path":         filePath,
-		"router_info_count": len(routerInfos),
+		"router_info_count": count,
 	}).Info("Successfully processed local SU3 file")
-
-	return routerInfos, nil
 }
 
 // ProcessLocalZipFile reads and processes a local zip reseed file
