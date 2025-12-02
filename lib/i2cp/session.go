@@ -169,47 +169,16 @@ type IncomingMessage struct {
 // Each session gets a completely separate in-memory StdNetDB instance to prevent client linkability.
 // Client NetDBs are ephemeral and not persisted to disk.
 func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error) {
-	if config == nil {
-		config = DefaultSessionConfig()
+	config = ensureValidConfig(config)
+
+	keyStore, dest, err := prepareDestinationAndKeys(dest)
+	if err != nil {
+		return nil, err
 	}
 
-	// Generate destination with keys if not provided
-	var keyStore *keys.DestinationKeyStore
-	if dest == nil {
-		// Create new destination with Ed25519/ElGamal keys
-		var err error
-		keyStore, err = keys.NewDestinationKeyStore()
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate keys: %w", err)
-		}
-		dest = keyStore.Destination()
-	}
-
-	// Create isolated in-memory StdNetDB for this client (ephemeral, not persisted)
-	// Pass empty string to create in-memory only database
-	stdDB := netdb.NewStdNetDB("")
-	clientNetDB := netdb.NewClientNetDB(stdDB)
-	log.Debug("Created ephemeral in-memory NetDB for client session")
-
-	// Determine queue size (use config or default)
-	queueSize := config.MessageQueueSize
-	if queueSize <= 0 {
-		queueSize = 100
-	}
-
-	// Create rate limiter if rate limiting is enabled
-	var rateLimiter *simpleRateLimiter
-	if config.MessageRateLimit > 0 {
-		burstSize := config.MessageRateBurstSize
-		if burstSize <= 0 {
-			burstSize = config.MessageRateLimit * 2
-		}
-		rateLimiter = newSimpleRateLimiter(config.MessageRateLimit, burstSize)
-		log.WithFields(logger.Fields{
-			"rate":  config.MessageRateLimit,
-			"burst": burstSize,
-		}).Debug("Created rate limiter for session")
-	}
+	clientNetDB := createIsolatedNetDB()
+	queueSize := determineQueueSize(config)
+	rateLimiter := createRateLimiterIfNeeded(config)
 
 	return &Session{
 		id:                 id,
@@ -224,6 +193,68 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 		queueHighWaterMark: queueSize,
 		stopCh:             make(chan struct{}),
 	}, nil
+}
+
+// ensureValidConfig returns the provided config or a default config if nil.
+func ensureValidConfig(config *SessionConfig) *SessionConfig {
+	if config == nil {
+		return DefaultSessionConfig()
+	}
+	return config
+}
+
+// prepareDestinationAndKeys generates a new destination with keys if not provided,
+// or returns the existing destination with nil keys.
+func prepareDestinationAndKeys(dest *destination.Destination) (*keys.DestinationKeyStore, *destination.Destination, error) {
+	if dest != nil {
+		return nil, dest, nil
+	}
+
+	keyStore, err := keys.NewDestinationKeyStore()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate keys: %w", err)
+	}
+
+	return keyStore, keyStore.Destination(), nil
+}
+
+// createIsolatedNetDB creates an isolated in-memory StdNetDB for a client session.
+// The database is ephemeral and not persisted to disk to prevent client linkability.
+func createIsolatedNetDB() *netdb.ClientNetDB {
+	stdDB := netdb.NewStdNetDB("")
+	clientNetDB := netdb.NewClientNetDB(stdDB)
+	log.Debug("Created ephemeral in-memory NetDB for client session")
+	return clientNetDB
+}
+
+// determineQueueSize calculates the message queue size from config or returns default.
+func determineQueueSize(config *SessionConfig) int {
+	queueSize := config.MessageQueueSize
+	if queueSize <= 0 {
+		return 100
+	}
+	return queueSize
+}
+
+// createRateLimiterIfNeeded creates a rate limiter if rate limiting is enabled in config.
+// Returns nil if rate limiting is disabled (MessageRateLimit <= 0).
+func createRateLimiterIfNeeded(config *SessionConfig) *simpleRateLimiter {
+	if config.MessageRateLimit <= 0 {
+		return nil
+	}
+
+	burstSize := config.MessageRateBurstSize
+	if burstSize <= 0 {
+		burstSize = config.MessageRateLimit * 2
+	}
+
+	rateLimiter := newSimpleRateLimiter(config.MessageRateLimit, burstSize)
+	log.WithFields(logger.Fields{
+		"rate":  config.MessageRateLimit,
+		"burst": burstSize,
+	}).Debug("Created rate limiter for session")
+
+	return rateLimiter
 }
 
 // ID returns the session ID
