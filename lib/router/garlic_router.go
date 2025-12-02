@@ -475,37 +475,49 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 	now := time.Now()
 
 	for destHash, messages := range gr.pendingMsgs {
-		// Skip if no messages for this destination
-		if len(messages) == 0 {
-			delete(gr.pendingMsgs, destHash)
-			continue
-		}
+		gr.processPendingDestination(destHash, messages, now)
+	}
+}
 
-		// Try to get LeaseSet
-		leaseSetChan := gr.netdb.GetLeaseSet(destHash)
-		if leaseSetChan == nil {
-			// LeaseSet still not found, clean up expired messages
+// processPendingDestination handles lookup retry and message processing for a single destination.
+// It attempts to retrieve the LeaseSet and either forwards queued messages or cleans up expired ones.
+func (gr *GarlicMessageRouter) processPendingDestination(destHash common.Hash, messages []pendingMessage, now time.Time) {
+	// Skip if no messages for this destination
+	if len(messages) == 0 {
+		delete(gr.pendingMsgs, destHash)
+		return
+	}
+
+	// Try to get LeaseSet
+	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
+	if leaseSetChan == nil {
+		// LeaseSet still not found, clean up expired messages
+		gr.cleanupExpiredMessages(destHash, messages, now)
+		return
+	}
+
+	// Attempt to read LeaseSet and process accordingly
+	gr.attemptLeaseSetRetrieval(destHash, messages, now, leaseSetChan)
+}
+
+// attemptLeaseSetRetrieval tries to retrieve a LeaseSet with a short timeout and processes or cleans up messages.
+// This performs a non-blocking read from the LeaseSet channel.
+func (gr *GarlicMessageRouter) attemptLeaseSetRetrieval(destHash common.Hash, messages []pendingMessage, now time.Time, leaseSetChan chan lease_set.LeaseSet) {
+	select {
+	case ls, ok := <-leaseSetChan:
+		if !ok {
 			gr.cleanupExpiredMessages(destHash, messages, now)
-			continue
+			return
 		}
 
-		// Try to read LeaseSet with short timeout (non-blocking)
-		select {
-		case ls, ok := <-leaseSetChan:
-			if !ok {
-				gr.cleanupExpiredMessages(destHash, messages, now)
-				continue
-			}
+		// LeaseSet found! Process all pending messages
+		// Note: processPendingMessagesForDestination will validate the LeaseSet
+		// and handle invalid cases by cleaning up the queue
+		gr.processPendingMessagesForDestination(destHash, ls, messages)
 
-			// LeaseSet found! Process all pending messages
-			// Note: processPendingMessagesForDestination will validate the LeaseSet
-			// and handle invalid cases by cleaning up the queue
-			gr.processPendingMessagesForDestination(destHash, ls, messages)
-
-		default:
-			// LeaseSet not immediately available, clean up expired
-			gr.cleanupExpiredMessages(destHash, messages, now)
-		}
+	default:
+		// LeaseSet not immediately available, clean up expired
+		gr.cleanupExpiredMessages(destHash, messages, now)
 	}
 }
 
