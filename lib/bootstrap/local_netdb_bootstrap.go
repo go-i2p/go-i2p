@@ -123,50 +123,7 @@ func (lb *LocalNetDbBootstrap) readRouterInfosFromDirectory(ctx context.Context,
 	routerInfos := make([]router_info.RouterInfo, 0)
 	count := 0
 
-	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
-		// Check context cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if err != nil {
-			return nil // Skip files with errors
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Only process .dat files that look like RouterInfo files
-		if !strings.HasSuffix(filePath, ".dat") {
-			return nil
-		}
-
-		if !strings.Contains(filePath, "routerInfo-") {
-			return nil
-		}
-
-		// Try to read and parse the RouterInfo
-		ri, err := lb.readRouterInfoFromFile(filePath)
-		if err != nil {
-			// Log but don't fail - some files might be corrupted
-			log.WithError(err).WithField("file", filePath).Debug("Failed to read RouterInfo file, skipping")
-			return nil
-		}
-
-		routerInfos = append(routerInfos, ri)
-		count++
-
-		// Stop if we have enough
-		if maxCount > 0 && count >= maxCount {
-			return filepath.SkipAll
-		}
-
-		return nil
-	})
+	err := filepath.Walk(path, lb.createWalkFunction(ctx, &routerInfos, &count, maxCount))
 
 	if err != nil && err != filepath.SkipAll {
 		return nil, err
@@ -177,6 +134,58 @@ func (lb *LocalNetDbBootstrap) readRouterInfosFromDirectory(ctx context.Context,
 	}
 
 	return routerInfos, nil
+}
+
+// createWalkFunction creates a filepath.WalkFunc that processes RouterInfo files
+func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInfos *[]router_info.RouterInfo, count *int, maxCount int) filepath.WalkFunc {
+	return func(filePath string, info os.FileInfo, err error) error {
+		if shouldStopWalk(ctx, *count, maxCount) {
+			return filepath.SkipAll
+		}
+
+		if !shouldProcessFile(filePath, info, err) {
+			return nil
+		}
+
+		ri, err := lb.readRouterInfoFromFile(filePath)
+		if err != nil {
+			log.WithError(err).WithField("file", filePath).Debug("Failed to read RouterInfo file, skipping")
+			return nil
+		}
+
+		*routerInfos = append(*routerInfos, ri)
+		*count++
+
+		return nil
+	}
+}
+
+// shouldStopWalk determines if the walk should be terminated based on context or count
+func shouldStopWalk(ctx context.Context, count int, maxCount int) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+	}
+
+	return maxCount > 0 && count >= maxCount
+}
+
+// shouldProcessFile determines if a file should be processed as a RouterInfo file
+func shouldProcessFile(filePath string, info os.FileInfo, err error) bool {
+	if err != nil {
+		return false
+	}
+
+	if info.IsDir() {
+		return false
+	}
+
+	if !strings.HasSuffix(filePath, ".dat") {
+		return false
+	}
+
+	return strings.Contains(filePath, "routerInfo-")
 }
 
 // readRouterInfoFromFile reads and parses a single RouterInfo file
