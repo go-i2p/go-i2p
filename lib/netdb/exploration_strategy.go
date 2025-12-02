@@ -161,8 +161,18 @@ func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash) 
 	defer s.mu.Unlock()
 
 	s.ourHash = ourHash
+	s.resetStatistics()
 
-	// Reset statistics
+	routers := db.GetAllRouterInfos()
+	s.totalRouters = len(routers)
+
+	s.processBucketDistribution(routers)
+	s.identifyBucketGaps()
+	s.logStatisticsUpdate()
+}
+
+// resetStatistics clears all bucket statistics and counters to prepare for a fresh update.
+func (s *AdaptiveStrategy) resetStatistics() {
 	for i := 0; i < NumKademliaBuckets; i++ {
 		s.bucketStats[i] = BucketStats{BucketIndex: i}
 	}
@@ -170,12 +180,10 @@ func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash) 
 	s.floodfillRouters = 0
 	s.sparseBuckets = nil
 	s.emptyBuckets = nil
+}
 
-	// Get all routers from NetDB
-	routers := db.GetAllRouterInfos()
-	s.totalRouters = len(routers)
-
-	// Calculate bucket for each router
+// processBucketDistribution calculates bucket assignments for all routers and updates statistics.
+func (s *AdaptiveStrategy) processBucketDistribution(routers []router_info.RouterInfo) {
 	for _, ri := range routers {
 		riHash, err := ri.IdentHash()
 		if err != nil {
@@ -186,14 +194,15 @@ func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash) 
 
 		s.bucketStats[bucketIdx].TotalRouters++
 
-		// Check if floodfill - use same method as std.go
 		if s.isFloodfillRouter(ri) {
 			s.bucketStats[bucketIdx].FloodfillRouters++
 			s.floodfillRouters++
 		}
 	}
+}
 
-	// Identify sparse and empty buckets
+// identifyBucketGaps finds buckets that are empty or have insufficient floodfill coverage.
+func (s *AdaptiveStrategy) identifyBucketGaps() {
 	for i := 0; i < NumKademliaBuckets; i++ {
 		stats := s.bucketStats[i]
 
@@ -203,7 +212,10 @@ func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash) 
 			s.sparseBuckets = append(s.sparseBuckets, i)
 		}
 	}
+}
 
+// logStatisticsUpdate logs the current exploration strategy statistics for debugging.
+func (s *AdaptiveStrategy) logStatisticsUpdate() {
 	log.WithFields(logger.Fields{
 		"total_routers":  s.totalRouters,
 		"floodfills":     s.floodfillRouters,

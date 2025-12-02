@@ -581,53 +581,74 @@ func (s *Session) CreateEncryptedLeaseSet() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Validate Ed25519 signature type requirement
+	if err := s.prepareEncryptedLeaseSetContext(); err != nil {
+		return nil, err
+	}
+
+	leases, err := s.gatherActiveLeasesForEncryption()
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedData, cookie, err := s.buildEncryptedLeaseSetData(leases)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.finalizeEncryptedLeaseSet(cookie, encryptedData)
+}
+
+// prepareEncryptedLeaseSetContext validates and prepares the session for EncryptedLeaseSet creation.
+// This includes validating Ed25519 support and ensuring the blinded destination is current.
+func (s *Session) prepareEncryptedLeaseSetContext() error {
 	if err := s.validateEncryptedLeaseSetSupport(); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Ensure blinded destination is up-to-date (may rotate daily)
-	if err := s.updateBlindedDestination(); err != nil {
-		return nil, err
-	}
+	return s.updateBlindedDestination()
+}
 
-	// Collect active tunnels
+// gatherActiveLeasesForEncryption collects and prepares active leases from the inbound tunnel pool.
+// Returns lease structures ready for inclusion in the encrypted LeaseSet.
+func (s *Session) gatherActiveLeasesForEncryption() ([]lease.Lease2, error) {
 	tunnels, err := s.collectActiveTunnels()
 	if err != nil {
 		return nil, err
 	}
 
-	// Build leases from tunnels
-	leases, err := s.buildLeasesFromTunnels(tunnels)
-	if err != nil {
-		return nil, err
-	}
+	return s.buildLeasesFromTunnels(tunnels)
+}
 
-	// Create inner LeaseSet2
+// buildEncryptedLeaseSetData creates and encrypts the inner LeaseSet2 data.
+// Returns the encrypted data and the cookie used for encryption.
+func (s *Session) buildEncryptedLeaseSetData(leases []lease.Lease2) ([]byte, [32]byte, error) {
 	innerLS2, err := s.createInnerLeaseSet2(leases)
 	if err != nil {
-		return nil, err
+		return nil, [32]byte{}, err
 	}
 
-	// Generate cookie for encryption
 	cookie, err := s.generateEncryptionCookie()
 	if err != nil {
-		return nil, err
+		return nil, [32]byte{}, err
 	}
 
-	// Encrypt inner LeaseSet2
-	encryptedInnerData, err := s.encryptInnerLeaseSet(innerLS2, cookie)
+	encryptedData, err := s.encryptInnerLeaseSet(innerLS2, cookie)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+
+	return encryptedData, cookie, nil
+}
+
+// finalizeEncryptedLeaseSet assembles and serializes the final EncryptedLeaseSet structure.
+// Takes the encryption cookie and encrypted inner data, creates the EncryptedLeaseSet,
+// and returns the serialized bytes ready for network publication.
+func (s *Session) finalizeEncryptedLeaseSet(cookie [32]byte, encryptedData []byte) ([]byte, error) {
+	els, err := s.assembleEncryptedLeaseSet(cookie, encryptedData)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create and sign EncryptedLeaseSet
-	els, err := s.assembleEncryptedLeaseSet(cookie, encryptedInnerData)
-	if err != nil {
-		return nil, err
-	}
-
-	// Serialize to bytes
 	elsBytes, err := els.Bytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
