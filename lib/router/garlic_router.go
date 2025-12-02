@@ -396,33 +396,43 @@ func (gr *GarlicMessageRouter) ForwardThroughTunnel(
 
 	// Check if we are the gateway (reflexive tunnel delivery)
 	if bytes.Equal(gatewayHash[:], gr.routerIdentity[:]) {
-		// We are the gateway - process the TunnelGateway message locally
-		log.WithFields(logger.Fields{
-			"tunnel_id": tunnelID,
-		}).Debug("TUNNEL delivery is reflexive, processing TunnelGateway locally")
-
-		// Create TunnelGateway message for local processing
-		msgBytes, err := msg.MarshalBinary()
-		if err != nil {
-			return fmt.Errorf("failed to marshal message for local tunnel injection: %w", err)
-		}
-
-		tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, msgBytes)
-
-		// Process the TunnelGateway message through our message processor
-		// This will decrypt tunnel layers and route to final destination
-		if gr.processor == nil {
-			return fmt.Errorf("message processor not set for local tunnel injection")
-		}
-
-		if err := gr.processor.ProcessMessage(tunnelGatewayMsg); err != nil {
-			return fmt.Errorf("failed to process local tunnel injection: %w", err)
-		}
-
-		log.WithField("tunnel_id", tunnelID).Debug("Successfully injected message into local tunnel")
-		return nil
+		return gr.processReflexiveTunnelDelivery(tunnelID, msg)
 	}
 
+	// Create and forward TunnelGateway message to remote gateway
+	return gr.forwardToTunnelGateway(gatewayHash, tunnelID, msg)
+}
+
+// processReflexiveTunnelDelivery handles tunnel delivery when we are the gateway router.
+func (gr *GarlicMessageRouter) processReflexiveTunnelDelivery(tunnelID tunnel.TunnelID, msg i2np.I2NPMessage) error {
+	log.WithFields(logger.Fields{
+		"tunnel_id": tunnelID,
+	}).Debug("TUNNEL delivery is reflexive, processing TunnelGateway locally")
+
+	// Create TunnelGateway message for local processing
+	msgBytes, err := msg.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal message for local tunnel injection: %w", err)
+	}
+
+	tunnelGatewayMsg := i2np.NewTunnelGatewayMessage(tunnelID, msgBytes)
+
+	// Process the TunnelGateway message through our message processor
+	// This will decrypt tunnel layers and route to final destination
+	if gr.processor == nil {
+		return fmt.Errorf("message processor not set for local tunnel injection")
+	}
+
+	if err := gr.processor.ProcessMessage(tunnelGatewayMsg); err != nil {
+		return fmt.Errorf("failed to process local tunnel injection: %w", err)
+	}
+
+	log.WithField("tunnel_id", tunnelID).Debug("Successfully injected message into local tunnel")
+	return nil
+}
+
+// forwardToTunnelGateway creates TunnelGateway message and sends to remote gateway router.
+func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg i2np.I2NPMessage) error {
 	// Serialize the wrapped message for inclusion in TunnelGateway
 	msgBytes, err := msg.MarshalBinary()
 	if err != nil {
