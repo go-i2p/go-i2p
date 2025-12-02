@@ -1811,41 +1811,9 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	data := writer.GetStoreData()
 	dataType := writer.GetStoreType()
 
-	// Validate data size before processing to prevent resource exhaustion
-	// I2P spec: RouterInfo is gzip-compressed, typical size 1-2 KB compressed, 3-10 KB uncompressed
-	const (
-		MaxCompressedSize   = 20 * 1024  // 20 KB compressed (generous limit)
-		MaxUncompressedSize = 100 * 1024 // 100 KB uncompressed (generous limit)
-		MaxCompressionRatio = 100        // Detect decompression bombs
-	)
-
-	if len(data) > MaxCompressedSize {
-		log.WithFields(logger.Fields{
-			"data_size": len(data),
-			"max_size":  MaxCompressedSize,
-		}).Warn("Rejecting oversized database store data")
-		return fmt.Errorf("database store data too large: %d bytes (max %d)", len(data), MaxCompressedSize)
-	}
-
-	// For RouterInfo (type 0), validate compression if data appears compressed
-	if dataType == DATABASE_STORE_TYPE_ROUTER_INFO && len(data) > 2 {
-		// Check if data starts with gzip magic number (0x1f 0x8b)
-		if data[0] == 0x1f && data[1] == 0x8b {
-			// Validate decompression bomb risk before processing
-			uncompressedSize, err := validateGzipSize(data, MaxUncompressedSize, MaxCompressionRatio)
-			if err != nil {
-				log.WithFields(logger.Fields{
-					"compressed_size":   len(data),
-					"uncompressed_size": uncompressedSize,
-					"error":             err,
-				}).Warn("Rejecting suspicious compressed RouterInfo")
-				return fmt.Errorf("invalid compressed RouterInfo: %w", err)
-			}
-			log.WithFields(logger.Fields{
-				"compressed_size":   len(data),
-				"uncompressed_size": uncompressedSize,
-			}).Debug("Validated gzip-compressed RouterInfo")
-		}
+	// Validate data before storing
+	if err := validateStoreData(data, dataType); err != nil {
+		return err
 	}
 
 	log.WithFields(logger.Fields{
@@ -1859,6 +1827,58 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 	}
 
 	return fmt.Errorf("no NetDB available for storage")
+}
+
+// validateStoreData validates data size and compression before storing.
+func validateStoreData(data []byte, dataType byte) error {
+	// I2P spec: RouterInfo is gzip-compressed, typical size 1-2 KB compressed, 3-10 KB uncompressed
+	const (
+		MaxCompressedSize   = 20 * 1024  // 20 KB compressed (generous limit)
+		MaxUncompressedSize = 100 * 1024 // 100 KB uncompressed (generous limit)
+		MaxCompressionRatio = 100        // Detect decompression bombs
+	)
+
+	// Validate data size before processing to prevent resource exhaustion
+	if len(data) > MaxCompressedSize {
+		log.WithFields(logger.Fields{
+			"data_size": len(data),
+			"max_size":  MaxCompressedSize,
+		}).Warn("Rejecting oversized database store data")
+		return fmt.Errorf("database store data too large: %d bytes (max %d)", len(data), MaxCompressedSize)
+	}
+
+	// For RouterInfo (type 0), validate compression if data appears compressed
+	if dataType == DATABASE_STORE_TYPE_ROUTER_INFO && len(data) > 2 {
+		return validateRouterInfoCompression(data, MaxUncompressedSize, MaxCompressionRatio)
+	}
+
+	return nil
+}
+
+// validateRouterInfoCompression checks gzip-compressed RouterInfo for decompression bombs.
+func validateRouterInfoCompression(data []byte, maxUncompressed, maxRatio int) error {
+	// Check if data starts with gzip magic number (0x1f 0x8b)
+	if data[0] != 0x1f || data[1] != 0x8b {
+		return nil // Not gzip-compressed, skip validation
+	}
+
+	// Validate decompression bomb risk before processing
+	uncompressedSize, err := validateGzipSize(data, maxUncompressed, maxRatio)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"compressed_size":   len(data),
+			"uncompressed_size": uncompressedSize,
+			"error":             err,
+		}).Warn("Rejecting suspicious compressed RouterInfo")
+		return fmt.Errorf("invalid compressed RouterInfo: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"compressed_size":   len(data),
+		"uncompressed_size": uncompressedSize,
+	}).Debug("Validated gzip-compressed RouterInfo")
+
+	return nil
 }
 
 // SessionManager demonstrates session-related interface usage
