@@ -469,48 +469,89 @@ func (p *MessageProcessor) parseDeliveryInstructions(data []byte) (*GarlicCloveD
 		Flag: flag,
 	}
 
-	// Check if encrypted (bit 7) - currently unimplemented
-	if (flag>>7)&0x01 == 1 {
-		if len(data)-offset < 32 {
-			return nil, 0, fmt.Errorf("insufficient data for session key")
-		}
-		copy(deliveryInstr.SessionKey[:], data[offset:offset+32])
-		offset += 32
+	// Parse optional session key (bit 7)
+	var err error
+	offset, err = parseSessionKey(data, offset, flag, deliveryInstr)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// Extract delivery type (bits 6-5)
-	deliveryType := (flag >> 5) & 0x03
+	// Extract delivery type for subsequent parsing
+	deliveryType := extractDeliveryType(flag)
 
-	// Check if hash is present (DESTINATION=1, ROUTER=2, TUNNEL=3)
-	if deliveryType >= 1 && deliveryType <= 3 {
-		if len(data)-offset < 32 {
-			return nil, 0, fmt.Errorf("insufficient data for hash")
-		}
-		copy(deliveryInstr.Hash[:], data[offset:offset+32])
-		offset += 32
+	// Parse optional hash field
+	offset, err = parseDeliveryHash(data, offset, deliveryType, deliveryInstr)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// Check if tunnel ID is present (TUNNEL=3)
-	if deliveryType == 3 {
-		if len(data)-offset < 4 {
-			return nil, 0, fmt.Errorf("insufficient data for tunnel ID")
-		}
-		tunnelID := uint32(data[offset])<<24 | uint32(data[offset+1])<<16 | uint32(data[offset+2])<<8 | uint32(data[offset+3])
-		deliveryInstr.TunnelID = tunnel.TunnelID(tunnelID)
-		offset += 4
+	// Parse optional tunnel ID
+	offset, err = parseTunnelID(data, offset, deliveryType, deliveryInstr)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// Check if delay is included (bit 4)
-	if (flag>>4)&0x01 == 1 {
-		if len(data)-offset < 4 {
-			return nil, 0, fmt.Errorf("insufficient data for delay")
-		}
-		delay := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
-		deliveryInstr.Delay = delay
-		offset += 4
+	// Parse optional delay field
+	offset, err = parseDelay(data, offset, flag, deliveryInstr)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	return deliveryInstr, offset, nil
+}
+
+// parseSessionKey extracts the optional session key from delivery instructions.
+// Returns the updated offset and any parsing error.
+func parseSessionKey(data []byte, offset int, flag byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
+	if (flag>>7)&0x01 == 1 {
+		if len(data)-offset < 32 {
+			return 0, fmt.Errorf("insufficient data for session key")
+		}
+		copy(deliveryInstr.SessionKey[:], data[offset:offset+32])
+		return offset + 32, nil
+	}
+	return offset, nil
+}
+
+// parseDeliveryHash extracts the optional hash field for DESTINATION, ROUTER, or TUNNEL delivery.
+// Returns the updated offset and any parsing error.
+func parseDeliveryHash(data []byte, offset int, deliveryType byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
+	if deliveryType >= 1 && deliveryType <= 3 {
+		if len(data)-offset < 32 {
+			return 0, fmt.Errorf("insufficient data for hash")
+		}
+		copy(deliveryInstr.Hash[:], data[offset:offset+32])
+		return offset + 32, nil
+	}
+	return offset, nil
+}
+
+// parseTunnelID extracts the optional tunnel ID field for TUNNEL delivery type.
+// Returns the updated offset and any parsing error.
+func parseTunnelID(data []byte, offset int, deliveryType byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
+	if deliveryType == 3 {
+		if len(data)-offset < 4 {
+			return 0, fmt.Errorf("insufficient data for tunnel ID")
+		}
+		tunnelID := uint32(data[offset])<<24 | uint32(data[offset+1])<<16 | uint32(data[offset+2])<<8 | uint32(data[offset+3])
+		deliveryInstr.TunnelID = tunnel.TunnelID(tunnelID)
+		return offset + 4, nil
+	}
+	return offset, nil
+}
+
+// parseDelay extracts the optional delay field from delivery instructions.
+// Returns the updated offset and any parsing error.
+func parseDelay(data []byte, offset int, flag byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
+	if (flag>>4)&0x01 == 1 {
+		if len(data)-offset < 4 {
+			return 0, fmt.Errorf("insufficient data for delay")
+		}
+		delay := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
+		deliveryInstr.Delay = delay
+		return offset + 4, nil
+	}
+	return offset, nil
 }
 
 // parseI2NPMessage parses a wrapped I2NP message from garlic clove data.
