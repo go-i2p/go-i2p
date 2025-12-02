@@ -44,7 +44,24 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 		return nil, err
 	}
 
-	// Determine file type and process accordingly
+	// Process file based on type
+	routerInfos, err := fb.processReseedFile(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(routerInfos) == 0 {
+		return nil, fmt.Errorf("no RouterInfos found in reseed file")
+	}
+
+	log.WithField("count", len(routerInfos)).Info("Successfully loaded RouterInfos from file")
+
+	// Limit to requested count
+	return limitRouterInfos(routerInfos, n), nil
+}
+
+// processReseedFile determines file type and extracts RouterInfos accordingly.
+func (fb *FileBootstrap) processReseedFile(ctx context.Context) ([]router_info.RouterInfo, error) {
 	ext := strings.ToLower(filepath.Ext(fb.filePath))
 	log.WithField("extension", ext).Debug("Detected file extension")
 
@@ -65,23 +82,21 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 		return nil, err
 	}
 
-	if len(routerInfos) == 0 {
-		return nil, fmt.Errorf("no RouterInfos found in reseed file")
-	}
+	return routerInfos, nil
+}
 
-	log.WithField("count", len(routerInfos)).Info("Successfully loaded RouterInfos from file")
-
-	// Return requested number of peers if specified
+// limitRouterInfos returns up to n RouterInfos from the provided slice.
+// If n <= 0, returns all RouterInfos.
+func limitRouterInfos(routerInfos []router_info.RouterInfo, n int) []router_info.RouterInfo {
 	if n > 0 && len(routerInfos) > n {
 		log.WithFields(logger.Fields{
 			"total":     len(routerInfos),
 			"requested": n,
 			"returning": n,
 		}).Debug("Limiting returned peers to requested count")
-		return routerInfos[:n], nil
+		return routerInfos[:n]
 	}
-
-	return routerInfos, nil
+	return routerInfos
 }
 
 // validateFile checks if the file exists and is readable

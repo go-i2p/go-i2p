@@ -462,24 +462,12 @@ func (p *MessageProcessor) parseGarlicClove(data []byte) (*GarlicClove, int, err
 	}
 	offset += bytesRead
 
-	// Parse clove ID (4 bytes)
-	if len(data)-offset < 4 {
-		return nil, 0, fmt.Errorf("insufficient data for clove ID")
+	// Parse clove metadata
+	cloveID, bytesRead, err := parseGarlicCloveTrailer(data[offset:])
+	if err != nil {
+		return nil, 0, err
 	}
-	cloveID := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
-	offset += 4
-
-	// Parse expiration (8 bytes) - skip for now
-	if len(data)-offset < 8 {
-		return nil, 0, fmt.Errorf("insufficient data for expiration")
-	}
-	offset += 8
-
-	// Parse certificate (3 bytes - always null)
-	if len(data)-offset < 3 {
-		return nil, 0, fmt.Errorf("insufficient data for certificate")
-	}
-	offset += 3
+	offset += bytesRead
 
 	clove := &GarlicClove{
 		DeliveryInstructions: *deliveryInstr,
@@ -488,6 +476,27 @@ func (p *MessageProcessor) parseGarlicClove(data []byte) (*GarlicClove, int, err
 	}
 
 	return clove, offset, nil
+}
+
+// parseGarlicCloveTrailer extracts clove ID, expiration, and certificate from clove trailer.
+// Returns clove ID and total bytes consumed (15 bytes: 4 for ID + 8 for expiration + 3 for certificate).
+func parseGarlicCloveTrailer(data []byte) (int, int, error) {
+	// Validate sufficient data for full trailer
+	if len(data) < 15 {
+		return 0, 0, fmt.Errorf("insufficient data for clove trailer (need 15 bytes, have %d)", len(data))
+	}
+
+	// Parse clove ID (4 bytes, big-endian)
+	cloveID := parseCloveID(data[0:4])
+
+	// Skip expiration (8 bytes) and certificate (3 bytes)
+	// Total bytes consumed: 4 + 8 + 3 = 15
+	return cloveID, 15, nil
+}
+
+// parseCloveID extracts a 4-byte big-endian integer clove ID.
+func parseCloveID(data []byte) int {
+	return int(data[0])<<24 | int(data[1])<<16 | int(data[2])<<8 | int(data[3])
 }
 
 // parseDeliveryInstructions parses garlic clove delivery instructions.
