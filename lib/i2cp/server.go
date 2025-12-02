@@ -464,31 +464,8 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 
 // handleCreateSession creates a new session
 func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Message, error) {
-	var dest *destination.Destination
-	var config *SessionConfig
-
-	// Parse destination and session configuration from payload (if provided)
-	if len(msg.Payload) > 0 {
-		var err error
-		dest, config, err = ParseCreateSessionPayload(msg.Payload)
-		if err != nil {
-			log.WithError(err).Warn("failed to parse create session payload, using defaults")
-			// Fall back to defaults on parse error
-			dest = nil
-			config = DefaultSessionConfig()
-		} else {
-			// Validate the parsed configuration
-			if err := ValidateSessionConfig(config); err != nil {
-				log.WithError(err).Warn("invalid session config, using defaults")
-				config = DefaultSessionConfig()
-			}
-		}
-	} else {
-		// Empty payload - use defaults (backward compatibility with tests)
-		log.Debug("Empty CreateSession payload, using defaults")
-		dest = nil
-		config = DefaultSessionConfig()
-	}
+	// Parse and validate session configuration
+	dest, config := parseSessionConfiguration(msg.Payload)
 
 	// Create session with parsed or default configuration
 	// If dest is nil, NewSession will generate a new destination
@@ -513,14 +490,42 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 		"outbound_tunnel_count":  config.OutboundTunnelCount,
 	}).Info("session_created")
 
-	// Send SessionStatus response (status byte: 0 = success)
-	response := &Message{
-		Type:      MessageTypeSessionStatus,
-		SessionID: session.ID(),
-		Payload:   []byte{0x00}, // Success
+	// Build success response
+	return buildSessionStatusResponse(session.ID()), nil
+}
+
+// parseSessionConfiguration extracts and validates session configuration from payload.
+// Returns destination and configuration, using defaults when payload is empty or invalid.
+func parseSessionConfiguration(payload []byte) (*destination.Destination, *SessionConfig) {
+	// Empty payload - use defaults (backward compatibility with tests)
+	if len(payload) == 0 {
+		log.Debug("Empty CreateSession payload, using defaults")
+		return nil, DefaultSessionConfig()
 	}
 
-	return response, nil
+	// Parse destination and session configuration from payload
+	dest, config, err := ParseCreateSessionPayload(payload)
+	if err != nil {
+		log.WithError(err).Warn("failed to parse create session payload, using defaults")
+		return nil, DefaultSessionConfig()
+	}
+
+	// Validate the parsed configuration
+	if err := ValidateSessionConfig(config); err != nil {
+		log.WithError(err).Warn("invalid session config, using defaults")
+		return dest, DefaultSessionConfig()
+	}
+
+	return dest, config
+}
+
+// buildSessionStatusResponse creates a successful SessionStatus message.
+func buildSessionStatusResponse(sessionID uint16) *Message {
+	return &Message{
+		Type:      MessageTypeSessionStatus,
+		SessionID: sessionID,
+		Payload:   []byte{0x00}, // Success status byte
+	}
 }
 
 // handleDestroySession destroys a session
