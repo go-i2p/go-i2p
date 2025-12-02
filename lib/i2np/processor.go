@@ -1142,25 +1142,50 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 		"message_id":   messageID,
 	}).Debug("Processing tunnel reply")
 
-	// Get the pending build request to find tunnel ID
-	tm.buildMutex.RLock()
-	req, exists := tm.pendingBuilds[messageID]
-	tm.buildMutex.RUnlock()
+	// Retrieve pending build request
+	req, exists := tm.retrievePendingBuildRequest(messageID)
 
+	// Process uncorrelated reply if no pending request exists
 	if !exists {
-		log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
-		// Continue processing even without pending build (allows testing and handles late replies)
-		err := handler.ProcessReply()
-		if err != nil {
-			return err
-		}
-		// Update tunnel states if possible (without decryption)
-		if tm.pool != nil {
-			tm.updateTunnelStatesFromReply(messageID, records, nil)
-		}
-		return nil
+		return tm.processUncorrelatedReply(handler, messageID, records)
 	}
 
+	// Process correlated reply with tunnel ID
+	err := tm.processCorrelatedReply(handler, req, messageID, records)
+
+	// Clean up pending build request
+	tm.removePendingBuildRequest(messageID)
+
+	return err
+}
+
+// retrievePendingBuildRequest safely retrieves a pending build request.
+func (tm *TunnelManager) retrievePendingBuildRequest(messageID int) (*buildRequest, bool) {
+	tm.buildMutex.RLock()
+	defer tm.buildMutex.RUnlock()
+	req, exists := tm.pendingBuilds[messageID]
+	return req, exists
+}
+
+// processUncorrelatedReply handles replies without a pending build request.
+func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, messageID int, records []BuildResponseRecord) error {
+	log.WithField("message_id", messageID).Warn("No pending build request found for reply - processing without correlation")
+
+	err := handler.ProcessReply()
+	if err != nil {
+		return err
+	}
+
+	// Update tunnel states if possible (without decryption)
+	if tm.pool != nil {
+		tm.updateTunnelStatesFromReply(messageID, records, nil)
+	}
+
+	return nil
+}
+
+// processCorrelatedReply handles replies with a pending build request.
+func (tm *TunnelManager) processCorrelatedReply(handler TunnelReplyHandler, req *buildRequest, messageID int, records []BuildResponseRecord) error {
 	// Use ReplyProcessor to decrypt and process the reply with proper key handling
 	err := tm.replyProcessor.ProcessBuildReply(handler, req.tunnelID)
 
@@ -1171,14 +1196,14 @@ func (tm *TunnelManager) ProcessTunnelReply(handler TunnelReplyHandler, messageI
 		log.Warn("No tunnel pool available for state updates")
 	}
 
-	// Remove the pending build request after processing (if it exists)
-	if exists {
-		tm.buildMutex.Lock()
-		delete(tm.pendingBuilds, messageID)
-		tm.buildMutex.Unlock()
-	}
-
 	return err
+}
+
+// removePendingBuildRequest safely removes a pending build request.
+func (tm *TunnelManager) removePendingBuildRequest(messageID int) {
+	tm.buildMutex.Lock()
+	defer tm.buildMutex.Unlock()
+	delete(tm.pendingBuilds, messageID)
 }
 
 // updateTunnelStatesFromReply updates tunnel states in the pool based on build reply results.
