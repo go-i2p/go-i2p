@@ -335,7 +335,22 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 		minMessageInterval   = 10 * time.Microsecond // Minimum 10μs between messages (prevents extreme spam)
 	)
 
+	state := s.getOrCreateConnectionState(conn)
+	now := time.Now()
+	elapsed := now.Sub(state.lastMessageTime)
+
+	// Reset counters every second
+	s.resetCountersIfNeeded(state, elapsed)
+
+	// Check all rate limits
+	return s.isWithinRateLimits(state, elapsed, maxMessagesPerSecond, maxBytesPerSecond, minMessageInterval)
+}
+
+// getOrCreateConnectionState retrieves or creates connection state.
+func (s *Server) getOrCreateConnectionState(conn net.Conn) *connectionState {
 	s.connMutex.Lock()
+	defer s.connMutex.Unlock()
+
 	state, exists := s.connStates[conn]
 	if !exists {
 		state = &connectionState{
@@ -345,30 +360,32 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 		}
 		s.connStates[conn] = state
 	}
-	s.connMutex.Unlock()
+	return state
+}
 
-	now := time.Now()
-	elapsed := now.Sub(state.lastMessageTime)
-
-	// Reset counters every second
+// resetCountersIfNeeded resets rate limit counters after one second.
+func (s *Server) resetCountersIfNeeded(state *connectionState, elapsed time.Duration) {
 	if elapsed >= time.Second {
 		state.messageCount = 0
 		state.bytesRead = 0
 	}
+}
 
+// isWithinRateLimits checks if connection is within all rate limits.
+func (s *Server) isWithinRateLimits(state *connectionState, elapsed time.Duration, maxMessages, maxBytes int, minInterval time.Duration) bool {
 	// Check message rate limit
-	if state.messageCount >= maxMessagesPerSecond {
+	if state.messageCount >= maxMessages {
 		return false
 	}
 
 	// Check bandwidth limit
-	if state.bytesRead >= maxBytesPerSecond {
+	if state.bytesRead >= uint64(maxBytes) {
 		return false
 	}
 
 	// Only enforce minimum interval if we're approaching the rate limit
 	// This allows legitimate bursts while preventing extreme abuse
-	if state.messageCount > maxMessagesPerSecond/10 && elapsed < minMessageInterval {
+	if state.messageCount > maxMessages/10 && elapsed < minInterval {
 		return false
 	}
 
