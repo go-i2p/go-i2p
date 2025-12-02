@@ -1117,24 +1117,40 @@ func (s *Session) publishLeaseSetToNetwork(leaseSetBytes []byte) error {
 	}
 
 	// Calculate destination hash for publication
-	var destHash data.Hash
+	destHash, err := s.calculatePublicationHash(useEncrypted, blindedDest)
+	if err != nil {
+		return err
+	}
 
+	// Publish to network
+	if err := s.publishToPublisher(publisher, destHash, leaseSetBytes, useEncrypted); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// calculatePublicationHash determines the correct hash for LeaseSet publication.
+func (s *Session) calculatePublicationHash(useEncrypted bool, blindedDest *destination.Destination) (data.Hash, error) {
 	if useEncrypted && blindedDest != nil {
 		// For EncryptedLeaseSet, use blinded destination hash
 		destBytes, err := blindedDest.Bytes()
 		if err != nil {
-			return fmt.Errorf("failed to get blinded destination bytes: %w", err)
+			return data.Hash{}, fmt.Errorf("failed to get blinded destination bytes: %w", err)
 		}
-		destHash = data.HashData(destBytes)
-	} else {
-		// For normal LeaseSet2, use original destination hash
-		destBytes, err := s.destination.Bytes()
-		if err != nil {
-			return fmt.Errorf("failed to get destination bytes: %w", err)
-		}
-		destHash = data.HashData(destBytes)
+		return data.HashData(destBytes), nil
 	}
 
+	// For normal LeaseSet2, use original destination hash
+	destBytes, err := s.destination.Bytes()
+	if err != nil {
+		return data.Hash{}, fmt.Errorf("failed to get destination bytes: %w", err)
+	}
+	return data.HashData(destBytes), nil
+}
+
+// publishToPublisher executes the publication and logs the result.
+func (s *Session) publishToPublisher(publisher LeaseSetPublisher, destHash data.Hash, leaseSetBytes []byte, useEncrypted bool) error {
 	if err := publisher.PublishLeaseSet(destHash, leaseSetBytes); err != nil {
 		return fmt.Errorf("publisher failed: %w", err)
 	}
