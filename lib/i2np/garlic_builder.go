@@ -480,53 +480,28 @@ func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
 		MinGarlicSize         = 1 + 3 + 4 + 8 // num(1) + cert(3) + msgID(4) + exp(8)
 	)
 
-	if nestingDepth > MaxGarlicNestingDepth {
-		return nil, oops.Errorf("garlic nesting depth exceeded: %d > %d", nestingDepth, MaxGarlicNestingDepth)
+	if err := validateGarlicNestingDepth(nestingDepth, MaxGarlicNestingDepth); err != nil {
+		return nil, err
 	}
 
-	if len(data) < MinGarlicSize {
-		return nil, oops.Errorf("garlic data too short: need at least %d bytes, got %d", MinGarlicSize, len(data))
+	if err := validateGarlicDataSize(data, MinGarlicSize); err != nil {
+		return nil, err
 	}
 
-	offset := 0
-
-	// Read clove count (1 byte)
-	cloveCount := int(data[offset])
-	offset++
-
-	// Validate clove count against practical limit
-	if cloveCount > MaxGarlicCloves {
-		return nil, oops.Errorf("garlic clove count too high: %d > %d (possible resource exhaustion attack)", cloveCount, MaxGarlicCloves)
+	cloveCount, offset, err := parseGarlicCloveCount(data, MaxGarlicCloves)
+	if err != nil {
+		return nil, err
 	}
 
-	// Parse cloves
-	cloves := make([]GarlicClove, cloveCount)
-	for i := 0; i < cloveCount; i++ {
-		clove, bytesRead, err := deserializeGarlicClove(data[offset:], nestingDepth)
-		if err != nil {
-			return nil, oops.Wrapf(err, "failed to parse clove %d", i)
-		}
-		cloves[i] = *clove
-		offset += bytesRead
+	cloves, offset, err := parseGarlicCloves(data, offset, cloveCount, nestingDepth)
+	if err != nil {
+		return nil, err
 	}
 
-	// Ensure enough data remains for certificate + message ID + expiration
-	if len(data) < offset+3+4+8 {
-		return nil, oops.Errorf("insufficient data for garlic trailer: need %d bytes, have %d", 3+4+8, len(data)-offset)
+	cert, messageID, expiration, err := parseGarlicMetadata(data, offset)
+	if err != nil {
+		return nil, err
 	}
-
-	// Read certificate (3 bytes - always NULL in current implementation)
-	cert := *certificate.NewCertificate()
-	offset += 3
-
-	// Read message ID (4 bytes, big-endian)
-	messageID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-	offset += 4
-
-	// Read expiration (8 bytes, milliseconds since epoch)
-	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
-	expiration := time.UnixMilli(int64(expirationMs))
-	offset += 8
 
 	return &Garlic{
 		Count:       cloveCount,
@@ -535,6 +510,65 @@ func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
 		MessageID:   messageID,
 		Expiration:  expiration,
 	}, nil
+}
+
+// validateGarlicNestingDepth checks if the nesting depth exceeds the maximum allowed.
+func validateGarlicNestingDepth(nestingDepth, maxDepth int) error {
+	if nestingDepth > maxDepth {
+		return oops.Errorf("garlic nesting depth exceeded: %d > %d", nestingDepth, maxDepth)
+	}
+	return nil
+}
+
+// validateGarlicDataSize checks if the data buffer meets the minimum size requirement.
+func validateGarlicDataSize(data []byte, minSize int) error {
+	if len(data) < minSize {
+		return oops.Errorf("garlic data too short: need at least %d bytes, got %d", minSize, len(data))
+	}
+	return nil
+}
+
+// parseGarlicCloveCount reads and validates the clove count from the data buffer.
+func parseGarlicCloveCount(data []byte, maxCloves int) (int, int, error) {
+	cloveCount := int(data[0])
+	if cloveCount > maxCloves {
+		return 0, 0, oops.Errorf("garlic clove count too high: %d > %d (possible resource exhaustion attack)", cloveCount, maxCloves)
+	}
+	return cloveCount, 1, nil
+}
+
+// parseGarlicCloves parses all cloves from the data buffer starting at the given offset.
+func parseGarlicCloves(data []byte, offset, cloveCount, nestingDepth int) ([]GarlicClove, int, error) {
+	cloves := make([]GarlicClove, cloveCount)
+	for i := 0; i < cloveCount; i++ {
+		clove, bytesRead, err := deserializeGarlicClove(data[offset:], nestingDepth)
+		if err != nil {
+			return nil, 0, oops.Wrapf(err, "failed to parse clove %d", i)
+		}
+		cloves[i] = *clove
+		offset += bytesRead
+	}
+	return cloves, offset, nil
+}
+
+// parseGarlicMetadata parses the certificate, message ID, and expiration from the data buffer.
+func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int, time.Time, error) {
+	const metadataSize = 3 + 4 + 8 // cert(3) + msgID(4) + exp(8)
+
+	if len(data) < offset+metadataSize {
+		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf("insufficient data for garlic trailer: need %d bytes, have %d", metadataSize, len(data)-offset)
+	}
+
+	cert := *certificate.NewCertificate()
+	offset += 3
+
+	messageID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+
+	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])
+	expiration := time.UnixMilli(int64(expirationMs))
+
+	return cert, messageID, expiration, nil
 }
 
 // deserializeGarlicClove parses a single garlic clove from bytes.
