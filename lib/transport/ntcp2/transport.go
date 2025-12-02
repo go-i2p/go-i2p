@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
@@ -34,7 +34,11 @@ type NTCP2Transport struct {
 	logger *logger.Entry
 }
 
-func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2Transport, error) {
+type KeystoreProvider interface {
+	GetEncryptionPrivateKey() types.PrivateEncryptionKey
+}
+
+func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*NTCP2Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logger.WithField("component", "ntcp2")
 
@@ -55,7 +59,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2T
 		return nil, err
 	}
 
-	if err := initializeCryptoKeys(ntcp2Config, identity, config.WorkingDir, cancel); err != nil {
+	if err := initializeCryptoKeys(ntcp2Config, identity, keystore, config.WorkingDir, cancel); err != nil {
 		logger.WithError(err).Error("Failed to initialize crypto keys")
 		return nil, err
 	}
@@ -92,8 +96,8 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 // initializeCryptoKeys loads or derives NTCP2 cryptographic keys from persistent storage.
 // The static key is derived from the router's X25519 encryption key (already persistent).
 // The obfuscation IV is loaded from persistent storage or generated if not found.
-func initializeCryptoKeys(ntcp2Config *ntcp2.NTCP2Config, identity router_info.RouterInfo, workingDir string, cancel context.CancelFunc) error {
-	if err := loadStaticKeyFromRouter(ntcp2Config, identity, cancel); err != nil {
+func initializeCryptoKeys(ntcp2Config *ntcp2.NTCP2Config, identity router_info.RouterInfo, keystore KeystoreProvider, workingDir string, cancel context.CancelFunc) error {
+	if err := loadStaticKeyFromRouter(ntcp2Config, identity, keystore, cancel); err != nil {
 		return err
 	}
 	return loadOrGenerateObfuscationIV(ntcp2Config, workingDir, cancel)
@@ -102,19 +106,23 @@ func initializeCryptoKeys(ntcp2Config *ntcp2.NTCP2Config, identity router_info.R
 // loadStaticKeyFromRouter derives the NTCP2 static key from the router's encryption key.
 // This ensures the static key is persistent (stored in RouterInfoKeystore) and consistent
 // across router restarts, which is critical for peer recognition.
-func loadStaticKeyFromRouter(ntcp2Config *ntcp2.NTCP2Config, identity router_info.RouterInfo, cancel context.CancelFunc) error {
+func loadStaticKeyFromRouter(ntcp2Config *ntcp2.NTCP2Config, identity router_info.RouterInfo, keystore KeystoreProvider, cancel context.CancelFunc) error {
 	if len(ntcp2Config.StaticKey) != 0 {
 		return nil // Already set
 	}
 
-	// Extract X25519 encryption private key from router identity
-	// Note: In a full implementation, we'd need to access the RouterInfoKeystore
-	// to get the encryption private key. For now, generate a placeholder.
-	// TODO: Pass RouterInfoKeystore to NewNTCP2Transport to access encryptionPrivKey
-	ntcp2Config.StaticKey = make([]byte, 32)
-	if _, err := rand.Read(ntcp2Config.StaticKey); err != nil {
+	// Extract X25519 encryption private key from RouterInfoKeystore
+	encryptionPrivKey := keystore.GetEncryptionPrivateKey()
+	if encryptionPrivKey == nil {
 		cancel()
-		return WrapNTCP2Error(err, "generating static key placeholder")
+		return WrapNTCP2Error(fmt.Errorf("encryption private key is nil"), "retrieving encryption key from keystore")
+	}
+
+	// Use the encryption private key as the NTCP2 static key
+	ntcp2Config.StaticKey = encryptionPrivKey.Bytes()
+	if len(ntcp2Config.StaticKey) != 32 {
+		cancel()
+		return WrapNTCP2Error(fmt.Errorf("invalid static key size: expected 32 bytes, got %d", len(ntcp2Config.StaticKey)), "loading static key")
 	}
 	return nil
 }

@@ -278,7 +278,7 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 	}
 
 	// Send DatabaseStore message to each selected floodfill
-	return p.sendDatabaseStoreMessages(lsEntry.Hash, lsBytes, floodfills)
+	return p.sendDatabaseStoreMessages(lsEntry.Hash, lsBytes, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfills)
 }
 
 // PublishLeaseSet publishes a specific LeaseSet to floodfill routers.
@@ -303,7 +303,7 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 	if err != nil {
 		return fmt.Errorf("failed to serialize LeaseSet: %w", err)
 	}
-	return p.sendDatabaseStoreMessages(hash, lsBytes, floodfills)
+	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfills)
 }
 
 // PublishRouterInfo publishes a specific RouterInfo to floodfill routers
@@ -325,7 +325,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to serialize RouterInfo: %w", err)
 	}
-	return p.sendDatabaseStoreMessages(hash, riBytes, floodfills)
+	return p.sendDatabaseStoreMessages(hash, riBytes, i2np.DATABASE_STORE_TYPE_ROUTER_INFO, floodfills)
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash
@@ -345,7 +345,7 @@ func (p *Publisher) selectFloodfillsForPublishing(hash common.Hash) ([]router_in
 }
 
 // sendDatabaseStoreMessages sends DatabaseStore messages to specified floodfills
-func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, floodfills []router_info.RouterInfo) error {
+func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dataType byte, floodfills []router_info.RouterInfo) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(floodfills))
 
@@ -354,7 +354,7 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, flo
 		go func(floodfill router_info.RouterInfo) {
 			defer wg.Done()
 
-			if err := p.sendDatabaseStoreToFloodfill(hash, data, floodfill); err != nil {
+			if err := p.sendDatabaseStoreToFloodfill(hash, data, dataType, floodfill); err != nil {
 				errChan <- err
 			}
 		}(ff)
@@ -389,7 +389,7 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, flo
 // sendDatabaseStoreToFloodfill sends a DatabaseStore message to a specific floodfill
 // through an outbound tunnel for anonymity. This method coordinates the tunnel selection,
 // message creation, and delivery to the gateway router.
-func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, floodfill router_info.RouterInfo) error {
+func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, dataType byte, floodfill router_info.RouterInfo) error {
 	// Select and validate outbound tunnel
 	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
 	if err != nil {
@@ -409,7 +409,7 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 	}).Trace("Sending DatabaseStore message to floodfill through tunnel")
 
 	// Create and wrap DatabaseStore message for tunnel delivery
-	tunnelGateway, err := p.createTunnelGatewayMessage(hash, data, selectedTunnel.ID)
+	tunnelGateway, err := p.createTunnelGatewayMessage(hash, data, dataType, selectedTunnel.ID)
 	if err != nil {
 		return err
 	}
@@ -454,9 +454,9 @@ func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash,
 
 // createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore
 // message. This wraps the DatabaseStore for delivery through an outbound tunnel.
-func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, tunnelID tunnel.TunnelID) (i2np.I2NPMessage, error) {
+func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, dataType byte, tunnelID tunnel.TunnelID) (i2np.I2NPMessage, error) {
 	// Create DatabaseStore I2NP message
-	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data)
+	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data, dataType)
 	if err != nil {
 		return nil, err
 	}
@@ -473,16 +473,10 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, tu
 }
 
 // createDatabaseStoreMessage creates a DatabaseStore I2NP message with the provided
-// hash and data. Determines the data type based on content characteristics.
-func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte) (i2np.I2NPMessage, error) {
-	// Determine data type based on content (RouterInfo=0, LeaseSet2=3)
-	dataType := byte(0) // Default to RouterInfo
-	if len(data) > 0 {
-		// Simple heuristic: RouterInfo is typically larger and gzip-compressed
-		// LeaseSet2 is uncompressed and smaller
-		// TODO: Add type detection or pass dataType as parameter
-		dataType = 3 // Assume LeaseSet2 for now
-	}
+// hash, data, and type. The dataType should be one of the DATABASE_STORE_TYPE_* constants:
+//   - DATABASE_STORE_TYPE_ROUTER_INFO (0): For RouterInfo entries
+//   - DATABASE_STORE_TYPE_LEASESET2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
+func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.I2NPMessage, error) {
 
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
 	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)

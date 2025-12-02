@@ -375,7 +375,7 @@ func (gr *GarlicMessageRouter) sendMessageToRouter(routerHash common.Hash, route
 //
 // Process:
 //  1. Check if gateway_hash == our_router_hash (we are the gateway)
-//  2. If yes, inject message directly into our tunnel processing (TODO)
+//  2. If yes, inject message directly into our tunnel processing via processReflexiveTunnelDelivery()
 //  3. Otherwise, wrap message in TunnelGateway envelope
 //  4. Send TunnelGateway message to gateway router via ROUTER delivery
 //

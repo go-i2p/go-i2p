@@ -64,14 +64,15 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 //
 // CURRENT LIMITATION:
 // This implementation currently creates CLEARTEXT records (222 bytes + 306 padding = 528 bytes).
-// Proper encryption using ElGamal or ECIES is NOT YET IMPLEMENTED.
+// For specification-compliant tunnel building, use EncryptBuildRequestRecord() from build_record_crypto.go
+// which implements proper ECIES-X25519-AEAD encryption.
 //
 // For specification-compliant tunnel building, encryption must be added using:
 //  1. Recipient router's encryption public key (from RouterInfo)
-//  2. ElGamal-2048 or ECIES-X25519 encryption
+//  2. ECIES-X25519-AEAD encryption (see build_record_crypto.go)
 //  3. Proper padding and formatting per specification
 //
-// TODO: Implement EncryptBuildRequestRecord() function that takes:
+// Use EncryptBuildRequestRecord() function (defined in build_record_crypto.go) that takes:
 //   - BuildRequestRecord (cleartext)
 //   - Recipient RouterInfo (for encryption public key)
 //   - Returns encrypted 528-byte record
@@ -120,23 +121,23 @@ func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
 //
 // SPECIFICATION COMPLIANCE NOTE:
 // According to I2P specification, BuildRequestRecords in TunnelBuild messages are
-// encrypted with ElGamal-2048 or ECIES-X25519. This implementation assumes CLEARTEXT
+// encrypted with ECIES-X25519-AEAD. This implementation assumes CLEARTEXT
 // records (for testing or from trusted sources).
 //
 // For specification-compliant processing of network messages:
-//  1. Decrypt each 528-byte chunk using local router's private encryption key
-//  2. Verify decryption succeeded (ElGamal padding check or AEAD authentication)
-//  3. Extract 222-byte cleartext BuildRequestRecord
+//  1. Decrypt each 528-byte chunk using DecryptBuildRequestRecord() from build_record_crypto.go
+//  2. This function uses local router's private encryption key
+//  3. Verifies AEAD authentication and extracts 222-byte cleartext
 //  4. Parse using ReadBuildRequestRecord()
 //
 // CURRENT LIMITATION:
 // This method parses cleartext records directly from the 528-byte chunks without decryption.
 // Encrypted records from production I2P routers will FAIL to parse correctly.
 //
-// TODO: Implement DecryptBuildRequestRecord() that takes:
+// Use DecryptBuildRequestRecord() (defined in build_record_crypto.go) that takes:
 //   - 528-byte encrypted record
 //   - Local router's decryption private key
-//   - Returns decrypted 222-byte cleartext record
+//   - Returns decrypted BuildRequestRecord
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	if err := msg.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
 		return oops.Wrapf(err, "failed to unmarshal base I2NP message")
