@@ -154,32 +154,41 @@ func (e *Explorer) Stop() {
 func (e *Explorer) explorationLoop() {
 	defer e.wg.Done()
 
-	// Calculate initial interval
 	interval := e.calculateExplorationInterval()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	// Run initial exploration immediately
 	e.performExplorationRound()
+	e.runExplorationTicker(ticker, &interval)
+}
 
+// runExplorationTicker manages the main exploration ticker loop
+func (e *Explorer) runExplorationTicker(ticker *time.Ticker, interval *time.Duration) {
 	for {
 		select {
 		case <-e.ctx.Done():
 			return
 		case <-ticker.C:
 			e.performExplorationRound()
-
-			// Recalculate interval if using adaptive strategy
-			if e.useAdaptive {
-				newInterval := e.calculateExplorationInterval()
-				if newInterval != interval {
-					interval = newInterval
-					ticker.Reset(interval)
-					log.WithField("new_interval", interval).Debug("Adjusted exploration interval")
-				}
-			}
+			e.adjustIntervalIfNeeded(ticker, interval)
 		}
 	}
+}
+
+// adjustIntervalIfNeeded recalculates and updates the exploration interval when using adaptive strategy
+func (e *Explorer) adjustIntervalIfNeeded(ticker *time.Ticker, currentInterval *time.Duration) {
+	if !e.useAdaptive {
+		return
+	}
+
+	newInterval := e.calculateExplorationInterval()
+	if newInterval == *currentInterval {
+		return
+	}
+
+	*currentInterval = newInterval
+	ticker.Reset(newInterval)
+	log.WithField("new_interval", newInterval).Debug("Adjusted exploration interval")
 }
 
 // performExplorationRound executes one round of exploration with configured concurrency
