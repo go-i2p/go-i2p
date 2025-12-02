@@ -260,31 +260,63 @@ func ValidateSessionConfig(config *SessionConfig) error {
 		return fmt.Errorf("session config is nil")
 	}
 
-	// Tunnel length limits (0-7 hops per I2P spec)
+	if err := validateTunnelLengths(config); err != nil {
+		return err
+	}
+
+	if err := validateTunnelCounts(config); err != nil {
+		return err
+	}
+
+	if err := validateTunnelLifetime(config); err != nil {
+		return err
+	}
+
+	if err := validateMessageQueueSize(config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateTunnelLengths validates inbound and outbound tunnel length are within I2P spec limits (0-7 hops).
+// Returns error if either tunnel length is out of range.
+func validateTunnelLengths(config *SessionConfig) error {
 	if config.InboundTunnelLength < 0 || config.InboundTunnelLength > 7 {
 		return fmt.Errorf("invalid inbound tunnel length: %d (must be 0-7)", config.InboundTunnelLength)
 	}
 	if config.OutboundTunnelLength < 0 || config.OutboundTunnelLength > 7 {
 		return fmt.Errorf("invalid outbound tunnel length: %d (must be 0-7)", config.OutboundTunnelLength)
 	}
+	return nil
+}
 
-	// Tunnel quantity limits (1-16 per pool is reasonable)
+// validateTunnelCounts validates inbound and outbound tunnel counts are within reasonable limits (1-16).
+// Returns error if either tunnel count is out of range.
+func validateTunnelCounts(config *SessionConfig) error {
 	if config.InboundTunnelCount < 1 || config.InboundTunnelCount > 16 {
 		return fmt.Errorf("invalid inbound tunnel count: %d (must be 1-16)", config.InboundTunnelCount)
 	}
 	if config.OutboundTunnelCount < 1 || config.OutboundTunnelCount > 16 {
 		return fmt.Errorf("invalid outbound tunnel count: %d (must be 1-16)", config.OutboundTunnelCount)
 	}
+	return nil
+}
 
-	// Tunnel lifetime limits (1 minute to 1 hour is reasonable)
+// validateTunnelLifetime validates tunnel lifetime is within reasonable bounds (1 minute to 1 hour).
+// Returns error if lifetime is out of range.
+func validateTunnelLifetime(config *SessionConfig) error {
 	if config.TunnelLifetime < 1*time.Minute || config.TunnelLifetime > 60*time.Minute {
 		return fmt.Errorf("invalid tunnel lifetime: %v (must be 1m-60m)", config.TunnelLifetime)
 	}
+	return nil
+}
 
-	// Message queue size (must be positive)
+// validateMessageQueueSize validates message queue size is positive.
+// Returns error if queue size is less than 1.
+func validateMessageQueueSize(config *SessionConfig) error {
 	if config.MessageQueueSize < 1 {
 		return fmt.Errorf("invalid message queue size: %d (must be >= 1)", config.MessageQueueSize)
 	}
-
 	return nil
 }
