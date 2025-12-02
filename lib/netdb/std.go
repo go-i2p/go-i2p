@@ -389,26 +389,55 @@ func (db *StdNetDB) Size() (routers int) {
 }
 
 func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
-	// Validate file extension
+	if !db.validateFileExtension(fpath) {
+		return false
+	}
+
+	cleanPath, err := db.resolveAndCleanPath(fpath)
+	if err != nil {
+		return false
+	}
+
+	if !db.verifyPathWithinNetDB(fpath, cleanPath) {
+		return false
+	}
+
+	if !db.validatePathSecurity(cleanPath) {
+		return false
+	}
+
+	log.WithFields(logger.Fields{
+		"file_path": cleanPath,
+		"is_valid":  true,
+	}).Debug("File path validation successful")
+	return true
+}
+
+// validateFileExtension checks if the file has the required .dat extension.
+func (db *StdNetDB) validateFileExtension(fpath string) bool {
 	if !strings.HasSuffix(fpath, ".dat") {
 		log.WithField("file_path", fpath).Debug("Invalid file extension, expected .dat")
 		return false
 	}
+	return true
+}
 
-	// Get the absolute path to resolve any symlinks or relative paths
+// resolveAndCleanPath resolves the absolute path and cleans it to remove path traversal components.
+func (db *StdNetDB) resolveAndCleanPath(fpath string) (string, error) {
 	absPath, err := filepath.Abs(fpath)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"file_path": fpath,
 			"error":     err,
 		}).Warn("Failed to resolve absolute path")
-		return false
+		return "", err
 	}
-
-	// Clean the path to remove any ".." or "." components
 	cleanPath := filepath.Clean(absPath)
+	return cleanPath, nil
+}
 
-	// Verify the file is within the NetDB directory (path traversal prevention)
+// verifyPathWithinNetDB ensures the file path is within the NetDB directory to prevent path traversal attacks.
+func (db *StdNetDB) verifyPathWithinNetDB(originalPath, cleanPath string) bool {
 	netdbPath, err := filepath.Abs(db.Path())
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -418,21 +447,22 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 		return false
 	}
 
-	// Ensure the clean path is within the NetDB directory
 	if !strings.HasPrefix(cleanPath, netdbPath+string(filepath.Separator)) &&
 		cleanPath != netdbPath {
 		log.WithFields(logger.Fields{
-			"file_path":  fpath,
+			"file_path":  originalPath,
 			"clean_path": cleanPath,
 			"netdb_path": netdbPath,
 		}).Warn("Path traversal attempt detected, file outside NetDB directory")
 		return false
 	}
+	return true
+}
 
-	// Check if it's a symlink (security: prevent symlink attacks)
+// validatePathSecurity checks for security issues including symlinks and file accessibility.
+func (db *StdNetDB) validatePathSecurity(cleanPath string) bool {
 	fileInfo, err := os.Lstat(cleanPath)
 	if err != nil {
-		// File doesn't exist yet - this is OK for new files
 		if os.IsNotExist(err) {
 			log.WithField("file_path", cleanPath).Debug("File path valid (file doesn't exist yet)")
 			return true
@@ -444,16 +474,10 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool {
 		return false
 	}
 
-	// Reject symlinks for security
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
 		log.WithField("file_path", cleanPath).Warn("Symlink detected, rejecting for security")
 		return false
 	}
-
-	log.WithFields(logger.Fields{
-		"file_path": cleanPath,
-		"is_valid":  true,
-	}).Debug("File path validation successful")
 	return true
 }
 
