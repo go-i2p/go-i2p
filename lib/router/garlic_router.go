@@ -565,19 +565,33 @@ func (gr *GarlicMessageRouter) processPendingMessagesForDestination(
 		"message_count": len(messages),
 	}).Info("LeaseSet found, processing pending messages")
 
+	// Extract and validate lease
+	gatewayHash, tunnelID, err := gr.extractValidLease(destHash, leaseSet)
+	if err != nil {
+		delete(gr.pendingMsgs, destHash)
+		return
+	}
+
+	// Forward all pending messages through the selected tunnel
+	gr.forwardPendingMessages(destHash, gatewayHash, tunnelID, messages)
+
+	// Remove all processed messages
+	delete(gr.pendingMsgs, destHash)
+}
+
+// extractValidLease extracts and validates the best lease from a LeaseSet.
+func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet lease_set.LeaseSet) (common.Hash, tunnel.TunnelID, error) {
 	// Get leases from LeaseSet
 	leases, err := leaseSet.Leases()
 	if err != nil {
 		log.WithError(err).Error("Failed to extract leases from LeaseSet")
-		delete(gr.pendingMsgs, destHash)
-		return
+		return common.Hash{}, 0, err
 	}
 
 	if len(leases) == 0 {
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Warn("LeaseSet has no valid leases")
-		delete(gr.pendingMsgs, destHash)
-		return
+		return common.Hash{}, 0, fmt.Errorf("no valid leases")
 	}
 
 	// Select best lease
@@ -585,15 +599,18 @@ func (gr *GarlicMessageRouter) processPendingMessagesForDestination(
 	if selectedLease == nil {
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Warn("No valid lease available")
-		delete(gr.pendingMsgs, destHash)
-		return
+		return common.Hash{}, 0, fmt.Errorf("no valid lease available")
 	}
 
 	// Extract gateway and tunnel ID
 	gatewayHash := selectedLease.TunnelGateway()
 	tunnelID := tunnel.TunnelID(selectedLease.TunnelID())
 
-	// Forward all pending messages
+	return gatewayHash, tunnelID, nil
+}
+
+// forwardPendingMessages forwards all messages through the specified tunnel.
+func (gr *GarlicMessageRouter) forwardPendingMessages(destHash common.Hash, gatewayHash common.Hash, tunnelID tunnel.TunnelID, messages []pendingMessage) {
 	for _, pm := range messages {
 		err := gr.ForwardThroughTunnel(gatewayHash, tunnelID, pm.msg)
 		if err != nil {
@@ -609,9 +626,6 @@ func (gr *GarlicMessageRouter) processPendingMessagesForDestination(
 			}).Debug("Successfully forwarded pending message")
 		}
 	}
-
-	// Remove all processed messages
-	delete(gr.pendingMsgs, destHash)
 }
 
 // queuePendingMessage adds a message to the pending queue for later delivery.
