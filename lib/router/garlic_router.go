@@ -150,54 +150,73 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 	}).Debug("Forwarding garlic clove to destination")
 
 	// Look up LeaseSet with timeout
-	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
-	if leaseSetChan == nil {
-		// LeaseSet not in NetDB, queue message for async lookup
-		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
-			Debug("LeaseSet not found, queueing message for async lookup")
+	leaseSet, shouldQueue := gr.lookupLeaseSetWithTimeout(destHash)
+	if shouldQueue {
 		return gr.queuePendingMessage(destHash, msg)
 	}
 
-	// Wait for LeaseSet with timeout
-	var leaseSet lease_set.LeaseSet
+	// Validate LeaseSet and extract leases
+	leases, err := gr.validateAndExtractLeases(destHash, leaseSet)
+	if err != nil {
+		return err
+	}
+
+	// Select best lease and route message
+	return gr.routeMessageThroughLease(destHash, leases, msg)
+}
+
+// lookupLeaseSetWithTimeout attempts to retrieve a LeaseSet from NetDB with timeout.
+// Returns the LeaseSet and a boolean indicating if the message should be queued.
+func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (lease_set.LeaseSet, bool) {
+	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
+	if leaseSetChan == nil {
+		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
+			Debug("LeaseSet not found, queueing message for async lookup")
+		return lease_set.LeaseSet{}, true
+	}
+
 	select {
 	case ls, ok := <-leaseSetChan:
 		if !ok {
-			// Channel closed without data, queue for retry
 			log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 				Debug("LeaseSet channel closed, queueing message for async lookup")
-			return gr.queuePendingMessage(destHash, msg)
+			return lease_set.LeaseSet{}, true
 		}
-		leaseSet = ls
+		return ls, false
 	case <-time.After(1 * time.Second):
-		// Timeout waiting for LeaseSet, queue for retry
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
-		return gr.queuePendingMessage(destHash, msg)
+		return lease_set.LeaseSet{}, true
 	}
+}
 
-	// Validate LeaseSet
+// validateAndExtractLeases validates a LeaseSet and extracts its leases.
+// Returns an error if the LeaseSet is invalid or has no valid leases.
+func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, leaseSet lease_set.LeaseSet) ([]lease.Lease, error) {
 	if !leaseSet.IsValid() {
-		return fmt.Errorf("destination %x has invalid LeaseSet", destHash[:8])
+		return nil, fmt.Errorf("destination %x has invalid LeaseSet", destHash[:8])
 	}
 
-	// Get leases from LeaseSet
 	leases, err := leaseSet.Leases()
 	if err != nil {
-		return fmt.Errorf("failed to extract leases from LeaseSet for %x: %w", destHash[:8], err)
+		return nil, fmt.Errorf("failed to extract leases from LeaseSet for %x: %w", destHash[:8], err)
 	}
 
 	if len(leases) == 0 {
-		return fmt.Errorf("destination %x has no valid leases", destHash[:8])
+		return nil, fmt.Errorf("destination %x has no valid leases", destHash[:8])
 	}
 
-	// Select best lease
+	return leases, nil
+}
+
+// routeMessageThroughLease selects the best lease from available leases and routes
+// the message through the corresponding tunnel gateway.
+func (gr *GarlicMessageRouter) routeMessageThroughLease(destHash common.Hash, leases []lease.Lease, msg i2np.I2NPMessage) error {
 	selectedLease := gr.selectBestLease(leases)
 	if selectedLease == nil {
 		return fmt.Errorf("no valid lease available for destination %x", destHash[:8])
 	}
 
-	// Extract gateway and tunnel ID from lease
 	gatewayHash := selectedLease.TunnelGateway()
 	tunnelID := tunnel.TunnelID(selectedLease.TunnelID())
 
@@ -207,7 +226,6 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 		"tunnel_id":    tunnelID,
 	}).Debug("Selected lease for DESTINATION delivery, routing through tunnel")
 
-	// Forward through the tunnel (converts to TUNNEL delivery)
 	return gr.ForwardThroughTunnel(gatewayHash, tunnelID, msg)
 }
 
