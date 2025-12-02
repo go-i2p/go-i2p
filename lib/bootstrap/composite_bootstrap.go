@@ -44,41 +44,57 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithField("requested_peers", n).Info("Starting composite bootstrap")
 
-	// First, try file bootstrap if configured
+	// Try file bootstrap first if configured
 	if cb.fileBootstrap != nil {
-		log.Info("Attempting file bootstrap from local reseed file")
-		peers, err := cb.fileBootstrap.GetPeers(ctx, n)
-		if err == nil && len(peers) > 0 {
-			log.WithField("count", len(peers)).Info("Successfully obtained peers from local reseed file")
+		peers, err := tryFileBootstrap(cb.fileBootstrap, ctx, n)
+		if err == nil {
 			return peers, nil
-		}
-
-		// Log file bootstrap failure
-		if err != nil {
-			log.WithError(err).Warn("File bootstrap failed, attempting remote reseed")
-		} else {
-			log.Warn("File bootstrap returned no peers, attempting remote reseed")
 		}
 	}
 
-	// Second, try reseed
+	// Try reseed bootstrap
+	peers, err := tryReseedBootstrap(cb.reseedBootstrap, ctx, n)
+	if err == nil {
+		return peers, nil
+	}
+
+	// Fall back to local netDb
+	return tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+}
+
+// tryFileBootstrap attempts to obtain peers from the local reseed file.
+func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	log.Info("Attempting file bootstrap from local reseed file")
+	peers, err := fb.GetPeers(ctx, n)
+
+	if err == nil && len(peers) > 0 {
+		log.WithField("count", len(peers)).Info("Successfully obtained peers from local reseed file")
+		return peers, nil
+	}
+
+	logFileBootstrapFailure(err)
+	return nil, fmt.Errorf("file bootstrap failed")
+}
+
+// tryReseedBootstrap attempts to obtain peers from remote reseed servers.
+func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.Info("Attempting reseed bootstrap")
-	peers, err := cb.reseedBootstrap.GetPeers(ctx, n)
+	peers, err := rb.GetPeers(ctx, n)
+
 	if err == nil && len(peers) > 0 {
 		log.WithField("count", len(peers)).Info("Successfully obtained peers from reseed")
 		return peers, nil
 	}
 
-	// Log reseed failure
-	if err != nil {
-		log.WithError(err).Warn("Reseed bootstrap failed, attempting local netDb fallback")
-	} else {
-		log.Warn("Reseed bootstrap returned no peers, attempting local netDb fallback")
-	}
+	logReseedFailure(err)
+	return nil, fmt.Errorf("reseed bootstrap failed")
+}
 
-	// Fall back to local netDb
+// tryLocalNetDbBootstrap attempts to obtain peers from local netDb directories.
+func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.Info("Attempting local netDb bootstrap")
-	peers, err = cb.localNetDbBootstrap.GetPeers(ctx, n)
+	peers, err := lb.GetPeers(ctx, n)
+
 	if err != nil {
 		log.WithError(err).Error("Local netDb bootstrap also failed")
 		return nil, fmt.Errorf("all bootstrap methods failed - file, reseed, and local netDb: %w", err)
@@ -90,4 +106,22 @@ func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_inf
 
 	log.WithField("count", len(peers)).Info("Successfully obtained peers from local netDb")
 	return peers, nil
+}
+
+// logFileBootstrapFailure logs appropriate warnings for file bootstrap failures.
+func logFileBootstrapFailure(err error) {
+	if err != nil {
+		log.WithError(err).Warn("File bootstrap failed, attempting remote reseed")
+	} else {
+		log.Warn("File bootstrap returned no peers, attempting remote reseed")
+	}
+}
+
+// logReseedFailure logs appropriate warnings for reseed bootstrap failures.
+func logReseedFailure(err error) {
+	if err != nil {
+		log.WithError(err).Warn("Reseed bootstrap failed, attempting local netDb fallback")
+	} else {
+		log.Warn("Reseed bootstrap returned no peers, attempting local netDb fallback")
+	}
 }
