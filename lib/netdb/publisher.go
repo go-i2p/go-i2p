@@ -387,24 +387,16 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, flo
 }
 
 // sendDatabaseStoreToFloodfill sends a DatabaseStore message to a specific floodfill
-// through an outbound tunnel for anonymity. This method:
-// 1. Selects an active outbound tunnel from the pool
-// 2. Creates a DatabaseStore I2NP message with the data
-// 3. Wraps the message for tunnel delivery to the floodfill
-// 4. Sends via the tunnel gateway router
+// through an outbound tunnel for anonymity. This method coordinates the tunnel selection,
+// message creation, and delivery to the gateway router.
 func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, floodfill router_info.RouterInfo) error {
-	// Step 1: Select an active outbound tunnel (check this first to fail fast)
-	selectedTunnel := p.pool.SelectTunnel()
-	if selectedTunnel == nil {
-		return fmt.Errorf("no active outbound tunnels available")
+	// Select and validate outbound tunnel
+	selectedTunnel, gatewayHash, err := p.selectAndValidateTunnel()
+	if err != nil {
+		return err
 	}
 
-	// Step 2: Validate tunnel has hops
-	if len(selectedTunnel.Hops) == 0 {
-		return fmt.Errorf("tunnel has no hops")
-	}
-
-	// Step 3: Get floodfill hash (validate RouterInfo)
+	// Get floodfill hash for logging and validation
 	ffHash, err := floodfill.IdentHash()
 	if err != nil {
 		return fmt.Errorf("failed to get floodfill hash: %w", err)
@@ -416,13 +408,78 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 		"tunnel_id":      selectedTunnel.ID,
 	}).Trace("Sending DatabaseStore message to floodfill through tunnel")
 
-	// Step 4: Create DatabaseStore I2NP message
+	// Create and wrap DatabaseStore message for tunnel delivery
+	tunnelGateway, err := p.createTunnelGatewayMessage(hash, data, selectedTunnel.ID)
+	if err != nil {
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"tunnel_id":        selectedTunnel.ID,
+		"gateway_hash":     fmt.Sprintf("%x", gatewayHash[:8]),
+		"floodfill_hash":   fmt.Sprintf("%x", ffHash[:8]),
+		"gateway_msg_type": tunnelGateway.Type(),
+	}).Debug("Sending DatabaseStore through tunnel gateway")
+
+	// Send message through gateway router
+	if err := p.sendMessageThroughGateway(gatewayHash, tunnelGateway); err != nil {
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"data_hash":      fmt.Sprintf("%x", hash[:8]),
+		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
+		"tunnel_id":      selectedTunnel.ID,
+		"gateway_hash":   fmt.Sprintf("%x", gatewayHash[:8]),
+	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
+
+	return nil
+}
+
+// selectAndValidateTunnel selects an active outbound tunnel and validates it has hops.
+// Returns the selected tunnel, gateway hash, and any error encountered.
+func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash, error) {
+	selectedTunnel := p.pool.SelectTunnel()
+	if selectedTunnel == nil {
+		return nil, common.Hash{}, fmt.Errorf("no active outbound tunnels available")
+	}
+
+	if len(selectedTunnel.Hops) == 0 {
+		return nil, common.Hash{}, fmt.Errorf("tunnel has no hops")
+	}
+
+	gatewayHash := selectedTunnel.Hops[0]
+	return selectedTunnel, gatewayHash, nil
+}
+
+// createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore
+// message. This wraps the DatabaseStore for delivery through an outbound tunnel.
+func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, tunnelID tunnel.TunnelID) (i2np.I2NPMessage, error) {
+	// Create DatabaseStore I2NP message
+	dbStoreMsg, err := p.createDatabaseStoreMessage(hash, data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Marshal DatabaseStore message for tunnel wrapping
+	dbStoreMsgBytes, err := dbStoreMsg.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
+	}
+
+	// Create TunnelGateway message to inject DatabaseStore into outbound tunnel
+	tunnelGateway := i2np.NewTunnelGatewayMessage(tunnelID, dbStoreMsgBytes)
+	return tunnelGateway, nil
+}
+
+// createDatabaseStoreMessage creates a DatabaseStore I2NP message with the provided
+// hash and data. Determines the data type based on content characteristics.
+func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte) (i2np.I2NPMessage, error) {
 	// Determine data type based on content (RouterInfo=0, LeaseSet2=3)
 	dataType := byte(0) // Default to RouterInfo
 	if len(data) > 0 {
 		// Simple heuristic: RouterInfo is typically larger and gzip-compressed
 		// LeaseSet2 is uncompressed and smaller
-		// For now, we'll need to pass this info or detect it properly
 		// TODO: Add type detection or pass dataType as parameter
 		dataType = 3 // Assume LeaseSet2 for now
 	}
@@ -432,52 +489,31 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 
 	dbStoreData, err := dbStore.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("failed to marshal DatabaseStore: %w", err)
+		return nil, fmt.Errorf("failed to marshal DatabaseStore: %w", err)
 	}
 	dbStoreMsg.SetData(dbStoreData)
 
-	// Step 5: Wrap DatabaseStore in TunnelGateway message for tunnel transmission
-	dbStoreMsgBytes, err := dbStoreMsg.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("failed to marshal DatabaseStore I2NP message: %w", err)
-	}
+	return dbStoreMsg, nil
+}
 
-	// Create TunnelGateway message to inject DatabaseStore into our outbound tunnel
-	// The first hop is the gateway for outbound tunnels
-	gatewayHash := selectedTunnel.Hops[0]
-	tunnelGateway := i2np.NewTunnelGatewayMessage(selectedTunnel.ID, dbStoreMsgBytes)
-
-	log.WithFields(logger.Fields{
-		"tunnel_id":        selectedTunnel.ID,
-		"gateway_hash":     fmt.Sprintf("%x", gatewayHash[:8]),
-		"floodfill_hash":   fmt.Sprintf("%x", ffHash[:8]),
-		"message_size":     len(dbStoreMsgBytes),
-		"gateway_msg_type": tunnelGateway.Type(),
-	}).Debug("Sending DatabaseStore through tunnel gateway")
-
-	// Step 6: Get gateway router's RouterInfo from NetDB
+// sendMessageThroughGateway sends an I2NP message to a gateway router via transport.
+// This retrieves the gateway RouterInfo, establishes a transport session, and queues
+// the message for transmission.
+func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.I2NPMessage) error {
+	// Get gateway router's RouterInfo from NetDB
 	gatewayRouterInfo, err := p.getGatewayRouterInfo(gatewayHash)
 	if err != nil {
 		return fmt.Errorf("failed to get gateway RouterInfo: %w", err)
 	}
 
-	// Step 7: Get or create transport session to gateway router
+	// Get or create transport session to gateway router
 	session, err := p.transport.GetSession(*gatewayRouterInfo)
 	if err != nil {
 		return fmt.Errorf("failed to get transport session to gateway: %w", err)
 	}
 
-	// Step 8: Queue TunnelGateway message for transmission
-	// The gateway router will receive this message and inject it into the tunnel
-	session.QueueSendI2NP(tunnelGateway)
-
-	log.WithFields(logger.Fields{
-		"data_hash":      fmt.Sprintf("%x", hash[:8]),
-		"floodfill_hash": fmt.Sprintf("%x", ffHash[:8]),
-		"tunnel_id":      selectedTunnel.ID,
-		"gateway_hash":   fmt.Sprintf("%x", gatewayHash[:8]),
-	}).Debug("DatabaseStore sent to tunnel gateway for transmission")
-
+	// Queue message for transmission
+	session.QueueSendI2NP(msg)
 	return nil
 }
 
