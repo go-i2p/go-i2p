@@ -365,35 +365,74 @@ func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
 	}
 
 	// Parse each clove
+	offset, err := p.parseGarlicCloves(garlic, data, offset, count)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse trailing fields (certificate, message ID, expiration)
+	if err := p.validateGarlicTrailingFields(data, offset); err != nil {
+		return nil, err
+	}
+
+	return garlic, nil
+}
+
+// parseGarlicCloves parses all garlic cloves from the data and appends them to the garlic structure.
+// Returns the updated offset after parsing all cloves.
+func (p *MessageProcessor) parseGarlicCloves(garlic *Garlic, data []byte, offset int, count int) (int, error) {
 	for i := 0; i < count; i++ {
 		clove, bytesRead, err := p.parseGarlicClove(data[offset:])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse clove %d: %w", i, err)
+			return 0, fmt.Errorf("failed to parse clove %d: %w", i, err)
 		}
 		garlic.Cloves = append(garlic.Cloves, *clove)
 		offset += bytesRead
 	}
+	return offset, nil
+}
 
-	// Parse certificate (3 bytes - always null in current implementation)
-	if len(data)-offset < 3 {
-		return nil, fmt.Errorf("insufficient data for certificate at offset %d", offset)
+// validateGarlicTrailingFields validates that the garlic data contains the required trailing fields.
+// These fields are: certificate (3 bytes), message ID (4 bytes), and expiration (8 bytes).
+func (p *MessageProcessor) validateGarlicTrailingFields(data []byte, offset int) error {
+	if err := p.validateGarlicCertificate(data, offset); err != nil {
+		return err
 	}
-	offset += 3 // Skip certificate
+	offset += 3
 
-	// Parse message ID (4 bytes)
-	if len(data)-offset < 4 {
-		return nil, fmt.Errorf("insufficient data for message ID at offset %d", offset)
+	if err := p.validateGarlicMessageID(data, offset); err != nil {
+		return err
 	}
-	// Message ID parsing would go here if needed
 	offset += 4
 
-	// Parse expiration (8 bytes)
-	if len(data)-offset < 8 {
-		return nil, fmt.Errorf("insufficient data for expiration at offset %d", offset)
-	}
-	// Expiration parsing would go here if needed
+	return p.validateGarlicExpiration(data, offset)
+}
 
-	return garlic, nil
+// validateGarlicCertificate validates that sufficient data exists for the certificate field.
+// The certificate is always 3 bytes and currently always null in the implementation.
+func (p *MessageProcessor) validateGarlicCertificate(data []byte, offset int) error {
+	if len(data)-offset < 3 {
+		return fmt.Errorf("insufficient data for certificate at offset %d", offset)
+	}
+	return nil
+}
+
+// validateGarlicMessageID validates that sufficient data exists for the message ID field.
+// The message ID is 4 bytes.
+func (p *MessageProcessor) validateGarlicMessageID(data []byte, offset int) error {
+	if len(data)-offset < 4 {
+		return fmt.Errorf("insufficient data for message ID at offset %d", offset)
+	}
+	return nil
+}
+
+// validateGarlicExpiration validates that sufficient data exists for the expiration field.
+// The expiration is 8 bytes.
+func (p *MessageProcessor) validateGarlicExpiration(data []byte, offset int) error {
+	if len(data)-offset < 8 {
+		return fmt.Errorf("insufficient data for expiration at offset %d", offset)
+	}
+	return nil
 }
 
 // parseGarlicClove parses a single garlic clove from the data.
