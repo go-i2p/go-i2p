@@ -93,33 +93,25 @@ func TestMessageProcessor(t *testing.T) {
 func TestTunnelManager(t *testing.T) {
 	manager := NewTunnelManager(&MockTestPeerSelector{}) // Use mock peer selector for test
 
-	// Create build request records
-	records := [8]BuildRequestRecord{}
-	for i := range records {
-		records[i] = BuildRequestRecord{
-			ReceiveTunnel: tunnel.TunnelID(i + 1),
-			NextTunnel:    tunnel.TunnelID(i + 2),
-		}
+	// Test with outbound tunnel build request - should get error due to insufficient peers
+	req := tunnel.BuildTunnelRequest{
+		IsInbound: false,
+		HopCount:  3,
 	}
-
-	// Test with TunnelBuild - should get error due to insufficient peers
-	builder := NewTunnelBuilder(records)
-	err := manager.BuildTunnel(builder)
+	tunnelID, err := manager.BuildTunnel(req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient peers")
-	assert.Equal(t, 8, builder.GetRecordCount())
+	assert.Equal(t, tunnel.TunnelID(0), tunnelID)
 
-	// Test with VariableTunnelBuild - should also get error
-	variableRecords := []BuildRequestRecord{
-		{ReceiveTunnel: 1, NextTunnel: 2},
-		{ReceiveTunnel: 3, NextTunnel: 4},
-		{ReceiveTunnel: 5, NextTunnel: 6},
+	// Test with inbound tunnel build request - should also get error
+	inboundReq := tunnel.BuildTunnelRequest{
+		IsInbound: true,
+		HopCount:  2,
 	}
-	variableBuilder := NewVariableTunnelBuilder(variableRecords)
-	err = manager.BuildTunnel(variableBuilder)
+	tunnelID, err = manager.BuildTunnel(inboundReq)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient peers")
-	assert.Equal(t, 3, variableBuilder.GetRecordCount())
+	assert.Equal(t, tunnel.TunnelID(0), tunnelID)
 }
 
 func TestDatabaseManager(t *testing.T) {

@@ -142,13 +142,17 @@ func TestTunnelManager_BuildTunnel_InsufficientPeers(t *testing.T) {
 
 	tm := NewTunnelManager(insufficientPeerSelector)
 
-	records := createTestBuildRequestRecords()
-	builder := NewTunnelBuilder(records)
+	// Build request for outbound tunnel
+	req := tunnel.BuildTunnelRequest{
+		IsInbound: false,
+		HopCount:  3,
+	}
 
 	// Should fail due to insufficient peers
-	err := tm.BuildTunnel(builder)
+	tunnelID, err := tm.BuildTunnel(req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient peers")
+	assert.Equal(t, tunnel.TunnelID(0), tunnelID)
 }
 
 // TestTunnelManager_SetSessionProvider tests session provider management
