@@ -195,6 +195,16 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 			break
 		}
 
+		// Validate fragment_size doesn't exceed remaining data to prevent index out of bounds
+		if int(fragment_size) > len(remainder) {
+			log.WithFields(logger.Fields{
+				"at":            "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
+				"fragment_size": fragment_size,
+				"remainder_len": len(remainder),
+			}).Error("fragment size exceeds remaining data")
+			break
+		}
+
 		fragment_data := remainder[:fragment_size]
 		pair := DeliveryInstructionsWithFragment{
 			DeliveryInstructions: instructions,
