@@ -359,6 +359,12 @@ func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout tim
 		return 0, err
 	}
 
+	// Validate NTP response before using it to prevent accepting invalid/malicious time sources
+	if !rt.validateResponse(response) {
+		log.WithField("server", server).Debug("NTP response failed validation")
+		return 0, err
+	}
+
 	now := time.Now().Add(response.ClockOffset)
 	delta := time.Until(now)
 	return delta, nil
