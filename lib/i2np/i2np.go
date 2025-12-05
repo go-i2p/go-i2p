@@ -56,8 +56,8 @@ type BaseI2NPMessage struct {
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msgType,
-		messageID:  0,                                // Will be set by caller
-		expiration: time.Now().Add(10 * time.Minute), // Default 10 minute expiration
+		messageID:  0,                               // Will be set by caller
+		expiration: time.Now().Add(60 * time.Second), // Default 60s per spec recommendation
 		data:       []byte{},
 	}
 }
