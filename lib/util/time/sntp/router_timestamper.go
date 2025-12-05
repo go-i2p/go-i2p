@@ -370,12 +370,12 @@ func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout tim
 	return delta, nil
 }
 
-// selectRandomServer chooses a random server from the list and formats it for IPv6 if needed.
+// selectRandomServer chooses a random server from the list.
+// The preferIPv6 parameter is currently unused but retained for future implementation
+// of IPv6-specific server selection logic. The beevik/ntp library handles DNS resolution
+// and will use IPv6 or IPv4 based on system configuration.
 func (rt *RouterTimestamper) selectRandomServer(servers []string, preferIPv6 bool) string {
 	server := servers[rand.Intn(len(servers))]
-	if preferIPv6 {
-		server = fmt.Sprintf("[%s]:123", server)
-	}
 	return server
 }
 
