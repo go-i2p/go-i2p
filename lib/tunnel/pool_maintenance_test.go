@@ -12,12 +12,13 @@ import (
 
 // MockTunnelBuilder for testing pool maintenance
 type MockTunnelBuilder struct {
-	mu           sync.Mutex
-	buildCount   int
-	shouldFail   bool
-	lastRequest  BuildTunnelRequest
-	builtTunnels []TunnelID
-	callbackPool *Pool // Allow builder to add tunnels to pool
+	mu             sync.Mutex
+	buildCount     int
+	shouldFail     bool
+	lastRequest    BuildTunnelRequest
+	builtTunnels   []TunnelID
+	callbackPool   *Pool         // Allow builder to add tunnels to pool
+	completionChan chan struct{} // Signal when a build completes
 }
 
 func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error) {
@@ -26,6 +27,16 @@ func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error
 
 	m.buildCount++
 	m.lastRequest = req
+
+	// Signal completion if channel is set
+	defer func() {
+		if m.completionChan != nil {
+			select {
+			case m.completionChan <- struct{}{}:
+			default:
+			}
+		}
+	}()
 
 	if m.shouldFail {
 		return 0, assert.AnError
@@ -411,47 +422,78 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	pool := NewTunnelPoolWithConfig(selector, config)
 	defer pool.Stop()
 
-	builder := &MockTunnelBuilder{callbackPool: pool}
+	// Set up builder with completion channel
+	completionChan := make(chan struct{}, 10)
+	builder := &MockTunnelBuilder{
+		completionChan: completionChan,
+	}
 	pool.SetTunnelBuilder(builder)
 
-	// Test that builds work asynchronously
+	// Test 1: Successful build
 	pool.mutex.Lock()
 	pool.buildTunnelsWithBackoff(2)
 	pool.mutex.Unlock()
 
-	// Wait for async build to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for both tunnels to complete
+	<-completionChan
+	<-completionChan
+	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update state
 
-	assert.Equal(t, 2, builder.GetBuildCount())
+	assert.Equal(t, 2, builder.GetBuildCount(), "First build should create 2 tunnels")
 
-	// Test backoff mechanism
+	// Wait long enough to avoid backoff (backoffDelay with buildFailures=0 is 100ms)
+	time.Sleep(150 * time.Millisecond)
+
+	// Test 2: Failed builds should increment failure count
 	builder.shouldFail = true
 	pool.mutex.Lock()
-	pool.buildTunnelsWithBackoff(2)
-	initialTime := pool.lastBuildTime
+	pool.buildFailures = 0 // Reset for test
+	pool.buildTunnelsWithBackoff(1)
+	initialTime := pool.lastBuildTime // Read the time AFTER calling buildTunnelsWithBackoff
 	pool.mutex.Unlock()
 
-	// Wait for async build to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the tunnel build to complete
+	<-completionChan
+	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update buildFailures
 
-	// Immediate retry should be skipped due to backoff
 	pool.mutex.Lock()
-	pool.buildTunnelsWithBackoff(2)
-	skippedTime := pool.lastBuildTime
+	failures := pool.buildFailures
 	pool.mutex.Unlock()
+	assert.Equal(t, 1, failures, "Failed build should increment buildFailures")
 
-	// Time should not have been updated (build was skipped)
-	assert.Equal(t, initialTime, skippedTime, "Build should have been skipped due to backoff")
+	// Test 3: Backoff should prevent immediate retry
+	// With buildFailures=1, backoffDelay = 100ms * 2^1 = 200ms
+	// Only ~10ms have passed since initialTime, so this should be skipped
+	time.Sleep(50 * time.Millisecond) // Total ~60ms since initialTime
 
-	// After backoff period, retry should work
-	time.Sleep(250 * time.Millisecond) // Wait for backoff
 	pool.mutex.Lock()
 	pool.buildTunnelsWithBackoff(1)
-	finalTime := pool.lastBuildTime
+	timeAfterSkip := pool.lastBuildTime
 	pool.mutex.Unlock()
 
-	// Time should be updated (build was attempted)
-	assert.True(t, finalTime.After(initialTime), "Build should have been attempted after backoff")
+	// lastBuildTime should not have changed (build was skipped)
+	assert.Equal(t, initialTime, timeAfterSkip, "Build should be skipped due to backoff")
+
+	// Build count should still be 3 (2 from first + 1 from second)
+	assert.Equal(t, 3, builder.GetBuildCount(), "Skipped build should not increment count")
+
+	// Test 4: After backoff delay, build should proceed
+	time.Sleep(200 * time.Millisecond) // Total > 260ms, well past 200ms backoff
+
+	pool.mutex.Lock()
+	pool.buildTunnelsWithBackoff(1)
+	timeAfterBackoff := pool.lastBuildTime
+	pool.mutex.Unlock()
+
+	// Wait for the tunnel build to complete
+	<-completionChan
+	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update state
+
+	// lastBuildTime should have been updated
+	assert.True(t, timeAfterBackoff.After(initialTime), "Build should proceed after backoff period")
+
+	// Build count should be 4 (previous 3 + 1 new)
+	assert.Equal(t, 4, builder.GetBuildCount(), "Build after backoff should increment count")
 }
 
 func TestMaintainPoolIntegration(t *testing.T) {
