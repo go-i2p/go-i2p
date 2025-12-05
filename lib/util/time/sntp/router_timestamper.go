@@ -402,15 +402,21 @@ func (rt *RouterTimestamper) setSyncedStatus(synced bool) {
 	rt.mutex.Unlock()
 }
 
+// stampTime stores the time offset and notifies listeners.
+// Per NTCP2 specification, timestamps are rounded to the nearest second
+// to prevent clock bias accumulation in the I2P network.
 func (rt *RouterTimestamper) stampTime(now time.Time) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 
+	// Round to nearest second per NTCP2 spec for RouterInfo timestamps
+	roundedNow := now.Round(time.Second)
+
 	// Store the time offset for GetCurrentTime
-	rt.timeOffset = time.Until(now)
+	rt.timeOffset = time.Until(roundedNow)
 
 	for _, listener := range rt.listeners {
-		listener.SetNow(now, 0)
+		listener.SetNow(roundedNow, 0)
 	}
 }
 
