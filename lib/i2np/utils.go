@@ -244,6 +244,9 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 }
 
 // ReadI2NPSSUMessageExpiration reads the expiration from SSU data
+// Note: Short expiration is a 4-byte unsigned integer that will wrap around
+// on February 7, 2106. As of that date, an offset must be added to get the
+// correct time. See I2NP specification for details.
 func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 	if len(data) < 5 {
 		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA

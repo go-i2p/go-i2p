@@ -37,6 +37,8 @@ expiration :: Date
 short_expiration :: Integer
                     4 bytes
                     date this message will expire (seconds since the epoch)
+                    Note: This unsigned value will wrap around on Feb 7, 2106.
+                    As of that date, an offset must be added to get the correct time.
 
 size :: Integer
         length -> 2 bytes
