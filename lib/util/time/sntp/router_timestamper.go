@@ -323,9 +323,9 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 		found[i] = delta
 
 		if i == 0 {
-			if rt.validateFirstSample(delta) {
-				break
-			}
+			// Validate first sample and set sync status, but continue collecting
+			// all concurrent samples for multi-server consensus
+			rt.validateFirstSample(delta)
 			expectedDelta = delta
 		} else {
 			if !rt.validateAdditionalSample(delta, expectedDelta) {
