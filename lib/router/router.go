@@ -209,18 +209,20 @@ func (r *Router) Wait() {
 	log.Debug("Router has stopped")
 }
 
-// Stop starts stopping internal state of router
+// Stop initiates router shutdown and waits for all goroutines to complete.
+// This method blocks until the router is fully stopped.
 func (r *Router) Stop() {
 	log.Debug("Stopping router")
 	r.runMux.Lock()
-	defer r.runMux.Unlock()
 
 	if !r.running {
+		r.runMux.Unlock()
 		log.Debug("Router already stopped")
 		return
 	}
 
 	r.running = false
+	r.runMux.Unlock()
 
 	// Cancel router context to signal shutdown to all goroutines
 	if r.cancel != nil {
@@ -229,7 +231,21 @@ func (r *Router) Stop() {
 	}
 
 	r.stopI2CPServer()
+	r.stopNetDB()
 	r.sendCloseSignal()
+
+	// Wait for all goroutines to finish before returning
+	log.Debug("Waiting for router goroutines to finish")
+	r.wg.Wait()
+	log.Debug("Router stopped successfully")
+}
+
+// stopNetDB shuts down the network database if it exists and logs the result.
+func (r *Router) stopNetDB() {
+	if r.StdNetDB != nil {
+		r.StdNetDB.Stop()
+		log.Debug("NetDB stopped")
+	}
 }
 
 // stopI2CPServer shuts down the I2CP server if it is running and logs the result.
