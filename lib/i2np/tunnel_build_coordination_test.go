@@ -76,7 +76,7 @@ func TestTunnelBuildMessage_Creation(t *testing.T) {
 
 	// Verify I2NPMessage interface compliance
 	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type())
-	assert.Equal(t, 0, msg.MessageID())                // Default message ID
+	assert.NotEqual(t, 0, msg.MessageID())             // Should have random message ID
 	assert.True(t, msg.Expiration().After(time.Now())) // Should have future expiration
 
 	// Verify TunnelBuilder interface compliance

@@ -2,9 +2,11 @@ package i2np
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"time"
 
 	datalib "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/samber/oops"
 )
 
@@ -52,11 +54,23 @@ type BaseI2NPMessage struct {
 	data       []byte
 }
 
+// generateRandomMessageID creates a random 4-byte message ID
+// Returns 0 on error (caller should handle by setting explicitly)
+func generateRandomMessageID() int {
+	msgIDBytes := make([]byte, 4)
+	if _, err := rand.Read(msgIDBytes); err != nil {
+		// Fall back to 0 if random generation fails
+		// Callers can still set message ID explicitly if needed
+		return 0
+	}
+	return int(binary.BigEndian.Uint32(msgIDBytes))
+}
+
 // NewBaseI2NPMessage creates a new base I2NP message
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msgType,
-		messageID:  0,                               // Will be set by caller
+		messageID:  generateRandomMessageID(),        // Random by default per spec
 		expiration: time.Now().Add(60 * time.Second), // Default 60s per spec recommendation
 		data:       []byte{},
 	}
