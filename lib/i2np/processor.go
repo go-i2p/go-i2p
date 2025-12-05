@@ -712,6 +712,12 @@ func (tm *TunnelManager) GetPool() *tunnel.Pool {
 	return tm.pool
 }
 
+// BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.
+// This adapter method wraps BuildTunnelFromRequest to match the interface signature.
+func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
+	return tm.BuildTunnelFromRequest(req)
+}
+
 // BuildTunnelFromRequest builds a tunnel from a BuildTunnelRequest using the tunnel.TunnelBuilder.
 // This is the recommended method for building tunnels with proper request tracking and retry support.
 //
@@ -972,8 +978,9 @@ func (tm *TunnelManager) generateMessageID() int {
 	return int(time.Now().UnixNano() & 0x7FFFFFFF)
 }
 
-// BuildTunnel builds a tunnel using TunnelBuilder interface
-func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error {
+// BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message interface.
+// This is used for message routing and differs from BuildTunnel (tunnel.BuilderInterface).
+func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error {
 	if err := tm.validateTunnelBuilder(builder); err != nil {
 		return err
 	}
@@ -2049,7 +2056,7 @@ func (mr *MessageRouter) RouteDatabaseMessage(msg interface{}) error {
 // RouteTunnelMessage routes tunnel-related messages
 func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
 	if builder, ok := msg.(TunnelBuilder); ok {
-		return mr.tunnelMgr.BuildTunnel(builder)
+		return mr.tunnelMgr.BuildTunnelWithBuilder(builder)
 	}
 
 	if handler, ok := msg.(TunnelReplyHandler); ok {

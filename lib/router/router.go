@@ -341,6 +341,15 @@ func (r *Router) initializeTunnelManager() {
 	r.tunnelManager = tm
 	r.runMux.Unlock()
 
+	// Configure automatic tunnel pool maintenance
+	pool := tm.GetPool()
+	pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
+	if err := pool.StartMaintenance(); err != nil {
+		log.WithError(err).Error("Failed to start tunnel pool maintenance")
+	} else {
+		log.Debug("Tunnel pool automatic maintenance started")
+	}
+
 	log.WithFields(logger.Fields{
 		"peer_selector": "netdb",
 		"pools_created": true,
