@@ -112,6 +112,8 @@ The core router functionality is now operational. We are currently focused on ad
 ## Verbosity ##
 Logging can be enabled and configured using the `DEBUG_I2P` environment variable. By default, logging is disabled.
 
+> **Note:** Logging is configured via environment variables (not config.yaml or command-line flags) because it is managed by an external logger package and needs to be set before the application starts.
+
 There are three available log levels:
 
 - Debug
