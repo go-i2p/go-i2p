@@ -3,6 +3,8 @@ package tunnel
 import (
 	"crypto/sha256"
 	"errors"
+	"sync"
+	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
 )
@@ -20,13 +22,17 @@ type MessageHandler func(msgBytes []byte) error
 // - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default
 // - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 // - Handles fragment reassembly for large messages
+// - Automatic cleanup of stale fragments (default: 60 seconds)
+// - Thread-safe for concurrent message processing
 // - Clear error handling and logging
 type Endpoint struct {
-	tunnelID   TunnelID
-	decryption tunnel.TunnelEncryptor
-	handler    MessageHandler
-	// fragments maps message ID to accumulated fragments
-	fragments map[uint32]*fragmentAssembler
+	tunnelID        TunnelID
+	decryption      tunnel.TunnelEncryptor
+	handler         MessageHandler
+	fragmentsMutex  sync.Mutex
+	fragments       map[uint32]*fragmentAssembler
+	fragmentTimeout time.Duration
+	stopChan        chan struct{}
 }
 
 // fragmentAssembler tracks fragments for a single message being reassembled.
@@ -38,11 +44,13 @@ type Endpoint struct {
 // - Tracks received fragments with a bitmap for efficient checking
 // - Stores delivery type from first fragment for proper routing
 // - Supports up to 63 follow-on fragments (6-bit fragment number in spec)
+// - Tracks creation time for expiration-based cleanup
 type fragmentAssembler struct {
 	fragments    map[int][]byte // fragment number -> fragment data
 	deliveryType byte           // Delivery type from first fragment
 	totalCount   int            // Expected number of fragments (0 until last fragment seen)
 	receivedMask uint64         // Bitmap of received fragments (supports up to 64 fragments)
+	createdAt    time.Time      // Timestamp when first fragment was received
 }
 
 var (
@@ -68,6 +76,7 @@ var (
 // - handler: callback function to process received I2NP messages
 //
 // Returns an error if decryption or handler is nil.
+// Starts a background goroutine to clean up stale fragments.
 func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler MessageHandler) (*Endpoint, error) {
 	if decryption == nil {
 		return nil, ErrNilDecryption
@@ -77,11 +86,16 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	}
 
 	ep := &Endpoint{
-		tunnelID:   tunnelID,
-		decryption: decryption,
-		handler:    handler,
-		fragments:  make(map[uint32]*fragmentAssembler),
+		tunnelID:        tunnelID,
+		decryption:      decryption,
+		handler:         handler,
+		fragments:       make(map[uint32]*fragmentAssembler),
+		fragmentTimeout: 60 * time.Second, // Default 60 second timeout for incomplete fragments
+		stopChan:        make(chan struct{}),
 	}
+
+	// Start background cleanup goroutine
+	go ep.cleanupFragments()
 
 	log.WithField("tunnel_id", tunnelID).Debug("Created tunnel endpoint")
 	return ep, nil
@@ -97,6 +111,7 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 // 5. Reassemble if fragmented
 // 6. Deliver to handler
 //
+// Thread-safe: protects fragment map access with mutex.
 // Returns an error if processing fails at any step.
 func (e *Endpoint) Receive(encryptedData []byte) error {
 	if len(encryptedData) != 1028 {
@@ -293,6 +308,9 @@ func (e *Endpoint) deliverNonFragmentedMessage(deliveryType byte, fragmentData [
 // storeFirstFragment stores the first fragment of a multi-fragment message.
 // Creates or updates the fragment assembler and checks for completion.
 func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentData []byte) error {
+	e.fragmentsMutex.Lock()
+	defer e.fragmentsMutex.Unlock()
+
 	assembler := e.ensureAssemblerExists(msgID, deliveryType)
 	e.recordFirstFragmentData(assembler, fragmentData, msgID)
 	return e.checkFragmentCompletion(msgID, assembler)
@@ -300,6 +318,7 @@ func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentD
 
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
 // Updates delivery type on existing assemblers to ensure correct routing.
+// Note: Caller must hold fragmentsMutex.
 func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
@@ -308,6 +327,7 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragm
 			deliveryType: deliveryType,
 			totalCount:   0,
 			receivedMask: 0,
+			createdAt:    time.Now(),
 		}
 		e.fragments[msgID] = assembler
 	} else {
@@ -347,6 +367,9 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 	if err != nil {
 		return err
 	}
+
+	e.fragmentsMutex.Lock()
+	defer e.fragmentsMutex.Unlock()
 
 	assembler := e.getOrCreateAssembler(msgID)
 
@@ -388,6 +411,7 @@ func (e *Endpoint) extractFollowOnFragmentInfo(di *DeliveryInstructions) (uint32
 }
 
 // getOrCreateAssembler retrieves existing assembler or creates a new one for the message ID.
+// Note: Caller must hold fragmentsMutex.
 func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
@@ -397,6 +421,7 @@ func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 			deliveryType: DT_LOCAL,
 			totalCount:   0,
 			receivedMask: 0,
+			createdAt:    time.Now(),
 		}
 		e.fragments[msgID] = assembler
 	}
@@ -494,6 +519,63 @@ func (e *Endpoint) TunnelID() TunnelID {
 
 // ClearFragments clears all accumulated fragments (useful for cleanup)
 func (e *Endpoint) ClearFragments() {
+	e.fragmentsMutex.Lock()
+	defer e.fragmentsMutex.Unlock()
+
 	e.fragments = make(map[uint32]*fragmentAssembler)
 	log.WithField("tunnel_id", e.tunnelID).Debug("Cleared fragment cache")
+}
+
+// Stop gracefully shuts down the endpoint and stops the cleanup goroutine.
+// Should be called when the endpoint is no longer needed to prevent resource leaks.
+func (e *Endpoint) Stop() {
+	close(e.stopChan)
+	log.WithField("tunnel_id", e.tunnelID).Debug("Stopped tunnel endpoint")
+}
+
+// cleanupFragments periodically removes stale incomplete fragments.
+// Runs in a background goroutine started by NewEndpoint.
+// Fragments older than fragmentTimeout are removed to prevent memory leaks.
+func (e *Endpoint) cleanupFragments() {
+	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			e.removeStaleFragments()
+		case <-e.stopChan:
+			return
+		}
+	}
+}
+
+// removeStaleFragments removes fragments that have exceeded the timeout period.
+// This prevents memory leaks from incomplete fragmented messages due to packet loss.
+func (e *Endpoint) removeStaleFragments() {
+	e.fragmentsMutex.Lock()
+	defer e.fragmentsMutex.Unlock()
+
+	now := time.Now()
+	removedCount := 0
+
+	for msgID, assembler := range e.fragments {
+		if now.Sub(assembler.createdAt) > e.fragmentTimeout {
+			delete(e.fragments, msgID)
+			removedCount++
+			log.WithFields(map[string]interface{}{
+				"message_id": msgID,
+				"age":        now.Sub(assembler.createdAt),
+				"fragments":  len(assembler.fragments),
+			}).Debug("Removed stale fragment assembler")
+		}
+	}
+
+	if removedCount > 0 {
+		log.WithFields(map[string]interface{}{
+			"tunnel_id": e.tunnelID,
+			"removed":   removedCount,
+			"remaining": len(e.fragments),
+		}).Info("Cleaned up stale fragments")
+	}
 }
