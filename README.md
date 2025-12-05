@@ -155,7 +155,7 @@ go-i2p --i2cp.enabled=false
 # Change listen address
 go-i2p --i2cp.address=0.0.0.0:7654
 
-# Adjust maximum sessions
+# Adjust maximum sessions (default is 100)
 go-i2p --i2cp.max-sessions=200
 
 # Use Unix domain socket instead of TCP
