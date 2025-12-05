@@ -388,9 +388,40 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 			UseShortBuild: true, // Use modern STBM by default
 		}
 
-		tunnelID, err := p.tunnelBuilder.BuildTunnel(req)
+		// Try to build tunnel with collision retry
+		const maxRetries = 3
+		var tunnelID TunnelID
+		var err error
+		for retry := 0; retry < maxRetries; retry++ {
+			tunnelID, err = p.tunnelBuilder.BuildTunnel(req)
+			if err != nil {
+				log.WithError(err).Warn("Failed to build tunnel")
+				break
+			}
+
+			// Check for tunnel ID collision
+			p.mutex.RLock()
+			_, exists := p.tunnels[tunnelID]
+			p.mutex.RUnlock()
+
+			if !exists {
+				// No collision, success
+				break
+			}
+
+			// Collision detected - extremely rare but handle it
+			log.WithFields(logger.Fields{
+				"tunnel_id": tunnelID,
+				"retry":     retry + 1,
+			}).Warn("Tunnel ID collision detected, retrying")
+
+			// If this was our last retry, set error
+			if retry == maxRetries-1 {
+				err = fmt.Errorf("tunnel ID collision after %d retries", maxRetries)
+			}
+		}
+
 		if err != nil {
-			log.WithError(err).Warn("Failed to build tunnel")
 			continue
 		}
 
