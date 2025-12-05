@@ -498,18 +498,12 @@ func getLocalCountryCode() string {
 	return ""
 }
 
+// GetCurrentTime returns the current time adjusted by the stored NTP offset.
+// This is a non-blocking operation that uses the most recent time offset
+// from background NTP synchronization. It does not trigger new NTP queries.
 func (rt *RouterTimestamper) GetCurrentTime() time.Time {
-	if rt.initialized && rt.isRunning && !rt.disabled {
-		// Request immediate timestamp update
-		rt.TimestampNow()
-		// Wait briefly for update to complete
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// Return current time based on stored offset
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
-
 	// Return system time adjusted by the stored time offset
 	return time.Now().Add(rt.timeOffset)
 }
