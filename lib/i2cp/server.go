@@ -9,14 +9,12 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
 )
 
 // log is the package logger
 var log = logger.GetGoI2PLogger()
-
-// DefaultI2CPPort is the standard I2CP port
-const DefaultI2CPPort = 7654
 
 // ServerConfig holds configuration for the I2CP server
 type ServerConfig struct {
@@ -37,7 +35,7 @@ type ServerConfig struct {
 // DefaultServerConfig returns a ServerConfig with sensible defaults
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		ListenAddr:  fmt.Sprintf("localhost:%d", DefaultI2CPPort),
+		ListenAddr:  fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
 		Network:     "tcp",
 		MaxSessions: 100,
 	}

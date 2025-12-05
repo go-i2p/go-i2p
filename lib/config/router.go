@@ -1,8 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 )
+
+// DefaultI2CPPort is the standard I2CP port
+const DefaultI2CPPort = 7654
 
 // I2CPConfig holds configuration for the I2CP server
 type I2CPConfig struct {
@@ -41,7 +45,7 @@ func defaultConfig() string {
 // DefaultI2CPConfig provides default I2CP server configuration
 var DefaultI2CPConfig = I2CPConfig{
 	Enabled:     true,
-	Address:     "localhost:7654",
+	Address:     fmt.Sprintf("localhost:%d", DefaultI2CPPort),
 	Network:     "tcp",
 	MaxSessions: 100,
 }
