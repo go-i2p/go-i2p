@@ -3,7 +3,7 @@ package i2np
 /*
 I2P I2NP Message
 https://geti2p.net/spec/i2np
-Accurate for version 0.9.28
+Accurate for version 0.9.66
 
 Standard (16 bytes):
 
