@@ -132,12 +132,21 @@ func NewRouterConfigFromViper() *RouterConfig {
 		LocalNetDbPaths:  localNetDbPaths,
 	}
 
+	// Create I2CP configuration
+	i2cpConfig := &I2CPConfig{
+		Enabled:     viper.GetBool("i2cp.enabled"),
+		Address:     viper.GetString("i2cp.address"),
+		Network:     viper.GetString("i2cp.network"),
+		MaxSessions: viper.GetInt("i2cp.max_sessions"),
+	}
+
 	// Create and return new RouterConfig
 	return &RouterConfig{
 		BaseDir:    viper.GetString("base_dir"),
 		WorkingDir: viper.GetString("working_dir"),
 		NetDb:      netDbConfig,
 		Bootstrap:  bootstrapConfig,
+		I2CP:       i2cpConfig,
 	}
 }
 
@@ -171,6 +180,14 @@ func UpdateRouterConfig() {
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
 		LocalNetDbPaths:  localNetDbPaths,
+	}
+
+	// Update I2CP configuration
+	RouterConfigProperties.I2CP = &I2CPConfig{
+		Enabled:     viper.GetBool("i2cp.enabled"),
+		Address:     viper.GetString("i2cp.address"),
+		Network:     viper.GetString("i2cp.network"),
+		MaxSessions: viper.GetInt("i2cp.max_sessions"),
 	}
 }
 
