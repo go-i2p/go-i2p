@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -67,6 +68,17 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	// Extract length from big-endian bytes
 	length := int(lengthBuf[0])<<24 | int(lengthBuf[1])<<16 | int(lengthBuf[2])<<8 | int(lengthBuf[3])
 	log.WithField("message_length", length).Debug("Read message length prefix")
+
+	// Validate message length to prevent memory exhaustion attacks
+	// NTCP2 limit is approximately 64KB - 20 = 65516 bytes per I2NP specification
+	const maxI2NPMessageSize = 65516
+	if length > maxI2NPMessageSize || length < 0 {
+		log.WithFields(map[string]interface{}{
+			"length":   length,
+			"max_size": maxI2NPMessageSize,
+		}).Error("Message length exceeds maximum allowed size")
+		return nil, fmt.Errorf("message length %d exceeds max %d", length, maxI2NPMessageSize)
+	}
 
 	// Read the I2NP message data
 	messageBuf := make([]byte, length)
