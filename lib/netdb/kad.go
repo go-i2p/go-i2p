@@ -60,7 +60,12 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 
 // attemptLocalLookup tries to find the RouterInfo locally first.
 func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.RouterInfo {
-	ri := kr.NetworkDatabase.GetRouterInfo(h)
+	riChan := kr.NetworkDatabase.GetRouterInfo(h)
+	ri, ok := <-riChan
+	if !ok {
+		log.Debug("Channel closed, no RouterInfo available")
+		return nil
+	}
 	// Check if the RouterInfo is valid by comparing with an empty hash
 	var emptyHash common.Hash
 	identHash, err := ri.IdentHash()

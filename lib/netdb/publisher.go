@@ -514,7 +514,14 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 // Returns an error if the RouterInfo cannot be retrieved or has no identity.
 func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.RouterInfo, error) {
 	// Get RouterInfo from NetDB using the hash
-	ri := p.db.GetRouterInfo(gatewayHash)
+	riChan := p.db.GetRouterInfo(gatewayHash)
+	if riChan == nil {
+		return nil, fmt.Errorf("gateway %x not found in NetDB", gatewayHash[:8])
+	}
+	ri, ok := <-riChan
+	if !ok {
+		return nil, fmt.Errorf("failed to retrieve RouterInfo for gateway %x", gatewayHash[:8])
+	}
 
 	// Check if RouterInfo has a valid identity by verifying we can get its hash.
 	// Note: We don't use IsValid() because in test environments, RouterInfo without

@@ -36,6 +36,12 @@ type TransportSendFunc func(peerHash common.Hash, msg i2np.I2NPMessage) error
 // NewMessageRouter creates a new message router with the given garlic session manager.
 // The transportSend callback will be used to send encrypted messages to the network.
 func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend TransportSendFunc) *MessageRouter {
+	log.WithFields(logger.Fields{
+		"at":                 "i2cp.NewMessageRouter",
+		"hasGarlicManager":   garlicMgr != nil,
+		"hasTransportSender": transportSend != nil,
+	}).Info("creating_message_router")
+
 	return &MessageRouter{
 		garlicSessions: garlicMgr,
 		transportSend:  transportSend,
@@ -62,6 +68,13 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	destinationPubKey [32]byte,
 	payload []byte,
 ) error {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
+		"sessionID":   session.ID(),
+		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+		"payloadSize": len(payload),
+	}).Info("routing_outbound_message")
+
 	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
 	if err != nil {
 		return err
@@ -112,6 +125,15 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 		return nil, fmt.Errorf("tunnel hops required for tunnel %d", selectedTunnel.ID)
 	}
 
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.MessageRouter.validateAndSelectTunnel",
+		"sessionID":   session.ID(),
+		"tunnelID":    selectedTunnel.ID,
+		"hopCount":    len(selectedTunnel.Hops),
+		"tunnelState": selectedTunnel.State,
+		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+	}).Debug("tunnel_selected_for_routing")
+
 	return selectedTunnel, nil
 }
 
@@ -122,6 +144,13 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	destinationPubKey [32]byte,
 	payload []byte,
 ) (i2np.I2NPMessage, error) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.MessageRouter.buildEncryptedGarlicMessage",
+		"sessionID":   session.ID(),
+		"destination": fmt.Sprintf("%x", destinationHash[:8]),
+		"payloadSize": len(payload),
+	}).Debug("building_garlic_message")
+
 	dataMsg := i2np.NewDataMessage(payload)
 
 	plaintextGarlic, err := mr.buildPlaintextGarlicMessage(session, destinationHash, dataMsg)
@@ -133,6 +162,15 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	if err != nil {
 		return nil, err
 	}
+
+	log.WithFields(logger.Fields{
+		"at":                 "i2cp.MessageRouter.buildEncryptedGarlicMessage",
+		"sessionID":          session.ID(),
+		"destination":        fmt.Sprintf("%x", destinationHash[:8]),
+		"plaintextSize":      len(plaintextGarlic),
+		"encryptedSize":      len(encryptedGarlic),
+		"encryptionOverhead": len(encryptedGarlic) - len(plaintextGarlic),
+	}).Debug("garlic_encrypted_successfully")
 
 	return mr.wrapInGarlicMessage(session, destinationHash, encryptedGarlic)
 }
@@ -272,9 +310,30 @@ func (mr *MessageRouter) logSuccessfulRouting(
 // Returns an error if sending fails.
 func (mr *MessageRouter) SendThroughTunnel(tunnel *tunnel.TunnelState, msg i2np.I2NPMessage) error {
 	if len(tunnel.Hops) == 0 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.MessageRouter.SendThroughTunnel",
+			"tunnelID": tunnel.ID,
+		}).Error("tunnel_has_no_hops")
 		return fmt.Errorf("tunnel hops required for tunnel %d", tunnel.ID)
 	}
 
 	gatewayHash := tunnel.Hops[0]
-	return mr.transportSend(gatewayHash, msg)
+	log.WithFields(logger.Fields{
+		"at":       "i2cp.MessageRouter.SendThroughTunnel",
+		"tunnelID": tunnel.ID,
+		"gateway":  fmt.Sprintf("%x", gatewayHash[:8]),
+		"hopCount": len(tunnel.Hops),
+	}).Debug("sending_message_through_tunnel")
+
+	err := mr.transportSend(gatewayHash, msg)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.MessageRouter.SendThroughTunnel",
+			"tunnelID": tunnel.ID,
+			"gateway":  fmt.Sprintf("%x", gatewayHash[:8]),
+			"error":    err.Error(),
+		}).Error("failed_to_send_through_tunnel")
+	}
+
+	return err
 }

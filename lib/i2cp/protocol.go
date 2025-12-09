@@ -16,6 +16,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"github.com/go-i2p/logger"
 )
 
 // Message type constants as defined in I2CP v2.10.0
@@ -155,16 +157,33 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 
 // ReadMessage reads a complete I2CP message from a reader
 func ReadMessage(r io.Reader) (*Message, error) {
+	connInfo := "unknown"
+	if conn, ok := r.(net.Conn); ok {
+		connInfo = conn.RemoteAddr().String()
+	}
+
 	setReaderDeadline(r)
 
 	header, err := readMessageHeader(r)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.ReadMessage",
+			"remoteAddr": connInfo,
+			"error":      err.Error(),
+		}).Debug("failed_to_read_header")
 		return nil, err
 	}
 
 	msgType, sessionID, payloadLen := parseMessageHeader(header)
 
 	if err := validatePayloadSize(payloadLen); err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.ReadMessage",
+			"remoteAddr": connInfo,
+			"payloadLen": payloadLen,
+			"maxAllowed": MaxPayloadSize,
+			"msgType":    MessageTypeName(msgType),
+		}).Error("payload_size_exceeded_max")
 		return nil, err
 	}
 
@@ -172,8 +191,24 @@ func ReadMessage(r io.Reader) (*Message, error) {
 
 	payload, err := readMessagePayload(r, payloadLen)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.ReadMessage",
+			"remoteAddr": connInfo,
+			"msgType":    MessageTypeName(msgType),
+			"sessionID":  sessionID,
+			"payloadLen": payloadLen,
+			"error":      err.Error(),
+		}).Debug("failed_to_read_payload")
 		return nil, err
 	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ReadMessage",
+		"remoteAddr": connInfo,
+		"msgType":    MessageTypeName(msgType),
+		"sessionID":  sessionID,
+		"payloadLen": payloadLen,
+	}).Debug("message_read_successfully")
 
 	return &Message{
 		Type:      msgType,
@@ -232,9 +267,12 @@ func logLargePayload(payloadLen uint32, msgType uint8, sessionID uint16) {
 
 	log.WithFields(map[string]interface{}{
 		"at":          "i2cp.ReadMessage",
-		"payload_len": payloadLen,
-		"msg_type":    MessageTypeName(msgType),
-		"session_id":  sessionID,
+		"payloadLen":  payloadLen,
+		"msgType":     MessageTypeName(msgType),
+		"msgTypeID":   msgType,
+		"sessionID":   sessionID,
+		"threshold":   DefaultPayloadSize,
+		"percentOver": fmt.Sprintf("%.1f%%", float64(payloadLen-DefaultPayloadSize)/float64(DefaultPayloadSize)*100),
 	}).Warn("large_i2cp_payload")
 }
 
@@ -251,14 +289,44 @@ func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
 
 // WriteMessage writes a complete I2CP message to a writer
 func WriteMessage(w io.Writer, msg *Message) error {
+	connInfo := "unknown"
+	if conn, ok := w.(net.Conn); ok {
+		connInfo = conn.RemoteAddr().String()
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.WriteMessage",
+		"remoteAddr":  connInfo,
+		"msgType":     MessageTypeName(msg.Type),
+		"sessionID":   msg.SessionID,
+		"payloadSize": len(msg.Payload),
+	}).Debug("writing_message")
+
 	data, err := msg.MarshalBinary()
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.WriteMessage",
+			"error": err.Error(),
+		}).Error("failed_to_marshal_message")
 		return fmt.Errorf("failed to marshal I2CP message: %w", err)
 	}
 
 	if _, err := w.Write(data); err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.WriteMessage",
+			"remoteAddr": connInfo,
+			"msgType":    MessageTypeName(msg.Type),
+			"error":      err.Error(),
+		}).Error("failed_to_write_message_data")
 		return fmt.Errorf("failed to write I2CP message: %w", err)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.WriteMessage",
+		"remoteAddr": connInfo,
+		"msgType":    MessageTypeName(msg.Type),
+		"totalBytes": len(data),
+	}).Debug("message_written_successfully")
 
 	return nil
 }

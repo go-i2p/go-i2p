@@ -180,14 +180,37 @@ type IncomingMessage struct {
 func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error) {
 	config = ensureValidConfig(config)
 
+	log.WithFields(logger.Fields{
+		"at":                   "i2cp.NewSession",
+		"sessionID":            id,
+		"hasDestination":       dest != nil,
+		"inboundTunnelLength":  config.InboundTunnelLength,
+		"outboundTunnelLength": config.OutboundTunnelLength,
+		"inboundTunnelCount":   config.InboundTunnelCount,
+		"outboundTunnelCount":  config.OutboundTunnelCount,
+		"messageQueueSize":     config.MessageQueueSize,
+		"messageRateLimit":     config.MessageRateLimit,
+		"useEncryptedLeaseSet": config.UseEncryptedLeaseSet,
+	}).Info("creating_i2cp_session")
+
 	keyStore, dest, err := prepareDestinationAndKeys(dest)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.NewSession",
+			"sessionID": id,
+			"error":     err.Error(),
+		}).Error("failed_to_prepare_destination")
 		return nil, err
 	}
 
 	clientNetDB := createIsolatedNetDB()
 	queueSize := determineQueueSize(config)
-	rateLimiter := createRateLimiterIfNeeded(config)
+	rateLimiter := createRateLimiterIfNeeded(config, id)
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.NewSession",
+		"sessionID": id,
+	}).Info("session_created_successfully")
 
 	return &Session{
 		id:                 id,
@@ -247,7 +270,7 @@ func determineQueueSize(config *SessionConfig) int {
 
 // createRateLimiterIfNeeded creates a rate limiter if rate limiting is enabled in config.
 // Returns nil if rate limiting is disabled (MessageRateLimit <= 0).
-func createRateLimiterIfNeeded(config *SessionConfig) *simpleRateLimiter {
+func createRateLimiterIfNeeded(config *SessionConfig, sessionID uint16) *simpleRateLimiter {
 	if config.MessageRateLimit <= 0 {
 		return nil
 	}
@@ -259,9 +282,11 @@ func createRateLimiterIfNeeded(config *SessionConfig) *simpleRateLimiter {
 
 	rateLimiter := newSimpleRateLimiter(config.MessageRateLimit, burstSize)
 	log.WithFields(logger.Fields{
-		"rate":  config.MessageRateLimit,
-		"burst": burstSize,
-	}).Debug("Created rate limiter for session")
+		"at":        "i2cp.createRateLimiterIfNeeded",
+		"sessionID": sessionID,
+		"rate":      config.MessageRateLimit,
+		"burst":     burstSize,
+	}).Debug("created_rate_limiter_for_session")
 
 	return rateLimiter
 }
@@ -306,6 +331,11 @@ func (s *Session) SetInboundPool(pool *tunnel.Pool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inboundPool = pool
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.SetInboundPool",
+		"sessionID": s.id,
+		"poolSet":   pool != nil,
+	}).Debug("inbound_tunnel_pool_set")
 }
 
 // SetOutboundPool sets the outbound tunnel pool for this session
@@ -313,6 +343,11 @@ func (s *Session) SetOutboundPool(pool *tunnel.Pool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.outboundPool = pool
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Session.SetOutboundPool",
+		"sessionID": s.id,
+		"poolSet":   pool != nil,
+	}).Debug("outbound_tunnel_pool_set")
 }
 
 // SetLeaseSetPublisher configures the publisher for distributing LeaseSets to the network.
@@ -387,6 +422,14 @@ func (s *Session) createIncomingMessage(payload []byte) *IncomingMessage {
 func (s *Session) enqueueMessageWithMonitoring(msg *IncomingMessage) error {
 	select {
 	case s.incomingMessages <- msg:
+		queueLen := len(s.incomingMessages)
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Session.enqueueMessageWithMonitoring",
+			"sessionID":   s.id,
+			"queueLen":    queueLen,
+			"queueCap":    cap(s.incomingMessages),
+			"payloadSize": len(msg.Payload),
+		}).Debug("message_queued")
 		s.checkQueueHighWaterMark()
 		return nil
 	default:
@@ -461,6 +504,19 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	if !s.active {
 		return fmt.Errorf("cannot reconfigure inactive session %d", s.id)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":                      "i2cp.Session.Reconfigure",
+		"sessionID":               s.id,
+		"oldInboundTunnelLength":  s.config.InboundTunnelLength,
+		"newInboundTunnelLength":  newConfig.InboundTunnelLength,
+		"oldOutboundTunnelLength": s.config.OutboundTunnelLength,
+		"newOutboundTunnelLength": newConfig.OutboundTunnelLength,
+		"oldInboundTunnelCount":   s.config.InboundTunnelCount,
+		"newInboundTunnelCount":   newConfig.InboundTunnelCount,
+		"oldOutboundTunnelCount":  s.config.OutboundTunnelCount,
+		"newOutboundTunnelCount":  newConfig.OutboundTunnelCount,
+	}).Info("session_reconfigured")
 
 	s.config = newConfig
 	return nil
@@ -546,13 +602,16 @@ func (s *Session) collectActiveTunnels() ([]*tunnel.TunnelState, error) {
 // Returns an error if no valid leases can be created from the provided tunnels.
 func (s *Session) buildLeasesFromTunnels(tunnels []*tunnel.TunnelState) ([]lease.Lease2, error) {
 	leases := make([]lease.Lease2, 0, len(tunnels))
+	skippedCount := 0
 
 	for _, tun := range tunnels {
 		if tun == nil || tun.State != tunnel.TunnelReady {
+			skippedCount++
 			continue
 		}
 
 		if len(tun.Hops) == 0 {
+			skippedCount++
 			continue
 		}
 
@@ -560,11 +619,26 @@ func (s *Session) buildLeasesFromTunnels(tunnels []*tunnel.TunnelState) ([]lease
 		if err != nil {
 			// Skip tunnels that would expire too soon instead of failing entirely
 			// This can happen with old tunnels or very short tunnel lifetimes
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Session.buildLeasesFromTunnels",
+				"sessionID": s.id,
+				"tunnelID":  tun.ID,
+				"error":     err.Error(),
+			}).Debug("skipping_tunnel_lease_creation")
+			skippedCount++
 			continue
 		}
 
 		leases = append(leases, *l)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":           "i2cp.Session.buildLeasesFromTunnels",
+		"sessionID":    s.id,
+		"totalTunnels": len(tunnels),
+		"validLeases":  len(leases),
+		"skipped":      skippedCount,
+	}).Debug("built_leases_from_tunnels")
 
 	if len(leases) == 0 {
 		return nil, fmt.Errorf("session %d has no valid leases to publish", s.id)
@@ -1224,8 +1298,15 @@ func (s *Session) LeaseSetAge() time.Duration {
 // Stop gracefully stops the session and cleans up resources
 func (s *Session) Stop() {
 	s.stopOnce.Do(func() {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.Stop",
+			"sessionID": s.id,
+			"uptime":    time.Since(s.createdAt),
+		}).Info("stopping_session")
+
 		s.mu.Lock()
 		s.active = false
+		queuedMessages := len(s.incomingMessages)
 		s.mu.Unlock()
 
 		close(s.stopCh)
@@ -1234,11 +1315,18 @@ func (s *Session) Stop() {
 		s.maintWg.Wait()
 
 		// Drain incoming message queue
+		discarded := 0
 		for {
 			select {
 			case <-s.incomingMessages:
-				// Discard
+				discarded++
 			default:
+				log.WithFields(logger.Fields{
+					"at":                "i2cp.Session.Stop",
+					"sessionID":         s.id,
+					"queuedMessages":    queuedMessages,
+					"discardedMessages": discarded,
+				}).Info("session_stopped")
 				return
 			}
 		}
@@ -1268,17 +1356,32 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 	// Allocate session ID
 	sessionID := sm.allocateSessionID()
 	if sessionID == SessionIDReservedControl || sessionID == SessionIDReservedBroadcast {
+		log.WithFields(logger.Fields{
+			"at":             "i2cp.SessionManager.CreateSession",
+			"activeSessions": len(sm.sessions),
+		}).Error("no_available_session_ids")
 		return nil, fmt.Errorf("no available session IDs")
 	}
 
 	// Create session with its own isolated in-memory NetDB
 	session, err := NewSession(sessionID, dest, config)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.SessionManager.CreateSession",
+			"sessionID": sessionID,
+			"error":     err.Error(),
+		}).Error("failed_to_create_session")
 		return nil, err
 	}
 
 	// Register session
 	sm.sessions[sessionID] = session
+
+	log.WithFields(logger.Fields{
+		"at":             "i2cp.SessionManager.CreateSession",
+		"sessionID":      sessionID,
+		"activeSessions": len(sm.sessions),
+	}).Info("session_registered")
 
 	return session, nil
 }
@@ -1298,11 +1401,22 @@ func (sm *SessionManager) DestroySession(sessionID uint16) error {
 	session, ok := sm.sessions[sessionID]
 	if !ok {
 		sm.mu.Unlock()
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.SessionManager.DestroySession",
+			"sessionID": sessionID,
+		}).Warn("session_not_found")
 		return fmt.Errorf("session %d not found", sessionID)
 	}
 
 	delete(sm.sessions, sessionID)
+	remainingCount := len(sm.sessions)
 	sm.mu.Unlock()
+
+	log.WithFields(logger.Fields{
+		"at":                "i2cp.SessionManager.DestroySession",
+		"sessionID":         sessionID,
+		"remainingSessions": remainingCount,
+	}).Info("session_destroyed")
 
 	// Stop session (outside lock to prevent deadlock)
 	session.Stop()

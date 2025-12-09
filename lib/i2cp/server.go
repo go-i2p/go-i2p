@@ -86,6 +86,13 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		config = DefaultServerConfig()
 	}
 
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.NewServer",
+		"network":     config.Network,
+		"listenAddr":  config.ListenAddr,
+		"maxSessions": config.MaxSessions,
+	}).Info("creating_i2cp_server")
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Server{
@@ -216,7 +223,8 @@ func (s *Server) shouldRejectConnection(conn net.Conn) bool {
 			"at":           "i2cp.Server.shouldRejectConnection",
 			"sessionCount": s.manager.SessionCount(),
 			"maxSessions":  s.config.MaxSessions,
-		}).Warn("max_sessions_reached")
+			"remoteAddr":   conn.RemoteAddr().String(),
+		}).Warn("max_sessions_reached_rejecting_connection")
 		conn.Close()
 		return true
 	}
@@ -240,17 +248,24 @@ func (s *Server) handleConnection(conn net.Conn) {
 // logClientConnected logs when a client connects to the server.
 func (s *Server) logClientConnected(conn net.Conn) {
 	log.WithFields(logger.Fields{
-		"at":         "i2cp.Server.handleConnection",
-		"remoteAddr": conn.RemoteAddr(),
+		"at":             "i2cp.Server.handleConnection",
+		"remoteAddr":     conn.RemoteAddr().String(),
+		"localAddr":      conn.LocalAddr().String(),
+		"activeSessions": s.manager.SessionCount(),
 	}).Info("client_connected")
 }
 
 // cleanupSessionConnection removes the session connection mapping on disconnect.
 func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	if *sessionPtr != nil {
+		sessionID := (*sessionPtr).ID()
 		s.mu.Lock()
-		delete(s.sessionConns, (*sessionPtr).ID())
+		delete(s.sessionConns, sessionID)
 		s.mu.Unlock()
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.cleanupSessionConnection",
+			"sessionID": sessionID,
+		}).Debug("client_disconnected")
 	}
 }
 
@@ -312,16 +327,23 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 	// Check connection-level rate limits before reading
 	if !s.checkConnectionRateLimit(conn) {
+		state := s.getOrCreateConnectionState(conn)
 		log.WithFields(logger.Fields{
-			"at":         "i2cp.Server.readClientMessage",
-			"remoteAddr": conn.RemoteAddr(),
+			"at":           "i2cp.Server.readClientMessage",
+			"remoteAddr":   conn.RemoteAddr().String(),
+			"messageCount": state.messageCount,
+			"bytesRead":    state.bytesRead,
 		}).Warn("connection_rate_limit_exceeded")
 		return nil, fmt.Errorf("connection rate limit exceeded")
 	}
 
 	msg, err := ReadMessage(conn)
 	if err != nil {
-		log.WithError(err).Debug("failed_to_read_message")
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.readClientMessage",
+			"remoteAddr": conn.RemoteAddr().String(),
+			"error":      err.Error(),
+		}).Debug("failed_to_read_message")
 		return nil, err
 	}
 
@@ -414,9 +436,11 @@ func (s *Server) updateConnectionState(conn net.Conn, msg *Message) {
 // logReceivedMessage logs details about a received message.
 func (s *Server) logReceivedMessage(msg *Message) {
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleConnection",
-		"type":      MessageTypeName(msg.Type),
-		"sessionID": msg.SessionID,
+		"at":          "i2cp.Server.handleConnection",
+		"type":        MessageTypeName(msg.Type),
+		"typeID":      msg.Type,
+		"sessionID":   msg.SessionID,
+		"payloadSize": len(msg.Payload),
 	}).Debug("received_message")
 }
 
@@ -445,8 +469,18 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 // sendResponse writes a response message to the connection if present.
 func (s *Server) sendResponse(conn net.Conn, response *Message) error {
 	if response != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.sendResponse",
+			"type":        MessageTypeName(response.Type),
+			"sessionID":   response.SessionID,
+			"payloadSize": len(response.Payload),
+		}).Debug("sending_response")
 		if err := WriteMessage(conn, response); err != nil {
-			log.WithError(err).Error("failed_to_write_response")
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.sendResponse",
+				"type":  MessageTypeName(response.Type),
+				"error": err.Error(),
+			}).Error("failed_to_write_response")
 			return err
 		}
 	}
@@ -479,8 +513,10 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 
 	default:
 		log.WithFields(logger.Fields{
-			"at":   "i2cp.Server.handleMessage",
-			"type": msg.Type,
+			"at":          "i2cp.Server.handleMessage",
+			"type":        msg.Type,
+			"sessionID":   msg.SessionID,
+			"payloadSize": len(msg.Payload),
 		}).Warn("unsupported_message_type")
 		return nil, fmt.Errorf("unsupported message type: %d", msg.Type)
 	}
@@ -792,6 +828,13 @@ func (s *Server) validateOutboundPool(session *Session) error {
 
 // routeMessageToDestination routes the message through the I2P network.
 func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessagePayload) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.routeMessageToDestination",
+		"sessionID":   session.ID(),
+		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"payloadSize": len(sendMsg.Payload),
+	}).Debug("routing_outbound_message")
+
 	// Look up destination's encryption public key from NetDB
 	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
 	if err != nil {
@@ -799,7 +842,7 @@ func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessag
 			"at":          "i2cp.Server.routeMessageToDestination",
 			"sessionID":   session.ID(),
 			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"error":       err,
+			"error":       err.Error(),
 		}).Error("failed_to_resolve_destination_key")
 		return
 	}
@@ -956,7 +999,7 @@ func (s *Server) logDeliveryStarted(sessionID uint16) {
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.deliverMessagesToClient",
 		"sessionID": sessionID,
-	}).Debug("started_message_delivery_goroutine")
+	}).Info("started_message_delivery_goroutine")
 }
 
 // checkServerShutdown checks if the server is shutting down.
@@ -1059,9 +1102,9 @@ func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Messa
 // logMessageDelivered logs successful message delivery to client.
 func (s *Server) logMessageDelivered(sessionID uint16, messageID uint32, size int) {
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.deliverMessagesToClient",
-		"sessionID": sessionID,
-		"messageID": messageID,
-		"size":      size,
-	}).Debug("delivered_message_to_client")
+		"at":          "i2cp.Server.deliverMessagesToClient",
+		"sessionID":   sessionID,
+		"messageID":   messageID,
+		"payloadSize": size,
+	}).Info("delivered_message_to_client")
 }

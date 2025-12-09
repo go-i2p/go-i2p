@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/logger"
 )
 
 // SendMessagePayload represents the payload structure of a SendMessage (type 7) message.
@@ -39,6 +40,11 @@ func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error) {
 	// Minimum size: 32 bytes for destination hash
 	// Payload can be empty (0 bytes), so minimum is exactly 32
 	if len(data) < 32 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseSendMessagePayload",
+			"dataSize": len(data),
+			"required": 32,
+		}).Error("send_message_payload_too_short")
 		return nil, fmt.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(data))
 	}
 
@@ -55,6 +61,12 @@ func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error) {
 	} else {
 		smp.Payload = []byte{}
 	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.ParseSendMessagePayload",
+		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"payloadSize": payloadLen,
+	}).Debug("parsed_send_message_payload")
 
 	return smp, nil
 }
@@ -73,6 +85,13 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 	if len(smp.Payload) > 0 {
 		copy(result[32:], smp.Payload)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.SendMessagePayload.MarshalBinary",
+		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
+		"payloadSize": len(smp.Payload),
+		"totalSize":   totalSize,
+	}).Debug("marshaled_send_message_payload")
 
 	return result, nil
 }
@@ -108,6 +127,11 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 	// Minimum size: 4 bytes for message ID
 	// Payload can be empty (0 bytes), so minimum is exactly 4
 	if len(data) < 4 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseMessagePayloadPayload",
+			"dataSize": len(data),
+			"required": 4,
+		}).Error("message_payload_too_short")
 		return nil, fmt.Errorf("message payload too short: need at least 4 bytes for message ID, got %d", len(data))
 	}
 
@@ -124,6 +148,12 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 	} else {
 		mpp.Payload = []byte{}
 	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.ParseMessagePayloadPayload",
+		"messageID":   mpp.MessageID,
+		"payloadSize": payloadLen,
+	}).Debug("parsed_message_payload")
 
 	return mpp, nil
 }
