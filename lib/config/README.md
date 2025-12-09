@@ -25,16 +25,8 @@ var DefaultBootstrapConfig = BootstrapConfig{
 
 	ReseedServers: []*ReseedConfig{
 		{
-			Url:            "https://reseed.i2p-projekt.de/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_1",
-		},
-		{
-			Url:            "https://i2p.mooo.com/netDb/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_2",
-		},
-		{
-			Url:            "https://netdb.i2p2.no/",
-			SU3Fingerprint: "PLACEHOLDER_FINGERPRINT_3",
+			Url:            "https://reseed.i2pgit.org/",
+			SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
 		},
 	},
 
