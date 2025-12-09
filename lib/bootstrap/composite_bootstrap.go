@@ -44,12 +44,16 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithField("requested_peers", n).Info("Starting composite bootstrap")
 
+	// Collect errors from all methods for better debugging
+	var fileErr, reseedErr, netDbErr error
+
 	// Try file bootstrap first if configured
 	if cb.fileBootstrap != nil {
 		peers, err := tryFileBootstrap(cb.fileBootstrap, ctx, n)
 		if err == nil {
 			return peers, nil
 		}
+		fileErr = err
 	}
 
 	// Try reseed bootstrap
@@ -57,9 +61,17 @@ func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_inf
 	if err == nil {
 		return peers, nil
 	}
+	reseedErr = err
 
 	// Fall back to local netDb
-	return tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+	peers, err = tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+	if err == nil {
+		return peers, nil
+	}
+	netDbErr = err
+
+	// All methods failed - return aggregated error for debugging
+	return nil, buildAggregatedError(fileErr, reseedErr, netDbErr)
 }
 
 // tryFileBootstrap attempts to obtain peers from the local reseed file.
@@ -95,8 +107,8 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 	log.Info("Attempting local netDb bootstrap")
 	peers, err := lb.GetPeers(ctx, n)
 	if err != nil {
-		log.WithError(err).Error("Local netDb bootstrap also failed")
-		return nil, fmt.Errorf("all bootstrap methods failed - file, reseed, and local netDb: %w", err)
+		log.WithError(err).Error("Local netDb bootstrap failed")
+		return nil, err
 	}
 
 	if len(peers) == 0 {
@@ -123,4 +135,28 @@ func logReseedFailure(err error) {
 	} else {
 		log.Warn("Reseed bootstrap returned no peers, attempting local netDb fallback")
 	}
+}
+
+// buildAggregatedError creates a detailed error message including all bootstrap method failures.
+func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
+	log.Error("All bootstrap methods failed")
+
+	// Build error message with all available error details
+	errMsg := "all bootstrap methods failed:"
+
+	if fileErr != nil {
+		errMsg += fmt.Sprintf(" file=%v;", fileErr)
+	} else {
+		errMsg += " file=not attempted;"
+	}
+
+	if reseedErr != nil {
+		errMsg += fmt.Sprintf(" reseed=%v;", reseedErr)
+	}
+
+	if netDbErr != nil {
+		errMsg += fmt.Sprintf(" netDb=%v", netDbErr)
+	}
+
+	return fmt.Errorf("%s", errMsg)
 }
