@@ -27,9 +27,9 @@ type Resolver interface {
 // i2p network database, storage of i2p RouterInfos
 type NetworkDatabase interface {
 	// obtain a RouterInfo by its hash locally
-	// return a RouterInfo if we found it locally
+	// return a channel that yields the RouterInfo if found locally
 	// return nil if the RouterInfo cannot be found locally
-	GetRouterInfo(hash common.Hash) router_info.RouterInfo
+	GetRouterInfo(hash common.Hash) chan router_info.RouterInfo
 
 	// obtain all routerInfos, ordered by their hash
 	// return a slice of routerInfos
