@@ -975,6 +975,20 @@ func (s *Server) prepareMessagePayload(
 	incomingMsg *IncomingMessage,
 	messageCounter *uint32,
 ) (*Message, error) {
+	// Validate payload size: MessagePayloadPayload has 4-byte MessageID + payload
+	// Total must not exceed I2CP MaxPayloadSize (65535 bytes)
+	const messageIDSize = 4
+	if len(incomingMsg.Payload)+messageIDSize > MaxPayloadSize {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.prepareMessagePayload",
+			"sessionID":   sessionID,
+			"payloadSize": len(incomingMsg.Payload),
+			"maxAllowed":  MaxPayloadSize - messageIDSize,
+		}).Error("incoming_message_payload_too_large")
+		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes)", 
+			len(incomingMsg.Payload), MaxPayloadSize-messageIDSize)
+	}
+
 	msgPayload := &MessagePayloadPayload{
 		MessageID: *messageCounter,
 		Payload:   incomingMsg.Payload,
