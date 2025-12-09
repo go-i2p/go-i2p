@@ -985,7 +985,7 @@ func (s *Server) prepareMessagePayload(
 			"payloadSize": len(incomingMsg.Payload),
 			"maxAllowed":  MaxPayloadSize - messageIDSize,
 		}).Error("incoming_message_payload_too_large")
-		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes)", 
+		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes)",
 			len(incomingMsg.Payload), MaxPayloadSize-messageIDSize)
 	}
 
