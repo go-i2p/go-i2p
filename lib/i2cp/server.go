@@ -920,6 +920,10 @@ func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
 	}()
 
 	sessionID := session.ID()
+	// Message ID counter uses uint32 and will wrap to 1 after reaching max value.
+	// This allows ~4.2 billion messages before wrap-around. I2CP spec doesn't mandate
+	// specific overflow behavior, so we use natural uint32 wrapping.
+	// Clients should handle message IDs as opaque identifiers, not sequence numbers.
 	messageCounter := uint32(1)
 
 	s.logDeliveryStarted(sessionID)
@@ -1013,7 +1017,12 @@ func (s *Server) prepareMessagePayload(
 		Payload:   incomingMsg.Payload,
 	}
 
-	*messageCounter++ // Increment for next message
+	// Increment counter with explicit wrap-around handling
+	// When counter reaches max uint32, wrap to 1 (skip 0 to avoid potential issues)
+	*messageCounter++
+	if *messageCounter == 0 {
+		*messageCounter = 1
+	}
 
 	payloadBytes, err := msgPayload.MarshalBinary()
 	if err != nil {
