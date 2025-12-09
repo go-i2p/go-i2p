@@ -621,8 +621,8 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	// if err == nil {
 	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
 	if err == nil {
+		defer f.Close()
 		err = e.WriteTo(f)
-		f.Close()
 		if err == nil {
 			log.Debug("Successfully saved NetDB entry")
 		} else {

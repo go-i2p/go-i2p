@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-i2p/crypto/types"
 )
@@ -37,7 +38,8 @@ func (ks *KeyStoreImpl) KeyID() string {
 		if err != nil {
 			// Generate a random fallback ID to avoid file collisions
 			// Use a timestamp-based approach similar to RouterInfoKeystore
-			return fmt.Sprintf("unknown-%d", os.Getpid())
+			nowTime := time.Now().UnixNano()
+			return fmt.Sprintf("unknown-%d-%d", os.Getpid(), int(nowTime%1000000))
 		}
 		if len(public.Bytes()) > 10 {
 			return string(public.Bytes()[:10])
