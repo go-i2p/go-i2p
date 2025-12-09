@@ -334,7 +334,9 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 		}
 	}
 
-	rt.stampTime(time.Now().Add(found[0]))
+	// Use median of all samples for robustness against outliers
+	medianDelta := rt.calculateMedian(found)
+	rt.stampTime(time.Now().Add(medianDelta))
 	return true
 }
 
@@ -393,6 +395,39 @@ func (rt *RouterTimestamper) validateFirstSample(delta time.Duration) bool {
 // validateAdditionalSample checks if subsequent samples are consistent with the expected delta.
 func (rt *RouterTimestamper) validateAdditionalSample(delta, expectedDelta time.Duration) bool {
 	return absDuration(delta-expectedDelta) <= maxVariance
+}
+
+// calculateMedian computes the median of a slice of time.Duration values.
+// For robustness, the median is preferred over the mean as it's less affected by outliers.
+func (rt *RouterTimestamper) calculateMedian(deltas []time.Duration) time.Duration {
+	if len(deltas) == 0 {
+		return 0
+	}
+	if len(deltas) == 1 {
+		return deltas[0]
+	}
+
+	// Create a copy to avoid modifying the original slice
+	sorted := make([]time.Duration, len(deltas))
+	copy(sorted, deltas)
+
+	// Simple insertion sort for small arrays (typically 3 servers)
+	for i := 1; i < len(sorted); i++ {
+		key := sorted[i]
+		j := i - 1
+		for j >= 0 && sorted[j] > key {
+			sorted[j+1] = sorted[j]
+			j--
+		}
+		sorted[j+1] = key
+	}
+
+	// Return the middle value (or average of two middle values for even length)
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 0 {
+		return (sorted[mid-1] + sorted[mid]) / 2
+	}
+	return sorted[mid]
 }
 
 // setSyncedStatus safely sets wellSynced status with mutex protection.

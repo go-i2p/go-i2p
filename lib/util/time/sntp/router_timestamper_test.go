@@ -18,7 +18,13 @@ func (c *MockNTPClient) QueryWithOptions(host string, options ntp.QueryOptions) 
 		return nil, c.Error
 	}
 	return &ntp.Response{
-		ClockOffset: c.ClockOffset,
+		ClockOffset:    c.ClockOffset,
+		RTT:            100 * time.Millisecond,
+		Time:           time.Now(),
+		Stratum:        2,
+		Leap:           ntp.LeapNoWarning,
+		RootDelay:      50 * time.Millisecond,
+		RootDispersion: 50 * time.Millisecond,
 	}, nil
 }
 
