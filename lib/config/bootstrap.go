@@ -1,22 +1,31 @@
 package config
 
-// configuration for 1 reseed server
+// ReseedConfig holds configuration for a single reseed server.
+// Reseed servers provide initial peer RouterInfo files to bootstrap network connectivity.
 type ReseedConfig struct {
-	// url of reseed server
+	// Url is the HTTPS URL of the reseed server
 	Url string
-	// fingerprint of reseed su3 signing key
+	// SU3Fingerprint is the fingerprint of the reseed server's SU3 signing key
+	// used to verify the authenticity of downloaded reseed data
 	SU3Fingerprint string
 }
 
+// BootstrapConfig configures how the router obtains initial peer information
+// to join the I2P network. It supports multiple bootstrap methods including
+// remote reseed servers, local reseed files, and existing netDb directories.
 type BootstrapConfig struct {
-	// if we have less than this many peers we should reseed
+	// LowPeerThreshold defines the minimum number of known peers before reseeding.
+	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
-	// path to a local reseed file (zip or su3) - takes priority over remote reseed servers
+	// ReseedFilePath specifies a local reseed file (zip or su3 format).
+	// If set, this takes priority over remote reseed servers.
 	ReseedFilePath string
-	// reseed servers
+	// ReseedServers is the list of remote reseed servers to contact.
+	// Only one default server is included; additional servers should be configured via config file.
 	ReseedServers []*ReseedConfig
-	// local netDb paths to search for existing RouterInfo files
-	// (supports Java I2P and i2pd netDb directories)
+	// LocalNetDbPaths lists directories to search for existing RouterInfo files.
+	// Supports Java I2P and i2pd netDb directory formats.
+	// These paths are populated at runtime based on the operating system.
 	LocalNetDbPaths []string
 }
 
