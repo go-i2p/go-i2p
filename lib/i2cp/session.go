@@ -49,6 +49,15 @@ func (rl *simpleRateLimiter) allow() bool {
 	now := time.Now()
 	elapsed := now.Sub(rl.lastCheck)
 
+	// Limit token accumulation to prevent excessive burst after long idle periods.
+	// Cap elapsed time at 60 seconds to avoid accumulating tokens beyond reasonable burst.
+	// This allows normal traffic patterns and brief idle periods while preventing
+	// unbounded accumulation after hours of inactivity.
+	const maxAccumulationWindow = 60 * time.Second
+	if elapsed > maxAccumulationWindow {
+		elapsed = maxAccumulationWindow
+	}
+
 	// Add tokens based on elapsed time
 	tokensToAdd := int(elapsed.Seconds() * float64(rl.rate))
 	if tokensToAdd > 0 {
