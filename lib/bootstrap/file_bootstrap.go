@@ -148,6 +148,12 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 		return nil, fmt.Errorf("failed to process SU3 file: %w", err)
 	}
 
+	// Defensive check: ensure we got valid RouterInfos
+	if len(routerInfos) == 0 {
+		log.WithField("file_path", fb.filePath).Error("No valid RouterInfos extracted from SU3 file")
+		return nil, fmt.Errorf("no valid RouterInfos found in SU3 file: %s", fb.filePath)
+	}
+
 	log.WithFields(logger.Fields{
 		"file_path": fb.filePath,
 		"count":     len(routerInfos),
@@ -175,6 +181,12 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 	if err != nil {
 		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to process zip file")
 		return nil, fmt.Errorf("failed to process zip file: %w", err)
+	}
+
+	// Defensive check: ensure we got valid RouterInfos
+	if len(routerInfos) == 0 {
+		log.WithField("file_path", fb.filePath).Error("No valid RouterInfos extracted from zip file")
+		return nil, fmt.Errorf("no valid RouterInfos found in zip file: %s", fb.filePath)
 	}
 
 	log.WithFields(logger.Fields{
