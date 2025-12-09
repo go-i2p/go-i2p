@@ -35,7 +35,9 @@ func (ks *KeyStoreImpl) KeyID() string {
 	if ks.name == "" {
 		public, err := ks.privateKey.Public()
 		if err != nil {
-			return "error"
+			// Generate a random fallback ID to avoid file collisions
+			// Use a timestamp-based approach similar to RouterInfoKeystore
+			return fmt.Sprintf("unknown-%d", os.Getpid())
 		}
 		if len(public.Bytes()) > 10 {
 			return string(public.Bytes()[:10])
