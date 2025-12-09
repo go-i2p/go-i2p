@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -214,6 +215,17 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	// Validate expiration: RouterInfos are valid for 24 hours per I2P specification
+	const routerInfoMaxAge = 24 * time.Hour
+	publishedDate := ri.Published()
+	if publishedDate != nil {
+		publishedTime := publishedDate.Time()
+		age := time.Since(publishedTime)
+		if age > routerInfoMaxAge {
+			return router_info.RouterInfo{}, fmt.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
+		}
 	}
 
 	return ri, nil
