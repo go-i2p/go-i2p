@@ -1029,7 +1029,7 @@ func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.Le
 	}
 
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o700)
+	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
 	if err != nil {
 		log.WithError(err).Error("Failed to open file for saving LeaseSet")
 		db.lsMutex.Lock()
@@ -1280,7 +1280,7 @@ func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2
 	}
 
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o700)
+	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
 	if err != nil {
 		log.WithError(err).Error("Failed to open file for saving LeaseSet2")
 		db.lsMutex.Lock()
@@ -1506,7 +1506,7 @@ func (db *StdNetDB) persistEncryptedLeaseSetToFilesystem(key common.Hash, els en
 	}
 
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o700)
+	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
 	if err != nil {
 		log.WithError(err).Error("Failed to open file for saving EncryptedLeaseSet")
 		db.lsMutex.Lock()
@@ -1732,7 +1732,7 @@ func (db *StdNetDB) persistMetaLeaseSetToFilesystem(key common.Hash, mls meta_le
 	}
 
 	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o700)
+	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
 	if err != nil {
 		log.WithError(err).Error("Failed to open file for saving MetaLeaseSet")
 		db.lsMutex.Lock()
