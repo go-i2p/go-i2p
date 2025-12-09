@@ -44,8 +44,8 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 		return nil, err
 	}
 
-	// Process file based on type
-	routerInfos, err := fb.processReseedFile(ctx)
+	// Process file based on type, passing limit to avoid loading excessive RouterInfos into memory
+	routerInfos, err := fb.processReseedFile(ctx, n)
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +56,13 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 
 	log.WithField("count", len(routerInfos)).Info("Successfully loaded RouterInfos from file")
 
-	// Limit to requested count
-	return limitRouterInfos(routerInfos, n), nil
+	// Note: routerInfos already limited by processReseedFile, no need to call limitRouterInfos
+	return routerInfos, nil
 }
 
 // processReseedFile determines file type and extracts RouterInfos accordingly.
-func (fb *FileBootstrap) processReseedFile(ctx context.Context) ([]router_info.RouterInfo, error) {
+// The limit parameter controls how many RouterInfos are parsed to minimize memory usage.
+func (fb *FileBootstrap) processReseedFile(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
 	ext := strings.ToLower(filepath.Ext(fb.filePath))
 	log.WithField("extension", ext).Debug("Detected file extension")
 
@@ -70,9 +71,9 @@ func (fb *FileBootstrap) processReseedFile(ctx context.Context) ([]router_info.R
 
 	switch ext {
 	case ".su3":
-		routerInfos, err = fb.processSU3File(ctx)
+		routerInfos, err = fb.processSU3File(ctx, limit)
 	case ".zip":
-		routerInfos, err = fb.processZipFile(ctx)
+		routerInfos, err = fb.processZipFile(ctx, limit)
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s (expected .su3 or .zip)", ext)
 	}
@@ -126,19 +127,22 @@ func (fb *FileBootstrap) validateFile() error {
 	return nil
 }
 
-// processSU3File reads and processes an SU3 reseed file
-func (fb *FileBootstrap) processSU3File(ctx context.Context) ([]router_info.RouterInfo, error) {
-	log.WithField("file_path", fb.filePath).Info("Processing SU3 reseed file")
+// processSU3File reads and processes an SU3 reseed file with a limit on parsed RouterInfos.
+// The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
+func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"file_path": fb.filePath,
+		"limit":     limit,
+	}).Info("Processing SU3 reseed file")
 
 	// Check context before processing
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
-	// Use the reseed package to process the SU3 file
-	// We'll read the file and use the existing reseed logic
+	// Use the reseed package to process the SU3 file with limit
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalSU3File(fb.filePath)
+	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, limit)
 	if err != nil {
 		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to process SU3 file")
 		return nil, fmt.Errorf("failed to process SU3 file: %w", err)
@@ -152,18 +156,22 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context) ([]router_info.Rout
 	return routerInfos, nil
 }
 
-// processZipFile reads and processes a zip reseed file
-func (fb *FileBootstrap) processZipFile(ctx context.Context) ([]router_info.RouterInfo, error) {
-	log.WithField("file_path", fb.filePath).Info("Processing zip reseed file")
+// processZipFile reads and processes a zip reseed file with a limit on parsed RouterInfos.
+// The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
+func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"file_path": fb.filePath,
+		"limit":     limit,
+	}).Info("Processing zip reseed file")
 
 	// Check context before processing
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
-	// Use the reseed package to process the zip file
+	// Use the reseed package to process the zip file with limit
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalZipFile(fb.filePath)
+	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, limit)
 	if err != nil {
 		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to process zip file")
 		return nil, fmt.Errorf("failed to process zip file: %w", err)

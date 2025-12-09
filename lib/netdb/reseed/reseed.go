@@ -111,7 +111,17 @@ func (r Reseed) SingleReseed(uri string) ([]router_info.RouterInfo, error) {
 
 // ProcessLocalSU3File reads and processes a local SU3 reseed file
 func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, error) {
-	log.WithField("file_path", filePath).Info("Processing local SU3 file")
+	return r.ProcessLocalSU3FileWithLimit(filePath, 0)
+}
+
+// ProcessLocalSU3FileWithLimit reads and processes a local SU3 reseed file with a limit on RouterInfos parsed.
+// If limit <= 0, all RouterInfos are parsed (same as ProcessLocalSU3File).
+// This prevents loading excessive RouterInfos into memory when only a small number is needed.
+func (r Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"file_path": filePath,
+		"limit":     limit,
+	}).Info("Processing local SU3 file")
 
 	// Read the SU3 file from disk
 	data, err := r.readSU3FileFromDisk(filePath)
@@ -125,8 +135,8 @@ func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, 
 		return nil, err
 	}
 
-	// Process the reseed zip content
-	routerInfos, err := r.processReseedZip(content)
+	// Process the reseed zip content with limit
+	routerInfos, err := r.processReseedZipWithLimit(content, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +185,17 @@ func (r Reseed) logSU3ProcessingSuccess(filePath string, count int) {
 
 // ProcessLocalZipFile reads and processes a local zip reseed file
 func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error) {
-	log.WithField("file_path", filePath).Info("Processing local zip file")
+	return r.ProcessLocalZipFileWithLimit(filePath, 0)
+}
+
+// ProcessLocalZipFileWithLimit reads and processes a local zip reseed file with a limit on RouterInfos parsed.
+// If limit <= 0, all RouterInfos are parsed (same as ProcessLocalZipFile).
+// This prevents loading excessive RouterInfos into memory when only a small number is needed.
+func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"file_path": filePath,
+		"limit":     limit,
+	}).Info("Processing local zip file")
 
 	// Read the zip file from disk
 	data, err := os.ReadFile(filePath)
@@ -189,8 +209,8 @@ func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, 
 		"size_bytes": len(data),
 	}).Debug("Read zip file from disk")
 
-	// Process the zip file
-	routerInfos, err := r.processReseedZip(data)
+	// Process the zip file with limit
+	routerInfos, err := r.processReseedZipWithLimit(data, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -597,6 +617,12 @@ func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 
 // processReseedZip writes the zip content to disk, extracts it, and parses router infos.
 func (r Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, error) {
+	return r.processReseedZipWithLimit(content, 0)
+}
+
+// processReseedZipWithLimit writes the zip content to disk, extracts it, and parses router infos with a limit.
+// If limit <= 0, all RouterInfos are parsed.
+func (r Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_info.RouterInfo, error) {
 	zipPath, err := r.writeZipFile(content)
 	if err != nil {
 		return nil, err
@@ -608,7 +634,7 @@ func (r Reseed) processReseedZip(content []byte) ([]router_info.RouterInfo, erro
 		return nil, err
 	}
 
-	return r.parseRouterInfoFiles(files)
+	return r.parseRouterInfoFilesWithLimit(files, limit)
 }
 
 // writeZipFile writes the zip content to a temporary file on disk.
@@ -655,13 +681,33 @@ func (r Reseed) extractZipFile(zipPath string) ([]string, error) {
 
 // parseRouterInfoFiles reads and parses router info files from the extracted files.
 func (r Reseed) parseRouterInfoFiles(files []string) ([]router_info.RouterInfo, error) {
-	log.WithField("total_files", len(files)).Info("Parsing router info files")
+	return r.parseRouterInfoFilesWithLimit(files, 0)
+}
+
+// parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.
+// If limit <= 0, all files are parsed. Otherwise, parsing stops after successfully parsing 'limit' RouterInfos.
+// This minimizes memory usage when only a small number of RouterInfos is needed.
+func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"total_files": len(files),
+		"limit":       limit,
+	}).Info("Parsing router info files")
 
 	var routerInfos []router_info.RouterInfo
 	var parseErrors int
 	var readErrors int
 
 	for _, f := range files {
+		// Check if we've reached the limit
+		if limit > 0 && len(routerInfos) >= limit {
+			log.WithFields(logger.Fields{
+				"parsed":      len(routerInfos),
+				"limit":       limit,
+				"total_files": len(files),
+			}).Debug("Reached RouterInfo limit, stopping parse")
+			break
+		}
+
 		riB, err := os.ReadFile(f)
 		if err != nil {
 			readErrors++
