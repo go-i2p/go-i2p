@@ -100,8 +100,19 @@ func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 func parseDestination(payload []byte) (*destination.Destination, []byte, error) {
 	dest, remaining, err := destination.ReadDestination(payload)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.parseDestination",
+			"payloadSize": len(payload),
+			"error":       err.Error(),
+		}).Error("failed_to_read_destination")
 		return nil, nil, fmt.Errorf("failed to read destination: %w", err)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":            "i2cp.parseDestination",
+		"destSize":      len(payload) - len(remaining),
+		"remainingSize": len(remaining),
+	}).Debug("destination_parsed")
 
 	return &dest, remaining, nil
 }
@@ -114,7 +125,10 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 
 	// Handle empty or minimal options (less than 3 bytes can't be a valid mapping)
 	if len(optionsBytes) < 3 {
-		log.Debug("No session options or invalid mapping provided, using defaults")
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.parseSessionOptions",
+			"optionSize": len(optionsBytes),
+		}).Debug("no_session_options_using_defaults")
 		return config, nil
 	}
 
@@ -122,12 +136,20 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 	mapping, _, errs := data.ReadMapping(optionsBytes)
 	if len(errs) > 0 {
 		// If mapping can't be parsed, log warning but return defaults
-		log.WithField("errors", errs).Warn("Failed to parse options mapping, using defaults")
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.parseSessionOptions",
+			"errors": fmt.Sprintf("%v", errs),
+		}).Warn("failed_to_parse_options_mapping_using_defaults")
 		return config, nil
 	}
 
 	// Convert mapping to Go map for easier access
 	optionsMap := mappingToGoMap(mapping)
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.parseSessionOptions",
+		"optionCount": len(optionsMap),
+	}).Debug("parsing_session_options")
 
 	// Apply options to config
 	applyTunnelLengthOptions(config, optionsMap)
@@ -144,9 +166,17 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 	result := make(map[string]string)
 	values := mapping.Values()
 
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.mappingToGoMap",
+		"pairCount": len(values),
+	}).Debug("converting_mapping_to_map")
+
 	for _, pair := range values {
 		if len(pair) != 2 {
-			log.WithField("pair_length", len(pair)).Warn("invalid mapping pair")
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.mappingToGoMap",
+				"pair_length": len(pair),
+			}).Warn("invalid_mapping_pair")
 			continue
 		}
 
@@ -155,14 +185,20 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 
 		if keyErr != nil || valErr != nil {
 			log.WithFields(logger.Fields{
+				"at":          "i2cp.mappingToGoMap",
 				"key_error":   keyErr,
 				"value_error": valErr,
-			}).Warn("failed to extract mapping pair")
+			}).Warn("failed_to_extract_mapping_pair")
 			continue
 		}
 
 		result[key] = value
 	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.mappingToGoMap",
+		"extractedCount": len(result),
+	}).Debug("mapping_converted")
 
 	return result
 }
@@ -172,23 +208,37 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) {
 	if val, exists := options["inbound.length"]; exists {
 		if length, err := strconv.Atoi(val); err == nil && length >= 0 && length <= 7 {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelLengthOptions",
+				"option": "inbound.length",
+				"value":  length,
+			}).Debug("applied_tunnel_length_option")
 			config.InboundTunnelLength = length
 		} else {
 			log.WithFields(logger.Fields{
-				"value": val,
-				"error": err,
-			}).Warn("invalid inbound.length option, using default")
+				"at":     "i2cp.applyTunnelLengthOptions",
+				"option": "inbound.length",
+				"value":  val,
+				"error":  err,
+			}).Warn("invalid_inbound_length_option_using_default")
 		}
 	}
 
 	if val, exists := options["outbound.length"]; exists {
 		if length, err := strconv.Atoi(val); err == nil && length >= 0 && length <= 7 {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelLengthOptions",
+				"option": "outbound.length",
+				"value":  length,
+			}).Debug("applied_tunnel_length_option")
 			config.OutboundTunnelLength = length
 		} else {
 			log.WithFields(logger.Fields{
-				"value": val,
-				"error": err,
-			}).Warn("invalid outbound.length option, using default")
+				"at":     "i2cp.applyTunnelLengthOptions",
+				"option": "outbound.length",
+				"value":  val,
+				"error":  err,
+			}).Warn("invalid_outbound_length_option_using_default")
 		}
 	}
 }
@@ -198,23 +248,37 @@ func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) 
 func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string) {
 	if val, exists := options["inbound.quantity"]; exists {
 		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 1 && quantity <= 16 {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": "inbound.quantity",
+				"value":  quantity,
+			}).Debug("applied_tunnel_quantity_option")
 			config.InboundTunnelCount = quantity
 		} else {
 			log.WithFields(logger.Fields{
-				"value": val,
-				"error": err,
-			}).Warn("invalid inbound.quantity option, using default")
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": "inbound.quantity",
+				"value":  val,
+				"error":  err,
+			}).Warn("invalid_inbound_quantity_option_using_default")
 		}
 	}
 
 	if val, exists := options["outbound.quantity"]; exists {
 		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 1 && quantity <= 16 {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": "outbound.quantity",
+				"value":  quantity,
+			}).Debug("applied_tunnel_quantity_option")
 			config.OutboundTunnelCount = quantity
 		} else {
 			log.WithFields(logger.Fields{
-				"value": val,
-				"error": err,
-			}).Warn("invalid outbound.quantity option, using default")
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": "outbound.quantity",
+				"value":  val,
+				"error":  err,
+			}).Warn("invalid_outbound_quantity_option_using_default")
 		}
 	}
 
@@ -247,8 +311,16 @@ func applyMessageOptions(config *SessionConfig, options map[string]string) {
 func applyMetadataOptions(config *SessionConfig, options map[string]string) {
 	// Check for nickname option (common in Java I2P clients)
 	if val, exists := options["inbound.nickname"]; exists {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.applyMetadataOptions",
+			"nickname": val,
+		}).Debug("applied_inbound_nickname")
 		config.Nickname = val
 	} else if val, exists := options["outbound.nickname"]; exists {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.applyMetadataOptions",
+			"nickname": val,
+		}).Debug("applied_outbound_nickname")
 		config.Nickname = val
 	}
 }
@@ -256,25 +328,57 @@ func applyMetadataOptions(config *SessionConfig, options map[string]string) {
 // ValidateSessionConfig validates session configuration values are within acceptable ranges.
 // Returns error if validation fails.
 func ValidateSessionConfig(config *SessionConfig) error {
+	log.WithFields(logger.Fields{
+		"at": "i2cp.ValidateSessionConfig",
+	}).Debug("validating_session_config")
+
 	if config == nil {
+		log.WithFields(logger.Fields{
+			"at": "i2cp.ValidateSessionConfig",
+		}).Error("session_config_is_nil")
 		return fmt.Errorf("session config is nil")
 	}
 
 	if err := validateTunnelLengths(config); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.ValidateSessionConfig",
+			"error": err.Error(),
+		}).Error("tunnel_length_validation_failed")
 		return err
 	}
 
 	if err := validateTunnelCounts(config); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.ValidateSessionConfig",
+			"error": err.Error(),
+		}).Error("tunnel_count_validation_failed")
 		return err
 	}
 
 	if err := validateTunnelLifetime(config); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.ValidateSessionConfig",
+			"error": err.Error(),
+		}).Error("tunnel_lifetime_validation_failed")
 		return err
 	}
 
 	if err := validateMessageQueueSize(config); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.ValidateSessionConfig",
+			"error": err.Error(),
+		}).Error("message_queue_size_validation_failed")
 		return err
 	}
+
+	log.WithFields(logger.Fields{
+		"at":                     "i2cp.ValidateSessionConfig",
+		"inboundTunnelLength":    config.InboundTunnelLength,
+		"outboundTunnelLength":   config.OutboundTunnelLength,
+		"inboundTunnelCount":     config.InboundTunnelCount,
+		"outboundTunnelCount":    config.OutboundTunnelCount,
+		"messageQueueSize":       config.MessageQueueSize,
+	}).Debug("session_config_validated_successfully")
 
 	return nil
 }
@@ -283,9 +387,21 @@ func ValidateSessionConfig(config *SessionConfig) error {
 // Returns error if either tunnel length is out of range.
 func validateTunnelLengths(config *SessionConfig) error {
 	if config.InboundTunnelLength < 0 || config.InboundTunnelLength > 7 {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.validateTunnelLengths",
+			"length": config.InboundTunnelLength,
+			"min":    0,
+			"max":    7,
+		}).Error("invalid_inbound_tunnel_length")
 		return fmt.Errorf("invalid inbound tunnel length: %d (must be 0-7)", config.InboundTunnelLength)
 	}
 	if config.OutboundTunnelLength < 0 || config.OutboundTunnelLength > 7 {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.validateTunnelLengths",
+			"length": config.OutboundTunnelLength,
+			"min":    0,
+			"max":    7,
+		}).Error("invalid_outbound_tunnel_length")
 		return fmt.Errorf("invalid outbound tunnel length: %d (must be 0-7)", config.OutboundTunnelLength)
 	}
 	return nil
@@ -295,9 +411,21 @@ func validateTunnelLengths(config *SessionConfig) error {
 // Returns error if either tunnel count is out of range.
 func validateTunnelCounts(config *SessionConfig) error {
 	if config.InboundTunnelCount < 1 || config.InboundTunnelCount > 16 {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.validateTunnelCounts",
+			"count": config.InboundTunnelCount,
+			"min":   1,
+			"max":   16,
+		}).Error("invalid_inbound_tunnel_count")
 		return fmt.Errorf("invalid inbound tunnel count: %d (must be 1-16)", config.InboundTunnelCount)
 	}
 	if config.OutboundTunnelCount < 1 || config.OutboundTunnelCount > 16 {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.validateTunnelCounts",
+			"count": config.OutboundTunnelCount,
+			"min":   1,
+			"max":   16,
+		}).Error("invalid_outbound_tunnel_count")
 		return fmt.Errorf("invalid outbound tunnel count: %d (must be 1-16)", config.OutboundTunnelCount)
 	}
 	return nil
@@ -307,6 +435,12 @@ func validateTunnelCounts(config *SessionConfig) error {
 // Returns error if lifetime is out of range.
 func validateTunnelLifetime(config *SessionConfig) error {
 	if config.TunnelLifetime < 1*time.Minute || config.TunnelLifetime > 60*time.Minute {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.validateTunnelLifetime",
+			"lifetime": config.TunnelLifetime,
+			"min":      1 * time.Minute,
+			"max":      60 * time.Minute,
+		}).Error("invalid_tunnel_lifetime")
 		return fmt.Errorf("invalid tunnel lifetime: %v (must be 1m-60m)", config.TunnelLifetime)
 	}
 	return nil
@@ -316,6 +450,11 @@ func validateTunnelLifetime(config *SessionConfig) error {
 // Returns error if queue size is less than 1.
 func validateMessageQueueSize(config *SessionConfig) error {
 	if config.MessageQueueSize < 1 {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.validateMessageQueueSize",
+			"queueSize": config.MessageQueueSize,
+			"min":       1,
+		}).Error("invalid_message_queue_size")
 		return fmt.Errorf("invalid message queue size: %d (must be >= 1)", config.MessageQueueSize)
 	}
 	return nil

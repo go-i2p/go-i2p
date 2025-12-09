@@ -173,5 +173,12 @@ func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
 		copy(result[4:], mpp.Payload)
 	}
 
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.MessagePayloadPayload.MarshalBinary",
+		"messageID":   mpp.MessageID,
+		"payloadSize": len(mpp.Payload),
+		"totalSize":   totalSize,
+	}).Debug("marshaled_message_payload")
+
 	return result, nil
 }
