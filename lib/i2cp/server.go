@@ -167,6 +167,15 @@ func (s *Server) Stop() error {
 // acceptLoop accepts incoming connections
 func (s *Server) acceptLoop() {
 	defer s.wg.Done()
+	defer func() {
+		// Defensive: recover from any panic during shutdown to prevent server crash
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.acceptLoop",
+				"panic": r,
+			}).Error("panic_in_accept_loop")
+		}
+	}()
 
 	for {
 		conn, err := s.listener.Accept()
@@ -899,6 +908,16 @@ func (s *Server) IsRunning() bool {
 // - An error occurs writing to the connection
 func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
 	defer s.wg.Done()
+	defer func() {
+		// Defensive: recover from any panic during shutdown to prevent goroutine leak
+		if r := recover(); r != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.deliverMessagesToClient",
+				"sessionID": session.ID(),
+				"panic":     r,
+			}).Error("panic_in_message_delivery_goroutine")
+		}
+	}()
 
 	sessionID := session.ID()
 	messageCounter := uint32(1)
