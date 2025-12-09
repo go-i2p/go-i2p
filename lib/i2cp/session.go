@@ -549,7 +549,9 @@ func (s *Session) buildLeasesFromTunnels(tunnels []*tunnel.TunnelState) ([]lease
 
 		l, err := s.createLeaseFromTunnel(tun)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create lease: %w", err)
+			// Skip tunnels that would expire too soon instead of failing entirely
+			// This can happen with old tunnels or very short tunnel lifetimes
+			continue
 		}
 
 		leases = append(leases, *l)
@@ -572,6 +574,21 @@ func (s *Session) createLeaseFromTunnel(tun *tunnel.TunnelState) (*lease.Lease2,
 
 	tunnelID := uint32(tun.ID)
 	expiration := tun.CreatedAt.Add(s.config.TunnelLifetime)
+
+	// Validate lease expiration: must have meaningful time remaining
+	// Use smaller of 30 seconds or 10% of tunnel lifetime to handle both
+	// production (10 minute tunnels) and test scenarios (short tunnels)
+	minValidity := 30 * time.Second
+	proportionalMin := s.config.TunnelLifetime / 10
+	if proportionalMin < minValidity {
+		minValidity = proportionalMin
+	}
+
+	timeUntilExpiration := time.Until(expiration)
+	if timeUntilExpiration < minValidity {
+		return nil, fmt.Errorf("lease would expire too soon (%v remaining, min %v required)",
+			timeUntilExpiration.Round(time.Second), minValidity)
+	}
 
 	return lease.NewLease2(gateway, tunnelID, expiration)
 }
