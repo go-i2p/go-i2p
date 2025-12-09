@@ -619,7 +619,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	}
 	log.WithField("hash", h).Debug("Saving NetDB entry")
 	// if err == nil {
-	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE, 0o700)
+	f, err = os.OpenFile(db.SkiplistFile(h), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
 	if err == nil {
 		defer f.Close()
 		err = e.WriteTo(f)
