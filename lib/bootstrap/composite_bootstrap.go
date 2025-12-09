@@ -85,7 +85,11 @@ func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_i
 	}
 
 	logFileBootstrapFailure(err)
-	return nil, fmt.Errorf("file bootstrap failed")
+	// Preserve actual error details for debugging
+	if err != nil {
+		return nil, fmt.Errorf("file bootstrap failed: %w", err)
+	}
+	return nil, fmt.Errorf("file bootstrap returned no peers")
 }
 
 // tryReseedBootstrap attempts to obtain peers from remote reseed servers.
@@ -99,7 +103,11 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 	}
 
 	logReseedFailure(err)
-	return nil, fmt.Errorf("reseed bootstrap failed")
+	// Preserve actual error details for debugging
+	if err != nil {
+		return nil, fmt.Errorf("reseed bootstrap failed: %w", err)
+	}
+	return nil, fmt.Errorf("reseed bootstrap returned no peers")
 }
 
 // tryLocalNetDbBootstrap attempts to obtain peers from local netDb directories.
@@ -108,7 +116,8 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 	peers, err := lb.GetPeers(ctx, n)
 	if err != nil {
 		log.WithError(err).Error("Local netDb bootstrap failed")
-		return nil, err
+		// Preserve error details with consistent wrapping
+		return nil, fmt.Errorf("local netDb bootstrap failed: %w", err)
 	}
 
 	if len(peers) == 0 {
