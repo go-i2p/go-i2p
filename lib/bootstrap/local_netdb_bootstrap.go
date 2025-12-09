@@ -271,6 +271,8 @@ func getDefaultNetDbSearchPaths() []string {
 	case "windows":
 		appData := os.Getenv("APPDATA")
 		if appData == "" {
+			// APPDATA environment variable not set - use standard fallback path
+			log.Warn("APPDATA environment variable not set, using default path (may be incorrect in custom Windows configurations)")
 			appData = filepath.Join(homeDir, "AppData", "Roaming")
 		}
 
