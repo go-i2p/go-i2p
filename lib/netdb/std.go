@@ -47,7 +47,11 @@ type StdNetDB struct {
 }
 
 func NewStdNetDB(db string) *StdNetDB {
-	log.WithField("db_path", db).Debug("Creating new StdNetDB")
+	log.WithFields(logger.Fields{
+		"at":      "(StdNetDB) NewStdNetDB",
+		"reason":  "initializing network database",
+		"db_path": db,
+	}).Debug("creating new StdNetDB")
 	ctx, cancel := context.WithCancel(context.Background())
 	return &StdNetDB{
 		DB:             db,
@@ -63,13 +67,21 @@ func NewStdNetDB(db string) *StdNetDB {
 }
 
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
-	log.WithField("hash", hash).Debug("Getting RouterInfo")
+	log.WithFields(logger.Fields{
+		"at":     "(StdNetDB) GetRouterInfo",
+		"reason": "looking up router info",
+		"hash":   fmt.Sprintf("%x...", hash[:8]),
+	}).Debug("getting RouterInfo")
 
 	// Check memory cache first
 	db.riMutex.Lock()
 	if ri, ok := db.RouterInfos[hash]; ok {
 		db.riMutex.Unlock()
-		log.Debug("RouterInfo found in memory cache")
+		log.WithFields(logger.Fields{
+			"at":     "(StdNetDB) GetRouterInfo",
+			"reason": "cache hit",
+			"hash":   fmt.Sprintf("%x...", hash[:8]),
+		}).Debug("routerInfo found in memory cache")
 		chnl = make(chan router_info.RouterInfo, 1)
 		chnl <- *ri.RouterInfo
 		close(chnl)
@@ -80,14 +92,22 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
 	if err != nil {
-		log.WithError(err).Error("Failed to load RouterInfo from file")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(StdNetDB) GetRouterInfo",
+			"reason": "file load failed",
+			"hash":   fmt.Sprintf("%x...", hash[:8]),
+		}).Error("failed to load RouterInfo from file")
 		return nil
 	}
 
 	chnl = make(chan router_info.RouterInfo, 1)
 	ri, err := db.parseAndCacheRouterInfo(hash, data)
 	if err != nil {
-		log.WithError(err).Error("Failed to parse RouterInfo")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(StdNetDB) GetRouterInfo",
+			"reason": "parse failed",
+			"hash":   fmt.Sprintf("%x...", hash[:8]),
+		}).Error("failed to parse RouterInfo")
 		close(chnl)
 		return
 	}

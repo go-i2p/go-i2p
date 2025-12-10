@@ -29,9 +29,11 @@ type peerDistance struct {
 
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"hash":    h,
+		"at":      "(KademliaResolver) Lookup",
+		"reason":  "starting kademlia lookup",
+		"hash":    fmt.Sprintf("%x...", h[:8]),
 		"timeout": timeout,
-	}).Debug("Starting Kademlia lookup")
+	}).Debug("starting Kademlia lookup")
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -63,18 +65,30 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 	riChan := kr.NetworkDatabase.GetRouterInfo(h)
 	ri, ok := <-riChan
 	if !ok {
-		log.Debug("Channel closed, no RouterInfo available")
+		log.WithFields(logger.Fields{
+			"at":     "(KademliaResolver) attemptLocalLookup",
+			"reason": "channel closed without result",
+			"hash":   fmt.Sprintf("%x...", h[:8]),
+		}).Debug("channel closed, no RouterInfo available")
 		return nil
 	}
 	// Check if the RouterInfo is valid by comparing with an empty hash
 	var emptyHash common.Hash
 	identHash, err := ri.IdentHash()
 	if err != nil {
-		log.WithError(err).Debug("Failed to get router hash from local lookup")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(KademliaResolver) attemptLocalLookup",
+			"reason": "failed to extract router hash",
+			"hash":   fmt.Sprintf("%x...", h[:8]),
+		}).Debug("failed to get router hash from local lookup")
 		return nil
 	}
 	if identHash != emptyHash {
-		log.WithField("hash", h).Debug("RouterInfo found locally")
+		log.WithFields(logger.Fields{
+			"at":     "(KademliaResolver) attemptLocalLookup",
+			"reason": "local cache hit",
+			"hash":   fmt.Sprintf("%x...", h[:8]),
+		}).Debug("routerInfo found locally")
 		return &ri
 	}
 	return nil

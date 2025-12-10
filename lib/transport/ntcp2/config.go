@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"github.com/go-i2p/logger"
 	"github.com/go-i2p/go-noise/ntcp2"
 )
 
@@ -11,7 +12,12 @@ type Config struct {
 }
 
 func NewConfig(listenerAddress string) (*Config, error) {
-	log.WithField("listener_address", listenerAddress).Debug("Creating new NTCP2 config")
+	log.WithFields(logger.Fields{
+		"at":               "NewConfig",
+		"reason":           "initialization",
+		"phase":            "startup",
+		"listener_address": listenerAddress,
+	}).Debug("creating new NTCP2 config")
 	return &Config{
 		ListenerAddress: listenerAddress,
 		WorkingDir:      "",  // Must be set before use
@@ -20,12 +26,25 @@ func NewConfig(listenerAddress string) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
-	log.Debug("Validating NTCP2 config")
+	log.WithFields(logger.Fields{
+		"at":               "(Config) Validate",
+		"reason":           "verifying_configuration",
+		"phase":            "startup",
+		"listener_address": c.ListenerAddress,
+	}).Debug("validating NTCP2 config")
 	// Add any necessary validation logic for the configuration
 	if c.ListenerAddress == "" {
-		log.Error("NTCP2 config validation failed: empty listener address")
+		log.WithFields(logger.Fields{
+			"at":     "(Config) Validate",
+			"reason": "empty_listener_address",
+			"phase":  "startup",
+		}).Error("NTCP2 config validation failed")
 		return ErrInvalidListenerAddress
 	}
-	log.Debug("NTCP2 config validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "(Config) Validate",
+		"reason": "validation_successful",
+		"phase":  "startup",
+	}).Debug("NTCP2 config validated successfully")
 	return nil
 }
