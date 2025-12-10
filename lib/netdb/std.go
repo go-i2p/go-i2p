@@ -248,26 +248,45 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 // filterAvailablePeers filters router infos excluding specified hashes and checking reachability
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
+	skippedExcluded := 0
+	skippedNoAddresses := 0
+	skippedNoValidNTCP2 := 0
+	skippedHashError := 0
+
 	for _, ri := range allRouterInfos {
 		riHash, err := ri.IdentHash()
 		if err != nil {
-			log.WithError(err).Warn("Failed to get router hash, skipping router")
+			log.WithError(err).Debug("Failed to get router hash, skipping router")
+			skippedHashError++
 			continue
 		}
-		if !excludeMap[riHash] {
-			// Basic reachability check - router should have valid addresses
-			if len(ri.RouterAddresses()) > 0 {
-				// Check if router has a valid NTCP2 address (not just any NTCP2 address)
-				if hasValidNTCP2Address(&ri) {
-					available = append(available, ri)
-				} else {
-					log.WithFields(logger.Fields{
-						"router_hash": fmt.Sprintf("%x", riHash[:8]),
-					}).Debug("Skipping peer without valid NTCP2 address")
-				}
-			}
+		if excludeMap[riHash] {
+			skippedExcluded++
+			continue
+		}
+		// Basic reachability check - router should have valid addresses
+		if len(ri.RouterAddresses()) == 0 {
+			skippedNoAddresses++
+			continue
+		}
+		// Check if router has a valid NTCP2 address (not just any NTCP2 address)
+		// This filters out peers that only have introducer-based addresses
+		if hasValidNTCP2Address(&ri) {
+			available = append(available, ri)
+		} else {
+			skippedNoValidNTCP2++
 		}
 	}
+
+	log.WithFields(logger.Fields{
+		"total":                  len(allRouterInfos),
+		"available":              len(available),
+		"skipped_excluded":       skippedExcluded,
+		"skipped_no_addresses":   skippedNoAddresses,
+		"skipped_no_valid_ntcp2": skippedNoValidNTCP2,
+		"skipped_hash_error":     skippedHashError,
+	}).Debug("Peer filtering complete")
+
 	return available
 }
 
@@ -307,7 +326,13 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 	available := db.filterAvailablePeers(allRouterInfos, excludeMap)
 
 	if len(available) == 0 {
-		return nil, fmt.Errorf("insufficient suitable peers after filtering")
+		log.WithFields(logger.Fields{
+			"total_peers":     len(allRouterInfos),
+			"excluded_peers":  len(exclude),
+			"filtered_peers":  len(available),
+			"requested_count": count,
+		}).Warn("No directly-contactable peers available after filtering - all peers may require introducers or lack valid NTCP2 addresses")
+		return nil, fmt.Errorf("insufficient suitable peers after filtering: need %d directly-contactable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
 	}
 
 	// If we have fewer available peers than requested, return all

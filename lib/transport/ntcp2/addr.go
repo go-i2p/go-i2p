@@ -143,15 +143,14 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	log.Debug("Getting host from RouterAddress")
 	host, err := addr.Host()
 	if err != nil {
-		// Enhanced logging for host extraction failures - this is Issue #1 from AUDIT.md
+		// Missing host key is normal for introducer-based addresses
+		// Log at debug level to reduce noise
 		log.WithFields(map[string]interface{}{
-			"at":         "resolveTCPAddress",
-			"phase":      "address_parsing",
-			"operation":  "extract_host",
-			"error":      err.Error(),
-			"cost":       addr.Cost(),
-			"expiration": addr.Expiration(),
-		}).Error("Failed to get host data")
+			"at":        "resolveTCPAddress",
+			"phase":     "address_parsing",
+			"operation": "extract_host",
+			"error":     err.Error(),
+		}).Debug("Cannot extract host from RouterAddress (may be introducer-based)")
 		return nil, fmt.Errorf("failed to extract host: %w", err)
 	}
 
@@ -210,6 +209,6 @@ func WrapNTCP2Addr(addr net.Addr, routerHash []byte) (*ntcp2.NTCP2Addr, error) {
 	if ntcp2Addr, ok := addr.(*ntcp2.NTCP2Addr); ok {
 		return ntcp2Addr, nil
 	}
-	 // Create new NTCP2Addr from TCP address
-    return ntcp2.NewNTCP2Addr(addr, routerHash, "initiator")
+	// Create new NTCP2Addr from TCP address
+	return ntcp2.NewNTCP2Addr(addr, routerHash, "initiator")
 }

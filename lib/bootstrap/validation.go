@@ -142,17 +142,17 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	// Actually try to retrieve the host - this is what NTCP2 transport does
 	// CheckOption() may return true even when the key doesn't exist in the mapping
+	// Note: Missing host key is NORMAL for introducer-based NTCP2 addresses
 	host, err := addr.Host()
 	if err != nil {
-		// Enhanced logging for Issue #1: RouterAddress missing required host key
+		// This is expected for introducer-only addresses - log at debug level
 		log.WithFields(logger.Fields{
 			"at":        "ValidateNTCP2Address",
 			"phase":     "validation",
 			"transport": "ntcp2",
-			"reason":    "host key missing or malformed in RouterAddress mapping",
+			"reason":    "host key missing (likely introducer-based address)",
 			"error":     err.Error(),
-			"impact":    "peer cannot be contacted via NTCP2",
-		}).Warn("RouterAddress missing required host key")
+		}).Debug("RouterAddress validation: no direct host key")
 		return fmt.Errorf("NTCP2 address cannot retrieve host: %w", err)
 	}
 
