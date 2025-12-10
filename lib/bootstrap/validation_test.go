@@ -53,7 +53,7 @@ func TestValidateRouterAddress_NTCP2MissingHost(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "missing required 'host' key")
+	assert.Contains(t, err.Error(), "cannot retrieve host")
 }
 
 func TestValidateRouterAddress_NTCP2EmptyHost(t *testing.T) {
@@ -64,7 +64,7 @@ func TestValidateRouterAddress_NTCP2EmptyHost(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "host is empty")
+	assert.Contains(t, err.Error(), "cannot retrieve host")
 }
 
 func TestValidateRouterAddress_NTCP2MissingPort(t *testing.T) {
@@ -75,7 +75,7 @@ func TestValidateRouterAddress_NTCP2MissingPort(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "missing required 'port' key")
+	assert.Contains(t, err.Error(), "cannot retrieve port")
 }
 
 func TestValidateRouterAddress_NTCP2EmptyPort(t *testing.T) {
@@ -86,7 +86,7 @@ func TestValidateRouterAddress_NTCP2EmptyPort(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "port is empty")
+	assert.Contains(t, err.Error(), "cannot retrieve port")
 }
 
 func TestValidateRouterAddress_ValidSSU(t *testing.T) {
@@ -107,7 +107,7 @@ func TestValidateRouterAddress_SSUMissingHost(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "missing required 'host' key")
+	assert.Contains(t, err.Error(), "cannot retrieve host")
 }
 
 func TestValidateRouterAddress_ValidSSU2(t *testing.T) {
@@ -128,7 +128,7 @@ func TestValidateRouterAddress_SSU2MissingPort(t *testing.T) {
 
 	err := ValidateRouterAddress(addr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "missing required 'port' key")
+	assert.Contains(t, err.Error(), "cannot retrieve port")
 }
 
 func TestValidateRouterAddress_UnknownTransport(t *testing.T) {
@@ -259,6 +259,6 @@ func BenchmarkValidateRouterAddress_MultipleChecks(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = ValidateRouterAddress(addr)
-		_ = validateNTCP2Address(addr)
+		_ = ValidateNTCP2Address(addr)
 	}
 }

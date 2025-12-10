@@ -191,43 +191,28 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 
 // validateSSUAddress validates SSU-specific requirements
 func validateSSUAddress(addr *router_address.RouterAddress) error {
-	// Check for required 'host' key
-	if !addr.CheckOption("host") {
-		return errors.New("SSU address missing required 'host' key")
+	// Use the same API as runtime transport - addr.Host() is the single source of truth
+	host, err := addr.Host()
+	if err != nil {
+		return fmt.Errorf("SSU address cannot retrieve host: %w", err)
 	}
 
-	// Validate host is not empty
-	hostStr := addr.HostString()
-	if hostStr == nil {
+	if host == nil {
 		return errors.New("SSU host is nil")
 	}
 
-	hostData, err := hostStr.Data()
-	if err != nil {
-		return fmt.Errorf("SSU host data invalid: %w", err)
-	}
-
-	if len(hostData) == 0 {
+	hostData := host.String()
+	if hostData == "" {
 		return errors.New("SSU host is empty")
 	}
 
-	// Check for required 'port' key
-	if !addr.CheckOption("port") {
-		return errors.New("SSU address missing required 'port' key")
-	}
-
-	// Validate port is not empty
-	portStr := addr.PortString()
-	if portStr == nil {
-		return errors.New("SSU port is nil")
-	}
-
-	portData, err := portStr.Data()
+	// Use the same API as runtime transport - addr.Port() is the single source of truth
+	port, err := addr.Port()
 	if err != nil {
-		return fmt.Errorf("SSU port data invalid: %w", err)
+		return fmt.Errorf("SSU address cannot retrieve port: %w", err)
 	}
 
-	if len(portData) == 0 {
+	if port == "" {
 		return errors.New("SSU port is empty")
 	}
 
@@ -236,44 +221,28 @@ func validateSSUAddress(addr *router_address.RouterAddress) error {
 
 // validateSSU2Address validates SSU2-specific requirements
 func validateSSU2Address(addr *router_address.RouterAddress) error {
-	// SSU2 has similar requirements to SSU
-	// Check for required 'host' key
-	if !addr.CheckOption("host") {
-		return errors.New("SSU2 address missing required 'host' key")
+	// Use the same API as runtime transport - addr.Host() is the single source of truth
+	host, err := addr.Host()
+	if err != nil {
+		return fmt.Errorf("SSU2 address cannot retrieve host: %w", err)
 	}
 
-	// Validate host is not empty
-	hostStr := addr.HostString()
-	if hostStr == nil {
+	if host == nil {
 		return errors.New("SSU2 host is nil")
 	}
 
-	hostData, err := hostStr.Data()
-	if err != nil {
-		return fmt.Errorf("SSU2 host data invalid: %w", err)
-	}
-
-	if len(hostData) == 0 {
+	hostData := host.String()
+	if hostData == "" {
 		return errors.New("SSU2 host is empty")
 	}
 
-	// Check for required 'port' key
-	if !addr.CheckOption("port") {
-		return errors.New("SSU2 address missing required 'port' key")
-	}
-
-	// Validate port is not empty
-	portStr := addr.PortString()
-	if portStr == nil {
-		return errors.New("SSU2 port is nil")
-	}
-
-	portData, err := portStr.Data()
+	// Use the same API as runtime transport - addr.Port() is the single source of truth
+	port, err := addr.Port()
 	if err != nil {
-		return fmt.Errorf("SSU2 port data invalid: %w", err)
+		return fmt.Errorf("SSU2 address cannot retrieve port: %w", err)
 	}
 
-	if len(portData) == 0 {
+	if port == "" {
 		return errors.New("SSU2 port is empty")
 	}
 
