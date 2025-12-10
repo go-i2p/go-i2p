@@ -190,6 +190,13 @@ func (s *Server) acceptLoop() {
 			continue
 		}
 
+		// i2psnark compatibility: Log all connection attempts
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.acceptLoop",
+			"remoteAddr": conn.RemoteAddr().String(),
+			"localAddr":  conn.LocalAddr().String(),
+		}).Info("new_i2cp_connection")
+
 		if s.shouldRejectConnection(conn) {
 			continue
 		}
@@ -883,8 +890,9 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 	// Validate payload size to prevent exceeding I2CP limits after garlic encryption
 	// i2psnark compatibility: Account for overhead from garlic encryption
 	// Data message (4 bytes) + garlic encryption (~200 bytes typical)
-	// Conservative limit: MaxPayloadSize - 512 bytes for all overhead
-	const maxSafePayloadSize = MaxPayloadSize - 512
+	// Conservative limit: MaxPayloadSize - 2048 bytes for all overhead
+	// Increased overhead budget to accommodate larger i2psnark messages
+	const maxSafePayloadSize = MaxPayloadSize - 2048
 	if len(sendMsg.Payload) > maxSafePayloadSize {
 		// i2psnark compatibility: Log detailed size information for debugging
 		log.WithFields(logger.Fields{

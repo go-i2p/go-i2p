@@ -63,9 +63,13 @@ const (
 // Protocol limits as per I2CP specification
 const (
 	// MaxPayloadSize is the maximum size for I2CP message payloads.
-	// Per I2CP spec: "Actual message length limit is about 64 KB."
-	// Using 65535 (64 KB - 1) to be safe with the 4-byte length field.
-	MaxPayloadSize = 65535
+	// i2psnark compatibility: The I2CP wire format uses a 4-byte length field (uint32),
+	// theoretically supporting up to 4 GB. Java I2P routers accept payloads larger than
+	// 64 KB. i2psnark-standalone sends payloads exceeding 65535 bytes for file transfers.
+	// Setting limit to 256 KB (262144 bytes) to match Java I2P behavior while preventing
+	// memory exhaustion attacks. This allows i2psnark to function properly while maintaining
+	// reasonable DoS protection.
+	MaxPayloadSize = 262144 // 256 KB
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
 	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
@@ -253,12 +257,24 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 	payloadLen = binary.BigEndian.Uint32(header[3:7])
 
 	// i2psnark compatibility: Debug log all message headers to identify patterns
+	// Log at debug level for normal messages, but include size category for analysis
+	sizeCategory := "small"
+	if payloadLen > DefaultPayloadSize && payloadLen <= 65535 {
+		sizeCategory = "medium"
+	} else if payloadLen > 65535 && payloadLen <= MaxPayloadSize {
+		sizeCategory = "large"
+	} else if payloadLen > MaxPayloadSize {
+		sizeCategory = "oversized"
+	}
+
 	log.WithFields(logger.Fields{
-		"at":         "i2cp.parseMessageHeader",
-		"msgType":    MessageTypeName(msgType),
-		"msgTypeID":  msgType,
-		"sessionID":  sessionID,
-		"payloadLen": payloadLen,
+		"at":           "i2cp.parseMessageHeader",
+		"msgType":      MessageTypeName(msgType),
+		"msgTypeID":    msgType,
+		"sessionID":    sessionID,
+		"payloadLen":   payloadLen,
+		"sizeCategory": sizeCategory,
+		"headerHex":    fmt.Sprintf("%x", header),
 	}).Debug("parsed_message_header")
 
 	return

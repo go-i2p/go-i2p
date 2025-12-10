@@ -223,8 +223,8 @@ func BenchmarkMessageUnmarshal(b *testing.B) {
 	}
 }
 
-// TestMessagePayloadSizeLimit verifies that I2CP enforces the 64 KB payload size limit
-// as specified in the I2CP specification.
+// TestMessagePayloadSizeLimit verifies that I2CP enforces the payload size limit.
+// Limit increased to 256 KB for i2psnark compatibility (from original 64 KB assumption).
 func TestMessagePayloadSizeLimit(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -233,7 +233,7 @@ func TestMessagePayloadSizeLimit(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:        "Maximum allowed size (64 KB - 1)",
+			name:        "Maximum allowed size (256 KB for i2psnark compatibility)",
 			payloadSize: MaxPayloadSize,
 			wantErr:     false,
 		},

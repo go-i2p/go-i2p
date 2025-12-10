@@ -20,13 +20,14 @@ import (
 // The router will wrap this payload in garlic encryption and route it through
 // the outbound tunnel pool to the specified destination.
 //
-// IMPORTANT: Per I2CP specification, the total payload size (destination + message data)
-// is limited to approximately 64 KB. Client applications are responsible for fragmenting
-// larger messages at the application layer. The I2CP protocol does NOT provide automatic
-// fragmentation - this must be handled by the client application itself.
+// IMPORTANT: Per I2CP wire format, the total payload size is limited to MaxPayloadSize
+// (currently 256 KB for i2psnark compatibility). Client applications like i2psnark may
+// send payloads larger than the original 64 KB limit. Applications requiring larger
+// messages should fragment them at the application layer, though i2psnark file transfers
+// can use the full 256 KB limit.
 type SendMessagePayload struct {
 	Destination data.Hash // 32-byte SHA256 hash of target destination
-	Payload     []byte    // Message data to send (variable length, max ~64 KB total)
+	Payload     []byte    // Message data to send (variable length, max 256 KB)
 }
 
 // ParseSendMessagePayload deserializes a SendMessage payload from wire format.
@@ -108,12 +109,12 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 // The router sends this to the client after receiving and decrypting a message
 // from the I2P network destined for the client's destination.
 //
-// IMPORTANT: Per I2CP specification, the total payload size is limited to approximately
-// 64 KB. Messages larger than this limit cannot be delivered via I2CP and must be
-// fragmented at the application layer by the sender.
+// IMPORTANT: Per I2CP wire format, the total payload size is limited to MaxPayloadSize
+// (currently 256 KB for i2psnark compatibility). Messages larger than this limit cannot
+// be delivered via I2CP and must be fragmented at the application layer by the sender.
 type MessagePayloadPayload struct {
 	MessageID uint32 // Unique message identifier
-	Payload   []byte // Decrypted message data (variable length, max ~64 KB total)
+	Payload   []byte // Decrypted message data (variable length, max 256 KB)
 }
 
 // ParseMessagePayloadPayload deserializes a MessagePayload payload from wire format.
