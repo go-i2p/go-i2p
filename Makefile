@@ -44,3 +44,6 @@ godoc:
 	./callgraph.sh
 	find . -name 'README.md' -exec git add -v {} \;
 	git commit -am "GODOC UPDATE CHECKIN"
+
+run:
+	DEBUG_I2P=warn go run . --netdb.path /home/idk/.i2p/netDb
