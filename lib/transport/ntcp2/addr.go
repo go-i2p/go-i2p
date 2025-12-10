@@ -99,7 +99,8 @@ func isNTCP2Transport(addr *router_address.RouterAddress) bool {
 	if err != nil {
 		return false
 	}
-	return str == "ntcp2"
+	// Check case-insensitively - some implementations use "NTCP2", others "ntcp2"
+	return strings.EqualFold(str, "ntcp2")
 }
 
 // resolveTCPAddress extracts host and port from a router address and resolves them to a TCP address.
