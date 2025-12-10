@@ -146,10 +146,13 @@ func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
 }
 
 func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, error) {
+	log.WithField("at", "GetKeys").Debug("Retrieving keys")
 	public, err := ks.privateKey.Public()
 	if err != nil {
+		log.WithError(err).WithField("at", "GetKeys").Error("Failed to derive public key")
 		return nil, nil, err
 	}
+	log.WithField("at", "GetKeys").Debug("Successfully retrieved keys")
 	return public, ks.privateKey, nil
 }
 
@@ -157,19 +160,33 @@ func (ks *RouterInfoKeystore) GetKeys() (types.PublicKey, types.PrivateKey, erro
 // This key is used as the static key for NTCP2 transport sessions, ensuring
 // consistent peer identification across router restarts.
 func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey {
+	log.WithField("at", "GetEncryptionPrivateKey").Debug("Returning X25519 encryption private key")
 	return ks.encryptionPrivKey
 }
 
 func (ks *RouterInfoKeystore) StoreKeys() error {
+	log.WithField("at", "StoreKeys").Debug("Storing keys to disk")
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
+		log.WithField("dir", ks.dir).Debug("Creating directory for keys")
 		err := os.MkdirAll(ks.dir, 0o755)
 		if err != nil {
+			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to create directory")
 			return err
 		}
 	}
 	// on the disk somewhere
 	filename := filepath.Join(ks.dir, ks.KeyID()+".key")
-	return os.WriteFile(filename, ks.privateKey.Bytes(), 0o600)
+	log.WithFields(map[string]interface{}{
+		"at":   "StoreKeys",
+		"file": filename,
+	}).Debug("Writing key file")
+	err := os.WriteFile(filename, ks.privateKey.Bytes(), 0o600)
+	if err != nil {
+		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write key file")
+		return err
+	}
+	log.WithField("at", "StoreKeys").Debug("Successfully stored keys")
+	return nil
 }
 
 func (ks *RouterInfoKeystore) KeyID() string {
@@ -214,11 +231,13 @@ func (ks *RouterInfoKeystore) KeyID() string {
 func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, needsFallback bool) {
 	// Handle nil privateKey case
 	if ks.privateKey == nil {
+		log.WithField("at", "tryGenerateKeyIDFromPrivateKey").Warn("Private key is nil, using fallback")
 		return "", true
 	}
 
 	public, err := ks.privateKey.Public()
 	if err != nil {
+		log.WithError(err).WithField("at", "tryGenerateKeyIDFromPrivateKey").Warn("Failed to derive public key, using fallback")
 		return "", true
 	}
 
@@ -232,32 +251,54 @@ func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, ne
 // generateFallbackKeyID creates a fallback KeyID when private key is unavailable.
 // This should only be called once per keystore instance via sync.Once.
 func (ks *RouterInfoKeystore) generateFallbackKeyID() string {
+	log.WithField("at", "generateFallbackKeyID").Warn("Generating fallback KeyID")
 	randomBytes := make([]byte, 4)
 	if _, err := rand.Read(randomBytes); err != nil {
+		log.WithError(err).WithField("at", "generateFallbackKeyID").Error("Random generation failed, using fixed fallback")
 		// If random generation fails, use a fixed fallback
 		return "fallback-key"
 	}
-	return "fallback-" + hex.EncodeToString(randomBytes)
+	fallbackID := "fallback-" + hex.EncodeToString(randomBytes)
+	log.WithFields(map[string]interface{}{
+		"at":    "generateFallbackKeyID",
+		"keyID": fallbackID,
+	}).Debug("Generated fallback KeyID")
+	return fallbackID
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress) (*router_info.RouterInfo, error) {
+	log.WithFields(map[string]interface{}{
+		"at":            "ConstructRouterInfo",
+		"address_count": len(addresses),
+	}).Debug("Constructing RouterInfo")
+
 	publicKey, privateKey, err := ks.validateAndGetKeys()
 	if err != nil {
+		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to validate and get keys")
 		return nil, err
 	}
 
 	cert, err := ks.createEd25519Certificate()
 	if err != nil {
+		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to create certificate")
 		return nil, err
 	}
 
 	routerIdentity, err := ks.buildRouterIdentity(publicKey, cert)
 	if err != nil {
+		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to build router identity")
 		return nil, err
 	}
 
-	return ks.assembleRouterInfo(routerIdentity, addresses, privateKey)
+	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey)
+	if err != nil {
+		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to assemble RouterInfo")
+		return nil, err
+	}
+
+	log.WithField("at", "ConstructRouterInfo").Debug("Successfully constructed RouterInfo")
+	return ri, nil
 }
 
 // validateAndGetKeys retrieves and validates the signing keys from the keystore
@@ -321,6 +362,8 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 
 // assembleRouterInfo creates the final RouterInfo with all components and standard options
 func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey) (*router_info.RouterInfo, error) {
+	log.WithField("at", "assembleRouterInfo").Debug("Assembling RouterInfo with timestamp and options")
+
 	rawTime := ks.RouterTimestamper.GetCurrentTime()
 	// Round to nearest second per NTCP2 spec to prevent clock bias in the network
 	// Reference: https://geti2p.net/spec/ntcp2#datetime
@@ -331,6 +374,13 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		"netId": "2",  // Production network
 	}
 
+	log.WithFields(map[string]interface{}{
+		"at":        "assembleRouterInfo",
+		"timestamp": publishedTime.Unix(),
+		"caps":      options["caps"],
+		"netId":     options["netId"],
+	}).Debug("Creating RouterInfo with options")
+
 	ri, err := router_info.NewRouterInfo(
 		routerIdentity,
 		publishedTime,
@@ -340,7 +390,9 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
 	)
 	if err != nil {
+		log.WithError(err).WithField("at", "assembleRouterInfo").Error("Failed to create RouterInfo")
 		return nil, oops.Errorf("failed to create router info: %w", err)
 	}
+	log.WithField("at", "assembleRouterInfo").Debug("Successfully assembled RouterInfo")
 	return ri, nil
 }

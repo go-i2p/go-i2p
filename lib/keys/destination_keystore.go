@@ -132,25 +132,40 @@ func assembleKeysAndCert(keyCert *key_certificate.KeyCertificate, encryptionPubK
 
 // Destination returns the public destination
 func (dks *DestinationKeyStore) Destination() *destination.Destination {
+	log.WithField("at", "Destination").Debug("Returning destination")
 	return dks.destination
 }
 
 // SigningPrivateKey returns the signing private key for creating LeaseSets
 func (dks *DestinationKeyStore) SigningPrivateKey() types.SigningPrivateKey {
+	log.WithField("at", "SigningPrivateKey").Debug("Returning signing private key")
 	return dks.signingPrivKey
 }
 
 // EncryptionPrivateKey returns the encryption private key for decrypting messages
 func (dks *DestinationKeyStore) EncryptionPrivateKey() types.PrivateEncryptionKey {
+	log.WithField("at", "EncryptionPrivateKey").Debug("Returning encryption private key")
 	return dks.encryptionPrivKey
 }
 
 // SigningPublicKey returns the signing public key
 func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, error) {
-	return dks.destination.SigningPublicKey()
+	log.WithField("at", "SigningPublicKey").Debug("Retrieving signing public key")
+	key, err := dks.destination.SigningPublicKey()
+	if err != nil {
+		log.WithError(err).WithField("at", "SigningPublicKey").Error("Failed to get signing public key")
+		return nil, err
+	}
+	return key, nil
 }
 
 // EncryptionPublicKey returns the encryption public key
 func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey, error) {
-	return dks.destination.PublicKey()
+	log.WithField("at", "EncryptionPublicKey").Debug("Retrieving encryption public key")
+	key, err := dks.destination.PublicKey()
+	if err != nil {
+		log.WithError(err).WithField("at", "EncryptionPublicKey").Error("Failed to get encryption public key")
+		return nil, err
+	}
+	return key, nil
 }
