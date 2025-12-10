@@ -370,17 +370,30 @@ func (r *Router) Start() {
 	if r.running {
 		log.WithFields(logger.Fields{
 			"at":     "(Router) Start",
+			"phase":  "startup",
 			"reason": "router is already running",
-		}).Error("Error Starting router")
+			"state":  "running",
+		}).Warn("attempted to start already running router")
 		return
 	}
-	log.Debug("Starting router")
+	log.WithFields(logger.Fields{
+		"at":           "(Router) Start",
+		"phase":        "startup",
+		"step":         1,
+		"reason":       "initiating router startup sequence",
+		"i2cp_enabled": r.cfg.I2CP != nil && r.cfg.I2CP.Enabled,
+	}).Info("starting router")
 	r.running = true
 
 	// Create router-level context for lifecycle management
 	// This context is cancelled in Stop() for coordinated shutdown
 	r.ctx, r.cancel = context.WithCancel(context.Background())
-	log.Debug("Router context initialized")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Start",
+		"phase":  "startup",
+		"step":   2,
+		"reason": "lifecycle context initialized",
+	}).Debug("router context initialized")
 
 	// Start I2CP server if enabled
 	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
@@ -554,7 +567,15 @@ func (r *Router) ensureNetDBReady() error {
 
 // performReseed executes network database reseeding process
 func (r *Router) performReseed() error {
-	log.Info("NetDB below threshold, initiating bootstrap")
+	log.WithFields(logger.Fields{
+		"at":             "(Router) performReseed",
+		"phase":          "bootstrap",
+		"reason":         "netdb below threshold, initiating bootstrap",
+		"current_size":   r.StdNetDB.Size(),
+		"threshold":      r.cfg.Bootstrap.LowPeerThreshold,
+		"shortfall":      r.cfg.Bootstrap.LowPeerThreshold - r.StdNetDB.Size(),
+		"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
+	}).Warn("netDb below threshold, initiating bootstrap")
 
 	// Create the appropriate bootstrapper based on user configuration
 	var bootstrapper bootstrap.Bootstrap
@@ -563,9 +584,21 @@ func (r *Router) performReseed() error {
 	case "file":
 		// Use file bootstrap only
 		if r.cfg.Bootstrap.ReseedFilePath == "" {
+			log.WithFields(logger.Fields{
+				"at":             "(Router) performReseed",
+				"phase":          "bootstrap",
+				"reason":         "bootstrap_type is file but path not configured",
+				"bootstrap_type": "file",
+			}).Error("bootstrap configuration error")
 			return fmt.Errorf("bootstrap_type is 'file' but no reseed_file_path is configured")
 		}
-		log.Info("Using file bootstrap only (as specified by bootstrap_type)")
+		log.WithFields(logger.Fields{
+			"at":        "(Router) performReseed",
+			"phase":     "bootstrap",
+			"reason":    "using file bootstrap as configured",
+			"file_path": r.cfg.Bootstrap.ReseedFilePath,
+			"strategy":  "file_only",
+		}).Info("using file bootstrap only (as specified by bootstrap_type)")
 		bootstrapper = bootstrap.NewFileBootstrap(r.cfg.Bootstrap.ReseedFilePath)
 
 	case "reseed":
@@ -580,18 +613,47 @@ func (r *Router) performReseed() error {
 
 	case "auto", "":
 		// Use composite bootstrap which tries all methods
-		log.Info("Using composite bootstrap (tries all methods)")
+		log.WithFields(logger.Fields{
+			"at":             "(Router) performReseed",
+			"phase":          "bootstrap",
+			"reason":         "using composite bootstrap strategy",
+			"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
+			"strategy":       "file -> reseed -> local_netdb",
+			"reseed_servers": len(r.cfg.Bootstrap.ReseedServers),
+		}).Info("using composite bootstrap (tries all methods)")
 		bootstrapper = bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
 
 	default:
-		log.WithField("bootstrap_type", r.cfg.Bootstrap.BootstrapType).Warn("Unknown bootstrap_type, falling back to composite bootstrap")
+		log.WithFields(logger.Fields{
+			"at":             "(Router) performReseed",
+			"phase":          "bootstrap",
+			"reason":         "unknown bootstrap_type, using fallback",
+			"bootstrap_type": r.cfg.Bootstrap.BootstrapType,
+			"fallback":       "composite",
+			"valid_types":    "file, reseed, local, auto",
+		}).Warn("unknown bootstrap_type, falling back to composite bootstrap")
 		bootstrapper = bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
 	}
 
 	if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
-		log.WithError(err).Warn("Bootstrap failed, continuing with limited NetDB")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":           "(Router) performReseed",
+			"phase":        "bootstrap",
+			"reason":       "bootstrap failed but continuing",
+			"current_size": r.StdNetDB.Size(),
+			"target":       r.cfg.Bootstrap.LowPeerThreshold,
+			"impact":       "router will operate with limited peer connectivity",
+		}).Warn("bootstrap failed, continuing with limited NetDB")
 		return err
 	}
+	log.WithFields(logger.Fields{
+		"at":           "(Router) performReseed",
+		"phase":        "bootstrap",
+		"reason":       "bootstrap completed successfully",
+		"netdb_size":   r.StdNetDB.Size(),
+		"threshold":    r.cfg.Bootstrap.LowPeerThreshold,
+		"peers_gained": r.StdNetDB.Size() - (r.cfg.Bootstrap.LowPeerThreshold - 1),
+	}).Info("bootstrap completed successfully")
 	return nil
 }
 
