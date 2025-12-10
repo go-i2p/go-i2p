@@ -22,22 +22,27 @@ import (
 // Returns a RouterAddress with transport style "ntcp2" and all required options,
 // or an error if address extraction or conversion fails.
 func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAddress, error) {
+	log.Debug("Converting NTCP2Transport to RouterAddress")
 	if transport == nil {
+		log.Error("Cannot convert nil transport to RouterAddress")
 		return nil, fmt.Errorf("transport cannot be nil")
 	}
 
 	host, port, err := extractTransportAddress(transport)
 	if err != nil {
+		log.WithError(err).Error("Failed to extract transport address")
 		return nil, err
 	}
 
 	staticKey, err := validateAndExtractStaticKey(transport)
 	if err != nil {
+		log.WithError(err).Error("Failed to validate and extract static key")
 		return nil, err
 	}
 
 	options, err := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
 	if err != nil {
+		log.WithError(err).Error("Failed to build router address options")
 		return nil, err
 	}
 
@@ -49,9 +54,11 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 		options,
 	)
 	if err != nil {
+		log.WithError(err).Error("Failed to create RouterAddress")
 		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
 	}
 
+	log.WithField("host", host).WithField("port", port).Info("Successfully converted NTCP2Transport to RouterAddress")
 	return routerAddress, nil
 }
 
@@ -60,6 +67,7 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 func extractTransportAddress(transport *NTCP2Transport) (string, string, error) {
 	addr := transport.Addr()
 	if addr == nil {
+		log.Error("Transport has no listening address")
 		return "", "", fmt.Errorf("transport has no listening address")
 	}
 
@@ -71,11 +79,13 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		var ok2 bool
 		tcpAddr, ok2 = underlying.(*net.TCPAddr)
 		if !ok2 {
+			log.Errorf("NTCP2Addr underlying address is not *net.TCPAddr, got %T", underlying)
 			return "", "", fmt.Errorf("NTCP2Addr underlying address is not *net.TCPAddr, got %T", underlying)
 		}
 	} else if directTCP, ok := addr.(*net.TCPAddr); ok {
 		tcpAddr = directTCP
 	} else {
+		log.Errorf("Expected *net.TCPAddr or *ntcp2.NTCP2Addr, got %T", addr)
 		return "", "", fmt.Errorf("expected *net.TCPAddr or *ntcp2.NTCP2Addr, got %T", addr)
 	}
 
@@ -89,12 +99,14 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 // Returns the base64-encoded static key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	if transport.config == nil || transport.config.NTCP2Config == nil {
+		log.Error("Transport NTCP2 configuration is not initialized")
 		return "", fmt.Errorf("transport NTCP2 configuration is not initialized")
 	}
 
 	ntcp2Config := transport.config.NTCP2Config
 
 	if len(ntcp2Config.StaticKey) != 32 {
+		log.WithField("length", len(ntcp2Config.StaticKey)).Error("Invalid static key length")
 		return "", fmt.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
 	}
 

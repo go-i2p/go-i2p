@@ -3,6 +3,8 @@ package config
 import (
 	"path/filepath"
 	"time"
+
+	"github.com/go-i2p/logger"
 )
 
 // ConfigDefaults contains all default configuration values for go-i2p.
@@ -367,12 +369,14 @@ func buildPerformanceDefaults() PerformanceDefaults {
 // Validate checks if the provided configuration values are reasonable.
 // Returns an error describing the first invalid value found.
 func Validate(cfg ConfigDefaults) error {
+	log.Debug("Validating configuration defaults")
 	return runConfigValidators(cfg)
 }
 
 // runConfigValidators executes all configuration validators in sequence.
 // Returns the first error encountered or nil if all validations pass.
 func runConfigValidators(cfg ConfigDefaults) error {
+	log.Debug("Running all configuration validators")
 	validators := []func() error{
 		func() error { return validateRouter(cfg.Router) },
 		func() error { return validateNetDB(cfg.NetDB) },
@@ -385,92 +389,124 @@ func runConfigValidators(cfg ConfigDefaults) error {
 
 	for _, validator := range validators {
 		if err := validator(); err != nil {
+			log.WithError(err).Error("Configuration validation failed")
 			return err
 		}
 	}
+	log.Info("All configuration validations passed successfully")
 	return nil
 }
 
 // validateRouter validates router configuration settings.
 func validateRouter(router RouterDefaults) error {
+	log.Debug("Validating router configuration")
 	if router.MaxConcurrentSessions < 1 {
+		log.WithField("max_concurrent_sessions", router.MaxConcurrentSessions).Error("Invalid router configuration")
 		return newValidationError("Router.MaxConcurrentSessions must be at least 1")
 	}
 	if router.MessageExpirationTime < 1*time.Second {
+		log.WithField("message_expiration_time", router.MessageExpirationTime).Error("Invalid router configuration")
 		return newValidationError("Router.MessageExpirationTime must be at least 1 second")
 	}
+	log.Debug("Router configuration validated successfully")
 	return nil
 }
 
 // validateNetDB validates network database configuration settings.
 func validateNetDB(netdb NetDBDefaults) error {
+	log.Debug("Validating NetDB configuration")
 	if netdb.MaxRouterInfos < 10 {
+		log.WithField("max_router_infos", netdb.MaxRouterInfos).Error("Invalid NetDB configuration")
 		return newValidationError("NetDB.MaxRouterInfos must be at least 10")
 	}
 	if netdb.MaxLeaseSets < 1 {
+		log.WithField("max_lease_sets", netdb.MaxLeaseSets).Error("Invalid NetDB configuration")
 		return newValidationError("NetDB.MaxLeaseSets must be at least 1")
 	}
+	log.Debug("NetDB configuration validated successfully")
 	return nil
 }
 
 // validateBootstrap validates bootstrap configuration settings.
 func validateBootstrap(bootstrap BootstrapDefaults) error {
+	log.Debug("Validating bootstrap configuration")
 	if bootstrap.LowPeerThreshold < 1 {
+		log.WithField("low_peer_threshold", bootstrap.LowPeerThreshold).Error("Invalid bootstrap configuration")
 		return newValidationError("Bootstrap.LowPeerThreshold must be at least 1")
 	}
 	if bootstrap.MinimumReseedPeers < 1 {
+		log.WithField("minimum_reseed_peers", bootstrap.MinimumReseedPeers).Error("Invalid bootstrap configuration")
 		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
 	}
+	log.Debug("Bootstrap configuration validated successfully")
 	return nil
 }
 
 // validateI2CP validates I2CP server configuration settings.
 func validateI2CP(i2cp I2CPDefaults) error {
+	log.Debug("Validating I2CP configuration")
 	if i2cp.MaxSessions < 1 {
+		log.WithField("max_sessions", i2cp.MaxSessions).Error("Invalid I2CP configuration")
 		return newValidationError("I2CP.MaxSessions must be at least 1")
 	}
 	if i2cp.MessageQueueSize < 1 {
+		log.WithField("message_queue_size", i2cp.MessageQueueSize).Error("Invalid I2CP configuration")
 		return newValidationError("I2CP.MessageQueueSize must be at least 1")
 	}
+	log.Debug("I2CP configuration validated successfully")
 	return nil
 }
 
 // validateTunnel validates tunnel configuration settings.
 func validateTunnel(tunnel TunnelDefaults) error {
+	log.Debug("Validating tunnel configuration")
 	if tunnel.MinPoolSize < 1 {
+		log.WithField("min_pool_size", tunnel.MinPoolSize).Error("Invalid tunnel configuration")
 		return newValidationError("Tunnel.MinPoolSize must be at least 1")
 	}
 	if tunnel.MaxPoolSize < tunnel.MinPoolSize {
+		log.WithFields(logger.Fields{"max_pool_size": tunnel.MaxPoolSize, "min_pool_size": tunnel.MinPoolSize}).Error("Invalid tunnel configuration")
 		return newValidationError("Tunnel.MaxPoolSize must be >= MinPoolSize")
 	}
 	if tunnel.TunnelLength < 1 || tunnel.TunnelLength > 8 {
+		log.WithField("tunnel_length", tunnel.TunnelLength).Error("Invalid tunnel configuration")
 		return newValidationError("Tunnel.TunnelLength must be between 1 and 8")
 	}
 	if tunnel.BuildRetries < 1 {
+		log.WithField("build_retries", tunnel.BuildRetries).Error("Invalid tunnel configuration")
 		return newValidationError("Tunnel.BuildRetries must be at least 1")
 	}
+	log.Debug("Tunnel configuration validated successfully")
 	return nil
 }
 
 // validateTransport validates transport layer configuration settings.
 func validateTransport(transport TransportDefaults) error {
+	log.Debug("Validating transport configuration")
 	if transport.MaxMessageSize < 1024 {
+		log.WithField("max_message_size", transport.MaxMessageSize).Error("Invalid transport configuration")
 		return newValidationError("Transport.MaxMessageSize must be at least 1024 bytes")
 	}
 	if transport.NTCP2MaxConnections < 1 {
+		log.WithField("ntcp2_max_connections", transport.NTCP2MaxConnections).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2MaxConnections must be at least 1")
 	}
+	log.Debug("Transport configuration validated successfully")
 	return nil
 }
 
 // validatePerformance validates performance tuning configuration settings.
 func validatePerformance(performance PerformanceDefaults) error {
+	log.Debug("Validating performance configuration")
 	if performance.WorkerPoolSize < 1 {
+		log.WithField("worker_pool_size", performance.WorkerPoolSize).Error("Invalid performance configuration")
 		return newValidationError("Performance.WorkerPoolSize must be at least 1")
 	}
 	if performance.MessageQueueSize < 1 {
+		log.WithField("message_queue_size", performance.MessageQueueSize).Error("Invalid performance configuration")
 		return newValidationError("Performance.MessageQueueSize must be at least 1")
 	}
+	log.Debug("Performance configuration validated successfully")
 	return nil
 }
 
