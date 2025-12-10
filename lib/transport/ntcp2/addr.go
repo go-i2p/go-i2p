@@ -143,20 +143,23 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	log.Debug("Getting host from RouterAddress")
 	host, err := addr.Host()
 	if err != nil {
-		// Missing host key is normal for introducer-based addresses
-		// Log at debug level to reduce noise
+		// Missing host key is normal for introducer-based addresses (NAT/firewall traversal)
+		// These addresses require introduction from a third-party router
+		// Log at debug level to reduce noise - this is expected behavior
 		log.WithFields(map[string]interface{}{
 			"at":        "resolveTCPAddress",
 			"phase":     "address_parsing",
 			"operation": "extract_host",
 			"error":     err.Error(),
-		}).Debug("Cannot extract host from RouterAddress (may be introducer-based)")
-		return nil, fmt.Errorf("failed to extract host: %w", err)
+			"context":   "normal for introducer-based addresses",
+		}).Debug("Cannot extract host from RouterAddress (introducer-only address)")
+		return nil, fmt.Errorf("failed to extract host (introducer-based address): %w", err)
 	}
 
 	port, err := addr.Port()
 	if err != nil {
-		// Enhanced logging for port extraction failures
+		// Port extraction failures are less common but still possible for malformed addresses
+		// Downgrade to Warn since some legitimate scenarios may lack port (though rare)
 		log.WithFields(map[string]interface{}{
 			"at":        "resolveTCPAddress",
 			"phase":     "address_parsing",
@@ -164,7 +167,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 			"error":     err.Error(),
 			"host":      host.String(),
 			"cost":      addr.Cost(),
-		}).Error("Failed to get port data")
+		}).Warn("Failed to extract port from RouterAddress")
 		return nil, fmt.Errorf("failed to extract port: %w", err)
 	}
 

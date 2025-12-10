@@ -222,16 +222,25 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 			// Found NTCP2 address - validate it using bootstrap package
 			log.WithField("index", i).Debug("hasValidNTCP2Address: found NTCP2 address, validating...")
 			if err := bootstrap.ValidateNTCP2Address(addr); err == nil {
-				// Valid NTCP2 address found! Router is usable.
-				log.WithField("index", i).Debug("hasValidNTCP2Address: NTCP2 address is VALID")
+				// Valid NTCP2 address found! Router is usable for direct connections.
+				log.WithField("index", i).Debug("hasValidNTCP2Address: NTCP2 address is VALID (direct connectivity)")
 				hasValidNTCP2 = true
 				// Don't break - continue logging all addresses for debugging
 			} else {
-				// Invalid NTCP2 address - will be skipped during connection
-				log.WithFields(logger.Fields{
-					"index": i,
-					"error": err.Error(),
-				}).Debug("hasValidNTCP2Address: NTCP2 address validation FAILED")
+				// Address validation failed - check if it's introducer-based or truly invalid
+				// Introducer-based addresses are normal for NAT/firewalled routers
+				isIntroducerBased := strings.Contains(err.Error(), "introducer")
+				if isIntroducerBased {
+					log.WithFields(logger.Fields{
+						"index":  i,
+						"reason": "introducer-based address (NAT/firewall)",
+					}).Debug("hasValidNTCP2Address: skipping introducer-only address")
+				} else {
+					log.WithFields(logger.Fields{
+						"index": i,
+						"error": err.Error(),
+					}).Debug("hasValidNTCP2Address: NTCP2 address validation FAILED")
+				}
 			}
 		}
 	}
