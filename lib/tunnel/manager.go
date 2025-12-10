@@ -40,8 +40,10 @@ func NewManager() *Manager {
 	go m.cleanupLoop()
 
 	log.WithFields(logger.Fields{
-		"at":     "NewManager",
-		"reason": "initialization",
+		"at":               "NewManager",
+		"phase":            "tunnel_build",
+		"reason":           "tunnel manager initialized",
+		"cleanup_interval": "60s",
 	}).Info("tunnel manager started")
 	return m
 }
@@ -58,6 +60,7 @@ func (m *Manager) AddParticipant(p *Participant) error {
 	if p == nil {
 		log.WithFields(logger.Fields{
 			"at":     "Manager.AddParticipant",
+			"phase":  "tunnel_build",
 			"reason": "nil_participant_rejected",
 		}).Error("cannot add nil participant")
 		return fmt.Errorf("cannot add nil participant")
@@ -70,16 +73,20 @@ func (m *Manager) AddParticipant(p *Participant) error {
 	if _, exists := m.participants[tunnelID]; exists {
 		log.WithFields(logger.Fields{
 			"at":        "Manager.AddParticipant",
+			"phase":     "tunnel_build",
 			"reason":    "duplicate_tunnel_id",
 			"tunnel_id": tunnelID,
+			"action":    "replacing",
 		}).Warn("participant already exists, replacing")
 	}
 
 	m.participants[tunnelID] = p
 	log.WithFields(logger.Fields{
-		"at":        "Manager.AddParticipant",
-		"reason":    "registered_for_relay",
-		"tunnel_id": tunnelID,
+		"at":                "Manager.AddParticipant",
+		"phase":             "tunnel_build",
+		"reason":            "registered_for_relay",
+		"tunnel_id":         tunnelID,
+		"participant_count": len(m.participants),
 	}).Debug("added participant tunnel")
 
 	return nil
@@ -188,9 +195,11 @@ func (m *Manager) cleanupExpiredParticipants() {
 
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
-			"at":     "Manager.cleanupExpiredParticipants",
-			"reason": "expiry_maintenance",
-			"count":  len(expired),
+			"at":        "Manager.cleanupExpiredParticipants",
+			"phase":     "tunnel_build",
+			"reason":    "expiry_maintenance",
+			"count":     len(expired),
+			"remaining": len(m.participants),
 		}).Info("cleaned up expired participant tunnels")
 	}
 }

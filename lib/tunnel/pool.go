@@ -313,7 +313,7 @@ func (p *Pool) maintainPool() {
 			"needed":      needed,
 			"min_tunnels": p.config.MinTunnels,
 			"max_tunnels": p.config.MaxTunnels,
-		}).Info("building replacement tunnels")
+		}).Warn("tunnel pool below minimum, building replacement tunnels")
 
 		// Build tunnels with exponential backoff on failures
 		p.buildTunnelsWithBackoff(needed)
@@ -415,14 +415,17 @@ func (p *Pool) buildTunnelsWithBackoff(count int) {
 
 	// Check if we need to wait due to backoff
 	if !p.lastBuildTime.IsZero() && now.Sub(p.lastBuildTime) < backoffDelay {
+		remaining := backoffDelay - now.Sub(p.lastBuildTime)
 		log.WithFields(logger.Fields{
-			"at":             "(Pool) buildTunnelsWithBackoff",
-			"phase":          "tunnel_build",
-			"reason":         "skipping build due to backoff delay",
-			"backoff_delay":  backoffDelay,
-			"failures":       p.buildFailures,
-			"time_remaining": backoffDelay - now.Sub(p.lastBuildTime),
-		}).Debug("skipping build due to backoff")
+			"at":              "(Pool) buildTunnelsWithBackoff",
+			"phase":           "tunnel_build",
+			"reason":          "skipping build due to backoff delay",
+			"backoff_delay":   backoffDelay,
+			"backoff_delay_s": backoffDelay.Seconds(),
+			"failures":        p.buildFailures,
+			"time_remaining":  remaining,
+			"next_attempt_in": remaining.Round(time.Second),
+		}).Warn("delaying tunnel build due to previous failures (exponential backoff)")
 		return
 	}
 
@@ -512,7 +515,8 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 				"tunnel_id":   tunnelID,
 				"retry":       retry + 1,
 				"max_retries": maxRetries,
-			}).Warn("tunnel ID collision detected, retrying")
+				"probability": "extremely rare event",
+			}).Warn("tunnel ID collision detected, retrying with new ID")
 
 			// If this was our last retry, set error
 			if retry == maxRetries-1 {
@@ -548,11 +552,13 @@ func (p *Pool) SelectTunnel() *TunnelState {
 	active := p.getActiveTunnelsLocked()
 	if len(active) == 0 {
 		log.WithFields(logger.Fields{
-			"at":        "(Pool) SelectTunnel",
-			"phase":     "tunnel_build",
-			"reason":    "no active tunnels available for selection",
-			"pool_size": len(p.tunnels),
-		}).Debug("no active tunnels available")
+			"at":          "(Pool) SelectTunnel",
+			"phase":       "tunnel_build",
+			"reason":      "no active tunnels available for selection",
+			"pool_size":   len(p.tunnels),
+			"min_tunnels": p.config.MinTunnels,
+			"impact":      "traffic cannot be routed until tunnels are built",
+		}).Warn("no active tunnels available")
 		return nil
 	}
 

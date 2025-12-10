@@ -158,29 +158,32 @@ func (fb *FileBootstrap) validateFile() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.WithFields(logger.Fields{
-				"at":        "(FileBootstrap) validateFile",
-				"phase":     "bootstrap",
-				"reason":    "reseed file does not exist",
-				"file_path": fb.filePath,
-			}).Error("reseed file does not exist")
+				"at":         "(FileBootstrap) validateFile",
+				"phase":      "bootstrap",
+				"reason":     "reseed file does not exist",
+				"file_path":  fb.filePath,
+				"suggestion": "verify file path or download reseed file",
+			}).Warn("reseed file does not exist")
 			return fmt.Errorf("file bootstrap validation failed: file does not exist at path %s", fb.filePath)
 		}
 		log.WithError(err).WithFields(logger.Fields{
-			"at":        "(FileBootstrap) validateFile",
-			"phase":     "bootstrap",
-			"reason":    "failed to access reseed file",
-			"file_path": fb.filePath,
-		}).Error("failed to stat reseed file")
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "failed to access reseed file",
+			"file_path":  fb.filePath,
+			"error_type": fmt.Sprintf("%T", err),
+		}).Warn("failed to stat reseed file")
 		return fmt.Errorf("file bootstrap validation failed: cannot access file %s: %w", fb.filePath, err)
 	}
 
 	if info.IsDir() {
 		log.WithFields(logger.Fields{
-			"at":        "(FileBootstrap) validateFile",
-			"phase":     "bootstrap",
-			"reason":    "path is directory not file",
-			"file_path": fb.filePath,
-		}).Error("reseed path is a directory, not a file")
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "path is directory not file",
+			"file_path":  fb.filePath,
+			"suggestion": "specify path to .su3 or .zip file, not directory",
+		}).Warn("reseed path is a directory, not a file")
 		return fmt.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", fb.filePath)
 	}
 
@@ -193,7 +196,8 @@ func (fb *FileBootstrap) validateFile() error {
 			"file_path":  fb.filePath,
 			"size_bytes": info.Size(),
 			"min_bytes":  100,
-		}).Error("reseed file is too small to be valid")
+			"suggestion": "verify file is complete and not corrupted",
+		}).Warn("reseed file is too small to be valid")
 		return fmt.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), fb.filePath)
 	}
 

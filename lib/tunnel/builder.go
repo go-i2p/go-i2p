@@ -155,6 +155,18 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		return nil, err
 	}
 
+	log.WithFields(logger.Fields{
+		"at":              "(TunnelBuilder) CreateBuildRequest",
+		"phase":           "tunnel_build",
+		"step":            "complete",
+		"reason":          "tunnel build request created successfully",
+		"tunnel_id":       tunnelID,
+		"hop_count":       req.HopCount,
+		"is_inbound":      req.IsInbound,
+		"use_short_build": req.UseShortBuild,
+		"records_created": len(records),
+	}).Debug("tunnel build request creation complete")
+
 	return &TunnelBuildResult{
 		TunnelID:      tunnelID,
 		Hops:          peers,
@@ -208,13 +220,15 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 
 	if len(peers) < req.HopCount {
 		log.WithFields(logger.Fields{
-			"at":        "(TunnelBuilder) selectTunnelPeers",
-			"phase":     "tunnel_build",
-			"reason":    "insufficient peers returned by selector",
-			"needed":    req.HopCount,
-			"got":       len(peers),
-			"shortfall": req.HopCount - len(peers),
-		}).Error("not enough peers")
+			"at":         "(TunnelBuilder) selectTunnelPeers",
+			"phase":      "tunnel_build",
+			"reason":     "insufficient peers returned by selector",
+			"needed":     req.HopCount,
+			"got":        len(peers),
+			"shortfall":  req.HopCount - len(peers),
+			"impact":     "tunnel build will fail",
+			"suggestion": "ensure sufficient peers in netDb or complete bootstrap",
+		}).Warn("not enough peers available for tunnel building")
 		return nil, fmt.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
@@ -242,8 +256,47 @@ func (tb *TunnelBuilder) createAllHopRecords(
 	for i := 0; i < req.HopCount; i++ {
 		record, replyKey, replyIV, err := tb.createHopRecord(i, req, tunnelID, peers)
 		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":        "(TunnelBuilder) createAllHopRecords",
+				"phase":     "tunnel_build",
+				"reason":    "hop record creation failed",
+				"hop_index": i,
+				"hop_count": req.HopCount,
+			}).Error("failed to create hop record")
 			return nil, nil, nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
 		}
+
+		// Determine hop position for logging
+		position := "participant"
+		if i == 0 {
+			if req.IsInbound {
+				position = "endpoint"
+			} else {
+				position = "gateway"
+			}
+		} else if i == req.HopCount-1 {
+			if req.IsInbound {
+				position = "gateway"
+			} else {
+				position = "endpoint"
+			}
+		}
+
+		// Get router hash for logging (with privacy protection)
+		routerHash, _ := peers[i].IdentHash()
+		routerHashStr := fmt.Sprintf("%x", routerHash[:])
+		log.WithFields(logger.Fields{
+			"at":             "(TunnelBuilder) createAllHopRecords",
+			"phase":          "tunnel_build",
+			"step":           i + 1,
+			"reason":         "hop record created successfully",
+			"tunnel_id":      tunnelID,
+			"hop_index":      i,
+			"hop_position":   position,
+			"router_hash":    fmt.Sprintf("%.12s...", routerHashStr),
+			"is_inbound":     req.IsInbound,
+			"keys_generated": true,
+		}).Debug("created build record for tunnel hop")
 
 		records[i] = record
 		replyKeys[i] = replyKey

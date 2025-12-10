@@ -132,12 +132,15 @@ func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":       "(LocalNetDbBootstrap) findNetDbDirectory",
-		"phase":    "bootstrap",
-		"reason":   "no valid netdb directory found",
-		"searched": len(lb.searchPaths),
-		"paths":    lb.searchPaths,
-	}).Error("no valid netdb directory found in search paths")
+		"at":         "(LocalNetDbBootstrap) findNetDbDirectory",
+		"phase":      "bootstrap",
+		"reason":     "no valid netdb directory found",
+		"searched":   len(lb.searchPaths),
+		"paths":      lb.searchPaths,
+		"os":         runtime.GOOS,
+		"impact":     "local netDb bootstrap will fail",
+		"suggestion": "install Java I2P or i2pd to populate local netDb",
+	}).Warn("no valid netdb directory found in search paths")
 	return "", fmt.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
@@ -219,7 +222,14 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 
 		ri, err := lb.readRouterInfoFromFile(filePath)
 		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to read RouterInfo file, skipping")
+			log.WithError(err).WithFields(logger.Fields{
+				"at":         "(LocalNetDbBootstrap) createWalkFunction",
+				"phase":      "bootstrap",
+				"reason":     "failed to read RouterInfo file",
+				"file":       filePath,
+				"error_type": fmt.Sprintf("%T", err),
+				"action":     "skipping",
+			}).Debug("failed to read RouterInfo file, skipping")
 			return nil
 		}
 
@@ -337,8 +347,12 @@ func getDefaultNetDbSearchPaths() []string {
 		if appData == "" {
 			// APPDATA environment variable not set - use standard fallback path
 			log.WithFields(logger.Fields{
-				"at":     "findWindowsNetDbPath",
-				"reason": "appdata_env_missing",
+				"at":            "getDefaultNetDbSearchPaths",
+				"phase":         "bootstrap",
+				"reason":        "appdata_env_missing",
+				"os":            "windows",
+				"fallback_path": filepath.Join(homeDir, "AppData", "Roaming"),
+				"impact":        "using default Windows AppData location",
 			}).Warn("APPDATA environment variable not set, using default path")
 			appData = filepath.Join(homeDir, "AppData", "Roaming")
 		}

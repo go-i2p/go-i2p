@@ -170,6 +170,33 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 		"router_count": len(serverRIs),
 	}).Debug("reseed HTTP request completed")
 
+	// Warn if reseed took longer than expected
+	if elapsed.Seconds() > 30 {
+		log.WithFields(logger.Fields{
+			"at":          "(ReseedBootstrap) attemptReseedFromServer",
+			"phase":       "bootstrap",
+			"reason":      "slow reseed operation detected",
+			"server_url":  server.Url,
+			"duration_ms": elapsed.Milliseconds(),
+			"threshold_s": 30,
+			"impact":      "may indicate network issues or server load",
+		}).Warn("reseed operation slower than expected")
+	}
+
+	// Warn if insufficient routers received
+	if len(serverRIs) < 50 {
+		log.WithFields(logger.Fields{
+			"at":           "(ReseedBootstrap) attemptReseedFromServer",
+			"phase":        "bootstrap",
+			"reason":       "insufficient routers from reseed server",
+			"server_url":   server.Url,
+			"router_count": len(serverRIs),
+			"minimum":      50,
+			"shortfall":    50 - len(serverRIs),
+			"impact":       "may need additional reseed servers",
+		}).Warn("reseed returned fewer routers than recommended")
+	}
+
 	return serverRIs, nil
 }
 
@@ -215,6 +242,8 @@ func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterIn
 			"failed_servers":     attemptedServers - successfulServers,
 			"router_count":       0,
 			"last_error":         lastErr.Error(),
+			"error_type":         fmt.Sprintf("%T", lastErr),
+			"recommendation":     "check network connectivity, firewall, and DNS resolution",
 		}).Error("all reseed attempts failed, no peers obtained")
 		return oops.Errorf("all reseed attempts failed: %w", lastErr)
 	}

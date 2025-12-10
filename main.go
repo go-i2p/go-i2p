@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -257,11 +258,32 @@ func runRouter() {
 	go signals.Handle()
 
 	log.WithFields(logger.Fields{
-		"at":     "runRouter",
-		"phase":  "startup",
-		"step":   1,
-		"reason": "parsing router configuration",
-	}).Debug("parsing i2p router configuration")
+		"at":          "runRouter",
+		"phase":       "startup",
+		"step":        1,
+		"reason":      "parsing router configuration",
+		"config_file": viper.ConfigFileUsed(),
+		"config_used": viper.ConfigFileUsed() != "",
+	}).Info("parsing i2p router configuration")
+
+	// Log configuration source
+	if viper.ConfigFileUsed() == "" {
+		log.WithFields(logger.Fields{
+			"at":       "runRouter",
+			"phase":    "startup",
+			"step":     1,
+			"reason":   "no config file found, using defaults",
+			"strategy": "defaults_and_flags",
+		}).Warn("no configuration file loaded, using default values and command-line flags")
+	} else {
+		log.WithFields(logger.Fields{
+			"at":          "runRouter",
+			"phase":       "startup",
+			"step":        1,
+			"reason":      "configuration file loaded",
+			"config_file": viper.ConfigFileUsed(),
+		}).Info("loaded configuration from file")
+	}
 
 	log.WithFields(logger.Fields{
 		"at":         "runRouter",
@@ -269,7 +291,8 @@ func runRouter() {
 		"step":       2,
 		"reason":     "netdb path configured",
 		"netdb_path": config.RouterConfigProperties.NetDb.Path,
-	}).Debug("using netDb in:", config.RouterConfigProperties.NetDb.Path)
+		"source":     "configuration",
+	}).Info("using netDb path: " + config.RouterConfigProperties.NetDb.Path)
 
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
@@ -329,9 +352,12 @@ func runRouter() {
 		routerInstance.Close()
 	} else {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "startup",
-			"reason": "router creation failed",
+			"at":         "runRouter",
+			"phase":      "startup",
+			"reason":     "router creation failed",
+			"error_type": fmt.Sprintf("%T", err),
+			"config":     config.RouterConfigProperties != nil,
+			"suggestion": "check configuration values and system resources",
 		}).Errorf("failed to create i2p router: %s", err)
 	}
 }

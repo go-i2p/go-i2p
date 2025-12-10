@@ -49,11 +49,13 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 		cb.fileBootstrap = NewFileBootstrap(cfg.ReseedFilePath)
 	} else {
 		log.WithFields(logger.Fields{
-			"at":     "(CompositeBootstrap) NewCompositeBootstrap",
-			"phase":  "bootstrap",
-			"step":   2,
-			"reason": "no local reseed file configured",
-		}).Debug("no local reseed file - will try reseed servers first")
+			"at":       "(CompositeBootstrap) NewCompositeBootstrap",
+			"phase":    "bootstrap",
+			"step":     2,
+			"reason":   "no local reseed file configured, using remote servers",
+			"fallback": "reseed_servers",
+			"strategy": "remote_first",
+		}).Warn("no local reseed file configured - will use remote reseed servers")
 	}
 
 	return cb
@@ -204,19 +206,24 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 func logFileBootstrapFailure(err error) {
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":       "(CompositeBootstrap) tryFileBootstrap",
-			"phase":    "bootstrap",
-			"step":     1,
-			"reason":   "file bootstrap failed, will try reseed",
-			"fallback": "reseed_bootstrap",
+			"at":         "(CompositeBootstrap) tryFileBootstrap",
+			"phase":      "bootstrap",
+			"step":       1,
+			"reason":     "file bootstrap failed, will try reseed",
+			"error_type": fmt.Sprintf("%T", err),
+			"fallback":   "reseed_bootstrap",
+			"next_step":  "attempting remote reseed servers",
 		}).Warn("file bootstrap failed, attempting remote reseed")
 	} else {
 		log.WithFields(logger.Fields{
-			"at":       "(CompositeBootstrap) tryFileBootstrap",
-			"phase":    "bootstrap",
-			"step":     1,
-			"reason":   "file bootstrap returned no peers",
-			"fallback": "reseed_bootstrap",
+			"at":        "(CompositeBootstrap) tryFileBootstrap",
+			"phase":     "bootstrap",
+			"step":      1,
+			"reason":    "file bootstrap returned no peers",
+			"peers":     0,
+			"expected":  ">0",
+			"fallback":  "reseed_bootstrap",
+			"next_step": "attempting remote reseed servers",
 		}).Warn("file bootstrap returned no peers, attempting remote reseed")
 	}
 }
@@ -225,28 +232,51 @@ func logFileBootstrapFailure(err error) {
 func logReseedFailure(err error) {
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"at":       "(CompositeBootstrap) tryReseedBootstrap",
-			"phase":    "bootstrap",
-			"step":     2,
-			"reason":   "reseed bootstrap failed, will try local netdb",
-			"fallback": "local_netdb_bootstrap",
+			"at":         "(CompositeBootstrap) tryReseedBootstrap",
+			"phase":      "bootstrap",
+			"step":       2,
+			"reason":     "reseed bootstrap failed, will try local netdb",
+			"error_type": fmt.Sprintf("%T", err),
+			"fallback":   "local_netdb_bootstrap",
+			"next_step":  "scanning for existing I2P netDb directories",
 		}).Warn("reseed bootstrap failed, attempting local netDb fallback")
 	} else {
 		log.WithFields(logger.Fields{
-			"at":       "(CompositeBootstrap) tryReseedBootstrap",
-			"phase":    "bootstrap",
-			"step":     2,
-			"reason":   "reseed bootstrap returned no peers",
-			"fallback": "local_netdb_bootstrap",
+			"at":        "(CompositeBootstrap) tryReseedBootstrap",
+			"phase":     "bootstrap",
+			"step":      2,
+			"reason":    "reseed bootstrap returned no peers",
+			"peers":     0,
+			"expected":  ">0",
+			"fallback":  "local_netdb_bootstrap",
+			"next_step": "scanning for existing I2P netDb directories",
 		}).Warn("reseed bootstrap returned no peers, attempting local netDb fallback")
 	}
 }
 
 // buildAggregatedError creates a detailed error message including all bootstrap method failures.
 func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
+	// Helper function to count failures
+	countFailures := func(errs ...error) int {
+		count := 0
+		for _, err := range errs {
+			if err != nil {
+				count++
+			}
+		}
+		return count
+	}
+
 	log.WithFields(logger.Fields{
-		"at":     "(CompositeBootstrap) Bootstrap",
-		"reason": "all_methods_exhausted",
+		"at":             "(CompositeBootstrap) Bootstrap",
+		"phase":          "bootstrap",
+		"reason":         "all_methods_exhausted",
+		"file_attempted": fileErr != nil,
+		"reseed_failed":  reseedErr != nil,
+		"netdb_failed":   netDbErr != nil,
+		"methods_tried":  3,
+		"methods_failed": countFailures(fileErr, reseedErr, netDbErr),
+		"recommendation": "check network connectivity and reseed server availability",
 	}).Error("all bootstrap methods failed")
 
 	// Build error message with all available error details
