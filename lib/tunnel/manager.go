@@ -51,6 +51,7 @@ func NewManager() *Manager {
 // Returns an error if the participant is nil or already exists.
 func (m *Manager) AddParticipant(p *Participant) error {
 	if p == nil {
+		log.WithField("at", "Manager.AddParticipant").Error("Cannot add nil participant")
 		return fmt.Errorf("cannot add nil participant")
 	}
 
@@ -82,6 +83,7 @@ func (m *Manager) RemoveParticipant(tunnelID TunnelID) bool {
 		return true
 	}
 
+	log.WithField("tunnel_id", tunnelID).Debug("Participant tunnel not found for removal")
 	return false
 }
 
@@ -94,7 +96,11 @@ func (m *Manager) GetParticipant(tunnelID TunnelID) *Participant {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.participants[tunnelID]
+	participant := m.participants[tunnelID]
+	if participant == nil {
+		log.WithField("tunnel_id", tunnelID).Debug("Participant tunnel not found")
+	}
+	return participant
 }
 
 // ParticipantCount returns the current number of participant tunnels.

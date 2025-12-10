@@ -2,6 +2,7 @@ package i2np
 
 import (
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/logger"
 )
 
 /*
@@ -64,6 +65,13 @@ type DatabaseSearchReply struct {
 
 // NewDatabaseSearchReply creates a new DatabaseSearchReply message
 func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *DatabaseSearchReply {
+	log.WithFields(logger.Fields{
+		"at":         "NewDatabaseSearchReply",
+		"key":        key.String()[:8],
+		"from":       from.String()[:8],
+		"peer_count": len(peerHashes),
+	}).Debug("Creating DatabaseSearchReply")
+
 	return &DatabaseSearchReply{
 		Key:        key,
 		Count:      len(peerHashes),
@@ -74,6 +82,12 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 
 // MarshalBinary serializes the DatabaseSearchReply message
 func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":         "DatabaseSearchReply.MarshalBinary",
+		"peer_count": d.Count,
+		"size":       32 + 1 + (d.Count * 32) + 32,
+	}).Debug("Serializing DatabaseSearchReply")
+
 	// Calculate size: key(32) + count(1) + peerHashes(count*32) + from(32)
 	size := 32 + 1 + (d.Count * 32) + 32
 	result := make([]byte, size)

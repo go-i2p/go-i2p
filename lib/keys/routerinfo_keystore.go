@@ -48,21 +48,31 @@ var _ KeyStore = (*RouterInfoKeystore)(nil)
 // it accepts a directory to store the keys in and a name for the keys
 // then it generates new private keys for the routerInfo if none exist
 func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
+	log.WithFields(map[string]interface{}{
+		"at":   "NewRouterInfoKeystore",
+		"dir":  dir,
+		"name": name,
+	}).Debug("Creating RouterInfo keystore")
+
 	if err := ensureDirectoryExists(dir); err != nil {
+		log.WithError(err).Error("Failed to ensure directory exists")
 		return nil, err
 	}
 
 	privateKey, err := loadOrGenerateKey(dir, name)
 	if err != nil {
+		log.WithError(err).Error("Failed to load or generate key")
 		return nil, err
 	}
 
 	// Generate X25519 encryption key pair for router
 	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate X25519 encryption key")
 		return nil, err
 	}
 
+	log.WithField("at", "NewRouterInfoKeystore").Debug("Successfully created RouterInfo keystore")
 	return initializeKeystore(dir, name, privateKey, encryptionPubKey, encryptionPrivKey), nil
 }
 
@@ -70,7 +80,9 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 // Returns an error if directory creation fails.
 func ensureDirectoryExists(dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		log.WithField("dir", dir).Debug("Creating keystore directory")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
+			log.WithError(err).Error("Failed to create directory")
 			return err
 		}
 	}
@@ -83,11 +95,14 @@ func ensureDirectoryExists(dir string) error {
 func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 	fullPath := filepath.Join(dir, name)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		log.WithField("path", fullPath).Debug("Generating new key")
 		return generateNewKey()
 	}
 
+	log.WithField("path", fullPath).Debug("Loading existing key")
 	keyData, err := os.ReadFile(fullPath)
 	if err != nil {
+		log.WithError(err).Error("Failed to read key file")
 		return nil, err
 	}
 
@@ -113,9 +128,11 @@ func generateNewKey() (types.PrivateKey, error) {
 	// Generate a new key pair using new concrete API - eliminates type assertion
 	_, privKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate Ed25519 key pair")
 		return nil, err
 	}
 
+	log.Debug("Generated new Ed25519 key pair")
 	// Return pointer to private key (required for interface compliance)
 	return privKey, nil
 }

@@ -24,34 +24,43 @@ type DestinationKeyStore struct {
 // This generates a new destination with fresh keys suitable for creating LeaseSet2s
 // using modern I2P cryptography (ECIES-X25519-AEAD-Ratchet compatible).
 func NewDestinationKeyStore() (*DestinationKeyStore, error) {
+	log.WithField("at", "NewDestinationKeyStore").Debug("Creating new destination keystore")
+
 	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate signing key pair")
 		return nil, err
 	}
 
 	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate encryption key pair")
 		return nil, err
 	}
 
 	keyCert, err := createKeyCertificate()
 	if err != nil {
+		log.WithError(err).Error("Failed to create key certificate")
 		return nil, err
 	}
 
 	padding, err := calculateKeyPadding()
 	if err != nil {
+		log.WithError(err).Error("Failed to calculate key padding")
 		return nil, err
 	}
 
 	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
 	if err != nil {
+		log.WithError(err).Error("Failed to assemble keys and cert")
 		return nil, err
 	}
 
 	dest := &destination.Destination{
 		KeysAndCert: keysAndCert,
 	}
+
+	log.WithField("at", "NewDestinationKeyStore").Debug("Successfully created destination keystore")
 
 	return &DestinationKeyStore{
 		destination:       dest,
@@ -64,6 +73,7 @@ func NewDestinationKeyStore() (*DestinationKeyStore, error) {
 func generateSigningKeyPair() (types.SigningPublicKey, types.SigningPrivateKey, error) {
 	signingPubKey, signingPrivKey, err := ed25519.GenerateEd25519KeyPair()
 	if err != nil {
+		log.WithError(err).Error("Ed25519 key generation failed")
 		return nil, nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
 	}
 	return signingPubKey, signingPrivKey, nil
@@ -73,6 +83,7 @@ func generateSigningKeyPair() (types.SigningPublicKey, types.SigningPrivateKey, 
 func generateEncryptionKeyPair() (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
 	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
 	if err != nil {
+		log.WithError(err).Error("X25519 key generation failed")
 		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
 	}
 	return encryptionPubKey, encryptionPrivKey, nil

@@ -199,6 +199,7 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 // This monitors tunnel health and builds new tunnels as needed.
 func (p *Pool) StartMaintenance() error {
 	if p.tunnelBuilder == nil {
+		log.WithField("at", "Pool.StartMaintenance").Error("Tunnel builder not set")
 		return fmt.Errorf("tunnel builder not set")
 	}
 
@@ -440,6 +441,7 @@ func (p *Pool) SelectTunnel() *TunnelState {
 
 	active := p.getActiveTunnelsLocked()
 	if len(active) == 0 {
+		log.WithField("at", "Pool.SelectTunnel").Debug("No active tunnels available")
 		return nil
 	}
 
