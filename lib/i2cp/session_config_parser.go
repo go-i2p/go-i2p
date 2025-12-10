@@ -39,19 +39,52 @@ import (
 //   - Destination (variable length, typically ~387+ bytes)
 //   - Options Mapping (2-byte size + key=value; pairs)
 func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *SessionConfig, error) {
+	// i2psnark compatibility: Log payload size for debugging
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.ParseCreateSessionPayload",
+		"payloadSize": len(payload),
+	}).Debug("parsing_create_session_payload")
+
 	if len(payload) < 2 {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.ParseCreateSessionPayload",
+			"payloadSize": len(payload),
+			"required":    2,
+		}).Error("create_session_payload_too_short")
 		return nil, nil, fmt.Errorf("create session payload too short: %d bytes", len(payload))
 	}
 
 	// Parse destination (reads variable-length structure)
 	dest, remainingBytes, err := parseDestination(payload)
 	if err != nil {
+		// i2psnark compatibility: Log destination parsing failure with excerpt
+		excerptLen := 64
+		if len(payload) < excerptLen {
+			excerptLen = len(payload)
+		}
+		log.WithFields(logger.Fields{
+			"at":             "i2cp.ParseCreateSessionPayload",
+			"error":          err.Error(),
+			"payloadSize":    len(payload),
+			"payloadExcerpt": fmt.Sprintf("%x", payload[:excerptLen]),
+		}).Error("failed_to_parse_destination")
 		return nil, nil, fmt.Errorf("failed to parse destination: %w", err)
 	}
 
 	// Parse options mapping from remaining bytes
+	log.WithFields(logger.Fields{
+		"at":             "i2cp.ParseCreateSessionPayload",
+		"remainingBytes": len(remainingBytes),
+	}).Debug("parsing_session_options")
+
 	config, err := parseSessionOptions(remainingBytes)
 	if err != nil {
+		// i2psnark compatibility: Log options parsing failure
+		log.WithFields(logger.Fields{
+			"at":             "i2cp.ParseCreateSessionPayload",
+			"error":          err.Error(),
+			"remainingBytes": len(remainingBytes),
+		}).Error("failed_to_parse_session_options")
 		return nil, nil, fmt.Errorf("failed to parse session options: %w", err)
 	}
 

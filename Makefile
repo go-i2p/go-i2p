@@ -46,4 +46,5 @@ godoc:
 	git commit -am "GODOC UPDATE CHECKIN"
 
 run:
-	DEBUG_I2P=warn go run . --netdb.path /home/idk/.i2p/netDb 2>&1 | tee go-i2p.log
+	go build -v .
+	DEBUG_I2P=warn ./go-i2p --netdb.path ${HOME}/.i2p/netDb 2>&1 | tee go-i2p.log

@@ -177,12 +177,16 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	msgType, sessionID, payloadLen := parseMessageHeader(header)
 
 	if err := validatePayloadSize(payloadLen); err != nil {
+		// i2psnark compatibility: Log full header details for debugging oversized payloads
 		log.WithFields(logger.Fields{
 			"at":         "i2cp.ReadMessage",
 			"remoteAddr": connInfo,
+			"msgType":    MessageTypeName(msgType),
+			"msgTypeID":  msgType,
+			"sessionID":  sessionID,
 			"payloadLen": payloadLen,
 			"maxAllowed": MaxPayloadSize,
-			"msgType":    MessageTypeName(msgType),
+			"headerHex":  fmt.Sprintf("%x", header),
 		}).Error("payload_size_exceeded_max")
 		return nil, err
 	}
@@ -247,6 +251,16 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 	msgType = header[0]
 	sessionID = binary.BigEndian.Uint16(header[1:3])
 	payloadLen = binary.BigEndian.Uint32(header[3:7])
+
+	// i2psnark compatibility: Debug log all message headers to identify patterns
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.parseMessageHeader",
+		"msgType":    MessageTypeName(msgType),
+		"msgTypeID":  msgType,
+		"sessionID":  sessionID,
+		"payloadLen": payloadLen,
+	}).Debug("parsed_message_header")
+
 	return
 }
 

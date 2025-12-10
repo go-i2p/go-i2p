@@ -244,10 +244,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 // logClientConnected logs when a client connects to the server.
 func (s *Server) logClientConnected(conn net.Conn) {
+	// i2psnark compatibility: Track client connection details for debugging
 	log.WithFields(logger.Fields{
 		"at":             "i2cp.Server.handleConnection",
 		"remoteAddr":     conn.RemoteAddr().String(),
 		"localAddr":      conn.LocalAddr().String(),
+		"network":        conn.RemoteAddr().Network(),
 		"activeSessions": s.manager.SessionCount(),
 	}).Info("client_connected")
 }
@@ -336,11 +338,15 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 
 	msg, err := ReadMessage(conn)
 	if err != nil {
+		// i2psnark compatibility: Log connection state on read failures
+		state := s.getOrCreateConnectionState(conn)
 		log.WithFields(logger.Fields{
-			"at":         "i2cp.Server.readClientMessage",
-			"remoteAddr": conn.RemoteAddr().String(),
-			"error":      err.Error(),
-		}).Debug("failed_to_read_message")
+			"at":           "i2cp.Server.readClientMessage",
+			"remoteAddr":   conn.RemoteAddr().String(),
+			"error":        err.Error(),
+			"messageCount": state.messageCount,
+			"bytesRead":    state.bytesRead,
+		}).Warn("failed_to_read_message")
 		return nil, err
 	}
 
@@ -486,6 +492,21 @@ func (s *Server) sendResponse(conn net.Conn, response *Message) error {
 
 // handleMessage processes a single I2CP message and returns an optional response
 func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, error) {
+	// i2psnark compatibility: Log all incoming messages for debugging
+	var currentSessionID uint16
+	if *sessionPtr != nil {
+		currentSessionID = (*sessionPtr).ID()
+	}
+
+	log.WithFields(logger.Fields{
+		"at":               "i2cp.Server.handleMessage",
+		"msgType":          MessageTypeName(msg.Type),
+		"msgTypeID":        msg.Type,
+		"msgSessionID":     msg.SessionID,
+		"currentSessionID": currentSessionID,
+		"payloadSize":      len(msg.Payload),
+	}).Debug("processing_i2cp_message")
+
 	switch msg.Type {
 	case MessageTypeCreateSession:
 		return s.handleCreateSession(msg, sessionPtr)
@@ -509,11 +530,14 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 		return s.handleSendMessage(msg, sessionPtr)
 
 	default:
+		// i2psnark compatibility: Log unsupported message types with full context
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.handleMessage",
-			"type":        msg.Type,
+			"msgType":     MessageTypeName(msg.Type),
+			"msgTypeID":   msg.Type,
 			"sessionID":   msg.SessionID,
 			"payloadSize": len(msg.Payload),
+			"payloadHex":  fmt.Sprintf("%x", msg.Payload[:min(32, len(msg.Payload))]),
 		}).Warn("unsupported_message_type")
 		return nil, fmt.Errorf("unsupported message type: %d", msg.Type)
 	}
@@ -538,6 +562,7 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 
 	*sessionPtr = session
 
+	// i2psnark compatibility: Log detailed session creation info
 	log.WithFields(logger.Fields{
 		"at":                     "i2cp.Server.handleCreateSession",
 		"sessionID":              session.ID(),
@@ -545,6 +570,8 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 		"outbound_tunnel_length": config.OutboundTunnelLength,
 		"inbound_tunnel_count":   config.InboundTunnelCount,
 		"outbound_tunnel_count":  config.OutboundTunnelCount,
+		"payloadSize":            len(msg.Payload),
+		"hasDestination":         dest != nil,
 	}).Info("session_created")
 
 	// Build success response
@@ -670,6 +697,13 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 
 	session := *sessionPtr
 
+	// i2psnark compatibility: Log LeaseSet creation request
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleCreateLeaseSet",
+		"sessionID":   session.ID(),
+		"payloadSize": len(msg.Payload),
+	}).Debug("creating_leaseset")
+
 	// Create LeaseSet from session's inbound tunnels
 	leaseSetBytes, err := session.CreateLeaseSet()
 	if err != nil {
@@ -709,6 +743,12 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 
 // handleGetDate returns the current router time
 func (s *Server) handleGetDate(msg *Message) (*Message, error) {
+	// i2psnark compatibility: Log time query
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleGetDate",
+		"sessionID": msg.SessionID,
+	}).Debug("handling_get_date_request")
+
 	// I2P time format: 8 bytes representing milliseconds since Unix epoch (big endian)
 	currentTimeMillis := time.Now().UnixMilli()
 
@@ -819,26 +859,42 @@ func (s *Server) validateSessionForSending(sessionPtr **Session) (*Session, erro
 
 // parseSendMessagePayload parses the SendMessage payload from the message.
 func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendMessagePayload, error) {
+	// i2psnark compatibility: Log SendMessage details before parsing
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.parseSendMessagePayload",
+		"sessionID":   session.ID(),
+		"payloadSize": len(msg.Payload),
+	}).Debug("parsing_send_message_payload")
+
 	sendMsg, err := ParseSendMessagePayload(msg.Payload)
 	if err != nil {
+		// i2psnark compatibility: Show payload excerpt on parse failure
+		excerptLen := min(64, len(msg.Payload))
 		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.parseSendMessagePayload",
-			"sessionID": session.ID(),
-			"error":     err,
+			"at":             "i2cp.Server.parseSendMessagePayload",
+			"sessionID":      session.ID(),
+			"payloadSize":    len(msg.Payload),
+			"error":          err,
+			"payloadExcerpt": fmt.Sprintf("%x", msg.Payload[:excerptLen]),
 		}).Error("failed_to_parse_send_message")
 		return nil, fmt.Errorf("failed to parse SendMessage payload: %w", err)
 	}
 
 	// Validate payload size to prevent exceeding I2CP limits after garlic encryption
-	// Account for overhead: Data message (4 bytes) + garlic encryption (~200 bytes typical)
+	// i2psnark compatibility: Account for overhead from garlic encryption
+	// Data message (4 bytes) + garlic encryption (~200 bytes typical)
 	// Conservative limit: MaxPayloadSize - 512 bytes for all overhead
 	const maxSafePayloadSize = MaxPayloadSize - 512
 	if len(sendMsg.Payload) > maxSafePayloadSize {
+		// i2psnark compatibility: Log detailed size information for debugging
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.parseSendMessagePayload",
-			"sessionID":   session.ID(),
-			"payloadSize": len(sendMsg.Payload),
-			"maxAllowed":  maxSafePayloadSize,
+			"at":              "i2cp.Server.parseSendMessagePayload",
+			"sessionID":       session.ID(),
+			"payloadSize":     len(sendMsg.Payload),
+			"maxAllowed":      maxSafePayloadSize,
+			"maxPayloadSize":  MaxPayloadSize,
+			"overhead":        512,
+			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 		}).Error("send_message_payload_too_large")
 		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
 			len(sendMsg.Payload), maxSafePayloadSize)
@@ -1141,4 +1197,12 @@ func (s *Server) logMessageDelivered(sessionID uint16, messageID uint32, size in
 		"messageID":   messageID,
 		"payloadSize": size,
 	}).Info("delivered_message_to_client")
+}
+
+// min returns the minimum of two integers (helper for i2psnark compatibility logging)
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
