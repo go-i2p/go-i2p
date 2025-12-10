@@ -3,6 +3,7 @@ package ntcp2
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
@@ -130,7 +131,8 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 		if err != nil {
 			continue
 		}
-		if str == "ntcp2" {
+		// Check case-insensitively - some implementations use "NTCP2", others "ntcp2"
+		if strings.EqualFold(str, "ntcp2") {
 			log.Debug("RouterInfo supports NTCP2")
 			return true
 		}
