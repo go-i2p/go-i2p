@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/go-i2p/common/router_address"
@@ -163,6 +164,13 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 
 	if port == "" {
 		return errors.New("NTCP2 port is empty")
+	}
+
+	// Try to actually resolve the address to catch invalid IPs early
+	hostPort := fmt.Sprintf("%s:%s", hostData, port)
+	_, err = net.ResolveTCPAddr("tcp", hostPort)
+	if err != nil {
+		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
 	}
 
 	// Optional: validate static key exists (common in NTCP2)
