@@ -480,11 +480,40 @@ func (r *Router) ensureNetDBReady() error {
 func (r *Router) performReseed() error {
 	log.Info("NetDB below threshold, initiating bootstrap")
 
-	// Use composite bootstrap which tries reseed first, then falls back to local netDb
-	bootstrapper := bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
+	// Create the appropriate bootstrapper based on user configuration
+	var bootstrapper bootstrap.Bootstrap
+
+	switch r.cfg.Bootstrap.BootstrapType {
+	case "file":
+		// Use file bootstrap only
+		if r.cfg.Bootstrap.ReseedFilePath == "" {
+			return fmt.Errorf("bootstrap_type is 'file' but no reseed_file_path is configured")
+		}
+		log.Info("Using file bootstrap only (as specified by bootstrap_type)")
+		bootstrapper = bootstrap.NewFileBootstrap(r.cfg.Bootstrap.ReseedFilePath)
+
+	case "reseed":
+		// Use reseed bootstrap only
+		log.Info("Using reseed bootstrap only (as specified by bootstrap_type)")
+		bootstrapper = bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
+
+	case "local":
+		// Use local netDb bootstrap only
+		log.Info("Using local netDb bootstrap only (as specified by bootstrap_type)")
+		bootstrapper = bootstrap.NewLocalNetDbBootstrap(r.cfg.Bootstrap)
+
+	case "auto", "":
+		// Use composite bootstrap which tries all methods
+		log.Info("Using composite bootstrap (tries all methods)")
+		bootstrapper = bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
+
+	default:
+		log.WithField("bootstrap_type", r.cfg.Bootstrap.BootstrapType).Warn("Unknown bootstrap_type, falling back to composite bootstrap")
+		bootstrapper = bootstrap.NewCompositeBootstrap(r.cfg.Bootstrap)
+	}
 
 	if err := r.StdNetDB.Reseed(bootstrapper, r.cfg.Bootstrap.LowPeerThreshold); err != nil {
-		log.WithError(err).Warn("Bootstrap failed (both reseed and local netDb), continuing with limited NetDB")
+		log.WithError(err).Warn("Bootstrap failed, continuing with limited NetDB")
 		return err
 	}
 	return nil

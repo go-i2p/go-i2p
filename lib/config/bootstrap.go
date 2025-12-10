@@ -17,6 +17,10 @@ type BootstrapConfig struct {
 	// LowPeerThreshold defines the minimum number of known peers before reseeding.
 	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
+	// BootstrapType specifies which bootstrap method to use exclusively.
+	// Valid values: "auto" (default, tries all methods), "file", "reseed", "local"
+	// When set to a specific type, only that method will be used.
+	BootstrapType string
 	// ReseedFilePath specifies a local reseed file (zip or su3 format).
 	// If set, this takes priority over remote reseed servers.
 	ReseedFilePath string
@@ -35,7 +39,8 @@ type BootstrapConfig struct {
 // Additional reseed servers from the I2P network can be added via configuration.
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
-	ReseedFilePath:   "", // No default reseed file
+	BootstrapType:    "auto", // Default to composite (tries all methods)
+	ReseedFilePath:   "",     // No default reseed file
 	// Default reseed server (run by go-i2p dev team)
 	// Additional reseed servers should be configured via config file
 	ReseedServers: []*ReseedConfig{

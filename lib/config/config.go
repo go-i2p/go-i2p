@@ -57,6 +57,7 @@ func setDefaults() {
 
 	// Bootstrap defaults
 	viper.SetDefault("bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold)
+	viper.SetDefault("bootstrap.bootstrap_type", defaults.Bootstrap.BootstrapType)
 	viper.SetDefault("bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout)
 	viper.SetDefault("bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers)
 	viper.SetDefault("bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval)
@@ -125,6 +126,7 @@ func NewRouterConfigFromViper() *RouterConfig {
 
 	bootstrapConfig := &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
+		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
 		LocalNetDbPaths:  localNetDbPaths,
@@ -175,6 +177,7 @@ func UpdateRouterConfig() {
 
 	RouterConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
+		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
 		LocalNetDbPaths:  localNetDbPaths,

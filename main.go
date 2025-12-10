@@ -55,6 +55,8 @@ func registerNetDbFlags() {
 func registerBootstrapFlags() {
 	RootCmd.PersistentFlags().Int("bootstrap.low-peer-threshold", config.DefaultBootstrapConfig.LowPeerThreshold,
 		"Minimum number of peers before reseeding")
+	RootCmd.PersistentFlags().String("bootstrap.type", config.DefaultBootstrapConfig.BootstrapType,
+		"Bootstrap type: auto (tries all methods), file (local file only), reseed (remote only), local (netDb only)")
 	RootCmd.PersistentFlags().String("bootstrap.reseed-file", "",
 		"Path to local reseed file (zip or su3) - takes priority over remote reseed servers")
 }
@@ -101,6 +103,9 @@ func bindBootstrapFlagsToViper() {
 	if err := viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold")); err != nil {
 		log.WithError(err).Fatal("Failed to bind bootstrap.low_peer_threshold flag")
 	}
+	if err := viper.BindPFlag("bootstrap.bootstrap_type", RootCmd.PersistentFlags().Lookup("bootstrap.type")); err != nil {
+		log.WithError(err).Fatal("Failed to bind bootstrap.bootstrap_type flag")
+	}
 	if err := viper.BindPFlag("bootstrap.reseed_file_path", RootCmd.PersistentFlags().Lookup("bootstrap.reseed-file")); err != nil {
 		log.WithError(err).Fatal("Failed to bind bootstrap.reseed_file_path flag")
 	}
@@ -136,7 +141,10 @@ var configCmd = &cobra.Command{
 
 		log.WithField("netdb_path", config.RouterConfigProperties.NetDb.Path).Info("NetDb configuration")
 
-		log.WithField("low_peer_threshold", config.RouterConfigProperties.Bootstrap.LowPeerThreshold).Info("Bootstrap configuration")
+		log.WithFields(logger.Fields{
+			"low_peer_threshold": config.RouterConfigProperties.Bootstrap.LowPeerThreshold,
+			"bootstrap_type":     config.RouterConfigProperties.Bootstrap.BootstrapType,
+		}).Info("Bootstrap configuration")
 
 		log.Info("Reseed servers:")
 		for _, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {

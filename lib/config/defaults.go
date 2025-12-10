@@ -98,6 +98,11 @@ type BootstrapDefaults struct {
 	// Default: 10 peers
 	LowPeerThreshold int
 
+	// BootstrapType specifies which bootstrap method to use
+	// Valid values: "auto", "file", "reseed", "local"
+	// Default: "auto" (tries all methods)
+	BootstrapType string
+
 	// ReseedTimeout is maximum time to wait for reseed operations
 	// Default: 60 seconds
 	ReseedTimeout time.Duration
@@ -299,6 +304,7 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 func buildBootstrapDefaults() BootstrapDefaults {
 	return BootstrapDefaults{
 		LowPeerThreshold:    10,
+		BootstrapType:       "auto",
 		ReseedTimeout:       60 * time.Second,
 		MinimumReseedPeers:  50,
 		ReseedRetryInterval: 5 * time.Minute,

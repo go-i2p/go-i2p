@@ -40,6 +40,16 @@ bootstrap:
   # Trigger reseeding when peer count falls below this threshold
   low_peer_threshold: 10
   
+  # Bootstrap type: which bootstrap method to use exclusively
+  # Valid values:
+  #   "auto"   - Default: tries all methods (file -> reseed -> local netDb)
+  #   "file"   - Use only local reseed file (requires reseed_file_path)
+  #   "reseed" - Use only remote reseed servers
+  #   "local"  - Use only local netDb directories
+  # When set to a specific type (file/reseed/local), ONLY that method will be used.
+  # If that method fails, bootstrap will fail (no fallback to other methods).
+  bootstrap_type: "auto"
+  
   # Maximum time to wait for reseed operations
   reseed_timeout: 60s
   
