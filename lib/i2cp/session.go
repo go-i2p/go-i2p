@@ -255,7 +255,10 @@ func prepareDestinationAndKeys(dest *destination.Destination) (*keys.Destination
 func createIsolatedNetDB() *netdb.ClientNetDB {
 	stdDB := netdb.NewStdNetDB("")
 	clientNetDB := netdb.NewClientNetDB(stdDB)
-	log.Debug("Created ephemeral in-memory NetDB for client session")
+	log.WithFields(logger.Fields{
+		"at":     "createIsolatedNetDB",
+		"reason": "ephemeral_session_storage",
+	}).Debug("created ephemeral in-memory NetDB for client session")
 	return clientNetDB
 }
 
@@ -404,7 +407,12 @@ func (s *Session) checkSessionActive() error {
 // checkRateLimit applies rate limiting if configured for this session.
 func (s *Session) checkRateLimit() error {
 	if s.messageRateLimiter != nil && !s.messageRateLimiter.allow() {
-		log.WithField("session_id", s.id).Warn("Message rate limit exceeded")
+		log.WithFields(logger.Fields{
+			"at":              "(Session) SendMessage",
+			"reason":          "rate_limit_exceeded",
+			"session_id":      s.id,
+			"rate_limit_msgs": s.config.MessageRateLimit,
+		}).Warn("message rate limit exceeded")
 		return fmt.Errorf("message rate limit exceeded for session %d", s.id)
 	}
 	return nil

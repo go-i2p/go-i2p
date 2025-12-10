@@ -3,6 +3,7 @@ package netdb
 import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/logger"
 )
 
 // ClientNetDB provides a client-focused interface to the network database.
@@ -21,7 +22,10 @@ type ClientNetDB struct {
 // NewClientNetDB creates a new client-focused network database view.
 // It wraps an existing StdNetDB and exposes only LeaseSet-related operations.
 func NewClientNetDB(db *StdNetDB) *ClientNetDB {
-	log.Debug("Creating new ClientNetDB")
+	log.WithFields(logger.Fields{
+		"at":     "NewClientNetDB",
+		"reason": "initialization",
+	}).Debug("creating new ClientNetDB")
 	return &ClientNetDB{
 		db: db,
 	}
@@ -84,7 +88,10 @@ func (c *ClientNetDB) GetLeaseSetCount() int {
 // Ensure verifies that the underlying database resources exist.
 // This should be called during initialization.
 func (c *ClientNetDB) Ensure() error {
-	log.Debug("ClientNetDB: Ensuring database resources")
+	log.WithFields(logger.Fields{
+		"at":     "ClientNetDB.EnsureResources",
+		"reason": "ephemeral_db_no_action",
+	}).Debug("ensuring database resources")
 	return c.db.Ensure()
 }
 

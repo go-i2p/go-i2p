@@ -369,14 +369,20 @@ func buildPerformanceDefaults() PerformanceDefaults {
 // Validate checks if the provided configuration values are reasonable.
 // Returns an error describing the first invalid value found.
 func Validate(cfg ConfigDefaults) error {
-	log.Debug("Validating configuration defaults")
+	log.WithFields(logger.Fields{
+		"at":     "ValidateConfigDefaults",
+		"reason": "verification_requested",
+	}).Debug("validating configuration defaults")
 	return runConfigValidators(cfg)
 }
 
 // runConfigValidators executes all configuration validators in sequence.
 // Returns the first error encountered or nil if all validations pass.
 func runConfigValidators(cfg ConfigDefaults) error {
-	log.Debug("Running all configuration validators")
+	log.WithFields(logger.Fields{
+		"at":     "ValidateConfigDefaults",
+		"reason": "running_all_validators",
+	}).Debug("running all configuration validators")
 	validators := []func() error{
 		func() error { return validateRouter(cfg.Router) },
 		func() error { return validateNetDB(cfg.NetDB) },
@@ -393,13 +399,19 @@ func runConfigValidators(cfg ConfigDefaults) error {
 			return err
 		}
 	}
-	log.Info("All configuration validations passed successfully")
+	log.WithFields(logger.Fields{
+		"at":     "ValidateConfigDefaults",
+		"reason": "all_validators_passed",
+	}).Info("all configuration validations passed successfully")
 	return nil
 }
 
 // validateRouter validates router configuration settings.
 func validateRouter(router RouterDefaults) error {
-	log.Debug("Validating router configuration")
+	log.WithFields(logger.Fields{
+		"at":     "validateRouterConfig",
+		"reason": "validating_router_settings",
+	}).Debug("validating router configuration")
 	if router.MaxConcurrentSessions < 1 {
 		log.WithField("max_concurrent_sessions", router.MaxConcurrentSessions).Error("Invalid router configuration")
 		return newValidationError("Router.MaxConcurrentSessions must be at least 1")
@@ -408,7 +420,10 @@ func validateRouter(router RouterDefaults) error {
 		log.WithField("message_expiration_time", router.MessageExpirationTime).Error("Invalid router configuration")
 		return newValidationError("Router.MessageExpirationTime must be at least 1 second")
 	}
-	log.Debug("Router configuration validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "validateRouterConfig",
+		"reason": "validation_passed",
+	}).Debug("router configuration validated successfully")
 	return nil
 }
 

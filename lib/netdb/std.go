@@ -125,7 +125,10 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 	// Add to cache if not already present
 	db.riMutex.Lock()
 	if _, ok := db.RouterInfos[hash]; !ok {
-		log.Debug("Adding RouterInfo to memory cache")
+		log.WithFields(logger.Fields{
+			"at":     "StdNetDB.parseAndCacheRouterInfo",
+			"reason": "new_entry",
+		}).Debug("adding RouterInfo to memory cache")
 		db.RouterInfos[hash] = Entry{
 			RouterInfo: &ri,
 		}
@@ -136,7 +139,10 @@ func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (rout
 }
 
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
-	log.Debug("Getting all RouterInfos")
+	log.WithFields(logger.Fields{
+		"at":     "StdNetDB.GetAllRouterInfos",
+		"reason": "bulk_retrieval",
+	}).Debug("getting all RouterInfos")
 	db.riMutex.Lock()
 	ri = make([]router_info.RouterInfo, 0, len(db.RouterInfos))
 	for _, e := range db.RouterInfos {
@@ -217,12 +223,20 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 
 	// If we have fewer available peers than requested, return all
 	if len(available) <= count {
-		log.WithField("available_peers", len(available)).Debug("Returning all available peers")
+		log.WithFields(logger.Fields{
+			"at":              "StdNetDB.SelectPeers",
+			"reason":          "requested_exceeds_available",
+			"available_peers": len(available),
+		}).Debug("returning all available peers")
 		return available, nil
 	}
 
 	selected := db.selectRandomPeers(available, count)
-	log.WithField("selected_peers", count).Debug("Peer selection completed")
+	log.WithFields(logger.Fields{
+		"at":             "StdNetDB.SelectPeers",
+		"reason":         "selection_complete",
+		"selected_peers": count,
+	}).Debug("peer selection completed")
 	return selected, nil
 }
 
@@ -259,7 +273,11 @@ func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([
 		return nil, fmt.Errorf("no floodfill routers available in NetDB")
 	}
 
-	log.WithField("floodfill_count", len(floodfills)).Debug("Found floodfill routers")
+	log.WithFields(logger.Fields{
+		"at":              "StdNetDB.SelectFloodfillRouters",
+		"reason":          "floodfill_selection_complete",
+		"floodfill_count": len(floodfills),
+	}).Debug("found floodfill routers")
 
 	// Calculate XOR distances and select closest
 	return db.selectClosestByXORDistance(floodfills, targetHash, count), nil

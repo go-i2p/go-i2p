@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/logger"
 )
 
 // Manager coordinates all tunnel operations including participant tracking.
@@ -37,7 +39,10 @@ func NewManager() *Manager {
 	m.wg.Add(1)
 	go m.cleanupLoop()
 
-	log.Info("Tunnel manager started")
+	log.WithFields(logger.Fields{
+		"at":     "NewManager",
+		"reason": "initialization",
+	}).Info("tunnel manager started")
 	return m
 }
 
@@ -51,7 +56,10 @@ func NewManager() *Manager {
 // Returns an error if the participant is nil or already exists.
 func (m *Manager) AddParticipant(p *Participant) error {
 	if p == nil {
-		log.WithField("at", "Manager.AddParticipant").Error("Cannot add nil participant")
+		log.WithFields(logger.Fields{
+			"at":     "Manager.AddParticipant",
+			"reason": "nil_participant_rejected",
+		}).Error("cannot add nil participant")
 		return fmt.Errorf("cannot add nil participant")
 	}
 
@@ -60,11 +68,19 @@ func (m *Manager) AddParticipant(p *Participant) error {
 
 	tunnelID := p.TunnelID()
 	if _, exists := m.participants[tunnelID]; exists {
-		log.WithField("tunnel_id", tunnelID).Warn("Participant already exists, replacing")
+		log.WithFields(logger.Fields{
+			"at":        "Manager.AddParticipant",
+			"reason":    "duplicate_tunnel_id",
+			"tunnel_id": tunnelID,
+		}).Warn("participant already exists, replacing")
 	}
 
 	m.participants[tunnelID] = p
-	log.WithField("tunnel_id", tunnelID).Debug("Added participant tunnel")
+	log.WithFields(logger.Fields{
+		"at":        "Manager.AddParticipant",
+		"reason":    "registered_for_relay",
+		"tunnel_id": tunnelID,
+	}).Debug("added participant tunnel")
 
 	return nil
 }
@@ -79,11 +95,19 @@ func (m *Manager) RemoveParticipant(tunnelID TunnelID) bool {
 
 	if _, exists := m.participants[tunnelID]; exists {
 		delete(m.participants, tunnelID)
-		log.WithField("tunnel_id", tunnelID).Debug("Removed participant tunnel")
+		log.WithFields(logger.Fields{
+			"at":        "Manager.RemoveParticipant",
+			"reason":    "cleanup_or_expiry",
+			"tunnel_id": tunnelID,
+		}).Debug("removed participant tunnel")
 		return true
 	}
 
-	log.WithField("tunnel_id", tunnelID).Debug("Participant tunnel not found for removal")
+	log.WithFields(logger.Fields{
+		"at":        "Manager.RemoveParticipant",
+		"reason":    "not_found",
+		"tunnel_id": tunnelID,
+	}).Debug("participant tunnel not found for removal")
 	return false
 }
 
@@ -98,7 +122,11 @@ func (m *Manager) GetParticipant(tunnelID TunnelID) *Participant {
 
 	participant := m.participants[tunnelID]
 	if participant == nil {
-		log.WithField("tunnel_id", tunnelID).Debug("Participant tunnel not found")
+		log.WithFields(logger.Fields{
+			"at":        "Manager.GetParticipant",
+			"reason":    "not_found",
+			"tunnel_id": tunnelID,
+		}).Debug("participant tunnel not found")
 	}
 	return participant
 }
@@ -128,7 +156,10 @@ func (m *Manager) cleanupLoop() {
 	for {
 		select {
 		case <-m.stopChan:
-			log.Debug("Tunnel manager cleanup loop stopping")
+			log.WithFields(logger.Fields{
+				"at":     "Manager.cleanupLoop",
+				"reason": "shutdown_signal",
+			}).Debug("tunnel manager cleanup loop stopping")
 			return
 		case <-ticker.C:
 			m.cleanupExpiredParticipants()
@@ -156,7 +187,11 @@ func (m *Manager) cleanupExpiredParticipants() {
 	}
 
 	if len(expired) > 0 {
-		log.WithField("count", len(expired)).Info("Cleaned up expired participant tunnels")
+		log.WithFields(logger.Fields{
+			"at":     "Manager.cleanupExpiredParticipants",
+			"reason": "expiry_maintenance",
+			"count":  len(expired),
+		}).Info("cleaned up expired participant tunnels")
 	}
 }
 
@@ -165,7 +200,10 @@ func (m *Manager) cleanupExpiredParticipants() {
 //
 // This should be called during router shutdown.
 func (m *Manager) Stop() {
-	log.Info("Stopping tunnel manager")
+	log.WithFields(logger.Fields{
+		"at":     "Manager.Stop",
+		"reason": "shutdown_requested",
+	}).Info("stopping tunnel manager")
 	close(m.stopChan)
 	m.wg.Wait()
 
@@ -174,5 +212,9 @@ func (m *Manager) Stop() {
 	m.participants = make(map[TunnelID]*Participant)
 	m.mu.Unlock()
 
-	log.WithField("cleared_participants", participantCount).Info("Tunnel manager stopped")
+	log.WithFields(logger.Fields{
+		"at":                   "Manager.Stop",
+		"reason":               "shutdown_complete",
+		"cleared_participants": participantCount,
+	}).Info("tunnel manager stopped")
 }

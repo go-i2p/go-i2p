@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/logger"
 )
 
 // MessageHandler is a callback function for processing received I2NP messages.
@@ -97,7 +98,11 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	// Start background cleanup goroutine
 	go ep.cleanupFragments()
 
-	log.WithField("tunnel_id", tunnelID).Debug("Created tunnel endpoint")
+	log.WithFields(logger.Fields{
+		"at":        "NewEndpoint",
+		"reason":    "inbound_endpoint_created",
+		"tunnel_id": tunnelID,
+	}).Debug("created tunnel endpoint")
 	return ep, nil
 }
 
@@ -114,8 +119,13 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 // Thread-safe: protects fragment map access with mutex.
 // Returns an error if processing fails at any step.
 func (e *Endpoint) Receive(encryptedData []byte) error {
-	if len(encryptedData) != 1028 {
-		log.WithField("size", len(encryptedData)).Error("Invalid tunnel data size")
+	if len(encryptedData) != 1024 {
+		log.WithFields(logger.Fields{
+			"at":       "(Endpoint) Receive",
+			"reason":   "invalid_data_size",
+			"size":     len(encryptedData),
+			"expected": 1024,
+		}).Error("invalid tunnel data size")
 		return ErrInvalidTunnelData
 	}
 
@@ -135,7 +145,11 @@ func (e *Endpoint) Receive(encryptedData []byte) error {
 		return err
 	}
 
-	log.WithField("tunnel_id", e.tunnelID).Debug("Successfully received message through endpoint")
+	log.WithFields(logger.Fields{
+		"at":        "(Endpoint) Receive",
+		"reason":    "message_received",
+		"tunnel_id": e.tunnelID,
+	}).Debug("successfully received message through endpoint")
 	return nil
 }
 
@@ -147,7 +161,11 @@ func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 	// Legacy AES uses AES-256-CBC with dual-layer decryption
 	decrypted, err := e.decryption.Decrypt(encryptedData)
 	if err != nil {
-		log.WithError(err).Error("Failed to decrypt tunnel message")
+		log.WithFields(logger.Fields{
+			"at":     "(Endpoint) decryptLayers",
+			"reason": "decryption_failed",
+			"error":  err.Error(),
+		}).Error("failed to decrypt tunnel message")
 		return nil, err
 	}
 
@@ -199,7 +217,10 @@ func (e *Endpoint) findDataStart(decrypted []byte) (int, error) {
 			return i + 1, nil
 		}
 	}
-	log.Error("No zero byte separator found in tunnel message")
+	log.WithFields(logger.Fields{
+		"at":     "(Endpoint) extractFragments",
+		"reason": "malformed_message_no_separator",
+	}).Error("no zero byte separator found in tunnel message")
 	return -1, ErrInvalidTunnelData
 }
 
@@ -210,7 +231,11 @@ func (e *Endpoint) processInstructionLoop(data []byte) error {
 	for len(data) >= 3 {
 		di, remainder, err := readDeliveryInstructions(data)
 		if err != nil {
-			log.WithError(err).Error("Failed to read delivery instructions")
+			log.WithFields(logger.Fields{
+				"at":     "(Endpoint) extractFragments",
+				"reason": "read_delivery_instructions_failed",
+				"error":  err.Error(),
+			}).Error("failed to read delivery instructions")
 			return err
 		}
 
@@ -237,7 +262,11 @@ func (e *Endpoint) processInstructionLoop(data []byte) error {
 func (e *Endpoint) extractFragmentData(di *DeliveryInstructions, remainder []byte) (uint16, []byte, []byte, error) {
 	fragSize, err := di.FragmentSize()
 	if err != nil {
-		log.WithError(err).Error("Failed to get fragment size")
+		log.WithFields(logger.Fields{
+			"at":     "(Endpoint) extractFragments",
+			"reason": "get_fragment_size_failed",
+			"error":  err.Error(),
+		}).Error("failed to get fragment size")
 		return 0, nil, nil, err
 	}
 
@@ -256,7 +285,11 @@ func (e *Endpoint) extractFragmentData(di *DeliveryInstructions, remainder []byt
 func (e *Endpoint) processFragmentByType(di *DeliveryInstructions, fragmentData []byte) error {
 	fragmentType, err := di.Type()
 	if err != nil {
-		log.WithError(err).Error("Failed to determine fragment type")
+		log.WithFields(logger.Fields{
+			"at":     "(Endpoint) extractFragments",
+			"reason": "fragment_type_unknown",
+			"error":  err.Error(),
+		}).Error("failed to determine fragment type")
 		return err
 	}
 

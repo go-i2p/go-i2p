@@ -556,20 +556,34 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 func parseSessionConfiguration(payload []byte) (*destination.Destination, *SessionConfig) {
 	// Empty payload - use defaults (backward compatibility with tests)
 	if len(payload) == 0 {
-		log.Debug("Empty CreateSession payload, using defaults")
+		log.WithFields(logger.Fields{
+			"at":           "parseSessionConfiguration",
+			"reason":       "empty_payload_backward_compat",
+			"payload_size": 0,
+		}).Debug("using default session config")
 		return nil, DefaultSessionConfig()
 	}
 
 	// Parse destination and session configuration from payload
 	dest, config, err := ParseCreateSessionPayload(payload)
 	if err != nil {
-		log.WithError(err).Warn("failed to parse create session payload, using defaults")
+		log.WithFields(logger.Fields{
+			"at":           "parseSessionConfiguration",
+			"reason":       "parse_failure",
+			"payload_size": len(payload),
+			"error":        err.Error(),
+		}).Warn("failed to parse create session payload, using defaults")
 		return nil, DefaultSessionConfig()
 	}
 
 	// Validate the parsed configuration
 	if err := ValidateSessionConfig(config); err != nil {
-		log.WithError(err).Warn("invalid session config, using defaults")
+		log.WithFields(logger.Fields{
+			"at":           "parseSessionConfiguration",
+			"reason":       "validation_failure",
+			"payload_size": len(payload),
+			"error":        err.Error(),
+		}).Warn("invalid session config, using defaults")
 		return dest, DefaultSessionConfig()
 	}
 
@@ -601,6 +615,7 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.handleDestroySession",
+		"reason":    "client_requested",
 		"sessionID": sessionID,
 	}).Info("session_destroyed")
 
@@ -714,7 +729,11 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 		Payload:   payload,
 	}
 
-	log.WithField("time_millis", currentTimeMillis).Debug("Returning router time to client")
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleGetDate",
+		"reason":      "client_requested",
+		"time_millis": currentTimeMillis,
+	}).Debug("returning router time")
 	return response, nil
 }
 
@@ -751,9 +770,11 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	}
 
 	log.WithFields(logger.Fields{
+		"at":           "i2cp.Server.handleGetBandwidthLimits",
+		"reason":       "client_requested",
 		"inbound_bps":  inboundLimit,
 		"outbound_bps": outboundLimit,
-	}).Debug("Returning bandwidth limits to client")
+	}).Debug("returning bandwidth limits")
 
 	return response, nil
 }

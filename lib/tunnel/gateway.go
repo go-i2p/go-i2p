@@ -63,7 +63,11 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 		nextHopID:  nextHopID,
 	}
 
-	log.WithField("tunnel_id", tunnelID).Debug("Created tunnel gateway")
+	log.WithFields(logger.Fields{
+		"at":        "NewGateway",
+		"reason":    "outbound_gateway_created",
+		"tunnel_id": tunnelID,
+	}).Debug("created tunnel gateway")
 	return gw, nil
 }
 
@@ -126,7 +130,11 @@ func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	log.WithField("tunnel_id", g.tunnelID).Debug("Successfully sent message through gateway")
+	log.WithFields(logger.Fields{
+		"at":        "(Gateway) Send",
+		"reason":    "message_sent",
+		"tunnel_id": g.tunnelID,
+	}).Debug("successfully sent message through gateway")
 	return encrypted, nil
 }
 
@@ -222,7 +230,11 @@ func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	// The TunnelEncryptor interface now returns errors for better error handling
 	encrypted, err := g.encryption.Encrypt(msg)
 	if err != nil {
-		log.WithError(err).Error("Failed to encrypt tunnel message")
+		log.WithFields(logger.Fields{
+			"at":     "(Gateway) encryptMessage",
+			"reason": "encryption_failed",
+			"error":  err.Error(),
+		}).Error("failed to encrypt tunnel message")
 		return nil, err
 	}
 

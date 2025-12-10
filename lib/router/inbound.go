@@ -38,7 +38,10 @@ type inboundTunnelEntry struct {
 
 // NewInboundMessageHandler creates a new inbound message handler
 func NewInboundMessageHandler(sessionManager *i2cp.SessionManager) *InboundMessageHandler {
-	log.WithField("at", "NewInboundMessageHandler").Debug("Creating inbound message handler")
+	log.WithFields(logger.Fields{
+		"at":     "NewInboundMessageHandler",
+		"reason": "initialization",
+	}).Debug("creating inbound message handler")
 	return &InboundMessageHandler{
 		tunnelSessions: make(map[tunnel.TunnelID]*inboundTunnelEntry),
 		sessionManager: sessionManager,
@@ -90,7 +93,11 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 
 	delete(h.tunnelSessions, tunnelID)
 
-	log.WithField("tunnel_id", tunnelID).Debug("Unregistered inbound tunnel")
+	log.WithFields(logger.Fields{
+		"at":        "(InboundMessageHandler) UnregisterTunnel",
+		"reason":    "tunnel_removed",
+		"tunnel_id": tunnelID,
+	}).Debug("unregistered inbound tunnel")
 }
 
 // HandleTunnelData processes an incoming TunnelData message.
@@ -158,7 +165,11 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 	if !exists {
 		// This is not necessarily an error - the tunnel might be for a different
 		// purpose (transit, exploratory, etc.). Just log and ignore.
-		log.WithField("tunnel_id", tunnelID).Debug("Received TunnelData for unregistered tunnel")
+		log.WithFields(logger.Fields{
+			"at":        "(InboundMessageHandler) HandleTunnelData",
+			"reason":    "unregistered_tunnel",
+			"tunnel_id": tunnelID,
+		}).Debug("received TunnelData for unregistered tunnel")
 		return nil
 	}
 

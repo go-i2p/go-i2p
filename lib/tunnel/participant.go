@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/logger"
 )
 
 // Participant represents an intermediate hop in an I2P tunnel.
@@ -67,7 +68,11 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 		lifetime:   10 * time.Minute, // Standard I2P tunnel lifetime
 	}
 
-	log.WithField("tunnel_id", tunnelID).Debug("Created tunnel participant")
+	log.WithFields(logger.Fields{
+		"at":        "NewParticipant",
+		"reason":    "relay_tunnel_created",
+		"tunnel_id": tunnelID,
+	}).Debug("created tunnel participant")
 	return p, nil
 }
 
@@ -95,7 +100,12 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decryptedData []byte, err error) {
 	// Validate input size
 	if len(encryptedData) != 1028 {
-		log.WithField("size", len(encryptedData)).Error("Invalid tunnel message size")
+		log.WithFields(logger.Fields{
+			"at":           "(Participant) Process",
+			"reason":       "invalid_message_size",
+			"size":         len(encryptedData),
+			"expected_min": 1028,
+		}).Error("invalid tunnel message size")
 		return 0, nil, ErrInvalidParticipantData
 	}
 
@@ -104,13 +114,22 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 	// Legacy AES uses AES-256-CBC with dual-layer decryption and IV handling
 	decrypted, err := p.decryption.Decrypt(encryptedData)
 	if err != nil {
-		log.WithError(err).Error("Failed to decrypt tunnel layer")
+		log.WithFields(logger.Fields{
+			"at":     "(Participant) Process",
+			"reason": "decryption_failed",
+			"error":  err.Error(),
+		}).Error("failed to decrypt tunnel layer")
 		return 0, nil, err
 	}
 
 	// Validate decrypted size
 	if len(decrypted) < 4 {
-		log.WithField("size", len(decrypted)).Error("Decrypted data too small for tunnel ID")
+		log.WithFields(logger.Fields{
+			"at":           "(Participant) Process",
+			"reason":       "truncated_data",
+			"size":         len(decrypted),
+			"expected_min": 4,
+		}).Error("decrypted data too small for tunnel ID")
 		return 0, nil, ErrInvalidParticipantData
 	}
 

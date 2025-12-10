@@ -28,12 +28,21 @@ type DefaultPeerSelector struct {
 // provided db. The db must implement SelectPeers with the same signature.
 // Returns an error if db is nil.
 func NewDefaultPeerSelector(db NetDBSelector) (*DefaultPeerSelector, error) {
-	log.WithField("at", "NewDefaultPeerSelector").Debug("Creating default peer selector")
+	log.WithFields(logger.Fields{
+		"at":     "NewDefaultPeerSelector",
+		"reason": "initialization",
+	}).Debug("creating default peer selector")
 	if db == nil {
-		log.WithField("at", "NewDefaultPeerSelector").Error("DB selector is nil")
+		log.WithFields(logger.Fields{
+			"at":     "NewDefaultPeerSelector",
+			"reason": "nil_db_selector",
+		}).Error("DB selector is nil")
 		return nil, fmt.Errorf("db selector cannot be nil")
 	}
-	log.WithField("at", "NewDefaultPeerSelector").Debug("Default peer selector created successfully")
+	log.WithFields(logger.Fields{
+		"at":     "NewDefaultPeerSelector",
+		"reason": "created_successfully",
+	}).Debug("default peer selector created")
 	return &DefaultPeerSelector{db: db}, nil
 }
 
@@ -56,7 +65,11 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 	}
 	peers, err := s.db.SelectPeers(count, exclude)
 	if err != nil {
-		log.WithError(err).Error("Underlying selector failed")
+		log.WithFields(logger.Fields{
+			"at":     "(DefaultPeerSelector) SelectPeers",
+			"reason": "db_selector_failed",
+			"error":  err.Error(),
+		}).Error("underlying selector failed")
 		return nil, fmt.Errorf("underlying selector error: %w", err)
 	}
 	log.WithFields(logger.Fields{

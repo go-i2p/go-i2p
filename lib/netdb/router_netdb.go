@@ -1,10 +1,13 @@
 package netdb
 
 import (
+	"fmt"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/logger"
 )
 
 // RouterNetDB provides a router-focused interface to the network database.
@@ -23,7 +26,10 @@ type RouterNetDB struct {
 // NewRouterNetDB creates a new router-focused network database view.
 // It wraps an existing StdNetDB and exposes only RouterInfo-related operations.
 func NewRouterNetDB(db *StdNetDB) *RouterNetDB {
-	log.Debug("Creating new RouterNetDB")
+	log.WithFields(logger.Fields{
+		"at":     "NewRouterNetDB",
+		"reason": "initialization",
+	}).Debug("creating new RouterNetDB")
 	return &RouterNetDB{
 		db: db,
 	}
@@ -32,7 +38,11 @@ func NewRouterNetDB(db *StdNetDB) *RouterNetDB {
 // GetRouterInfo retrieves a RouterInfo by its hash.
 // Returns a channel that yields the RouterInfo if found, nil if not found.
 func (r *RouterNetDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
-	log.WithField("hash", hash).Debug("RouterNetDB: Getting RouterInfo")
+	log.WithFields(logger.Fields{
+		"at":     "RouterNetDB.GetRouterInfo",
+		"reason": "lookup_requested",
+		"hash":   fmt.Sprintf("%x...", hash[:8]),
+	}).Debug("getting RouterInfo")
 	return r.db.GetRouterInfo(hash)
 }
 

@@ -144,10 +144,16 @@ func (e *Explorer) Start() error {
 
 // Stop halts database exploration and waits for in-flight lookups to complete.
 func (e *Explorer) Stop() {
-	log.Info("Stopping database exploration")
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) Stop",
+		"reason": "shutdown_requested",
+	}).Info("stopping database exploration")
 	e.cancel()
 	e.wg.Wait()
-	log.Info("Database exploration stopped")
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) Stop",
+		"reason": "shutdown_complete",
+	}).Info("database exploration stopped")
 }
 
 // explorationLoop runs periodic exploration rounds
@@ -188,12 +194,19 @@ func (e *Explorer) adjustIntervalIfNeeded(ticker *time.Ticker, currentInterval *
 
 	*currentInterval = newInterval
 	ticker.Reset(newInterval)
-	log.WithField("new_interval", newInterval).Debug("Adjusted exploration interval")
+	log.WithFields(logger.Fields{
+		"at":           "(Explorer) adjustExplorationInterval",
+		"reason":       "dynamic_interval_adjustment",
+		"new_interval": newInterval,
+	}).Debug("adjusted exploration interval")
 }
 
 // performExplorationRound executes one round of exploration with configured concurrency
 func (e *Explorer) performExplorationRound() {
-	log.Debug("Starting exploration round")
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) exploreRound",
+		"reason": "periodic_network_discovery",
+	}).Debug("starting exploration round")
 
 	// Generate exploration keys using strategy
 	var keys []common.Hash
@@ -231,7 +244,10 @@ func (e *Explorer) performExplorationRound() {
 	}
 
 	wg.Wait()
-	log.Debug("Exploration round completed")
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) exploreRound",
+		"reason": "round_completed",
+	}).Debug("exploration round completed")
 }
 
 // performExploratoryLookup executes a single exploratory lookup with the given hash
@@ -334,7 +350,10 @@ func (e *Explorer) ExploreOnce() error {
 		return fmt.Errorf("tunnel pool required for exploration")
 	}
 
-	log.Info("Performing one-time exploration")
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) ExploreOnce",
+		"reason": "manual_exploration_triggered",
+	}).Info("performing one-time exploration")
 	e.performExplorationRound()
 	return nil
 }

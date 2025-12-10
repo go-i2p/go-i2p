@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/logger"
 )
 
 // CompositeBootstrap implements the Bootstrap interface by trying multiple
@@ -22,7 +23,10 @@ type CompositeBootstrap struct {
 
 // NewCompositeBootstrap creates a new composite bootstrap with file, reseed, and local netDb fallback
 func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
-	log.Info("Initializing composite bootstrap (file + reseed + local netDb fallback)")
+	log.WithFields(logger.Fields{
+		"at":     "NewCompositeBootstrap",
+		"reason": "initialization",
+	}).Info("initializing composite bootstrap (file + reseed + local netDb fallback)")
 
 	cb := &CompositeBootstrap{
 		reseedBootstrap:     NewReseedBootstrap(cfg),
@@ -148,7 +152,10 @@ func logReseedFailure(err error) {
 
 // buildAggregatedError creates a detailed error message including all bootstrap method failures.
 func buildAggregatedError(fileErr, reseedErr, netDbErr error) error {
-	log.Error("All bootstrap methods failed")
+	log.WithFields(logger.Fields{
+		"at":     "(CompositeBootstrap) Bootstrap",
+		"reason": "all_methods_exhausted",
+	}).Error("all bootstrap methods failed")
 
 	// Build error message with all available error details
 	errMsg := "all bootstrap methods failed:"

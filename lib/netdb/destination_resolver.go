@@ -45,7 +45,11 @@ func NewDestinationResolver(netdb interface {
 // - publicKey: The X25519 public key for garlic encryption (32 bytes)
 // - error: Non-nil if the destination cannot be resolved or has an unsupported key type
 func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byte, error) {
-	log.WithField("destination_hash", fmt.Sprintf("%x", destHash[:8])).Debug("Resolving destination")
+	log.WithFields(logger.Fields{
+		"at":               "DestinationResolver.ResolveDestination",
+		"reason":           "lookup_requested",
+		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
+	}).Debug("resolving destination")
 
 	// Try to get LeaseSet from NetDB
 	lsChan := dr.netdb.GetLeaseSet(destHash)
@@ -224,6 +228,9 @@ func (dr *DestinationResolver) extractX25519KeyBytes(dest destination.Destinatio
 	var key [32]byte
 	copy(key[:], pubKeyBytes)
 
-	log.Debug("Extracted X25519 key from legacy LeaseSet with X25519 destination")
+	log.WithFields(logger.Fields{
+		"at":     "extractX25519KeyFromLegacyLeaseSet",
+		"reason": "legacy_leaseset_x25519_dest",
+	}).Debug("extracted X25519 key from legacy LeaseSet")
 	return key, nil
 }

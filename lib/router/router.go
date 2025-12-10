@@ -69,14 +69,20 @@ type Router struct {
 
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
-	log.Debug("Creating router with provided configuration")
+	log.WithFields(logger.Fields{
+		"at":     "NewRouter",
+		"reason": "initialization",
+	}).Debug("creating router with provided configuration")
 
 	r, err := FromConfig(cfg)
 	if err != nil {
 		log.WithError(err).Error("Failed to create router from configuration")
 		return nil, err
 	}
-	log.Debug("Router created successfully with provided configuration")
+	log.WithFields(logger.Fields{
+		"at":     "NewRouter",
+		"reason": "initialization_complete",
+	}).Debug("router created successfully")
 
 	if err := initializeRouterKeystore(r, cfg); err != nil {
 		return nil, err
@@ -210,12 +216,18 @@ func (r *Router) Wait() {
 // Stop initiates router shutdown and waits for all goroutines to complete.
 // This method blocks until the router is fully stopped.
 func (r *Router) Stop() {
-	log.Debug("Stopping router")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"reason": "shutdown_requested",
+	}).Debug("stopping router")
 	r.runMux.Lock()
 
 	if !r.running {
 		r.runMux.Unlock()
-		log.Debug("Router already stopped")
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Stop",
+			"reason": "already_stopped",
+		}).Debug("router already stopped")
 		return
 	}
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-i2p/logger"
+
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 )
@@ -30,7 +32,11 @@ func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap {
 		searchPaths = append(cfg.LocalNetDbPaths, searchPaths...)
 	}
 
-	log.WithField("search_paths", searchPaths).Info("Initializing local netDb bootstrap")
+	log.WithFields(logger.Fields{
+		"at":           "NewLocalNetDbBootstrap",
+		"reason":       "initialization",
+		"search_paths": searchPaths,
+	}).Info("initializing local netDb bootstrap")
 	return &LocalNetDbBootstrap{
 		searchPaths: searchPaths,
 	}
@@ -272,7 +278,10 @@ func getDefaultNetDbSearchPaths() []string {
 		appData := os.Getenv("APPDATA")
 		if appData == "" {
 			// APPDATA environment variable not set - use standard fallback path
-			log.Warn("APPDATA environment variable not set, using default path (may be incorrect in custom Windows configurations)")
+			log.WithFields(logger.Fields{
+				"at":     "findWindowsNetDbPath",
+				"reason": "appdata_env_missing",
+			}).Warn("APPDATA environment variable not set, using default path")
 			appData = filepath.Join(homeDir, "AppData", "Roaming")
 		}
 
