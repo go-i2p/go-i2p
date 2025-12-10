@@ -183,13 +183,14 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 	return excludeMap
 }
 
-// hasValidNTCP2Address checks if router has at least one NTCP2 address AND all NTCP2 addresses are valid.
-// This is important because the NTCP2 transport will try all NTCP2 addresses in sequence when connecting,
-// so having any invalid NTCP2 address can cause connection attempts to fail.
+// hasValidNTCP2Address checks if router has at least one valid NTCP2 address.
+// The NTCP2 transport will try all NTCP2 addresses in sequence when connecting,
+// and will use the first one that works. Therefore, we only need to ensure at least
+// one valid NTCP2 address exists - invalid addresses will simply be skipped during connection.
 // This filters out routers that:
-// - Have NTCP2 addresses missing 'host' or 'port' keys
-// - Have NTCP2 addresses with invalid/unresolvable hostnames or IPs
-// - Have any NTCP2 addresses that would cause connection attempts to fail
+// - Have NO NTCP2 addresses at all
+// - Have only NTCP2 addresses missing 'host' or 'port' keys
+// - Have only NTCP2 addresses with invalid/unresolvable hostnames or IPs
 // Note: Many I2P routers are firewalled and only reachable via SSU introducers,
 // so it's normal for a significant portion of routers to be filtered out.
 func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
@@ -201,8 +202,7 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 	addresses := ri.RouterAddresses()
 	log.WithField("address_count", len(addresses)).Debug("hasValidNTCP2Address: checking addresses")
 
-	hasNTCP2 := false
-	allNTCP2Valid := true
+	hasValidNTCP2 := false
 
 	for i, addr := range addresses {
 		// Check if this is an NTCP2 address
@@ -219,34 +219,29 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 		}).Debug("hasValidNTCP2Address: checking address style")
 
 		if strings.EqualFold(styleStr, "ntcp2") {
-			hasNTCP2 = true
 			// Found NTCP2 address - validate it using bootstrap package
 			log.WithField("index", i).Debug("hasValidNTCP2Address: found NTCP2 address, validating...")
 			if err := bootstrap.ValidateNTCP2Address(addr); err == nil {
-				// Valid NTCP2 address
+				// Valid NTCP2 address found! Router is usable.
 				log.WithField("index", i).Debug("hasValidNTCP2Address: NTCP2 address is VALID")
+				hasValidNTCP2 = true
+				// Don't break - continue logging all addresses for debugging
 			} else {
-				// Invalid NTCP2 address - mark as invalid
+				// Invalid NTCP2 address - will be skipped during connection
 				log.WithFields(logger.Fields{
 					"index": i,
 					"error": err.Error(),
 				}).Debug("hasValidNTCP2Address: NTCP2 address validation FAILED")
-				allNTCP2Valid = false
 			}
 		}
 	}
 
-	if !hasNTCP2 {
-		log.Debug("hasValidNTCP2Address: NO NTCP2 addresses found")
+	if !hasValidNTCP2 {
+		log.Debug("hasValidNTCP2Address: NO valid NTCP2 addresses found")
 		return false
 	}
 
-	if !allNTCP2Valid {
-		log.Debug("hasValidNTCP2Address: Some NTCP2 addresses are INVALID")
-		return false
-	}
-
-	log.Debug("hasValidNTCP2Address: All NTCP2 addresses are VALID")
+	log.Debug("hasValidNTCP2Address: At least one valid NTCP2 address found")
 	return true
 }
 

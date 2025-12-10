@@ -167,10 +167,14 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	}
 
 	// Try to actually resolve the address to catch invalid IPs early
-	hostPort := fmt.Sprintf("%s:%s", hostData, port)
+	// Use net.JoinHostPort to properly handle IPv6 addresses (wraps them in brackets)
+	hostPort := net.JoinHostPort(hostData, port)
 	_, err = net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
-		log.Warn("Invalid addr discovered", hostPort)
+		log.WithFields(logger.Fields{
+			"host_port": hostPort,
+			"error":     err.Error(),
+		}).Warn("Invalid NTCP2 address discovered")
 		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
 	}
 
