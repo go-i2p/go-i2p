@@ -170,6 +170,7 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	hostPort := fmt.Sprintf("%s:%s", hostData, port)
 	_, err = net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
+		log.Warn("Invalid addr discovered", hostPort)
 		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
 	}
 
