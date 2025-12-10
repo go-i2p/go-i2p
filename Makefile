@@ -44,7 +44,3 @@ godoc:
 	./callgraph.sh
 	find . -name 'README.md' -exec git add -v {} \;
 	git commit -am "GODOC UPDATE CHECKIN"
-
-run:
-	go build -v .
-	DEBUG_I2P=debug ./go-i2p --bootstrap.type file --bootstrap.reseed-file ${HOME}/i2p/i2preseed.zip --i2cp.address localhost:8654 2>&1 | tee go-i2p.log
