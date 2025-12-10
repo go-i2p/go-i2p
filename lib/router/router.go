@@ -694,16 +694,17 @@ func (r *Router) mainloop() {
 		return
 	}
 
-	r.initializeMessageRouter()
-
+	// Ensure NetDB is ready before initializing components that depend on it
 	if err := r.ensureNetDBReady(); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "(Router) mainloop",
 			"reason": err.Error(),
-		}).Error("Netdb Startup failed")
+		}).Error("NetDB startup failed")
 		r.Stop()
 		return
 	}
+
+	r.initializeMessageRouter()
 
 	// Start session monitors for inbound message processing
 	r.startSessionMonitors()
@@ -977,11 +978,47 @@ func (r *Router) getSessionByHash(peerHash common.Hash) (*ntcp.NTCP2Session, err
 // This enables the I2NP message processing layer to send responses back through
 // the router's active transport sessions.
 // NTCP2Session already implements the i2np.TransportSession interface.
+// If no active session exists, it attempts to establish an outbound connection.
 func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error) {
+	// First check for existing session
 	session, err := r.getSessionByHash(hash)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		// NTCP2Session implements i2np.TransportSession (QueueSendI2NP, SendQueueSize)
+		return session, nil
 	}
-	// NTCP2Session implements i2np.TransportSession (QueueSendI2NP, SendQueueSize)
-	return session, nil
+
+	// No existing session - try to establish outbound connection
+	log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Debug("No active session, attempting outbound connection")
+
+	// Look up RouterInfo from NetDB with timeout
+	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
+	if routerInfoChan == nil {
+		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])
+	}
+
+	// Receive RouterInfo from channel with timeout
+	select {
+	case routerInfo, ok := <-routerInfoChan:
+		if !ok {
+			return nil, fmt.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
+		}
+
+		// Use TransportMuxer to establish outbound session
+		transportSession, err := r.TransportMuxer.GetSession(routerInfo)
+		if err != nil {
+			log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Error("Failed to establish outbound session")
+			return nil, fmt.Errorf("failed to establish outbound session: %w", err)
+		}
+
+		// Convert TransportSession to NTCP2Session and store it
+		if ntcp2Session, ok := transportSession.(*ntcp.NTCP2Session); ok {
+			r.addSession(hash, ntcp2Session)
+			log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound session")
+		}
+
+		return transportSession, nil
+
+	case <-time.After(30 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
+	}
 }

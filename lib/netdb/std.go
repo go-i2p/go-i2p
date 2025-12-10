@@ -26,6 +26,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
+	"github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 )
 
 // standard network database implementation using local filesystem skiplist
@@ -195,7 +196,14 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 		if !excludeMap[riHash] {
 			// Basic reachability check - router should have valid addresses
 			if len(ri.RouterAddresses()) > 0 {
-				available = append(available, ri)
+				// Check if router supports NTCP2 transport
+				if ntcp2.SupportsNTCP2(&ri) {
+					available = append(available, ri)
+				} else {
+					log.WithFields(logger.Fields{
+						"router_hash": fmt.Sprintf("%x", riHash[:8]),
+					}).Debug("Skipping peer without NTCP2 support")
+				}
 			}
 		}
 	}
@@ -965,9 +973,22 @@ func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors i
 			continue
 		}
 
-		// Add to in-memory cache
+		// Get the actual IdentHash from the RouterInfo content
+		identHash, err := ri.IdentHash()
+		if err != nil {
+			log.WithError(err).WithField("file", filePath).Debug("Failed to compute IdentHash from RouterInfo")
+			errors++
+			continue
+		}
+
+		// Convert to common.Hash
+		var contentHash common.Hash
+		identHashBytes := identHash.Bytes()
+		copy(contentHash[:], identHashBytes[:])
+
+		// Add to in-memory cache using the content hash (not filename hash)
 		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{
+		db.RouterInfos[contentHash] = Entry{
 			RouterInfo: &ri,
 		}
 		db.riMutex.Unlock()
