@@ -1,5 +1,7 @@
 package i2np
 
+import "github.com/go-i2p/logger"
+
 /*
 I2P I2NP VariableTunnelBuild
 https://geti2p.net/spec/i2np
@@ -37,6 +39,11 @@ func (v *VariableTunnelBuild) GetRecordCount() int {
 
 // NewVariableTunnelBuilder creates a new VariableTunnelBuild and returns it as TunnelBuilder interface
 func NewVariableTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
+	log.WithFields(logger.Fields{
+		"at":           "NewVariableTunnelBuilder",
+		"record_count": len(records),
+	}).Debug("Creating VariableTunnelBuild")
+
 	return &VariableTunnelBuild{
 		Count:               len(records),
 		BuildRequestRecords: records,

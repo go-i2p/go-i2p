@@ -1,5 +1,7 @@
 package i2np
 
+import "github.com/go-i2p/logger"
+
 /*
 I2P I2NP ShortTunnelBuildReply
 https://geti2p.net/spec/i2np
@@ -35,6 +37,11 @@ func (s *ShortTunnelBuildReply) GetRecordCount() int {
 
 // NewShortTunnelBuildReply creates a new ShortTunnelBuildReply
 func NewShortTunnelBuildReply(records []BuildResponseRecord) *ShortTunnelBuildReply {
+	log.WithFields(logger.Fields{
+		"at":           "NewShortTunnelBuildReply",
+		"record_count": len(records),
+	}).Debug("Creating ShortTunnelBuildReply")
+
 	return &ShortTunnelBuildReply{
 		Count:                len(records),
 		BuildResponseRecords: records,
