@@ -697,6 +697,16 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	// Initialize ReplyProcessor with default config for reply decryption
 	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
 
+	// Wire retry callback: tunnel build timeouts will automatically retry via pool
+	// This fixes Issue #4 from AUDIT.md: "No retry callback configured"
+	tm.replyProcessor.SetRetryCallback(pool.RetryTunnelBuild)
+
+	log.WithFields(logger.Fields{
+		"at":     "NewTunnelManager",
+		"phase":  "initialization",
+		"reason": "retry callback configured for automatic tunnel build retry",
+	}).Debug("tunnel manager initialized with retry callback")
+
 	// Start periodic cleanup of expired build requests (every 30 seconds)
 	tm.cleanupTicker = time.NewTicker(30 * time.Second)
 	go tm.cleanupExpiredBuilds()

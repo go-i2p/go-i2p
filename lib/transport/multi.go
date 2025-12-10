@@ -140,12 +140,17 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			// try to get a session
 			s, err = t.GetSession(routerInfo)
 			if err != nil {
+				// Enhanced logging for Issue #2: Session establishment failures
 				log.WithFields(logger.Fields{
 					"at":              "(TransportMuxer) GetSession",
+					"phase":           "session_establishment",
 					"reason":          "session_creation_failed",
 					"transport_index": i,
+					"peer_hash":       fmt.Sprintf("%x", peerHash[:]),
 					"error":           err.Error(),
-				}).Debug("failed to get session from compatible transport, trying next")
+					"impact":          "cannot communicate with this peer",
+					"addresses":       len(routerInfo.RouterAddresses()),
+				}).Warn("failed to get session from compatible transport, trying next")
 				// we could not get a session
 				// try the next transport
 				continue
@@ -159,11 +164,16 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			return
 		}
 	}
+	// Enhanced logging for Issue #2: Complete session establishment failure
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
+		"phase":          "session_establishment",
 		"reason":         "no_compatible_transport",
+		"peer_hash":      fmt.Sprintf("%x", peerHash[:]),
 		"num_transports": len(tmux.trans),
-	}).Error("failed to get session")
+		"addresses":      len(routerInfo.RouterAddresses()),
+		"impact":         "peer completely unreachable",
+	}).Error("failed to get session - no compatible transports found")
 	// we failed to get a session for this routerInfo
 	err = ErrNoTransportAvailable
 	return

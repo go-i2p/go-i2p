@@ -181,17 +181,22 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	msgType, sessionID, payloadLen := parseMessageHeader(header)
 
 	if err := validatePayloadSize(payloadLen); err != nil {
+		// Enhanced logging for Issue #5: I2CP Payload Size Exceeded
 		// i2psnark compatibility: Log full header details for debugging oversized payloads
 		log.WithFields(logger.Fields{
 			"at":         "i2cp.ReadMessage",
+			"phase":      "i2cp_message_parsing",
 			"remoteAddr": connInfo,
 			"msgType":    MessageTypeName(msgType),
 			"msgTypeID":  msgType,
 			"sessionID":  sessionID,
 			"payloadLen": payloadLen,
 			"maxAllowed": MaxPayloadSize,
+			"exceeded":   payloadLen - MaxPayloadSize,
 			"headerHex":  fmt.Sprintf("%x", header),
-		}).Error("payload_size_exceeded_max")
+			"reason":     "client sent message exceeding I2CP spec limit (256KB)",
+			"impact":     "connection will be terminated to prevent DoS",
+		}).Error("payload_size_exceeded_max - client may need reconfiguration")
 		return nil, err
 	}
 

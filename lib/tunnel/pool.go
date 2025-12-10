@@ -639,3 +639,59 @@ type PoolStats struct {
 	Failed     int // Failed builds
 	NearExpiry int // Active but near expiration
 }
+
+// RetryTunnelBuild retries building a tunnel that previously timed out.
+// This method is called by the ReplyProcessor when a tunnel build times out
+// and automatic retry is configured.
+//
+// Parameters:
+//   - tunnelID: The ID of the tunnel that timed out (for logging correlation)
+//   - isInbound: Direction of the tunnel (true=inbound, false=outbound)
+//   - hopCount: Number of hops for the tunnel
+//
+// Returns error if the tunnel cannot be built (e.g., peer selection fails).
+func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int) error {
+	log.WithFields(logger.Fields{
+		"at":         "Pool.RetryTunnelBuild",
+		"phase":      "tunnel_build",
+		"operation":  "retry_timed_out_tunnel",
+		"tunnel_id":  tunnelID,
+		"is_inbound": isInbound,
+		"hop_count":  hopCount,
+		"reason":     "tunnel build timeout detected, attempting retry",
+	}).Info("retrying tunnel build after timeout")
+
+	// Create build request with the same parameters
+	req := BuildTunnelRequest{
+		IsInbound: isInbound,
+		HopCount:  hopCount,
+	}
+
+	// Attempt to build the tunnel
+	newTunnelID, err := p.tunnelBuilder.BuildTunnel(req)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":          "Pool.RetryTunnelBuild",
+			"phase":       "tunnel_build",
+			"operation":   "retry_failed",
+			"original_id": tunnelID,
+			"is_inbound":  isInbound,
+			"hop_count":   hopCount,
+			"reason":      "tunnel builder returned error",
+		}).Error("failed to retry tunnel build after timeout")
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "Pool.RetryTunnelBuild",
+		"phase":       "tunnel_build",
+		"operation":   "retry_success",
+		"original_id": tunnelID,
+		"new_id":      newTunnelID,
+		"is_inbound":  isInbound,
+		"hop_count":   hopCount,
+		"reason":      "retry tunnel build initiated successfully",
+	}).Info("tunnel retry build initiated")
+
+	return nil
+}

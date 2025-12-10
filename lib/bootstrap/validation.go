@@ -144,25 +144,66 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	// CheckOption() may return true even when the key doesn't exist in the mapping
 	host, err := addr.Host()
 	if err != nil {
+		// Enhanced logging for Issue #1: RouterAddress missing required host key
+		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "host key missing or malformed in RouterAddress mapping",
+			"error":     err.Error(),
+			"impact":    "peer cannot be contacted via NTCP2",
+		}).Warn("RouterAddress missing required host key")
 		return fmt.Errorf("NTCP2 address cannot retrieve host: %w", err)
 	}
 
 	if host == nil {
+		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "host key value is nil",
+			"impact":    "peer cannot be contacted via NTCP2",
+		}).Warn("NTCP2 host is nil")
 		return errors.New("NTCP2 host is nil")
 	}
 
 	hostData := host.String()
 	if hostData == "" {
+		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "host key value is empty string",
+			"impact":    "peer cannot be contacted via NTCP2",
+		}).Warn("NTCP2 host is empty")
 		return errors.New("NTCP2 host is empty")
 	}
 
 	// Actually try to retrieve the port - this is what NTCP2 transport does
 	port, err := addr.Port()
 	if err != nil {
+		// Enhanced logging for Issue #1: RouterAddress missing required port key
+		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "port key missing or malformed in RouterAddress mapping",
+			"error":     err.Error(),
+			"host":      hostData,
+			"impact":    "peer cannot be contacted via NTCP2",
+		}).Warn("RouterAddress missing required port key")
 		return fmt.Errorf("NTCP2 address cannot retrieve port: %w", err)
 	}
 
 	if port == "" {
+		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "port key value is empty string",
+			"host":      hostData,
+			"impact":    "peer cannot be contacted via NTCP2",
+		}).Warn("NTCP2 port is empty")
 		return errors.New("NTCP2 port is empty")
 	}
 
@@ -172,8 +213,13 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	_, err = net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
 		log.WithFields(logger.Fields{
+			"at":        "ValidateNTCP2Address",
+			"phase":     "validation",
+			"transport": "ntcp2",
+			"reason":    "cannot resolve host:port as valid TCP address",
 			"host_port": hostPort,
 			"error":     err.Error(),
+			"impact":    "peer address is malformed or unresolvable",
 		}).Warn("Invalid NTCP2 address discovered")
 		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
 	}
