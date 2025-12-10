@@ -226,8 +226,14 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 	}
 
 	// Use the reseed package to process the SU3 file with limit
+	// Request more than limit to account for invalid RouterInfos
+	requestLimit := limit * 2
+	if limit <= 0 {
+		requestLimit = 0 // No limit
+	}
+
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, limit)
+	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, requestLimit)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":        "(FileBootstrap) processSU3File",
@@ -238,15 +244,30 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 		return nil, fmt.Errorf("SU3 file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
+	// Validate RouterInfos and filter out invalid ones
+	validRouterInfos := fb.validateAndFilterRouterInfos(routerInfos, "SU3")
+
 	// Defensive check: ensure we got valid RouterInfos
-	if len(routerInfos) == 0 {
+	if len(validRouterInfos) == 0 {
 		log.WithFields(logger.Fields{
 			"at":        "(FileBootstrap) processSU3File",
 			"phase":     "bootstrap",
-			"reason":    "no valid RouterInfos extracted",
+			"reason":    "no valid RouterInfos extracted after validation",
 			"file_path": fb.filePath,
 		}).Error("no valid RouterInfos extracted from SU3 file")
-		return nil, fmt.Errorf("SU3 file processing failed: no valid RouterInfos found in %s (file may be corrupted or empty)", fb.filePath)
+		return nil, fmt.Errorf("SU3 file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fb.filePath)
+	}
+
+	// Limit to requested amount if specified
+	if limit > 0 && len(validRouterInfos) > limit {
+		validRouterInfos = validRouterInfos[:limit]
+		log.WithFields(logger.Fields{
+			"at":       "(FileBootstrap) processSU3File",
+			"phase":    "bootstrap",
+			"reason":   "limiting valid RouterInfos to requested count",
+			"limit":    limit,
+			"returned": len(validRouterInfos),
+		}).Debug("limited validated RouterInfos to requested count")
 	}
 
 	log.WithFields(logger.Fields{
@@ -254,10 +275,10 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 		"phase":        "bootstrap",
 		"reason":       "SU3 processing completed successfully",
 		"file_path":    fb.filePath,
-		"router_count": len(routerInfos),
+		"router_count": len(validRouterInfos),
 	}).Info("successfully processed SU3 file")
 
-	return routerInfos, nil
+	return validRouterInfos, nil
 }
 
 // processZipFile reads and processes a zip reseed file with a limit on parsed RouterInfos.
@@ -277,8 +298,14 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 	}
 
 	// Use the reseed package to process the zip file with limit
+	// Request more than limit to account for invalid RouterInfos
+	requestLimit := limit * 2
+	if limit <= 0 {
+		requestLimit = 0 // No limit
+	}
+
 	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, limit)
+	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, requestLimit)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":        "(FileBootstrap) processZipFile",
@@ -289,15 +316,30 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 		return nil, fmt.Errorf("zip file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
+	// Validate RouterInfos and filter out invalid ones
+	validRouterInfos := fb.validateAndFilterRouterInfos(routerInfos, "ZIP")
+
 	// Defensive check: ensure we got valid RouterInfos
-	if len(routerInfos) == 0 {
+	if len(validRouterInfos) == 0 {
 		log.WithFields(logger.Fields{
 			"at":        "(FileBootstrap) processZipFile",
 			"phase":     "bootstrap",
-			"reason":    "no valid RouterInfos extracted",
+			"reason":    "no valid RouterInfos extracted after validation",
 			"file_path": fb.filePath,
 		}).Error("no valid RouterInfos extracted from zip file")
-		return nil, fmt.Errorf("zip file processing failed: no valid RouterInfos found in %s (file may be corrupted or empty)", fb.filePath)
+		return nil, fmt.Errorf("zip file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fb.filePath)
+	}
+
+	// Limit to requested amount if specified
+	if limit > 0 && len(validRouterInfos) > limit {
+		validRouterInfos = validRouterInfos[:limit]
+		log.WithFields(logger.Fields{
+			"at":       "(FileBootstrap) processZipFile",
+			"phase":    "bootstrap",
+			"reason":   "limiting valid RouterInfos to requested count",
+			"limit":    limit,
+			"returned": len(validRouterInfos),
+		}).Debug("limited validated RouterInfos to requested count")
 	}
 
 	log.WithFields(logger.Fields{
@@ -305,8 +347,48 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 		"phase":        "bootstrap",
 		"reason":       "zip processing completed successfully",
 		"file_path":    fb.filePath,
-		"router_count": len(routerInfos),
+		"router_count": len(validRouterInfos),
 	}).Info("successfully processed zip file")
 
-	return routerInfos, nil
+	return validRouterInfos, nil
+}
+
+// validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones
+// It also collects and logs statistics about the validation process
+func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, fileType string) []router_info.RouterInfo {
+	stats := NewValidationStats()
+	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
+
+	for _, ri := range routerInfos {
+		if err := ValidateRouterInfo(ri); err != nil {
+			stats.RecordInvalid(err.Error())
+			log.WithFields(logger.Fields{
+				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
+				"phase":       "validation",
+				"reason":      "invalid RouterInfo from reseed",
+				"error":       err.Error(),
+				"router_hash": GetRouterHashString(ri),
+			}).Debug("skipping invalid RouterInfo from reseed")
+		} else {
+			stats.RecordValid()
+			validRouterInfos = append(validRouterInfos, ri)
+		}
+	}
+
+	// Log validation statistics
+	stats.LogSummary(fmt.Sprintf("file_bootstrap_%s", fileType))
+
+	if stats.InvalidRouterInfos > 0 {
+		log.WithFields(logger.Fields{
+			"at":              "(FileBootstrap) validateAndFilterRouterInfos",
+			"phase":           "validation",
+			"file_type":       fileType,
+			"invalid_count":   stats.InvalidRouterInfos,
+			"valid_count":     stats.ValidRouterInfos,
+			"validity_rate":   fmt.Sprintf("%.1f%%", stats.ValidityRate()),
+			"invalid_reasons": stats.InvalidReasons,
+		}).Warn("some RouterInfos from reseed file failed validation")
+	}
+
+	return validRouterInfos
 }

@@ -1,0 +1,296 @@
+package bootstrap
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/logger"
+)
+
+// ValidationStats tracks statistics about RouterInfo validation during bootstrap
+type ValidationStats struct {
+	TotalProcessed     int
+	ValidRouterInfos   int
+	InvalidRouterInfos int
+	InvalidReasons     map[string]int
+}
+
+// NewValidationStats creates a new ValidationStats instance
+func NewValidationStats() *ValidationStats {
+	return &ValidationStats{
+		InvalidReasons: make(map[string]int),
+	}
+}
+
+// RecordValid increments the valid RouterInfo count
+func (vs *ValidationStats) RecordValid() {
+	vs.TotalProcessed++
+	vs.ValidRouterInfos++
+}
+
+// RecordInvalid increments the invalid RouterInfo count and tracks the reason
+func (vs *ValidationStats) RecordInvalid(reason string) {
+	vs.TotalProcessed++
+	vs.InvalidRouterInfos++
+	vs.InvalidReasons[reason]++
+}
+
+// ValidityRate returns the percentage of valid RouterInfos
+func (vs *ValidationStats) ValidityRate() float64 {
+	if vs.TotalProcessed == 0 {
+		return 0.0
+	}
+	return float64(vs.ValidRouterInfos) / float64(vs.TotalProcessed) * 100.0
+}
+
+// LogSummary logs a summary of the validation statistics
+func (vs *ValidationStats) LogSummary(phase string) {
+	log.WithFields(logger.Fields{
+		"at":              "ValidationStats.LogSummary",
+		"phase":           phase,
+		"total_processed": vs.TotalProcessed,
+		"valid":           vs.ValidRouterInfos,
+		"invalid":         vs.InvalidRouterInfos,
+		"validity_rate":   fmt.Sprintf("%.1f%%", vs.ValidityRate()),
+	}).Info("RouterInfo validation summary")
+
+	if vs.InvalidRouterInfos > 0 {
+		log.WithFields(logger.Fields{
+			"at":              "ValidationStats.LogSummary",
+			"phase":           phase,
+			"invalid_reasons": vs.InvalidReasons,
+		}).Debug("Invalid RouterInfo breakdown by reason")
+	}
+}
+
+// ValidateRouterInfo performs comprehensive validation on a RouterInfo
+// Returns nil if valid, otherwise returns an error describing the validation failure
+func ValidateRouterInfo(ri router_info.RouterInfo) error {
+	// Check if RouterInfo has any addresses
+	addresses := ri.RouterAddresses()
+	if len(addresses) == 0 {
+		return errors.New("no router addresses")
+	}
+
+	// Check if at least one valid address exists
+	hasValidAddress := false
+	var lastErr error
+
+	for _, addr := range addresses {
+		if err := ValidateRouterAddress(addr); err == nil {
+			hasValidAddress = true
+			break
+		} else {
+			lastErr = err
+		}
+	}
+
+	if !hasValidAddress {
+		if lastErr != nil {
+			return fmt.Errorf("no valid router addresses found (last error: %v)", lastErr)
+		}
+		return errors.New("no valid router addresses found")
+	}
+
+	return nil
+}
+
+// ValidateRouterAddress validates a single RouterAddress
+// Returns nil if valid, otherwise returns an error describing the validation failure
+func ValidateRouterAddress(addr *router_address.RouterAddress) error {
+	// Check transport style
+	style := addr.TransportStyle()
+	styleBytes, err := style.Data()
+	if err != nil {
+		return fmt.Errorf("invalid transport style: %w", err)
+	}
+	styleStr := string(styleBytes)
+
+	if styleStr == "" {
+		return errors.New("empty transport style")
+	}
+
+	// For NTCP2, validate required keys
+	if strings.EqualFold(styleStr, "ntcp2") {
+		return validateNTCP2Address(addr)
+	}
+
+	// For SSU, validate required keys (basic validation)
+	if strings.EqualFold(styleStr, "ssu") {
+		return validateSSUAddress(addr)
+	}
+
+	// For SSU2, validate required keys (basic validation)
+	if strings.EqualFold(styleStr, "ssu2") {
+		return validateSSU2Address(addr)
+	}
+
+	// Unknown transport style, but don't fail - might be future protocol
+	log.WithFields(logger.Fields{
+		"at":              "ValidateRouterAddress",
+		"transport_style": styleStr,
+	}).Debug("Unknown transport style, accepting as potentially valid")
+
+	return nil
+}
+
+// validateNTCP2Address validates NTCP2-specific requirements
+func validateNTCP2Address(addr *router_address.RouterAddress) error {
+	// Check for required 'host' key
+	if !addr.CheckOption("host") {
+		return errors.New("NTCP2 address missing required 'host' key")
+	}
+
+	// Validate host is not empty
+	hostStr := addr.HostString()
+	if hostStr == nil {
+		return errors.New("NTCP2 host is nil")
+	}
+
+	hostData, err := hostStr.Data()
+	if err != nil {
+		return fmt.Errorf("NTCP2 host data invalid: %w", err)
+	}
+
+	if len(hostData) == 0 {
+		return errors.New("NTCP2 host is empty")
+	}
+
+	// Check for required 'port' key
+	if !addr.CheckOption("port") {
+		return errors.New("NTCP2 address missing required 'port' key")
+	}
+
+	// Validate port is not empty
+	portStr := addr.PortString()
+	if portStr == nil {
+		return errors.New("NTCP2 port is nil")
+	}
+
+	portData, err := portStr.Data()
+	if err != nil {
+		return fmt.Errorf("NTCP2 port data invalid: %w", err)
+	}
+
+	if len(portData) == 0 {
+		return errors.New("NTCP2 port is empty")
+	}
+
+	// Optional: validate static key exists (common in NTCP2)
+	if !addr.CheckOption("s") {
+		log.WithFields(logger.Fields{
+			"at":    "validateNTCP2Address",
+			"issue": "missing static key",
+		}).Debug("NTCP2 address missing optional 's' (static key)")
+	}
+
+	return nil
+}
+
+// validateSSUAddress validates SSU-specific requirements
+func validateSSUAddress(addr *router_address.RouterAddress) error {
+	// Check for required 'host' key
+	if !addr.CheckOption("host") {
+		return errors.New("SSU address missing required 'host' key")
+	}
+
+	// Validate host is not empty
+	hostStr := addr.HostString()
+	if hostStr == nil {
+		return errors.New("SSU host is nil")
+	}
+
+	hostData, err := hostStr.Data()
+	if err != nil {
+		return fmt.Errorf("SSU host data invalid: %w", err)
+	}
+
+	if len(hostData) == 0 {
+		return errors.New("SSU host is empty")
+	}
+
+	// Check for required 'port' key
+	if !addr.CheckOption("port") {
+		return errors.New("SSU address missing required 'port' key")
+	}
+
+	// Validate port is not empty
+	portStr := addr.PortString()
+	if portStr == nil {
+		return errors.New("SSU port is nil")
+	}
+
+	portData, err := portStr.Data()
+	if err != nil {
+		return fmt.Errorf("SSU port data invalid: %w", err)
+	}
+
+	if len(portData) == 0 {
+		return errors.New("SSU port is empty")
+	}
+
+	return nil
+}
+
+// validateSSU2Address validates SSU2-specific requirements
+func validateSSU2Address(addr *router_address.RouterAddress) error {
+	// SSU2 has similar requirements to SSU
+	// Check for required 'host' key
+	if !addr.CheckOption("host") {
+		return errors.New("SSU2 address missing required 'host' key")
+	}
+
+	// Validate host is not empty
+	hostStr := addr.HostString()
+	if hostStr == nil {
+		return errors.New("SSU2 host is nil")
+	}
+
+	hostData, err := hostStr.Data()
+	if err != nil {
+		return fmt.Errorf("SSU2 host data invalid: %w", err)
+	}
+
+	if len(hostData) == 0 {
+		return errors.New("SSU2 host is empty")
+	}
+
+	// Check for required 'port' key
+	if !addr.CheckOption("port") {
+		return errors.New("SSU2 address missing required 'port' key")
+	}
+
+	// Validate port is not empty
+	portStr := addr.PortString()
+	if portStr == nil {
+		return errors.New("SSU2 port is nil")
+	}
+
+	portData, err := portStr.Data()
+	if err != nil {
+		return fmt.Errorf("SSU2 port data invalid: %w", err)
+	}
+
+	if len(portData) == 0 {
+		return errors.New("SSU2 port is empty")
+	}
+
+	return nil
+}
+
+// GetRouterHashString returns a hex string representation of the RouterInfo's IdentHash
+// This is a helper function to avoid duplication in logging
+func GetRouterHashString(ri router_info.RouterInfo) string {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		return "<error>"
+	}
+	hashBytes := hash[:]
+	if len(hashBytes) < 8 {
+		return fmt.Sprintf("%x", hashBytes)
+	}
+	return fmt.Sprintf("%x", hashBytes[:8]) // First 8 bytes for brevity
+}

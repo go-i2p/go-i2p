@@ -170,6 +170,18 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 		"router_count": len(serverRIs),
 	}).Debug("reseed HTTP request completed")
 
+	// Validate RouterInfos and filter out invalid ones
+	validServerRIs := rb.validateAndFilterRouterInfos(serverRIs, server.Url)
+
+	log.WithFields(logger.Fields{
+		"at":                 "(ReseedBootstrap) attemptReseedFromServer",
+		"phase":              "validation",
+		"reason":             "RouterInfo validation completed",
+		"server_url":         server.Url,
+		"total_received":     len(serverRIs),
+		"valid_after_filter": len(validServerRIs),
+	}).Debug("RouterInfo validation completed for reseed server")
+
 	// Warn if reseed took longer than expected
 	if elapsed.Seconds() > 30 {
 		log.WithFields(logger.Fields{
@@ -184,20 +196,61 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 	}
 
 	// Warn if insufficient routers received
-	if len(serverRIs) < 50 {
+	if len(validServerRIs) < 50 {
 		log.WithFields(logger.Fields{
 			"at":           "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":        "bootstrap",
-			"reason":       "insufficient routers from reseed server",
+			"reason":       "insufficient valid routers from reseed server",
 			"server_url":   server.Url,
-			"router_count": len(serverRIs),
+			"router_count": len(validServerRIs),
 			"minimum":      50,
-			"shortfall":    50 - len(serverRIs),
+			"shortfall":    50 - len(validServerRIs),
 			"impact":       "may need additional reseed servers",
-		}).Warn("reseed returned fewer routers than recommended")
+		}).Warn("reseed returned fewer valid routers than recommended")
 	}
 
-	return serverRIs, nil
+	return validServerRIs, nil
+}
+
+// validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones
+// It also collects and logs statistics about the validation process
+func (rb *ReseedBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, serverUrl string) []router_info.RouterInfo {
+	stats := NewValidationStats()
+	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
+
+	for _, ri := range routerInfos {
+		if err := ValidateRouterInfo(ri); err != nil {
+			stats.RecordInvalid(err.Error())
+			log.WithFields(logger.Fields{
+				"at":          "(ReseedBootstrap) validateAndFilterRouterInfos",
+				"phase":       "validation",
+				"reason":      "invalid RouterInfo from reseed server",
+				"error":       err.Error(),
+				"router_hash": GetRouterHashString(ri),
+				"server_url":  serverUrl,
+			}).Debug("skipping invalid RouterInfo from reseed server")
+		} else {
+			stats.RecordValid()
+			validRouterInfos = append(validRouterInfos, ri)
+		}
+	}
+
+	// Log validation statistics
+	stats.LogSummary("reseed_bootstrap")
+
+	if stats.InvalidRouterInfos > 0 {
+		log.WithFields(logger.Fields{
+			"at":              "(ReseedBootstrap) validateAndFilterRouterInfos",
+			"phase":           "validation",
+			"server_url":      serverUrl,
+			"invalid_count":   stats.InvalidRouterInfos,
+			"valid_count":     stats.ValidRouterInfos,
+			"validity_rate":   fmt.Sprintf("%.1f%%", stats.ValidityRate()),
+			"invalid_reasons": stats.InvalidReasons,
+		}).Warn("some RouterInfos from reseed server failed validation")
+	}
+
+	return validRouterInfos
 }
 
 // logServerSuccess logs successful retrieval of router infos from a server.
