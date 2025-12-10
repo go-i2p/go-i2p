@@ -20,7 +20,6 @@ import (
 
 	"github.com/eyedeekay/go-unzip/pkg/unzip"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/su3"
 )
 
@@ -628,61 +627,83 @@ func (r Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_i
 	}
 	defer r.cleanupZipFile(zipPath)
 
-	files, err := r.extractZipFile(zipPath)
+	tempDir, files, err := r.extractZipFile(zipPath)
 	if err != nil {
 		return nil, err
 	}
+	defer r.cleanupTempDirectory(tempDir)
 
 	return r.parseRouterInfoFilesWithLimit(files, limit)
 }
 
 // writeZipFile writes the zip content to a temporary file on disk.
 func (r Reseed) writeZipFile(content []byte) (string, error) {
-	zipPath := filepath.Join(config.RouterConfigProperties.NetDb.Path, "reseed.zip")
+	// Create temporary file in system temp directory
+	tempFile, err := os.CreateTemp("", "reseed-*.zip")
+	if err != nil {
+		log.WithError(err).Error("Failed to create temporary file for reseed zip")
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	zipPath := tempFile.Name()
+	tempFile.Close()
+
 	log.WithFields(logger.Fields{
 		"path":       zipPath,
 		"size_bytes": len(content),
-	}).Debug("Writing reseed zip file to disk")
+	}).Debug("Writing reseed zip file to temporary location")
 
-	err := os.WriteFile(zipPath, content, 0o644)
+	err = os.WriteFile(zipPath, content, 0o644)
 	if err != nil {
 		log.WithError(err).WithField("path", zipPath).Error("Failed to write reseed zip file")
+		os.Remove(zipPath) // Clean up on error
 		return "", err
 	}
-	log.WithField("path", zipPath).Info("Successfully wrote reseed zip file")
+	log.WithField("path", zipPath).Info("Successfully wrote reseed zip file to temporary location")
 	return zipPath, nil
 }
 
-// extractZipFile extracts the zip file and returns the list of extracted file paths.
-func (r Reseed) extractZipFile(zipPath string) ([]string, error) {
-	destPath := config.RouterConfigProperties.NetDb.Path
-	log.WithFields(logger.Fields{
-		"zip_path":  zipPath,
-		"dest_path": destPath,
-	}).Info("Extracting reseed zip file")
+// extractZipFile extracts the zip file to a temporary directory and returns the temp directory path and list of extracted file paths.
+// The caller is responsible for cleaning up the temporary directory after use.
+func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
+	// Create temporary directory for extraction
+	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
+	if err != nil {
+		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
+		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
 
-	files, err := unzip.New().Extract(zipPath, destPath)
+	log.WithFields(logger.Fields{
+		"zip_path": zipPath,
+		"temp_dir": tempDir,
+	}).Info("Extracting reseed zip file to temporary directory")
+
+	files, err := unzip.New().Extract(zipPath, tempDir)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"zip_path":  zipPath,
-			"dest_path": destPath,
+			"zip_path": zipPath,
+			"temp_dir": tempDir,
 		}).Error("Failed to extract reseed zip file")
-		return nil, err
+		os.RemoveAll(tempDir) // Clean up on error
+		return "", nil, err
 	}
 	if len(files) <= 0 {
 		log.WithField("zip_path", zipPath).Error("Reseed zip file appears to have no content")
-		return nil, oops.Errorf("error: reseed appears to have no content")
+		os.RemoveAll(tempDir) // Clean up on error
+		return "", nil, oops.Errorf("error: reseed appears to have no content")
 	}
 
 	// The unzip library returns just the filenames, not full paths
-	// We need to prepend the destination path to each filename
+	// We need to prepend the temporary directory path to each filename
 	fullPaths := make([]string, len(files))
 	for i, filename := range files {
-		fullPaths[i] = filepath.Join(destPath, filename)
+		fullPaths[i] = filepath.Join(tempDir, filename)
 	}
 
-	log.WithField("file_count", len(fullPaths)).Info("Successfully extracted reseed files")
-	return fullPaths, nil
+	log.WithFields(logger.Fields{
+		"file_count": len(fullPaths),
+		"temp_dir":   tempDir,
+	}).Info("Successfully extracted reseed files to temporary directory")
+	return tempDir, fullPaths, nil
 }
 
 // parseRouterInfoFiles reads and parses router info files from the extracted files.
@@ -755,6 +776,19 @@ func (r Reseed) cleanupZipFile(zipPath string) {
 		log.WithError(err).WithField("path", zipPath).Warn("Failed to remove reseed zip file")
 	} else {
 		log.WithField("path", zipPath).Debug("Successfully removed reseed zip file")
+	}
+}
+
+// cleanupTempDirectory removes the temporary extraction directory from disk.
+func (r Reseed) cleanupTempDirectory(tempDir string) {
+	if tempDir == "" {
+		return
+	}
+	log.WithField("path", tempDir).Debug("Cleaning up temporary extraction directory")
+	if err := os.RemoveAll(tempDir); err != nil {
+		log.WithError(err).WithField("path", tempDir).Warn("Failed to remove temporary extraction directory")
+	} else {
+		log.WithField("path", tempDir).Debug("Successfully removed temporary extraction directory")
 	}
 }
 
