@@ -872,7 +872,12 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 	// Route based on message type to appropriate handler
 	switch msg.Type() {
 	case i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE:
-		return r.messageRouter.RouteDatabaseMessage(msg)
+		// Parse DatabaseStore message from BaseI2NPMessage data
+		dbStore, err := r.parseDatabaseStoreMessage(msg)
+		if err != nil {
+			return fmt.Errorf("failed to parse DatabaseStore message: %w", err)
+		}
+		return r.messageRouter.RouteDatabaseMessage(dbStore)
 
 	case i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
 		return r.messageRouter.RouteDatabaseMessage(msg)
@@ -904,6 +909,31 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 	default:
 		return fmt.Errorf("unsupported message type: %d", msg.Type())
 	}
+}
+
+// parseDatabaseStoreMessage extracts and parses DatabaseStore data from a BaseI2NPMessage.
+// This converts the raw I2NP message into a structured DatabaseStore that implements
+// the DatabaseWriter interface for NetDB storage.
+func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.DatabaseStore, error) {
+	// Extract payload from BaseI2NPMessage
+	payload, ok := msg.(i2np.PayloadCarrier)
+	if !ok {
+		return nil, fmt.Errorf("message does not implement PayloadCarrier interface")
+	}
+
+	// Create DatabaseStore and unmarshal the payload
+	dbStore := &i2np.DatabaseStore{}
+	if err := dbStore.UnmarshalBinary(payload.GetPayload()); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal DatabaseStore: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"message_id": msg.MessageID(),
+		"store_type": dbStore.GetStoreType(),
+		"key":        dbStore.GetStoreKey().String(),
+	}).Info("Parsed DatabaseStore message from peer")
+
+	return dbStore, nil
 }
 
 // Session Management Methods

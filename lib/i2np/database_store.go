@@ -1,6 +1,8 @@
 package i2np
 
 import (
+	"fmt"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
 )
@@ -231,6 +233,56 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 	}).Debug("DatabaseStore marshaled successfully")
 
 	return result, nil
+}
+
+// UnmarshalBinary deserializes the DatabaseStore message from I2NP message data
+func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
+	if len(data) < 37 { // Minimum: key(32) + type(1) + replyToken(4)
+		return fmt.Errorf("DatabaseStore message too short: %d bytes", len(data))
+	}
+
+	offset := 0
+
+	// Key (32 bytes)
+	copy(d.Key[:], data[offset:offset+32])
+	offset += 32
+
+	// Type (1 byte)
+	d.Type = data[offset]
+	offset++
+
+	// Reply Token (4 bytes)
+	copy(d.ReplyToken[:], data[offset:offset+4])
+	offset += 4
+
+	// Check if reply token > 0 (has reply routing info)
+	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
+	if hasReply {
+		if len(data) < offset+36 { // Need replyTunnelID(4) + replyGateway(32)
+			return fmt.Errorf("DatabaseStore with reply token truncated")
+		}
+		// Reply Tunnel ID (4 bytes)
+		copy(d.ReplyTunnelID[:], data[offset:offset+4])
+		offset += 4
+
+		// Reply Gateway (32 bytes)
+		copy(d.ReplyGateway[:], data[offset:offset+32])
+		offset += 32
+	}
+
+	// Data (remaining bytes)
+	d.Data = make([]byte, len(data)-offset)
+	copy(d.Data, data[offset:])
+
+	log.WithFields(logger.Fields{
+		"at":        "UnmarshalBinary",
+		"data_type": d.Type,
+		"data_size": len(d.Data),
+		"key":       fmt.Sprintf("%x", d.Key[:8]),
+		"has_reply": hasReply,
+	}).Debug("DatabaseStore unmarshaled successfully")
+
+	return nil
 }
 
 // Compile-time interface satisfaction check
