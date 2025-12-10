@@ -6,10 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/logger"
 )
-
-var log = logger.GetGoI2PLogger()
 
 // muxes multiple transports into 1 Transport
 // implements transport.Transport

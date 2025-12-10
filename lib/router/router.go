@@ -28,8 +28,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
-var log = logger.GetGoI2PLogger()
-
 // i2p router type
 type Router struct {
 	// keystore for router info

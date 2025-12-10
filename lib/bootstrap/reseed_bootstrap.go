@@ -11,8 +11,6 @@ import (
 	"github.com/samber/oops"
 )
 
-var log = logger.GetGoI2PLogger()
-
 // ReseedBootstrap implements the Bootstrap interface using HTTP reseeding
 type ReseedBootstrap struct {
 	// Configuration containing reseed servers

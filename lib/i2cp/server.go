@@ -13,9 +13,6 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// log is the package logger
-var log = logger.GetGoI2PLogger()
-
 // ServerConfig holds configuration for the I2CP server
 type ServerConfig struct {
 	// Address to listen on (e.g., "localhost:7654" or "/tmp/i2cp.sock" for Unix socket)

@@ -23,8 +23,6 @@ import (
 	"github.com/go-i2p/su3"
 )
 
-var log = logger.GetGoI2PLogger()
-
 const (
 	I2pUserAgent = "Wget/1.11.4"
 )

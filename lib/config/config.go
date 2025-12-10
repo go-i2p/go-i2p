@@ -5,13 +5,11 @@ import (
 	"path/filepath"
 
 	"github.com/go-i2p/go-i2p/lib/util"
-	"github.com/go-i2p/logger"
 	"github.com/spf13/viper"
 )
 
 var (
 	CfgFile string
-	log     = logger.GetGoI2PLogger()
 )
 
 const GOI2P_BASE_DIR = ".go-i2p"

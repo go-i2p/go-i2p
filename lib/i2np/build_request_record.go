@@ -10,8 +10,6 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
-var log = logger.GetGoI2PLogger()
-
 /*
 I2P I2NP BuildRequestRecord
 https://geti2p.net/spec/i2np
