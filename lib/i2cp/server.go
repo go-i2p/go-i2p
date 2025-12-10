@@ -810,6 +810,22 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 		}).Error("failed_to_parse_send_message")
 		return nil, fmt.Errorf("failed to parse SendMessage payload: %w", err)
 	}
+
+	// Validate payload size to prevent exceeding I2CP limits after garlic encryption
+	// Account for overhead: Data message (4 bytes) + garlic encryption (~200 bytes typical)
+	// Conservative limit: MaxPayloadSize - 512 bytes for all overhead
+	const maxSafePayloadSize = MaxPayloadSize - 512
+	if len(sendMsg.Payload) > maxSafePayloadSize {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.parseSendMessagePayload",
+			"sessionID":   session.ID(),
+			"payloadSize": len(sendMsg.Payload),
+			"maxAllowed":  maxSafePayloadSize,
+		}).Error("send_message_payload_too_large")
+		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
+			len(sendMsg.Payload), maxSafePayloadSize)
+	}
+
 	return sendMsg, nil
 }
 
