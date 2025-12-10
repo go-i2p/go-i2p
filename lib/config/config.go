@@ -8,9 +8,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	CfgFile string
-)
+var CfgFile string
 
 const GOI2P_BASE_DIR = ".go-i2p"
 

@@ -1,8 +1,8 @@
 package ntcp2
 
 import (
-	"github.com/go-i2p/logger"
 	"github.com/go-i2p/go-noise/ntcp2"
+	"github.com/go-i2p/logger"
 )
 
 type Config struct {
