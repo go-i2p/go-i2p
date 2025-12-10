@@ -234,7 +234,7 @@ func TestSendDatabaseStoreToFloodfill_GatewayNotInNetDB(t *testing.T) {
 	// Should fail when gateway not found in NetDB
 	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in NetDB")
+	assert.Contains(t, err.Error(), "failed to retrieve RouterInfo for gateway")
 }
 
 // TestSendDatabaseStoreToFloodfill_MultipleTunnelsRoundRobin tests round-robin tunnel selection
