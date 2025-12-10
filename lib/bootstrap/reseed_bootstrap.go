@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -19,12 +21,24 @@ type ReseedBootstrap struct {
 
 // NewReseedBootstrap creates a new reseeder with the provided configuration
 func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
-	log.WithField("reseed_server_count", len(config.ReseedServers)).Info("Initializing reseed bootstrap")
+	log.WithFields(logger.Fields{
+		"at":                  "(ReseedBootstrap) NewReseedBootstrap",
+		"phase":               "bootstrap",
+		"step":                1,
+		"reason":              "initializing reseed bootstrap",
+		"reseed_server_count": len(config.ReseedServers),
+	}).Info("initializing reseed bootstrap")
 	for i, server := range config.ReseedServers {
 		log.WithFields(logger.Fields{
-			"index": i,
-			"url":   server.Url,
-		}).Debug("Configured reseed server")
+			"at":              "(ReseedBootstrap) NewReseedBootstrap",
+			"phase":           "bootstrap",
+			"step":            i + 2,
+			"reason":          "registering reseed server configuration",
+			"server_index":    i,
+			"server_url":      server.Url,
+			"has_fingerprint": server.SU3Fingerprint != "",
+			"fingerprint_len": len(server.SU3Fingerprint),
+		}).Debug("reseed server configured")
 	}
 	return &ReseedBootstrap{
 		config: config,
@@ -88,19 +102,28 @@ func (rb *ReseedBootstrap) processReseedServer(ctx context.Context, server *conf
 // logReseedStart logs the beginning of the bootstrap peer acquisition.
 func (rb *ReseedBootstrap) logReseedStart(n int) {
 	log.WithFields(logger.Fields{
+		"at":              "(ReseedBootstrap) GetPeers",
+		"phase":           "bootstrap",
+		"step":            "start",
+		"reason":          "initiating peer acquisition from reseed servers",
 		"requested_peers": n,
 		"server_count":    len(rb.config.ReseedServers),
-	}).Info("Starting bootstrap peer acquisition")
+		"strategy":        "sequential_until_satisfied",
+	}).Info("starting bootstrap peer acquisition")
 }
 
 // checkContextCancellation checks if the context has been canceled.
 func (rb *ReseedBootstrap) checkContextCancellation(ctx context.Context, attemptedServers, successfulServers, collectedPeers int) (bool, error) {
 	if ctx.Err() != nil {
 		log.WithError(ctx.Err()).WithFields(logger.Fields{
+			"at":                 "(ReseedBootstrap) checkContextCancellation",
+			"phase":              "bootstrap",
+			"reason":             "context canceled during reseed operation",
 			"attempted_servers":  attemptedServers,
 			"successful_servers": successfulServers,
 			"collected_peers":    collectedPeers,
-		}).Warn("Bootstrap reseed canceled by context")
+			"context_error":      ctx.Err().Error(),
+		}).Warn("bootstrap reseed canceled by context")
 		return true, oops.Errorf("reseed canceled: %v", ctx.Err())
 	}
 	return false, nil
@@ -108,21 +131,44 @@ func (rb *ReseedBootstrap) checkContextCancellation(ctx context.Context, attempt
 
 // attemptReseedFromServer attempts to reseed from a single server.
 func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
+	startTime := time.Now()
 	log.WithFields(logger.Fields{
-		"server":        server.Url,
+		"at":            "(ReseedBootstrap) attemptReseedFromServer",
+		"phase":         "bootstrap",
+		"step":          attemptNumber,
+		"reason":        "attempting HTTP reseed from server",
+		"server_url":    server.Url,
 		"attempt":       attemptNumber,
 		"total_servers": len(rb.config.ReseedServers),
-	}).Info("Attempting to reseed from server")
+	}).Info("attempting reseed from server")
 
 	reseeder := reseed.NewReseed()
 	serverRIs, err := reseeder.SingleReseed(server.Url)
+	elapsed := time.Since(startTime)
+
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
-			"server":  server.Url,
-			"attempt": attemptNumber,
-		}).Warn("Reseed attempt failed")
+			"at":          "(ReseedBootstrap) attemptReseedFromServer",
+			"phase":       "bootstrap",
+			"step":        attemptNumber,
+			"reason":      "reseed attempt failed",
+			"server_url":  server.Url,
+			"attempt":     attemptNumber,
+			"duration_ms": elapsed.Milliseconds(),
+			"error_type":  fmt.Sprintf("%T", err),
+		}).Warn("reseed attempt failed")
 		return nil, oops.Errorf("reseed from %s failed: %v", server.Url, err)
 	}
+
+	log.WithFields(logger.Fields{
+		"at":           "(ReseedBootstrap) attemptReseedFromServer",
+		"phase":        "bootstrap",
+		"step":         attemptNumber,
+		"reason":       "reseed request completed successfully",
+		"server_url":   server.Url,
+		"duration_ms":  elapsed.Milliseconds(),
+		"router_count": len(serverRIs),
+	}).Debug("reseed HTTP request completed")
 
 	return serverRIs, nil
 }
@@ -130,20 +176,28 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 // logServerSuccess logs successful retrieval of router infos from a server.
 func (rb *ReseedBootstrap) logServerSuccess(server *config.ReseedConfig, count, total, successfulServers int) {
 	log.WithFields(logger.Fields{
-		"server":             server.Url,
-		"count":              count,
-		"total":              total,
+		"at":                 "(ReseedBootstrap) processReseedServer",
+		"phase":              "bootstrap",
+		"reason":             "successfully obtained router infos from server",
+		"server_url":         server.Url,
+		"routers_from_this":  count,
+		"routers_total":      total,
 		"successful_servers": successfulServers,
-	}).Info("Successfully obtained router infos from reseed server")
+		"total_servers":      len(rb.config.ReseedServers),
+	}).Info("successfully obtained router infos from reseed server")
 }
 
 // hasEnoughPeers checks if we have collected enough peers.
 func (rb *ReseedBootstrap) hasEnoughPeers(requested, obtained int) bool {
 	if requested > 0 && obtained >= requested {
 		log.WithFields(logger.Fields{
+			"at":        "(ReseedBootstrap) hasEnoughPeers",
+			"phase":     "bootstrap",
+			"reason":    "reached requested peer threshold",
 			"requested": requested,
 			"obtained":  obtained,
-		}).Info("Reached requested peer count, stopping reseed")
+			"surplus":   obtained - requested,
+		}).Info("reached requested peer count, stopping reseed")
 		return true
 	}
 	return false
@@ -153,9 +207,15 @@ func (rb *ReseedBootstrap) hasEnoughPeers(requested, obtained int) bool {
 func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterInfo, lastErr error, attemptedServers, successfulServers int) error {
 	if len(allRouterInfos) == 0 && lastErr != nil {
 		log.WithFields(logger.Fields{
+			"at":                 "(ReseedBootstrap) validateResults",
+			"phase":              "bootstrap",
+			"reason":             "all reseed attempts failed",
 			"attempted_servers":  attemptedServers,
 			"successful_servers": successfulServers,
-		}).Error("All reseed attempts failed, no peers obtained")
+			"failed_servers":     attemptedServers - successfulServers,
+			"router_count":       0,
+			"last_error":         lastErr.Error(),
+		}).Error("all reseed attempts failed, no peers obtained")
 		return oops.Errorf("all reseed attempts failed: %w", lastErr)
 	}
 	return nil
@@ -164,9 +224,15 @@ func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterIn
 // logReseedComplete logs the completion of bootstrap peer acquisition.
 func (rb *ReseedBootstrap) logReseedComplete(totalPeers, attemptedServers, successfulServers, requestedPeers int) {
 	log.WithFields(logger.Fields{
-		"total_peers":        totalPeers,
+		"at":                 "(ReseedBootstrap) GetPeers",
+		"phase":              "bootstrap",
+		"step":               "complete",
+		"reason":             "peer acquisition completed successfully",
+		"routers_obtained":   totalPeers,
+		"routers_requested":  requestedPeers,
 		"attempted_servers":  attemptedServers,
 		"successful_servers": successfulServers,
-		"requested_peers":    requestedPeers,
-	}).Info("Bootstrap peer acquisition completed")
+		"failed_servers":     attemptedServers - successfulServers,
+		"success_rate":       fmt.Sprintf("%.1f%%", float64(successfulServers)/float64(attemptedServers)*100),
+	}).Info("bootstrap peer acquisition completed")
 }

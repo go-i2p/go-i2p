@@ -24,8 +24,10 @@ type CompositeBootstrap struct {
 // NewCompositeBootstrap creates a new composite bootstrap with file, reseed, and local netDb fallback
 func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 	log.WithFields(logger.Fields{
-		"at":     "NewCompositeBootstrap",
-		"reason": "initialization",
+		"at":     "(CompositeBootstrap) NewCompositeBootstrap",
+		"phase":  "bootstrap",
+		"step":   1,
+		"reason": "initializing composite bootstrap strategy",
 	}).Info("initializing composite bootstrap (file + reseed + local netDb fallback)")
 
 	cb := &CompositeBootstrap{
@@ -36,8 +38,22 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 
 	// Only create file bootstrap if a file path is specified
 	if cfg.ReseedFilePath != "" {
-		log.WithField("file_path", cfg.ReseedFilePath).Info("Local reseed file specified - will use as highest priority")
+		log.WithFields(logger.Fields{
+			"at":        "(CompositeBootstrap) NewCompositeBootstrap",
+			"phase":     "bootstrap",
+			"step":      2,
+			"reason":    "local reseed file configured",
+			"file_path": cfg.ReseedFilePath,
+			"priority":  "highest",
+		}).Info("local reseed file specified - will use as highest priority")
 		cb.fileBootstrap = NewFileBootstrap(cfg.ReseedFilePath)
+	} else {
+		log.WithFields(logger.Fields{
+			"at":     "(CompositeBootstrap) NewCompositeBootstrap",
+			"phase":  "bootstrap",
+			"step":   2,
+			"reason": "no local reseed file configured",
+		}).Debug("no local reseed file - will try reseed servers first")
 	}
 
 	return cb
@@ -46,7 +62,15 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 // GetPeers implements the Bootstrap interface by trying file first (if specified),
 // then reseed, then falling back to local netDb if both fail
 func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.WithField("requested_peers", n).Info("Starting composite bootstrap")
+	log.WithFields(logger.Fields{
+		"at":              "(CompositeBootstrap) GetPeers",
+		"phase":           "bootstrap",
+		"step":            "start",
+		"reason":          "starting composite bootstrap with fallback strategy",
+		"requested_peers": n,
+		"has_file_source": cb.fileBootstrap != nil,
+		"strategy":        "file -> reseed -> local_netdb",
+	}).Info("starting composite bootstrap")
 
 	// Collect errors from all methods for better debugging
 	var fileErr, reseedErr, netDbErr error
@@ -80,11 +104,24 @@ func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_inf
 
 // tryFileBootstrap attempts to obtain peers from the local reseed file.
 func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.Info("Attempting file bootstrap from local reseed file")
+	log.WithFields(logger.Fields{
+		"at":     "(CompositeBootstrap) tryFileBootstrap",
+		"phase":  "bootstrap",
+		"step":   1,
+		"reason": "attempting file bootstrap from local reseed file",
+		"limit":  n,
+	}).Info("attempting file bootstrap from local reseed file")
 	peers, err := fb.GetPeers(ctx, n)
 
 	if err == nil && len(peers) > 0 {
-		log.WithField("count", len(peers)).Info("Successfully obtained peers from local reseed file")
+		log.WithFields(logger.Fields{
+			"at":           "(CompositeBootstrap) tryFileBootstrap",
+			"phase":        "bootstrap",
+			"step":         1,
+			"reason":       "file bootstrap succeeded",
+			"router_count": len(peers),
+			"requested":    n,
+		}).Info("successfully obtained peers from local reseed file")
 		return peers, nil
 	}
 
@@ -98,11 +135,24 @@ func tryFileBootstrap(fb *FileBootstrap, ctx context.Context, n int) ([]router_i
 
 // tryReseedBootstrap attempts to obtain peers from remote reseed servers.
 func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.Info("Attempting reseed bootstrap")
+	log.WithFields(logger.Fields{
+		"at":     "(CompositeBootstrap) tryReseedBootstrap",
+		"phase":  "bootstrap",
+		"step":   2,
+		"reason": "attempting reseed bootstrap from remote servers",
+		"limit":  n,
+	}).Info("attempting reseed bootstrap")
 	peers, err := rb.GetPeers(ctx, n)
 
 	if err == nil && len(peers) > 0 {
-		log.WithField("count", len(peers)).Info("Successfully obtained peers from reseed")
+		log.WithFields(logger.Fields{
+			"at":           "(CompositeBootstrap) tryReseedBootstrap",
+			"phase":        "bootstrap",
+			"step":         2,
+			"reason":       "reseed bootstrap succeeded",
+			"router_count": len(peers),
+			"requested":    n,
+		}).Info("successfully obtained peers from reseed")
 		return peers, nil
 	}
 
@@ -116,10 +166,21 @@ func tryReseedBootstrap(rb *ReseedBootstrap, ctx context.Context, n int) ([]rout
 
 // tryLocalNetDbBootstrap attempts to obtain peers from local netDb directories.
 func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.Info("Attempting local netDb bootstrap")
+	log.WithFields(logger.Fields{
+		"at":     "(CompositeBootstrap) tryLocalNetDbBootstrap",
+		"phase":  "bootstrap",
+		"step":   3,
+		"reason": "attempting local netdb bootstrap fallback",
+		"limit":  n,
+	}).Info("attempting local netDb bootstrap")
 	peers, err := lb.GetPeers(ctx, n)
 	if err != nil {
-		log.WithError(err).Error("Local netDb bootstrap failed")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(CompositeBootstrap) tryLocalNetDbBootstrap",
+			"phase":  "bootstrap",
+			"step":   3,
+			"reason": "local netdb bootstrap failed",
+		}).Error("local netDb bootstrap failed")
 		// Preserve error details with consistent wrapping
 		return nil, fmt.Errorf("local netDb bootstrap failed: %w", err)
 	}
@@ -128,25 +189,56 @@ func tryLocalNetDbBootstrap(lb *LocalNetDbBootstrap, ctx context.Context, n int)
 		return nil, fmt.Errorf("local netDb bootstrap returned no peers")
 	}
 
-	log.WithField("count", len(peers)).Info("Successfully obtained peers from local netDb")
+	log.WithFields(logger.Fields{
+		"at":           "(CompositeBootstrap) tryLocalNetDbBootstrap",
+		"phase":        "bootstrap",
+		"step":         3,
+		"reason":       "local netdb bootstrap succeeded",
+		"router_count": len(peers),
+		"requested":    n,
+	}).Info("successfully obtained peers from local netDb")
 	return peers, nil
 }
 
 // logFileBootstrapFailure logs appropriate warnings for file bootstrap failures.
 func logFileBootstrapFailure(err error) {
 	if err != nil {
-		log.WithError(err).Warn("File bootstrap failed, attempting remote reseed")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":       "(CompositeBootstrap) tryFileBootstrap",
+			"phase":    "bootstrap",
+			"step":     1,
+			"reason":   "file bootstrap failed, will try reseed",
+			"fallback": "reseed_bootstrap",
+		}).Warn("file bootstrap failed, attempting remote reseed")
 	} else {
-		log.Warn("File bootstrap returned no peers, attempting remote reseed")
+		log.WithFields(logger.Fields{
+			"at":       "(CompositeBootstrap) tryFileBootstrap",
+			"phase":    "bootstrap",
+			"step":     1,
+			"reason":   "file bootstrap returned no peers",
+			"fallback": "reseed_bootstrap",
+		}).Warn("file bootstrap returned no peers, attempting remote reseed")
 	}
 }
 
 // logReseedFailure logs appropriate warnings for reseed bootstrap failures.
 func logReseedFailure(err error) {
 	if err != nil {
-		log.WithError(err).Warn("Reseed bootstrap failed, attempting local netDb fallback")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":       "(CompositeBootstrap) tryReseedBootstrap",
+			"phase":    "bootstrap",
+			"step":     2,
+			"reason":   "reseed bootstrap failed, will try local netdb",
+			"fallback": "local_netdb_bootstrap",
+		}).Warn("reseed bootstrap failed, attempting local netDb fallback")
 	} else {
-		log.Warn("Reseed bootstrap returned no peers, attempting local netDb fallback")
+		log.WithFields(logger.Fields{
+			"at":       "(CompositeBootstrap) tryReseedBootstrap",
+			"phase":    "bootstrap",
+			"step":     2,
+			"reason":   "reseed bootstrap returned no peers",
+			"fallback": "local_netdb_bootstrap",
+		}).Warn("reseed bootstrap returned no peers, attempting local netDb fallback")
 	}
 }
 

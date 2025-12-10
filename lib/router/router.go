@@ -70,18 +70,28 @@ type Router struct {
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	log.WithFields(logger.Fields{
-		"at":     "NewRouter",
-		"reason": "initialization",
+		"at":          "(Router) CreateRouter",
+		"phase":       "startup",
+		"step":        1,
+		"reason":      "creating router instance",
+		"base_dir":    cfg.BaseDir,
+		"working_dir": cfg.WorkingDir,
 	}).Debug("creating router with provided configuration")
 
 	r, err := FromConfig(cfg)
 	if err != nil {
-		log.WithError(err).Error("Failed to create router from configuration")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) CreateRouter",
+			"phase":  "startup",
+			"reason": "router configuration failed",
+		}).Error("failed to create router from configuration")
 		return nil, err
 	}
 	log.WithFields(logger.Fields{
-		"at":     "NewRouter",
-		"reason": "initialization_complete",
+		"at":     "(Router) CreateRouter",
+		"phase":  "startup",
+		"step":   2,
+		"reason": "router instance created successfully",
 	}).Debug("router created successfully")
 
 	if err := initializeRouterKeystore(r, cfg); err != nil {
@@ -106,17 +116,37 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 
 // initializeRouterKeystore creates and stores the router keystore
 func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
-	log.Debug("Working directory is:", cfg.WorkingDir)
+	log.WithFields(logger.Fields{
+		"at":          "(Router) initializeRouterKeystore",
+		"phase":       "startup",
+		"step":        3,
+		"reason":      "initializing router keystore",
+		"working_dir": cfg.WorkingDir,
+	}).Debug("working directory is:", cfg.WorkingDir)
 
 	keystore, err := keys.NewRouterInfoKeystore(cfg.WorkingDir, "localRouter")
 	if err != nil {
-		log.WithError(err).Error("Failed to create RouterInfoKeystore")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":          "(Router) initializeRouterKeystore",
+			"phase":       "startup",
+			"reason":      "keystore creation failed",
+			"working_dir": cfg.WorkingDir,
+		}).Error("failed to create RouterInfoKeystore")
 		return err
 	}
-	log.Debug("RouterInfoKeystore created successfully")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) initializeRouterKeystore",
+		"phase":  "startup",
+		"step":   3,
+		"reason": "keystore created successfully",
+	}).Debug("routerInfoKeystore created successfully")
 
 	if err = keystore.StoreKeys(); err != nil {
-		log.WithError(err).Error("Failed to store RouterInfoKeystore")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) initializeRouterKeystore",
+			"phase":  "startup",
+			"reason": "keystore persistence failed",
+		}).Error("failed to store RouterInfoKeystore")
 		return err
 	}
 	log.Debug("RouterInfoKeystore stored successfully")
@@ -198,19 +228,38 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 
 // create router from configuration
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
-	log.WithField("config", c).Debug("Creating router from configuration")
+	log.WithFields(logger.Fields{
+		"at":          "(Router) FromConfig",
+		"phase":       "startup",
+		"step":        1,
+		"reason":      "constructing router from config",
+		"base_dir":    c.BaseDir,
+		"working_dir": c.WorkingDir,
+	}).Debug("creating router from configuration")
 	r = new(Router)
 	r.cfg = c
 	r.closeChnl = make(chan bool)
-	log.Debug("Router created successfully from configuration")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) FromConfig",
+		"phase":  "startup",
+		"reason": "router struct initialized",
+	}).Debug("router created successfully from configuration")
 	return
 }
 
 // Wait blocks until router is fully stopped
 func (r *Router) Wait() {
-	log.Debug("Waiting for router to stop")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Wait",
+		"phase":  "running",
+		"reason": "waiting for router shutdown",
+	}).Debug("waiting for router to stop")
 	r.wg.Wait()
-	log.Debug("Router has stopped")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Wait",
+		"phase":  "shutdown",
+		"reason": "all router goroutines completed",
+	}).Debug("router has stopped")
 }
 
 // Stop initiates router shutdown and waits for all goroutines to complete.
@@ -218,7 +267,9 @@ func (r *Router) Wait() {
 func (r *Router) Stop() {
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Stop",
-		"reason": "shutdown_requested",
+		"phase":  "shutdown",
+		"step":   1,
+		"reason": "shutdown requested",
 	}).Debug("stopping router")
 	r.runMux.Lock()
 
@@ -226,7 +277,8 @@ func (r *Router) Stop() {
 		r.runMux.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "(Router) Stop",
-			"reason": "already_stopped",
+			"phase":  "shutdown",
+			"reason": "router not running",
 		}).Debug("router already stopped")
 		return
 	}
@@ -237,7 +289,12 @@ func (r *Router) Stop() {
 	// Cancel router context to signal shutdown to all goroutines
 	if r.cancel != nil {
 		r.cancel()
-		log.Debug("Router context cancelled")
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Stop",
+			"phase":  "shutdown",
+			"step":   2,
+			"reason": "context canceled to signal subsystems",
+		}).Debug("router context cancelled")
 	}
 
 	r.stopI2CPServer()
@@ -245,16 +302,35 @@ func (r *Router) Stop() {
 	r.sendCloseSignal()
 
 	// Wait for all goroutines to finish before returning
-	log.Debug("Waiting for router goroutines to finish")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"phase":  "shutdown",
+		"step":   3,
+		"reason": "waiting for goroutines to complete",
+	}).Debug("waiting for router goroutines to finish")
 	r.wg.Wait()
-	log.Debug("Router stopped successfully")
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Stop",
+		"phase":  "shutdown",
+		"step":   4,
+		"reason": "all subsystems stopped",
+	}).Debug("router stopped successfully")
 }
 
 // stopNetDB shuts down the network database if it exists and logs the result.
 func (r *Router) stopNetDB() {
 	if r.StdNetDB != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopNetDB",
+			"phase":  "shutdown",
+			"reason": "stopping network database",
+		}).Debug("stopping NetDB")
 		r.StdNetDB.Stop()
-		log.Debug("NetDB stopped")
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopNetDB",
+			"phase":  "shutdown",
+			"reason": "network database stopped",
+		}).Debug("netDB stopped")
 	}
 }
 

@@ -20,7 +20,13 @@ type FileBootstrap struct {
 
 // NewFileBootstrap creates a new file bootstrap with the provided file path
 func NewFileBootstrap(filePath string) *FileBootstrap {
-	log.WithField("file_path", filePath).Info("Initializing file bootstrap")
+	log.WithFields(logger.Fields{
+		"at":        "(FileBootstrap) NewFileBootstrap",
+		"phase":     "bootstrap",
+		"step":      1,
+		"reason":    "initializing file bootstrap from local reseed file",
+		"file_path": filePath,
+	}).Info("initializing file bootstrap")
 	return &FileBootstrap{
 		filePath: filePath,
 	}
@@ -29,13 +35,21 @@ func NewFileBootstrap(filePath string) *FileBootstrap {
 // GetPeers implements the Bootstrap interface by reading RouterInfos from a local file
 func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
+		"at":              "(FileBootstrap) GetPeers",
+		"phase":           "bootstrap",
+		"step":            "start",
+		"reason":          "reading routers from local reseed file",
 		"file_path":       fb.filePath,
 		"requested_peers": n,
-	}).Info("Starting file bootstrap from local reseed file")
+	}).Info("starting file bootstrap from local reseed file")
 
 	// Check if context is already canceled
 	if ctx.Err() != nil {
-		log.WithError(ctx.Err()).Warn("File bootstrap canceled by context before starting")
+		log.WithError(ctx.Err()).WithFields(logger.Fields{
+			"at":     "(FileBootstrap) GetPeers",
+			"phase":  "bootstrap",
+			"reason": "context canceled before file bootstrap",
+		}).Warn("file bootstrap canceled by context before starting")
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
@@ -54,7 +68,15 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 		return nil, fmt.Errorf("no RouterInfos found in reseed file")
 	}
 
-	log.WithField("count", len(routerInfos)).Info("Successfully loaded RouterInfos from file")
+	log.WithFields(logger.Fields{
+		"at":           "(FileBootstrap) GetPeers",
+		"phase":        "bootstrap",
+		"step":         "complete",
+		"reason":       "successfully loaded routers from file",
+		"router_count": len(routerInfos),
+		"requested":    n,
+		"file_path":    fb.filePath,
+	}).Info("successfully loaded RouterInfos from file")
 
 	// Note: routerInfos already limited by processReseedFile, no need to call limitRouterInfos
 	return routerInfos, nil
@@ -64,7 +86,14 @@ func (fb *FileBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.Rou
 // The limit parameter controls how many RouterInfos are parsed to minimize memory usage.
 func (fb *FileBootstrap) processReseedFile(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
 	ext := strings.ToLower(filepath.Ext(fb.filePath))
-	log.WithField("extension", ext).Debug("Detected file extension")
+	log.WithFields(logger.Fields{
+		"at":        "(FileBootstrap) processReseedFile",
+		"phase":     "bootstrap",
+		"reason":    "determining file type for processing",
+		"extension": ext,
+		"file_path": fb.filePath,
+		"limit":     limit,
+	}).Debug("detected file extension")
 
 	var routerInfos []router_info.RouterInfo
 	var err error
@@ -79,7 +108,13 @@ func (fb *FileBootstrap) processReseedFile(ctx context.Context, limit int) ([]ro
 	}
 
 	if err != nil {
-		log.WithError(err).Error("Failed to process reseed file")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "(FileBootstrap) processReseedFile",
+			"phase":     "bootstrap",
+			"reason":    "failed to process reseed file",
+			"file_path": fb.filePath,
+			"file_type": ext,
+		}).Error("failed to process reseed file")
 		return nil, err
 	}
 
@@ -102,35 +137,63 @@ func limitRouterInfos(routerInfos []router_info.RouterInfo, n int) []router_info
 
 // validateFile checks if the file exists and is readable
 func (fb *FileBootstrap) validateFile() error {
-	log.WithField("file_path", fb.filePath).Debug("Validating reseed file")
+	log.WithFields(logger.Fields{
+		"at":        "(FileBootstrap) validateFile",
+		"phase":     "bootstrap",
+		"reason":    "validating reseed file existence and accessibility",
+		"file_path": fb.filePath,
+	}).Debug("validating reseed file")
 
 	// Check if file path is empty
 	if fb.filePath == "" {
-		log.Error("File bootstrap: empty file path provided")
+		log.WithFields(logger.Fields{
+			"at":     "(FileBootstrap) validateFile",
+			"phase":  "bootstrap",
+			"reason": "empty file path provided",
+		}).Error("file bootstrap: empty file path provided")
 		return fmt.Errorf("file bootstrap validation failed: empty file path")
 	}
 
 	info, err := os.Stat(fb.filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.WithField("file_path", fb.filePath).Error("Reseed file does not exist")
+			log.WithFields(logger.Fields{
+				"at":        "(FileBootstrap) validateFile",
+				"phase":     "bootstrap",
+				"reason":    "reseed file does not exist",
+				"file_path": fb.filePath,
+			}).Error("reseed file does not exist")
 			return fmt.Errorf("file bootstrap validation failed: file does not exist at path %s", fb.filePath)
 		}
-		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to stat reseed file")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "(FileBootstrap) validateFile",
+			"phase":     "bootstrap",
+			"reason":    "failed to access reseed file",
+			"file_path": fb.filePath,
+		}).Error("failed to stat reseed file")
 		return fmt.Errorf("file bootstrap validation failed: cannot access file %s: %w", fb.filePath, err)
 	}
 
 	if info.IsDir() {
-		log.WithField("file_path", fb.filePath).Error("Reseed path is a directory, not a file")
+		log.WithFields(logger.Fields{
+			"at":        "(FileBootstrap) validateFile",
+			"phase":     "bootstrap",
+			"reason":    "path is directory not file",
+			"file_path": fb.filePath,
+		}).Error("reseed path is a directory, not a file")
 		return fmt.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", fb.filePath)
 	}
 
 	// Check for suspiciously small files that likely aren't valid reseed files
 	if info.Size() < 100 {
 		log.WithFields(logger.Fields{
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "file too small to be valid reseed",
 			"file_path":  fb.filePath,
 			"size_bytes": info.Size(),
-		}).Error("Reseed file is too small to be valid")
+			"min_bytes":  100,
+		}).Error("reseed file is too small to be valid")
 		return fmt.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), fb.filePath)
 	}
 
@@ -146,9 +209,12 @@ func (fb *FileBootstrap) validateFile() error {
 // The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
 func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
+		"at":        "(FileBootstrap) processSU3File",
+		"phase":     "bootstrap",
+		"reason":    "processing SU3 reseed file",
 		"file_path": fb.filePath,
 		"limit":     limit,
-	}).Info("Processing SU3 reseed file")
+	}).Info("processing SU3 reseed file")
 
 	// Check context before processing
 	if ctx.Err() != nil {
@@ -159,20 +225,33 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 	reseeder := reseed.NewReseed()
 	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, limit)
 	if err != nil {
-		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to process SU3 file")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "(FileBootstrap) processSU3File",
+			"phase":     "bootstrap",
+			"reason":    "SU3 file processing failed",
+			"file_path": fb.filePath,
+		}).Error("failed to process SU3 file")
 		return nil, fmt.Errorf("SU3 file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
 	// Defensive check: ensure we got valid RouterInfos
 	if len(routerInfos) == 0 {
-		log.WithField("file_path", fb.filePath).Error("No valid RouterInfos extracted from SU3 file")
+		log.WithFields(logger.Fields{
+			"at":        "(FileBootstrap) processSU3File",
+			"phase":     "bootstrap",
+			"reason":    "no valid RouterInfos extracted",
+			"file_path": fb.filePath,
+		}).Error("no valid RouterInfos extracted from SU3 file")
 		return nil, fmt.Errorf("SU3 file processing failed: no valid RouterInfos found in %s (file may be corrupted or empty)", fb.filePath)
 	}
 
 	log.WithFields(logger.Fields{
-		"file_path": fb.filePath,
-		"count":     len(routerInfos),
-	}).Info("Successfully processed SU3 file")
+		"at":           "(FileBootstrap) processSU3File",
+		"phase":        "bootstrap",
+		"reason":       "SU3 processing completed successfully",
+		"file_path":    fb.filePath,
+		"router_count": len(routerInfos),
+	}).Info("successfully processed SU3 file")
 
 	return routerInfos, nil
 }
@@ -181,9 +260,12 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 // The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
 func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
+		"at":        "(FileBootstrap) processZipFile",
+		"phase":     "bootstrap",
+		"reason":    "processing zip reseed file",
 		"file_path": fb.filePath,
 		"limit":     limit,
-	}).Info("Processing zip reseed file")
+	}).Info("processing zip reseed file")
 
 	// Check context before processing
 	if ctx.Err() != nil {
@@ -194,20 +276,33 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 	reseeder := reseed.NewReseed()
 	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, limit)
 	if err != nil {
-		log.WithError(err).WithField("file_path", fb.filePath).Error("Failed to process zip file")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "(FileBootstrap) processZipFile",
+			"phase":     "bootstrap",
+			"reason":    "zip file processing failed",
+			"file_path": fb.filePath,
+		}).Error("failed to process zip file")
 		return nil, fmt.Errorf("zip file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
 	// Defensive check: ensure we got valid RouterInfos
 	if len(routerInfos) == 0 {
-		log.WithField("file_path", fb.filePath).Error("No valid RouterInfos extracted from zip file")
+		log.WithFields(logger.Fields{
+			"at":        "(FileBootstrap) processZipFile",
+			"phase":     "bootstrap",
+			"reason":    "no valid RouterInfos extracted",
+			"file_path": fb.filePath,
+		}).Error("no valid RouterInfos extracted from zip file")
 		return nil, fmt.Errorf("zip file processing failed: no valid RouterInfos found in %s (file may be corrupted or empty)", fb.filePath)
 	}
 
 	log.WithFields(logger.Fields{
-		"file_path": fb.filePath,
-		"count":     len(routerInfos),
-	}).Info("Successfully processed zip file")
+		"at":           "(FileBootstrap) processZipFile",
+		"phase":        "bootstrap",
+		"reason":       "zip processing completed successfully",
+		"file_path":    fb.filePath,
+		"router_count": len(routerInfos),
+	}).Info("successfully processed zip file")
 
 	return routerInfos, nil
 }

@@ -24,12 +24,25 @@ type TunnelBuilder struct {
 //
 // Returns an error if the peer selector is nil.
 func NewTunnelBuilder(selector PeerSelector) (*TunnelBuilder, error) {
-	log.WithField("at", "NewTunnelBuilder").Debug("Creating new tunnel builder")
+	log.WithFields(logger.Fields{
+		"at":     "(TunnelBuilder) NewTunnelBuilder",
+		"phase":  "tunnel_build",
+		"step":   1,
+		"reason": "initializing tunnel builder",
+	}).Debug("creating new tunnel builder")
 	if selector == nil {
-		log.WithField("at", "NewTunnelBuilder").Error("Peer selector is nil")
+		log.WithFields(logger.Fields{
+			"at":     "(TunnelBuilder) NewTunnelBuilder",
+			"phase":  "tunnel_build",
+			"reason": "peer selector is nil",
+		}).Error("peer selector is nil")
 		return nil, fmt.Errorf("peer selector cannot be nil")
 	}
-	log.WithField("at", "NewTunnelBuilder").Debug("Tunnel builder created successfully")
+	log.WithFields(logger.Fields{
+		"at":     "(TunnelBuilder) NewTunnelBuilder",
+		"phase":  "tunnel_build",
+		"reason": "tunnel builder initialized successfully",
+	}).Debug("tunnel builder created successfully")
 	return &TunnelBuilder{peerSelector: selector}, nil
 }
 
@@ -86,29 +99,56 @@ type TunnelBuildResult struct {
 // - Cryptographic key generation fails
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error) {
 	log.WithFields(logger.Fields{
-		"at":              "CreateBuildRequest",
+		"at":              "(TunnelBuilder) CreateBuildRequest",
+		"phase":           "tunnel_build",
+		"step":            "start",
+		"reason":          "initiating tunnel build request creation",
 		"hop_count":       req.HopCount,
 		"is_inbound":      req.IsInbound,
 		"use_short_build": req.UseShortBuild,
-	}).Debug("Creating tunnel build request")
+		"exclude_count":   len(req.ExcludePeers),
+	}).Debug("creating tunnel build request")
 
 	if err := tb.validateHopCount(req.HopCount); err != nil {
-		log.WithError(err).Error("Invalid hop count")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "(TunnelBuilder) CreateBuildRequest",
+			"phase":     "tunnel_build",
+			"reason":    "hop count validation failed",
+			"hop_count": req.HopCount,
+			"min_hops":  1,
+			"max_hops":  8,
+		}).Error("invalid hop count")
 		return nil, err
 	}
 
 	peers, err := tb.selectTunnelPeers(req)
 	if err != nil {
-		log.WithError(err).Error("Failed to select tunnel peers")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":            "(TunnelBuilder) CreateBuildRequest",
+			"phase":         "tunnel_build",
+			"reason":        "peer selection failed",
+			"hop_count":     req.HopCount,
+			"exclude_count": len(req.ExcludePeers),
+		}).Error("failed to select tunnel peers")
 		return nil, err
 	}
 
 	tunnelID, err := generateTunnelID()
 	if err != nil {
-		log.WithError(err).Error("Failed to generate tunnel ID")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(TunnelBuilder) CreateBuildRequest",
+			"phase":  "tunnel_build",
+			"reason": "tunnel ID generation failed",
+		}).Error("failed to generate tunnel ID")
 		return nil, fmt.Errorf("failed to generate tunnel ID: %w", err)
 	}
-	log.WithField("tunnel_id", tunnelID).Debug("Generated tunnel ID")
+	log.WithFields(logger.Fields{
+		"at":        "(TunnelBuilder) CreateBuildRequest",
+		"phase":     "tunnel_build",
+		"step":      "id_generated",
+		"reason":    "generated unique tunnel identifier",
+		"tunnel_id": tunnelID,
+	}).Debug("generated tunnel ID")
 
 	records, replyKeys, replyIVs, err := tb.createAllHopRecords(req, tunnelID, peers)
 	if err != nil {
@@ -146,31 +186,45 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
 // selectTunnelPeers selects and validates peers for tunnel hops.
 func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"at":            "selectTunnelPeers",
+		"at":            "(TunnelBuilder) selectTunnelPeers",
+		"phase":         "tunnel_build",
+		"step":          "peer_selection",
+		"reason":        "selecting routers for tunnel hops",
 		"hop_count":     req.HopCount,
 		"exclude_count": len(req.ExcludePeers),
-	}).Debug("Selecting tunnel peers")
+	}).Debug("selecting tunnel peers")
 
 	peers, err := tb.peerSelector.SelectPeers(req.HopCount, req.ExcludePeers)
 	if err != nil {
-		log.WithError(err).Error("Peer selection failed")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":            "(TunnelBuilder) selectTunnelPeers",
+			"phase":         "tunnel_build",
+			"reason":        "peer selector returned error",
+			"hop_count":     req.HopCount,
+			"exclude_count": len(req.ExcludePeers),
+		}).Error("peer selection failed")
 		return nil, fmt.Errorf("failed to select peers: %w", err)
 	}
 
 	if len(peers) < req.HopCount {
 		log.WithFields(logger.Fields{
-			"at":     "selectTunnelPeers",
-			"needed": req.HopCount,
-			"got":    len(peers),
-			"reason": "insufficient peers selected",
-		}).Error("Not enough peers")
+			"at":        "(TunnelBuilder) selectTunnelPeers",
+			"phase":     "tunnel_build",
+			"reason":    "insufficient peers returned by selector",
+			"needed":    req.HopCount,
+			"got":       len(peers),
+			"shortfall": req.HopCount - len(peers),
+		}).Error("not enough peers")
 		return nil, fmt.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
 	log.WithFields(logger.Fields{
-		"at":         "selectTunnelPeers",
+		"at":         "(TunnelBuilder) selectTunnelPeers",
+		"phase":      "tunnel_build",
+		"step":       "peer_selection",
+		"reason":     "peer selection completed successfully",
 		"peer_count": len(peers),
-	}).Debug("Successfully selected tunnel peers")
+	}).Debug("successfully selected tunnel peers")
 	return peers, nil
 }
 

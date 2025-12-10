@@ -84,46 +84,96 @@ func bindFlagsToViper() {
 // bindRouterFlagsToViper binds router flags to viper configuration.
 func bindRouterFlagsToViper() {
 	if err := viper.BindPFlag("base_dir", RootCmd.PersistentFlags().Lookup("base-dir")); err != nil {
-		log.WithError(err).Fatal("Failed to bind base_dir flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindRouterFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind base_dir configuration flag",
+			"flag":   "base-dir",
+		}).Fatal("failed to bind base_dir flag")
 	}
 	if err := viper.BindPFlag("working_dir", RootCmd.PersistentFlags().Lookup("working-dir")); err != nil {
-		log.WithError(err).Fatal("Failed to bind working_dir flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindRouterFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind working_dir configuration flag",
+			"flag":   "working-dir",
+		}).Fatal("failed to bind working_dir flag")
 	}
 }
 
 // bindNetDbFlagsToViper binds NetDb flags to viper configuration.
 func bindNetDbFlagsToViper() {
 	if err := viper.BindPFlag("netdb.path", RootCmd.PersistentFlags().Lookup("netdb.path")); err != nil {
-		log.WithError(err).Fatal("Failed to bind netdb.path flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindNetDbFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind netdb.path configuration flag",
+			"flag":   "netdb.path",
+		}).Fatal("failed to bind netdb.path flag")
 	}
 }
 
 // bindBootstrapFlagsToViper binds bootstrap flags to viper configuration.
 func bindBootstrapFlagsToViper() {
 	if err := viper.BindPFlag("bootstrap.low_peer_threshold", RootCmd.PersistentFlags().Lookup("bootstrap.low-peer-threshold")); err != nil {
-		log.WithError(err).Fatal("Failed to bind bootstrap.low_peer_threshold flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindBootstrapFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind bootstrap threshold flag",
+			"flag":   "bootstrap.low-peer-threshold",
+		}).Fatal("failed to bind bootstrap.low_peer_threshold flag")
 	}
 	if err := viper.BindPFlag("bootstrap.bootstrap_type", RootCmd.PersistentFlags().Lookup("bootstrap.type")); err != nil {
-		log.WithError(err).Fatal("Failed to bind bootstrap.bootstrap_type flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindBootstrapFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind bootstrap type flag",
+			"flag":   "bootstrap.type",
+		}).Fatal("failed to bind bootstrap.bootstrap_type flag")
 	}
 	if err := viper.BindPFlag("bootstrap.reseed_file_path", RootCmd.PersistentFlags().Lookup("bootstrap.reseed-file")); err != nil {
-		log.WithError(err).Fatal("Failed to bind bootstrap.reseed_file_path flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindBootstrapFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind reseed file path flag",
+			"flag":   "bootstrap.reseed-file",
+		}).Fatal("failed to bind bootstrap.reseed_file_path flag")
 	}
 }
 
 // bindI2CPFlagsToViper binds I2CP flags to viper configuration.
 func bindI2CPFlagsToViper() {
 	if err := viper.BindPFlag("i2cp.enabled", RootCmd.PersistentFlags().Lookup("i2cp.enabled")); err != nil {
-		log.WithError(err).Fatal("Failed to bind i2cp.enabled flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2CPFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2cp.enabled flag",
+			"flag":   "i2cp.enabled",
+		}).Fatal("failed to bind i2cp.enabled flag")
 	}
 	if err := viper.BindPFlag("i2cp.address", RootCmd.PersistentFlags().Lookup("i2cp.address")); err != nil {
-		log.WithError(err).Fatal("Failed to bind i2cp.address flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2CPFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2cp.address flag",
+			"flag":   "i2cp.address",
+		}).Fatal("failed to bind i2cp.address flag")
 	}
 	if err := viper.BindPFlag("i2cp.network", RootCmd.PersistentFlags().Lookup("i2cp.network")); err != nil {
-		log.WithError(err).Fatal("Failed to bind i2cp.network flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2CPFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2cp.network flag",
+			"flag":   "i2cp.network",
+		}).Fatal("failed to bind i2cp.network flag")
 	}
 	if err := viper.BindPFlag("i2cp.max_sessions", RootCmd.PersistentFlags().Lookup("i2cp.max-sessions")); err != nil {
-		log.WithError(err).Fatal("Failed to bind i2cp.max_sessions flag")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindI2CPFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind i2cp.max_sessions flag",
+			"flag":   "i2cp.max-sessions",
+		}).Fatal("failed to bind i2cp.max_sessions flag")
 	}
 }
 
@@ -132,26 +182,51 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Show current configuration",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.WithField("config_file", viper.ConfigFileUsed()).Info("Configuration file")
+		log.WithFields(logger.Fields{
+			"at":          "configCmd",
+			"phase":       "startup",
+			"reason":      "displaying configuration",
+			"config_file": viper.ConfigFileUsed(),
+		}).Info("configuration file")
 
 		log.WithFields(logger.Fields{
+			"at":          "configCmd",
+			"phase":       "startup",
+			"reason":      "router configuration loaded",
 			"base_dir":    config.RouterConfigProperties.BaseDir,
 			"working_dir": config.RouterConfigProperties.WorkingDir,
-		}).Info("Router configuration")
-
-		log.WithField("netdb_path", config.RouterConfigProperties.NetDb.Path).Info("NetDb configuration")
+		}).Info("router configuration")
 
 		log.WithFields(logger.Fields{
+			"at":         "configCmd",
+			"phase":      "startup",
+			"reason":     "netdb configuration loaded",
+			"netdb_path": config.RouterConfigProperties.NetDb.Path,
+		}).Info("netDb configuration")
+
+		log.WithFields(logger.Fields{
+			"at":                 "configCmd",
+			"phase":              "startup",
+			"reason":             "bootstrap configuration loaded",
 			"low_peer_threshold": config.RouterConfigProperties.Bootstrap.LowPeerThreshold,
 			"bootstrap_type":     config.RouterConfigProperties.Bootstrap.BootstrapType,
-		}).Info("Bootstrap configuration")
+		}).Info("bootstrap configuration")
 
-		log.Info("Reseed servers:")
-		for _, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {
+		log.WithFields(logger.Fields{
+			"at":     "configCmd",
+			"phase":  "startup",
+			"reason": "displaying reseed servers",
+			"count":  len(config.RouterConfigProperties.Bootstrap.ReseedServers),
+		}).Info("reseed servers:")
+		for i, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {
 			log.WithFields(logger.Fields{
+				"at":              "configCmd",
+				"phase":           "startup",
+				"reason":          "reseed server configured",
+				"index":           i,
 				"url":             server.Url,
 				"su3_fingerprint": server.SU3Fingerprint,
-			}).Info("  Reseed server")
+			}).Info("  reseed server")
 		}
 	},
 }
@@ -181,13 +256,37 @@ func debugPrintConfig() {
 func runRouter() {
 	go signals.Handle()
 
-	log.Debug("parsing i2p router configuration")
-	log.Debug("using netDb in:", config.RouterConfigProperties.NetDb.Path)
-	log.Debug("starting up i2p router")
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "startup",
+		"step":   1,
+		"reason": "parsing router configuration",
+	}).Debug("parsing i2p router configuration")
+
+	log.WithFields(logger.Fields{
+		"at":         "runRouter",
+		"phase":      "startup",
+		"step":       2,
+		"reason":     "netdb path configured",
+		"netdb_path": config.RouterConfigProperties.NetDb.Path,
+	}).Debug("using netDb in:", config.RouterConfigProperties.NetDb.Path)
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "startup",
+		"step":   3,
+		"reason": "initiating router creation",
+	}).Debug("starting up i2p router")
 
 	var err error
 	routerInstance, err = router.CreateRouter(config.RouterConfigProperties)
 	if err == nil {
+		log.WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "startup",
+			"step":   4,
+			"reason": "router created successfully",
+		}).Info("router instance created")
 		signals.RegisterReloadHandler(func() {
 			if err := viper.ReadInConfig(); err != nil {
 				log.Errorf("failed to reload config: %s", err)
@@ -198,15 +297,42 @@ func runRouter() {
 
 		signals.RegisterInterruptHandler(func() {
 			if routerInstance != nil {
+				log.WithFields(logger.Fields{
+					"at":     "runRouter",
+					"phase":  "shutdown",
+					"reason": "interrupt signal received",
+				}).Info("stopping router")
 				routerInstance.Stop()
 			}
 		})
 
+		log.WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "startup",
+			"step":   5,
+			"reason": "starting router subsystems",
+		}).Info("starting router")
 		routerInstance.Start()
+
+		log.WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "running",
+			"reason": "router running, waiting for shutdown",
+		}).Info("router started, entering main loop")
 		routerInstance.Wait()
+
+		log.WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "shutdown",
+			"reason": "router shutdown complete, cleaning up",
+		}).Info("closing router")
 		routerInstance.Close()
 	} else {
-		log.Errorf("failed to create i2p router: %s", err)
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "startup",
+			"reason": "router creation failed",
+		}).Errorf("failed to create i2p router: %s", err)
 	}
 }
 

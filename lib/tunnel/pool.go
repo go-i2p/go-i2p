@@ -138,9 +138,13 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	defer p.mutex.Unlock()
 	p.tunnels[tunnel.ID] = tunnel
 	log.WithFields(logger.Fields{
-		"at":        "Pool.AddTunnel",
-		"reason":    "tunnel_registered",
-		"tunnel_id": tunnel.ID,
+		"at":           "(Pool) AddTunnel",
+		"phase":        "tunnel_build",
+		"reason":       "tunnel registered in pool",
+		"tunnel_id":    tunnel.ID,
+		"tunnel_state": tunnel.State,
+		"hop_count":    len(tunnel.Hops),
+		"pool_size":    len(p.tunnels),
 	}).Debug("added tunnel to pool")
 }
 
@@ -148,11 +152,21 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 func (p *Pool) RemoveTunnel(id TunnelID) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	tunnel, existed := p.tunnels[id]
 	delete(p.tunnels, id)
 	log.WithFields(logger.Fields{
-		"at":        "Pool.RemoveTunnel",
-		"reason":    "tunnel_deregistered",
+		"at":        "(Pool) RemoveTunnel",
+		"phase":     "tunnel_build",
+		"reason":    "tunnel removed from pool",
 		"tunnel_id": id,
+		"existed":   existed,
+		"tunnel_state": func() string {
+			if existed {
+				return fmt.Sprintf("%v", tunnel.State)
+			}
+			return "unknown"
+		}(),
+		"pool_size": len(p.tunnels),
 	}).Debug("removed tunnel from pool")
 }
 
@@ -168,9 +182,11 @@ func (p *Pool) GetActiveTunnels() []*TunnelState {
 		}
 	}
 	log.WithFields(logger.Fields{
-		"at":           "Pool.GetActiveTunnels",
-		"reason":       "filtered_by_state",
+		"at":           "(Pool) GetActiveTunnels",
+		"phase":        "tunnel_build",
+		"reason":       "filtered tunnels by ready state",
 		"active_count": len(active),
+		"total_count":  len(p.tunnels),
 	}).Debug("retrieved active tunnels")
 	return active
 }
@@ -182,8 +198,10 @@ func (p *Pool) Stop() {
 	}
 	p.maintWg.Wait() // Wait for maintenance goroutine to exit
 	log.WithFields(logger.Fields{
-		"at":     "Pool.Stop",
-		"reason": "shutdown_complete",
+		"at":        "(Pool) Stop",
+		"phase":     "tunnel_build",
+		"reason":    "pool maintenance shutdown completed",
+		"pool_size": len(p.tunnels),
 	}).Debug("tunnel pool stopped")
 }
 
@@ -207,9 +225,12 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
-			"at":            "Pool.cleanupExpiredTunnels",
-			"reason":        "expiry_maintenance",
+			"at":            "(Pool) cleanupExpiredTunnels",
+			"phase":         "tunnel_build",
+			"reason":        "expired tunnels removed from pool",
 			"expired_count": len(expired),
+			"max_age":       maxAge,
+			"pool_size":     len(p.tunnels),
 		}).Warn("cleaned up expired tunnels")
 	}
 }
@@ -219,8 +240,9 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration) {
 func (p *Pool) StartMaintenance() error {
 	if p.tunnelBuilder == nil {
 		log.WithFields(logger.Fields{
-			"at":     "Pool.StartMaintenance",
-			"reason": "nil_tunnel_builder",
+			"at":     "(Pool) StartMaintenance",
+			"phase":  "tunnel_build",
+			"reason": "tunnel builder not configured",
 		}).Error("tunnel builder not set")
 		return fmt.Errorf("tunnel builder not set")
 	}
@@ -228,9 +250,14 @@ func (p *Pool) StartMaintenance() error {
 	p.maintWg.Add(1)
 	go p.maintenanceLoop()
 	log.WithFields(logger.Fields{
-		"at":          "Pool.StartMaintenance",
-		"reason":      "maintenance_started",
+		"at":          "(Pool) StartMaintenance",
+		"phase":       "tunnel_build",
+		"step":        1,
+		"reason":      "pool maintenance goroutine started",
 		"min_tunnels": p.config.MinTunnels,
+		"max_tunnels": p.config.MaxTunnels,
+		"hop_count":   p.config.HopCount,
+		"is_inbound":  p.config.IsInbound,
 	}).Info("started tunnel pool maintenance")
 	return nil
 }
@@ -250,8 +277,9 @@ func (p *Pool) maintenanceLoop() {
 		select {
 		case <-p.ctx.Done():
 			log.WithFields(logger.Fields{
-				"at":     "Pool.maintenanceLoop",
-				"reason": "shutdown_signal",
+				"at":     "(Pool) maintenanceLoop",
+				"phase":  "tunnel_build",
+				"reason": "received shutdown signal",
 			}).Debug("pool maintenance loop stopped")
 			return
 		case <-ticker.C:
@@ -276,10 +304,16 @@ func (p *Pool) maintainPool() {
 
 	if needed > 0 {
 		log.WithFields(logger.Fields{
+			"at":          "(Pool) maintainPool",
+			"phase":       "tunnel_build",
+			"step":        "determine_needs",
+			"reason":      "tunnel pool below threshold",
 			"active":      activeCount,
 			"near_expiry": nearExpiry,
 			"needed":      needed,
-		}).Info("Building replacement tunnels")
+			"min_tunnels": p.config.MinTunnels,
+			"max_tunnels": p.config.MaxTunnels,
+		}).Info("building replacement tunnels")
 
 		// Build tunnels with exponential backoff on failures
 		p.buildTunnelsWithBackoff(needed)
@@ -298,9 +332,13 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 		if tunnel.State == TunnelReady && age > p.config.TunnelLifetime {
 			expired = append(expired, id)
 			log.WithFields(logger.Fields{
-				"tunnel_id": id,
-				"age":       age,
-			}).Debug("Tunnel expired")
+				"at":           "(Pool) cleanupExpiredTunnelsLocked",
+				"phase":        "tunnel_build",
+				"reason":       "tunnel exceeded lifetime",
+				"tunnel_id":    id,
+				"age":          age,
+				"max_lifetime": p.config.TunnelLifetime,
+			}).Debug("tunnel expired")
 		}
 
 		// Remove failed tunnels
@@ -315,9 +353,11 @@ func (p *Pool) cleanupExpiredTunnelsLocked() {
 
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
-			"at":     "Pool.cleanupExpiredAndFailedTunnels",
-			"reason": "expiry_and_failure_cleanup",
-			"count":  len(expired),
+			"at":        "(Pool) cleanupExpiredAndFailedTunnels",
+			"phase":     "tunnel_build",
+			"reason":    "removed expired and failed tunnels",
+			"count":     len(expired),
+			"pool_size": len(p.tunnels),
 		}).Debug("cleaned up expired/failed tunnels")
 	}
 }
@@ -376,9 +416,13 @@ func (p *Pool) buildTunnelsWithBackoff(count int) {
 	// Check if we need to wait due to backoff
 	if !p.lastBuildTime.IsZero() && now.Sub(p.lastBuildTime) < backoffDelay {
 		log.WithFields(logger.Fields{
-			"backoff":  backoffDelay,
-			"failures": p.buildFailures,
-		}).Debug("Skipping build due to backoff")
+			"at":             "(Pool) buildTunnelsWithBackoff",
+			"phase":          "tunnel_build",
+			"reason":         "skipping build due to backoff delay",
+			"backoff_delay":  backoffDelay,
+			"failures":       p.buildFailures,
+			"time_remaining": backoffDelay - now.Sub(p.lastBuildTime),
+		}).Debug("skipping build due to backoff")
 		return
 	}
 
@@ -402,9 +446,11 @@ func (p *Pool) attemptBuildTunnelsAsync(count int) {
 		p.buildFailures++
 		if p.buildFailures > p.config.MaxBuildRetries {
 			log.WithFields(logger.Fields{
-				"at":       "Pool.buildTunnelsIfNeeded",
-				"reason":   "max_retries_exceeded",
-				"failures": p.buildFailures,
+				"at":          "(Pool) attemptBuildTunnelsAsync",
+				"phase":       "tunnel_build",
+				"reason":      "consecutive build failures exceeded threshold",
+				"failures":    p.buildFailures,
+				"max_retries": p.config.MaxBuildRetries,
 			}).Warn("max build retries exceeded")
 			p.buildFailures = p.config.MaxBuildRetries // Cap failures
 		}
@@ -415,8 +461,9 @@ func (p *Pool) attemptBuildTunnelsAsync(count int) {
 func (p *Pool) attemptBuildTunnels(count int) bool {
 	if p.tunnelBuilder == nil {
 		log.WithFields(logger.Fields{
-			"at":     "Pool.buildTunnelsIfNeeded",
-			"reason": "nil_tunnel_builder",
+			"at":     "(Pool) attemptBuildTunnels",
+			"phase":  "tunnel_build",
+			"reason": "tunnel builder not configured",
 		}).Error("cannot build tunnels: tunnel builder not set")
 		return false
 	}
@@ -437,9 +484,12 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 			tunnelID, err = p.tunnelBuilder.BuildTunnel(req)
 			if err != nil {
 				log.WithFields(logger.Fields{
-					"at":     "Pool.buildTunnelsIfNeeded",
-					"reason": "tunnel_build_failed",
-					"error":  err.Error(),
+					"at":          "(Pool) attemptBuildTunnels",
+					"phase":       "tunnel_build",
+					"reason":      "tunnel build request failed",
+					"error":       err.Error(),
+					"retry":       retry + 1,
+					"max_retries": maxRetries,
 				}).Warn("failed to build tunnel")
 				break
 			}
@@ -456,9 +506,13 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 
 			// Collision detected - extremely rare but handle it
 			log.WithFields(logger.Fields{
-				"tunnel_id": tunnelID,
-				"retry":     retry + 1,
-			}).Warn("Tunnel ID collision detected, retrying")
+				"at":          "(Pool) attemptBuildTunnels",
+				"phase":       "tunnel_build",
+				"reason":      "tunnel ID collision detected",
+				"tunnel_id":   tunnelID,
+				"retry":       retry + 1,
+				"max_retries": maxRetries,
+			}).Warn("tunnel ID collision detected, retrying")
 
 			// If this was our last retry, set error
 			if retry == maxRetries-1 {
@@ -471,9 +525,13 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 		}
 
 		log.WithFields(logger.Fields{
-			"at":        "Pool.buildTunnelsIfNeeded",
-			"reason":    "build_initiated",
-			"tunnel_id": tunnelID,
+			"at":         "(Pool) attemptBuildTunnels",
+			"phase":      "tunnel_build",
+			"step":       i + 1,
+			"reason":     "tunnel build initiated",
+			"tunnel_id":  tunnelID,
+			"hop_count":  req.HopCount,
+			"is_inbound": req.IsInbound,
 		}).Debug("initiated tunnel build")
 		successCount++
 	}
@@ -490,8 +548,10 @@ func (p *Pool) SelectTunnel() *TunnelState {
 	active := p.getActiveTunnelsLocked()
 	if len(active) == 0 {
 		log.WithFields(logger.Fields{
-			"at":     "Pool.SelectTunnel",
-			"reason": "no_tunnels_available",
+			"at":        "(Pool) SelectTunnel",
+			"phase":     "tunnel_build",
+			"reason":    "no active tunnels available for selection",
+			"pool_size": len(p.tunnels),
 		}).Debug("no active tunnels available")
 		return nil
 	}

@@ -33,9 +33,12 @@ func NewLocalNetDbBootstrap(cfg *config.BootstrapConfig) *LocalNetDbBootstrap {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "NewLocalNetDbBootstrap",
-		"reason":       "initialization",
-		"search_paths": searchPaths,
+		"at":                "(LocalNetDbBootstrap) NewLocalNetDbBootstrap",
+		"phase":             "bootstrap",
+		"step":              1,
+		"reason":            "initializing local netdb bootstrap",
+		"search_path_count": len(searchPaths),
+		"search_paths":      searchPaths,
 	}).Info("initializing local netDb bootstrap")
 	return &LocalNetDbBootstrap{
 		searchPaths: searchPaths,
@@ -52,7 +55,14 @@ func NewLocalNetDbBootstrapWithPaths(paths []string) *LocalNetDbBootstrap {
 
 // GetPeers implements the Bootstrap interface by reading RouterInfos from local netDb
 func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
-	log.WithField("requested_peers", n).Info("Starting local netDb bootstrap")
+	log.WithFields(logger.Fields{
+		"at":              "(LocalNetDbBootstrap) GetPeers",
+		"phase":           "bootstrap",
+		"step":            "start",
+		"reason":          "searching for existing I2P netdb directories",
+		"requested_peers": n,
+		"search_paths":    len(lb.searchPaths),
+	}).Info("starting local netDb bootstrap")
 
 	// Find the first available netDb directory
 	netDbPath, err := lb.findNetDbDirectory()
@@ -60,7 +70,14 @@ func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 		return nil, fmt.Errorf("no local netDb found: %w", err)
 	}
 
-	log.WithField("path", netDbPath).Info("Found local netDb directory")
+	log.WithFields(logger.Fields{
+		"at":       "(LocalNetDbBootstrap) GetPeers",
+		"phase":    "bootstrap",
+		"step":     "directory_found",
+		"reason":   "found valid netdb directory",
+		"path":     netDbPath,
+		"searched": len(lb.searchPaths),
+	}).Info("found local netDb directory")
 
 	// Read RouterInfos from the directory
 	routerInfos, err := lb.readRouterInfosFromDirectory(ctx, netDbPath, n)
@@ -68,22 +85,59 @@ func (lb *LocalNetDbBootstrap) GetPeers(ctx context.Context, n int) ([]router_in
 		return nil, fmt.Errorf("failed to read RouterInfos from local netDb: %w", err)
 	}
 
-	log.WithField("count", len(routerInfos)).Info("Successfully loaded RouterInfos from local netDb")
+	log.WithFields(logger.Fields{
+		"at":           "(LocalNetDbBootstrap) GetPeers",
+		"phase":        "bootstrap",
+		"step":         "complete",
+		"reason":       "successfully loaded routers from local netdb",
+		"router_count": len(routerInfos),
+		"requested":    n,
+		"netdb_path":   netDbPath,
+	}).Info("successfully loaded RouterInfos from local netDb")
 	return routerInfos, nil
 }
 
 // findNetDbDirectory searches for an existing netDb directory
 func (lb *LocalNetDbBootstrap) findNetDbDirectory() (string, error) {
-	for _, path := range lb.searchPaths {
+	log.WithFields(logger.Fields{
+		"at":         "(LocalNetDbBootstrap) findNetDbDirectory",
+		"phase":      "bootstrap",
+		"reason":     "searching for existing netdb directory",
+		"path_count": len(lb.searchPaths),
+	}).Debug("searching for netdb directory")
+
+	for i, path := range lb.searchPaths {
 		expanded := expandPath(path)
+
+		log.WithFields(logger.Fields{
+			"at":     "(LocalNetDbBootstrap) findNetDbDirectory",
+			"phase":  "bootstrap",
+			"reason": "checking search path",
+			"index":  i + 1,
+			"total":  len(lb.searchPaths),
+			"path":   expanded,
+		}).Debug("checking netdb search path")
 
 		// Check if this is a valid netDb directory
 		if lb.isValidNetDbDirectory(expanded) {
-			log.WithField("path", expanded).Debug("Found valid netDb directory")
+			log.WithFields(logger.Fields{
+				"at":      "(LocalNetDbBootstrap) findNetDbDirectory",
+				"phase":   "bootstrap",
+				"reason":  "found valid netdb directory",
+				"path":    expanded,
+				"checked": i + 1,
+			}).Debug("found valid netDb directory")
 			return expanded, nil
 		}
 	}
 
+	log.WithFields(logger.Fields{
+		"at":       "(LocalNetDbBootstrap) findNetDbDirectory",
+		"phase":    "bootstrap",
+		"reason":   "no valid netdb directory found",
+		"searched": len(lb.searchPaths),
+		"paths":    lb.searchPaths,
+	}).Error("no valid netdb directory found in search paths")
 	return "", fmt.Errorf("no valid netDb directory found in search paths: %v", lb.searchPaths)
 }
 
@@ -244,7 +298,11 @@ func getDefaultNetDbSearchPaths() []string {
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.WithError(err).Warn("Failed to get user home directory")
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "getDefaultNetDbSearchPaths",
+			"phase":  "bootstrap",
+			"reason": "failed to determine user home directory",
+		}).Warn("failed to get user home directory")
 		homeDir = "~"
 	}
 
