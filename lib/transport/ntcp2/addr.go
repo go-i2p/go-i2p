@@ -210,5 +210,6 @@ func WrapNTCP2Addr(addr net.Addr, routerHash []byte) (*ntcp2.NTCP2Addr, error) {
 	if ntcp2Addr, ok := addr.(*ntcp2.NTCP2Addr); ok {
 		return ntcp2Addr, nil
 	}
-	return nil, ErrInvalidRouterInfo
+	 // Create new NTCP2Addr from TCP address
+    return ntcp2.NewNTCP2Addr(addr, routerHash, "initiator")
 }
