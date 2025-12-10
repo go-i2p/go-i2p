@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -673,8 +674,15 @@ func (r Reseed) extractZipFile(zipPath string) ([]string, error) {
 		return nil, oops.Errorf("error: reseed appears to have no content")
 	}
 
-	log.WithField("file_count", len(files)).Info("Successfully extracted reseed files")
-	return files, nil
+	// The unzip library returns just the filenames, not full paths
+	// We need to prepend the destination path to each filename
+	fullPaths := make([]string, len(files))
+	for i, filename := range files {
+		fullPaths[i] = filepath.Join(destPath, filename)
+	}
+
+	log.WithField("file_count", len(fullPaths)).Info("Successfully extracted reseed files")
+	return fullPaths, nil
 }
 
 // parseRouterInfoFiles reads and parses router info files from the extracted files.
@@ -694,6 +702,7 @@ func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rout
 	var routerInfos []router_info.RouterInfo
 	var parseErrors int
 	var readErrors int
+	var skippedFiles int
 
 	for _, f := range files {
 		// Check if we've reached the limit
@@ -704,6 +713,13 @@ func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rout
 				"total_files": len(files),
 			}).Debug("Reached RouterInfo limit, stopping parse")
 			break
+		}
+
+		// Skip files that don't match RouterInfo naming pattern
+		if !r.isRouterInfoFile(f) {
+			skippedFiles++
+			log.WithField("file", f).Debug("Skipping non-RouterInfo file")
+			continue
 		}
 
 		riB, err := os.ReadFile(f)
@@ -723,6 +739,7 @@ func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rout
 
 	log.WithFields(logger.Fields{
 		"total_files":    len(files),
+		"skipped_files":  skippedFiles,
 		"parsed_success": len(routerInfos),
 		"read_errors":    readErrors,
 		"parse_errors":   parseErrors,
@@ -739,4 +756,21 @@ func (r Reseed) cleanupZipFile(zipPath string) {
 	} else {
 		log.WithField("path", zipPath).Debug("Successfully removed reseed zip file")
 	}
+}
+
+// isRouterInfoFile determines if a file path should be processed as a RouterInfo file.
+// RouterInfo files should have a .dat extension and contain "routerInfo-" in the filename.
+// This filters out directories and other non-RouterInfo files that may be extracted from the zip.
+func (r Reseed) isRouterInfoFile(filePath string) bool {
+	// Get just the filename from the path
+	filename := filepath.Base(filePath)
+
+	// Check for .dat extension
+	if !strings.HasSuffix(filename, ".dat") {
+		return false
+	}
+
+	// Check for routerInfo- prefix in filename
+	// RouterInfo files follow the pattern: routerInfo-<base64hash>.dat
+	return strings.HasPrefix(filename, "routerInfo-")
 }
