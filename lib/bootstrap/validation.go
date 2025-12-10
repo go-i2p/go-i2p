@@ -115,7 +115,7 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 
 	// For NTCP2, validate required keys
 	if strings.EqualFold(styleStr, "ntcp2") {
-		return validateNTCP2Address(addr)
+		return ValidateNTCP2Address(addr)
 	}
 
 	// For SSU, validate required keys (basic validation)
@@ -137,8 +137,8 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 	return nil
 }
 
-// validateNTCP2Address validates NTCP2-specific requirements
-func validateNTCP2Address(addr *router_address.RouterAddress) error {
+// ValidateNTCP2Address validates NTCP2-specific requirements
+func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	// Check for required 'host' key
 	if !addr.CheckOption("host") {
 		return errors.New("NTCP2 address missing required 'host' key")

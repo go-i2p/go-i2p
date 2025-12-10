@@ -15,4 +15,4 @@ if [ ! -f ~/Downloads/i2preseed.zip ] || [ ! -s ~/Downloads/i2preseed.zip ]; the
 fi
 # Set reseed file if not already set
 : ${RESEED_FILE:=~/Downloads/i2preseed.zip}
-./go-i2p --bootstrap.type file --bootstrap.reseed-file "$RESEED_FILE" --i2cp.address localhost:8654 2>&1 | tee go-i2p.log
+./go-i2p --bootstrap.reseed-file "$RESEED_FILE" --i2cp.address localhost:8654 2>&1 | tee go-i2p.log

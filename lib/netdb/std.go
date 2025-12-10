@@ -26,7 +26,6 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
-	"github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 )
 
 // standard network database implementation using local filesystem skiplist
@@ -184,6 +183,32 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 	return excludeMap
 }
 
+// hasValidNTCP2Address checks if router has at least one NTCP2 address with required 'host' key
+func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
+	if ri == nil {
+		return false
+	}
+
+	for _, addr := range ri.RouterAddresses() {
+		// Check if this is an NTCP2 address
+		style := addr.TransportStyle()
+		styleStr, err := style.Data()
+		if err != nil {
+			continue
+		}
+
+		if strings.EqualFold(styleStr, "ntcp2") {
+			// Found NTCP2 address - validate it using bootstrap package
+			if err := bootstrap.ValidateNTCP2Address(addr); err == nil {
+				// Valid NTCP2 address found
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // filterAvailablePeers filters router infos excluding specified hashes and checking reachability
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
@@ -196,13 +221,13 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 		if !excludeMap[riHash] {
 			// Basic reachability check - router should have valid addresses
 			if len(ri.RouterAddresses()) > 0 {
-				// Check if router supports NTCP2 transport
-				if ntcp2.SupportsNTCP2(&ri) {
+				// Check if router has a valid NTCP2 address (not just any NTCP2 address)
+				if hasValidNTCP2Address(&ri) {
 					available = append(available, ri)
 				} else {
 					log.WithFields(logger.Fields{
 						"router_hash": fmt.Sprintf("%x", riHash[:8]),
-					}).Debug("Skipping peer without NTCP2 support")
+					}).Debug("Skipping peer without valid NTCP2 address")
 				}
 			}
 		}
