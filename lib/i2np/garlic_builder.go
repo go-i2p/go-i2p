@@ -285,15 +285,15 @@ func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
 // Message_ID: 4 bytes
 // Expiration: 8 bytes (milliseconds since epoch)
 func serializeGarlic(garlic *Garlic) ([]byte, error) {
-	log.WithFields(logger.Fields{
-		"at":          "serializeGarlic",
-		"clove_count": garlic.Count,
-	}).Debug("Serializing garlic message")
-
 	if garlic == nil {
 		log.WithField("at", "serializeGarlic").Error("Attempted to serialize nil garlic")
 		return nil, oops.Errorf("cannot serialize nil garlic message")
 	}
+
+	log.WithFields(logger.Fields{
+		"at":          "serializeGarlic",
+		"clove_count": garlic.Count,
+	}).Debug("Serializing garlic message")
 
 	// Estimate buffer size (cloves are variable length, so this is approximate)
 	estimatedSize := 1 + (len(garlic.Cloves) * 100) + 3 + 4 + 8

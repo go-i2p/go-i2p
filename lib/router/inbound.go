@@ -173,20 +173,8 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 		return nil
 	}
 
-	// The endpoint.Receive() expects 1028 bytes in the format:
-	// [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Encrypted Data (1004)]
-	//
-	// But we only have 1024 bytes. We need to pad with 4 zero bytes to make it 1028.
-	// Actually, re-reading the endpoint code and tunnel message format more carefully:
-	// The full tunnel message IS 1028 bytes, but somewhere in the parsing/transport
-	// layer, only 1024 bytes are being stored. This is likely a bug in the codebase.
-	//
-	// For now, let's work around it by creating a 1028-byte buffer:
-	fullTunnelMsg := make([]byte, 1028)
-	copy(fullTunnelMsg, data) // Copy the 1024 bytes we have
-	// The last 4 bytes will be zero-padded
-
-	if err := entry.endpoint.Receive(fullTunnelMsg); err != nil {
+	// The endpoint.Receive() expects exactly 1024 bytes of encrypted tunnel data
+	if err := entry.endpoint.Receive(data); err != nil {
 		log.WithFields(logger.Fields{
 			"tunnel_id":  tunnelID,
 			"session_id": entry.sessionID,

@@ -28,13 +28,15 @@ func newMockNetDB() *mockNetDB {
 	}
 }
 
-func (m *mockNetDB) GetRouterInfo(hash common.Hash) router_info.RouterInfo {
+func (m *mockNetDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	ch := make(chan router_info.RouterInfo, 1)
 	if ri, exists := m.routerInfos[hash]; exists {
-		return ri
+		ch <- ri
 	}
-	return router_info.RouterInfo{}
+	close(ch)
+	return ch
 }
 
 func (m *mockNetDB) GetAllRouterInfos() []router_info.RouterInfo {
