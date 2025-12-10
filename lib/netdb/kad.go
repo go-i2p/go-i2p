@@ -83,6 +83,10 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 // validateRemoteLookupCapability checks if remote lookups are possible.
 func (kr *KademliaResolver) validateRemoteLookupCapability() error {
 	if kr.pool == nil {
+		log.WithFields(logger.Fields{
+			"at":     "validateRemoteLookupCapability",
+			"reason": "tunnel pool not configured",
+		}).Error("Cannot perform remote lookup")
 		return fmt.Errorf("tunnel pool required for remote lookups")
 	}
 	return nil
@@ -90,13 +94,29 @@ func (kr *KademliaResolver) validateRemoteLookupCapability() error {
 
 // performRemoteLookup starts the Kademlia lookup process in a goroutine.
 func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Hash, timeout time.Duration, resultChan chan *router_info.RouterInfo, errChan chan error) {
+	log.WithFields(logger.Fields{
+		"at":      "performRemoteLookup",
+		"hash":    fmt.Sprintf("%x", h[:8]),
+		"timeout": timeout,
+	}).Debug("Starting remote Kademlia lookup")
 	go func() {
 		// Find the closest peers we know to the target hash
 		closestPeers := kr.findClosestPeers(h)
 		if len(closestPeers) == 0 {
+			log.WithFields(logger.Fields{
+				"at":     "performRemoteLookup",
+				"hash":   fmt.Sprintf("%x", h[:8]),
+				"reason": "no peers available",
+			}).Error("Kademlia lookup failed")
 			errChan <- fmt.Errorf("insufficient peers available for lookup")
 			return
 		}
+
+		log.WithFields(logger.Fields{
+			"at":         "performRemoteLookup",
+			"hash":       fmt.Sprintf("%x", h[:8]),
+			"peer_count": len(closestPeers),
+		}).Debug("Found closest peers for lookup")
 
 		// Query each closest peer in parallel
 		kr.queryClosestPeers(ctx, closestPeers, h, resultChan)
@@ -142,10 +162,21 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 	case result := <-resultChan:
 		// Store the result in our local database
 		kr.NetworkDatabase.StoreRouterInfo(*result)
+		log.WithFields(logger.Fields{
+			"at":   "collectLookupResult",
+			"hash": fmt.Sprintf("%x", result),
+		}).Debug("Kademlia lookup successful, stored RouterInfo")
 		return result, nil
 	case err := <-errChan:
+		log.WithFields(logger.Fields{
+			"at": "collectLookupResult",
+		}).WithError(err).Error("Kademlia lookup failed")
 		return nil, err
 	case <-ctx.Done():
+		log.WithFields(logger.Fields{
+			"at":      "collectLookupResult",
+			"timeout": timeout,
+		}).Error("Kademlia lookup timed out")
 		return nil, fmt.Errorf("lookup timed out after %s", timeout)
 	}
 }
@@ -256,6 +287,13 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	// 1. Create an I2NP DatabaseLookup message
 	// 2. Send it through the tunnel pool to the peer
 	// 3. Wait for and process the response
+
+	log.WithFields(logger.Fields{
+		"at":     "queryPeer",
+		"peer":   fmt.Sprintf("%x", peer[:8]),
+		"target": fmt.Sprintf("%x", target[:8]),
+		"reason": "not implemented",
+	}).Debug("Peer query placeholder")
 
 	// Placeholder implementation that would need to be completed
 	return nil, fmt.Errorf("peer query not implemented")

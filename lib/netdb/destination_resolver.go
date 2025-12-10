@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/logger"
 )
 
 // DestinationResolver resolves I2P destinations to their encryption public keys.
@@ -50,12 +51,22 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 	lsChan := dr.netdb.GetLeaseSet(destHash)
 
 	if lsChan == nil {
+		log.WithFields(logger.Fields{
+			"at":               "ResolveDestination",
+			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+			"reason":           "not found in netdb",
+		}).Error("Destination lookup failed")
 		return [32]byte{}, fmt.Errorf("destination %x not found in netdb", destHash[:8])
 	}
 
 	// Read from channel
 	ls, ok := <-lsChan
 	if !ok {
+		log.WithFields(logger.Fields{
+			"at":               "ResolveDestination",
+			"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+			"reason":           "channel closed",
+		}).Error("Failed to retrieve LeaseSet")
 		return [32]byte{}, fmt.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
 	}
 
@@ -103,6 +114,10 @@ func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseS
 
 	ls2, _, err := lease_set2.ReadLeaseSet2(lsBytes)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "parseLeaseSet2",
+			"reason": "invalid LeaseSet2 data",
+		}).WithError(err).Debug("LeaseSet2 parse failed")
 		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
@@ -129,12 +144,23 @@ func (dr *DestinationResolver) findX25519KeyInLeaseSet2(ls2 lease_set2.LeaseSet2
 		}
 	}
 
+	log.WithFields(logger.Fields{
+		"at":               "findX25519KeyInLeaseSet2",
+		"destination_hash": fmt.Sprintf("%x", destHash[:8]),
+		"reason":           "no X25519 encryption key found",
+	}).Error("Encryption key not found in LeaseSet2")
 	return [32]byte{}, fmt.Errorf("x25519 encryption key not found in lease set")
 }
 
 // extractValidX25519Key validates and extracts a 32-byte X25519 key from encryption key data.
 func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.EncryptionKey, destHash common.Hash) ([32]byte, error) {
 	if len(encKey.KeyData) != 32 {
+		log.WithFields(logger.Fields{
+			"at":       "validateX25519KeyLength",
+			"expected": 32,
+			"actual":   len(encKey.KeyData),
+			"reason":   "invalid key length",
+		}).Error("X25519 key validation failed")
 		return [32]byte{}, fmt.Errorf("invalid X25519 key length: %d", len(encKey.KeyData))
 	}
 

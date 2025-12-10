@@ -38,6 +38,7 @@ type inboundTunnelEntry struct {
 
 // NewInboundMessageHandler creates a new inbound message handler
 func NewInboundMessageHandler(sessionManager *i2cp.SessionManager) *InboundMessageHandler {
+	log.WithField("at", "NewInboundMessageHandler").Debug("Creating inbound message handler")
 	return &InboundMessageHandler{
 		tunnelSessions: make(map[tunnel.TunnelID]*inboundTunnelEntry),
 		sessionManager: sessionManager,
@@ -59,6 +60,12 @@ func (h *InboundMessageHandler) RegisterTunnel(tunnelID tunnel.TunnelID, session
 	defer h.mu.Unlock()
 
 	if _, exists := h.tunnelSessions[tunnelID]; exists {
+		log.WithFields(logger.Fields{
+			"at":         "RegisterTunnel",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "tunnel already registered",
+		}).Error("Failed to register tunnel")
 		return fmt.Errorf("tunnel %d already registered", tunnelID)
 	}
 
@@ -115,16 +122,33 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 	// Extract tunnel data using interface
 	tunnelCarrier, ok := msg.(i2np.TunnelCarrier)
 	if !ok {
+		log.WithFields(logger.Fields{
+			"at":           "HandleTunnelData",
+			"message_type": msg.Type(),
+			"reason":       "message does not implement TunnelCarrier",
+		}).Error("Invalid message type")
 		return fmt.Errorf("message does not implement TunnelCarrier interface")
 	}
 
 	data := tunnelCarrier.GetTunnelData()
 	if len(data) != 1024 {
+		log.WithFields(logger.Fields{
+			"at":       "HandleTunnelData",
+			"expected": 1024,
+			"actual":   len(data),
+			"reason":   "wrong tunnel data size",
+		}).Error("Invalid tunnel data")
 		return fmt.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
 	}
 
 	// The tunnel ID is stored in the first 4 bytes of the tunnel data
 	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(data[0:4]))
+
+	log.WithFields(logger.Fields{
+		"at":        "HandleTunnelData",
+		"tunnel_id": tunnelID,
+		"data_size": len(data),
+	}).Debug("Processing tunnel data message")
 
 	// Find the session and endpoint for this tunnel
 	h.mu.RLock()
@@ -182,6 +206,11 @@ func (h *InboundMessageHandler) createMessageHandler(sessionID uint16) tunnel.Me
 		// Look up the session
 		session, ok := h.sessionManager.GetSession(sessionID)
 		if !ok {
+			log.WithFields(logger.Fields{
+				"at":         "createMessageHandler",
+				"session_id": sessionID,
+				"reason":     "session not found",
+			}).Error("Failed to lookup session")
 			return fmt.Errorf("session %d not found", sessionID)
 		}
 
