@@ -47,4 +47,4 @@ godoc:
 
 run:
 	go build -v .
-	DEBUG_I2P=warn ./go-i2p --bootstrap.type local --netdb.path ${HOME}/i2p/netDb 2>&1 | tee go-i2p.log
+	DEBUG_I2P=warn ./go-i2p --bootstrap.type local --netdb.path ${HOME}/.i2p/netDb 2>&1 | tee go-i2p.log
