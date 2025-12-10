@@ -75,7 +75,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 
 	// Check memory cache first
 	db.riMutex.Lock()
-	if ri, ok := db.RouterInfos[hash]; ok {
+	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
 		db.riMutex.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
@@ -680,6 +680,10 @@ func (db *StdNetDB) Save() (err error) {
 	log.Debug("Saving all NetDB entries")
 	db.riMutex.Lock()
 	for _, entry := range db.RouterInfos {
+		// Only save entries that have been loaded into memory
+		if entry.RouterInfo == nil {
+			continue
+		}
 		if e := db.SaveEntry(&entry); e != nil {
 			err = e
 			log.WithError(e).Error("Failed to save NetDB entry")
@@ -861,15 +865,95 @@ func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte)
 	return nil
 }
 
-// ensure that the network database exists
+// ensure that the network database exists and load existing RouterInfos
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
 		log.Debug("NetDB directory does not exist, creating it")
 		err = db.Create()
 	} else {
 		log.Debug("NetDB directory already exists")
+		// Load existing RouterInfos from disk into memory
+		if loadErr := db.loadExistingRouterInfos(); loadErr != nil {
+			log.WithError(loadErr).Warn("Failed to load some existing RouterInfos, continuing anyway")
+		}
 	}
 	return
+}
+
+// loadExistingRouterInfos scans the NetDB directory and loads RouterInfo hashes into memory.
+// This allows Size() to accurately reflect the number of RouterInfos available without
+// loading full RouterInfo data (which happens on-demand via GetRouterInfo).
+func (db *StdNetDB) loadExistingRouterInfos() error {
+	basePath := db.Path()
+	loaded := 0
+	errors := 0
+
+	log.WithField("path", basePath).Debug("Scanning NetDB for existing RouterInfos")
+
+	// First, check the root directory (some implementations store files there)
+	loaded, errors = db.scanDirectoryForRouterInfos(basePath, loaded, errors)
+
+	// Walk through all r* subdirectories in the skiplist
+	for _, c := range base64.I2PEncodeAlphabet {
+		dirPath := filepath.Join(basePath, fmt.Sprintf("r%c", c))
+		loaded, errors = db.scanDirectoryForRouterInfos(dirPath, loaded, errors)
+	}
+
+	log.WithFields(logger.Fields{
+		"loaded": loaded,
+		"errors": errors,
+		"total":  loaded + errors,
+	}).Info("Loaded existing RouterInfo hashes from NetDB")
+
+	return nil
+}
+
+// scanDirectoryForRouterInfos scans a single directory for RouterInfo files and adds them to the database
+func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors int) (int, int) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		// Skip if directory doesn't exist or can't be read
+		return loaded, errors
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".dat") {
+			continue
+		}
+
+		// Extract hash from filename: routerInfo-<base64hash>.dat
+		if !strings.HasPrefix(entry.Name(), "routerInfo-") {
+			continue
+		}
+
+		hashStr := strings.TrimPrefix(entry.Name(), "routerInfo-")
+		hashStr = strings.TrimSuffix(hashStr, ".dat")
+
+		// Decode the base64 hash
+		hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
+		if err != nil {
+			log.WithError(err).WithField("filename", entry.Name()).Debug("Failed to decode hash from filename")
+			errors++
+			continue
+		}
+
+		// Convert to Hash type
+		var hash common.Hash
+		copy(hash[:], hashBytes)
+
+		// Add to in-memory map if not already present (don't load full data yet)
+		db.riMutex.Lock()
+		if _, exists := db.RouterInfos[hash]; !exists {
+			// Create a placeholder entry - actual RouterInfo will be loaded on-demand
+			db.RouterInfos[hash] = Entry{
+				RouterInfo: nil, // nil indicates "exists on disk but not loaded"
+			}
+			loaded++
+		}
+		db.riMutex.Unlock()
+	}
+
+	return loaded, errors
 }
 
 // create base network database directory
