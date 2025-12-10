@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -38,6 +39,12 @@ type TunnelGatway struct {
 
 // NewTunnelGatewayMessage creates a new TunnelGateway message
 func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGatway {
+	log.WithFields(logger.Fields{
+		"at":          "NewTunnelGatewayMessage",
+		"tunnel_id":   tunnelID,
+		"payload_len": len(payload),
+	}).Debug("Creating TunnelGateway message")
+
 	msg := &TunnelGatway{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY),
 		TunnelID:        tunnelID,
@@ -59,12 +66,22 @@ func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGa
 func (t *TunnelGatway) UnmarshalBinary(data []byte) error {
 	// First unmarshal the base message
 	if err := t.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "TunnelGatway.UnmarshalBinary",
+			"reason": "base message unmarshal failed",
+		}).WithError(err).Error("Failed to unmarshal TunnelGateway")
 		return err
 	}
 
 	// Extract the data payload and parse it
 	messageData := t.BaseI2NPMessage.GetData()
 	if len(messageData) < 6 {
+		log.WithFields(logger.Fields{
+			"at":       "TunnelGatway.UnmarshalBinary",
+			"expected": 6,
+			"actual":   len(messageData),
+			"reason":   "payload too short",
+		}).Error("Invalid TunnelGateway payload")
 		return oops.Errorf("tunnel gateway message payload too short: %d bytes", len(messageData))
 	}
 
@@ -72,12 +89,25 @@ func (t *TunnelGatway) UnmarshalBinary(data []byte) error {
 	t.Length = int(binary.BigEndian.Uint16(messageData[4:6]))
 
 	if len(messageData) < 6+t.Length {
+		log.WithFields(logger.Fields{
+			"at":        "TunnelGatway.UnmarshalBinary",
+			"tunnel_id": t.TunnelID,
+			"expected":  6 + t.Length,
+			"actual":    len(messageData),
+			"reason":    "payload truncated",
+		}).Error("TunnelGateway payload truncated")
 		return oops.Errorf("tunnel gateway message payload truncated: expected %d bytes, got %d",
 			6+t.Length, len(messageData))
 	}
 
 	t.Data = make([]byte, t.Length)
 	copy(t.Data, messageData[6:6+t.Length])
+
+	log.WithFields(logger.Fields{
+		"at":        "TunnelGatway.UnmarshalBinary",
+		"tunnel_id": t.TunnelID,
+		"data_len":  t.Length,
+	}).Debug("Successfully unmarshaled TunnelGateway")
 
 	return nil
 }

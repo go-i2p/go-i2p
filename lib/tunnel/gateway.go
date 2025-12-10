@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/logger"
 )
 
 // Gateway handles sending I2NP messages through a tunnel
@@ -48,6 +49,11 @@ const (
 // Returns an error if encryption is nil.
 func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID TunnelID) (*Gateway, error) {
 	if encryption == nil {
+		log.WithFields(logger.Fields{
+			"at":        "NewGateway",
+			"tunnel_id": tunnelID,
+			"reason":    "nil encryption",
+		}).Error("Failed to create gateway")
 		return nil, ErrNilEncryption
 	}
 
@@ -75,25 +81,48 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 //
 // Returns the encrypted tunnel message ready for transmission, or an error.
 func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":        "Gateway.Send",
+		"tunnel_id": g.tunnelID,
+		"msg_size":  len(msgBytes),
+	}).Debug("Sending message through tunnel gateway")
+
 	if len(msgBytes) == 0 {
+		log.WithFields(logger.Fields{
+			"at":        "Gateway.Send",
+			"tunnel_id": g.tunnelID,
+			"reason":    "empty message",
+		}).Error("Invalid message")
 		return nil, ErrInvalidMessage
 	}
 
 	// Create simple delivery instructions for local delivery (type DT_LOCAL)
 	deliveryInstructions, err := g.createDeliveryInstructions(msgBytes)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "Gateway.Send",
+			"tunnel_id": g.tunnelID,
+		}).WithError(err).Error("Failed to create delivery instructions")
 		return nil, err
 	}
 
 	// Build the tunnel message
 	tunnelMsg, err := g.buildTunnelMessage(deliveryInstructions, msgBytes)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "Gateway.Send",
+			"tunnel_id": g.tunnelID,
+		}).WithError(err).Error("Failed to build tunnel message")
 		return nil, err
 	}
 
 	// Encrypt the tunnel message
 	encrypted, err := g.encryptTunnelMessage(tunnelMsg)
 	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "Gateway.Send",
+			"tunnel_id": g.tunnelID,
+		}).WithError(err).Error("Failed to encrypt tunnel message")
 		return nil, err
 	}
 
@@ -109,6 +138,12 @@ func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
 	// - 2 bytes: message size (if not fragmented)
 
 	if len(msgBytes) > maxTunnelPayload-3 {
+		log.WithFields(logger.Fields{
+			"at":       "createDeliveryInstructions",
+			"msg_size": len(msgBytes),
+			"max_size": maxTunnelPayload - 3,
+			"reason":   "message too large",
+		}).Error("Message exceeds tunnel payload limit")
 		return nil, ErrMessageTooLarge
 	}
 
@@ -145,6 +180,12 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 	paddingSize := totalSize - 24 - 1 - dataSize // -1 for zero byte
 
 	if paddingSize < 0 {
+		log.WithFields(logger.Fields{
+			"at":         "buildTunnelMessage",
+			"data_size":  dataSize,
+			"total_size": totalSize,
+			"reason":     "negative padding size",
+		}).Error("Message too large for tunnel")
 		return nil, ErrMessageTooLarge
 	}
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/certificate"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -73,17 +74,34 @@ type GarlicElGamal struct {
 // NewGarlicElGamal creates a new GarlicElGamal from raw bytes
 func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error) {
 	if len(bytes) < 4 {
+		log.WithFields(logger.Fields{
+			"at":       "NewGarlicElGamal",
+			"expected": 4,
+			"actual":   len(bytes),
+			"reason":   "insufficient data for length field",
+		}).Error("Failed to parse GarlicElGamal")
 		return nil, oops.Errorf("insufficient data for GarlicElGamal: need at least 4 bytes for length, got %d", len(bytes))
 	}
 
 	length := binary.BigEndian.Uint32(bytes[0:4])
 
 	if len(bytes) < int(4+length) {
+		log.WithFields(logger.Fields{
+			"at":        "NewGarlicElGamal",
+			"length":    length,
+			"available": len(bytes) - 4,
+			"reason":    "insufficient data for payload",
+		}).Error("GarlicElGamal data truncated")
 		return nil, oops.Errorf("insufficient data for GarlicElGamal: length indicates %d bytes but only %d available", length, len(bytes)-4)
 	}
 
 	data := make([]byte, length)
 	copy(data, bytes[4:4+length])
+
+	log.WithFields(logger.Fields{
+		"at":     "NewGarlicElGamal",
+		"length": length,
+	}).Debug("Successfully parsed GarlicElGamal")
 
 	return &GarlicElGamal{
 		Length: length,
@@ -94,6 +112,10 @@ func NewGarlicElGamal(bytes []byte) (*GarlicElGamal, error) {
 // Bytes serializes the GarlicElGamal to bytes
 func (g *GarlicElGamal) Bytes() ([]byte, error) {
 	if g == nil {
+		log.WithFields(logger.Fields{
+			"at":     "GarlicElGamal.Bytes",
+			"reason": "nil receiver",
+		}).Error("Cannot serialize nil GarlicElGamal")
 		return nil, oops.Errorf("cannot serialize nil GarlicElGamal")
 	}
 

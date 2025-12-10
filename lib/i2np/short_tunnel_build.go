@@ -1,5 +1,7 @@
 package i2np
 
+import "github.com/go-i2p/logger"
+
 /*
 I2P I2NP ShortTunnelBuild
 https://geti2p.net/spec/i2np
@@ -43,6 +45,11 @@ func (s *ShortTunnelBuild) GetRecordCount() int {
 // NewShortTunnelBuilder creates a new ShortTunnelBuild and returns it as TunnelBuilder interface.
 // This is the modern, preferred format for tunnel building (added in I2P 0.9.51).
 func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
+	log.WithFields(logger.Fields{
+		"at":           "NewShortTunnelBuilder",
+		"record_count": len(records),
+	}).Debug("Creating ShortTunnelBuild")
+
 	return &ShortTunnelBuild{
 		Count:               len(records),
 		BuildRequestRecords: records,
@@ -53,6 +60,12 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 // Format: [count:1][records...]
 // Note: This returns the cleartext records. Encryption must be applied by the caller.
 func (s *ShortTunnelBuild) Bytes() []byte {
+	log.WithFields(logger.Fields{
+		"at":           "ShortTunnelBuild.Bytes",
+		"record_count": s.Count,
+		"output_size":  1 + (s.Count * 222),
+	}).Debug("Serializing ShortTunnelBuild")
+
 	// 1 byte for count + 222 bytes per record (cleartext)
 	size := 1 + (s.Count * 222)
 	data := make([]byte, size)
