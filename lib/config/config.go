@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-i2p/go-i2p/lib/util"
+	"github.com/go-i2p/logger"
 	"github.com/spf13/viper"
 )
 
@@ -112,7 +113,12 @@ func NewRouterConfigFromViper() *RouterConfig {
 	// Create Bootstrap configuration
 	var reseedServers []*ReseedConfig
 	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
-		log.Warnf("Error parsing reseed servers: %s", err)
+		log.WithFields(logger.Fields{
+			"at":     "NewRouterConfigFromViper",
+			"reason": "reseed_servers_parse_error",
+			"phase":  "startup",
+			"error":  err.Error(),
+		}).Warn("error parsing reseed servers, using empty list")
 		reseedServers = []*ReseedConfig{}
 	}
 
@@ -163,13 +169,22 @@ func UpdateRouterConfig() {
 	// Update Bootstrap configuration
 	var reseedServers []*ReseedConfig
 	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
-		log.Warnf("Error parsing reseed servers: %s", err)
+		log.WithFields(logger.Fields{
+			"at":     "UpdateRouterConfig",
+			"reason": "reseed_servers_parse_error",
+			"phase":  "startup",
+			"error":  err.Error(),
+		}).Warn("error parsing reseed servers, using empty list")
 		reseedServers = []*ReseedConfig{}
 	}
 
 	var localNetDbPaths []string
 	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
-		log.Debugf("No local netDb paths configured, will use defaults")
+		log.WithFields(logger.Fields{
+			"at":     "UpdateRouterConfig",
+			"reason": "no_local_netdb_paths_configured",
+			"phase":  "startup",
+		}).Debug("using default netDb paths")
 		localNetDbPaths = []string{}
 	}
 
@@ -202,7 +217,13 @@ func createDefaultConfig(defaultConfigDir string) {
 		log.Fatalf("Could not write default config file: %s", err)
 	}
 
-	log.Debugf("Created default configuration at: %s", defaultConfigFile)
+	log.WithFields(logger.Fields{
+		"at":          "createDefaultConfig",
+		"reason":      "default_config_created",
+		"phase":       "startup",
+		"config_file": defaultConfigFile,
+		"config_dir":  defaultConfigDir,
+	}).Debug("created default configuration")
 }
 
 func handleConfigFile() {
@@ -217,7 +238,12 @@ func handleConfigFile() {
 			log.Fatalf("Error reading config file: %s", err)
 		}
 	} else {
-		log.Debugf("Using config file: %s", viper.ConfigFileUsed())
+		log.WithFields(logger.Fields{
+			"at":          "handleConfigFile",
+			"reason":      "config_file_loaded",
+			"phase":       "startup",
+			"config_file": viper.ConfigFileUsed(),
+		}).Debug("using config file")
 	}
 }
 

@@ -435,69 +435,151 @@ func validateRouter(router RouterDefaults) error {
 
 // validateNetDB validates network database configuration settings.
 func validateNetDB(netdb NetDBDefaults) error {
-	log.Debug("Validating NetDB configuration")
+	log.WithFields(logger.Fields{
+		"at":     "validateNetDBConfig",
+		"reason": "validating_netdb_settings",
+		"phase":  "startup",
+	}).Debug("validating NetDB configuration")
 	if netdb.MaxRouterInfos < 10 {
-		log.WithField("max_router_infos", netdb.MaxRouterInfos).Error("Invalid NetDB configuration")
+		log.WithFields(logger.Fields{
+			"at":               "validateNetDBConfig",
+			"reason":           "max_router_infos_too_low",
+			"max_router_infos": netdb.MaxRouterInfos,
+			"minimum_required": 10,
+		}).Error("invalid NetDB configuration")
 		return newValidationError("NetDB.MaxRouterInfos must be at least 10")
 	}
 	if netdb.MaxLeaseSets < 1 {
-		log.WithField("max_lease_sets", netdb.MaxLeaseSets).Error("Invalid NetDB configuration")
+		log.WithFields(logger.Fields{
+			"at":               "validateNetDBConfig",
+			"reason":           "max_lease_sets_too_low",
+			"max_lease_sets":   netdb.MaxLeaseSets,
+			"minimum_required": 1,
+		}).Error("invalid NetDB configuration")
 		return newValidationError("NetDB.MaxLeaseSets must be at least 1")
 	}
-	log.Debug("NetDB configuration validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "validateNetDBConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("NetDB configuration validated successfully")
 	return nil
 }
 
 // validateBootstrap validates bootstrap configuration settings.
 func validateBootstrap(bootstrap BootstrapDefaults) error {
-	log.Debug("Validating bootstrap configuration")
+	log.WithFields(logger.Fields{
+		"at":     "validateBootstrapConfig",
+		"reason": "validating_bootstrap_settings",
+		"phase":  "startup",
+	}).Debug("validating bootstrap configuration")
 	if bootstrap.LowPeerThreshold < 1 {
-		log.WithField("low_peer_threshold", bootstrap.LowPeerThreshold).Error("Invalid bootstrap configuration")
+		log.WithFields(logger.Fields{
+			"at":                 "validateBootstrapConfig",
+			"reason":             "low_peer_threshold_too_low",
+			"low_peer_threshold": bootstrap.LowPeerThreshold,
+			"minimum_required":   1,
+		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.LowPeerThreshold must be at least 1")
 	}
 	if bootstrap.MinimumReseedPeers < 1 {
-		log.WithField("minimum_reseed_peers", bootstrap.MinimumReseedPeers).Error("Invalid bootstrap configuration")
+		log.WithFields(logger.Fields{
+			"at":                   "validateBootstrapConfig",
+			"reason":               "minimum_reseed_peers_too_low",
+			"minimum_reseed_peers": bootstrap.MinimumReseedPeers,
+			"minimum_required":     1,
+		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
 	}
-	log.Debug("Bootstrap configuration validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "validateBootstrapConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("bootstrap configuration validated successfully")
 	return nil
 }
 
 // validateI2CP validates I2CP server configuration settings.
 func validateI2CP(i2cp I2CPDefaults) error {
-	log.Debug("Validating I2CP configuration")
+	log.WithFields(logger.Fields{
+		"at":     "validateI2CPConfig",
+		"reason": "validating_i2cp_settings",
+		"phase":  "startup",
+	}).Debug("validating I2CP configuration")
 	if i2cp.MaxSessions < 1 {
-		log.WithField("max_sessions", i2cp.MaxSessions).Error("Invalid I2CP configuration")
+		log.WithFields(logger.Fields{
+			"at":               "validateI2CPConfig",
+			"reason":           "max_sessions_too_low",
+			"max_sessions":     i2cp.MaxSessions,
+			"minimum_required": 1,
+		}).Error("invalid I2CP configuration")
 		return newValidationError("I2CP.MaxSessions must be at least 1")
 	}
 	if i2cp.MessageQueueSize < 1 {
-		log.WithField("message_queue_size", i2cp.MessageQueueSize).Error("Invalid I2CP configuration")
+		log.WithFields(logger.Fields{
+			"at":                 "validateI2CPConfig",
+			"reason":             "message_queue_size_too_low",
+			"message_queue_size": i2cp.MessageQueueSize,
+			"minimum_required":   1,
+		}).Error("invalid I2CP configuration")
 		return newValidationError("I2CP.MessageQueueSize must be at least 1")
 	}
-	log.Debug("I2CP configuration validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "validateI2CPConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("I2CP configuration validated successfully")
 	return nil
 }
 
 // validateTunnel validates tunnel configuration settings.
 func validateTunnel(tunnel TunnelDefaults) error {
-	log.Debug("Validating tunnel configuration")
+	log.WithFields(logger.Fields{
+		"at":     "validateTunnelConfig",
+		"reason": "validating_tunnel_settings",
+		"phase":  "startup",
+	}).Debug("validating tunnel configuration")
 	if tunnel.MinPoolSize < 1 {
-		log.WithField("min_pool_size", tunnel.MinPoolSize).Error("Invalid tunnel configuration")
+		log.WithFields(logger.Fields{
+			"at":               "validateTunnelConfig",
+			"reason":           "min_pool_size_too_low",
+			"min_pool_size":    tunnel.MinPoolSize,
+			"minimum_required": 1,
+		}).Error("invalid tunnel configuration")
 		return newValidationError("Tunnel.MinPoolSize must be at least 1")
 	}
 	if tunnel.MaxPoolSize < tunnel.MinPoolSize {
-		log.WithFields(logger.Fields{"max_pool_size": tunnel.MaxPoolSize, "min_pool_size": tunnel.MinPoolSize}).Error("Invalid tunnel configuration")
+		log.WithFields(logger.Fields{
+			"at":            "validateTunnelConfig",
+			"reason":        "max_pool_size_less_than_min",
+			"max_pool_size": tunnel.MaxPoolSize,
+			"min_pool_size": tunnel.MinPoolSize,
+		}).Error("invalid tunnel configuration")
 		return newValidationError("Tunnel.MaxPoolSize must be >= MinPoolSize")
 	}
 	if tunnel.TunnelLength < 1 || tunnel.TunnelLength > 8 {
-		log.WithField("tunnel_length", tunnel.TunnelLength).Error("Invalid tunnel configuration")
+		log.WithFields(logger.Fields{
+			"at":            "validateTunnelConfig",
+			"reason":        "tunnel_length_out_of_range",
+			"tunnel_length": tunnel.TunnelLength,
+			"valid_range":   "1-8",
+		}).Error("invalid tunnel configuration")
 		return newValidationError("Tunnel.TunnelLength must be between 1 and 8")
 	}
 	if tunnel.BuildRetries < 1 {
-		log.WithField("build_retries", tunnel.BuildRetries).Error("Invalid tunnel configuration")
+		log.WithFields(logger.Fields{
+			"at":               "validateTunnelConfig",
+			"reason":           "build_retries_too_low",
+			"build_retries":    tunnel.BuildRetries,
+			"minimum_required": 1,
+		}).Error("invalid tunnel configuration")
 		return newValidationError("Tunnel.BuildRetries must be at least 1")
 	}
-	log.Debug("Tunnel configuration validated successfully")
+	log.WithFields(logger.Fields{
+		"at":     "validateTunnelConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("tunnel configuration validated successfully")
 	return nil
 }
 
