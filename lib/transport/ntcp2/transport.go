@@ -160,10 +160,29 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, ctx
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
 func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
+	// Here's where we do NAT traversal if needed (not implemented yet)
+	// uses github.com/go-i2p/go-nat-listener
+
 	tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
 		return err
 	}
+
+	/*
+		// NAT traversal code placeholder
+		_, port, err := net.SplitHostPort(config.ListenerAddress)
+		if err != nil {
+			return fmt.Errorf("invalid listener address: %w", err)
+		}
+		iport, err := strconv.Atoi(port)
+		if err != nil {
+			return fmt.Errorf("invalid listener port: %w", err)
+		}
+		tcpListener, err := nattraversal.Listen(iport)
+		if err != nil {
+			log.Fatal("Failed to create listener:", err)
+		}
+	*/
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
