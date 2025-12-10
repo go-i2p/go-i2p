@@ -880,15 +880,13 @@ func (db *StdNetDB) Ensure() (err error) {
 	return
 }
 
-// loadExistingRouterInfos scans the NetDB directory and loads RouterInfo hashes into memory.
-// This allows Size() to accurately reflect the number of RouterInfos available without
-// loading full RouterInfo data (which happens on-demand via GetRouterInfo).
+// loadExistingRouterInfos scans the NetDB directory and loads all RouterInfo files into memory.
 func (db *StdNetDB) loadExistingRouterInfos() error {
 	basePath := db.Path()
 	loaded := 0
 	errors := 0
 
-	log.WithField("path", basePath).Debug("Scanning NetDB for existing RouterInfos")
+	log.WithField("path", basePath).Info("Loading existing RouterInfos from NetDB")
 
 	// First, check the root directory (some implementations store files there)
 	loaded, errors = db.scanDirectoryForRouterInfos(basePath, loaded, errors)
@@ -903,12 +901,12 @@ func (db *StdNetDB) loadExistingRouterInfos() error {
 		"loaded": loaded,
 		"errors": errors,
 		"total":  loaded + errors,
-	}).Info("Loaded existing RouterInfo hashes from NetDB")
+	}).Info("Completed loading RouterInfos from NetDB")
 
 	return nil
 }
 
-// scanDirectoryForRouterInfos scans a single directory for RouterInfo files and adds them to the database
+// scanDirectoryForRouterInfos scans a single directory for RouterInfo files and loads them into memory
 func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors int) (int, int) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -941,16 +939,39 @@ func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors i
 		var hash common.Hash
 		copy(hash[:], hashBytes)
 
-		// Add to in-memory map if not already present (don't load full data yet)
+		// Check if already loaded
 		db.riMutex.Lock()
-		if _, exists := db.RouterInfos[hash]; !exists {
-			// Create a placeholder entry - actual RouterInfo will be loaded on-demand
-			db.RouterInfos[hash] = Entry{
-				RouterInfo: nil, // nil indicates "exists on disk but not loaded"
-			}
-			loaded++
+		_, exists := db.RouterInfos[hash]
+		db.riMutex.Unlock()
+
+		if exists {
+			continue
+		}
+
+		// Load the RouterInfo from disk
+		filePath := filepath.Join(dirPath, entry.Name())
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			log.WithError(err).WithField("file", filePath).Debug("Failed to read RouterInfo file")
+			errors++
+			continue
+		}
+
+		// Parse the RouterInfo
+		ri, _, err := router_info.ReadRouterInfo(data)
+		if err != nil {
+			log.WithError(err).WithField("file", filePath).Debug("Failed to parse RouterInfo")
+			errors++
+			continue
+		}
+
+		// Add to in-memory cache
+		db.riMutex.Lock()
+		db.RouterInfos[hash] = Entry{
+			RouterInfo: &ri,
 		}
 		db.riMutex.Unlock()
+		loaded++
 	}
 
 	return loaded, errors
