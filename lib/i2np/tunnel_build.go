@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -84,6 +85,11 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 //
 // DO NOT USE for production tunnel building without implementing encryption first.
 func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
+	log.WithFields(logger.Fields{
+		"at":           "NewTunnelBuildMessage",
+		"record_count": 8,
+	}).Debug("Creating new TunnelBuild message")
+
 	msg := &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
 		Records:         TunnelBuild(records),
@@ -98,6 +104,11 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 		// Remaining 306 bytes: zero padding (spec requires random padding for encrypted records)
 	}
 	msg.SetData(data)
+
+	log.WithFields(logger.Fields{
+		"at":        "NewTunnelBuildMessage",
+		"data_size": len(data),
+	}).Debug("TunnelBuild message created successfully (cleartext, requires encryption)")
 
 	return msg
 }
@@ -139,24 +150,48 @@ func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
 //   - Local router's decryption private key
 //   - Returns decrypted BuildRequestRecord
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
+	log.WithFields(logger.Fields{
+		"at":        "UnmarshalBinary",
+		"data_size": len(data),
+	}).Debug("Unmarshaling TunnelBuild message")
+
 	if err := msg.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
+		log.WithError(err).Error("Failed to unmarshal base I2NP message")
 		return oops.Wrapf(err, "failed to unmarshal base I2NP message")
 	}
 
 	recordData := msg.GetData()
 	if len(recordData) != 8*528 {
+		log.WithFields(logger.Fields{
+			"at":            "UnmarshalBinary",
+			"expected_size": 8 * 528,
+			"actual_size":   len(recordData),
+		}).Error("Invalid TunnelBuild data size")
 		return oops.Errorf("invalid TunnelBuild data size: expected %d bytes, got %d", 8*528, len(recordData))
 	}
+
+	log.WithFields(logger.Fields{
+		"at": "UnmarshalBinary",
+	}).Debug("Parsing build request records (cleartext)")
 
 	// Parse each 528-byte chunk as cleartext BuildRequestRecord
 	// WARNING: Does NOT handle encrypted records (non-compliant with I2P spec for network messages)
 	for i := 0; i < 8; i++ {
 		record, err := ReadBuildRequestRecord(recordData[i*528 : (i+1)*528])
 		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":           "UnmarshalBinary",
+				"record_index": i,
+			}).Error("Failed to parse build request record")
 			return oops.Wrapf(err, "failed to parse build request record %d", i)
 		}
 		msg.Records[i] = record
 	}
+
+	log.WithFields(logger.Fields{
+		"at":           "UnmarshalBinary",
+		"record_count": 8,
+	}).Debug("TunnelBuild message unmarshaled successfully")
 
 	return nil
 }

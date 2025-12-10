@@ -25,26 +25,34 @@ type Entry struct {
 
 // WriteTo writes the Entry to the provided writer.
 func (e *Entry) WriteTo(w io.Writer) error {
+	log.WithField("at", "Entry.WriteTo").Debug("Writing netdb entry")
+
 	if e.RouterInfo != nil {
+		log.WithField("type", "RouterInfo").Debug("Writing RouterInfo entry")
 		return e.writeRouterInfo(w)
 	}
 
 	if e.LeaseSet != nil {
+		log.WithField("type", "LeaseSet").Debug("Writing LeaseSet entry")
 		return e.writeLeaseSet(w)
 	}
 
 	if e.LeaseSet2 != nil {
+		log.WithField("type", "LeaseSet2").Debug("Writing LeaseSet2 entry")
 		return e.writeLeaseSet2(w)
 	}
 
 	if e.EncryptedLeaseSet != nil {
+		log.WithField("type", "EncryptedLeaseSet").Debug("Writing EncryptedLeaseSet entry")
 		return e.writeEncryptedLeaseSet(w)
 	}
 
 	if e.MetaLeaseSet != nil {
+		log.WithField("type", "MetaLeaseSet").Debug("Writing MetaLeaseSet entry")
 		return e.writeMetaLeaseSet(w)
 	}
 
+	log.WithField("at", "Entry.WriteTo").Error("Entry contains no valid data")
 	return fmt.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
 }
 

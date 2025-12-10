@@ -2,6 +2,7 @@ package i2np
 
 import (
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/logger"
 )
 
 // DatabaseStore type constants (bits 3-0 of type field)
@@ -116,6 +117,13 @@ type DatabaseStore struct {
 
 // NewDatabaseStore creates a new DatabaseStore message
 func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStore {
+	log.WithFields(logger.Fields{
+		"at":        "NewDatabaseStore",
+		"data_size": len(data),
+		"data_type": dataType,
+		"key":       key.String(),
+	}).Debug("Creating new DatabaseStore message")
+
 	return &DatabaseStore{
 		Key:           key,
 		Type:          dataType,
@@ -172,11 +180,21 @@ func (d *DatabaseStore) IsLeaseSet2() bool {
 
 // MarshalBinary serializes the DatabaseStore message
 func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":        "MarshalBinary",
+		"data_type": d.Type,
+		"data_size": len(d.Data),
+		"key":       d.Key.String(),
+	}).Debug("Marshaling DatabaseStore message")
+
 	// Calculate the size: key(32) + type(1) + replyToken(4) + data
 	// If replyToken > 0, add replyTunnelID(4) + replyGateway(32)
 	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
 	baseSize := 32 + 1 + 4 + len(d.Data) // key + type + replyToken + data
 	if hasReply {
+		log.WithFields(logger.Fields{
+			"at": "MarshalBinary",
+		}).Debug("DatabaseStore includes reply token and gateway")
 		baseSize += 4 + 32 // replyTunnelID + replyGateway
 	}
 
@@ -205,6 +223,12 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 
 	// Data
 	copy(result[offset:], d.Data)
+
+	log.WithFields(logger.Fields{
+		"at":          "MarshalBinary",
+		"result_size": len(result),
+		"has_reply":   hasReply,
+	}).Debug("DatabaseStore marshaled successfully")
 
 	return result, nil
 }

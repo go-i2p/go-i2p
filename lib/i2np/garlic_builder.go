@@ -2,9 +2,11 @@ package i2np
 
 import (
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/logger"
 
 	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"
@@ -32,6 +34,11 @@ type GarlicBuilder struct {
 // messageID: Unique identifier for this garlic message (for tracking/ACKs)
 // expiration: Time when this garlic message should no longer be processed
 func NewGarlicBuilder(messageID int, expiration time.Time) *GarlicBuilder {
+	log.WithFields(logger.Fields{
+		"at":         "NewGarlicBuilder",
+		"message_id": messageID,
+		"expiration": expiration,
+	}).Debug("Creating new garlic message builder")
 	return &GarlicBuilder{
 		cloves:      make([]GarlicClove, 0),
 		certificate: *certificate.NewCertificate(),
@@ -44,9 +51,11 @@ func NewGarlicBuilder(messageID int, expiration time.Time) *GarlicBuilder {
 // - Random message ID
 // - Expiration set to 10 seconds from now
 func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
+	log.WithField("at", "NewGarlicBuilderWithDefaults").Debug("Creating garlic builder with defaults")
 	// Generate random message ID (4 bytes)
 	msgIDBytes := make([]byte, 4)
 	if _, err := rand.Read(msgIDBytes); err != nil {
+		log.WithError(err).Error("Failed to generate random message ID")
 		return nil, oops.Wrapf(err, "failed to generate random message ID")
 	}
 	messageID := int(binary.BigEndian.Uint32(msgIDBytes))
@@ -54,6 +63,10 @@ func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
 	// Default expiration: 10 seconds from now (typical for garlic messages)
 	expiration := time.Now().Add(10 * time.Second)
 
+	log.WithFields(logger.Fields{
+		"message_id": messageID,
+		"expiration": expiration,
+	}).Debug("Generated default garlic builder parameters")
 	return NewGarlicBuilder(messageID, expiration), nil
 }
 
@@ -70,12 +83,25 @@ func (gb *GarlicBuilder) AddClove(
 	cloveID int,
 	cloveExpiration time.Time,
 ) error {
+	log.WithFields(logger.Fields{
+		"at":       "AddClove",
+		"clove_id": cloveID,
+		"flag":     fmt.Sprintf("0x%02x", deliveryInstructions.Flag),
+	}).Debug("Adding clove to garlic message")
+
 	if message == nil {
+		log.WithField("at", "AddClove").Error("Attempted to add nil I2NP message")
 		return oops.Errorf("cannot add nil I2NP message to garlic clove")
 	}
 
 	// Validate expiration (clove should not outlive garlic message)
 	if cloveExpiration.After(gb.expiration) {
+		log.WithFields(logger.Fields{
+			"at":                "AddClove",
+			"clove_expiration":  cloveExpiration,
+			"garlic_expiration": gb.expiration,
+			"reason":            "clove expiration after garlic expiration",
+		}).Error("Invalid clove expiration")
 		return oops.Errorf("clove expiration (%v) cannot be after garlic message expiration (%v)",
 			cloveExpiration, gb.expiration)
 	}
@@ -89,6 +115,10 @@ func (gb *GarlicBuilder) AddClove(
 	}
 
 	gb.cloves = append(gb.cloves, clove)
+	log.WithFields(logger.Fields{
+		"at":          "AddClove",
+		"clove_count": len(gb.cloves),
+	}).Debug("Clove added successfully")
 	return nil
 }
 
@@ -169,11 +199,24 @@ func (gb *GarlicBuilder) AddRouterDeliveryClove(
 // This produces a Garlic object ready for encryption.
 // The actual encryption is handled by SessionManager (ECIES-X25519-AEAD-Ratchet).
 func (gb *GarlicBuilder) Build() (*Garlic, error) {
+	log.WithFields(logger.Fields{
+		"at":          "Build",
+		"clove_count": len(gb.cloves),
+		"message_id":  gb.messageID,
+	}).Debug("Building garlic message")
+
 	if len(gb.cloves) == 0 {
+		log.WithField("at", "Build").Error("Cannot build garlic with zero cloves")
 		return nil, oops.Errorf("cannot build garlic message with zero cloves")
 	}
 
 	if len(gb.cloves) > 255 {
+		log.WithFields(logger.Fields{
+			"at":          "Build",
+			"clove_count": len(gb.cloves),
+			"max_cloves":  255,
+			"reason":      "exceeded maximum clove count",
+		}).Error("Too many cloves in garlic message")
 		return nil, oops.Errorf("garlic message cannot contain more than 255 cloves, got %d", len(gb.cloves))
 	}
 
@@ -185,6 +228,7 @@ func (gb *GarlicBuilder) Build() (*Garlic, error) {
 		Expiration:  gb.expiration,
 	}
 
+	log.WithField("at", "Build").Debug("Garlic message built successfully")
 	return garlic, nil
 }
 
@@ -193,16 +237,24 @@ func (gb *GarlicBuilder) Build() (*Garlic, error) {
 //
 // Returns the serialized plaintext garlic message (unencrypted).
 func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
+	log.WithField("at", "BuildAndSerialize").Debug("Building and serializing garlic message")
+
 	garlic, err := gb.Build()
 	if err != nil {
+		log.WithError(err).Error("Failed to build garlic message")
 		return nil, oops.Wrapf(err, "failed to build garlic message")
 	}
 
 	payload, err := serializeGarlic(garlic)
 	if err != nil {
+		log.WithError(err).Error("Failed to serialize garlic message")
 		return nil, oops.Wrapf(err, "failed to serialize garlic message")
 	}
 
+	log.WithFields(logger.Fields{
+		"at":           "BuildAndSerialize",
+		"payload_size": len(payload),
+	}).Debug("Garlic message serialized successfully")
 	return payload, nil
 }
 
@@ -233,7 +285,13 @@ func (gb *GarlicBuilder) BuildAndSerialize() ([]byte, error) {
 // Message_ID: 4 bytes
 // Expiration: 8 bytes (milliseconds since epoch)
 func serializeGarlic(garlic *Garlic) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":          "serializeGarlic",
+		"clove_count": garlic.Count,
+	}).Debug("Serializing garlic message")
+
 	if garlic == nil {
+		log.WithField("at", "serializeGarlic").Error("Attempted to serialize nil garlic")
 		return nil, oops.Errorf("cannot serialize nil garlic message")
 	}
 
@@ -474,6 +532,12 @@ func NewRouterDeliveryInstructions(routerHash common.Hash) GarlicCloveDeliveryIn
 //
 // Returns the parsed Garlic structure or an error if validation fails.
 func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
+	log.WithFields(logger.Fields{
+		"at":            "DeserializeGarlic",
+		"data_size":     len(data),
+		"nesting_depth": nestingDepth,
+	}).Debug("Deserializing garlic message")
+
 	const (
 		MaxGarlicCloves       = 64            // Practical limit for clove count
 		MaxGarlicNestingDepth = 3             // Prevent infinite recursion
@@ -482,11 +546,23 @@ func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error) {
 
 	// Validate garlic structure
 	if err := validateGarlicStructure(data, nestingDepth, MinGarlicSize, MaxGarlicNestingDepth); err != nil {
+		log.WithError(err).Error("Garlic structure validation failed")
 		return nil, err
 	}
 
 	// Parse garlic components
-	return parseGarlicStructure(data, nestingDepth, MaxGarlicCloves)
+	garlic, err := parseGarlicStructure(data, nestingDepth, MaxGarlicCloves)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse garlic structure")
+		return nil, err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "DeserializeGarlic",
+		"clove_count": garlic.Count,
+		"message_id":  garlic.MessageID,
+	}).Debug("Garlic message deserialized successfully")
+	return garlic, nil
 }
 
 // validateGarlicStructure validates nesting depth and data size.

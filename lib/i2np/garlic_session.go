@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/kdf"
 	"github.com/go-i2p/crypto/ratchet"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"go.step.sm/crypto/x25519"
 )
@@ -50,14 +51,24 @@ type GarlicSession struct {
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
 // The private key is used for decrypting New Session messages.
 func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error) {
+	log.WithFields(logger.Fields{
+		"at": "NewGarlicSessionManager",
+	}).Debug("Creating new garlic session manager")
+
 	// Derive public key from private key
 	pubBytes, _, err := ecies.GenerateKeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to derive public key for session manager")
 		return nil, oops.Wrapf(err, "failed to derive public key")
 	}
 
 	var publicKey [32]byte
 	copy(publicKey[:], pubBytes)
+
+	log.WithFields(logger.Fields{
+		"at":              "NewGarlicSessionManager",
+		"session_timeout": 10 * time.Minute,
+	}).Debug("Garlic session manager created successfully")
 
 	return &GarlicSessionManager{
 		sessions:       make(map[common.Hash]*GarlicSession),
@@ -84,16 +95,31 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	destinationPubKey [32]byte,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":             "EncryptGarlicMessage",
+		"plaintext_size": len(plaintextGarlic),
+		"dest_hash":      destinationHash.String(),
+	}).Debug("Encrypting garlic message")
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	session, exists := sm.sessions[destinationHash]
 
 	if !exists {
+		log.WithFields(logger.Fields{
+			"at":        "EncryptGarlicMessage",
+			"dest_hash": destinationHash.String(),
+		}).Debug("No existing session found, creating new session")
 		// New Session: Use ECIES ephemeral-static encryption
 		return sm.encryptNewSession(destinationHash, destinationPubKey, plaintextGarlic)
 	}
 
+	log.WithFields(logger.Fields{
+		"at":              "EncryptGarlicMessage",
+		"dest_hash":       destinationHash.String(),
+		"message_counter": session.MessageCounter,
+	}).Debug("Using existing session for encryption")
 	// Existing Session: Use ratchet-based encryption
 	return sm.encryptExistingSession(session, plaintextGarlic)
 }
@@ -107,21 +133,44 @@ func (sm *GarlicSessionManager) encryptNewSession(
 	destinationPubKey [32]byte,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":        "encryptNewSession",
+		"dest_hash": destinationHash.String(),
+	}).Debug("Encrypting with new session")
+
 	ephemeralPub, sessionKeys, err := sm.performECIESKeyExchange(destinationPubKey)
 	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "encryptNewSession",
+			"dest_hash": destinationHash.String(),
+		}).Error("ECIES key exchange failed")
 		return nil, err
 	}
 
 	encryptedPayload, err := sm.encryptPayloadWithSessionKey(sessionKeys.symKey, plaintextGarlic)
 	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "encryptNewSession",
+			"dest_hash": destinationHash.String(),
+		}).Error("Failed to encrypt payload with session key")
 		return nil, err
 	}
 
 	newSessionMsg := constructNewSessionMessage(ephemeralPub, encryptedPayload)
 
 	if err := sm.storeNewSessionState(destinationHash, destinationPubKey, sessionKeys); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "encryptNewSession",
+			"dest_hash": destinationHash.String(),
+		}).Error("Failed to store new session state")
 		return nil, err
 	}
+
+	log.WithFields(logger.Fields{
+		"at":           "encryptNewSession",
+		"dest_hash":    destinationHash.String(),
+		"message_size": len(newSessionMsg),
+	}).Debug("New session encrypted successfully")
 
 	return newSessionMsg, nil
 }
@@ -137,16 +186,19 @@ type sessionKeys struct {
 func (sm *GarlicSessionManager) performECIESKeyExchange(destinationPubKey [32]byte) ([]byte, *sessionKeys, error) {
 	ephemeralPub, ephemeralPriv, err := x25519.GenerateKey(rand.Reader)
 	if err != nil {
+		log.WithError(err).Error("Failed to generate ephemeral key pair")
 		return nil, nil, oops.Wrapf(err, "failed to generate ephemeral key pair")
 	}
 
 	sharedSecret, err := deriveECIESSharedSecret(ephemeralPriv, destinationPubKey)
 	if err != nil {
+		log.WithError(err).Error("Failed to derive ECIES shared secret")
 		return nil, nil, err
 	}
 
 	keys, err := deriveSessionKeysFromSecret(sharedSecret)
 	if err != nil {
+		log.WithError(err).Error("Failed to derive session keys from shared secret")
 		return nil, nil, err
 	}
 
@@ -232,8 +284,18 @@ func (sm *GarlicSessionManager) storeNewSessionState(
 	sm.sessions[destinationHash] = session
 
 	if err := sm.generateTagWindow(session); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":        "storeNewSessionState",
+			"dest_hash": destinationHash.String(),
+		}).Error("Failed to generate tag window")
 		return oops.Wrapf(err, "failed to generate tag window")
 	}
+
+	log.WithFields(logger.Fields{
+		"at":            "storeNewSessionState",
+		"dest_hash":     destinationHash.String(),
+		"session_count": len(sm.sessions),
+	}).Debug("New session state stored successfully")
 
 	return nil
 }
@@ -265,13 +327,23 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	session *GarlicSession,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":              "encryptExistingSession",
+		"message_counter": session.MessageCounter,
+	}).Debug("Encrypting with existing session")
+
 	messageKey, sessionTag, err := advanceRatchets(session)
 	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":              "encryptExistingSession",
+			"message_counter": session.MessageCounter,
+		}).Error("Failed to advance ratchets")
 		return nil, err
 	}
 
 	ciphertext, tag, nonce, err := encryptWithSessionKey(messageKey, plaintextGarlic, sessionTag)
 	if err != nil {
+		log.WithError(err).Error("Failed to encrypt with session key")
 		return nil, err
 	}
 
@@ -280,6 +352,12 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 	// Update session state
 	session.LastUsed = time.Now()
 	session.MessageCounter++
+
+	log.WithFields(logger.Fields{
+		"at":              "encryptExistingSession",
+		"message_counter": session.MessageCounter,
+		"message_size":    len(existingSessionMsg),
+	}).Debug("Existing session encrypted successfully")
 
 	return existingSessionMsg, nil
 }
@@ -350,11 +428,20 @@ func buildExistingSessionMessage(sessionTag [8]byte, nonce, ciphertext []byte, t
 // - Decrypted plaintext garlic message (can be parsed into Garlic struct)
 // - Session tag (if Existing Session), empty array if New Session
 func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":           "DecryptGarlicMessage",
+		"message_size": len(encryptedGarlic),
+	}).Debug("Decrypting garlic message")
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	// Check message length to determine type
 	if len(encryptedGarlic) < 8 {
+		log.WithFields(logger.Fields{
+			"at":           "DecryptGarlicMessage",
+			"message_size": len(encryptedGarlic),
+		}).Error("Encrypted garlic message too short")
 		return nil, [8]byte{}, oops.Errorf("encrypted garlic message too short: %d bytes", len(encryptedGarlic))
 	}
 
@@ -365,15 +452,27 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 	// Check if this matches an existing session tag
 	session := sm.findSessionByTag(sessionTag)
 	if session != nil {
+		log.WithFields(logger.Fields{
+			"at": "DecryptGarlicMessage",
+		}).Debug("Found existing session for tag")
 		// Existing Session decryption
 		return sm.decryptExistingSession(session, encryptedGarlic[8:], sessionTag)
 	}
 
+	log.WithFields(logger.Fields{
+		"at": "DecryptGarlicMessage",
+	}).Debug("No session found for tag, attempting new session decryption")
 	// New Session decryption (no matching tag, use our private key)
 	plaintext, err := sm.decryptNewSession(encryptedGarlic)
 	if err != nil {
+		log.WithError(err).Error("Failed to decrypt garlic message")
 		return nil, [8]byte{}, oops.Wrapf(err, "failed to decrypt garlic message")
 	}
+
+	log.WithFields(logger.Fields{
+		"at":             "DecryptGarlicMessage",
+		"plaintext_size": len(plaintext),
+	}).Debug("Garlic message decrypted successfully")
 
 	return plaintext, [8]byte{}, nil
 }
@@ -381,27 +480,41 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 // decryptNewSession decrypts a New Session message using our static private key.
 // Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":           "decryptNewSession",
+		"message_size": len(newSessionMsg),
+	}).Debug("Decrypting new session message")
+
 	parsedMsg, err := parseNewSessionMessage(newSessionMsg)
 	if err != nil {
+		log.WithError(err).Error("Failed to parse new session message")
 		return nil, err
 	}
 
 	sharedSecret, err := sm.deriveSharedSecretFromEphemeral(parsedMsg.ephemeralPubKey)
 	if err != nil {
+		log.WithError(err).Error("Failed to derive shared secret from ephemeral key")
 		return nil, err
 	}
 
 	sessionKeys, err := deriveKeysFromSharedSecret(sharedSecret)
 	if err != nil {
+		log.WithError(err).Error("Failed to derive session keys")
 		return nil, err
 	}
 
 	plaintext, err := decryptWithSessionKeys(parsedMsg, sessionKeys.symKey)
 	if err != nil {
+		log.WithError(err).Error("Failed to decrypt with session keys")
 		return nil, err
 	}
 
 	sm.initializeInboundRatchetState(parsedMsg.ephemeralPubKey, sessionKeys)
+
+	log.WithFields(logger.Fields{
+		"at":             "decryptNewSession",
+		"plaintext_size": len(plaintext),
+	}).Debug("New session decrypted successfully")
 
 	return plaintext, nil
 }
@@ -512,24 +625,41 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 	existingSessionMsg []byte,
 	sessionTag [8]byte,
 ) ([]byte, [8]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":              "decryptExistingSession",
+		"message_counter": session.MessageCounter,
+	}).Debug("Decrypting existing session message")
+
 	nonce, ciphertext, tag, err := parseExistingSessionMessage(existingSessionMsg)
 	if err != nil {
+		log.WithError(err).Error("Failed to parse existing session message")
 		return nil, [8]byte{}, err
 	}
 
 	messageKey, err := deriveDecryptionKey(session)
 	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":              "decryptExistingSession",
+			"message_counter": session.MessageCounter,
+		}).Error("Failed to derive decryption key")
 		return nil, [8]byte{}, err
 	}
 
 	plaintext, err := decryptWithSessionTag(messageKey, ciphertext, tag, sessionTag, nonce)
 	if err != nil {
+		log.WithError(err).Error("Failed to decrypt with session tag")
 		return nil, [8]byte{}, err
 	}
 
 	// Update session state
 	session.LastUsed = time.Now()
 	session.MessageCounter++
+
+	log.WithFields(logger.Fields{
+		"at":              "decryptExistingSession",
+		"message_counter": session.MessageCounter,
+		"plaintext_size":  len(plaintext),
+	}).Debug("Existing session decrypted successfully")
 
 	return plaintext, sessionTag, nil
 }
@@ -645,10 +775,17 @@ func (sm *GarlicSessionManager) replenishTagWindowIfNeeded(session *GarlicSessio
 func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error {
 	const tagWindowSize = 10
 
+	log.WithFields(logger.Fields{
+		"at":                   "generateTagWindow",
+		"current_pending_tags": len(session.pendingTags),
+		"target_window_size":   tagWindowSize,
+	}).Debug("Generating session tag window")
+
 	// Generate tags up to the window size
 	for len(session.pendingTags) < tagWindowSize {
 		tag, err := session.TagRatchet.GenerateNextTag()
 		if err != nil {
+			log.WithError(err).Error("Failed to generate session tag")
 			return oops.Wrapf(err, "failed to generate session tag")
 		}
 
@@ -659,6 +796,12 @@ func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error 
 		sm.tagIndex[tag] = session
 	}
 
+	log.WithFields(logger.Fields{
+		"at":                 "generateTagWindow",
+		"generated_tags":     len(session.pendingTags),
+		"total_indexed_tags": len(sm.tagIndex),
+	}).Debug("Tag window generated successfully")
+
 	return nil
 }
 
@@ -666,6 +809,11 @@ func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error 
 // Should be called periodically to prevent memory leaks.
 // This also cleans up any tags associated with expired sessions from the tag index.
 func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
+	log.WithFields(logger.Fields{
+		"at":            "CleanupExpiredSessions",
+		"session_count": len(sm.sessions),
+	}).Debug("Cleaning up expired sessions")
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -686,6 +834,15 @@ func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
 		}
 	}
 
+	if removed > 0 {
+		log.WithFields(logger.Fields{
+			"at":                     "CleanupExpiredSessions",
+			"removed_sessions":       removed,
+			"remaining_sessions":     len(sm.sessions),
+			"remaining_indexed_tags": len(sm.tagIndex),
+		}).Info("Expired sessions cleaned up")
+	}
+
 	return removed
 }
 
@@ -698,8 +855,13 @@ func (sm *GarlicSessionManager) GetSessionCount() int {
 
 // GenerateGarlicSessionManager creates a garlic session manager with a freshly generated key pair.
 func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
+	log.WithFields(logger.Fields{
+		"at": "GenerateGarlicSessionManager",
+	}).Debug("Generating new garlic session manager with fresh key pair")
+
 	_, privBytes, err := ecies.GenerateKeyPair()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate session manager key pair")
 		return nil, oops.Wrapf(err, "failed to generate session manager key pair")
 	}
 
