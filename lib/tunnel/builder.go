@@ -9,6 +9,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/logger"
 )
 
 // TunnelBuilder handles the creation of tunnel build request messages.
@@ -23,9 +24,12 @@ type TunnelBuilder struct {
 //
 // Returns an error if the peer selector is nil.
 func NewTunnelBuilder(selector PeerSelector) (*TunnelBuilder, error) {
+	log.WithField("at", "NewTunnelBuilder").Debug("Creating new tunnel builder")
 	if selector == nil {
+		log.WithField("at", "NewTunnelBuilder").Error("Peer selector is nil")
 		return nil, fmt.Errorf("peer selector cannot be nil")
 	}
+	log.WithField("at", "NewTunnelBuilder").Debug("Tunnel builder created successfully")
 	return &TunnelBuilder{peerSelector: selector}, nil
 }
 
@@ -81,19 +85,30 @@ type TunnelBuildResult struct {
 // - Peer selection fails
 // - Cryptographic key generation fails
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error) {
+	log.WithFields(logger.Fields{
+		"at":              "CreateBuildRequest",
+		"hop_count":       req.HopCount,
+		"is_inbound":      req.IsInbound,
+		"use_short_build": req.UseShortBuild,
+	}).Debug("Creating tunnel build request")
+
 	if err := tb.validateHopCount(req.HopCount); err != nil {
+		log.WithError(err).Error("Invalid hop count")
 		return nil, err
 	}
 
 	peers, err := tb.selectTunnelPeers(req)
 	if err != nil {
+		log.WithError(err).Error("Failed to select tunnel peers")
 		return nil, err
 	}
 
 	tunnelID, err := generateTunnelID()
 	if err != nil {
+		log.WithError(err).Error("Failed to generate tunnel ID")
 		return nil, fmt.Errorf("failed to generate tunnel ID: %w", err)
 	}
+	log.WithField("tunnel_id", tunnelID).Debug("Generated tunnel ID")
 
 	records, replyKeys, replyIVs, err := tb.createAllHopRecords(req, tunnelID, peers)
 	if err != nil {
@@ -112,7 +127,17 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 
 // validateHopCount validates that the hop count is within I2P spec limits (1-8).
 func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
+	log.WithFields(logger.Fields{
+		"at":        "validateHopCount",
+		"hop_count": hopCount,
+	}).Debug("Validating hop count")
+
 	if hopCount < 1 || hopCount > 8 {
+		log.WithFields(logger.Fields{
+			"at":        "validateHopCount",
+			"hop_count": hopCount,
+			"reason":    "hop count out of range (1-8)",
+		}).Error("Invalid hop count")
 		return fmt.Errorf("hop count must be between 1 and 8, got %d", hopCount)
 	}
 	return nil
@@ -120,15 +145,32 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
 
 // selectTunnelPeers selects and validates peers for tunnel hops.
 func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"at":            "selectTunnelPeers",
+		"hop_count":     req.HopCount,
+		"exclude_count": len(req.ExcludePeers),
+	}).Debug("Selecting tunnel peers")
+
 	peers, err := tb.peerSelector.SelectPeers(req.HopCount, req.ExcludePeers)
 	if err != nil {
+		log.WithError(err).Error("Peer selection failed")
 		return nil, fmt.Errorf("failed to select peers: %w", err)
 	}
 
 	if len(peers) < req.HopCount {
+		log.WithFields(logger.Fields{
+			"at":     "selectTunnelPeers",
+			"needed": req.HopCount,
+			"got":    len(peers),
+			"reason": "insufficient peers selected",
+		}).Error("Not enough peers")
 		return nil, fmt.Errorf("insufficient peers: need %d, got %d", req.HopCount, len(peers))
 	}
 
+	log.WithFields(logger.Fields{
+		"at":         "selectTunnelPeers",
+		"peer_count": len(peers),
+	}).Debug("Successfully selected tunnel peers")
 	return peers, nil
 }
 

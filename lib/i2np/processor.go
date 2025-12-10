@@ -42,6 +42,7 @@ type MessageProcessor struct {
 
 // NewMessageProcessor creates a new message processor
 func NewMessageProcessor() *MessageProcessor {
+	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
 	return &MessageProcessor{
 		factory: NewI2NPMessageFactory(),
 	}
@@ -50,6 +51,7 @@ func NewMessageProcessor() *MessageProcessor {
 // SetGarlicSessionManager sets the garlic session manager for decrypting garlic messages.
 // This must be called before processing garlic messages, otherwise they will fail with an error.
 func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManager) {
+	log.WithField("at", "SetGarlicSessionManager").Debug("Setting garlic session manager")
 	p.garlicSessions = garlicMgr
 }
 
@@ -57,11 +59,17 @@ func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManag
 // This is optional - if not set, only LOCAL delivery (0x00) will be processed.
 // The forwarder enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) deliveries.
 func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
+	log.WithField("at", "SetCloveForwarder").Debug("Setting garlic clove forwarder")
 	p.cloveForwarder = forwarder
 }
 
 // ProcessMessage processes any I2NP message using interfaces
 func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
+	log.WithFields(logger.Fields{
+		"at":           "ProcessMessage",
+		"message_type": msg.Type(),
+	}).Debug("Processing I2NP message")
+
 	switch msg.Type() {
 	case I2NP_MESSAGE_TYPE_DATA:
 		return p.processDataMessage(msg)
@@ -72,6 +80,11 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
 		return p.processTunnelDataMessage(msg)
 	default:
+		log.WithFields(logger.Fields{
+			"at":           "ProcessMessage",
+			"message_type": msg.Type(),
+			"reason":       "unknown message type",
+		}).Error("Cannot process message")
 		return fmt.Errorf("unknown message type: %d", msg.Type())
 	}
 }

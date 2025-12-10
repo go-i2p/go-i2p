@@ -3,6 +3,7 @@ package i2np
 import (
 	"encoding/binary"
 
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -16,6 +17,11 @@ type DataMessage struct {
 
 // NewDataMessage creates a new Data message
 func NewDataMessage(payload []byte) *DataMessage {
+	log.WithFields(logger.Fields{
+		"at":           "NewDataMessage",
+		"payload_size": len(payload),
+	}).Debug("Creating new data message")
+
 	msg := &DataMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA),
 		PayloadLength:   len(payload),
@@ -43,25 +49,47 @@ func (d *DataMessage) GetPayload() []byte {
 
 // UnmarshalBinary deserializes a Data message
 func (d *DataMessage) UnmarshalBinary(data []byte) error {
+	log.WithFields(logger.Fields{
+		"at":        "DataMessage.UnmarshalBinary",
+		"data_size": len(data),
+	}).Debug("Unmarshaling data message")
+
 	// First unmarshal the base message
 	if err := d.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
+		log.WithError(err).Error("Failed to unmarshal base message")
 		return err
 	}
 
 	// Extract the data payload and parse it
 	messageData := d.BaseI2NPMessage.GetData()
 	if len(messageData) < 4 {
+		log.WithFields(logger.Fields{
+			"at":     "DataMessage.UnmarshalBinary",
+			"got":    len(messageData),
+			"need":   4,
+			"reason": "payload too short",
+		}).Error("Invalid data message")
 		return oops.Errorf("data message payload too short: %d bytes", len(messageData))
 	}
 
 	d.PayloadLength = int(binary.BigEndian.Uint32(messageData[0:4]))
 	if len(messageData) < 4+d.PayloadLength {
+		log.WithFields(logger.Fields{
+			"at":       "DataMessage.UnmarshalBinary",
+			"expected": 4 + d.PayloadLength,
+			"got":      len(messageData),
+			"reason":   "payload truncated",
+		}).Error("Truncated data message")
 		return oops.Errorf("data message payload truncated: expected %d bytes, got %d", 4+d.PayloadLength, len(messageData))
 	}
 
 	d.Payload = make([]byte, d.PayloadLength)
 	copy(d.Payload, messageData[4:4+d.PayloadLength])
 
+	log.WithFields(logger.Fields{
+		"at":             "DataMessage.UnmarshalBinary",
+		"payload_length": d.PayloadLength,
+	}).Debug("Successfully unmarshaled data message")
 	return nil
 }
 
