@@ -186,26 +186,44 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 // hasValidNTCP2Address checks if router has at least one NTCP2 address with required 'host' key
 func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 	if ri == nil {
+		log.Debug("hasValidNTCP2Address: RouterInfo is nil")
 		return false
 	}
 
-	for _, addr := range ri.RouterAddresses() {
+	addresses := ri.RouterAddresses()
+	log.WithField("address_count", len(addresses)).Debug("hasValidNTCP2Address: checking addresses")
+
+	for i, addr := range addresses {
 		// Check if this is an NTCP2 address
 		style := addr.TransportStyle()
 		styleStr, err := style.Data()
 		if err != nil {
+			log.WithField("index", i).WithError(err).Debug("hasValidNTCP2Address: failed to get transport style")
 			continue
 		}
 
+		log.WithFields(logger.Fields{
+			"index": i,
+			"style": styleStr,
+		}).Debug("hasValidNTCP2Address: checking address style")
+
 		if strings.EqualFold(styleStr, "ntcp2") {
 			// Found NTCP2 address - validate it using bootstrap package
+			log.WithField("index", i).Debug("hasValidNTCP2Address: found NTCP2 address, validating...")
 			if err := bootstrap.ValidateNTCP2Address(addr); err == nil {
 				// Valid NTCP2 address found
+				log.WithField("index", i).Debug("hasValidNTCP2Address: NTCP2 address is VALID")
 				return true
+			} else {
+				log.WithFields(logger.Fields{
+					"index": i,
+					"error": err.Error(),
+				}).Debug("hasValidNTCP2Address: NTCP2 address validation FAILED")
 			}
 		}
 	}
 
+	log.Debug("hasValidNTCP2Address: NO valid NTCP2 address found")
 	return false
 }
 

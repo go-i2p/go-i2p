@@ -139,43 +139,29 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 
 // ValidateNTCP2Address validates NTCP2-specific requirements
 func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
-	// Check for required 'host' key
-	if !addr.CheckOption("host") {
-		return errors.New("NTCP2 address missing required 'host' key")
+	// Actually try to retrieve the host - this is what NTCP2 transport does
+	// CheckOption() may return true even when the key doesn't exist in the mapping
+	host, err := addr.Host()
+	if err != nil {
+		return fmt.Errorf("NTCP2 address cannot retrieve host: %w", err)
 	}
 
-	// Validate host is not empty
-	hostStr := addr.HostString()
-	if hostStr == nil {
+	if host == nil {
 		return errors.New("NTCP2 host is nil")
 	}
 
-	hostData, err := hostStr.Data()
-	if err != nil {
-		return fmt.Errorf("NTCP2 host data invalid: %w", err)
-	}
-
-	if len(hostData) == 0 {
+	hostData := host.String()
+	if hostData == "" {
 		return errors.New("NTCP2 host is empty")
 	}
 
-	// Check for required 'port' key
-	if !addr.CheckOption("port") {
-		return errors.New("NTCP2 address missing required 'port' key")
-	}
-
-	// Validate port is not empty
-	portStr := addr.PortString()
-	if portStr == nil {
-		return errors.New("NTCP2 port is nil")
-	}
-
-	portData, err := portStr.Data()
+	// Actually try to retrieve the port - this is what NTCP2 transport does
+	port, err := addr.Port()
 	if err != nil {
-		return fmt.Errorf("NTCP2 port data invalid: %w", err)
+		return fmt.Errorf("NTCP2 address cannot retrieve port: %w", err)
 	}
 
-	if len(portData) == 0 {
+	if port == "" {
 		return errors.New("NTCP2 port is empty")
 	}
 
