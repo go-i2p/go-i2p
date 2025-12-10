@@ -196,7 +196,7 @@ func mappingToGoMap(mapping data.Mapping) map[string]string {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":          "i2cp.mappingToGoMap",
+		"at":             "i2cp.mappingToGoMap",
 		"extractedCount": len(result),
 	}).Debug("mapping_converted")
 
@@ -372,12 +372,12 @@ func ValidateSessionConfig(config *SessionConfig) error {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":                     "i2cp.ValidateSessionConfig",
-		"inboundTunnelLength":    config.InboundTunnelLength,
-		"outboundTunnelLength":   config.OutboundTunnelLength,
-		"inboundTunnelCount":     config.InboundTunnelCount,
-		"outboundTunnelCount":    config.OutboundTunnelCount,
-		"messageQueueSize":       config.MessageQueueSize,
+		"at":                   "i2cp.ValidateSessionConfig",
+		"inboundTunnelLength":  config.InboundTunnelLength,
+		"outboundTunnelLength": config.OutboundTunnelLength,
+		"inboundTunnelCount":   config.InboundTunnelCount,
+		"outboundTunnelCount":  config.OutboundTunnelCount,
+		"messageQueueSize":     config.MessageQueueSize,
 	}).Debug("session_config_validated_successfully")
 
 	return nil
