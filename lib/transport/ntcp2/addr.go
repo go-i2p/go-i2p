@@ -78,10 +78,15 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 		return ntcp2Addr, nil
 	}
 
+	// Enhanced logging when no valid NTCP2 addresses found - helps diagnose Issue #1 scope
 	log.WithFields(map[string]interface{}{
-		"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
-		"address_count": len(addresses),
-	}).Debug("No valid NTCP2 address found in RouterInfo after checking all addresses")
+		"at":              "findValidNTCP2Address",
+		"phase":           "address_extraction",
+		"operation":       "find_valid_address",
+		"router_hash":     fmt.Sprintf("%x", hashBytes[:8]),
+		"addresses_total": len(addresses),
+		"addresses_tried": len(addresses),
+	}).Warn("No valid NTCP2 address found in RouterInfo after checking all addresses")
 	return nil, ErrInvalidRouterInfo
 }
 
@@ -90,7 +95,17 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 	log.Debug("Found NTCP2 transport address, resolving TCP address")
 	tcpAddr, err := resolveTCPAddress(addr)
 	if err != nil {
-		log.WithError(err).Debug("Failed to resolve TCP address from NTCP2 router address")
+		// Enhanced logging for TCP resolution failures - links to host extraction Issue #1
+		hashVal, _ := routerInfo.IdentHash()
+		hashBytes := hashVal.Bytes()
+		log.WithFields(map[string]interface{}{
+			"at":            "processNTCP2Address",
+			"phase":         "address_resolution",
+			"operation":     "resolve_tcp",
+			"error":         err.Error(),
+			"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
+			"address_count": len(routerInfo.RouterAddresses()),
+		}).Warn("Failed to resolve TCP address from NTCP2 router address")
 		return nil, fmt.Errorf("failed to resolve TCP address: %w", err)
 	}
 
@@ -125,15 +140,32 @@ func isNTCP2Transport(addr *router_address.RouterAddress) bool {
 // resolveTCPAddress extracts host and port from a router address and resolves them to a TCP address.
 // It returns an error if host or port extraction fails, or if TCP address resolution fails.
 func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
+	log.Debug("Getting host from RouterAddress")
 	host, err := addr.Host()
 	if err != nil {
-		log.WithError(err).Debug("Failed to extract host from router address")
+		// Enhanced logging for host extraction failures - this is Issue #1 from AUDIT.md
+		log.WithFields(map[string]interface{}{
+			"at":         "resolveTCPAddress",
+			"phase":      "address_parsing",
+			"operation":  "extract_host",
+			"error":      err.Error(),
+			"cost":       addr.Cost(),
+			"expiration": addr.Expiration(),
+		}).Error("Failed to get host data")
 		return nil, fmt.Errorf("failed to extract host: %w", err)
 	}
 
 	port, err := addr.Port()
 	if err != nil {
-		log.WithError(err).Debug("Failed to extract port from router address")
+		// Enhanced logging for port extraction failures
+		log.WithFields(map[string]interface{}{
+			"at":        "resolveTCPAddress",
+			"phase":     "address_parsing",
+			"operation": "extract_port",
+			"error":     err.Error(),
+			"host":      host.String(),
+			"cost":      addr.Cost(),
+		}).Error("Failed to get port data")
 		return nil, fmt.Errorf("failed to extract port: %w", err)
 	}
 

@@ -1036,6 +1036,17 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 		// Use TransportMuxer to establish outbound session
 		transportSession, err := r.TransportMuxer.GetSession(routerInfo)
 		if err != nil {
+			// Enhanced logging for session establishment failures - Issue #2 from AUDIT.md
+			// Include context about peer and transport compatibility
+			log.WithFields(logger.Fields{
+				"at":            "Router.GetSessionByHash",
+				"phase":         "session_establishment",
+				"operation":     "outbound_connection",
+				"peer_hash":     fmt.Sprintf("%x", hash[:8]),
+				"error":         err.Error(),
+				"address_count": len(routerInfo.RouterAddresses()),
+				"has_ntcp2":     hasNTCP2Address(routerInfo),
+			}).Error("failed to get session")
 			log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Error("Failed to establish outbound session")
 			return nil, fmt.Errorf("failed to establish outbound session: %w", err)
 		}
@@ -1049,6 +1060,25 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 		return transportSession, nil
 
 	case <-time.After(30 * time.Second):
+		// Enhanced logging for RouterInfo lookup timeout
+		log.WithFields(logger.Fields{
+			"at":        "Router.GetSessionByHash",
+			"phase":     "session_establishment",
+			"operation": "netdb_lookup",
+			"peer_hash": fmt.Sprintf("%x", hash[:8]),
+			"timeout":   "30s",
+		}).Error("Timeout waiting for RouterInfo from NetDB")
 		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
 	}
+}
+
+// hasNTCP2Address checks if RouterInfo contains at least one NTCP2 address
+func hasNTCP2Address(routerInfo router_info.RouterInfo) bool {
+	for _, addr := range routerInfo.RouterAddresses() {
+		style := addr.TransportStyle()
+		if styleStr, err := style.Data(); err == nil && styleStr == "ntcp2" {
+			return true
+		}
+	}
+	return false
 }

@@ -303,20 +303,33 @@ func (p *Pool) maintainPool() {
 	needed := p.calculateNeededTunnels(activeCount, nearExpiry)
 
 	if needed > 0 {
+		// Enhanced logging for tunnel pool health - Issue #4 from AUDIT.md
 		log.WithFields(logger.Fields{
-			"at":          "(Pool) maintainPool",
-			"phase":       "tunnel_build",
-			"step":        "determine_needs",
-			"reason":      "tunnel pool below threshold",
-			"active":      activeCount,
-			"near_expiry": nearExpiry,
-			"needed":      needed,
-			"min_tunnels": p.config.MinTunnels,
-			"max_tunnels": p.config.MaxTunnels,
+			"at":                   "Pool.maintainPool",
+			"phase":                "tunnel_build",
+			"step":                 "determine_needs",
+			"operation":            "check_pool_health",
+			"reason":               "tunnel pool below threshold",
+			"active":               activeCount,
+			"near_expiry":          nearExpiry,
+			"needed":               needed,
+			"min_tunnels":          p.config.MinTunnels,
+			"max_tunnels":          p.config.MaxTunnels,
+			"is_inbound":           p.config.IsInbound,
+			"consecutive_failures": p.buildFailures,
 		}).Warn("tunnel pool below minimum, building replacement tunnels")
 
 		// Build tunnels with exponential backoff on failures
 		p.buildTunnelsWithBackoff(needed)
+
+		// Log completion of build attempt
+		log.WithFields(logger.Fields{
+			"at":         "Pool.maintainPool",
+			"phase":      "tunnel_build",
+			"operation":  "build_complete",
+			"requested":  needed,
+			"is_inbound": p.config.IsInbound,
+		}).Debug("tunnel build attempt completed")
 	}
 }
 
@@ -486,13 +499,19 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 		for retry := 0; retry < maxRetries; retry++ {
 			tunnelID, err = p.tunnelBuilder.BuildTunnel(req)
 			if err != nil {
+				// Enhanced logging for tunnel build failures - Issue #3 from AUDIT.md
+				// These failures are typically caused by session establishment failures (Issue #2)
 				log.WithFields(logger.Fields{
-					"at":          "(Pool) attemptBuildTunnels",
+					"at":          "Pool.attemptBuildTunnels",
 					"phase":       "tunnel_build",
+					"operation":   "build_tunnel",
 					"reason":      "tunnel build request failed",
 					"error":       err.Error(),
 					"retry":       retry + 1,
 					"max_retries": maxRetries,
+					"hop_count":   req.HopCount,
+					"is_inbound":  req.IsInbound,
+					"pool_size":   len(p.tunnels),
 				}).Warn("failed to build tunnel")
 				break
 			}
