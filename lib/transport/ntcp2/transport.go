@@ -329,7 +329,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	conn, err := t.dialNTCP2Connection(routerInfo)
 	if err != nil {
-		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Error("Failed to dial NTCP2 connection")
+		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
 		return nil, err
 	}
 
@@ -344,7 +344,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Conn, error) {
 	tcpAddr, err := ExtractNTCP2Addr(routerInfo)
 	if err != nil {
-		t.logger.WithError(err).Error("Failed to extract NTCP2 address from RouterInfo")
+		t.logger.WithError(err).Debug("Failed to extract NTCP2 address from RouterInfo")
 		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
 

@@ -48,14 +48,29 @@ func validateNTCP2Support(routerInfo *router_info.RouterInfo, hashBytes []byte) 
 
 // findValidNTCP2Address iterates through router addresses to find and wrap a valid NTCP2 address.
 func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) (net.Addr, error) {
-	for _, addr := range routerInfo.RouterAddresses() {
+	addresses := routerInfo.RouterAddresses()
+	log.WithFields(map[string]interface{}{
+		"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
+		"address_count": len(addresses),
+	}).Debug("Searching for valid NTCP2 address")
+
+	for i, addr := range addresses {
+		style := addr.TransportStyle()
+		styleStr, _ := style.Data()
+		log.WithFields(map[string]interface{}{
+			"index":           i,
+			"transport_style": styleStr,
+		}).Debug("Checking router address")
+
 		if !isNTCP2Transport(addr) {
 			continue
 		}
 
 		ntcp2Addr, err := processNTCP2Address(addr, routerInfo)
 		if err != nil {
-			log.WithError(err).Warn("Failed to process NTCP2 address")
+			log.WithFields(map[string]interface{}{
+				"index": i,
+			}).WithError(err).Debug("Failed to process NTCP2 address, trying next")
 			continue
 		}
 
@@ -63,7 +78,10 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 		return ntcp2Addr, nil
 	}
 
-	log.WithField("router_hash", fmt.Sprintf("%x", hashBytes[:8])).Error("No valid NTCP2 address found in RouterInfo")
+	log.WithFields(map[string]interface{}{
+		"router_hash":   fmt.Sprintf("%x", hashBytes[:8]),
+		"address_count": len(addresses),
+	}).Debug("No valid NTCP2 address found in RouterInfo after checking all addresses")
 	return nil, ErrInvalidRouterInfo
 }
 
@@ -72,6 +90,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 	log.Debug("Found NTCP2 transport address, resolving TCP address")
 	tcpAddr, err := resolveTCPAddress(addr)
 	if err != nil {
+		log.WithError(err).Debug("Failed to resolve TCP address from NTCP2 router address")
 		return nil, fmt.Errorf("failed to resolve TCP address: %w", err)
 	}
 
@@ -108,15 +127,27 @@ func isNTCP2Transport(addr *router_address.RouterAddress) bool {
 func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	host, err := addr.Host()
 	if err != nil {
-		return nil, err
+		log.WithError(err).Debug("Failed to extract host from router address")
+		return nil, fmt.Errorf("failed to extract host: %w", err)
 	}
 
 	port, err := addr.Port()
 	if err != nil {
-		return nil, err
+		log.WithError(err).Debug("Failed to extract port from router address")
+		return nil, fmt.Errorf("failed to extract port: %w", err)
 	}
 
-	return net.ResolveTCPAddr("tcp", net.JoinHostPort(host.String(), port))
+	hostPort := net.JoinHostPort(host.String(), port)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", hostPort)
+	if err != nil {
+		log.WithFields(map[string]interface{}{
+			"host": host.String(),
+			"port": port,
+		}).WithError(err).Debug("Failed to resolve TCP address")
+		return nil, fmt.Errorf("failed to resolve TCP address %s: %w", hostPort, err)
+	}
+
+	return tcpAddr, nil
 }
 
 // Check if RouterInfo supports NTCP2

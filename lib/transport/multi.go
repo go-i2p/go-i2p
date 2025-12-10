@@ -145,7 +145,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 					"reason":          "session_creation_failed",
 					"transport_index": i,
 					"error":           err.Error(),
-				}).Warn("failed to get session from compatible transport")
+				}).Debug("failed to get session from compatible transport, trying next")
 				// we could not get a session
 				// try the next transport
 				continue
