@@ -102,12 +102,13 @@
 //	  -d '{"jsonrpc":"2.0","id":1,"method":"Authenticate",
 //	       "params":{"API":1,"Password":"itoopie"}}'
 //
-// Echo - Test connectivity:
+// Echo - Test connectivity (returns {"Result": value}):
 //
 //	curl -X POST http://localhost:7650/jsonrpc \
 //	  -H "Content-Type: application/json" \
 //	  -d '{"jsonrpc":"2.0","id":2,"method":"Echo",
 //	       "params":{"Token":"abc123","Echo":"test"}}'
+//	# Response: {"jsonrpc":"2.0","id":2,"result":{"Result":"test"}}
 //
 // RouterInfo - Query router status:
 //

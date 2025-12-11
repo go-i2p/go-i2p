@@ -246,7 +246,7 @@ Test RPC connectivity by echoing a value.
   "jsonrpc": "2.0",
   "id": 2,
   "result": {
-    "Echo": "hello world"
+    "Result": "hello world"
   }
 }
 ```

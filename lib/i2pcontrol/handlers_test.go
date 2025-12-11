@@ -24,8 +24,8 @@ func TestEchoHandler_String(t *testing.T) {
 		t.Fatalf("result is not map[string]interface{}: %T", result)
 	}
 
-	if resultMap["Echo"] != "test message" {
-		t.Errorf("Echo = %v, want %v", resultMap["Echo"], "test message")
+	if resultMap["Result"] != "test message" {
+		t.Errorf("Result = %v, want %v", resultMap["Result"], "test message")
 	}
 }
 
@@ -40,8 +40,8 @@ func TestEchoHandler_Number(t *testing.T) {
 
 	resultMap := result.(map[string]interface{})
 	// JSON numbers are decoded as float64
-	if resultMap["Echo"] != float64(12345) {
-		t.Errorf("Echo = %v, want %v", resultMap["Echo"], 12345)
+	if resultMap["Result"] != float64(12345) {
+		t.Errorf("Result = %v, want %v", resultMap["Result"], 12345)
 	}
 }
 
@@ -55,13 +55,13 @@ func TestEchoHandler_Object(t *testing.T) {
 	}
 
 	resultMap := result.(map[string]interface{})
-	echoVal, ok := resultMap["Echo"].(map[string]interface{})
+	resultVal, ok := resultMap["Result"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("Echo is not map: %T", resultMap["Echo"])
+		t.Fatalf("Result is not map: %T", resultMap["Result"])
 	}
 
-	if echoVal["nested"] != "value" {
-		t.Errorf("nested = %v, want value", echoVal["nested"])
+	if resultVal["nested"] != "value" {
+		t.Errorf("nested = %v, want value", resultVal["nested"])
 	}
 }
 

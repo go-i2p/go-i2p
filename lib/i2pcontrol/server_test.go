@@ -307,9 +307,9 @@ func TestEchoHandler(t *testing.T) {
 			t.Fatal("Expected result to be a map")
 		}
 
-		echo, ok := result["Echo"].(string)
+		echo, ok := result["Result"].(string)
 		if !ok || echo != "test message" {
-			t.Errorf("Expected Echo='test message', got %v", echo)
+			t.Errorf("Expected Result='test message', got %v", echo)
 		}
 	})
 

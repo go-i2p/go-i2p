@@ -32,6 +32,7 @@ func NewEchoHandler() *EchoHandler {
 
 // Handle processes the Echo request.
 // Extracts the "Echo" parameter and returns it unchanged.
+// Note: Java I2P returns {"Result": value} not {"Echo": value}
 func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req struct {
 		Echo interface{} `json:"Echo"`
@@ -42,7 +43,7 @@ func (h *EchoHandler) Handle(ctx context.Context, params json.RawMessage) (inter
 	}
 
 	return map[string]interface{}{
-		"Echo": req.Echo,
+		"Result": req.Echo,
 	}, nil
 }
 
