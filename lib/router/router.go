@@ -77,6 +77,11 @@ type Router struct {
 
 	// bandwidthTracker tracks bandwidth usage and calculates rolling averages
 	bandwidthTracker *BandwidthTracker
+
+	// isReseeding tracks whether the router is currently performing a reseed operation
+	isReseeding bool
+	// reseedMutex protects concurrent access to isReseeding flag
+	reseedMutex sync.RWMutex
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -658,6 +663,18 @@ func (r *Router) ensureNetDBReady() error {
 
 // performReseed executes network database reseeding process
 func (r *Router) performReseed() error {
+	// Set reseeding flag
+	r.reseedMutex.Lock()
+	r.isReseeding = true
+	r.reseedMutex.Unlock()
+
+	// Ensure flag is cleared when function exits
+	defer func() {
+		r.reseedMutex.Lock()
+		r.isReseeding = false
+		r.reseedMutex.Unlock()
+	}()
+
 	log.WithFields(logger.Fields{
 		"at":             "(Router) performReseed",
 		"phase":          "bootstrap",
@@ -1192,6 +1209,14 @@ func (r *Router) IsRunning() bool {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.running
+}
+
+// IsReseeding returns whether the router is currently performing a NetDB reseed operation.
+// Thread-safe access to reseeding state.
+func (r *Router) IsReseeding() bool {
+	r.reseedMutex.RLock()
+	defer r.reseedMutex.RUnlock()
+	return r.isReseeding
 }
 
 // hasNTCP2Address checks if RouterInfo contains at least one NTCP2 address

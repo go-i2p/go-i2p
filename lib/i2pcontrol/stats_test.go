@@ -55,6 +55,10 @@ func (m *mockRouterAccess) IsRunning() bool {
 	return m.running
 }
 
+func (m *mockRouterAccess) IsReseeding() bool {
+	return false // Mock always returns false for testing
+}
+
 func (m *mockRouterAccess) GetBandwidthRates() (rate1s, rate15s uint64) {
 	// Return test values
 	return 1024, 2048

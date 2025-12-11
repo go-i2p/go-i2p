@@ -78,6 +78,9 @@ type RouterInfoStats struct {
 	// HighCapacityPeers is the number of reliable, high-performance peers
 	HighCapacityPeersCount int
 
+	// IsReseeding indicates if the router is currently performing a NetDB reseed operation
+	IsReseeding bool
+
 	// ParticipatingTunnels is the count of tunnels we're participating in
 	ParticipatingTunnels int
 
@@ -169,6 +172,9 @@ type RouterAccess interface {
 	// IsRunning returns whether the router is currently operational
 	IsRunning() bool
 
+	// IsReseeding returns whether the router is currently performing a NetDB reseed operation
+	IsReseeding() bool
+
 	// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates in bytes per second
 	GetBandwidthRates() (rate1s, rate15s uint64)
 }
@@ -229,6 +235,9 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 		stats.FastPeersCount = netdb.GetFastPeerCount()
 		stats.HighCapacityPeersCount = netdb.GetHighCapacityPeerCount()
 	}
+
+	// Collect reseed status from router
+	stats.IsReseeding = rsp.router.IsReseeding()
 
 	// Collect participating tunnel statistics from participant manager
 	if pm := rsp.router.GetParticipantManager(); pm != nil {

@@ -179,6 +179,7 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 		"i2p.router.netdb.activepeers":         routerStats.ActivePeersCount,
 		"i2p.router.netdb.fastpeers":           routerStats.FastPeersCount,
 		"i2p.router.netdb.highcapacitypeers":   routerStats.HighCapacityPeersCount,
+		"i2p.router.netdb.isreseeding":         routerStats.IsReseeding,
 		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,
 		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
 		"i2p.router.net.status":                getStatusCode(h.stats.IsRunning()),

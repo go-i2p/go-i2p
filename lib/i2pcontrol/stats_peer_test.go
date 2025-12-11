@@ -37,6 +37,10 @@ func (m *mockRouterAccessForPeerStats) IsRunning() bool {
 	return true
 }
 
+func (m *mockRouterAccessForPeerStats) IsReseeding() bool {
+	return false
+}
+
 func (m *mockRouterAccessForPeerStats) GetBandwidthRates() (rate1s, rate15s uint64) {
 	return 0, 0
 }

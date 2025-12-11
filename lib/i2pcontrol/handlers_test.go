@@ -651,6 +651,45 @@ func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
 	}
 }
 
+// TestRouterInfoHandler_IsReseedingField tests that isreseeding field is exposed
+func TestRouterInfoHandler_IsReseedingField(t *testing.T) {
+	mockStats := &mockRouterAccess{running: true}
+	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+	handler := NewRouterInfoHandler(statsProvider)
+
+	// Request the isreseeding field
+	params := json.RawMessage(`{"i2p.router.netdb.isreseeding": null}`)
+	ctx := context.Background()
+
+	result, err := handler.Handle(ctx, params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	// Result should be a map
+	response, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Handle() result type = %T, want map[string]interface{}", result)
+	}
+
+	// Verify isreseeding field exists and is boolean
+	isReseeding, exists := response["i2p.router.netdb.isreseeding"]
+	if !exists {
+		t.Error("i2p.router.netdb.isreseeding field not found in response")
+	}
+
+	// Verify it's a boolean
+	_, isBool := isReseeding.(bool)
+	if !isBool {
+		t.Errorf("i2p.router.netdb.isreseeding = %v (%T), want bool", isReseeding, isReseeding)
+	}
+
+	// Verify it's false (mock always returns false)
+	if isReseeding != false {
+		t.Errorf("i2p.router.netdb.isreseeding = %v, want false", isReseeding)
+	}
+}
+
 func BenchmarkEchoHandler(b *testing.B) {
 	handler := NewEchoHandler()
 	params := json.RawMessage(`{"Echo": "test"}`)
