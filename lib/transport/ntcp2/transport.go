@@ -408,14 +408,20 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	tcpDialDuration := time.Since(tcpDialStart)
 
 	if tcpErr != nil {
-		// TCP connection failed - log detailed diagnostics
+		// BUG FIX #6: IPv6 connectivity diagnostics
+		// TCP connection failed - log detailed diagnostics including protocol version
+		isIPv6 := strings.Contains(tcpAddrString, "[")
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":   tcpAddrString,
-			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
-			"error":         tcpErr.Error(),
-			"error_type":    classifyDialError(tcpErr),
-			"duration_ms":   tcpDialDuration.Milliseconds(),
-			"syscall_error": getSyscallError(tcpErr),
+			"remote_addr":    tcpAddrString,
+			"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
+			"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
+			"error":          tcpErr.Error(),
+			"error_type":     classifyDialError(tcpErr),
+			"duration_ms":    tcpDialDuration.Milliseconds(),
+			"syscall_error":  getSyscallError(tcpErr),
+			"is_ipv6":        isIPv6,
+			"phase":          "tcp_dial",
+			"impact":         "network unreachable - check firewall/routing",
 		}).Error("TCP connection failed before noise handshake")
 		t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
 			tcpAddrString, tcpDialDuration.Milliseconds(), tcpErr, classifyDialError(tcpErr))
@@ -436,15 +442,19 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	handshakeDuration := time.Since(handshakeStart)
 
 	if err != nil {
-		// PRIORITY 2: Enhanced structured logging with all error details
+		// BUG FIX #3: Enhanced diagnostics with full peer identity
+		// Add complete peer hash for correlation with other systems
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":   tcpAddrString,
-			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
-			"error_type":    classifyDialError(err),
-			"error_message": err.Error(),
-			"duration_ms":   handshakeDuration.Milliseconds(),
-			"syscall_error": getSyscallError(err),
-			"tcp_success":   true, // TCP succeeded but handshake failed
+			"remote_addr":    tcpAddrString,
+			"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
+			"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
+			"error_type":     classifyDialError(err),
+			"error_message":  err.Error(),
+			"duration_ms":    handshakeDuration.Milliseconds(),
+			"syscall_error":  getSyscallError(err),
+			"tcp_success":    true, // TCP succeeded but handshake failed
+			"phase":          "noise_handshake",
+			"impact":         "cannot establish secure channel",
 		}).Error("Failed to dial NTCP2 connection")
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
 	}

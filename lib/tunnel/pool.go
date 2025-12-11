@@ -76,7 +76,7 @@ func DefaultPoolConfig() PoolConfig {
 		MaxTunnels:       6,
 		TunnelLifetime:   10 * time.Minute,
 		RebuildThreshold: 2 * time.Minute,
-		BuildRetryDelay:  5 * time.Second,
+		BuildRetryDelay:  2 * time.Second, // BUG FIX #4: Reduced initial delay (exponential backoff will increase)
 		MaxBuildRetries:  3,
 		HopCount:         3,
 		IsInbound:        false,
@@ -95,7 +95,9 @@ type Pool struct {
 	buildFailures  int       // Consecutive build failures
 	ctx            context.Context
 	cancel         context.CancelFunc
-	maintWg        sync.WaitGroup // Track maintenance goroutine
+	maintWg        sync.WaitGroup            // Track maintenance goroutine
+	failedPeers    map[common.Hash]time.Time // BUG FIX #5: Track failed peer connection attempts
+	failedPeersMu  sync.RWMutex              // BUG FIX #5: Protect failed peers map
 }
 
 // NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration
@@ -110,7 +112,8 @@ func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 		tunnels:       make(map[TunnelID]*TunnelState),
 		peerSelector:  selector,
 		config:        config,
-		lastBuildTime: time.Time{}, // Zero time
+		lastBuildTime: time.Time{},                     // Zero time
+		failedPeers:   make(map[common.Hash]time.Time), // BUG FIX #5: Track failed connection attempts
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -303,6 +306,9 @@ func (p *Pool) maintainPool() {
 	needed := p.calculateNeededTunnels(activeCount, nearExpiry)
 
 	if needed > 0 {
+		// BUG FIX #5: Clean up expired failed peer entries
+		p.CleanupFailedPeers()
+
 		// Enhanced logging for tunnel pool health - Issue #4 from AUDIT.md
 		log.WithFields(logger.Fields{
 			"at":                   "Pool.maintainPool",
@@ -694,4 +700,62 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 	}).Info("tunnel retry build initiated")
 
 	return nil
+}
+
+// BUG FIX #5: Failed peer tracking to avoid retry loops
+// MarkPeerFailed records that a peer failed to establish a connection.
+// This peer will be avoided for a cooldown period to prevent wasted retry attempts.
+func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
+	p.failedPeersMu.Lock()
+	defer p.failedPeersMu.Unlock()
+	p.failedPeers[peerHash] = time.Now()
+	log.WithFields(logger.Fields{
+		"at":        "Pool.MarkPeerFailed",
+		"phase":     "tunnel_build",
+		"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+		"reason":    "peer connection failed, marking for cooldown",
+		"impact":    "peer will be excluded from tunnel building temporarily",
+	}).Debug("marked peer as failed")
+}
+
+// IsPeerFailed checks if a peer is currently in the failed state.
+// Returns true if the peer failed recently and is still in cooldown.
+func (p *Pool) IsPeerFailed(peerHash common.Hash) bool {
+	p.failedPeersMu.RLock()
+	defer p.failedPeersMu.RUnlock()
+	failTime, exists := p.failedPeers[peerHash]
+	if !exists {
+		return false
+	}
+	// 5-minute cooldown period
+	cooldownPeriod := 5 * time.Minute
+	return time.Since(failTime) < cooldownPeriod
+}
+
+// CleanupFailedPeers removes failed peer entries that have exceeded the cooldown period.
+// Should be called periodically as part of pool maintenance.
+func (p *Pool) CleanupFailedPeers() {
+	p.failedPeersMu.Lock()
+	defer p.failedPeersMu.Unlock()
+
+	now := time.Now()
+	cooldownPeriod := 5 * time.Minute
+	var cleaned []common.Hash
+
+	for hash, failTime := range p.failedPeers {
+		if now.Sub(failTime) > cooldownPeriod {
+			cleaned = append(cleaned, hash)
+			delete(p.failedPeers, hash)
+		}
+	}
+
+	if len(cleaned) > 0 {
+		log.WithFields(logger.Fields{
+			"at":            "Pool.CleanupFailedPeers",
+			"phase":         "tunnel_build",
+			"cleaned_count": len(cleaned),
+			"remaining":     len(p.failedPeers),
+			"cooldown":      cooldownPeriod,
+		}).Debug("cleaned up expired failed peer entries")
+	}
 }
