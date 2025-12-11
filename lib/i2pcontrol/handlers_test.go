@@ -284,6 +284,48 @@ func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestRouterInfoHandler_StatusField(t *testing.T) {
+	t.Run("status_when_running", func(t *testing.T) {
+		mockStats := &mockRouterAccess{running: true}
+		statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+
+		handler := NewRouterInfoHandler(statsProvider)
+		params := json.RawMessage(`{"i2p.router.status": null}`)
+
+		result, err := handler.Handle(context.Background(), params)
+		if err != nil {
+			t.Fatalf("Handle() error = %v", err)
+		}
+
+		resultMap := result.(map[string]interface{})
+
+		// Status should be "OK" when running
+		if resultMap["i2p.router.status"] != "OK" {
+			t.Errorf("status = %v, want OK", resultMap["i2p.router.status"])
+		}
+	})
+
+	t.Run("status_when_not_running", func(t *testing.T) {
+		mockStats := &mockRouterAccess{running: false}
+		statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+
+		handler := NewRouterInfoHandler(statsProvider)
+		params := json.RawMessage(`{"i2p.router.status": null}`)
+
+		result, err := handler.Handle(context.Background(), params)
+		if err != nil {
+			t.Fatalf("Handle() error = %v", err)
+		}
+
+		resultMap := result.(map[string]interface{})
+
+		// Status should be "ERROR" when not running
+		if resultMap["i2p.router.status"] != "ERROR" {
+			t.Errorf("status = %v, want ERROR", resultMap["i2p.router.status"])
+		}
+	})
+}
+
 func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 	mockStats := &mockRouterAccess{running: true}
 	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")

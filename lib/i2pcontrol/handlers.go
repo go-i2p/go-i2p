@@ -173,6 +173,7 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 	availableFields := map[string]interface{}{
 		"i2p.router.uptime":                    routerStats.Uptime,
 		"i2p.router.version":                   routerStats.Version,
+		"i2p.router.status":                    routerStats.Status,
 		"i2p.router.net.tunnels.participating": routerStats.ParticipatingTunnels,
 		"i2p.router.netdb.knownpeers":          routerStats.KnownPeers,
 		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,

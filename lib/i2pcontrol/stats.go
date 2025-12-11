@@ -58,6 +58,9 @@ type RouterInfoStats struct {
 	// Version is the router version string
 	Version string
 
+	// Status is the router status string (e.g., "OK", "TESTING", "ERROR")
+	Status string
+
 	// ActivePeers is the number of currently active transport connections
 	// Currently returns 0 as session tracking is not yet exposed
 	ActivePeers int
@@ -193,9 +196,16 @@ func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
 // GetRouterInfo returns general router status information.
 // Collects statistics from NetDB and tunnel manager.
 func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
+	// Determine status string based on whether router is running
+	statusStr := "ERROR"
+	if rsp.router.IsRunning() {
+		statusStr = "OK"
+	}
+
 	stats := RouterInfoStats{
 		Uptime:      rsp.calculateUptime(),
 		Version:     rsp.version,
+		Status:      statusStr,
 		ActivePeers: 0, // Active session tracking not yet exposed
 	}
 

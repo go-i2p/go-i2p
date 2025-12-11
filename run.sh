@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 if [ -z "$DEBUG_I2P" ]; then
-    export DEBUG_I2P=warn
+    export DEBUG_I2P=error
 fi
 rm -f go-i2p.log
 go clean -cache
