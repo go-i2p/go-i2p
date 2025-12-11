@@ -162,7 +162,7 @@ type I2CPDefaults struct {
 // I2PControlDefaults contains default values for I2PControl JSON-RPC server
 type I2PControlDefaults struct {
 	// Enabled determines if I2PControl server starts automatically
-	// Default: false (must be explicitly enabled for security)
+	// Default: true (enabled for development and monitoring)
 	Enabled bool
 
 	// Address is the listen address for I2PControl server
@@ -368,10 +368,10 @@ func buildI2CPDefaults() I2CPDefaults {
 }
 
 // buildI2PControlDefaults creates default I2PControl RPC server configuration values.
-// I2PControl is disabled by default for security - it must be explicitly enabled.
+// I2PControl is enabled by default for development and monitoring convenience.
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:         false,
+		Enabled:         true,
 		Address:         "localhost:7650",
 		Password:        "itoopie",
 		UseHTTPS:        false,

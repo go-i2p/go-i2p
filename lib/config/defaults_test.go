@@ -80,8 +80,8 @@ func TestDefaults(t *testing.T) {
 	}
 
 	// I2PControl defaults
-	if cfg.I2PControl.Enabled {
-		t.Error("I2PControl.Enabled should be false by default (security)")
+	if !cfg.I2PControl.Enabled {
+		t.Error("I2PControl.Enabled should be true by default (development convenience)")
 	}
 	if cfg.I2PControl.Address != "localhost:7650" {
 		t.Errorf("I2PControl.Address = %s, want localhost:7650", cfg.I2PControl.Address)

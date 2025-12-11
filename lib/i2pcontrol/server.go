@@ -97,7 +97,9 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 		cancel:      cancel,
 	}
 
+	// Register RPC handler at both standard path and root for convenience
 	mux.HandleFunc("/jsonrpc", server.handleRPC)
+	mux.HandleFunc("/", server.handleRPC)
 
 	server.httpServer = &http.Server{
 		Addr:         cfg.Address,

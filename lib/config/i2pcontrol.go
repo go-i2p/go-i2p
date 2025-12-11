@@ -14,7 +14,7 @@ const DefaultI2PControlPort = 7650
 // supporting basic statistics queries without write operations to router configuration.
 type I2PControlConfig struct {
 	// Enabled determines if the I2PControl server should start
-	// Default: false (must be explicitly enabled)
+	// Default: true (enabled for development and monitoring)
 	Enabled bool
 
 	// Address is the listen address for the I2PControl server
@@ -51,14 +51,14 @@ type I2PControlConfig struct {
 }
 
 // DefaultI2PControlConfig provides sensible defaults for I2PControl server.
-// These defaults prioritize security and development convenience:
-// - Disabled by default (must be explicitly enabled)
+// These defaults prioritize development convenience:
+// - Enabled by default for development and monitoring
 // - Localhost-only binding (not exposed to network)
 // - HTTP only (HTTPS requires explicit cert configuration)
 // - Standard I2PControl port (7650)
 // - Standard default password (should be changed in production)
 var DefaultI2PControlConfig = I2PControlConfig{
-	Enabled:         false,
+	Enabled:         true,
 	Address:         "localhost:7650",
 	Password:        "itoopie",
 	UseHTTPS:        false,
