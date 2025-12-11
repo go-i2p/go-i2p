@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/go-i2p/common/data"
@@ -375,15 +376,49 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 		return nil, err
 	}
 
+	// Get peer hash for structured logging
+	peerHash, _ := routerInfo.IdentHash()
+	peerHashBytes := peerHash.Bytes()
+
 	t.logger.WithField("remote_addr", tcpAddr.String()).Info("Dialing NTCP2 connection")
 	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
 	if err != nil {
-		t.logger.WithError(err).WithField("remote_addr", tcpAddr.String()).Error("Failed to dial NTCP2 connection")
+		// Enhanced structured logging for dial failures to aid diagnostics
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr": tcpAddr.String(),
+			"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
+			"error_type":  classifyDialError(err),
+		}).WithError(err).Error("Failed to dial NTCP2 connection")
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
 	}
 
 	t.logger.WithField("remote_addr", tcpAddr.String()).Info("NTCP2 connection established")
 	return conn, nil
+}
+
+// classifyDialError categorizes network dial errors for structured logging
+func classifyDialError(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	errStr := err.Error()
+	switch {
+	case strings.Contains(errStr, "timeout"):
+		return "timeout"
+	case strings.Contains(errStr, "refused"):
+		return "connection_refused"
+	case strings.Contains(errStr, "unreachable"):
+		return "host_unreachable"
+	case strings.Contains(errStr, "no route"):
+		return "no_route"
+	case strings.Contains(errStr, "handshake"):
+		return "handshake_failed"
+	case strings.Contains(errStr, "context canceled"):
+		return "canceled"
+	default:
+		return "unknown"
+	}
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
