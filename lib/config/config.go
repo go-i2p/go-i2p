@@ -72,6 +72,15 @@ func setDefaults() {
 	viper.SetDefault("i2cp.read_timeout", defaults.I2CP.ReadTimeout)
 	viper.SetDefault("i2cp.write_timeout", defaults.I2CP.WriteTimeout)
 
+	// I2PControl defaults
+	viper.SetDefault("i2pcontrol.enabled", defaults.I2PControl.Enabled)
+	viper.SetDefault("i2pcontrol.address", defaults.I2PControl.Address)
+	viper.SetDefault("i2pcontrol.password", defaults.I2PControl.Password)
+	viper.SetDefault("i2pcontrol.use_https", defaults.I2PControl.UseHTTPS)
+	viper.SetDefault("i2pcontrol.cert_file", defaults.I2PControl.CertFile)
+	viper.SetDefault("i2pcontrol.key_file", defaults.I2PControl.KeyFile)
+	viper.SetDefault("i2pcontrol.token_expiration", defaults.I2PControl.TokenExpiration)
+
 	// Tunnel defaults
 	viper.SetDefault("tunnel.min_pool_size", defaults.Tunnel.MinPoolSize)
 	viper.SetDefault("tunnel.max_pool_size", defaults.Tunnel.MaxPoolSize)
@@ -202,6 +211,17 @@ func UpdateRouterConfig() {
 		Address:     viper.GetString("i2cp.address"),
 		Network:     viper.GetString("i2cp.network"),
 		MaxSessions: viper.GetInt("i2cp.max_sessions"),
+	}
+
+	// Update I2PControl configuration
+	RouterConfigProperties.I2PControl = &I2PControlConfig{
+		Enabled:         viper.GetBool("i2pcontrol.enabled"),
+		Address:         viper.GetString("i2pcontrol.address"),
+		Password:        viper.GetString("i2pcontrol.password"),
+		UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
+		CertFile:        viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:         viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
 	}
 }
 

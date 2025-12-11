@@ -28,6 +28,9 @@ type ConfigDefaults struct {
 	// I2CP server defaults
 	I2CP I2CPDefaults
 
+	// I2PControl RPC server defaults
+	I2PControl I2PControlDefaults
+
 	// Tunnel defaults
 	Tunnel TunnelDefaults
 
@@ -156,6 +159,38 @@ type I2CPDefaults struct {
 	WriteTimeout time.Duration
 }
 
+// I2PControlDefaults contains default values for I2PControl JSON-RPC server
+type I2PControlDefaults struct {
+	// Enabled determines if I2PControl server starts automatically
+	// Default: false (must be explicitly enabled for security)
+	Enabled bool
+
+	// Address is the listen address for I2PControl server
+	// Default: "localhost:7650" (I2PControl standard port)
+	Address string
+
+	// Password is used for token-based authentication
+	// Default: "itoopie" (I2PControl standard default)
+	// IMPORTANT: Change in production!
+	Password string
+
+	// UseHTTPS enables TLS/HTTPS for encrypted communication
+	// Default: false (HTTP only)
+	UseHTTPS bool
+
+	// CertFile is the path to the TLS certificate file (PEM format)
+	// Required when UseHTTPS is true
+	CertFile string
+
+	// KeyFile is the path to the TLS private key file (PEM format)
+	// Required when UseHTTPS is true
+	KeyFile string
+
+	// TokenExpiration is how long authentication tokens remain valid
+	// Default: 10 minutes
+	TokenExpiration time.Duration
+}
+
 // TunnelDefaults contains default values for tunnel management
 type TunnelDefaults struct {
 	// MinPoolSize is minimum tunnels to maintain per pool
@@ -268,6 +303,7 @@ func Defaults() ConfigDefaults {
 		NetDB:       buildNetDBDefaults(workingDir),
 		Bootstrap:   buildBootstrapDefaults(),
 		I2CP:        buildI2CPDefaults(),
+		I2PControl:  buildI2PControlDefaults(),
 		Tunnel:      buildTunnelDefaults(),
 		Transport:   buildTransportDefaults(),
 		Performance: buildPerformanceDefaults(),
@@ -328,6 +364,20 @@ func buildI2CPDefaults() I2CPDefaults {
 		SessionTimeout:   30 * time.Minute,
 		ReadTimeout:      60 * time.Second,
 		WriteTimeout:     30 * time.Second,
+	}
+}
+
+// buildI2PControlDefaults creates default I2PControl RPC server configuration values.
+// I2PControl is disabled by default for security - it must be explicitly enabled.
+func buildI2PControlDefaults() I2PControlDefaults {
+	return I2PControlDefaults{
+		Enabled:         false,
+		Address:         "localhost:7650",
+		Password:        "itoopie",
+		UseHTTPS:        false,
+		CertFile:        "",
+		KeyFile:         "",
+		TokenExpiration: 10 * time.Minute,
 	}
 }
 
@@ -394,6 +444,7 @@ func runConfigValidators(cfg ConfigDefaults) error {
 		func() error { return validateNetDB(cfg.NetDB) },
 		func() error { return validateBootstrap(cfg.Bootstrap) },
 		func() error { return validateI2CP(cfg.I2CP) },
+		func() error { return validateI2PControl(cfg.I2PControl) },
 		func() error { return validateTunnel(cfg.Tunnel) },
 		func() error { return validateTransport(cfg.Transport) },
 		func() error { return validatePerformance(cfg.Performance) },
@@ -529,6 +580,51 @@ func validateI2CP(i2cp I2CPDefaults) error {
 		"reason": "validation_passed",
 		"phase":  "startup",
 	}).Debug("I2CP configuration validated successfully")
+	return nil
+}
+
+// validateI2PControl validates I2PControl RPC server configuration settings.
+func validateI2PControl(i2pcontrol I2PControlDefaults) error {
+	log.WithFields(logger.Fields{
+		"at":     "validateI2PControlConfig",
+		"reason": "validating_i2pcontrol_settings",
+		"phase":  "startup",
+	}).Debug("validating I2PControl configuration")
+
+	// If HTTPS is enabled, cert and key files must be provided
+	if i2pcontrol.UseHTTPS {
+		if i2pcontrol.CertFile == "" {
+			log.WithFields(logger.Fields{
+				"at":     "validateI2PControlConfig",
+				"reason": "missing_cert_file",
+			}).Error("invalid I2PControl configuration")
+			return newValidationError("I2PControl.CertFile must be set when UseHTTPS is enabled")
+		}
+		if i2pcontrol.KeyFile == "" {
+			log.WithFields(logger.Fields{
+				"at":     "validateI2PControlConfig",
+				"reason": "missing_key_file",
+			}).Error("invalid I2PControl configuration")
+			return newValidationError("I2PControl.KeyFile must be set when UseHTTPS is enabled")
+		}
+	}
+
+	// Token expiration must be at least 1 minute
+	if i2pcontrol.TokenExpiration < 1*time.Minute {
+		log.WithFields(logger.Fields{
+			"at":               "validateI2PControlConfig",
+			"reason":           "token_expiration_too_low",
+			"token_expiration": i2pcontrol.TokenExpiration,
+			"minimum_required": "1m",
+		}).Error("invalid I2PControl configuration")
+		return newValidationError("I2PControl.TokenExpiration must be at least 1 minute")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "validateI2PControlConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("I2PControl configuration validated successfully")
 	return nil
 }
 

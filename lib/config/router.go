@@ -32,6 +32,8 @@ type RouterConfig struct {
 	Bootstrap *BootstrapConfig
 	// I2CP server configuration
 	I2CP *I2CPConfig
+	// I2PControl RPC server configuration
+	I2PControl *I2PControlConfig
 }
 
 func defaultBase() string {
@@ -55,6 +57,7 @@ var defaultRouterConfig = &RouterConfig{
 	NetDb:      &DefaultNetDbConfig,
 	Bootstrap:  &DefaultBootstrapConfig,
 	I2CP:       &DefaultI2CPConfig,
+	I2PControl: &DefaultI2PControlConfig,
 	BaseDir:    defaultBase(),
 	WorkingDir: defaultConfig(),
 }

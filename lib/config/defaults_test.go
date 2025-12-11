@@ -79,6 +79,29 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("I2CP.MessageQueueSize = %d, want 64", cfg.I2CP.MessageQueueSize)
 	}
 
+	// I2PControl defaults
+	if cfg.I2PControl.Enabled {
+		t.Error("I2PControl.Enabled should be false by default (security)")
+	}
+	if cfg.I2PControl.Address != "localhost:7650" {
+		t.Errorf("I2PControl.Address = %s, want localhost:7650", cfg.I2PControl.Address)
+	}
+	if cfg.I2PControl.Password != "itoopie" {
+		t.Errorf("I2PControl.Password = %s, want itoopie", cfg.I2PControl.Password)
+	}
+	if cfg.I2PControl.UseHTTPS {
+		t.Error("I2PControl.UseHTTPS should be false by default")
+	}
+	if cfg.I2PControl.CertFile != "" {
+		t.Errorf("I2PControl.CertFile should be empty by default, got %s", cfg.I2PControl.CertFile)
+	}
+	if cfg.I2PControl.KeyFile != "" {
+		t.Errorf("I2PControl.KeyFile should be empty by default, got %s", cfg.I2PControl.KeyFile)
+	}
+	if cfg.I2PControl.TokenExpiration != 10*time.Minute {
+		t.Errorf("I2PControl.TokenExpiration = %v, want 10m", cfg.I2PControl.TokenExpiration)
+	}
+
 	// Tunnel defaults
 	if cfg.Tunnel.MinPoolSize != 4 {
 		t.Errorf("Tunnel.MinPoolSize = %d, want 4", cfg.Tunnel.MinPoolSize)
@@ -216,6 +239,67 @@ func TestValidate_I2CPInvalidQueueSize(t *testing.T) {
 	err := Validate(cfg)
 	if err == nil {
 		t.Error("Validate() should fail when MessageQueueSize < 1")
+	}
+}
+
+// TestValidate_I2PControlHTTPSMissingCert verifies validation catches missing cert file
+func TestValidate_I2PControlHTTPSMissingCert(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2PControl.UseHTTPS = true
+	cfg.I2PControl.CertFile = ""
+	cfg.I2PControl.KeyFile = "/path/to/key.pem"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when UseHTTPS is true but CertFile is empty")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_I2PControlHTTPSMissingKey verifies validation catches missing key file
+func TestValidate_I2PControlHTTPSMissingKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2PControl.UseHTTPS = true
+	cfg.I2PControl.CertFile = "/path/to/cert.pem"
+	cfg.I2PControl.KeyFile = ""
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when UseHTTPS is true but KeyFile is empty")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_I2PControlInvalidTokenExpiration verifies validation catches invalid token expiration
+func TestValidate_I2PControlInvalidTokenExpiration(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2PControl.TokenExpiration = 30 * time.Second
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when TokenExpiration < 1 minute")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_I2PControlValidConfig verifies valid I2PControl config passes
+func TestValidate_I2PControlValidConfig(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2PControl.Enabled = true
+	cfg.I2PControl.UseHTTPS = true
+	cfg.I2PControl.CertFile = "/path/to/cert.pem"
+	cfg.I2PControl.KeyFile = "/path/to/key.pem"
+	cfg.I2PControl.TokenExpiration = 10 * time.Minute
+
+	err := Validate(cfg)
+	if err != nil {
+		t.Errorf("Validate() should pass for valid I2PControl config: %v", err)
 	}
 }
 

@@ -131,6 +131,39 @@ i2cp:
   # Maximum time to wait for client writes
   write_timeout: 30s
 
+# I2PControl RPC Server Configuration
+# I2PControl provides a JSON-RPC 2.0 API for monitoring router status
+# Useful for development, debugging, and integration with monitoring tools
+i2pcontrol:
+  # Enable I2PControl server (disabled by default for security)
+  enabled: false
+  
+  # Listen address for I2PControl server
+  # Default: localhost:7650 (I2PControl standard port)
+  # WARNING: Binding to 0.0.0.0 exposes the server to all network interfaces
+  address: "localhost:7650"
+  
+  # Password for authentication
+  # Default: "itoopie" (I2PControl standard default)
+  # IMPORTANT: Change this in production environments!
+  password: "itoopie"
+  
+  # Enable HTTPS (recommended for remote access)
+  use_https: false
+  
+  # TLS certificate file (required if use_https is true)
+  # Format: PEM-encoded X.509 certificate
+  # cert_file: "/path/to/cert.pem"
+  
+  # TLS key file (required if use_https is true)
+  # Format: PEM-encoded private key
+  # key_file: "/path/to/key.pem"
+  
+  # Token expiration time
+  # How long authentication tokens remain valid
+  # Default: 10 minutes
+  token_expiration: 10m
+
 # Tunnel Configuration
 tunnel:
   # Minimum tunnels to maintain per pool
