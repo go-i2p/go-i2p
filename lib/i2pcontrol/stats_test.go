@@ -4,17 +4,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
 )
+
+// mockTunnelEncryptor is a simple mock for testing participant tunnels
+type mockTunnelEncryptor struct{}
+
+func (m *mockTunnelEncryptor) Encrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (m *mockTunnelEncryptor) Decrypt(data []byte) ([]byte, error) {
+	return data, nil
+}
+
+func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
+	return tunnel.TunnelEncryptionECIES
+}
 
 // mockRouterAccess provides a simple mock for testing
 type mockRouterAccess struct {
-	netdb         *netdb.StdNetDB
-	tunnelManager *i2np.TunnelManager
-	cfg           *config.RouterConfig
-	running       bool
+	netdb              *netdb.StdNetDB
+	tunnelManager      *i2np.TunnelManager
+	participantManager *tunnelpkg.Manager
+	cfg                *config.RouterConfig
+	running            bool
 }
 
 func (m *mockRouterAccess) GetNetDB() *netdb.StdNetDB {
@@ -23,6 +41,10 @@ func (m *mockRouterAccess) GetNetDB() *netdb.StdNetDB {
 
 func (m *mockRouterAccess) GetTunnelManager() *i2np.TunnelManager {
 	return m.tunnelManager
+}
+
+func (m *mockRouterAccess) GetParticipantManager() *tunnelpkg.Manager {
+	return m.participantManager
 }
 
 func (m *mockRouterAccess) GetConfig() *config.RouterConfig {
@@ -134,6 +156,42 @@ func TestGetRouterInfo_NilTunnelManager(t *testing.T) {
 	}
 	if stats.OutboundTunnels != 0 {
 		t.Errorf("OutboundTunnels = %d, want 0 (nil TunnelManager)", stats.OutboundTunnels)
+	}
+}
+
+// TestGetRouterInfo_WithParticipatingTunnels tests that participating tunnel count is collected
+func TestGetRouterInfo_WithParticipatingTunnels(t *testing.T) {
+	// Create a participant manager with some tunnels
+	pm := tunnelpkg.NewManager()
+	defer pm.Stop()
+
+	// Add some mock participants (we need a mock encryptor)
+	for i := tunnelpkg.TunnelID(1); i <= 5; i++ {
+		p, err := tunnelpkg.NewParticipant(i, &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := pm.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// Verify participant count is 5
+	if pm.ParticipantCount() != 5 {
+		t.Fatalf("Expected 5 participants, got %d", pm.ParticipantCount())
+	}
+
+	router := &mockRouterAccess{
+		participantManager: pm,
+		running:            true,
+	}
+
+	provider := NewRouterStatsProvider(router, "0.1.0")
+	stats := provider.GetRouterInfo()
+
+	// Should return the actual participating tunnel count
+	if stats.ParticipatingTunnels != 5 {
+		t.Errorf("ParticipatingTunnels = %d, want 5", stats.ParticipatingTunnels)
 	}
 }
 

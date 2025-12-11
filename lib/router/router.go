@@ -66,6 +66,9 @@ type Router struct {
 	// tunnelManager manages tunnel building and pool maintenance
 	tunnelManager *i2np.TunnelManager
 
+	// participantManager tracks tunnels where this router acts as a transit hop
+	participantManager *tunnel.Manager
+
 	// i2pcontrolServer provides RPC monitoring interface
 	i2pcontrolServer interface {
 		Start() error
@@ -337,6 +340,7 @@ func (r *Router) Stop() {
 	r.stopBandwidthTracker()
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
+	r.stopParticipantManager()
 	r.stopNetDB()
 	r.sendCloseSignal()
 
@@ -378,6 +382,14 @@ func (r *Router) stopBandwidthTracker() {
 	if r.bandwidthTracker != nil {
 		r.bandwidthTracker.Stop()
 		log.Debug("Bandwidth tracker stopped")
+	}
+}
+
+// stopParticipantManager shuts down the participant manager if it exists.
+func (r *Router) stopParticipantManager() {
+	if r.participantManager != nil {
+		r.participantManager.Stop()
+		log.Debug("Participant manager stopped")
 	}
 }
 
@@ -497,6 +509,10 @@ func (r *Router) initializeMessageRouter() {
 	// Must be done before garlic router so it can access the tunnel pool
 	r.initializeTunnelManager()
 
+	// Initialize participant manager for tracking transit tunnels
+	r.participantManager = tunnel.NewManager()
+	log.Debug("Participant manager initialized for transit tunnel tracking")
+
 	// Initialize garlic message router for handling garlic clove forwarding
 	r.initializeGarlicRouter()
 
@@ -603,6 +619,14 @@ func (r *Router) GetTunnelManager() *i2np.TunnelManager {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.tunnelManager
+}
+
+// GetParticipantManager returns the participant manager for transit tunnel tracking.
+// Returns nil if not initialized.
+func (r *Router) GetParticipantManager() *tunnel.Manager {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.participantManager
 }
 
 // GetGarlicRouter returns the garlic router in a thread-safe manner.

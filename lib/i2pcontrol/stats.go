@@ -6,6 +6,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 // RouterStatsProvider provides access to router statistics for I2PControl RPC.
@@ -150,6 +151,9 @@ type RouterAccess interface {
 	// GetTunnelManager returns the tunnel manager for tunnel statistics
 	GetTunnelManager() *i2np.TunnelManager
 
+	// GetParticipantManager returns the participant manager for transit tunnel statistics
+	GetParticipantManager() *tunnel.Manager
+
 	// GetConfig returns the router configuration
 	GetConfig() *config.RouterConfig
 
@@ -214,11 +218,15 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 		stats.KnownPeers = netdb.GetRouterInfoCount()
 	}
 
+	// Collect participating tunnel statistics from participant manager
+	if pm := rsp.router.GetParticipantManager(); pm != nil {
+		stats.ParticipatingTunnels = pm.ParticipantCount()
+	}
+
 	// Collect tunnel statistics if available
 	if tm := rsp.router.GetTunnelManager(); tm != nil {
 		// Currently TunnelManager only has one pool (GetPool())
-		// Participating tunnels and separate inbound/outbound tracking
-		// not yet implemented - return 0 for now
+		// Separate inbound/outbound tracking not yet implemented
 		if pool := tm.GetPool(); pool != nil {
 			poolStats := pool.GetPoolStats()
 			// Total active tunnels (not separated by direction yet)
@@ -301,6 +309,7 @@ type RealRouter struct {
 	Router interface {
 		GetNetDB() *netdb.StdNetDB
 		GetTunnelManager() *i2np.TunnelManager
+		GetParticipantManager() *tunnel.Manager
 		GetConfig() *config.RouterConfig
 		IsRunning() bool
 	}
@@ -314,6 +323,11 @@ func (rr RealRouter) GetNetDB() *netdb.StdNetDB {
 // GetTunnelManager returns the tunnel manager (implements RouterAccess)
 func (rr RealRouter) GetTunnelManager() *i2np.TunnelManager {
 	return rr.Router.GetTunnelManager()
+}
+
+// GetParticipantManager returns the participant manager (implements RouterAccess)
+func (rr RealRouter) GetParticipantManager() *tunnel.Manager {
+	return rr.Router.GetParticipantManager()
 }
 
 // GetConfig returns the router configuration (implements RouterAccess)

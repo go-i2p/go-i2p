@@ -404,7 +404,7 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 
 	// PRIORITY 1: Test raw TCP connection first to isolate failure point
 	tcpDialStart := time.Now()
-	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddrString, 10*time.Second)
+	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddrString, 30*time.Second)
 	tcpDialDuration := time.Since(tcpDialStart)
 
 	if tcpErr != nil {
