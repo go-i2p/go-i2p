@@ -351,11 +351,11 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 	// Available configuration fields with real data
 	availableSettings := map[string]interface{}{
 		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
-		"i2p.router.net.ntcp.hostname": "",    // Hostname extraction not implemented
+		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
 		"i2p.router.net.ntcp.autoip":   true,  // Default behavior
 		"i2p.router.upnp.enabled":      false, // Not yet implemented
-		"i2p.router.bandwidth.in":      0,     // Not yet tracked
-		"i2p.router.bandwidth.out":     0,     // Not yet tracked
+		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
+		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
 	}
 
 	// If specific settings requested, return only those
@@ -377,7 +377,7 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 	// If no settings requested, return common settings
 	if len(result) == 0 {
 		result["i2p.router.net.ntcp.port"] = netConfig.NTCP2Port
-		result["i2p.router.net.ntcp.hostname"] = ""
+		result["i2p.router.net.ntcp.hostname"] = netConfig.NTCP2Hostname
 	}
 
 	return result, nil

@@ -144,6 +144,18 @@ type NetworkConfig struct {
 	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on
 	// Returns empty string if NTCP2 is not available
 	NTCP2Address string
+
+	// NTCP2Hostname is the hostname/IP address (without port) that NTCP2 is listening on
+	// Extracted from NTCP2Address
+	NTCP2Hostname string
+
+	// BandwidthLimitIn is the inbound bandwidth limit in KB/s
+	// Returns 0 if no limit is configured (unlimited)
+	BandwidthLimitIn int
+
+	// BandwidthLimitOut is the outbound bandwidth limit in KB/s
+	// Returns 0 if no limit is configured (unlimited)
+	BandwidthLimitOut int
 }
 
 // routerStatsProvider implements RouterStatsProvider by wrapping the actual Router.
@@ -331,12 +343,15 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 }
 
 // GetNetworkConfig returns network configuration settings.
-// Extracts NTCP2 port and address from the router's transport layer.
+// Extracts NTCP2 port, hostname, and bandwidth limits from the router.
 // Returns zero values if transport is not available or not NTCP2.
 func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 	config := NetworkConfig{
-		NTCP2Port:    0,
-		NTCP2Address: "",
+		NTCP2Port:         0,
+		NTCP2Address:      "",
+		NTCP2Hostname:     "",
+		BandwidthLimitIn:  0, // 0 means unlimited
+		BandwidthLimitOut: 0, // 0 means unlimited
 	}
 
 	// Get transport address from router
@@ -357,39 +372,80 @@ func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 
 	config.NTCP2Address = addrStr
 
-	// Parse port from address string
-	// Expected format: "127.0.0.1:12345" or "[::1]:12345"
-	// Use simple string parsing to extract port
+	// Parse hostname and port from address string
+	// Expected format: "127.0.0.1:12345" or "[::1]:12345" or "[2001:db8::1]:12345"
+	hostname, port := rsp.parseHostPort(addrStr)
+	config.NTCP2Hostname = hostname
+	config.NTCP2Port = port
+
+	// Bandwidth limits are not yet configurable in the router
+	// Return 0 (unlimited) for now
+	// TODO: Add bandwidth limit configuration to RouterConfig
+	config.BandwidthLimitIn = 0
+	config.BandwidthLimitOut = 0
+
+	return config
+}
+
+// parseHostPort extracts hostname and port from an address string.
+// Handles both IPv4 (host:port) and IPv6 ([host]:port) formats.
+// Returns empty string and 0 if parsing fails.
+func (rsp *routerStatsProvider) parseHostPort(addrStr string) (hostname string, port int) {
+	// Handle IPv6 addresses with brackets: [2001:db8::1]:12345
+	if len(addrStr) > 0 && addrStr[0] == '[' {
+		// Find closing bracket
+		closeBracket := -1
+		for i := 1; i < len(addrStr); i++ {
+			if addrStr[i] == ']' {
+				closeBracket = i
+				break
+			}
+		}
+		if closeBracket > 0 {
+			hostname = addrStr[1:closeBracket] // Extract IPv6 address without brackets
+			// Port comes after ]:
+			if closeBracket+1 < len(addrStr) && addrStr[closeBracket+1] == ':' {
+				port = rsp.parsePort(addrStr[closeBracket+2:])
+			}
+			return hostname, port
+		}
+	}
+
+	// Handle IPv4 addresses: 127.0.0.1:12345
+	// Find the last colon (in case of IPv6 without brackets, this handles the port)
 	lastColon := -1
 	for i := len(addrStr) - 1; i >= 0; i-- {
 		if addrStr[i] == ':' {
 			lastColon = i
 			break
 		}
-		if addrStr[i] == ']' {
-			// IPv6 address, continue to find colon outside brackets
-			continue
-		}
 	}
 
-	if lastColon > 0 && lastColon < len(addrStr)-1 {
-		portStr := addrStr[lastColon+1:]
-		// Parse port number
-		port := 0
-		for _, ch := range portStr {
-			if ch >= '0' && ch <= '9' {
-				port = port*10 + int(ch-'0')
-			} else {
-				// Invalid character, reset port
-				port = 0
-				break
-			}
-		}
-		config.NTCP2Port = port
+	if lastColon > 0 {
+		hostname = addrStr[:lastColon]
+		port = rsp.parsePort(addrStr[lastColon+1:])
+	} else {
+		// No colon found, entire string is hostname
+		hostname = addrStr
 	}
 
-	return config
-}// IsRunning returns whether the router is currently running.
+	return hostname, port
+}
+
+// parsePort converts a port string to an integer.
+// Returns 0 if the string is not a valid port number.
+func (rsp *routerStatsProvider) parsePort(portStr string) int {
+	port := 0
+	for _, ch := range portStr {
+		if ch >= '0' && ch <= '9' {
+			port = port*10 + int(ch-'0')
+		} else {
+			// Invalid character
+			return 0
+		}
+	}
+	return port
+} // IsRunning returns whether the router is currently running.
 func (rsp *routerStatsProvider) IsRunning() bool {
 	return rsp.router.IsRunning()
 }

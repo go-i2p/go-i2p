@@ -468,15 +468,20 @@ func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
 func TestNetworkSettingHandler_AllSettings(t *testing.T) {
 	stats := &mockServerStatsProvider{
 		network: NetworkConfig{
-			NTCP2Port:    12345,
-			NTCP2Address: "127.0.0.1:12345",
+			NTCP2Port:         12345,
+			NTCP2Address:      "127.0.0.1:12345",
+			NTCP2Hostname:     "127.0.0.1",
+			BandwidthLimitIn:  1024,
+			BandwidthLimitOut: 2048,
 		},
 	}
 	handler := NewNetworkSettingHandler(stats)
 
 	params := json.RawMessage(`{
 		"i2p.router.net.ntcp.port": null,
-		"i2p.router.net.ntcp.hostname": null
+		"i2p.router.net.ntcp.hostname": null,
+		"i2p.router.bandwidth.in": null,
+		"i2p.router.bandwidth.out": null
 	}`)
 
 	result, err := handler.Handle(context.Background(), params)
@@ -491,17 +496,30 @@ func TestNetworkSettingHandler_AllSettings(t *testing.T) {
 		t.Errorf("port = %v, want 12345", resultMap["i2p.router.net.ntcp.port"])
 	}
 
-	// Hostname should be empty string (not yet implemented)
-	if resultMap["i2p.router.net.ntcp.hostname"] != "" {
-		t.Errorf("hostname = %v, want empty string", resultMap["i2p.router.net.ntcp.hostname"])
+	// Hostname should return mock value
+	if resultMap["i2p.router.net.ntcp.hostname"] != "127.0.0.1" {
+		t.Errorf("hostname = %v, want 127.0.0.1", resultMap["i2p.router.net.ntcp.hostname"])
+	}
+
+	// Bandwidth in should return mock value
+	if resultMap["i2p.router.bandwidth.in"] != 1024 {
+		t.Errorf("bandwidth.in = %v, want 1024", resultMap["i2p.router.bandwidth.in"])
+	}
+
+	// Bandwidth out should return mock value
+	if resultMap["i2p.router.bandwidth.out"] != 2048 {
+		t.Errorf("bandwidth.out = %v, want 2048", resultMap["i2p.router.bandwidth.out"])
 	}
 }
 
 func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
 	stats := &mockServerStatsProvider{
 		network: NetworkConfig{
-			NTCP2Port:    9999,
-			NTCP2Address: "0.0.0.0:9999",
+			NTCP2Port:         9999,
+			NTCP2Address:      "0.0.0.0:9999",
+			NTCP2Hostname:     "0.0.0.0",
+			BandwidthLimitIn:  512,
+			BandwidthLimitOut: 1024,
 		},
 	}
 	handler := NewNetworkSettingHandler(stats)
@@ -530,6 +548,11 @@ func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
 	// Verify port value
 	if resultMap["i2p.router.net.ntcp.port"] != 9999 {
 		t.Errorf("port = %v, want 9999", resultMap["i2p.router.net.ntcp.port"])
+	}
+
+	// Verify hostname value
+	if resultMap["i2p.router.net.ntcp.hostname"] != "0.0.0.0" {
+		t.Errorf("hostname = %v, want 0.0.0.0", resultMap["i2p.router.net.ntcp.hostname"])
 	}
 }
 
@@ -579,6 +602,77 @@ func TestNetworkSettingHandler_InvalidJSON(t *testing.T) {
 	_, err := handler.Handle(context.Background(), params)
 	if err == nil {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
+	}
+}
+
+func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
+	tests := []struct {
+		name             string
+		config           NetworkConfig
+		wantHostname     string
+		wantBandwidthIn  int
+		wantBandwidthOut int
+	}{
+		{
+			name: "IPv4 with bandwidth limits",
+			config: NetworkConfig{
+				NTCP2Port:         8080,
+				NTCP2Address:      "192.168.1.1:8080",
+				NTCP2Hostname:     "192.168.1.1",
+				BandwidthLimitIn:  500,
+				BandwidthLimitOut: 1000,
+			},
+			wantHostname:     "192.168.1.1",
+			wantBandwidthIn:  500,
+			wantBandwidthOut: 1000,
+		},
+		{
+			name: "IPv6 with unlimited bandwidth",
+			config: NetworkConfig{
+				NTCP2Port:         9090,
+				NTCP2Address:      "[::1]:9090",
+				NTCP2Hostname:     "::1",
+				BandwidthLimitIn:  0,
+				BandwidthLimitOut: 0,
+			},
+			wantHostname:     "::1",
+			wantBandwidthIn:  0,
+			wantBandwidthOut: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := &mockServerStatsProvider{
+				network: tt.config,
+			}
+			handler := NewNetworkSettingHandler(stats)
+
+			params := json.RawMessage(`{
+				"i2p.router.net.ntcp.hostname": null,
+				"i2p.router.bandwidth.in": null,
+				"i2p.router.bandwidth.out": null
+			}`)
+
+			result, err := handler.Handle(context.Background(), params)
+			if err != nil {
+				t.Fatalf("Handle() error = %v", err)
+			}
+
+			resultMap := result.(map[string]interface{})
+
+			if resultMap["i2p.router.net.ntcp.hostname"] != tt.wantHostname {
+				t.Errorf("hostname = %v, want %v", resultMap["i2p.router.net.ntcp.hostname"], tt.wantHostname)
+			}
+
+			if resultMap["i2p.router.bandwidth.in"] != tt.wantBandwidthIn {
+				t.Errorf("bandwidth.in = %v, want %v", resultMap["i2p.router.bandwidth.in"], tt.wantBandwidthIn)
+			}
+
+			if resultMap["i2p.router.bandwidth.out"] != tt.wantBandwidthOut {
+				t.Errorf("bandwidth.out = %v, want %v", resultMap["i2p.router.bandwidth.out"], tt.wantBandwidthOut)
+			}
+		})
 	}
 }
 
