@@ -268,9 +268,7 @@ func testNetworkConnectivity() error {
 	// Test 1: DNS resolution
 	log.Debug("Testing DNS resolution...")
 	testHosts := []string{
-		"reseed.i2p-projekt.de",
-		"reseed-fr.i2p2.no",
-		"reseed.i2p.vzaws.com",
+		"reseed.i2pgit.org",
 	}
 
 	dnsSuccess := false
@@ -288,6 +286,7 @@ func testNetworkConnectivity() error {
 			"resolved":   len(addrs),
 			"first_addr": addrs[0],
 		}).Debug("DNS resolution successful")
+		log.Infof("DNS resolution successful: %s -> %s", host, addrs[0])
 		dnsSuccess = true
 		break
 	}
@@ -299,25 +298,26 @@ func testNetworkConnectivity() error {
 	// Test 2: TCP connectivity to known I2P reseed server
 	log.Debug("Testing TCP connectivity to reseed server...")
 	tcpTestHosts := []string{
-		"reseed.i2p-projekt.de:443",
-		"reseed-fr.i2p2.no:443",
-		"reseed.i2p.vzaws.com:8443",
+		"reseed.i2pgit.org:443",
 	}
 
 	tcpSuccess := false
 	for _, hostPort := range tcpTestHosts {
+		log.Infof("Testing TCP connection to %s...", hostPort)
 		conn, err := net.DialTimeout("tcp", hostPort, 5*time.Second)
 		if err != nil {
 			log.WithFields(logger.Fields{
 				"target": hostPort,
 				"error":  err.Error(),
 			}).Warn("TCP connectivity test failed")
+			log.Warnf("TCP connectivity test failed to %s: %v", hostPort, err)
 			continue
 		}
 		conn.Close()
 		log.WithFields(logger.Fields{
 			"target": hostPort,
 		}).Debug("TCP connectivity test successful")
+		log.Infof("TCP connectivity test successful to %s", hostPort)
 		tcpSuccess = true
 		break
 	}

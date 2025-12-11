@@ -365,13 +365,26 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 }
 
 func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Conn, error) {
-	tcpAddr, err := ExtractNTCP2Addr(routerInfo)
+	ntcp2Addr, err := ExtractNTCP2Addr(routerInfo)
 	if err != nil {
 		t.logger.WithError(err).Debug("Failed to extract NTCP2 address from RouterInfo")
 		return nil, WrapNTCP2Error(err, "extracting NTCP2 address")
 	}
 
-	t.logger.WithField("remote_addr", tcpAddr.String()).Debug("Extracted NTCP2 address")
+	// Extract the underlying TCP address for raw connection test
+	// ntcp2Addr.String() returns "ntcp2://hash/initiator/ip:port" format
+	// We need just the "ip:port" part for net.DialTimeout
+	var tcpAddrString string
+	if ntcpAddr, ok := ntcp2Addr.(*ntcp2.NTCP2Addr); ok {
+		// NTCP2Addr has an UnderlyingAddr() method that returns the wrapped net.Addr
+		underlyingAddr := ntcpAddr.UnderlyingAddr()
+		tcpAddrString = underlyingAddr.String()
+	} else {
+		// Fallback to string representation (shouldn't happen)
+		tcpAddrString = ntcp2Addr.String()
+	}
+
+	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Extracted NTCP2 address")
 
 	config, err := t.createNTCP2Config(routerInfo)
 	if err != nil {
@@ -384,45 +397,48 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	peerHashBytes := peerHash.Bytes()
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr": tcpAddr.String(),
+		"remote_addr": tcpAddrString,
 		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
 	}).Debug("Attempting raw TCP connection before noise handshake")
+	t.logger.Infof("Attempting TCP connection to peer at %s (hash: %x...)", tcpAddrString, peerHashBytes[:8])
 
 	// PRIORITY 1: Test raw TCP connection first to isolate failure point
 	tcpDialStart := time.Now()
-	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddr.String(), 10*time.Second)
+	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddrString, 10*time.Second)
 	tcpDialDuration := time.Since(tcpDialStart)
 
 	if tcpErr != nil {
 		// TCP connection failed - log detailed diagnostics
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":   tcpAddr.String(),
+			"remote_addr":   tcpAddrString,
 			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
 			"error":         tcpErr.Error(),
 			"error_type":    classifyDialError(tcpErr),
 			"duration_ms":   tcpDialDuration.Milliseconds(),
 			"syscall_error": getSyscallError(tcpErr),
 		}).Error("TCP connection failed before noise handshake")
-		return nil, fmt.Errorf("TCP dial failed to %s: %w", tcpAddr.String(), tcpErr)
+		t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
+			tcpAddrString, tcpDialDuration.Milliseconds(), tcpErr, classifyDialError(tcpErr))
+		return nil, fmt.Errorf("TCP dial failed to %s: %w", tcpAddrString, tcpErr)
 	}
 	tcpConn.Close() // Close test connection
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr": tcpAddr.String(),
+		"remote_addr": tcpAddrString,
 		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
 		"duration_ms": tcpDialDuration.Milliseconds(),
 	}).Info("TCP connection successful, attempting noise handshake")
 
 	// Now attempt full NTCP2 handshake
-	t.logger.WithField("remote_addr", tcpAddr.String()).Info("Dialing NTCP2 connection")
+	t.logger.WithField("remote_addr", ntcp2Addr.String()).Info("Dialing NTCP2 connection")
 	handshakeStart := time.Now()
-	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
+	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddrString, config)
 	handshakeDuration := time.Since(handshakeStart)
 
 	if err != nil {
 		// PRIORITY 2: Enhanced structured logging with all error details
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr":   tcpAddr.String(),
+			"remote_addr":   tcpAddrString,
 			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
 			"error_type":    classifyDialError(err),
 			"error_message": err.Error(),
@@ -434,7 +450,7 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	}
 
 	t.logger.WithFields(map[string]interface{}{
-		"remote_addr":       tcpAddr.String(),
+		"remote_addr":       tcpAddrString,
 		"peer_hash":         fmt.Sprintf("%x", peerHashBytes[:8]),
 		"total_duration_ms": time.Since(tcpDialStart).Milliseconds(),
 	}).Info("NTCP2 connection established")
