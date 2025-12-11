@@ -34,6 +34,10 @@ type RouterStatsProvider interface {
 	// Includes RouterInfo count, LeaseSet count, and floodfill status
 	GetNetDBStats() NetDBStats
 
+	// GetNetworkConfig returns network configuration settings
+	// Includes NTCP2 port and address information
+	GetNetworkConfig() NetworkConfig
+
 	// IsRunning returns whether the router is currently running
 	IsRunning() bool
 
@@ -130,6 +134,18 @@ type NetDBStats struct {
 	Floodfill bool
 }
 
+// NetworkConfig contains network configuration settings.
+// This maps to I2PControl NetworkSetting method responses.
+type NetworkConfig struct {
+	// NTCP2Port is the port number the NTCP2 transport is listening on
+	// Returns 0 if NTCP2 is not available
+	NTCP2Port int
+
+	// NTCP2Address is the full address string (IP:port) the NTCP2 transport is listening on
+	// Returns empty string if NTCP2 is not available
+	NTCP2Address string
+}
+
 // routerStatsProvider implements RouterStatsProvider by wrapping the actual Router.
 // Uses interface types to minimize coupling with router internals.
 //
@@ -172,6 +188,11 @@ type RouterAccess interface {
 
 	// GetConfig returns the router configuration
 	GetConfig() *config.RouterConfig
+
+	// GetTransportAddr returns the listening address of the first available transport
+	// Returns nil if no transports are available
+	// This is used to extract NTCP2 port and address for NetworkSetting RPC method
+	GetTransportAddr() interface{}
 
 	// IsRunning returns whether the router is currently operational
 	IsRunning() bool
@@ -309,7 +330,66 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 	return stats
 }
 
-// IsRunning returns whether the router is currently running.
+// GetNetworkConfig returns network configuration settings.
+// Extracts NTCP2 port and address from the router's transport layer.
+// Returns zero values if transport is not available or not NTCP2.
+func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
+	config := NetworkConfig{
+		NTCP2Port:    0,
+		NTCP2Address: "",
+	}
+
+	// Get transport address from router
+	addr := rsp.router.GetTransportAddr()
+	if addr == nil {
+		return config
+	}
+
+	// Extract address string (format is typically "ip:port")
+	addrStr := ""
+	if netAddr, ok := addr.(interface{ String() string }); ok {
+		addrStr = netAddr.String()
+	}
+
+	if addrStr == "" {
+		return config
+	}
+
+	config.NTCP2Address = addrStr
+
+	// Parse port from address string
+	// Expected format: "127.0.0.1:12345" or "[::1]:12345"
+	// Use simple string parsing to extract port
+	lastColon := -1
+	for i := len(addrStr) - 1; i >= 0; i-- {
+		if addrStr[i] == ':' {
+			lastColon = i
+			break
+		}
+		if addrStr[i] == ']' {
+			// IPv6 address, continue to find colon outside brackets
+			continue
+		}
+	}
+
+	if lastColon > 0 && lastColon < len(addrStr)-1 {
+		portStr := addrStr[lastColon+1:]
+		// Parse port number
+		port := 0
+		for _, ch := range portStr {
+			if ch >= '0' && ch <= '9' {
+				port = port*10 + int(ch-'0')
+			} else {
+				// Invalid character, reset port
+				port = 0
+				break
+			}
+		}
+		config.NTCP2Port = port
+	}
+
+	return config
+}// IsRunning returns whether the router is currently running.
 func (rsp *routerStatsProvider) IsRunning() bool {
 	return rsp.router.IsRunning()
 }

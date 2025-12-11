@@ -64,6 +64,12 @@ func (m *mockRouterAccess) GetBandwidthRates() (rate1s, rate15s uint64) {
 	return 1024, 2048
 }
 
+func (m *mockRouterAccess) GetTransportAddr() interface{} {
+	// Return a mock TCP address for testing
+	type mockAddr struct{}
+	return &mockAddr{}
+}
+
 func (m *mockRouterAccess) Stop() {
 	// Mock implementation - sets running to false
 	m.running = false

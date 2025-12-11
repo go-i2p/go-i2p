@@ -85,8 +85,8 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 	// RouterManager enabled - allows remote shutdown via RPC
 	registry.Register("RouterManager", NewRouterManagerHandler(stats.GetRouterControl()))
 
-	// NetworkSetting will be registered when configuration interfaces are ready
-	// registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
+	// NetworkSetting enabled - provides read-only access to network configuration
+	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
 
 	// Create HTTP server
 	mux := http.NewServeMux()

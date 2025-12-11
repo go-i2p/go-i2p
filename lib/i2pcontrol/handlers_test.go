@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-
-	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // Test Echo Handler
@@ -468,8 +466,13 @@ func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
 // Test NetworkSetting Handler
 
 func TestNetworkSettingHandler_AllSettings(t *testing.T) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{
+		network: NetworkConfig{
+			NTCP2Port:    12345,
+			NTCP2Address: "127.0.0.1:12345",
+		},
+	}
+	handler := NewNetworkSettingHandler(stats)
 
 	params := json.RawMessage(`{
 		"i2p.router.net.ntcp.port": null,
@@ -483,20 +486,25 @@ func TestNetworkSettingHandler_AllSettings(t *testing.T) {
 
 	resultMap := result.(map[string]interface{})
 
-	// Port should be 0 (not exposed in config yet)
-	if resultMap["i2p.router.net.ntcp.port"] != 0 {
-		t.Errorf("port = %v, want 0", resultMap["i2p.router.net.ntcp.port"])
+	// Port should return mock value
+	if resultMap["i2p.router.net.ntcp.port"] != 12345 {
+		t.Errorf("port = %v, want 12345", resultMap["i2p.router.net.ntcp.port"])
 	}
 
-	// Hostname should be empty string
+	// Hostname should be empty string (not yet implemented)
 	if resultMap["i2p.router.net.ntcp.hostname"] != "" {
 		t.Errorf("hostname = %v, want empty string", resultMap["i2p.router.net.ntcp.hostname"])
 	}
 }
 
 func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{
+		network: NetworkConfig{
+			NTCP2Port:    9999,
+			NTCP2Address: "0.0.0.0:9999",
+		},
+	}
+	handler := NewNetworkSettingHandler(stats)
 
 	params := json.RawMessage(`{}`)
 
@@ -518,11 +526,16 @@ func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
 			t.Errorf("missing default field: %s", field)
 		}
 	}
+
+	// Verify port value
+	if resultMap["i2p.router.net.ntcp.port"] != 9999 {
+		t.Errorf("port = %v, want 9999", resultMap["i2p.router.net.ntcp.port"])
+	}
 }
 
 func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{}
+	handler := NewNetworkSettingHandler(stats)
 
 	params := json.RawMessage(`{"unknown.setting": null}`)
 
@@ -540,8 +553,8 @@ func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
 }
 
 func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{}
+	handler := NewNetworkSettingHandler(stats)
 
 	// Try to write a value (non-null)
 	params := json.RawMessage(`{"i2p.router.net.ntcp.port": 12345}`)
@@ -558,8 +571,8 @@ func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
 }
 
 func TestNetworkSettingHandler_InvalidJSON(t *testing.T) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{}
+	handler := NewNetworkSettingHandler(stats)
 
 	params := json.RawMessage(`{invalid}`)
 
@@ -728,8 +741,13 @@ func BenchmarkRouterInfoHandler(b *testing.B) {
 }
 
 func BenchmarkNetworkSettingHandler(b *testing.B) {
-	cfg := &config.RouterConfig{}
-	handler := NewNetworkSettingHandler(cfg)
+	stats := &mockServerStatsProvider{
+		network: NetworkConfig{
+			NTCP2Port:    12345,
+			NTCP2Address: "127.0.0.1:12345",
+		},
+	}
+	handler := NewNetworkSettingHandler(stats)
 	params := json.RawMessage(`{"i2p.router.net.ntcp.port": null}`)
 	ctx := context.Background()
 

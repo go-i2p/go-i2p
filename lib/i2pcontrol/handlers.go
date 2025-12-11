@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // EchoHandler implements the Echo RPC method.
@@ -323,16 +321,16 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 // Note: Only read operations are supported initially.
 // Write operations (changing config) will be added later.
 type NetworkSettingHandler struct {
-	config *config.RouterConfig
+	stats RouterStatsProvider
 }
 
 // NewNetworkSettingHandler creates a new NetworkSetting handler.
 //
 // Parameters:
-//   - cfg: Router configuration
-func NewNetworkSettingHandler(cfg *config.RouterConfig) *NetworkSettingHandler {
+//   - stats: Router statistics provider for accessing network configuration
+func NewNetworkSettingHandler(stats RouterStatsProvider) *NetworkSettingHandler {
 	return &NetworkSettingHandler{
-		config: cfg,
+		stats: stats,
 	}
 }
 
@@ -345,13 +343,15 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid NetworkSetting parameters", err.Error())
 	}
 
+	// Get network configuration from router
+	netConfig := h.stats.GetNetworkConfig()
+
 	result := make(map[string]interface{})
 
-	// Available configuration fields
-	// Note: Using simplified field names - real I2PControl uses more specific paths
+	// Available configuration fields with real data
 	availableSettings := map[string]interface{}{
-		"i2p.router.net.ntcp.port":     h.getNTCP2Port(),
-		"i2p.router.net.ntcp.hostname": "",    // Hostname not exposed in config
+		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
+		"i2p.router.net.ntcp.hostname": "",    // Hostname extraction not implemented
 		"i2p.router.net.ntcp.autoip":   true,  // Default behavior
 		"i2p.router.upnp.enabled":      false, // Not yet implemented
 		"i2p.router.bandwidth.in":      0,     // Not yet tracked
@@ -376,18 +376,9 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 
 	// If no settings requested, return common settings
 	if len(result) == 0 {
-		result["i2p.router.net.ntcp.port"] = h.getNTCP2Port()
+		result["i2p.router.net.ntcp.port"] = netConfig.NTCP2Port
 		result["i2p.router.net.ntcp.hostname"] = ""
 	}
 
 	return result, nil
-}
-
-// getNTCP2Port extracts the NTCP2 port from router configuration.
-// Returns 0 as a placeholder since transport config is not directly accessible.
-// TODO: Expose transport configuration in RouterConfig for better I2PControl support
-func (h *NetworkSettingHandler) getNTCP2Port() int {
-	// Transport configuration not exposed in RouterConfig
-	// Return 0 as placeholder
-	return 0
 }

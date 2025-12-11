@@ -19,6 +19,7 @@ type mockServerStatsProvider struct {
 	info      RouterInfoStats
 	tunnels   TunnelStats
 	netdb     NetDBStats
+	network   NetworkConfig
 	running   bool
 }
 
@@ -26,6 +27,7 @@ func (m *mockServerStatsProvider) GetBandwidthStats() BandwidthStats { return m.
 func (m *mockServerStatsProvider) GetRouterInfo() RouterInfoStats    { return m.info }
 func (m *mockServerStatsProvider) GetTunnelStats() TunnelStats       { return m.tunnels }
 func (m *mockServerStatsProvider) GetNetDBStats() NetDBStats         { return m.netdb }
+func (m *mockServerStatsProvider) GetNetworkConfig() NetworkConfig   { return m.network }
 func (m *mockServerStatsProvider) IsRunning() bool                   { return m.running }
 func (m *mockServerStatsProvider) GetRouterControl() interface{ Stop() } {
 	// Return a simple mock that implements Stop()

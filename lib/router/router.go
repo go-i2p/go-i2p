@@ -271,6 +271,23 @@ func (r *Router) GetBandwidthRates() (rate1s, rate15s uint64) {
 	return r.bandwidthTracker.GetRates()
 }
 
+// GetTransportAddr returns the listening address of the first available transport.
+// This is used by I2PControl to expose NTCP2 port and address information.
+// Returns nil if no transports are available.
+func (r *Router) GetTransportAddr() interface{} {
+	if r.TransportMuxer == nil {
+		return nil
+	}
+
+	transports := r.TransportMuxer.GetTransports()
+	if len(transports) == 0 {
+		return nil
+	}
+
+	// Return the address of the first transport (typically NTCP2)
+	return transports[0].Addr()
+}
+
 // create router from configuration
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	log.WithFields(logger.Fields{
