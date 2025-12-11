@@ -65,6 +65,12 @@ type Router struct {
 
 	// tunnelManager manages tunnel building and pool maintenance
 	tunnelManager *i2np.TunnelManager
+
+	// i2pcontrolServer provides RPC monitoring interface
+	i2pcontrolServer interface {
+		Start() error
+		Stop()
+	}
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -298,6 +304,7 @@ func (r *Router) Stop() {
 	}
 
 	r.stopI2CPServer()
+	r.stopI2PControlServer()
 	r.stopNetDB()
 	r.sendCloseSignal()
 
@@ -400,6 +407,11 @@ func (r *Router) Start() {
 		if err := r.startI2CPServer(); err != nil {
 			log.WithError(err).Error("Failed to start I2CP server")
 		}
+	}
+
+	// Start I2PControl server if enabled
+	if err := r.startI2PControlServer(); err != nil {
+		log.WithError(err).Error("Failed to start I2PControl server")
 	}
 
 	// Track mainloop goroutine for clean shutdown
@@ -1088,6 +1100,25 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 		}).Error("Timeout waiting for RouterInfo from NetDB")
 		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
 	}
+}
+
+// GetNetDB returns the network database for I2PControl statistics collection.
+// Returns nil if NetDB has not been initialized.
+func (r *Router) GetNetDB() *netdb.StdNetDB {
+	return r.StdNetDB
+}
+
+// GetConfig returns the router configuration for I2PControl.
+func (r *Router) GetConfig() *config.RouterConfig {
+	return r.cfg
+}
+
+// IsRunning returns whether the router is currently operational.
+// Thread-safe access to running state.
+func (r *Router) IsRunning() bool {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.running
 }
 
 // hasNTCP2Address checks if RouterInfo contains at least one NTCP2 address
