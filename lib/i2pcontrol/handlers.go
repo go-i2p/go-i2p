@@ -163,6 +163,9 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 	// Get current router stats
 	routerStats := h.stats.GetRouterInfo()
 
+	// Get bandwidth stats
+	bandwidthStats := h.stats.GetBandwidthStats()
+
 	// Build response with requested fields
 	result := make(map[string]interface{})
 
@@ -175,8 +178,10 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 		"i2p.router.net.tunnels.inbound":       routerStats.InboundTunnels,
 		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
 		"i2p.router.net.status":                getStatusCode(h.stats.IsRunning()),
-		"i2p.router.net.bw.inbound.1s":         0.0, // Not yet implemented
-		"i2p.router.net.bw.outbound.1s":        0.0, // Not yet implemented
+		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate,
+		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate, // Using 1s rate for both (15s not separately tracked yet)
+		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate,
+		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate, // Using 1s rate for both (15s not separately tracked yet)
 	}
 
 	// If specific fields requested, return only those

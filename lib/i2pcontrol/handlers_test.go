@@ -284,6 +284,50 @@ func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
+	mockStats := &mockRouterAccess{running: true}
+	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+
+	handler := NewRouterInfoHandler(statsProvider)
+	params := json.RawMessage(`{
+		"i2p.router.net.bw.inbound.1s": null,
+		"i2p.router.net.bw.inbound.15s": null,
+		"i2p.router.net.bw.outbound.1s": null,
+		"i2p.router.net.bw.outbound.15s": null
+	}`)
+
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	resultMap := result.(map[string]interface{})
+
+	// Check all bandwidth fields are present
+	if _, ok := resultMap["i2p.router.net.bw.inbound.1s"]; !ok {
+		t.Error("missing i2p.router.net.bw.inbound.1s")
+	}
+	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
+		t.Error("missing i2p.router.net.bw.inbound.15s")
+	}
+	if _, ok := resultMap["i2p.router.net.bw.outbound.1s"]; !ok {
+		t.Error("missing i2p.router.net.bw.outbound.1s")
+	}
+	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; !ok {
+		t.Error("missing i2p.router.net.bw.outbound.15s")
+	}
+
+	// Check that bandwidth values are from mock (1024 bytes/sec)
+	// Inbound should be 0 (not tracked separately yet)
+	if resultMap["i2p.router.net.bw.inbound.1s"] != 0.0 {
+		t.Errorf("inbound.1s = %v, want 0.0", resultMap["i2p.router.net.bw.inbound.1s"])
+	}
+	// Outbound should be 1024.0 from mock
+	if resultMap["i2p.router.net.bw.outbound.1s"] != 1024.0 {
+		t.Errorf("outbound.1s = %v, want 1024.0", resultMap["i2p.router.net.bw.outbound.1s"])
+	}
+}
+
 // Test RouterManager Handler
 
 type mockRouterControl struct {
