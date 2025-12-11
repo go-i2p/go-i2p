@@ -9,7 +9,6 @@ require (
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.0.6
 	github.com/go-i2p/crypto v0.0.5
-	github.com/go-i2p/go-nat-listener v0.0.0-20250730143432-c15ab073b20d
 	github.com/go-i2p/go-noise v0.0.3
 	github.com/go-i2p/logger v0.0.1
 	github.com/go-i2p/su3 v0.0.1
@@ -30,9 +29,7 @@ require (
 	github.com/go-i2p/elgamal v0.0.2 // indirect
 	github.com/go-i2p/noise v0.0.0-20250805205922-091c71f48c43 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -47,8 +44,7 @@ require (
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 )
 

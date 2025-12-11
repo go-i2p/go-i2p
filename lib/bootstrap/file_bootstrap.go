@@ -360,6 +360,19 @@ func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.
 	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
 
 	for _, ri := range routerInfos {
+		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE validation
+		// This prevents ERROR logs from common package when checking introducer-only addresses
+		if !HasDirectNTCP2Connectivity(ri) {
+			stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
+			log.WithFields(logger.Fields{
+				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
+				"phase":       "pre-filter",
+				"reason":      "no direct NTCP2 connectivity",
+				"router_hash": GetRouterHashString(ri),
+			}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
+			continue
+		}
+
 		if err := ValidateRouterInfo(ri); err != nil {
 			stats.RecordInvalid(err.Error())
 			log.WithFields(logger.Fields{

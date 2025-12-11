@@ -67,6 +67,52 @@ func (vs *ValidationStats) LogSummary(phase string) {
 	}
 }
 
+// HasDirectNTCP2Connectivity checks if a RouterInfo has at least one NTCP2 address
+// with direct connectivity (host and port keys present, not introducer-only).
+// This pre-filtering function prevents ERROR logs from the common package when
+// attempting to extract host keys from introducer-only addresses.
+//
+// CRITICAL FIX #1: Pre-filter bootstrap peers before validation to prevent
+// "RouterAddress missing required host key" errors for introducer-only addresses.
+func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
+	addresses := ri.RouterAddresses()
+	if len(addresses) == 0 {
+		return false
+	}
+
+	for _, addr := range addresses {
+		// Check transport style
+		style := addr.TransportStyle()
+		styleBytes, err := style.Data()
+		if err != nil {
+			continue
+		}
+
+		// Only consider NTCP2 addresses
+		if !strings.EqualFold(string(styleBytes), "ntcp2") {
+			continue
+		}
+
+		// Check if this address has direct connectivity by trying to extract host and port
+		// We check using the standard methods but suppress errors
+		// If either extraction fails, this is an introducer-only address
+		host, hostErr := addr.Host()
+		if hostErr != nil || host == nil {
+			continue
+		}
+
+		port, portErr := addr.Port()
+		if portErr != nil || port == "" {
+			continue
+		}
+
+		// Both host and port keys exist and are valid - this is a directly dialable NTCP2 address
+		return true
+	}
+
+	return false
+}
+
 // ValidateRouterInfo performs comprehensive validation on a RouterInfo
 // Returns nil if valid, otherwise returns an error describing the validation failure
 func ValidateRouterInfo(ri router_info.RouterInfo) error {

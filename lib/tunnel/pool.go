@@ -98,6 +98,14 @@ type Pool struct {
 	maintWg        sync.WaitGroup            // Track maintenance goroutine
 	failedPeers    map[common.Hash]time.Time // BUG FIX #5: Track failed peer connection attempts
 	failedPeersMu  sync.RWMutex              // BUG FIX #5: Protect failed peers map
+	peerTracker    PeerTracker               // Optional peer reputation tracking (netdb integration)
+}
+
+// PeerTracker interface for recording peer connection outcomes.
+// This allows Pool to report connection results to NetDB for reputation tracking.
+type PeerTracker interface {
+	RecordFailure(hash common.Hash, reason string)
+	RecordSuccess(hash common.Hash, responseTimeMs int64)
 }
 
 // NewTunnelPool creates a new tunnel pool with the given peer selector and default configuration
@@ -116,7 +124,20 @@ func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 		failedPeers:   make(map[common.Hash]time.Time), // BUG FIX #5: Track failed connection attempts
 		ctx:           ctx,
 		cancel:        cancel,
+		peerTracker:   nil, // Will be set via SetPeerTracker if NetDB integration is enabled
 	}
+}
+
+// SetPeerTracker sets the peer tracker for NetDB integration.
+// This allows the pool to report connection results for reputation tracking.
+func (p *Pool) SetPeerTracker(tracker PeerTracker) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.peerTracker = tracker
+	log.WithFields(logger.Fields{
+		"at":     "Pool.SetPeerTracker",
+		"reason": "enabling peer reputation tracking",
+	}).Debug("peer tracker configured for pool")
 }
 
 // SetTunnelBuilder sets the tunnel builder for this pool.
@@ -490,12 +511,25 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 		return false
 	}
 
+	// BUG FIX: Get list of failed peers to exclude from tunnel building
+	// This prevents wasted retry attempts on peers that recently failed
+	excludePeers := p.GetFailedPeers()
+	if len(excludePeers) > 0 {
+		log.WithFields(logger.Fields{
+			"at":            "Pool.attemptBuildTunnels",
+			"phase":         "tunnel_build",
+			"exclude_count": len(excludePeers),
+			"reason":        "excluding recently failed peers from tunnel selection",
+		}).Debug("excluding failed peers from tunnel building")
+	}
+
 	var successCount int
 	for i := 0; i < count; i++ {
 		req := BuildTunnelRequest{
 			HopCount:      p.config.HopCount,
 			IsInbound:     p.config.IsInbound,
-			UseShortBuild: true, // Use modern STBM by default
+			UseShortBuild: true,         // Use modern STBM by default
+			ExcludePeers:  excludePeers, // BUG FIX: Exclude recently failed peers
 		}
 
 		// Try to build tunnel with collision retry
@@ -667,10 +701,14 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"reason":     "tunnel build timeout detected, attempting retry",
 	}).Info("retrying tunnel build after timeout")
 
+	// BUG FIX: Exclude failed peers from retry attempts
+	excludePeers := p.GetFailedPeers()
+
 	// Create build request with the same parameters
 	req := BuildTunnelRequest{
-		IsInbound: isInbound,
-		HopCount:  hopCount,
+		IsInbound:    isInbound,
+		HopCount:     hopCount,
+		ExcludePeers: excludePeers, // BUG FIX: Exclude recently failed peers from retry
 	}
 
 	// Attempt to build the tunnel
@@ -705,16 +743,25 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 // BUG FIX #5: Failed peer tracking to avoid retry loops
 // MarkPeerFailed records that a peer failed to establish a connection.
 // This peer will be avoided for a cooldown period to prevent wasted retry attempts.
+// If a PeerTracker is configured, the failure is also reported for reputation tracking.
 func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
 	p.failedPeersMu.Lock()
-	defer p.failedPeersMu.Unlock()
 	p.failedPeers[peerHash] = time.Now()
+	tracker := p.peerTracker // Get tracker reference while holding lock
+	p.failedPeersMu.Unlock()
+
+	// Report to NetDB peer tracker if configured (outside lock to avoid deadlock)
+	if tracker != nil {
+		tracker.RecordFailure(peerHash, "tunnel_build_failed")
+	}
+
 	log.WithFields(logger.Fields{
 		"at":        "Pool.MarkPeerFailed",
 		"phase":     "tunnel_build",
 		"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
 		"reason":    "peer connection failed, marking for cooldown",
 		"impact":    "peer will be excluded from tunnel building temporarily",
+		"tracked":   tracker != nil,
 	}).Debug("marked peer as failed")
 }
 
@@ -758,4 +805,28 @@ func (p *Pool) CleanupFailedPeers() {
 			"cooldown":      cooldownPeriod,
 		}).Debug("cleaned up expired failed peer entries")
 	}
+}
+
+// GetFailedPeers returns a list of peer hashes currently marked as failed.
+// This is used to exclude failed peers from tunnel building attempts.
+func (p *Pool) GetFailedPeers() []common.Hash {
+	p.failedPeersMu.RLock()
+	defer p.failedPeersMu.RUnlock()
+
+	if len(p.failedPeers) == 0 {
+		return nil
+	}
+
+	// Create slice with only peers still in cooldown
+	now := time.Now()
+	cooldownPeriod := 5 * time.Minute
+	failed := make([]common.Hash, 0, len(p.failedPeers))
+
+	for hash, failTime := range p.failedPeers {
+		if now.Sub(failTime) < cooldownPeriod {
+			failed = append(failed, hash)
+		}
+	}
+
+	return failed
 }

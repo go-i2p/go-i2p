@@ -459,6 +459,12 @@ func (r *Router) initializeTunnelManager() {
 	// Configure automatic tunnel pool maintenance
 	pool := tm.GetPool()
 	pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
+
+	// HIGH PRIORITY FIX #3: Connect pool to NetDB peer tracker for reputation tracking
+	// This enables peer connection success/failure tracking for improved peer selection
+	pool.SetPeerTracker(r.StdNetDB.PeerTracker)
+	log.Debug("Tunnel pool configured with NetDB peer tracker for reputation tracking")
+
 	if err := pool.StartMaintenance(); err != nil {
 		log.WithError(err).Error("Failed to start tunnel pool maintenance")
 	} else {
