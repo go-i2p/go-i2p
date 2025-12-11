@@ -503,111 +503,16 @@ func (p *Pool) attemptBuildTunnelsAsync(count int) {
 
 // attemptBuildTunnels attempts to build the specified number of tunnels
 func (p *Pool) attemptBuildTunnels(count int) bool {
-	if p.tunnelBuilder == nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Pool) attemptBuildTunnels",
-			"phase":  "tunnel_build",
-			"reason": "tunnel builder not configured",
-		}).Error("cannot build tunnels: tunnel builder not set")
+	if !p.validateTunnelBuilder() {
 		return false
 	}
 
-	// BUG FIX: Get list of failed peers to exclude from tunnel building
-	// This prevents wasted retry attempts on peers that recently failed
-	excludePeers := p.GetFailedPeers()
-	if len(excludePeers) > 0 {
-		log.WithFields(logger.Fields{
-			"at":            "Pool.attemptBuildTunnels",
-			"phase":         "tunnel_build",
-			"exclude_count": len(excludePeers),
-			"reason":        "excluding recently failed peers from tunnel selection",
-		}).Debug("excluding failed peers from tunnel building")
-	}
+	excludePeers := p.getAndLogFailedPeers()
 
 	var successCount int
 	for i := 0; i < count; i++ {
-		// BUG FIX: Progressive peer exclusion for retry diversity
-		// Start with base exclusion list, add failed peers from each retry
-		progressiveExclude := make([]common.Hash, len(excludePeers))
-		copy(progressiveExclude, excludePeers)
-
-		req := BuildTunnelRequest{
-			HopCount:                  p.config.HopCount,
-			IsInbound:                 p.config.IsInbound,
-			UseShortBuild:             true, // Use modern STBM by default
-			ExcludePeers:              progressiveExclude,
-			RequireDirectConnectivity: true, // BUG FIX: Only select directly-contactable peers
-		}
-
-		// BUG FIX: Enhanced retry with progressive peer exclusion for diversity
-		// Each retry uses different peers by excluding those from previous attempts
-		const maxRetries = 3
-		var tunnelID TunnelID
-		var err error
-		var lastBuildPeers []common.Hash // Track peers from last build attempt
-
-		for retry := 0; retry < maxRetries; retry++ {
-			// On retry, exclude peers from previous failed attempt
-			if retry > 0 && len(lastBuildPeers) > 0 {
-				req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
-				log.WithFields(logger.Fields{
-					"at":                  "Pool.attemptBuildTunnels",
-					"phase":               "tunnel_build",
-					"retry":               retry + 1,
-					"excluded_from_retry": len(lastBuildPeers),
-					"total_excluded":      len(req.ExcludePeers),
-				}).Debug("excluding peers from previous failed attempt")
-			}
-
-			tunnelID, err = p.tunnelBuilder.BuildTunnel(req)
-			if err != nil {
-				// Enhanced logging for tunnel build failures - Issue #3 from AUDIT.md
-				// These failures are typically caused by session establishment failures (Issue #2)
-				log.WithFields(logger.Fields{
-					"at":             "Pool.attemptBuildTunnels",
-					"phase":          "tunnel_build",
-					"operation":      "build_tunnel",
-					"reason":         "tunnel build request failed",
-					"error":          err.Error(),
-					"retry":          retry + 1,
-					"max_retries":    maxRetries,
-					"hop_count":      req.HopCount,
-					"is_inbound":     req.IsInbound,
-					"pool_size":      len(p.tunnels),
-					"excluded_peers": len(req.ExcludePeers),
-				}).Warn("failed to build tunnel")
-
-				// TODO: Extract peer hashes from build result for next retry
-				// For now, retry will use same peer selection strategy
-				continue // Try again with next retry
-			}
-
-			// Check for tunnel ID collision
-			p.mutex.RLock()
-			_, exists := p.tunnels[tunnelID]
-			p.mutex.RUnlock()
-
-			if !exists {
-				// No collision, success
-				break
-			}
-
-			// Collision detected - extremely rare but handle it
-			log.WithFields(logger.Fields{
-				"at":          "(Pool) attemptBuildTunnels",
-				"phase":       "tunnel_build",
-				"reason":      "tunnel ID collision detected",
-				"tunnel_id":   tunnelID,
-				"retry":       retry + 1,
-				"max_retries": maxRetries,
-				"probability": "extremely rare event",
-			}).Warn("tunnel ID collision detected, retrying with new ID")
-
-			// If this was our last retry, set error
-			if retry == maxRetries-1 {
-				err = fmt.Errorf("tunnel ID collision after %d retries", maxRetries)
-			}
-		}
+		req := p.prepareBuildRequest(excludePeers)
+		tunnelID, err := p.executeBuildWithRetry(&req)
 
 		if err != nil {
 			continue
@@ -626,6 +531,131 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 	}
 
 	return successCount > 0
+}
+
+// validateTunnelBuilder checks if the tunnel builder is configured.
+// Returns true if builder is set, false otherwise with error logging.
+func (p *Pool) validateTunnelBuilder() bool {
+	if p.tunnelBuilder == nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Pool) attemptBuildTunnels",
+			"phase":  "tunnel_build",
+			"reason": "tunnel builder not configured",
+		}).Error("cannot build tunnels: tunnel builder not set")
+		return false
+	}
+	return true
+}
+
+// getAndLogFailedPeers retrieves the list of failed peers and logs if any exist.
+// This prevents wasted retry attempts on peers that recently failed.
+func (p *Pool) getAndLogFailedPeers() []common.Hash {
+	excludePeers := p.GetFailedPeers()
+	if len(excludePeers) > 0 {
+		log.WithFields(logger.Fields{
+			"at":            "Pool.attemptBuildTunnels",
+			"phase":         "tunnel_build",
+			"exclude_count": len(excludePeers),
+			"reason":        "excluding recently failed peers from tunnel selection",
+		}).Debug("excluding failed peers from tunnel building")
+	}
+	return excludePeers
+}
+
+// prepareBuildRequest creates a BuildTunnelRequest with progressive peer exclusion.
+// Copies the base exclusion list to allow per-request modifications during retries.
+func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelRequest {
+	progressiveExclude := make([]common.Hash, len(excludePeers))
+	copy(progressiveExclude, excludePeers)
+
+	return BuildTunnelRequest{
+		HopCount:                  p.config.HopCount,
+		IsInbound:                 p.config.IsInbound,
+		UseShortBuild:             true, // Use modern STBM by default
+		ExcludePeers:              progressiveExclude,
+		RequireDirectConnectivity: true, // BUG FIX: Only select directly-contactable peers
+	}
+}
+
+// executeBuildWithRetry attempts to build a tunnel with progressive peer exclusion on retries.
+// Each retry excludes peers from previous failed attempts to improve diversity.
+// Returns the tunnel ID on success or an error after all retries exhausted.
+func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) {
+	const maxRetries = 3
+	var lastBuildPeers []common.Hash // Track peers from last build attempt
+
+	for retry := 0; retry < maxRetries; retry++ {
+		if retry > 0 && len(lastBuildPeers) > 0 {
+			req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
+			log.WithFields(logger.Fields{
+				"at":                  "Pool.attemptBuildTunnels",
+				"phase":               "tunnel_build",
+				"retry":               retry + 1,
+				"excluded_from_retry": len(lastBuildPeers),
+				"total_excluded":      len(req.ExcludePeers),
+			}).Debug("excluding peers from previous failed attempt")
+		}
+
+		tunnelID, err := p.tunnelBuilder.BuildTunnel(*req)
+		if err != nil {
+			p.logBuildFailure(err, retry, maxRetries, req)
+			// TODO: Extract peer hashes from build result for next retry
+			continue
+		}
+
+		if !p.checkTunnelCollision(tunnelID, retry, maxRetries) {
+			return tunnelID, nil
+		}
+
+		// Last retry with collision
+		if retry == maxRetries-1 {
+			return 0, fmt.Errorf("tunnel ID collision after %d retries", maxRetries)
+		}
+	}
+
+	return 0, fmt.Errorf("tunnel build failed after %d retries", maxRetries)
+}
+
+// logBuildFailure logs detailed information about a tunnel build failure.
+// Enhanced logging for Issue #3 from AUDIT.md - failures typically caused by session establishment failures.
+func (p *Pool) logBuildFailure(err error, retry int, maxRetries int, req *BuildTunnelRequest) {
+	log.WithFields(logger.Fields{
+		"at":             "Pool.attemptBuildTunnels",
+		"phase":          "tunnel_build",
+		"operation":      "build_tunnel",
+		"reason":         "tunnel build request failed",
+		"error":          err.Error(),
+		"retry":          retry + 1,
+		"max_retries":    maxRetries,
+		"hop_count":      req.HopCount,
+		"is_inbound":     req.IsInbound,
+		"pool_size":      len(p.tunnels),
+		"excluded_peers": len(req.ExcludePeers),
+	}).Warn("failed to build tunnel")
+}
+
+// checkTunnelCollision checks if a tunnel ID already exists in the pool.
+// Returns true if collision detected (extremely rare), false if ID is available.
+func (p *Pool) checkTunnelCollision(tunnelID TunnelID, retry int, maxRetries int) bool {
+	p.mutex.RLock()
+	_, exists := p.tunnels[tunnelID]
+	p.mutex.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "(Pool) attemptBuildTunnels",
+		"phase":       "tunnel_build",
+		"reason":      "tunnel ID collision detected",
+		"tunnel_id":   tunnelID,
+		"retry":       retry + 1,
+		"max_retries": maxRetries,
+		"probability": "extremely rare event",
+	}).Warn("tunnel ID collision detected, retrying with new ID")
+
+	return true
 }
 
 // SelectTunnel selects a tunnel from the pool using round-robin strategy.
