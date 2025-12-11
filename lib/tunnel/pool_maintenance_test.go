@@ -453,7 +453,10 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	initialTime := pool.lastBuildTime // Read the time AFTER calling buildTunnelsWithBackoff
 	pool.mutex.Unlock()
 
-	// Wait for the tunnel build to complete
+	// Wait for the tunnel build to complete (with retries)
+	// Failed builds retry up to 3 times, so wait for all attempts
+	<-completionChan
+	<-completionChan
 	<-completionChan
 	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update buildFailures
 
@@ -475,8 +478,9 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	// lastBuildTime should not have changed (build was skipped)
 	assert.Equal(t, initialTime, timeAfterSkip, "Build should be skipped due to backoff")
 
-	// Build count should still be 3 (2 from first + 1 from second)
-	assert.Equal(t, 3, builder.GetBuildCount(), "Skipped build should not increment count")
+	// Build count should be 5 (2 from first + 3 retries from failed second)
+	// Note: attemptBuildTunnels retries up to 3 times on failure
+	assert.Equal(t, 5, builder.GetBuildCount(), "Skipped build should not increment count")
 
 	// Test 4: After backoff delay, build should proceed
 	time.Sleep(200 * time.Millisecond) // Total > 260ms, well past 200ms backoff
@@ -486,15 +490,19 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	timeAfterBackoff := pool.lastBuildTime
 	pool.mutex.Unlock()
 
-	// Wait for the tunnel build to complete
+	// Wait for the tunnel build to complete (with retries)
+	// Failed builds retry up to 3 times, so wait for all attempts
+	<-completionChan
+	<-completionChan
 	<-completionChan
 	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update state
 
 	// lastBuildTime should have been updated
 	assert.True(t, timeAfterBackoff.After(initialTime), "Build should proceed after backoff period")
 
-	// Build count should be 4 (previous 3 + 1 new)
-	assert.Equal(t, 4, builder.GetBuildCount(), "Build after backoff should increment count")
+	// Build count should be 8 (previous 5 + 3 retries from new failed build)
+	// Note: attemptBuildTunnels retries up to 3 times on failure
+	assert.Equal(t, 8, builder.GetBuildCount(), "Build after backoff should increment count")
 }
 
 func TestMaintainPoolIntegration(t *testing.T) {
