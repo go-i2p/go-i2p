@@ -2356,3 +2356,121 @@ func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
 	log.WithField("count", len(result)).Debug("Retrieved all LeaseSets")
 	return result
 }
+
+// GetActivePeerCount returns the number of peers with successful connections in the last hour.
+// Active peers are those we have successfully communicated with recently, indicating they are
+// currently online and reachable. This is useful for monitoring network connectivity and
+// determining the health of our peer connections.
+func (db *StdNetDB) GetActivePeerCount() int {
+	if db.PeerTracker == nil {
+		return 0
+	}
+
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	count := 0
+
+	// Iterate through all tracked peers and count those with recent successful connections
+	db.riMutex.Lock()
+	defer db.riMutex.Unlock()
+
+	for hash := range db.RouterInfos {
+		stats := db.PeerTracker.GetStats(hash)
+		if stats != nil && !stats.LastSuccess.IsZero() && stats.LastSuccess.After(hourAgo) {
+			count++
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"active_peers": count,
+		"threshold":    "1 hour",
+	}).Debug("Counted active peers")
+
+	return count
+}
+
+// GetFastPeerCount returns the number of peers with low latency (fast response times).
+// Fast peers are those with average response times under 500ms, making them good
+// candidates for tunnel building and high-performance operations.
+//
+// Classification criteria:
+//   - Average response time < 500ms
+//   - Minimum 3 successful connections for statistical significance
+func (db *StdNetDB) GetFastPeerCount() int {
+	if db.PeerTracker == nil {
+		return 0
+	}
+
+	const fastThresholdMs = 500
+	const minAttempts = 3
+	count := 0
+
+	db.riMutex.Lock()
+	defer db.riMutex.Unlock()
+
+	for hash := range db.RouterInfos {
+		stats := db.PeerTracker.GetStats(hash)
+		if stats != nil &&
+			stats.TotalAttempts >= minAttempts &&
+			stats.AvgResponseTimeMs > 0 &&
+			stats.AvgResponseTimeMs < fastThresholdMs {
+			count++
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"fast_peers":   count,
+		"threshold_ms": fastThresholdMs,
+		"min_attempts": minAttempts,
+	}).Debug("Counted fast peers")
+
+	return count
+}
+
+// GetHighCapacityPeerCount returns the number of high-capacity peers.
+// High-capacity peers are reliable routers with good performance and high availability,
+// making them excellent candidates for important roles like tunnel building.
+//
+// Classification criteria:
+//   - Success rate >= 80%
+//   - Minimum 5 connection attempts for statistical significance
+//   - Average response time < 1000ms (1 second)
+//   - Not marked as stale
+func (db *StdNetDB) GetHighCapacityPeerCount() int {
+	if db.PeerTracker == nil {
+		return 0
+	}
+
+	const minSuccessRate = 0.80
+	const maxResponseMs = 1000
+	const minAttempts = 5
+	count := 0
+
+	db.riMutex.Lock()
+	defer db.riMutex.Unlock()
+
+	for hash := range db.RouterInfos {
+		stats := db.PeerTracker.GetStats(hash)
+		if stats == nil || stats.TotalAttempts < minAttempts {
+			continue
+		}
+
+		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
+		isStale := db.PeerTracker.IsLikelyStale(hash)
+
+		if successRate >= minSuccessRate &&
+			stats.AvgResponseTimeMs > 0 &&
+			stats.AvgResponseTimeMs < maxResponseMs &&
+			!isStale {
+			count++
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"high_capacity_peers": count,
+		"min_success_rate":    minSuccessRate,
+		"max_response_ms":     maxResponseMs,
+		"min_attempts":        minAttempts,
+	}).Debug("Counted high-capacity peers")
+
+	return count
+}

@@ -69,6 +69,15 @@ type RouterInfoStats struct {
 	// KnownPeers is the number of RouterInfos in the NetDB
 	KnownPeers int
 
+	// ActivePeers is the number of peers with successful connections in the last hour
+	ActivePeersCount int
+
+	// FastPeers is the number of peers with low latency (< 500ms average response time)
+	FastPeersCount int
+
+	// HighCapacityPeers is the number of reliable, high-performance peers
+	HighCapacityPeersCount int
+
 	// ParticipatingTunnels is the count of tunnels we're participating in
 	ParticipatingTunnels int
 
@@ -216,6 +225,9 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 	// Collect NetDB statistics if available
 	if netdb := rsp.router.GetNetDB(); netdb != nil {
 		stats.KnownPeers = netdb.GetRouterInfoCount()
+		stats.ActivePeersCount = netdb.GetActivePeerCount()
+		stats.FastPeersCount = netdb.GetFastPeerCount()
+		stats.HighCapacityPeersCount = netdb.GetHighCapacityPeerCount()
 	}
 
 	// Collect participating tunnel statistics from participant manager

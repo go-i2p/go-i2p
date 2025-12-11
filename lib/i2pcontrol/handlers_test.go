@@ -593,9 +593,67 @@ func TestGetStatusCode(t *testing.T) {
 
 // Benchmark tests
 
+// TestRouterInfoHandler_PeerClassificationFields tests that peer classification fields are exposed
+func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
+	mockStats := &mockRouterAccess{running: true}
+	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0-test")
+
+	handler := NewRouterInfoHandler(statsProvider)
+
+	// Request the new peer classification fields
+	params := json.RawMessage(`{
+		"i2p.router.netdb.activepeers": null,
+		"i2p.router.netdb.fastpeers": null,
+		"i2p.router.netdb.highcapacitypeers": null
+	}`)
+
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	resultMap := result.(map[string]interface{})
+
+	// Verify all requested fields are present
+	if _, ok := resultMap["i2p.router.netdb.activepeers"]; !ok {
+		t.Error("missing field: i2p.router.netdb.activepeers")
+	}
+	if _, ok := resultMap["i2p.router.netdb.fastpeers"]; !ok {
+		t.Error("missing field: i2p.router.netdb.fastpeers")
+	}
+	if _, ok := resultMap["i2p.router.netdb.highcapacitypeers"]; !ok {
+		t.Error("missing field: i2p.router.netdb.highcapacitypeers")
+	}
+
+	// Verify fields are numeric (should be 0 for mock)
+	activePeers, ok := resultMap["i2p.router.netdb.activepeers"].(int)
+	if !ok {
+		t.Errorf("activepeers not int: %T", resultMap["i2p.router.netdb.activepeers"])
+	}
+	if activePeers < 0 {
+		t.Errorf("activepeers = %d, want >= 0", activePeers)
+	}
+
+	fastPeers, ok := resultMap["i2p.router.netdb.fastpeers"].(int)
+	if !ok {
+		t.Errorf("fastpeers not int: %T", resultMap["i2p.router.netdb.fastpeers"])
+	}
+	if fastPeers < 0 {
+		t.Errorf("fastpeers = %d, want >= 0", fastPeers)
+	}
+
+	highCapPeers, ok := resultMap["i2p.router.netdb.highcapacitypeers"].(int)
+	if !ok {
+		t.Errorf("highcapacitypeers not int: %T", resultMap["i2p.router.netdb.highcapacitypeers"])
+	}
+	if highCapPeers < 0 {
+		t.Errorf("highcapacitypeers = %d, want >= 0", highCapPeers)
+	}
+}
+
 func BenchmarkEchoHandler(b *testing.B) {
 	handler := NewEchoHandler()
-	params := json.RawMessage(`{"Echo": "benchmark test"}`)
+	params := json.RawMessage(`{"Echo": "test"}`)
 	ctx := context.Background()
 
 	b.ResetTimer()
