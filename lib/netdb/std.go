@@ -40,6 +40,9 @@ type StdNetDB struct {
 	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
 	expiryMutex    sync.RWMutex              // mutex for expiry tracking
 
+	// HIGH PRIORITY FIX #3: Peer connection tracking and reputation
+	PeerTracker *PeerTracker // tracks connection success/failure for peers
+
 	// Cleanup goroutine management
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -61,6 +64,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		lsMutex:        sync.Mutex{},
 		leaseSetExpiry: make(map[common.Hash]time.Time),
 		expiryMutex:    sync.RWMutex{},
+		PeerTracker:    NewPeerTracker(), // HIGH PRIORITY FIX #3: Initialize peer tracking
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -261,6 +265,7 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 	skippedNoAddresses := 0
 	skippedNoValidNTCP2 := 0
 	skippedHashError := 0
+	skippedStale := 0 // HIGH PRIORITY FIX #3: Track stale peer filtering
 
 	for _, ri := range allRouterInfos {
 		riHash, err := ri.IdentHash()
@@ -276,6 +281,15 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 		// Basic reachability check - router should have valid addresses
 		if len(ri.RouterAddresses()) == 0 {
 			skippedNoAddresses++
+			continue
+		}
+		// HIGH PRIORITY FIX #3: Skip peers identified as stale by connection tracker
+		if db.PeerTracker.IsLikelyStale(riHash) {
+			log.WithFields(logger.Fields{
+				"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+				"reason":    "peer_marked_stale_by_tracker",
+			}).Debug("Skipping stale peer")
+			skippedStale++
 			continue
 		}
 		// Check if router has a valid NTCP2 address (not just any NTCP2 address)
@@ -297,6 +311,7 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 		"skipped_excluded":       skippedExcluded,
 		"skipped_no_addresses":   skippedNoAddresses,
 		"skipped_no_valid_ntcp2": skippedNoValidNTCP2,
+		"skipped_stale":          skippedStale, // HIGH PRIORITY FIX #3
 		"skipped_hash_error":     skippedHashError,
 		"directly_contactable":   len(available),
 		"introducer_only":        skippedNoValidNTCP2,
