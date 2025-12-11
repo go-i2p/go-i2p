@@ -7,6 +7,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -179,9 +180,17 @@ func TestRouterImplementsSessionProvider(t *testing.T) {
 
 // TestGetSessionByHashWithNonExistentPeer tests SessionProvider interface with missing peer
 func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
+	// Create temporary directory for NetDB
+	tempDir := t.TempDir()
+	
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		StdNetDB:       netdb.NewStdNetDB(tempDir),
 	}
+
+	// Ensure NetDB is initialized
+	err := router.StdNetDB.Ensure()
+	require.NoError(t, err, "NetDB initialization should succeed")
 
 	// Test with non-existent peer
 	nonExistentHash := common.Hash{}
@@ -190,7 +199,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 	transportSession, err := router.GetSessionByHash(nonExistentHash)
 	assert.Error(t, err, "Should return error for non-existent peer")
 	assert.Nil(t, transportSession, "TransportSession should be nil on error")
-	assert.Contains(t, err.Error(), "no session found", "Error message should indicate session not found")
+	assert.Contains(t, err.Error(), "no RouterInfo found", "Error message should indicate RouterInfo not found")
 }
 
 // TestSessionReplacement tests that adding a session with the same hash replaces the old one

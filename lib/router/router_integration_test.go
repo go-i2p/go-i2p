@@ -8,6 +8,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,10 +65,18 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 
 // TestSessionProviderWithNonExistentPeer verifies error handling for unknown peers
 func TestSessionProviderWithNonExistentPeer(t *testing.T) {
-	// Create a router with empty session map
+	// Create a temporary directory for NetDB
+	tempDir := t.TempDir()
+	
+	// Create a router with proper NetDB initialization
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		StdNetDB:       netdb.NewStdNetDB(tempDir),
 	}
+
+	// Ensure NetDB is initialized
+	err := router.StdNetDB.Ensure()
+	require.NoError(t, err, "NetDB initialization should succeed")
 
 	// Try to retrieve a non-existent session
 	unknownPeerHash := common.Hash{}
@@ -75,10 +84,10 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 
 	session, err := router.GetSessionByHash(unknownPeerHash)
 
-	// Verify error handling
+	// Verify error handling - should fail because peer is not in NetDB
 	assert.Error(t, err, "Should return error for unknown peer")
 	assert.Nil(t, session, "Session should be nil for unknown peer")
-	assert.Contains(t, err.Error(), "no session found", "Error message should indicate session not found")
+	assert.Contains(t, err.Error(), "no RouterInfo found", "Error message should indicate RouterInfo not found")
 
 	t.Log("SessionProvider correctly handles requests for unknown peers")
 }

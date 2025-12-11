@@ -1039,6 +1039,18 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 			return nil, fmt.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
 		}
 
+		// Check if TransportMuxer is initialized before using it
+		if r.TransportMuxer == nil {
+			log.WithFields(logger.Fields{
+				"at":        "Router.GetSessionByHash",
+				"phase":     "session_establishment",
+				"operation": "outbound_connection",
+				"peer_hash": fmt.Sprintf("%x", hash[:8]),
+				"reason":    "transport_not_initialized",
+			}).Error("TransportMuxer not initialized")
+			return nil, fmt.Errorf("transport not initialized for peer %x", hash[:8])
+		}
+
 		// Use TransportMuxer to establish outbound session
 		transportSession, err := r.TransportMuxer.GetSession(routerInfo)
 		if err != nil {
