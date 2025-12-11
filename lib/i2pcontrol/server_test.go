@@ -27,6 +27,14 @@ func (m *mockServerStatsProvider) GetRouterInfo() RouterInfoStats    { return m.
 func (m *mockServerStatsProvider) GetTunnelStats() TunnelStats       { return m.tunnels }
 func (m *mockServerStatsProvider) GetNetDBStats() NetDBStats         { return m.netdb }
 func (m *mockServerStatsProvider) IsRunning() bool                   { return m.running }
+func (m *mockServerStatsProvider) GetRouterControl() interface{ Stop() } {
+	// Return a simple mock that implements Stop()
+	return mockStopControl{}
+}
+
+type mockStopControl struct{}
+
+func (mockStopControl) Stop() {}
 
 // testConfig creates a test I2PControl configuration
 func testConfig(port int) *config.I2PControlConfig {

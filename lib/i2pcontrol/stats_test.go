@@ -64,6 +64,11 @@ func (m *mockRouterAccess) GetBandwidthRates() (rate1s, rate15s uint64) {
 	return 1024, 2048
 }
 
+func (m *mockRouterAccess) Stop() {
+	// Mock implementation - sets running to false
+	m.running = false
+}
+
 // TestNewRouterStatsProvider tests stats provider creation
 func TestNewRouterStatsProvider(t *testing.T) {
 	router := &mockRouterAccess{running: true}

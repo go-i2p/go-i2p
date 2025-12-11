@@ -36,6 +36,10 @@ type RouterStatsProvider interface {
 
 	// IsRunning returns whether the router is currently running
 	IsRunning() bool
+
+	// GetRouterControl returns the underlying router control interface
+	// This is used by RouterManagerHandler to perform control operations (shutdown, restart, etc.)
+	GetRouterControl() interface{ Stop() }
 }
 
 // BandwidthStats contains bandwidth usage statistics.
@@ -177,6 +181,9 @@ type RouterAccess interface {
 
 	// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates in bytes per second
 	GetBandwidthRates() (rate1s, rate15s uint64)
+
+	// Stop initiates graceful shutdown of the router
+	Stop()
 }
 
 // NewRouterStatsProvider creates a new statistics provider for the given router.
@@ -305,6 +312,12 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 // IsRunning returns whether the router is currently running.
 func (rsp *routerStatsProvider) IsRunning() bool {
 	return rsp.router.IsRunning()
+}
+
+// GetRouterControl returns the underlying router control interface.
+// This allows RouterManagerHandler to perform control operations like shutdown.
+func (rsp *routerStatsProvider) GetRouterControl() interface{ Stop() } {
+	return rsp.router
 }
 
 // calculateUptime returns router uptime in milliseconds.

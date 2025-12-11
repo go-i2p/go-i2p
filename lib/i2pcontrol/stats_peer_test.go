@@ -45,6 +45,10 @@ func (m *mockRouterAccessForPeerStats) GetBandwidthRates() (rate1s, rate15s uint
 	return 0, 0
 }
 
+func (m *mockRouterAccessForPeerStats) Stop() {
+	// Mock implementation - no-op for test
+}
+
 // Helper to create test hash
 func testHash(suffix byte) common.Hash {
 	var hash common.Hash
