@@ -72,9 +72,65 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 		}).Error("underlying selector failed")
 		return nil, fmt.Errorf("underlying selector error: %w", err)
 	}
+
+	// PRIORITY 4: Enhanced peer diagnostics to understand what peers are selected
 	log.WithFields(logger.Fields{
 		"at":         "SelectPeers",
 		"peer_count": len(peers),
 	}).Debug("Successfully selected peers")
+
+	// Analyze selected peers for reachability characteristics
+	ntcp2Count := 0
+	introducerOnlyCount := 0
+	directlyDialableCount := 0
+
+	for _, peer := range peers {
+		hasDirectNTCP2 := false
+		addresses := peer.RouterAddresses()
+
+		for _, addr := range addresses {
+			style := addr.TransportStyle()
+			styleStr, err := style.Data()
+			if err != nil {
+				continue
+			}
+
+			// Check if this is NTCP2 (case-insensitive)
+			if styleStr == "NTCP2" || styleStr == "ntcp2" {
+				ntcp2Count++
+				// Check if address has 'host' key (directly dialable) vs introducer-only
+				_, hostErr := addr.Host()
+				if hostErr == nil {
+					hasDirectNTCP2 = true
+				}
+			}
+		}
+
+		if hasDirectNTCP2 {
+			directlyDialableCount++
+		} else if ntcp2Count > 0 {
+			// Has NTCP2 but no direct address - introducer only
+			introducerOnlyCount++
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                  "SelectPeers",
+		"total_peers":         len(peers),
+		"ntcp2_addresses":     ntcp2Count,
+		"directly_dialable":   directlyDialableCount,
+		"introducer_only":     introducerOnlyCount,
+		"dialable_percentage": fmt.Sprintf("%.1f%%", float64(directlyDialableCount)/float64(len(peers))*100),
+	}).Info("Peer selection characteristics for tunnel building")
+
+	if directlyDialableCount == 0 && len(peers) > 0 {
+		log.WithFields(logger.Fields{
+			"at":                "SelectPeers",
+			"total_peers":       len(peers),
+			"directly_dialable": directlyDialableCount,
+			"reason":            "no directly dialable peers selected",
+		}).Warn("WARNING: No directly dialable NTCP2 peers selected - tunnel building may fail")
+	}
+
 	return peers, nil
 }

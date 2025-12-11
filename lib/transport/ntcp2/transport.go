@@ -2,10 +2,13 @@ package ntcp2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -380,19 +383,61 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	peerHash, _ := routerInfo.IdentHash()
 	peerHashBytes := peerHash.Bytes()
 
-	t.logger.WithField("remote_addr", tcpAddr.String()).Info("Dialing NTCP2 connection")
-	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
-	if err != nil {
-		// Enhanced structured logging for dial failures to aid diagnostics
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr": tcpAddr.String(),
+		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
+	}).Debug("Attempting raw TCP connection before noise handshake")
+
+	// PRIORITY 1: Test raw TCP connection first to isolate failure point
+	tcpDialStart := time.Now()
+	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddr.String(), 10*time.Second)
+	tcpDialDuration := time.Since(tcpDialStart)
+
+	if tcpErr != nil {
+		// TCP connection failed - log detailed diagnostics
 		t.logger.WithFields(map[string]interface{}{
-			"remote_addr": tcpAddr.String(),
-			"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
-			"error_type":  classifyDialError(err),
-		}).WithError(err).Error("Failed to dial NTCP2 connection")
+			"remote_addr":   tcpAddr.String(),
+			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
+			"error":         tcpErr.Error(),
+			"error_type":    classifyDialError(tcpErr),
+			"duration_ms":   tcpDialDuration.Milliseconds(),
+			"syscall_error": getSyscallError(tcpErr),
+		}).Error("TCP connection failed before noise handshake")
+		return nil, fmt.Errorf("TCP dial failed to %s: %w", tcpAddr.String(), tcpErr)
+	}
+	tcpConn.Close() // Close test connection
+
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr": tcpAddr.String(),
+		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
+		"duration_ms": tcpDialDuration.Milliseconds(),
+	}).Info("TCP connection successful, attempting noise handshake")
+
+	// Now attempt full NTCP2 handshake
+	t.logger.WithField("remote_addr", tcpAddr.String()).Info("Dialing NTCP2 connection")
+	handshakeStart := time.Now()
+	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddr.String(), config)
+	handshakeDuration := time.Since(handshakeStart)
+
+	if err != nil {
+		// PRIORITY 2: Enhanced structured logging with all error details
+		t.logger.WithFields(map[string]interface{}{
+			"remote_addr":   tcpAddr.String(),
+			"peer_hash":     fmt.Sprintf("%x", peerHashBytes[:8]),
+			"error_type":    classifyDialError(err),
+			"error_message": err.Error(),
+			"duration_ms":   handshakeDuration.Milliseconds(),
+			"syscall_error": getSyscallError(err),
+			"tcp_success":   true, // TCP succeeded but handshake failed
+		}).Error("Failed to dial NTCP2 connection")
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
 	}
 
-	t.logger.WithField("remote_addr", tcpAddr.String()).Info("NTCP2 connection established")
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr":       tcpAddr.String(),
+		"peer_hash":         fmt.Sprintf("%x", peerHashBytes[:8]),
+		"total_duration_ms": time.Since(tcpDialStart).Milliseconds(),
+	}).Info("NTCP2 connection established")
 	return conn, nil
 }
 
@@ -419,6 +464,27 @@ func classifyDialError(err error) string {
 	default:
 		return "unknown"
 	}
+}
+
+// getSyscallError extracts syscall error details from network errors
+func getSyscallError(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	// Unwrap to find syscall.Errno
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if opErr.Err != nil {
+			var syscallErr syscall.Errno
+			if errors.As(opErr.Err, &syscallErr) {
+				return fmt.Sprintf("syscall.Errno(%d): %s", syscallErr, syscallErr.Error())
+			}
+			return fmt.Sprintf("op_error: %s", opErr.Err.Error())
+		}
+	}
+
+	return "not_syscall_error"
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {

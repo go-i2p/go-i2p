@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
@@ -251,7 +253,86 @@ func debugPrintConfig() {
 		return
 	}
 
-	log.Debugf("Current configuration:\n%s", string(yamlData))
+	log.Debugf("Current configuration:\\n%s", string(yamlData))
+}
+
+// testNetworkConnectivity performs basic network connectivity checks at startup
+// PRIORITY 3: Validate that the router has external network access
+func testNetworkConnectivity() error {
+	log.WithFields(logger.Fields{
+		"at":     "testNetworkConnectivity",
+		"phase":  "startup",
+		"reason": "validating external network access",
+	}).Info("running network connectivity pre-check")
+
+	// Test 1: DNS resolution
+	log.Debug("Testing DNS resolution...")
+	testHosts := []string{
+		"reseed.i2p-projekt.de",
+		"reseed-fr.i2p2.no",
+		"reseed.i2p.vzaws.com",
+	}
+
+	dnsSuccess := false
+	for _, host := range testHosts {
+		addrs, err := net.LookupHost(host)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"host":  host,
+				"error": err.Error(),
+			}).Warn("DNS lookup failed for reseed host")
+			continue
+		}
+		log.WithFields(logger.Fields{
+			"host":       host,
+			"resolved":   len(addrs),
+			"first_addr": addrs[0],
+		}).Debug("DNS resolution successful")
+		dnsSuccess = true
+		break
+	}
+
+	if !dnsSuccess {
+		return fmt.Errorf("DNS resolution failed for all test hosts - check network/DNS configuration")
+	}
+
+	// Test 2: TCP connectivity to known I2P reseed server
+	log.Debug("Testing TCP connectivity to reseed server...")
+	tcpTestHosts := []string{
+		"reseed.i2p-projekt.de:443",
+		"reseed-fr.i2p2.no:443",
+		"reseed.i2p.vzaws.com:8443",
+	}
+
+	tcpSuccess := false
+	for _, hostPort := range tcpTestHosts {
+		conn, err := net.DialTimeout("tcp", hostPort, 5*time.Second)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"target": hostPort,
+				"error":  err.Error(),
+			}).Warn("TCP connectivity test failed")
+			continue
+		}
+		conn.Close()
+		log.WithFields(logger.Fields{
+			"target": hostPort,
+		}).Debug("TCP connectivity test successful")
+		tcpSuccess = true
+		break
+	}
+
+	if !tcpSuccess {
+		return fmt.Errorf("TCP connectivity failed to all test hosts - check firewall/network configuration")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "testNetworkConnectivity",
+		"phase":  "startup",
+		"result": "success",
+	}).Info("Network connectivity pre-check passed - external access confirmed")
+
+	return nil
 }
 
 func runRouter() {
@@ -298,6 +379,25 @@ func runRouter() {
 		"at":     "runRouter",
 		"phase":  "startup",
 		"step":   3,
+		"reason": "testing network connectivity",
+	}).Debug("running network pre-checks")
+
+	// PRIORITY 3: Test basic network connectivity before starting router
+	if err := testNetworkConnectivity(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "runRouter",
+			"phase":  "startup",
+			"step":   3,
+			"error":  err.Error(),
+			"reason": "network connectivity check failed",
+		}).Warn("Network connectivity test failed - router may not be able to connect to peers")
+		// Continue anyway - may work if router has different network config
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "startup",
+		"step":   4,
 		"reason": "initiating router creation",
 	}).Debug("starting up i2p router")
 
