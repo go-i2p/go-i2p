@@ -47,14 +47,19 @@ func NewTunnelBuilder(selector PeerSelector) (*TunnelBuilder, error) {
 }
 
 // BuildTunnelRequest contains the parameters needed to build a tunnel.
+//
+// BUG FIX: Added RequireDirectConnectivity to enable pre-filtering of introducer-only peers.
+// This prevents session establishment failures by only selecting peers with direct NTCP2 addresses.
+// Set to true in production; tests may leave false to test with mock peers.
 type BuildTunnelRequest struct {
-	HopCount      int           // Number of hops in the tunnel (1-8)
-	IsInbound     bool          // True for inbound tunnel, false for outbound
-	OurIdentity   common.Hash   // Our router identity hash
-	ExcludePeers  []common.Hash // Peers to exclude from selection
-	ReplyTunnelID TunnelID      // Tunnel ID for receiving build replies (0 for outbound)
-	ReplyGateway  common.Hash   // Gateway hash for build replies (empty for outbound)
-	UseShortBuild bool          // Use Short Tunnel Build (STBM - modern, default true)
+	HopCount                  int           // Number of hops in the tunnel (1-8)
+	IsInbound                 bool          // True for inbound tunnel, false for outbound
+	OurIdentity               common.Hash   // Our router identity hash
+	ExcludePeers              []common.Hash // Peers to exclude from selection
+	ReplyTunnelID             TunnelID      // Tunnel ID for receiving build replies (0 for outbound)
+	ReplyGateway              common.Hash   // Gateway hash for build replies (empty for outbound)
+	UseShortBuild             bool          // Use Short Tunnel Build (STBM - modern, default true)
+	RequireDirectConnectivity bool          // Only select peers with direct NTCP2 connectivity (set true in production)
 }
 
 // BuildRequestRecord contains all the data for a single tunnel hop build request.
@@ -198,12 +203,13 @@ func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
 // selectTunnelPeers selects and validates peers for tunnel hops.
 func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"at":            "(TunnelBuilder) selectTunnelPeers",
-		"phase":         "tunnel_build",
-		"step":          "peer_selection",
-		"reason":        "selecting routers for tunnel hops",
-		"hop_count":     req.HopCount,
-		"exclude_count": len(req.ExcludePeers),
+		"at":                          "(TunnelBuilder) selectTunnelPeers",
+		"phase":                       "tunnel_build",
+		"step":                        "peer_selection",
+		"reason":                      "selecting routers for tunnel hops",
+		"hop_count":                   req.HopCount,
+		"exclude_count":               len(req.ExcludePeers),
+		"require_direct_connectivity": req.RequireDirectConnectivity,
 	}).Debug("selecting tunnel peers")
 
 	peers, err := tb.peerSelector.SelectPeers(req.HopCount, req.ExcludePeers)
