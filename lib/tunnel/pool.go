@@ -20,6 +20,7 @@ type TunnelState struct {
 	CreatedAt     time.Time        // When tunnel building started
 	ResponseCount int              // Number of responses received
 	Responses     []BuildResponse  // Responses from each hop
+	IsInbound     bool             // True if this is an inbound tunnel
 }
 
 // TunnelBuildState represents different states during tunnel building

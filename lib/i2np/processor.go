@@ -669,11 +669,13 @@ type buildRequest struct {
 	createdAt     time.Time                // When the request was created
 	retryCount    int                      // Number of retry attempts
 	useShortBuild bool                     // True if using STBM, false for legacy VTB
+	isInbound     bool                     // True if this is an inbound tunnel
 }
 
 // TunnelManager coordinates tunnel building and management
 type TunnelManager struct {
-	pool            *tunnel.Pool
+	inboundPool     *tunnel.Pool
+	outboundPool    *tunnel.Pool
 	sessionProvider SessionProvider
 	peerSelector    tunnel.PeerSelector
 	pendingBuilds   map[int]*buildRequest // Track pending builds by message ID
@@ -685,10 +687,20 @@ type TunnelManager struct {
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
 // Starts a background goroutine for cleaning up expired build requests.
+// Creates separate inbound and outbound tunnel pools for proper statistics tracking.
 func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
-	pool := tunnel.NewTunnelPool(peerSelector)
+	// Create separate pools for inbound and outbound tunnels
+	inboundConfig := tunnel.DefaultPoolConfig()
+	inboundConfig.IsInbound = true
+	inboundPool := tunnel.NewTunnelPoolWithConfig(peerSelector, inboundConfig)
+
+	outboundConfig := tunnel.DefaultPoolConfig()
+	outboundConfig.IsInbound = false
+	outboundPool := tunnel.NewTunnelPoolWithConfig(peerSelector, outboundConfig)
+
 	tm := &TunnelManager{
-		pool:          pool,
+		inboundPool:   inboundPool,
+		outboundPool:  outboundPool,
 		peerSelector:  peerSelector,
 		pendingBuilds: make(map[int]*buildRequest),
 		cleanupStop:   make(chan struct{}),
@@ -697,9 +709,9 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	// Initialize ReplyProcessor with default config for reply decryption
 	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
 
-	// Wire retry callback: tunnel build timeouts will automatically retry via pool
+	// Wire retry callback for both pools: tunnel build timeouts will automatically retry
 	// This fixes Issue #4 from AUDIT.md: "No retry callback configured"
-	tm.replyProcessor.SetRetryCallback(pool.RetryTunnelBuild)
+	tm.replyProcessor.SetRetryCallback(tm.retryTunnelBuild)
 
 	log.WithFields(logger.Fields{
 		"at":     "NewTunnelManager",
@@ -711,6 +723,12 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	tm.cleanupTicker = time.NewTicker(30 * time.Second)
 	go tm.cleanupExpiredBuilds()
 
+	log.WithFields(logger.Fields{
+		"at":     "NewTunnelManager",
+		"phase":  "initialization",
+		"reason": "tunnel manager initialized with separate inbound/outbound pools",
+	}).Debug("tunnel manager created")
+
 	return tm
 }
 
@@ -721,6 +739,14 @@ func (tm *TunnelManager) Stop() {
 		tm.cleanupTicker.Stop()
 	}
 	close(tm.cleanupStop)
+
+	if tm.inboundPool != nil {
+		tm.inboundPool.Stop()
+	}
+	if tm.outboundPool != nil {
+		tm.outboundPool.Stop()
+	}
+
 	log.Debug("Tunnel manager stopped")
 }
 
@@ -729,10 +755,38 @@ func (tm *TunnelManager) SetSessionProvider(provider SessionProvider) {
 	tm.sessionProvider = provider
 }
 
-// GetPool returns the tunnel pool managed by this TunnelManager.
-// This allows the router to access the pool for message routing through tunnels.
+// GetPool returns the outbound tunnel pool for backward compatibility.
+// Deprecated: Use GetInboundPool() or GetOutboundPool() for specific pools.
 func (tm *TunnelManager) GetPool() *tunnel.Pool {
-	return tm.pool
+	return tm.outboundPool
+}
+
+// GetInboundPool returns the inbound tunnel pool.
+func (tm *TunnelManager) GetInboundPool() *tunnel.Pool {
+	return tm.inboundPool
+}
+
+// GetOutboundPool returns the outbound tunnel pool.
+func (tm *TunnelManager) GetOutboundPool() *tunnel.Pool {
+	return tm.outboundPool
+}
+
+// getPoolForTunnel returns the appropriate pool based on tunnel direction.
+func (tm *TunnelManager) getPoolForTunnel(isInbound bool) *tunnel.Pool {
+	if isInbound {
+		return tm.inboundPool
+	}
+	return tm.outboundPool
+}
+
+// retryTunnelBuild routes retry requests to the appropriate pool.
+// This wrapper is used by the ReplyProcessor for automatic tunnel build retries.
+func (tm *TunnelManager) retryTunnelBuild(tunnelID tunnel.TunnelID, isInbound bool, hopCount int) error {
+	pool := tm.getPoolForTunnel(isInbound)
+	if pool == nil {
+		return fmt.Errorf("pool not initialized for isInbound=%v", isInbound)
+	}
+	return pool.RetryTunnelBuild(tunnelID, isInbound, hopCount)
 }
 
 // BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.
@@ -757,7 +811,8 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	}
 
 	tunnelState := tm.createTunnelStateFromResult(result)
-	tm.pool.AddTunnel(tunnelState)
+	pool := tm.getPoolForTunnel(req.IsInbound)
+	pool.AddTunnel(tunnelState)
 	tm.trackPendingBuild(result, messageID)
 
 	// Register with ReplyProcessor for decryption key management
@@ -768,7 +823,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		req.IsInbound,
 		len(result.Hops),
 	); regErr != nil {
-		tm.cleanupFailedBuild(result.TunnelID, messageID)
+		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
 		return 0, fmt.Errorf("failed to register pending build: %w", regErr)
 	}
 
@@ -780,7 +835,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 
 	err = tm.sendBuildMessage(result, messageID)
 	if err != nil {
-		tm.cleanupFailedBuild(result.TunnelID, messageID)
+		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
 		return 0, fmt.Errorf("failed to send build request: %w", err)
 	}
 
@@ -816,6 +871,7 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 		State:     tunnel.TunnelBuilding,
 		CreatedAt: time.Now(),
 		Responses: make([]tunnel.BuildResponse, 0, len(result.Hops)),
+		IsInbound: result.IsInbound,
 	}
 
 	for i, peer := range result.Hops {
@@ -845,12 +901,14 @@ func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, mes
 		createdAt:     time.Now(),
 		retryCount:    0,
 		useShortBuild: result.UseShortBuild,
+		isInbound:     result.IsInbound,
 	}
 }
 
 // cleanupFailedBuild removes tunnel and pending build request on send failure
-func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID int) {
-	tm.pool.RemoveTunnel(tunnelID)
+func (tm *TunnelManager) cleanupFailedBuild(tunnelID tunnel.TunnelID, messageID int, isInbound bool) {
+	pool := tm.getPoolForTunnel(isInbound)
+	pool.RemoveTunnel(tunnelID)
 	tm.buildMutex.Lock()
 	delete(tm.pendingBuilds, messageID)
 	tm.buildMutex.Unlock()
@@ -1018,7 +1076,8 @@ func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error {
 
 	tunnelID := tm.generateTunnelID()
 	tunnelState := tm.createTunnelState(tunnelID, count, peers)
-	tm.pool.AddTunnel(tunnelState)
+	// BuildTunnelWithBuilder is legacy interface, defaults to outbound tunnels
+	tm.outboundPool.AddTunnel(tunnelState)
 
 	return tm.sendTunnelBuildRequests(records, peers[:count], tunnelID)
 }
@@ -1218,7 +1277,7 @@ func (tm *TunnelManager) processUncorrelatedReply(handler TunnelReplyHandler, me
 	}
 
 	// Update tunnel states if possible (without decryption)
-	if tm.pool != nil {
+	if tm.inboundPool != nil || tm.outboundPool != nil {
 		tm.updateTunnelStatesFromReply(messageID, records, nil)
 	}
 
@@ -1231,7 +1290,7 @@ func (tm *TunnelManager) processCorrelatedReply(handler TunnelReplyHandler, req 
 	err := tm.replyProcessor.ProcessBuildReply(handler, req.tunnelID)
 
 	// Update tunnel state based on reply processing results
-	if tm.pool != nil {
+	if tm.inboundPool != nil || tm.outboundPool != nil {
 		tm.updateTunnelStatesFromReply(messageID, records, err)
 	} else {
 		log.Warn("No tunnel pool available for state updates")
@@ -1326,7 +1385,7 @@ func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, m
 		"error":      replyErr,
 	}).Warn("Tunnel build failed")
 
-	go tm.cleanupFailedTunnel(matchingTunnel.ID)
+	go tm.cleanupFailedTunnel(matchingTunnel.ID, matchingTunnel.IsInbound)
 }
 
 // findMatchingBuildingTunnel finds a tunnel that's currently building based on the message ID.
@@ -1342,7 +1401,8 @@ func (tm *TunnelManager) findMatchingBuildingTunnel(messageID int) *tunnel.Tunne
 	}
 
 	// Look up the tunnel state from the pool
-	tunnelState, exists := tm.pool.GetTunnel(req.tunnelID)
+	pool := tm.getPoolForTunnel(req.isInbound)
+	tunnelState, exists := pool.GetTunnel(req.tunnelID)
 	if !exists {
 		log.WithField("tunnel_id", req.tunnelID).Warn("Tunnel state not found in pool")
 		return nil
@@ -1358,12 +1418,13 @@ func (tm *TunnelManager) findMatchingBuildingTunnel(messageID int) *tunnel.Tunne
 }
 
 // cleanupFailedTunnel removes a failed tunnel from the pool after a delay
-func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID) {
+func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID, isInbound bool) {
 	// Small delay before cleanup to allow for logging/debugging
 	time.Sleep(1 * time.Second)
 
-	if tm.pool != nil {
-		tm.pool.RemoveTunnel(tunnelID)
+	pool := tm.getPoolForTunnel(isInbound)
+	if pool != nil {
+		pool.RemoveTunnel(tunnelID)
 		log.WithField("tunnel_id", tunnelID).Debug("Cleaned up failed tunnel")
 	}
 }
@@ -1415,7 +1476,8 @@ func (tm *TunnelManager) isRequestExpired(req *buildRequest, now time.Time, time
 
 // handleExpiredRequest marks tunnel as failed and schedules cleanup.
 func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now time.Time) {
-	tunnelState, exists := tm.pool.GetTunnel(req.tunnelID)
+	pool := tm.getPoolForTunnel(req.isInbound)
+	tunnelState, exists := pool.GetTunnel(req.tunnelID)
 	if !exists {
 		return
 	}
@@ -1427,7 +1489,7 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 		"age":        now.Sub(req.createdAt),
 	}).Warn("Tunnel build timed out")
 
-	go tm.cleanupFailedTunnel(req.tunnelID)
+	go tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 }
 
 // removeExpiredFromMap deletes expired build requests from the pending map.
@@ -1463,9 +1525,10 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		delete(tm.pendingBuilds, messageID)
 
 		// Mark tunnel as failed and schedule async cleanup
-		if tunnelState, exists := tm.pool.GetTunnel(req.tunnelID); exists {
+		pool := tm.getPoolForTunnel(req.isInbound)
+		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
 			tunnelState.State = tunnel.TunnelFailed
-			go tm.cleanupFailedTunnel(req.tunnelID)
+			go tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 		}
 
 		log.WithFields(logger.Fields{
@@ -1556,8 +1619,23 @@ func (dm *DatabaseManager) SetSessionProvider(provider SessionProvider) {
 // SetPeerSelector sets the peer selector for the TunnelManager
 func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector) {
 	mr.tunnelMgr.peerSelector = selector
-	if mr.tunnelMgr.pool != nil {
-		mr.tunnelMgr.pool = tunnel.NewTunnelPool(selector)
+	// Recreate pools with new selector if they exist
+	if mr.tunnelMgr.inboundPool != nil || mr.tunnelMgr.outboundPool != nil {
+		// Stop existing pools
+		if mr.tunnelMgr.inboundPool != nil {
+			mr.tunnelMgr.inboundPool.Stop()
+		}
+		if mr.tunnelMgr.outboundPool != nil {
+			mr.tunnelMgr.outboundPool.Stop()
+		}
+		// Create new pools
+		inboundConfig := tunnel.DefaultPoolConfig()
+		inboundConfig.IsInbound = true
+		mr.tunnelMgr.inboundPool = tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
+
+		outboundConfig := tunnel.DefaultPoolConfig()
+		outboundConfig.IsInbound = false
+		mr.tunnelMgr.outboundPool = tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
 	}
 }
 

@@ -260,7 +260,7 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 }
 
 // GetTunnelStats returns detailed tunnel statistics.
-// Collects statistics from tunnel manager pools.
+// Collects statistics from separate inbound and outbound tunnel manager pools.
 func (rsp *routerStatsProvider) GetTunnelStats() TunnelStats {
 	stats := TunnelStats{}
 
@@ -270,15 +270,17 @@ func (rsp *routerStatsProvider) GetTunnelStats() TunnelStats {
 		return stats
 	}
 
-	// Currently TunnelManager only has one pool
-	// Separate inbound/outbound/participating tracking not yet implemented
-	if pool := tm.GetPool(); pool != nil {
-		poolStats := pool.GetPoolStats()
-		// For now, split totals as estimates (real tracking TODO)
-		stats.InboundActive = poolStats.Active / 2
-		stats.OutboundActive = poolStats.Active / 2
-		stats.InboundBuilding = poolStats.Building / 2
-		stats.OutboundBuilding = poolStats.Building / 2
+	// Get statistics from separate inbound and outbound pools
+	if inboundPool := tm.GetInboundPool(); inboundPool != nil {
+		inboundStats := inboundPool.GetPoolStats()
+		stats.InboundActive = inboundStats.Active
+		stats.InboundBuilding = inboundStats.Building
+	}
+
+	if outboundPool := tm.GetOutboundPool(); outboundPool != nil {
+		outboundStats := outboundPool.GetPoolStats()
+		stats.OutboundActive = outboundStats.Active
+		stats.OutboundBuilding = outboundStats.Building
 	}
 
 	return stats

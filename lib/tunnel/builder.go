@@ -88,6 +88,7 @@ type TunnelBuildResult struct {
 	ReplyKeys     []session_key.SessionKey // Reply decryption keys for each hop
 	ReplyIVs      [][16]byte               // Reply IVs for each hop
 	UseShortBuild bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
+	IsInbound     bool                     // True if this is an inbound tunnel
 }
 
 // CreateBuildRequest generates a complete tunnel build request with encrypted records.
@@ -179,6 +180,7 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		ReplyKeys:     replyKeys,
 		ReplyIVs:      replyIVs,
 		UseShortBuild: req.UseShortBuild,
+		IsInbound:     req.IsInbound,
 	}, nil
 }
 

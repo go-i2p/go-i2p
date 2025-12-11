@@ -109,11 +109,12 @@ func TestTunnelManager_CleanupFailedTunnel(t *testing.T) {
 	peerSelector := &SimpleMockPeerSelector{}
 	tm := NewTunnelManager(peerSelector)
 
-	// Test cleanup (should not panic)
+	// Test cleanup for both inbound and outbound tunnels (should not panic)
 	testTunnelID := tunnel.TunnelID(12345)
-	go tm.cleanupFailedTunnel(testTunnelID)
+	go tm.cleanupFailedTunnel(testTunnelID, false) // outbound
+	go tm.cleanupFailedTunnel(testTunnelID, true)  // inbound
 
-	// Give goroutine time to execute (this is primarily a no-panic test)
+	// Give goroutines time to execute (this is primarily a no-panic test)
 	// In practice, we can't easily verify the tunnel was removed without
 	// better pool access methods
 }
