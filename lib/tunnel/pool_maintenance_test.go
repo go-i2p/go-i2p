@@ -405,7 +405,8 @@ func TestAttemptBuildTunnelsWithFailures(t *testing.T) {
 
 	success := pool.attemptBuildTunnels(2)
 	assert.False(t, success) // All builds failed
-	assert.Equal(t, 2, builder.GetBuildCount())
+	// Each tunnel attempt retries up to 3 times on failure: 2 tunnels × 3 retries = 6 build calls
+	assert.Equal(t, 6, builder.GetBuildCount())
 	assert.Empty(t, builder.builtTunnels)
 }
 

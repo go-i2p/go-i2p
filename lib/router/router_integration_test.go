@@ -67,7 +67,7 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 	// Create a temporary directory for NetDB
 	tempDir := t.TempDir()
-	
+
 	// Create a router with proper NetDB initialization
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
