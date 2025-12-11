@@ -287,14 +287,21 @@ func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo
 		}
 	}
 
+	// Enhanced metrics for Critical Priority Issue #2: NetDB Composition Analysis
+	// This detailed breakdown helps operators understand NetDB quality
 	log.WithFields(logger.Fields{
+		"at":                     "filterAvailablePeers",
+		"phase":                  "peer_filtering",
 		"total":                  len(allRouterInfos),
 		"available":              len(available),
 		"skipped_excluded":       skippedExcluded,
 		"skipped_no_addresses":   skippedNoAddresses,
 		"skipped_no_valid_ntcp2": skippedNoValidNTCP2,
 		"skipped_hash_error":     skippedHashError,
-	}).Debug("Peer filtering complete")
+		"directly_contactable":   len(available),
+		"introducer_only":        skippedNoValidNTCP2,
+		"usability_ratio":        fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
+	}).Info("Peer filtering complete")
 
 	return available
 }
@@ -335,12 +342,19 @@ func (db *StdNetDB) SelectPeers(count int, exclude []common.Hash) ([]router_info
 	available := db.filterAvailablePeers(allRouterInfos, excludeMap)
 
 	if len(available) == 0 {
+		// Enhanced metrics for Critical Priority Issue #2: Peer Selection Diagnostics
+		// This provides operators with actionable information about NetDB composition
 		log.WithFields(logger.Fields{
+			"at":              "StdNetDB.SelectPeers",
+			"phase":           "peer_selection",
 			"total_peers":     len(allRouterInfos),
 			"excluded_peers":  len(exclude),
 			"filtered_peers":  len(available),
 			"requested_count": count,
-		}).Warn("No directly-contactable peers available after filtering - all peers may require introducers or lack valid NTCP2 addresses")
+			"diagnosis":       "all peers require introducers or lack valid NTCP2 addresses",
+			"recommendation":  "implement NTCP2 introducer support or add SSU2 transport",
+			"impact":          "tunnel building will fail until directly-contactable peers are available",
+		}).Error("No directly-contactable peers available after filtering")
 		return nil, fmt.Errorf("insufficient suitable peers after filtering: need %d directly-contactable peers, but 0 available from %d total peers (%d excluded)", count, len(allRouterInfos), len(exclude))
 	}
 

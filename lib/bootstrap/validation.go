@@ -145,15 +145,17 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 	// Note: Missing host key is NORMAL for introducer-based NTCP2 addresses
 	host, err := addr.Host()
 	if err != nil {
-		// This is expected for introducer-only addresses - log at debug level
+		// This is expected for introducer-only addresses - log at info level for visibility
 		// Introducer-based addresses are used for routers behind NAT/firewalls
+		// This is NOT an error - it's standard I2P protocol behavior
 		log.WithFields(logger.Fields{
 			"at":        "ValidateNTCP2Address",
 			"phase":     "validation",
 			"transport": "ntcp2",
-			"reason":    "host key missing - this is normal for introducer-based/firewalled routers",
+			"reason":    "host key missing - normal for introducer-based/firewalled routers",
 			"error":     err.Error(),
-		}).Debug("NTCP2 address is introducer-only (no direct connectivity)")
+			"note":      "requires introducer support (not yet implemented)",
+		}).Info("NTCP2 address is introducer-only (no direct connectivity)")
 		return fmt.Errorf("NTCP2 address cannot retrieve host (introducer-based): %w", err)
 	}
 

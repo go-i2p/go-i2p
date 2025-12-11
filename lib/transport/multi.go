@@ -164,7 +164,15 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			return
 		}
 	}
-	// Enhanced logging for Issue #2: Complete session establishment failure
+	// Enhanced logging for Critical Priority Issue #3: Session Establishment Diagnostics
+	// Analyze peer's address types to provide actionable diagnostics
+	addressTypes := make([]string, 0, len(routerInfo.RouterAddresses()))
+	for _, addr := range routerInfo.RouterAddresses() {
+		style := addr.TransportStyle()
+		if styleBytes, err := style.Data(); err == nil {
+			addressTypes = append(addressTypes, string(styleBytes))
+		}
+	}
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
 		"phase":          "session_establishment",
@@ -172,7 +180,10 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		"peer_hash":      fmt.Sprintf("%x", peerHash[:]),
 		"num_transports": len(tmux.trans),
 		"addresses":      len(routerInfo.RouterAddresses()),
+		"address_types":  addressTypes,
 		"impact":         "peer completely unreachable",
+		"diagnosis":      "peer may only support introducer-based connections or SSU2",
+		"recommendation": "implement introducer support or SSU2 transport",
 	}).Error("failed to get session - no compatible transports found")
 	// we failed to get a session for this routerInfo
 	err = ErrNoTransportAvailable
