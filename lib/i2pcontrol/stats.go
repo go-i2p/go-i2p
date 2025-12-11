@@ -152,6 +152,9 @@ type RouterAccess interface {
 
 	// IsRunning returns whether the router is currently operational
 	IsRunning() bool
+
+	// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates in bytes per second
+	GetBandwidthRates() (rate1s, rate15s uint64)
 }
 
 // NewRouterStatsProvider creates a new statistics provider for the given router.
@@ -172,18 +175,18 @@ func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProv
 }
 
 // GetBandwidthStats returns current bandwidth statistics.
-// Currently returns zero values as bandwidth tracking is not implemented.
-//
-// TODO: Implement actual bandwidth tracking by:
-//   - Adding byte counters to transport layer
-//   - Computing rolling averages (15s, 1m, 5m)
-//   - Tracking per-tunnel bandwidth
+// Returns the 1-second rolling average bandwidth rate from the router's bandwidth tracker.
+// Rates are in bytes per second.
 func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
-	// Bandwidth tracking not yet implemented
-	// Return zero values as placeholder
+	// Get the 1-second rolling average rate (we ignore 15s for now)
+	rate1s, _ := rsp.router.GetBandwidthRates()
+
+	// Convert from bytes per second to the format expected by I2PControl
+	// The rate represents total bandwidth (inbound + outbound combined)
+	// For simplicity, we return it as outbound rate (Java I2P behavior)
 	return BandwidthStats{
-		InboundRate:  0.0,
-		OutboundRate: 0.0,
+		InboundRate:  0.0,             // Not tracked separately yet
+		OutboundRate: float64(rate1s), // 1-second average in bytes/sec
 	}
 }
 

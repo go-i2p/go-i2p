@@ -33,6 +33,11 @@ func (m *mockRouterAccess) IsRunning() bool {
 	return m.running
 }
 
+func (m *mockRouterAccess) GetBandwidthRates() (rate1s, rate15s uint64) {
+	// Return test values
+	return 1024, 2048
+}
+
 // TestNewRouterStatsProvider tests stats provider creation
 func TestNewRouterStatsProvider(t *testing.T) {
 	router := &mockRouterAccess{running: true}
@@ -72,12 +77,12 @@ func TestGetBandwidthStats(t *testing.T) {
 
 	stats := provider.GetBandwidthStats()
 
-	// Currently should return zero values (not implemented)
+	// Should return bandwidth from mock (1024 bytes/sec 1s rate, 2048 bytes/sec 15s rate)
 	if stats.InboundRate != 0.0 {
 		t.Errorf("InboundRate = %f, want 0.0", stats.InboundRate)
 	}
-	if stats.OutboundRate != 0.0 {
-		t.Errorf("OutboundRate = %f, want 0.0", stats.OutboundRate)
+	if stats.OutboundRate != 1024.0 {
+		t.Errorf("OutboundRate = %f, want 1024.0", stats.OutboundRate)
 	}
 }
 

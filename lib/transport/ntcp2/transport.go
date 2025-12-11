@@ -567,6 +567,24 @@ func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
 }
 
+// GetTotalBandwidth returns the total bytes sent and received across all active sessions.
+// This aggregates bandwidth statistics from all sessions managed by this transport.
+func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64) {
+	t.sessions.Range(func(key, value interface{}) bool {
+		if session, ok := value.(*NTCP2Session); ok {
+			sent, received := session.GetBandwidthStats()
+			totalBytesSent += sent
+			totalBytesReceived += received
+		}
+		return true // Continue iteration
+	})
+	t.logger.WithFields(map[string]interface{}{
+		"total_bytes_sent":     totalBytesSent,
+		"total_bytes_received": totalBytesReceived,
+	}).Debug("Aggregated bandwidth across all sessions")
+	return totalBytesSent, totalBytesReceived
+}
+
 // Close closes the transport cleanly.
 func (t *NTCP2Transport) Close() error {
 	t.logger.Info("Closing NTCP2 transport")

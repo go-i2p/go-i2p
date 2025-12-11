@@ -112,12 +112,12 @@ func TestGetRateHandler_AllFields(t *testing.T) {
 		t.Error("missing i2p.router.net.bw.outbound.15s")
 	}
 
-	// Should return 0.0 (not yet implemented)
+	// Should return actual bandwidth from mock (1024 bytes/sec from GetBandwidthRates)
 	if resultMap["i2p.router.net.bw.inbound.15s"] != 0.0 {
 		t.Errorf("inbound = %v, want 0.0", resultMap["i2p.router.net.bw.inbound.15s"])
 	}
-	if resultMap["i2p.router.net.bw.outbound.15s"] != 0.0 {
-		t.Errorf("outbound = %v, want 0.0", resultMap["i2p.router.net.bw.outbound.15s"])
+	if resultMap["i2p.router.net.bw.outbound.15s"] != 1024.0 {
+		t.Errorf("outbound = %v, want 1024.0", resultMap["i2p.router.net.bw.outbound.15s"])
 	}
 }
 

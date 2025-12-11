@@ -71,6 +71,9 @@ type Router struct {
 		Start() error
 		Stop()
 	}
+
+	// bandwidthTracker tracks bandwidth usage and calculates rolling averages
+	bandwidthTracker *BandwidthTracker
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -232,6 +235,34 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 	return nil
 }
 
+// getTotalBandwidth returns the total bytes sent and received from all transports.
+// This method is used by the bandwidth tracker to sample bandwidth usage.
+func (r *Router) getTotalBandwidth() (sent, received uint64) {
+	if r.TransportMuxer == nil {
+		return 0, 0
+	}
+
+	// Get all transports from the muxer
+	for _, t := range r.TransportMuxer.GetTransports() {
+		// Check if this is an NTCP2 transport
+		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
+			s, rcv := ntcp2Transport.GetTotalBandwidth()
+			sent += s
+			received += rcv
+		}
+	}
+	return sent, received
+}
+
+// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates.
+// Returns rates in bytes per second.
+func (r *Router) GetBandwidthRates() (rate1s, rate15s uint64) {
+	if r.bandwidthTracker == nil {
+		return 0, 0
+	}
+	return r.bandwidthTracker.GetRates()
+}
+
 // create router from configuration
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	log.WithFields(logger.Fields{
@@ -303,6 +334,7 @@ func (r *Router) Stop() {
 		}).Debug("router context cancelled")
 	}
 
+	r.stopBandwidthTracker()
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
 	r.stopNetDB()
@@ -342,6 +374,13 @@ func (r *Router) stopNetDB() {
 }
 
 // stopI2CPServer shuts down the I2CP server if it is running and logs the result.
+func (r *Router) stopBandwidthTracker() {
+	if r.bandwidthTracker != nil {
+		r.bandwidthTracker.Stop()
+		log.Debug("Bandwidth tracker stopped")
+	}
+}
+
 func (r *Router) stopI2CPServer() {
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {
@@ -401,6 +440,16 @@ func (r *Router) Start() {
 		"step":   2,
 		"reason": "lifecycle context initialized",
 	}).Debug("router context initialized")
+
+	// Initialize and start bandwidth tracking
+	r.bandwidthTracker = NewBandwidthTracker()
+	r.bandwidthTracker.Start(r.getTotalBandwidth)
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Start",
+		"phase":  "startup",
+		"step":   3,
+		"reason": "bandwidth tracker initialized",
+	}).Debug("bandwidth tracker started")
 
 	// Start I2CP server if enabled
 	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {

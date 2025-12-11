@@ -285,3 +285,12 @@ type acceptResult struct {
 	conn net.Conn
 	err  error
 }
+
+// GetTransports returns a copy of the slice of transports in this muxer.
+// This allows external code to iterate over transports without exposing internal state.
+func (tmux *TransportMuxer) GetTransports() []Transport {
+	// Return a copy to prevent external modifications
+	transports := make([]Transport, len(tmux.trans))
+	copy(transports, tmux.trans)
+	return transports
+}

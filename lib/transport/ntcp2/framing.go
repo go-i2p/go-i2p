@@ -46,17 +46,29 @@ func UnframeI2NPMessage(conn net.Conn) (i2np.I2NPMessage, error) {
 
 // Stream-based unframing for continuous reading
 type I2NPUnframer struct {
-	conn net.Conn
+	conn           net.Conn
+	bytesRead      int // Track bytes read in last operation
+	totalBytesRead int // Track cumulative bytes read
 }
 
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer {
 	return &I2NPUnframer{
-		conn: conn,
+		conn:           conn,
+		bytesRead:      0,
+		totalBytesRead: 0,
 	}
+}
+
+// BytesRead returns the number of bytes read during the last ReadNextMessage call
+func (u *I2NPUnframer) BytesRead() int {
+	return u.bytesRead
 }
 
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	log.Debug("Reading next framed message from connection")
+
+	// Reset byte counter for this read operation
+	u.bytesRead = 0
 
 	// Read the NTCP2 length prefix (4 bytes)
 	lengthBuf := make([]byte, 4)
@@ -97,18 +109,26 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	log.WithFields(map[string]interface{}{
 		"message_type":   msg.Type(),
 		"message_length": length,
+		"bytes_read":     u.bytesRead,
 	}).Debug("Successfully read and unframed I2NP message")
 	return msg, nil
 }
 
 func (u *I2NPUnframer) readFull(buf []byte) error {
 	// Read from the connection until the buffer is full
+	totalLen := len(buf)
 	for len(buf) > 0 {
 		n, err := u.conn.Read(buf)
 		if err != nil {
 			return err
 		}
+		u.bytesRead += n
+		u.totalBytesRead += n
 		buf = buf[n:]
+	}
+	// Ensure we read the full buffer
+	if u.bytesRead < totalLen {
+		return fmt.Errorf("incomplete read: got %d bytes, expected %d", u.bytesRead, totalLen)
 	}
 	return nil
 }

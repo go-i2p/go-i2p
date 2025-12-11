@@ -21,6 +21,11 @@ type NTCP2Session struct {
 	// Queue management
 	sendQueueSize int32 // atomic counter
 
+	// Bandwidth tracking (atomic counters for thread-safe access)
+	// These track cumulative bytes since session start
+	bytesSent     uint64 // atomic: total bytes sent over this session
+	bytesReceived uint64 // atomic: total bytes received over this session
+
 	// Error handling
 	lastError error
 	errorOnce sync.Once
@@ -96,6 +101,12 @@ func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) {
 // SendQueueSize returns how many I2NP messages are not completely sent yet.
 func (s *NTCP2Session) SendQueueSize() int {
 	return int(atomic.LoadInt32(&s.sendQueueSize))
+}
+
+// GetBandwidthStats returns the total bytes sent and received by this session.
+// The values are read atomically and represent cumulative totals since session start.
+func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
+	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
 }
 
 // ReadNextI2NP blocking reads the next fully received I2NP message from this session.
@@ -204,6 +215,8 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 		s.setError(WrapNTCP2Error(err, "writing message"))
 		return false
 	}
+	// Track outbound bandwidth
+	atomic.AddUint64(&s.bytesSent, uint64(bytesWritten))
 	s.logger.WithField("bytes_written", bytesWritten).Debug("Message written successfully")
 	return true
 }
@@ -248,9 +261,16 @@ func (s *NTCP2Session) shouldStopReceiving() bool {
 	}
 }
 
-// readNextMessage reads the next I2NP message from the unframer.
+// readNextMessage reads the next I2NP message from the unframer and tracks bytes received.
 func (s *NTCP2Session) readNextMessage(unframer *I2NPUnframer) (i2np.I2NPMessage, error) {
-	return unframer.ReadNextMessage()
+	msg, err := unframer.ReadNextMessage()
+	if err == nil {
+		// Track bytes received atomically
+		bytesRead := unframer.BytesRead()
+		atomic.AddUint64(&s.bytesReceived, uint64(bytesRead))
+		s.logger.WithField("bytes_read", bytesRead).Debug("Message read successfully")
+	}
+	return msg, err
 }
 
 // handleReceiveError handles errors that occur during message receiving.
