@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 )
@@ -55,14 +56,10 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 		"exclude_count": len(exclude),
 	}).Debug("Selecting peers for tunnel")
 
-	if count <= 0 {
-		log.WithFields(logger.Fields{
-			"at":     "SelectPeers",
-			"count":  count,
-			"reason": "count must be positive",
-		}).Error("Invalid peer count")
-		return nil, fmt.Errorf("count must be > 0")
+	if err := validatePeerCount(count); err != nil {
+		return nil, err
 	}
+
 	peers, err := s.db.SelectPeers(count, exclude)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -73,34 +70,57 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 		return nil, fmt.Errorf("underlying selector error: %w", err)
 	}
 
-	// PRIORITY 4: Enhanced peer diagnostics to understand what peers are selected
 	log.WithFields(logger.Fields{
 		"at":         "SelectPeers",
 		"peer_count": len(peers),
 	}).Debug("Successfully selected peers")
 
-	// Analyze selected peers for reachability characteristics
-	ntcp2Count := 0
-	introducerOnlyCount := 0
-	directlyDialableCount := 0
+	analyzePeerCharacteristics(peers)
+	return peers, nil
+}
 
+// validatePeerCount checks if the peer count is valid and logs errors for invalid counts.
+// Returns an error if count is less than or equal to 0.
+func validatePeerCount(count int) error {
+	if count <= 0 {
+		log.WithFields(logger.Fields{
+			"at":     "validatePeerCount",
+			"count":  count,
+			"reason": "count must be positive",
+		}).Error("Invalid peer count")
+		return fmt.Errorf("count must be > 0")
+	}
+	return nil
+}
+
+// analyzePeerCharacteristics examines selected peers for reachability characteristics
+// and logs diagnostic information about NTCP2 connectivity and dialability.
+func analyzePeerCharacteristics(peers []router_info.RouterInfo) {
+	ntcp2Count, directlyDialableCount, introducerOnlyCount := countPeerTypes(peers)
+
+	log.WithFields(logger.Fields{
+		"at":                  "analyzePeerCharacteristics",
+		"total_peers":         len(peers),
+		"ntcp2_addresses":     ntcp2Count,
+		"directly_dialable":   directlyDialableCount,
+		"introducer_only":     introducerOnlyCount,
+		"dialable_percentage": fmt.Sprintf("%.1f%%", float64(directlyDialableCount)/float64(len(peers))*100),
+	}).Info("Peer selection characteristics for tunnel building")
+
+	warnIfNoDialablePeers(directlyDialableCount, len(peers))
+}
+
+// countPeerTypes iterates through peers and counts NTCP2 addresses, directly dialable peers,
+// and introducer-only peers based on their router address configuration.
+func countPeerTypes(peers []router_info.RouterInfo) (ntcp2Count, directlyDialableCount, introducerOnlyCount int) {
 	for _, peer := range peers {
 		hasDirectNTCP2 := false
 		addresses := peer.RouterAddresses()
 
 		for _, addr := range addresses {
-			style := addr.TransportStyle()
-			styleStr, err := style.Data()
-			if err != nil {
-				continue
-			}
-
-			// Check if this is NTCP2 (case-insensitive)
-			if styleStr == "NTCP2" || styleStr == "ntcp2" {
+			if isNTCP2Address(addr) {
 				ntcp2Count++
-				// Check if address has 'host' key (directly dialable) vs introducer-only
-				_, hostErr := addr.Host()
-				if hostErr == nil {
+				if hasHostKey(addr) {
 					hasDirectNTCP2 = true
 				}
 			}
@@ -109,28 +129,39 @@ func (s *DefaultPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]r
 		if hasDirectNTCP2 {
 			directlyDialableCount++
 		} else if ntcp2Count > 0 {
-			// Has NTCP2 but no direct address - introducer only
 			introducerOnlyCount++
 		}
 	}
+	return ntcp2Count, directlyDialableCount, introducerOnlyCount
+}
 
-	log.WithFields(logger.Fields{
-		"at":                  "SelectPeers",
-		"total_peers":         len(peers),
-		"ntcp2_addresses":     ntcp2Count,
-		"directly_dialable":   directlyDialableCount,
-		"introducer_only":     introducerOnlyCount,
-		"dialable_percentage": fmt.Sprintf("%.1f%%", float64(directlyDialableCount)/float64(len(peers))*100),
-	}).Info("Peer selection characteristics for tunnel building")
+// isNTCP2Address checks if a router address is an NTCP2 transport (case-insensitive).
+// Returns true if the transport style is NTCP2.
+func isNTCP2Address(addr *router_address.RouterAddress) bool {
+	style := addr.TransportStyle()
+	styleStr, err := style.Data()
+	if err != nil {
+		return false
+	}
+	return styleStr == "NTCP2" || styleStr == "ntcp2"
+}
 
-	if directlyDialableCount == 0 && len(peers) > 0 {
+// hasHostKey checks if a router address has a 'host' key indicating it is directly dialable.
+// Returns true if the host key exists without error.
+func hasHostKey(addr *router_address.RouterAddress) bool {
+	_, hostErr := addr.Host()
+	return hostErr == nil
+}
+
+// warnIfNoDialablePeers logs a warning if no directly dialable NTCP2 peers were selected,
+// which may cause tunnel building failures.
+func warnIfNoDialablePeers(directlyDialableCount, totalPeers int) {
+	if directlyDialableCount == 0 && totalPeers > 0 {
 		log.WithFields(logger.Fields{
-			"at":                "SelectPeers",
-			"total_peers":       len(peers),
+			"at":                "warnIfNoDialablePeers",
+			"total_peers":       totalPeers,
 			"directly_dialable": directlyDialableCount,
 			"reason":            "no directly dialable peers selected",
 		}).Warn("WARNING: No directly dialable NTCP2 peers selected - tunnel building may fail")
 	}
-
-	return peers, nil
 }
