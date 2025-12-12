@@ -61,7 +61,7 @@ func (m *mockRouterAccess) IsReseeding() bool {
 
 func (m *mockRouterAccess) GetBandwidthRates() (inbound, outbound uint64) {
 	// Return test values (inbound, outbound in bytes/sec)
-	// Currently inbound tracking is not implemented, so return 0
+	// Mock returns 0 for inbound and 1024 for outbound as test data
 	return 0, 1024
 }
 
