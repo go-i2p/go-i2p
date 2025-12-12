@@ -140,8 +140,9 @@ type Session struct {
 	clientNetDB *netdb.ClientNetDB // Isolated NetDB for this client (LeaseSets only)
 
 	// Session state
-	createdAt time.Time // Session creation time
-	active    bool      // Session is active
+	createdAt    time.Time // Session creation time
+	lastActivity time.Time // Last activity timestamp for timeout tracking
+	active       bool      // Session is active
 
 	// Message queues
 	incomingMessages chan *IncomingMessage // Messages received from I2P network
@@ -219,6 +220,7 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 		config:             config,
 		clientNetDB:        clientNetDB,
 		createdAt:          time.Now(),
+		lastActivity:       time.Now(),
 		active:             true,
 		incomingMessages:   make(chan *IncomingMessage, queueSize),
 		messageRateLimiter: rateLimiter,
@@ -329,6 +331,20 @@ func (s *Session) CreatedAt() time.Time {
 	return s.createdAt
 }
 
+// LastActivity returns when the session was last active
+func (s *Session) LastActivity() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastActivity
+}
+
+// updateActivity updates the session's last activity timestamp
+func (s *Session) updateActivity() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastActivity = time.Now()
+}
+
 // SetInboundPool sets the inbound tunnel pool for this session
 func (s *Session) SetInboundPool(pool *tunnel.Pool) {
 	s.mu.Lock()
@@ -388,6 +404,7 @@ func (s *Session) QueueIncomingMessage(payload []byte) error {
 		return err
 	}
 
+	s.updateActivity()
 	msg := s.createIncomingMessage(payload)
 	return s.enqueueMessageWithMonitoring(msg)
 }
@@ -497,6 +514,7 @@ func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) e
 func (s *Session) ReceiveMessage() (*IncomingMessage, error) {
 	select {
 	case msg := <-s.incomingMessages:
+		s.updateActivity()
 		return msg, nil
 	case <-s.stopCh:
 		return nil, nil
@@ -1437,6 +1455,26 @@ func (sm *SessionManager) SessionCount() int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return len(sm.sessions)
+}
+
+// GetAllSessions returns a copy of all active sessions
+func (sm *SessionManager) GetAllSessions() []*Session {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	sessions := make([]*Session, 0, len(sm.sessions))
+	for _, session := range sm.sessions {
+		sessions = append(sessions, session)
+	}
+	return sessions
+}
+
+// RemoveSession removes a session from the manager without stopping it
+func (sm *SessionManager) RemoveSession(sessionID uint16) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	delete(sm.sessions, sessionID)
 }
 
 // allocateSessionID finds the next available session ID

@@ -38,6 +38,7 @@ type MessageProcessor struct {
 	factory        *I2NPMessageFactory
 	garlicSessions *GarlicSessionManager
 	cloveForwarder GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager      *DatabaseManager     // Optional database manager for DatabaseLookup messages
 }
 
 // NewMessageProcessor creates a new message processor
@@ -63,6 +64,13 @@ func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
 	p.cloveForwarder = forwarder
 }
 
+// SetDatabaseManager sets the database manager for processing DatabaseLookup messages.
+// This must be called before processing DatabaseLookup messages, otherwise they will fail with an error.
+func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
+	log.WithField("at", "SetDatabaseManager").Debug("Setting database manager")
+	p.dbManager = dbMgr
+}
+
 // ProcessMessage processes any I2NP message using interfaces
 func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 	log.WithFields(logger.Fields{
@@ -75,6 +83,8 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 		return p.processDataMessage(msg)
 	case I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
 		return p.processDeliveryStatusMessage(msg)
+	case I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
+		return p.processDatabaseLookupMessage(msg)
 	case I2NP_MESSAGE_TYPE_GARLIC:
 		return p.processGarlicMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
@@ -111,6 +121,24 @@ func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
 		return nil
 	}
 	return fmt.Errorf("message does not implement StatusReporter interface")
+}
+
+// processDatabaseLookupMessage processes database lookup messages using DatabaseReader interface
+func (p *MessageProcessor) processDatabaseLookupMessage(msg I2NPMessage) error {
+	if p.dbManager == nil {
+		return fmt.Errorf("database manager not configured")
+	}
+
+	if reader, ok := msg.(DatabaseReader); ok {
+		key := reader.GetKey()
+		from := reader.GetFrom()
+		log.WithFields(logger.Fields{
+			"key":  fmt.Sprintf("%x", key[:8]),
+			"from": fmt.Sprintf("%x", from[:8]),
+		}).Debug("Processing database lookup")
+		return p.dbManager.PerformLookup(reader)
+	}
+	return fmt.Errorf("message does not implement DatabaseReader interface")
 }
 
 // processGarlicMessage processes encrypted garlic messages by decrypting them
@@ -2112,6 +2140,9 @@ func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
 		mr.dbManager.SetRetriever(retriever)
 		log.Debug("NetDB retriever configured for message router")
 	}
+
+	// Set database manager on processor for DatabaseLookup message handling
+	mr.processor.SetDatabaseManager(mr.dbManager)
 }
 
 // SetOurRouterHash sets our router's identity hash for use in DatabaseSearchReply messages.

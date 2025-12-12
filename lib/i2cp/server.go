@@ -36,6 +36,10 @@ type ServerConfig struct {
 	// Zero means no timeout. Default: 30 seconds
 	WriteTimeout time.Duration
 
+	// SessionTimeout is how long idle sessions stay alive before being closed
+	// Zero means no timeout (sessions persist until explicit disconnect). Default: 30 minutes
+	SessionTimeout time.Duration
+
 	// LeaseSet publisher for distributing LeaseSets to the network (optional)
 	// If nil, sessions will function but won't publish to the network
 	LeaseSetPublisher LeaseSetPublisher
@@ -44,11 +48,12 @@ type ServerConfig struct {
 // DefaultServerConfig returns a ServerConfig with sensible defaults
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		ListenAddr:   fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
-		Network:      "tcp",
-		MaxSessions:  100,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ListenAddr:     fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
+		Network:        "tcp",
+		MaxSessions:    100,
+		ReadTimeout:    60 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		SessionTimeout: 30 * time.Minute,
 	}
 }
 
@@ -156,6 +161,12 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go s.acceptLoop()
 
+	// Start session timeout cleanup goroutine if timeout is configured
+	if s.config.SessionTimeout > 0 {
+		s.wg.Add(1)
+		go s.sessionTimeoutCleanup()
+	}
+
 	return nil
 }
 
@@ -225,6 +236,62 @@ func (s *Server) acceptLoop() {
 
 		s.wg.Add(1)
 		go s.handleConnection(conn)
+	}
+}
+
+// sessionTimeoutCleanup periodically checks for idle sessions and closes them
+func (s *Server) sessionTimeoutCleanup() {
+	defer s.wg.Done()
+
+	// Check for idle sessions every minute
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	log.WithFields(logger.Fields{
+		"at":             "i2cp.Server.sessionTimeoutCleanup",
+		"sessionTimeout": s.config.SessionTimeout,
+	}).Info("session_timeout_cleanup_started")
+
+	for {
+		select {
+		case <-ticker.C:
+			s.cleanupIdleSessions()
+		case <-s.ctx.Done():
+			return
+		}
+	}
+}
+
+// cleanupIdleSessions checks all sessions and closes those that have been idle beyond SessionTimeout
+func (s *Server) cleanupIdleSessions() {
+	sessions := s.manager.GetAllSessions()
+	now := time.Now()
+
+	for _, session := range sessions {
+		if !session.IsActive() {
+			continue
+		}
+
+		idleTime := now.Sub(session.LastActivity())
+		if idleTime > s.config.SessionTimeout {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.cleanupIdleSessions",
+				"sessionID": session.ID(),
+				"idleTime":  idleTime,
+				"timeout":   s.config.SessionTimeout,
+			}).Info("closing_idle_session")
+
+			// Stop the session
+			session.Stop()
+
+			// Remove from server's session tracking
+			s.mu.Lock()
+			delete(s.sessionConns, session.ID())
+			s.mu.Unlock()
+
+			// Remove from manager
+			s.manager.RemoveSession(session.ID())
+		}
 	}
 }
 

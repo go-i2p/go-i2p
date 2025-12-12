@@ -148,7 +148,7 @@ type I2CPDefaults struct {
 
 	// SessionTimeout is how long idle sessions stay alive
 	// Default: 30 minutes
-	// Note: Timeout enforcement not yet implemented - sessions persist until explicit disconnect
+	// Set to 0 to disable timeout enforcement (sessions persist until explicit disconnect)
 	SessionTimeout time.Duration
 
 	// ReadTimeout is maximum time to wait for client reads
