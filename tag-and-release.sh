@@ -1,8 +1,5 @@
 #! /usr/bin/env sh
 
-# fail on any error
-set -e
-
 # takes one argument: the version to tag
 VERSION=$1
 
