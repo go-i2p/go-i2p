@@ -1,7 +1,7 @@
 package i2cp
 
 import (
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"fmt"
 	"sync"
 	"time"
@@ -1458,14 +1458,12 @@ func (s *Session) Stop() {
 type SessionManager struct {
 	mu       sync.RWMutex
 	sessions map[uint16]*Session // Session ID -> Session
-	nextID   uint16              // Next available session ID
 }
 
 // NewSessionManager creates a new session manager
 func NewSessionManager() *SessionManager {
 	return &SessionManager{
 		sessions: make(map[uint16]*Session),
-		nextID:   1, // Start from 1, skip reserved 0x0000
 	}
 }
 
@@ -1572,14 +1570,25 @@ func (sm *SessionManager) RemoveSession(sessionID uint16) {
 	delete(sm.sessions, sessionID)
 }
 
-// allocateSessionID finds the next available session ID
-// Must be called with sm.mu locked
+// allocateSessionID finds the next available session ID using cryptographic randomness
+// to prevent session ID prediction attacks. Must be called with sm.mu locked.
 func (sm *SessionManager) allocateSessionID() uint16 {
-	startID := sm.nextID
+	// Try up to 100 times to find an unused ID
+	// With 16-bit space (65536 IDs) and typical session counts (<100),
+	// collision probability is extremely low
+	maxAttempts := 100
 
-	for {
-		id := sm.nextID
-		sm.nextID++
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		id, err := generateSecureSessionID()
+		if err != nil {
+			// Log error but continue trying - fall back to next attempt
+			log.WithFields(logger.Fields{
+				"at":      "allocateSessionID",
+				"attempt": attempt,
+				"error":   err.Error(),
+			}).Warn("failed to generate random session ID")
+			continue
+		}
 
 		// Skip reserved IDs
 		if id == SessionIDReservedControl || id == SessionIDReservedBroadcast {
@@ -1590,12 +1599,27 @@ func (sm *SessionManager) allocateSessionID() uint16 {
 		if _, exists := sm.sessions[id]; !exists {
 			return id
 		}
-
-		// Wrapped around, no IDs available
-		if sm.nextID == startID {
-			return SessionIDReservedControl // Signal error
-		}
 	}
+
+	// Exhausted all attempts - no available IDs (should never happen in practice)
+	log.WithFields(logger.Fields{
+		"at":             "allocateSessionID",
+		"activeSessions": len(sm.sessions),
+		"maxAttempts":    maxAttempts,
+	}).Error("failed to allocate session ID after maximum attempts")
+	return SessionIDReservedControl // Signal error
+}
+
+// generateSecureSessionID generates a cryptographically random 16-bit session ID
+func generateSecureSessionID() (uint16, error) {
+	var buf [2]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("failed to read random bytes: %w", err)
+	}
+
+	// Convert bytes to uint16 (big-endian)
+	id := uint16(buf[0])<<8 | uint16(buf[1])
+	return id, nil
 }
 
 // StopAll stops all active sessions

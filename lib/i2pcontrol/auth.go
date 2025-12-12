@@ -2,7 +2,7 @@ package i2pcontrol
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
+	"github.com/go-i2p/crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
