@@ -1057,6 +1057,8 @@ func (db *StdNetDB) loadExistingRouterInfos() error {
 }
 
 // scanDirectoryForRouterInfos scans a single directory for RouterInfo files and loads them into memory
+// scanDirectoryForRouterInfos scans a directory for RouterInfo files and loads them into memory.
+// Returns the updated count of successfully loaded files and error count.
 func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors int) (int, int) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -1065,41 +1067,50 @@ func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors i
 	}
 
 	for _, entry := range entries {
-		if !db.isValidRouterInfoFile(entry) {
-			continue
+		loadedOne, hadError := db.processRouterInfoEntry(dirPath, entry)
+		if loadedOne {
+			loaded++
 		}
-
-		hash, err := db.extractHashFromFilename(entry.Name())
-		if err != nil {
-			log.WithError(err).WithField("filename", entry.Name()).Debug("Failed to decode hash from filename")
+		if hadError {
 			errors++
-			continue
 		}
-
-		if db.isRouterInfoAlreadyLoaded(hash) {
-			continue
-		}
-
-		filePath := filepath.Join(dirPath, entry.Name())
-		ri, err := db.loadAndParseRouterInfo(filePath)
-		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to load RouterInfo")
-			errors++
-			continue
-		}
-
-		contentHash, err := db.computeRouterInfoHash(ri, filePath)
-		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to compute RouterInfo hash")
-			errors++
-			continue
-		}
-
-		db.storeRouterInfo(contentHash, ri)
-		loaded++
 	}
 
 	return loaded, errors
+}
+
+// processRouterInfoEntry processes a single directory entry and attempts to load it as a RouterInfo.
+// Returns whether a RouterInfo was successfully loaded and whether an error occurred.
+func (db *StdNetDB) processRouterInfoEntry(dirPath string, entry os.DirEntry) (loaded bool, hadError bool) {
+	if !db.isValidRouterInfoFile(entry) {
+		return false, false
+	}
+
+	hash, err := db.extractHashFromFilename(entry.Name())
+	if err != nil {
+		log.WithError(err).WithField("filename", entry.Name()).Debug("Failed to decode hash from filename")
+		return false, true
+	}
+
+	if db.isRouterInfoAlreadyLoaded(hash) {
+		return false, false
+	}
+
+	filePath := filepath.Join(dirPath, entry.Name())
+	ri, err := db.loadAndParseRouterInfo(filePath)
+	if err != nil {
+		log.WithError(err).WithField("file", filePath).Debug("Failed to load RouterInfo")
+		return false, true
+	}
+
+	contentHash, err := db.computeRouterInfoHash(ri, filePath)
+	if err != nil {
+		log.WithError(err).WithField("file", filePath).Debug("Failed to compute RouterInfo hash")
+		return false, true
+	}
+
+	db.storeRouterInfo(contentHash, ri)
+	return true, false
 }
 
 // isValidRouterInfoFile checks if a directory entry is a valid RouterInfo file.
