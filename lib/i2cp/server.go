@@ -798,6 +798,21 @@ func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Con
 				"payloadSize": len(payload),
 			}).Info("sent_request_variable_leaseset")
 
+			// Start LeaseSet maintenance now that tunnels are ready
+			// This will automatically refresh the LeaseSet as tunnels rotate
+			if err := session.StartLeaseSetMaintenance(); err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+					"sessionID": sessionID,
+					"error":     err.Error(),
+				}).Error("failed_to_start_leaseset_maintenance")
+			} else {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+					"sessionID": sessionID,
+				}).Info("leaseset_maintenance_started")
+			}
+
 			return
 		}
 	}
