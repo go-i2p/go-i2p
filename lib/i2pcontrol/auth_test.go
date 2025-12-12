@@ -10,7 +10,6 @@ import (
 func TestNewAuthManager(t *testing.T) {
 	password := "testpass"
 	am, err := NewAuthManager(password)
-
 	if err != nil {
 		t.Fatalf("NewAuthManager failed: %v", err)
 	}
@@ -46,7 +45,6 @@ func TestAuthenticateSuccess(t *testing.T) {
 
 	expiration := 10 * time.Minute
 	token, err := am.Authenticate(password, expiration)
-
 	if err != nil {
 		t.Fatalf("Authenticate failed: %v", err)
 	}

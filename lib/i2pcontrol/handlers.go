@@ -370,7 +370,7 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 
 // processRequestedSettings processes a map of requested settings and returns their values.
 // Returns an error if a write operation is attempted (non-null value provided).
-func (h *NetworkSettingHandler) processRequestedSettings(req map[string]interface{}, availableSettings map[string]interface{}) (map[string]interface{}, error) {
+func (h *NetworkSettingHandler) processRequestedSettings(req, availableSettings map[string]interface{}) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	for setting := range req {

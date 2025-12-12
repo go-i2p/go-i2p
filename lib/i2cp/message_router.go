@@ -42,7 +42,7 @@ type TransportSendFunc func(peerHash common.Hash, msg i2np.I2NPMessage) error
 // - statusCode: Status code indicating delivery outcome (see MessageStatus* constants)
 // - messageSize: Size of the original message payload in bytes
 // - nonce: Optional nonce value (0 if not applicable)
-type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize uint32, nonce uint32)
+type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize, nonce uint32)
 
 // NewMessageRouter creates a new message router with the given garlic session manager.
 // The transportSend callback will be used to send encrypted messages to the network.

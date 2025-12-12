@@ -708,7 +708,7 @@ func buildSessionStatusResponse(sessionID uint16) *Message {
 // - 1 byte:  Status code
 // - 4 bytes: Message size (uint32, big endian)
 // - 4 bytes: Nonce (uint32, big endian)
-func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode uint8, messageSize uint32, nonce uint32) *Message {
+func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode uint8, messageSize, nonce uint32) *Message {
 	payload := make([]byte, 13)
 	binary.BigEndian.PutUint32(payload[0:4], messageID)
 	payload[4] = statusCode
@@ -1564,7 +1564,7 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 	}).Info("routing_message_expires")
 
 	// Create status callback
-	statusCallback := func(msgID uint32, statusCode uint8, messageSize uint32, nonce uint32) {
+	statusCallback := func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
 		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, sendMsg.Nonce)
 		s.sendStatusToClient(session, statusMsg)
 	}
@@ -1628,7 +1628,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 	}).Debug("routing_message_async")
 
 	// Create status callback to send MessageStatus to client
-	statusCallback := func(msgID uint32, statusCode uint8, messageSize uint32, nonce uint32) {
+	statusCallback := func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
 		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, nonce)
 		s.sendStatusToClient(session, statusMsg)
 	}

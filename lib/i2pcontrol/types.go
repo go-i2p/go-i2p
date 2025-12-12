@@ -172,7 +172,7 @@ func (r *Response) Marshal() ([]byte, error) {
 
 // NewSuccessResponse creates a successful JSON-RPC response.
 // The result parameter will be serialized as the "result" field.
-func NewSuccessResponse(id interface{}, result interface{}) *Response {
+func NewSuccessResponse(id, result interface{}) *Response {
 	return &Response{
 		JSONRPC: "2.0",
 		ID:      id,

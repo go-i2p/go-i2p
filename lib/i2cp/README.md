@@ -37,6 +37,22 @@ management, and message delivery
 
 ```go
 const (
+	HostLookupTypeHash     = 0 // Lookup by destination hash
+	HostLookupTypeHostname = 1 // Lookup by hostname
+)
+```
+
+```go
+const (
+	HostReplySuccess  = 0 // Destination found
+	HostReplyNotFound = 1 // Destination not found
+	HostReplyTimeout  = 2 // Lookup timed out
+	HostReplyError    = 3 // Generic error
+)
+```
+
+```go
+const (
 	// Session management
 	MessageTypeCreateSession      = 1 // Client -> Router: Create new session
 	MessageTypeSessionStatus      = 2 // Router -> Client: Session creation result
@@ -62,9 +78,16 @@ const (
 	MessageTypeGetDate            = 11 // Client -> Router: Query router time
 	MessageTypeSetDate            = 12 // Router -> Client: Current router time
 
+	// Naming service (modern types)
+	MessageTypeHostLookup = 38 // Client -> Router: Destination lookup by hash or hostname
+	MessageTypeHostReply  = 39 // Router -> Client: Destination lookup result
+
+	// Advanced features
+	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
+
 	// Deprecated/legacy message types
-	MessageTypeHostLookup = 13 // Deprecated in v2.10.0
-	MessageTypeHostReply  = 14 // Deprecated in v2.10.0
+	MessageTypeHostLookupDeprecated = 13 // Deprecated in v2.10.0, use type 38
+	MessageTypeHostReplyDeprecated  = 14 // Deprecated in v2.10.0, use type 39
 )
 ```
 Message type constants as defined in I2CP v2.10.0
@@ -160,6 +183,148 @@ acceptable ranges. Returns error if validation fails.
 func WriteMessage(w io.Writer, msg *Message) error
 ```
 WriteMessage writes a complete I2CP message to a writer
+
+#### type DisconnectPayload
+
+```go
+type DisconnectPayload struct {
+	Reason string // UTF-8 disconnect reason string
+}
+```
+
+DisconnectPayload represents the payload structure of a Disconnect (type 30)
+message. This message allows graceful connection termination with a reason
+string.
+
+Format per I2CP v2.10.0 specification:
+
+    ReasonLength: uint16 (2 bytes) - length of reason string in bytes
+    Reason: string (variable length) - UTF-8 encoded disconnect reason
+
+Common disconnect reasons: - "client shutdown" - Normal client termination -
+"timeout" - Connection timeout - "protocol error" - Invalid message received -
+"version mismatch" - Incompatible protocol version
+
+The server should clean up all session resources and close the connection after
+receiving this message.
+
+#### func  ParseDisconnectPayload
+
+```go
+func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error)
+```
+ParseDisconnectPayload deserializes a Disconnect payload from wire format.
+Returns an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-1:  Reason length (uint16, big endian)
+    bytes 2+:   Reason string (UTF-8, length specified by bytes 0-1)
+
+#### func (*DisconnectPayload) MarshalBinary
+
+```go
+func (dp *DisconnectPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the DisconnectPayload to wire format. Returns the
+serialized bytes ready to be sent as an I2CP message payload.
+
+#### type HostLookupPayload
+
+```go
+type HostLookupPayload struct {
+	RequestID  uint32 // Unique request identifier
+	LookupType uint16 // 0=hash, 1=hostname
+	Query      string // Hash or hostname to lookup
+}
+```
+
+HostLookupPayload represents the payload structure of a HostLookup (type 38)
+message. This message allows clients to query for destination information by
+hash or hostname.
+
+Format per I2CP v2.10.0 specification:
+
+    RequestID: uint32 (4 bytes) - unique request identifier for matching reply
+    LookupType: uint16 (2 bytes) - 0=hash lookup, 1=hostname lookup
+    QueryLength: uint16 (2 bytes) - length of query string in bytes
+    Query: string (variable length) - hash or hostname to lookup
+
+Lookup types: - 0: Hash lookup - Query is base32 destination hash - 1: Hostname
+lookup - Query is .i2p hostname
+
+The server will return a HostReply message with the same RequestID.
+
+#### func  ParseHostLookupPayload
+
+```go
+func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error)
+```
+ParseHostLookupPayload deserializes a HostLookup payload from wire format.
+Returns an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-3:   RequestID (uint32, big endian)
+    bytes 4-5:   LookupType (uint16, big endian)
+    bytes 6-7:   Query length (uint16, big endian)
+    bytes 8+:    Query string (length specified by bytes 6-7)
+
+#### func (*HostLookupPayload) MarshalBinary
+
+```go
+func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the HostLookupPayload to wire format. Returns the
+serialized bytes ready to be sent as an I2CP message payload.
+
+#### type HostReplyPayload
+
+```go
+type HostReplyPayload struct {
+	RequestID   uint32 // Matches RequestID from HostLookup
+	ResultCode  uint8  // 0=success, non-zero=error
+	Destination []byte // Full destination (empty if error)
+}
+```
+
+HostReplyPayload represents the payload structure of a HostReply (type 39)
+message. This is the server's response to a HostLookup request.
+
+Format per I2CP v2.10.0 specification:
+
+    RequestID: uint32 (4 bytes) - matches the RequestID from HostLookup
+    ResultCode: uint8 (1 byte) - 0=success, non-zero=error code
+    Destination: []byte (variable, 387+ bytes if found) - full destination (optional)
+
+Result codes: - 0: Success - destination found - 1: Not found - destination does
+not exist - 2: Timeout - lookup timed out - 3: Error - generic error during
+lookup
+
+If ResultCode is 0 (success), Destination contains the full destination
+structure. If ResultCode is non-zero, Destination is empty.
+
+#### func  ParseHostReplyPayload
+
+```go
+func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error)
+```
+ParseHostReplyPayload deserializes a HostReply payload from wire format. Returns
+an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-3:   RequestID (uint32, big endian)
+    byte 4:      ResultCode (uint8)
+    bytes 5+:    Destination (optional, only if ResultCode=0)
+
+#### func (*HostReplyPayload) MarshalBinary
+
+```go
+func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the HostReplyPayload to wire format. Returns the
+serialized bytes ready to be sent as an I2CP message payload.
 
 #### type IncomingMessage
 
@@ -346,7 +511,7 @@ Returns an error if sending fails.
 #### type MessageStatusCallback
 
 ```go
-type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize uint32, nonce uint32)
+type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize, nonce uint32)
 ```
 
 MessageStatusCallback is invoked to notify about message delivery status

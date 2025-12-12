@@ -513,7 +513,6 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 	for i := 0; i < count; i++ {
 		req := p.prepareBuildRequest(excludePeers)
 		tunnelID, err := p.executeBuildWithRetry(&req)
-
 		if err != nil {
 			continue
 		}
@@ -618,7 +617,7 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 
 // logBuildFailure logs detailed information about a tunnel build failure.
 // Enhanced logging for Issue #3 from AUDIT.md - failures typically caused by session establishment failures.
-func (p *Pool) logBuildFailure(err error, retry int, maxRetries int, req *BuildTunnelRequest) {
+func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunnelRequest) {
 	log.WithFields(logger.Fields{
 		"at":             "Pool.attemptBuildTunnels",
 		"phase":          "tunnel_build",
@@ -636,7 +635,7 @@ func (p *Pool) logBuildFailure(err error, retry int, maxRetries int, req *BuildT
 
 // checkTunnelCollision checks if a tunnel ID already exists in the pool.
 // Returns true if collision detected (extremely rare), false if ID is available.
-func (p *Pool) checkTunnelCollision(tunnelID TunnelID, retry int, maxRetries int) bool {
+func (p *Pool) checkTunnelCollision(tunnelID TunnelID, retry, maxRetries int) bool {
 	p.mutex.RLock()
 	_, exists := p.tunnels[tunnelID]
 	p.mutex.RUnlock()

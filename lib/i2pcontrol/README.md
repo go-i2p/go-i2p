@@ -1006,7 +1006,7 @@ in the "error" field.
 #### func  NewSuccessResponse
 
 ```go
-func NewSuccessResponse(id interface{}, result interface{}) *Response
+func NewSuccessResponse(id, result interface{}) *Response
 ```
 NewSuccessResponse creates a successful JSON-RPC response. The result parameter
 will be serialized as the "result" field.

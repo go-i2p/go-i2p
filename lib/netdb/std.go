@@ -1081,7 +1081,7 @@ func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors i
 
 // processRouterInfoEntry processes a single directory entry and attempts to load it as a RouterInfo.
 // Returns whether a RouterInfo was successfully loaded and whether an error occurred.
-func (db *StdNetDB) processRouterInfoEntry(dirPath string, entry os.DirEntry) (loaded bool, hadError bool) {
+func (db *StdNetDB) processRouterInfoEntry(dirPath string, entry os.DirEntry) (loaded, hadError bool) {
 	if !db.isValidRouterInfoFile(entry) {
 		return false, false
 	}
