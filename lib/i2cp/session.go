@@ -545,67 +545,102 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.active {
-		return fmt.Errorf("cannot reconfigure inactive session %d", s.id)
+	if err := validateSessionActive(s.active, s.id); err != nil {
+		return err
 	}
 
 	oldConfig := s.config
+	mergeConfigUpdates(s.config, newConfig)
+	logConfigurationChanges(s.id, oldConfig, s.config)
 
-	// Merge new config with existing config - only update non-zero values
+	return nil
+}
+
+// validateSessionActive checks if the session is active before reconfiguration.
+func validateSessionActive(active bool, sessionID uint16) error {
+	if !active {
+		return fmt.Errorf("cannot reconfigure inactive session %d", sessionID)
+	}
+	return nil
+}
+
+// mergeConfigUpdates merges non-zero values from newConfig into existing config.
+func mergeConfigUpdates(existing *SessionConfig, newConfig *SessionConfig) {
+	mergeTunnelParameters(existing, newConfig)
+	mergeMessageParameters(existing, newConfig)
+	mergeEncryptionParameters(existing, newConfig)
+	mergeMetadataParameters(existing, newConfig)
+}
+
+// mergeTunnelParameters updates tunnel-related configuration fields.
+func mergeTunnelParameters(existing *SessionConfig, newConfig *SessionConfig) {
 	if newConfig.InboundTunnelLength > 0 {
-		s.config.InboundTunnelLength = newConfig.InboundTunnelLength
+		existing.InboundTunnelLength = newConfig.InboundTunnelLength
 	}
 	if newConfig.OutboundTunnelLength > 0 {
-		s.config.OutboundTunnelLength = newConfig.OutboundTunnelLength
+		existing.OutboundTunnelLength = newConfig.OutboundTunnelLength
 	}
 	if newConfig.InboundTunnelCount > 0 {
-		s.config.InboundTunnelCount = newConfig.InboundTunnelCount
+		existing.InboundTunnelCount = newConfig.InboundTunnelCount
 	}
 	if newConfig.OutboundTunnelCount > 0 {
-		s.config.OutboundTunnelCount = newConfig.OutboundTunnelCount
+		existing.OutboundTunnelCount = newConfig.OutboundTunnelCount
 	}
 	if newConfig.TunnelLifetime > 0 {
-		s.config.TunnelLifetime = newConfig.TunnelLifetime
+		existing.TunnelLifetime = newConfig.TunnelLifetime
 	}
+}
+
+// mergeMessageParameters updates message-related configuration fields.
+func mergeMessageParameters(existing *SessionConfig, newConfig *SessionConfig) {
 	if newConfig.MessageTimeout > 0 {
-		s.config.MessageTimeout = newConfig.MessageTimeout
+		existing.MessageTimeout = newConfig.MessageTimeout
 	}
 	if newConfig.MessageQueueSize > 0 {
-		s.config.MessageQueueSize = newConfig.MessageQueueSize
+		existing.MessageQueueSize = newConfig.MessageQueueSize
 	}
 	if newConfig.MessageRateLimit > 0 {
-		s.config.MessageRateLimit = newConfig.MessageRateLimit
+		existing.MessageRateLimit = newConfig.MessageRateLimit
 	}
 	if newConfig.MessageRateBurstSize > 0 {
-		s.config.MessageRateBurstSize = newConfig.MessageRateBurstSize
+		existing.MessageRateBurstSize = newConfig.MessageRateBurstSize
 	}
+}
+
+// mergeEncryptionParameters updates encryption-related configuration fields.
+func mergeEncryptionParameters(existing *SessionConfig, newConfig *SessionConfig) {
 	if newConfig.LeaseSetExpiration > 0 {
-		s.config.LeaseSetExpiration = newConfig.LeaseSetExpiration
-	}
-	if newConfig.Nickname != "" {
-		s.config.Nickname = newConfig.Nickname
+		existing.LeaseSetExpiration = newConfig.LeaseSetExpiration
 	}
 	// UseEncryptedLeaseSet and BlindingSecret are set explicitly (allow false/nil)
 	// Only update if explicitly provided
 	if len(newConfig.BlindingSecret) > 0 {
-		s.config.BlindingSecret = newConfig.BlindingSecret
-		s.config.UseEncryptedLeaseSet = newConfig.UseEncryptedLeaseSet
+		existing.BlindingSecret = newConfig.BlindingSecret
+		existing.UseEncryptedLeaseSet = newConfig.UseEncryptedLeaseSet
 	}
+}
 
+// mergeMetadataParameters updates metadata-related configuration fields.
+func mergeMetadataParameters(existing *SessionConfig, newConfig *SessionConfig) {
+	if newConfig.Nickname != "" {
+		existing.Nickname = newConfig.Nickname
+	}
+}
+
+// logConfigurationChanges logs the before and after state of tunnel configuration.
+func logConfigurationChanges(sessionID uint16, oldConfig *SessionConfig, newConfig *SessionConfig) {
 	log.WithFields(logger.Fields{
 		"at":                      "i2cp.Session.Reconfigure",
-		"sessionID":               s.id,
+		"sessionID":               sessionID,
 		"oldInboundTunnelLength":  oldConfig.InboundTunnelLength,
-		"newInboundTunnelLength":  s.config.InboundTunnelLength,
+		"newInboundTunnelLength":  newConfig.InboundTunnelLength,
 		"oldOutboundTunnelLength": oldConfig.OutboundTunnelLength,
-		"newOutboundTunnelLength": s.config.OutboundTunnelLength,
+		"newOutboundTunnelLength": newConfig.OutboundTunnelLength,
 		"oldInboundTunnelCount":   oldConfig.InboundTunnelCount,
-		"newInboundTunnelCount":   s.config.InboundTunnelCount,
+		"newInboundTunnelCount":   newConfig.InboundTunnelCount,
 		"oldOutboundTunnelCount":  oldConfig.OutboundTunnelCount,
-		"newOutboundTunnelCount":  s.config.OutboundTunnelCount,
+		"newOutboundTunnelCount":  newConfig.OutboundTunnelCount,
 	}).Info("session_reconfigured")
-
-	return nil
 }
 
 // CreateLeaseSet generates a new LeaseSet2 for this session using active inbound tunnels.
