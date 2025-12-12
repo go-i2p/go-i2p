@@ -68,7 +68,7 @@ The core router functionality is now operational. We are currently focused on ad
   - [X] Exploration
   - [X] Publishing
   - [X] Floodfill
-  - [~] LS2 and Encrypted Leasesets (storage/retrieval only; client-side decryption and MetaLeaseSet resolution pending)
+  - [~] LS2 and Encrypted Leasesets (I2CP clients can publish; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution pending)
 - Transport Layer
   - [X] Transport manager and interfaces
   - NTCP2
