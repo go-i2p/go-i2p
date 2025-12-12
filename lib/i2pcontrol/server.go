@@ -29,34 +29,65 @@ type Server struct {
 // NewServer creates a new I2PControl server with the given configuration and statistics provider.
 // It initializes authentication, registers all RPC method handlers, and prepares the HTTP server.
 func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("i2pcontrol: config cannot be nil")
-	}
-	if stats == nil {
-		return nil, fmt.Errorf("i2pcontrol: stats provider cannot be nil")
-	}
-	if cfg.Password == "" {
-		return nil, fmt.Errorf("i2pcontrol: password cannot be empty")
+	if err := validateServerConfig(cfg, stats); err != nil {
+		return nil, err
 	}
 
-	// Initialize authentication manager
-	authManager, err := NewAuthManager(cfg.Password)
+	authManager, err := initializeAuthManager(cfg.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	registry := registerRPCHandlers(stats, authManager)
+
+	server := &Server{
+		config:      cfg,
+		authManager: authManager,
+		registry:    registry,
+		stats:       stats,
+		ctx:         ctx,
+		cancel:      cancel,
+	}
+
+	server.httpServer = createHTTPServer(cfg, server)
+	return server, nil
+}
+
+// validateServerConfig checks that required server configuration parameters are valid.
+// Returns an error if config is nil, stats is nil, or password is empty.
+func validateServerConfig(cfg *config.I2PControlConfig, stats RouterStatsProvider) error {
+	if cfg == nil {
+		return fmt.Errorf("i2pcontrol: config cannot be nil")
+	}
+	if stats == nil {
+		return fmt.Errorf("i2pcontrol: stats provider cannot be nil")
+	}
+	if cfg.Password == "" {
+		return fmt.Errorf("i2pcontrol: password cannot be empty")
+	}
+	return nil
+}
+
+// initializeAuthManager creates and initializes the authentication manager with the given password.
+// Returns the auth manager or an error if initialization fails.
+func initializeAuthManager(password string) (*AuthManager, error) {
+	authManager, err := NewAuthManager(password)
 	if err != nil {
 		return nil, fmt.Errorf("i2pcontrol: failed to create auth manager: %w", err)
 	}
+	return authManager, nil
+}
 
-	// Create context for server lifecycle
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Initialize method registry
+// registerRPCHandlers creates a method registry and registers all RPC handlers.
+// Returns the configured registry with Echo, GetRate, RouterInfo, Authenticate, RouterManager, NetworkSetting, and I2PControl handlers.
+func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager) *MethodRegistry {
 	registry := NewMethodRegistry()
 
-	// Register all RPC handlers
 	registry.Register("Echo", NewEchoHandler())
 	registry.Register("GetRate", NewGetRateHandler(stats))
 	registry.Register("RouterInfo", NewRouterInfoHandler(stats))
 
-	// Register Authenticate handler with access to auth manager
 	registry.Register("Authenticate", RPCHandlerFunc(func(ctx context.Context, params json.RawMessage) (interface{}, error) {
 		var req struct {
 			API      int    `json:"API"`
@@ -82,39 +113,27 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 		}, nil
 	}))
 
-	// RouterManager enabled - allows remote shutdown via RPC
 	registry.Register("RouterManager", NewRouterManagerHandler(stats.GetRouterControl()))
-
-	// NetworkSetting enabled - provides read-only access to network configuration
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
-
-	// I2PControl enabled - allows server self-management (password changes)
 	registry.Register("I2PControl", NewI2PControlHandler(authManager))
 
-	// Create HTTP server
-	mux := http.NewServeMux()
-	server := &Server{
-		config:      cfg,
-		authManager: authManager,
-		registry:    registry,
-		stats:       stats,
-		ctx:         ctx,
-		cancel:      cancel,
-	}
+	return registry
+}
 
-	// Register RPC handler at both standard path and root for convenience
+// createHTTPServer creates and configures the HTTP server with timeouts and RPC handlers.
+// Returns the configured HTTP server ready to start.
+func createHTTPServer(cfg *config.I2PControlConfig, server *Server) *http.Server {
+	mux := http.NewServeMux()
 	mux.HandleFunc("/jsonrpc", server.handleRPC)
 	mux.HandleFunc("/", server.handleRPC)
 
-	server.httpServer = &http.Server{
+	return &http.Server{
 		Addr:         cfg.Address,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	return server, nil
 }
 
 // Start begins listening for HTTP/HTTPS requests on the configured address.
