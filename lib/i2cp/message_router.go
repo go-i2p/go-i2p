@@ -87,6 +87,37 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	expirationMs uint64,
 	statusCallback MessageStatusCallback,
 ) error {
+	mr.logRoutingStart(session, messageID, destinationHash, payload, expirationMs)
+
+	if err := checkMessageExpiration(session, messageID, expirationMs, payload, statusCallback); err != nil {
+		return err
+	}
+
+	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
+	if err != nil {
+		notifyStatusCallback(statusCallback, messageID, MessageStatusNoTunnels, payload)
+		return err
+	}
+
+	garlicMsg, err := mr.buildEncryptedGarlicMessage(session, destinationHash, destinationPubKey, payload)
+	if err != nil {
+		notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+		return err
+	}
+
+	if err := mr.sendThroughGateway(session, selectedTunnel, destinationHash, garlicMsg); err != nil {
+		notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+		return err
+	}
+
+	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
+	notifyStatusCallback(statusCallback, messageID, MessageStatusSuccess, payload)
+
+	return nil
+}
+
+// logRoutingStart logs the initiation of outbound message routing.
+func (mr *MessageRouter) logRoutingStart(session *Session, messageID uint32, destinationHash common.Hash, payload []byte, expirationMs uint64) {
 	log.WithFields(logger.Fields{
 		"at":           "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":    session.ID(),
@@ -95,61 +126,36 @@ func (mr *MessageRouter) RouteOutboundMessage(
 		"payloadSize":  len(payload),
 		"expirationMs": expirationMs,
 	}).Info("routing_outbound_message")
+}
 
-	// Check expiration if set (expirationMs > 0)
-	if expirationMs > 0 {
-		currentMs := uint64(time.Now().UnixMilli())
-		if currentMs >= expirationMs {
-			log.WithFields(logger.Fields{
-				"at":           "i2cp.MessageRouter.RouteOutboundMessage",
-				"sessionID":    session.ID(),
-				"messageID":    messageID,
-				"currentMs":    currentMs,
-				"expirationMs": expirationMs,
-			}).Warn("message_expired")
-
-			// Notify callback of expiration failure
-			if statusCallback != nil {
-				statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
-			}
-			return fmt.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
-		}
+// checkMessageExpiration validates the message has not expired and notifies callback on expiration.
+func checkMessageExpiration(session *Session, messageID uint32, expirationMs uint64, payload []byte, statusCallback MessageStatusCallback) error {
+	if expirationMs == 0 {
+		return nil
 	}
 
-	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
-	if err != nil {
-		// Notify callback of tunnel selection failure
-		if statusCallback != nil {
-			statusCallback(messageID, MessageStatusNoTunnels, uint32(len(payload)), 0)
-		}
-		return err
+	currentMs := uint64(time.Now().UnixMilli())
+	if currentMs < expirationMs {
+		return nil
 	}
 
-	garlicMsg, err := mr.buildEncryptedGarlicMessage(session, destinationHash, destinationPubKey, payload)
-	if err != nil {
-		// Notify callback of encryption failure
-		if statusCallback != nil {
-			statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
-		}
-		return err
+	log.WithFields(logger.Fields{
+		"at":           "i2cp.MessageRouter.RouteOutboundMessage",
+		"sessionID":    session.ID(),
+		"messageID":    messageID,
+		"currentMs":    currentMs,
+		"expirationMs": expirationMs,
+	}).Warn("message_expired")
+
+	notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+	return fmt.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
+}
+
+// notifyStatusCallback invokes the status callback if provided.
+func notifyStatusCallback(callback MessageStatusCallback, messageID uint32, statusCode uint8, payload []byte) {
+	if callback != nil {
+		callback(messageID, statusCode, uint32(len(payload)), 0)
 	}
-
-	if err := mr.sendThroughGateway(session, selectedTunnel, destinationHash, garlicMsg); err != nil {
-		// Notify callback of send failure
-		if statusCallback != nil {
-			statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
-		}
-		return err
-	}
-
-	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
-
-	// Notify callback of successful routing
-	if statusCallback != nil {
-		statusCallback(messageID, MessageStatusSuccess, uint32(len(payload)), 0)
-	}
-
-	return nil
 }
 
 // validateAndSelectTunnel validates the session has an outbound pool and selects a tunnel.
