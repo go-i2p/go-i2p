@@ -1047,79 +1047,116 @@ func (db *StdNetDB) scanDirectoryForRouterInfos(dirPath string, loaded, errors i
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".dat") {
+		if !db.isValidRouterInfoFile(entry) {
 			continue
 		}
 
-		// Extract hash from filename: routerInfo-<base64hash>.dat
-		if !strings.HasPrefix(entry.Name(), "routerInfo-") {
-			continue
-		}
-
-		hashStr := strings.TrimPrefix(entry.Name(), "routerInfo-")
-		hashStr = strings.TrimSuffix(hashStr, ".dat")
-
-		// Decode the base64 hash
-		hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
+		hash, err := db.extractHashFromFilename(entry.Name())
 		if err != nil {
 			log.WithError(err).WithField("filename", entry.Name()).Debug("Failed to decode hash from filename")
 			errors++
 			continue
 		}
 
-		// Convert to Hash type
-		var hash common.Hash
-		copy(hash[:], hashBytes)
-
-		// Check if already loaded
-		db.riMutex.Lock()
-		_, exists := db.RouterInfos[hash]
-		db.riMutex.Unlock()
-
-		if exists {
+		if db.isRouterInfoAlreadyLoaded(hash) {
 			continue
 		}
 
-		// Load the RouterInfo from disk
 		filePath := filepath.Join(dirPath, entry.Name())
-		data, err := os.ReadFile(filePath)
+		ri, err := db.loadAndParseRouterInfo(filePath)
 		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to read RouterInfo file")
+			log.WithError(err).WithField("file", filePath).Debug("Failed to load RouterInfo")
 			errors++
 			continue
 		}
 
-		// Parse the RouterInfo
-		ri, _, err := router_info.ReadRouterInfo(data)
+		contentHash, err := db.computeRouterInfoHash(ri, filePath)
 		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to parse RouterInfo")
+			log.WithError(err).WithField("file", filePath).Debug("Failed to compute RouterInfo hash")
 			errors++
 			continue
 		}
 
-		// Get the actual IdentHash from the RouterInfo content
-		identHash, err := ri.IdentHash()
-		if err != nil {
-			log.WithError(err).WithField("file", filePath).Debug("Failed to compute IdentHash from RouterInfo")
-			errors++
-			continue
-		}
-
-		// Convert to common.Hash
-		var contentHash common.Hash
-		identHashBytes := identHash.Bytes()
-		copy(contentHash[:], identHashBytes[:])
-
-		// Add to in-memory cache using the content hash (not filename hash)
-		db.riMutex.Lock()
-		db.RouterInfos[contentHash] = Entry{
-			RouterInfo: &ri,
-		}
-		db.riMutex.Unlock()
+		db.storeRouterInfo(contentHash, ri)
 		loaded++
 	}
 
 	return loaded, errors
+}
+
+// isValidRouterInfoFile checks if a directory entry is a valid RouterInfo file.
+func (db *StdNetDB) isValidRouterInfoFile(entry os.DirEntry) bool {
+	if entry.IsDir() {
+		return false
+	}
+	if !strings.HasSuffix(entry.Name(), ".dat") {
+		return false
+	}
+	return strings.HasPrefix(entry.Name(), "routerInfo-")
+}
+
+// extractHashFromFilename extracts and decodes the hash from a RouterInfo filename.
+// Expected format: routerInfo-<base64hash>.dat
+func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error) {
+	var hash common.Hash
+
+	hashStr := strings.TrimPrefix(filename, "routerInfo-")
+	hashStr = strings.TrimSuffix(hashStr, ".dat")
+
+	hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
+	if err != nil {
+		return hash, err
+	}
+
+	copy(hash[:], hashBytes)
+	return hash, nil
+}
+
+// isRouterInfoAlreadyLoaded checks if a RouterInfo with the given hash is already in memory.
+func (db *StdNetDB) isRouterInfoAlreadyLoaded(hash common.Hash) bool {
+	db.riMutex.Lock()
+	_, exists := db.RouterInfos[hash]
+	db.riMutex.Unlock()
+	return exists
+}
+
+// loadAndParseRouterInfo reads a RouterInfo file from disk and parses it.
+func (db *StdNetDB) loadAndParseRouterInfo(filePath string) (*router_info.RouterInfo, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	ri, _, err := router_info.ReadRouterInfo(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ri, nil
+}
+
+// computeRouterInfoHash computes the identity hash from a RouterInfo's content.
+func (db *StdNetDB) computeRouterInfoHash(ri *router_info.RouterInfo, filePath string) (common.Hash, error) {
+	var contentHash common.Hash
+
+	identHash, err := ri.IdentHash()
+	if err != nil {
+		return contentHash, err
+	}
+
+	identHashBytes := identHash.Bytes()
+	copy(contentHash[:], identHashBytes[:])
+
+	return contentHash, nil
+}
+
+// storeRouterInfo adds a RouterInfo to the in-memory cache.
+func (db *StdNetDB) storeRouterInfo(hash common.Hash, ri *router_info.RouterInfo) {
+	db.riMutex.Lock()
+	db.RouterInfos[hash] = Entry{
+		RouterInfo: ri,
+	}
+	db.riMutex.Unlock()
 }
 
 // create base network database directory
