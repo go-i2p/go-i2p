@@ -197,12 +197,14 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 		{
 			name: "Valid payload with data",
 			input: func() []byte {
-				// MessageID (4 bytes) + payload
-				data := make([]byte, 4)
+				// SessionID (2 bytes) + MessageID (4 bytes) + payload
+				data := make([]byte, 6)
 				data[0] = 0x00
-				data[1] = 0x00
-				data[2] = 0x12
-				data[3] = 0x34 // MessageID = 0x1234 = 4660
+				data[1] = 0x01 // SessionID = 0x0001
+				data[2] = 0x00
+				data[3] = 0x00
+				data[4] = 0x12
+				data[5] = 0x34 // MessageID = 0x00001234 = 4660
 				return append(data, []byte("Received message")...)
 			}(),
 			wantErr:       false,
@@ -212,11 +214,14 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 		{
 			name: "Valid payload with empty message",
 			input: func() []byte {
-				data := make([]byte, 4)
-				data[0] = 0xFF
-				data[1] = 0xFF
+				// SessionID (2 bytes) + MessageID (4 bytes), no payload
+				data := make([]byte, 6)
+				data[0] = 0x00
+				data[1] = 0x02 // SessionID = 0x0002
 				data[2] = 0xFF
-				data[3] = 0xFF // MessageID = 0xFFFFFFFF
+				data[3] = 0xFF
+				data[4] = 0xFF
+				data[5] = 0xFF // MessageID = 0xFFFFFFFF
 				return data
 			}(),
 			wantErr:       false,

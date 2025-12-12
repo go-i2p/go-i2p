@@ -358,37 +358,31 @@ func TestMessageWireFormat(t *testing.T) {
 		t.Fatalf("MarshalBinary() error = %v", err)
 	}
 
-	// Expected format:
-	// Byte 0: Type (0x0B for GetDate)
-	// Bytes 1-2: SessionID (0x1234, big endian)
-	// Bytes 3-6: PayloadLength (0x00000003, big endian)
-	// Bytes 7-9: Payload (0xAA, 0xBB, 0xCC)
+	// Expected format per I2CP specification:
+	// Bytes 0-3: PayloadLength (0x00000003, big endian)
+	// Byte 4: Type (0x20 for GetDate)
+	// Bytes 5-7: Payload (0xAA, 0xBB, 0xCC)
+	// NOTE: Session ID is NOT in the wire format - it's managed at the message layer
 
-	expectedLen := 1 + 2 + 4 + 3 // type + sessionID + length + payload
+	expectedLen := 4 + 1 + 3 // length + type + payload
 	if len(data) != expectedLen {
 		t.Errorf("Wire format length = %d, want %d", len(data), expectedLen)
 	}
 
-	// Verify type byte
-	if data[0] != MessageTypeGetDate {
-		t.Errorf("Type byte = 0x%02X, want 0x%02X", data[0], MessageTypeGetDate)
-	}
-
-	// Verify session ID (big endian)
-	sessionID := binary.BigEndian.Uint16(data[1:3])
-	if sessionID != 0x1234 {
-		t.Errorf("SessionID = 0x%04X, want 0x1234", sessionID)
-	}
-
 	// Verify payload length (big endian)
-	payloadLen := binary.BigEndian.Uint32(data[3:7])
+	payloadLen := binary.BigEndian.Uint32(data[0:4])
 	if payloadLen != 3 {
 		t.Errorf("Payload length = %d, want 3", payloadLen)
 	}
 
+	// Verify type byte
+	if data[4] != MessageTypeGetDate {
+		t.Errorf("Type byte = 0x%02X, want 0x%02X", data[4], MessageTypeGetDate)
+	}
+
 	// Verify payload bytes
-	if !bytes.Equal(data[7:], []byte{0xAA, 0xBB, 0xCC}) {
-		t.Errorf("Payload = %v, want [0xAA 0xBB 0xCC]", data[7:])
+	if !bytes.Equal(data[5:], []byte{0xAA, 0xBB, 0xCC}) {
+		t.Errorf("Payload = %v, want [0xAA 0xBB 0xCC]", data[5:])
 	}
 }
 
@@ -444,17 +438,17 @@ func TestMessageRoundTrip(t *testing.T) {
 			if decoded.Type != original.Type {
 				t.Errorf("Type = %d, want %d", decoded.Type, original.Type)
 			}
-			if decoded.SessionID != original.SessionID {
-				t.Errorf("SessionID = %d, want %d", decoded.SessionID, original.SessionID)
+			// Note: SessionID is NOT in the wire format per I2CP spec, so it's always 0 after unmarshal
+			// SessionID must be set from connection context by the protocol handler
+			if decoded.SessionID != 0 {
+				t.Errorf("SessionID = %d, want 0 (not in wire format)", decoded.SessionID)
 			}
 			if !bytes.Equal(decoded.Payload, original.Payload) {
 				t.Errorf("Payload mismatch")
 			}
 		})
 	}
-}
-
-// TestReservedSessionIDConstants tests that reserved session ID constants have correct values.
+} // TestReservedSessionIDConstants tests that reserved session ID constants have correct values.
 func TestReservedSessionIDConstants(t *testing.T) {
 	tests := []struct {
 		name       string

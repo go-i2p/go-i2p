@@ -72,11 +72,13 @@ func TestHandleSendMessage(t *testing.T) {
 		t.Errorf("Expected MessageStatus type, got %d", response.Type)
 	}
 	// Verify it's an acceptance status (status code should be 1)
-	if len(response.Payload) < 5 {
-		t.Fatal("MessageStatus payload too short")
+	// MessageStatus format: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4) = 15 bytes
+	if len(response.Payload) < 15 {
+		t.Fatalf("MessageStatus payload too short: got %d bytes, expected 15", len(response.Payload))
 	}
-	if response.Payload[4] != MessageStatusAccepted {
-		t.Errorf("Expected MessageStatusAccepted (%d), got %d", MessageStatusAccepted, response.Payload[4])
+	// Status byte is at index 6 (after SessionID(2) + MessageID(4))
+	if response.Payload[6] != MessageStatusAccepted {
+		t.Errorf("Expected MessageStatusAccepted (%d), got %d", MessageStatusAccepted, response.Payload[6])
 	}
 }
 
