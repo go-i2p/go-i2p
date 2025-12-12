@@ -27,7 +27,6 @@ update_our_packages() {
   go get "github.com/eyedeekay/go-i2p/common@v$VERSION"
   go get "github.com/eyedeekay/go-i2p/noise@v$VERSION"
   go get "github.com/eyedeekay/go-i2p/go-noise@v$VERSION"
-  go get "github.com/eyedeekay/go-i2p@v$VERSION"
   go mod tidy
   git commit -am "Update dependencies to v$VERSION"
   git push origin main || git push origin trunk || git push origin master
