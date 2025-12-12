@@ -29,6 +29,9 @@ update_our_packages() {
   go get "github.com/eyedeekay/go-i2p/go-noise@v$VERSION"
   go mod tidy
   git commit -am "Update dependencies to v$VERSION"
+}
+
+push() {
   git push origin main || git push origin trunk || git push origin master
   git push --tags
 }
@@ -42,6 +45,7 @@ cd logger
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "logger v$VERSION"
+push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
 # next do crypto
@@ -49,6 +53,7 @@ cd crypto
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "crypto v$VERSION"
+push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
 # next do common
@@ -56,6 +61,7 @@ cd common
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "common v$VERSION"
+push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
 # next do noise
@@ -63,6 +69,7 @@ cd noise
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "noise v$VERSION"
+push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
 # next do go-noise
@@ -70,9 +77,11 @@ cd go-noise
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-noise v$VERSION"
+push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
 comment_out_replaces
 update_our_packages
 # finally do go-i2p
 git tag -sa "v$VERSION" -m "go-i2p v$VERSION
+push
