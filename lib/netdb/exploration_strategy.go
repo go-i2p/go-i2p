@@ -250,32 +250,39 @@ func (s *AdaptiveStrategy) GetStats() StrategyStats {
 	return stats
 }
 
-// calculateBucket determines which Kademlia bucket a router hash belongs to.
-// Bucket is determined by the position of the most significant differing bit
-// between our hash and the router hash (0-255).
-func (s *AdaptiveStrategy) calculateBucket(routerHash common.Hash) int {
-	// XOR distance
+// computeXORDistance calculates the XOR distance between two hashes.
+// The XOR distance represents the bitwise difference between the hashes.
+func computeXORDistance(hash1, hash2 common.Hash) common.Hash {
 	var distance common.Hash
 	for i := 0; i < 32; i++ {
-		distance[i] = s.ourHash[i] ^ routerHash[i]
+		distance[i] = hash1[i] ^ hash2[i]
 	}
+	return distance
+}
 
-	// Find first non-zero bit (most significant differing bit)
+// findMostSignificantDifferingBit locates the position of the most significant bit
+// that differs between two hashes (represented by their XOR distance).
+// Returns the bit position (0-255) or 0 if the distance is zero.
+func findMostSignificantDifferingBit(distance common.Hash) int {
 	for byteIdx := 0; byteIdx < 32; byteIdx++ {
 		if distance[byteIdx] != 0 {
-			// Find position of most significant bit in this byte
 			b := distance[byteIdx]
 			for bitIdx := 7; bitIdx >= 0; bitIdx-- {
 				if (b & (1 << uint(bitIdx))) != 0 {
-					// Bucket index = byte position * 8 + bit position
 					return byteIdx*8 + (7 - bitIdx)
 				}
 			}
 		}
 	}
-
-	// Distance is zero (same router) - shouldn't happen in practice
 	return 0
+}
+
+// calculateBucket determines which Kademlia bucket a router hash belongs to.
+// Bucket is determined by the position of the most significant differing bit
+// between our hash and the router hash (0-255).
+func (s *AdaptiveStrategy) calculateBucket(routerHash common.Hash) int {
+	distance := computeXORDistance(s.ourHash, routerHash)
+	return findMostSignificantDifferingBit(distance)
 }
 
 // generateKeyInBucket creates a hash that falls into the specified Kademlia bucket.

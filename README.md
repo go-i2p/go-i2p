@@ -1,10 +1,10 @@
-# go-i2p
+# `go-i2p`
 
 A pure Go implementation of the I2P router.
 
 ## Status
 
-go-i2p is in active development. We recently completed several significant milestones including:
+`go-i2p` is in active development. We recently completed several significant milestones including:
 
 - **Complete I2CP Protocol Server**: Full session lifecycle management, message routing, and client support
 - **End-to-End Message Routing**: Complete message routing system connecting I2CP clients through tunnels to other destinations with garlic encryption
@@ -13,7 +13,7 @@ go-i2p is in active development. We recently completed several significant miles
 
 The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have most of an I2CP client, part of a Streaming library, and almost none of a Datagrams library, all of which are requirements for SAMv3.3, which is what all our applications use. Therefore those are our next targets. After the turn of the year, we will return our focus to transports by implementing SSU2.
 
-**go-i2p's Network presence is HIGHLY DISTINCTIVE at this time.** This is because:
+**`go-i2p`'s network presence is HIGHLY DISTINCTIVE at this time.** This is because:
 
  - We do not yet implement SSU2, all our routers are NTCP2 only. This will change.
  - We do not implement Elgamal or AES+SessionTag or DSA. This will not change.
