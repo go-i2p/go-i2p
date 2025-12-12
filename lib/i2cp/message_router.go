@@ -33,6 +33,16 @@ type MessageRouter struct {
 // Returns an error if the message cannot be sent.
 type TransportSendFunc func(peerHash common.Hash, msg i2np.I2NPMessage) error
 
+// MessageStatusCallback is invoked to notify about message delivery status changes.
+// Implementations should handle the callback asynchronously to avoid blocking the router.
+//
+// Parameters:
+// - messageID: Unique identifier for the message (client-provided or generated)
+// - statusCode: Status code indicating delivery outcome (see MessageStatus* constants)
+// - messageSize: Size of the original message payload in bytes
+// - nonce: Optional nonce value (0 if not applicable)
+type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize uint32, nonce uint32)
+
 // NewMessageRouter creates a new message router with the given garlic session manager.
 // The transportSend callback will be used to send encrypted messages to the network.
 func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend TransportSendFunc) *MessageRouter {
@@ -54,42 +64,66 @@ func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend Transp
 // 2. Encrypt garlic message for destination using ECIES-X25519-AEAD
 // 3. Select outbound tunnel from session's pool
 // 4. Send encrypted garlic through tunnel gateway
+// 5. Invoke status callback with delivery status
 //
 // Parameters:
 // - session: I2CP session sending the message
+// - messageID: Unique identifier for tracking this message
 // - destinationHash: Hash of the target I2P destination
 // - destinationPubKey: X25519 public key of the destination (for garlic encryption)
 // - payload: Raw message data to send
+// - statusCallback: Optional callback to notify about delivery status (nil allowed)
 //
 // Returns an error if routing fails at any step.
 func (mr *MessageRouter) RouteOutboundMessage(
 	session *Session,
+	messageID uint32,
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	payload []byte,
+	statusCallback MessageStatusCallback,
 ) error {
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":   session.ID(),
+		"messageID":   messageID,
 		"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		"payloadSize": len(payload),
 	}).Info("routing_outbound_message")
 
 	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
 	if err != nil {
+		// Notify callback of tunnel selection failure
+		if statusCallback != nil {
+			statusCallback(messageID, MessageStatusNoTunnels, uint32(len(payload)), 0)
+		}
 		return err
 	}
 
 	garlicMsg, err := mr.buildEncryptedGarlicMessage(session, destinationHash, destinationPubKey, payload)
 	if err != nil {
+		// Notify callback of encryption failure
+		if statusCallback != nil {
+			statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
+		}
 		return err
 	}
 
 	if err := mr.sendThroughGateway(session, selectedTunnel, destinationHash, garlicMsg); err != nil {
+		// Notify callback of send failure
+		if statusCallback != nil {
+			statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
+		}
 		return err
 	}
 
 	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
+
+	// Notify callback of successful routing
+	if statusCallback != nil {
+		statusCallback(messageID, MessageStatusSuccess, uint32(len(payload)), 0)
+	}
+
 	return nil
 }
 

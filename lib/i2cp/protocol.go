@@ -35,8 +35,9 @@ const (
 	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage    = 7 // Client -> Router: Send message to destination
-	MessageTypeMessagePayload = 8 // Router -> Client: Received message
+	MessageTypeSendMessage    = 7  // Client -> Router: Send message to destination
+	MessageTypeMessagePayload = 8  // Router -> Client: Received message
+	MessageTypeMessageStatus  = 22 // Router -> Client: Message delivery status
 
 	// Status and information
 	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
@@ -60,6 +61,30 @@ const (
 	ProtocolVersionMajor = 2
 	ProtocolVersionMinor = 10
 	ProtocolVersionPatch = 0
+)
+
+// MessageStatus codes as defined in I2CP specification.
+// These codes indicate the delivery status of messages sent via SendMessage.
+const (
+	// MessageStatusAccepted indicates the message was accepted for delivery.
+	// Sent immediately when SendMessage is received.
+	MessageStatusAccepted = 1
+
+	// MessageStatusSuccess indicates the message was successfully delivered.
+	// Sent after routing completes successfully.
+	MessageStatusSuccess = 4
+
+	// MessageStatusFailure indicates the message delivery failed.
+	// Generic failure status.
+	MessageStatusFailure = 5
+
+	// MessageStatusNoTunnels indicates delivery failed due to no available tunnels.
+	// Sent when the session has no outbound tunnels.
+	MessageStatusNoTunnels = 16
+
+	// MessageStatusNoLeaseSet indicates delivery failed due to missing LeaseSet.
+	// Sent when the destination's LeaseSet cannot be found.
+	MessageStatusNoLeaseSet = 21
 )
 
 // Protocol limits as per I2CP specification
@@ -391,6 +416,8 @@ func MessageTypeName(msgType uint8) string {
 		return "SendMessage"
 	case MessageTypeMessagePayload:
 		return "MessagePayload"
+	case MessageTypeMessageStatus:
+		return "MessageStatus"
 	case MessageTypeGetBandwidthLimits:
 		return "GetBandwidthLimits"
 	case MessageTypeBandwidthLimits:

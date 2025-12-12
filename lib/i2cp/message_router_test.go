@@ -50,7 +50,7 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 	payload := []byte("test message payload")
 
 	// Route message
-	err := router.RouteOutboundMessage(session, destHash, destPubKey, payload)
+	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, nil)
 	require.NoError(t, err)
 
 	// Verify message was sent to gateway
@@ -85,7 +85,7 @@ func TestRouteOutboundMessageNoPool(t *testing.T) {
 	var destPubKey [32]byte
 	payload := []byte("test")
 
-	err = router.RouteOutboundMessage(session, destHash, destPubKey, payload)
+	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "outbound tunnel pool required")
 }
@@ -113,7 +113,7 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 	var destPubKey [32]byte
 	payload := []byte("test")
 
-	err = router.RouteOutboundMessage(session, destHash, destPubKey, payload)
+	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient active outbound tunnels")
 }

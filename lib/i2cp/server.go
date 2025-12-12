@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -74,6 +75,9 @@ type Server struct {
 
 	// LeaseSet publishing
 	leaseSetPublisher LeaseSetPublisher
+
+	// Message ID generation for status tracking
+	nextMessageID atomic.Uint32
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -686,6 +690,26 @@ func buildSessionStatusResponse(sessionID uint16) *Message {
 	}
 }
 
+// buildMessageStatusResponse creates a MessageStatus message.
+// MessageStatus payload format (13 bytes):
+// - 4 bytes: Message ID (uint32, big endian)
+// - 1 byte:  Status code
+// - 4 bytes: Message size (uint32, big endian)
+// - 4 bytes: Nonce (uint32, big endian)
+func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode uint8, messageSize uint32, nonce uint32) *Message {
+	payload := make([]byte, 13)
+	binary.BigEndian.PutUint32(payload[0:4], messageID)
+	payload[4] = statusCode
+	binary.BigEndian.PutUint32(payload[5:9], messageSize)
+	binary.BigEndian.PutUint32(payload[9:13], nonce)
+
+	return &Message{
+		Type:      MessageTypeMessageStatus,
+		SessionID: sessionID,
+		Payload:   payload,
+	}
+}
+
 // handleDestroySession destroys a session
 func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
@@ -1155,15 +1179,17 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 }
 
 // handleSendMessage handles a client sending a message to a destination.
-// This parses the SendMessage payload (destination hash + message data),
-// validates the session state, and initiates message routing.
+// This implements the full message delivery flow with status tracking:
+// 1. Parse and validate the SendMessage payload
+// 2. Generate unique message ID for tracking
+// 3. Send immediate MessageStatus (accepted) to client
+// 4. Route message asynchronously with delivery status callbacks
 //
-// In a full implementation, this would:
-// 1. Wrap the payload in garlic encryption using the destination's public key
-// 2. Select an outbound tunnel from the session's tunnel pool
-// 3. Send the garlic message through the tunnel to the destination
-//
-// Current implementation provides payload parsing and validation.
+// Message routing:
+// - Wraps payload in garlic encryption using destination's public key
+// - Selects outbound tunnel from session's tunnel pool
+// - Sends encrypted garlic through tunnel gateway
+// - Reports final status (success/failure) via MessageStatus message
 func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message, error) {
 	session, err := s.validateSessionForSending(sessionPtr)
 	if err != nil {
@@ -1179,9 +1205,31 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 		return nil, err
 	}
 
-	s.routeMessageToDestination(session, sendMsg)
+	// Generate unique message ID for tracking
+	messageID := s.nextMessageID.Add(1)
 
-	return nil, nil
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleSendMessage",
+		"sessionID":   session.ID(),
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"payloadSize": len(sendMsg.Payload),
+	}).Debug("sending_message_accepted")
+
+	// Send immediate acceptance status to client
+	acceptMsg := buildMessageStatusResponse(
+		session.ID(),
+		messageID,
+		MessageStatusAccepted,
+		uint32(len(sendMsg.Payload)),
+		0, // nonce
+	)
+
+	// Route message asynchronously with status tracking
+	go s.routeMessageWithStatus(session, messageID, sendMsg)
+
+	// Return immediate acceptance response
+	return acceptMsg, nil
 }
 
 // validateSessionForSending validates that a session exists for sending.
@@ -1252,7 +1300,106 @@ func (s *Server) validateOutboundPool(session *Session) error {
 	return nil
 }
 
+// routeMessageWithStatus routes a message asynchronously with delivery status tracking.
+// This method is called from a goroutine and handles the complete routing flow including
+// status callbacks to notify the client of delivery success/failure.
+func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, sendMsg *SendMessagePayload) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.routeMessageWithStatus",
+		"sessionID":   session.ID(),
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"payloadSize": len(sendMsg.Payload),
+	}).Debug("routing_message_async")
+
+	// Create status callback to send MessageStatus to client
+	statusCallback := func(msgID uint32, statusCode uint8, messageSize uint32, nonce uint32) {
+		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, nonce)
+		s.sendStatusToClient(session, statusMsg)
+	}
+
+	// Look up destination's encryption public key from NetDB
+	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.routeMessageWithStatus",
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"error":       err.Error(),
+		}).Error("failed_to_resolve_destination_key")
+		// Send failure status
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
+		return
+	}
+
+	// Route through message router
+	if s.messageRouter != nil {
+		err := s.messageRouter.RouteOutboundMessage(
+			session,
+			messageID,
+			sendMsg.Destination,
+			destPubKey,
+			sendMsg.Payload,
+			statusCallback,
+		)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.routeMessageWithStatus",
+				"sessionID":   session.ID(),
+				"messageID":   messageID,
+				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+				"error":       err.Error(),
+			}).Error("failed_to_route_message")
+			// Status callback already invoked by RouteOutboundMessage
+		}
+	} else {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.routeMessageWithStatus",
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		}).Warn("no_message_router_message_queued")
+		// Send failure status when no router available
+		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), 0)
+	}
+}
+
+// sendStatusToClient sends a MessageStatus message to the client connection.
+func (s *Server) sendStatusToClient(session *Session, statusMsg *Message) {
+	s.mu.RLock()
+	conn, exists := s.sessionConns[session.ID()]
+	s.mu.RUnlock()
+
+	if !exists {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.sendStatusToClient",
+			"sessionID": session.ID(),
+		}).Warn("no_connection_for_status_message")
+		return
+	}
+
+	data, err := statusMsg.MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.sendStatusToClient",
+			"sessionID": session.ID(),
+			"error":     err.Error(),
+		}).Error("failed_to_marshal_status_message")
+		return
+	}
+
+	if _, err := conn.Write(data); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.sendStatusToClient",
+			"sessionID": session.ID(),
+			"error":     err.Error(),
+		}).Error("failed_to_send_status_message")
+	}
+}
+
 // routeMessageToDestination routes the message through the I2P network.
+// Deprecated: Use routeMessageWithStatus for new code that supports delivery tracking.
 func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessagePayload) {
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.routeMessageToDestination",
@@ -1274,7 +1421,23 @@ func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessag
 	}
 
 	if s.messageRouter != nil {
-		s.routeWithMessageRouter(session, sendMsg, destPubKey)
+		// Call with messageID=0 and no callback for backward compatibility
+		err := s.messageRouter.RouteOutboundMessage(
+			session,
+			0, // messageID
+			sendMsg.Destination,
+			destPubKey,
+			sendMsg.Payload,
+			nil, // no status callback
+		)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.routeMessageToDestination",
+				"sessionID":   session.ID(),
+				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+				"error":       err.Error(),
+			}).Error("failed_to_route_message")
+		}
 	} else {
 		s.logMessageQueuedWithoutRouter(session, sendMsg)
 	}
@@ -1301,17 +1464,21 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 }
 
 // routeWithMessageRouter attempts to route the message using the message router.
-func (s *Server) routeWithMessageRouter(session *Session, sendMsg *SendMessagePayload, destPubKey [32]byte) {
+// Deprecated: Use routeMessageWithStatus for new code with delivery tracking.
+func (s *Server) routeWithMessageRouter(session *Session, messageID uint32, sendMsg *SendMessagePayload, destPubKey [32]byte, statusCallback MessageStatusCallback) {
 	err := s.messageRouter.RouteOutboundMessage(
 		session,
+		messageID,
 		sendMsg.Destination,
 		destPubKey,
 		sendMsg.Payload,
+		statusCallback,
 	)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.routeWithMessageRouter",
 			"sessionID":   session.ID(),
+			"messageID":   messageID,
 			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 			"error":       err,
 		}).Error("failed_to_route_message")
@@ -1319,6 +1486,7 @@ func (s *Server) routeWithMessageRouter(session *Session, sendMsg *SendMessagePa
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.routeWithMessageRouter",
 			"sessionID":   session.ID(),
+			"messageID":   messageID,
 			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 			"payloadSize": len(sendMsg.Payload),
 		}).Info("message_routed_successfully")
