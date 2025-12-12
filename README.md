@@ -16,7 +16,7 @@ The core router functionality is now operational. We are currently focused on ad
 ### Implemented Features
 
 - Clients
-  - [X] I2CP Protocol Server
+  - [X] I2CP Protocol Server(still pretty broken, not compatible with i2psnark-standalone yet)
   - [X] Message routing (outbound I2CP → tunnels → garlic encryption)
   - [X] Inbound message delivery (tunnel → I2CP sessions)
   - [ ] Datagrams (planned for github.com/go-i2p/go-datagrams)
