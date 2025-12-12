@@ -51,4 +51,20 @@
 // initial router information from trusted sources.
 //
 // See bootstrap package for reseed client implementation.
+//
+// # Exploration
+//
+// The Explorer performs periodic database lookups to discover new routers
+// and expand NetDB knowledge beyond floodfill routers. Two exploration
+// strategies are supported:
+//
+//   - Adaptive (default): Targets sparse regions of the keyspace using
+//     bucket analysis to efficiently discover routers in under-represented
+//     areas. Automatically adjusts exploration interval based on NetDB health.
+//
+//   - Random: Performs lookups for random keys across the entire keyspace.
+//     Simpler but less efficient than adaptive strategy.
+//
+// Exploration runs in the background with configurable interval (default: 5 minutes),
+// concurrency (default: 3 parallel lookups), and timeout (default: 30 seconds per lookup).
 package netdb
