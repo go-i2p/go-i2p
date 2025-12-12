@@ -118,54 +118,42 @@ func (tmux *TransportMuxer) Name() string {
 	return _name
 }
 
-// get a transport session given a router info
-// return session and nil if successful
-// return nil and ErrNoTransportAvailable if we failed to get a session
-func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
+// tryGetSessionFromTransport attempts to get a session from a compatible transport.
+// Returns the session and nil if successful, or nil and an error if it fails.
+func (tmux *TransportMuxer) tryGetSessionFromTransport(t Transport, routerInfo router_info.RouterInfo, index int) (TransportSession, error) {
 	peerHash, _ := routerInfo.IdentHash()
 	log.WithFields(logger.Fields{
-		"at":             "(TransportMuxer) GetSession",
-		"reason":         "attempting_peer_connection",
-		"peer_hash":      fmt.Sprintf("%x...", peerHash[:8]),
-		"num_transports": len(tmux.trans),
-	}).Debug("attempting to get session")
-	for i, t := range tmux.trans {
-		// pick the first one that is compatible
-		if t.Compatible(routerInfo) {
-			log.WithFields(logger.Fields{
-				"at":              "(TransportMuxer) GetSession",
-				"reason":          "compatible_transport_found",
-				"transport_index": i,
-			}).Debug("found compatible transport, attempting session")
-			// try to get a session
-			s, err = t.GetSession(routerInfo)
-			if err != nil {
-				// Enhanced logging for Issue #2: Session establishment failures
-				log.WithFields(logger.Fields{
-					"at":              "(TransportMuxer) GetSession",
-					"phase":           "session_establishment",
-					"reason":          "session_creation_failed",
-					"transport_index": i,
-					"peer_hash":       fmt.Sprintf("%x", peerHash[:]),
-					"error":           err.Error(),
-					"impact":          "cannot communicate with this peer",
-					"addresses":       len(routerInfo.RouterAddresses()),
-				}).Warn("failed to get session from compatible transport, trying next")
-				// we could not get a session
-				// try the next transport
-				continue
-			}
-			// we got a session
-			log.WithFields(logger.Fields{
-				"at":              "(TransportMuxer) GetSession",
-				"reason":          "session_established",
-				"transport_index": i,
-			}).Debug("successfully got session from transport")
-			return
-		}
+		"at":              "(TransportMuxer) GetSession",
+		"reason":          "compatible_transport_found",
+		"transport_index": index,
+	}).Debug("found compatible transport, attempting session")
+
+	s, err := t.GetSession(routerInfo)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) GetSession",
+			"phase":           "session_establishment",
+			"reason":          "session_creation_failed",
+			"transport_index": index,
+			"peer_hash":       fmt.Sprintf("%x", peerHash[:]),
+			"error":           err.Error(),
+			"impact":          "cannot communicate with this peer",
+			"addresses":       len(routerInfo.RouterAddresses()),
+		}).Warn("failed to get session from compatible transport, trying next")
+		return nil, err
 	}
-	// Enhanced logging for Critical Priority Issue #3: Session Establishment Diagnostics
-	// Analyze peer's address types to provide actionable diagnostics
+
+	log.WithFields(logger.Fields{
+		"at":              "(TransportMuxer) GetSession",
+		"reason":          "session_established",
+		"transport_index": index,
+	}).Debug("successfully got session from transport")
+	return s, nil
+}
+
+// logNoTransportError logs detailed diagnostics when no compatible transport is found.
+func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInfo) {
+	peerHash, _ := routerInfo.IdentHash()
 	addressTypes := make([]string, 0, len(routerInfo.RouterAddresses()))
 	for _, addr := range routerInfo.RouterAddresses() {
 		style := addr.TransportStyle()
@@ -173,6 +161,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			addressTypes = append(addressTypes, string(styleBytes))
 		}
 	}
+
 	log.WithFields(logger.Fields{
 		"at":             "(TransportMuxer) GetSession",
 		"phase":          "session_establishment",
@@ -185,7 +174,31 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		"diagnosis":      "peer may only support introducer-based connections or SSU2",
 		"recommendation": "implement introducer support or SSU2 transport",
 	}).Error("failed to get session - no compatible transports found")
-	// we failed to get a session for this routerInfo
+}
+
+// get a transport session given a router info
+// return session and nil if successful
+// return nil and ErrNoTransportAvailable if we failed to get a session
+func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
+	peerHash, _ := routerInfo.IdentHash()
+	log.WithFields(logger.Fields{
+		"at":             "(TransportMuxer) GetSession",
+		"reason":         "attempting_peer_connection",
+		"peer_hash":      fmt.Sprintf("%x...", peerHash[:8]),
+		"num_transports": len(tmux.trans),
+	}).Debug("attempting to get session")
+
+	for i, t := range tmux.trans {
+		if t.Compatible(routerInfo) {
+			s, err = tmux.tryGetSessionFromTransport(t, routerInfo, i)
+			if err != nil {
+				continue
+			}
+			return
+		}
+	}
+
+	tmux.logNoTransportError(routerInfo)
 	err = ErrNoTransportAvailable
 	return
 }
