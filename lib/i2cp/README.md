@@ -184,6 +184,44 @@ func WriteMessage(w io.Writer, msg *Message) error
 ```
 WriteMessage writes a complete I2CP message to a writer
 
+#### type BlindingInfoPayload
+
+```go
+type BlindingInfoPayload struct {
+	Enabled bool   // Whether destination blinding is enabled
+	Secret  []byte // Blinding secret (nil = generate random, empty = disabled)
+}
+```
+
+BlindingInfoPayload represents the payload structure of a BlindingInfo (type 42)
+message. This message allows clients to configure destination blinding
+parameters.
+
+Wire format:
+
+    1 byte:  Blinding enabled flag (0x00 = disabled, 0x01 = enabled)
+    N bytes: Blinding secret (optional, 32 bytes if provided; 0 bytes to use random)
+
+If enabled flag is 0x00, no secret is expected and blinding will be disabled. If
+enabled flag is 0x01 and no secret follows, a random secret will be generated.
+If enabled flag is 0x01 and 32 bytes follow, that secret will be used.
+
+#### func  ParseBlindingInfoPayload
+
+```go
+func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error)
+```
+ParseBlindingInfoPayload deserializes a BlindingInfo payload from wire format.
+Minimum size: 1 byte (enabled flag) Maximum size: 33 bytes (flag + 32-byte
+secret)
+
+#### func (*BlindingInfoPayload) MarshalBinary
+
+```go
+func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the BlindingInfoPayload to wire format.
+
 #### type DisconnectPayload
 
 ```go
@@ -679,6 +717,17 @@ func (s *Server) SetMessageRouter(router *MessageRouter)
 SetMessageRouter sets the message router for outbound message handling. This
 should be called after creating the server and before starting it.
 
+#### func (*Server) SetNetDB
+
+```go
+func (s *Server) SetNetDB(netdb interface {
+	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+},
+)
+```
+SetNetDB sets the NetDB accessor for looking up LeaseSet data. This enables
+HostLookup queries to retrieve full destination information.
+
 #### func (*Server) Start
 
 ```go
@@ -705,6 +754,18 @@ type ServerConfig struct {
 
 	// Maximum number of concurrent sessions
 	MaxSessions int
+
+	// ReadTimeout is the maximum duration for reading requests from clients
+	// Zero means no timeout. Default: 60 seconds
+	ReadTimeout time.Duration
+
+	// WriteTimeout is the maximum duration for writing responses to clients
+	// Zero means no timeout. Default: 30 seconds
+	WriteTimeout time.Duration
+
+	// SessionTimeout is how long idle sessions stay alive before being closed
+	// Zero means no timeout (sessions persist until explicit disconnect). Default: 30 minutes
+	SessionTimeout time.Duration
 
 	// LeaseSet publisher for distributing LeaseSets to the network (optional)
 	// If nil, sessions will function but won't publish to the network
@@ -825,6 +886,13 @@ InboundPool returns the inbound tunnel pool
 func (s *Session) IsActive() bool
 ```
 IsActive returns whether the session is active
+
+#### func (*Session) LastActivity
+
+```go
+func (s *Session) LastActivity() time.Time
+```
+LastActivity returns when the session was last active
 
 #### func (*Session) LeaseSetAge
 
@@ -1018,12 +1086,26 @@ func (sm *SessionManager) DestroySession(sessionID uint16) error
 ```
 DestroySession removes and stops a session
 
+#### func (*SessionManager) GetAllSessions
+
+```go
+func (sm *SessionManager) GetAllSessions() []*Session
+```
+GetAllSessions returns a copy of all active sessions
+
 #### func (*SessionManager) GetSession
 
 ```go
 func (sm *SessionManager) GetSession(sessionID uint16) (*Session, bool)
 ```
 GetSession retrieves a session by ID
+
+#### func (*SessionManager) RemoveSession
+
+```go
+func (sm *SessionManager) RemoveSession(sessionID uint16)
+```
+RemoveSession removes a session from the manager without stopping it
 
 #### func (*SessionManager) SessionCount
 

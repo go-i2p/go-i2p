@@ -33,9 +33,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1 -->
-<g id="edge1" class="edge">
+<g id="edge3" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1</title>
-<g id="a_edge1"><a xlink:title="at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
+<g id="a_edge3"><a xlink:title="at .:0: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.init#1]">
 <path fill="none" stroke="#000000" d="M75.4113,-156C102.9748,-156 145.8607,-156 176.8609,-156"/>
 <polygon fill="#000000" stroke="#000000" points="176.8791,-159.5001 186.879,-156 176.879,-152.5001 176.8791,-159.5001"/>
 </a>
@@ -60,9 +60,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload -->
-<g id="edge2" class="edge">
+<g id="edge1" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload</title>
-<g id="a_edge2"><a xlink:title="at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]">
+<g id="a_edge1"><a xlink:title="at unix.go:23: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleReload]">
 <path fill="none" stroke="#000000" d="M80.8029,-58.9493C101.7394,-55.0622 129.5814,-49.8929 154.4915,-45.2681"/>
 <polygon fill="#000000" stroke="#000000" points="155.4019,-48.6589 164.5949,-43.3922 154.124,-41.7765 155.4019,-48.6589"/>
 </a>
@@ -78,9 +78,9 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted -->
-<g id="edge3" class="edge">
+<g id="edge2" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.Handle&#45;&gt;github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted</title>
-<g id="a_edge3"><a xlink:title="at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
+<g id="a_edge2"><a xlink:title="at unix.go:25: calling [github.com/go&#45;i2p/go&#45;i2p/lib/util/signals.handleInterrupted]">
 <path fill="none" stroke="#000000" d="M80.8029,-70.8555C98.7443,-74.0791 121.7569,-78.2139 143.6498,-82.1475"/>
 <polygon fill="#000000" stroke="#000000" points="143.1463,-85.613 153.6077,-83.9366 144.3842,-78.7233 143.1463,-85.613"/>
 </a>

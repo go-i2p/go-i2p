@@ -73,25 +73,25 @@ NewBandwidthTracker creates a new bandwidth tracker with 1-second sampling.
 #### func (*BandwidthTracker) GetRate15s
 
 ```go
-func (bt *BandwidthTracker) GetRate15s() uint64
+func (bt *BandwidthTracker) GetRate15s() (inbound, outbound uint64)
 ```
-GetRate15s returns the 15-second rolling average bandwidth rate in bytes per
-second.
+GetRate15s returns the 15-second inbound and outbound bandwidth rates in bytes
+per second.
 
 #### func (*BandwidthTracker) GetRate1s
 
 ```go
-func (bt *BandwidthTracker) GetRate1s() uint64
+func (bt *BandwidthTracker) GetRate1s() (inbound, outbound uint64)
 ```
-GetRate1s returns the 1-second rolling average bandwidth rate in bytes per
+GetRate1s returns the 1-second inbound and outbound bandwidth rates in bytes per
 second.
 
 #### func (*BandwidthTracker) GetRates
 
 ```go
-func (bt *BandwidthTracker) GetRates() (rate1s, rate15s uint64)
+func (bt *BandwidthTracker) GetRates() (inbound, outbound uint64)
 ```
-GetRates returns the current 1-second and 15-second bandwidth rates in bytes per
+GetRates returns the 15-second inbound and outbound bandwidth rates in bytes per
 second.
 
 #### func (*BandwidthTracker) Start
@@ -406,10 +406,10 @@ can start up again
 #### func (*Router) GetBandwidthRates
 
 ```go
-func (r *Router) GetBandwidthRates() (rate1s, rate15s uint64)
+func (r *Router) GetBandwidthRates() (inbound, outbound uint64)
 ```
-GetBandwidthRates returns the current 1-second and 15-second bandwidth rates.
-Returns rates in bytes per second.
+GetBandwidthRates returns the current 15-second inbound and outbound bandwidth
+rates. Returns rates in bytes per second.
 
 #### func (*Router) GetConfig
 

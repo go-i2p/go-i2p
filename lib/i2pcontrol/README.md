@@ -281,10 +281,10 @@ robustness. Current status:
 All public types and methods are safe for concurrent access from multiple
 goroutines:
 
-- **Server**: Immutable after construction (fields set only in NewServer and never modified). Uses sync.WaitGroup for shutdown coordination.
-- **AuthManager**: Protected by sync.RWMutex for token management.
-- **MethodRegistry**: Protected by sync.RWMutex for handler registration/lookup.
-- **RouterStatsProvider**: Interface implementations must be thread-safe.
+    - **Server**: Immutable after construction (fields set only in NewServer and never modified). Uses sync.WaitGroup for shutdown coordination.
+    - **AuthManager**: Protected by sync.RWMutex for token management.
+    - **MethodRegistry**: Protected by sync.RWMutex for handler registration/lookup.
+    - **RouterStatsProvider**: Interface implementations must be thread-safe.
 
 ## Usage
 
@@ -417,18 +417,18 @@ Returns:
 
 ```go
 type BandwidthStats struct {
-	// InboundRate is the current inbound data rate (bytes/sec)
-	// Currently returns 0.0 as bandwidth tracking is not yet implemented
+	// InboundRate is the inbound data rate (bytes/sec)
+	// Tracks received bytes from all transport sessions.
 	InboundRate float64
 
-	// OutboundRate is the current outbound data rate (bytes/sec)
-	// Currently returns 0.0 as bandwidth tracking is not yet implemented
+	// OutboundRate is the outbound data rate (bytes/sec)
+	// Tracks sent bytes from all transport sessions.
 	OutboundRate float64
 }
 ```
 
 BandwidthStats contains bandwidth usage statistics. Rates are measured in bytes
-per second.
+per second (15-second rolling average).
 
 #### type EchoHandler
 
@@ -1050,8 +1050,8 @@ type RouterAccess interface {
 	// IsReseeding returns whether the router is currently performing a NetDB reseed operation
 	IsReseeding() bool
 
-	// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates in bytes per second
-	GetBandwidthRates() (rate1s, rate15s uint64)
+	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
+	GetBandwidthRates() (inbound, outbound uint64)
 
 	// Stop initiates graceful shutdown of the router
 	Stop()

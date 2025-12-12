@@ -1564,6 +1564,15 @@ delivery types. This is optional - if not set, only LOCAL delivery (0x00) will
 be processed. The forwarder enables DESTINATION (0x01), ROUTER (0x02), and
 TUNNEL (0x03) deliveries.
 
+#### func (*MessageProcessor) SetDatabaseManager
+
+```go
+func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager)
+```
+SetDatabaseManager sets the database manager for processing DatabaseLookup
+messages. This must be called before processing DatabaseLookup messages,
+otherwise they will fail with an error.
+
 #### func (*MessageProcessor) SetGarlicSessionManager
 
 ```go
