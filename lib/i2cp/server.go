@@ -3,6 +3,7 @@ package i2cp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -243,6 +244,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	s.logClientConnected(conn)
 
+	// Read and validate protocol version byte (0x2a) per I2CP specification.
+	// This must be the first byte sent by the client before any I2CP messages.
+	if !s.readProtocolByte(conn) {
+		return
+	}
+
 	var session *Session
 	defer s.cleanupSessionConnection(&session)
 
@@ -280,6 +287,40 @@ func (s *Server) cleanupConnectionState(conn net.Conn) {
 	s.connMutex.Lock()
 	delete(s.connStates, conn)
 	s.connMutex.Unlock()
+}
+
+// readProtocolByte reads and validates the I2CP protocol version byte (0x2a).
+// Per I2CP specification, this must be the first byte sent by the client.
+// Returns true if the protocol byte is valid, false otherwise.
+func (s *Server) readProtocolByte(conn net.Conn) bool {
+	protocolByte := make([]byte, 1)
+	if _, err := io.ReadFull(conn, protocolByte); err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.readProtocolByte",
+			"remoteAddr": conn.RemoteAddr().String(),
+			"error":      err.Error(),
+		}).Error("failed_to_read_protocol_byte")
+		return false
+	}
+
+	const expectedProtocolByte = 0x2a
+	if protocolByte[0] != expectedProtocolByte {
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.readProtocolByte",
+			"remoteAddr": conn.RemoteAddr().String(),
+			"expected":   fmt.Sprintf("0x%02x", expectedProtocolByte),
+			"received":   fmt.Sprintf("0x%02x", protocolByte[0]),
+		}).Error("invalid_protocol_byte")
+		return false
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "i2cp.Server.readProtocolByte",
+		"remoteAddr":   conn.RemoteAddr().String(),
+		"protocolByte": fmt.Sprintf("0x%02x", protocolByte[0]),
+	}).Info("protocol_handshake_successful")
+
+	return true
 }
 
 // runConnectionLoop processes messages from the client connection.
