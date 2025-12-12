@@ -282,20 +282,23 @@ func setReaderDeadline(r io.Reader) {
 }
 
 // readMessageHeader reads the I2CP message header from the reader.
-// The header consists of type(1) + sessionID(2) + length(4) = 7 bytes.
+// Per I2CP spec: length(4 bytes) + type(1 byte) = 5 bytes total header.
+// The session ID is NOT part of the common header - it's in the message body for messages that use it.
 func readMessageHeader(r io.Reader) ([]byte, error) {
-	header := make([]byte, 7)
+	header := make([]byte, 5)
 	if _, err := io.ReadFull(r, header); err != nil {
 		return nil, fmt.Errorf("failed to read I2CP header: %w", err)
 	}
 	return header, nil
 }
 
-// parseMessageHeader extracts the message type, session ID, and payload length from the header bytes.
+// parseMessageHeader extracts the payload length and message type from the header bytes.
+// Per I2CP spec: header is length(4) + type(1), NOT type + sessionID + length.
 func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payloadLen uint32) {
-	msgType = header[0]
-	sessionID = binary.BigEndian.Uint16(header[1:3])
-	payloadLen = binary.BigEndian.Uint32(header[3:7])
+	// Correct I2CP wire format: length(4 bytes big-endian) + type(1 byte)
+	payloadLen = binary.BigEndian.Uint32(header[0:4])
+	msgType = header[4]
+	sessionID = 0 // Session ID is NOT in the header, it's in the message body
 
 	// i2psnark compatibility: Debug log all message headers to identify patterns
 	// Log at debug level for normal messages, but include size category for analysis
