@@ -9,7 +9,7 @@ require (
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.1.0
 	github.com/go-i2p/crypto v0.1.0
-	github.com/go-i2p/go-noise v0.0.3
+	github.com/go-i2p/go-noise v0.1.0
 	github.com/go-i2p/logger v0.1.0
 	github.com/go-i2p/su3 v0.0.1
 	github.com/samber/oops v1.19.4
@@ -28,7 +28,7 @@ require (
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
-	github.com/go-i2p/noise v0.0.0-20250805205922-091c71f48c43 // indirect
+	github.com/go-i2p/noise v0.0.0-20251212204422-ded862d8cdf9 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect

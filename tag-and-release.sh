@@ -92,5 +92,5 @@ cd go-i2p
 cleanup
 comment_out_replaces
 update_our_packages
-git tag -sa "v$VERSION" -m "go-i2p v$VERSION
+git tag -sa "v$VERSION" -m "go-i2p v$VERSION"
 push
