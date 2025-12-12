@@ -393,7 +393,15 @@ func logLargePayload(payloadLen uint32, msgType uint8, sessionID uint16) {
 }
 
 // readMessagePayload reads the message payload from the reader based on the specified length.
+// Defense-in-depth: Validates payload size before allocation to prevent memory exhaustion attacks.
 func readMessagePayload(r io.Reader, payloadLen uint32) ([]byte, error) {
+	// Validate payload size before allocation (defense-in-depth)
+	// Even though caller should validate, we check here to prevent misuse
+	if payloadLen > MaxPayloadSize {
+		return nil, fmt.Errorf("payload size %d exceeds maximum %d", payloadLen, MaxPayloadSize)
+	}
+
+	// Safe to allocate after validation
 	payload := make([]byte, payloadLen)
 	if payloadLen > 0 {
 		if _, err := io.ReadFull(r, payload); err != nil {
