@@ -44,12 +44,17 @@ const (
 	MessageTypeDestroySession     = 4 // Client -> Router: Terminate session
 
 	// LeaseSet management
-	MessageTypeCreateLeaseSet  = 5 // Client -> Router: Publish LeaseSet
-	MessageTypeRequestLeaseSet = 6 // Router -> Client: Request LeaseSet update
+	MessageTypeCreateLeaseSet          = 5  // Client -> Router: Publish LeaseSet (deprecated)
+	MessageTypeRequestLeaseSet         = 6  // Router -> Client: Request LeaseSet update
+	MessageTypeRequestVariableLeaseSet = 37 // Router -> Client: Request LeaseSet (with lease data)
+	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage    = 7 // Client -> Router: Send message to destination
-	MessageTypeMessagePayload = 8 // Router -> Client: Received message
+	MessageTypeSendMessage        = 7  // Client -> Router: Send message to destination
+	MessageTypeMessagePayload     = 8  // Router -> Client: Received message
+	MessageTypeMessageStatus      = 22 // Router -> Client: Message delivery status
+	MessageTypeDisconnect         = 30 // Client -> Router: Graceful disconnect
+	MessageTypeSendMessageExpires = 36 // Client -> Router: Send message with TTL
 
 	// Status and information
 	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
@@ -83,10 +88,40 @@ Protocol version constants
 
 ```go
 const (
+	// MessageStatusAccepted indicates the message was accepted for delivery.
+	// Sent immediately when SendMessage is received.
+	MessageStatusAccepted = 1
+
+	// MessageStatusSuccess indicates the message was successfully delivered.
+	// Sent after routing completes successfully.
+	MessageStatusSuccess = 4
+
+	// MessageStatusFailure indicates the message delivery failed.
+	// Generic failure status.
+	MessageStatusFailure = 5
+
+	// MessageStatusNoTunnels indicates delivery failed due to no available tunnels.
+	// Sent when the session has no outbound tunnels.
+	MessageStatusNoTunnels = 16
+
+	// MessageStatusNoLeaseSet indicates delivery failed due to missing LeaseSet.
+	// Sent when the destination's LeaseSet cannot be found.
+	MessageStatusNoLeaseSet = 21
+)
+```
+MessageStatus codes as defined in I2CP specification. These codes indicate the
+delivery status of messages sent via SendMessage.
+
+```go
+const (
 	// MaxPayloadSize is the maximum size for I2CP message payloads.
-	// Per I2CP spec: "Actual message length limit is about 64 KB."
-	// Using 65535 (64 KB - 1) to be safe with the 4-byte length field.
-	MaxPayloadSize = 65535
+	// i2psnark compatibility: The I2CP wire format uses a 4-byte length field (uint32),
+	// theoretically supporting up to 4 GB. Java I2P routers accept payloads larger than
+	// 64 KB. i2psnark-standalone sends payloads exceeding 65535 bytes for file transfers.
+	// Setting limit to 256 KB (262144 bytes) to match Java I2P behavior while preventing
+	// memory exhaustion attacks. This allows i2psnark to function properly while maintaining
+	// reasonable DoS protection.
+	MaxPayloadSize = 262144 // 256 KB
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
 	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
@@ -104,17 +139,20 @@ const (
 ```
 Protocol limits as per I2CP specification
 
-```go
-const DefaultI2CPPort = 7654
-```
-DefaultI2CPPort is the standard I2CP port
-
 #### func  MessageTypeName
 
 ```go
 func MessageTypeName(msgType uint8) string
 ```
 MessageTypeName returns a human-readable name for the message type
+
+#### func  ValidateSessionConfig
+
+```go
+func ValidateSessionConfig(config *SessionConfig) error
+```
+ValidateSessionConfig validates session configuration values are within
+acceptable ranges. Returns error if validation fails.
 
 #### func  WriteMessage
 
@@ -196,7 +234,7 @@ UnmarshalBinary deserializes an I2CP message from wire format
 ```go
 type MessagePayloadPayload struct {
 	MessageID uint32 // Unique message identifier
-	Payload   []byte // Decrypted message data (variable length, max ~64 KB total)
+	Payload   []byte // Decrypted message data (variable length, max 256 KB)
 }
 ```
 
@@ -213,9 +251,10 @@ Format:
 The router sends this to the client after receiving and decrypting a message
 from the I2P network destined for the client's destination.
 
-IMPORTANT: Per I2CP specification, the total payload size is limited to
-approximately 64 KB. Messages larger than this limit cannot be delivered via
-I2CP and must be fragmented at the application layer by the sender.
+IMPORTANT: Per I2CP wire format, the total payload size is limited to
+MaxPayloadSize (currently 256 KB for i2psnark compatibility). Messages larger
+than this limit cannot be delivered via I2CP and must be fragmented at the
+application layer by the sender.
 
 #### func  ParseMessagePayloadPayload
 
@@ -266,20 +305,28 @@ the network.
 ```go
 func (mr *MessageRouter) RouteOutboundMessage(
 	session *Session,
+	messageID uint32,
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	payload []byte,
+	expirationMs uint64,
+	statusCallback MessageStatusCallback,
 ) error
 ```
 RouteOutboundMessage routes a message from an I2CP client through the I2P
-network. This implements the complete outbound message flow: 1. Create garlic
-message with Data clove containing the payload 2. Encrypt garlic message for
-destination using ECIES-X25519-AEAD 3. Select outbound tunnel from session's
-pool 4. Send encrypted garlic through tunnel gateway
+network. This implements the complete outbound message flow: 1. Check message
+expiration (if expirationMs > 0) 2. Create garlic message with Data clove
+containing the payload 3. Encrypt garlic message for destination using
+ECIES-X25519-AEAD 4. Select outbound tunnel from session's pool 5. Send
+encrypted garlic through tunnel gateway 6. Invoke status callback with delivery
+status
 
-Parameters: - session: I2CP session sending the message - destinationHash: Hash
-of the target I2P destination - destinationPubKey: X25519 public key of the
-destination (for garlic encryption) - payload: Raw message data to send
+Parameters: - session: I2CP session sending the message - messageID: Unique
+identifier for tracking this message - destinationHash: Hash of the target I2P
+destination - destinationPubKey: X25519 public key of the destination (for
+garlic encryption) - payload: Raw message data to send - expirationMs:
+Expiration timestamp in milliseconds since epoch (0 = no expiration) -
+statusCallback: Optional callback to notify about delivery status (nil allowed)
 
 Returns an error if routing fails at any step.
 
@@ -296,12 +343,84 @@ Parameters: - tunnel: The tunnel to send through - msg: The I2NP message to send
 
 Returns an error if sending fails.
 
+#### type MessageStatusCallback
+
+```go
+type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize uint32, nonce uint32)
+```
+
+MessageStatusCallback is invoked to notify about message delivery status
+changes. Implementations should handle the callback asynchronously to avoid
+blocking the router.
+
+Parameters: - messageID: Unique identifier for the message (client-provided or
+generated) - statusCode: Status code indicating delivery outcome (see
+MessageStatus* constants) - messageSize: Size of the original message payload in
+bytes - nonce: Optional nonce value (0 if not applicable)
+
+#### type SendMessageExpiresPayload
+
+```go
+type SendMessageExpiresPayload struct {
+	Destination data.Hash // 32-byte SHA256 hash of target destination
+	Payload     []byte    // Message data to send (variable length, max 256 KB)
+	Nonce       uint32    // Random nonce for message identification
+	Flags       uint16    // Delivery flags (reserved, set to 0)
+	Expiration  uint64    // Expiration time in milliseconds since epoch (48-bit)
+}
+```
+
+SendMessageExpiresPayload represents the payload structure of a
+SendMessageExpires (type 36) message. This is an enhanced version of SendMessage
+that includes expiration time and delivery flags.
+
+Format per I2CP v2.10.0 specification:
+
+    Destination: Hash (32 bytes) - SHA256 hash of target destination
+    Payload: []byte (variable length) - actual message data to send
+    Nonce: uint32 (4 bytes) - random nonce for message identification
+    Flags: uint16 (2 bytes) - delivery flags (currently unused, set to 0)
+    Expiration: uint64 (6 bytes) - expiration timestamp (milliseconds since epoch, only lower 48 bits used)
+
+The Expiration field is a 48-bit timestamp (6 bytes) representing milliseconds
+since Unix epoch. Messages that have passed their expiration time will not be
+sent and will receive a failure status.
+
+Flags field is reserved for future use (e.g., priority, encryption options).
+Currently should be set to 0.
+
+#### func  ParseSendMessageExpiresPayload
+
+```go
+func ParseSendMessageExpiresPayload(data []byte) (*SendMessageExpiresPayload, error)
+```
+ParseSendMessageExpiresPayload deserializes a SendMessageExpires payload from
+wire format. Returns an error if the payload is too short or malformed.
+
+Wire format:
+
+    bytes 0-31:      Destination hash (32 bytes)
+    bytes 32-(N-13): Message payload (variable length)
+    bytes (N-12)-(N-9): Nonce (4 bytes, big endian)
+    bytes (N-8)-(N-7):  Flags (2 bytes, big endian)
+    bytes (N-6)-(N-1):  Expiration (6 bytes, big endian, 48-bit timestamp)
+
+Where N is the total payload size.
+
+#### func (*SendMessageExpiresPayload) MarshalBinary
+
+```go
+func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error)
+```
+MarshalBinary serializes the SendMessageExpiresPayload to wire format. Returns
+the serialized bytes ready to be sent as an I2CP message payload.
+
 #### type SendMessagePayload
 
 ```go
 type SendMessagePayload struct {
 	Destination data.Hash // 32-byte SHA256 hash of target destination
-	Payload     []byte    // Message data to send (variable length, max ~64 KB total)
+	Payload     []byte    // Message data to send (variable length, max 256 KB)
 }
 ```
 
@@ -318,11 +437,11 @@ Format:
 The router will wrap this payload in garlic encryption and route it through the
 outbound tunnel pool to the specified destination.
 
-IMPORTANT: Per I2CP specification, the total payload size (destination + message
-data) is limited to approximately 64 KB. Client applications are responsible for
-fragmenting larger messages at the application layer. The I2CP protocol does NOT
-provide automatic fragmentation - this must be handled by the client application
-itself.
+IMPORTANT: Per I2CP wire format, the total payload size is limited to
+MaxPayloadSize (currently 256 KB for i2psnark compatibility). Client
+applications like i2psnark may send payloads larger than the original 64 KB
+limit. Applications requiring larger messages should fragment them at the
+application layer, though i2psnark file transfers can use the full 256 KB limit.
 
 #### func  ParseSendMessagePayload
 
@@ -463,6 +582,26 @@ disk.
 func (s *Session) Config() *SessionConfig
 ```
 Config returns the session configuration
+
+#### func (*Session) CreateEncryptedLeaseSet
+
+```go
+func (s *Session) CreateEncryptedLeaseSet() ([]byte, error)
+```
+CreateEncryptedLeaseSet generates an EncryptedLeaseSet from the session's active
+tunnels.
+
+EncryptedLeaseSet provides enhanced privacy by: - Blinding the destination
+(changes daily based on UTC date) - Encrypting the inner LeaseSet2 data - Using
+a cookie-based authentication scheme
+
+This method will: 1. Validate the destination supports EncryptedLeaseSet
+(Ed25519 only) 2. Derive/update the blinded destination (rotates daily at UTC
+midnight) 3. Collect active inbound tunnels 4. Build leases from tunnels 5.
+Create inner LeaseSet2 6. Encrypt inner LeaseSet2 7. Sign EncryptedLeaseSet with
+blinded signing key
+
+Returns serialized EncryptedLeaseSet bytes or error.
 
 #### func (*Session) CreateLeaseSet
 
@@ -638,6 +777,11 @@ type SessionConfig struct {
 	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
 	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
 
+	// EncryptedLeaseSet configuration (requires Ed25519 destination)
+	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
+	BlindingSecret       []byte // Secret for destination blinding (if empty, random generated)
+	LeaseSetExpiration   uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
+
 	// Session metadata
 	Nickname string // Optional nickname for debugging
 }
@@ -651,6 +795,33 @@ SessionConfig holds the configuration for an I2CP session
 func DefaultSessionConfig() *SessionConfig
 ```
 DefaultSessionConfig returns a SessionConfig with sensible defaults
+
+#### func  ParseCreateSessionPayload
+
+```go
+func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *SessionConfig, error)
+```
+ParseCreateSessionPayload parses a CreateSession message payload. Returns the
+destination and session configuration.
+
+Wire format:
+
+    - Destination (variable length, typically ~387+ bytes)
+    - Options Mapping (2-byte size + key=value; pairs)
+
+#### func  ParseReconfigureSessionPayload
+
+```go
+func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error)
+```
+ParseReconfigureSessionPayload parses a ReconfigureSession message payload.
+Returns the updated session configuration.
+
+Wire format:
+
+    - Options Mapping (2-byte size + key=value; pairs)
+
+Note: SessionID is in the message header, not the payload.
 
 #### type SessionManager
 

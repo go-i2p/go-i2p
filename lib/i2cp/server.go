@@ -593,6 +593,9 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 	case MessageTypeSendMessage:
 		return s.handleSendMessage(msg, sessionPtr)
 
+	case MessageTypeSendMessageExpires:
+		return s.handleSendMessageExpires(msg, sessionPtr)
+
 	default:
 		// i2psnark compatibility: Log unsupported message types with full context
 		log.WithFields(logger.Fields{
@@ -1300,6 +1303,159 @@ func (s *Server) validateOutboundPool(session *Session) error {
 	return nil
 }
 
+// handleSendMessageExpires handles SendMessageExpires (type 36) messages.
+// This is an enhanced version of SendMessage that includes expiration time and delivery flags.
+// The message will not be sent if it has already expired when processing begins.
+func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*Message, error) {
+	session, err := s.validateSessionForSending(sessionPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse SendMessageExpires payload
+	sendMsgExpires, err := s.parseSendMessageExpiresPayload(msg, session)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.validateOutboundPool(session); err != nil {
+		return nil, err
+	}
+
+	// Generate unique message ID for tracking
+	messageID := s.nextMessageID.Add(1)
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleSendMessageExpires",
+		"sessionID":   session.ID(),
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", sendMsgExpires.Destination[:8]),
+		"payloadSize": len(sendMsgExpires.Payload),
+		"nonce":       sendMsgExpires.Nonce,
+		"flags":       sendMsgExpires.Flags,
+		"expiration":  sendMsgExpires.Expiration,
+	}).Debug("sending_message_expires_accepted")
+
+	// Send immediate acceptance status to client
+	acceptMsg := buildMessageStatusResponse(
+		session.ID(),
+		messageID,
+		MessageStatusAccepted,
+		uint32(len(sendMsgExpires.Payload)),
+		sendMsgExpires.Nonce,
+	)
+
+	// Route message asynchronously with status tracking and expiration
+	go s.routeMessageExpiresWithStatus(session, messageID, sendMsgExpires)
+
+	// Return immediate acceptance response
+	return acceptMsg, nil
+}
+
+// parseSendMessageExpiresPayload parses the SendMessageExpires payload from the message.
+func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) (*SendMessageExpiresPayload, error) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.parseSendMessageExpiresPayload",
+		"sessionID":   session.ID(),
+		"payloadSize": len(msg.Payload),
+	}).Debug("parsing_send_message_expires_payload")
+
+	sendMsg, err := ParseSendMessageExpiresPayload(msg.Payload)
+	if err != nil {
+		excerptLen := min(64, len(msg.Payload))
+		log.WithFields(logger.Fields{
+			"at":             "i2cp.Server.parseSendMessageExpiresPayload",
+			"sessionID":      session.ID(),
+			"payloadSize":    len(msg.Payload),
+			"error":          err,
+			"payloadExcerpt": fmt.Sprintf("%x", msg.Payload[:excerptLen]),
+		}).Error("failed_to_parse_send_message_expires")
+		return nil, fmt.Errorf("failed to parse SendMessageExpires payload: %w", err)
+	}
+
+	// Validate payload size (same limits as SendMessage)
+	const maxSafePayloadSize = MaxPayloadSize - 2048
+	if len(sendMsg.Payload) > maxSafePayloadSize {
+		log.WithFields(logger.Fields{
+			"at":              "i2cp.Server.parseSendMessageExpiresPayload",
+			"sessionID":       session.ID(),
+			"payloadSize":     len(sendMsg.Payload),
+			"maxAllowed":      maxSafePayloadSize,
+			"maxPayloadSize":  MaxPayloadSize,
+			"destinationHash": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		}).Error("send_message_expires_payload_too_large")
+		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes to allow for encryption overhead)",
+			len(sendMsg.Payload), maxSafePayloadSize)
+	}
+
+	return sendMsg, nil
+}
+
+// routeMessageExpiresWithStatus routes a SendMessageExpires message asynchronously with
+// delivery status tracking and expiration checking.
+func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint32, sendMsg *SendMessageExpiresPayload) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.routeMessageExpiresWithStatus",
+		"sessionID":   session.ID(),
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		"payloadSize": len(sendMsg.Payload),
+		"expiration":  sendMsg.Expiration,
+		"nonce":       sendMsg.Nonce,
+	}).Info("routing_message_expires")
+
+	// Create status callback
+	statusCallback := func(msgID uint32, statusCode uint8, messageSize uint32, nonce uint32) {
+		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, sendMsg.Nonce)
+		s.sendStatusToClient(session, statusMsg)
+	}
+
+	// Resolve destination public key
+	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.routeMessageExpiresWithStatus",
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+			"error":       err.Error(),
+		}).Error("failed_to_resolve_destination_key")
+		// Send failure status
+		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
+		return
+	}
+
+	// Route through message router with expiration
+	if s.messageRouter != nil {
+		err := s.messageRouter.RouteOutboundMessage(
+			session,
+			messageID,
+			sendMsg.Destination,
+			destPubKey,
+			sendMsg.Payload,
+			sendMsg.Expiration, // Pass expiration time
+			statusCallback,
+		)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.routeMessageExpiresWithStatus",
+				"sessionID":   session.ID(),
+				"messageID":   messageID,
+				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+				"error":       err.Error(),
+			}).Error("failed_to_route_message_expires")
+			// Status callback already invoked by RouteOutboundMessage
+		}
+	} else {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.routeMessageExpiresWithStatus",
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
+		}).Warn("no_message_router_configured")
+	}
+}
+
 // routeMessageWithStatus routes a message asynchronously with delivery status tracking.
 // This method is called from a goroutine and handles the complete routing flow including
 // status callbacks to notify the client of delivery success/failure.
@@ -1341,6 +1497,7 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 			sendMsg.Destination,
 			destPubKey,
 			sendMsg.Payload,
+			0, // no expiration for SendMessage (type 7)
 			statusCallback,
 		)
 		if err != nil {
@@ -1428,6 +1585,7 @@ func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessag
 			sendMsg.Destination,
 			destPubKey,
 			sendMsg.Payload,
+			0,   // no expiration
 			nil, // no status callback
 		)
 		if err != nil {
@@ -1472,6 +1630,7 @@ func (s *Server) routeWithMessageRouter(session *Session, messageID uint32, send
 		sendMsg.Destination,
 		destPubKey,
 		sendMsg.Payload,
+		0, // no expiration
 		statusCallback,
 	)
 	if err != nil {

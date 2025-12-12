@@ -17,6 +17,7 @@ var (
 	ErrConnectionPoolFull     = oops.New("NTCP2 connection pool full")
 	ErrFramingError           = oops.New("I2NP message framing error")
 	ErrInvalidListenerAddress = oops.New("invalid listener address for NTCP2")
+	ErrInvalidConfig          = oops.New("invalid NTCP2 configuration")
 )
 ```
 
@@ -52,6 +53,44 @@ func FrameI2NPMessage(msg i2np.I2NPMessage) ([]byte, error)
 ```
 Frame an I2NP message for transmission over NTCP2
 
+#### func  GetStaticKeyFromRouter
+
+```go
+func GetStaticKeyFromRouter(encryptionKey types.PrivateEncryptionKey) []byte
+```
+GetStaticKeyFromRouter extracts the X25519 encryption private key from the
+router keystore. This key serves as the NTCP2 static key, ensuring consistent
+peer identification across router restarts. The key is already persisted by the
+RouterInfoKeystore.
+
+Parameters:
+
+    - encryptionKey: The router's X25519 encryption private key
+
+Returns:
+
+    - 32-byte static key suitable for NTCP2 configuration
+
+#### func  HasDirectConnectivity
+
+```go
+func HasDirectConnectivity(addr *router_address.RouterAddress) bool
+```
+HasDirectConnectivity checks if a RouterAddress has direct NTCP2 connectivity.
+Returns true if the address has both host and port keys (directly dialable).
+Returns false if the address is introducer-only (requires NAT traversal).
+CRITICAL FIX #1: Pre-filtering utility for peer selection.
+
+#### func  SupportsDirectNTCP2
+
+```go
+func SupportsDirectNTCP2(routerInfo *router_info.RouterInfo) bool
+```
+SupportsDirectNTCP2 checks if a RouterInfo has at least one directly dialable
+NTCP2 address. This is a convenience function for peer selection - filters out
+introducer-only routers. CRITICAL FIX #1: Exported function for use in peer
+selection/filtering.
+
 #### func  SupportsNTCP2
 
 ```go
@@ -86,6 +125,7 @@ Wrap go-noise errors with context
 ```go
 type Config struct {
 	ListenerAddress string // Address to listen on, e.g., ":42069"
+	WorkingDir      string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
 	*ntcp2.NTCP2Config
 }
 ```
@@ -118,11 +158,27 @@ Stream-based unframing for continuous reading
 func NewI2NPUnframer(conn net.Conn) *I2NPUnframer
 ```
 
+#### func (*I2NPUnframer) BytesRead
+
+```go
+func (u *I2NPUnframer) BytesRead() int
+```
+BytesRead returns the number of bytes read during the last ReadNextMessage call
+
 #### func (*I2NPUnframer) ReadNextMessage
 
 ```go
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error)
 ```
+
+#### type KeystoreProvider
+
+```go
+type KeystoreProvider interface {
+	GetEncryptionPrivateKey() types.PrivateEncryptionKey
+}
+```
+
 
 #### type NTCP2Session
 
@@ -144,6 +200,14 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 func (s *NTCP2Session) Close() error
 ```
 Close closes the session cleanly.
+
+#### func (*NTCP2Session) GetBandwidthStats
+
+```go
+func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64)
+```
+GetBandwidthStats returns the total bytes sent and received by this session. The
+values are read atomically and represent cumulative totals since session start.
 
 #### func (*NTCP2Session) QueueSendI2NP
 
@@ -187,7 +251,7 @@ type NTCP2Transport struct {
 #### func  NewNTCP2Transport
 
 ```go
-func NewNTCP2Transport(identity router_info.RouterInfo, config *Config) (*NTCP2Transport, error)
+func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*NTCP2Transport, error)
 ```
 
 #### func (*NTCP2Transport) Accept
@@ -225,6 +289,15 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 ```
 GetSession obtains a transport session with a router given its RouterInfo.
 
+#### func (*NTCP2Transport) GetTotalBandwidth
+
+```go
+func (t *NTCP2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64)
+```
+GetTotalBandwidth returns the total bytes sent and received across all active
+sessions. This aggregates bandwidth statistics from all sessions managed by this
+transport.
+
 #### func (*NTCP2Transport) Name
 
 ```go
@@ -238,6 +311,35 @@ Name returns the name of this transport.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error
 ```
 SetIdentity sets the router identity for this transport.
+
+#### type PersistentConfig
+
+```go
+type PersistentConfig struct {
+}
+```
+
+PersistentConfig manages persistent NTCP2 configuration data. It handles loading
+and storing the obfuscation IV which must remain consistent across router
+restarts to maintain session continuity.
+
+#### func  NewPersistentConfig
+
+```go
+func NewPersistentConfig(workingDir string) *PersistentConfig
+```
+NewPersistentConfig creates a new persistent configuration manager. workingDir
+is the router's working directory (typically ~/.go-i2p/config).
+
+#### func (*PersistentConfig) LoadOrGenerateObfuscationIV
+
+```go
+func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error)
+```
+LoadOrGenerateObfuscationIV loads the obfuscation IV from persistent storage. If
+the file doesn't exist, generates a new random IV and saves it. Returns an error
+if the file exists but contains invalid data. Returns the 16-byte obfuscation IV
+or an error if loading/generation fails.
 
 
 

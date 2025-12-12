@@ -166,17 +166,23 @@ BuildResponse represents a response from a tunnel hop
 
 ```go
 type BuildTunnelRequest struct {
-	HopCount      int           // Number of hops in the tunnel (1-8)
-	IsInbound     bool          // True for inbound tunnel, false for outbound
-	OurIdentity   common.Hash   // Our router identity hash
-	ExcludePeers  []common.Hash // Peers to exclude from selection
-	ReplyTunnelID TunnelID      // Tunnel ID for receiving build replies (0 for outbound)
-	ReplyGateway  common.Hash   // Gateway hash for build replies (empty for outbound)
-	UseShortBuild bool          // Use Short Tunnel Build (STBM - modern, default true)
+	HopCount                  int           // Number of hops in the tunnel (1-8)
+	IsInbound                 bool          // True for inbound tunnel, false for outbound
+	OurIdentity               common.Hash   // Our router identity hash
+	ExcludePeers              []common.Hash // Peers to exclude from selection
+	ReplyTunnelID             TunnelID      // Tunnel ID for receiving build replies (0 for outbound)
+	ReplyGateway              common.Hash   // Gateway hash for build replies (empty for outbound)
+	UseShortBuild             bool          // Use Short Tunnel Build (STBM - modern, default true)
+	RequireDirectConnectivity bool          // Only select peers with direct NTCP2 connectivity (set true in production)
 }
 ```
 
 BuildTunnelRequest contains the parameters needed to build a tunnel.
+
+BUG FIX: Added RequireDirectConnectivity to enable pre-filtering of
+introducer-only peers. This prevents session establishment failures by only
+selecting peers with direct NTCP2 addresses. Set to true in production; tests
+may leave false to test with mock peers.
 
 #### type BuilderInterface
 
@@ -274,6 +280,68 @@ DeliveryInstructions represents I2P tunnel message delivery instructions
 func NewDeliveryInstructions(bytes []byte) (*DeliveryInstructions, error)
 ```
 NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
+
+#### func  NewLocalDeliveryInstructions
+
+```go
+func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions
+```
+NewLocalDeliveryInstructions creates delivery instructions for LOCAL delivery.
+LOCAL delivery means the message should be processed locally by the current
+router. This is used for both inbound tunnels (standard) and outbound tunnels
+(when message arrives at the final hop).
+
+Parameters:
+
+    - fragmentSize: The size of the message fragment to deliver
+
+Returns:
+
+    - *DeliveryInstructions: A new delivery instruction configured for LOCAL delivery
+
+The resulting instruction will have:
+
+    - deliveryType: DT_LOCAL
+    - fragmentType: FIRST_FRAGMENT
+    - fragmented: false (unfragmented message)
+    - hasDelay: false
+    - hasExtOptions: false
+
+#### func  NewRouterDeliveryInstructions
+
+```go
+func NewRouterDeliveryInstructions(routerHash [32]byte, fragmentSize uint16) *DeliveryInstructions
+```
+NewRouterDeliveryInstructions creates delivery instructions for ROUTER delivery.
+ROUTER delivery sends the message directly to a specific router (not through a
+tunnel).
+
+Parameters:
+
+    - routerHash: SHA-256 hash of the destination router's identity
+    - fragmentSize: The size of the message fragment
+
+Returns:
+
+    - *DeliveryInstructions: A new delivery instruction configured for ROUTER delivery
+
+#### func  NewTunnelDeliveryInstructions
+
+```go
+func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragmentSize uint16) *DeliveryInstructions
+```
+NewTunnelDeliveryInstructions creates delivery instructions for TUNNEL delivery.
+TUNNEL delivery routes the message to a specific tunnel on a gateway router.
+
+Parameters:
+
+    - tunnelID: The destination tunnel ID
+    - gatewayHash: SHA-256 hash of the gateway router's identity
+    - fragmentSize: The size of the message fragment
+
+Returns:
+
+    - *DeliveryInstructions: A new delivery instruction configured for TUNNEL delivery
 
 #### func (*DeliveryInstructions) Bytes
 
@@ -448,7 +516,8 @@ Design decisions: - Simple callback-based message delivery - Works with raw
 bytes to avoid import cycles - Uses crypto/tunnel package with ECIES-X25519-AEAD
 (ChaCha20/Poly1305) by default - Supports both modern ECIES and legacy
 AES-256-CBC for compatibility - Handles fragment reassembly for large messages -
-Clear error handling and logging
+Automatic cleanup of stale fragments (default: 60 seconds) - Thread-safe for
+concurrent message processing - Clear error handling and logging
 
 #### func  NewEndpoint
 
@@ -461,7 +530,8 @@ Parameters: - tunnelID: the ID of this tunnel - decryption: the tunnel
 decryption object for layered decryption - handler: callback function to process
 received I2NP messages
 
-Returns an error if decryption or handler is nil.
+Returns an error if decryption or handler is nil. Starts a background goroutine
+to clean up stale fragments.
 
 #### func (*Endpoint) ClearFragments
 
@@ -481,7 +551,16 @@ Process: 1. Decrypt the tunnel message 2. Validate checksum 3. Parse delivery
 instructions 4. Extract message fragments 5. Reassemble if fragmented 6. Deliver
 to handler
 
-Returns an error if processing fails at any step.
+Thread-safe: protects fragment map access with mutex. Returns an error if
+processing fails at any step.
+
+#### func (*Endpoint) Stop
+
+```go
+func (e *Endpoint) Stop()
+```
+Stop gracefully shuts down the endpoint and stops the cleanup goroutine. Should
+be called when the endpoint is no longer needed to prevent resource leaks.
 
 #### func (*Endpoint) TunnelID
 
@@ -760,6 +839,18 @@ type PeerSelector interface {
 
 PeerSelector defines interface for selecting peers for tunnel building
 
+#### type PeerTracker
+
+```go
+type PeerTracker interface {
+	RecordFailure(hash common.Hash, reason string)
+	RecordSuccess(hash common.Hash, responseTimeMs int64)
+}
+```
+
+PeerTracker interface for recording peer connection outcomes. This allows Pool
+to report connection results to NetDB for reputation tracking.
+
 #### type Pool
 
 ```go
@@ -798,12 +889,28 @@ func (p *Pool) CleanupExpiredTunnels(maxAge time.Duration)
 ```
 CleanupExpiredTunnels removes tunnels that have been building for too long
 
+#### func (*Pool) CleanupFailedPeers
+
+```go
+func (p *Pool) CleanupFailedPeers()
+```
+CleanupFailedPeers removes failed peer entries that have exceeded the cooldown
+period. Should be called periodically as part of pool maintenance.
+
 #### func (*Pool) GetActiveTunnels
 
 ```go
 func (p *Pool) GetActiveTunnels() []*TunnelState
 ```
 GetActiveTunnels returns all active tunnels
+
+#### func (*Pool) GetFailedPeers
+
+```go
+func (p *Pool) GetFailedPeers() []common.Hash
+```
+GetFailedPeers returns a list of peer hashes currently marked as failed. This is
+used to exclude failed peers from tunnel building attempts.
 
 #### func (*Pool) GetPoolStats
 
@@ -819,12 +926,47 @@ func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool)
 ```
 GetTunnel retrieves a tunnel by ID
 
+#### func (*Pool) IsPeerFailed
+
+```go
+func (p *Pool) IsPeerFailed(peerHash common.Hash) bool
+```
+IsPeerFailed checks if a peer is currently in the failed state. Returns true if
+the peer failed recently and is still in cooldown.
+
+#### func (*Pool) MarkPeerFailed
+
+```go
+func (p *Pool) MarkPeerFailed(peerHash common.Hash)
+```
+BUG FIX #5: Failed peer tracking to avoid retry loops MarkPeerFailed records
+that a peer failed to establish a connection. This peer will be avoided for a
+cooldown period to prevent wasted retry attempts. If a PeerTracker is
+configured, the failure is also reported for reputation tracking.
+
 #### func (*Pool) RemoveTunnel
 
 ```go
 func (p *Pool) RemoveTunnel(id TunnelID)
 ```
 RemoveTunnel removes a tunnel from the pool
+
+#### func (*Pool) RetryTunnelBuild
+
+```go
+func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int) error
+```
+RetryTunnelBuild retries building a tunnel that previously timed out. This
+method is called by the ReplyProcessor when a tunnel build times out and
+automatic retry is configured.
+
+Parameters:
+
+    - tunnelID: The ID of the tunnel that timed out (for logging correlation)
+    - isInbound: Direction of the tunnel (true=inbound, false=outbound)
+    - hopCount: Number of hops for the tunnel
+
+Returns error if the tunnel cannot be built (e.g., peer selection fails).
 
 #### func (*Pool) SelectTunnel
 
@@ -833,6 +975,14 @@ func (p *Pool) SelectTunnel() *TunnelState
 ```
 SelectTunnel selects a tunnel from the pool using round-robin strategy. Returns
 nil if no active tunnels are available.
+
+#### func (*Pool) SetPeerTracker
+
+```go
+func (p *Pool) SetPeerTracker(tracker PeerTracker)
+```
+SetPeerTracker sets the peer tracker for NetDB integration. This allows the pool
+to report connection results for reputation tracking.
 
 #### func (*Pool) SetTunnelBuilder
 
@@ -913,6 +1063,7 @@ type TunnelBuildResult struct {
 	ReplyKeys     []session_key.SessionKey // Reply decryption keys for each hop
 	ReplyIVs      [][16]byte               // Reply IVs for each hop
 	UseShortBuild bool                     // True if using Short Tunnel Build (STBM), false for Variable Tunnel Build
+	IsInbound     bool                     // True if this is an inbound tunnel
 }
 ```
 
@@ -989,6 +1140,7 @@ type TunnelState struct {
 	CreatedAt     time.Time        // When tunnel building started
 	ResponseCount int              // Number of responses received
 	Responses     []BuildResponse  // Responses from each hop
+	IsInbound     bool             // True if this is an inbound tunnel
 }
 ```
 

@@ -43,12 +43,32 @@ func (r Reseed) ProcessLocalSU3File(filePath string) ([]router_info.RouterInfo, 
 ```
 ProcessLocalSU3File reads and processes a local SU3 reseed file
 
+#### func (Reseed) ProcessLocalSU3FileWithLimit
+
+```go
+func (r Reseed) ProcessLocalSU3FileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
+```
+ProcessLocalSU3FileWithLimit reads and processes a local SU3 reseed file with a
+limit on RouterInfos parsed. If limit <= 0, all RouterInfos are parsed (same as
+ProcessLocalSU3File). This prevents loading excessive RouterInfos into memory
+when only a small number is needed.
+
 #### func (Reseed) ProcessLocalZipFile
 
 ```go
 func (r Reseed) ProcessLocalZipFile(filePath string) ([]router_info.RouterInfo, error)
 ```
 ProcessLocalZipFile reads and processes a local zip reseed file
+
+#### func (Reseed) ProcessLocalZipFileWithLimit
+
+```go
+func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]router_info.RouterInfo, error)
+```
+ProcessLocalZipFileWithLimit reads and processes a local zip reseed file with a
+limit on RouterInfos parsed. If limit <= 0, all RouterInfos are parsed (same as
+ProcessLocalZipFile). This prevents loading excessive RouterInfos into memory
+when only a small number is needed.
 
 #### func (Reseed) SingleReseed
 

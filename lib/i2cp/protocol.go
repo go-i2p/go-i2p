@@ -35,9 +35,11 @@ const (
 	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage    = 7  // Client -> Router: Send message to destination
-	MessageTypeMessagePayload = 8  // Router -> Client: Received message
-	MessageTypeMessageStatus  = 22 // Router -> Client: Message delivery status
+	MessageTypeSendMessage        = 7  // Client -> Router: Send message to destination
+	MessageTypeMessagePayload     = 8  // Router -> Client: Received message
+	MessageTypeMessageStatus      = 22 // Router -> Client: Message delivery status
+	MessageTypeDisconnect         = 30 // Client -> Router: Graceful disconnect
+	MessageTypeSendMessageExpires = 36 // Client -> Router: Send message with TTL
 
 	// Status and information
 	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
@@ -418,6 +420,10 @@ func MessageTypeName(msgType uint8) string {
 		return "MessagePayload"
 	case MessageTypeMessageStatus:
 		return "MessageStatus"
+	case MessageTypeDisconnect:
+		return "Disconnect"
+	case MessageTypeSendMessageExpires:
+		return "SendMessageExpires"
 	case MessageTypeGetBandwidthLimits:
 		return "GetBandwidthLimits"
 	case MessageTypeBandwidthLimits:

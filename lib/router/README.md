@@ -43,6 +43,204 @@ Core routing functional, I2CP complete, LeaseSet2 supported.
 
 ## Usage
 
+#### type BandwidthSample
+
+```go
+type BandwidthSample struct {
+}
+```
+
+BandwidthSample represents a single bandwidth measurement at a point in time.
+
+#### type BandwidthTracker
+
+```go
+type BandwidthTracker struct {
+}
+```
+
+BandwidthTracker tracks bandwidth usage over time and calculates rolling
+averages. It maintains samples for computing 1-second and 15-second rolling
+averages.
+
+#### func  NewBandwidthTracker
+
+```go
+func NewBandwidthTracker() *BandwidthTracker
+```
+NewBandwidthTracker creates a new bandwidth tracker with 1-second sampling.
+
+#### func (*BandwidthTracker) GetRate15s
+
+```go
+func (bt *BandwidthTracker) GetRate15s() uint64
+```
+GetRate15s returns the 15-second rolling average bandwidth rate in bytes per
+second.
+
+#### func (*BandwidthTracker) GetRate1s
+
+```go
+func (bt *BandwidthTracker) GetRate1s() uint64
+```
+GetRate1s returns the 1-second rolling average bandwidth rate in bytes per
+second.
+
+#### func (*BandwidthTracker) GetRates
+
+```go
+func (bt *BandwidthTracker) GetRates() (rate1s, rate15s uint64)
+```
+GetRates returns the current 1-second and 15-second bandwidth rates in bytes per
+second.
+
+#### func (*BandwidthTracker) Start
+
+```go
+func (bt *BandwidthTracker) Start(getBandwidth func() (sent, received uint64))
+```
+Start begins the bandwidth tracking goroutine. The getBandwidth function should
+return current cumulative bytes sent/received.
+
+#### func (*BandwidthTracker) Stop
+
+```go
+func (bt *BandwidthTracker) Stop()
+```
+Stop stops the bandwidth tracking goroutine.
+
+#### type GarlicMessageRouter
+
+```go
+type GarlicMessageRouter struct {
+}
+```
+
+GarlicMessageRouter provides router-level garlic message forwarding. It bridges
+the gap between message processing (lib/i2np) and router infrastructure (NetDB,
+transport, tunnels) to enable delivery of garlic cloves to destinations,
+routers, and tunnels beyond LOCAL processing.
+
+This component implements the GarlicCloveForwarder interface and is designed to
+be injected into the MessageProcessor via SetCloveForwarder().
+
+Architecture:
+
+    - Receives forwarding requests from MessageProcessor
+    - Accesses NetDB for destination/router lookups
+    - Uses transport layer for direct router-to-router messaging
+    - Uses tunnel pools for destination and tunnel delivery
+
+#### func  NewGarlicMessageRouter
+
+```go
+func NewGarlicMessageRouter(
+	netdb GarlicNetDB,
+	transportMgr *transport.TransportMuxer,
+	tunnelPool *tunnel.Pool,
+	routerIdentity common.Hash,
+) *GarlicMessageRouter
+```
+NewGarlicMessageRouter creates a new garlic message router with required
+dependencies. All parameters are required for full functionality:
+
+    - netdb: For looking up destinations and routers
+    - transportMgr: For sending messages to peer routers
+    - tunnelPool: For routing messages through tunnels
+    - routerIdentity: Our router's hash for reflexive delivery detection
+
+#### func (*GarlicMessageRouter) ForwardThroughTunnel
+
+```go
+func (gr *GarlicMessageRouter) ForwardThroughTunnel(
+	gatewayHash common.Hash,
+	tunnelID tunnel.TunnelID,
+	msg i2np.I2NPMessage,
+) error
+```
+ForwardThroughTunnel implements GarlicCloveForwarder interface. Forwards a
+message through a tunnel to a gateway (delivery type 0x03).
+
+Process:
+
+    1. Check if gateway_hash == our_router_hash (we are the gateway)
+    2. If yes, inject message directly into our tunnel processing via processReflexiveTunnelDelivery()
+    3. Otherwise, wrap message in TunnelGateway envelope
+    4. Send TunnelGateway message to gateway router via ROUTER delivery
+
+Tunnel delivery is the most common forwarding type in I2P, as most traffic flows
+through tunnels for anonymity. The gateway router is responsible for injecting
+messages into the tunnel's encryption layers.
+
+#### func (*GarlicMessageRouter) ForwardToDestination
+
+```go
+func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2np.I2NPMessage) error
+```
+ForwardToDestination implements GarlicCloveForwarder interface. Forwards a
+message to a destination hash (delivery type 0x01).
+
+Process:
+
+    1. Look up destination in NetDB to get LeaseSet
+    2. If found: Select a valid lease and route through the tunnel
+    3. If not found: Queue message and trigger async LeaseSet lookup
+    4. Background processor retries lookups and forwards messages when LeaseSets arrive
+
+Per I2P spec, destinations are identified by their 32-byte hash and are reached
+by sending messages through one of their published inbound tunnels.
+
+#### func (*GarlicMessageRouter) ForwardToRouter
+
+```go
+func (gr *GarlicMessageRouter) ForwardToRouter(routerHash common.Hash, msg i2np.I2NPMessage) error
+```
+ForwardToRouter implements GarlicCloveForwarder interface. Forwards a message
+directly to a router hash (delivery type 0x02).
+
+Process:
+
+    1. Check if router_hash == our_router_hash (reflexive delivery)
+    2. If reflexive, process locally via MessageProcessor
+    3. Otherwise, look up router in NetDB to get RouterInfo
+    4. Send message via transport layer
+
+Reflexive delivery occurs when a garlic message instructs us to send a clove to
+ourselves - this is processed locally to avoid unnecessary network traffic.
+
+#### func (*GarlicMessageRouter) SetMessageProcessor
+
+```go
+func (gr *GarlicMessageRouter) SetMessageProcessor(processor *i2np.MessageProcessor)
+```
+SetMessageProcessor sets a reference to the MessageProcessor for LOCAL delivery
+recursion. This enables the router to process messages locally when needed
+(e.g., reflexive ROUTER delivery).
+
+#### func (*GarlicMessageRouter) Stop
+
+```go
+func (gr *GarlicMessageRouter) Stop()
+```
+Stop gracefully shuts down the garlic message router. This stops the background
+message processing goroutine.
+
+#### type GarlicNetDB
+
+```go
+type GarlicNetDB interface {
+	GetRouterInfo(hash common.Hash) chan router_info.RouterInfo
+	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
+	StoreRouterInfo(ri router_info.RouterInfo)
+	Size() int
+	SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error)
+}
+```
+
+GarlicNetDB defines the NetDB interface needed for garlic message routing. This
+matches the actual StdNetDB implementation which returns channels for async
+lookups.
+
 #### type InboundMessageHandler
 
 ```go
@@ -205,6 +403,45 @@ func (r *Router) Close() error
 Close closes any internal state and finalizes router resources so that nothing
 can start up again
 
+#### func (*Router) GetBandwidthRates
+
+```go
+func (r *Router) GetBandwidthRates() (rate1s, rate15s uint64)
+```
+GetBandwidthRates returns the current 1-second and 15-second bandwidth rates.
+Returns rates in bytes per second.
+
+#### func (*Router) GetConfig
+
+```go
+func (r *Router) GetConfig() *config.RouterConfig
+```
+GetConfig returns the router configuration for I2PControl.
+
+#### func (*Router) GetGarlicRouter
+
+```go
+func (r *Router) GetGarlicRouter() *GarlicMessageRouter
+```
+GetGarlicRouter returns the garlic router in a thread-safe manner. Returns nil
+if the garlic router has not been initialized yet.
+
+#### func (*Router) GetNetDB
+
+```go
+func (r *Router) GetNetDB() *netdb.StdNetDB
+```
+GetNetDB returns the network database for I2PControl statistics collection.
+Returns nil if NetDB has not been initialized.
+
+#### func (*Router) GetParticipantManager
+
+```go
+func (r *Router) GetParticipantManager() *tunnel.Manager
+```
+GetParticipantManager returns the participant manager for transit tunnel
+tracking. Returns nil if not initialized.
+
 #### func (*Router) GetSessionByHash
 
 ```go
@@ -213,7 +450,41 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 GetSessionByHash implements SessionProvider interface for DatabaseManager. This
 enables the I2NP message processing layer to send responses back through the
 router's active transport sessions. NTCP2Session already implements the
-i2np.TransportSession interface.
+i2np.TransportSession interface. If no active session exists, it attempts to
+establish an outbound connection.
+
+#### func (*Router) GetTransportAddr
+
+```go
+func (r *Router) GetTransportAddr() interface{}
+```
+GetTransportAddr returns the listening address of the first available transport.
+This is used by I2PControl to expose NTCP2 port and address information. Returns
+nil if no transports are available.
+
+#### func (*Router) GetTunnelManager
+
+```go
+func (r *Router) GetTunnelManager() *i2np.TunnelManager
+```
+GetTunnelManager returns the tunnel manager in a thread-safe manner. Returns nil
+if the tunnel manager has not been initialized yet.
+
+#### func (*Router) IsReseeding
+
+```go
+func (r *Router) IsReseeding() bool
+```
+IsReseeding returns whether the router is currently performing a NetDB reseed
+operation. Thread-safe access to reseeding state.
+
+#### func (*Router) IsRunning
+
+```go
+func (r *Router) IsRunning() bool
+```
+IsRunning returns whether the router is currently operational. Thread-safe
+access to running state.
 
 #### func (*Router) Start
 
@@ -227,7 +498,8 @@ Start starts router mainloop
 ```go
 func (r *Router) Stop()
 ```
-Stop starts stopping internal state of router
+Stop initiates router shutdown and waits for all goroutines to complete. This
+method blocks until the router is fully stopped.
 
 #### func (*Router) Wait
 

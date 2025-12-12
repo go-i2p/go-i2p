@@ -13,7 +13,9 @@
 ```go
 func CheckFileAge(fpath string, maxAge int) bool
 ```
-Check if a file is more than maxAge minutes old returns false if
+CheckFileAge checks if a file is older than maxAge minutes. Returns false if the
+file does not exist or on stat error. Returns true if file exists and its
+modification time is older than maxAge minutes.
 
 #### func  CheckFileExists
 
@@ -27,6 +29,8 @@ Check if a file exists and is readable etc returns false if not
 ```go
 func CloseAll()
 ```
+CloseAll closes all registered io.Closer instances and clears the list. This
+function is thread-safe.
 
 #### func  Panicf
 
@@ -40,6 +44,8 @@ Panicf allows passing formated string to panic()
 ```go
 func RegisterCloser(c io.Closer)
 ```
+RegisterCloser registers an io.Closer to be closed during shutdown. This
+function is thread-safe.
 
 #### func  UserHome
 

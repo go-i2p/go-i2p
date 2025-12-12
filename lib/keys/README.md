@@ -137,6 +137,15 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 ConstructRouterInfo creates a complete RouterInfo structure with signing keys
 and certificate
 
+#### func (*RouterInfoKeystore) GetEncryptionPrivateKey
+
+```go
+func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey
+```
+GetEncryptionPrivateKey returns the X25519 encryption private key used for
+NTCP2. This key is used as the static key for NTCP2 transport sessions, ensuring
+consistent peer identification across router restarts.
+
 #### func (*RouterInfoKeystore) GetKeys
 
 ```go

@@ -433,7 +433,7 @@ func (env *e2eTestEnvironment) SendMessageFromClient(
 	destPubKey [32]byte,
 	payload []byte,
 ) error {
-	return env.messageRouter.RouteOutboundMessage(session, destHash, destPubKey, payload)
+	return env.messageRouter.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
 }
 
 // WaitForOutboundTransmission waits for messages to be transmitted through the gateway

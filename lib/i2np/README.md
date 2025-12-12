@@ -125,13 +125,45 @@ TunnelBuildReply constants for processing responses
 var (
 	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
 	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
-	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build request record data")
+	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build response record data")
 	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = oops.Errorf("not enough i2np database lookup data")
 	ERR_DATABASE_LOOKUP_INVALID_SIZE          = oops.Errorf("database lookup excluded peers size exceeds protocol limit")
 )
 ```
 I2NP Error Constants Moved from: header.go, build_request_record.go,
 build_response_record.go, database_lookup.go
+
+#### func  EncryptBuildRequestRecord
+
+```go
+func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo router_info.RouterInfo) ([528]byte, error)
+```
+EncryptBuildRequestRecord encrypts a BuildRequestRecord using ECIES-X25519-AEAD
+encryption.
+
+This implements the I2P specification for encrypted tunnel build records. The
+222-byte cleartext record is encrypted using the recipient router's X25519
+public key, then padded to the standard 528-byte format.
+
+Format:
+
+    - Bytes 0-15: First 16 bytes of SHA-256 hash of recipient's RouterIdentity
+    - Bytes 16-527: ECIES-X25519 encrypted data
+
+The ECIES encryption produces:
+[ephemeral_pubkey(32)][nonce(12)][aead_ciphertext(222+16_tag=238)] Total ECIES
+output: 32 + 12 + 238 = 282 bytes Remaining padding: 512 - 282 = 230 bytes of
+zeros
+
+Parameters:
+
+    - record: The cleartext BuildRequestRecord (serializes to 222 bytes)
+    - recipientRouterInfo: The RouterInfo of the hop that will decrypt this record
+
+Returns:
+
+    - [528]byte: Encrypted build request record ready for network transmission
+    - error: Any encryption error encountered
 
 #### func  EncryptGarlicWithBuilder
 
@@ -146,6 +178,24 @@ func EncryptGarlicWithBuilder(
 EncryptGarlicWithBuilder is a convenience function that builds and encrypts a
 garlic message. This combines GarlicBuilder.BuildAndSerialize with
 GarlicSessionManager.EncryptGarlicMessage.
+
+#### func  ExtractIdentityHashPrefix
+
+```go
+func ExtractIdentityHashPrefix(encrypted [528]byte) common.Hash
+```
+ExtractIdentityHashPrefix returns the first 16 bytes of an encrypted record.
+
+This is useful for debugging and logging to identify which router a record is
+intended for without performing full decryption.
+
+Parameters:
+
+    - encrypted: The 528-byte encrypted build request record
+
+Returns:
+
+    - common.Hash: The identity hash prefix (first 16 bytes copied to Hash type)
 
 #### func  ReadI2NPNTCPData
 
@@ -187,7 +237,10 @@ ReadI2NPNTCPMessageSize reads the message size from NTCP data
 ```go
 func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error)
 ```
-ReadI2NPSSUMessageExpiration reads the expiration from SSU data
+ReadI2NPSSUMessageExpiration reads the expiration from SSU data Note: Short
+expiration is a 4-byte unsigned integer that will wrap around on February 7,
+2106. As of that date, an offset must be added to get the correct time. See I2NP
+specification for details.
 
 #### func  ReadI2NPType
 
@@ -195,6 +248,25 @@ ReadI2NPSSUMessageExpiration reads the expiration from SSU data
 func ReadI2NPType(data []byte) (int, error)
 ```
 ReadI2NPType reads the I2NP message type from data
+
+#### func  VerifyIdentityHash
+
+```go
+func VerifyIdentityHash(encrypted [528]byte, ourRouterInfo router_info.RouterInfo) bool
+```
+VerifyIdentityHash checks if an encrypted BuildRequestRecord is intended for us.
+
+This provides a fast pre-check before attempting decryption by comparing the
+first 16 bytes of the record (identity hash prefix) with our own identity hash.
+
+Parameters:
+
+    - encrypted: The 528-byte encrypted build request record
+    - ourRouterInfo: Our router's RouterInfo
+
+Returns:
+
+    - bool: true if the record is likely intended for us, false otherwise
 
 #### type BaseI2NPMessage
 
@@ -382,11 +454,46 @@ type BuildRequestRecord struct {
 ```
 
 
+#### func  DecryptBuildRequestRecord
+
+```go
+func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
+```
+DecryptBuildRequestRecord decrypts an encrypted BuildRequestRecord using
+ECIES-X25519-AEAD.
+
+This implements the I2P specification for decrypting tunnel build records. The
+recipient router uses its X25519 private key to decrypt the 512-byte ciphertext
+portion, extracting the 222-byte cleartext BuildRequestRecord.
+
+Format:
+
+    - Bytes 0-15: First 16 bytes of SHA-256 hash of our RouterIdentity (ignored during decryption)
+    - Bytes 16-527: ECIES-X25519 encrypted data (ephemeral_pubkey + nonce + aead_ciphertext)
+
+Parameters:
+
+    - encrypted: The 528-byte encrypted build request record
+    - privateKey: Our router's X25519 private encryption key (32 bytes)
+
+Returns:
+
+    - BuildRequestRecord: Decrypted and parsed build request record
+    - error: Any decryption or parsing error encountered
+
 #### func  ReadBuildRequestRecord
 
 ```go
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error)
 ```
+
+#### func (*BuildRequestRecord) Bytes
+
+```go
+func (b *BuildRequestRecord) Bytes() []byte
+```
+Bytes serializes the BuildRequestRecord to its cleartext 222-byte
+representation. The caller is responsible for encrypting this data.
 
 #### func (*BuildRequestRecord) GetIVKey
 
@@ -607,7 +714,8 @@ type DatabaseManager struct {
 }
 ```
 
-DatabaseManager demonstrates database-related interface usage
+DatabaseManager demonstrates database-related interface usage DatabaseManager
+demonstrates database-related interface usage
 
 #### func  NewDatabaseManager
 
@@ -786,6 +894,13 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error)
 ```
 MarshalBinary serializes the DatabaseStore message
 
+#### func (*DatabaseStore) UnmarshalBinary
+
+```go
+func (d *DatabaseStore) UnmarshalBinary(data []byte) error
+```
+UnmarshalBinary deserializes the DatabaseStore message from I2NP message data
+
 #### type DatabaseWriter
 
 ```go
@@ -878,6 +993,20 @@ type Garlic struct {
 }
 ```
 
+
+#### func  DeserializeGarlic
+
+```go
+func DeserializeGarlic(data []byte, nestingDepth int) (*Garlic, error)
+```
+DeserializeGarlic parses a decrypted garlic message from bytes with validation.
+This function enforces security limits to prevent resource exhaustion attacks.
+
+Security validations: - Maximum clove count (64) to prevent memory exhaustion -
+Maximum nesting depth (3) to prevent stack overflow from recursive garlic -
+Proper bounds checking for all fields
+
+Returns the parsed Garlic structure or an error if validation fails.
 
 #### func (*Garlic) GetCloveCount
 
@@ -1076,6 +1205,29 @@ func NewTunnelDeliveryInstructions(gatewayHash common.Hash, tunnelID tunnel.Tunn
 NewTunnelDeliveryInstructions creates delivery instructions for tunnel delivery.
 gatewayHash: SHA256 hash of the tunnel gateway router tunnelID: Destination
 tunnel ID
+
+#### type GarlicCloveForwarder
+
+```go
+type GarlicCloveForwarder interface {
+	// ForwardToDestination forwards a message to a destination hash (delivery type 0x01).
+	// The forwarder should lookup the destination's LeaseSet and route through a tunnel.
+	ForwardToDestination(destHash common.Hash, msg I2NPMessage) error
+
+	// ForwardToRouter forwards a message directly to a router hash (delivery type 0x02).
+	// The forwarder should send the message via the transport layer.
+	ForwardToRouter(routerHash common.Hash, msg I2NPMessage) error
+
+	// ForwardThroughTunnel forwards a message through a tunnel to a gateway (delivery type 0x03).
+	// The forwarder should wrap the message in a TunnelGateway envelope and send to the gateway.
+	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error
+}
+```
+
+GarlicCloveForwarder defines the interface for forwarding garlic cloves to
+different delivery targets. This interface enables the MessageProcessor to
+delegate non-LOCAL delivery types to router-level components that have access to
+NetDB, transport, and tunnel infrastructure.
 
 #### type GarlicElGamal
 
@@ -1402,6 +1554,25 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error
 ```
 ProcessMessage processes any I2NP message using interfaces
 
+#### func (*MessageProcessor) SetCloveForwarder
+
+```go
+func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder)
+```
+SetCloveForwarder sets the garlic clove forwarder for handling non-LOCAL
+delivery types. This is optional - if not set, only LOCAL delivery (0x00) will
+be processed. The forwarder enables DESTINATION (0x01), ROUTER (0x02), and
+TUNNEL (0x03) deliveries.
+
+#### func (*MessageProcessor) SetGarlicSessionManager
+
+```go
+func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManager)
+```
+SetGarlicSessionManager sets the garlic session manager for decrypting garlic
+messages. This must be called before processing garlic messages, otherwise they
+will fail with an error.
+
 #### type MessageRouter
 
 ```go
@@ -1417,6 +1588,14 @@ MessageRouter demonstrates advanced interface-based routing
 func NewMessageRouter(config MessageRouterConfig) *MessageRouter
 ```
 NewMessageRouter creates a new message router
+
+#### func (*MessageRouter) GetProcessor
+
+```go
+func (mr *MessageRouter) GetProcessor() *MessageProcessor
+```
+GetProcessor returns the underlying MessageProcessor for direct access. This is
+used by the router to set up garlic clove forwarding.
 
 #### func (*MessageRouter) RouteDatabaseMessage
 
@@ -1746,6 +1925,15 @@ type ShortTunnelBuild struct {
 ```
 
 
+#### func (*ShortTunnelBuild) Bytes
+
+```go
+func (s *ShortTunnelBuild) Bytes() []byte
+```
+Bytes serializes the ShortTunnelBuild message to wire format. Format:
+[count:1][records...] Note: This returns the cleartext records. Encryption must
+be applied by the caller.
+
 #### func (*ShortTunnelBuild) GetBuildRecords
 
 ```go
@@ -1862,6 +2050,39 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage
 ```
 NewTunnelBuildMessage creates a new TunnelBuild I2NP message
 
+SPECIFICATION COMPLIANCE NOTE: According to I2P specification
+(https://geti2p.net/spec/i2np), BuildRequestRecords MUST be encrypted before
+transmission using either:
+
+    - ElGamal-2048 encryption (legacy format, 528 bytes)
+    - ECIES-X25519-AEAD-Ratchet encryption (modern format, I2P 0.9.44+)
+
+CURRENT LIMITATION: This implementation currently creates CLEARTEXT records (222
+bytes + 306 padding = 528 bytes). For specification-compliant tunnel building,
+use EncryptBuildRequestRecord() from build_record_crypto.go which implements
+proper ECIES-X25519-AEAD encryption.
+
+For specification-compliant tunnel building, encryption must be added using:
+
+    1. Recipient router's encryption public key (from RouterInfo)
+    2. ECIES-X25519-AEAD encryption (see build_record_crypto.go)
+    3. Proper padding and formatting per specification
+
+Use EncryptBuildRequestRecord() function (defined in build_record_crypto.go)
+that takes:
+
+    - BuildRequestRecord (cleartext)
+    - Recipient RouterInfo (for encryption public key)
+    - Returns encrypted 528-byte record
+
+This method is suitable for:
+
+    - Local testing with cooperating routers that accept cleartext
+    - Internal message structure creation before encryption
+    - Unit testing of serialization logic
+
+DO NOT USE for production tunnel building without implementing encryption first.
+
 #### func (*TunnelBuildMessage) GetBuildRecords
 
 ```go
@@ -1889,6 +2110,28 @@ MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error
 ```
 UnmarshalBinary deserializes the TunnelBuild message
+
+SPECIFICATION COMPLIANCE NOTE: According to I2P specification,
+BuildRequestRecords in TunnelBuild messages are encrypted with
+ECIES-X25519-AEAD. This implementation assumes CLEARTEXT records (for testing or
+from trusted sources).
+
+For specification-compliant processing of network messages:
+
+    1. Decrypt each 528-byte chunk using DecryptBuildRequestRecord() from build_record_crypto.go
+    2. This function uses local router's private encryption key
+    3. Verifies AEAD authentication and extracts 222-byte cleartext
+    4. Parse using ReadBuildRequestRecord()
+
+CURRENT LIMITATION: This method parses cleartext records directly from the
+528-byte chunks without decryption. Encrypted records from production I2P
+routers will FAIL to parse correctly.
+
+Use DecryptBuildRequestRecord() (defined in build_record_crypto.go) that takes:
+
+    - 528-byte encrypted record
+    - Local router's decryption private key
+    - Returns decrypted BuildRequestRecord
 
 #### type TunnelBuildReply
 
@@ -2010,12 +2253,27 @@ UnmarshalBinary deserializes a TunnelData message
 
 ```go
 type TunnelGatway struct {
+	*BaseI2NPMessage
 	TunnelID tunnel.TunnelID
 	Length   int
 	Data     []byte
 }
 ```
 
+
+#### func  NewTunnelGatewayMessage
+
+```go
+func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGatway
+```
+NewTunnelGatewayMessage creates a new TunnelGateway message
+
+#### func (*TunnelGatway) UnmarshalBinary
+
+```go
+func (t *TunnelGatway) UnmarshalBinary(data []byte) error
+```
+UnmarshalBinary deserializes a TunnelGateway message
 
 #### type TunnelIdentifier
 
@@ -2052,14 +2310,17 @@ TunnelManager coordinates tunnel building and management
 func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager
 ```
 NewTunnelManager creates a new tunnel manager with build request tracking.
-Starts a background goroutine for cleaning up expired build requests.
+Starts a background goroutine for cleaning up expired build requests. Creates
+separate inbound and outbound tunnel pools for proper statistics tracking.
 
 #### func (*TunnelManager) BuildTunnel
 
 ```go
-func (tm *TunnelManager) BuildTunnel(builder TunnelBuilder) error
+func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error)
 ```
-BuildTunnel builds a tunnel using TunnelBuilder interface
+BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.
+This adapter method wraps BuildTunnelFromRequest to match the interface
+signature.
 
 #### func (*TunnelManager) BuildTunnelFromRequest
 
@@ -2074,6 +2335,37 @@ The method: 1. Uses tunnel.TunnelBuilder to create encrypted build records 2.
 Generates a unique message ID for request/reply correlation 3. Tracks the
 pending build request with reply decryption keys 4. Sends the build request via
 appropriate transport 5. Returns the tunnel ID for tracking
+
+#### func (*TunnelManager) BuildTunnelWithBuilder
+
+```go
+func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error
+```
+BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message
+interface. This is used for message routing and differs from BuildTunnel
+(tunnel.BuilderInterface).
+
+#### func (*TunnelManager) GetInboundPool
+
+```go
+func (tm *TunnelManager) GetInboundPool() *tunnel.Pool
+```
+GetInboundPool returns the inbound tunnel pool.
+
+#### func (*TunnelManager) GetOutboundPool
+
+```go
+func (tm *TunnelManager) GetOutboundPool() *tunnel.Pool
+```
+GetOutboundPool returns the outbound tunnel pool.
+
+#### func (*TunnelManager) GetPool
+
+```go
+func (tm *TunnelManager) GetPool() *tunnel.Pool
+```
+GetPool returns the outbound tunnel pool for backward compatibility. Deprecated:
+Use GetInboundPool() or GetOutboundPool() for specific pools.
 
 #### func (*TunnelManager) ProcessTunnelReply
 

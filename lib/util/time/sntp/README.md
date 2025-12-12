@@ -55,6 +55,9 @@ func (rt *RouterTimestamper) AddListener(listener UpdateListener)
 ```go
 func (rt *RouterTimestamper) GetCurrentTime() time.Time
 ```
+GetCurrentTime returns the current time adjusted by the stored NTP offset. This
+is a non-blocking operation that uses the most recent time offset from
+background NTP synchronization. It does not trigger new NTP queries.
 
 #### func (*RouterTimestamper) GetPriorityServers
 

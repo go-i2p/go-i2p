@@ -9,18 +9,28 @@
 ## Usage
 
 ```go
+const DefaultI2CPPort = 7654
+```
+DefaultI2CPPort is the standard I2CP port
+
+```go
+const DefaultI2PControlPort = 7650
+```
+DefaultI2PControlPort is the standard I2PControl RPC port As defined in the
+I2PControl specification
+
+```go
 const GOI2P_BASE_DIR = ".go-i2p"
 ```
 
 ```go
-var (
-	CfgFile string
-)
+var CfgFile string
 ```
 
 ```go
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
+	BootstrapType:    "auto",
 	ReseedFilePath:   "",
 
 	ReseedServers: []*ReseedConfig{
@@ -33,17 +43,37 @@ var DefaultBootstrapConfig = BootstrapConfig{
 	LocalNetDbPaths: []string{},
 }
 ```
-default configuration for network bootstrap
+default configuration for network bootstrap Note: Reseed servers should be
+configured via config file. Only reseed.i2pgit.org is included by default as it
+is maintained by the go-i2p dev team. Additional reseed servers from the I2P
+network can be added via configuration.
 
 ```go
 var DefaultI2CPConfig = I2CPConfig{
 	Enabled:     true,
-	Address:     "localhost:7654",
+	Address:     fmt.Sprintf("localhost:%d", DefaultI2CPPort),
 	Network:     "tcp",
 	MaxSessions: 100,
 }
 ```
 DefaultI2CPConfig provides default I2CP server configuration
+
+```go
+var DefaultI2PControlConfig = I2PControlConfig{
+	Enabled:         true,
+	Address:         "localhost:7650",
+	Password:        "itoopie",
+	UseHTTPS:        false,
+	CertFile:        "",
+	KeyFile:         "",
+	TokenExpiration: 10 * time.Minute,
+}
+```
+DefaultI2PControlConfig provides sensible defaults for I2PControl server. These
+defaults prioritize development convenience: - Enabled by default for
+development and monitoring - Localhost-only binding (not exposed to network) -
+HTTP only (HTTPS requires explicit cert configuration) - Standard I2PControl
+port (7650) - Standard default password (should be changed in production)
 
 ```go
 var DefaultNetDbConfig = NetDbConfig{
@@ -93,18 +123,29 @@ error describing the first invalid value found.
 
 ```go
 type BootstrapConfig struct {
-	// if we have less than this many peers we should reseed
+	// LowPeerThreshold defines the minimum number of known peers before reseeding.
+	// If the router has fewer peers than this threshold, it will attempt to reseed.
 	LowPeerThreshold int
-	// path to a local reseed file (zip or su3) - takes priority over remote reseed servers
+	// BootstrapType specifies which bootstrap method to use exclusively.
+	// Valid values: "auto" (default, tries all methods), "file", "reseed", "local"
+	// When set to a specific type, only that method will be used.
+	BootstrapType string
+	// ReseedFilePath specifies a local reseed file (zip or su3 format).
+	// If set, this takes priority over remote reseed servers.
 	ReseedFilePath string
-	// reseed servers
+	// ReseedServers is the list of remote reseed servers to contact.
+	// Only one default server is included; additional servers should be configured via config file.
 	ReseedServers []*ReseedConfig
-	// local netDb paths to search for existing RouterInfo files
-	// (supports Java I2P and i2pd netDb directories)
+	// LocalNetDbPaths lists directories to search for existing RouterInfo files.
+	// Supports Java I2P and i2pd netDb directory formats.
+	// These paths are populated at runtime based on the operating system.
 	LocalNetDbPaths []string
 }
 ```
 
+BootstrapConfig configures how the router obtains initial peer information to
+join the I2P network. It supports multiple bootstrap methods including remote
+reseed servers, local reseed files, and existing netDb directories.
 
 #### type BootstrapDefaults
 
@@ -113,6 +154,11 @@ type BootstrapDefaults struct {
 	// LowPeerThreshold triggers reseeding when peer count falls below this
 	// Default: 10 peers
 	LowPeerThreshold int
+
+	// BootstrapType specifies which bootstrap method to use
+	// Valid values: "auto", "file", "reseed", "local"
+	// Default: "auto" (tries all methods)
+	BootstrapType string
 
 	// ReseedTimeout is maximum time to wait for reseed operations
 	// Default: 60 seconds
@@ -127,7 +173,8 @@ type BootstrapDefaults struct {
 	ReseedRetryInterval time.Duration
 
 	// ReseedServers are the default reseed server configurations
-	// Note: These contain placeholder fingerprints - production should use real values
+	// Only reseed.i2pgit.org is included by default (maintained by go-i2p dev team)
+	// Additional reseed servers should be configured via config file
 	ReseedServers []*ReseedConfig
 }
 ```
@@ -149,6 +196,9 @@ type ConfigDefaults struct {
 
 	// I2CP server defaults
 	I2CP I2CPDefaults
+
+	// I2PControl RPC server defaults
+	I2PControl I2PControlDefaults
 
 	// Tunnel defaults
 	Tunnel TunnelDefaults
@@ -234,6 +284,93 @@ type I2CPDefaults struct {
 
 I2CPDefaults contains default values for I2CP server
 
+#### type I2PControlConfig
+
+```go
+type I2PControlConfig struct {
+	// Enabled determines if the I2PControl server should start
+	// Default: true (enabled for development and monitoring)
+	Enabled bool
+
+	// Address is the listen address for the I2PControl server
+	// Format: "host:port" (e.g., "localhost:7650", "0.0.0.0:7650")
+	// Default: "localhost:7650"
+	// Security: Binding to 0.0.0.0 exposes the server to all network interfaces
+	Address string
+
+	// Password is used for token-based authentication
+	// Clients must authenticate with this password to receive an access token
+	// Default: "itoopie" (I2PControl standard default)
+	// IMPORTANT: Change this in production environments!
+	Password string
+
+	// UseHTTPS enables TLS/HTTPS for encrypted communication
+	// Default: false (HTTP only)
+	// Recommended: true for any non-localhost deployment
+	UseHTTPS bool
+
+	// CertFile is the path to the TLS certificate file
+	// Required when UseHTTPS is true
+	// Format: PEM-encoded X.509 certificate
+	CertFile string
+
+	// KeyFile is the path to the TLS private key file
+	// Required when UseHTTPS is true
+	// Format: PEM-encoded private key
+	KeyFile string
+
+	// TokenExpiration is how long authentication tokens remain valid
+	// Default: 10 minutes
+	// Expired tokens must re-authenticate to get a new token
+	TokenExpiration time.Duration
+}
+```
+
+I2PControlConfig holds configuration for the I2PControl JSON-RPC server.
+I2PControl is a monitoring and control interface for I2P routers, providing a
+standardized JSON-RPC 2.0 API for querying router statistics and status.
+
+This implementation provides a minimal monitoring server for development use,
+supporting basic statistics queries without write operations to router
+configuration.
+
+#### type I2PControlDefaults
+
+```go
+type I2PControlDefaults struct {
+	// Enabled determines if I2PControl server starts automatically
+	// Default: true (enabled for development and monitoring)
+	Enabled bool
+
+	// Address is the listen address for I2PControl server
+	// Default: "localhost:7650" (I2PControl standard port)
+	Address string
+
+	// Password is used for token-based authentication
+	// Default: "itoopie" (I2PControl standard default)
+	// IMPORTANT: Change in production!
+	Password string
+
+	// UseHTTPS enables TLS/HTTPS for encrypted communication
+	// Default: false (HTTP only)
+	UseHTTPS bool
+
+	// CertFile is the path to the TLS certificate file (PEM format)
+	// Required when UseHTTPS is true
+	CertFile string
+
+	// KeyFile is the path to the TLS private key file (PEM format)
+	// Required when UseHTTPS is true
+	KeyFile string
+
+	// TokenExpiration is how long authentication tokens remain valid
+	// Default: 10 minutes
+	TokenExpiration time.Duration
+}
+```
+
+I2PControlDefaults contains default values for I2PControl JSON-RPC server
+
 #### type NetDBDefaults
 
 ```go
@@ -313,14 +450,16 @@ PerformanceDefaults contains default values for performance tuning
 
 ```go
 type ReseedConfig struct {
-	// url of reseed server
+	// Url is the HTTPS URL of the reseed server
 	Url string
-	// fingerprint of reseed su3 signing key
+	// SU3Fingerprint is the fingerprint of the reseed server's SU3 signing key
+	// used to verify the authenticity of downloaded reseed data
 	SU3Fingerprint string
 }
 ```
 
-configuration for 1 reseed server
+ReseedConfig holds configuration for a single reseed server. Reseed servers
+provide initial peer RouterInfo files to bootstrap network connectivity.
 
 #### type RouterConfig
 
@@ -336,6 +475,8 @@ type RouterConfig struct {
 	Bootstrap *BootstrapConfig
 	// I2CP server configuration
 	I2CP *I2CPConfig
+	// I2PControl RPC server configuration
+	I2PControl *I2PControlConfig
 }
 ```
 

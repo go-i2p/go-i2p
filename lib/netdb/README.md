@@ -65,9 +65,92 @@ See bootstrap package for reseed client implementation.
 ## Usage
 
 ```go
+const (
+	// NumKademliaBuckets is the number of Kademlia buckets (256 bits = 256 buckets)
+	NumKademliaBuckets = 256
+
+	// MinFloodfillsPerBucket is the minimum desired floodfills per bucket
+	MinFloodfillsPerBucket = 2
+)
+```
+
+```go
 const CacheFileName = "sizecache.txt"
 ```
 Moved from: std.go name of file to hold precomputed size of netdb
+
+#### type AdaptiveStrategy
+
+```go
+type AdaptiveStrategy struct {
+}
+```
+
+AdaptiveStrategy implements an intelligent exploration strategy that: - Tracks
+Kademlia bucket distribution - Identifies gaps in floodfill coverage - Generates
+exploration keys targeting sparse regions - Adapts exploration rate based on
+NetDB size
+
+#### func  NewAdaptiveStrategy
+
+```go
+func NewAdaptiveStrategy(ourHash common.Hash) *AdaptiveStrategy
+```
+NewAdaptiveStrategy creates a new adaptive exploration strategy
+
+#### func (*AdaptiveStrategy) GenerateExplorationKeys
+
+```go
+func (s *AdaptiveStrategy) GenerateExplorationKeys(count int) ([]common.Hash, error)
+```
+GenerateExplorationKeys generates exploration keys targeting sparse buckets
+
+#### func (*AdaptiveStrategy) GetBucketStats
+
+```go
+func (s *AdaptiveStrategy) GetBucketStats(bucketIdx int) BucketStats
+```
+GetBucketStats returns statistics for a specific bucket
+
+#### func (*AdaptiveStrategy) GetFloodfillGaps
+
+```go
+func (s *AdaptiveStrategy) GetFloodfillGaps() []int
+```
+GetFloodfillGaps returns bucket indices with insufficient floodfill coverage
+
+#### func (*AdaptiveStrategy) GetStats
+
+```go
+func (s *AdaptiveStrategy) GetStats() StrategyStats
+```
+GetStats returns current strategy statistics
+
+#### func (*AdaptiveStrategy) ShouldExplore
+
+```go
+func (s *AdaptiveStrategy) ShouldExplore(netdbSize int) bool
+```
+ShouldExplore determines if exploration is needed
+
+#### func (*AdaptiveStrategy) UpdateStats
+
+```go
+func (s *AdaptiveStrategy) UpdateStats(db NetworkDatabase, ourHash common.Hash)
+```
+UpdateStats refreshes bucket statistics from current NetDB state
+
+#### type BucketStats
+
+```go
+type BucketStats struct {
+	BucketIndex      int // 0-255, representing the leading bit position
+	TotalRouters     int // Total routers in this bucket
+	FloodfillRouters int // Floodfill routers in this bucket
+}
+```
+
+BucketStats tracks statistics for a single Kademlia bucket
 
 #### type ClientNetDB
 
@@ -235,6 +318,26 @@ func (e *Entry) WriteTo(w io.Writer) error
 ```
 WriteTo writes the Entry to the provided writer.
 
+#### type ExplorationStrategy
+
+```go
+type ExplorationStrategy interface {
+	// GenerateExplorationKeys generates hashes to explore based on strategy
+	GenerateExplorationKeys(count int) ([]common.Hash, error)
+
+	// ShouldExplore determines if exploration is needed based on NetDB state
+	ShouldExplore(netdbSize int) bool
+
+	// UpdateStats updates strategy state based on current NetDB
+	UpdateStats(db NetworkDatabase, ourHash common.Hash)
+
+	// GetStats returns current strategy statistics
+	GetStats() StrategyStats
+}
+```
+
+ExplorationStrategy defines an interface for different exploration approaches
+
 #### type Explorer
 
 ```go
@@ -292,11 +395,29 @@ type ExplorerConfig struct {
 	// Interval between exploration rounds (default: 5 minutes)
 	Interval time.Duration
 
+	// MinInterval is the minimum exploration interval when NetDB is sparse (default: 1 minute)
+	MinInterval time.Duration
+
+	// MaxInterval is the maximum exploration interval when NetDB is healthy (default: 15 minutes)
+	MaxInterval time.Duration
+
 	// Number of concurrent exploration lookups (default: 3)
 	Concurrency int
 
 	// Timeout for individual lookups (default: 30 seconds)
 	LookupTimeout time.Duration
+
+	// UseAdaptive enables adaptive exploration strategy (default: true)
+	// When true, uses bucket-aware exploration targeting sparse regions
+	// When false, uses simple random exploration
+	UseAdaptive bool
+
+	// OurHash is our router's identity hash for bucket calculations
+	// Required for adaptive strategy
+	OurHash common.Hash
+
+	// StatsUpdateInterval determines how often to update strategy statistics (default: 1 minute)
+	StatsUpdateInterval time.Duration
 }
 ```
 
@@ -313,10 +434,15 @@ DefaultExplorerConfig returns the default explorer configuration
 
 ```go
 type ExplorerStats struct {
-	Interval      time.Duration
-	Concurrency   int
-	LookupTimeout time.Duration
-	IsRunning     bool
+	Interval         time.Duration
+	Concurrency      int
+	LookupTimeout    time.Duration
+	IsRunning        bool
+	UseAdaptive      bool
+	TotalRouters     int
+	FloodfillRouters int
+	SparseBuckets    int
+	EmptyBuckets     int
 }
 ```
 
@@ -339,14 +465,26 @@ resolves router infos with recursive kademlia lookup
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 ```
 
+#### type LeaseSetEntry
+
+```go
+type LeaseSetEntry struct {
+	Hash  common.Hash // Hash of the LeaseSet destination
+	Entry Entry       // The actual LeaseSet entry (can be LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)
+}
+```
+
+LeaseSetEntry represents a LeaseSet with its hash for iteration. Used by
+GetAllLeaseSets() to return all LeaseSets stored in the database.
+
 #### type NetworkDatabase
 
 ```go
 type NetworkDatabase interface {
 	// obtain a RouterInfo by its hash locally
-	// return a RouterInfo if we found it locally
+	// return a channel that yields the RouterInfo if found locally
 	// return nil if the RouterInfo cannot be found locally
-	GetRouterInfo(hash common.Hash) router_info.RouterInfo
+	GetRouterInfo(hash common.Hash) chan router_info.RouterInfo
 
 	// obtain all routerInfos, ordered by their hash
 	// return a slice of routerInfos
@@ -374,10 +512,121 @@ type NetworkDatabase interface {
 
 	// GetLeaseSetCount returns the number of LeaseSets stored in the database
 	GetLeaseSetCount() int
+
+	// GetAllLeaseSets returns all LeaseSets currently stored in the database.
+	// Returns a slice containing all LeaseSet entries (LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet).
+	// This is used for publishing all LeaseSets to floodfill routers.
+	GetAllLeaseSets() []LeaseSetEntry
 }
 ```
 
 Moved from: netdb.go i2p network database, storage of i2p RouterInfos
+
+#### type PeerStats
+
+```go
+type PeerStats struct {
+	Hash              common.Hash
+	SuccessCount      int
+	FailureCount      int
+	LastSuccess       time.Time
+	LastFailure       time.Time
+	LastAttempt       time.Time
+	ConsecutiveFails  int
+	TotalAttempts     int
+	AvgResponseTimeMs int64
+}
+```
+
+PeerStats tracks connection success/failure statistics for a peer. HIGH PRIORITY
+FIX #3: Stale peer detection through connection tracking.
+
+#### type PeerTracker
+
+```go
+type PeerTracker struct {
+}
+```
+
+PeerTracker maintains reputation/connectivity statistics for peers. Helps
+identify stale peers and prioritize reliable ones for tunnel building. HIGH
+PRIORITY FIX #3: Infrastructure for peer reputation scoring.
+
+#### func  NewPeerTracker
+
+```go
+func NewPeerTracker() *PeerTracker
+```
+NewPeerTracker creates a new peer tracking system.
+
+#### func (*PeerTracker) GetReliablePeers
+
+```go
+func (pt *PeerTracker) GetReliablePeers(minAttempts int) []common.Hash
+```
+GetReliablePeers returns a list of peer hashes that are considered reliable.
+Reliable peers have: success rate >= 75%, or recent successful connections.
+
+#### func (*PeerTracker) GetStats
+
+```go
+func (pt *PeerTracker) GetStats(hash common.Hash) *PeerStats
+```
+GetStats retrieves statistics for a peer.
+
+#### func (*PeerTracker) GetSuccessRate
+
+```go
+func (pt *PeerTracker) GetSuccessRate(hash common.Hash) float64
+```
+GetSuccessRate calculates the connection success rate for a peer. Returns a
+value between 0.0 and 1.0, or -1.0 if no attempts recorded.
+
+#### func (*PeerTracker) GetSummary
+
+```go
+func (pt *PeerTracker) GetSummary() map[string]interface{}
+```
+GetSummary returns overall tracking statistics.
+
+#### func (*PeerTracker) IsLikelyStale
+
+```go
+func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool
+```
+IsLikelyStale determines if a peer is likely offline/stale based on failure
+patterns. A peer is considered stale if: - It has 3+ consecutive failures, OR -
+Success rate < 25% with at least 5 attempts, OR - No successful connection in
+last hour with recent failures
+
+#### func (*PeerTracker) PruneOldEntries
+
+```go
+func (pt *PeerTracker) PruneOldEntries(maxAge time.Duration) int
+```
+PruneOldEntries removes tracking data for peers not seen recently. Helps prevent
+unbounded memory growth.
+
+#### func (*PeerTracker) RecordAttempt
+
+```go
+func (pt *PeerTracker) RecordAttempt(hash common.Hash)
+```
+RecordAttempt records a connection attempt to a peer.
+
+#### func (*PeerTracker) RecordFailure
+
+```go
+func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string)
+```
+RecordFailure records a failed connection attempt to a peer.
+
+#### func (*PeerTracker) RecordSuccess
+
+```go
+func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64)
+```
+RecordSuccess records a successful connection to a peer.
 
 #### type Publisher
 
@@ -393,11 +642,19 @@ routers in the network.
 #### func  NewPublisher
 
 ```go
-func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, config PublisherConfig) *Publisher
+func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport TransportManager, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher
 ```
 NewPublisher creates a new database publisher. The publisher periodically
 distributes RouterInfo and LeaseSets to the closest floodfill routers based on
 Kademlia XOR distance.
+
+Parameters:
+
+    - db: NetworkDatabase for floodfill router selection
+    - pool: Tunnel pool for sending DatabaseStore messages (can be nil initially)
+    - transport: TransportManager for sending I2NP messages to gateway routers (can be nil initially)
+    - routerInfoProvider: Provider for accessing local RouterInfo (can be nil if not publishing RouterInfo)
+    - config: Publisher configuration (intervals, floodfill count)
 
 #### func (*Publisher) GetStats
 
@@ -421,6 +678,14 @@ routers.
 func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error
 ```
 PublishRouterInfo publishes a specific RouterInfo to floodfill routers
+
+#### func (*Publisher) SetTransport
+
+```go
+func (p *Publisher) SetTransport(transport TransportManager)
+```
+SetTransport sets the transport manager after publisher creation. This allows
+the transport to be configured after initial publisher setup.
 
 #### func (*Publisher) Start
 
@@ -494,6 +759,20 @@ func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver)
 ```
 Moved from: kad.go NewKademliaResolver creates a new resolver that stores result
 into a NetworkDatabase and uses a tunnel pool for the lookup
+
+#### type RouterInfoProvider
+
+```go
+type RouterInfoProvider interface {
+	// GetRouterInfo returns the current RouterInfo for this router.
+	// Returns an error if the RouterInfo cannot be constructed or retrieved.
+	GetRouterInfo() (*router_info.RouterInfo, error)
+}
+```
+
+RouterInfoProvider provides access to the local router's RouterInfo. This
+interface allows the Publisher to get the current RouterInfo without tight
+coupling to the router implementation, enabling easier testing.
 
 #### type RouterNetDB
 
@@ -684,6 +963,9 @@ type StdNetDB struct {
 	RouterInfos map[common.Hash]Entry
 
 	LeaseSets map[common.Hash]Entry
+
+	// HIGH PRIORITY FIX #3: Peer connection tracking and reputation
+	PeerTracker *PeerTracker // tracks connection success/failure for peers
 }
 ```
 
@@ -713,7 +995,7 @@ create base network database directory
 ```go
 func (db *StdNetDB) Ensure() (err error)
 ```
-ensure that the network database exists
+ensure that the network database exists and load existing RouterInfos
 
 #### func (*StdNetDB) Exists
 
@@ -721,6 +1003,27 @@ ensure that the network database exists
 func (db *StdNetDB) Exists() bool
 ```
 return true if the network db directory exists and is writable
+
+#### func (*StdNetDB) GetActivePeerCount
+
+```go
+func (db *StdNetDB) GetActivePeerCount() int
+```
+GetActivePeerCount returns the number of peers with successful connections in
+the last hour. Active peers are those we have successfully communicated with
+recently, indicating they are currently online and reachable. This is useful for
+monitoring network connectivity and determining the health of our peer
+connections.
+
+#### func (*StdNetDB) GetAllLeaseSets
+
+```go
+func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry
+```
+GetAllLeaseSets returns all LeaseSets currently stored in the database. This
+includes all types: LeaseSet, LeaseSet2, EncryptedLeaseSet, and MetaLeaseSet.
+The method returns a slice of LeaseSetEntry containing the hash and Entry data.
+This is primarily used for publishing all LeaseSets to floodfill routers.
 
 #### func (*StdNetDB) GetAllRouterInfos
 
@@ -745,6 +1048,37 @@ func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
 GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the
 database. Checks memory cache first, then loads from filesystem if necessary.
 Returns serialized EncryptedLeaseSet bytes suitable for network transmission.
+
+#### func (*StdNetDB) GetFastPeerCount
+
+```go
+func (db *StdNetDB) GetFastPeerCount() int
+```
+GetFastPeerCount returns the number of peers with low latency (fast response
+times). Fast peers are those with average response times under 500ms, making
+them good candidates for tunnel building and high-performance operations.
+
+Classification criteria:
+
+    - Average response time < 500ms
+    - Minimum 3 successful connections for statistical significance
+
+#### func (*StdNetDB) GetHighCapacityPeerCount
+
+```go
+func (db *StdNetDB) GetHighCapacityPeerCount() int
+```
+GetHighCapacityPeerCount returns the number of high-capacity peers.
+High-capacity peers are reliable routers with good performance and high
+availability, making them excellent candidates for important roles like tunnel
+building.
+
+Classification criteria:
+
+    - Success rate >= 80%
+    - Minimum 5 connection attempts for statistical significance
+    - Average response time < 1000ms (1 second)
+    - Not marked as stale
 
 #### func (*StdNetDB) GetLeaseSet
 
@@ -846,9 +1180,10 @@ get netdb path
 #### func (*StdNetDB) RecalculateSize
 
 ```go
-func (db *StdNetDB) RecalculateSize() (err error)
+func (db *StdNetDB) RecalculateSize() error
 ```
-recalculateSize recalculates cached size of netdb
+RecalculateSize is maintained for interface compatibility. Since Size() now
+operates directly on in-memory data, this is a no-op.
 
 #### func (*StdNetDB) Reseed
 
@@ -905,7 +1240,8 @@ unreachable routers and excludes specified hashes
 ```go
 func (db *StdNetDB) Size() (routers int)
 ```
-return how many routers we know about in our network database
+Size returns the count of RouterInfos currently stored in the network database.
+This is a direct in-memory count and does not require filesystem access.
 
 #### func (*StdNetDB) SkiplistFile
 
@@ -986,6 +1322,48 @@ func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte)
 ```
 StoreRouterInfo stores a RouterInfo entry in the database from I2NP
 DatabaseStore message.
+
+#### type StrategyStats
+
+```go
+type StrategyStats struct {
+	TotalRouters       int
+	FloodfillRouters   int
+	SparseBuckets      []int       // Bucket indices with < MinFloodfillsPerBucket floodfills
+	EmptyBuckets       []int       // Bucket indices with no routers
+	BucketDistribution map[int]int // Bucket index -> router count
+}
+```
+
+StrategyStats contains statistics about exploration strategy
+
+#### type TransportManager
+
+```go
+type TransportManager interface {
+	// GetSession obtains a transport session with a router given its RouterInfo.
+	// If a session with this router is NOT already made, attempts to create one.
+	// Returns an established TransportSession and nil on success.
+	// Returns nil and an error on error.
+	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
+}
+```
+
+TransportManager provides access to the transport layer for sending I2NP
+messages. This interface allows the Publisher to send messages to gateway
+routers without tight coupling to the router/transport implementation.
+
+#### type TransportSession
+
+```go
+type TransportSession interface {
+	// QueueSendI2NP queues an I2NP message to be sent over the session.
+	// Will block as long as the send queue is full.
+	QueueSendI2NP(msg i2np.I2NPMessage)
+}
+```
+
+TransportSession represents a session for sending I2NP messages to a router.
 
 
 

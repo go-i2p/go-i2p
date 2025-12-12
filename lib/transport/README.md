@@ -153,7 +153,7 @@ close every transport that this transport muxer has
 #### func (*TransportMuxer) Compatible
 
 ```go
-func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) (compat bool)
+func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool
 ```
 is there a transport that we mux that is compatible with this router info?
 
@@ -164,6 +164,14 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 ```
 get a transport session given a router info return session and nil if successful
 return nil and ErrNoTransportAvailable if we failed to get a session
+
+#### func (*TransportMuxer) GetTransports
+
+```go
+func (tmux *TransportMuxer) GetTransports() []Transport
+```
+GetTransports returns a copy of the slice of transports in this muxer. This
+allows external code to iterate over transports without exposing internal state.
 
 #### func (*TransportMuxer) Name
 

@@ -30,9 +30,12 @@ func BenchmarkMessageThroughput(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		err := env.messageRouter.RouteOutboundMessage(
 			env.senderSession,
+			0, // messageID
 			env.receiverDestHash,
 			env.receiverPubKey,
 			payload,
+			0,   // no expiration
+			nil, // no status callback
 		)
 		if err != nil {
 			b.Fatalf("Failed to route message: %v", err)
@@ -58,9 +61,12 @@ func BenchmarkMessageThroughputParallel(b *testing.B) {
 		for pb.Next() {
 			err := env.messageRouter.RouteOutboundMessage(
 				env.senderSession,
+				0, // messageID
 				env.receiverDestHash,
 				env.receiverPubKey,
 				payload,
+				0,   // no expiration
+				nil, // no status callback
 			)
 			if err != nil {
 				b.Fatalf("Failed to route message: %v", err)

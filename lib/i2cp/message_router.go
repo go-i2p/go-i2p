@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"fmt"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -60,11 +61,12 @@ func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend Transp
 
 // RouteOutboundMessage routes a message from an I2CP client through the I2P network.
 // This implements the complete outbound message flow:
-// 1. Create garlic message with Data clove containing the payload
-// 2. Encrypt garlic message for destination using ECIES-X25519-AEAD
-// 3. Select outbound tunnel from session's pool
-// 4. Send encrypted garlic through tunnel gateway
-// 5. Invoke status callback with delivery status
+// 1. Check message expiration (if expirationMs > 0)
+// 2. Create garlic message with Data clove containing the payload
+// 3. Encrypt garlic message for destination using ECIES-X25519-AEAD
+// 4. Select outbound tunnel from session's pool
+// 5. Send encrypted garlic through tunnel gateway
+// 6. Invoke status callback with delivery status
 //
 // Parameters:
 // - session: I2CP session sending the message
@@ -72,6 +74,7 @@ func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend Transp
 // - destinationHash: Hash of the target I2P destination
 // - destinationPubKey: X25519 public key of the destination (for garlic encryption)
 // - payload: Raw message data to send
+// - expirationMs: Expiration timestamp in milliseconds since epoch (0 = no expiration)
 // - statusCallback: Optional callback to notify about delivery status (nil allowed)
 //
 // Returns an error if routing fails at any step.
@@ -81,15 +84,37 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	payload []byte,
+	expirationMs uint64,
 	statusCallback MessageStatusCallback,
 ) error {
 	log.WithFields(logger.Fields{
-		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
-		"sessionID":   session.ID(),
-		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", destinationHash[:8]),
-		"payloadSize": len(payload),
+		"at":           "i2cp.MessageRouter.RouteOutboundMessage",
+		"sessionID":    session.ID(),
+		"messageID":    messageID,
+		"destination":  fmt.Sprintf("%x", destinationHash[:8]),
+		"payloadSize":  len(payload),
+		"expirationMs": expirationMs,
 	}).Info("routing_outbound_message")
+
+	// Check expiration if set (expirationMs > 0)
+	if expirationMs > 0 {
+		currentMs := uint64(time.Now().UnixMilli())
+		if currentMs >= expirationMs {
+			log.WithFields(logger.Fields{
+				"at":           "i2cp.MessageRouter.RouteOutboundMessage",
+				"sessionID":    session.ID(),
+				"messageID":    messageID,
+				"currentMs":    currentMs,
+				"expirationMs": expirationMs,
+			}).Warn("message_expired")
+
+			// Notify callback of expiration failure
+			if statusCallback != nil {
+				statusCallback(messageID, MessageStatusFailure, uint32(len(payload)), 0)
+			}
+			return fmt.Errorf("message expired: current=%d, expiration=%d", currentMs, expirationMs)
+		}
+	}
 
 	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
 	if err != nil {

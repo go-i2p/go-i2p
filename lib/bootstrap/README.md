@@ -9,6 +9,50 @@ provides generic interfaces for initial bootstrap into network and network
 
 ## Usage
 
+#### func  GetRouterHashString
+
+```go
+func GetRouterHashString(ri router_info.RouterInfo) string
+```
+GetRouterHashString returns a hex string representation of the RouterInfo's
+IdentHash This is a helper function to avoid duplication in logging
+
+#### func  HasDirectNTCP2Connectivity
+
+```go
+func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool
+```
+HasDirectNTCP2Connectivity checks if a RouterInfo has at least one NTCP2 address
+with direct connectivity (host and port keys present, not introducer-only). This
+pre-filtering function prevents ERROR logs from the common package when
+attempting to extract host keys from introducer-only addresses.
+
+CRITICAL FIX #1: Pre-filter bootstrap peers before validation to prevent
+"RouterAddress missing required host key" errors for introducer-only addresses.
+
+#### func  ValidateNTCP2Address
+
+```go
+func ValidateNTCP2Address(addr *router_address.RouterAddress) error
+```
+ValidateNTCP2Address validates NTCP2-specific requirements
+
+#### func  ValidateRouterAddress
+
+```go
+func ValidateRouterAddress(addr *router_address.RouterAddress) error
+```
+ValidateRouterAddress validates a single RouterAddress Returns nil if valid,
+otherwise returns an error describing the validation failure
+
+#### func  ValidateRouterInfo
+
+```go
+func ValidateRouterInfo(ri router_info.RouterInfo) error
+```
+ValidateRouterInfo performs comprehensive validation on a RouterInfo Returns nil
+if valid, otherwise returns an error describing the validation failure
+
 #### type Bootstrap
 
 ```go
@@ -132,6 +176,54 @@ func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.R
 ```
 GetPeers implements the Bootstrap interface by obtaining RouterInfos from
 configured reseed servers
+
+#### type ValidationStats
+
+```go
+type ValidationStats struct {
+	TotalProcessed     int
+	ValidRouterInfos   int
+	InvalidRouterInfos int
+	InvalidReasons     map[string]int
+}
+```
+
+ValidationStats tracks statistics about RouterInfo validation during bootstrap
+
+#### func  NewValidationStats
+
+```go
+func NewValidationStats() *ValidationStats
+```
+NewValidationStats creates a new ValidationStats instance
+
+#### func (*ValidationStats) LogSummary
+
+```go
+func (vs *ValidationStats) LogSummary(phase string)
+```
+LogSummary logs a summary of the validation statistics
+
+#### func (*ValidationStats) RecordInvalid
+
+```go
+func (vs *ValidationStats) RecordInvalid(reason string)
+```
+RecordInvalid increments the invalid RouterInfo count and tracks the reason
+
+#### func (*ValidationStats) RecordValid
+
+```go
+func (vs *ValidationStats) RecordValid()
+```
+RecordValid increments the valid RouterInfo count
+
+#### func (*ValidationStats) ValidityRate
+
+```go
+func (vs *ValidationStats) ValidityRate() float64
+```
+ValidityRate returns the percentage of valid RouterInfos
 
 
 

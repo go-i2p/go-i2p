@@ -692,7 +692,7 @@ func TestE2E_OutboundMessageRouting(t *testing.T) {
 	payload := []byte("Hello from I2CP integration test!")
 
 	// Route the message (messageID=0, no status callback for test)
-	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, nil)
+	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
 	require.NoError(t, err)
 
 	// Verify message was sent
