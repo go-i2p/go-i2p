@@ -456,7 +456,7 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 
 // handlePasswordChange processes password change requests from the I2PControl API.
 // Updates the result map and settingsSaved flag if password is successfully changed.
-func handlePasswordChange(authManager interface{ ChangePassword(string) int }, req map[string]interface{}, result map[string]interface{}, settingsSaved *bool) error {
+func handlePasswordChange(authManager interface{ ChangePassword(string) int }, req, result map[string]interface{}, settingsSaved *bool) error {
 	newPassword, ok := req["i2pcontrol.password"]
 	if !ok || newPassword == nil {
 		return nil

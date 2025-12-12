@@ -359,6 +359,30 @@ func (gr *GarlicMessageRouter) handleReflexiveDelivery(routerHash common.Hash, m
 // lookupRouterInfo retrieves and validates RouterInfo from NetDB.
 // Returns the RouterInfo if found and valid, or an error otherwise.
 func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_info.RouterInfo, error) {
+	routerInfoChan, err := gr.checkNetDBForRouter(routerHash)
+	if err != nil {
+		return router_info.RouterInfo{}, err
+	}
+
+	routerInfo, err := gr.waitForRouterInfo(routerInfoChan, routerHash)
+	if err != nil {
+		return router_info.RouterInfo{}, err
+	}
+
+	if err := gr.validateRouterInfo(routerInfo, routerHash); err != nil {
+		return router_info.RouterInfo{}, err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "lookupRouterInfo",
+		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+	}).Debug("RouterInfo lookup successful")
+	return routerInfo, nil
+}
+
+// checkNetDBForRouter verifies that the router exists in the NetDB and returns its info channel.
+// Returns an error if the router is not found in the database.
+func (gr *GarlicMessageRouter) checkNetDBForRouter(routerHash common.Hash) (chan router_info.RouterInfo, error) {
 	routerInfoChan := gr.netdb.GetRouterInfo(routerHash)
 	if routerInfoChan == nil {
 		log.WithFields(logger.Fields{
@@ -366,11 +390,14 @@ func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 			"reason":      "not found in NetDB",
 		}).Error("RouterInfo lookup failed")
-		return router_info.RouterInfo{}, fmt.Errorf("router %x not found in NetDB", routerHash[:8])
+		return nil, fmt.Errorf("router %x not found in NetDB", routerHash[:8])
 	}
+	return routerInfoChan, nil
+}
 
-	// Wait for RouterInfo with timeout
-	var routerInfo router_info.RouterInfo
+// waitForRouterInfo waits for RouterInfo data to arrive on the channel with a timeout.
+// Returns the RouterInfo if successfully received, or an error on timeout or channel closure.
+func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info.RouterInfo, routerHash common.Hash) (router_info.RouterInfo, error) {
 	select {
 	case ri, ok := <-routerInfoChan:
 		if !ok {
@@ -381,7 +408,7 @@ func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_
 			}).Error("RouterInfo channel closed")
 			return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
 		}
-		routerInfo = ri
+		return ri, nil
 	case <-time.After(1 * time.Second):
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",
@@ -390,22 +417,20 @@ func (gr *GarlicMessageRouter) lookupRouterInfo(routerHash common.Hash) (router_
 		}).Error("RouterInfo lookup timed out")
 		return router_info.RouterInfo{}, fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
 	}
+}
 
-	// Validate RouterInfo
+// validateRouterInfo checks if the retrieved RouterInfo is valid.
+// Returns an error if validation fails.
+func (gr *GarlicMessageRouter) validateRouterInfo(routerInfo router_info.RouterInfo, routerHash common.Hash) error {
 	if !routerInfo.IsValid() {
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
 			"reason":      "invalid RouterInfo",
 		}).Error("RouterInfo validation failed")
-		return router_info.RouterInfo{}, fmt.Errorf("router %x has invalid RouterInfo", routerHash[:8])
+		return fmt.Errorf("router %x has invalid RouterInfo", routerHash[:8])
 	}
-
-	log.WithFields(logger.Fields{
-		"at":          "lookupRouterInfo",
-		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
-	}).Debug("RouterInfo lookup successful")
-	return routerInfo, nil
+	return nil
 }
 
 // sendMessageToRouter establishes a transport session and queues the message for delivery.
