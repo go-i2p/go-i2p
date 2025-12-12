@@ -881,6 +881,13 @@ func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Con
 
 	for {
 		select {
+		case <-s.ctx.Done():
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+				"sessionID": sessionID,
+			}).Debug("context_cancelled_stopping_tunnel_monitoring")
+			return
+
 		case <-timeout:
 			logTimeoutWaitingForTunnels(sessionID)
 			return
