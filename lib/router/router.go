@@ -1145,68 +1145,101 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 	// No existing session - try to establish outbound connection
 	log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Debug("No active session, attempting outbound connection")
 
-	// Look up RouterInfo from NetDB with timeout
+	routerInfo, err := r.retrieveRouterInfoWithTimeout(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	transportSession, err := r.establishOutboundSession(hash, routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	r.registerNewSession(hash, transportSession)
+	return transportSession, nil
+}
+
+// retrieveRouterInfoWithTimeout looks up RouterInfo from NetDB with a timeout.
+func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.RouterInfo, error) {
 	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
 	if routerInfoChan == nil {
 		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])
 	}
 
-	// Receive RouterInfo from channel with timeout
 	select {
 	case routerInfo, ok := <-routerInfoChan:
 		if !ok {
 			return nil, fmt.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
 		}
-
-		// Check if TransportMuxer is initialized before using it
-		if r.TransportMuxer == nil {
-			log.WithFields(logger.Fields{
-				"at":        "Router.GetSessionByHash",
-				"phase":     "session_establishment",
-				"operation": "outbound_connection",
-				"peer_hash": fmt.Sprintf("%x", hash[:8]),
-				"reason":    "transport_not_initialized",
-			}).Error("TransportMuxer not initialized")
-			return nil, fmt.Errorf("transport not initialized for peer %x", hash[:8])
-		}
-
-		// Use TransportMuxer to establish outbound session
-		transportSession, err := r.TransportMuxer.GetSession(routerInfo)
-		if err != nil {
-			// Enhanced logging for session establishment failures - Issue #2 from AUDIT.md
-			// Include context about peer and transport compatibility
-			log.WithFields(logger.Fields{
-				"at":            "Router.GetSessionByHash",
-				"phase":         "session_establishment",
-				"operation":     "outbound_connection",
-				"peer_hash":     fmt.Sprintf("%x", hash[:8]),
-				"error":         err.Error(),
-				"address_count": len(routerInfo.RouterAddresses()),
-				"has_ntcp2":     hasNTCP2Address(routerInfo),
-			}).Error("failed to get session")
-			log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Error("Failed to establish outbound session")
-			return nil, fmt.Errorf("failed to establish outbound session: %w", err)
-		}
-
-		// Convert TransportSession to NTCP2Session and store it
-		if ntcp2Session, ok := transportSession.(*ntcp.NTCP2Session); ok {
-			r.addSession(hash, ntcp2Session)
-			log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound session")
-		}
-
-		return transportSession, nil
+		return &routerInfo, nil
 
 	case <-time.After(30 * time.Second):
-		// Enhanced logging for RouterInfo lookup timeout
+		r.logRouterInfoTimeout(hash)
+		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
+	}
+}
+
+// establishOutboundSession creates a new transport session to a peer.
+func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_info.RouterInfo) (i2np.TransportSession, error) {
+	if err := r.validateTransportMuxer(hash); err != nil {
+		return nil, err
+	}
+
+	transportSession, err := r.TransportMuxer.GetSession(*routerInfo)
+	if err != nil {
+		r.logSessionEstablishmentFailure(hash, routerInfo, err)
+		return nil, fmt.Errorf("failed to establish outbound session: %w", err)
+	}
+
+	return transportSession, nil
+}
+
+// validateTransportMuxer checks if the transport muxer is initialized.
+func (r *Router) validateTransportMuxer(hash common.Hash) error {
+	if r.TransportMuxer == nil {
 		log.WithFields(logger.Fields{
 			"at":        "Router.GetSessionByHash",
 			"phase":     "session_establishment",
-			"operation": "netdb_lookup",
+			"operation": "outbound_connection",
 			"peer_hash": fmt.Sprintf("%x", hash[:8]),
-			"timeout":   "30s",
-		}).Error("Timeout waiting for RouterInfo from NetDB")
-		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
+			"reason":    "transport_not_initialized",
+		}).Error("TransportMuxer not initialized")
+		return fmt.Errorf("transport not initialized for peer %x", hash[:8])
 	}
+	return nil
+}
+
+// registerNewSession stores a newly established session if it's an NTCP2 session.
+func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.TransportSession) {
+	if ntcp2Session, ok := transportSession.(*ntcp.NTCP2Session); ok {
+		r.addSession(hash, ntcp2Session)
+		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound session")
+	}
+}
+
+// logSessionEstablishmentFailure logs detailed context about session establishment failures.
+func (r *Router) logSessionEstablishmentFailure(hash common.Hash, routerInfo *router_info.RouterInfo, err error) {
+	log.WithFields(logger.Fields{
+		"at":            "Router.GetSessionByHash",
+		"phase":         "session_establishment",
+		"operation":     "outbound_connection",
+		"peer_hash":     fmt.Sprintf("%x", hash[:8]),
+		"error":         err.Error(),
+		"address_count": len(routerInfo.RouterAddresses()),
+		"has_ntcp2":     hasNTCP2Address(*routerInfo),
+	}).Error("failed to get session")
+	log.WithError(err).WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Error("Failed to establish outbound session")
+}
+
+// logRouterInfoTimeout logs timeout events when waiting for RouterInfo from NetDB.
+func (r *Router) logRouterInfoTimeout(hash common.Hash) {
+	log.WithFields(logger.Fields{
+		"at":        "Router.GetSessionByHash",
+		"phase":     "session_establishment",
+		"operation": "netdb_lookup",
+		"peer_hash": fmt.Sprintf("%x", hash[:8]),
+		"timeout":   "30s",
+	}).Error("Timeout waiting for RouterInfo from NetDB")
 }
 
 // GetNetDB returns the network database for I2PControl statistics collection.
