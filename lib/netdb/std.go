@@ -1206,33 +1206,50 @@ func (db *StdNetDB) storeRouterInfo(hash common.Hash, ri *router_info.RouterInfo
 }
 
 // create base network database directory
-func (db *StdNetDB) Create() (err error) {
+// createRootDirectory creates the root network database directory.
+// Returns the directory mode and any error encountered.
+func (db *StdNetDB) createRootDirectory() (os.FileMode, error) {
 	mode := os.FileMode(0o700)
 	p := db.Path()
 	log.WithField("path", p).Debug("Creating network database directory")
-	// create root for skiplist
-	err = os.MkdirAll(p, mode)
-	if err == nil {
-		// create all subdirectories for RouterInfo skiplist (r prefix)
-		for _, c := range base64.I2PEncodeAlphabet {
-			err = os.MkdirAll(filepath.Join(p, fmt.Sprintf("r%c", c)), mode)
-			if err != nil {
-				log.WithError(err).Error("Failed to create RouterInfo subdirectory")
-				return
-			}
-		}
-		// create all subdirectories for LeaseSet skiplist (l prefix)
-		for _, c := range base64.I2PEncodeAlphabet {
-			err = os.MkdirAll(filepath.Join(p, fmt.Sprintf("l%c", c)), mode)
-			if err != nil {
-				log.WithError(err).Error("Failed to create LeaseSet subdirectory")
-				return
-			}
-		}
-	} else {
+	err := os.MkdirAll(p, mode)
+	if err != nil {
 		log.WithError(err).Error("Failed to create root network database directory")
 	}
-	return
+	return mode, err
+}
+
+// createSkiplistSubdirectories creates all subdirectories for a skiplist with the given prefix.
+// The prefix should be "r" for RouterInfo or "l" for LeaseSet.
+func (db *StdNetDB) createSkiplistSubdirectories(prefix string, mode os.FileMode) error {
+	p := db.Path()
+	for _, c := range base64.I2PEncodeAlphabet {
+		err := os.MkdirAll(filepath.Join(p, fmt.Sprintf("%s%c", prefix, c)), mode)
+		if err != nil {
+			log.WithError(err).WithField("prefix", prefix).Error("Failed to create skiplist subdirectory")
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *StdNetDB) Create() (err error) {
+	mode, err := db.createRootDirectory()
+	if err != nil {
+		return err
+	}
+
+	// create all subdirectories for RouterInfo skiplist (r prefix)
+	if err = db.createSkiplistSubdirectories("r", mode); err != nil {
+		return err
+	}
+
+	// create all subdirectories for LeaseSet skiplist (l prefix)
+	if err = db.createSkiplistSubdirectories("l", mode); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetRouterInfoBytes retrieves RouterInfo data as bytes from the database
