@@ -269,8 +269,11 @@
 //
 // # Thread Safety
 //
-// All public types and methods are safe for concurrent access from
-// multiple goroutines. The Server, AuthManager, MethodRegistry, and
-// RouterStatsProvider implementations use appropriate synchronization
-// primitives (mutexes, atomic operations) to ensure thread safety.
+// All public types and methods are safe for concurrent access from multiple
+// goroutines:
+//
+//   - **Server**: Immutable after construction (fields set only in NewServer and never modified). Uses sync.WaitGroup for shutdown coordination.
+//   - **AuthManager**: Protected by sync.RWMutex for token management.
+//   - **MethodRegistry**: Protected by sync.RWMutex for handler registration/lookup.
+//   - **RouterStatsProvider**: Interface implementations must be thread-safe.
 package i2pcontrol
