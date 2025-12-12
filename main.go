@@ -265,13 +265,30 @@ func testNetworkConnectivity() error {
 		"reason": "validating external network access",
 	}).Info("running network connectivity pre-check")
 
-	// Test 1: DNS resolution
+	if err := testDNSResolution(); err != nil {
+		return err
+	}
+
+	if err := testTCPConnectivity(); err != nil {
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "testNetworkConnectivity",
+		"phase":  "startup",
+		"result": "success",
+	}).Info("Network connectivity pre-check passed - external access confirmed")
+
+	return nil
+}
+
+// testDNSResolution verifies DNS resolution works for reseed hosts.
+func testDNSResolution() error {
 	log.Debug("Testing DNS resolution...")
 	testHosts := []string{
 		"reseed.i2pgit.org",
 	}
 
-	dnsSuccess := false
 	for _, host := range testHosts {
 		addrs, err := net.LookupHost(host)
 		if err != nil {
@@ -287,21 +304,19 @@ func testNetworkConnectivity() error {
 			"first_addr": addrs[0],
 		}).Debug("DNS resolution successful")
 		log.Infof("DNS resolution successful: %s -> %s", host, addrs[0])
-		dnsSuccess = true
-		break
+		return nil
 	}
 
-	if !dnsSuccess {
-		return fmt.Errorf("DNS resolution failed for all test hosts - check network/DNS configuration")
-	}
+	return fmt.Errorf("DNS resolution failed for all test hosts - check network/DNS configuration")
+}
 
-	// Test 2: TCP connectivity to known I2P reseed server
+// testTCPConnectivity verifies TCP connectivity to reseed servers.
+func testTCPConnectivity() error {
 	log.Debug("Testing TCP connectivity to reseed server...")
 	tcpTestHosts := []string{
 		"reseed.i2pgit.org:443",
 	}
 
-	tcpSuccess := false
 	for _, hostPort := range tcpTestHosts {
 		log.Infof("Testing TCP connection to %s...", hostPort)
 		conn, err := net.DialTimeout("tcp", hostPort, 5*time.Second)
@@ -318,21 +333,10 @@ func testNetworkConnectivity() error {
 			"target": hostPort,
 		}).Debug("TCP connectivity test successful")
 		log.Infof("TCP connectivity test successful to %s", hostPort)
-		tcpSuccess = true
-		break
+		return nil
 	}
 
-	if !tcpSuccess {
-		return fmt.Errorf("TCP connectivity failed to all test hosts - check firewall/network configuration")
-	}
-
-	log.WithFields(logger.Fields{
-		"at":     "testNetworkConnectivity",
-		"phase":  "startup",
-		"result": "success",
-	}).Info("Network connectivity pre-check passed - external access confirmed")
-
-	return nil
+	return fmt.Errorf("TCP connectivity failed to all test hosts - check firewall/network configuration")
 }
 
 func runRouter() {

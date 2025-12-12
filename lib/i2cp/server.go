@@ -1665,7 +1665,22 @@ func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Messag
 
 	session := *sessionPtr
 
-	// Parse blinding info payload
+	blindingInfo, err := parseAndLogBlindingInfo(msg, session)
+	if err != nil {
+		return nil, err
+	}
+
+	updateSessionBlindingConfig(session, blindingInfo)
+
+	if err := applyBlindedDestinationUpdate(session, blindingInfo); err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+// parseAndLogBlindingInfo parses the BlindingInfo payload and logs the received configuration.
+func parseAndLogBlindingInfo(msg *Message, session *Session) (*BlindingInfoPayload, error) {
 	blindingInfo, err := ParseBlindingInfoPayload(msg.Payload)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -1684,44 +1699,49 @@ func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Messag
 		"hasSecret": len(blindingInfo.Secret) > 0,
 	}).Info("received_blinding_info")
 
-	// Update session configuration
+	return blindingInfo, nil
+}
+
+// updateSessionBlindingConfig updates the session's blinding configuration based on the received info.
+func updateSessionBlindingConfig(session *Session, blindingInfo *BlindingInfoPayload) {
 	session.mu.Lock()
+	defer session.mu.Unlock()
+
 	session.config.UseEncryptedLeaseSet = blindingInfo.Enabled
 	if blindingInfo.Enabled && len(blindingInfo.Secret) > 0 {
 		session.config.BlindingSecret = blindingInfo.Secret
-		// Clear cached secret to force regeneration with new config
 		session.blindingSecret = nil
 	} else if blindingInfo.Enabled {
-		// Enabled with no secret = generate random
 		session.config.BlindingSecret = nil
 		session.blindingSecret = nil
 	} else {
-		// Disabled = clear everything
 		session.config.BlindingSecret = nil
 		session.blindingSecret = nil
 		session.blindedDestination = nil
 	}
-	session.mu.Unlock()
+}
 
-	// If enabled, trigger immediate blinded destination update
-	if blindingInfo.Enabled {
-		if err := session.updateBlindedDestination(); err != nil {
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Server.handleBlindingInfo",
-				"sessionID": session.ID(),
-				"error":     err.Error(),
-			}).Error("failed_to_update_blinded_destination")
-			return nil, fmt.Errorf("failed to update blinded destination: %w", err)
-		}
+// applyBlindedDestinationUpdate triggers blinded destination update if blinding is enabled.
+func applyBlindedDestinationUpdate(session *Session, blindingInfo *BlindingInfoPayload) error {
+	if !blindingInfo.Enabled {
+		return nil
+	}
+
+	if err := session.updateBlindedDestination(); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.handleBlindingInfo",
 			"sessionID": session.ID(),
-		}).Debug("blinded_destination_updated")
+			"error":     err.Error(),
+		}).Error("failed_to_update_blinded_destination")
+		return fmt.Errorf("failed to update blinded destination: %w", err)
 	}
 
-	// Return nil (no response) to acknowledge receipt
-	// Client should request LeaseSet regeneration if needed
-	return nil, nil
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleBlindingInfo",
+		"sessionID": session.ID(),
+	}).Debug("blinded_destination_updated")
+
+	return nil
 }
 
 // handleSendMessage handles a client sending a message to a destination.
