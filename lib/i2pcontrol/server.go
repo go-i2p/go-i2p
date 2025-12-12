@@ -122,45 +122,68 @@ func (s *Server) Start() error {
 		return nil
 	}
 
+	s.startHTTPServer()
+	s.startTokenCleanup()
+
+	return nil
+}
+
+// startHTTPServer launches the HTTP or HTTPS server in a background goroutine.
+func (s *Server) startHTTPServer() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 
 		var err error
 		if s.config.UseHTTPS {
-			if s.config.CertFile == "" || s.config.KeyFile == "" {
-				log.WithFields(logger.Fields{
-					"at":       "(Server).Start",
-					"reason":   "missing cert or key file",
-					"certFile": s.config.CertFile,
-					"keyFile":  s.config.KeyFile,
-				}).Error("Failed to start HTTPS server")
-				return
-			}
-			log.WithFields(logger.Fields{
-				"at":       "(Server).Start",
-				"address":  s.config.Address,
-				"protocol": "HTTPS",
-			}).Info("Starting I2PControl server")
-			err = s.httpServer.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
+			err = s.startHTTPSServer()
 		} else {
-			log.WithFields(logger.Fields{
-				"at":       "(Server).Start",
-				"address":  s.config.Address,
-				"protocol": "HTTP",
-			}).Info("Starting I2PControl server")
-			err = s.httpServer.ListenAndServe()
+			err = s.startPlainHTTPServer()
 		}
 
 		if err != nil && err != http.ErrServerClosed {
 			log.WithFields(logger.Fields{
-				"at":     "(Server).Start",
+				"at":     "(Server).startHTTPServer",
 				"reason": err.Error(),
 			}).Error("I2PControl server error")
 		}
 	}()
+}
 
-	// Start token cleanup goroutine
+// startHTTPSServer validates HTTPS configuration and starts the TLS server.
+func (s *Server) startHTTPSServer() error {
+	if s.config.CertFile == "" || s.config.KeyFile == "" {
+		log.WithFields(logger.Fields{
+			"at":       "(Server).startHTTPSServer",
+			"reason":   "missing cert or key file",
+			"certFile": s.config.CertFile,
+			"keyFile":  s.config.KeyFile,
+		}).Error("Failed to start HTTPS server")
+		return fmt.Errorf("missing certificate or key file")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":       "(Server).startHTTPSServer",
+		"address":  s.config.Address,
+		"protocol": "HTTPS",
+	}).Info("Starting I2PControl server")
+
+	return s.httpServer.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
+}
+
+// startPlainHTTPServer starts the HTTP server without TLS.
+func (s *Server) startPlainHTTPServer() error {
+	log.WithFields(logger.Fields{
+		"at":       "(Server).startPlainHTTPServer",
+		"address":  s.config.Address,
+		"protocol": "HTTP",
+	}).Info("Starting I2PControl server")
+
+	return s.httpServer.ListenAndServe()
+}
+
+// startTokenCleanup launches a background goroutine to periodically clean expired tokens.
+func (s *Server) startTokenCleanup() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -176,8 +199,6 @@ func (s *Server) Start() error {
 			}
 		}
 	}()
-
-	return nil
 }
 
 // Stop gracefully shuts down the server, waiting for active requests to complete.
@@ -217,67 +238,88 @@ func (s *Server) Stop() {
 // 5. Dispatch to method handler
 // 6. Serialize and return response
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers for cross-origin requests
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	s.setCORSHeaders(w)
 
-	// Handle OPTIONS preflight request
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Verify HTTP method
-	if r.Method != http.MethodPost {
-		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeInvalidRequest, "Method must be POST"))
+	if rpcErr := s.validateHTTPRequest(r); rpcErr != nil {
+		s.writeErrorResponse(w, nil, rpcErr)
 		return
 	}
 
-	// Verify Content-Type
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
-		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeInvalidRequest, "Content-Type must be application/json"))
+	body, rpcErr := s.readRequestBody(r)
+	if rpcErr != nil {
+		s.writeErrorResponse(w, nil, rpcErr)
 		return
 	}
 
-	// Read request body
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // Limit to 1MB
-	if err != nil {
-		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeInternalError, "Failed to read request body"))
-		return
-	}
-	defer r.Body.Close()
-
-	// Parse JSON-RPC request
 	req, err := ParseRequest(body)
 	if err != nil {
 		s.writeErrorResponse(w, nil, NewRPCError(ErrCodeParseError, err.Error()))
 		return
 	}
 
-	// Validate authentication token (except for Authenticate method)
-	if req.Method != "Authenticate" {
-		// Parse params to extract Token
-		var params struct {
-			Token string `json:"Token"`
-		}
-		if err := json.Unmarshal(req.Params, &params); err != nil || params.Token == "" {
-			s.writeErrorResponse(w, req.ID, NewRPCError(ErrCodeInvalidParams, "Missing or invalid Token parameter"))
-			return
-		}
-
-		if !s.authManager.ValidateToken(params.Token) {
-			s.writeErrorResponse(w, req.ID, NewRPCError(ErrCodeAuthRequired, "Invalid or expired authentication token"))
-			return
-		}
+	if rpcErr := s.validateAuthentication(req); rpcErr != nil {
+		s.writeErrorResponse(w, req.ID, rpcErr)
+		return
 	}
 
-	// Dispatch to method handler
 	resp := s.registry.HandleRequest(r.Context(), body)
-
-	// Write response
 	s.writeResponse(w, resp)
+}
+
+// setCORSHeaders configures Cross-Origin Resource Sharing headers for JSON-RPC requests.
+func (s *Server) setCORSHeaders(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+// validateHTTPRequest checks that the HTTP method is POST and Content-Type is application/json.
+func (s *Server) validateHTTPRequest(r *http.Request) *RPCError {
+	if r.Method != http.MethodPost {
+		return NewRPCError(ErrCodeInvalidRequest, "Method must be POST")
+	}
+
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+		return NewRPCError(ErrCodeInvalidRequest, "Content-Type must be application/json")
+	}
+
+	return nil
+}
+
+// readRequestBody reads and returns the HTTP request body with a 1MB size limit.
+func (s *Server) readRequestBody(r *http.Request) ([]byte, *RPCError) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return nil, NewRPCError(ErrCodeInternalError, "Failed to read request body")
+	}
+	defer r.Body.Close()
+	return body, nil
+}
+
+// validateAuthentication verifies the authentication token for non-Authenticate method calls.
+func (s *Server) validateAuthentication(req *Request) *RPCError {
+	if req.Method == "Authenticate" {
+		return nil
+	}
+
+	var params struct {
+		Token string `json:"Token"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil || params.Token == "" {
+		return NewRPCError(ErrCodeInvalidParams, "Missing or invalid Token parameter")
+	}
+
+	if !s.authManager.ValidateToken(params.Token) {
+		return NewRPCError(ErrCodeAuthRequired, "Invalid or expired authentication token")
+	}
+
+	return nil
 }
 
 // writeResponse serializes and writes a JSON-RPC response to the HTTP response writer.
