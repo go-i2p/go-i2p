@@ -186,17 +186,31 @@ func ValidateRouterAddress(addr *router_address.RouterAddress) error {
 
 // ValidateNTCP2Address validates NTCP2-specific requirements
 func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
-	// Actually try to retrieve the host - this is what NTCP2 transport does
-	// CheckOption() may return true even when the key doesn't exist in the mapping
-	// Note: Missing host key is NORMAL for introducer-based NTCP2 addresses
+	hostData, err := validateHostData(addr)
+	if err != nil {
+		return err
+	}
+
+	port, err := validatePortData(addr, hostData)
+	if err != nil {
+		return err
+	}
+
+	if err := validateTCPResolution(hostData, port); err != nil {
+		return err
+	}
+
+	checkOptionalStaticKey(addr)
+	return nil
+}
+
+// validateHostData retrieves and validates the host from the RouterAddress.
+// Returns the host string if valid, or an error for missing, nil, or empty hosts.
+func validateHostData(addr *router_address.RouterAddress) (string, error) {
 	host, err := addr.Host()
 	if err != nil {
-		// BUG FIX: This is expected for introducer-only addresses - log at debug level only
-		// Introducer-based addresses are used for routers behind NAT/firewalls
-		// This is NOT an error - it's standard I2P protocol behavior for ~40% of I2P routers
-		// Previously logged at ERROR level causing log pollution (120+ messages per 2 minutes)
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validateHostData",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "host key missing - normal for introducer-based/firewalled routers",
@@ -204,38 +218,42 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 			"note":      "requires introducer support (not yet implemented)",
 			"impact":    "none - will be skipped during peer selection",
 		}).Debug("NTCP2 address is introducer-only (no direct connectivity)")
-		return fmt.Errorf("NTCP2 address cannot retrieve host (introducer-based): %w", err)
+		return "", fmt.Errorf("NTCP2 address cannot retrieve host (introducer-based): %w", err)
 	}
 
 	if host == nil {
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validateHostData",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "host key value is nil",
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 host is nil")
-		return errors.New("NTCP2 host is nil")
+		return "", errors.New("NTCP2 host is nil")
 	}
 
 	hostData := host.String()
 	if hostData == "" {
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validateHostData",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "host key value is empty string",
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 host is empty")
-		return errors.New("NTCP2 host is empty")
+		return "", errors.New("NTCP2 host is empty")
 	}
 
-	// Actually try to retrieve the port - this is what NTCP2 transport does
+	return hostData, nil
+}
+
+// validatePortData retrieves and validates the port from the RouterAddress.
+// Returns the port string if valid, or an error for missing or empty ports.
+func validatePortData(addr *router_address.RouterAddress, hostData string) (string, error) {
 	port, err := addr.Port()
 	if err != nil {
-		// Enhanced logging for Issue #1: RouterAddress missing required port key
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validatePortData",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "port key missing or malformed in RouterAddress mapping",
@@ -243,28 +261,32 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 			"host":      hostData,
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("RouterAddress missing required port key")
-		return fmt.Errorf("NTCP2 address cannot retrieve port: %w", err)
+		return "", fmt.Errorf("NTCP2 address cannot retrieve port: %w", err)
 	}
 
 	if port == "" {
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validatePortData",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "port key value is empty string",
 			"host":      hostData,
 			"impact":    "peer cannot be contacted via NTCP2",
 		}).Warn("NTCP2 port is empty")
-		return errors.New("NTCP2 port is empty")
+		return "", errors.New("NTCP2 port is empty")
 	}
 
-	// Try to actually resolve the address to catch invalid IPs early
-	// Use net.JoinHostPort to properly handle IPv6 addresses (wraps them in brackets)
+	return port, nil
+}
+
+// validateTCPResolution resolves the TCP address to validate that the host:port combination is valid.
+// Returns an error if the address cannot be resolved.
+func validateTCPResolution(hostData, port string) error {
 	hostPort := net.JoinHostPort(hostData, port)
-	_, err = net.ResolveTCPAddr("tcp", hostPort)
+	_, err := net.ResolveTCPAddr("tcp", hostPort)
 	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":        "ValidateNTCP2Address",
+			"at":        "validateTCPResolution",
 			"phase":     "validation",
 			"transport": "ntcp2",
 			"reason":    "cannot resolve host:port as valid TCP address",
@@ -274,16 +296,18 @@ func ValidateNTCP2Address(addr *router_address.RouterAddress) error {
 		}).Warn("Invalid NTCP2 address discovered")
 		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
 	}
+	return nil
+}
 
-	// Optional: validate static key exists (common in NTCP2)
+// checkOptionalStaticKey checks for the optional static key in NTCP2 addresses.
+// Logs a debug message if the static key is missing.
+func checkOptionalStaticKey(addr *router_address.RouterAddress) {
 	if !addr.CheckOption("s") {
 		log.WithFields(logger.Fields{
-			"at":    "validateNTCP2Address",
+			"at":    "checkOptionalStaticKey",
 			"issue": "missing static key",
 		}).Debug("NTCP2 address missing optional 's' (static key)")
 	}
-
-	return nil
 }
 
 // validateSSUAddress validates SSU-specific requirements
