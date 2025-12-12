@@ -818,11 +818,11 @@ func buildSessionStatusResponse(sessionID uint16) *Message {
 // - 4 bytes: Nonce (uint32, big endian)
 func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode uint8, messageSize, nonce uint32) *Message {
 	payload := make([]byte, 15)
-	binary.BigEndian.PutUint16(payload[0:2], sessionID)   // SessionID
-	binary.BigEndian.PutUint32(payload[2:6], messageID)   // MessageID
+	binary.BigEndian.PutUint16(payload[0:2], sessionID)    // SessionID
+	binary.BigEndian.PutUint32(payload[2:6], messageID)    // MessageID
 	payload[6] = statusCode                                // Status
 	binary.BigEndian.PutUint32(payload[7:11], messageSize) // Message size
-	binary.BigEndian.PutUint32(payload[11:15], nonce)     // Nonce
+	binary.BigEndian.PutUint32(payload[11:15], nonce)      // Nonce
 
 	return &Message{
 		Type:      MessageTypeMessageStatus,

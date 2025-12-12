@@ -208,8 +208,15 @@ func TestMessageStatusUnmarshal(t *testing.T) {
 		t.Errorf("Type = %d, want %d", parsedMsg.Type, originalMsg.Type)
 	}
 
-	if parsedMsg.SessionID != originalMsg.SessionID {
-		t.Errorf("SessionID = %d, want %d", parsedMsg.SessionID, originalMsg.SessionID)
+	// Per I2CP spec: SessionID is NOT in common header, it's in the payload
+	// UnmarshalBinary sets SessionID=0, we must extract it from payload
+	if len(parsedMsg.Payload) >= 2 {
+		payloadSessionID := binary.BigEndian.Uint16(parsedMsg.Payload[0:2])
+		if payloadSessionID != originalMsg.SessionID {
+			t.Errorf("Payload SessionID = %d, want %d", payloadSessionID, originalMsg.SessionID)
+		}
+	} else {
+		t.Fatalf("Payload too short to contain SessionID")
 	}
 
 	if len(parsedMsg.Payload) != len(originalMsg.Payload) {
@@ -250,41 +257,48 @@ func TestMessageIDGeneration(t *testing.T) {
 
 // TestMessageStatusPayloadFormat verifies the exact wire format specification.
 func TestMessageStatusPayloadFormat(t *testing.T) {
-	// According to I2CP spec, MessageStatus payload is:
+	// According to I2CP spec v2.10.0, MessageStatus payload is:
+	// 2 bytes: Session ID (uint16, big endian)
 	// 4 bytes: Message ID (uint32, big endian)
 	// 1 byte:  Status code
 	// 4 bytes: Message size (uint32, big endian)
 	// 4 bytes: Nonce (uint32, big endian)
-	// Total: 13 bytes
+	// Total: 15 bytes
 
 	msg := buildMessageStatusResponse(1, 0x12345678, 0xAB, 0xCDEF0123, 0x9ABCDEF0)
 
-	if len(msg.Payload) != 13 {
-		t.Fatalf("Payload length = %d, want 13", len(msg.Payload))
+	if len(msg.Payload) != 15 {
+		t.Fatalf("Payload length = %d, want 15", len(msg.Payload))
 	}
 
 	// Verify exact byte positions
+	expectedSessionID := uint16(1)
+	gotSessionID := binary.BigEndian.Uint16(msg.Payload[0:2])
+	if gotSessionID != expectedSessionID {
+		t.Errorf("Session ID at bytes 0-1 = 0x%04X, want 0x%04X", gotSessionID, expectedSessionID)
+	}
+
 	expectedMessageID := uint32(0x12345678)
-	gotMessageID := binary.BigEndian.Uint32(msg.Payload[0:4])
+	gotMessageID := binary.BigEndian.Uint32(msg.Payload[2:6])
 	if gotMessageID != expectedMessageID {
-		t.Errorf("Message ID at bytes 0-3 = 0x%08X, want 0x%08X", gotMessageID, expectedMessageID)
+		t.Errorf("Message ID at bytes 2-5 = 0x%08X, want 0x%08X", gotMessageID, expectedMessageID)
 	}
 
 	expectedStatus := uint8(0xAB)
-	gotStatus := msg.Payload[4]
+	gotStatus := msg.Payload[6]
 	if gotStatus != expectedStatus {
-		t.Errorf("Status code at byte 4 = 0x%02X, want 0x%02X", gotStatus, expectedStatus)
+		t.Errorf("Status code at byte 6 = 0x%02X, want 0x%02X", gotStatus, expectedStatus)
 	}
 
 	expectedSize := uint32(0xCDEF0123)
-	gotSize := binary.BigEndian.Uint32(msg.Payload[5:9])
+	gotSize := binary.BigEndian.Uint32(msg.Payload[7:11])
 	if gotSize != expectedSize {
-		t.Errorf("Message size at bytes 5-8 = 0x%08X, want 0x%08X", gotSize, expectedSize)
+		t.Errorf("Message size at bytes 7-10 = 0x%08X, want 0x%08X", gotSize, expectedSize)
 	}
 
 	expectedNonce := uint32(0x9ABCDEF0)
-	gotNonce := binary.BigEndian.Uint32(msg.Payload[9:13])
+	gotNonce := binary.BigEndian.Uint32(msg.Payload[11:15])
 	if gotNonce != expectedNonce {
-		t.Errorf("Nonce at bytes 9-12 = 0x%08X, want 0x%08X", gotNonce, expectedNonce)
+		t.Errorf("Nonce at bytes 11-14 = 0x%08X, want 0x%08X", gotNonce, expectedNonce)
 	}
 }
