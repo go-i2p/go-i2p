@@ -800,7 +800,7 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 func buildSessionStatusResponse(sessionID uint16) *Message {
 	payload := make([]byte, 3)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID) // SessionID
-	payload[2] = 0x00                                     // Success status byte
+	payload[2] = 0x00                                   // Success status byte
 
 	return &Message{
 		Type:      MessageTypeSessionStatus,
