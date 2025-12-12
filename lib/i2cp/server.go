@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
 
@@ -514,6 +516,13 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 
 		s.wg.Add(1)
 		go s.deliverMessagesToClient(*sessionPtr, conn)
+
+		// Start tunnel monitoring to send RequestVariableLeaseSet when ready
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.monitorTunnelsAndRequestLeaseSet(*sessionPtr, conn)
+		}()
 	}
 }
 
@@ -696,6 +705,152 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 
 	// No response for DestroySession
 	return nil, nil
+}
+
+// monitorTunnelsAndRequestLeaseSet monitors a session's tunnel pools and sends
+// RequestVariableLeaseSet (type 37) when tunnels are ready. This is required by
+// I2CP protocol - the router must tell the client when to publish its LeaseSet.
+//
+// Per I2CP spec: After session creation, router waits for inbound+outbound tunnels,
+// then sends type 37 with lease data. Client responds with CreateLeaseSet (type 5).
+//
+// NOTE: This requires tunnel pools to be attached to the session by the router layer.
+// Currently pools are not attached during handleCreateSession, so this will wait
+// indefinitely. This is Bug #2's partial fix - pools need router integration.
+func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Conn) {
+	sessionID := session.ID()
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID": sessionID,
+	}).Debug("starting_tunnel_monitoring")
+
+	// Wait for both inbound and outbound tunnels to be ready
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	timeout := time.After(2 * time.Minute) // Give up after 2 minutes
+
+	for {
+		select {
+		case <-timeout:
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+				"sessionID": sessionID,
+			}).Warn("timeout_waiting_for_tunnels")
+			return
+
+		case <-ticker.C:
+			inboundPool := session.InboundPool()
+			outboundPool := session.OutboundPool()
+
+			// Check if pools are attached and have active tunnels
+			if inboundPool == nil || outboundPool == nil {
+				continue
+			}
+
+			inTunnels := inboundPool.GetActiveTunnels()
+			outTunnels := outboundPool.GetActiveTunnels()
+
+			if len(inTunnels) == 0 || len(outTunnels) == 0 {
+				continue
+			}
+
+			// Tunnels ready - build and send RequestVariableLeaseSet
+			log.WithFields(logger.Fields{
+				"at":              "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+				"sessionID":       sessionID,
+				"inboundTunnels":  len(inTunnels),
+				"outboundTunnels": len(outTunnels),
+			}).Info("tunnels_ready_sending_leaseset_request")
+
+			payload, err := s.buildRequestVariableLeaseSetPayload(inTunnels)
+			if err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+					"sessionID": sessionID,
+					"error":     err.Error(),
+				}).Error("failed_to_build_leaseset_request")
+				return
+			}
+
+			msg := &Message{
+				Type:      MessageTypeRequestVariableLeaseSet,
+				SessionID: sessionID,
+				Payload:   payload,
+			}
+
+			if err := WriteMessage(conn, msg); err != nil {
+				log.WithFields(logger.Fields{
+					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+					"sessionID": sessionID,
+					"error":     err.Error(),
+				}).Error("failed_to_send_leaseset_request")
+				return
+			}
+
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+				"sessionID":   sessionID,
+				"payloadSize": len(payload),
+			}).Info("sent_request_variable_leaseset")
+
+			return
+		}
+	}
+}
+
+// buildRequestVariableLeaseSetPayload constructs the payload for RequestVariableLeaseSet (type 37).
+// Payload format per I2CP spec:
+//
+//	1 byte: number of leases (N)
+//	For each lease (N times):
+//	  32 bytes: tunnel gateway router hash
+//	  4 bytes:  tunnel ID (big endian uint32)
+//	  8 bytes:  end date (milliseconds since epoch, big endian uint64)
+func (s *Server) buildRequestVariableLeaseSetPayload(tunnels []*tunnel.TunnelState) ([]byte, error) {
+	if len(tunnels) == 0 {
+		return nil, fmt.Errorf("no tunnels provided")
+	}
+
+	if len(tunnels) > 16 {
+		// Limit to 16 leases to keep LeaseSet size reasonable
+		tunnels = tunnels[:16]
+	}
+
+	// Calculate payload size: 1 byte count + N * (32 + 4 + 8) bytes
+	payloadSize := 1 + len(tunnels)*44
+	payload := make([]byte, payloadSize)
+
+	payload[0] = byte(len(tunnels))
+
+	offset := 1
+	now := time.Now()
+
+	for _, tun := range tunnels {
+		if tun == nil || len(tun.Hops) == 0 {
+			continue
+		}
+
+		// Gateway router hash (32 bytes)
+		copy(payload[offset:offset+32], tun.Hops[0][:])
+		offset += 32
+
+		// Tunnel ID (4 bytes, big endian)
+		binary.BigEndian.PutUint32(payload[offset:offset+4], uint32(tun.ID))
+		offset += 4
+
+		// End date (8 bytes, big endian, milliseconds since epoch)
+		endDate := tun.CreatedAt.Add(10 * time.Minute) // Standard 10-minute lease
+		if endDate.Before(now) {
+			endDate = now.Add(5 * time.Minute) // Use 5 minutes if tunnel is old
+		}
+		endDateMillis := uint64(endDate.UnixMilli())
+		binary.BigEndian.PutUint64(payload[offset:offset+8], endDateMillis)
+		offset += 8
+	}
+
+	return payload, nil
 }
 
 // handleReconfigureSession updates session configuration
