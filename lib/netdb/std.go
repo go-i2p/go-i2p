@@ -23,6 +23,7 @@ import (
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
 	"github.com/go-i2p/common/meta_leaseset"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
@@ -209,42 +210,9 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 	hasValidNTCP2 := false
 
 	for i, addr := range addresses {
-		// Check if this is an NTCP2 address
-		style := addr.TransportStyle()
-		styleStr, err := style.Data()
-		if err != nil {
-			log.WithField("index", i).WithError(err).Debug("hasValidNTCP2Address: failed to get transport style")
-			continue
-		}
-
-		log.WithFields(logger.Fields{
-			"index": i,
-			"style": styleStr,
-		}).Debug("hasValidNTCP2Address: checking address style")
-
-		if strings.EqualFold(styleStr, "ntcp2") {
-			// Found NTCP2 address - validate it using bootstrap package
-			log.WithField("index", i).Debug("hasValidNTCP2Address: found NTCP2 address, validating...")
-			if err := bootstrap.ValidateNTCP2Address(addr); err == nil {
-				// Valid NTCP2 address found! Router is usable for direct connections.
-				log.WithField("index", i).Debug("hasValidNTCP2Address: NTCP2 address is VALID (direct connectivity)")
+		if isNTCP2Address(addr, i) {
+			if validateAndLogNTCP2Address(addr, i) {
 				hasValidNTCP2 = true
-				// Don't break - continue logging all addresses for debugging
-			} else {
-				// Address validation failed - check if it's introducer-based or truly invalid
-				// Introducer-based addresses are normal for NAT/firewalled routers
-				isIntroducerBased := strings.Contains(err.Error(), "introducer")
-				if isIntroducerBased {
-					log.WithFields(logger.Fields{
-						"index":  i,
-						"reason": "introducer-based address (NAT/firewall)",
-					}).Debug("hasValidNTCP2Address: skipping introducer-only address")
-				} else {
-					log.WithFields(logger.Fields{
-						"index": i,
-						"error": err.Error(),
-					}).Debug("hasValidNTCP2Address: NTCP2 address validation FAILED")
-				}
 			}
 		}
 	}
@@ -256,6 +224,56 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 
 	log.Debug("hasValidNTCP2Address: At least one valid NTCP2 address found")
 	return true
+}
+
+// isNTCP2Address checks if the given address uses NTCP2 transport style.
+// It returns true if the address is NTCP2, false otherwise or on error.
+func isNTCP2Address(addr *router_address.RouterAddress, index int) bool {
+	style := addr.TransportStyle()
+	styleStr, err := style.Data()
+	if err != nil {
+		log.WithField("index", index).WithError(err).Debug("isNTCP2Address: failed to get transport style")
+		return false
+	}
+
+	log.WithFields(logger.Fields{
+		"index": index,
+		"style": styleStr,
+	}).Debug("isNTCP2Address: checking address style")
+
+	return strings.EqualFold(styleStr, "ntcp2")
+}
+
+// validateAndLogNTCP2Address validates an NTCP2 address and logs the result.
+// It returns true if the address is valid for direct connectivity, false otherwise.
+func validateAndLogNTCP2Address(addr *router_address.RouterAddress, index int) bool {
+	log.WithField("index", index).Debug("validateAndLogNTCP2Address: found NTCP2 address, validating...")
+
+	err := bootstrap.ValidateNTCP2Address(addr)
+	if err == nil {
+		log.WithField("index", index).Debug("validateAndLogNTCP2Address: NTCP2 address is VALID (direct connectivity)")
+		return true
+	}
+
+	logNTCP2ValidationFailure(err, index)
+	return false
+}
+
+// logNTCP2ValidationFailure logs the appropriate message for NTCP2 validation failures.
+// It distinguishes between introducer-based addresses (NAT/firewall) and truly invalid addresses.
+func logNTCP2ValidationFailure(err error, index int) {
+	isIntroducerBased := strings.Contains(err.Error(), "introducer")
+	if isIntroducerBased {
+		log.WithFields(logger.Fields{
+			"index":  index,
+			"reason": "introducer-based address (NAT/firewall)",
+		}).Debug("logNTCP2ValidationFailure: skipping introducer-only address")
+	} else {
+		log.WithFields(logger.Fields{
+			"index": index,
+			"error": err.Error(),
+		}).Debug("logNTCP2ValidationFailure: NTCP2 address validation FAILED")
+	}
 }
 
 // filterAvailablePeers filters router infos excluding specified hashes and checking reachability
