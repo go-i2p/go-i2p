@@ -17,6 +17,20 @@
 //
 // Each tunnel has multiple hops (typically 3) for anonymity.
 //
+// # Tunnel Roles
+//
+// Routers can perform three roles in tunnel operation:
+//
+//   - Gateway: Receives messages from the network and forwards them into
+//     the tunnel with the first layer of encryption.
+//
+//   - Participant: Acts as an intermediate hop, removing one layer of
+//     encryption and forwarding to the next hop. The Participant.Process()
+//     method handles decryption and extraction of next hop information.
+//
+//   - Endpoint: Receives messages from the tunnel, removes the final
+//     encryption layer, and delivers to the destination or local router.
+//
 // # Thread Safety
 //
 // TunnelPool is safe for concurrent access:
