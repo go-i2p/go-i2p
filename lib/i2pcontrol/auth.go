@@ -64,8 +64,13 @@ func NewAuthManager(password string) (*AuthManager, error) {
 //   - token: Base64-encoded authentication token
 //   - error: If password is invalid or token generation fails
 func (am *AuthManager) Authenticate(password string, expiration time.Duration) (string, error) {
+	// Read password with lock to prevent race with ChangePassword
+	am.mu.RLock()
+	currentPassword := am.password
+	am.mu.RUnlock()
+
 	// Validate password using constant-time comparison to prevent timing attacks
-	if !hmac.Equal([]byte(password), []byte(am.password)) {
+	if !hmac.Equal([]byte(password), []byte(currentPassword)) {
 		return "", fmt.Errorf("invalid password")
 	}
 
@@ -169,6 +174,34 @@ func (am *AuthManager) TokenCount() int {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 	return len(am.tokens)
+}
+
+// ChangePassword updates the authentication password and revokes all existing tokens.
+// This forces all clients to re-authenticate with the new password.
+// Thread-safe for concurrent access.
+//
+// Parameters:
+//   - newPassword: The new password to set
+//
+// Returns:
+//   - int: Number of tokens revoked (clients that must re-authenticate)
+func (am *AuthManager) ChangePassword(newPassword string) int {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	// Update password
+	am.password = newPassword
+
+	// Count and revoke all existing tokens
+	revokedCount := len(am.tokens)
+	am.tokens = make(map[string]time.Time)
+
+	log.WithFields(map[string]interface{}{
+		"at":      "AuthManager.ChangePassword",
+		"revoked": revokedCount,
+	}).Info("password changed, all tokens revoked")
+
+	return revokedCount
 }
 
 // generateToken creates a cryptographic token from a timestamp.

@@ -88,6 +88,9 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 	// NetworkSetting enabled - provides read-only access to network configuration
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
 
+	// I2PControl enabled - allows server self-management (password changes)
+	registry.Register("I2PControl", NewI2PControlHandler(authManager))
+
 	// Create HTTP server
 	mux := http.NewServeMux()
 	server := &Server{

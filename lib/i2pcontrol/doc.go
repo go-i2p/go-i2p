@@ -130,6 +130,15 @@
 //	                 "i2p.router.net.bw.inbound.15s":null,
 //	                 "i2p.router.net.bw.outbound.15s":null}}'
 //
+// I2PControl - Manage server settings (password change):
+//
+//	curl -X POST http://localhost:7650/jsonrpc \
+//	  -H "Content-Type: application/json" \
+//	  -d '{"jsonrpc":"2.0","id":5,"method":"I2PControl",
+//	       "params":{"Token":"abc123",
+//	                 "i2pcontrol.password":"new-secure-password"}}'
+//	# Response: {"jsonrpc":"2.0","id":5,"result":{"i2pcontrol.password":null,"SettingsSaved":true}}
+//
 // # Supported Methods
 //
 // The following JSON-RPC methods are implemented:
@@ -138,11 +147,14 @@
 //   - Echo: Connection test (returns input value)
 //   - GetRate: Bandwidth statistics (in/out rates)
 //   - RouterInfo: Router status (uptime, version, tunnels, peers)
+//   - RouterManager: Control operations (shutdown)
+//   - NetworkSetting: Configuration queries (read-only)
+//   - I2PControl: Server management (password changes)
 //
 // Planned for future implementation:
 //
-//   - RouterManager: Control operations (shutdown, restart)
-//   - NetworkSetting: Configuration queries and updates
+//   - RouterManager: Restart, reseed operations
+//   - NetworkSetting: Configuration updates (write operations)
 //
 // # Available Router Metrics
 //
@@ -253,13 +265,16 @@
 //   - ✅ Token authentication
 //   - ✅ HTTP/HTTPS transport
 //   - ✅ Echo, GetRate, RouterInfo methods
+//   - ✅ RouterManager method (shutdown)
+//   - ✅ NetworkSetting method (read-only)
+//   - ✅ I2PControl method (password changes)
 //   - ✅ Thread-safe concurrent access
 //   - ✅ Graceful shutdown
-//   - ✅ 87%+ test coverage
+//   - ✅ 78%+ test coverage
 //   - ⚠️  No rate limiting
 //   - ⚠️  No audit logging
-//   - 🚧 RouterManager method (planned)
-//   - 🚧 NetworkSetting method (planned)
+//   - 🚧 RouterManager: Restart/reseed (planned)
+//   - 🚧 NetworkSetting: Write operations (planned)
 //
 // # References
 //

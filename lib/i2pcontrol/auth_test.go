@@ -528,3 +528,203 @@ func BenchmarkCleanupExpiredTokens(b *testing.B) {
 		am.CleanupExpiredTokens()
 	}
 }
+
+// TestChangePassword verifies password change functionality
+func TestChangePassword(t *testing.T) {
+	am, err := NewAuthManager("oldpass")
+	if err != nil {
+		t.Fatalf("NewAuthManager failed: %v", err)
+	}
+
+	// Create some tokens with old password
+	token1, err := am.Authenticate("oldpass", 10*time.Minute)
+	if err != nil {
+		t.Fatalf("Authenticate failed: %v", err)
+	}
+
+	token2, err := am.Authenticate("oldpass", 10*time.Minute)
+	if err != nil {
+		t.Fatalf("Authenticate failed: %v", err)
+	}
+
+	// Verify tokens are valid
+	if !am.ValidateToken(token1) {
+		t.Error("token1 should be valid before password change")
+	}
+	if !am.ValidateToken(token2) {
+		t.Error("token2 should be valid before password change")
+	}
+
+	// Change password
+	revokedCount := am.ChangePassword("newpass")
+	if revokedCount != 2 {
+		t.Errorf("revokedCount = %d, want 2", revokedCount)
+	}
+
+	// Old tokens should be invalid
+	if am.ValidateToken(token1) {
+		t.Error("token1 should be invalid after password change")
+	}
+	if am.ValidateToken(token2) {
+		t.Error("token2 should be invalid after password change")
+	}
+
+	// Old password should not work
+	_, err = am.Authenticate("oldpass", 10*time.Minute)
+	if err == nil {
+		t.Error("old password should not work after change")
+	}
+
+	// New password should work
+	newToken, err := am.Authenticate("newpass", 10*time.Minute)
+	if err != nil {
+		t.Fatalf("Authenticate with new password failed: %v", err)
+	}
+
+	if !am.ValidateToken(newToken) {
+		t.Error("new token should be valid")
+	}
+}
+
+// TestChangePasswordNoTokens verifies password change with no active tokens
+func TestChangePasswordNoTokens(t *testing.T) {
+	am, err := NewAuthManager("oldpass")
+	if err != nil {
+		t.Fatalf("NewAuthManager failed: %v", err)
+	}
+
+	// Change password without any tokens
+	revokedCount := am.ChangePassword("newpass")
+	if revokedCount != 0 {
+		t.Errorf("revokedCount = %d, want 0", revokedCount)
+	}
+
+	// New password should work
+	token, err := am.Authenticate("newpass", 10*time.Minute)
+	if err != nil {
+		t.Fatalf("Authenticate with new password failed: %v", err)
+	}
+
+	if !am.ValidateToken(token) {
+		t.Error("new token should be valid")
+	}
+}
+
+// TestChangePasswordConcurrent verifies thread-safe password changes
+func TestChangePasswordConcurrent(t *testing.T) {
+	am, err := NewAuthManager("pass")
+	if err != nil {
+		t.Fatalf("NewAuthManager failed: %v", err)
+	}
+
+	// Create multiple tokens
+	for i := 0; i < 10; i++ {
+		_, err := am.Authenticate("pass", 10*time.Minute)
+		if err != nil {
+			t.Fatalf("Authenticate failed: %v", err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	errors := make(chan error, 3)
+
+	// Concurrent password change
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		am.ChangePassword("newpass1")
+	}()
+
+	// Concurrent authentication attempts
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			_, err := am.Authenticate("pass", 10*time.Minute)
+			if err != nil {
+				// Expected to fail sometimes during password change
+				continue
+			}
+		}
+	}()
+
+	// Concurrent token validation
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			// Create a token to validate
+			token, err := am.Authenticate("pass", 10*time.Minute)
+			if err != nil {
+				continue
+			}
+			am.ValidateToken(token)
+		}
+	}()
+
+	wg.Wait()
+	close(errors)
+
+	// Check for unexpected errors
+	for err := range errors {
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+}
+
+// TestChangePasswordMultipleTimes verifies multiple password changes
+func TestChangePasswordMultipleTimes(t *testing.T) {
+	am, err := NewAuthManager("pass1")
+	if err != nil {
+		t.Fatalf("NewAuthManager failed: %v", err)
+	}
+
+	passwords := []string{"pass2", "pass3", "pass4", "pass5"}
+
+	for _, newPass := range passwords {
+		// Create a token with current password
+		oldToken, err := am.Authenticate(am.password, 10*time.Minute)
+		if err != nil {
+			t.Fatalf("Authenticate failed: %v", err)
+		}
+
+		// Change password
+		am.ChangePassword(newPass)
+
+		// Old token should be invalid
+		if am.ValidateToken(oldToken) {
+			t.Errorf("token should be invalid after changing to %s", newPass)
+		}
+
+		// New password should work
+		newToken, err := am.Authenticate(newPass, 10*time.Minute)
+		if err != nil {
+			t.Fatalf("Authenticate with %s failed: %v", newPass, err)
+		}
+
+		if !am.ValidateToken(newToken) {
+			t.Errorf("new token should be valid for %s", newPass)
+		}
+	}
+}
+
+// BenchmarkChangePassword measures password change performance
+func BenchmarkChangePassword(b *testing.B) {
+	am, err := NewAuthManager("password")
+	if err != nil {
+		b.Fatalf("NewAuthManager failed: %v", err)
+	}
+
+	// Create some tokens
+	for i := 0; i < 10; i++ {
+		am.Authenticate("password", 10*time.Minute)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		am.ChangePassword("newpassword")
+		// Restore original password for next iteration
+		am.ChangePassword("password")
+	}
+}

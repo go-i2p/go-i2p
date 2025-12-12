@@ -396,3 +396,93 @@ func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) ma
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
 	}
 }
+
+// I2PControlHandler implements the I2PControl RPC method.
+// Manages I2PControl server settings (password, port, address).
+//
+// Request params:
+//
+//	{
+//	  "i2pcontrol.password": "new_password"
+//	}
+//
+// Response:
+//
+//	{
+//	  "i2pcontrol.password": null,
+//	  "SettingsSaved": true
+//	}
+//
+// Note: Only password changes are implemented initially.
+// Port and address changes would require server restart and are deferred.
+type I2PControlHandler struct {
+	authManager interface {
+		// ChangePassword updates password and revokes all tokens
+		ChangePassword(newPassword string) int
+	}
+}
+
+// NewI2PControlHandler creates a new I2PControl handler.
+//
+// Parameters:
+//   - authManager: Authentication manager for password changes
+func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }) *I2PControlHandler {
+	return &I2PControlHandler{
+		authManager: authManager,
+	}
+}
+
+// Handle processes the I2PControl request.
+// Handles password changes and returns SettingsSaved status.
+func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	var req map[string]interface{}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid I2PControl parameters", err.Error())
+	}
+
+	result := make(map[string]interface{})
+	settingsSaved := false
+
+	// Handle password change
+	if newPassword, ok := req["i2pcontrol.password"]; ok && newPassword != nil {
+		passwordStr, ok := newPassword.(string)
+		if !ok {
+			return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "password must be a string", fmt.Sprintf("got %T", newPassword))
+		}
+
+		if passwordStr == "" {
+			return nil, NewRPCError(ErrCodeInvalidParams, "password cannot be empty")
+		}
+
+		// Change password and revoke all tokens
+		revokedCount := h.authManager.ChangePassword(passwordStr)
+
+		log.WithFields(map[string]interface{}{
+			"at":      "I2PControlHandler.Handle",
+			"revoked": revokedCount,
+		}).Info("password changed via RPC")
+
+		result["i2pcontrol.password"] = nil
+		settingsSaved = true
+	}
+
+	// Handle port change (not implemented - requires server restart)
+	if _, ok := req["i2pcontrol.port"]; ok {
+		return nil, NewRPCErrorWithData(ErrCodeNotImpl, "port change not implemented", "requires server restart")
+	}
+
+	// Handle address change (not implemented - requires server restart)
+	if _, ok := req["i2pcontrol.address"]; ok {
+		return nil, NewRPCErrorWithData(ErrCodeNotImpl, "address change not implemented", "requires server restart")
+	}
+
+	// If no operations requested, return error
+	if len(result) == 0 {
+		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "no settings specified", "specify at least one setting to change")
+	}
+
+	// Add SettingsSaved flag
+	result["SettingsSaved"] = settingsSaved
+
+	return result, nil
+}

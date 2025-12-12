@@ -850,3 +850,223 @@ func BenchmarkNetworkSettingHandler(b *testing.B) {
 		_, _ = handler.Handle(ctx, params)
 	}
 }
+
+// Test I2PControl Handler
+
+// mockAuthManager provides a test implementation of password management
+type mockAuthManager struct {
+	password      string
+	changeCount   int
+	revokedTokens int
+}
+
+func (m *mockAuthManager) ChangePassword(newPassword string) int {
+	m.password = newPassword
+	m.changeCount++
+	m.revokedTokens = 5 // Simulate 5 tokens being revoked
+	return m.revokedTokens
+}
+
+func TestI2PControlHandler_PasswordChange(t *testing.T) {
+	authMgr := &mockAuthManager{password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
+
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("result is not map[string]interface{}: %T", result)
+	}
+
+	// Check password was changed
+	if authMgr.password != "newpass123" {
+		t.Errorf("password = %v, want newpass123", authMgr.password)
+	}
+
+	// Check SettingsSaved flag
+	if settingsSaved, ok := resultMap["SettingsSaved"].(bool); !ok || !settingsSaved {
+		t.Errorf("SettingsSaved = %v, want true", resultMap["SettingsSaved"])
+	}
+
+	// Check password field is null in response
+	if resultMap["i2pcontrol.password"] != nil {
+		t.Errorf("i2pcontrol.password = %v, want nil", resultMap["i2pcontrol.password"])
+	}
+}
+
+func TestI2PControlHandler_EmptyPassword(t *testing.T) {
+	authMgr := &mockAuthManager{password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.password": ""}`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for empty password, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
+	}
+
+	// Password should not have changed
+	if authMgr.password != "oldpass" {
+		t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
+	}
+}
+
+func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
+	authMgr := &mockAuthManager{password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.password": 12345}`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for numeric password, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
+	}
+
+	// Password should not have changed
+	if authMgr.password != "oldpass" {
+		t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
+	}
+}
+
+func TestI2PControlHandler_PortChangeNotImplemented(t *testing.T) {
+	authMgr := &mockAuthManager{}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.port": 7657}`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for port change, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeNotImpl {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeNotImpl)
+	}
+}
+
+func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
+	authMgr := &mockAuthManager{}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.address": "127.0.0.1"}`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for address change, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeNotImpl {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeNotImpl)
+	}
+}
+
+func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
+	authMgr := &mockAuthManager{}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{}`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for no settings, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
+	}
+}
+
+func TestI2PControlHandler_InvalidJSON(t *testing.T) {
+	authMgr := &mockAuthManager{}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"invalid json`)
+
+	_, err := handler.Handle(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+
+	if rpcErr.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
+	}
+}
+
+func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
+	authMgr := &mockAuthManager{password: "pass1"}
+	handler := NewI2PControlHandler(authMgr)
+
+	// First change
+	params1 := json.RawMessage(`{"i2pcontrol.password": "pass2"}`)
+	_, err := handler.Handle(context.Background(), params1)
+	if err != nil {
+		t.Fatalf("first Handle() error = %v", err)
+	}
+
+	if authMgr.password != "pass2" {
+		t.Errorf("after first change, password = %v, want pass2", authMgr.password)
+	}
+
+	// Second change
+	params2 := json.RawMessage(`{"i2pcontrol.password": "pass3"}`)
+	_, err = handler.Handle(context.Background(), params2)
+	if err != nil {
+		t.Fatalf("second Handle() error = %v", err)
+	}
+
+	if authMgr.password != "pass3" {
+		t.Errorf("after second change, password = %v, want pass3", authMgr.password)
+	}
+
+	if authMgr.changeCount != 2 {
+		t.Errorf("changeCount = %v, want 2", authMgr.changeCount)
+	}
+}
+
+func BenchmarkI2PControlHandler(b *testing.B) {
+	authMgr := &mockAuthManager{}
+	handler := NewI2PControlHandler(authMgr)
+	params := json.RawMessage(`{"i2pcontrol.password": "newpass"}`)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = handler.Handle(ctx, params)
+	}
+}
