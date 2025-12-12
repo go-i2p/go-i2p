@@ -551,10 +551,10 @@ func TestHostLookupTypeNames(t *testing.T) {
 	}
 
 	// Verify deprecated types are distinct
-	if MessageTypeHostLookupDeprecated != 13 {
-		t.Errorf("MessageTypeHostLookupDeprecated = %d, want 13", MessageTypeHostLookupDeprecated)
+	if MessageTypeDestLookup != 34 {
+		t.Errorf("MessageTypeDestLookup = %d, want 34", MessageTypeDestLookup)
 	}
-	if MessageTypeHostReplyDeprecated != 14 {
-		t.Errorf("MessageTypeHostReplyDeprecated = %d, want 14", MessageTypeHostReplyDeprecated)
+	if MessageTypeDestReply != 35 {
+		t.Errorf("MessageTypeDestReply = %d, want 35", MessageTypeDestReply)
 	}
 }
