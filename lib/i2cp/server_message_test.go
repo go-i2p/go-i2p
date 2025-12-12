@@ -60,13 +60,23 @@ func TestHandleSendMessage(t *testing.T) {
 	pool := &tunnel.Pool{}
 	session.SetOutboundPool(pool)
 
-	// Test with pool (should succeed)
+	// Test with pool (should succeed and return acceptance status)
 	response, err = server.handleSendMessage(msg, &sessionPtr)
 	if err != nil {
 		t.Errorf("Unexpected error with outbound pool: %v", err)
 	}
-	if response != nil {
-		t.Error("Expected nil response for SendMessage")
+	if response == nil {
+		t.Fatal("Expected MessageStatus response, got nil")
+	}
+	if response.Type != MessageTypeMessageStatus {
+		t.Errorf("Expected MessageStatus type, got %d", response.Type)
+	}
+	// Verify it's an acceptance status (status code should be 1)
+	if len(response.Payload) < 5 {
+		t.Fatal("MessageStatus payload too short")
+	}
+	if response.Payload[4] != MessageStatusAccepted {
+		t.Errorf("Expected MessageStatusAccepted (%d), got %d", MessageStatusAccepted, response.Payload[4])
 	}
 }
 
