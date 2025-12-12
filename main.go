@@ -339,19 +339,8 @@ func testTCPConnectivity() error {
 	return fmt.Errorf("TCP connectivity failed to all test hosts - check firewall/network configuration")
 }
 
-func runRouter() {
-	go signals.Handle()
-
-	log.WithFields(logger.Fields{
-		"at":          "runRouter",
-		"phase":       "startup",
-		"step":        1,
-		"reason":      "parsing router configuration",
-		"config_file": viper.ConfigFileUsed(),
-		"config_used": viper.ConfigFileUsed() != "",
-	}).Info("parsing i2p router configuration")
-
-	// Log configuration source
+// logConfigurationSource logs whether configuration was loaded from file or using defaults.
+func logConfigurationSource() {
 	if viper.ConfigFileUsed() == "" {
 		log.WithFields(logger.Fields{
 			"at":       "runRouter",
@@ -369,6 +358,80 @@ func runRouter() {
 			"config_file": viper.ConfigFileUsed(),
 		}).Info("loaded configuration from file")
 	}
+}
+
+// manageRouterLifecycle handles the full router lifecycle: creation, startup, execution, and shutdown.
+func manageRouterLifecycle() error {
+	var err error
+	routerInstance, err = router.CreateRouter(config.RouterConfigProperties)
+	if err != nil {
+		return fmt.Errorf("failed to create router: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "startup",
+		"step":   4,
+		"reason": "router created successfully",
+	}).Info("router instance created")
+
+	signals.RegisterReloadHandler(func() {
+		if err := viper.ReadInConfig(); err != nil {
+			log.Errorf("failed to reload config: %s", err)
+			return
+		}
+		config.UpdateRouterConfig()
+	})
+
+	signals.RegisterInterruptHandler(func() {
+		if routerInstance != nil {
+			log.WithFields(logger.Fields{
+				"at":     "runRouter",
+				"phase":  "shutdown",
+				"reason": "interrupt signal received",
+			}).Info("stopping router")
+			routerInstance.Stop()
+		}
+	})
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "startup",
+		"step":   5,
+		"reason": "starting router subsystems",
+	}).Info("starting router")
+	routerInstance.Start()
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "running",
+		"reason": "router running, waiting for shutdown",
+	}).Info("router started, entering main loop")
+	routerInstance.Wait()
+
+	log.WithFields(logger.Fields{
+		"at":     "runRouter",
+		"phase":  "shutdown",
+		"reason": "router shutdown complete, cleaning up",
+	}).Info("closing router")
+	routerInstance.Close()
+
+	return nil
+}
+
+func runRouter() {
+	go signals.Handle()
+
+	log.WithFields(logger.Fields{
+		"at":          "runRouter",
+		"phase":       "startup",
+		"step":        1,
+		"reason":      "parsing router configuration",
+		"config_file": viper.ConfigFileUsed(),
+		"config_used": viper.ConfigFileUsed() != "",
+	}).Info("parsing i2p router configuration")
+
+	logConfigurationSource()
 
 	log.WithFields(logger.Fields{
 		"at":         "runRouter",
@@ -386,7 +449,6 @@ func runRouter() {
 		"reason": "testing network connectivity",
 	}).Debug("running network pre-checks")
 
-	// PRIORITY 3: Test basic network connectivity before starting router
 	if err := testNetworkConnectivity(); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "runRouter",
@@ -395,7 +457,6 @@ func runRouter() {
 			"error":  err.Error(),
 			"reason": "network connectivity check failed",
 		}).Warn("Network connectivity test failed - router may not be able to connect to peers")
-		// Continue anyway - may work if router has different network config
 	}
 
 	log.WithFields(logger.Fields{
@@ -405,56 +466,7 @@ func runRouter() {
 		"reason": "initiating router creation",
 	}).Debug("starting up i2p router")
 
-	var err error
-	routerInstance, err = router.CreateRouter(config.RouterConfigProperties)
-	if err == nil {
-		log.WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "startup",
-			"step":   4,
-			"reason": "router created successfully",
-		}).Info("router instance created")
-		signals.RegisterReloadHandler(func() {
-			if err := viper.ReadInConfig(); err != nil {
-				log.Errorf("failed to reload config: %s", err)
-				return
-			}
-			config.UpdateRouterConfig()
-		})
-
-		signals.RegisterInterruptHandler(func() {
-			if routerInstance != nil {
-				log.WithFields(logger.Fields{
-					"at":     "runRouter",
-					"phase":  "shutdown",
-					"reason": "interrupt signal received",
-				}).Info("stopping router")
-				routerInstance.Stop()
-			}
-		})
-
-		log.WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "startup",
-			"step":   5,
-			"reason": "starting router subsystems",
-		}).Info("starting router")
-		routerInstance.Start()
-
-		log.WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "running",
-			"reason": "router running, waiting for shutdown",
-		}).Info("router started, entering main loop")
-		routerInstance.Wait()
-
-		log.WithFields(logger.Fields{
-			"at":     "runRouter",
-			"phase":  "shutdown",
-			"reason": "router shutdown complete, cleaning up",
-		}).Info("closing router")
-		routerInstance.Close()
-	} else {
+	if err := manageRouterLifecycle(); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "runRouter",
 			"phase":      "startup",
