@@ -19,9 +19,9 @@ func TestHostLookupPayloadParse(t *testing.T) {
 			name: "hash_lookup",
 			data: func() []byte {
 				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.BigEndian, uint32(12345))      // RequestID
-				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHash)) // Type
-				binary.Write(buf, binary.BigEndian, uint16(52))         // Query length (base64 hash)
+				binary.Write(buf, binary.BigEndian, uint32(12345))                      // RequestID
+				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHash))         // Type
+				binary.Write(buf, binary.BigEndian, uint16(52))                         // Query length (base64 hash)
 				buf.WriteString("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") // 52 char hash
 				return buf.Bytes()
 			}(),
@@ -72,7 +72,7 @@ func TestHostLookupPayloadParse(t *testing.T) {
 				binary.Write(buf, binary.BigEndian, uint32(11111))
 				binary.Write(buf, binary.BigEndian, uint16(HostLookupTypeHostname))
 				binary.Write(buf, binary.BigEndian, uint16(100)) // Claims 100 bytes
-				buf.WriteString("short") // Only 5 bytes
+				buf.WriteString("short")                         // Only 5 bytes
 				return buf.Bytes()
 			}(),
 			shouldError: true,
