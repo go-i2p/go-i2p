@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 724 commits
+        📝 1155 commits
          • 📜 MIT License
       </div>
     </div>
@@ -25,6 +25,12 @@
         <div class="nav-section-title">Documentation:</div>
         
           <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
         
           <li><a href="../docs/template.html" >Template</a></li>
         
@@ -75,8 +81,41 @@
 <li>✅ Interface-based message system with factory patterns</li>
 <li>✅ Data, DeliveryStatus, TunnelData message implementations</li>
 <li>✅ Database Store/Lookup message structures</li>
+<li>✅ DatabaseStore LeaseSet type field parsing (bits 3-0) for LeaseSet2 support</li>
 <li>✅ Tunnel Build/Reply message structures</li>
 <li>✅ Build Request/Response Record parsing and interfaces</li>
+</ul></li>
+</ul>
+
+<h3 id="tunnel-building-system">Tunnel Building System</h3>
+
+<ul>
+<li>✅ <strong>Active Tunnel Management</strong>: Complete tunnel building coordination
+
+<ul>
+<li>✅ Tunnel building coordination and state machine</li>
+<li>✅ Build request/response handling with retry logic</li>
+<li>✅ Short Tunnel Build Message (STBM) support (modern I2P standard)</li>
+<li>✅ Gateway and endpoint implementations</li>
+<li>✅ Message ID correlation for request/reply tracking</li>
+<li>✅ 90-second timeout enforcement with cleanup</li>
+</ul></li>
+</ul>
+
+<h3 id="tunnel-pool-management">Tunnel Pool Management</h3>
+
+<ul>
+<li>✅ <strong>Automatic Pool Maintenance</strong>: Complete pool lifecycle management
+
+<ul>
+<li>✅ Configurable min/max tunnel counts (default 4-6 per pool)</li>
+<li>✅ Automatic tunnel building when below threshold</li>
+<li>✅ Proactive replacement before expiration (2min before 10min lifetime)</li>
+<li>✅ Round-robin tunnel selection with load balancing</li>
+<li>✅ Exponential backoff on build failures</li>
+<li>✅ Background maintenance goroutine with graceful shutdown</li>
+<li>✅ Support for inbound and outbound pool types</li>
+<li>✅ Pool statistics and health monitoring</li>
 </ul></li>
 </ul>
 
@@ -93,6 +132,72 @@
 </ul></li>
 </ul>
 
+<h3 id="tunnel-cryptography">Tunnel Cryptography</h3>
+
+<ul>
+<li>✅ <strong>Security Layer Implementation</strong>: Complete tunnel encryption
+
+<ul>
+<li>✅ ECIES-X25519-AEAD encryption (modern I2P standard)</li>
+<li>✅ AES-256-CBC legacy support for backward compatibility</li>
+<li>✅ Integration with github.com/go-i2p/crypto/tunnel</li>
+<li>✅ Participant tunnel processing (decrypt/re-encrypt)</li>
+<li>✅ Gateway and endpoint crypto operations</li>
+<li>✅ Comprehensive test coverage with real encryption</li>
+</ul></li>
+</ul>
+
+<h3 id="end-to-end-garlic-encryption">End-to-End Garlic Encryption</h3>
+
+<ul>
+<li>✅ <strong>ECIES-X25519-AEAD-Ratchet Implementation</strong>: Modern garlic encryption
+
+<ul>
+<li>✅ Garlic message construction with delivery instructions</li>
+<li>✅ ECIES-X25519 key agreement integration</li>
+<li>✅ ChaCha20/Poly1305 AEAD encryption (native implementation)</li>
+<li>✅ Ratchet protocol for forward secrecy (DH, Symmetric, Tag ratchets)</li>
+<li>✅ Session management with automatic cleanup</li>
+<li>✅ New Session and Existing Session message handling</li>
+<li>✅ Proper HKDF key derivation from ECIES shared secrets</li>
+<li>✅ O(1) hash-based session tag lookup with tag window management</li>
+<li>✅ Comprehensive test coverage (&gt;85% for session logic)</li>
+<li>✅ Message format compliance with I2P specification</li>
+</ul></li>
+</ul>
+
+<h3 id="i2cp-implementation">I2CP Implementation</h3>
+
+<ul>
+<li>✅ <strong>I2CP Protocol Server</strong>: Complete I2CP v2.10.0 server
+
+<ul>
+<li>✅ TCP server socket on localhost:7654</li>
+<li>✅ Protocol message handling (CreateSession, DestroySession, ReconfigureSession)</li>
+<li>✅ Session management and multi-client support</li>
+<li>✅ Message framing and serialization</li>
+<li>✅ Integration framework for LeaseSet and message delivery</li>
+<li>✅ SendMessage and MessagePayload handlers</li>
+</ul></li>
+</ul>
+
+<h3 id="netdb-implementation">NetDb Implementation</h3>
+
+<ul>
+<li>✅ <strong>Database Store Integration</strong>:
+
+<ul>
+<li>✅ Database Store message handling implementation</li>
+<li>✅ RouterInfo storage and retrieval</li>
+<li>✅ LeaseSet management and storage</li>
+<li>✅ LeaseSet2 support with type discrimination</li>
+<li>✅ Database lookup system</li>
+<li>✅ Peer selection logic (basic implementation)</li>
+<li>✅ Floodfill router selection using Kademlia XOR distance metric</li>
+<li>✅ LeaseSet distribution to closest floodfill routers</li>
+</ul></li>
+</ul>
+
 <h3 id="common-data-structures">Common Data Structures</h3>
 
 <ul>
@@ -101,54 +206,74 @@
 <ul>
 <li>✅ Keys and Certificates, Router Info/Address</li>
 <li>✅ Session Keys, Hashes, Signatures</li>
-<li>✅ Lease and LeaseSet structures</li>
+<li>Lease and LeaseSet structures</li>
+</ul></li>
+</ul>
+
+<h3 id="i2cp-client-tunnel-lifecycle">I2CP Client Tunnel Lifecycle</h3>
+
+<ul>
+<li>✅ <strong>Application Layer Integration</strong>: Complete I2CP session lifecycle
+
+<ul>
+<li>✅ CreateLeaseSet implementation</li>
+<li>✅ SendMessage and ReceiveMessage handlers</li>
+<li>✅ LeaseSet maintenance and rotation</li>
+<li>✅ End-to-end integration testing</li>
+<li>✅ Message queue management</li>
+<li>✅ Test coverage &gt;85%</li>
+</ul></li>
+</ul>
+
+<h3 id="message-routing-system">Message Routing System</h3>
+
+<ul>
+<li>✅ <strong>End-to-End Message Delivery</strong>: Connect I2CP, tunnels, and garlic encryption
+
+<ul>
+<li>✅ Route outbound I2CP messages through tunnel system</li>
+<li>✅ Decrypt and deliver inbound tunnel messages to I2CP sessions</li>
+<li>✅ LeaseSet publishing to NetDB</li>
+<li>✅ Destination lookup and resolution</li>
+<li>✅ Message fragment handling across tunnel boundaries</li>
+<li>✅ Integration testing for outbound message flow</li>
+<li>✅ Integration testing for full end-to-end message delivery</li>
 </ul></li>
 </ul>
 
 <h2 id="in-progress-components">In Progress Components 🚧</h2>
 
-<h3 id="netdb-implementation">NetDb Implementation</h3>
-
-<ul>
-<li><strong>Database Store Integration</strong>:
-
-<ul>
-<li>✅ Database Store message handling implementation</li>
-<li>✅ RouterInfo storage and retrieval</li>
-<li>✅ LeaseSet management and storage</li>
-<li>✅ Database lookup system</li>
-<li>✅ Peer selection logic (basic implementation)</li>
-</ul></li>
-</ul>
-
 <h2 id="next-priority-components">Next Priority Components 🎯</h2>
 
-<h3 id="tunnel-building-system">Tunnel Building System</h3>
-
-<ul>
-<li><strong>Active Tunnel Management</strong>:
-
-<ul>
-<li>✅ Tunnel building coordination</li>
-<li>✅ Build request/response handling</li>
-<li>✅ Gateway and endpoint implementations</li>
-<li>📋 Participant tunnel processing</li>
-</ul></li>
-</ul>
-
-<h3 id="tunnel-cryptography">Tunnel Cryptography</h3>
-
-<ul>
-<li><strong>Security Layer Implementation</strong>:
-
-<ul>
-<li>📋 Layered encryption/decryption</li>
-<li>📋 Key generation and management</li>
-<li>📋 Tunnel message forwarding logic</li>
-</ul></li>
-</ul>
-
 <h2 id="future-components">Future Components 📅</h2>
+
+<h3 id="advanced-netdb-features">Advanced NetDb Features</h3>
+
+<ul>
+<li><strong>Enhanced Database Operations</strong>:
+
+<ul>
+<li>✅ Floodfill router functionality (Kademlia XOR distance metric)</li>
+<li>✅ Client/Router NetDb isolation</li>
+<li>✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)</li>
+<li>✅ Advanced peer selection algorithms (random selection, XOR distance, floodfill routing)</li>
+<li>✅ Database exploration and publishing (periodic discovery, LeaseSet/RouterInfo distribution)</li>
+<li>✅ EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)</li>
+</ul></li>
+</ul>
+
+<h3 id="application-layer">Application Layer</h3>
+
+<ul>
+<li><strong>Client Applications</strong>:
+
+<ul>
+<li>📋 I2CP implementation (goes in github.com/go-i2p/go-i2cp)</li>
+<li>📋 Streaming library (goes in github.com/go-i2p/go-streaming)</li>
+<li>📋 Datagram support (goes in github.com/go-i2p/go-datagrams)</li>
+<li>📋 End-to-end encryption (Garlic routing)</li>
+</ul></li>
+</ul>
 
 <h3 id="ssu2-transport-post-ntcp2">SSU2 Transport (Post-NTCP2)</h3>
 
@@ -163,43 +288,46 @@
 </ul></li>
 </ul>
 
-<h3 id="advanced-netdb-features">Advanced NetDb Features</h3>
-
-<ul>
-<li><strong>Enhanced Database Operations</strong>:
-
-<ul>
-<li>📋 Floodfill router functionality</li>
-<li>📋 Database exploration and publishing</li>
-<li>📋 LS2 and Encrypted LeaseSet support</li>
-<li>📋 Advanced peer selection algorithms</li>
-</ul></li>
-</ul>
-
-<h3 id="application-layer">Application Layer</h3>
-
-<ul>
-<li><strong>Client Applications</strong>:
-
-<ul>
-<li>📋 I2CP implementation</li>
-<li>📋 Streaming library</li>
-<li>📋 Datagram support</li>
-<li>📋 End-to-end encryption (Garlic routing)</li>
-</ul></li>
-</ul>
-
 <h2 id="current-status">Current Status</h2>
 
-<p><strong>Primary Goal</strong>: NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. The foundation for tunnel building and NetDb integration is in place. Next major milestone is implementing database operations and tunnel building.</p>
+<p><strong>Primary Goal</strong>: Core router functionality is now operational. NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing. <strong>Full end-to-end message routing connecting clients through tunnels to destinations is now complete.</strong> <strong>All LeaseSet types (1, 3, 5, 7) are fully supported in NetDB.</strong></p>
 
-<p><strong>Test Coverage</strong>: Core components have basic test coverage including NTCP2 sessions, I2NP message processing, and tunnel message parsing.</p>
+<p><strong>Recent Milestones</strong>:</p>
+
+<ul>
+<li>✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)</li>
+<li>✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)</li>
+<li>✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)</li>
+<li>✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)</li>
+<li>✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)</li>
+<li>✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)</li>
+<li>✅ Phase 7a: Message Fragment Reassembly (fragment handling, out-of-order assembly, comprehensive tests)</li>
+<li>✅ Phase 7b: Message Routing System (outbound complete, inbound tunnel→I2CP routing complete, full E2E integration tests)</li>
+<li>✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)</li>
+<li>✅ Phase 9: Client/Router NetDB Isolation (ClientNetDB for LeaseSets, RouterNetDB for RouterInfos, improved separation of concerns)</li>
+<li>✅ Phase 10: End-to-End Message Routing Complete (Full message delivery from I2CP client through tunnels to destination, with comprehensive integration tests)</li>
+<li>✅ Phase 11: EncryptedLeaseSet and MetaLeaseSet Support (Complete support for all modern I2P LeaseSet types with storage, retrieval, and expiration tracking)</li>
+</ul>
+
+<p><strong>Next Focus</strong>: Application Layer (I2CP client library, streaming) or SSU2 Transport</p>
+
+<p><strong>Test Coverage</strong>: Core components have strong test coverage:</p>
+
+<ul>
+<li>Garlic session management: &gt;80% coverage</li>
+<li>Garlic message construction: &gt;95% coverage</li>
+<li>Tunnel pool management: &gt;80% coverage</li>
+<li>Tunnel building: Comprehensive integration tests</li>
+<li>NTCP2 sessions: Unit and integration tests</li>
+<li>I2NP message processing: Protocol compliance tests</li>
+<li>NetDB LeaseSet operations: Comprehensive validation and thread-safety tests for all types (LeaseSet, LeaseSet2, EncryptedLeaseSet, MetaLeaseSet)</li>
+</ul>
 
       </div>
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-12-12 19:19:02 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-12-12 20:06:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>

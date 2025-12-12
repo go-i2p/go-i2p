@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Llm Disclosure - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 1155 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" class="active">Llm Disclosure</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>Llm Disclosure - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="llm-usage-disclosure">LLM Usage Disclosure</h1>
+
+<p>go-i2p allows cautious, disclosed use of LLM generated code under certain conditions.
+This document attempts to provide transparency about that usage.</p>
+
+<p>The enlightened position, in our opinion, is that LLMs cannot help you if you cannot think, and if you can think, then LLMs aren&rsquo;t really necessary.
+However, what they are, fast word-predictors, can be useful for certain tasks(mostly by virtue of being fast).
+Our advice is to use them for discovering issues in code which was written by a human.
+Typically we do this by prompting the LLM to seek out issues in a small, focused section of the codebase, write a unit test demonstrating the issue, and generate a report about the issue.
+We also asked the LLM to do package-level protocol compliance, code quality, and red-team reviews.
+Then a human(idk, for instance) validates or invalidates the report and implements a fix.</p>
+
+<p>It is important to remember that LLM&rsquo;s don&rsquo;t really &ldquo;know&rdquo; things, they &ldquo;predict&rdquo; things while speaking in an authoritative voice.
+They are sometimes good at making accurate predictions, but they will <em>always</em> behave as if they are perfectly correct.
+They are absolutely worse-than-useless to people who are uncritical of their output.
+You need to treat it like the dumb co-worker who proposed to port your whole codebase to a new language 6 years ago. #oddlyspecific</p>
+
+<h2 id="llms-have-been-used-for">LLMs have been used for:</h2>
+
+<ul>
+<li>Test generation</li>
+<li>Code review</li>
+<li>Documentation suggestions</li>
+<li>Refactoring suggestions</li>
+</ul>
+
+<p>Code review type usage produced freestanding bug reports in markdown documents, which were then reviewed and resolved by a human.</p>
+
+<p>Allowing the LLM to generate tests has led to significant test accumulation. While this has been a small problem as new features have broken old negative tests which relied on <code>unimplemented</code> error messages, ultimately these negative tests were turned into unit tests and this is no longer a problem.</p>
+
+<h2 id="llm-s-have-not-been-used-for">LLM&rsquo;s have <em>not</em> been used for:</h2>
+
+<ul>
+<li>Non-test code.</li>
+<li>Handling any long-term secret material(there is none)</li>
+<li>No code or documentation of any kind(test or library) has been checked in without a human reviewer</li>
+</ul>
+
+<h2 id="llms-that-have-been-used-are">LLMs that have been used are:</h2>
+
+<ul>
+<li>claude-3.5-sonnet</li>
+<li>claude-4.0-sonnet</li>
+<li>claude-4.5-sonnet</li>
+</ul>
+
+<p>All LLM assistance has been provided by Github Copilot.</p>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-12-12 20:06:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

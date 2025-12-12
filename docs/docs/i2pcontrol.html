@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I2PControl JSON-RPC Server User Guide - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 1155 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" class="active">I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>I2PControl JSON-RPC Server User Guide - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="i2pcontrol-json-rpc-server-user-guide">I2PControl JSON-RPC Server User Guide</h1>
+
+<h2 id="introduction">Introduction</h2>
+
+<p>I2PControl is a JSON-RPC 2.0 interface for monitoring I2P routers. This guide explains how to enable, configure, and use the I2PControl server in go-i2p for development and testing purposes.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#configuration">Configuration</a></li>
+<li><a href="#using-the-api">Using the API</a></li>
+<li><a href="#security">Security</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#advanced-topics">Advanced Topics</a></li>
+</ol>
+
+<hr>
+
+<h2 id="quick-start">Quick Start</h2>
+
+<h3 id="step-1-enable-i2pcontrol">Step 1: Enable I2PControl</h3>
+
+<p>Edit your <code>config.yaml</code>:</p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  enabled: true
+  address: &quot;localhost:7650&quot;
+  password: &quot;your-secure-password&quot;
+</code></pre>
+
+<p>Or use command-line flags:</p>
+
+<pre><code class="language-bash">./go-i2p --i2pcontrol.enabled=true --i2pcontrol.password=&quot;your-password&quot;
+</code></pre>
+
+<h3 id="step-2-start-the-router">Step 2: Start the Router</h3>
+
+<pre><code class="language-bash">./go-i2p --config config.yaml
+</code></pre>
+
+<p>Look for the startup message in logs:</p>
+
+<pre><code>INFO[0000] starting I2PControl server                    address=&quot;localhost:7650&quot; at=router.startI2PControlServer
+</code></pre>
+
+<h3 id="step-3-test-connectivity">Step 3: Test Connectivity</h3>
+
+<pre><code class="language-bash"># Authenticate to get a token
+curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{
+    &quot;jsonrpc&quot;: &quot;2.0&quot;,
+    &quot;id&quot;: 1,
+    &quot;method&quot;: &quot;Authenticate&quot;,
+    &quot;params&quot;: {
+      &quot;API&quot;: 1,
+      &quot;Password&quot;: &quot;your-secure-password&quot;
+    }
+  }'
+</code></pre>
+
+<p>Expected response:</p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;result&quot;: {
+    &quot;API&quot;: 1,
+    &quot;Token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...&quot;
+  }
+}
+</code></pre>
+
+<p>Save the token for subsequent requests.</p>
+
+<hr>
+
+<h2 id="configuration">Configuration</h2>
+
+<h3 id="configuration-options">Configuration Options</h3>
+
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Enable I2PControl server</td>
+</tr>
+
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td><code>&quot;localhost:7650&quot;</code></td>
+<td>Listen address (host:port)</td>
+</tr>
+
+<tr>
+<td><code>password</code></td>
+<td>string</td>
+<td><code>&quot;itoopie&quot;</code></td>
+<td>Authentication password</td>
+</tr>
+
+<tr>
+<td><code>use_https</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Enable HTTPS/TLS</td>
+</tr>
+
+<tr>
+<td><code>cert_file</code></td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>TLS certificate path</td>
+</tr>
+
+<tr>
+<td><code>key_file</code></td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>TLS private key path</td>
+</tr>
+
+<tr>
+<td><code>token_expiration</code></td>
+<td>duration</td>
+<td><code>10m</code></td>
+<td>Token validity duration</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="configuration-methods">Configuration Methods</h3>
+
+<h4 id="1-configuration-file-recommended">1. Configuration File (Recommended)</h4>
+
+<p>Create or edit <code>config.yaml</code>:</p>
+
+<pre><code class="language-yaml"># I2PControl Configuration
+i2pcontrol:
+  # Enable the RPC server
+  enabled: true
+  
+  # Listen address
+  # Use &quot;localhost:7650&quot; for local-only access (recommended)
+  # Use &quot;0.0.0.0:7650&quot; for network access (requires HTTPS!)
+  address: &quot;localhost:7650&quot;
+  
+  # Authentication password
+  # IMPORTANT: Change from default in production!
+  password: &quot;change-me-in-production&quot;
+  
+  # HTTPS/TLS settings
+  use_https: false
+  # cert_file: &quot;/path/to/cert.pem&quot;
+  # key_file: &quot;/path/to/key.pem&quot;
+  
+  # Token expiration (examples: 5m, 15m, 1h)
+  token_expiration: 10m
+</code></pre>
+
+<h4 id="2-command-line-flags">2. Command-Line Flags</h4>
+
+<p>Override configuration with flags:</p>
+
+<pre><code class="language-bash">./go-i2p \
+  --i2pcontrol.enabled=true \
+  --i2pcontrol.address=&quot;localhost:7650&quot; \
+  --i2pcontrol.password=&quot;my-password&quot;
+</code></pre>
+
+<h4 id="3-environment-variables">3. Environment Variables</h4>
+
+<p>Set via Viper environment variables:</p>
+
+<pre><code class="language-bash">export I2PCONTROL_ENABLED=true
+export I2PCONTROL_ADDRESS=localhost:7650
+export I2PCONTROL_PASSWORD=my-password
+./go-i2p
+</code></pre>
+
+<h3 id="configuration-validation">Configuration Validation</h3>
+
+<p>The server validates configuration on startup:</p>
+
+<ul>
+<li><strong>Password required</strong>: Cannot be empty</li>
+<li><strong>HTTPS requirements</strong>: If <code>use_https</code> is true, both <code>cert_file</code> and <code>key_file</code> must be specified</li>
+<li><strong>Port availability</strong>: Specified port must not be in use</li>
+</ul>
+
+<p>Validation errors appear in logs:</p>
+
+<pre><code>ERRO[0000] failed to start I2PControl server             error=&quot;password cannot be empty&quot;
+</code></pre>
+
+<hr>
+
+<h2 id="using-the-api">Using the API</h2>
+
+<h3 id="authentication-flow">Authentication Flow</h3>
+
+<p>All RPC methods (except <code>Authenticate</code>) require a valid authentication token.</p>
+
+<p><strong>Step 1: Authenticate</strong></p>
+
+<pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{
+    &quot;jsonrpc&quot;: &quot;2.0&quot;,
+    &quot;id&quot;: 1,
+    &quot;method&quot;: &quot;Authenticate&quot;,
+    &quot;params&quot;: {
+      &quot;API&quot;: 1,
+      &quot;Password&quot;: &quot;your-password&quot;
+    }
+  }'
+</code></pre>
+
+<p><strong>Step 2: Extract Token</strong></p>
+
+<p>Using <code>jq</code>:</p>
+
+<pre><code class="language-bash">TOKEN=$(curl -s -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{
+    &quot;jsonrpc&quot;: &quot;2.0&quot;,
+    &quot;id&quot;: 1,
+    &quot;method&quot;: &quot;Authenticate&quot;,
+    &quot;params&quot;: {&quot;API&quot;: 1, &quot;Password&quot;: &quot;your-password&quot;}
+  }' | jq -r '.result.Token')
+
+echo &quot;Token: $TOKEN&quot;
+</code></pre>
+
+<p><strong>Step 3: Use Token</strong></p>
+
+<p>Include token in all subsequent requests:</p>
+
+<pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 2,
+    \&quot;method\&quot;: \&quot;Echo\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;Echo\&quot;: \&quot;test\&quot;
+    }
+  }&quot;
+</code></pre>
+
+<h3 id="available-methods">Available Methods</h3>
+
+<h4 id="echo-connection-test">Echo - Connection Test</h4>
+
+<p>Test RPC connectivity by echoing a value.</p>
+
+<p><strong>Request:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 2,
+  &quot;method&quot;: &quot;Echo&quot;,
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token-here&quot;,
+    &quot;Echo&quot;: &quot;hello world&quot;
+  }
+}
+</code></pre>
+
+<p><strong>Response:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 2,
+  &quot;result&quot;: {
+    &quot;Result&quot;: &quot;hello world&quot;
+  }
+}
+</code></pre>
+
+<p><strong>curl Example:</strong></p>
+
+<pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 2,
+    \&quot;method\&quot;: \&quot;Echo\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;Echo\&quot;: \&quot;test\&quot;
+    }
+  }&quot; | jq .
+</code></pre>
+
+<h4 id="getrate-bandwidth-statistics">GetRate - Bandwidth Statistics</h4>
+
+<p>Query current bandwidth rates.</p>
+
+<p><strong>Request:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 3,
+  &quot;method&quot;: &quot;GetRate&quot;,
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token-here&quot;,
+    &quot;i2p.router.net.bw.inbound.15s&quot;: null,
+    &quot;i2p.router.net.bw.outbound.15s&quot;: null
+  }
+}
+</code></pre>
+
+<p><strong>Response:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 3,
+  &quot;result&quot;: {
+    &quot;i2p.router.net.bw.inbound.15s&quot;: 12345.67,
+    &quot;i2p.router.net.bw.outbound.15s&quot;: 23456.78
+  }
+}
+</code></pre>
+
+<p><strong>curl Example:</strong></p>
+
+<pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 3,
+    \&quot;method\&quot;: \&quot;GetRate\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;i2p.router.net.bw.inbound.15s\&quot;: null,
+      \&quot;i2p.router.net.bw.outbound.15s\&quot;: null
+    }
+  }&quot; | jq .
+</code></pre>
+
+<p><strong>Supported Rate Metrics:</strong></p>
+
+<ul>
+<li><code>i2p.router.net.bw.inbound.15s</code> - Inbound bandwidth (bytes/sec, 15s average)</li>
+<li><code>i2p.router.net.bw.outbound.15s</code> - Outbound bandwidth (bytes/sec, 15s average)</li>
+</ul>
+
+<h4 id="routerinfo-router-status">RouterInfo - Router Status</h4>
+
+<p>Query router operational status and statistics.</p>
+
+<p><strong>Request:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 4,
+  &quot;method&quot;: &quot;RouterInfo&quot;,
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token-here&quot;,
+    &quot;i2p.router.uptime&quot;: null,
+    &quot;i2p.router.version&quot;: null,
+    &quot;i2p.router.net.tunnels.participating&quot;: null,
+    &quot;i2p.router.netdb.knownpeers&quot;: null
+  }
+}
+</code></pre>
+
+<p><strong>Response:</strong></p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 4,
+  &quot;result&quot;: {
+    &quot;i2p.router.uptime&quot;: 3600000,
+    &quot;i2p.router.version&quot;: &quot;0.1.0-go&quot;,
+    &quot;i2p.router.net.tunnels.participating&quot;: 10,
+    &quot;i2p.router.netdb.knownpeers&quot;: 150
+  }
+}
+</code></pre>
+
+<p><strong>curl Example:</strong></p>
+
+<pre><code class="language-bash">curl -X POST http://localhost:7650/jsonrpc \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 4,
+    \&quot;method\&quot;: \&quot;RouterInfo\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;i2p.router.uptime\&quot;: null,
+      \&quot;i2p.router.version\&quot;: null,
+      \&quot;i2p.router.net.tunnels.participating\&quot;: null,
+      \&quot;i2p.router.netdb.knownpeers\&quot;: null
+    }
+  }&quot; | jq .
+</code></pre>
+
+<p><strong>Supported RouterInfo Metrics:</strong></p>
+
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><code>i2p.router.uptime</code></td>
+<td>int64</td>
+<td>Router uptime in milliseconds</td>
+</tr>
+
+<tr>
+<td><code>i2p.router.version</code></td>
+<td>string</td>
+<td>Router version string</td>
+</tr>
+
+<tr>
+<td><code>i2p.router.net.tunnels.participating</code></td>
+<td>int</td>
+<td>Number of tunnels we&rsquo;re participating in</td>
+</tr>
+
+<tr>
+<td><code>i2p.router.netdb.knownpeers</code></td>
+<td>int</td>
+<td>Number of known routers in NetDB</td>
+</tr>
+
+<tr>
+<td><code>i2p.router.netdb.activepeers</code></td>
+<td>int</td>
+<td>Number of currently active peers</td>
+</tr>
+
+<tr>
+<td><code>i2p.router.netdb.fastpeers</code></td>
+<td>int</td>
+<td>Number of fast peers</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="error-handling">Error Handling</h3>
+
+<p>All errors follow JSON-RPC 2.0 error format:</p>
+
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 5,
+  &quot;error&quot;: {
+    &quot;code&quot;: -32000,
+    &quot;message&quot;: &quot;authentication required&quot;
+  }
+}
+</code></pre>
+
+<p><strong>Common Error Codes:</strong></p>
+
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Name</th>
+<th>Common Causes</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>-32700</td>
+<td>Parse error</td>
+<td>Invalid JSON syntax</td>
+</tr>
+
+<tr>
+<td>-32600</td>
+<td>Invalid Request</td>
+<td>Missing required fields (jsonrpc, method, params)</td>
+</tr>
+
+<tr>
+<td>-32601</td>
+<td>Method not found</td>
+<td>Typo in method name</td>
+</tr>
+
+<tr>
+<td>-32602</td>
+<td>Invalid params</td>
+<td>Wrong parameter format</td>
+</tr>
+
+<tr>
+<td>-32603</td>
+<td>Internal error</td>
+<td>Server-side problem</td>
+</tr>
+
+<tr>
+<td>-32000</td>
+<td>Auth required</td>
+<td>Missing or expired token</td>
+</tr>
+
+<tr>
+<td>-32001</td>
+<td>Auth failed</td>
+<td>Wrong password</td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="complete-example-script">Complete Example Script</h3>
+
+<pre><code class="language-bash">#!/bin/bash
+# test-i2pcontrol.sh - Test I2PControl API
+
+API_URL=&quot;http://localhost:7650/jsonrpc&quot;
+PASSWORD=&quot;your-password&quot;
+
+echo &quot;=== Authenticating ===&quot;
+AUTH_RESPONSE=$(curl -s -X POST &quot;$API_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 1,
+    \&quot;method\&quot;: \&quot;Authenticate\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;API\&quot;: 1,
+      \&quot;Password\&quot;: \&quot;$PASSWORD\&quot;
+    }
+  }&quot;)
+
+echo &quot;$AUTH_RESPONSE&quot; | jq .
+
+TOKEN=$(echo &quot;$AUTH_RESPONSE&quot; | jq -r '.result.Token')
+
+if [ &quot;$TOKEN&quot; = &quot;null&quot; ] || [ -z &quot;$TOKEN&quot; ]; then
+  echo &quot;Authentication failed!&quot;
+  exit 1
+fi
+
+echo -e &quot;\n=== Echo Test ===&quot;
+curl -s -X POST &quot;$API_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 2,
+    \&quot;method\&quot;: \&quot;Echo\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;Echo\&quot;: \&quot;Hello I2P!\&quot;
+    }
+  }&quot; | jq .
+
+echo -e &quot;\n=== Router Info ===&quot;
+curl -s -X POST &quot;$API_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 3,
+    \&quot;method\&quot;: \&quot;RouterInfo\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;i2p.router.uptime\&quot;: null,
+      \&quot;i2p.router.version\&quot;: null,
+      \&quot;i2p.router.net.tunnels.participating\&quot;: null,
+      \&quot;i2p.router.netdb.knownpeers\&quot;: null
+    }
+  }&quot; | jq .
+
+echo -e &quot;\n=== Bandwidth Stats ===&quot;
+curl -s -X POST &quot;$API_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+    \&quot;id\&quot;: 4,
+    \&quot;method\&quot;: \&quot;GetRate\&quot;,
+    \&quot;params\&quot;: {
+      \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+      \&quot;i2p.router.net.bw.inbound.15s\&quot;: null,
+      \&quot;i2p.router.net.bw.outbound.15s\&quot;: null
+    }
+  }&quot; | jq .
+
+echo -e &quot;\n=== Tests Complete ===&quot;
+</code></pre>
+
+<p>Save as <code>test-i2pcontrol.sh</code>, make executable, and run:</p>
+
+<pre><code class="language-bash">chmod +x test-i2pcontrol.sh
+./test-i2pcontrol.sh
+</code></pre>
+
+<hr>
+
+<h2 id="security">Security</h2>
+
+<h3 id="development-vs-production">Development vs. Production</h3>
+
+<p><strong>This implementation is designed for development use.</strong> For production deployments, implement additional security measures.</p>
+
+<h3 id="threat-model">Threat Model</h3>
+
+<p><strong>What&rsquo;s Protected:</strong></p>
+
+<ul>
+<li>Token forgery (HMAC-SHA256 signing)</li>
+<li>Unauthorized method calls (token validation)</li>
+<li>Method enumeration (authentication required first)</li>
+</ul>
+
+<p><strong>What&rsquo;s NOT Protected:</strong></p>
+
+<ul>
+<li>Password sniffing (use HTTPS!)</li>
+<li>Token replay attacks (within validity period)</li>
+<li>Denial of service (no rate limiting)</li>
+<li>Brute force attacks (no account lockout)</li>
+<li>Man-in-the-middle (use HTTPS!)</li>
+</ul>
+
+<h3 id="best-practices">Best Practices</h3>
+
+<h4 id="1-change-default-password">1. Change Default Password</h4>
+
+<p><strong>Never use the default password in production!</strong></p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  password: &quot;change-me-in-production&quot;  # ❌ BAD
+  password: &quot;Xk9#mP2$vL8@qR4!&quot;         # ✅ GOOD
+</code></pre>
+
+<p>Generate strong passwords:</p>
+
+<pre><code class="language-bash"># Linux/Mac
+openssl rand -base64 32
+
+# Or use a password manager
+</code></pre>
+
+<h4 id="2-enable-https-for-network-access">2. Enable HTTPS for Network Access</h4>
+
+<p><strong>Never expose HTTP I2PControl to the network!</strong></p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  address: &quot;0.0.0.0:7650&quot;  # Accessible from network
+  use_https: true          # REQUIRED
+  cert_file: &quot;/etc/ssl/certs/i2pcontrol-cert.pem&quot;
+  key_file: &quot;/etc/ssl/private/i2pcontrol-key.pem&quot;
+</code></pre>
+
+<p>Generate self-signed certificate (testing only):</p>
+
+<pre><code class="language-bash">openssl req -x509 -newkey rsa:4096 \
+  -keyout i2pcontrol-key.pem \
+  -out i2pcontrol-cert.pem \
+  -days 365 -nodes \
+  -subj &quot;/CN=localhost&quot;
+</code></pre>
+
+<p>For production, use certificates from a trusted CA:</p>
+
+<pre><code class="language-bash"># Let's Encrypt example
+certbot certonly --standalone -d your-domain.com
+
+# Update config to use Let's Encrypt certs
+cert_file: &quot;/etc/letsencrypt/live/your-domain.com/fullchain.pem&quot;
+key_file: &quot;/etc/letsencrypt/live/your-domain.com/privkey.pem&quot;
+</code></pre>
+
+<h4 id="3-limit-network-exposure">3. Limit Network Exposure</h4>
+
+<p><strong>Localhost only (recommended for development):</strong></p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  address: &quot;localhost:7650&quot;  # Only accessible from local machine
+</code></pre>
+
+<p><strong>Specific interface:</strong></p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  address: &quot;192.168.1.100:7650&quot;  # Only accessible from this interface
+</code></pre>
+
+<p><strong>All interfaces with firewall:</strong></p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  address: &quot;0.0.0.0:7650&quot;
+  use_https: true
+</code></pre>
+
+<p>Then configure firewall (iptables example):</p>
+
+<pre><code class="language-bash"># Allow only from specific IP
+iptables -A INPUT -p tcp --dport 7650 -s 192.168.1.50 -j ACCEPT
+iptables -A INPUT -p tcp --dport 7650 -j DROP
+</code></pre>
+
+<h4 id="4-token-expiration">4. Token Expiration</h4>
+
+<p>Shorter token lifetimes improve security but reduce convenience:</p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  token_expiration: 5m   # High security (frequent re-auth)
+  token_expiration: 10m  # Balanced (default)
+  token_expiration: 30m  # Low security (convenient)
+</code></pre>
+
+<h4 id="5-monitor-access">5. Monitor Access</h4>
+
+<p>Check logs for suspicious activity:</p>
+
+<pre><code class="language-bash"># grep for authentication failures
+grep &quot;authentication failed&quot; router.log
+
+# grep for invalid tokens
+grep &quot;authentication required&quot; router.log
+</code></pre>
+
+<p>Consider implementing:</p>
+
+<ul>
+<li>Failed authentication tracking</li>
+<li>Rate limiting per IP</li>
+<li>Audit logging of all RPC calls</li>
+</ul>
+
+<h3 id="security-checklist">Security Checklist</h3>
+
+<p><strong>For Development (localhost only):</strong></p>
+
+<ul>
+<li>[x] Bind to <code>localhost</code> only</li>
+<li>[ ] Change default password (recommended)</li>
+<li>[ ] HTTPS not required for localhost</li>
+</ul>
+
+<p><strong>For Production (network access):</strong></p>
+
+<ul>
+<li>[ ] Changed default password to strong password</li>
+<li>[ ] HTTPS enabled with valid certificates</li>
+<li>[ ] Firewall rules configured</li>
+<li>[ ] Token expiration set appropriately</li>
+<li>[ ] Regular security updates</li>
+<li>[ ] Audit logging enabled (future enhancement)</li>
+</ul>
+
+<hr>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3 id="server-won-t-start">Server Won&rsquo;t Start</h3>
+
+<h4 id="problem-bind-address-already-in-use">Problem: &ldquo;bind: address already in use&rdquo;</h4>
+
+<p><strong>Cause:</strong> Port 7650 is already in use by another process.</p>
+
+<p><strong>Solution 1:</strong> Stop the conflicting process:</p>
+
+<pre><code class="language-bash"># Find process using port 7650
+lsof -i :7650
+# or
+netstat -tulpn | grep 7650
+
+# Kill the process
+kill &lt;PID&gt;
+</code></pre>
+
+<p><strong>Solution 2:</strong> Use a different port:</p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  address: &quot;localhost:7651&quot;
+</code></pre>
+
+<h4 id="problem-failed-to-start-i2pcontrol-server-password-cannot-be-empty">Problem: &ldquo;failed to start I2PControl server: password cannot be empty&rdquo;</h4>
+
+<p><strong>Cause:</strong> Password is not configured.</p>
+
+<p><strong>Solution:</strong> Set password in configuration:</p>
+
+<pre><code class="language-yaml">i2pcontrol:
+  enabled: true
+  password: &quot;your-password&quot;
+</code></pre>
+
+<h4 id="problem-certificate-signed-by-unknown-authority-https">Problem: &ldquo;certificate signed by unknown authority&rdquo; (HTTPS)</h4>
+
+<p><strong>Cause:</strong> Using self-signed certificate.</p>
+
+<p><strong>Solution 1:</strong> Accept self-signed cert in curl:</p>
+
+<pre><code class="language-bash">curl -k -X POST https://localhost:7650/jsonrpc ...
+</code></pre>
+
+<p><strong>Solution 2:</strong> Use certificate from trusted CA (production).</p>
+
+<h3 id="authentication-issues">Authentication Issues</h3>
+
+<h4 id="problem-authentication-failed">Problem: &ldquo;authentication failed&rdquo;</h4>
+
+<p><strong>Cause:</strong> Wrong password.</p>
+
+<p><strong>Solution:</strong> Verify password in config:</p>
+
+<pre><code class="language-bash"># Check configured password
+grep -A 2 &quot;i2pcontrol:&quot; config.yaml | grep password
+
+# Test with correct password
+curl -X POST http://localhost:7650/jsonrpc \
+  -d '{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;Authenticate&quot;,&quot;params&quot;:{&quot;API&quot;:1,&quot;Password&quot;:&quot;&lt;actual-password&gt;&quot;}}'
+</code></pre>
+
+<h4 id="problem-authentication-required-with-token">Problem: &ldquo;authentication required&rdquo; (with token)</h4>
+
+<p><strong>Cause 1:</strong> Token expired.</p>
+
+<p><strong>Solution:</strong> Re-authenticate to get new token:</p>
+
+<pre><code class="language-bash">TOKEN=$(curl -s -X POST http://localhost:7650/jsonrpc \
+  -d '{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;Authenticate&quot;,&quot;params&quot;:{&quot;API&quot;:1,&quot;Password&quot;:&quot;your-password&quot;}}' \
+  | jq -r '.result.Token')
+</code></pre>
+
+<p><strong>Cause 2:</strong> Invalid token format.</p>
+
+<p><strong>Solution:</strong> Ensure token is included correctly in params:</p>
+
+<pre><code class="language-json">{
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token-here&quot;,  // ✅ Correct
+    ...
+  }
+}
+</code></pre>
+
+<h3 id="connection-issues">Connection Issues</h3>
+
+<h4 id="problem-connection-refused">Problem: &ldquo;Connection refused&rdquo;</h4>
+
+<p><strong>Cause 1:</strong> Server not running.</p>
+
+<p><strong>Solution:</strong> Verify server is enabled and started:</p>
+
+<pre><code class="language-bash"># Check configuration
+grep -A 2 &quot;i2pcontrol:&quot; config.yaml
+
+# Check logs for startup message
+grep &quot;I2PControl&quot; router.log
+</code></pre>
+
+<p><strong>Cause 2:</strong> Wrong address.</p>
+
+<p><strong>Solution:</strong> Verify listen address:</p>
+
+<pre><code class="language-bash"># Check what address is bound
+netstat -tulpn | grep 7650
+
+# If bound to 127.0.0.1, only localhost works
+curl http://localhost:7650/jsonrpc  # ✅ Works
+curl http://192.168.1.100:7650/jsonrpc  # ❌ Fails
+</code></pre>
+
+<h4 id="problem-no-route-to-host-remote-access">Problem: &ldquo;No route to host&rdquo; (remote access)</h4>
+
+<p><strong>Cause:</strong> Firewall blocking connection.</p>
+
+<p><strong>Solution:</strong> Check firewall rules:</p>
+
+<pre><code class="language-bash"># Linux - check iptables
+iptables -L -n | grep 7650
+
+# Temporarily allow (testing only!)
+iptables -A INPUT -p tcp --dport 7650 -j ACCEPT
+</code></pre>
+
+<h3 id="api-issues">API Issues</h3>
+
+<h4 id="problem-method-not-found">Problem: &ldquo;Method not found&rdquo;</h4>
+
+<p><strong>Cause:</strong> Typo in method name or unsupported method.</p>
+
+<p><strong>Solution:</strong> Verify method name:</p>
+
+<pre><code class="language-bash"># Supported methods: Authenticate, Echo, GetRate, RouterInfo
+curl -X POST http://localhost:7650/jsonrpc \
+  -d '{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;Echo&quot;,&quot;params&quot;:{&quot;Token&quot;:&quot;...&quot;,&quot;Echo&quot;:&quot;test&quot;}}'
+#                                           ^^^^^
+#                                           Correct capitalization
+</code></pre>
+
+<h4 id="problem-invalid-params">Problem: &ldquo;Invalid params&rdquo;</h4>
+
+<p><strong>Cause:</strong> Wrong parameter format or missing required fields.</p>
+
+<p><strong>Solution:</strong> Check parameter structure:</p>
+
+<pre><code class="language-json">// Echo requires Token and Echo fields
+{
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token&quot;,  // ✅ Required
+    &quot;Echo&quot;: &quot;value&quot;         // ✅ Required
+  }
+}
+
+// RouterInfo requires Token and requested metrics
+{
+  &quot;params&quot;: {
+    &quot;Token&quot;: &quot;your-token&quot;,              // ✅ Required
+    &quot;i2p.router.uptime&quot;: null,          // ✅ Set to null to request
+    &quot;i2p.router.version&quot;: null
+  }
+}
+</code></pre>
+
+<h3 id="performance-issues">Performance Issues</h3>
+
+<h4 id="problem-slow-response-times">Problem: Slow response times</h4>
+
+<p><strong>Cause:</strong> Router under heavy load.</p>
+
+<p><strong>Solution:</strong> Check router performance:</p>
+
+<pre><code class="language-bash"># Check router CPU usage
+top -p $(pgrep go-i2p)
+
+# Check memory usage
+ps aux | grep go-i2p
+</code></pre>
+
+<h4 id="problem-connection-timeouts">Problem: Connection timeouts</h4>
+
+<p><strong>Cause:</strong> Network latency or server overload.</p>
+
+<p><strong>Solution:</strong> Increase client timeout:</p>
+
+<pre><code class="language-bash"># curl with 30-second timeout
+curl --max-time 30 -X POST http://localhost:7650/jsonrpc ...
+</code></pre>
+
+<h3 id="debug-logging">Debug Logging</h3>
+
+<p>Enable verbose logging for troubleshooting:</p>
+
+<pre><code class="language-yaml"># config.yaml
+log:
+  level: debug
+</code></pre>
+
+<p>Then check logs:</p>
+
+<pre><code class="language-bash"># Watch logs in real-time
+tail -f router.log | grep i2pcontrol
+
+# Search for errors
+grep &quot;ERROR.*i2pcontrol&quot; router.log
+</code></pre>
+
+<hr>
+
+<h2 id="advanced-topics">Advanced Topics</h2>
+
+<h3 id="token-management">Token Management</h3>
+
+<h4 id="token-lifecycle">Token Lifecycle</h4>
+
+<ol>
+<li><strong>Generation:</strong> Created during <code>Authenticate</code> call</li>
+<li><strong>Validation:</strong> Checked on every RPC method call</li>
+<li><strong>Expiration:</strong> Invalid after configured duration</li>
+<li><strong>Cleanup:</strong> Expired tokens removed periodically</li>
+</ol>
+
+<h4 id="token-format">Token Format</h4>
+
+<p>Tokens use HMAC-SHA256 signing:</p>
+
+<pre><code>token = hex(HMAC-SHA256(password || timestamp, secret))
+</code></pre>
+
+<p><strong>Security properties:</strong></p>
+
+<ul>
+<li>Cryptographically signed (cannot be forged)</li>
+<li>Time-bound (expires after configured duration)</li>
+<li>Verifiable (server validates signature)</li>
+</ul>
+
+<h4 id="token-storage">Token Storage</h4>
+
+<p><strong>Client-side:</strong> Store token securely:</p>
+
+<pre><code class="language-bash"># Save to file with restricted permissions
+TOKEN=$(curl ... | jq -r '.result.Token')
+echo &quot;$TOKEN&quot; &gt; .i2pcontrol-token
+chmod 600 .i2pcontrol-token
+
+# Use in scripts
+TOKEN=$(cat .i2pcontrol-token)
+</code></pre>
+
+<p><strong>Server-side:</strong> Tokens stored in memory only (lost on restart).</p>
+
+<h3 id="programmatic-access">Programmatic Access</h3>
+
+<h4 id="python-example">Python Example</h4>
+
+<pre><code class="language-python">import requests
+import json
+
+class I2PControl:
+    def __init__(self, url, password):
+        self.url = url
+        self.password = password
+        self.token = None
+        self.request_id = 0
+    
+    def _call(self, method, params):
+        self.request_id += 1
+        payload = {
+            &quot;jsonrpc&quot;: &quot;2.0&quot;,
+            &quot;id&quot;: self.request_id,
+            &quot;method&quot;: method,
+            &quot;params&quot;: params
+        }
+        response = requests.post(self.url, json=payload)
+        result = response.json()
+        
+        if &quot;error&quot; in result:
+            raise Exception(f&quot;RPC Error: {result['error']}&quot;)
+        
+        return result[&quot;result&quot;]
+    
+    def authenticate(self):
+        result = self._call(&quot;Authenticate&quot;, {
+            &quot;API&quot;: 1,
+            &quot;Password&quot;: self.password
+        })
+        self.token = result[&quot;Token&quot;]
+        return self.token
+    
+    def echo(self, value):
+        return self._call(&quot;Echo&quot;, {
+            &quot;Token&quot;: self.token,
+            &quot;Echo&quot;: value
+        })
+    
+    def get_router_info(self, *metrics):
+        params = {&quot;Token&quot;: self.token}
+        for metric in metrics:
+            params[metric] = None
+        return self._call(&quot;RouterInfo&quot;, params)
+
+# Usage
+client = I2PControl(&quot;http://localhost:7650/jsonrpc&quot;, &quot;my-password&quot;)
+client.authenticate()
+
+print(client.echo(&quot;test&quot;))
+
+info = client.get_router_info(
+    &quot;i2p.router.uptime&quot;,
+    &quot;i2p.router.version&quot;,
+    &quot;i2p.router.netdb.knownpeers&quot;
+)
+print(json.dumps(info, indent=2))
+</code></pre>
+
+<h4 id="go-example">Go Example</h4>
+
+<pre><code class="language-go">package main
+
+import (
+	&quot;bytes&quot;
+	&quot;encoding/json&quot;
+	&quot;fmt&quot;
+	&quot;net/http&quot;
+)
+
+type RPCRequest struct {
+	JSONRPC string      `json:&quot;jsonrpc&quot;`
+	ID      int         `json:&quot;id&quot;`
+	Method  string      `json:&quot;method&quot;`
+	Params  interface{} `json:&quot;params&quot;`
+}
+
+type RPCResponse struct {
+	JSONRPC string          `json:&quot;jsonrpc&quot;`
+	ID      int             `json:&quot;id&quot;`
+	Result  json.RawMessage `json:&quot;result,omitempty&quot;`
+	Error   *RPCError       `json:&quot;error,omitempty&quot;`
+}
+
+type RPCError struct {
+	Code    int    `json:&quot;code&quot;`
+	Message string `json:&quot;message&quot;`
+}
+
+type I2PControlClient struct {
+	URL       string
+	Password  string
+	Token     string
+	requestID int
+}
+
+func (c *I2PControlClient) call(method string, params interface{}) (json.RawMessage, error) {
+	c.requestID++
+	req := RPCRequest{
+		JSONRPC: &quot;2.0&quot;,
+		ID:      c.requestID,
+		Method:  method,
+		Params:  params,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(c.URL, &quot;application/json&quot;, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rpcResp RPCResponse
+	if err := json.NewDecoder(resp.Body).Decode(&amp;rpcResp); err != nil {
+		return nil, err
+	}
+
+	if rpcResp.Error != nil {
+		return nil, fmt.Errorf(&quot;RPC error %d: %s&quot;, rpcResp.Error.Code, rpcResp.Error.Message)
+	}
+
+	return rpcResp.Result, nil
+}
+
+func (c *I2PControlClient) Authenticate() error {
+	result, err := c.call(&quot;Authenticate&quot;, map[string]interface{}{
+		&quot;API&quot;:      1,
+		&quot;Password&quot;: c.Password,
+	})
+	if err != nil {
+		return err
+	}
+
+	var auth struct {
+		Token string `json:&quot;Token&quot;`
+	}
+	if err := json.Unmarshal(result, &amp;auth); err != nil {
+		return err
+	}
+
+	c.Token = auth.Token
+	return nil
+}
+
+func (c *I2PControlClient) Echo(value interface{}) (interface{}, error) {
+	result, err := c.call(&quot;Echo&quot;, map[string]interface{}{
+		&quot;Token&quot;: c.Token,
+		&quot;Echo&quot;:  value,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var echo struct {
+		Echo interface{} `json:&quot;Echo&quot;`
+	}
+	if err := json.Unmarshal(result, &amp;echo); err != nil {
+		return nil, err
+	}
+
+	return echo.Echo, nil
+}
+
+func main() {
+	client := &amp;I2PControlClient{
+		URL:      &quot;http://localhost:7650/jsonrpc&quot;,
+		Password: &quot;my-password&quot;,
+	}
+
+	if err := client.Authenticate(); err != nil {
+		panic(err)
+	}
+
+	echo, err := client.Echo(&quot;test&quot;)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf(&quot;Echo: %v\n&quot;, echo)
+}
+</code></pre>
+
+<h3 id="monitoring-and-metrics">Monitoring and Metrics</h3>
+
+<h4 id="continuous-monitoring-script">Continuous Monitoring Script</h4>
+
+<pre><code class="language-bash">#!/bin/bash
+# monitor-router.sh - Continuous router monitoring
+
+API_URL=&quot;http://localhost:7650/jsonrpc&quot;
+PASSWORD=&quot;your-password&quot;
+INTERVAL=30  # seconds
+
+# Authenticate
+TOKEN=$(curl -s -X POST &quot;$API_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{\&quot;jsonrpc\&quot;:\&quot;2.0\&quot;,\&quot;id\&quot;:1,\&quot;method\&quot;:\&quot;Authenticate\&quot;,\&quot;params\&quot;:{\&quot;API\&quot;:1,\&quot;Password\&quot;:\&quot;$PASSWORD\&quot;}}&quot; \
+  | jq -r '.result.Token')
+
+echo &quot;Monitoring started (interval: ${INTERVAL}s)&quot;
+echo &quot;Press Ctrl+C to stop&quot;
+echo &quot;&quot;
+
+while true; do
+  TIMESTAMP=$(date +&quot;%Y-%m-%d %H:%M:%S&quot;)
+  
+  # Get router info
+  INFO=$(curl -s -X POST &quot;$API_URL&quot; \
+    -H &quot;Content-Type: application/json&quot; \
+    -d &quot;{
+      \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+      \&quot;id\&quot;: 2,
+      \&quot;method\&quot;: \&quot;RouterInfo\&quot;,
+      \&quot;params\&quot;: {
+        \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+        \&quot;i2p.router.uptime\&quot;: null,
+        \&quot;i2p.router.net.tunnels.participating\&quot;: null,
+        \&quot;i2p.router.netdb.knownpeers\&quot;: null
+      }
+    }&quot;)
+  
+  UPTIME=$(echo &quot;$INFO&quot; | jq -r '.result[&quot;i2p.router.uptime&quot;]')
+  TUNNELS=$(echo &quot;$INFO&quot; | jq -r '.result[&quot;i2p.router.net.tunnels.participating&quot;]')
+  PEERS=$(echo &quot;$INFO&quot; | jq -r '.result[&quot;i2p.router.netdb.knownpeers&quot;]')
+  
+  # Get bandwidth
+  BW=$(curl -s -X POST &quot;$API_URL&quot; \
+    -H &quot;Content-Type: application/json&quot; \
+    -d &quot;{
+      \&quot;jsonrpc\&quot;: \&quot;2.0\&quot;,
+      \&quot;id\&quot;: 3,
+      \&quot;method\&quot;: \&quot;GetRate\&quot;,
+      \&quot;params\&quot;: {
+        \&quot;Token\&quot;: \&quot;$TOKEN\&quot;,
+        \&quot;i2p.router.net.bw.inbound.15s\&quot;: null,
+        \&quot;i2p.router.net.bw.outbound.15s\&quot;: null
+      }
+    }&quot;)
+  
+  BW_IN=$(echo &quot;$BW&quot; | jq -r '.result[&quot;i2p.router.net.bw.inbound.15s&quot;]')
+  BW_OUT=$(echo &quot;$BW&quot; | jq -r '.result[&quot;i2p.router.net.bw.outbound.15s&quot;]')
+  
+  printf &quot;%s | Uptime: %dms | Tunnels: %d | Peers: %d | BW In: %.2f KB/s | BW Out: %.2f KB/s\n&quot; \
+    &quot;$TIMESTAMP&quot; &quot;$UPTIME&quot; &quot;$TUNNELS&quot; &quot;$PEERS&quot; \
+    &quot;$(echo &quot;$BW_IN / 1024&quot; | bc -l)&quot; \
+    &quot;$(echo &quot;$BW_OUT / 1024&quot; | bc -l)&quot;
+  
+  sleep &quot;$INTERVAL&quot;
+done
+</code></pre>
+
+<h3 id="integration-with-monitoring-tools">Integration with Monitoring Tools</h3>
+
+<h4 id="prometheus-exporter-example">Prometheus Exporter (Example)</h4>
+
+<pre><code class="language-python">#!/usr/bin/env python3
+# i2pcontrol-exporter.py - Prometheus metrics exporter
+
+from prometheus_client import start_http_server, Gauge
+import requests
+import time
+import sys
+
+class I2PControlExporter:
+    def __init__(self, i2pcontrol_url, password, listen_port=9200):
+        self.url = i2pcontrol_url
+        self.password = password
+        self.token = None
+        self.request_id = 0
+        
+        # Define metrics
+        self.uptime = Gauge('i2p_router_uptime_ms', 'Router uptime in milliseconds')
+        self.tunnels = Gauge('i2p_router_tunnels_participating', 'Participating tunnels')
+        self.known_peers = Gauge('i2p_router_known_peers', 'Known peers in NetDB')
+        self.bw_in = Gauge('i2p_router_bandwidth_inbound_bps', 'Inbound bandwidth (bytes/sec)')
+        self.bw_out = Gauge('i2p_router_bandwidth_outbound_bps', 'Outbound bandwidth (bytes/sec)')
+        
+        # Start HTTP server for Prometheus scraping
+        start_http_server(listen_port)
+        print(f&quot;Prometheus exporter listening on port {listen_port}&quot;)
+    
+    def authenticate(self):
+        # ... (same as previous Python example)
+        pass
+    
+    def collect_metrics(self):
+        try:
+            # Authenticate if needed
+            if not self.token:
+                self.authenticate()
+            
+            # Collect router info
+            # ... (same RPC calls as previous example)
+            
+            # Update Prometheus metrics
+            self.uptime.set(uptime)
+            self.tunnels.set(tunnels)
+            self.known_peers.set(peers)
+            self.bw_in.set(bw_in)
+            self.bw_out.set(bw_out)
+            
+        except Exception as e:
+            print(f&quot;Error collecting metrics: {e}&quot;)
+            self.token = None  # Re-authenticate next time
+    
+    def run(self, interval=30):
+        while True:
+            self.collect_metrics()
+            time.sleep(interval)
+
+if __name__ == '__main__':
+    exporter = I2PControlExporter(
+        'http://localhost:7650/jsonrpc',
+        'your-password'
+    )
+    exporter.run()
+</code></pre>
+
+<p>Run exporter:</p>
+
+<pre><code class="language-bash">python3 i2pcontrol-exporter.py
+</code></pre>
+
+<p>Add to Prometheus config:</p>
+
+<pre><code class="language-yaml">scrape_configs:
+  - job_name: 'i2p'
+    static_configs:
+      - targets: ['localhost:9200']
+</code></pre>
+
+<hr>
+
+<h2 id="references">References</h2>
+
+<ul>
+<li><a href="https://geti2p.net/spec/i2pcontrol" target="_blank">I2PControl Specification</a></li>
+<li><a href="https://www.jsonrpc.org/specification" target="_blank">JSON-RPC 2.0 Specification</a></li>
+<li><a href="https://github.com/go-i2p/go-i2p" target="_blank">go-i2p GitHub Repository</a></li>
+<li><a href="../../lib/i2pcontrol/README.html">Package Documentation</a></li>
+</ul>
+
+<h2 id="support">Support</h2>
+
+<p>For issues or questions:</p>
+
+<ol>
+<li>Check this guide&rsquo;s <a href="#troubleshooting">Troubleshooting</a> section</li>
+<li>Review package <a href="../../lib/i2pcontrol/README.html">README</a></li>
+<li>Check router logs for errors</li>
+<li>Open an issue on GitHub</li>
+</ol>
+
+<h2 id="license">License</h2>
+
+<p>This documentation is part of go-i2p and follows the same license terms.</p>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-12-12 20:06:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>

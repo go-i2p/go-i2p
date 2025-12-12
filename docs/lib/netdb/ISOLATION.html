@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetDB Client/Router Isolation - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 1155 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" class="active">NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>NetDB Client/Router Isolation - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="netdb-client-router-isolation">NetDB Client/Router Isolation</h1>
+
+<h2 id="overview">Overview</h2>
+
+<p>This document describes the NetDB isolation architecture that separates client and router database operations, implementing complete data isolation between I2CP clients and the router&rsquo;s network database.</p>
+
+<h2 id="architecture">Architecture</h2>
+
+<h3 id="components">Components</h3>
+
+<ol>
+<li><strong>StdNetDB</strong> - Base implementation that stores both RouterInfos and LeaseSets</li>
+<li><strong>ClientNetDB</strong> - Wrapper providing LeaseSet-only operations for clients<br>
+</li>
+<li><strong>RouterNetDB</strong> - Wrapper providing RouterInfo + LeaseSet operations for the router</li>
+</ol>
+
+<h3 id="isolation-strategy">Isolation Strategy</h3>
+
+<ul>
+<li><strong>Complete Separation</strong>: Each I2CP client receives its own isolated <code>StdNetDB</code> instance</li>
+<li><strong>No Shared State</strong>: Clients cannot access each other&rsquo;s data or the router&rsquo;s database</li>
+<li><strong>Type Safety</strong>: Go&rsquo;s type system enforces isolation at compile time</li>
+<li><strong>Ephemeral Storage</strong>: Client databases are in-memory only (not persisted to disk)</li>
+<li><strong>Persistent Router</strong>: The router&rsquo;s NetDB is persistent and stored on disk</li>
+</ul>
+
+<h2 id="implementation-details">Implementation Details</h2>
+
+<h3 id="clientnetdb">ClientNetDB</h3>
+
+<p><strong>File</strong>: <code>lib/netdb/client_netdb.go</code></p>
+
+<p><strong>Purpose</strong>: Isolates client LeaseSet operations from router operations</p>
+
+<p><strong>Operations</strong>:</p>
+
+<ul>
+<li><code>GetLeaseSet(hash)</code> - Retrieve LeaseSet by hash</li>
+<li><code>GetLeaseSetBytes(hash)</code> - Get raw LeaseSet data</li>
+<li><code>StoreLeaseSet(leaseSet)</code> - Store a LeaseSet</li>
+<li><code>StoreLeaseSet2(leaseSet2)</code> - Store a LeaseSet2</li>
+<li><code>GetLeaseSetCount()</code> - Count stored LeaseSets</li>
+</ul>
+
+<p><strong>Key Design</strong>:</p>
+
+<pre><code class="language-go">type ClientNetDB struct {
+    db *StdNetDB  // Own isolated instance
+}
+</code></pre>
+
+<p>Each session creates its own <code>StdNetDB</code> with an empty path (ephemeral):</p>
+
+<pre><code class="language-go">db := NewStdNetDB(&quot;&quot;)  // Empty path = in-memory only
+clientDB := NewClientNetDB(db)
+</code></pre>
+
+<h3 id="routernetdb">RouterNetDB</h3>
+
+<p><strong>File</strong>: <code>lib/netdb/router_netdb.go</code></p>
+
+<p><strong>Purpose</strong>: Provide router-specific operations including floodfill functionality</p>
+
+<p><strong>RouterInfo Operations</strong>:</p>
+
+<ul>
+<li><code>GetRouterInfo(hash)</code> - Get RouterInfo by hash</li>
+<li><code>StoreRouterInfo(routerInfo)</code> - Store a RouterInfo</li>
+<li><code>SelectPeers(count, filter)</code> - Select peers for tunnel building</li>
+<li><code>SelectFloodfillRouters(count)</code> - Select floodfill routers</li>
+<li><code>GetRouterInfoCount()</code> - Count stored RouterInfos</li>
+<li><code>GetDatabaseSize()</code> - Get total database size</li>
+</ul>
+
+<p><strong>LeaseSet Operations</strong> (for direct router database operations):</p>
+
+<ul>
+<li><code>GetLeaseSet(hash)</code> - Retrieve LeaseSet for floodfill, detached lookups, and direct operations</li>
+<li><code>GetLeaseSetBytes(hash)</code> - Get raw LeaseSet data for network responses</li>
+<li><code>StoreLeaseSet(leaseSet)</code> - Store LeaseSet from direct database store messages</li>
+<li><code>StoreLeaseSet2(leaseSet2)</code> - Store LeaseSet2 from direct database store messages</li>
+<li><code>GetLeaseSetCount()</code> - Count stored LeaseSets</li>
+</ul>
+
+<p><strong>Key Design</strong>:</p>
+
+<pre><code class="language-go">type RouterNetDB struct {
+    db *StdNetDB  // Router's persistent instance
+}
+</code></pre>
+
+<p>The router creates a persistent <code>StdNetDB</code> with a filesystem path:</p>
+
+<pre><code class="language-go">db := NewStdNetDB(&quot;/path/to/netdb&quot;)  // Persistent storage
+routerDB := NewRouterNetDB(db)
+</code></pre>
+
+<h3 id="i2cp-session-integration">I2CP Session Integration</h3>
+
+<p><strong>File</strong>: <code>lib/i2cp/session.go</code></p>
+
+<p><strong>Changes</strong>: Each session now creates its own ephemeral ClientNetDB:</p>
+
+<pre><code class="language-go">func NewSession(id uint16, dest common.Destination, config *config.RouterConfig, _ string) (*Session, error) {
+    // Create ephemeral in-memory database (empty path)
+    db := NewStdNetDB(&quot;&quot;)
+    
+    return &amp;Session{
+        id:        id,
+        dest:      dest,
+        clientDB:  NewClientNetDB(db),
+        // ...
+    }, nil
+}
+</code></pre>
+
+<p>The <code>netDBPath</code> parameter is now ignored (for backward compatibility) since all client databases are ephemeral.</p>
+
+<h2 id="database-message-routing">Database Message Routing</h2>
+
+<p>The following chart shows all possible paths for database messages and how they are handled:</p>
+
+<pre><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATABASE MESSAGE ROUTING                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  MESSAGE TYPE          │ SOURCE           │ CONTAINS        │ HANDLER       │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseStore         │ Network (direct) │ RouterInfo      │ RouterNetDB   │
+│    (DataType=0)        │ to router        │                 │ .StoreRouter  │
+│                        │                  │                 │ Info()        │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseStore         │ Network (direct) │ LeaseSet        │ RouterNetDB   │
+│    (DataType=1)        │ to router        │                 │ .StoreLeaseS  │
+│                        │                  │                 │ et()          │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseStore         │ Network (direct) │ LeaseSet2       │ RouterNetDB   │
+│    (DataType=3)        │ to router        │                 │ .StoreLeaseS  │
+│                        │                  │                 │ et2()         │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseStore         │ Client session   │ LeaseSet        │ ClientNetDB   │
+│    (DataType=1)        │ via I2CP         │ (own dest)      │ .StoreLeaseS  │
+│                        │                  │                 │ et()          │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseStore         │ Client session   │ LeaseSet2       │ ClientNetDB   │
+│    (DataType=3)        │ via I2CP         │ (own dest)      │ .StoreLeaseS  │
+│                        │                  │                 │ et2()         │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseLookup        │ Network (direct) │ Hash            │ RouterNetDB   │
+│    (RouterInfo)        │ to router        │ (RouterInfo)    │ .GetRouterIn  │
+│                        │                  │                 │ fo()          │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseLookup        │ Network (direct) │ Hash            │ RouterNetDB   │
+│    (LeaseSet)          │ to router        │ (Destination)   │ .GetLeaseSet  │
+│                        │                  │                 │ ()            │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  DatabaseLookup        │ Client session   │ Hash            │ ClientNetDB   │
+│    (detached)          │ via I2CP         │ (Destination)   │ .GetLeaseSet  │
+│                        │                  │                 │ ()            │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  Local Operation       │ Tunnel building  │ N/A             │ RouterNetDB   │
+│    (peer selection)    │ subsystem        │                 │ .SelectPeers  │
+│                        │                  │                 │ ()            │
+│  ──────────────────────┼──────────────────┼─────────────────┼───────────────│
+│                                                                             │
+│  Local Operation       │ Floodfill        │ N/A             │ RouterNetDB   │
+│    (FF selection)      │ subsystem        │                 │ .SelectFloodi │
+│                        │                  │                 │ fillRouters() │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+KEY ISOLATION RULES:
+  • Client sessions NEVER access RouterInfo (enforced by type system)
+  • Client sessions ONLY access their own ephemeral LeaseSet storage
+  • Router NEVER accesses client session databases
+  • Each client session has completely isolated in-memory database
+  • Router database is persistent on disk
+  • Direct network messages always route to RouterNetDB
+  • I2CP messages from clients route to session's ClientNetDB
+</code></pre>
+
+<h2 id="benefits">Benefits</h2>
+
+<ol>
+<li><strong>Security</strong>: Clients cannot access router&rsquo;s RouterInfo database</li>
+<li><strong>Privacy</strong>: Clients cannot see each other&rsquo;s LeaseSets</li>
+<li><strong>Reliability</strong>: Client database corruption doesn&rsquo;t affect router or other clients</li>
+<li><strong>Simplicity</strong>: No complex sharing logic or synchronization needed</li>
+<li><strong>Direct Operations</strong>: Router can handle all direct database operations (floodfill, detached lookups, etc.) while maintaining isolation from clients</li>
+</ol>
+
+<h2 id="testing">Testing</h2>
+
+<p>Comprehensive test coverage in:</p>
+
+<ul>
+<li><code>lib/netdb/client_netdb_test.go</code> - ClientNetDB operations and isolation</li>
+<li><code>lib/netdb/router_netdb_test.go</code> - RouterNetDB operations including floodfill</li>
+<li><code>lib/i2cp/session_test.go</code> - Session isolation and ephemeral storage</li>
+</ul>
+
+<p>All tests verify:</p>
+
+<ul>
+<li>Correct operation of isolated databases</li>
+<li>Type safety enforcement</li>
+<li>Ephemeral vs persistent storage behavior</li>
+<li>Concurrent access safety</li>
+<li>Floodfill LeaseSet operations</li>
+</ul>
+
+<h2 id="migration-notes">Migration Notes</h2>
+
+<h3 id="breaking-changes">Breaking Changes</h3>
+
+<ol>
+<li><strong>NewSession signature</strong>: The <code>netDBPath</code> parameter is now ignored
+&ldquo;`go
+// Before: path was used
+session, err := NewSession(id, dest, config, &ldquo;/path/to/netdb&rdquo;)</li>
+</ol>
+
+<p>// After: path is ignored (pass empty string)
+   session, err := NewSession(id, dest, config, &ldquo;&rdquo;)</p>
+
+<pre><code>
+2. **CreateSession signature**: Same as above
+   ```go
+   // Before
+   manager.CreateSession(dest, config, &quot;/path/to/netdb&quot;)
+   
+   // After: path ignored
+   manager.CreateSession(dest, config, &quot;&quot;)
+</code></pre>
+
+<h3 id="router-integration">Router Integration</h3>
+
+<p>When initializing the router, create a RouterNetDB wrapper:</p>
+
+<pre><code class="language-go">// Create persistent router database
+stdDB := netdb.NewStdNetDB(&quot;/path/to/router/netdb&quot;)
+if err := stdDB.Create(); err != nil {
+    return err
+}
+
+// Wrap in RouterNetDB for type safety
+routerDB := netdb.NewRouterNetDB(stdDB)
+
+// Use routerDB for all router operations
+routerInfo := routerDB.GetRouterInfo(hash)
+routerDB.StoreLeaseSet(leaseSet)  // Direct database store operation
+</code></pre>
+
+<h2 id="future-enhancements">Future Enhancements</h2>
+
+<p>Possible improvements:</p>
+
+<ul>
+<li>LRU eviction for client databases to limit memory usage</li>
+<li>Configurable TTL for client LeaseSets</li>
+<li>Metrics for database sizes and operations</li>
+<li>Router&rsquo;s LeaseSet cache optimization for direct operations and detached lookups</li>
+</ul>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2025-12-12 20:06:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>
