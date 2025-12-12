@@ -118,21 +118,21 @@
   - ✅ Integration testing for outbound message flow
   - ✅ Integration testing for full end-to-end message delivery
 
+### Advanced NetDb Features
+
+- **Enhanced Database Operations**:
+  - ✅ Floodfill router functionality
+  - ✅ Client/Router NetDb isolation
+  - ✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)
+  - ✅ Pluggable peer selection algorithm interface
+  - ✅ Database exploration and publishings (random selection, XOR distance, floodfill routing)
+  - 📋 EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)(Partial support)
+
 ## In Progress Components 🚧
 
 ## Next Priority Components 🎯
 
 ## Future Components 📅
-
-### Advanced NetDb Features
-
-- **Enhanced Database Operations**:
-  - ✅ Floodfill router functionality (Kademlia XOR distance metric)
-  - ✅ Client/Router NetDb isolation
-  - ✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)
-  - ✅ Advanced peer selection algorithms (random selection, XOR distance, floodfill routing)
-  - ✅ Database exploration and publishing (periodic discovery, LeaseSet/RouterInfo distribution)
-  - ✅ EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)
 
 ### Application Layer
 
@@ -150,26 +150,7 @@
   - 📋 Peer testing mechanisms
   - 📋 Introducer functionality
 
-## Current Status
-
-**Primary Goal**: Core router functionality is now operational. NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing. **Full end-to-end message routing connecting clients through tunnels to destinations is now complete.** **All LeaseSet types (1, 3, 5, 7) are fully supported in NetDB.**
-
-**Recent Milestones**:
-
-- ✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)
-- ✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)
-- ✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)
-- ✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)
-- ✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)
-- ✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)
-- ✅ Phase 7a: Message Fragment Reassembly (fragment handling, out-of-order assembly, comprehensive tests)
-- ✅ Phase 7b: Message Routing System (outbound complete, inbound tunnel→I2CP routing complete, full E2E integration tests)
-- ✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)
-- ✅ Phase 9: Client/Router NetDB Isolation (ClientNetDB for LeaseSets, RouterNetDB for RouterInfos, improved separation of concerns)
-- ✅ Phase 10: End-to-End Message Routing Complete (Full message delivery from I2CP client through tunnels to destination, with comprehensive integration tests)
-- ✅ Phase 11: EncryptedLeaseSet and MetaLeaseSet Support (Complete support for all modern I2P LeaseSet types with storage, retrieval, and expiration tracking)
-
-**Next Focus**: Application Layer (I2CP client library, streaming) or SSU2 Transport
+**Next Focus**: Application Layer (I2CP client library, streaming)
 
 **Test Coverage**: Core components have strong test coverage:
 
