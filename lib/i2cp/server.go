@@ -2278,26 +2278,33 @@ func (s *Server) IsRunning() bool {
 // - An error occurs writing to the connection
 func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
 	defer s.wg.Done()
-	defer func() {
-		// Defensive: recover from any panic during shutdown to prevent goroutine leak
-		if r := recover(); r != nil {
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Server.deliverMessagesToClient",
-				"sessionID": session.ID(),
-				"panic":     r,
-			}).Error("panic_in_message_delivery_goroutine")
-		}
-	}()
+	defer s.recoverFromDeliveryPanic(session)
 
 	sessionID := session.ID()
-	// Message ID counter uses uint32 and will wrap to 1 after reaching max value.
-	// This allows ~4.2 billion messages before wrap-around. I2CP spec doesn't mandate
-	// specific overflow behavior, so we use natural uint32 wrapping.
-	// Clients should handle message IDs as opaque identifiers, not sequence numbers.
 	messageCounter := uint32(1)
 
 	s.logDeliveryStarted(sessionID)
+	s.runDeliveryLoop(session, sessionID, conn, &messageCounter)
+}
 
+// recoverFromDeliveryPanic recovers from panics during message delivery to prevent goroutine leaks.
+// Logs panic information for debugging purposes.
+func (s *Server) recoverFromDeliveryPanic(session *Session) {
+	if r := recover(); r != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.deliverMessagesToClient",
+			"sessionID": session.ID(),
+			"panic":     r,
+		}).Error("panic_in_message_delivery_goroutine")
+	}
+}
+
+// runDeliveryLoop executes the main message delivery loop for a session.
+// Message ID counter uses uint32 and will wrap to 1 after reaching max value.
+// This allows ~4.2 billion messages before wrap-around. I2CP spec doesn't mandate
+// specific overflow behavior, so we use natural uint32 wrapping.
+// Clients should handle message IDs as opaque identifiers, not sequence numbers.
+func (s *Server) runDeliveryLoop(session *Session, sessionID uint16, conn net.Conn, messageCounter *uint32) {
 	for {
 		if shouldStopDelivery := s.checkServerShutdown(); shouldStopDelivery {
 			return
@@ -2308,7 +2315,7 @@ func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
 			return
 		}
 
-		i2cpMsg, err := s.prepareMessagePayload(sessionID, incomingMsg, &messageCounter)
+		i2cpMsg, err := s.prepareMessagePayload(sessionID, incomingMsg, messageCounter)
 		if err != nil {
 			continue
 		}
@@ -2317,7 +2324,7 @@ func (s *Server) deliverMessagesToClient(session *Session, conn net.Conn) {
 			return
 		}
 
-		s.logMessageDelivered(sessionID, messageCounter-1, len(incomingMsg.Payload))
+		s.logMessageDelivered(sessionID, *messageCounter-1, len(incomingMsg.Payload))
 	}
 }
 
