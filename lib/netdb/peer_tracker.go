@@ -163,7 +163,24 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 		return false // No data - assume peer is fine
 	}
 
-	// Check consecutive failures
+	if pt.hasExcessiveConsecutiveFailures(stats, hash) {
+		return true
+	}
+
+	if pt.hasLowSuccessRate(stats, hash) {
+		return true
+	}
+
+	if pt.hasRecentFailuresWithoutSuccess(stats, hash) {
+		return true
+	}
+
+	return false
+}
+
+// hasExcessiveConsecutiveFailures checks if the peer has too many consecutive failures.
+// Returns true if consecutive failures meet or exceed the threshold of 3.
+func (pt *PeerTracker) hasExcessiveConsecutiveFailures(stats *PeerStats, hash common.Hash) bool {
 	if stats.ConsecutiveFails >= 3 {
 		log.WithFields(logger.Fields{
 			"peer_hash":         hash.String()[:16],
@@ -172,8 +189,12 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 		}).Debug("Peer marked as likely stale")
 		return true
 	}
+	return false
+}
 
-	// Check overall success rate
+// hasLowSuccessRate checks if the peer's overall success rate is below acceptable threshold.
+// Returns true if success rate is below 25% with at least 5 attempts.
+func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) bool {
 	if stats.TotalAttempts >= 5 {
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
 		if successRate < 0.25 {
@@ -185,9 +206,12 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 			return true
 		}
 	}
+	return false
+}
 
-	// Check if peer hasn't succeeded recently but has recent failures and consecutive failures
-	// This catches peers that used to work but are now offline
+// hasRecentFailuresWithoutSuccess checks if the peer has recent failures with no recent successes.
+// Returns true if peer has consecutive failures in the last hour but no success in that period.
+func (pt *PeerTracker) hasRecentFailuresWithoutSuccess(stats *PeerStats, hash common.Hash) bool {
 	hourAgo := time.Now().Add(-1 * time.Hour)
 	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
@@ -200,7 +224,6 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
