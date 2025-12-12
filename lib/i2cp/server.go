@@ -865,99 +865,141 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 // indefinitely. This is Bug #2's partial fix - pools need router integration.
 func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Conn) {
 	sessionID := session.ID()
+	logMonitoringStart(sessionID)
 
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-		"sessionID": sessionID,
-	}).Debug("starting_tunnel_monitoring")
-
-	// Wait for both inbound and outbound tunnels to be ready
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	timeout := time.After(2 * time.Minute) // Give up after 2 minutes
+	timeout := time.After(2 * time.Minute)
 
 	for {
 		select {
 		case <-timeout:
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-				"sessionID": sessionID,
-			}).Warn("timeout_waiting_for_tunnels")
+			logTimeoutWaitingForTunnels(sessionID)
 			return
 
 		case <-ticker.C:
-			inboundPool := session.InboundPool()
-			outboundPool := session.OutboundPool()
-
-			// Check if pools are attached and have active tunnels
-			if inboundPool == nil || outboundPool == nil {
-				continue
-			}
-
-			inTunnels := inboundPool.GetActiveTunnels()
-			outTunnels := outboundPool.GetActiveTunnels()
-
-			if len(inTunnels) == 0 || len(outTunnels) == 0 {
-				continue
-			}
-
-			// Tunnels ready - build and send RequestVariableLeaseSet
-			log.WithFields(logger.Fields{
-				"at":              "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-				"sessionID":       sessionID,
-				"inboundTunnels":  len(inTunnels),
-				"outboundTunnels": len(outTunnels),
-			}).Info("tunnels_ready_sending_leaseset_request")
-
-			payload, err := s.buildRequestVariableLeaseSetPayload(inTunnels)
-			if err != nil {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-					"sessionID": sessionID,
-					"error":     err.Error(),
-				}).Error("failed_to_build_leaseset_request")
+			if tunnels, ready := checkTunnelReadiness(session); ready {
+				s.handleTunnelsReady(session, conn, sessionID, tunnels)
 				return
 			}
-
-			msg := &Message{
-				Type:      MessageTypeRequestVariableLeaseSet,
-				SessionID: sessionID,
-				Payload:   payload,
-			}
-
-			if err := WriteMessage(conn, msg); err != nil {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-					"sessionID": sessionID,
-					"error":     err.Error(),
-				}).Error("failed_to_send_leaseset_request")
-				return
-			}
-
-			log.WithFields(logger.Fields{
-				"at":          "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-				"sessionID":   sessionID,
-				"payloadSize": len(payload),
-			}).Info("sent_request_variable_leaseset")
-
-			// Start LeaseSet maintenance now that tunnels are ready
-			// This will automatically refresh the LeaseSet as tunnels rotate
-			if err := session.StartLeaseSetMaintenance(); err != nil {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-					"sessionID": sessionID,
-					"error":     err.Error(),
-				}).Error("failed_to_start_leaseset_maintenance")
-			} else {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-					"sessionID": sessionID,
-				}).Info("leaseset_maintenance_started")
-			}
-
-			return
 		}
+	}
+}
+
+// logMonitoringStart logs the start of tunnel monitoring.
+func logMonitoringStart(sessionID uint16) {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID": sessionID,
+	}).Debug("starting_tunnel_monitoring")
+}
+
+// logTimeoutWaitingForTunnels logs when tunnel monitoring times out.
+func logTimeoutWaitingForTunnels(sessionID uint16) {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID": sessionID,
+	}).Warn("timeout_waiting_for_tunnels")
+}
+
+// tunnelReadinessResult holds tunnel readiness check results.
+type tunnelReadinessResult struct {
+	inboundTunnels  []*tunnel.TunnelState
+	outboundTunnels []*tunnel.TunnelState
+}
+
+// checkTunnelReadiness verifies if both inbound and outbound tunnels are available and active.
+func checkTunnelReadiness(session *Session) (tunnelReadinessResult, bool) {
+	result := tunnelReadinessResult{}
+
+	inboundPool := session.InboundPool()
+	outboundPool := session.OutboundPool()
+
+	if inboundPool == nil || outboundPool == nil {
+		return result, false
+	}
+
+	result.inboundTunnels = inboundPool.GetActiveTunnels()
+	result.outboundTunnels = outboundPool.GetActiveTunnels()
+
+	if len(result.inboundTunnels) == 0 || len(result.outboundTunnels) == 0 {
+		return result, false
+	}
+
+	return result, true
+}
+
+// handleTunnelsReady processes tunnel readiness by sending LeaseSet request and starting maintenance.
+func (s *Server) handleTunnelsReady(session *Session, conn net.Conn, sessionID uint16, tunnels tunnelReadinessResult) {
+	logTunnelsReady(sessionID, len(tunnels.inboundTunnels), len(tunnels.outboundTunnels))
+
+	if err := s.sendLeaseSetRequest(session, conn, sessionID, tunnels.inboundTunnels); err != nil {
+		return
+	}
+
+	startLeaseSetMaintenance(session, sessionID)
+}
+
+// logTunnelsReady logs when tunnels become ready.
+func logTunnelsReady(sessionID uint16, inboundCount, outboundCount int) {
+	log.WithFields(logger.Fields{
+		"at":              "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID":       sessionID,
+		"inboundTunnels":  inboundCount,
+		"outboundTunnels": outboundCount,
+	}).Info("tunnels_ready_sending_leaseset_request")
+}
+
+// sendLeaseSetRequest builds and sends the RequestVariableLeaseSet message to the client.
+func (s *Server) sendLeaseSetRequest(session *Session, conn net.Conn, sessionID uint16, inTunnels []*tunnel.TunnelState) error {
+	payload, err := s.buildRequestVariableLeaseSetPayload(inTunnels)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": sessionID,
+			"error":     err.Error(),
+		}).Error("failed_to_build_leaseset_request")
+		return err
+	}
+
+	msg := &Message{
+		Type:      MessageTypeRequestVariableLeaseSet,
+		SessionID: sessionID,
+		Payload:   payload,
+	}
+
+	if err := WriteMessage(conn, msg); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": sessionID,
+			"error":     err.Error(),
+		}).Error("failed_to_send_leaseset_request")
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+		"sessionID":   sessionID,
+		"payloadSize": len(payload),
+	}).Info("sent_request_variable_leaseset")
+
+	return nil
+}
+
+// startLeaseSetMaintenance initiates automatic LeaseSet maintenance for the session.
+func startLeaseSetMaintenance(session *Session, sessionID uint16) {
+	if err := session.StartLeaseSetMaintenance(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": sessionID,
+			"error":     err.Error(),
+		}).Error("failed_to_start_leaseset_maintenance")
+	} else {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": sessionID,
+		}).Info("leaseset_maintenance_started")
 	}
 }
 
