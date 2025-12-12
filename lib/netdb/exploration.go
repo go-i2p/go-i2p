@@ -295,19 +295,25 @@ func (e *Explorer) statsUpdateLoop() {
 	ticker := time.NewTicker(e.statsUpdateInt)
 	defer ticker.Stop()
 
-	// Update stats immediately
+	e.updateStrategyStatsIfPresent()
+	e.runStatsUpdateLoop(ticker)
+}
+
+// updateStrategyStatsIfPresent updates strategy statistics if a strategy is configured.
+func (e *Explorer) updateStrategyStatsIfPresent() {
 	if e.strategy != nil {
 		e.strategy.UpdateStats(e.db, e.ourHash)
 	}
+}
 
+// runStatsUpdateLoop runs the main stats update loop until context is cancelled.
+func (e *Explorer) runStatsUpdateLoop(ticker *time.Ticker) {
 	for {
 		select {
 		case <-e.ctx.Done():
 			return
 		case <-ticker.C:
-			if e.strategy != nil {
-				e.strategy.UpdateStats(e.db, e.ourHash)
-			}
+			e.updateStrategyStatsIfPresent()
 		}
 	}
 }
