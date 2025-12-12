@@ -97,12 +97,12 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 	return result, nil
 }
 
-// MessagePayloadPayload represents the payload structure of a MessagePayload (type 8) message.
+// MessagePayloadPayload represents the payload structure of a MessagePayload (type 31) message.
 // This structure follows the I2CP v2.10.0 specification for router-to-client message delivery.
 //
-// Format:
+// Format per I2CP spec:
 //
-//	SessionID: uint16 (already in Message header)
+//	SessionID: uint16 (2 bytes) - session identifier (part of wire format, not common header)
 //	MessageID: uint32 (4 bytes) - unique identifier for this message
 //	Payload: []byte (variable length) - decrypted message data
 //
@@ -113,6 +113,7 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 // (currently 256 KB for i2psnark compatibility). Messages larger than this limit cannot
 // be delivered via I2CP and must be fragmented at the application layer by the sender.
 type MessagePayloadPayload struct {
+	SessionID uint16 // Session identifier (included in wire format)
 	MessageID uint32 // Unique message identifier
 	Payload   []byte // Decrypted message data (variable length, max 256 KB)
 }
@@ -120,38 +121,43 @@ type MessagePayloadPayload struct {
 // ParseMessagePayloadPayload deserializes a MessagePayload payload from wire format.
 // Returns an error if the payload is too short or malformed.
 //
-// Wire format:
+// Wire format per I2CP spec:
 //
-//	bytes 0-3:   MessageID (4 bytes, big endian)
-//	bytes 4+:    Message payload (variable length)
+//	bytes 0-1:   SessionID (2 bytes, big endian)
+//	bytes 2-5:   MessageID (4 bytes, big endian)
+//	bytes 6+:    Message payload (variable length)
 func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
-	// Minimum size: 4 bytes for message ID
-	// Payload can be empty (0 bytes), so minimum is exactly 4
-	if len(data) < 4 {
+	// Minimum size: 2 bytes SessionID + 4 bytes MessageID = 6 bytes
+	// Payload can be empty (0 bytes), so minimum is exactly 6
+	if len(data) < 6 {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseMessagePayloadPayload",
 			"dataSize": len(data),
-			"required": 4,
+			"required": 6,
 		}).Error("message_payload_too_short")
-		return nil, fmt.Errorf("message payload too short: need at least 4 bytes for message ID, got %d", len(data))
+		return nil, fmt.Errorf("message payload too short: need at least 6 bytes (SessionID + MessageID), got %d", len(data))
 	}
 
 	mpp := &MessagePayloadPayload{}
 
-	// Parse message ID (first 4 bytes, big endian)
-	mpp.MessageID = binary.BigEndian.Uint32(data[0:4])
+	// Parse session ID (first 2 bytes, big endian)
+	mpp.SessionID = binary.BigEndian.Uint16(data[0:2])
+
+	// Parse message ID (next 4 bytes, big endian)
+	mpp.MessageID = binary.BigEndian.Uint32(data[2:6])
 
 	// Parse message payload (remaining bytes)
-	payloadLen := len(data) - 4
+	payloadLen := len(data) - 6
 	if payloadLen > 0 {
 		mpp.Payload = make([]byte, payloadLen)
-		copy(mpp.Payload, data[4:])
+		copy(mpp.Payload, data[6:])
 	} else {
 		mpp.Payload = []byte{}
 	}
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseMessagePayloadPayload",
+		"sessionID":   mpp.SessionID,
 		"messageID":   mpp.MessageID,
 		"payloadSize": payloadLen,
 	}).Debug("parsed_message_payload")
@@ -162,20 +168,24 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error) {
 // MarshalBinary serializes the MessagePayloadPayload to wire format.
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
-	// Calculate total size: 4 (message ID) + len(payload)
-	totalSize := 4 + len(mpp.Payload)
+	// Calculate total size: 2 (session ID) + 4 (message ID) + len(payload)
+	totalSize := 6 + len(mpp.Payload)
 	result := make([]byte, totalSize)
 
+	// Write session ID (big endian)
+	binary.BigEndian.PutUint16(result[0:2], mpp.SessionID)
+
 	// Write message ID (big endian)
-	binary.BigEndian.PutUint32(result[0:4], mpp.MessageID)
+	binary.BigEndian.PutUint32(result[2:6], mpp.MessageID)
 
 	// Write payload
 	if len(mpp.Payload) > 0 {
-		copy(result[4:], mpp.Payload)
+		copy(result[6:], mpp.Payload)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessagePayloadPayload.MarshalBinary",
+		"sessionID":   mpp.SessionID,
 		"messageID":   mpp.MessageID,
 		"payloadSize": len(mpp.Payload),
 		"totalSize":   totalSize,

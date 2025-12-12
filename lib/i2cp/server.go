@@ -810,21 +810,23 @@ func buildSessionStatusResponse(sessionID uint16) *Message {
 }
 
 // buildMessageStatusResponse creates a MessageStatus message.
-// MessageStatus payload format (13 bytes):
+// Per I2CP spec, MessageStatus payload format (15 bytes):
+// - 2 bytes: Session ID (uint16, big endian)
 // - 4 bytes: Message ID (uint32, big endian)
 // - 1 byte:  Status code
 // - 4 bytes: Message size (uint32, big endian)
 // - 4 bytes: Nonce (uint32, big endian)
 func buildMessageStatusResponse(sessionID uint16, messageID uint32, statusCode uint8, messageSize, nonce uint32) *Message {
-	payload := make([]byte, 13)
-	binary.BigEndian.PutUint32(payload[0:4], messageID)
-	payload[4] = statusCode
-	binary.BigEndian.PutUint32(payload[5:9], messageSize)
-	binary.BigEndian.PutUint32(payload[9:13], nonce)
+	payload := make([]byte, 15)
+	binary.BigEndian.PutUint16(payload[0:2], sessionID)   // SessionID
+	binary.BigEndian.PutUint32(payload[2:6], messageID)   // MessageID
+	payload[6] = statusCode                                // Status
+	binary.BigEndian.PutUint32(payload[7:11], messageSize) // Message size
+	binary.BigEndian.PutUint32(payload[11:15], nonce)     // Nonce
 
 	return &Message{
 		Type:      MessageTypeMessageStatus,
-		SessionID: sessionID,
+		SessionID: sessionID, // Keep for application logic
 		Payload:   payload,
 	}
 }
@@ -2326,21 +2328,22 @@ func (s *Server) prepareMessagePayload(
 	incomingMsg *IncomingMessage,
 	messageCounter *uint32,
 ) (*Message, error) {
-	// Validate payload size: MessagePayloadPayload has 4-byte MessageID + payload
+	// Validate payload size: MessagePayloadPayload has 2-byte SessionID + 4-byte MessageID + payload
 	// Total must not exceed I2CP MaxPayloadSize constant
-	const messageIDSize = 4
-	if len(incomingMsg.Payload)+messageIDSize > MaxPayloadSize {
+	const headerSize = 6 // SessionID(2) + MessageID(4)
+	if len(incomingMsg.Payload)+headerSize > MaxPayloadSize {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.prepareMessagePayload",
 			"sessionID":   sessionID,
 			"payloadSize": len(incomingMsg.Payload),
-			"maxAllowed":  MaxPayloadSize - messageIDSize,
+			"maxAllowed":  MaxPayloadSize - headerSize,
 		}).Error("incoming_message_payload_too_large")
 		return nil, fmt.Errorf("message payload too large: %d bytes (max %d bytes)",
-			len(incomingMsg.Payload), MaxPayloadSize-messageIDSize)
+			len(incomingMsg.Payload), MaxPayloadSize-headerSize)
 	}
 
 	msgPayload := &MessagePayloadPayload{
+		SessionID: sessionID,
 		MessageID: *messageCounter,
 		Payload:   incomingMsg.Payload,
 	}

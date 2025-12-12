@@ -283,6 +283,7 @@ func TestMessagePayloadPayloadMarshalBinary(t *testing.T) {
 	payload := []byte("Inbound message data")
 
 	mpp := &MessagePayloadPayload{
+		SessionID: 0x1234,
 		MessageID: 0x00ABCDEF,
 		Payload:   payload,
 	}
@@ -293,26 +294,32 @@ func TestMessagePayloadPayloadMarshalBinary(t *testing.T) {
 		t.Fatalf("MarshalBinary() error = %v", err)
 	}
 
-	// Verify total size
-	expectedSize := 4 + len(payload)
+	// Verify total size: SessionID(2) + MessageID(4) + payload
+	expectedSize := 6 + len(payload)
 	if len(data) != expectedSize {
 		t.Errorf("Marshaled size = %d, want %d", len(data), expectedSize)
 	}
 
+	// Verify session ID (big endian)
+	if data[0] != 0x12 || data[1] != 0x34 {
+		t.Errorf("SessionID bytes incorrect: got [%02x %02x]", data[0], data[1])
+	}
+
 	// Verify message ID (big endian)
-	if data[0] != 0x00 || data[1] != 0xAB || data[2] != 0xCD || data[3] != 0xEF {
-		t.Errorf("MessageID bytes incorrect: got [%02x %02x %02x %02x]", data[0], data[1], data[2], data[3])
+	if data[2] != 0x00 || data[3] != 0xAB || data[4] != 0xCD || data[5] != 0xEF {
+		t.Errorf("MessageID bytes incorrect: got [%02x %02x %02x %02x]", data[2], data[3], data[4], data[5])
 	}
 
 	// Verify payload
-	if !bytes.Equal(data[4:], payload) {
-		t.Errorf("Payload mismatch: got %v, want %v", data[4:], payload)
+	if !bytes.Equal(data[6:], payload) {
+		t.Errorf("Payload mismatch: got %v, want %v", data[6:], payload)
 	}
 }
 
 // TestMessagePayloadPayloadRoundTrip tests marshal/unmarshal round trip
 func TestMessagePayloadPayloadRoundTrip(t *testing.T) {
 	original := &MessagePayloadPayload{
+		SessionID: 0x5678,
 		MessageID: 12345,
 		Payload:   []byte("Round trip message payload test"),
 	}
@@ -374,6 +381,7 @@ func TestSendMessagePayloadEmptyPayload(t *testing.T) {
 // TestMessagePayloadPayloadZeroID tests handling of message ID = 0
 func TestMessagePayloadPayloadZeroID(t *testing.T) {
 	mpp := &MessagePayloadPayload{
+		SessionID: 0x9ABC,
 		MessageID: 0,
 		Payload:   []byte("Message with ID 0"),
 	}

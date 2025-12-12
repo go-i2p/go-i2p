@@ -280,6 +280,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 // Message types with SessionID in payload:
 // - SessionStatus (type 20): SessionID(2) + Status(1)
 // - MessageStatus (type 22): SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4)
+// - MessagePayload (type 31): SessionID(2) + MessageID(4) + payload_data
 // - ReconfigureSession (type 2): SessionID(2) + config_data
 // - DestroySession (type 3): SessionID(2)
 // - SendMessage (type 5): SessionID(2) + message_data
@@ -292,6 +293,7 @@ func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
 	switch msgType {
 	case MessageTypeSessionStatus,
 		MessageTypeMessageStatus,
+		MessageTypeMessagePayload,
 		MessageTypeReconfigureSession,
 		MessageTypeDestroySession,
 		MessageTypeSendMessage,

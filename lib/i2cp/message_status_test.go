@@ -107,28 +107,33 @@ func TestBuildMessageStatusResponse(t *testing.T) {
 				t.Errorf("SessionID = %d, want %d", msg.SessionID, tt.sessionID)
 			}
 
-			// Verify payload length (13 bytes: 4+1+4+4)
-			if len(msg.Payload) != 13 {
-				t.Fatalf("Payload length = %d, want 13", len(msg.Payload))
+			// Verify payload length (15 bytes per I2CP spec: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4))
+			if len(msg.Payload) != 15 {
+				t.Fatalf("Payload length = %d, want 15", len(msg.Payload))
 			}
 
 			// Parse and verify payload fields
-			gotMessageID := binary.BigEndian.Uint32(msg.Payload[0:4])
+			gotSessionID := binary.BigEndian.Uint16(msg.Payload[0:2])
+			if gotSessionID != tt.sessionID {
+				t.Errorf("Payload SessionID = %d, want %d", gotSessionID, tt.sessionID)
+			}
+
+			gotMessageID := binary.BigEndian.Uint32(msg.Payload[2:6])
 			if gotMessageID != tt.messageID {
 				t.Errorf("MessageID = %d, want %d", gotMessageID, tt.messageID)
 			}
 
-			gotStatusCode := msg.Payload[4]
+			gotStatusCode := msg.Payload[6]
 			if gotStatusCode != tt.statusCode {
 				t.Errorf("StatusCode = %d, want %d", gotStatusCode, tt.statusCode)
 			}
 
-			gotMessageSize := binary.BigEndian.Uint32(msg.Payload[5:9])
+			gotMessageSize := binary.BigEndian.Uint32(msg.Payload[7:11])
 			if gotMessageSize != tt.messageSize {
 				t.Errorf("MessageSize = %d, want %d", gotMessageSize, tt.messageSize)
 			}
 
-			gotNonce := binary.BigEndian.Uint32(msg.Payload[9:13])
+			gotNonce := binary.BigEndian.Uint32(msg.Payload[11:15])
 			if gotNonce != tt.nonce {
 				t.Errorf("Nonce = %d, want %d", gotNonce, tt.nonce)
 			}
@@ -145,36 +150,37 @@ func TestBuildMessageStatusResponseMarshal(t *testing.T) {
 		t.Fatalf("MarshalBinary() error = %v", err)
 	}
 
-	// Expected format: type(1) + sessionID(2) + length(4) + payload(13) = 20 bytes
-	expectedLen := 1 + 2 + 4 + 13
+	// Expected format per I2CP spec: length(4) + type(1) + payload(15)
+	// MessageStatus payload: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4) = 15 bytes
+	expectedLen := 4 + 1 + 15
 	if len(data) != expectedLen {
 		t.Errorf("Marshaled length = %d, want %d", len(data), expectedLen)
 	}
 
-	// Verify type byte
-	if data[0] != MessageTypeMessageStatus {
-		t.Errorf("Type byte = %d, want %d", data[0], MessageTypeMessageStatus)
+	// Verify payload length field (first 4 bytes)
+	gotPayloadLen := binary.BigEndian.Uint32(data[0:4])
+	if gotPayloadLen != 15 {
+		t.Errorf("Payload length field = %d, want 15", gotPayloadLen)
 	}
 
-	// Verify session ID
-	gotSessionID := binary.BigEndian.Uint16(data[1:3])
+	// Verify type byte (byte 4)
+	if data[4] != MessageTypeMessageStatus {
+		t.Errorf("Type byte = %d, want %d", data[4], MessageTypeMessageStatus)
+	}
+
+	// Verify session ID in payload (bytes 5-6)
+	gotSessionID := binary.BigEndian.Uint16(data[5:7])
 	if gotSessionID != 100 {
 		t.Errorf("SessionID = %d, want 100", gotSessionID)
 	}
 
-	// Verify payload length field
-	gotPayloadLen := binary.BigEndian.Uint32(data[3:7])
-	if gotPayloadLen != 13 {
-		t.Errorf("Payload length field = %d, want 13", gotPayloadLen)
-	}
-
-	// Verify message ID in payload
+	// Verify message ID in payload (bytes 7-10)
 	gotMessageID := binary.BigEndian.Uint32(data[7:11])
 	if gotMessageID != 12345 {
 		t.Errorf("MessageID = %d, want 12345", gotMessageID)
 	}
 
-	// Verify status code
+	// Verify status code (byte 11)
 	if data[11] != MessageStatusSuccess {
 		t.Errorf("StatusCode = %d, want %d", data[11], MessageStatusSuccess)
 	}
