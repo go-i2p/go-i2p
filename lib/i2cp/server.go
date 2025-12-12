@@ -212,14 +212,11 @@ func recoverFromAcceptPanic() {
 }
 
 // acceptAndLogConnection accepts a new connection and logs the connection attempt.
-// Returns the accepted connection or nil if accept fails.
-func (s *Server) acceptAndLogConnection() net.Conn {
+// Returns the accepted connection and a boolean indicating if the loop should terminate.
+func (s *Server) acceptAndLogConnection() (net.Conn, bool) {
 	conn, err := s.listener.Accept()
 	if err != nil {
-		if s.handleAcceptError(err) {
-			return nil
-		}
-		return nil
+		return nil, s.handleAcceptError(err)
 	}
 
 	log.WithFields(logger.Fields{
@@ -228,7 +225,7 @@ func (s *Server) acceptAndLogConnection() net.Conn {
 		"localAddr":  conn.LocalAddr().String(),
 	}).Info("new_i2cp_connection")
 
-	return conn
+	return conn, false
 }
 
 // acceptLoop accepts incoming connections
@@ -237,14 +234,12 @@ func (s *Server) acceptLoop() {
 	defer recoverFromAcceptPanic()
 
 	for {
-		conn := s.acceptAndLogConnection()
+		conn, shouldStop := s.acceptAndLogConnection()
+		if shouldStop {
+			return
+		}
 		if conn == nil {
-			select {
-			case <-s.ctx.Done():
-				return
-			default:
-				continue
-			}
+			continue
 		}
 
 		if s.shouldRejectConnection(conn) {
