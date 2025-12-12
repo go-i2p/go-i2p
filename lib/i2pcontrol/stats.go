@@ -252,49 +252,72 @@ func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
 // GetRouterInfo returns general router status information.
 // Collects statistics from NetDB and tunnel manager.
 func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
-	// Determine status string based on whether router is running
-	statusStr := "ERROR"
-	if rsp.router.IsRunning() {
-		statusStr = "OK"
-	}
-
 	stats := RouterInfoStats{
 		Uptime:      rsp.calculateUptime(),
 		Version:     rsp.version,
-		Status:      statusStr,
+		Status:      rsp.determineRouterStatus(),
 		ActivePeers: 0, // Active session tracking not yet exposed
 	}
 
-	// Collect NetDB statistics if available
-	if netdb := rsp.router.GetNetDB(); netdb != nil {
-		stats.KnownPeers = netdb.GetRouterInfoCount()
-		stats.ActivePeersCount = netdb.GetActivePeerCount()
-		stats.FastPeersCount = netdb.GetFastPeerCount()
-		stats.HighCapacityPeersCount = netdb.GetHighCapacityPeerCount()
-	}
-
-	// Collect reseed status from router
+	rsp.collectNetDBStats(&stats)
 	stats.IsReseeding = rsp.router.IsReseeding()
-
-	// Collect participating tunnel statistics from participant manager
-	if pm := rsp.router.GetParticipantManager(); pm != nil {
-		stats.ParticipatingTunnels = pm.ParticipantCount()
-	}
-
-	// Collect tunnel statistics if available
-	if tm := rsp.router.GetTunnelManager(); tm != nil {
-		// Use separate inbound and outbound pools
-		if inboundPool := tm.GetInboundPool(); inboundPool != nil {
-			inboundStats := inboundPool.GetPoolStats()
-			stats.InboundTunnels = inboundStats.Active
-		}
-		if outboundPool := tm.GetOutboundPool(); outboundPool != nil {
-			outboundStats := outboundPool.GetPoolStats()
-			stats.OutboundTunnels = outboundStats.Active
-		}
-	}
+	rsp.collectParticipatingTunnelStats(&stats)
+	rsp.collectTunnelStats(&stats)
 
 	return stats
+}
+
+// determineRouterStatus returns the router status string based on whether the router is running.
+// Returns "OK" if the router is running, "ERROR" otherwise.
+func (rsp *routerStatsProvider) determineRouterStatus() string {
+	if rsp.router.IsRunning() {
+		return "OK"
+	}
+	return "ERROR"
+}
+
+// collectNetDBStats populates NetDB statistics in the provided RouterInfoStats.
+// Collects peer counts including known, active, fast, and high-capacity peers.
+func (rsp *routerStatsProvider) collectNetDBStats(stats *RouterInfoStats) {
+	netdb := rsp.router.GetNetDB()
+	if netdb == nil {
+		return
+	}
+
+	stats.KnownPeers = netdb.GetRouterInfoCount()
+	stats.ActivePeersCount = netdb.GetActivePeerCount()
+	stats.FastPeersCount = netdb.GetFastPeerCount()
+	stats.HighCapacityPeersCount = netdb.GetHighCapacityPeerCount()
+}
+
+// collectParticipatingTunnelStats populates participating tunnel count in the provided RouterInfoStats.
+// Collects the count of tunnels this router is participating in from the participant manager.
+func (rsp *routerStatsProvider) collectParticipatingTunnelStats(stats *RouterInfoStats) {
+	pm := rsp.router.GetParticipantManager()
+	if pm == nil {
+		return
+	}
+
+	stats.ParticipatingTunnels = pm.ParticipantCount()
+}
+
+// collectTunnelStats populates tunnel statistics in the provided RouterInfoStats.
+// Collects active inbound and outbound tunnel counts from separate tunnel pools.
+func (rsp *routerStatsProvider) collectTunnelStats(stats *RouterInfoStats) {
+	tm := rsp.router.GetTunnelManager()
+	if tm == nil {
+		return
+	}
+
+	if inboundPool := tm.GetInboundPool(); inboundPool != nil {
+		inboundStats := inboundPool.GetPoolStats()
+		stats.InboundTunnels = inboundStats.Active
+	}
+
+	if outboundPool := tm.GetOutboundPool(); outboundPool != nil {
+		outboundStats := outboundPool.GetPoolStats()
+		stats.OutboundTunnels = outboundStats.Active
+	}
 }
 
 // GetTunnelStats returns detailed tunnel statistics.
