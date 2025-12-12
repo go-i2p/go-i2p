@@ -136,6 +136,7 @@ i2cp:
 # Useful for development, debugging, and integration with monitoring tools
 i2pcontrol:
   # Enable I2PControl server (enabled by default for monitoring)
+  # Uncomment to explicitly disable: enabled: false
   enabled: true
   
   # Listen address for I2PControl server
