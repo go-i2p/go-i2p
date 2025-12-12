@@ -252,6 +252,8 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 
 // createAllHopRecords creates build request records for all tunnel hops.
 // Returns the records, reply keys, and reply IVs for each hop.
+// createAllHopRecords creates build records for all hops in a tunnel.
+// Returns the build records, reply keys, and reply IVs for each hop.
 func (tb *TunnelBuilder) createAllHopRecords(
 	req BuildTunnelRequest,
 	tunnelID TunnelID,
@@ -274,37 +276,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 			return nil, nil, nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
 		}
 
-		// Determine hop position for logging
-		position := "participant"
-		if i == 0 {
-			if req.IsInbound {
-				position = "endpoint"
-			} else {
-				position = "gateway"
-			}
-		} else if i == req.HopCount-1 {
-			if req.IsInbound {
-				position = "gateway"
-			} else {
-				position = "endpoint"
-			}
-		}
-
-		// Get router hash for logging (with privacy protection)
-		routerHash, _ := peers[i].IdentHash()
-		routerHashStr := fmt.Sprintf("%x", routerHash[:])
-		log.WithFields(logger.Fields{
-			"at":             "(TunnelBuilder) createAllHopRecords",
-			"phase":          "tunnel_build",
-			"step":           i + 1,
-			"reason":         "hop record created successfully",
-			"tunnel_id":      tunnelID,
-			"hop_index":      i,
-			"hop_position":   position,
-			"router_hash":    fmt.Sprintf("%.12s...", routerHashStr),
-			"is_inbound":     req.IsInbound,
-			"keys_generated": true,
-		}).Debug("created build record for tunnel hop")
+		tb.logHopRecordCreation(i, req, tunnelID, peers[i])
 
 		records[i] = record
 		replyKeys[i] = replyKey
@@ -312,6 +284,43 @@ func (tb *TunnelBuilder) createAllHopRecords(
 	}
 
 	return records, replyKeys, replyIVs, nil
+}
+
+// determineHopPosition determines the position of a hop in the tunnel (gateway, endpoint, or participant).
+func (tb *TunnelBuilder) determineHopPosition(hopIndex int, hopCount int, isInbound bool) string {
+	if hopIndex == 0 {
+		if isInbound {
+			return "endpoint"
+		}
+		return "gateway"
+	}
+	if hopIndex == hopCount-1 {
+		if isInbound {
+			return "gateway"
+		}
+		return "endpoint"
+	}
+	return "participant"
+}
+
+// logHopRecordCreation logs the successful creation of a hop record with detailed context.
+func (tb *TunnelBuilder) logHopRecordCreation(hopIndex int, req BuildTunnelRequest, tunnelID TunnelID, peer router_info.RouterInfo) {
+	position := tb.determineHopPosition(hopIndex, req.HopCount, req.IsInbound)
+	routerHash, _ := peer.IdentHash()
+	routerHashStr := fmt.Sprintf("%x", routerHash[:])
+
+	log.WithFields(logger.Fields{
+		"at":             "(TunnelBuilder) createAllHopRecords",
+		"phase":          "tunnel_build",
+		"step":           hopIndex + 1,
+		"reason":         "hop record created successfully",
+		"tunnel_id":      tunnelID,
+		"hop_index":      hopIndex,
+		"hop_position":   position,
+		"router_hash":    fmt.Sprintf("%.12s...", routerHashStr),
+		"is_inbound":     req.IsInbound,
+		"keys_generated": true,
+	}).Debug("created build record for tunnel hop")
 }
 
 // createHopRecord creates a build request record for a single tunnel hop.
