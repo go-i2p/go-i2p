@@ -844,8 +844,13 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 		"sessionID": sessionID,
 	}).Info("session_destroyed")
 
-	// No response for DestroySession
-	return nil, nil
+	// Per I2CP spec, return SessionStatus(Destroyed) to confirm session termination
+	// Status code 0 = Destroyed
+	return &Message{
+		Type:      MessageTypeSessionStatus,
+		SessionID: sessionID,
+		Payload:   []byte{0}, // Status 0 = Destroyed
+	}, nil
 }
 
 // monitorTunnelsAndRequestLeaseSet monitors a session's tunnel pools and sends
