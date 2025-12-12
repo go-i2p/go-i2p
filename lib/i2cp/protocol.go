@@ -29,9 +29,10 @@ const (
 	MessageTypeDestroySession     = 4 // Client -> Router: Terminate session
 
 	// LeaseSet management
-	MessageTypeCreateLeaseSet          = 5  // Client -> Router: Publish LeaseSet
+	MessageTypeCreateLeaseSet          = 5  // Client -> Router: Publish LeaseSet (deprecated)
 	MessageTypeRequestLeaseSet         = 6  // Router -> Client: Request LeaseSet update
 	MessageTypeRequestVariableLeaseSet = 37 // Router -> Client: Request LeaseSet (with lease data)
+	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
 	MessageTypeSendMessage    = 7 // Client -> Router: Send message to destination
