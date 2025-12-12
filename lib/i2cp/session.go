@@ -538,8 +538,9 @@ func (s *Session) ReceiveMessage() (*IncomingMessage, error) {
 	}
 }
 
-// Reconfigure updates the session configuration
-// Note: This only updates config values, tunnel pools need to be recreated separately
+// Reconfigure updates the session configuration by merging new values with existing config.
+// Only non-zero values from newConfig are applied, preserving existing values for zero fields.
+// Note: Tunnel pools need to be recreated separately to apply tunnel configuration changes.
 func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -548,20 +549,62 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 		return fmt.Errorf("cannot reconfigure inactive session %d", s.id)
 	}
 
+	oldConfig := s.config
+
+	// Merge new config with existing config - only update non-zero values
+	if newConfig.InboundTunnelLength > 0 {
+		s.config.InboundTunnelLength = newConfig.InboundTunnelLength
+	}
+	if newConfig.OutboundTunnelLength > 0 {
+		s.config.OutboundTunnelLength = newConfig.OutboundTunnelLength
+	}
+	if newConfig.InboundTunnelCount > 0 {
+		s.config.InboundTunnelCount = newConfig.InboundTunnelCount
+	}
+	if newConfig.OutboundTunnelCount > 0 {
+		s.config.OutboundTunnelCount = newConfig.OutboundTunnelCount
+	}
+	if newConfig.TunnelLifetime > 0 {
+		s.config.TunnelLifetime = newConfig.TunnelLifetime
+	}
+	if newConfig.MessageTimeout > 0 {
+		s.config.MessageTimeout = newConfig.MessageTimeout
+	}
+	if newConfig.MessageQueueSize > 0 {
+		s.config.MessageQueueSize = newConfig.MessageQueueSize
+	}
+	if newConfig.MessageRateLimit > 0 {
+		s.config.MessageRateLimit = newConfig.MessageRateLimit
+	}
+	if newConfig.MessageRateBurstSize > 0 {
+		s.config.MessageRateBurstSize = newConfig.MessageRateBurstSize
+	}
+	if newConfig.LeaseSetExpiration > 0 {
+		s.config.LeaseSetExpiration = newConfig.LeaseSetExpiration
+	}
+	if newConfig.Nickname != "" {
+		s.config.Nickname = newConfig.Nickname
+	}
+	// UseEncryptedLeaseSet and BlindingSecret are set explicitly (allow false/nil)
+	// Only update if explicitly provided
+	if len(newConfig.BlindingSecret) > 0 {
+		s.config.BlindingSecret = newConfig.BlindingSecret
+		s.config.UseEncryptedLeaseSet = newConfig.UseEncryptedLeaseSet
+	}
+
 	log.WithFields(logger.Fields{
 		"at":                      "i2cp.Session.Reconfigure",
 		"sessionID":               s.id,
-		"oldInboundTunnelLength":  s.config.InboundTunnelLength,
-		"newInboundTunnelLength":  newConfig.InboundTunnelLength,
-		"oldOutboundTunnelLength": s.config.OutboundTunnelLength,
-		"newOutboundTunnelLength": newConfig.OutboundTunnelLength,
-		"oldInboundTunnelCount":   s.config.InboundTunnelCount,
-		"newInboundTunnelCount":   newConfig.InboundTunnelCount,
-		"oldOutboundTunnelCount":  s.config.OutboundTunnelCount,
-		"newOutboundTunnelCount":  newConfig.OutboundTunnelCount,
+		"oldInboundTunnelLength":  oldConfig.InboundTunnelLength,
+		"newInboundTunnelLength":  s.config.InboundTunnelLength,
+		"oldOutboundTunnelLength": oldConfig.OutboundTunnelLength,
+		"newOutboundTunnelLength": s.config.OutboundTunnelLength,
+		"oldInboundTunnelCount":   oldConfig.InboundTunnelCount,
+		"newInboundTunnelCount":   s.config.InboundTunnelCount,
+		"oldOutboundTunnelCount":  oldConfig.OutboundTunnelCount,
+		"newOutboundTunnelCount":  s.config.OutboundTunnelCount,
 	}).Info("session_reconfigured")
 
-	s.config = newConfig
 	return nil
 }
 
