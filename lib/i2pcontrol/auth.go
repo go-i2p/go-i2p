@@ -2,12 +2,13 @@ package i2pcontrol
 
 import (
 	"crypto/hmac"
-	"github.com/go-i2p/crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 )
 
 // AuthManager handles token-based authentication for I2PControl RPC.

@@ -1,10 +1,11 @@
 package i2cp
 
 import (
-	"github.com/go-i2p/crypto/rand"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
@@ -565,7 +566,7 @@ func validateSessionActive(active bool, sessionID uint16) error {
 }
 
 // mergeConfigUpdates merges non-zero values from newConfig into existing config.
-func mergeConfigUpdates(existing *SessionConfig, newConfig *SessionConfig) {
+func mergeConfigUpdates(existing, newConfig *SessionConfig) {
 	mergeTunnelParameters(existing, newConfig)
 	mergeMessageParameters(existing, newConfig)
 	mergeEncryptionParameters(existing, newConfig)
@@ -573,7 +574,7 @@ func mergeConfigUpdates(existing *SessionConfig, newConfig *SessionConfig) {
 }
 
 // mergeTunnelParameters updates tunnel-related configuration fields.
-func mergeTunnelParameters(existing *SessionConfig, newConfig *SessionConfig) {
+func mergeTunnelParameters(existing, newConfig *SessionConfig) {
 	if newConfig.InboundTunnelLength > 0 {
 		existing.InboundTunnelLength = newConfig.InboundTunnelLength
 	}
@@ -592,7 +593,7 @@ func mergeTunnelParameters(existing *SessionConfig, newConfig *SessionConfig) {
 }
 
 // mergeMessageParameters updates message-related configuration fields.
-func mergeMessageParameters(existing *SessionConfig, newConfig *SessionConfig) {
+func mergeMessageParameters(existing, newConfig *SessionConfig) {
 	if newConfig.MessageTimeout > 0 {
 		existing.MessageTimeout = newConfig.MessageTimeout
 	}
@@ -608,7 +609,7 @@ func mergeMessageParameters(existing *SessionConfig, newConfig *SessionConfig) {
 }
 
 // mergeEncryptionParameters updates encryption-related configuration fields.
-func mergeEncryptionParameters(existing *SessionConfig, newConfig *SessionConfig) {
+func mergeEncryptionParameters(existing, newConfig *SessionConfig) {
 	if newConfig.LeaseSetExpiration > 0 {
 		existing.LeaseSetExpiration = newConfig.LeaseSetExpiration
 	}
@@ -621,14 +622,14 @@ func mergeEncryptionParameters(existing *SessionConfig, newConfig *SessionConfig
 }
 
 // mergeMetadataParameters updates metadata-related configuration fields.
-func mergeMetadataParameters(existing *SessionConfig, newConfig *SessionConfig) {
+func mergeMetadataParameters(existing, newConfig *SessionConfig) {
 	if newConfig.Nickname != "" {
 		existing.Nickname = newConfig.Nickname
 	}
 }
 
 // logConfigurationChanges logs the before and after state of tunnel configuration.
-func logConfigurationChanges(sessionID uint16, oldConfig *SessionConfig, newConfig *SessionConfig) {
+func logConfigurationChanges(sessionID uint16, oldConfig, newConfig *SessionConfig) {
 	log.WithFields(logger.Fields{
 		"at":                      "i2cp.Session.Reconfigure",
 		"sessionID":               sessionID,
