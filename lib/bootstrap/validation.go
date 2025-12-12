@@ -67,6 +67,31 @@ func (vs *ValidationStats) LogSummary(phase string) {
 	}
 }
 
+// extractNTCP2Transport extracts and validates the transport style from a RouterAddress.
+// Returns true if the address uses NTCP2 transport, false otherwise.
+func extractNTCP2Transport(addr *router_address.RouterAddress) bool {
+	style := addr.TransportStyle()
+	styleBytes, err := style.Data()
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(string(styleBytes), "ntcp2")
+}
+
+// validateDirectHost checks if a RouterAddress has a valid, directly accessible host.
+// Returns true if host extraction succeeds and the host is not nil, false otherwise.
+func validateDirectHost(addr *router_address.RouterAddress) bool {
+	host, err := addr.Host()
+	return err == nil && host != nil
+}
+
+// validateDirectPort checks if a RouterAddress has a valid, non-empty port.
+// Returns true if port extraction succeeds and the port is not empty, false otherwise.
+func validateDirectPort(addr *router_address.RouterAddress) bool {
+	port, err := addr.Port()
+	return err == nil && port != ""
+}
+
 // HasDirectNTCP2Connectivity checks if a RouterInfo has at least one NTCP2 address
 // with direct connectivity (host and port keys present, not introducer-only).
 // This pre-filtering function prevents ERROR logs from the common package when
@@ -81,32 +106,18 @@ func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
 	}
 
 	for _, addr := range addresses {
-		// Check transport style
-		style := addr.TransportStyle()
-		styleBytes, err := style.Data()
-		if err != nil {
+		if !extractNTCP2Transport(addr) {
 			continue
 		}
 
-		// Only consider NTCP2 addresses
-		if !strings.EqualFold(string(styleBytes), "ntcp2") {
+		if !validateDirectHost(addr) {
 			continue
 		}
 
-		// Check if this address has direct connectivity by trying to extract host and port
-		// We check using the standard methods but suppress errors
-		// If either extraction fails, this is an introducer-only address
-		host, hostErr := addr.Host()
-		if hostErr != nil || host == nil {
+		if !validateDirectPort(addr) {
 			continue
 		}
 
-		port, portErr := addr.Port()
-		if portErr != nil || port == "" {
-			continue
-		}
-
-		// Both host and port keys exist and are valid - this is a directly dialable NTCP2 address
 		return true
 	}
 
