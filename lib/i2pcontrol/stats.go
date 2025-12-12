@@ -47,14 +47,14 @@ type RouterStatsProvider interface {
 }
 
 // BandwidthStats contains bandwidth usage statistics.
-// Rates are measured in bytes per second.
+// Rates are measured in bytes per second (15-second rolling average).
 type BandwidthStats struct {
-	// InboundRate is the current inbound data rate (bytes/sec)
-	// Currently returns 0.0 as bandwidth tracking is not yet implemented
+	// InboundRate is the inbound data rate (bytes/sec)
+	// Tracks received bytes from all transport sessions.
 	InboundRate float64
 
-	// OutboundRate is the current outbound data rate (bytes/sec)
-	// Currently returns 0.0 as bandwidth tracking is not yet implemented
+	// OutboundRate is the outbound data rate (bytes/sec)
+	// Tracks sent bytes from all transport sessions.
 	OutboundRate float64
 }
 
@@ -212,8 +212,8 @@ type RouterAccess interface {
 	// IsReseeding returns whether the router is currently performing a NetDB reseed operation
 	IsReseeding() bool
 
-	// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates in bytes per second
-	GetBandwidthRates() (rate1s, rate15s uint64)
+	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
+	GetBandwidthRates() (inbound, outbound uint64)
 
 	// Stop initiates graceful shutdown of the router
 	Stop()
@@ -237,18 +237,15 @@ func NewRouterStatsProvider(router RouterAccess, version string) RouterStatsProv
 }
 
 // GetBandwidthStats returns current bandwidth statistics.
-// Returns the 1-second rolling average bandwidth rate from the router's bandwidth tracker.
+// Returns 15-second rolling average bandwidth rates for inbound and outbound.
 // Rates are in bytes per second.
 func (rsp *routerStatsProvider) GetBandwidthStats() BandwidthStats {
-	// Get the 1-second rolling average rate (we ignore 15s for now)
-	rate1s, _ := rsp.router.GetBandwidthRates()
+	// Get 15-second inbound and outbound rates (more stable than 1s)
+	inbound, outbound := rsp.router.GetBandwidthRates()
 
-	// Convert from bytes per second to the format expected by I2PControl
-	// The rate represents total bandwidth (inbound + outbound combined)
-	// For simplicity, we return it as outbound rate (Java I2P behavior)
 	return BandwidthStats{
-		InboundRate:  0.0,             // Not tracked separately yet
-		OutboundRate: float64(rate1s), // 1-second average in bytes/sec
+		InboundRate:  float64(inbound),  // 15-second average in bytes/sec
+		OutboundRate: float64(outbound), // 15-second average in bytes/sec
 	}
 }
 

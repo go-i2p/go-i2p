@@ -262,9 +262,9 @@ func (r *Router) getTotalBandwidth() (sent, received uint64) {
 	return sent, received
 }
 
-// GetBandwidthRates returns the current 1-second and 15-second bandwidth rates.
+// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates.
 // Returns rates in bytes per second.
-func (r *Router) GetBandwidthRates() (rate1s, rate15s uint64) {
+func (r *Router) GetBandwidthRates() (inbound, outbound uint64) {
 	if r.bandwidthTracker == nil {
 		return 0, 0
 	}

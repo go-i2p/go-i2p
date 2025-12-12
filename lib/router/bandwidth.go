@@ -23,8 +23,11 @@ type BandwidthTracker struct {
 	lastSample     BandwidthSample
 
 	// Cached rates (bytes per second)
-	rate1s  atomic.Uint64
-	rate15s atomic.Uint64
+	// Separate inbound and outbound tracking for I2PControl
+	inboundRate1s   atomic.Uint64
+	inboundRate15s  atomic.Uint64
+	outboundRate1s  atomic.Uint64
+	outboundRate15s atomic.Uint64
 
 	stopChan chan struct{}
 	wg       sync.WaitGroup
@@ -119,23 +122,25 @@ func (bt *BandwidthTracker) takeSample(getBandwidth func() (sent, received uint6
 // Must be called with bt.mu held.
 func (bt *BandwidthTracker) updateRates() {
 	if len(bt.samples) == 0 {
-		bt.rate1s.Store(0)
-		bt.rate15s.Store(0)
+		bt.inboundRate1s.Store(0)
+		bt.inboundRate15s.Store(0)
+		bt.outboundRate1s.Store(0)
+		bt.outboundRate15s.Store(0)
 		return
 	}
 
 	now := time.Now()
 
-	// Calculate 1-second rate (most recent sample)
+	// Calculate 1-second rates (most recent sample)
 	if len(bt.samples) >= 1 {
 		lastSample := bt.samples[len(bt.samples)-1]
-		// Rate is bytes per second (we sample every second)
-		rate := lastSample.bytesSent + lastSample.bytesReceived
-		bt.rate1s.Store(rate)
+		// Rates are bytes per second (we sample every second)
+		bt.inboundRate1s.Store(lastSample.bytesReceived)
+		bt.outboundRate1s.Store(lastSample.bytesSent)
 	}
 
-	// Calculate 15-second rate (average of all samples in 15s window)
-	var totalBytes uint64
+	// Calculate 15-second rates (average of all samples in 15s window)
+	var totalSent, totalReceived uint64
 	var count int
 	for i := len(bt.samples) - 1; i >= 0; i-- {
 		sample := bt.samples[i]
@@ -143,30 +148,32 @@ func (bt *BandwidthTracker) updateRates() {
 		if now.Sub(sample.timestamp) > 15*time.Second {
 			break
 		}
-		totalBytes += sample.bytesSent + sample.bytesReceived
+		totalSent += sample.bytesSent
+		totalReceived += sample.bytesReceived
 		count++
 	}
 
 	if count > 0 {
 		// Average bytes per sample (samples are 1 second apart)
-		avgRate := totalBytes / uint64(count)
-		bt.rate15s.Store(avgRate)
+		bt.inboundRate15s.Store(totalReceived / uint64(count))
+		bt.outboundRate15s.Store(totalSent / uint64(count))
 	} else {
-		bt.rate15s.Store(0)
+		bt.inboundRate15s.Store(0)
+		bt.outboundRate15s.Store(0)
 	}
 }
 
-// GetRates returns the current 1-second and 15-second bandwidth rates in bytes per second.
-func (bt *BandwidthTracker) GetRates() (rate1s, rate15s uint64) {
-	return bt.rate1s.Load(), bt.rate15s.Load()
+// GetRates returns the 15-second inbound and outbound bandwidth rates in bytes per second.
+func (bt *BandwidthTracker) GetRates() (inbound, outbound uint64) {
+	return bt.inboundRate15s.Load(), bt.outboundRate15s.Load()
 }
 
-// GetRate1s returns the 1-second rolling average bandwidth rate in bytes per second.
-func (bt *BandwidthTracker) GetRate1s() uint64 {
-	return bt.rate1s.Load()
+// GetRate1s returns the 1-second inbound and outbound bandwidth rates in bytes per second.
+func (bt *BandwidthTracker) GetRate1s() (inbound, outbound uint64) {
+	return bt.inboundRate1s.Load(), bt.outboundRate1s.Load()
 }
 
-// GetRate15s returns the 15-second rolling average bandwidth rate in bytes per second.
-func (bt *BandwidthTracker) GetRate15s() uint64 {
-	return bt.rate15s.Load()
+// GetRate15s returns the 15-second inbound and outbound bandwidth rates in bytes per second.
+func (bt *BandwidthTracker) GetRate15s() (inbound, outbound uint64) {
+	return bt.inboundRate15s.Load(), bt.outboundRate15s.Load()
 }

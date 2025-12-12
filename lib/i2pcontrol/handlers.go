@@ -182,9 +182,9 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 		"i2p.router.net.tunnels.outbound":      routerStats.OutboundTunnels,
 		"i2p.router.net.status":                getStatusCode(h.stats.IsRunning()),
 		"i2p.router.net.bw.inbound.1s":         bandwidthStats.InboundRate,
-		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate, // Using 1s rate for both (15s not separately tracked yet)
+		"i2p.router.net.bw.inbound.15s":        bandwidthStats.InboundRate,
 		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate,
-		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate, // Using 1s rate for both (15s not separately tracked yet)
+		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
 	}
 
 	// If specific fields requested, return only those
