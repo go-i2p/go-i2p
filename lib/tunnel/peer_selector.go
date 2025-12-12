@@ -114,25 +114,35 @@ func analyzePeerCharacteristics(peers []router_info.RouterInfo) {
 // and introducer-only peers based on their router address configuration.
 func countPeerTypes(peers []router_info.RouterInfo) (ntcp2Count, directlyDialableCount, introducerOnlyCount int) {
 	for _, peer := range peers {
-		hasDirectNTCP2 := false
-		addresses := peer.RouterAddresses()
-
-		for _, addr := range addresses {
-			if isNTCP2Address(addr) {
-				ntcp2Count++
-				if hasHostKey(addr) {
-					hasDirectNTCP2 = true
-				}
-			}
-		}
-
-		if hasDirectNTCP2 {
-			directlyDialableCount++
-		} else if ntcp2Count > 0 {
-			introducerOnlyCount++
-		}
+		hasDirectNTCP2, peerNTCP2Count := checkPeerAddresses(peer.RouterAddresses())
+		ntcp2Count += peerNTCP2Count
+		updateDialabilityCounters(&directlyDialableCount, &introducerOnlyCount, hasDirectNTCP2, peerNTCP2Count)
 	}
 	return ntcp2Count, directlyDialableCount, introducerOnlyCount
+}
+
+// checkPeerAddresses examines all addresses for a peer and determines if it has directly dialable NTCP2.
+// Returns whether the peer has direct NTCP2 connectivity and the count of NTCP2 addresses found.
+func checkPeerAddresses(addresses []*router_address.RouterAddress) (hasDirectNTCP2 bool, ntcp2Count int) {
+	for _, addr := range addresses {
+		if isNTCP2Address(addr) {
+			ntcp2Count++
+			if hasHostKey(addr) {
+				hasDirectNTCP2 = true
+			}
+		}
+	}
+	return hasDirectNTCP2, ntcp2Count
+}
+
+// updateDialabilityCounters increments the appropriate dialability counter based on peer characteristics.
+// Updates directlyDialableCount if the peer has direct NTCP2, or introducerOnlyCount if it only has introducers.
+func updateDialabilityCounters(directlyDialableCount, introducerOnlyCount *int, hasDirectNTCP2 bool, ntcp2Count int) {
+	if hasDirectNTCP2 {
+		*directlyDialableCount++
+	} else if ntcp2Count > 0 {
+		*introducerOnlyCount++
+	}
 }
 
 // isNTCP2Address checks if a router address is an NTCP2 transport (case-insensitive).

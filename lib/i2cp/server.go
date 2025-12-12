@@ -879,26 +879,38 @@ func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Con
 	defer ticker.Stop()
 
 	timeout := time.After(2 * time.Minute)
+	s.waitForTunnelReadiness(session, conn, sessionID, ticker, timeout)
+}
 
+// waitForTunnelReadiness polls tunnel pools until tunnels are ready, context is cancelled, or timeout occurs.
+func (s *Server) waitForTunnelReadiness(session *Session, conn net.Conn, sessionID uint16, ticker *time.Ticker, timeout <-chan time.Time) {
 	for {
-		select {
-		case <-s.ctx.Done():
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
-				"sessionID": sessionID,
-			}).Debug("context_cancelled_stopping_tunnel_monitoring")
+		if s.checkMonitoringEvent(session, conn, sessionID, ticker, timeout) {
 			return
-
-		case <-timeout:
-			logTimeoutWaitingForTunnels(sessionID)
-			return
-
-		case <-ticker.C:
-			if tunnels, ready := checkTunnelReadiness(session); ready {
-				s.handleTunnelsReady(session, conn, sessionID, tunnels)
-				return
-			}
 		}
+	}
+}
+
+// checkMonitoringEvent processes a single monitoring event and returns true if monitoring should stop.
+func (s *Server) checkMonitoringEvent(session *Session, conn net.Conn, sessionID uint16, ticker *time.Ticker, timeout <-chan time.Time) bool {
+	select {
+	case <-s.ctx.Done():
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": sessionID,
+		}).Debug("context_cancelled_stopping_tunnel_monitoring")
+		return true
+
+	case <-timeout:
+		logTimeoutWaitingForTunnels(sessionID)
+		return true
+
+	case <-ticker.C:
+		if tunnels, ready := checkTunnelReadiness(session); ready {
+			s.handleTunnelsReady(session, conn, sessionID, tunnels)
+			return true
+		}
+		return false
 	}
 }
 
