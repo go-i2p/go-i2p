@@ -383,6 +383,10 @@ func MessageTypeName(msgType uint8) string {
 		return "CreateLeaseSet"
 	case MessageTypeRequestLeaseSet:
 		return "RequestLeaseSet"
+	case MessageTypeRequestVariableLeaseSet:
+		return "RequestVariableLeaseSet"
+	case MessageTypeCreateLeaseSet2:
+		return "CreateLeaseSet2"
 	case MessageTypeSendMessage:
 		return "SendMessage"
 	case MessageTypeMessagePayload:

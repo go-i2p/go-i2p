@@ -255,6 +255,11 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.Close()
 
+	// Send protocol byte (0x2a) as required by I2CP spec
+	protocolByte := []byte{0x2a}
+	_, err = conn.Write(protocolByte)
+	require.NoError(t, err)
+
 	// Step 1: Create session
 	createMsg := &Message{
 		Type:      MessageTypeCreateSession,
@@ -443,6 +448,11 @@ func TestE2E_MultipleSessionsConcurrent(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 		conns[i] = conn
+
+		// Send protocol byte (0x2a)
+		protocolByte := []byte{0x2a}
+		_, err = conn.Write(protocolByte)
+		require.NoError(t, err)
 
 		// Create session
 		createMsg := &Message{

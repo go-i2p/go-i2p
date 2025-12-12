@@ -314,3 +314,57 @@ func TestReadMessagePayloadSizeLimit(t *testing.T) {
 		t.Errorf("Error %q does not contain 'too large'", err.Error())
 	}
 }
+
+// TestProtocolConstants verifies I2CP protocol constants
+func TestProtocolConstants(t *testing.T) {
+	// Test protocol version
+	if ProtocolVersionMajor != 2 {
+		t.Errorf("ProtocolVersionMajor = %d, want 2", ProtocolVersionMajor)
+	}
+	if ProtocolVersionMinor != 10 {
+		t.Errorf("ProtocolVersionMinor = %d, want 10", ProtocolVersionMinor)
+	}
+	if ProtocolVersionPatch != 0 {
+		t.Errorf("ProtocolVersionPatch = %d, want 0", ProtocolVersionPatch)
+	}
+
+	// Test reserved session IDs
+	if SessionIDReservedControl != 0x0000 {
+		t.Errorf("SessionIDReservedControl = 0x%04X, want 0x0000", SessionIDReservedControl)
+	}
+	if SessionIDReservedBroadcast != 0xFFFF {
+		t.Errorf("SessionIDReservedBroadcast = 0x%04X, want 0xFFFF", SessionIDReservedBroadcast)
+	}
+
+	// Test critical message type constants
+	if MessageTypeCreateSession != 1 {
+		t.Errorf("MessageTypeCreateSession = %d, want 1", MessageTypeCreateSession)
+	}
+	if MessageTypeRequestVariableLeaseSet != 37 {
+		t.Errorf("MessageTypeRequestVariableLeaseSet = %d, want 37", MessageTypeRequestVariableLeaseSet)
+	}
+	if MessageTypeCreateLeaseSet2 != 41 {
+		t.Errorf("MessageTypeCreateLeaseSet2 = %d, want 41", MessageTypeCreateLeaseSet2)
+	}
+}
+
+// TestMessageTypeNames verifies message type name lookups
+func TestMessageTypeNames(t *testing.T) {
+	tests := []struct {
+		msgType uint8
+		want    string
+	}{
+		{MessageTypeCreateSession, "CreateSession"},
+		{MessageTypeSessionStatus, "SessionStatus"},
+		{MessageTypeRequestVariableLeaseSet, "RequestVariableLeaseSet"},
+		{MessageTypeCreateLeaseSet2, "CreateLeaseSet2"},
+		{255, "Unknown(255)"}, // Unknown type
+	}
+
+	for _, tt := range tests {
+		got := MessageTypeName(tt.msgType)
+		if got != tt.want {
+			t.Errorf("MessageTypeName(%d) = %q, want %q", tt.msgType, got, tt.want)
+		}
+	}
+}

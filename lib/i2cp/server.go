@@ -1049,27 +1049,52 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	return nil, nil
 }
 
-// handleGetDate returns the current router time
+// handleGetDate returns the current router time and protocol version.
+// Per I2CP v2.10.0 spec (as of router 0.8.7):
+// "The two parties' protocol version strings are exchanged in the Get/Set Date Messages.
+//
+//	Going forward, clients may use this information to communicate correctly with old routers."
+//
+// SetDate payload format:
+//
+//	Bytes 0-7:  Current time (milliseconds since epoch, big endian)
+//	Bytes 8-9:  Version string length (big endian uint16)
+//	Bytes 10+:  Protocol version string (UTF-8)
 func (s *Server) handleGetDate(msg *Message) (*Message, error) {
-	// i2psnark compatibility: Log time query
+	// Parse client version if provided in GetDate payload
+	clientVersion := ""
+	if len(msg.Payload) >= 2 {
+		strLen := binary.BigEndian.Uint16(msg.Payload[0:2])
+		if len(msg.Payload) >= 2+int(strLen) {
+			clientVersion = string(msg.Payload[2 : 2+strLen])
+		}
+	}
+
 	log.WithFields(logger.Fields{
-		"at":        "i2cp.Server.handleGetDate",
-		"sessionID": msg.SessionID,
+		"at":            "i2cp.Server.handleGetDate",
+		"sessionID":     msg.SessionID,
+		"clientVersion": clientVersion,
 	}).Debug("handling_get_date_request")
 
-	// I2P time format: 8 bytes representing milliseconds since Unix epoch (big endian)
+	// Current router time (milliseconds since Unix epoch)
 	currentTimeMillis := time.Now().UnixMilli()
 
-	// Encode as 8-byte big endian integer
-	payload := make([]byte, 8)
-	payload[0] = byte(currentTimeMillis >> 56)
-	payload[1] = byte(currentTimeMillis >> 48)
-	payload[2] = byte(currentTimeMillis >> 40)
-	payload[3] = byte(currentTimeMillis >> 32)
-	payload[4] = byte(currentTimeMillis >> 24)
-	payload[5] = byte(currentTimeMillis >> 16)
-	payload[6] = byte(currentTimeMillis >> 8)
-	payload[7] = byte(currentTimeMillis)
+	// Protocol version string: "2.10.0"
+	versionStr := fmt.Sprintf("%d.%d.%d",
+		ProtocolVersionMajor, ProtocolVersionMinor, ProtocolVersionPatch)
+	versionBytes := []byte(versionStr)
+
+	// Build payload: 8 bytes (time) + 2 bytes (string length) + version string
+	payload := make([]byte, 8+2+len(versionBytes))
+
+	// Time (8 bytes, big endian)
+	binary.BigEndian.PutUint64(payload[0:8], uint64(currentTimeMillis))
+
+	// Version string length (2 bytes, big endian)
+	binary.BigEndian.PutUint16(payload[8:10], uint16(len(versionBytes)))
+
+	// Version string
+	copy(payload[10:], versionBytes)
 
 	response := &Message{
 		Type:      MessageTypeSetDate,
@@ -1078,10 +1103,12 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 	}
 
 	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleGetDate",
-		"reason":      "client_requested",
-		"time_millis": currentTimeMillis,
-	}).Debug("returning router time")
+		"at":              "i2cp.Server.handleGetDate",
+		"reason":          "client_requested",
+		"time_millis":     currentTimeMillis,
+		"protocolVersion": versionStr,
+		"clientVersion":   clientVersion,
+	}).Debug("returning router time and version")
 	return response, nil
 }
 
