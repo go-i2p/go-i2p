@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1155 commits
+        📝 1156 commits
          • 📜 MIT License
       </div>
     </div>
@@ -241,26 +241,26 @@
 </ul></li>
 </ul>
 
-<h2 id="in-progress-components">In Progress Components 🚧</h2>
-
-<h2 id="next-priority-components">Next Priority Components 🎯</h2>
-
-<h2 id="future-components">Future Components 📅</h2>
-
 <h3 id="advanced-netdb-features">Advanced NetDb Features</h3>
 
 <ul>
 <li><strong>Enhanced Database Operations</strong>:
 
 <ul>
-<li>✅ Floodfill router functionality (Kademlia XOR distance metric)</li>
+<li>✅ Floodfill router functionality</li>
 <li>✅ Client/Router NetDb isolation</li>
 <li>✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)</li>
-<li>✅ Advanced peer selection algorithms (random selection, XOR distance, floodfill routing)</li>
-<li>✅ Database exploration and publishing (periodic discovery, LeaseSet/RouterInfo distribution)</li>
-<li>✅ EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)</li>
+<li>✅ Pluggable peer selection algorithm interface</li>
+<li>✅ Database exploration and publishings (random selection, XOR distance, floodfill routing)</li>
+<li>📋 EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)(Partial support)</li>
 </ul></li>
 </ul>
+
+<h2 id="in-progress-components">In Progress Components 🚧</h2>
+
+<h2 id="next-priority-components">Next Priority Components 🎯</h2>
+
+<h2 id="future-components">Future Components 📅</h2>
 
 <h3 id="application-layer">Application Layer</h3>
 
@@ -288,28 +288,7 @@
 </ul></li>
 </ul>
 
-<h2 id="current-status">Current Status</h2>
-
-<p><strong>Primary Goal</strong>: Core router functionality is now operational. NTCP2 transport is feature-complete and actively sending/receiving I2NP messages. Tunnel building infrastructure is complete with automatic pool management. End-to-end garlic encryption is implemented with ECIES-X25519-AEAD-Ratchet. I2CP protocol server is complete with session lifecycle and message queueing. <strong>Full end-to-end message routing connecting clients through tunnels to destinations is now complete.</strong> <strong>All LeaseSet types (1, 3, 5, 7) are fully supported in NetDB.</strong></p>
-
-<p><strong>Recent Milestones</strong>:</p>
-
-<ul>
-<li>✅ Phase 1: Tunnel Cryptography (ECIES-X25519-AEAD + AES-256-CBC legacy support)</li>
-<li>✅ Phase 2: Tunnel Building System (STBM support, retry logic, timeout handling)</li>
-<li>✅ Phase 3: Tunnel Pool Management (automatic maintenance, round-robin selection, exponential backoff)</li>
-<li>✅ Phase 4: End-to-End Garlic Encryption (ECIES-X25519-AEAD-Ratchet, session management)</li>
-<li>✅ Phase 5: I2CP Protocol Server (TCP server, session management, message protocol)</li>
-<li>✅ Phase 6: I2CP Client Tunnel Lifecycle (LeaseSet creation, message delivery, integration testing)</li>
-<li>✅ Phase 7a: Message Fragment Reassembly (fragment handling, out-of-order assembly, comprehensive tests)</li>
-<li>✅ Phase 7b: Message Routing System (outbound complete, inbound tunnel→I2CP routing complete, full E2E integration tests)</li>
-<li>✅ Phase 8: LeaseSet2 Support (DatabaseStore type parsing, NetDB storage/retrieval, modern I2P compatibility)</li>
-<li>✅ Phase 9: Client/Router NetDB Isolation (ClientNetDB for LeaseSets, RouterNetDB for RouterInfos, improved separation of concerns)</li>
-<li>✅ Phase 10: End-to-End Message Routing Complete (Full message delivery from I2CP client through tunnels to destination, with comprehensive integration tests)</li>
-<li>✅ Phase 11: EncryptedLeaseSet and MetaLeaseSet Support (Complete support for all modern I2P LeaseSet types with storage, retrieval, and expiration tracking)</li>
-</ul>
-
-<p><strong>Next Focus</strong>: Application Layer (I2CP client library, streaming) or SSU2 Transport</p>
+<p><strong>Next Focus</strong>: Application Layer (I2CP client library, streaming)</p>
 
 <p><strong>Test Coverage</strong>: Core components have strong test coverage:</p>
 
@@ -327,7 +306,7 @@
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2025-12-12 20:06:08 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2025-12-12 20:17:46 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
