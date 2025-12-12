@@ -391,45 +391,69 @@ func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 // Handles both IPv4 (host:port) and IPv6 ([host]:port) formats.
 // Returns empty string and 0 if parsing fails.
 func (rsp *routerStatsProvider) parseHostPort(addrStr string) (hostname string, port int) {
-	// Handle IPv6 addresses with brackets: [2001:db8::1]:12345
-	if len(addrStr) > 0 && addrStr[0] == '[' {
-		// Find closing bracket
-		closeBracket := -1
-		for i := 1; i < len(addrStr); i++ {
-			if addrStr[i] == ']' {
-				closeBracket = i
-				break
-			}
-		}
-		if closeBracket > 0 {
-			hostname = addrStr[1:closeBracket] // Extract IPv6 address without brackets
-			// Port comes after ]:
-			if closeBracket+1 < len(addrStr) && addrStr[closeBracket+1] == ':' {
-				port = rsp.parsePort(addrStr[closeBracket+2:])
-			}
-			return hostname, port
-		}
+	if rsp.isIPv6WithBrackets(addrStr) {
+		return rsp.parseIPv6Address(addrStr)
+	}
+	return rsp.parseIPv4Address(addrStr)
+}
+
+// isIPv6WithBrackets checks if the address string starts with a bracket indicating IPv6 format.
+func (rsp *routerStatsProvider) isIPv6WithBrackets(addrStr string) bool {
+	return len(addrStr) > 0 && addrStr[0] == '['
+}
+
+// parseIPv6Address extracts hostname and port from an IPv6 address string with brackets.
+// Expected format: [2001:db8::1]:12345
+func (rsp *routerStatsProvider) parseIPv6Address(addrStr string) (hostname string, port int) {
+	closeBracket := rsp.findClosingBracket(addrStr)
+	if closeBracket <= 0 {
+		return "", 0
 	}
 
-	// Handle IPv4 addresses: 127.0.0.1:12345
-	// Find the last colon (in case of IPv6 without brackets, this handles the port)
-	lastColon := -1
-	for i := len(addrStr) - 1; i >= 0; i-- {
-		if addrStr[i] == ':' {
-			lastColon = i
-			break
+	hostname = addrStr[1:closeBracket]
+	port = rsp.extractPortAfterBracket(addrStr, closeBracket)
+	return hostname, port
+}
+
+// findClosingBracket locates the position of the closing bracket in an address string.
+func (rsp *routerStatsProvider) findClosingBracket(addrStr string) int {
+	for i := 1; i < len(addrStr); i++ {
+		if addrStr[i] == ']' {
+			return i
 		}
 	}
+	return -1
+}
 
+// extractPortAfterBracket extracts the port number after the closing bracket and colon.
+func (rsp *routerStatsProvider) extractPortAfterBracket(addrStr string, closeBracket int) int {
+	if closeBracket+1 < len(addrStr) && addrStr[closeBracket+1] == ':' {
+		return rsp.parsePort(addrStr[closeBracket+2:])
+	}
+	return 0
+}
+
+// parseIPv4Address extracts hostname and port from an IPv4 address string.
+// Expected format: 127.0.0.1:12345
+func (rsp *routerStatsProvider) parseIPv4Address(addrStr string) (hostname string, port int) {
+	lastColon := rsp.findLastColon(addrStr)
 	if lastColon > 0 {
 		hostname = addrStr[:lastColon]
 		port = rsp.parsePort(addrStr[lastColon+1:])
 	} else {
-		// No colon found, entire string is hostname
 		hostname = addrStr
 	}
-
 	return hostname, port
+}
+
+// findLastColon locates the position of the last colon in an address string.
+func (rsp *routerStatsProvider) findLastColon(addrStr string) int {
+	for i := len(addrStr) - 1; i >= 0; i-- {
+		if addrStr[i] == ':' {
+			return i
+		}
+	}
+	return -1
 }
 
 // parsePort converts a port string to an integer.
