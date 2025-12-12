@@ -48,7 +48,7 @@ The core router functionality is now operational. We are currently focused on ad
 - End-to-End Crypto
   - [X] Garlic messages
   - [X] ECIES-X25519-AEAD-Ratchet (primary)
-  - [X] ElGamal/AES+SessionTag (legacy compatibility)
+  - [ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)
 - I2NP
   - [X] Message parsing and serialization
   - [X] Message interfaces and factory patterns
