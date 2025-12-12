@@ -1309,15 +1309,16 @@ func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 }
 
 // handleBlindingInfo handles blinded destination parameters.
-// This allows clients to configure blinding for their destinations.
+// This allows clients to configure destination blinding for privacy enhancement.
+// Blinded destinations rotate daily at UTC midnight to prevent long-term correlation.
 //
-// Current implementation returns an error as blinded destinations are not
-// fully implemented yet. This is a placeholder for future enhancement.
-// Proper implementation requires:
-// 1. Parse blinding parameters from payload
-// 2. Update session's destination with blinding info
-// 3. Integrate with EncryptedLeaseSet generation
-// 4. Handle blinding date rotation (UTC midnight)
+// Workflow:
+// 1. Parse BlindingInfo payload (enabled flag + optional secret)
+// 2. Update session configuration with blinding parameters
+// 3. If enabled, trigger blinded destination derivation
+// 4. Session will automatically use blinded destinations in EncryptedLeaseSets
+//
+// The session's updateBlindedDestination() handles daily rotation automatically.
 func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, fmt.Errorf("session not active")
@@ -1325,18 +1326,62 @@ func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Messag
 
 	session := *sessionPtr
 
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleBlindingInfo",
-		"sessionID":   session.ID(),
-		"payloadSize": len(msg.Payload),
-	}).Warn("blinding_info_not_implemented")
+	// Parse blinding info payload
+	blindingInfo, err := ParseBlindingInfoPayload(msg.Payload)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.handleBlindingInfo",
+			"sessionID":   session.ID(),
+			"payloadSize": len(msg.Payload),
+			"error":       err.Error(),
+		}).Error("failed_to_parse_blinding_info")
+		return nil, fmt.Errorf("failed to parse BlindingInfo payload: %w", err)
+	}
 
-	// TODO: Implement blinded destination support
-	// For now, log the request and continue without error
-	// This allows clients to send BlindingInfo without breaking the connection
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleBlindingInfo",
+		"sessionID": session.ID(),
+		"enabled":   blindingInfo.Enabled,
+		"hasSecret": len(blindingInfo.Secret) > 0,
+	}).Info("received_blinding_info")
+
+	// Update session configuration
+	session.mu.Lock()
+	session.config.UseEncryptedLeaseSet = blindingInfo.Enabled
+	if blindingInfo.Enabled && len(blindingInfo.Secret) > 0 {
+		session.config.BlindingSecret = blindingInfo.Secret
+		// Clear cached secret to force regeneration with new config
+		session.blindingSecret = nil
+	} else if blindingInfo.Enabled {
+		// Enabled with no secret = generate random
+		session.config.BlindingSecret = nil
+		session.blindingSecret = nil
+	} else {
+		// Disabled = clear everything
+		session.config.BlindingSecret = nil
+		session.blindingSecret = nil
+		session.blindedDestination = nil
+	}
+	session.mu.Unlock()
+
+	// If enabled, trigger immediate blinded destination update
+	if blindingInfo.Enabled {
+		if err := session.updateBlindedDestination(); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.handleBlindingInfo",
+				"sessionID": session.ID(),
+				"error":     err.Error(),
+			}).Error("failed_to_update_blinded_destination")
+			return nil, fmt.Errorf("failed to update blinded destination: %w", err)
+		}
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleBlindingInfo",
+			"sessionID": session.ID(),
+		}).Debug("blinded_destination_updated")
+	}
 
 	// Return nil (no response) to acknowledge receipt
-	// In future, may return SessionStatus or similar confirmation
+	// Client should request LeaseSet regeneration if needed
 	return nil, nil
 }
 

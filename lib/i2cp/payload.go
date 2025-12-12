@@ -634,3 +634,86 @@ func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
 
 	return result, nil
 }
+
+// BlindingInfoPayload represents the payload structure of a BlindingInfo (type 42) message.
+// This message allows clients to configure destination blinding parameters.
+//
+// Wire format:
+//
+//	1 byte:  Blinding enabled flag (0x00 = disabled, 0x01 = enabled)
+//	N bytes: Blinding secret (optional, 32 bytes if provided; 0 bytes to use random)
+//
+// If enabled flag is 0x00, no secret is expected and blinding will be disabled.
+// If enabled flag is 0x01 and no secret follows, a random secret will be generated.
+// If enabled flag is 0x01 and 32 bytes follow, that secret will be used.
+type BlindingInfoPayload struct {
+	Enabled bool   // Whether destination blinding is enabled
+	Secret  []byte // Blinding secret (nil = generate random, empty = disabled)
+}
+
+// ParseBlindingInfoPayload deserializes a BlindingInfo payload from wire format.
+// Minimum size: 1 byte (enabled flag)
+// Maximum size: 33 bytes (flag + 32-byte secret)
+func ParseBlindingInfoPayload(data []byte) (*BlindingInfoPayload, error) {
+	if len(data) < 1 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseBlindingInfoPayload",
+			"dataSize": len(data),
+		}).Error("payload_too_short")
+		return nil, fmt.Errorf("BlindingInfo payload too short: need at least 1 byte, got %d", len(data))
+	}
+
+	bip := &BlindingInfoPayload{}
+	bip.Enabled = data[0] != 0x00
+
+	// If enabled and secret provided, extract it
+	if bip.Enabled && len(data) > 1 {
+		if len(data) != 33 {
+			log.WithFields(logger.Fields{
+				"at":       "i2cp.ParseBlindingInfoPayload",
+				"dataSize": len(data),
+			}).Error("invalid_secret_length")
+			return nil, fmt.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(data)-1)
+		}
+		bip.Secret = make([]byte, 32)
+		copy(bip.Secret, data[1:33])
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.ParseBlindingInfoPayload",
+		"enabled":   bip.Enabled,
+		"hasSecret": len(bip.Secret) > 0,
+		"dataSize":  len(data),
+	}).Debug("parsed_blinding_info_payload")
+
+	return bip, nil
+}
+
+// MarshalBinary serializes the BlindingInfoPayload to wire format.
+func (bip *BlindingInfoPayload) MarshalBinary() ([]byte, error) {
+	var result []byte
+
+	// Enabled flag
+	if bip.Enabled {
+		result = append(result, 0x01)
+	} else {
+		result = append(result, 0x00)
+	}
+
+	// Secret (if provided and enabled)
+	if bip.Enabled && len(bip.Secret) > 0 {
+		if len(bip.Secret) != 32 {
+			return nil, fmt.Errorf("BlindingInfo secret must be 32 bytes, got %d", len(bip.Secret))
+		}
+		result = append(result, bip.Secret...)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.BlindingInfoPayload.MarshalBinary",
+		"enabled":   bip.Enabled,
+		"hasSecret": len(bip.Secret) > 0,
+		"totalSize": len(result),
+	}).Debug("marshaled_blinding_info_payload")
+
+	return result, nil
+}
