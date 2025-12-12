@@ -28,6 +28,14 @@ type ServerConfig struct {
 	// Maximum number of concurrent sessions
 	MaxSessions int
 
+	// ReadTimeout is the maximum duration for reading requests from clients
+	// Zero means no timeout. Default: 60 seconds
+	ReadTimeout time.Duration
+
+	// WriteTimeout is the maximum duration for writing responses to clients
+	// Zero means no timeout. Default: 30 seconds
+	WriteTimeout time.Duration
+
 	// LeaseSet publisher for distributing LeaseSets to the network (optional)
 	// If nil, sessions will function but won't publish to the network
 	LeaseSetPublisher LeaseSetPublisher
@@ -36,9 +44,11 @@ type ServerConfig struct {
 // DefaultServerConfig returns a ServerConfig with sensible defaults
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		ListenAddr:  fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
-		Network:     "tcp",
-		MaxSessions: 100,
+		ListenAddr:   fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
+		Network:      "tcp",
+		MaxSessions:  100,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 }
 
@@ -383,6 +393,16 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 
 // readClientMessage reads an I2CP message from the connection with rate limiting.
 func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
+	// Set read deadline if timeout is configured
+	if s.config.ReadTimeout > 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.readClientMessage",
+				"error": err.Error(),
+			}).Warn("failed_to_set_read_deadline")
+		}
+	}
+
 	// Check connection-level rate limits before reading
 	if !s.checkConnectionRateLimit(conn) {
 		state := s.getOrCreateConnectionState(conn)
@@ -538,6 +558,16 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 // sendResponse writes a response message to the connection if present.
 func (s *Server) sendResponse(conn net.Conn, response *Message) error {
 	if response != nil {
+		// Set write deadline if timeout is configured
+		if s.config.WriteTimeout > 0 {
+			if err := conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout)); err != nil {
+				log.WithFields(logger.Fields{
+					"at":    "i2cp.Server.sendResponse",
+					"error": err.Error(),
+				}).Warn("failed_to_set_write_deadline")
+			}
+		}
+
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.sendResponse",
 			"type":        MessageTypeName(response.Type),
