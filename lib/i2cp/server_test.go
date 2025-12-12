@@ -6,6 +6,22 @@ import (
 	"time"
 )
 
+// dialI2CPClient connects to an I2CP server and sends the required protocol byte (0x2a)
+func dialI2CPClient(addr string) (net.Conn, error) {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send protocol byte as required by I2CP spec
+	if _, err := conn.Write([]byte{0x2a}); err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	return conn, nil
+}
+
 func TestServerStartStop(t *testing.T) {
 	config := &ServerConfig{
 		ListenAddr:  "localhost:17654",
@@ -82,7 +98,7 @@ func TestServerCreateSession(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Connect to server
-	conn, err := net.Dial("tcp", "localhost:17656")
+	conn, err := dialI2CPClient("localhost:17656")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
@@ -143,7 +159,7 @@ func TestServerDestroySession(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Connect to server
-	conn, err := net.Dial("tcp", "localhost:17659")
+	conn, err := dialI2CPClient("localhost:17659")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
@@ -209,7 +225,7 @@ func TestServerMaxSessions(t *testing.T) {
 	// Create 2 sessions (should succeed)
 	var conns []net.Conn
 	for i := 0; i < 2; i++ {
-		conn, err := net.Dial("tcp", "localhost:17654")
+		conn, err := dialI2CPClient("localhost:17654")
 		if err != nil {
 			t.Fatalf("Failed to connect: %v", err)
 		}
@@ -237,7 +253,7 @@ func TestServerMaxSessions(t *testing.T) {
 	}
 
 	// Third connection should be rejected immediately
-	conn3, err := net.Dial("tcp", "localhost:17654")
+	conn3, err := dialI2CPClient("localhost:17654")
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
@@ -281,7 +297,7 @@ func TestServerGetDate(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	conn, err := net.Dial("tcp", "localhost:17658")
+	conn, err := dialI2CPClient("localhost:17658")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
@@ -330,7 +346,7 @@ func TestServerHandleCreateLeaseSet(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Connect and create session
-	conn, err := net.Dial("tcp", "localhost:17659")
+	conn, err := dialI2CPClient("localhost:17659")
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
@@ -406,7 +422,7 @@ func BenchmarkServerCreateSession(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		conn, err := net.Dial("tcp", "localhost:27654")
+		conn, err := dialI2CPClient("localhost:27654")
 		if err != nil {
 			b.Fatalf("Failed to connect: %v", err)
 		}
