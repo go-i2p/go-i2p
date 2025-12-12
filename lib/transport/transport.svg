@@ -17,32 +17,32 @@
 <g id="clust7" class="cluster">
 <title>cluster_github.com/go&#45;i2p/common/router_address.RouterAddress</title>
 <g id="a_clust7"><a xlink:title="type: github.com/go&#45;i2p/common/router_address.RouterAddress">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M257.7273,-261C257.7273,-261 358.9293,-261 358.9293,-261 364.9293,-261 370.9293,-267 370.9293,-273 370.9293,-273 370.9293,-327 370.9293,-327 370.9293,-333 364.9293,-339 358.9293,-339 358.9293,-339 257.7273,-339 257.7273,-339 251.7273,-339 245.7273,-333 245.7273,-327 245.7273,-327 245.7273,-273 245.7273,-273 245.7273,-267 251.7273,-261 257.7273,-261"/>
-<text text-anchor="middle" x="308.3283" y="-269.5" font-family="Arial" font-size="15.00" fill="#222222">(RouterAddress)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M257.7273,-616C257.7273,-616 358.9293,-616 358.9293,-616 364.9293,-616 370.9293,-622 370.9293,-628 370.9293,-628 370.9293,-682 370.9293,-682 370.9293,-688 364.9293,-694 358.9293,-694 358.9293,-694 257.7273,-694 257.7273,-694 251.7273,-694 245.7273,-688 245.7273,-682 245.7273,-682 245.7273,-628 245.7273,-628 245.7273,-622 251.7273,-616 257.7273,-616"/>
+<text text-anchor="middle" x="308.3283" y="-624.5" font-family="Arial" font-size="15.00" fill="#222222">(RouterAddress)</text>
 </a>
 </g>
 </g>
 <g id="clust6" class="cluster">
 <title>cluster_github.com/go&#45;i2p/common/data.I2PString</title>
 <g id="a_clust6"><a xlink:title="type: github.com/go&#45;i2p/common/data.I2PString">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M277.3283,-175C277.3283,-175 340.3283,-175 340.3283,-175 346.3283,-175 352.3283,-181 352.3283,-187 352.3283,-187 352.3283,-241 352.3283,-241 352.3283,-247 346.3283,-253 340.3283,-253 340.3283,-253 277.3283,-253 277.3283,-253 271.3283,-253 265.3283,-247 265.3283,-241 265.3283,-241 265.3283,-187 265.3283,-187 265.3283,-181 271.3283,-175 277.3283,-175"/>
-<text text-anchor="middle" x="308.8283" y="-183.5" font-family="Arial" font-size="15.00" fill="#222222">(I2PString)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M277.3283,-530C277.3283,-530 340.3283,-530 340.3283,-530 346.3283,-530 352.3283,-536 352.3283,-542 352.3283,-542 352.3283,-596 352.3283,-596 352.3283,-602 346.3283,-608 340.3283,-608 340.3283,-608 277.3283,-608 277.3283,-608 271.3283,-608 265.3283,-602 265.3283,-596 265.3283,-596 265.3283,-542 265.3283,-542 265.3283,-536 271.3283,-530 277.3283,-530"/>
+<text text-anchor="middle" x="308.8283" y="-538.5" font-family="Arial" font-size="15.00" fill="#222222">(I2PString)</text>
 </a>
 </g>
 </g>
 <g id="clust5" class="cluster">
-<title>cluster_*github.com/sirupsen/logrus.Logger</title>
-<g id="a_clust5"><a xlink:title="type: *github.com/sirupsen/logrus.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M701.5346,-861C701.5346,-861 755.8558,-861 755.8558,-861 761.8558,-861 767.8558,-867 767.8558,-873 767.8558,-873 767.8558,-927 767.8558,-927 767.8558,-933 761.8558,-939 755.8558,-939 755.8558,-939 701.5346,-939 701.5346,-939 695.5346,-939 689.5346,-933 689.5346,-927 689.5346,-927 689.5346,-873 689.5346,-873 689.5346,-867 695.5346,-861 701.5346,-861"/>
-<text text-anchor="middle" x="728.6952" y="-869.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<title>cluster_*github.com/go&#45;i2p/logger.Logger</title>
+<g id="a_clust5"><a xlink:title="type: *github.com/go&#45;i2p/logger.Logger">
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M689.0858,-861C689.0858,-861 767.3046,-861 767.3046,-861 773.3046,-861 779.3046,-867 779.3046,-873 779.3046,-873 779.3046,-927 779.3046,-927 779.3046,-933 773.3046,-939 767.3046,-939 767.3046,-939 689.0858,-939 689.0858,-939 683.0858,-939 677.0858,-933 677.0858,-927 677.0858,-927 677.0858,-873 677.0858,-873 677.0858,-867 683.0858,-861 689.0858,-861"/>
+<text text-anchor="middle" x="728.1952" y="-869.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
 </a>
 </g>
 </g>
 <g id="clust4" class="cluster">
-<title>cluster_*github.com/go&#45;i2p/logger.Logger</title>
-<g id="a_clust4"><a xlink:title="type: *github.com/go&#45;i2p/logger.Logger">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M689.0858,-318C689.0858,-318 767.3046,-318 767.3046,-318 773.3046,-318 779.3046,-324 779.3046,-330 779.3046,-330 779.3046,-506 779.3046,-506 779.3046,-512 773.3046,-518 767.3046,-518 767.3046,-518 689.0858,-518 689.0858,-518 683.0858,-518 677.0858,-512 677.0858,-506 677.0858,-506 677.0858,-330 677.0858,-330 677.0858,-324 683.0858,-318 689.0858,-318"/>
-<text text-anchor="middle" x="728.1952" y="-326.5" font-family="Arial" font-size="15.00" fill="#222222">(*Logger)</text>
+<title>cluster_*github.com/go&#45;i2p/logger.Entry</title>
+<g id="a_clust4"><a xlink:title="type: *github.com/go&#45;i2p/logger.Entry">
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M701.5346,-351C701.5346,-351 754.8558,-351 754.8558,-351 760.8558,-351 766.8558,-357 766.8558,-363 766.8558,-363 766.8558,-539 766.8558,-539 766.8558,-545 760.8558,-551 754.8558,-551 754.8558,-551 701.5346,-551 701.5346,-551 695.5346,-551 689.5346,-545 689.5346,-539 689.5346,-539 689.5346,-363 689.5346,-363 689.5346,-357 695.5346,-351 701.5346,-351"/>
+<text text-anchor="middle" x="728.1952" y="-359.5" font-family="Arial" font-size="15.00" fill="#222222">(*Entry)</text>
 </a>
 </g>
 </g>
@@ -57,64 +57,64 @@
 <g id="clust2" class="cluster">
 <title>cluster_*github.com/go&#45;i2p/common/router_info.RouterInfo</title>
 <g id="a_clust2"><a xlink:title="type: *github.com/go&#45;i2p/common/router_info.RouterInfo">
-<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M252.512,-555C252.512,-555 364.1446,-555 364.1446,-555 370.1446,-555 376.1446,-561 376.1446,-567 376.1446,-567 376.1446,-682 376.1446,-682 376.1446,-688 370.1446,-694 364.1446,-694 364.1446,-694 252.512,-694 252.512,-694 246.512,-694 240.512,-688 240.512,-682 240.512,-682 240.512,-567 240.512,-567 240.512,-561 246.512,-555 252.512,-555"/>
-<text text-anchor="middle" x="308.3283" y="-563.5" font-family="Arial" font-size="15.00" fill="#222222">(*RouterInfo)</text>
+<path fill="#eed8ae" stroke="#000000" stroke-width=".5" d="M252.512,-283C252.512,-283 364.1446,-283 364.1446,-283 370.1446,-283 376.1446,-289 376.1446,-295 376.1446,-295 376.1446,-410 376.1446,-410 376.1446,-416 370.1446,-422 364.1446,-422 364.1446,-422 252.512,-422 252.512,-422 246.512,-422 240.512,-416 240.512,-410 240.512,-410 240.512,-295 240.512,-295 240.512,-289 246.512,-283 252.512,-283"/>
+<text text-anchor="middle" x="308.3283" y="-291.5" font-family="Arial" font-size="15.00" fill="#222222">(*RouterInfo)</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux -->
 <g id="node1" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux</title>
-<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux | defined in multi.go:21&#10;at multi.go:22: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:29: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:26: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M547.8333,-679C547.8333,-679 517.8333,-679 517.8333,-679 511.8333,-679 505.8333,-673 505.8333,-667 505.8333,-667 505.8333,-655 505.8333,-655 505.8333,-649 511.8333,-643 517.8333,-643 517.8333,-643 547.8333,-643 547.8333,-643 553.8333,-643 559.8333,-649 559.8333,-655 559.8333,-655 559.8333,-667 559.8333,-667 559.8333,-673 553.8333,-679 547.8333,-679"/>
-<text text-anchor="middle" x="532.8333" y="-656.8" font-family="Verdana" font-size="14.00" fill="#000000">Mux</text>
+<g id="a_node1"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux | defined in multi.go:21&#10;at multi.go:22: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:29: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:26: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:32: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M547.8333,-663C547.8333,-663 517.8333,-663 517.8333,-663 511.8333,-663 505.8333,-657 505.8333,-651 505.8333,-651 505.8333,-639 505.8333,-639 505.8333,-633 511.8333,-627 517.8333,-627 517.8333,-627 547.8333,-627 547.8333,-627 553.8333,-627 559.8333,-633 559.8333,-639 559.8333,-639 559.8333,-651 559.8333,-651 559.8333,-657 553.8333,-663 547.8333,-663"/>
+<text text-anchor="middle" x="532.8333" y="-640.8" font-family="Verdana" font-size="14.00" fill="#000000">Mux</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="node17" class="node">
+<title>(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/logger.Entry).Debug | defined in log.go:92">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M747.0172,-482C747.0172,-482 709.3732,-482 709.3732,-482 703.3732,-482 697.3732,-476 697.3732,-470 697.3732,-470 697.3732,-458 697.3732,-458 697.3732,-452 703.3732,-446 709.3732,-446 709.3732,-446 747.0172,-446 747.0172,-446 753.0172,-446 759.0172,-452 759.0172,-458 759.0172,-458 759.0172,-470 759.0172,-470 759.0172,-476 753.0172,-482 747.0172,-482"/>
+<text text-anchor="middle" x="728.1952" y="-468.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="728.1952" y="-451.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
+</a>
+</g>
+</g>
+<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge24" class="edge">
+<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge24"><a xlink:title="at multi.go:26: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:32: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M549.0598,-626.9906C580.6379,-592.1369 649.6563,-516.9585 677.0858,-495 680.7897,-492.0349 684.8008,-489.1401 688.8911,-486.3851"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="690.8163,-489.3083 697.3255,-480.9488 687.0239,-483.4246 690.8163,-489.3083"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="node17" class="node">
+<g id="node20" class="node">
 <title>(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_node17"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithFields | defined in log.go:66">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M759.4143,-510C759.4143,-510 696.9761,-510 696.9761,-510 690.9761,-510 684.9761,-504 684.9761,-498 684.9761,-498 684.9761,-486 684.9761,-486 684.9761,-480 690.9761,-474 696.9761,-474 696.9761,-474 759.4143,-474 759.4143,-474 765.4143,-474 771.4143,-480 771.4143,-486 771.4143,-486 771.4143,-498 771.4143,-498 771.4143,-504 765.4143,-510 759.4143,-510"/>
-<text text-anchor="middle" x="728.1952" y="-496.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="728.1952" y="-479.4" font-family="Verdana" font-size="14.00" fill="#000000">WithFields</text>
+<g id="a_node20"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).WithFields | defined in log.go:66">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M759.4143,-931C759.4143,-931 696.9761,-931 696.9761,-931 690.9761,-931 684.9761,-925 684.9761,-919 684.9761,-919 684.9761,-907 684.9761,-907 684.9761,-901 690.9761,-895 696.9761,-895 696.9761,-895 759.4143,-895 759.4143,-895 765.4143,-895 771.4143,-901 771.4143,-907 771.4143,-907 771.4143,-919 771.4143,-919 771.4143,-925 765.4143,-931 759.4143,-931"/>
+<text text-anchor="middle" x="728.1952" y="-917.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="728.1952" y="-900.4" font-family="Verdana" font-size="14.00" fill="#000000">WithFields</text>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge4" class="edge">
+<g id="edge10" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge4"><a xlink:title="at multi.go:22: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:29: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M560.0992,-653.5477C585.28,-645.6365 622.6706,-631.1785 649.0858,-609 678.8558,-584.0047 702.0923,-545.0988 715.4708,-519.0963"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="718.6025,-520.6591 719.9475,-510.1499 712.3425,-517.5265 718.6025,-520.6591"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="node20" class="node">
-<title>(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_node20"><a xlink:title="(*github.com/sirupsen/logrus.Logger).Debug | defined in logger.go:221">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M747.0172,-931C747.0172,-931 709.3732,-931 709.3732,-931 703.3732,-931 697.3732,-925 697.3732,-919 697.3732,-919 697.3732,-907 697.3732,-907 697.3732,-901 703.3732,-895 709.3732,-895 709.3732,-895 747.0172,-895 747.0172,-895 753.0172,-895 759.0172,-901 759.0172,-907 759.0172,-907 759.0172,-919 759.0172,-919 759.0172,-925 753.0172,-931 747.0172,-931"/>
-<text text-anchor="middle" x="728.1952" y="-917.2" font-family="Verdana" font-size="14.00" fill="#000000">logrus</text>
-<text text-anchor="middle" x="728.1952" y="-900.4" font-family="Verdana" font-size="14.00" fill="#000000">Debug</text>
-</a>
-</g>
-</g>
-<!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge14" class="edge">
-<title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.Mux&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge14"><a xlink:title="at multi.go:26: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:32: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M559.9968,-666.5036C578.7696,-671.4927 603.2898,-680.5079 620.0858,-696 677.6354,-749.082 708.6302,-839.5908 721.2763,-885.1126"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="717.9286,-886.1417 723.9014,-894.8924 724.6893,-884.3269 717.9286,-886.1417"/>
+<g id="a_edge10"><a xlink:title="at multi.go:22: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:29: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M560.0065,-655.8745C578.7838,-664.4897 603.3055,-678.0606 620.0858,-696 673.1899,-752.7723 705.9404,-840.5759 720.065,-885.0851"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="716.8068,-886.3963 723.1038,-894.9168 723.4947,-884.3291 716.8068,-886.3963"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.init -->
 <g id="node2" class="node">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.init</title>
-<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport.init | defined in .:0&#10;at log.go:5: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]&#10;at errors.go:6: calling [github.com/samber/oops.Errorf]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M108.5379,-83C108.5379,-83 78.5379,-83 78.5379,-83 72.5379,-83 66.5379,-77 66.5379,-71 66.5379,-71 66.5379,-59 66.5379,-59 66.5379,-53 72.5379,-47 78.5379,-47 78.5379,-47 108.5379,-47 108.5379,-47 114.5379,-47 120.5379,-53 120.5379,-59 120.5379,-59 120.5379,-71 120.5379,-71 120.5379,-77 114.5379,-83 108.5379,-83"/>
-<text text-anchor="middle" x="93.5379" y="-60.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
+<g id="a_node2"><a xlink:title="github.com/go&#45;i2p/go&#45;i2p/lib/transport.init | defined in .:0&#10;at errors.go:6: calling [github.com/samber/oops.Errorf]&#10;at log.go:5: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M108.5379,-78C108.5379,-78 78.5379,-78 78.5379,-78 72.5379,-78 66.5379,-72 66.5379,-66 66.5379,-66 66.5379,-54 66.5379,-54 66.5379,-48 72.5379,-42 78.5379,-42 78.5379,-42 108.5379,-42 108.5379,-42 114.5379,-42 120.5379,-48 120.5379,-54 120.5379,-54 120.5379,-66 120.5379,-66 120.5379,-72 114.5379,-78 108.5379,-78"/>
+<text text-anchor="middle" x="93.5379" y="-55.8" font-family="Verdana" font-size="14.00" fill="#000000">init</text>
 </a>
 </g>
 </g>
@@ -129,18 +129,18 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.init&#45;&gt;github.com/samber/oops.Errorf -->
-<g id="edge28" class="edge">
+<g id="edge19" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.init&#45;&gt;github.com/samber/oops.Errorf</title>
-<g id="a_edge28"><a xlink:title="at errors.go:6: calling [github.com/samber/oops.Errorf]">
-<path fill="none" stroke="#8b4513" d="M120.7413,-61.0738C158.18,-55.6704 225.8267,-45.9072 268.8371,-39.6996"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="269.5453,-43.1338 278.9428,-38.2411 268.5454,-36.2056 269.5453,-43.1338"/>
+<g id="a_edge19"><a xlink:title="at errors.go:6: calling [github.com/samber/oops.Errorf]">
+<path fill="none" stroke="#8b4513" d="M120.7413,-56.7071C158.18,-52.1752 225.8267,-43.9867 268.8371,-38.7803"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="269.4359,-42.2335 278.9428,-37.5571 268.5946,-35.2842 269.4359,-42.2335"/>
 </a>
 </g>
 </g>
 <!-- github.com/go&#45;i2p/logger.GetGoI2PLogger -->
 <g id="node4" class="node">
 <title>github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:169">
+<g id="a_node4"><a xlink:title="github.com/go&#45;i2p/logger.GetGoI2PLogger | defined in log.go:254">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M357.0178,-113C357.0178,-113 259.6388,-113 259.6388,-113 253.6388,-113 247.6388,-107 247.6388,-101 247.6388,-101 247.6388,-89 247.6388,-89 247.6388,-83 253.6388,-77 259.6388,-77 259.6388,-77 357.0178,-77 357.0178,-77 363.0178,-77 369.0178,-83 369.0178,-89 369.0178,-89 369.0178,-101 369.0178,-101 369.0178,-107 363.0178,-113 357.0178,-113"/>
 <text text-anchor="middle" x="308.3283" y="-99.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
 <text text-anchor="middle" x="308.3283" y="-82.4" font-family="Verdana" font-size="14.00" fill="#000000">GetGoI2PLogger</text>
@@ -148,11 +148,11 @@
 </g>
 </g>
 <!-- github.com/go&#45;i2p/go&#45;i2p/lib/transport.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger -->
-<g id="edge15" class="edge">
+<g id="edge33" class="edge">
 <title>github.com/go&#45;i2p/go&#45;i2p/lib/transport.init&#45;&gt;github.com/go&#45;i2p/logger.GetGoI2PLogger</title>
-<g id="a_edge15"><a xlink:title="at log.go:5: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
-<path fill="none" stroke="#8b4513" d="M120.7413,-68.7995C149.9837,-72.8839 197.6554,-79.5422 237.6221,-85.1244"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="237.2131,-88.6012 247.6012,-86.5182 238.1815,-81.6685 237.2131,-88.6012"/>
+<g id="a_edge33"><a xlink:title="at log.go:5: calling [github.com/go&#45;i2p/logger.GetGoI2PLogger]">
+<path fill="none" stroke="#8b4513" d="M120.7413,-64.4328C149.9837,-69.1978 197.6554,-76.9659 237.6221,-83.4785"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="237.1684,-86.9506 247.6012,-85.1045 238.2943,-80.0417 237.1684,-86.9506"/>
 </a>
 </g>
 </g>
@@ -160,9 +160,9 @@
 <g id="node5" class="node">
 <title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
 <g id="a_node5"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash | defined in router_info_struct.go:324">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M339.8059,-686C339.8059,-686 276.8507,-686 276.8507,-686 270.8507,-686 264.8507,-680 264.8507,-674 264.8507,-674 264.8507,-662 264.8507,-662 264.8507,-656 270.8507,-650 276.8507,-650 276.8507,-650 339.8059,-650 339.8059,-650 345.8059,-650 351.8059,-656 351.8059,-662 351.8059,-662 351.8059,-674 351.8059,-674 351.8059,-680 345.8059,-686 339.8059,-686"/>
-<text text-anchor="middle" x="308.3283" y="-672.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
-<text text-anchor="middle" x="308.3283" y="-655.4" font-family="Verdana" font-size="14.00" fill="#000000">IdentHash</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M339.8059,-414C339.8059,-414 276.8507,-414 276.8507,-414 270.8507,-414 264.8507,-408 264.8507,-402 264.8507,-402 264.8507,-390 264.8507,-390 264.8507,-384 270.8507,-378 276.8507,-378 276.8507,-378 339.8059,-378 339.8059,-378 345.8059,-378 351.8059,-384 351.8059,-390 351.8059,-390 351.8059,-402 351.8059,-402 351.8059,-408 345.8059,-414 339.8059,-414"/>
+<text text-anchor="middle" x="308.3283" y="-400.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
+<text text-anchor="middle" x="308.3283" y="-383.4" font-family="Verdana" font-size="14.00" fill="#000000">IdentHash</text>
 </a>
 </g>
 </g>
@@ -170,92 +170,373 @@
 <g id="node6" class="node">
 <title>(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
 <g id="a_node6"><a xlink:title="(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses | defined in router_info_struct.go:356">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M355.9615,-625C355.9615,-625 260.6951,-625 260.6951,-625 254.6951,-625 248.6951,-619 248.6951,-613 248.6951,-613 248.6951,-601 248.6951,-601 248.6951,-595 254.6951,-589 260.6951,-589 260.6951,-589 355.9615,-589 355.9615,-589 361.9615,-589 367.9615,-595 367.9615,-601 367.9615,-601 367.9615,-613 367.9615,-613 367.9615,-619 361.9615,-625 355.9615,-625"/>
-<text text-anchor="middle" x="308.3283" y="-611.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
-<text text-anchor="middle" x="308.3283" y="-594.4" font-family="Verdana" font-size="14.00" fill="#000000">RouterAddresses</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M355.9615,-353C355.9615,-353 260.6951,-353 260.6951,-353 254.6951,-353 248.6951,-347 248.6951,-341 248.6951,-341 248.6951,-329 248.6951,-329 248.6951,-323 254.6951,-317 260.6951,-317 260.6951,-317 355.9615,-317 355.9615,-317 361.9615,-317 367.9615,-323 367.9615,-329 367.9615,-329 367.9615,-341 367.9615,-341 367.9615,-347 361.9615,-353 355.9615,-353"/>
+<text text-anchor="middle" x="308.3283" y="-339.2" font-family="Verdana" font-size="14.00" fill="#000000">router_info</text>
+<text text-anchor="middle" x="308.3283" y="-322.4" font-family="Verdana" font-size="14.00" fill="#000000">RouterAddresses</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible -->
+<g id="node7" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible</title>
+<g id="a_node7"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible | defined in multi.go:194&#10;at multi.go:195: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at multi.go:196: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:211: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:203: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:200: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:214: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:207: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M126.3667,-955C126.3667,-955 60.7091,-955 60.7091,-955 54.7091,-955 48.7091,-949 48.7091,-943 48.7091,-943 48.7091,-931 48.7091,-931 48.7091,-925 54.7091,-919 60.7091,-919 60.7091,-919 126.3667,-919 126.3667,-919 132.3667,-919 138.3667,-925 138.3667,-931 138.3667,-931 138.3667,-943 138.3667,-943 138.3667,-949 132.3667,-955 126.3667,-955"/>
+<text text-anchor="middle" x="93.5379" y="-932.8" font-family="Verdana" font-size="14.00" fill="#000000">Compatible</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge5" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge5"><a xlink:title="at multi.go:195: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M138.2581,-926.0802C147.8588,-921.6845 156.9477,-915.549 163.0758,-907 221.1354,-826.005 146.0878,-544.4001 199.0758,-460 212.0573,-439.3228 234.3386,-424.5408 255.407,-414.4307"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="256.9816,-417.5598 264.6464,-410.2453 254.0932,-411.1835 256.9816,-417.5598"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge32" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge32"><a xlink:title="at multi.go:200: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:214: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:207: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M138.4774,-925.8125C147.9501,-921.4324 156.9263,-915.371 163.0758,-907 270.8423,-760.3037 83.001,-602.4964 236.0758,-504 379.6099,-411.6426 597.5801,-438.7572 687.3603,-455.3671"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="686.9305,-458.8481 697.409,-457.2825 688.2413,-451.9719 686.9305,-458.8481"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge13" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge13"><a xlink:title="at multi.go:196: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:211: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:203: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M138.5384,-946.9896C181.822,-955.7166 249.2147,-967 308.3283,-967 308.3283,-967 308.3283,-967 532.8333,-967 585.2601,-967 598.8204,-961.8983 649.0858,-947 659.8398,-943.8126 671.0857,-939.5729 681.6113,-935.1716"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="683.2411,-938.2805 691.0405,-931.1096 680.4716,-931.8516 683.2411,-938.2805"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult -->
+<g id="node8" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult</title>
+<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult | defined in multi.go:268&#10;at multi.go:274: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:279: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:270: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:276: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M589.0714,-772C589.0714,-772 476.5952,-772 476.5952,-772 470.5952,-772 464.5952,-766 464.5952,-760 464.5952,-760 464.5952,-748 464.5952,-748 464.5952,-742 470.5952,-736 476.5952,-736 476.5952,-736 589.0714,-736 589.0714,-736 595.0714,-736 601.0714,-742 601.0714,-748 601.0714,-748 601.0714,-760 601.0714,-760 601.0714,-766 595.0714,-772 589.0714,-772"/>
+<text text-anchor="middle" x="532.8333" y="-749.8" font-family="Verdana" font-size="14.00" fill="#000000">handleAcceptResult</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge1" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge1"><a xlink:title="at multi.go:274: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:279: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M601.2065,-753.2406C619.0885,-749.6587 636.7796,-742.5038 649.0858,-729 719.6371,-651.5831 620.3579,-583.05 677.0858,-495 680.1771,-490.2018 684.2992,-486.0345 688.8665,-482.4484"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="691.1453,-485.1311 697.442,-476.6104 687.2061,-479.3447 691.1453,-485.1311"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge27" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge27"><a xlink:title="at multi.go:270: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:276: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M596.2886,-772.0163C604.642,-775.6677 612.8156,-779.9682 620.0858,-785 659.3655,-812.1859 692.7394,-857.1682 711.6197,-885.9259"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="708.8769,-888.1316 717.2296,-894.6495 714.7646,-884.3454 708.8769,-888.1316"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult -->
+<g id="node9" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult</title>
+<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult | defined in multi.go:255&#10;at multi.go:258: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult]&#10;at multi.go:260: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:263: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M367.7919,-779C367.7919,-779 248.8647,-779 248.8647,-779 242.8647,-779 236.8647,-773 236.8647,-767 236.8647,-767 236.8647,-755 236.8647,-755 236.8647,-749 242.8647,-743 248.8647,-743 248.8647,-743 367.7919,-743 367.7919,-743 373.7919,-743 379.7919,-749 379.7919,-755 379.7919,-755 379.7919,-767 379.7919,-767 379.7919,-773 373.7919,-779 367.7919,-779"/>
+<text text-anchor="middle" x="308.3283" y="-756.8" font-family="Verdana" font-size="14.00" fill="#000000">waitForAcceptResult</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult -->
+<g id="edge28" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult</title>
+<g id="a_edge28"><a xlink:title="at multi.go:258: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult]">
+<path fill="none" stroke="#000000" d="M379.9803,-758.7659C403.6725,-758.0272 430.1535,-757.2015 454.3313,-756.4477"/>
+<polygon fill="#000000" stroke="#000000" points="454.6513,-759.9395 464.5373,-756.1294 454.4331,-752.9429 454.6513,-759.9395"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge30" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge30"><a xlink:title="at multi.go:263: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M334.8399,-742.9873C349.6982,-731.8997 367.7613,-716.6497 380.5808,-700 426.7904,-639.9837 396.0972,-595.3247 453.5808,-546 488.9588,-515.6434 619.674,-485.7939 687.2069,-471.973"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.9794,-475.3877 697.0863,-469.9733 686.5907,-468.5268 687.9794,-475.3877"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge29" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge29"><a xlink:title="at multi.go:260: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M337.8165,-779.027C376.6436,-802.6427 441.4284,-841.5869 453.5808,-846 536.4087,-876.0786 564.5591,-854.0919 649.0858,-879 659.8448,-882.1704 671.0928,-886.4031 681.6188,-890.803"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="680.4791,-894.1229 691.0479,-894.865 683.2487,-887.6941 680.4791,-894.1229"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close -->
+<g id="node10" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close</title>
+<g id="a_node10"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close | defined in multi.go:71&#10;at multi.go:76: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:98: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:92: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:72: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:81: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:88: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:86: calling [(*github.com/go&#45;i2p/logger.Entry).Warn]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M109.4244,-1016C109.4244,-1016 77.6514,-1016 77.6514,-1016 71.6514,-1016 65.6514,-1010 65.6514,-1004 65.6514,-1004 65.6514,-992 65.6514,-992 65.6514,-986 71.6514,-980 77.6514,-980 77.6514,-980 109.4244,-980 109.4244,-980 115.4244,-980 121.4244,-986 121.4244,-992 121.4244,-992 121.4244,-1004 121.4244,-1004 121.4244,-1010 115.4244,-1016 109.4244,-1016"/>
+<text text-anchor="middle" x="93.5379" y="-993.8" font-family="Verdana" font-size="14.00" fill="#000000">Close</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge2" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge2"><a xlink:title="at multi.go:76: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:98: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:92: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M121.6139,-993.0355C136.374,-988.9038 153.3711,-981.4266 163.0758,-968 216.2646,-894.4123 189.4054,-651.2811 199.0758,-561 213.1022,-430.0517 149.9346,-366.6187 236.0758,-267 257.8697,-241.7962 275.0085,-247 308.3283,-247 308.3283,-247 308.3283,-247 532.8333,-247 585.2601,-247 612.0933,-229.8499 649.0858,-267 702.1882,-320.3286 634.4017,-372.0172 677.0858,-434 680.2588,-438.6077 684.3898,-442.6114 688.9285,-446.0599"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.1487,-449.0791 697.4198,-451.6781 691.0112,-443.2412 687.1487,-449.0791"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Entry).Warn -->
+<g id="node18" class="node">
+<title>(*github.com/go&#45;i2p/logger.Entry).Warn</title>
+<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/logger.Entry).Warn | defined in log.go:112">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M745.9615,-543C745.9615,-543 710.4289,-543 710.4289,-543 704.4289,-543 698.4289,-537 698.4289,-531 698.4289,-531 698.4289,-519 698.4289,-519 698.4289,-513 704.4289,-507 710.4289,-507 710.4289,-507 745.9615,-507 745.9615,-507 751.9615,-507 757.9615,-513 757.9615,-519 757.9615,-519 757.9615,-531 757.9615,-531 757.9615,-537 751.9615,-543 745.9615,-543"/>
+<text text-anchor="middle" x="728.1952" y="-529.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="728.1952" y="-512.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Warn -->
+<g id="edge23" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Warn</title>
+<g id="a_edge23"><a xlink:title="at multi.go:86: calling [(*github.com/go&#45;i2p/logger.Entry).Warn]">
+<path fill="none" stroke="#8b4513" d="M121.5765,-992.6438C136.1362,-988.4034 152.9526,-980.9474 163.0758,-968 285.7149,-811.1474 84.3797,-654.9626 236.0758,-526 270.0886,-497.0844 576.5943,-514.7178 687.9746,-522.1657"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.915,-525.6696 698.1285,-522.8528 688.3877,-518.6856 687.915,-525.6696"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge14" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge14"><a xlink:title="at multi.go:72: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:81: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:88: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M121.6834,-997.5709C162.7221,-996.9833 241.3898,-996 308.3283,-996 308.3283,-996 308.3283,-996 532.8333,-996 593.901,-996 657.7697,-961.2207 695.2239,-936.689"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="697.3447,-939.4812 703.7076,-931.0098 693.4507,-933.6643 697.3447,-939.4812"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name -->
+<g id="node11" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name</title>
+<g id="a_node11"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name | defined in multi.go:103&#10;at multi.go:107: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:117: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:104: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:113: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M110.4659,-833C110.4659,-833 76.6099,-833 76.6099,-833 70.6099,-833 64.6099,-827 64.6099,-821 64.6099,-821 64.6099,-809 64.6099,-809 64.6099,-803 70.6099,-797 76.6099,-797 76.6099,-797 110.4659,-797 110.4659,-797 116.4659,-797 122.4659,-803 122.4659,-809 122.4659,-809 122.4659,-821 122.4659,-821 122.4659,-827 116.4659,-833 110.4659,-833"/>
+<text text-anchor="middle" x="93.5379" y="-810.8" font-family="Verdana" font-size="14.00" fill="#000000">Name</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge6" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge6"><a xlink:title="at multi.go:107: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:117: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M122.4528,-809.932C137.0854,-805.7888 153.6935,-798.3335 163.0758,-785 236.369,-680.8399 114.4936,-308.2213 199.0758,-213 231.8584,-176.0939 258.9647,-193 308.3283,-193 308.3283,-193 308.3283,-193 532.8333,-193 585.2601,-193 612.8455,-175.1158 649.0858,-213 717.5252,-284.5438 622.5778,-351.3481 677.0858,-434 680.2012,-438.724 684.3371,-442.803 688.9112,-446.2959"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.2186,-449.3725 697.4919,-451.9631 691.0764,-443.5314 687.2186,-449.3725"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge18" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge18"><a xlink:title="at multi.go:104: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:113: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M122.3842,-824.1493C135.6352,-829.2439 151.0411,-836.4995 163.0758,-846 183.7285,-862.3037 176.6315,-879.2668 199.0758,-893 241.1824,-918.7642 258.9647,-913 308.3283,-913 308.3283,-913 308.3283,-913 532.8333,-913 580.7808,-913 635.3476,-913 674.602,-913"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="674.7431,-916.5001 684.743,-913 674.743,-909.5001 674.7431,-916.5001"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine -->
+<g id="node12" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine</title>
+<g id="a_node12"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine | defined in multi.go:239&#10;at multi.go:242: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1]">
+<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M368.3341,-853C368.3341,-853 248.3225,-853 248.3225,-853 242.3225,-853 236.3225,-847 236.3225,-841 236.3225,-841 236.3225,-829 236.3225,-829 236.3225,-823 242.3225,-817 248.3225,-817 248.3225,-817 368.3341,-817 368.3341,-817 374.3341,-817 380.3341,-823 380.3341,-829 380.3341,-829 380.3341,-841 380.3341,-841 380.3341,-847 374.3341,-853 368.3341,-853"/>
+<text text-anchor="middle" x="308.3283" y="-830.8" font-family="Verdana" font-size="14.00" fill="#000000">startAcceptGoroutine</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 -->
+<g id="node13" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1</title>
+<g id="a_node13"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 | defined in multi.go:242">
+<polygon fill="#add8e6" stroke="#000000" stroke-dasharray="1,5" points="611.8391,-833 453.8275,-833 453.8275,-797 611.8391,-797 611.8391,-833"/>
+<text text-anchor="middle" x="532.8333" y="-810.8" font-family="Verdana" font-size="14.00" fill="#000000">startAcceptGoroutine$1</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 -->
+<g id="edge7" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1</title>
+<g id="a_edge7"><a xlink:title="at multi.go:242: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1]">
+<path fill="none" stroke="#000000" d="M380.5989,-828.5618C396.5467,-827.1411 413.733,-825.61 430.6143,-824.1062"/>
+<polygon fill="#000000" stroke="#000000" points="444.0559,-826.4226 453.7059,-822.0491 443.4348,-819.4502 444.0559,-826.4226"/>
+<polyline fill="none" stroke="#000000" points="443.7454,-822.9364 438.7651,-823.3801 "/>
+<ellipse fill="none" stroke="#000000" cx="434.7809" cy="-823.7351" rx="4" ry="4"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout -->
+<g id="node14" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout</title>
+<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout | defined in multi.go:224&#10;at multi.go:236: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult]&#10;at multi.go:230: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:235: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine]&#10;at multi.go:225: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M151.1137,-1077C151.1137,-1077 35.9621,-1077 35.9621,-1077 29.9621,-1077 23.9621,-1071 23.9621,-1065 23.9621,-1065 23.9621,-1053 23.9621,-1053 23.9621,-1047 29.9621,-1041 35.9621,-1041 35.9621,-1041 151.1137,-1041 151.1137,-1041 157.1137,-1041 163.1137,-1047 163.1137,-1053 163.1137,-1053 163.1137,-1065 163.1137,-1065 163.1137,-1071 157.1137,-1077 151.1137,-1077"/>
+<text text-anchor="middle" x="93.5379" y="-1054.8" font-family="Verdana" font-size="14.00" fill="#000000">AcceptWithTimeout</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult -->
+<g id="edge3" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult</title>
+<g id="a_edge3"><a xlink:title="at multi.go:236: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult]">
+<path fill="none" stroke="#000000" d="M148.5796,-1040.7933C153.9337,-1037.4674 158.9123,-1033.5665 163.0758,-1029 233.6233,-951.6243 171.1006,-887.1107 236.0758,-805 242.2958,-797.1396 250.3348,-790.343 258.7807,-784.6017"/>
+<polygon fill="#000000" stroke="#000000" points="260.7261,-787.5127 267.3099,-779.2119 256.9866,-781.5952 260.7261,-787.5127"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine -->
+<g id="edge16" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine</title>
+<g id="a_edge16"><a xlink:title="at multi.go:235: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine]">
+<path fill="none" stroke="#000000" d="M144.324,-1040.8402C150.9491,-1037.416 157.3973,-1033.4776 163.0758,-1029 223.3061,-981.507 271.4127,-903.2772 294.1197,-862.1701"/>
+<polygon fill="#000000" stroke="#000000" points="297.2559,-863.7292 298.9574,-853.2719 291.106,-860.3857 297.2559,-863.7292"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge15" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge15"><a xlink:title="at multi.go:230: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M150.6046,-1040.9696C155.3745,-1037.627 159.6663,-1033.6737 163.0758,-1029 187.7484,-995.1796 205.4645,-307.557 236.0758,-279 265.499,-251.5514 376.8421,-274 417.0808,-274 417.0808,-274 417.0808,-274 532.8333,-274 628.5786,-274 602.8752,-373.5025 677.0858,-434 680.7791,-437.0108 684.8088,-439.9141 688.9323,-442.6502"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.123,-445.647 697.4504,-448.0126 690.8523,-439.7231 687.123,-445.647"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge31" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge31"><a xlink:title="at multi.go:225: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M163.5474,-1050.1582C205.4729,-1045.6061 259.8685,-1041 308.3283,-1041 308.3283,-1041 308.3283,-1041 532.8333,-1041 606.532,-1041 674.0574,-976.4795 707.0262,-939.0546"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="710.03,-940.93 713.9013,-931.0678 704.7248,-936.3633 710.03,-940.93"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity -->
+<g id="node15" class="node">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity</title>
+<g id="a_node15"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity | defined in multi.go:37&#10;at multi.go:53: calling [(*github.com/go&#45;i2p/logger.Entry).Error]&#10;at multi.go:38: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at multi.go:44: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:66: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:61: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:63: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:48: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:57: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M124.4738,-772C124.4738,-772 62.602,-772 62.602,-772 56.602,-772 50.602,-766 50.602,-760 50.602,-760 50.602,-748 50.602,-748 50.602,-742 56.602,-736 62.602,-736 62.602,-736 124.4738,-736 124.4738,-736 130.4738,-736 136.4738,-742 136.4738,-748 136.4738,-748 136.4738,-760 136.4738,-760 136.4738,-766 130.4738,-772 124.4738,-772"/>
+<text text-anchor="middle" x="93.5379" y="-749.8" font-family="Verdana" font-size="14.00" fill="#000000">SetIdentity</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
+<g id="edge17" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
+<g id="a_edge17"><a xlink:title="at multi.go:38: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M136.4375,-748.7246C146.5684,-745.4551 156.3629,-740.2504 163.0758,-732 212.8412,-670.8368 140.5594,-431.8522 199.0758,-379 216.6346,-363.1409 242.6124,-366.4946 264.8315,-374.2364"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="263.8191,-377.5967 274.4092,-377.9136 266.3281,-371.0618 263.8191,-377.5967"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge20" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge20"><a xlink:title="at multi.go:44: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:66: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:61: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M136.277,-749.0015C146.5358,-745.7392 156.4335,-740.4688 163.0758,-732 238.1189,-636.3219 118.1872,-276.7899 199.0758,-186 231.9135,-149.1428 258.9647,-166 308.3283,-166 308.3283,-166 308.3283,-166 532.8333,-166 585.2601,-166 613.1039,-147.8703 649.0858,-186 687.1503,-226.3366 646.8674,-387.4941 677.0858,-434 680.1691,-438.7451 684.2866,-442.836 688.8516,-446.3349"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.154,-449.4084 697.4253,-452.0067 691.0162,-443.5702 687.154,-449.4084"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/logger.Entry).Error -->
+<g id="node19" class="node">
+<title>(*github.com/go&#45;i2p/logger.Entry).Error</title>
+<g id="a_node19"><a xlink:title="(*github.com/go&#45;i2p/logger.Entry).Error | defined in log.go:124">
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M745.9615,-421C745.9615,-421 710.4289,-421 710.4289,-421 704.4289,-421 698.4289,-415 698.4289,-409 698.4289,-409 698.4289,-397 698.4289,-397 698.4289,-391 704.4289,-385 710.4289,-385 710.4289,-385 745.9615,-385 745.9615,-385 751.9615,-385 757.9615,-391 757.9615,-397 757.9615,-397 757.9615,-409 757.9615,-409 757.9615,-415 751.9615,-421 745.9615,-421"/>
+<text text-anchor="middle" x="728.1952" y="-407.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
+<text text-anchor="middle" x="728.1952" y="-390.4" font-family="Verdana" font-size="14.00" fill="#000000">Error</text>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Error -->
+<g id="edge11" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Error</title>
+<g id="a_edge11"><a xlink:title="at multi.go:53: calling [(*github.com/go&#45;i2p/logger.Entry).Error]">
+<path fill="none" stroke="#8b4513" d="M136.281,-749.0046C146.5399,-745.7424 156.4365,-740.4712 163.0758,-732 238.9055,-635.2479 136.9056,-286.0471 199.0758,-180 225.3055,-135.2585 256.465,-139 308.3283,-139 308.3283,-139 308.3283,-139 532.8333,-139 587.6202,-139 616.2585,-136.1368 649.0858,-180 694.546,-240.7431 715.5875,-329.9109 723.7824,-374.8721"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="720.3468,-375.545 725.5115,-384.7958 727.2429,-374.3433 720.3468,-375.545"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
+<g id="edge25" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
+<g id="a_edge25"><a xlink:title="at multi.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:63: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:48: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:57: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M136.275,-769.6681C145.5185,-773.9643 154.9488,-779.0953 163.0758,-785 202.2828,-813.4861 194.8534,-840.5176 236.0758,-866 264.4176,-883.52 275.0085,-886 308.3283,-886 308.3283,-886 308.3283,-886 532.8333,-886 581.3395,-886 635.9878,-894.2685 675.1257,-901.6541"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="674.4973,-905.0973 684.9795,-903.5567 675.8244,-898.2243 674.4973,-905.0973"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession -->
-<g id="node7" class="node">
+<g id="node16" class="node">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession</title>
-<g id="a_node7"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession | defined in multi.go:124&#10;at multi.go:153: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]&#10;at multi.go:171: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]&#10;at multi.go:131: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:139: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:163: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:169: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:170: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:152: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:182: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:187: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at multi.go:126: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:135: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:144: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:159: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:176: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:172: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]&#10;at multi.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M125.0267,-772C125.0267,-772 62.0491,-772 62.0491,-772 56.0491,-772 50.0491,-766 50.0491,-760 50.0491,-760 50.0491,-748 50.0491,-748 50.0491,-742 56.0491,-736 62.0491,-736 62.0491,-736 125.0267,-736 125.0267,-736 131.0267,-736 137.0267,-742 137.0267,-748 137.0267,-748 137.0267,-760 137.0267,-760 137.0267,-766 131.0267,-772 125.0267,-772"/>
-<text text-anchor="middle" x="93.5379" y="-749.8" font-family="Verdana" font-size="14.00" fill="#000000">GetSession</text>
+<g id="a_node16"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession | defined in multi.go:124&#10;at multi.go:131: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:139: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:163: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:169: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:170: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:152: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:182: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:171: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]&#10;at multi.go:187: calling [(*github.com/go&#45;i2p/logger.Entry).Error]&#10;at multi.go:126: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:135: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:144: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:159: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:176: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:153: calling [(*github.com/go&#45;i2p/logger.Entry).Warn]&#10;at multi.go:172: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]&#10;at multi.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M125.0267,-894C125.0267,-894 62.0491,-894 62.0491,-894 56.0491,-894 50.0491,-888 50.0491,-882 50.0491,-882 50.0491,-870 50.0491,-870 50.0491,-864 56.0491,-858 62.0491,-858 62.0491,-858 125.0267,-858 125.0267,-858 131.0267,-858 137.0267,-864 137.0267,-870 137.0267,-870 137.0267,-882 137.0267,-882 137.0267,-888 131.0267,-894 125.0267,-894"/>
+<text text-anchor="middle" x="93.5379" y="-871.8" font-family="Verdana" font-size="14.00" fill="#000000">GetSession</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge30" class="edge">
+<g id="edge34" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge30"><a xlink:title="at multi.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M137.2168,-747.2002C146.7346,-743.9378 156.0473,-739.1179 163.0758,-732 201.9,-692.6818 154.7061,-645.9328 199.0758,-613 215.012,-601.1715 218.6616,-628.4805 236.0758,-638 242.1613,-641.3266 248.6937,-644.5198 255.2527,-647.5003"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="254.2688,-650.8907 264.8323,-651.7057 257.0827,-644.4812 254.2688,-650.8907"/>
+<g id="a_edge34"><a xlink:title="at multi.go:125: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
+<path fill="none" stroke="#8b4513" d="M137.1683,-865.5618C147.1653,-861.1358 156.7122,-854.8655 163.0758,-846 220.2829,-766.3015 130.0406,-475.7039 199.0758,-406 213.3508,-391.5867 234.6582,-387.4355 254.6757,-387.5023"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="254.5495,-391 264.6709,-387.8682 254.8057,-384.0047 254.5495,-391"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses -->
-<g id="edge10" class="edge">
+<g id="edge8" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses</title>
-<g id="a_edge10"><a xlink:title="at multi.go:169: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:170: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:152: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:182: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
-<path fill="none" stroke="#8b4513" d="M137.296,-747.2778C146.811,-744.0127 156.1026,-739.1721 163.0758,-732 203.6754,-690.2427 152.5793,-641.0724 199.0758,-606 210.2866,-597.5437 224.1499,-594.0619 238.1941,-593.3847"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="238.4269,-596.8841 248.4171,-593.3562 238.4074,-589.8842 238.4269,-596.8841"/>
+<g id="a_edge8"><a xlink:title="at multi.go:169: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:170: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:152: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]&#10;at multi.go:182: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).RouterAddresses]">
+<path fill="none" stroke="#8b4513" d="M137.1749,-865.5666C147.1719,-861.1405 156.717,-854.869 163.0758,-846 221.0136,-765.1902 155.4603,-489.3572 199.0758,-400 208.2274,-381.2507 225.5174,-367.4852 243.6876,-357.5793"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="245.3205,-360.6755 252.6464,-353.0216 242.1464,-354.4365 245.3205,-360.6755"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug -->
+<g id="edge4" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Debug</title>
+<g id="a_edge4"><a xlink:title="at multi.go:131: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:139: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]&#10;at multi.go:163: calling [(*github.com/go&#45;i2p/logger.Entry).Debug]">
+<path fill="none" stroke="#8b4513" d="M137.3042,-865.6583C147.2995,-861.231 156.8114,-854.9359 163.0758,-846 240.5147,-735.5359 109.6628,-341.017 199.0758,-240 231.7934,-203.0363 258.9647,-220 308.3283,-220 308.3283,-220 308.3283,-220 532.8333,-220 585.2601,-220 612.5189,-202.431 649.0858,-240 709.8477,-302.427 628.4969,-361.6933 677.0858,-434 680.2062,-438.6435 684.3068,-442.6679 688.8304,-446.1266"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.0419,-449.1403 697.3096,-451.7531 690.9123,-443.3076 687.0419,-449.1403"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Warn -->
+<g id="edge22" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Warn</title>
+<g id="a_edge22"><a xlink:title="at multi.go:153: calling [(*github.com/go&#45;i2p/logger.Entry).Warn]">
+<path fill="none" stroke="#8b4513" d="M137.3701,-865.2851C147.2386,-860.8706 156.6739,-854.675 163.0758,-846 207.1408,-786.2887 143.8452,-563.5655 199.0758,-514 270.4547,-449.9425 577.2936,-497.6769 688.0929,-517.4725"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="687.726,-520.9628 698.1889,-519.2963 688.9704,-514.0743 687.726,-520.9628"/>
+</a>
+</g>
+</g>
+<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Error -->
+<g id="edge12" class="edge">
+<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Entry).Error</title>
+<g id="a_edge12"><a xlink:title="at multi.go:187: calling [(*github.com/go&#45;i2p/logger.Entry).Error]">
+<path fill="none" stroke="#8b4513" d="M137.0994,-865.5121C147.0974,-861.0868 156.662,-854.8292 163.0758,-846 213.7086,-776.2996 138.5962,-521.3518 199.0758,-460 216.2526,-442.5755 567.372,-414.9537 687.9537,-405.9458"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="688.5132,-409.4139 698.2261,-405.1818 687.994,-402.4332 688.5132,-409.4139"/>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge20" class="edge">
+<g id="edge21" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge20"><a xlink:title="at multi.go:126: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:135: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:144: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:159: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:176: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M137.1177,-748.4528C146.9911,-745.1712 156.4918,-740.0287 163.0758,-732 256.0695,-618.601 99.1619,-511.3516 199.0758,-404 232.7069,-367.8654 258.9647,-384 308.3283,-384 308.3283,-384 308.3283,-384 532.8333,-384 541.5292,-384 634.0854,-437.1014 688.6209,-468.8349"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="686.9519,-471.9132 697.3544,-473.9232 690.4759,-465.8649 686.9519,-471.9132"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="node18" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_node18"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Warn | defined in log.go:36">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M745.9615,-449C745.9615,-449 710.4289,-449 710.4289,-449 704.4289,-449 698.4289,-443 698.4289,-437 698.4289,-437 698.4289,-425 698.4289,-425 698.4289,-419 704.4289,-413 710.4289,-413 710.4289,-413 745.9615,-413 745.9615,-413 751.9615,-413 757.9615,-419 757.9615,-425 757.9615,-425 757.9615,-437 757.9615,-437 757.9615,-443 751.9615,-449 745.9615,-449"/>
-<text text-anchor="middle" x="728.1952" y="-435.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="728.1952" y="-418.4" font-family="Verdana" font-size="14.00" fill="#000000">Warn</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="edge1" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_edge1"><a xlink:title="at multi.go:153: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
-<path fill="none" stroke="#8b4513" d="M137.1285,-748.4616C147.0017,-745.1799 156.4996,-740.0351 163.0758,-732 265.923,-606.336 81.7715,-424.5882 236.0758,-374 279.7557,-359.6797 609.5263,-326.5895 649.0858,-350 671.3392,-363.1691 659.0656,-382.4551 677.0858,-401 680.8949,-404.9201 685.3241,-408.5051 689.952,-411.7253"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="688.0933,-414.6911 698.4057,-417.1212 691.8596,-408.7906 688.0933,-414.6911"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="node19" class="node">
-<title>(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_node19"><a xlink:title="(*github.com/go&#45;i2p/logger.Logger).Error | defined in log.go:48">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M745.9615,-388C745.9615,-388 710.4289,-388 710.4289,-388 704.4289,-388 698.4289,-382 698.4289,-376 698.4289,-376 698.4289,-364 698.4289,-364 698.4289,-358 704.4289,-352 710.4289,-352 710.4289,-352 745.9615,-352 745.9615,-352 751.9615,-352 757.9615,-358 757.9615,-364 757.9615,-364 757.9615,-376 757.9615,-376 757.9615,-382 751.9615,-388 745.9615,-388"/>
-<text text-anchor="middle" x="728.1952" y="-374.2" font-family="Verdana" font-size="14.00" fill="#000000">logger</text>
-<text text-anchor="middle" x="728.1952" y="-357.4" font-family="Verdana" font-size="14.00" fill="#000000">Error</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge16" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge16"><a xlink:title="at multi.go:187: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="none" stroke="#8b4513" d="M137.2232,-748.5384C147.0945,-745.2552 156.5679,-740.0905 163.0758,-732 245.6033,-629.403 137.4573,-231.243 236.0758,-144 248.1303,-133.336 292.2338,-139 308.3283,-139 308.3283,-139 308.3283,-139 532.8333,-139 638.0935,-139 698.2749,-280.5646 719.4492,-342.0498"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="716.2434,-343.4996 722.7336,-351.8738 722.8822,-341.28 716.2434,-343.4996"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge9" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge9"><a xlink:title="at multi.go:131: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:139: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:163: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M137.3704,-770.1808C146.261,-774.3706 155.2696,-779.3284 163.0758,-785 202.2828,-813.4861 194.8534,-840.5176 236.0758,-866 264.4176,-883.52 275.0085,-886 308.3283,-886 308.3283,-886 308.3283,-886 532.8333,-886 586.5798,-886 647.867,-896.1515 687.2397,-904.0053"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="686.7512,-907.4776 697.2489,-906.0468 688.1502,-900.6188 686.7512,-907.4776"/>
+<g id="a_edge21"><a xlink:title="at multi.go:126: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:135: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:144: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:159: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:176: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
+<path fill="none" stroke="#8b4513" d="M134.4507,-894.1146C158.427,-904.5204 186.4186,-916.2501 199.0758,-920 246.4059,-934.0223 258.9647,-940 308.3283,-940 308.3283,-940 308.3283,-940 532.8333,-940 581.3395,-940 635.9878,-931.7315 675.1257,-924.3459"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="675.8244,-927.7757 684.9795,-922.4433 674.4973,-920.9027 675.8244,-927.7757"/>
 </a>
 </g>
 </g>
@@ -263,18 +544,18 @@
 <g id="node21" class="node">
 <title>(github.com/go&#45;i2p/common/data.I2PString).Data</title>
 <g id="a_node21"><a xlink:title="(github.com/go&#45;i2p/common/data.I2PString).Data | defined in string.go:101">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M323.3283,-245C323.3283,-245 293.3283,-245 293.3283,-245 287.3283,-245 281.3283,-239 281.3283,-233 281.3283,-233 281.3283,-221 281.3283,-221 281.3283,-215 287.3283,-209 293.3283,-209 293.3283,-209 323.3283,-209 323.3283,-209 329.3283,-209 335.3283,-215 335.3283,-221 335.3283,-221 335.3283,-233 335.3283,-233 335.3283,-239 329.3283,-245 323.3283,-245"/>
-<text text-anchor="middle" x="308.3283" y="-231.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
-<text text-anchor="middle" x="308.3283" y="-214.4" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M323.3283,-600C323.3283,-600 293.3283,-600 293.3283,-600 287.3283,-600 281.3283,-594 281.3283,-588 281.3283,-588 281.3283,-576 281.3283,-576 281.3283,-570 287.3283,-564 293.3283,-564 293.3283,-564 323.3283,-564 323.3283,-564 329.3283,-564 335.3283,-570 335.3283,-576 335.3283,-576 335.3283,-588 335.3283,-588 335.3283,-594 329.3283,-600 323.3283,-600"/>
+<text text-anchor="middle" x="308.3283" y="-586.2" font-family="Verdana" font-size="14.00" fill="#000000">data</text>
+<text text-anchor="middle" x="308.3283" y="-569.4" font-family="Verdana" font-size="14.00" fill="#000000">Data</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data -->
-<g id="edge21" class="edge">
+<g id="edge26" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(github.com/go&#45;i2p/common/data.I2PString).Data</title>
-<g id="a_edge21"><a xlink:title="at multi.go:172: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
-<path fill="none" stroke="#8b4513" d="M137.2115,-748.529C147.0831,-745.246 156.5595,-740.0837 163.0758,-732 217.4203,-664.5838 178.2188,-428.0432 199.0758,-344 209.3938,-302.4236 205.4195,-284.9208 236.0758,-255 245.7235,-245.5838 258.8894,-239.249 271.3409,-235.0261"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="272.5359,-238.3212 281.0926,-232.0736 270.5074,-231.6216 272.5359,-238.3212"/>
+<g id="a_edge26"><a xlink:title="at multi.go:172: calling [(github.com/go&#45;i2p/common/data.I2PString).Data]">
+<path fill="none" stroke="#8b4513" d="M137.3433,-863.8905C146.8566,-859.5433 156.1355,-853.728 163.0758,-846 236.4354,-764.3135 161.1941,-690.2935 236.0758,-610 245.3428,-600.0633 258.544,-593.6089 271.1326,-589.4358"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="272.3901,-592.715 281.0103,-586.5552 270.4303,-585.9949 272.3901,-592.715"/>
 </a>
 </g>
 </g>
@@ -282,299 +563,18 @@
 <g id="node22" class="node">
 <title>(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
 <g id="a_node22"><a xlink:title="(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle | defined in router_address_methods.go:104">
-<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M350.0305,-331C350.0305,-331 266.6261,-331 266.6261,-331 260.6261,-331 254.6261,-325 254.6261,-319 254.6261,-319 254.6261,-307 254.6261,-307 254.6261,-301 260.6261,-295 266.6261,-295 266.6261,-295 350.0305,-295 350.0305,-295 356.0305,-295 362.0305,-301 362.0305,-307 362.0305,-307 362.0305,-319 362.0305,-319 362.0305,-325 356.0305,-331 350.0305,-331"/>
-<text text-anchor="middle" x="308.3283" y="-317.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
-<text text-anchor="middle" x="308.3283" y="-300.4" font-family="Verdana" font-size="14.00" fill="#000000">TransportStyle</text>
+<path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M350.0305,-686C350.0305,-686 266.6261,-686 266.6261,-686 260.6261,-686 254.6261,-680 254.6261,-674 254.6261,-674 254.6261,-662 254.6261,-662 254.6261,-656 260.6261,-650 266.6261,-650 266.6261,-650 350.0305,-650 350.0305,-650 356.0305,-650 362.0305,-656 362.0305,-662 362.0305,-662 362.0305,-674 362.0305,-674 362.0305,-680 356.0305,-686 350.0305,-686"/>
+<text text-anchor="middle" x="308.3283" y="-672.2" font-family="Verdana" font-size="14.00" fill="#000000">router_address</text>
+<text text-anchor="middle" x="308.3283" y="-655.4" font-family="Verdana" font-size="14.00" fill="#000000">TransportStyle</text>
 </a>
 </g>
 </g>
 <!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle -->
-<g id="edge2" class="edge">
+<g id="edge9" class="edge">
 <title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).GetSession&#45;&gt;(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle</title>
-<g id="a_edge2"><a xlink:title="at multi.go:171: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
-<path fill="none" stroke="#8b4513" d="M137.2034,-748.5225C147.0751,-745.2396 156.5536,-740.079 163.0758,-732 270.1944,-599.312 93.2982,-483.7594 199.0758,-350 210.2902,-335.819 227.1826,-327.0384 244.3534,-321.613"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="245.7653,-324.8527 254.4546,-318.7909 243.8816,-318.1109 245.7653,-324.8527"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout -->
-<g id="node8" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout</title>
-<g id="a_node8"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout | defined in multi.go:224&#10;at multi.go:230: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:235: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine]&#10;at multi.go:225: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:236: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M151.1137,-1077C151.1137,-1077 35.9621,-1077 35.9621,-1077 29.9621,-1077 23.9621,-1071 23.9621,-1065 23.9621,-1065 23.9621,-1053 23.9621,-1053 23.9621,-1047 29.9621,-1041 35.9621,-1041 35.9621,-1041 151.1137,-1041 151.1137,-1041 157.1137,-1041 163.1137,-1047 163.1137,-1053 163.1137,-1053 163.1137,-1065 163.1137,-1065 163.1137,-1071 157.1137,-1077 151.1137,-1077"/>
-<text text-anchor="middle" x="93.5379" y="-1054.8" font-family="Verdana" font-size="14.00" fill="#000000">AcceptWithTimeout</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine -->
-<g id="node9" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine</title>
-<g id="a_node9"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine | defined in multi.go:239&#10;at multi.go:242: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M368.3341,-779C368.3341,-779 248.3225,-779 248.3225,-779 242.3225,-779 236.3225,-773 236.3225,-767 236.3225,-767 236.3225,-755 236.3225,-755 236.3225,-749 242.3225,-743 248.3225,-743 248.3225,-743 368.3341,-743 368.3341,-743 374.3341,-743 380.3341,-749 380.3341,-755 380.3341,-755 380.3341,-767 380.3341,-767 380.3341,-773 374.3341,-779 368.3341,-779"/>
-<text text-anchor="middle" x="308.3283" y="-756.8" font-family="Verdana" font-size="14.00" fill="#000000">startAcceptGoroutine</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine -->
-<g id="edge18" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine</title>
-<g id="a_edge18"><a xlink:title="at multi.go:235: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine]">
-<path fill="none" stroke="#000000" d="M148.5796,-1040.7933C153.9337,-1037.4674 158.9123,-1033.5665 163.0758,-1029 233.6233,-951.6243 171.1006,-887.1107 236.0758,-805 242.2958,-797.1396 250.3348,-790.343 258.7807,-784.6017"/>
-<polygon fill="#000000" stroke="#000000" points="260.7261,-787.5127 267.3099,-779.2119 256.9866,-781.5952 260.7261,-787.5127"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult -->
-<g id="node12" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult</title>
-<g id="a_node12"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult | defined in multi.go:255&#10;at multi.go:260: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:258: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult]&#10;at multi.go:263: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M367.7919,-853C367.7919,-853 248.8647,-853 248.8647,-853 242.8647,-853 236.8647,-847 236.8647,-841 236.8647,-841 236.8647,-829 236.8647,-829 236.8647,-823 242.8647,-817 248.8647,-817 248.8647,-817 367.7919,-817 367.7919,-817 373.7919,-817 379.7919,-823 379.7919,-829 379.7919,-829 379.7919,-841 379.7919,-841 379.7919,-847 373.7919,-853 367.7919,-853"/>
-<text text-anchor="middle" x="308.3283" y="-830.8" font-family="Verdana" font-size="14.00" fill="#000000">waitForAcceptResult</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult -->
-<g id="edge33" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult</title>
-<g id="a_edge33"><a xlink:title="at multi.go:236: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult]">
-<path fill="none" stroke="#000000" d="M144.324,-1040.8402C150.9491,-1037.416 157.3973,-1033.4776 163.0758,-1029 223.3061,-981.507 271.4127,-903.2772 294.1197,-862.1701"/>
-<polygon fill="#000000" stroke="#000000" points="297.2559,-863.7292 298.9574,-853.2719 291.106,-860.3857 297.2559,-863.7292"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge22" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge22"><a xlink:title="at multi.go:225: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M150.0157,-1040.9992C154.9664,-1037.6467 159.4598,-1033.6831 163.0758,-1029 195.9115,-986.4748 195.8054,-586.5651 236.0758,-551 266.2362,-524.3636 376.8421,-546 417.0808,-546 417.0808,-546 417.0808,-546 532.8333,-546 583.6014,-546 639.1957,-528.8491 678.0519,-513.8787"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="679.5375,-517.0553 687.5569,-510.1314 676.97,-510.5431 679.5375,-517.0553"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge17" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).AcceptWithTimeout&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge17"><a xlink:title="at multi.go:230: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M163.5607,-1050.6494C205.4909,-1046.3502 259.8867,-1042 308.3283,-1042 308.3283,-1042 308.3283,-1042 532.8333,-1042 606.7054,-1042 674.158,-976.9755 707.07,-939.2581"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="710.1081,-941.0894 713.9326,-931.2089 704.7813,-936.5479 710.1081,-941.0894"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 -->
-<g id="node10" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1</title>
-<g id="a_node10"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 | defined in multi.go:242">
-<polygon fill="#add8e6" stroke="#000000" stroke-dasharray="1,5" points="611.8391,-772 453.8275,-772 453.8275,-736 611.8391,-736 611.8391,-772"/>
-<text text-anchor="middle" x="532.8333" y="-749.8" font-family="Verdana" font-size="14.00" fill="#000000">startAcceptGoroutine$1</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1 -->
-<g id="edge5" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1</title>
-<g id="a_edge5"><a xlink:title="at multi.go:242: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).startAcceptGoroutine$1]">
-<path fill="none" stroke="#000000" d="M380.5989,-758.7466C396.5467,-758.2494 413.733,-757.7135 430.6143,-757.1872"/>
-<polygon fill="#000000" stroke="#000000" points="443.8199,-760.2772 453.7059,-756.4672 443.6017,-753.2806 443.8199,-760.2772"/>
-<polyline fill="none" stroke="#000000" points="443.7108,-756.7789 438.7132,-756.9347 "/>
-<ellipse fill="none" stroke="#000000" cx="434.7151" cy="-757.0594" rx="4" ry="4"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult -->
-<g id="node11" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult</title>
-<g id="a_node11"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult | defined in multi.go:268&#10;at multi.go:270: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:276: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:274: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:279: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M589.0714,-833C589.0714,-833 476.5952,-833 476.5952,-833 470.5952,-833 464.5952,-827 464.5952,-821 464.5952,-821 464.5952,-809 464.5952,-809 464.5952,-803 470.5952,-797 476.5952,-797 476.5952,-797 589.0714,-797 589.0714,-797 595.0714,-797 601.0714,-803 601.0714,-809 601.0714,-809 601.0714,-821 601.0714,-821 601.0714,-827 595.0714,-833 589.0714,-833"/>
-<text text-anchor="middle" x="532.8333" y="-810.8" font-family="Verdana" font-size="14.00" fill="#000000">handleAcceptResult</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge6" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge6"><a xlink:title="at multi.go:270: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:276: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M601.1468,-798.4152C608.0855,-794.7904 614.5887,-790.3758 620.0858,-785 696.0167,-710.7445 719.0435,-578.5869 725.6714,-520.6058"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="729.1843,-520.6683 726.7583,-510.355 722.2234,-519.9301 729.1843,-520.6683"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge26" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge26"><a xlink:title="at multi.go:274: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:279: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M601.1443,-832.37C617.3066,-837.6585 634.1697,-844.1871 649.0858,-852 667.7521,-861.7772 686.5197,-876.0142 701.0878,-888.2753"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="698.8585,-890.9744 708.7218,-894.8429 703.4237,-885.6679 698.8585,-890.9744"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult -->
-<g id="edge31" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult</title>
-<g id="a_edge31"><a xlink:title="at multi.go:258: calling [(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).handleAcceptResult]">
-<path fill="none" stroke="#000000" d="M379.9803,-828.6169C403.6725,-826.5063 430.1535,-824.1472 454.3313,-821.9933"/>
-<polygon fill="#000000" stroke="#000000" points="454.8874,-825.4578 464.5373,-821.0841 454.2662,-818.4854 454.8874,-825.4578"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge3" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge3"><a xlink:title="at multi.go:260: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M349.3316,-816.8294C360.611,-810.2918 372.0683,-802.0065 380.5808,-792 437.855,-724.6739 387.8446,-666.0922 453.5808,-607 520.6205,-546.736 568.4388,-593.2757 649.0858,-553 668.0685,-543.5199 686.9754,-529.169 701.5434,-516.768"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="703.9273,-519.3331 709.1633,-510.1225 699.3263,-514.0575 703.9273,-519.3331"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge32" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).waitForAcceptResult&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge32"><a xlink:title="at multi.go:263: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M379.8124,-841.878C464.3794,-850.4269 599.894,-865.5358 649.0858,-879 662.0558,-882.55 675.6785,-887.8031 687.8938,-893.1241"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="686.7933,-896.4668 697.3491,-897.3748 689.6635,-890.0822 686.7933,-896.4668"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close -->
-<g id="node13" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close</title>
-<g id="a_node13"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close | defined in multi.go:71&#10;at multi.go:76: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:98: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:92: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:72: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:81: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:88: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:86: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M109.4244,-894C109.4244,-894 77.6514,-894 77.6514,-894 71.6514,-894 65.6514,-888 65.6514,-882 65.6514,-882 65.6514,-870 65.6514,-870 65.6514,-864 71.6514,-858 77.6514,-858 77.6514,-858 109.4244,-858 109.4244,-858 115.4244,-858 121.4244,-864 121.4244,-870 121.4244,-870 121.4244,-882 121.4244,-882 121.4244,-888 115.4244,-894 109.4244,-894"/>
-<text text-anchor="middle" x="93.5379" y="-871.8" font-family="Verdana" font-size="14.00" fill="#000000">Close</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge23" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge23"><a xlink:title="at multi.go:72: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:95: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:81: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:88: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M121.5917,-871.0194C136.3448,-866.8826 153.3423,-859.4057 163.0758,-846 213.952,-775.9294 140.6153,-521.8799 199.0758,-458 232.4022,-421.5841 258.9647,-438 308.3283,-438 308.3283,-438 308.3283,-438 417.0808,-438 508.8663,-438 613.6695,-461.0981 675.2022,-477.081"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="674.5051,-480.5167 685.0667,-479.679 676.2879,-473.7476 674.5051,-480.5167"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn -->
-<g id="edge24" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Warn</title>
-<g id="a_edge24"><a xlink:title="at multi.go:86: calling [(*github.com/go&#45;i2p/logger.Logger).Warn]">
-<path fill="none" stroke="#8b4513" d="M121.5989,-871.0247C136.3543,-866.8895 153.3517,-859.4125 163.0758,-846 214.6822,-774.8189 153.6284,-527.2629 199.0758,-452 225.8848,-407.6032 256.465,-411 308.3283,-411 308.3283,-411 308.3283,-411 532.8333,-411 586.8214,-411 648.7675,-418.6522 688.1705,-424.4899"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="687.7606,-427.9677 698.172,-426.0047 688.8089,-421.0466 687.7606,-427.9677"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge7" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Close&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge7"><a xlink:title="at multi.go:76: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:98: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:92: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M121.4844,-888.4488C147.362,-899.8288 184.0394,-915.5452 199.0758,-920 246.4059,-934.0223 258.9647,-940 308.3283,-940 308.3283,-940 308.3283,-940 532.8333,-940 586.5798,-940 647.867,-929.8485 687.2397,-921.9947"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="688.1502,-925.3812 697.2489,-919.9532 686.7512,-918.5224 688.1502,-925.3812"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible -->
-<g id="node14" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible</title>
-<g id="a_node14"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible | defined in multi.go:194&#10;at multi.go:200: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:214: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:207: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:196: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:211: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:203: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:195: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M126.3667,-1016C126.3667,-1016 60.7091,-1016 60.7091,-1016 54.7091,-1016 48.7091,-1010 48.7091,-1004 48.7091,-1004 48.7091,-992 48.7091,-992 48.7091,-986 54.7091,-980 60.7091,-980 60.7091,-980 126.3667,-980 126.3667,-980 132.3667,-980 138.3667,-986 138.3667,-992 138.3667,-992 138.3667,-1004 138.3667,-1004 138.3667,-1010 132.3667,-1016 126.3667,-1016"/>
-<text text-anchor="middle" x="93.5379" y="-993.8" font-family="Verdana" font-size="14.00" fill="#000000">Compatible</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge29" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge29"><a xlink:title="at multi.go:195: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M138.2758,-985.7429C147.5256,-981.4245 156.4547,-975.6588 163.0758,-968 244.9343,-873.3113 152.4525,-789.1338 236.0758,-696 241.3842,-690.0879 248.089,-685.4134 255.2634,-681.7201"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="256.8505,-684.844 264.5323,-677.5474 253.977,-678.461 256.8505,-684.844"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge27" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge27"><a xlink:title="at multi.go:196: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:211: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:203: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M138.3854,-986.7444C147.8614,-982.3668 156.8622,-976.3235 163.0758,-968 203.3747,-914.0174 185.6782,-733.0199 199.0758,-667 210.853,-608.965 190.773,-577.1368 236.0758,-539 297.9936,-486.8764 336.1445,-519 417.0808,-519 417.0808,-519 417.0808,-519 532.8333,-519 581.3395,-519 635.9878,-510.7315 675.1257,-503.3459"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="675.8244,-506.7757 684.9795,-501.4433 674.4973,-499.9027 675.8244,-506.7757"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge25" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Compatible&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge25"><a xlink:title="at multi.go:200: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:214: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:207: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M138.3777,-997.3396C181.8294,-996.757 249.594,-996 308.3283,-996 308.3283,-996 308.3283,-996 532.8333,-996 593.901,-996 657.7697,-961.2207 695.2239,-936.689"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="697.3447,-939.4812 703.7076,-931.0098 693.4507,-933.6643 697.3447,-939.4812"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name -->
-<g id="node15" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name</title>
-<g id="a_node15"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name | defined in multi.go:103&#10;at multi.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:104: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:113: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M110.4659,-833C110.4659,-833 76.6099,-833 76.6099,-833 70.6099,-833 64.6099,-827 64.6099,-821 64.6099,-821 64.6099,-809 64.6099,-809 64.6099,-803 70.6099,-797 76.6099,-797 76.6099,-797 110.4659,-797 110.4659,-797 116.4659,-797 122.4659,-803 122.4659,-809 122.4659,-809 122.4659,-821 122.4659,-821 122.4659,-827 116.4659,-833 110.4659,-833"/>
-<text text-anchor="middle" x="93.5379" y="-810.8" font-family="Verdana" font-size="14.00" fill="#000000">Name</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge11" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge11"><a xlink:title="at multi.go:104: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:113: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M122.287,-809.8134C136.8711,-805.6354 153.4857,-798.1848 163.0758,-785 243.9003,-673.88 131.5739,-260.2166 236.0758,-171 284.9209,-129.2994 320.3647,-148.6662 380.5808,-171 512.2221,-219.825 526.9171,-271.9624 620.0858,-377 650.2689,-411.0282 643.9735,-430.8148 677.0858,-462 679.2626,-464.0501 681.6038,-466.0213 684.0441,-467.9052"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="682.4389,-471.0562 692.6277,-473.9615 686.4745,-465.3365 682.4389,-471.0562"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge8" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).Name&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge8"><a xlink:title="at multi.go:107: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:117: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M122.3842,-824.1493C135.6352,-829.2439 151.0411,-836.4995 163.0758,-846 183.7285,-862.3037 176.6315,-879.2668 199.0758,-893 241.1824,-918.7642 258.9647,-913 308.3283,-913 308.3283,-913 308.3283,-913 532.8333,-913 586.2294,-913 647.8347,-913 687.3588,-913"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="687.4041,-916.5001 697.404,-913 687.404,-909.5001 687.4041,-916.5001"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity -->
-<g id="node16" class="node">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity</title>
-<g id="a_node16"><a xlink:title="(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity | defined in multi.go:37&#10;at multi.go:38: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]&#10;at multi.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]&#10;at multi.go:44: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:66: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:61: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:63: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:48: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:57: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="#add8e6" stroke="#000000" stroke-width="1.5" d="M124.4738,-955C124.4738,-955 62.602,-955 62.602,-955 56.602,-955 50.602,-949 50.602,-943 50.602,-943 50.602,-931 50.602,-931 50.602,-925 56.602,-919 62.602,-919 62.602,-919 124.4738,-919 124.4738,-919 130.4738,-919 136.4738,-925 136.4738,-931 136.4738,-931 136.4738,-943 136.4738,-943 136.4738,-949 130.4738,-955 124.4738,-955"/>
-<text text-anchor="middle" x="93.5379" y="-932.8" font-family="Verdana" font-size="14.00" fill="#000000">SetIdentity</text>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash -->
-<g id="edge12" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash</title>
-<g id="a_edge12"><a xlink:title="at multi.go:38: calling [(*github.com/go&#45;i2p/common/router_info.RouterInfo).IdentHash]">
-<path fill="none" stroke="#8b4513" d="M136.2609,-926.31C146.3932,-921.8787 156.2325,-915.6688 163.0758,-907 220.665,-834.0486 137.4257,-770.5534 199.0758,-701 213.1298,-685.1444 234.5053,-676.7769 254.6336,-672.4085"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="255.5056,-675.806 264.6876,-670.5199 254.2133,-668.9263 255.5056,-675.806"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields -->
-<g id="edge34" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).WithFields</title>
-<g id="a_edge34"><a xlink:title="at multi.go:39: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:63: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:48: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]&#10;at multi.go:57: calling [(*github.com/go&#45;i2p/logger.Logger).WithFields]">
-<path fill="none" stroke="#8b4513" d="M136.2891,-926.3322C146.4212,-921.9007 156.2533,-915.6852 163.0758,-907 218.2171,-836.8036 175.2218,-577.3061 236.0758,-512 258.7909,-487.6231 275.0085,-492 308.3283,-492 308.3283,-492 308.3283,-492 532.8333,-492 580.7808,-492 635.3476,-492 674.602,-492"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="674.7431,-495.5001 684.743,-492 674.743,-488.5001 674.7431,-495.5001"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error -->
-<g id="edge13" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/go&#45;i2p/logger.Logger).Error</title>
-<g id="a_edge13"><a xlink:title="at multi.go:53: calling [(*github.com/go&#45;i2p/logger.Logger).Error]">
-<path fill="none" stroke="#8b4513" d="M136.4512,-926.4577C146.582,-922.0253 156.373,-915.7779 163.0758,-907 220.8343,-831.3601 170.5961,-554.064 236.0758,-485 259.0006,-460.8203 275.0085,-465 308.3283,-465 308.3283,-465 308.3283,-465 417.0808,-465 518.7246,-465 631.2242,-418.0436 689.075,-390.1561"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="690.7702,-393.2233 698.2173,-385.6873 687.6961,-386.9344 690.7702,-393.2233"/>
-</a>
-</g>
-</g>
-<!-- (*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug -->
-<g id="edge19" class="edge">
-<title>(*github.com/go&#45;i2p/go&#45;i2p/lib/transport.TransportMuxer).SetIdentity&#45;&gt;(*github.com/sirupsen/logrus.Logger).Debug</title>
-<g id="a_edge19"><a xlink:title="at multi.go:44: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:66: calling [(*github.com/sirupsen/logrus.Logger).Debug]&#10;at multi.go:61: calling [(*github.com/sirupsen/logrus.Logger).Debug]">
-<path fill="none" stroke="#8b4513" d="M136.4892,-946.5747C179.6736,-955.3544 248.2734,-967 308.3283,-967 308.3283,-967 308.3283,-967 532.8333,-967 585.2601,-967 598.8204,-961.8983 649.0858,-947 661.9785,-943.1787 675.5782,-937.845 687.7962,-932.5335"/>
-<polygon fill="#8b4513" stroke="#8b4513" points="689.5549,-935.5813 697.2587,-928.3078 686.7006,-929.1896 689.5549,-935.5813"/>
+<g id="a_edge9"><a xlink:title="at multi.go:171: calling [(github.com/go&#45;i2p/common/router_address.RouterAddress).TransportStyle]">
+<path fill="none" stroke="#8b4513" d="M137.2504,-862.7672C146.5479,-858.4942 155.7556,-852.9936 163.0758,-846 216.6847,-794.7831 181.5139,-746.2005 236.0758,-696 239.0535,-693.2603 242.329,-690.7778 245.791,-688.53"/>
+<polygon fill="#8b4513" stroke="#8b4513" points="247.7828,-691.4226 254.7179,-683.413 244.3016,-685.3496 247.7828,-691.4226"/>
 </a>
 </g>
 </g>

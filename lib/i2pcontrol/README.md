@@ -136,6 +136,15 @@ GetRate - Query bandwidth statistics:
                      "i2p.router.net.bw.inbound.15s":null,
                      "i2p.router.net.bw.outbound.15s":null}}'
 
+I2PControl - Manage server settings (password change):
+
+    curl -X POST http://localhost:7650/jsonrpc \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","id":5,"method":"I2PControl",
+           "params":{"Token":"abc123",
+                     "i2pcontrol.password":"new-secure-password"}}'
+    # Response: {"jsonrpc":"2.0","id":5,"result":{"i2pcontrol.password":null,"SettingsSaved":true}}
+
 # Supported Methods
 
 The following JSON-RPC methods are implemented:
@@ -144,11 +153,14 @@ The following JSON-RPC methods are implemented:
     - Echo: Connection test (returns input value)
     - GetRate: Bandwidth statistics (in/out rates)
     - RouterInfo: Router status (uptime, version, tunnels, peers)
+    - RouterManager: Control operations (shutdown)
+    - NetworkSetting: Configuration queries (read-only)
+    - I2PControl: Server management (password changes)
 
 Planned for future implementation:
 
-    - RouterManager: Control operations (shutdown, restart)
-    - NetworkSetting: Configuration queries and updates
+    - RouterManager: Restart, reseed operations
+    - NetworkSetting: Configuration updates (write operations)
 
 # Available Router Metrics
 
@@ -262,13 +274,16 @@ robustness. Current status:
     - ✅ Token authentication
     - ✅ HTTP/HTTPS transport
     - ✅ Echo, GetRate, RouterInfo methods
+    - ✅ RouterManager method (shutdown)
+    - ✅ NetworkSetting method (read-only)
+    - ✅ I2PControl method (password changes)
     - ✅ Thread-safe concurrent access
     - ✅ Graceful shutdown
-    - ✅ 87%+ test coverage
+    - ✅ 78%+ test coverage
     - ⚠️  No rate limiting
     - ⚠️  No audit logging
-    - 🚧 RouterManager method (planned)
-    - 🚧 NetworkSetting method (planned)
+    - 🚧 RouterManager: Restart/reseed (planned)
+    - 🚧 NetworkSetting: Write operations (planned)
 
 # References
 
@@ -359,6 +374,23 @@ Returns:
 
     - token: Base64-encoded authentication token
     - error: If password is invalid or token generation fails
+
+#### func (*AuthManager) ChangePassword
+
+```go
+func (am *AuthManager) ChangePassword(newPassword string) int
+```
+ChangePassword updates the authentication password and revokes all existing
+tokens. This forces all clients to re-authenticate with the new password.
+Thread-safe for concurrent access.
+
+Parameters:
+
+    - newPassword: The new password to set
+
+Returns:
+
+    - int: Number of tokens revoked (clients that must re-authenticate)
 
 #### func (*AuthManager) CleanupExpiredTokens
 
@@ -511,6 +543,51 @@ func (h *GetRateHandler) Handle(ctx context.Context, params json.RawMessage) (in
 ```
 Handle processes the GetRate request. Returns bandwidth statistics for requested
 fields.
+
+#### type I2PControlHandler
+
+```go
+type I2PControlHandler struct {
+}
+```
+
+I2PControlHandler implements the I2PControl RPC method. Manages I2PControl
+server settings (password, port, address).
+
+Request params:
+
+    {
+      "i2pcontrol.password": "new_password"
+    }
+
+Response:
+
+    {
+      "i2pcontrol.password": null,
+      "SettingsSaved": true
+    }
+
+Note: Only password changes are implemented initially. Port and address changes
+would require server restart and are deferred.
+
+#### func  NewI2PControlHandler
+
+```go
+func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }) *I2PControlHandler
+```
+NewI2PControlHandler creates a new I2PControl handler.
+
+Parameters:
+
+    - authManager: Authentication manager for password changes
+
+#### func (*I2PControlHandler) Handle
+
+```go
+func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
+```
+Handle processes the I2PControl request. Handles password changes and returns
+SettingsSaved status.
 
 #### type MethodRegistry
 

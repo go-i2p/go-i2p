@@ -53,30 +53,30 @@ const (
 
 ```go
 const (
-	// Session management
-	MessageTypeCreateSession      = 1 // Client -> Router: Create new session
-	MessageTypeSessionStatus      = 2 // Router -> Client: Session creation result
-	MessageTypeReconfigureSession = 3 // Client -> Router: Update session config
-	MessageTypeDestroySession     = 4 // Client -> Router: Terminate session
+	// Session management - PER I2CP SPEC v2.10.0
+	MessageTypeCreateSession      = 1  // Client -> Router: Create new session
+	MessageTypeSessionStatus      = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
+	MessageTypeReconfigureSession = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
+	MessageTypeDestroySession     = 3  // Client -> Router: Terminate session (SPEC: 3, was 4)
 
 	// LeaseSet management
-	MessageTypeCreateLeaseSet          = 5  // Client -> Router: Publish LeaseSet (deprecated)
-	MessageTypeRequestLeaseSet         = 6  // Router -> Client: Request LeaseSet update
+	MessageTypeCreateLeaseSet          = 4  // Client -> Router: Publish LeaseSet (SPEC: 4, was 5)
+	MessageTypeRequestLeaseSet         = 21 // Router -> Client: Request LeaseSet update (SPEC: 21, was 6)
 	MessageTypeRequestVariableLeaseSet = 37 // Router -> Client: Request LeaseSet (with lease data)
 	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage        = 7  // Client -> Router: Send message to destination
-	MessageTypeMessagePayload     = 8  // Router -> Client: Received message
+	MessageTypeSendMessage        = 5  // Client -> Router: Send message to destination (SPEC: 5, was 7)
+	MessageTypeMessagePayload     = 31 // Router -> Client: Received message (SPEC: 31, was 8)
 	MessageTypeMessageStatus      = 22 // Router -> Client: Message delivery status
 	MessageTypeDisconnect         = 30 // Client -> Router: Graceful disconnect
 	MessageTypeSendMessageExpires = 36 // Client -> Router: Send message with TTL
 
 	// Status and information
-	MessageTypeGetBandwidthLimits = 9  // Client -> Router: Query bandwidth
-	MessageTypeBandwidthLimits    = 10 // Router -> Client: Bandwidth limits response
-	MessageTypeGetDate            = 11 // Client -> Router: Query router time
-	MessageTypeSetDate            = 12 // Router -> Client: Current router time
+	MessageTypeGetBandwidthLimits = 8  // Client -> Router: Query bandwidth (SPEC: 8, was 9)
+	MessageTypeBandwidthLimits    = 23 // Router -> Client: Bandwidth limits response (SPEC: 23, was 10)
+	MessageTypeGetDate            = 32 // Client -> Router: Query router time (SPEC: 32, was 11)
+	MessageTypeSetDate            = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
 
 	// Naming service (modern types)
 	MessageTypeHostLookup = 38 // Client -> Router: Destination lookup by hash or hostname
@@ -86,8 +86,12 @@ const (
 	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
 
 	// Deprecated/legacy message types
-	MessageTypeHostLookupDeprecated = 13 // Deprecated in v2.10.0, use type 38
-	MessageTypeHostReplyDeprecated  = 14 // Deprecated in v2.10.0, use type 39
+	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v2.10.0, use type 38 (SPEC: 34, was 13)
+	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v2.10.0, use type 39 (SPEC: 35, was 14)
+
+	// Deprecated receive messages (unused in fast receive mode)
+	MessageTypeReceiveMessageBegin = 6 // Client -> Router: DEPRECATED, not supported
+	MessageTypeReceiveMessageEnd   = 7 // Client -> Router: DEPRECATED, not supported
 )
 ```
 Message type constants as defined in I2CP v2.10.0
