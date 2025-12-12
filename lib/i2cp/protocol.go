@@ -47,9 +47,16 @@ const (
 	MessageTypeGetDate            = 11 // Client -> Router: Query router time
 	MessageTypeSetDate            = 12 // Router -> Client: Current router time
 
+	// Naming service (modern types)
+	MessageTypeHostLookup = 38 // Client -> Router: Destination lookup by hash or hostname
+	MessageTypeHostReply  = 39 // Router -> Client: Destination lookup result
+
+	// Advanced features
+	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
+
 	// Deprecated/legacy message types
-	MessageTypeHostLookup = 13 // Deprecated in v2.10.0
-	MessageTypeHostReply  = 14 // Deprecated in v2.10.0
+	MessageTypeHostLookupDeprecated = 13 // Deprecated in v2.10.0, use type 38
+	MessageTypeHostReplyDeprecated  = 14 // Deprecated in v2.10.0, use type 39
 )
 
 // Reserved session IDs
@@ -433,8 +440,14 @@ func MessageTypeName(msgType uint8) string {
 	case MessageTypeSetDate:
 		return "SetDate"
 	case MessageTypeHostLookup:
-		return "HostLookup (deprecated)"
+		return "HostLookup"
 	case MessageTypeHostReply:
+		return "HostReply"
+	case MessageTypeBlindingInfo:
+		return "BlindingInfo"
+	case MessageTypeHostLookupDeprecated:
+		return "HostLookup (deprecated)"
+	case MessageTypeHostReplyDeprecated:
 		return "HostReply (deprecated)"
 	default:
 		return fmt.Sprintf("Unknown(%d)", msgType)

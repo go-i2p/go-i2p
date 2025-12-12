@@ -599,6 +599,12 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 	case MessageTypeDisconnect:
 		return s.handleDisconnect(msg, sessionPtr)
 
+	case MessageTypeHostLookup:
+		return s.handleHostLookup(msg)
+
+	case MessageTypeBlindingInfo:
+		return s.handleBlindingInfo(msg, sessionPtr)
+
 	default:
 		// i2psnark compatibility: Log unsupported message types with full context
 		log.WithFields(logger.Fields{
@@ -1237,6 +1243,100 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 
 	// Returning nil signals the connection should be closed gracefully
 	// No response message is sent - client expects connection to close
+	return nil, nil
+}
+
+// handleHostLookup handles a destination lookup request by hash or hostname.
+// This allows clients to query for destination information.
+//
+// Current implementation returns "not implemented" as we don't have a naming
+// service integrated yet. Future implementations should:
+// 1. Query NetDB for destination by hash (type 0)
+// 2. Query naming service for .i2p hostnames (type 1)
+// 3. Return HostReply with destination or error code
+func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
+	// Parse host lookup payload
+	lookupMsg, err := ParseHostLookupPayload(msg.Payload)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.handleHostLookup",
+			"sessionID":   msg.SessionID,
+			"payloadSize": len(msg.Payload),
+			"error":       err.Error(),
+		}).Error("failed_to_parse_host_lookup_payload")
+		return nil, fmt.Errorf("failed to parse HostLookup payload: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleHostLookup",
+		"sessionID":  msg.SessionID,
+		"requestID":  lookupMsg.RequestID,
+		"lookupType": lookupMsg.LookupType,
+		"query":      lookupMsg.Query,
+	}).Info("host_lookup_requested")
+
+	// TODO: Implement actual lookup logic
+	// For now, return "not found" error
+	replyPayload := &HostReplyPayload{
+		RequestID:   lookupMsg.RequestID,
+		ResultCode:  HostReplyNotFound,
+		Destination: nil,
+	}
+
+	replyData, err := replyPayload.MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": lookupMsg.RequestID,
+			"error":     err.Error(),
+		}).Error("failed_to_marshal_host_reply")
+		return nil, fmt.Errorf("failed to marshal HostReply: %w", err)
+	}
+
+	response := &Message{
+		Type:      MessageTypeHostReply,
+		SessionID: msg.SessionID,
+		Payload:   replyData,
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleHostLookup",
+		"requestID":  lookupMsg.RequestID,
+		"resultCode": replyPayload.ResultCode,
+	}).Debug("returning_host_reply")
+
+	return response, nil
+}
+
+// handleBlindingInfo handles blinded destination parameters.
+// This allows clients to configure blinding for their destinations.
+//
+// Current implementation returns an error as blinded destinations are not
+// fully implemented yet. This is a placeholder for future enhancement.
+// Proper implementation requires:
+// 1. Parse blinding parameters from payload
+// 2. Update session's destination with blinding info
+// 3. Integrate with EncryptedLeaseSet generation
+// 4. Handle blinding date rotation (UTC midnight)
+func (s *Server) handleBlindingInfo(msg *Message, sessionPtr **Session) (*Message, error) {
+	if *sessionPtr == nil {
+		return nil, fmt.Errorf("session not active")
+	}
+
+	session := *sessionPtr
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleBlindingInfo",
+		"sessionID":   session.ID(),
+		"payloadSize": len(msg.Payload),
+	}).Warn("blinding_info_not_implemented")
+
+	// TODO: Implement blinded destination support
+	// For now, log the request and continue without error
+	// This allows clients to send BlindingInfo without breaking the connection
+
+	// Return nil (no response) to acknowledge receipt
+	// In future, may return SessionStatus or similar confirmation
 	return nil, nil
 }
 

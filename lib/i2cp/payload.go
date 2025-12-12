@@ -414,3 +414,223 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 
 	return result, nil
 }
+
+// HostLookupPayload represents the payload structure of a HostLookup (type 38) message.
+// This message allows clients to query for destination information by hash or hostname.
+//
+// Format per I2CP v2.10.0 specification:
+//
+//	RequestID: uint32 (4 bytes) - unique request identifier for matching reply
+//	LookupType: uint16 (2 bytes) - 0=hash lookup, 1=hostname lookup
+//	QueryLength: uint16 (2 bytes) - length of query string in bytes
+//	Query: string (variable length) - hash or hostname to lookup
+//
+// Lookup types:
+// - 0: Hash lookup - Query is base32 destination hash
+// - 1: Hostname lookup - Query is .i2p hostname
+//
+// The server will return a HostReply message with the same RequestID.
+type HostLookupPayload struct {
+	RequestID  uint32 // Unique request identifier
+	LookupType uint16 // 0=hash, 1=hostname
+	Query      string // Hash or hostname to lookup
+}
+
+const (
+	HostLookupTypeHash     = 0 // Lookup by destination hash
+	HostLookupTypeHostname = 1 // Lookup by hostname
+)
+
+// ParseHostLookupPayload deserializes a HostLookup payload from wire format.
+// Returns an error if the payload is too short or malformed.
+//
+// Wire format:
+//
+//	bytes 0-3:   RequestID (uint32, big endian)
+//	bytes 4-5:   LookupType (uint16, big endian)
+//	bytes 6-7:   Query length (uint16, big endian)
+//	bytes 8+:    Query string (length specified by bytes 6-7)
+func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
+	// Minimum size: 4 (requestID) + 2 (type) + 2 (length) = 8 bytes
+	if len(data) < 8 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseHostLookupPayload",
+			"dataSize": len(data),
+			"required": 8,
+		}).Error("host_lookup_payload_too_short")
+		return nil, fmt.Errorf("host lookup payload too short: need at least 8 bytes, got %d", len(data))
+	}
+
+	hlp := &HostLookupPayload{}
+
+	// Parse request ID (first 4 bytes, big endian)
+	hlp.RequestID = binary.BigEndian.Uint32(data[0:4])
+
+	// Parse lookup type (bytes 4-5, big endian)
+	hlp.LookupType = binary.BigEndian.Uint16(data[4:6])
+
+	// Parse query length (bytes 6-7, big endian)
+	queryLen := binary.BigEndian.Uint16(data[6:8])
+
+	// Validate we have enough bytes for the query string
+	if len(data) < 8+int(queryLen) {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.ParseHostLookupPayload",
+			"dataSize":    len(data),
+			"queryLen":    queryLen,
+			"requiredLen": 8 + int(queryLen),
+		}).Error("host_lookup_payload_incomplete")
+		return nil, fmt.Errorf("host lookup payload incomplete: need %d bytes for query, got %d", 8+int(queryLen), len(data))
+	}
+
+	// Parse query string
+	if queryLen > 0 {
+		hlp.Query = string(data[8 : 8+queryLen])
+	} else {
+		hlp.Query = ""
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ParseHostLookupPayload",
+		"requestID":  hlp.RequestID,
+		"lookupType": hlp.LookupType,
+		"queryLen":   queryLen,
+		"query":      hlp.Query,
+	}).Debug("parsed_host_lookup_payload")
+
+	return hlp, nil
+}
+
+// MarshalBinary serializes the HostLookupPayload to wire format.
+// Returns the serialized bytes ready to be sent as an I2CP message payload.
+func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
+	queryBytes := []byte(hlp.Query)
+	totalSize := 4 + 2 + 2 + len(queryBytes) // requestID + type + length + query
+	result := make([]byte, totalSize)
+
+	// Write request ID (big endian)
+	binary.BigEndian.PutUint32(result[0:4], hlp.RequestID)
+
+	// Write lookup type (big endian)
+	binary.BigEndian.PutUint16(result[4:6], hlp.LookupType)
+
+	// Write query length (big endian)
+	binary.BigEndian.PutUint16(result[6:8], uint16(len(queryBytes)))
+
+	// Write query string
+	if len(queryBytes) > 0 {
+		copy(result[8:], queryBytes)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.HostLookupPayload.MarshalBinary",
+		"requestID":  hlp.RequestID,
+		"lookupType": hlp.LookupType,
+		"queryLen":   len(queryBytes),
+		"query":      hlp.Query,
+		"totalSize":  totalSize,
+	}).Debug("marshaled_host_lookup_payload")
+
+	return result, nil
+}
+
+// HostReplyPayload represents the payload structure of a HostReply (type 39) message.
+// This is the server's response to a HostLookup request.
+//
+// Format per I2CP v2.10.0 specification:
+//
+//	RequestID: uint32 (4 bytes) - matches the RequestID from HostLookup
+//	ResultCode: uint8 (1 byte) - 0=success, non-zero=error code
+//	Destination: []byte (variable, 387+ bytes if found) - full destination (optional)
+//
+// Result codes:
+// - 0: Success - destination found
+// - 1: Not found - destination does not exist
+// - 2: Timeout - lookup timed out
+// - 3: Error - generic error during lookup
+//
+// If ResultCode is 0 (success), Destination contains the full destination structure.
+// If ResultCode is non-zero, Destination is empty.
+type HostReplyPayload struct {
+	RequestID   uint32 // Matches RequestID from HostLookup
+	ResultCode  uint8  // 0=success, non-zero=error
+	Destination []byte // Full destination (empty if error)
+}
+
+const (
+	HostReplySuccess  = 0 // Destination found
+	HostReplyNotFound = 1 // Destination not found
+	HostReplyTimeout  = 2 // Lookup timed out
+	HostReplyError    = 3 // Generic error
+)
+
+// ParseHostReplyPayload deserializes a HostReply payload from wire format.
+// Returns an error if the payload is too short or malformed.
+//
+// Wire format:
+//
+//	bytes 0-3:   RequestID (uint32, big endian)
+//	byte 4:      ResultCode (uint8)
+//	bytes 5+:    Destination (optional, only if ResultCode=0)
+func ParseHostReplyPayload(data []byte) (*HostReplyPayload, error) {
+	// Minimum size: 4 (requestID) + 1 (resultCode) = 5 bytes
+	if len(data) < 5 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseHostReplyPayload",
+			"dataSize": len(data),
+			"required": 5,
+		}).Error("host_reply_payload_too_short")
+		return nil, fmt.Errorf("host reply payload too short: need at least 5 bytes, got %d", len(data))
+	}
+
+	hrp := &HostReplyPayload{}
+
+	// Parse request ID (first 4 bytes, big endian)
+	hrp.RequestID = binary.BigEndian.Uint32(data[0:4])
+
+	// Parse result code (byte 4)
+	hrp.ResultCode = data[4]
+
+	// Parse destination (remaining bytes, if any)
+	if len(data) > 5 {
+		hrp.Destination = make([]byte, len(data)-5)
+		copy(hrp.Destination, data[5:])
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ParseHostReplyPayload",
+		"requestID":  hrp.RequestID,
+		"resultCode": hrp.ResultCode,
+		"destSize":   len(hrp.Destination),
+	}).Debug("parsed_host_reply_payload")
+
+	return hrp, nil
+}
+
+// MarshalBinary serializes the HostReplyPayload to wire format.
+// Returns the serialized bytes ready to be sent as an I2CP message payload.
+func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error) {
+	totalSize := 4 + 1 + len(hrp.Destination) // requestID + resultCode + destination
+	result := make([]byte, totalSize)
+
+	// Write request ID (big endian)
+	binary.BigEndian.PutUint32(result[0:4], hrp.RequestID)
+
+	// Write result code
+	result[4] = hrp.ResultCode
+
+	// Write destination (if present)
+	if len(hrp.Destination) > 0 {
+		copy(result[5:], hrp.Destination)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.HostReplyPayload.MarshalBinary",
+		"requestID":  hrp.RequestID,
+		"resultCode": hrp.ResultCode,
+		"destSize":   len(hrp.Destination),
+		"totalSize":  totalSize,
+	}).Debug("marshaled_host_reply_payload")
+
+	return result, nil
+}
