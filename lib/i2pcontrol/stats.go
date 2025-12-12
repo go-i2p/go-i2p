@@ -283,13 +283,14 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 
 	// Collect tunnel statistics if available
 	if tm := rsp.router.GetTunnelManager(); tm != nil {
-		// Currently TunnelManager only has one pool (GetPool())
-		// Separate inbound/outbound tracking not yet implemented
-		if pool := tm.GetPool(); pool != nil {
-			poolStats := pool.GetPoolStats()
-			// Total active tunnels (not separated by direction yet)
-			stats.InboundTunnels = poolStats.Active / 2  // Estimate
-			stats.OutboundTunnels = poolStats.Active / 2 // Estimate
+		// Use separate inbound and outbound pools
+		if inboundPool := tm.GetInboundPool(); inboundPool != nil {
+			inboundStats := inboundPool.GetPoolStats()
+			stats.InboundTunnels = inboundStats.Active
+		}
+		if outboundPool := tm.GetOutboundPool(); outboundPool != nil {
+			outboundStats := outboundPool.GetPoolStats()
+			stats.OutboundTunnels = outboundStats.Active
 		}
 	}
 
