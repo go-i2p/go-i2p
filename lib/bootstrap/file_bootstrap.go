@@ -136,6 +136,63 @@ func limitRouterInfos(routerInfos []router_info.RouterInfo, n int) []router_info
 }
 
 // validateFile checks if the file exists and is readable
+// checkFileAccessibility verifies that the file exists and is accessible.
+// Returns os.FileInfo and nil if successful, or nil and an error if the file cannot be accessed.
+func checkFileAccessibility(filePath string) (os.FileInfo, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.WithFields(logger.Fields{
+				"at":         "(FileBootstrap) validateFile",
+				"phase":      "bootstrap",
+				"reason":     "reseed file does not exist",
+				"file_path":  filePath,
+				"suggestion": "verify file path or download reseed file",
+			}).Warn("reseed file does not exist")
+			return nil, fmt.Errorf("file bootstrap validation failed: file does not exist at path %s", filePath)
+		}
+		log.WithError(err).WithFields(logger.Fields{
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "failed to access reseed file",
+			"file_path":  filePath,
+			"error_type": fmt.Sprintf("%T", err),
+		}).Warn("failed to stat reseed file")
+		return nil, fmt.Errorf("file bootstrap validation failed: cannot access file %s: %w", filePath, err)
+	}
+
+	if info.IsDir() {
+		log.WithFields(logger.Fields{
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "path is directory not file",
+			"file_path":  filePath,
+			"suggestion": "specify path to .su3 or .zip file, not directory",
+		}).Warn("reseed path is a directory, not a file")
+		return nil, fmt.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", filePath)
+	}
+
+	return info, nil
+}
+
+// validateFileSize checks that the file is large enough to be a valid reseed file.
+// Files smaller than 100 bytes are considered invalid.
+func validateFileSize(filePath string, info os.FileInfo) error {
+	if info.Size() < 100 {
+		log.WithFields(logger.Fields{
+			"at":         "(FileBootstrap) validateFile",
+			"phase":      "bootstrap",
+			"reason":     "file too small to be valid reseed",
+			"file_path":  filePath,
+			"size_bytes": info.Size(),
+			"min_bytes":  100,
+			"suggestion": "verify file is complete and not corrupted",
+		}).Warn("reseed file is too small to be valid")
+		return fmt.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), filePath)
+	}
+	return nil
+}
+
 func (fb *FileBootstrap) validateFile() error {
 	log.WithFields(logger.Fields{
 		"at":        "(FileBootstrap) validateFile",
@@ -144,7 +201,6 @@ func (fb *FileBootstrap) validateFile() error {
 		"file_path": fb.filePath,
 	}).Debug("validating reseed file")
 
-	// Check if file path is empty
 	if fb.filePath == "" {
 		log.WithFields(logger.Fields{
 			"at":     "(FileBootstrap) validateFile",
@@ -154,51 +210,13 @@ func (fb *FileBootstrap) validateFile() error {
 		return fmt.Errorf("file bootstrap validation failed: empty file path")
 	}
 
-	info, err := os.Stat(fb.filePath)
+	info, err := checkFileAccessibility(fb.filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			log.WithFields(logger.Fields{
-				"at":         "(FileBootstrap) validateFile",
-				"phase":      "bootstrap",
-				"reason":     "reseed file does not exist",
-				"file_path":  fb.filePath,
-				"suggestion": "verify file path or download reseed file",
-			}).Warn("reseed file does not exist")
-			return fmt.Errorf("file bootstrap validation failed: file does not exist at path %s", fb.filePath)
-		}
-		log.WithError(err).WithFields(logger.Fields{
-			"at":         "(FileBootstrap) validateFile",
-			"phase":      "bootstrap",
-			"reason":     "failed to access reseed file",
-			"file_path":  fb.filePath,
-			"error_type": fmt.Sprintf("%T", err),
-		}).Warn("failed to stat reseed file")
-		return fmt.Errorf("file bootstrap validation failed: cannot access file %s: %w", fb.filePath, err)
+		return err
 	}
 
-	if info.IsDir() {
-		log.WithFields(logger.Fields{
-			"at":         "(FileBootstrap) validateFile",
-			"phase":      "bootstrap",
-			"reason":     "path is directory not file",
-			"file_path":  fb.filePath,
-			"suggestion": "specify path to .su3 or .zip file, not directory",
-		}).Warn("reseed path is a directory, not a file")
-		return fmt.Errorf("file bootstrap validation failed: path is a directory, not a file: %s", fb.filePath)
-	}
-
-	// Check for suspiciously small files that likely aren't valid reseed files
-	if info.Size() < 100 {
-		log.WithFields(logger.Fields{
-			"at":         "(FileBootstrap) validateFile",
-			"phase":      "bootstrap",
-			"reason":     "file too small to be valid reseed",
-			"file_path":  fb.filePath,
-			"size_bytes": info.Size(),
-			"min_bytes":  100,
-			"suggestion": "verify file is complete and not corrupted",
-		}).Warn("reseed file is too small to be valid")
-		return fmt.Errorf("file bootstrap validation failed: file too small (%d bytes) at %s", info.Size(), fb.filePath)
+	if err := validateFileSize(fb.filePath, info); err != nil {
+		return err
 	}
 
 	log.WithFields(logger.Fields{
