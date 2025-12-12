@@ -22,11 +22,11 @@ comment_out_replaces() {
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/eyedeekay/go-i2p/logger@v$VERSION"
-  go get "github.com/eyedeekay/go-i2p/crypto@v$VERSION"
-  go get "github.com/eyedeekay/go-i2p/common@v$VERSION"
-  go get "github.com/eyedeekay/go-i2p/noise@v$VERSION"
-  go get "github.com/eyedeekay/go-i2p/go-noise@v$VERSION"
+  go get "github.com/eyedeekay/go-i2p/logger@v$VERSION"; true
+  go get "github.com/eyedeekay/go-i2p/crypto@v$VERSION"; true
+  go get "github.com/eyedeekay/go-i2p/common@v$VERSION"; true
+  go get "github.com/eyedeekay/go-i2p/noise@v$VERSION"; true
+  go get "github.com/eyedeekay/go-i2p/go-noise@v$VERSION"; true
   go mod tidy
   git commit -am "Update dependencies to v$VERSION"
 }
