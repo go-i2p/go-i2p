@@ -1219,6 +1219,20 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 		"clientVersion": clientVersion,
 	}).Debug("handling_get_date_request")
 
+	// Store client version in session if we have one
+	// GetDate can be called before CreateSession in some clients,
+	// so we need to handle session lookup gracefully.
+	if msg.SessionID != 0 && clientVersion != "" {
+		if session, exists := s.manager.GetSession(msg.SessionID); exists {
+			session.SetProtocolVersion(clientVersion)
+			log.WithFields(logger.Fields{
+				"at":            "i2cp.Server.handleGetDate",
+				"sessionID":     msg.SessionID,
+				"clientVersion": clientVersion,
+			}).Debug("stored_client_protocol_version")
+		}
+	}
+
 	// Current router time (milliseconds since Unix epoch)
 	currentTimeMillis := time.Now().UnixMilli()
 

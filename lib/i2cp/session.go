@@ -127,10 +127,11 @@ type Session struct {
 	mu sync.RWMutex
 
 	// Session identity
-	id          uint16                    // Session ID (assigned by router)
-	destination *destination.Destination  // Client's I2P destination
-	keys        *keys.DestinationKeyStore // Private keys for LeaseSet signing and decryption
-	config      *SessionConfig            // Session configuration
+	id              uint16                    // Session ID (assigned by router)
+	destination     *destination.Destination  // Client's I2P destination
+	keys            *keys.DestinationKeyStore // Private keys for LeaseSet signing and decryption
+	config          *SessionConfig            // Session configuration
+	protocolVersion string                    // Client's I2CP protocol version (from GetDate)
 
 	// Tunnel pools
 	inboundPool  *tunnel.Pool // Pool of inbound tunnels
@@ -377,6 +378,22 @@ func (s *Session) SetLeaseSetPublisher(publisher LeaseSetPublisher) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.publisher = publisher
+}
+
+// SetProtocolVersion stores the client's I2CP protocol version from GetDate message.
+// This is called when the client sends GetDate with its version string.
+func (s *Session) SetProtocolVersion(version string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.protocolVersion = version
+}
+
+// ProtocolVersion returns the client's I2CP protocol version.
+// Returns empty string if not yet set via GetDate exchange.
+func (s *Session) ProtocolVersion() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.protocolVersion
 }
 
 // InboundPool returns the inbound tunnel pool
