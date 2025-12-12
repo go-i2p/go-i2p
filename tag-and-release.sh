@@ -31,11 +31,11 @@ update_our_packages() {
 push() {
   git push origin main || git push origin trunk || git push origin master
   git push --tags
+  sleep 20m
 }
 
 cleanup() {
   git push origin --delete "v$VERSION"
-  sleep 20m
 }
 
 # descend into the go-i2p namespace and tag dependencies
