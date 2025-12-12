@@ -336,20 +336,29 @@ func NewNetworkSettingHandler(stats RouterStatsProvider) *NetworkSettingHandler 
 
 // Handle processes the NetworkSetting request.
 // Returns requested configuration values.
+// Handle processes a NetworkSetting request and returns the requested configuration values.
+// Returns network settings from the router configuration, or an error if parsing fails.
 func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	// Parse request to see which settings are requested
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid NetworkSetting parameters", err.Error())
 	}
 
-	// Get network configuration from router
 	netConfig := h.stats.GetNetworkConfig()
+	availableSettings := h.buildAvailableSettings(netConfig)
 
-	result := make(map[string]interface{})
+	// If specific settings requested, return only those
+	if len(req) > 0 {
+		return h.processRequestedSettings(req, availableSettings)
+	}
 
-	// Available configuration fields with real data
-	availableSettings := map[string]interface{}{
+	// If no settings requested, return common settings
+	return h.buildDefaultSettings(netConfig), nil
+}
+
+// buildAvailableSettings creates a map of all available network settings with their current values.
+func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) map[string]interface{} {
+	return map[string]interface{}{
 		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
 		"i2p.router.net.ntcp.autoip":   true,  // Default behavior
@@ -357,28 +366,33 @@ func (h *NetworkSettingHandler) Handle(ctx context.Context, params json.RawMessa
 		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
 		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
 	}
+}
 
-	// If specific settings requested, return only those
-	if len(req) > 0 {
-		for setting := range req {
-			if value, exists := availableSettings[setting]; exists {
-				// Check if this is a write operation (non-null value)
-				if req[setting] != nil {
-					return nil, NewRPCErrorWithData(ErrCodeNotImpl, "setting modification not implemented", fmt.Sprintf("cannot modify %s", setting))
-				}
-				result[setting] = value
-			} else {
-				// Unknown setting - return null to indicate not available
-				result[setting] = nil
+// processRequestedSettings processes a map of requested settings and returns their values.
+// Returns an error if a write operation is attempted (non-null value provided).
+func (h *NetworkSettingHandler) processRequestedSettings(req map[string]interface{}, availableSettings map[string]interface{}) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	for setting := range req {
+		if value, exists := availableSettings[setting]; exists {
+			// Check if this is a write operation (non-null value)
+			if req[setting] != nil {
+				return nil, NewRPCErrorWithData(ErrCodeNotImpl, "setting modification not implemented", fmt.Sprintf("cannot modify %s", setting))
 			}
+			result[setting] = value
+		} else {
+			// Unknown setting - return null to indicate not available
+			result[setting] = nil
 		}
 	}
 
-	// If no settings requested, return common settings
-	if len(result) == 0 {
-		result["i2p.router.net.ntcp.port"] = netConfig.NTCP2Port
-		result["i2p.router.net.ntcp.hostname"] = netConfig.NTCP2Hostname
-	}
-
 	return result, nil
+}
+
+// buildDefaultSettings returns a map containing the most commonly requested network settings.
+func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) map[string]interface{} {
+	return map[string]interface{}{
+		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
+		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
+	}
 }
