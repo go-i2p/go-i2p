@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"encoding/binary"
 	"net"
 	"testing"
 	"time"
@@ -129,8 +130,20 @@ func TestServerCreateSession(t *testing.T) {
 		t.Error("Session ID should not be reserved control value")
 	}
 
-	if len(response.Payload) < 1 || response.Payload[0] != 0x00 {
-		t.Errorf("SessionStatus payload = %v, want [0x00]", response.Payload)
+	// Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte) = 3 bytes
+	if len(response.Payload) != 3 {
+		t.Errorf("SessionStatus payload length = %d, want 3", len(response.Payload))
+	}
+
+	// Verify SessionID in payload matches the SessionID in message header
+	payloadSessionID := binary.BigEndian.Uint16(response.Payload[0:2])
+	if payloadSessionID != response.SessionID {
+		t.Errorf("SessionID in payload = %d, want %d", payloadSessionID, response.SessionID)
+	}
+
+	// Verify status byte is 0x00 (success)
+	if response.Payload[2] != 0x00 {
+		t.Errorf("SessionStatus status byte = 0x%02x, want 0x00", response.Payload[2])
 	}
 
 	// Verify session was created

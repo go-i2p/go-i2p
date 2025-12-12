@@ -21,6 +21,7 @@ comment_out_replaces() {
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
+  go get -u ./...
   go get "github.com/eyedeekay/go-i2p/logger@v$VERSION"
   go get "github.com/eyedeekay/go-i2p/crypto@v$VERSION"
   go get "github.com/eyedeekay/go-i2p/common@v$VERSION"
