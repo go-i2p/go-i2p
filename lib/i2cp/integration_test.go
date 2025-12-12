@@ -230,11 +230,13 @@ func receiveMessageWithContext(ctx context.Context, session *Session) (*Incoming
 
 // TestE2E_ClientProtocolFlow tests the complete I2CP protocol flow from client perspective
 func TestE2E_ClientProtocolFlow(t *testing.T) {
-	// Start server
+	// Start server with random port (port 0 = let OS choose)
 	config := &ServerConfig{
-		ListenAddr:  "localhost:17660",
-		Network:     "tcp",
-		MaxSessions: 100,
+		ListenAddr:   "localhost:0",
+		Network:      "tcp",
+		MaxSessions:  100,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	server, err := NewServer(config)
@@ -248,17 +250,31 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(10 * time.Millisecond)
+	// Get the actual address the server is listening on
+	serverAddr := server.listener.Addr().String()
+	t.Logf("Server listening on %s", serverAddr)
 
-	// Connect as a client
-	conn, err := net.Dial("tcp", "localhost:17660")
-	require.NoError(t, err)
+	// Wait for server to be ready with retry logic
+	// Use exponential backoff to handle goroutine scheduling delays
+	var conn net.Conn
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		conn, err = net.Dial("tcp", serverAddr)
+		if err == nil {
+			break
+		}
+		// Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms
+		backoff := time.Duration(1<<uint(i)) * time.Millisecond
+		time.Sleep(backoff)
+	}
+	require.NoError(t, err, "failed to connect to server after %d retries", maxRetries)
 	defer conn.Close()
 
 	// Send protocol byte (0x2a) as required by I2CP spec
 	protocolByte := []byte{0x2a}
 	_, err = conn.Write(protocolByte)
 	require.NoError(t, err)
+	t.Log("✓ Protocol byte sent successfully")
 
 	// Step 1: Create session
 	createMsg := &Message{
@@ -269,10 +285,13 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 
 	err = WriteMessage(conn, createMsg)
 	require.NoError(t, err)
+	t.Log("✓ CreateSession message sent successfully")
 
 	// Read SessionStatus response
+	t.Log("→ Attempting to read SessionStatus response...")
 	statusMsg, err := ReadMessage(conn)
 	require.NoError(t, err)
+	t.Log("✓ SessionStatus response received successfully")
 	require.Equal(t, uint8(MessageTypeSessionStatus), uint8(statusMsg.Type))
 	require.NotEqual(t, SessionIDReservedControl, statusMsg.SessionID)
 

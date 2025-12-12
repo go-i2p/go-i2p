@@ -112,8 +112,8 @@ const (
 	MaxPayloadSize = 262144 // 256 KB
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
-	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
-	MaxMessageSize = 7 + MaxPayloadSize
+	// Header per I2CP spec: length(4) + type(1) = 5 bytes
+	MaxMessageSize = 5 + MaxPayloadSize
 
 	// DefaultPayloadSize is the typical payload size for most I2CP messages.
 	// Payloads exceeding this threshold trigger warning logs.
@@ -125,10 +125,12 @@ const (
 	MessageReadTimeout = 30 // seconds
 )
 
-// Message represents a generic I2CP message
+// Message represents a generic I2CP message.
+// Wire format per I2CP spec: length(4) + type(1) + payload(variable)
+// SessionID is NOT in the wire format - it's managed at the connection/session layer.
 type Message struct {
 	Type      uint8  // Message type
-	SessionID uint16 // Session identifier
+	SessionID uint16 // Session identifier (application-level, not in wire format)
 	Payload   []byte // Message payload
 }
 
@@ -145,45 +147,44 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 		return nil, fmt.Errorf("i2cp message payload too large: %d bytes (max %d bytes per I2CP spec)", payloadLen, MaxPayloadSize)
 	}
 
-	// Calculate total message size
-	totalLen := 1 + 2 + 4 + payloadLen
+	// Per I2CP spec: wire format is length(4) + type(1) + payload
+	// Session ID is NOT in the wire format - it's handled at the message layer
+	totalLen := 5 + payloadLen
 
 	result := make([]byte, totalLen)
 
-	// Type (1 byte)
-	result[0] = m.Type
-
-	// Session ID (2 bytes, big endian)
-	binary.BigEndian.PutUint16(result[1:3], m.SessionID)
-
 	// Payload length (4 bytes, big endian)
-	binary.BigEndian.PutUint32(result[3:7], uint32(payloadLen))
+	binary.BigEndian.PutUint32(result[0:4], uint32(payloadLen))
+
+	// Type (1 byte)
+	result[4] = m.Type
 
 	// Payload
 	if payloadLen > 0 {
-		copy(result[7:], m.Payload)
+		copy(result[5:], m.Payload)
 	}
 
 	return result, nil
 }
 
 // UnmarshalBinary deserializes an I2CP message from wire format
+// Per I2CP spec: wire format is length(4) + type(1) + payload
 func (m *Message) UnmarshalBinary(data []byte) error {
-	if len(data) < 7 {
-		return fmt.Errorf("i2cp message too short: need at least 7 bytes, got %d", len(data))
+	if len(data) < 5 {
+		return fmt.Errorf("i2cp message too short: need at least 5 bytes for header, got %d", len(data))
 	}
 
-	// Parse type
-	m.Type = data[0]
+	// Parse payload length (4 bytes, big endian)
+	payloadLen := binary.BigEndian.Uint32(data[0:4])
 
-	// Parse session ID
-	m.SessionID = binary.BigEndian.Uint16(data[1:3])
+	// Parse type (1 byte)
+	m.Type = data[4]
 
-	// Parse payload length
-	payloadLen := binary.BigEndian.Uint32(data[3:7])
+	// Session ID is NOT in wire format - it must be set by the caller from context
+	m.SessionID = 0
 
 	// Validate total length
-	expectedTotal := 7 + payloadLen
+	expectedTotal := 5 + payloadLen
 	if uint32(len(data)) < expectedTotal {
 		return fmt.Errorf("i2cp message truncated: expected %d bytes, got %d", expectedTotal, len(data))
 	}
@@ -191,7 +192,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	// Extract payload
 	if payloadLen > 0 {
 		m.Payload = make([]byte, payloadLen)
-		copy(m.Payload, data[7:7+payloadLen])
+		copy(m.Payload, data[5:5+payloadLen])
 	} else {
 		m.Payload = []byte{}
 	}
@@ -255,6 +256,10 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		return nil, err
 	}
 
+	// Extract SessionID from payload for message types that include it
+	// Per I2CP spec: Some messages have SessionID as first 2 bytes of payload
+	sessionID = extractSessionIDFromPayload(msgType, payload)
+
 	log.WithFields(logger.Fields{
 		"at":         "i2cp.ReadMessage",
 		"remoteAddr": connInfo,
@@ -268,6 +273,38 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		SessionID: sessionID,
 		Payload:   payload,
 	}, nil
+}
+
+// extractSessionIDFromPayload extracts SessionID from message payload for message types that include it.
+// Per I2CP spec: Some message types have SessionID as first 2 bytes of payload.
+// Message types with SessionID in payload:
+// - SessionStatus (type 20): SessionID(2) + Status(1)
+// - MessageStatus (type 22): SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4)
+// - ReconfigureSession (type 2): SessionID(2) + config_data
+// - DestroySession (type 3): SessionID(2)
+// - SendMessage (type 5): SessionID(2) + message_data
+// - ReceiveMessageBegin (type 6): SessionID(2) + message_data
+// - ReceiveMessageEnd (type 7): SessionID(2) + MessageID(4)
+// - CreateLeaseSet (type 4): SessionID(2) + leaseset_data
+// - SendMessageExpires (type 36): SessionID(2) + message_data
+func extractSessionIDFromPayload(msgType uint8, payload []byte) uint16 {
+	// Messages that include SessionID in payload
+	switch msgType {
+	case MessageTypeSessionStatus,
+		MessageTypeMessageStatus,
+		MessageTypeReconfigureSession,
+		MessageTypeDestroySession,
+		MessageTypeSendMessage,
+		MessageTypeReceiveMessageBegin,
+		MessageTypeReceiveMessageEnd,
+		MessageTypeCreateLeaseSet,
+		MessageTypeSendMessageExpires:
+		if len(payload) >= 2 {
+			return binary.BigEndian.Uint16(payload[0:2])
+		}
+	}
+	// Messages without SessionID in payload (e.g., CreateSession, GetDate, HostLookup)
+	return 0
 }
 
 // setReaderDeadline sets a read deadline on the connection to prevent slow-send attacks.
@@ -286,8 +323,7 @@ func setReaderDeadline(r io.Reader) {
 }
 
 // readMessageHeader reads the I2CP message header from the reader.
-// Per I2CP spec: length(4 bytes) + type(1 byte) = 5 bytes total header.
-// The session ID is NOT part of the common header - it's in the message body for messages that use it.
+// Per I2CP spec: header is length(4) + type(1) = 5 bytes total.
 func readMessageHeader(r io.Reader) ([]byte, error) {
 	header := make([]byte, 5)
 	if _, err := io.ReadFull(r, header); err != nil {
@@ -297,12 +333,12 @@ func readMessageHeader(r io.Reader) ([]byte, error) {
 }
 
 // parseMessageHeader extracts the payload length and message type from the header bytes.
-// Per I2CP spec: header is length(4) + type(1), NOT type + sessionID + length.
+// Per I2CP spec: header is length(4) + type(1). Session ID is NOT in the header.
 func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payloadLen uint32) {
 	// Correct I2CP wire format: length(4 bytes big-endian) + type(1 byte)
 	payloadLen = binary.BigEndian.Uint32(header[0:4])
 	msgType = header[4]
-	sessionID = 0 // Session ID is NOT in the header, it's in the message body
+	sessionID = 0 // Session ID is NOT in the header
 
 	// i2psnark compatibility: Debug log all message headers to identify patterns
 	// Log at debug level for normal messages, but include size category for analysis

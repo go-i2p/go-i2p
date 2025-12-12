@@ -796,11 +796,16 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 }
 
 // buildSessionStatusResponse creates a successful SessionStatus message.
+// Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte)
 func buildSessionStatusResponse(sessionID uint16) *Message {
+	payload := make([]byte, 3)
+	binary.BigEndian.PutUint16(payload[0:2], sessionID) // SessionID
+	payload[2] = 0x00                                     // Success status byte
+
 	return &Message{
 		Type:      MessageTypeSessionStatus,
-		SessionID: sessionID,
-		Payload:   []byte{0x00}, // Success status byte
+		SessionID: sessionID, // Keep for application logic
+		Payload:   payload,
 	}
 }
 

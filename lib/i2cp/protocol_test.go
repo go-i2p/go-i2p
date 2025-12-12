@@ -61,8 +61,8 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 				return
 			}
 
-			// Validate structure
-			if len(data) < 7 {
+			// Validate structure: header should be 5 bytes (length + type) per I2CP spec
+			if len(data) < 5 {
 				t.Errorf("Marshaled data too short: %d bytes", len(data))
 				return
 			}
@@ -74,12 +74,13 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 				return
 			}
 
-			// Compare
+			// Compare: Type and Payload should match
+			// SessionID is NOT in wire format, so it won't be preserved
 			if got.Type != tt.msg.Type {
 				t.Errorf("Type mismatch: got %d, want %d", got.Type, tt.msg.Type)
 			}
-			if got.SessionID != tt.msg.SessionID {
-				t.Errorf("SessionID mismatch: got 0x%04X, want 0x%04X", got.SessionID, tt.msg.SessionID)
+			if got.SessionID != 0 {
+				t.Errorf("SessionID should be 0 after unmarshal (not in wire format), got 0x%04X", got.SessionID)
 			}
 			if !bytes.Equal(got.Payload, tt.msg.Payload) {
 				t.Errorf("Payload mismatch: got %v, want %v", got.Payload, tt.msg.Payload)
@@ -150,12 +151,13 @@ func TestReadWriteMessage(t *testing.T) {
 		t.Fatalf("ReadMessage() error = %v", err)
 	}
 
-	// Compare
+	// Compare: Type and Payload should match
+	// SessionID is NOT in wire format per I2CP spec, so it won't be preserved
 	if got.Type != original.Type {
 		t.Errorf("Type mismatch: got %d, want %d", got.Type, original.Type)
 	}
-	if got.SessionID != original.SessionID {
-		t.Errorf("SessionID mismatch: got 0x%04X, want 0x%04X", got.SessionID, original.SessionID)
+	if got.SessionID != 0 {
+		t.Errorf("SessionID should be 0 after read (not in wire format), got 0x%04X", got.SessionID)
 	}
 	if !bytes.Equal(got.Payload, original.Payload) {
 		t.Errorf("Payload mismatch: got %v, want %v", got.Payload, original.Payload)
@@ -291,16 +293,17 @@ func TestMessagePayloadSizeLimit(t *testing.T) {
 // TestReadMessagePayloadSizeLimit verifies that reading messages enforces the size limit
 func TestReadMessagePayloadSizeLimit(t *testing.T) {
 	// Create a message header claiming an oversized payload
+	// Per I2CP spec: header is length(4) + type(1)
 	oversizedLength := uint32(MaxPayloadSize + 1000)
 
-	header := make([]byte, 7)
-	header[0] = MessageTypeSendMessage // Type
-	header[1] = 0x12                   // SessionID high byte
-	header[2] = 0x34                   // SessionID low byte
-	header[3] = byte(oversizedLength >> 24)
-	header[4] = byte(oversizedLength >> 16)
-	header[5] = byte(oversizedLength >> 8)
-	header[6] = byte(oversizedLength)
+	header := make([]byte, 5)
+	// Length (4 bytes, big endian)
+	header[0] = byte(oversizedLength >> 24)
+	header[1] = byte(oversizedLength >> 16)
+	header[2] = byte(oversizedLength >> 8)
+	header[3] = byte(oversizedLength)
+	// Type (1 byte)
+	header[4] = MessageTypeSendMessage
 
 	buf := bytes.NewBuffer(header)
 
