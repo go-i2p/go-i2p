@@ -278,65 +278,82 @@ func logNTCP2ValidationFailure(err error, index int) {
 
 // filterAvailablePeers filters router infos excluding specified hashes and checking reachability
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
+	stats := &peerFilterStats{}
+	available := db.collectAvailablePeers(allRouterInfos, excludeMap, stats)
+	logPeerFilteringResults(allRouterInfos, available, stats)
+	return available
+}
+
+// peerFilterStats tracks filtering statistics for peer selection.
+type peerFilterStats struct {
+	skippedExcluded     int
+	skippedNoAddresses  int
+	skippedNoValidNTCP2 int
+	skippedHashError    int
+	skippedStale        int
+}
+
+// collectAvailablePeers iterates through router infos and filters out invalid or excluded peers.
+func (db *StdNetDB) collectAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool, stats *peerFilterStats) []router_info.RouterInfo {
 	var available []router_info.RouterInfo
-	skippedExcluded := 0
-	skippedNoAddresses := 0
-	skippedNoValidNTCP2 := 0
-	skippedHashError := 0
-	skippedStale := 0 // HIGH PRIORITY FIX #3: Track stale peer filtering
 
 	for _, ri := range allRouterInfos {
-		riHash, err := ri.IdentHash()
-		if err != nil {
-			log.WithError(err).Debug("Failed to get router hash, skipping router")
-			skippedHashError++
+		if shouldSkipPeer(ri, excludeMap, db.PeerTracker, stats) {
 			continue
 		}
-		if excludeMap[riHash] {
-			skippedExcluded++
-			continue
-		}
-		// Basic reachability check - router should have valid addresses
-		if len(ri.RouterAddresses()) == 0 {
-			skippedNoAddresses++
-			continue
-		}
-		// HIGH PRIORITY FIX #3: Skip peers identified as stale by connection tracker
-		if db.PeerTracker.IsLikelyStale(riHash) {
-			log.WithFields(logger.Fields{
-				"peer_hash": fmt.Sprintf("%x", riHash[:8]),
-				"reason":    "peer_marked_stale_by_tracker",
-			}).Debug("Skipping stale peer")
-			skippedStale++
-			continue
-		}
-		// Check if router has a valid NTCP2 address (not just any NTCP2 address)
-		// This filters out peers that only have introducer-based addresses
 		if hasValidNTCP2Address(&ri) {
 			available = append(available, ri)
 		} else {
-			skippedNoValidNTCP2++
+			stats.skippedNoValidNTCP2++
 		}
 	}
 
-	// Enhanced metrics for Critical Priority Issue #2: NetDB Composition Analysis
-	// This detailed breakdown helps operators understand NetDB quality
+	return available
+}
+
+// shouldSkipPeer determines if a peer should be filtered out based on various criteria.
+func shouldSkipPeer(ri router_info.RouterInfo, excludeMap map[common.Hash]bool, tracker *PeerTracker, stats *peerFilterStats) bool {
+	riHash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Debug("Failed to get router hash, skipping router")
+		stats.skippedHashError++
+		return true
+	}
+	if excludeMap[riHash] {
+		stats.skippedExcluded++
+		return true
+	}
+	if len(ri.RouterAddresses()) == 0 {
+		stats.skippedNoAddresses++
+		return true
+	}
+	if tracker.IsLikelyStale(riHash) {
+		log.WithFields(logger.Fields{
+			"peer_hash": fmt.Sprintf("%x", riHash[:8]),
+			"reason":    "peer_marked_stale_by_tracker",
+		}).Debug("Skipping stale peer")
+		stats.skippedStale++
+		return true
+	}
+	return false
+}
+
+// logPeerFilteringResults logs detailed peer filtering statistics.
+func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo, stats *peerFilterStats) {
 	log.WithFields(logger.Fields{
 		"at":                     "filterAvailablePeers",
 		"phase":                  "peer_filtering",
 		"total":                  len(allRouterInfos),
 		"available":              len(available),
-		"skipped_excluded":       skippedExcluded,
-		"skipped_no_addresses":   skippedNoAddresses,
-		"skipped_no_valid_ntcp2": skippedNoValidNTCP2,
-		"skipped_stale":          skippedStale, // HIGH PRIORITY FIX #3
-		"skipped_hash_error":     skippedHashError,
+		"skipped_excluded":       stats.skippedExcluded,
+		"skipped_no_addresses":   stats.skippedNoAddresses,
+		"skipped_no_valid_ntcp2": stats.skippedNoValidNTCP2,
+		"skipped_stale":          stats.skippedStale,
+		"skipped_hash_error":     stats.skippedHashError,
 		"directly_contactable":   len(available),
-		"introducer_only":        skippedNoValidNTCP2,
+		"introducer_only":        stats.skippedNoValidNTCP2,
 		"usability_ratio":        fmt.Sprintf("%.1f%%", float64(len(available))*100.0/float64(len(allRouterInfos))),
 	}).Info("Peer filtering complete")
-
-	return available
 }
 
 // selectRandomPeers randomly selects the requested number of peers from available pool
