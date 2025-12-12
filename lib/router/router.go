@@ -1089,6 +1089,9 @@ func (r *Router) startI2CPServer() error {
 		return fmt.Errorf("failed to create I2CP server: %w", err)
 	}
 
+	// Set NetDB for HostLookup functionality
+	server.SetNetDB(r.StdNetDB)
+
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start I2CP server: %w", err)
 	}

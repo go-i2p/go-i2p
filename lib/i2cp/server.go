@@ -64,6 +64,11 @@ type Server struct {
 		ResolveDestination(destHash common.Hash) ([32]byte, error)
 	}
 
+	// NetDB access for HostLookup queries
+	netdb interface {
+		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+	}
+
 	// Connection tracking for message delivery
 	mu           sync.RWMutex
 	running      bool
@@ -1249,11 +1254,11 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 // handleHostLookup handles a destination lookup request by hash or hostname.
 // This allows clients to query for destination information.
 //
-// Current implementation returns "not implemented" as we don't have a naming
-// service integrated yet. Future implementations should:
-// 1. Query NetDB for destination by hash (type 0)
-// 2. Query naming service for .i2p hostnames (type 1)
-// 3. Return HostReply with destination or error code
+// Lookup types:
+// - Type 0 (hash): Query NetDB for destination by hash
+// - Type 1 (hostname): Requires naming service integration (not yet implemented)
+//
+// For hash lookups, the destination is retrieved from the LeaseSet stored in NetDB.
 func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 	// Parse host lookup payload
 	lookupMsg, err := ParseHostLookupPayload(msg.Payload)
@@ -1275,12 +1280,40 @@ func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 		"query":      lookupMsg.Query,
 	}).Info("host_lookup_requested")
 
-	// TODO: Implement actual lookup logic
-	// For now, return "not found" error
-	replyPayload := &HostReplyPayload{
-		RequestID:   lookupMsg.RequestID,
-		ResultCode:  HostReplyNotFound,
-		Destination: nil,
+	var replyPayload *HostReplyPayload
+
+	// Handle different lookup types
+	switch lookupMsg.LookupType {
+	case HostLookupTypeHash:
+		// Lookup by destination hash - query NetDB for LeaseSet
+		replyPayload = s.lookupDestinationByHash(lookupMsg)
+
+	case HostLookupTypeHostname:
+		// Hostname lookup requires naming service integration
+		// Return "not implemented" error for now
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": lookupMsg.RequestID,
+			"query":     lookupMsg.Query,
+		}).Debug("hostname_lookup_not_implemented")
+		replyPayload = &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
+
+	default:
+		// Unknown lookup type
+		log.WithFields(logger.Fields{
+			"at":         "i2cp.Server.handleHostLookup",
+			"requestID":  lookupMsg.RequestID,
+			"lookupType": lookupMsg.LookupType,
+		}).Warn("unknown_lookup_type")
+		replyPayload = &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
 	}
 
 	replyData, err := replyPayload.MarshalBinary()
@@ -1306,6 +1339,127 @@ func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 	}).Debug("returning_host_reply")
 
 	return response, nil
+}
+
+// lookupDestinationByHash queries NetDB for a LeaseSet by hash and extracts the destination.
+// Returns HostReplyPayload with the destination bytes if found, or an error code if not found.
+func (s *Server) lookupDestinationByHash(lookupMsg *HostLookupPayload) *HostReplyPayload {
+	// Check if we have NetDB access configured
+	if s.netdb == nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.lookupDestinationByHash",
+			"requestID": lookupMsg.RequestID,
+		}).Warn("no_netdb_configured")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
+	}
+
+	// Parse the hash from the query string
+	// The query should contain the destination hash as a hex string
+	var destHash common.Hash
+	if len(lookupMsg.Query) >= 64 {
+		// Assume hex-encoded hash (64 hex chars = 32 bytes)
+		_, err := fmt.Sscanf(lookupMsg.Query[:64], "%x", &destHash)
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.lookupDestinationByHash",
+				"requestID": lookupMsg.RequestID,
+				"query":     lookupMsg.Query,
+				"error":     err.Error(),
+			}).Warn("invalid_hash_format")
+			return &HostReplyPayload{
+				RequestID:   lookupMsg.RequestID,
+				ResultCode:  HostReplyError,
+				Destination: nil,
+			}
+		}
+	} else {
+		// Query too short to be a valid hash
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.lookupDestinationByHash",
+			"requestID": lookupMsg.RequestID,
+			"queryLen":  len(lookupMsg.Query),
+		}).Warn("query_too_short_for_hash")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
+	}
+
+	// Query NetDB for the LeaseSet
+	leaseSetBytes, err := s.netdb.GetLeaseSetBytes(destHash)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.lookupDestinationByHash",
+			"requestID": lookupMsg.RequestID,
+			"destHash":  fmt.Sprintf("%x", destHash[:8]),
+			"error":     err.Error(),
+		}).Debug("leaseset_not_found_in_netdb")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyNotFound,
+			Destination: nil,
+		}
+	}
+
+	// Extract destination from LeaseSet
+	// LeaseSet structure starts with the destination
+	// We need to parse the LeaseSet to extract the destination bytes
+	destination, err := s.extractDestinationFromLeaseSet(leaseSetBytes)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.lookupDestinationByHash",
+			"requestID": lookupMsg.RequestID,
+			"destHash":  fmt.Sprintf("%x", destHash[:8]),
+			"error":     err.Error(),
+		}).Error("failed_to_extract_destination")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "i2cp.Server.lookupDestinationByHash",
+		"requestID":    lookupMsg.RequestID,
+		"destHash":     fmt.Sprintf("%x", destHash[:8]),
+		"destByteSize": len(destination),
+	}).Info("destination_found")
+
+	return &HostReplyPayload{
+		RequestID:   lookupMsg.RequestID,
+		ResultCode:  HostReplySuccess,
+		Destination: destination,
+	}
+}
+
+// extractDestinationFromLeaseSet extracts the destination bytes from a LeaseSet.
+// The destination is at the beginning of the LeaseSet structure.
+// Returns the destination bytes suitable for HostReply, or an error if parsing fails.
+func (s *Server) extractDestinationFromLeaseSet(leaseSetBytes []byte) ([]byte, error) {
+	// LeaseSet format starts with Destination
+	// Destination minimum size is 387 bytes (for standard ElGamal/DSA)
+	// But can be larger with key certificates
+	if len(leaseSetBytes) < 387 {
+		return nil, fmt.Errorf("leaseset too small: %d bytes", len(leaseSetBytes))
+	}
+
+	// Parse the destination to determine its actual size
+	_, remainder, err := destination.ReadDestination(leaseSetBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse destination: %w", err)
+	}
+
+	// Calculate how many bytes the destination occupies
+	destSize := len(leaseSetBytes) - len(remainder)
+
+	// Return the destination bytes
+	return leaseSetBytes[:destSize], nil
 }
 
 // handleBlindingInfo handles blinded destination parameters.
@@ -1889,6 +2043,17 @@ func (s *Server) SetDestinationResolver(resolver interface {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.destinationResolver = resolver
+}
+
+// SetNetDB sets the NetDB accessor for looking up LeaseSet data.
+// This enables HostLookup queries to retrieve full destination information.
+func (s *Server) SetNetDB(netdb interface {
+	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+},
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.netdb = netdb
 }
 
 // IsRunning returns whether the server is currently running
