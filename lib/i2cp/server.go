@@ -201,34 +201,51 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+// recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
+func recoverFromAcceptPanic() {
+	if r := recover(); r != nil {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.Server.acceptLoop",
+			"panic": r,
+		}).Error("panic_in_accept_loop")
+	}
+}
+
+// acceptAndLogConnection accepts a new connection and logs the connection attempt.
+// Returns the accepted connection or nil if accept fails.
+func (s *Server) acceptAndLogConnection() net.Conn {
+	conn, err := s.listener.Accept()
+	if err != nil {
+		if s.handleAcceptError(err) {
+			return nil
+		}
+		return nil
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.acceptLoop",
+		"remoteAddr": conn.RemoteAddr().String(),
+		"localAddr":  conn.LocalAddr().String(),
+	}).Info("new_i2cp_connection")
+
+	return conn
+}
+
 // acceptLoop accepts incoming connections
 func (s *Server) acceptLoop() {
 	defer s.wg.Done()
-	defer func() {
-		// Defensive: recover from any panic during shutdown to prevent server crash
-		if r := recover(); r != nil {
-			log.WithFields(logger.Fields{
-				"at":    "i2cp.Server.acceptLoop",
-				"panic": r,
-			}).Error("panic_in_accept_loop")
-		}
-	}()
+	defer recoverFromAcceptPanic()
 
 	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			if s.handleAcceptError(err) {
+		conn := s.acceptAndLogConnection()
+		if conn == nil {
+			select {
+			case <-s.ctx.Done():
 				return
+			default:
+				continue
 			}
-			continue
 		}
-
-		// i2psnark compatibility: Log all connection attempts
-		log.WithFields(logger.Fields{
-			"at":         "i2cp.Server.acceptLoop",
-			"remoteAddr": conn.RemoteAddr().String(),
-			"localAddr":  conn.LocalAddr().String(),
-		}).Info("new_i2cp_connection")
 
 		if s.shouldRejectConnection(conn) {
 			continue
