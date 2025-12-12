@@ -504,13 +504,14 @@ func (s *Server) readClientMessage(conn net.Conn) (*Message, error) {
 
 // checkConnectionRateLimit enforces per-connection rate limits.
 // Returns true if the connection is within limits, false if rate limited.
-// Limits are set high to accommodate legitimate local client applications
-// while still preventing extreme resource exhaustion attacks.
+// Conservative limits prevent resource exhaustion from malicious clients,
+// especially during pre-session phase before authentication is complete.
+// Legitimate I2CP clients rarely exceed these limits.
 func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 	const (
-		maxMessagesPerSecond = 10000                 // Maximum 10,000 messages/second per connection
-		maxBytesPerSecond    = 100 * 1024 * 1024     // Maximum 100 MB/second per connection
-		minMessageInterval   = 10 * time.Microsecond // Minimum 10μs between messages (prevents extreme spam)
+		maxMessagesPerSecond = 100                   // Maximum 100 messages/second per connection (conservative for security)
+		maxBytesPerSecond    = 10 * 1024 * 1024      // Maximum 10 MB/second per connection
+		minMessageInterval   = 10 * time.Millisecond // Minimum 10ms between messages (prevents rapid-fire attacks)
 	)
 
 	state := s.getOrCreateConnectionState(conn)

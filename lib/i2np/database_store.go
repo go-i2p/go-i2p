@@ -21,6 +21,17 @@ const (
 	DATABASE_STORE_TYPE_META_LEASESET = 7
 )
 
+// Size limits for DatabaseStore data payloads
+const (
+	// MaxRouterInfoSize is the maximum size for a RouterInfo (gzip-compressed)
+	// Real RouterInfos are typically 2-6KB; 64KB provides large safety margin
+	MaxRouterInfoSize = 65536 // 64KB
+
+	// MaxLeaseSetSize is the maximum size for any LeaseSet type
+	// LeaseSets are typically <2KB; 32KB provides large safety margin
+	MaxLeaseSetSize = 32768 // 32KB
+)
+
 /*
 I2P I2NP DatabaseStore
 https://geti2p.net/spec/i2np
@@ -270,8 +281,19 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		offset += 32
 	}
 
-	// Data (remaining bytes)
-	d.Data = make([]byte, len(data)-offset)
+	// Data (remaining bytes) - validate size before allocation
+	dataLen := len(data) - offset
+	if err := validateDatabaseStoreSize(d.Type, dataLen); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "UnmarshalBinary",
+			"data_type": d.Type,
+			"data_size": dataLen,
+			"error":     err.Error(),
+		}).Error("DatabaseStore data size validation failed")
+		return err
+	}
+
+	d.Data = make([]byte, dataLen)
 	copy(d.Data, data[offset:])
 
 	log.WithFields(logger.Fields{
@@ -281,6 +303,34 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		"key":       fmt.Sprintf("%x", d.Key[:8]),
 		"has_reply": hasReply,
 	}).Debug("DatabaseStore unmarshaled successfully")
+
+	return nil
+}
+
+// validateDatabaseStoreSize checks if the data size is within acceptable limits
+// for the given DatabaseStore type to prevent memory exhaustion attacks.
+func validateDatabaseStoreSize(dataType byte, size int) error {
+	leaseSetType := dataType & 0x0F // Extract bits 3-0
+
+	switch leaseSetType {
+	case DATABASE_STORE_TYPE_ROUTER_INFO:
+		if size > MaxRouterInfoSize {
+			return fmt.Errorf("RouterInfo size %d exceeds maximum %d", size, MaxRouterInfoSize)
+		}
+	case DATABASE_STORE_TYPE_LEASESET,
+		DATABASE_STORE_TYPE_LEASESET2,
+		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+		DATABASE_STORE_TYPE_META_LEASESET:
+		if size > MaxLeaseSetSize {
+			return fmt.Errorf("LeaseSet size %d exceeds maximum %d", size, MaxLeaseSetSize)
+		}
+	default:
+		// Unknown type - use LeaseSet limit as conservative default
+		if size > MaxLeaseSetSize {
+			return fmt.Errorf("unknown DatabaseStore type %d: size %d exceeds maximum %d",
+				dataType, size, MaxLeaseSetSize)
+		}
+	}
 
 	return nil
 }
