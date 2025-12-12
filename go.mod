@@ -53,17 +53,17 @@ require (
 // publish intermediate versions.
 
 // Group 1: common, crypto, elgamal
-replace github.com/go-i2p/common => ../common
+//replace github.com/go-i2p/common => ../common
 
-replace github.com/go-i2p/crypto => ../crypto
+//replace github.com/go-i2p/crypto => ../crypto
 
 // replace github.com/go-i2p/elgamal => ../elgamal
 
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
-replace github.com/go-i2p/go-noise => ../go-noise
+//replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3
-replace github.com/go-i2p/logger => ../logger
+//replace github.com/go-i2p/logger => ../logger
 
-replace github.com/go-i2p/su3 => ../su3
+//replace github.com/go-i2p/su3 => ../su3
