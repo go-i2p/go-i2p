@@ -317,3 +317,100 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 
 	return result, nil
 }
+
+// DisconnectPayload represents the payload structure of a Disconnect (type 30) message.
+// This message allows graceful connection termination with a reason string.
+//
+// Format per I2CP v2.10.0 specification:
+//
+//	ReasonLength: uint16 (2 bytes) - length of reason string in bytes
+//	Reason: string (variable length) - UTF-8 encoded disconnect reason
+//
+// Common disconnect reasons:
+// - "client shutdown" - Normal client termination
+// - "timeout" - Connection timeout
+// - "protocol error" - Invalid message received
+// - "version mismatch" - Incompatible protocol version
+//
+// The server should clean up all session resources and close the connection
+// after receiving this message.
+type DisconnectPayload struct {
+	Reason string // UTF-8 disconnect reason string
+}
+
+// ParseDisconnectPayload deserializes a Disconnect payload from wire format.
+// Returns an error if the payload is too short or malformed.
+//
+// Wire format:
+//
+//	bytes 0-1:  Reason length (uint16, big endian)
+//	bytes 2+:   Reason string (UTF-8, length specified by bytes 0-1)
+func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
+	// Minimum size: 2 bytes for length field
+	// Reason can be empty (0 bytes), so minimum is exactly 2
+	if len(data) < 2 {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseDisconnectPayload",
+			"dataSize": len(data),
+			"required": 2,
+		}).Error("disconnect_payload_too_short")
+		return nil, fmt.Errorf("disconnect payload too short: need at least 2 bytes for length, got %d", len(data))
+	}
+
+	dp := &DisconnectPayload{}
+
+	// Parse reason length (first 2 bytes, big endian)
+	reasonLen := binary.BigEndian.Uint16(data[0:2])
+
+	// Validate we have enough bytes for the reason string
+	if len(data) < 2+int(reasonLen) {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.ParseDisconnectPayload",
+			"dataSize":    len(data),
+			"reasonLen":   reasonLen,
+			"requiredLen": 2 + int(reasonLen),
+		}).Error("disconnect_payload_incomplete")
+		return nil, fmt.Errorf("disconnect payload incomplete: need %d bytes for reason, got %d", 2+int(reasonLen), len(data))
+	}
+
+	// Parse reason string (UTF-8)
+	if reasonLen > 0 {
+		dp.Reason = string(data[2 : 2+reasonLen])
+	} else {
+		dp.Reason = ""
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.ParseDisconnectPayload",
+		"reasonLen": reasonLen,
+		"reason":    dp.Reason,
+	}).Debug("parsed_disconnect_payload")
+
+	return dp, nil
+}
+
+// MarshalBinary serializes the DisconnectPayload to wire format.
+// Returns the serialized bytes ready to be sent as an I2CP message payload.
+func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
+	// Calculate total size: 2 (length) + len(reason)
+	reasonBytes := []byte(dp.Reason)
+	totalSize := 2 + len(reasonBytes)
+	result := make([]byte, totalSize)
+
+	// Write reason length (big endian)
+	binary.BigEndian.PutUint16(result[0:2], uint16(len(reasonBytes)))
+
+	// Write reason string
+	if len(reasonBytes) > 0 {
+		copy(result[2:], reasonBytes)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.DisconnectPayload.MarshalBinary",
+		"reason":    dp.Reason,
+		"reasonLen": len(reasonBytes),
+		"totalSize": totalSize,
+	}).Debug("marshaled_disconnect_payload")
+
+	return result, nil
+}

@@ -596,6 +596,9 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 	case MessageTypeSendMessageExpires:
 		return s.handleSendMessageExpires(msg, sessionPtr)
 
+	case MessageTypeDisconnect:
+		return s.handleDisconnect(msg, sessionPtr)
+
 	default:
 		// i2psnark compatibility: Log unsupported message types with full context
 		log.WithFields(logger.Fields{
@@ -1179,6 +1182,62 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	}).Debug("returning bandwidth limits")
 
 	return response, nil
+}
+
+// handleDisconnect handles a graceful client disconnect request.
+// This allows clients to terminate the connection with a reason string.
+// The server will:
+// 1. Parse the disconnect reason from the payload
+// 2. Log the disconnect with the reason
+// 3. Clean up the session if one exists
+// 4. Return nil to signal connection should be closed (no response sent)
+//
+// Note: Returning nil from a handler signals the connection should be closed.
+func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message, error) {
+	// Parse disconnect payload
+	disconnectMsg, err := ParseDisconnectPayload(msg.Payload)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.handleDisconnect",
+			"sessionID":   msg.SessionID,
+			"payloadSize": len(msg.Payload),
+			"error":       err.Error(),
+		}).Error("failed_to_parse_disconnect_payload")
+		// Even if parse fails, proceed with disconnect
+		disconnectMsg = &DisconnectPayload{Reason: "unknown (parse error)"}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleDisconnect",
+		"sessionID": msg.SessionID,
+		"reason":    disconnectMsg.Reason,
+	}).Info("client_disconnect_requested")
+
+	// Clean up session if it exists
+	if *sessionPtr != nil {
+		session := *sessionPtr
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleDisconnect",
+			"sessionID": session.ID(),
+			"reason":    disconnectMsg.Reason,
+		}).Info("destroying_session_on_disconnect")
+
+		// Destroy the session (this cleans up resources)
+		if err := s.manager.DestroySession(session.ID()); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.handleDisconnect",
+				"sessionID": session.ID(),
+				"error":     err.Error(),
+			}).Warn("failed_to_destroy_session_on_disconnect")
+		}
+
+		// Clear session pointer
+		*sessionPtr = nil
+	}
+
+	// Returning nil signals the connection should be closed gracefully
+	// No response message is sent - client expects connection to close
+	return nil, nil
 }
 
 // handleSendMessage handles a client sending a message to a destination.
