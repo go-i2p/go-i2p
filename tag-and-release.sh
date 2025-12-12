@@ -33,12 +33,18 @@ push() {
   git push --tags
 }
 
+cleanup() {
+  git push origin --delete "v$VERSION"
+  sleep 20m
+}
+
 # descend into the go-i2p namespace and tag dependencies
 cd ../
 # store the go-i2p namespace directory
 GOI2P_DIR=$(pwd)
 # start with logger
 cd logger
+cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "logger v$VERSION"
@@ -47,6 +53,7 @@ push
 cd "$GOI2P_DIR"
 # next do crypto
 cd crypto
+cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "crypto v$VERSION"
@@ -55,6 +62,7 @@ push
 cd "$GOI2P_DIR"
 # next do common
 cd common
+cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "common v$VERSION"
@@ -63,6 +71,7 @@ push
 cd "$GOI2P_DIR"
 # next do noise
 cd noise
+cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "noise v$VERSION"
@@ -71,14 +80,17 @@ push
 cd "$GOI2P_DIR"
 # next do go-noise
 cd go-noise
+cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-noise v$VERSION"
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
+# finally do go-i2p
+cd go-i2p
+cleanup
 comment_out_replaces
 update_our_packages
-# finally do go-i2p
 git tag -sa "v$VERSION" -m "go-i2p v$VERSION
 push
