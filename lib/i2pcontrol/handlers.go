@@ -151,24 +151,12 @@ func NewRouterInfoHandler(stats RouterStatsProvider) *RouterInfoHandler {
 
 // Handle processes the RouterInfo request.
 // Returns router statistics for requested fields.
-func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	// Parse request to see which fields are requested
-	var req map[string]interface{}
-	if err := json.Unmarshal(params, &req); err != nil {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid RouterInfo parameters", err.Error())
-	}
-
-	// Get current router stats
+// buildAvailableFields constructs a map of all available RouterInfo fields and their current values.
+func (h *RouterInfoHandler) buildAvailableFields() map[string]interface{} {
 	routerStats := h.stats.GetRouterInfo()
-
-	// Get bandwidth stats
 	bandwidthStats := h.stats.GetBandwidthStats()
 
-	// Build response with requested fields
-	result := make(map[string]interface{})
-
-	// Map of available fields to their values
-	availableFields := map[string]interface{}{
+	return map[string]interface{}{
 		"i2p.router.uptime":                    routerStats.Uptime,
 		"i2p.router.version":                   routerStats.Version,
 		"i2p.router.status":                    routerStats.Status,
@@ -186,8 +174,13 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 		"i2p.router.net.bw.outbound.1s":        bandwidthStats.OutboundRate,
 		"i2p.router.net.bw.outbound.15s":       bandwidthStats.OutboundRate,
 	}
+}
 
-	// If specific fields requested, return only those
+// selectRequestedOrDefaultFields returns the requested fields from available fields,
+// or a set of default fields if no specific fields were requested or none matched.
+func selectRequestedOrDefaultFields(req, availableFields map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
 	if len(req) > 0 {
 		for field := range req {
 			if value, exists := availableFields[field]; exists {
@@ -196,14 +189,25 @@ func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) 
 		}
 	}
 
-	// If no specific fields or none matched, return common fields
 	if len(result) == 0 {
-		result["i2p.router.uptime"] = routerStats.Uptime
-		result["i2p.router.version"] = routerStats.Version
-		result["i2p.router.net.tunnels.participating"] = routerStats.ParticipatingTunnels
-		result["i2p.router.netdb.knownpeers"] = routerStats.KnownPeers
-		result["i2p.router.net.status"] = getStatusCode(h.stats.IsRunning())
+		result["i2p.router.uptime"] = availableFields["i2p.router.uptime"]
+		result["i2p.router.version"] = availableFields["i2p.router.version"]
+		result["i2p.router.net.tunnels.participating"] = availableFields["i2p.router.net.tunnels.participating"]
+		result["i2p.router.netdb.knownpeers"] = availableFields["i2p.router.netdb.knownpeers"]
+		result["i2p.router.net.status"] = availableFields["i2p.router.net.status"]
 	}
+
+	return result
+}
+
+func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
+	var req map[string]interface{}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid RouterInfo parameters", err.Error())
+	}
+
+	availableFields := h.buildAvailableFields()
+	result := selectRequestedOrDefaultFields(req, availableFields)
 
 	return result, nil
 }
