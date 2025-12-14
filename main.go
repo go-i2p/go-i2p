@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
-	"github.com/go-i2p/go-i2p/lib/router"
+	"github.com/go-i2p/go-i2p/lib/embedded"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	routerInstance *router.Router
+	embeddedRouter *embedded.StandardEmbeddedRouter
 	log            = logger.GetGoI2PLogger()
 )
 
@@ -363,17 +363,22 @@ func logConfigurationSource() {
 // manageRouterLifecycle handles the full router lifecycle: creation, startup, execution, and shutdown.
 func manageRouterLifecycle() error {
 	var err error
-	routerInstance, err = router.CreateRouter(config.RouterConfigProperties)
+	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(config.RouterConfigProperties)
 	if err != nil {
-		return fmt.Errorf("failed to create router: %w", err)
+		return fmt.Errorf("failed to create embedded router: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "startup",
 		"step":   4,
-		"reason": "router created successfully",
-	}).Info("router instance created")
+		"reason": "embedded router created successfully",
+	}).Info("embedded router instance created")
+
+	// Configure the router
+	if err := embeddedRouter.Configure(config.RouterConfigProperties); err != nil {
+		return fmt.Errorf("failed to configure router: %w", err)
+	}
 
 	signals.RegisterReloadHandler(func() {
 		if err := viper.ReadInConfig(); err != nil {
@@ -384,13 +389,16 @@ func manageRouterLifecycle() error {
 	})
 
 	signals.RegisterInterruptHandler(func() {
-		if routerInstance != nil {
+		if embeddedRouter != nil && embeddedRouter.IsRunning() {
 			log.WithFields(logger.Fields{
 				"at":     "runRouter",
 				"phase":  "shutdown",
 				"reason": "interrupt signal received",
-			}).Info("stopping router")
-			routerInstance.Stop()
+			}).Info("stopping embedded router")
+			if err := embeddedRouter.Stop(); err != nil {
+				log.WithError(err).Error("error during graceful stop, forcing hard stop")
+				embeddedRouter.HardStop()
+			}
 		}
 	})
 
@@ -399,22 +407,29 @@ func manageRouterLifecycle() error {
 		"phase":  "startup",
 		"step":   5,
 		"reason": "starting router subsystems",
-	}).Info("starting router")
-	routerInstance.Start()
+	}).Info("starting embedded router")
+
+	if err := embeddedRouter.Start(); err != nil {
+		return fmt.Errorf("failed to start router: %w", err)
+	}
 
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "running",
 		"reason": "router running, waiting for shutdown",
-	}).Info("router started, entering main loop")
-	routerInstance.Wait()
+	}).Info("embedded router started, entering main loop")
+
+	embeddedRouter.Wait()
 
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "shutdown",
 		"reason": "router shutdown complete, cleaning up",
-	}).Info("closing router")
-	routerInstance.Close()
+	}).Info("closing embedded router")
+
+	if err := embeddedRouter.Close(); err != nil {
+		return fmt.Errorf("failed to close router: %w", err)
+	}
 
 	return nil
 }
