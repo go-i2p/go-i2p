@@ -37,7 +37,7 @@ func Test_Example(t *testing.T) {
 	}
 
 	// In a real application, you would call router.Wait() here to block until shutdown is requested.
-	// Calling wait is not necessary if you have other application logic that blocks reaching the end of main.
+	// Calling Wait() is not necessary if you have other application logic that keeps the program running.
 	// For this example, we'll just log that the router has started.
 	log.Println("Router started successfully.")
 	log.Println("I2CP is running on", cfg.I2CP.Address)
@@ -49,11 +49,10 @@ func Test_Example(t *testing.T) {
 	conn.Close()
 	log.Println("Successfully connected to I2CP port.")
 	// If you have additional application logic, run it here.
-	// The key thing to remember is that the router is running in the background until you call Stop() or HardStop().
-	// For this example, we'll just log that we're done.
+	// The key thing to remember is that the router is running in background goroutines until you call Stop() or HardStop().
 	log.Println("Router is running. Proceeding to shutdown...")
+	// For this test, we'll let it run briefly before stopping.
 	time.Sleep(2 * time.Second)
-	// For this example, we'll just stop immediately
 
 	// Stop the router gracefully
 	if err := router.Stop(); err != nil {
