@@ -257,7 +257,7 @@ func TestMessageIDGeneration(t *testing.T) {
 
 // TestMessageStatusPayloadFormat verifies the exact wire format specification.
 func TestMessageStatusPayloadFormat(t *testing.T) {
-	// According to I2CP spec v2.10.0, MessageStatus payload is:
+	// According to I2CP spec v0.9.67, MessageStatus payload is:
 	// 2 bytes: Session ID (uint16, big endian)
 	// 4 bytes: Message ID (uint32, big endian)
 	// 1 byte:  Status code

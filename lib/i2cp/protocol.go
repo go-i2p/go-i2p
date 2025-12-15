@@ -1,4 +1,4 @@
-// Package i2cp implements the I2P Client Protocol (I2CP) v2.10.0.
+// Package i2cp implements the I2P Client Protocol (I2CP) v0.9.67.
 //
 // I2CP is the protocol used by client applications to communicate with the I2P router.
 // It allows clients to create sessions, send messages, and receive messages through the I2P network.
@@ -20,9 +20,9 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// Message type constants as defined in I2CP v2.10.0
+// Message type constants as defined in I2CP v0.9.67
 const (
-	// Session management - PER I2CP SPEC v2.10.0
+	// Session management - PER I2CP SPEC v0.9.67
 	MessageTypeCreateSession      = 1  // Client -> Router: Create new session
 	MessageTypeSessionStatus      = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
 	MessageTypeReconfigureSession = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
@@ -55,8 +55,8 @@ const (
 	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
 
 	// Deprecated/legacy message types
-	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v2.10.0, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v2.10.0, use type 39 (SPEC: 35, was 14)
+	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
+	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
 
 	// Deprecated receive messages (unused in fast receive mode)
 	MessageTypeReceiveMessageBegin = 6 // Client -> Router: DEPRECATED, not supported

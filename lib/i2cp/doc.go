@@ -6,7 +6,7 @@
 //   - Managing LeaseSet publication
 //
 // The server listens on localhost:7654 by default (configurable via --i2cp.address).
-// Protocol version: I2CP v2.10.0
+// Protocol version: I2CP v0.9.67
 //
 // Main components:
 //   - Server: Handles TCP/Unix socket connections

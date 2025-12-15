@@ -1193,7 +1193,7 @@ func (s *Server) handleCreateLeaseSet(msg *Message, sessionPtr **Session) (*Mess
 // - MetaLeaseSet (type 7) for multiple destinations
 // - Multiple encryption keys per destination
 //
-// Per I2CP v2.10.0 spec:
+// Per I2CP v0.9.67 spec:
 // "CreateLeaseSet2Message: Create a LeaseSet2. Sent from client to router.
 //
 //	Supports LeaseSet2, EncryptedLeaseSet, and MetaLeaseSet formats.
@@ -1274,7 +1274,7 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 }
 
 // handleGetDate returns the current router time and protocol version.
-// Per I2CP v2.10.0 spec (as of router 0.8.7):
+// Per I2CP v0.9.67 spec (as of router 0.8.7):
 // "The two parties' protocol version strings are exchanged in the Get/Set Date Messages.
 //
 //	Going forward, clients may use this information to communicate correctly with old routers."

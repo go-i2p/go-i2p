@@ -9,7 +9,7 @@ import (
 )
 
 // SendMessagePayload represents the payload structure of a SendMessage (type 7) message.
-// This structure follows the I2CP v2.10.0 specification for client-to-router message delivery.
+// This structure follows the I2CP v0.9.67 specification for client-to-router message delivery.
 //
 // Format:
 //
@@ -98,7 +98,7 @@ func (smp *SendMessagePayload) MarshalBinary() ([]byte, error) {
 }
 
 // MessagePayloadPayload represents the payload structure of a MessagePayload (type 31) message.
-// This structure follows the I2CP v2.10.0 specification for router-to-client message delivery.
+// This structure follows the I2CP v0.9.67 specification for router-to-client message delivery.
 //
 // Format per I2CP spec:
 //
@@ -197,7 +197,7 @@ func (mpp *MessagePayloadPayload) MarshalBinary() ([]byte, error) {
 // SendMessageExpiresPayload represents the payload structure of a SendMessageExpires (type 36) message.
 // This is an enhanced version of SendMessage that includes expiration time and delivery flags.
 //
-// Format per I2CP v2.10.0 specification:
+// Format per I2CP v0.9.67 specification:
 //
 //	Destination: Hash (32 bytes) - SHA256 hash of target destination
 //	Payload: []byte (variable length) - actual message data to send
@@ -331,7 +331,7 @@ func (smp *SendMessageExpiresPayload) MarshalBinary() ([]byte, error) {
 // DisconnectPayload represents the payload structure of a Disconnect (type 30) message.
 // This message allows graceful connection termination with a reason string.
 //
-// Format per I2CP v2.10.0 specification:
+// Format per I2CP v0.9.67 specification:
 //
 //	ReasonLength: uint16 (2 bytes) - length of reason string in bytes
 //	Reason: string (variable length) - UTF-8 encoded disconnect reason
@@ -428,7 +428,7 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 // HostLookupPayload represents the payload structure of a HostLookup (type 38) message.
 // This message allows clients to query for destination information by hash or hostname.
 //
-// Format per I2CP v2.10.0 specification:
+// Format per I2CP v0.9.67 specification:
 //
 //	RequestID: uint32 (4 bytes) - unique request identifier for matching reply
 //	LookupType: uint16 (2 bytes) - 0=hash lookup, 1=hostname lookup
@@ -547,7 +547,7 @@ func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 // HostReplyPayload represents the payload structure of a HostReply (type 39) message.
 // This is the server's response to a HostLookup request.
 //
-// Format per I2CP v2.10.0 specification:
+// Format per I2CP v0.9.67 specification:
 //
 //	RequestID: uint32 (4 bytes) - matches the RequestID from HostLookup
 //	ResultCode: uint8 (1 byte) - 0=success, non-zero=error code
