@@ -321,11 +321,11 @@ func TestReadMessagePayloadSizeLimit(t *testing.T) {
 // TestProtocolConstants verifies I2CP protocol constants
 func TestProtocolConstants(t *testing.T) {
 	// Test protocol version
-	if ProtocolVersionMajor != 2 {
-		t.Errorf("ProtocolVersionMajor = %d, want 2", ProtocolVersionMajor)
+	if ProtocolVersionMajor != 9 {
+		t.Errorf("ProtocolVersionMajor = %d, want 9", ProtocolVersionMajor)
 	}
-	if ProtocolVersionMinor != 10 {
-		t.Errorf("ProtocolVersionMinor = %d, want 10", ProtocolVersionMinor)
+	if ProtocolVersionMinor != 67 {
+		t.Errorf("ProtocolVersionMinor = %d, want 67", ProtocolVersionMinor)
 	}
 	if ProtocolVersionPatch != 0 {
 		t.Errorf("ProtocolVersionPatch = %d, want 0", ProtocolVersionPatch)

@@ -51,14 +51,14 @@ func TestDisconnectPayloadParse(t *testing.T) {
 		{
 			name: "long_reason",
 			payload: func() []byte {
-				reason := "Connection terminated due to protocol version mismatch: expected 2.10.0, got 2.9.0"
+				reason := "Connection terminated due to protocol version mismatch: expected 9.67.0, got 2.9.0"
 				buf := make([]byte, 2+len(reason))
 				binary.BigEndian.PutUint16(buf[0:2], uint16(len(reason)))
 				copy(buf[2:], reason)
 				return buf
 			}(),
 			expectError:  false,
-			expectReason: "Connection terminated due to protocol version mismatch: expected 2.10.0, got 2.9.0",
+			expectReason: "Connection terminated due to protocol version mismatch: expected 9.67.0, got 2.9.0",
 		},
 		{
 			name: "utf8_reason",

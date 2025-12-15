@@ -71,8 +71,8 @@ const (
 
 // Protocol version constants
 const (
-	ProtocolVersionMajor = 2
-	ProtocolVersionMinor = 10
+	ProtocolVersionMajor = 9
+	ProtocolVersionMinor = 67
 	ProtocolVersionPatch = 0
 )
 
