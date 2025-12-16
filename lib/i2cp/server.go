@@ -1317,7 +1317,7 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 	// Current router time (milliseconds since Unix epoch)
 	currentTimeMillis := time.Now().UnixMilli()
 
-	// Protocol version string: "9.67.0"
+	// Protocol version string: "0.9.67"
 	versionStr := fmt.Sprintf("%d.%d.%d",
 		ProtocolVersionMajor, ProtocolVersionMinor, ProtocolVersionPatch)
 	versionBytes := []byte(versionStr)

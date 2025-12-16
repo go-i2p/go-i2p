@@ -309,7 +309,7 @@ func TestExpirationTime(t *testing.T) {
 	}
 
 	// Test 48-bit range (max value that fits in 6 bytes)
-	maxExpiration := uint64(1<<48 - 1) // 281474976710655 ms = ~8925 years from epoch
+	maxExpiration := uint64(1<<48 - 1) // 2814740.9.67655 ms = ~8925 years from epoch
 	if maxExpiration < futureMs {
 		t.Error("48-bit expiration should support far future dates")
 	}
