@@ -322,13 +322,13 @@ func TestReadMessagePayloadSizeLimit(t *testing.T) {
 func TestProtocolConstants(t *testing.T) {
 	// Test protocol version
 	if ProtocolVersionMajor != 9 {
-		t.Errorf("ProtocolVersionMajor = %d, want 9", ProtocolVersionMajor)
+		t.Errorf("ProtocolVersionMajor = %d, want 0", ProtocolVersionMajor)
 	}
 	if ProtocolVersionMinor != 67 {
-		t.Errorf("ProtocolVersionMinor = %d, want 67", ProtocolVersionMinor)
+		t.Errorf("ProtocolVersionMinor = %d, want 9", ProtocolVersionMinor)
 	}
 	if ProtocolVersionPatch != 0 {
-		t.Errorf("ProtocolVersionPatch = %d, want 0", ProtocolVersionPatch)
+		t.Errorf("ProtocolVersionPatch = %d, want 67", ProtocolVersionPatch)
 	}
 
 	// Test reserved session IDs

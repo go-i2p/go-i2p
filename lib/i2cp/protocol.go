@@ -71,9 +71,9 @@ const (
 
 // Protocol version constants
 const (
-	ProtocolVersionMajor = 9
-	ProtocolVersionMinor = 67
-	ProtocolVersionPatch = 0
+	ProtocolVersionMajor = 0
+	ProtocolVersionMinor = 9
+	ProtocolVersionPatch = 67
 )
 
 // MessageStatus codes as defined in I2CP specification.
