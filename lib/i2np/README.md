@@ -111,6 +111,19 @@ DatabaseStore type constants (bits 3-0 of type field)
 
 ```go
 const (
+	// MaxRouterInfoSize is the maximum size for a RouterInfo (gzip-compressed)
+	// Real RouterInfos are typically 2-6KB; 64KB provides large safety margin
+	MaxRouterInfoSize = 65536 // 64KB
+
+	// MaxLeaseSetSize is the maximum size for any LeaseSet type
+	// LeaseSets are typically <2KB; 32KB provides large safety margin
+	MaxLeaseSetSize = 32768 // 32KB
+)
+```
+Size limits for DatabaseStore data payloads
+
+```go
+const (
 	TUNNEL_BUILD_REPLY_SUCCESS   = 0x00 // Tunnel hop accepted the request
 	TUNNEL_BUILD_REPLY_REJECT    = 0x01 // General rejection
 	TUNNEL_BUILD_REPLY_OVERLOAD  = 0x02 // Router is overloaded

@@ -13,7 +13,7 @@ I2CP allows client applications to communicate with the I2P network by:
     - Managing LeaseSet publication
 
 The server listens on localhost:7654 by default (configurable via
---i2cp.address). Protocol version: I2CP v2.10.0
+--i2cp.address). Protocol version: I2CP v0.9.67
 
 Main components:
 
@@ -22,7 +22,7 @@ Main components:
     - MessageRouter: Routes messages through tunnel system
     - Publisher: Publishes LeaseSets to NetDB
 
-Package i2cp implements the I2P Client Protocol (I2CP) v2.10.0.
+Package i2cp implements the I2P Client Protocol (I2CP) v0.9.67.
 
 I2CP is the protocol used by client applications to communicate with the I2P
 router. It allows clients to create sessions, send messages, and receive
@@ -53,7 +53,7 @@ const (
 
 ```go
 const (
-	// Session management - PER I2CP SPEC v2.10.0
+	// Session management - PER I2CP SPEC v0.9.67
 	MessageTypeCreateSession      = 1  // Client -> Router: Create new session
 	MessageTypeSessionStatus      = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
 	MessageTypeReconfigureSession = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
@@ -86,15 +86,15 @@ const (
 	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
 
 	// Deprecated/legacy message types
-	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v2.10.0, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v2.10.0, use type 39 (SPEC: 35, was 14)
+	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
+	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
 
 	// Deprecated receive messages (unused in fast receive mode)
 	MessageTypeReceiveMessageBegin = 6 // Client -> Router: DEPRECATED, not supported
 	MessageTypeReceiveMessageEnd   = 7 // Client -> Router: DEPRECATED, not supported
 )
 ```
-Message type constants as defined in I2CP v2.10.0
+Message type constants as defined in I2CP v0.9.67
 
 ```go
 const (
@@ -106,12 +106,22 @@ Reserved session IDs
 
 ```go
 const (
-	ProtocolVersionMajor = 2
-	ProtocolVersionMinor = 10
-	ProtocolVersionPatch = 0
+	ProtocolVersionMajor = 0
+	ProtocolVersionMinor = 9
+	ProtocolVersionPatch = 67
 )
 ```
 Protocol version constants
+
+```go
+const (
+	ExpectedProtocolVersionMajor = 0
+	ExpectedProtocolVersionMinor = 9
+	ExpectedProtocolVersionPatch = 67
+)
+```
+Expected protocol version values for testing and validation. These constants
+define the expected I2CP API version that this implementation supports.
 
 ```go
 const (
@@ -151,8 +161,8 @@ const (
 	MaxPayloadSize = 262144 // 256 KB
 
 	// MaxMessageSize is the maximum total I2CP message size including header.
-	// Header: type(1) + sessionID(2) + length(4) = 7 bytes
-	MaxMessageSize = 7 + MaxPayloadSize
+	// Header per I2CP spec: length(4) + type(1) = 5 bytes
+	MaxMessageSize = 5 + MaxPayloadSize
 
 	// DefaultPayloadSize is the typical payload size for most I2CP messages.
 	// Payloads exceeding this threshold trigger warning logs.
@@ -238,7 +248,7 @@ DisconnectPayload represents the payload structure of a Disconnect (type 30)
 message. This message allows graceful connection termination with a reason
 string.
 
-Format per I2CP v2.10.0 specification:
+Format per I2CP v0.9.67 specification:
 
     ReasonLength: uint16 (2 bytes) - length of reason string in bytes
     Reason: string (variable length) - UTF-8 encoded disconnect reason
@@ -285,7 +295,7 @@ HostLookupPayload represents the payload structure of a HostLookup (type 38)
 message. This message allows clients to query for destination information by
 hash or hostname.
 
-Format per I2CP v2.10.0 specification:
+Format per I2CP v0.9.67 specification:
 
     RequestID: uint32 (4 bytes) - unique request identifier for matching reply
     LookupType: uint16 (2 bytes) - 0=hash lookup, 1=hostname lookup
@@ -333,7 +343,7 @@ type HostReplyPayload struct {
 HostReplyPayload represents the payload structure of a HostReply (type 39)
 message. This is the server's response to a HostLookup request.
 
-Format per I2CP v2.10.0 specification:
+Format per I2CP v0.9.67 specification:
 
     RequestID: uint32 (4 bytes) - matches the RequestID from HostLookup
     ResultCode: uint8 (1 byte) - 0=success, non-zero=error code
@@ -407,12 +417,14 @@ any errors during the publication process
 ```go
 type Message struct {
 	Type      uint8  // Message type
-	SessionID uint16 // Session identifier
+	SessionID uint16 // Session identifier (application-level, not in wire format)
 	Payload   []byte // Message payload
 }
 ```
 
-Message represents a generic I2CP message
+Message represents a generic I2CP message. Wire format per I2CP spec: length(4)
++ type(1) + payload(variable) SessionID is NOT in the wire format - it's managed
+at the connection/session layer.
 
 #### func  ReadMessage
 
@@ -434,24 +446,26 @@ sessionID(2) + length(4) + payload(variable)
 ```go
 func (m *Message) UnmarshalBinary(data []byte) error
 ```
-UnmarshalBinary deserializes an I2CP message from wire format
+UnmarshalBinary deserializes an I2CP message from wire format Per I2CP spec:
+wire format is length(4) + type(1) + payload
 
 #### type MessagePayloadPayload
 
 ```go
 type MessagePayloadPayload struct {
+	SessionID uint16 // Session identifier (included in wire format)
 	MessageID uint32 // Unique message identifier
 	Payload   []byte // Decrypted message data (variable length, max 256 KB)
 }
 ```
 
 MessagePayloadPayload represents the payload structure of a MessagePayload (type
-8) message. This structure follows the I2CP v2.10.0 specification for
+31) message. This structure follows the I2CP v0.9.67 specification for
 router-to-client message delivery.
 
-Format:
+Format per I2CP spec:
 
-    SessionID: uint16 (already in Message header)
+    SessionID: uint16 (2 bytes) - session identifier (part of wire format, not common header)
     MessageID: uint32 (4 bytes) - unique identifier for this message
     Payload: []byte (variable length) - decrypted message data
 
@@ -471,10 +485,11 @@ func ParseMessagePayloadPayload(data []byte) (*MessagePayloadPayload, error)
 ParseMessagePayloadPayload deserializes a MessagePayload payload from wire
 format. Returns an error if the payload is too short or malformed.
 
-Wire format:
+Wire format per I2CP spec:
 
-    bytes 0-3:   MessageID (4 bytes, big endian)
-    bytes 4+:    Message payload (variable length)
+    bytes 0-1:   SessionID (2 bytes, big endian)
+    bytes 2-5:   MessageID (4 bytes, big endian)
+    bytes 6+:    Message payload (variable length)
 
 #### func (*MessagePayloadPayload) MarshalBinary
 
@@ -581,7 +596,7 @@ SendMessageExpiresPayload represents the payload structure of a
 SendMessageExpires (type 36) message. This is an enhanced version of SendMessage
 that includes expiration time and delivery flags.
 
-Format per I2CP v2.10.0 specification:
+Format per I2CP v0.9.67 specification:
 
     Destination: Hash (32 bytes) - SHA256 hash of target destination
     Payload: []byte (variable length) - actual message data to send
@@ -632,7 +647,7 @@ type SendMessagePayload struct {
 ```
 
 SendMessagePayload represents the payload structure of a SendMessage (type 7)
-message. This structure follows the I2CP v2.10.0 specification for
+message. This structure follows the I2CP v0.9.67 specification for
 client-to-router message delivery.
 
 Format:
@@ -732,6 +747,22 @@ func (s *Server) SetNetDB(netdb interface {
 SetNetDB sets the NetDB accessor for looking up LeaseSet data. This enables
 HostLookup queries to retrieve full destination information.
 
+#### func (*Server) SetPeerSelector
+
+```go
+func (s *Server) SetPeerSelector(selector tunnel.PeerSelector)
+```
+SetPeerSelector sets the peer selector for session tunnel pool initialization.
+Must be called before sessions are created. Thread-safe.
+
+#### func (*Server) SetTunnelBuilder
+
+```go
+func (s *Server) SetTunnelBuilder(builder tunnel.BuilderInterface)
+```
+SetTunnelBuilder sets the tunnel builder for session tunnel pool initialization.
+Must be called before sessions are created. Thread-safe.
+
 #### func (*Server) Start
 
 ```go
@@ -784,7 +815,9 @@ ServerConfig holds configuration for the I2CP server
 ```go
 func DefaultServerConfig() *ServerConfig
 ```
-DefaultServerConfig returns a ServerConfig with sensible defaults
+DefaultServerConfig returns a ServerConfig with sensible defaults. This function
+delegates to config.DefaultI2CPConfig for consistency, ensuring a single source
+of truth for I2CP defaults.
 
 #### type Session
 
@@ -913,6 +946,14 @@ func (s *Session) OutboundPool() *tunnel.Pool
 ```
 OutboundPool returns the outbound tunnel pool
 
+#### func (*Session) ProtocolVersion
+
+```go
+func (s *Session) ProtocolVersion() string
+```
+ProtocolVersion returns the client's I2CP protocol version. Returns empty string
+if not yet set via GetDate exchange.
+
 #### func (*Session) QueueIncomingMessage
 
 ```go
@@ -945,8 +986,10 @@ Returns nil, nil if the session is stopped
 ```go
 func (s *Session) Reconfigure(newConfig *SessionConfig) error
 ```
-Reconfigure updates the session configuration Note: This only updates config
-values, tunnel pools need to be recreated separately
+Reconfigure updates the session configuration by merging new values with
+existing config. Only non-zero values from newConfig are applied, preserving
+existing values for zero fields. Note: Tunnel pools need to be recreated
+separately to apply tunnel configuration changes.
 
 #### func (*Session) SetInboundPool
 
@@ -971,6 +1014,14 @@ local NetDB and distributing them to floodfill routers on the I2P network.
 func (s *Session) SetOutboundPool(pool *tunnel.Pool)
 ```
 SetOutboundPool sets the outbound tunnel pool for this session
+
+#### func (*Session) SetProtocolVersion
+
+```go
+func (s *Session) SetProtocolVersion(version string)
+```
+SetProtocolVersion stores the client's I2CP protocol version from GetDate
+message. This is called when the client sends GetDate with its version string.
 
 #### func (*Session) StartLeaseSetMaintenance
 

@@ -1,357 +1,179 @@
-# lib/embedded - Embeddable I2P Router
+# embedded
+--
+    import "github.com/go-i2p/go-i2p/lib/embedded"
 
-The `embedded` package provides a clean, reusable interface for embedding I2P routers into Go applications. It extracts the router lifecycle management from `main.go` into a library that can be used programmatically.
+![embedded.svg](embedded.svg)
 
-## Overview
+Package embedded provides a reusable interface for embedding I2P routers into Go
+applications.
 
-This package enables applications to run an I2P router as an embedded component rather than as a separate process. It provides:
+This package extracts router lifecycle management from the main application into
+a library that can be used programmatically. It provides thread-safe, structured
+lifecycle management for I2P router instances.
 
-- **Clean Interface**: `EmbeddedRouter` interface defines the contract for router lifecycle management
-- **Thread-Safe Implementation**: `StandardEmbeddedRouter` provides safe concurrent access to router state
-- **Graceful Shutdown**: Support for both graceful and immediate shutdown modes
-- **Error Handling**: Comprehensive error reporting following project conventions
+# Basic Usage
 
-## Interface
+    cfg := config.DefaultRouterConfig()
+    router, err := embedded.NewStandardEmbeddedRouter(cfg)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-```go
-type EmbeddedRouter interface {
-    // Configure initializes the router with the provided configuration
-    Configure(cfg *config.RouterConfig) error
-    
-    // Start begins router operations
-    Start() error
-    
-    // Stop performs graceful shutdown
-    Stop() error
-    
-    // HardStop performs immediate termination
-    HardStop()
-}
-```
+    if err := router.Configure(cfg); err != nil {
+        log.Fatal(err)
+    }
+
+    if err := router.Start(); err != nil {
+        log.Fatal(err)
+    }
+    defer router.Close()
+
+    router.Wait()
+
+# Lifecycle
+
+The embedded router follows a strict lifecycle:
+
+    1. Create with NewStandardEmbeddedRouter()
+    2. Configure with Configure()
+    3. Start with Start()
+    4. Run with Wait()
+    5. Stop with Stop()
+    6. Cleanup with Close()
+
+# Thread Safety
+
+All methods are thread-safe and can be called concurrently. The implementation
+uses sync.RWMutex to protect internal state.
+
+# Error Handling
+
+All lifecycle methods return errors that can be inspected. The package follows
+the project's error handling conventions with structured logging.
+
+# Graceful Shutdown
+
+The Stop() method performs graceful shutdown, waiting for subsystems to complete
+in-flight operations. For immediate termination, use HardStop().
 
 ## Usage
 
-### Basic Example
+#### type EmbeddedRouter
 
 ```go
-package main
+type EmbeddedRouter interface {
+	// Configure initializes the router with the provided configuration.
+	// Must be called before Start(). Returns error if configuration is invalid
+	// or if router is already configured.
+	Configure(cfg *config.RouterConfig) error
 
-import (
-    "log"
-    
-    "github.com/go-i2p/go-i2p/lib/config"
-    "github.com/go-i2p/go-i2p/lib/embedded"
-)
+	// Start begins router operations, starting all subsystems (networking,
+	// tunnels, netdb, etc.). Returns error if router fails to start or if
+	// called before Configure().
+	Start() error
 
-func main() {
-    // Load configuration
-    cfg := config.DefaultRouterConfig()
-    
-    // Create embedded router
-    router, err := embedded.NewStandardEmbeddedRouter(cfg)
-    if err != nil {
-        log.Fatalf("Failed to create router: %v", err)
-    }
-    
-    // Configure the router
-    if err := router.Configure(cfg); err != nil {
-        log.Fatalf("Failed to configure router: %v", err)
-    }
-    
-    // Start the router
-    if err := router.Start(); err != nil {
-        log.Fatalf("Failed to start router: %v", err)
-    }
-    
-    // Wait for router to shut down
-    router.Wait()
-    
-    // Clean up
-    if err := router.Close(); err != nil {
-        log.Printf("Error during cleanup: %v", err)
-    }
+	// Stop performs graceful shutdown of the router, allowing in-flight
+	// operations to complete. Returns error if shutdown fails or times out.
+	Stop() error
+
+	// HardStop performs immediate termination of the router without waiting
+	// for graceful cleanup. Use only when Stop() is insufficient.
+	HardStop()
 }
 ```
 
-### With Signal Handling
+EmbeddedRouter defines the interface for an embeddable I2P router instance. This
+interface allows programmatic control of router lifecycle for applications that
+need to embed an I2P router rather than run it as a standalone process.
+
+#### type StandardEmbeddedRouter
 
 ```go
-package main
-
-import (
-    "log"
-    "os"
-    "os/signal"
-    "syscall"
-    
-    "github.com/go-i2p/go-i2p/lib/config"
-    "github.com/go-i2p/go-i2p/lib/embedded"
-)
-
-func main() {
-    cfg := config.DefaultRouterConfig()
-    
-    router, err := embedded.NewStandardEmbeddedRouter(cfg)
-    if err != nil {
-        log.Fatalf("Failed to create router: %v", err)
-    }
-    
-    if err := router.Configure(cfg); err != nil {
-        log.Fatalf("Failed to configure router: %v", err)
-    }
-    
-    // Set up signal handler
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-    
-    go func() {
-        <-sigChan
-        log.Println("Shutdown signal received, stopping router...")
-        if err := router.Stop(); err != nil {
-            log.Printf("Error during graceful stop: %v", err)
-            router.HardStop()
-        }
-    }()
-    
-    if err := router.Start(); err != nil {
-        log.Fatalf("Failed to start router: %v", err)
-    }
-    
-    router.Wait()
-    
-    if err := router.Close(); err != nil {
-        log.Printf("Error during cleanup: %v", err)
-    }
+type StandardEmbeddedRouter struct {
 }
 ```
 
-### As a Service Component
+StandardEmbeddedRouter is the standard implementation of EmbeddedRouter. It
+wraps a router.Router instance and manages its lifecycle with proper
+thread-safety and error handling.
+
+#### func  NewStandardEmbeddedRouter
 
 ```go
-package myapp
-
-import (
-    "context"
-    "fmt"
-    
-    "github.com/go-i2p/go-i2p/lib/config"
-    "github.com/go-i2p/go-i2p/lib/embedded"
-)
-
-type MyI2PService struct {
-    router *embedded.StandardEmbeddedRouter
-    ctx    context.Context
-    cancel context.CancelFunc
-}
-
-func NewMyI2PService(cfg *config.RouterConfig) (*MyI2PService, error) {
-    router, err := embedded.NewStandardEmbeddedRouter(cfg)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create router: %w", err)
-    }
-    
-    if err := router.Configure(cfg); err != nil {
-        return nil, fmt.Errorf("failed to configure router: %w", err)
-    }
-    
-    ctx, cancel := context.WithCancel(context.Background())
-    
-    return &MyI2PService{
-        router: router,
-        ctx:    ctx,
-        cancel: cancel,
-    }, nil
-}
-
-func (s *MyI2PService) Start() error {
-    if err := s.router.Start(); err != nil {
-        return fmt.Errorf("failed to start router: %w", err)
-    }
-    
-    // Start your application logic here
-    go s.run()
-    
-    return nil
-}
-
-func (s *MyI2PService) run() {
-    // Your application logic that uses the I2P router
-    <-s.ctx.Done()
-}
-
-func (s *MyI2PService) Stop() error {
-    s.cancel()
-    
-    if err := s.router.Stop(); err != nil {
-        return fmt.Errorf("failed to stop router: %w", err)
-    }
-    
-    return s.router.Close()
-}
+func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error)
 ```
+NewStandardEmbeddedRouter creates a new embedded router instance. The router
+must be configured with Configure() before calling Start().
 
-## Lifecycle Management
+Returns error if the configuration is nil or invalid.
 
-The embedded router follows this lifecycle:
-
-1. **Creation**: `NewStandardEmbeddedRouter()` - Creates router wrapper
-2. **Configuration**: `Configure()` - Initializes router with configuration
-3. **Startup**: `Start()` - Starts all router subsystems
-4. **Running**: `Wait()` - Blocks until shutdown
-5. **Shutdown**: `Stop()` - Graceful shutdown of subsystems
-6. **Cleanup**: `Close()` - Releases all resources
-
-### State Transitions
-
-```
-[Created] --Configure()--> [Configured] --Start()--> [Running]
-                                                         |
-                                                    Stop()/HardStop()
-                                                         |
-                                                         v
-                                                    [Stopped] --Close()--> [Closed]
-```
-
-## Error Handling
-
-The package follows the project's error handling conventions:
-
-- All methods return descriptive errors using `fmt.Errorf` with `%w` for error wrapping
-- State violations (e.g., starting an already running router) return errors
-- Logging uses structured logging with `logger.Fields` for context
-
-## Thread Safety
-
-`StandardEmbeddedRouter` is thread-safe:
-
-- All state access is protected by `sync.RWMutex`
-- Methods can be called concurrently without external synchronization
-- Internal router state changes are atomic
-
-## Graceful vs. Hard Shutdown
-
-### Graceful Shutdown (`Stop()`)
-
-- Signals all subsystems to shut down
-- Waits for in-flight operations to complete
-- Allows proper cleanup of resources
-- Returns error if shutdown fails
-
-**Use this by default.**
-
-### Hard Shutdown (`HardStop()`)
-
-- Forces immediate termination
-- Does not wait for operations to complete
-- May leave resources in inconsistent state
-- Does not return error
-
-**Use only when:**
-- `Stop()` hangs or fails
-- Immediate termination is required
-- Application is terminating abnormally
-
-## Testing
+#### func (*StandardEmbeddedRouter) Close
 
 ```go
-package myapp_test
-
-import (
-    "testing"
-    "time"
-    
-    "github.com/go-i2p/go-i2p/lib/config"
-    "github.com/go-i2p/go-i2p/lib/embedded"
-)
-
-func TestEmbeddedRouter(t *testing.T) {
-    cfg := config.DefaultRouterConfig()
-    cfg.BaseDir = t.TempDir()
-    
-    router, err := embedded.NewStandardEmbeddedRouter(cfg)
-    if err != nil {
-        t.Fatalf("Failed to create router: %v", err)
-    }
-    
-    if err := router.Configure(cfg); err != nil {
-        t.Fatalf("Failed to configure router: %v", err)
-    }
-    
-    if err := router.Start(); err != nil {
-        t.Fatalf("Failed to start router: %v", err)
-    }
-    
-    // Verify router is running
-    if !router.IsRunning() {
-        t.Error("Router should be running")
-    }
-    
-    // Let it run briefly
-    time.Sleep(2 * time.Second)
-    
-    // Stop the router
-    if err := router.Stop(); err != nil {
-        t.Errorf("Failed to stop router: %v", err)
-    }
-    
-    // Verify router is stopped
-    if router.IsRunning() {
-        t.Error("Router should not be running")
-    }
-    
-    // Clean up
-    if err := router.Close(); err != nil {
-        t.Errorf("Failed to close router: %v", err)
-    }
-}
+func (e *StandardEmbeddedRouter) Close() error
 ```
+Close releases all resources associated with the router. This should be called
+after Stop() to ensure proper cleanup.
 
-## Differences from Direct Router Usage
-
-### Before (main.go direct usage)
+#### func (*StandardEmbeddedRouter) Configure
 
 ```go
-routerInstance, err := router.CreateRouter(config.RouterConfigProperties)
-if err != nil {
-    log.Fatalf("Failed: %v", err)
-}
-
-routerInstance.Start()
-routerInstance.Wait()
-routerInstance.Close()
+func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error
 ```
+Configure initializes the router with the provided configuration. This method
+creates the underlying router instance but does not start it.
 
-### After (embedded package)
+#### func (*StandardEmbeddedRouter) HardStop
 
 ```go
-router, err := embedded.NewStandardEmbeddedRouter(cfg)
-if err != nil {
-    log.Fatalf("Failed: %v", err)
-}
-
-router.Configure(cfg)
-router.Start()
-router.Wait()
-router.Close()
+func (e *StandardEmbeddedRouter) HardStop()
 ```
+HardStop performs immediate termination without graceful cleanup. Use this only
+when Stop() fails or when immediate termination is required.
 
-### Benefits
+#### func (*StandardEmbeddedRouter) IsConfigured
 
-1. **Clearer lifecycle**: Explicit Configure/Start/Stop/Close steps
-2. **Better error handling**: All lifecycle methods return errors
-3. **State validation**: Prevents invalid operations (e.g., starting twice)
-4. **Reusability**: Can be embedded in other applications
-5. **Testing**: Easier to test with explicit state management
+```go
+func (e *StandardEmbeddedRouter) IsConfigured() bool
+```
+IsConfigured returns true if the router has been configured.
 
-## Implementation Notes
+#### func (*StandardEmbeddedRouter) IsRunning
 
-- The package wraps `router.Router` without modifying its behavior
-- All logging follows the project's structured logging conventions
-- Signal handling remains in the application layer (not in the embedded package)
-- Configuration reloading is handled by the application, not the embedded router
+```go
+func (e *StandardEmbeddedRouter) IsRunning() bool
+```
+IsRunning returns true if the router is currently running.
 
-## See Also
+#### func (*StandardEmbeddedRouter) Start
 
-- `lib/router` - Core router implementation
-- `lib/config` - Router configuration structures
-- `main.go` - Reference implementation using embedded router
+```go
+func (e *StandardEmbeddedRouter) Start() error
+```
+Start begins router operations. The router must be configured before calling
+Start(). This method starts all router subsystems and blocks until the router is
+fully started.
+
+#### func (*StandardEmbeddedRouter) Stop
+
+```go
+func (e *StandardEmbeddedRouter) Stop() error
+```
+Stop performs graceful shutdown of the router. This method stops all router
+subsystems and waits for them to shut down cleanly.
+
+#### func (*StandardEmbeddedRouter) Wait
+
+```go
+func (e *StandardEmbeddedRouter) Wait()
+```
+Wait blocks until the router shuts down. This method can be called after Start()
+to keep the router running until Stop() is called.
+
+
+
+embedded 
+
+github.com/go-i2p/go-i2p/lib/embedded
+
+[go-i2p template file](/template.md)

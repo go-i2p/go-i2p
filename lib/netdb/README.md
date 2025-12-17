@@ -1005,7 +1005,6 @@ func (db *StdNetDB) CheckFilePathValid(fpath string) bool
 ```go
 func (db *StdNetDB) Create() (err error)
 ```
-create base network database directory
 
 #### func (*StdNetDB) Ensure
 

@@ -1193,8 +1193,6 @@ Parameters:
 ```go
 func (h *RouterInfoHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
 ```
-Handle processes the RouterInfo request. Returns router statistics for requested
-fields.
 
 #### type RouterInfoStats
 
