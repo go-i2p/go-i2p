@@ -45,12 +45,14 @@ type ServerConfig struct {
 	LeaseSetPublisher LeaseSetPublisher
 }
 
-// DefaultServerConfig returns a ServerConfig with sensible defaults
+// DefaultServerConfig returns a ServerConfig with sensible defaults.
+// This function delegates to config.DefaultI2CPConfig for consistency,
+// ensuring a single source of truth for I2CP defaults.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		ListenAddr:     fmt.Sprintf("localhost:%d", config.DefaultI2CPPort),
-		Network:        "tcp",
-		MaxSessions:    100,
+		ListenAddr:     config.DefaultI2CPConfig.Address,
+		Network:        config.DefaultI2CPConfig.Network,
+		MaxSessions:    config.DefaultI2CPConfig.MaxSessions,
 		ReadTimeout:    60 * time.Second,
 		WriteTimeout:   30 * time.Second,
 		SessionTimeout: 30 * time.Minute,
@@ -83,6 +85,10 @@ type Server struct {
 	netdb interface {
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	}
+
+	// Tunnel infrastructure for session tunnel pool initialization
+	tunnelBuilder tunnel.BuilderInterface
+	peerSelector  tunnel.PeerSelector
 
 	// Connection tracking for message delivery
 	mu           sync.RWMutex
@@ -199,6 +205,30 @@ func (s *Server) Stop() error {
 	log.WithField("at", "i2cp.Server.Stop").Info("i2cp_server_stopped")
 
 	return nil
+}
+
+// SetTunnelBuilder sets the tunnel builder for session tunnel pool initialization.
+// Must be called before sessions are created. Thread-safe.
+func (s *Server) SetTunnelBuilder(builder tunnel.BuilderInterface) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tunnelBuilder = builder
+	log.WithFields(logger.Fields{
+		"at":     "i2cp.Server.SetTunnelBuilder",
+		"reason": "tunnel builder configured",
+	}).Debug("tunnel builder set for I2CP server")
+}
+
+// SetPeerSelector sets the peer selector for session tunnel pool initialization.
+// Must be called before sessions are created. Thread-safe.
+func (s *Server) SetPeerSelector(selector tunnel.PeerSelector) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peerSelector = selector
+	log.WithFields(logger.Fields{
+		"at":     "i2cp.Server.SetPeerSelector",
+		"reason": "peer selector configured",
+	}).Debug("peer selector set for I2CP server")
 }
 
 // recoverFromAcceptPanic recovers from any panic in the accept loop to prevent server crash.
@@ -751,6 +781,16 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 		session.SetLeaseSetPublisher(s.leaseSetPublisher)
 	}
 
+	// Initialize tunnel pools with builders if available
+	if err := s.initializeSessionTunnelPools(session, config); err != nil {
+		// Log warning but don't fail session creation - pools can be set up later
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleCreateSession",
+			"sessionID": session.ID(),
+			"error":     err.Error(),
+		}).Warn("failed to initialize tunnel pools")
+	}
+
 	*sessionPtr = session
 
 	// i2psnark compatibility: Log detailed session creation info
@@ -806,6 +846,64 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 	}
 
 	return dest, config
+}
+
+// initializeSessionTunnelPools creates and configures tunnel pools for a session.
+// This requires both tunnelBuilder and peerSelector to be set via SetTunnelBuilder
+// and SetPeerSelector. If either is missing, pools are not initialized and an error
+// is returned (but session creation can still proceed).
+func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionConfig) error {
+	s.mu.RLock()
+	builder := s.tunnelBuilder
+	selector := s.peerSelector
+	s.mu.RUnlock()
+
+	// Check if tunnel infrastructure is available
+	if builder == nil || selector == nil {
+		return fmt.Errorf("tunnel infrastructure not configured (builder=%v, selector=%v)",
+			builder != nil, selector != nil)
+	}
+
+	// Create inbound tunnel pool
+	inboundConfig := tunnel.PoolConfig{
+		MinTunnels:       config.InboundTunnelCount,
+		MaxTunnels:       config.InboundTunnelCount + 2, // Allow some extra capacity
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		BuildRetryDelay:  2 * time.Second,
+		MaxBuildRetries:  3,
+		HopCount:         config.InboundTunnelLength,
+		IsInbound:        true,
+	}
+	inboundPool := tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
+	inboundPool.SetTunnelBuilder(builder)
+	session.SetInboundPool(inboundPool)
+
+	// Create outbound tunnel pool
+	outboundConfig := tunnel.PoolConfig{
+		MinTunnels:       config.OutboundTunnelCount,
+		MaxTunnels:       config.OutboundTunnelCount + 2, // Allow some extra capacity
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		BuildRetryDelay:  2 * time.Second,
+		MaxBuildRetries:  3,
+		HopCount:         config.OutboundTunnelLength,
+		IsInbound:        false,
+	}
+	outboundPool := tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
+	outboundPool.SetTunnelBuilder(builder)
+	session.SetOutboundPool(outboundPool)
+
+	log.WithFields(logger.Fields{
+		"at":                    "i2cp.Server.initializeSessionTunnelPools",
+		"sessionID":             session.ID(),
+		"inbound_hop_count":     config.InboundTunnelLength,
+		"outbound_hop_count":    config.OutboundTunnelLength,
+		"inbound_tunnel_count":  config.InboundTunnelCount,
+		"outbound_tunnel_count": config.OutboundTunnelCount,
+	}).Info("tunnel_pools_initialized")
+
+	return nil
 }
 
 // buildSessionStatusResponse creates a successful SessionStatus message.
@@ -880,9 +978,12 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 // Per I2CP spec: After session creation, router waits for inbound+outbound tunnels,
 // then sends type 37 with lease data. Client responds with CreateLeaseSet (type 5).
 //
-// NOTE: This requires tunnel pools to be attached to the session by the router layer.
-// Currently pools are not attached during handleCreateSession, so this will wait
-// indefinitely. This is Bug #2's partial fix - pools need router integration.
+// TODO: Full tunnel pool integration required. The router must:
+// 1. Attach tunnel pools with proper TunnelBuilder during session creation
+// 2. Provide peer selector for tunnel hop selection
+// 3. Integrate with transport layer for tunnel establishment
+// 4. Set up tunnel lifecycle management (expiry, rotation)
+// Currently pools may not build tunnels automatically without this integration.
 func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Conn) {
 	sessionID := session.ID()
 	logMonitoringStart(sessionID)

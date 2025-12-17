@@ -1092,6 +1092,23 @@ func (r *Router) startI2CPServer() error {
 	// Set NetDB for HostLookup functionality
 	server.SetNetDB(r.StdNetDB)
 
+	// Configure tunnel infrastructure for session tunnel pool initialization
+	if r.tunnelManager != nil {
+		server.SetTunnelBuilder(r.tunnelManager)
+		log.Debug("I2CP server: tunnel builder configured")
+	} else {
+		log.Warn("I2CP server: tunnel manager not available for session pools")
+	}
+
+	// Create peer selector for tunnel building
+	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
+	if err != nil {
+		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
+	} else {
+		server.SetPeerSelector(peerSelector)
+		log.Debug("I2CP server: peer selector configured")
+	}
+
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start I2CP server: %w", err)
 	}

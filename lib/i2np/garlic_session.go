@@ -15,6 +15,7 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"go.step.sm/crypto/x25519"
+	"golang.org/x/crypto/curve25519"
 )
 
 // GarlicSessionManager manages ECIES-X25519-AEAD-Ratchet sessions for garlic encryption.
@@ -56,15 +57,10 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 		"at": "NewGarlicSessionManager",
 	}).Debug("Creating new garlic session manager")
 
-	// Derive public key from private key
-	pubBytes, _, err := ecies.GenerateKeyPair()
-	if err != nil {
-		log.WithError(err).Error("Failed to derive public key for session manager")
-		return nil, oops.Wrapf(err, "failed to derive public key")
-	}
-
+	// Derive public key from private key using X25519 scalar multiplication
+	// publicKey = privateKey * basepoint (standard X25519 key derivation)
 	var publicKey [32]byte
-	copy(publicKey[:], pubBytes)
+	curve25519.ScalarBaseMult(&publicKey, &privateKey)
 
 	log.WithFields(logger.Fields{
 		"at":              "NewGarlicSessionManager",
