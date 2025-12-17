@@ -492,14 +492,14 @@ func TestReservedSessionIDConstants(t *testing.T) {
 
 // TestProtocolVersionConstants verifies protocol version constants.
 func TestProtocolVersionConstants(t *testing.T) {
-	if ProtocolVersionMajor != 0 {
-		t.Errorf("ProtocolVersionMajor = %d, want 0", ProtocolVersionMajor)
+	if ProtocolVersionMajor != ExpectedProtocolVersionMajor {
+		t.Errorf("ProtocolVersionMajor = %d, want %d", ProtocolVersionMajor, ExpectedProtocolVersionMajor)
 	}
-	if ProtocolVersionMinor != 9 {
-		t.Errorf("ProtocolVersionMinor = %d, want 9", ProtocolVersionMinor)
+	if ProtocolVersionMinor != ExpectedProtocolVersionMinor {
+		t.Errorf("ProtocolVersionMinor = %d, want %d", ProtocolVersionMinor, ExpectedProtocolVersionMinor)
 	}
-	if ProtocolVersionPatch != 67 {
-		t.Errorf("ProtocolVersionPatch = %d, want 67", ProtocolVersionPatch)
+	if ProtocolVersionPatch != ExpectedProtocolVersionPatch {
+		t.Errorf("ProtocolVersionPatch = %d, want %d", ProtocolVersionPatch, ExpectedProtocolVersionPatch)
 	}
 
 	t.Logf("Protocol version: %d.%d.%d",

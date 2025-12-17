@@ -76,6 +76,14 @@ const (
 	ProtocolVersionPatch = 67
 )
 
+// Expected protocol version values for testing and validation.
+// These constants define the expected I2CP API version that this implementation supports.
+const (
+	ExpectedProtocolVersionMajor = 0
+	ExpectedProtocolVersionMinor = 9
+	ExpectedProtocolVersionPatch = 67
+)
+
 // MessageStatus codes as defined in I2CP specification.
 // These codes indicate the delivery status of messages sent via SendMessage.
 const (
