@@ -20,6 +20,24 @@ endif
 #check for gofumpt
 check_gofumpt:
 	@which gofumpt > /dev/null 2>&1 || (echo "gofumpt is required but not installed. Please install it from https://github.com/mvdan/gofumpt."; exit 1)
+	make help_deps
+
+#check for trivy
+check_trivy:
+	@which trivy > /dev/null 2>&1 || (echo "trivy is required for SPDX/SBOM generation. Please install it from https://github.com/aquasecurity/trivy"; exit 1)
+	make help_deps
+
+#check for comply
+check_comply:
+	@which comply > /dev/null 2>&1 || (echo "comply is required for license directory generation. Please install it from https://github.com/leeanthony/comply"; exit 1)
+	make help_deps
+
+#message about deps:
+help_deps:
+	@echo "Or install them using go install"
+	@echo "go install github.com/aquasecurity/trivy/cmd/trivy@latest"
+	@echo "go install github.com/leaanthony/comply@latest"
+	@echo "go install mvdan.cc/gofumpt@latest"
 
 build: clean $(EXE)
 
@@ -31,6 +49,11 @@ clean:
 
 fmt:
 	find . -name '*.go' -exec gofumpt -w -extra {} \;
+
+compliant:
+	go mod vendor
+	comply
+	rm -rf vendor
 
 info:
 	echo "GOROOT: ${GOROOT}"
