@@ -50,10 +50,13 @@ clean:
 fmt:
 	find . -name '*.go' -exec gofumpt -w -extra {} \;
 
-compliant:
+comply: check_comply
 	go mod vendor
 	comply
 	rm -rf vendor
+
+sbom: check_trivy
+	trivy fs --scanners license --format spdx-json --output LICENSES.spdx.json .
 
 info:
 	echo "GOROOT: ${GOROOT}"
