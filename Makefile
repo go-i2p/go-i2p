@@ -19,18 +19,15 @@ endif
 
 #check for gofumpt
 check_gofumpt:
-	@which gofumpt > /dev/null 2>&1 || (echo "gofumpt is required but not installed. Please install it from https://github.com/mvdan/gofumpt."; exit 1)
-	make help_deps
+	@which gofumpt > /dev/null 2>&1 || (echo "gofumpt is required but not installed. Please install it from https://github.com/mvdan/gofumpt."; exit 1) || make help_deps
 
 #check for trivy
 check_trivy:
-	@which trivy > /dev/null 2>&1 || (echo "trivy is required for SPDX/SBOM generation. Please install it from https://github.com/aquasecurity/trivy"; exit 1)
-	make help_deps
+	@which trivy > /dev/null 2>&1 || (echo "trivy is required for SPDX/SBOM generation. Please install it from https://github.com/aquasecurity/trivy"; exit 1) || make help_deps
 
 #check for comply
 check_comply:
-	@which comply > /dev/null 2>&1 || (echo "comply is required for license directory generation. Please install it from https://github.com/leeanthony/comply"; exit 1)
-	make help_deps
+	@which comply > /dev/null 2>&1 || (echo "comply is required for license directory generation. Please install it from https://github.com/leeanthony/comply"; exit 1) || make help_deps
 
 #message about deps:
 help_deps:
@@ -47,7 +44,7 @@ $(EXE):
 clean:
 	$(GO) clean -v
 
-fmt:
+fmt: check_gofumpt
 	find . -name '*.go' -exec gofumpt -w -extra {} \;
 
 comply: check_comply

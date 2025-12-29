@@ -30,7 +30,7 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 		"at":     "Mux",
 		"reason": "created_successfully",
 	}).Debug("TransportMuxer created")
-	return
+	return tmux
 }
 
 // set the identity for every transport
@@ -52,7 +52,7 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 				"error":           err.Error(),
 			}).Error("failed to set identity for transport")
 			// an error happened let's return and complain
-			return
+			return err
 		}
 		log.WithFields(logger.Fields{
 			"at":              "(TransportMuxer) SetIdentity",
@@ -64,7 +64,7 @@ func (tmux *TransportMuxer) SetIdentity(ident router_info.RouterInfo) (err error
 		"at":     "(TransportMuxer) SetIdentity",
 		"reason": "all_transports_configured",
 	}).Debug("identity set for all transports")
-	return
+	return err
 }
 
 // close every transport that this transport muxer has
@@ -96,7 +96,7 @@ func (tmux *TransportMuxer) Close() (err error) {
 		"at":     "(TransportMuxer) Close",
 		"reason": "all_transports_closed",
 	}).Debug("all transports closed")
-	return
+	return err
 }
 
 // the name of this transport with the names of all the ones that we mux
@@ -194,13 +194,13 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			if err != nil {
 				continue
 			}
-			return
+			return s, err
 		}
 	}
 
 	tmux.logNoTransportError(routerInfo)
 	err = ErrNoTransportAvailable
-	return
+	return s, err
 }
 
 // is there a transport that we mux that is compatible with this router info?

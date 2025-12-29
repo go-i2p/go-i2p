@@ -371,7 +371,7 @@ func parseMessageHeader(header []byte) (msgType uint8, sessionID uint16, payload
 		"headerHex":    fmt.Sprintf("%x", header),
 	}).Debug("parsed_message_header")
 
-	return
+	return msgType, sessionID, payloadLen
 }
 
 // validatePayloadSize checks if the payload length exceeds the maximum allowed size per I2CP specification.

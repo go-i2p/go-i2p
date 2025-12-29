@@ -417,7 +417,7 @@ func (p *Pool) countTunnelsLocked() (active, nearExpiry int) {
 			}
 		}
 	}
-	return
+	return active, nearExpiry
 }
 
 // calculateNeededTunnels determines how many tunnels to build

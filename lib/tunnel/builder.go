@@ -367,27 +367,27 @@ func generateHopCryptoKeys() (layerKey, ivKey, replyKey session_key.SessionKey, 
 	layerKey, err = generateSessionKey()
 	if err != nil {
 		err = fmt.Errorf("failed to generate layer key: %w", err)
-		return
+		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	ivKey, err = generateSessionKey()
 	if err != nil {
 		err = fmt.Errorf("failed to generate IV key: %w", err)
-		return
+		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	replyKey, err = generateSessionKey()
 	if err != nil {
 		err = fmt.Errorf("failed to generate reply key: %w", err)
-		return
+		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
 	if _, err = rand.Read(replyIV[:]); err != nil {
 		err = fmt.Errorf("failed to generate reply IV: %w", err)
-		return
+		return layerKey, ivKey, replyKey, replyIV, err
 	}
 
-	return
+	return layerKey, ivKey, replyKey, replyIV, err
 }
 
 // generateRecordPadding generates random padding for a build request record.
@@ -457,7 +457,7 @@ func (tb *TunnelBuilder) determineRoutingParams(
 		}
 	}
 
-	return
+	return receiveTunnel, nextTunnel, ourIdent, nextIdent, err
 }
 
 func (tb *TunnelBuilder) determineInboundRouting(
@@ -489,7 +489,7 @@ func (tb *TunnelBuilder) determineInboundRouting(
 		}
 	}
 
-	return
+	return receiveTunnel, nextTunnel, nextIdent, err
 }
 
 func (tb *TunnelBuilder) determineOutboundRouting(
@@ -515,7 +515,7 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 		}
 	}
 
-	return
+	return receiveTunnel, nextTunnel, nextIdent, err
 }
 
 // generateTunnelID creates a cryptographically random tunnel ID.
