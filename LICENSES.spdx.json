@@ -1,0 +1,1788 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": ".",
+  "documentNamespace": "http://trivy.dev/repository/.-e9051d6f-dbcb-44d8-b10c-2507c11b55a5",
+  "creationInfo": {
+    "creators": [
+      "Organization: aquasecurity",
+      "Tool: trivy-0.68.2"
+    ],
+    "created": "2025-12-29T18:42:49Z"
+  },
+  "packages": [
+    {
+      "name": "go.mod",
+      "SPDXID": "SPDXRef-Application-e90da172ca54b427",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "primaryPackagePurpose": "APPLICATION",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "Class: lang-pkgs"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "Type: gomod"
+        }
+      ]
+    },
+    {
+      "name": "filippo.io/edwards25519",
+      "SPDXID": "SPDXRef-Package-e51751278eff7003",
+      "versionInfo": "v1.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/filippo.io/edwards25519@v1.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: filippo.io/edwards25519@v1.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/beevik/ntp",
+      "SPDXID": "SPDXRef-Package-588b66c5c561c794",
+      "versionInfo": "v1.5.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "BSD-2-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/beevik/ntp@v1.5.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/beevik/ntp@v1.5.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/cespare/xxhash/v2",
+      "SPDXID": "SPDXRef-Package-66df394e911b4aa1",
+      "versionInfo": "v2.3.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/cespare/xxhash/v2@v2.3.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/cespare/xxhash/v2@v2.3.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/davecgh/go-spew",
+      "SPDXID": "SPDXRef-Package-5a5175bf60514336",
+      "versionInfo": "v1.1.2-0.20180830191138-d8f796af33cc",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/davecgh/go-spew@v1.1.2-0.20180830191138-d8f796af33cc"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/dchest/siphash",
+      "SPDXID": "SPDXRef-Package-2ed5c595b240017f",
+      "versionInfo": "v1.2.3",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "CC0-1.0",
+      "licenseDeclared": "CC0-1.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/dchest/siphash@v1.2.3"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/dchest/siphash@v1.2.3"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/eyedeekay/go-unzip",
+      "SPDXID": "SPDXRef-Package-bbe77d2fe4f3e5ca",
+      "versionInfo": "v0.0.0-20240201194209-560d8225b50e",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/eyedeekay/go-unzip@v0.0.0-20240201194209-560d8225b50e"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/eyedeekay/go-unzip@v0.0.0-20240201194209-560d8225b50e"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/fsnotify/fsnotify",
+      "SPDXID": "SPDXRef-Package-4f8073cb3c78a98a",
+      "versionInfo": "v1.9.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/fsnotify/fsnotify@v1.9.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/fsnotify/fsnotify@v1.9.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/common",
+      "SPDXID": "SPDXRef-Package-2cbeae2bd094062e",
+      "versionInfo": "v0.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/common@v0.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/common@v0.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/crypto",
+      "SPDXID": "SPDXRef-Package-806078e4ace7a83f",
+      "versionInfo": "v0.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/crypto@v0.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/crypto@v0.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/elgamal",
+      "SPDXID": "SPDXRef-Package-79f13c6ca9be6341",
+      "versionInfo": "v0.0.2",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/elgamal@v0.0.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/elgamal@v0.0.2"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/go-i2p",
+      "SPDXID": "SPDXRef-Package-4df06fd0c33c6b36",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/go-i2p"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/go-i2p"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/go-noise",
+      "SPDXID": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "versionInfo": "v0.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/go-noise@v0.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/go-noise@v0.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/logger",
+      "SPDXID": "SPDXRef-Package-2e29297a621c609c",
+      "versionInfo": "v0.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/logger@v0.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/logger@v0.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/noise",
+      "SPDXID": "SPDXRef-Package-f3e45df4cd331e10",
+      "versionInfo": "v0.0.0-20251212204422-ded862d8cdf9",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/noise@v0.0.0-20251212204422-ded862d8cdf9"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/noise@v0.0.0-20251212204422-ded862d8cdf9"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-i2p/su3",
+      "SPDXID": "SPDXRef-Package-6889ccd166f870cd",
+      "versionInfo": "v0.0.1",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-i2p/su3@v0.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-i2p/su3@v0.0.1"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/go-viper/mapstructure/v2",
+      "SPDXID": "SPDXRef-Package-1cb726592b213253",
+      "versionInfo": "v2.4.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/go-viper/mapstructure/v2@v2.4.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/go-viper/mapstructure/v2@v2.4.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/inconshreveable/mousetrap",
+      "SPDXID": "SPDXRef-Package-7d458188318eac05",
+      "versionInfo": "v1.1.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/inconshreveable/mousetrap@v1.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/inconshreveable/mousetrap@v1.1.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/oklog/ulid/v2",
+      "SPDXID": "SPDXRef-Package-bc76fa8be9b24f3a",
+      "versionInfo": "v2.1.1",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/oklog/ulid/v2@v2.1.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/oklog/ulid/v2@v2.1.1"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/pelletier/go-toml/v2",
+      "SPDXID": "SPDXRef-Package-cc70fef155284df9",
+      "versionInfo": "v2.2.4",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/pelletier/go-toml/v2@v2.2.4"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/pelletier/go-toml/v2@v2.2.4"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/pmezard/go-difflib",
+      "SPDXID": "SPDXRef-Package-45523642ffb13c1d",
+      "versionInfo": "v1.0.1-0.20181226105442-5d4384ee4fb2",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/pmezard/go-difflib@v1.0.1-0.20181226105442-5d4384ee4fb2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/pmezard/go-difflib@v1.0.1-0.20181226105442-5d4384ee4fb2"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/sagikazarmark/locafero",
+      "SPDXID": "SPDXRef-Package-5a5012744f83351e",
+      "versionInfo": "v0.12.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/sagikazarmark/locafero@v0.12.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/sagikazarmark/locafero@v0.12.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/samber/lo",
+      "SPDXID": "SPDXRef-Package-86d6df9d2ea6af77",
+      "versionInfo": "v1.52.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/samber/lo@v1.52.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/samber/lo@v1.52.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/samber/oops",
+      "SPDXID": "SPDXRef-Package-c3621ec6a374429d",
+      "versionInfo": "v1.19.4",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/samber/oops@v1.19.4"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/samber/oops@v1.19.4"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/sirupsen/logrus",
+      "SPDXID": "SPDXRef-Package-bb1b0f2589bd909f",
+      "versionInfo": "v1.9.3",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/sirupsen/logrus@v1.9.3"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/sirupsen/logrus@v1.9.3"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/spf13/afero",
+      "SPDXID": "SPDXRef-Package-cd751df2065af012",
+      "versionInfo": "v1.15.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/spf13/afero@v1.15.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/spf13/afero@v1.15.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/spf13/cast",
+      "SPDXID": "SPDXRef-Package-81d33a605a0ee858",
+      "versionInfo": "v1.10.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/spf13/cast@v1.10.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/spf13/cast@v1.10.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/spf13/cobra",
+      "SPDXID": "SPDXRef-Package-134feb54b43409fd",
+      "versionInfo": "v1.10.2",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/spf13/cobra@v1.10.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/spf13/cobra@v1.10.2"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/spf13/pflag",
+      "SPDXID": "SPDXRef-Package-c5f5ae171d0b21a9",
+      "versionInfo": "v1.0.10",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/spf13/pflag@v1.0.10"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/spf13/pflag@v1.0.10"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/spf13/viper",
+      "SPDXID": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "versionInfo": "v1.21.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/spf13/viper@v1.21.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/spf13/viper@v1.21.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/stretchr/testify",
+      "SPDXID": "SPDXRef-Package-2a26d73fd5182aa4",
+      "versionInfo": "v1.11.1",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/stretchr/testify@v1.11.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/stretchr/testify@v1.11.1"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "github.com/subosito/gotenv",
+      "SPDXID": "SPDXRef-Package-13f59ed5eb073398",
+      "versionInfo": "v1.6.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/subosito/gotenv@v1.6.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: github.com/subosito/gotenv@v1.6.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "go.opentelemetry.io/otel",
+      "SPDXID": "SPDXRef-Package-bf980e1cd6b6377d",
+      "versionInfo": "v1.39.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0 AND BSD-3-Clause",
+      "licenseDeclared": "Apache-2.0 AND BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/go.opentelemetry.io/otel@v1.39.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: go.opentelemetry.io/otel@v1.39.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "go.opentelemetry.io/otel/trace",
+      "SPDXID": "SPDXRef-Package-3452b4d2c0d5ee63",
+      "versionInfo": "v1.39.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0 AND BSD-3-Clause",
+      "licenseDeclared": "Apache-2.0 AND BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/go.opentelemetry.io/otel/trace@v1.39.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: go.opentelemetry.io/otel/trace@v1.39.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "go.step.sm/crypto",
+      "SPDXID": "SPDXRef-Package-d081be69afcf8ca3",
+      "versionInfo": "v0.75.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/go.step.sm/crypto@v0.75.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: go.step.sm/crypto@v0.75.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "go.yaml.in/yaml/v3",
+      "SPDXID": "SPDXRef-Package-5ade647d758a1202",
+      "versionInfo": "v3.0.4",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0 AND MIT",
+      "licenseDeclared": "Apache-2.0 AND MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/go.yaml.in/yaml/v3@v3.0.4"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: go.yaml.in/yaml/v3@v3.0.4"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "SPDXID": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "versionInfo": "v0.46.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/crypto@v0.46.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: golang.org/x/crypto@v0.46.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/net",
+      "SPDXID": "SPDXRef-Package-4c4e55cf17136baa",
+      "versionInfo": "v0.48.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/net@v0.48.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: golang.org/x/net@v0.48.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/sys",
+      "SPDXID": "SPDXRef-Package-b85d8d4fb89d570c",
+      "versionInfo": "v0.39.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/sys@v0.39.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: golang.org/x/sys@v0.39.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/text",
+      "SPDXID": "SPDXRef-Package-67f62736e8473d6f",
+      "versionInfo": "v0.32.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/text@v0.32.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: golang.org/x/text@v0.32.0"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "SPDXID": "SPDXRef-Package-12cab821fcbc24a0",
+      "versionInfo": "v3.0.1",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "sourceInfo": "package found in: go.mod",
+      "licenseConcluded": "Apache-2.0 AND MIT",
+      "licenseDeclared": "Apache-2.0 AND MIT",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/gopkg.in/yaml.v3@v3.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgID: gopkg.in/yaml.v3@v3.0.1"
+        },
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "PkgType: gomod"
+        }
+      ]
+    },
+    {
+      "name": ".",
+      "SPDXID": "SPDXRef-Repository-741c5ff31ac42f2e",
+      "downloadLocation": "git+.",
+      "filesAnalyzed": false,
+      "primaryPackagePurpose": "SOURCE",
+      "annotations": [
+        {
+          "annotator": "Tool: trivy-0.68.2",
+          "annotationDate": "2025-12-29T18:42:49Z",
+          "annotationType": "OTHER",
+          "comment": "SchemaVersion: 2"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Application-e90da172ca54b427",
+      "relatedSpdxElement": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relationshipType": "CONTAINS"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relatedSpdxElement": "SPDXRef-Repository-741c5ff31ac42f2e",
+      "relationshipType": "DESCRIBES"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-134feb54b43409fd",
+      "relatedSpdxElement": "SPDXRef-Package-5ade647d758a1202",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-134feb54b43409fd",
+      "relatedSpdxElement": "SPDXRef-Package-7d458188318eac05",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-134feb54b43409fd",
+      "relatedSpdxElement": "SPDXRef-Package-c5f5ae171d0b21a9",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-13f59ed5eb073398",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-13f59ed5eb073398",
+      "relatedSpdxElement": "SPDXRef-Package-67f62736e8473d6f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relatedSpdxElement": "SPDXRef-Package-12cab821fcbc24a0",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relatedSpdxElement": "SPDXRef-Package-45523642ffb13c1d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relatedSpdxElement": "SPDXRef-Package-5a5175bf60514336",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2cbeae2bd094062e",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2cbeae2bd094062e",
+      "relatedSpdxElement": "SPDXRef-Package-2e29297a621c609c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2cbeae2bd094062e",
+      "relatedSpdxElement": "SPDXRef-Package-806078e4ace7a83f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2cbeae2bd094062e",
+      "relatedSpdxElement": "SPDXRef-Package-c3621ec6a374429d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2cbeae2bd094062e",
+      "relatedSpdxElement": "SPDXRef-Package-d081be69afcf8ca3",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-2e29297a621c609c",
+      "relatedSpdxElement": "SPDXRef-Package-bb1b0f2589bd909f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-3452b4d2c0d5ee63",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-3452b4d2c0d5ee63",
+      "relatedSpdxElement": "SPDXRef-Package-bf980e1cd6b6377d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4c4e55cf17136baa",
+      "relatedSpdxElement": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4c4e55cf17136baa",
+      "relatedSpdxElement": "SPDXRef-Package-67f62736e8473d6f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4c4e55cf17136baa",
+      "relatedSpdxElement": "SPDXRef-Package-b85d8d4fb89d570c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-12cab821fcbc24a0",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-134feb54b43409fd",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-2cbeae2bd094062e",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-2e29297a621c609c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-588b66c5c561c794",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-6889ccd166f870cd",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-806078e4ace7a83f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-bbe77d2fe4f3e5ca",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-c3621ec6a374429d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-d081be69afcf8ca3",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4df06fd0c33c6b36",
+      "relatedSpdxElement": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relatedSpdxElement": "SPDXRef-Package-4c4e55cf17136baa",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relatedSpdxElement": "SPDXRef-Package-b85d8d4fb89d570c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4f8073cb3c78a98a",
+      "relatedSpdxElement": "SPDXRef-Package-b85d8d4fb89d570c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-588b66c5c561c794",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-588b66c5c561c794",
+      "relatedSpdxElement": "SPDXRef-Package-4c4e55cf17136baa",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-5a5012744f83351e",
+      "relatedSpdxElement": "SPDXRef-Package-cd751df2065af012",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-6889ccd166f870cd",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-6889ccd166f870cd",
+      "relatedSpdxElement": "SPDXRef-Package-2e29297a621c609c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-6889ccd166f870cd",
+      "relatedSpdxElement": "SPDXRef-Package-806078e4ace7a83f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-6889ccd166f870cd",
+      "relatedSpdxElement": "SPDXRef-Package-c3621ec6a374429d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-2e29297a621c609c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-79f13c6ca9be6341",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-c3621ec6a374429d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-d081be69afcf8ca3",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-806078e4ace7a83f",
+      "relatedSpdxElement": "SPDXRef-Package-e51751278eff7003",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-86d6df9d2ea6af77",
+      "relatedSpdxElement": "SPDXRef-Package-67f62736e8473d6f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bb1b0f2589bd909f",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bb1b0f2589bd909f",
+      "relatedSpdxElement": "SPDXRef-Package-b85d8d4fb89d570c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bf980e1cd6b6377d",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bf980e1cd6b6377d",
+      "relatedSpdxElement": "SPDXRef-Package-3452b4d2c0d5ee63",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bf980e1cd6b6377d",
+      "relatedSpdxElement": "SPDXRef-Package-66df394e911b4aa1",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relatedSpdxElement": "SPDXRef-Package-2e29297a621c609c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relatedSpdxElement": "SPDXRef-Package-2ed5c595b240017f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relatedSpdxElement": "SPDXRef-Package-c3621ec6a374429d",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c0c6a5a4266d1e05",
+      "relatedSpdxElement": "SPDXRef-Package-f3e45df4cd331e10",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c3621ec6a374429d",
+      "relatedSpdxElement": "SPDXRef-Package-3452b4d2c0d5ee63",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c3621ec6a374429d",
+      "relatedSpdxElement": "SPDXRef-Package-86d6df9d2ea6af77",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-c3621ec6a374429d",
+      "relatedSpdxElement": "SPDXRef-Package-bc76fa8be9b24f3a",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-cd751df2065af012",
+      "relatedSpdxElement": "SPDXRef-Package-67f62736e8473d6f",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-d081be69afcf8ca3",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-d081be69afcf8ca3",
+      "relatedSpdxElement": "SPDXRef-Package-4c4e55cf17136baa",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-d081be69afcf8ca3",
+      "relatedSpdxElement": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-d081be69afcf8ca3",
+      "relatedSpdxElement": "SPDXRef-Package-b85d8d4fb89d570c",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-d081be69afcf8ca3",
+      "relatedSpdxElement": "SPDXRef-Package-e51751278eff7003",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-13f59ed5eb073398",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-1cb726592b213253",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-2a26d73fd5182aa4",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-4f8073cb3c78a98a",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-5a5012744f83351e",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-5ade647d758a1202",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-81d33a605a0ee858",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-c5f5ae171d0b21a9",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-cc70fef155284df9",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ea8b6b7e0b2bb2c1",
+      "relatedSpdxElement": "SPDXRef-Package-cd751df2065af012",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-f3e45df4cd331e10",
+      "relatedSpdxElement": "SPDXRef-Package-4ee1c9c4699c65a2",
+      "relationshipType": "DEPENDS_ON"
+    },
+    {
+      "spdxElementId": "SPDXRef-Repository-741c5ff31ac42f2e",
+      "relatedSpdxElement": "SPDXRef-Application-e90da172ca54b427",
+      "relationshipType": "CONTAINS"
+    }
+  ]
+}

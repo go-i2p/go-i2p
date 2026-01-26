@@ -23,5 +23,5 @@ func NewKademliaResolver(netDb NetworkDatabase, pool *tunnel.Pool) (r Resolver) 
 			"reason": "nil_dependencies",
 		}).Warn("cannot create resolver: pool or netDb is nil")
 	}
-	return
+	return r
 }

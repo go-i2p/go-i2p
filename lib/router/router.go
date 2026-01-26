@@ -306,7 +306,7 @@ func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 		"phase":  "startup",
 		"reason": "router struct initialized",
 	}).Debug("router created successfully from configuration")
-	return
+	return r, err
 }
 
 // Wait blocks until router is fully stopped

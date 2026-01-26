@@ -90,7 +90,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		chnl = make(chan router_info.RouterInfo, 1)
 		chnl <- *ri.RouterInfo
 		close(chnl)
-		return
+		return chnl
 	}
 	db.riMutex.Unlock()
 
@@ -114,12 +114,12 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 			"hash":   fmt.Sprintf("%x...", hash[:8]),
 		}).Error("failed to parse RouterInfo")
 		close(chnl)
-		return
+		return chnl
 	}
 
 	chnl <- ri
 	close(chnl)
-	return
+	return chnl
 }
 
 // loadRouterInfoFromFile loads RouterInfo data from the skiplist file.
@@ -176,7 +176,7 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 		}
 	}
 	db.riMutex.Unlock()
-	return
+	return ri
 }
 
 // buildExcludeMap creates a map for fast hash lookup during peer filtering
@@ -572,7 +572,7 @@ func (db *StdNetDB) SkiplistFile(hash common.Hash) (fpath string) {
 	fname := base64.EncodeToString(hash[:])
 	fpath = filepath.Join(db.Path(), fmt.Sprintf("r%c", fname[0]), fmt.Sprintf("routerInfo-%s.dat", fname))
 	log.WithField("file_path", fpath).Debug("Generated skiplist file path")
-	return
+	return fpath
 }
 
 // get netdb path
@@ -840,7 +840,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 			log.Errorf("failed to save netdb entry: %s", err.Error())
 		}
 	*/
-	return
+	return err
 }
 
 func (db *StdNetDB) Save() (err error) {
@@ -857,7 +857,7 @@ func (db *StdNetDB) Save() (err error) {
 		}
 	}
 	db.riMutex.Unlock()
-	return
+	return err
 }
 
 // reseed if we have less than minRouters known routers
@@ -1044,7 +1044,7 @@ func (db *StdNetDB) Ensure() (err error) {
 			log.WithError(loadErr).Warn("Failed to load some existing RouterInfos, continuing anyway")
 		}
 	}
-	return
+	return err
 }
 
 // loadExistingRouterInfos scans the NetDB directory and loads all RouterInfo files into memory.
@@ -1450,7 +1450,7 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 		chnl = make(chan lease_set.LeaseSet, 1)
 		chnl <- *ls.LeaseSet
 		close(chnl)
-		return
+		return chnl
 	}
 	db.lsMutex.Unlock()
 
@@ -1466,12 +1466,12 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse LeaseSet")
 		close(chnl)
-		return
+		return chnl
 	}
 
 	chnl <- ls
 	close(chnl)
-	return
+	return chnl
 }
 
 // loadLeaseSetFromFile loads LeaseSet data from the skiplist file.
@@ -1701,7 +1701,7 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 		chnl = make(chan lease_set2.LeaseSet2, 1)
 		chnl <- *ls.LeaseSet2
 		close(chnl)
-		return
+		return chnl
 	}
 	db.lsMutex.Unlock()
 
@@ -1717,12 +1717,12 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	if err != nil {
 		log.WithError(err).Error("Failed to parse LeaseSet2")
 		close(chnl)
-		return
+		return chnl
 	}
 
 	chnl <- ls2
 	close(chnl)
-	return
+	return chnl
 }
 
 // parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
@@ -1927,7 +1927,7 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 		chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
 		chnl <- *ls.EncryptedLeaseSet
 		close(chnl)
-		return
+		return chnl
 	}
 	db.lsMutex.Unlock()
 
@@ -1943,12 +1943,12 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 	if err != nil {
 		log.WithError(err).Error("Failed to parse EncryptedLeaseSet")
 		close(chnl)
-		return
+		return chnl
 	}
 
 	chnl <- els
 	close(chnl)
-	return
+	return chnl
 }
 
 // parseAndCacheEncryptedLeaseSet parses EncryptedLeaseSet data and adds it to the memory cache.
@@ -2153,7 +2153,7 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 		chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
 		chnl <- *ls.MetaLeaseSet
 		close(chnl)
-		return
+		return chnl
 	}
 	db.lsMutex.Unlock()
 
@@ -2169,12 +2169,12 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 	if err != nil {
 		log.WithError(err).Error("Failed to parse MetaLeaseSet")
 		close(chnl)
-		return
+		return chnl
 	}
 
 	chnl <- mls
 	close(chnl)
-	return
+	return chnl
 }
 
 // parseAndCacheMetaLeaseSet parses MetaLeaseSet data and adds it to the memory cache.
@@ -2429,7 +2429,7 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 		nextExpiry = time.Until(earliest)
 	}
 
-	return
+	return total, expired, nextExpiry
 }
 
 // GetAllLeaseSets returns all LeaseSets currently stored in the database.

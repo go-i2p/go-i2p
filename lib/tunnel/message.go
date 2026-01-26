@@ -128,7 +128,7 @@ type DeliveryInstructionsWithFragment struct {
 
 func (tm EncryptedTunnelMessage) ID() (tid TunnelID) {
 	tid = TunnelID(binary.BigEndian.Uint32(tm[:4]))
-	return
+	return tid
 }
 
 func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV {
