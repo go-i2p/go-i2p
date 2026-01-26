@@ -94,3 +94,33 @@ comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-i2p v$VERSION"
 push
+cd "$GOI2P_DIR"
+# now start the client libraries
+cd go-i2cp
+cleanup
+comment_out_replaces
+update_our_packages
+git tag -sa "v$VERSION" -m "go-i2cp v$VERSION"
+push
+cd "$GOI2P_DIR"
+cd go-datagrams
+cleanup
+comment_out_replaces
+update_our_packages
+git tag -sa "v$VERSION" -m "go-datagrams v$VERSION"
+push
+cd "$GOI2P_DIR"
+cd go-streaming
+cleanup
+comment_out_replaces
+update_our_packages
+git tag -sa "v$VERSION" -m "go-streaming v$VERSION"
+push
+cd "$GOI2P_DIR"
+cd go-sam-bridge
+cleanup
+comment_out_replaces
+update_our_packages
+git tag -sa "v$VERSION" -m "go-sam-bridge v$VERSION"
+push
+cd "$GOI2P_DIR"

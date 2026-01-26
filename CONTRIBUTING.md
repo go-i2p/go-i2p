@@ -45,7 +45,7 @@ If a function requires more code than that, carefully consider the discrete task
 
 ## I2P Specifications
 
-The I2P community maintains up-to-date [specifications](https://geti2p.net/spec) of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in `github.com/go-i2p/lib/common/`) have been implemented and tested, and serve as good examples.
+The I2P community maintains up-to-date [specifications](https://geti2p.net/spec) of most of the application, which are being used to create go-i2p.  Currently, most the of common data structures (located in `github.com/go-i2p/lib/common/`, the contemporary, non experimental cryptography(located in `github.com/go-i2p/crypto` and `github.com/go-i2p/noise`)) have been implemented and tested, and serve as good examples.
 
 ## Testing
 

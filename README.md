@@ -25,8 +25,9 @@ The core router functionality is now operational. We have tested functionality u
   - [X] Message routing (outbound I2CP → tunnels → garlic encryption)
   - [X] Inbound message delivery (tunnel → I2CP sessions)
   - [X] [I2CP Client: https://github.com/go-i2p/go-i2cp](https://github.com/go-i2p/go-i2cp)
-  - [ ] [Datagrams: https://github.com/go-i2p/go-datagrams](https://github.com/go-i2p/go-datagrams)
-  - [ ] [Streaming: https://github.com/go-i2p/go-streaming](https://github.com/go-i2p/go-streaming)
+  - [X] [Datagrams: https://github.com/go-i2p/go-datagrams](https://github.com/go-i2p/go-datagrams)
+  - [X] [Streaming: https://github.com/go-i2p/go-streaming](https://github.com/go-i2p/go-streaming)
+  - [ ] [SAM API v3.3: https://github.com/go-i2p/go-sam-bridge](https://github.com/go-i2p/go-sam-bridge)
 - [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
   - Signing
     - [X] ECDSA_SHA256_P256
