@@ -19,11 +19,16 @@ comment_out_replaces() {
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/eyedeekay/go-i2p/logger@v$VERSION"; true
-  go get "github.com/eyedeekay/go-i2p/crypto@v$VERSION"; true
-  go get "github.com/eyedeekay/go-i2p/common@v$VERSION"; true
-  go get "github.com/eyedeekay/go-i2p/noise@v$VERSION"; true
-  go get "github.com/eyedeekay/go-i2p/go-noise@v$VERSION"; true
+  go get "github.com/go-i2p/go-i2p/logger@v$LOGGER_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/crypto@v$CRYPTO_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/common@v$COMMON_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/noise@v$NOISE_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-noise@v$GO_NOISE_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-i2p@v$GO_I2P_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-i2cp@v$GO_I2CP_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-datagrams@v$GO_DATAGRAMS_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-streaming@v$GO_STREAMING_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-sam-bridge@v$GO_SAM_BRIDGE_TAG_HASH"; true
   go mod tidy
   git commit -am "Update dependencies to v$VERSION"
 }
@@ -48,6 +53,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "logger v$VERSION"
+LOGGER_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
@@ -57,6 +63,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "crypto v$VERSION"
+CRYPTO_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
@@ -66,6 +73,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "common v$VERSION"
+COMMON_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
@@ -75,6 +83,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "noise v$VERSION"
+NOISE_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
@@ -84,6 +93,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-noise v$VERSION"
+GO_NOISE_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 # return to go-i2p namespace
 cd "$GOI2P_DIR"
@@ -93,6 +103,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-i2p v$VERSION"
+GO_I2P_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 cd "$GOI2P_DIR"
 # now start the client libraries
@@ -101,6 +112,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-i2cp v$VERSION"
+GO_I2CP_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 cd "$GOI2P_DIR"
 cd go-datagrams
@@ -108,6 +120,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-datagrams v$VERSION"
+GO_DATAGRAMS_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 cd "$GOI2P_DIR"
 cd go-streaming
@@ -115,6 +128,7 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-streaming v$VERSION"
+GO_STREAMING_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 cd "$GOI2P_DIR"
 cd go-sam-bridge
@@ -122,5 +136,6 @@ cleanup
 comment_out_replaces
 update_our_packages
 git tag -sa "v$VERSION" -m "go-sam-bridge v$VERSION"
+GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse "v$VERSION")
 push
 cd "$GOI2P_DIR"
