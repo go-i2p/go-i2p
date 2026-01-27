@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RELEASE NOTES - go-i2p/go-i2p</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <nav class="nav-sidebar">
+    <div class="repo-info">
+      <h2>
+        <a href="../index.html">go-i2p/go-i2p</a>
+      </h2>
+      <div class="repo-meta">
+        📝 1195 commits
+         • 📜 MIT License
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <li><a href="../index.html">Repository Overview</a></li>
+      
+      
+        <div class="nav-section-title">Documentation:</div>
+        
+          <li><a href="../docs/CONTRIBUTING.html" >Contributing</a></li>
+        
+          <li><a href="../docs/docs/i2pcontrol.html" >I2PControl JSON-RPC Server User Guide</a></li>
+        
+          <li><a href="../docs/docs/llm-disclosure.html" >Llm Disclosure</a></li>
+        
+          <li><a href="../docs/lib/netdb/ISOLATION.html" >NetDB Client/Router Isolation</a></li>
+        
+          <li><a href="../docs/RELEASE_NOTES.html" class="active">RELEASE NOTES</a></li>
+        
+          <li><a href="../docs/template.html" >Template</a></li>
+        
+          <li><a href="../docs/ROADMAP.html" >go-i2p Implementation Roadmap</a></li>
+        
+      
+    </ul>
+    
+    <div class="nav-footer">
+      <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a>
+    </div>
+  </nav>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>RELEASE NOTES - go-i2p/go-i2p</h1>
+    </header>
+    
+    <main>
+      <div class="doc-content">
+        <h1 id="release-notes-for-go-i2p-version-0-1-1">Release Notes for <code>go-i2p</code> Version <code>0.1.1</code></h1>
+
+<p>This release is only recommended for developers at this time.
+The first general-use release will be version <code>0.2.0</code></p>
+
+<p>In version 0.1.1 we officially introduce the <code>lib/embedded</code> API for <code>go-i2p</code>.
+This API allows Go developers to simply and straightforwardly include a <code>go-i2p</code> router in their own downstream applications.
+This release also corresponds to significant progress in other parts of the namespace, enabled by the new embedded library.</p>
+
+<ul>
+<li><a href="https://github.com/go-i2p/go-i2cp" target="_blank"><code>go-i2cp</code> now functions as a pure-Go I2CP Client library.</a></li>
+<li><a href="https://github.com/go-i2p/go-datagrams" target="_blank"><code>go-datagrams</code> now functions as a pure-Go I2P Datagrams library</a></li>
+<li><a href="https://github.com/go-i2p/go-streaming" target="_blank"><code>go-streaming</code> now functions as a pure-Go I2P Streaming library</a></li>
+<li>and most importantly, <a href="https://github.com/go-i2p/go-sam-bridge" target="_blank"><code>go-sam-bridge</code> implements the SAMv3.3 API, and embeds a <code>go-i2p</code> router, <em>and</em> is embeddable itself</a></li>
+</ul>
+
+<p>All these changes are building toward the big API target for <code>go-i2p</code>, which is making I2P integration as simple as possible for Go applications. The latest checkin of <code>onramp</code> now embeds a <code>go-sam-bridge</code> and starts it automatically if SAMv3.3 is not available on the host, meaning that in the next version of <code>onramp</code>, those who upgrade will seamlessly upgrade to having optional embedded I2P routers. Our hope is that it is also possible to do this for the lower-level <code>go-sam-go</code> library as well. Zero-Configuration I2P applications are nearly upon us!</p>
+
+      </div>
+    </main>
+    
+    <footer class="page-footer">
+      <p>Generated on 2026-01-27 21:05:51 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+    </footer>
+  </div>
+</body>
+</html>
