@@ -75,10 +75,10 @@ tagandrelease() {
   #cleanup
   comment_out_replaces
   update_our_packages
-  echo git tag -sa "v$VERSION" -m "$1 v$VERSION"
-  #TAG_HASH=$(git rev-parse "v$VERSION")
-  #echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
-  #echo "$TAG_HASH"
+  git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
+  TAG_HASH=$(git rev-parse "v$VERSION")
+  echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
+  echo "$TAG_HASH"
   echo push
 }
 
