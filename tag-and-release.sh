@@ -51,16 +51,16 @@ echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" || echo PANIC go get logger failed in $(pwd); exit 1
-  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" || echo PANIC go get crypto failed in $(pwd); exit 1
-  go get "github.com/go-i2p/common@$COMMON_TAG_HASH" || echo PANIC go get common failed in $(pwd); exit 1
-  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" || echo PANIC go get noise failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" || echo PANIC go get go-noise failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" || echo PANIC go get go-i2p failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" || echo PANIC go get go-i2cp failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" || echo PANIC go get go-datagrams failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" || echo PANIC go get go-streaming failed in $(pwd); exit 1
-  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" || echo PANIC go get go-sam-bridge failed in $(pwd); exit 1
+  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH"
+  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH"
+  go get "github.com/go-i2p/common@$COMMON_TAG_HASH"
+  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH"
+  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH"
+  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH"
+  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"
+  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"
+  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"
+  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"
   go mod tidy || echo PANIC go mod tidy failed in $(pwd); exit 1
   git commit -am "Update dependencies to v$VERSION"
 }
