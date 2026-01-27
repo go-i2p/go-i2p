@@ -63,6 +63,18 @@ cd "$GOI2P_DIR"
 cd go-sam-bridge && push
 GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse HEAD)
 
+echo "Collected tag hashes:"
+echo "LOGGER_TAG_HASH=$LOGGER_TAG_HASH"
+echo "CRYPTO_TAG_HASH=$CRYPTO_TAG_HASH"
+echo "COMMON_TAG_HASH=$COMMON_TAG_HASH"
+echo "NOISE_TAG_HASH=$NOISE_TAG_HASH"
+echo "GO_NOISE_TAG_HASH=$GO_NOISE_TAG_HASH"
+echo "GO_I2P_TAG_HASH=$GO_I2P_TAG_HASH"
+echo "GO_I2CP_TAG_HASH=$GO_I2CP_TAG_HASH"
+echo "GO_DATAGRAMS_TAG_HASH=$GO_DATAGRAMS_TAG_HASH"
+echo "GO_STREAMING_TAG_HASH=$GO_STREAMING_TAG_HASH"
+echo "GO_SAM_BRIDGE_TAG_HASH=$GO_SAM_BRIDGE_TAG_HASH"
+
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
