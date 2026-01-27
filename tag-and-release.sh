@@ -79,6 +79,13 @@ tagandrelease() {
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
+  if [ ! -f RELEASE_NOTES.md ]; then
+    echo "Release notes for: $1" > RELEASE_NOTES.md
+    echo "======================" >> RELEASE_NOTES.md
+    echo "" >> RELEASE_NOTES.md
+    echo "TODO: Add RELEASE_NOTES.md for $1" >> RELEASE_NOTES.md
+    echo "" >> RELEASE_NOTES.md
+  fi
   if [ -f RELEASE_NOTES.md ]; then
     github-release release \
       --user go-i2p \
