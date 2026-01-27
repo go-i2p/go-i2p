@@ -69,97 +69,28 @@ cleanup() {
   git push origin --delete "v$VERSION"
 }
 
-cd "$GOI2P_DIR"
+tagandrelease() {
+  cd "$GOI2P_DIR"
+  cd $1
+  cleanup
+  comment_out_replaces
+  update_our_packages
+  git tag -sa "v$VERSION" -m "$1 v$VERSION"
+  TAG_HASH=$(git rev-parse "v$VERSION")
+  echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
+  echo "$TAG_HASH"
+  push
+}
 
-# start with logger
-cd logger
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "logger v$VERSION"
-LOGGER_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-# return to go-i2p namespace
-cd "$GOI2P_DIR"
-# next do crypto
-cd crypto
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "crypto v$VERSION"
-CRYPTO_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-# return to go-i2p namespace
-cd "$GOI2P_DIR"
-# next do common
-cd common
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "common v$VERSION"
-COMMON_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-# return to go-i2p namespace
-cd "$GOI2P_DIR"
-# next do noise
-cd noise
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "noise v$VERSION"
-NOISE_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-# return to go-i2p namespace
-cd "$GOI2P_DIR"
-# next do go-noise
-cd go-noise
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-noise v$VERSION"
-GO_NOISE_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-# return to go-i2p namespace
-cd "$GOI2P_DIR"
-# finally do go-i2p
-cd go-i2p
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-i2p v$VERSION"
-GO_I2P_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-cd "$GOI2P_DIR"
-# now start the client libraries
-cd go-i2cp
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-i2cp v$VERSION"
-GO_I2CP_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-cd "$GOI2P_DIR"
-cd go-datagrams
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-datagrams v$VERSION"
-GO_DATAGRAMS_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-cd "$GOI2P_DIR"
-cd go-streaming
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-streaming v$VERSION"
-GO_STREAMING_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-cd "$GOI2P_DIR"
-cd go-sam-bridge
-cleanup
-comment_out_replaces
-update_our_packages
-git tag -sa "v$VERSION" -m "go-sam-bridge v$VERSION"
-GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse "v$VERSION")
-push
-cd "$GOI2P_DIR"
+echo "Tagging and releasing version v$VERSION" 1>&2
+
+LOGGER_TAG_HASH=$(tagandrelease logger)
+CRYPTO_TAG_HASH=$(tagandrelease crypto)
+COMMON_TAG_HASH=$(tagandrelease common)
+NOISE_TAG_HASH=$(tagandrelease noise)
+GO_NOISE_TAG_HASH=$(tagandrelease go-noise)
+GO_I2P_TAG_HASH=$(tagandrelease go-i2p)
+GO_I2CP_TAG_HASH=$(tagandrelease go-i2cp)
+GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams)
+GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming)
+GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge)
