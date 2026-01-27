@@ -233,7 +233,7 @@ func createDefaultConfig(defaultConfigDir string) {
 	}
 
 	// Write current config file
-	if err := viper.WriteConfig(); err != nil {
+	if err := viper.SafeWriteConfig(); err != nil {
 		log.Fatalf("Could not write default config file: %s", err)
 	}
 
