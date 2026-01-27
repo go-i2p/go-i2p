@@ -94,3 +94,13 @@ GO_I2CP_TAG_HASH=$(tagandrelease go-i2cp)
 GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams)
 GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming)
 GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge)
+
+cd "$GOI2P_DIR"
+cd go-i2p
+echo github-release release \
+  --user go-i2p \
+  --repo go-i2p \
+  --tag "v$VERSION" \
+  --name "go-i2p v$VERSION" \
+  --description "$(cat RELEASE_NOTES.md)" \
+  --pre-release=true
