@@ -15,20 +15,62 @@ comment_out_replaces() {
   rm go.mod.bak
 }
 
+# descend into the go-i2p namespace and collect checkin hashes
+cd ../
+GOI2P_DIR=$(pwd)
+cd logger
+LOGGER_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd crypto
+CRYPTO_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd common
+COMMON_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd noise
+NOISE_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-noise
+GO_NOISE_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-i2p
+GO_I2P_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-i2cp
+GO_I2CP_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-datagrams
+GO_DATAGRAMS_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-streaming
+GO_STREAMING_TAG_HASH=$(git rev-parse HEAD)
+
+cd "$GOI2P_DIR"
+cd go-sam-bridge
+GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse HEAD)
+
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/go-i2p/go-i2p/logger@v$LOGGER_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/crypto@v$CRYPTO_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/common@v$COMMON_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/noise@v$NOISE_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-noise@v$GO_NOISE_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-i2p@v$GO_I2P_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-i2cp@v$GO_I2CP_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-datagrams@v$GO_DATAGRAMS_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-streaming@v$GO_STREAMING_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-sam-bridge@v$GO_SAM_BRIDGE_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/logger@$LOGGER_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/crypto@$CRYPTO_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/common@$COMMON_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/noise@$NOISE_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-noise@$GO_NOISE_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-i2p@$GO_I2P_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"; true
+  go get "github.com/go-i2p/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"; true
   go mod tidy
   git commit -am "Update dependencies to v$VERSION"
 }
