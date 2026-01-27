@@ -79,6 +79,12 @@ tagandrelease() {
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
+  github-release release \
+  --user go-i2p \
+  --repo "$1" \
+  --tag "v$VERSION" \
+  --name "go-i2p v$VERSION" \
+  --description "$(cat RELEASE_NOTES.md)" 1>&2
   push
 }
 
@@ -95,11 +101,4 @@ GO_DATAGRAMS_TAG_HASH=$(tagandrelease go-datagrams)
 GO_STREAMING_TAG_HASH=$(tagandrelease go-streaming)
 GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge)
 
-cd "$GOI2P_DIR"
-cd go-i2p
-github-release release \
-  --user go-i2p \
-  --repo go-i2p \
-  --tag "v$VERSION" \
-  --name "go-i2p v$VERSION" \
-  --description "$(cat RELEASE_NOTES.md)"
+echo "Successfully tagged and released version v$VERSION" 1>&2
