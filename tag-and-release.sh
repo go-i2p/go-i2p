@@ -18,7 +18,6 @@ comment_out_replaces() {
 push() {
   git push origin main || git push origin trunk || git push origin master
   git push --tags
-  sleep 1m
 }
 
 # descend into the go-i2p namespace and collect checkin hashes
@@ -67,19 +66,19 @@ update_our_packages() {
 }
 
 cleanup() {
-  git push origin --delete "v$VERSION"
+  git push origin --delete "v$VERSION" 2> /dev/null || true
 }
 
 tagandrelease() {
   cd "$GOI2P_DIR"
   cd $1
-  cleanup
+  #cleanup
   comment_out_replaces
   update_our_packages
   echo git tag -sa "v$VERSION" -m "$1 v$VERSION"
-  TAG_HASH=$(git rev-parse "v$VERSION")
-  echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
-  echo "$TAG_HASH"
+  #TAG_HASH=$(git rev-parse "v$VERSION")
+  #echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
+  #echo "$TAG_HASH"
   echo push
 }
 
