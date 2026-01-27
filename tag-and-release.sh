@@ -15,6 +15,12 @@ comment_out_replaces() {
   rm go.mod.bak
 }
 
+push() {
+  git push origin main || git push origin trunk || git push origin master
+  git push --tags
+  sleep 1m
+}
+
 # descend into the go-i2p namespace and collect checkin hashes
 cd ../
 GOI2P_DIR=$(pwd)
@@ -73,12 +79,6 @@ update_our_packages() {
   go get "github.com/go-i2p/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"; true
   go mod tidy || echo PANIC go mod tidy failed in $(pwd); exit 1
   git commit -am "Update dependencies to v$VERSION"
-}
-
-push() {
-  git push origin main || git push origin trunk || git push origin master
-  git push --tags
-  sleep 1m
 }
 
 cleanup() {
