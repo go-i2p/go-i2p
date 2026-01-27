@@ -79,7 +79,7 @@ tagandrelease() {
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
-  echo push
+  push
 }
 
 echo "Tagging and releasing version v$VERSION" 1>&2
