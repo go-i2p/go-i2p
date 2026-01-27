@@ -8,7 +8,7 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.1.0
-	github.com/go-i2p/crypto v0.1.1-0.20251212210701-124dadb97cb7
+	github.com/go-i2p/crypto v0.1.1-rc1
 	github.com/go-i2p/go-noise v0.1.0
 	github.com/go-i2p/logger v0.1.0
 	github.com/go-i2p/su3 v0.0.1
