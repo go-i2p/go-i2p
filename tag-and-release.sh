@@ -78,7 +78,7 @@ update_our_packages() {
 push() {
   git push origin main || git push origin trunk || git push origin master
   git push --tags
-  sleep 20m
+  sleep 1m
 }
 
 cleanup() {
