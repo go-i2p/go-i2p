@@ -102,5 +102,4 @@ github-release release \
   --repo go-i2p \
   --tag "v$VERSION" \
   --name "go-i2p v$VERSION" \
-  --description "$(cat RELEASE_NOTES.md)" \
-  --pre-release=true
+  --description "$(cat RELEASE_NOTES.md)"
