@@ -76,9 +76,6 @@ cd logger
 cleanup
 comment_out_replaces
 update_our_packages
-exit 1
-
-
 git tag -sa "v$VERSION" -m "logger v$VERSION"
 LOGGER_TAG_HASH=$(git rev-parse "v$VERSION")
 push
