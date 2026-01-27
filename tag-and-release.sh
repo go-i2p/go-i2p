@@ -106,7 +106,7 @@ tagandrelease() {
       --name "go-i2p v$VERSION" \
       --description "$(cat RELEASE_NOTES.md)" 1>&2
   fi
-  push
+  push > /dev/null 2>/dev/null
 }
 
 echo "Tagging and releasing version v$VERSION" 1>&2
