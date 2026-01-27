@@ -97,7 +97,7 @@ GO_SAM_BRIDGE_TAG_HASH=$(tagandrelease go-sam-bridge)
 
 cd "$GOI2P_DIR"
 cd go-i2p
-echo github-release release \
+github-release release \
   --user go-i2p \
   --repo go-i2p \
   --tag "v$VERSION" \
