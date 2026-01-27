@@ -74,7 +74,7 @@ tagandrelease() {
   cd $1
   #cleanup
   comment_out_replaces
-  update_our_packages
+  update_our_packages > /dev/null 2>/dev/null
   if [ ! -f RELEASE_NOTES.md ]; then
     echo "Release notes for: \`$1\` Version \`$VERSION\`" > RELEASE_NOTES.md
     echo "==============================================" >> RELEASE_NOTES.md
