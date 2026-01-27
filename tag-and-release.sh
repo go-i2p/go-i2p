@@ -24,71 +24,43 @@ push() {
 # descend into the go-i2p namespace and collect checkin hashes
 cd ../
 GOI2P_DIR=$(pwd)
-cd logger && push
-LOGGER_TAG_HASH=$(git rev-parse HEAD)
 
-cd "$GOI2P_DIR"
-cd crypto && push
-CRYPTO_TAG_HASH=$(git rev-parse HEAD)
+collecthash() {
+  cd "$1" && #push
+  TAG_HASH=$(git rev-parse HEAD)
+  REMOTE=$(git remote -v)
+  cd "$GOI2P_DIR"
+  echo "$TAG_HASH"
+  echo "$1 tag hash: $TAG_HASH" 1>&2
+  echo "Remote: $REMOTE" 1>&2
+}
+LOGGER_TAG_HASH=$(collecthash logger)
+CRYPTO_TAG_HASH=$(collecthash crypto)
+COMMON_TAG_HASH=$(collecthash common)
+NOISE_TAG_HASH=$(collecthash noise)
+GO_NOISE_TAG_HASH=$(collecthash go-noise)
+GO_I2P_TAG_HASH=$(collecthash go-i2p)
+GO_I2CP_TAG_HASH=$(collecthash go-i2cp)
+GO_DATAGRAMS_TAG_HASH=$(collecthash go-datagrams)
+GO_STREAMING_TAG_HASH=$(collecthash go-streaming)
+GO_SAM_BRIDGE_TAG_HASH=$(collecthash go-sam-bridge)
 
-cd "$GOI2P_DIR"
-cd common && push
-COMMON_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd noise && push
-NOISE_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-noise && push
-GO_NOISE_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-i2p && push
-GO_I2P_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-i2cp && push
-GO_I2CP_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-datagrams && push
-GO_DATAGRAMS_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-streaming && push
-GO_STREAMING_TAG_HASH=$(git rev-parse HEAD)
-
-cd "$GOI2P_DIR"
-cd go-sam-bridge && push
-GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse HEAD)
-
-echo "Collected tag hashes:"
-echo "LOGGER_TAG_HASH=$LOGGER_TAG_HASH"
-echo "CRYPTO_TAG_HASH=$CRYPTO_TAG_HASH"
-echo "COMMON_TAG_HASH=$COMMON_TAG_HASH"
-echo "NOISE_TAG_HASH=$NOISE_TAG_HASH"
-echo "GO_NOISE_TAG_HASH=$GO_NOISE_TAG_HASH"
-echo "GO_I2P_TAG_HASH=$GO_I2P_TAG_HASH"
-echo "GO_I2CP_TAG_HASH=$GO_I2CP_TAG_HASH"
-echo "GO_DATAGRAMS_TAG_HASH=$GO_DATAGRAMS_TAG_HASH"
-echo "GO_STREAMING_TAG_HASH=$GO_STREAMING_TAG_HASH"
-echo "GO_SAM_BRIDGE_TAG_HASH=$GO_SAM_BRIDGE_TAG_HASH"
+echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/go-i2p/go-i2p/logger@$LOGGER_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/crypto@$CRYPTO_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/common@$COMMON_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/noise@$NOISE_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-noise@$GO_NOISE_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-i2p@$GO_I2P_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"; true
-  go get "github.com/go-i2p/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"; true
+  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" || echo PANIC go get logger failed in $(pwd); exit 1
+  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" || echo PANIC go get crypto failed in $(pwd); exit 1
+  go get "github.com/go-i2p/common@$COMMON_TAG_HASH" || echo PANIC go get common failed in $(pwd); exit 1
+  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" || echo PANIC go get noise failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" || echo PANIC go get go-noise failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" || echo PANIC go get go-i2p failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" || echo PANIC go get go-i2cp failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" || echo PANIC go get go-datagrams failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" || echo PANIC go get go-streaming failed in $(pwd); exit 1
+  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" || echo PANIC go get go-sam-bridge failed in $(pwd); exit 1
   go mod tidy || echo PANIC go mod tidy failed in $(pwd); exit 1
   git commit -am "Update dependencies to v$VERSION"
 }
@@ -97,15 +69,16 @@ cleanup() {
   git push origin --delete "v$VERSION"
 }
 
-# descend into the go-i2p namespace and tag dependencies
-cd ../
-# store the go-i2p namespace directory
-GOI2P_DIR=$(pwd)
+cd "$GOI2P_DIR"
+
 # start with logger
 cd logger
 cleanup
 comment_out_replaces
 update_our_packages
+exit 1
+
+
 git tag -sa "v$VERSION" -m "logger v$VERSION"
 LOGGER_TAG_HASH=$(git rev-parse "v$VERSION")
 push
