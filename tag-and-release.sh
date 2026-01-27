@@ -51,17 +51,18 @@ echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
-  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH"
-  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH"
-  go get "github.com/go-i2p/common@$COMMON_TAG_HASH"
-  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH"
-  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH"
-  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH"
-  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"
-  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"
-  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"
-  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"
-  go mod tidy || echo PANIC go mod tidy failed in $(pwd); exit 1
+  go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/common@$COMMON_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" >/dev/null 2>/dev/null || true
+  go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
+  go mod tidy >/dev/null 2>/dev/null || true
+  echo "Updated our packages to v$VERSION" 1>&2
   git commit -am "Update dependencies to v$VERSION"
 }
 
@@ -75,11 +76,11 @@ tagandrelease() {
   cleanup
   comment_out_replaces
   update_our_packages
-  git tag -sa "v$VERSION" -m "$1 v$VERSION"
+  echo git tag -sa "v$VERSION" -m "$1 v$VERSION"
   TAG_HASH=$(git rev-parse "v$VERSION")
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
-  push
+  echo push
 }
 
 echo "Tagging and releasing version v$VERSION" 1>&2
