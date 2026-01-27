@@ -75,6 +75,12 @@ tagandrelease() {
   #cleanup
   comment_out_replaces
   update_our_packages > /dev/null 2>/dev/null
+  # if release nodes is less than 7 lines long, delete it and create a placeholder
+  if [ -f RELEASE_NOTES.md ] && [ $(wc -l < RELEASE_NOTES.md) -lt 7 ]; then
+    rm RELEASE_NOTES.md
+    git add -v -f RELEASE_NOTES.md 1>&2
+    git commit -m "Remove short RELEASE_NOTES.md for $1" 1>&2
+  fi
   if [ ! -f RELEASE_NOTES.md ]; then
     echo "Release notes for: \`$1\` Version \`$VERSION\`" > RELEASE_NOTES.md
     echo "==============================================" >> RELEASE_NOTES.md
