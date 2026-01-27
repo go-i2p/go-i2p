@@ -71,7 +71,7 @@ update_our_packages() {
   go get "github.com/go-i2p/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"; true
   go get "github.com/go-i2p/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"; true
   go get "github.com/go-i2p/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"; true
-  go mod tidy
+  go mod tidy || echo PANIC go mod tidy failed in $(pwd); exit 1
   git commit -am "Update dependencies to v$VERSION"
 }
 
