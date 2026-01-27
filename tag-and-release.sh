@@ -18,43 +18,43 @@ comment_out_replaces() {
 # descend into the go-i2p namespace and collect checkin hashes
 cd ../
 GOI2P_DIR=$(pwd)
-cd logger
+cd logger && push
 LOGGER_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd crypto
+cd crypto && push
 CRYPTO_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd common
+cd common && push
 COMMON_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd noise
+cd noise && push
 NOISE_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-noise
+cd go-noise && push
 GO_NOISE_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-i2p
+cd go-i2p && push
 GO_I2P_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-i2cp
+cd go-i2cp && push
 GO_I2CP_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-datagrams
+cd go-datagrams && push
 GO_DATAGRAMS_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-streaming
+cd go-streaming && push
 GO_STREAMING_TAG_HASH=$(git rev-parse HEAD)
 
 cd "$GOI2P_DIR"
-cd go-sam-bridge
+cd go-sam-bridge && push
 GO_SAM_BRIDGE_TAG_HASH=$(git rev-parse HEAD)
 
 # go get all our packages at the new version
