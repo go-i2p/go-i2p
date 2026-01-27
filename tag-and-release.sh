@@ -79,7 +79,8 @@ tagandrelease() {
     echo "Release notes for: \`$1\` Version \`$VERSION\`" > RELEASE_NOTES.md
     echo "==============================================" >> RELEASE_NOTES.md
     echo "" >> RELEASE_NOTES.md
-    echo "TODO: Add RELEASE_NOTES.md for $1" >> RELEASE_NOTES.md
+    echo "This file is generated automatically in order to keep git tags in sync." >> RELEASE_NOTES.md
+    echo "TODO: Add RELEASE_NOTES.md for $1." >> RELEASE_NOTES.md
     echo "" >> RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Add placeholder RELEASE_NOTES.md for $1" 1>&2
