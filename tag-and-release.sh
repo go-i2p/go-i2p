@@ -75,19 +75,28 @@ tagandrelease() {
   #cleanup
   comment_out_replaces
   update_our_packages
-  git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
-  TAG_HASH=$(git rev-parse "v$VERSION")
-  echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
-  echo "$TAG_HASH"
   if [ ! -f RELEASE_NOTES.md ]; then
-    echo "Release notes for: $1" > RELEASE_NOTES.md
-    echo "======================" >> RELEASE_NOTES.md
+    echo "Release notes for: \`$1\` Version \`$VERSION\`" > RELEASE_NOTES.md
+    echo "==============================================" >> RELEASE_NOTES.md
     echo "" >> RELEASE_NOTES.md
     echo "TODO: Add RELEASE_NOTES.md for $1" >> RELEASE_NOTES.md
     echo "" >> RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Add placeholder RELEASE_NOTES.md for $1" 1>&2
   fi
+  # if the top line of RELEASE_NOTES does not contain $VERSION, replace it
+  FIRST_LINE=$(head -n 1 RELEASE_NOTES.md)
+  if ! echo "$FIRST_LINE" | grep -q "v$VERSION"; then
+    REPLACEMENT_LINE="Release notes for: \`$1\` Version \`$VERSION\`"
+    sed -i.bak "1s/.*/$REPLACEMENT_LINE/" RELEASE_NOTES.md
+    rm RELEASE_NOTES.md.bak
+    git add -v -f RELEASE_NOTES.md 1>&2
+    git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
+  fi
+  git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
+  TAG_HASH=$(git rev-parse "v$VERSION")
+  echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
+  echo "$TAG_HASH"
   if [ -f RELEASE_NOTES.md ]; then
     github-release release \
       --user go-i2p \
