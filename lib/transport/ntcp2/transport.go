@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,7 +14,6 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/transport"
-	nattraversal "github.com/go-i2p/go-nat-listener"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 )
@@ -169,18 +167,25 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	// Here's where we do NAT traversal if needed (not implemented yet)
 	// uses github.com/go-i2p/go-nat-listener
 
-	_, port, err := net.SplitHostPort(config.ListenerAddress)
+	tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
-		return fmt.Errorf("invalid listener address: %w", err)
+		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}
-	iport, err := strconv.Atoi(port)
-	if err != nil {
-		return fmt.Errorf("invalid listener port: %w", err)
-	}
-	tcpListener, err := nattraversal.ListenWithFallback(iport)
-	if err != nil {
-		log.Fatal("Failed to create listener:", err)
-	}
+	/*
+		This works now, but it's disabled until we can test it properly.
+			_, port, err := net.SplitHostPort(config.ListenerAddress)
+			if err != nil {
+				return fmt.Errorf("invalid listener address: %w", err)
+			}
+			iport, err := strconv.Atoi(port)
+			if err != nil {
+				return fmt.Errorf("invalid listener port: %w", err)
+			}
+			tcpListener, err := nattraversal.ListenWithFallback(iport)
+			if err != nil {
+				log.Fatal("Failed to create listener:", err)
+			}
+	*/
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
