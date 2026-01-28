@@ -1,4 +1,20 @@
+Release notes for: `go-i2p` Version `0.1.3`
+==========================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+This release resolves build issues in `go-i2p/crypto` and brings the library stack into sync.
+
 Release notes for: `go-i2p` Version `0.1.2`
+==========================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+This release was conducted specifically to test CI/CD pipelines and to bring the library stack in sync.
+
+Release notes for: `go-i2p` Version `0.1.1`
 ==========================================
 
 This release is only recommended for developers at this time.
