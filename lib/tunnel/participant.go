@@ -20,6 +20,7 @@ import (
 // - No message inspection (maintains tunnel privacy)
 // - Stateless processing for better performance
 // - Tracks creation time and expiration (tunnels typically last 10 minutes)
+// - Tracks last activity to detect idle tunnels (protection against resource exhaustion attacks)
 type Participant struct {
 	// tunnelID is this participant's tunnel ID (not used for processing,
 	// but kept for logging and debugging)
@@ -34,6 +35,14 @@ type Participant struct {
 	// lifetime is how long this participant tunnel is valid
 	// Typically 10 minutes for I2P tunnels
 	lifetime time.Duration
+
+	// lastActivity tracks when data was last processed through this tunnel
+	// Used to detect idle tunnels that may be part of a resource exhaustion attack
+	lastActivity time.Time
+
+	// idleTimeout is how long a tunnel can be idle before being dropped
+	// Default is 2 minutes to mitigate attackers requesting excessive tunnels
+	idleTimeout time.Duration
 }
 
 var (
@@ -43,6 +52,11 @@ var (
 	// ErrInvalidParticipantData is returned when tunnel data is malformed
 	ErrInvalidParticipantData = errors.New("invalid participant tunnel data")
 )
+
+// DefaultIdleTimeout is the default duration after which an idle tunnel is dropped.
+// This helps mitigate resource exhaustion attacks where attackers request
+// excessive tunnels but send no data through them.
+const DefaultIdleTimeout = 2 * time.Minute
 
 // NewParticipant creates a new tunnel participant.
 //
@@ -55,23 +69,28 @@ var (
 // Design note: We use TunnelEncryptor interface even though it's called
 // "decryption" because the interface supports both encrypt and decrypt operations.
 // The crypto/tunnel package uses the same interface for both directions.
-// The participant is created with a default lifetime of 10 minutes (standard I2P tunnel lifetime).
+// The participant is created with a default lifetime of 10 minutes (standard I2P tunnel lifetime)
+// and an idle timeout of 2 minutes to protect against resource exhaustion attacks.
 func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Participant, error) {
 	if decryption == nil {
 		return nil, ErrNilParticipantDecryption
 	}
 
+	now := time.Now()
 	p := &Participant{
-		tunnelID:   tunnelID,
-		decryption: decryption,
-		createdAt:  time.Now(),
-		lifetime:   10 * time.Minute, // Standard I2P tunnel lifetime
+		tunnelID:     tunnelID,
+		decryption:   decryption,
+		createdAt:    now,
+		lifetime:     10 * time.Minute, // Standard I2P tunnel lifetime
+		lastActivity: now,              // Initialize to creation time
+		idleTimeout:  DefaultIdleTimeout,
 	}
 
 	log.WithFields(logger.Fields{
-		"at":        "NewParticipant",
-		"reason":    "relay_tunnel_created",
-		"tunnel_id": tunnelID,
+		"at":           "NewParticipant",
+		"reason":       "relay_tunnel_created",
+		"tunnel_id":    tunnelID,
+		"idle_timeout": DefaultIdleTimeout,
 	}).Debug("created tunnel participant")
 	return p, nil
 }
@@ -98,6 +117,10 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 // - The tunnel ID in the message header specifies the next hop, not this hop
 // - All 1028 bytes are returned; the next hop will decrypt further
 func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decryptedData []byte, err error) {
+	// Update last activity timestamp to track tunnel usage
+	// This helps detect idle tunnels that may be part of a resource exhaustion attack
+	p.lastActivity = time.Now()
+
 	// Validate input size
 	if len(encryptedData) != 1028 {
 		log.WithFields(logger.Fields{
@@ -173,4 +196,28 @@ func (p *Participant) SetLifetime(lifetime time.Duration) {
 // CreatedAt returns when this participant tunnel was created.
 func (p *Participant) CreatedAt() time.Time {
 	return p.createdAt
+}
+
+// LastActivity returns when data was last processed through this tunnel.
+func (p *Participant) LastActivity() time.Time {
+	return p.lastActivity
+}
+
+// IsIdle checks if this participant tunnel has been idle for too long.
+// Returns true if no data has been processed within the idle timeout period.
+// This helps detect tunnels that may be part of a resource exhaustion attack
+// where attackers request excessive tunnels but send no data through them.
+//
+// Parameters:
+// - now: the current time to check against
+//
+// This is used by the tunnel manager to clean up idle participants.
+func (p *Participant) IsIdle(now time.Time) bool {
+	return now.Sub(p.lastActivity) > p.idleTimeout
+}
+
+// SetIdleTimeout updates the idle timeout for this participant tunnel.
+// This allows customization beyond the default 2 minutes if needed.
+func (p *Participant) SetIdleTimeout(timeout time.Duration) {
+	p.idleTimeout = timeout
 }

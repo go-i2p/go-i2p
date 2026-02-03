@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
@@ -383,5 +384,78 @@ func TestParticipantErrorConditions(t *testing.T) {
 				t.Errorf("expected error %v, got %v", tt.wantError, err)
 			}
 		})
+	}
+}
+
+// TestParticipantIdleDetection tests the idle tunnel detection functionality
+func TestParticipantIdleDetection(t *testing.T) {
+	// Create a valid participant
+	layerKey := generateRandomKey()
+	ivKey := generateRandomKey()
+	encryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
+	if err != nil {
+		t.Fatalf("failed to create AES encryptor: %v", err)
+	}
+
+	p, err := NewParticipant(12345, encryptor)
+	if err != nil {
+		t.Fatalf("failed to create participant: %v", err)
+	}
+
+	// Test that new participant is not idle
+	now := time.Now()
+	if p.IsIdle(now) {
+		t.Error("new participant should not be idle immediately")
+	}
+
+	// Test that participant becomes idle after timeout
+	futureTime := now.Add(DefaultIdleTimeout + time.Second)
+	if !p.IsIdle(futureTime) {
+		t.Error("participant should be idle after timeout period")
+	}
+
+	// Test LastActivity returns the creation time initially
+	if p.LastActivity().IsZero() {
+		t.Error("last activity should not be zero")
+	}
+
+	// Test SetIdleTimeout
+	p.SetIdleTimeout(5 * time.Minute)
+	// With longer timeout, should no longer be idle at futureTime
+	if p.IsIdle(futureTime) {
+		t.Error("participant should not be idle with longer timeout")
+	}
+}
+
+// TestParticipantProcessUpdatesActivity tests that Process updates last activity
+func TestParticipantProcessUpdatesActivity(t *testing.T) {
+	// Create a valid participant
+	layerKey := generateRandomKey()
+	ivKey := generateRandomKey()
+	encryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
+	if err != nil {
+		t.Fatalf("failed to create AES encryptor: %v", err)
+	}
+
+	p, err := NewParticipant(12345, encryptor)
+	if err != nil {
+		t.Fatalf("failed to create participant: %v", err)
+	}
+
+	initialActivity := p.LastActivity()
+
+	// Wait a tiny bit and process a message (even if it fails, activity should update)
+	time.Sleep(1 * time.Millisecond)
+
+	// Create a valid 1028-byte message
+	encryptedData := make([]byte, 1028)
+	binary.BigEndian.PutUint32(encryptedData[:4], 99999)
+
+	// Process will update lastActivity even before validation
+	p.Process(encryptedData)
+
+	newActivity := p.LastActivity()
+	if !newActivity.After(initialActivity) {
+		t.Error("Process should update last activity timestamp")
 	}
 }

@@ -174,22 +174,32 @@ func (m *Manager) cleanupLoop() {
 	}
 }
 
-// cleanupExpiredParticipants removes participant tunnels that have expired.
+// cleanupExpiredParticipants removes participant tunnels that have expired or are idle.
 // Tunnels are considered expired after their configured lifetime (typically 10 minutes).
+// Tunnels are considered idle if no data has been processed within the idle timeout (2 minutes).
+// Dropping idle tunnels helps mitigate resource exhaustion attacks where attackers
+// request excessive tunnels but send no data through them.
 func (m *Manager) cleanupExpiredParticipants() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
 	var expired []TunnelID
+	var idle []TunnelID
 
 	for id, p := range m.participants {
 		if p.IsExpired(now) {
 			expired = append(expired, id)
+		} else if p.IsIdle(now) {
+			idle = append(idle, id)
 		}
 	}
 
 	for _, id := range expired {
+		delete(m.participants, id)
+	}
+
+	for _, id := range idle {
 		delete(m.participants, id)
 	}
 
@@ -201,6 +211,16 @@ func (m *Manager) cleanupExpiredParticipants() {
 			"count":     len(expired),
 			"remaining": len(m.participants),
 		}).Info("cleaned up expired participant tunnels")
+	}
+
+	if len(idle) > 0 {
+		log.WithFields(logger.Fields{
+			"at":        "Manager.cleanupExpiredParticipants",
+			"phase":     "tunnel_build",
+			"reason":    "idle_tunnel_dropped",
+			"count":     len(idle),
+			"remaining": len(m.participants),
+		}).Warn("dropped idle participant tunnels (potential resource exhaustion attack mitigation)")
 	}
 }
 

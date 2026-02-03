@@ -322,3 +322,111 @@ func TestManagerStop(t *testing.T) {
 	// Verify we can still call methods safely (shouldn't panic)
 	_ = m.AddParticipant(nil) // Intentionally ignore error - testing nil handling after stop
 }
+
+// TestCleanupIdleParticipants verifies automatic cleanup of idle participants
+// This helps mitigate resource exhaustion attacks where attackers request
+// excessive tunnels but send no data through them.
+func TestCleanupIdleParticipants(t *testing.T) {
+	m := NewManager()
+	defer m.Stop()
+
+	// Create a participant that has been idle too long (no activity for 3 minutes)
+	idleParticipant, _ := NewParticipant(11111, &mockTunnelEncryptor{})
+	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle for 3 minutes
+	if err := m.AddParticipant(idleParticipant); err != nil {
+		t.Fatalf("Failed to add idle participant: %v", err)
+	}
+
+	// Create an active participant (recent activity)
+	activeParticipant, _ := NewParticipant(22222, &mockTunnelEncryptor{})
+	// lastActivity is already set to now by NewParticipant
+	if err := m.AddParticipant(activeParticipant); err != nil {
+		t.Fatalf("Failed to add active participant: %v", err)
+	}
+
+	// Create a participant that's idle but not yet past the threshold
+	almostIdleParticipant, _ := NewParticipant(33333, &mockTunnelEncryptor{})
+	almostIdleParticipant.lastActivity = time.Now().Add(-1 * time.Minute) // Only idle for 1 minute
+	if err := m.AddParticipant(almostIdleParticipant); err != nil {
+		t.Fatalf("Failed to add almost-idle participant: %v", err)
+	}
+
+	// Verify all three were added
+	if m.ParticipantCount() != 3 {
+		t.Fatalf("Expected 3 participants, got %d", m.ParticipantCount())
+	}
+
+	// Trigger cleanup
+	m.cleanupExpiredParticipants()
+
+	// Should have only 2 participants left (the active and almost-idle ones)
+	if m.ParticipantCount() != 2 {
+		t.Errorf("Expected 2 participants after cleanup, got %d", m.ParticipantCount())
+	}
+
+	// Verify the idle one was removed
+	if m.GetParticipant(11111) != nil {
+		t.Error("Idle participant was not cleaned up")
+	}
+
+	// Verify the active one remains
+	if m.GetParticipant(22222) == nil {
+		t.Error("Active participant was incorrectly removed")
+	}
+
+	// Verify the almost-idle one remains
+	if m.GetParticipant(33333) == nil {
+		t.Error("Almost-idle participant was incorrectly removed")
+	}
+}
+
+// TestIdleAndExpiredParticipantCleanup verifies that both idle and expired
+// participants are cleaned up in the same pass
+func TestIdleAndExpiredParticipantCleanup(t *testing.T) {
+	m := NewManager()
+	defer m.Stop()
+
+	// Create an expired participant
+	expiredParticipant, _ := NewParticipant(11111, &mockTunnelEncryptor{})
+	expiredParticipant.createdAt = time.Now().Add(-11 * time.Minute) // Expired (past 10min lifetime)
+	if err := m.AddParticipant(expiredParticipant); err != nil {
+		t.Fatalf("Failed to add expired participant: %v", err)
+	}
+
+	// Create an idle participant
+	idleParticipant, _ := NewParticipant(22222, &mockTunnelEncryptor{})
+	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle
+	if err := m.AddParticipant(idleParticipant); err != nil {
+		t.Fatalf("Failed to add idle participant: %v", err)
+	}
+
+	// Create a healthy participant
+	healthyParticipant, _ := NewParticipant(33333, &mockTunnelEncryptor{})
+	if err := m.AddParticipant(healthyParticipant); err != nil {
+		t.Fatalf("Failed to add healthy participant: %v", err)
+	}
+
+	// Verify all three were added
+	if m.ParticipantCount() != 3 {
+		t.Fatalf("Expected 3 participants, got %d", m.ParticipantCount())
+	}
+
+	// Trigger cleanup
+	m.cleanupExpiredParticipants()
+
+	// Should have only 1 participant left (the healthy one)
+	if m.ParticipantCount() != 1 {
+		t.Errorf("Expected 1 participant after cleanup, got %d", m.ParticipantCount())
+	}
+
+	// Verify only the healthy one remains
+	if m.GetParticipant(11111) != nil {
+		t.Error("Expired participant was not cleaned up")
+	}
+	if m.GetParticipant(22222) != nil {
+		t.Error("Idle participant was not cleaned up")
+	}
+	if m.GetParticipant(33333) == nil {
+		t.Error("Healthy participant was incorrectly removed")
+	}
+}
