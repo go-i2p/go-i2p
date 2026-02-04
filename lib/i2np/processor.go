@@ -3,6 +3,7 @@ package i2np
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -1081,10 +1083,16 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 }
 
 // generateMessageID generates a unique message ID for tracking build requests.
+// Uses cryptographically secure random to avoid collisions and predictability.
 func (tm *TunnelManager) generateMessageID() int {
-	// Use time-based ID with some randomness
-	// In production, this should be more sophisticated to avoid collisions
-	return int(time.Now().UnixNano() & 0x7FFFFFFF)
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to time-based if rand fails (should never happen)
+		log.WithError(err).Warn("Failed to generate random message ID, using time-based fallback")
+		return int(time.Now().UnixNano() & 0x7FFFFFFF)
+	}
+	// Use only 31 bits to ensure positive int on all platforms
+	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF)
 }
 
 // BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message interface.
@@ -1164,10 +1172,15 @@ func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.Rou
 	}
 }
 
-// generateTunnelID generates a new unique tunnel ID
+// generateTunnelID generates a unique tunnel ID using cryptographically secure random.
 func (tm *TunnelManager) generateTunnelID() tunnel.TunnelID {
-	// Simple tunnel ID generation - in production this should be cryptographically secure
-	return tunnel.TunnelID(time.Now().UnixNano() & 0xFFFFFFFF)
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to time-based if rand fails (should never happen)
+		log.WithError(err).Warn("Failed to generate random tunnel ID, using time-based fallback")
+		return tunnel.TunnelID(time.Now().UnixNano() & 0xFFFFFFFF)
+	}
+	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:]))
 }
 
 // sendTunnelBuildRequests sends tunnel build requests to each selected peer
