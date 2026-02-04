@@ -266,11 +266,11 @@ func TestReplyProcessor_RetryCorrelation(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	var retryCount int32
-	var lastTunnelID tunnel.TunnelID
+	var lastTunnelID atomic.Uint64
 
 	rp.SetRetryCallback(func(tunnelID tunnel.TunnelID, isInbound bool, hopCount int) error {
 		atomic.AddInt32(&retryCount, 1)
-		lastTunnelID = tunnelID
+		lastTunnelID.Store(uint64(tunnelID))
 		return nil
 	})
 
@@ -297,7 +297,7 @@ func TestReplyProcessor_RetryCorrelation(t *testing.T) {
 
 	// Verify retry was triggered with correct tunnel ID
 	assert.Equal(t, int32(1), atomic.LoadInt32(&retryCount))
-	assert.Equal(t, tunnelID, lastTunnelID, "Retry callback should receive correct tunnel ID")
+	assert.Equal(t, uint64(tunnelID), lastTunnelID.Load(), "Retry callback should receive correct tunnel ID")
 }
 
 // TestReplyProcessor_KeyIVCorrectness verifies reply keys/IVs are stored correctly.
