@@ -37,17 +37,19 @@ type GarlicCloveForwarder interface {
 
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
-	factory        *I2NPMessageFactory
-	garlicSessions *GarlicSessionManager
-	cloveForwarder GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
-	dbManager      *DatabaseManager     // Optional database manager for DatabaseLookup messages
+	factory             *I2NPMessageFactory
+	garlicSessions      *GarlicSessionManager
+	cloveForwarder      GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager           *DatabaseManager     // Optional database manager for DatabaseLookup messages
+	expirationValidator *ExpirationValidator // Validator for checking message expiration
 }
 
 // NewMessageProcessor creates a new message processor
 func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
 	return &MessageProcessor{
-		factory: NewI2NPMessageFactory(),
+		factory:             NewI2NPMessageFactory(),
+		expirationValidator: NewExpirationValidator(),
 	}
 }
 
@@ -73,12 +75,44 @@ func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
 	p.dbManager = dbMgr
 }
 
-// ProcessMessage processes any I2NP message using interfaces
+// SetExpirationValidator sets a custom expiration validator for message processing.
+// If not set, a default validator with 5-minute tolerance is used.
+func (p *MessageProcessor) SetExpirationValidator(v *ExpirationValidator) {
+	if v != nil {
+		p.expirationValidator = v
+	}
+}
+
+// DisableExpirationCheck disables expiration validation in the processor.
+// Useful for testing or special processing scenarios.
+func (p *MessageProcessor) DisableExpirationCheck() {
+	if p.expirationValidator != nil {
+		p.expirationValidator.Disable()
+	}
+}
+
+// EnableExpirationCheck enables expiration validation in the processor.
+func (p *MessageProcessor) EnableExpirationCheck() {
+	if p.expirationValidator != nil {
+		p.expirationValidator.Enable()
+	}
+}
+
+// ProcessMessage processes any I2NP message using interfaces.
+// Messages are first validated for expiration before processing.
+// Expired messages are rejected with ERR_I2NP_MESSAGE_EXPIRED.
 func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
 		"message_type": msg.Type(),
 	}).Debug("Processing I2NP message")
+
+	// Validate message expiration before processing
+	if p.expirationValidator != nil {
+		if err := p.expirationValidator.ValidateMessage(msg); err != nil {
+			return err
+		}
+	}
 
 	switch msg.Type() {
 	case I2NP_MESSAGE_TYPE_DATA:

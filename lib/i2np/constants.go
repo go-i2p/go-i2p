@@ -31,4 +31,10 @@ var (
 	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build response record data")
 	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = oops.Errorf("not enough i2np database lookup data")
 	ERR_DATABASE_LOOKUP_INVALID_SIZE          = oops.Errorf("database lookup excluded peers size exceeds protocol limit")
+	ERR_I2NP_MESSAGE_EXPIRED                  = oops.Errorf("i2np message has expired")
 )
+
+// Default expiration tolerance for clock skew (5 minutes into the past)
+// This allows for reasonable clock differences between I2P routers while
+// still rejecting clearly expired messages.
+const DefaultExpirationTolerance = 5 * 60 // 5 minutes in seconds
