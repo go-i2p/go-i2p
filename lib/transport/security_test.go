@@ -17,23 +17,23 @@ import (
 // all Transport interface methods. This is a compile-time check that will
 // fail if the interface is not properly implemented.
 func TestTransportInterfaceCompliance(t *testing.T) {
-	// Note: TransportMuxer does NOT implement Transport interface fully.
-	// It is missing Accept() and Addr() methods.
-	// This is documented as a known gap in AUDIT.md.
+	// Compile-time interface check is in multi.go: var _ Transport = (*TransportMuxer)(nil)
 
 	// Verify individual method existence on TransportMuxer
 	muxer := &TransportMuxer{}
 
-	// Check methods that exist
-	_ = muxer.SetIdentity
-	_ = muxer.GetSession
-	_ = muxer.Compatible
-	_ = muxer.Close
-	_ = muxer.Name
-	_ = muxer.AcceptWithTimeout // Has timeout variant but not Accept()
-	_ = muxer.GetTransports
+	// Check all interface methods exist
+	_ = muxer.Accept            // Transport interface
+	_ = muxer.Addr              // Transport interface
+	_ = muxer.SetIdentity       // Transport interface
+	_ = muxer.GetSession        // Transport interface
+	_ = muxer.Compatible        // Transport interface
+	_ = muxer.Close             // Transport interface
+	_ = muxer.Name              // Transport interface
+	_ = muxer.AcceptWithTimeout // Extension method with timeout
+	_ = muxer.GetTransports     // Extension method
 
-	t.Log("TransportMuxer has most Transport methods, but Accept() and Addr() are not implemented")
+	t.Log("TransportMuxer correctly implements Transport interface (verified in multi.go)")
 }
 
 // TestTransportSelectionPriority verifies that transports are tried in the order they are added.
@@ -136,6 +136,64 @@ func (m *mockSession) ReadNextI2NP() (i2np.I2NPMessage, error) {
 	return nil, nil
 }
 func (m *mockSession) Close() error { return nil }
+
+// TestMuxerAccept verifies the Accept method works correctly.
+func TestMuxerAccept(t *testing.T) {
+	expectedConn := &mockConn{}
+	transport := &mockTransport{
+		acceptConn: expectedConn,
+	}
+	muxer := Mux(transport)
+
+	conn, err := muxer.Accept()
+	require.NoError(t, err)
+	assert.Equal(t, expectedConn, conn)
+}
+
+// TestMuxerAcceptNoTransport verifies Accept returns error when no transport available.
+func TestMuxerAcceptNoTransport(t *testing.T) {
+	muxer := &TransportMuxer{trans: []Transport{}}
+
+	conn, err := muxer.Accept()
+	assert.Error(t, err)
+	assert.Equal(t, ErrNoTransportAvailable, err)
+	assert.Nil(t, conn)
+}
+
+// TestMuxerAddr verifies the Addr method returns the first transport's address.
+func TestMuxerAddr(t *testing.T) {
+	expectedAddr := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}
+	transport := &mockTransportWithAddr{addr: expectedAddr}
+	muxer := Mux(transport)
+
+	addr := muxer.Addr()
+	assert.Equal(t, expectedAddr, addr)
+}
+
+// TestMuxerAddrNoTransport verifies Addr returns nil when no transport available.
+func TestMuxerAddrNoTransport(t *testing.T) {
+	muxer := &TransportMuxer{trans: []Transport{}}
+
+	addr := muxer.Addr()
+	assert.Nil(t, addr)
+}
+
+// mockTransportWithAddr is a mock transport that returns a specific address.
+type mockTransportWithAddr struct {
+	addr net.Addr
+}
+
+func (m *mockTransportWithAddr) Accept() (net.Conn, error) { return nil, nil }
+func (m *mockTransportWithAddr) Addr() net.Addr            { return m.addr }
+func (m *mockTransportWithAddr) SetIdentity(ident router_info.RouterInfo) error {
+	return nil
+}
+func (m *mockTransportWithAddr) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
+	return nil, nil
+}
+func (m *mockTransportWithAddr) Compatible(routerInfo router_info.RouterInfo) bool { return false }
+func (m *mockTransportWithAddr) Close() error                                      { return nil }
+func (m *mockTransportWithAddr) Name() string                                      { return "MockWithAddr" }
 
 // TestConnectionPoolingNoLimits verifies current lack of connection limits.
 // This test documents that connection pooling limits are NOT enforced,
@@ -303,17 +361,15 @@ func (m *mockTransportWithCloseError) Name() string {
 	return "MockWithCloseError"
 }
 
-// TestNameGenerationTruncation verifies the Name() method's string manipulation.
-func TestNameGenerationTruncation(t *testing.T) {
+// TestNameGenerationCorrectness verifies the Name() method generates proper composite names.
+func TestNameGenerationCorrectness(t *testing.T) {
 	transport1 := &mockTransport{}
 	muxer := Mux(transport1)
 
 	name := muxer.Name()
-	// The Name() function appears to have a bug - it takes the last 3 chars
-	// instead of trimming the trailing ", "
 	t.Logf("Muxer name: %q", name)
 
-	// Document this as a potential bug for review
-	t.Log("Note: TransportMuxer.Name() truncates to last 3 characters of the generated string")
-	t.Log("This appears to be a bug - should likely remove trailing ', ' instead")
+	// Verify the name is properly formatted (no trailing comma)
+	assert.Equal(t, "Muxed Transport: MockTransport", name, "Name should be properly formatted")
+	assert.NotContains(t, name, ", \"", "Name should not end with trailing comma")
 }

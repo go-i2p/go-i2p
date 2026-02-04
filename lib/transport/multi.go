@@ -10,6 +10,9 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// Compile-time check that TransportMuxer implements Transport interface
+var _ Transport = (*TransportMuxer)(nil)
+
 // muxes multiple transports into 1 Transport
 // implements transport.Transport
 type TransportMuxer struct {
@@ -229,6 +232,49 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 		"reason": "no_compatible_transport",
 	}).Debug("no compatible transport found")
 	return false
+}
+
+// Accept accepts an incoming connection from the first available transport.
+// This implements the Transport interface requirement.
+// Returns the connection and nil on success.
+// Returns nil and ErrNoTransportAvailable if no transports are configured.
+func (tmux *TransportMuxer) Accept() (net.Conn, error) {
+	log.WithFields(logger.Fields{
+		"at":              "(TransportMuxer) Accept",
+		"reason":          "awaiting_connection",
+		"transport_count": len(tmux.trans),
+	}).Debug("accepting connection")
+
+	if len(tmux.trans) == 0 {
+		return nil, ErrNoTransportAvailable
+	}
+
+	// Use the first transport for accepting connections
+	conn, err := tmux.trans[0].Accept()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(TransportMuxer) Accept",
+			"reason": "accept_error",
+			"error":  err.Error(),
+		}).Debug("accept failed")
+		return nil, err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "(TransportMuxer) Accept",
+		"reason": "connection_accepted",
+	}).Debug("accept succeeded")
+	return conn, nil
+}
+
+// Addr returns the address of the first transport's listener.
+// This implements the Transport interface requirement.
+// Returns nil if no transports are configured.
+func (tmux *TransportMuxer) Addr() net.Addr {
+	if len(tmux.trans) == 0 {
+		return nil
+	}
+	return tmux.trans[0].Addr()
 }
 
 // AcceptWithTimeout accepts an incoming connection with a timeout.
