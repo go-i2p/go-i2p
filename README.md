@@ -21,7 +21,7 @@ The core router functionality is now operational. We have tested functionality u
 ### Implemented Features
 
 - Clients
-  - [X] I2CP Protocol Server (v2.10.0 - tested with i2psnark-standalone)
+  - [X] I2CP Protocol Server (v0.9.67 - tested with i2psnark-standalone)
   - [X] Message routing (outbound I2CP → tunnels → garlic encryption)
   - [X] Inbound message delivery (tunnel → I2CP sessions)
   - [X] [I2CP Client: https://github.com/go-i2p/go-i2cp](https://github.com/go-i2p/go-i2cp)
@@ -43,7 +43,7 @@ The core router functionality is now operational. We have tested functionality u
     - [X] RSA_SHA384_3072
     - [X] RSA_SHA512_4096
     - [X] Ed25519
-    - [ ] Red25519
+    - [ ] Red25519 (planned - blinded key signatures)
   - [X] ElGamal
   - [X] AES256
   - [X] X25519
@@ -174,7 +174,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
 ### Features
 
 - **Session Management**: Create, reconfigure, and destroy client sessions
-- **Message Protocol**: Full I2CP v2.10.0 protocol implementation
+- **Message Protocol**: Full I2CP v0.9.67 protocol implementation
 - **Multi-client Support**: Handle multiple concurrent client sessions (default: 100)
 - **Thread-safe**: Concurrent session access with proper synchronization
 

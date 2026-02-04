@@ -40,19 +40,23 @@
 //
 // # Usage Example
 //
-//	// Create tunnel pool
-//	pool := tunnel.NewTunnelPool(config, netdb, transport)
+//	// Create tunnel pool with peer selector
+//	pool := tunnel.NewTunnelPool(peerSelector)
 //
-//	// Build outbound tunnel
-//	outTunnel, err := pool.BuildOutboundTunnel(3) // 3 hops
-//	if err != nil {
-//	    log.Printf("Failed to build tunnel: %v", err)
+//	// Start maintenance (builds tunnels automatically)
+//	if err := pool.StartMaintenance(); err != nil {
+//	    log.Printf("Failed to start maintenance: %v", err)
 //	}
 //
-//	// Route message through tunnel
-//	if err := outTunnel.SendMessage(msg); err != nil {
-//	    log.Printf("Failed to send: %v", err)
+//	// Select an active tunnel for sending
+//	outTunnel := pool.SelectTunnel()
+//	if outTunnel == nil {
+//	    log.Printf("No active tunnels available")
 //	}
+//
+//	// For message routing, use Gateway.Send() with an I2NP message
+//	// gateway := tunnel.NewGateway(tunnelID, nextHopID, encryption)
+//	// encryptedMsg, err := gateway.Send(i2npMessageBytes)
 //
 // # Cryptography
 //
