@@ -207,8 +207,13 @@ func extractHostQuietly(addr *router_address.RouterAddress) (net.Addr, error) {
 // HasDirectConnectivity checks if a RouterAddress has direct NTCP2 connectivity.
 // Returns true if the address has both host and port keys (directly dialable).
 // Returns false if the address is introducer-only (requires NAT traversal).
+// Returns false for nil addresses.
 // CRITICAL FIX #1: Pre-filtering utility for peer selection.
 func HasDirectConnectivity(addr *router_address.RouterAddress) bool {
+	if addr == nil {
+		return false
+	}
+
 	// Check transport style
 	style := addr.TransportStyle()
 	styleStr, err := style.Data()
