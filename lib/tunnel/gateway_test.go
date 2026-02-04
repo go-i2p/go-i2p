@@ -253,3 +253,57 @@ func TestGatewayMessageBuilding(t *testing.T) {
 	tunnelID := TunnelID(uint32(tunnelMsg[0])<<24 | uint32(tunnelMsg[1])<<16 | uint32(tunnelMsg[2])<<8 | uint32(tunnelMsg[3]))
 	assert.Equal(t, TunnelID(67890), tunnelID)
 }
+
+// TestGatewayPaddingIsRandom tests that padding bytes are random and non-zero
+func TestGatewayPaddingIsRandom(t *testing.T) {
+	gw := &Gateway{
+		tunnelID:  TunnelID(12345),
+		nextHopID: TunnelID(67890),
+	}
+
+	// Use a small message to maximize padding
+	testMsg := []byte("Hi")
+	instructions, err := gw.createDeliveryInstructions(testMsg)
+	require.NoError(t, err)
+
+	// Build multiple messages and verify padding varies
+	var paddingBytes1, paddingBytes2 []byte
+
+	tunnelMsg1, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+
+	tunnelMsg2, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+
+	// Find the zero separator to locate padding
+	for i := 24; i < len(tunnelMsg1); i++ {
+		if tunnelMsg1[i] == 0x00 {
+			paddingBytes1 = tunnelMsg1[24:i]
+			break
+		}
+	}
+	for i := 24; i < len(tunnelMsg2); i++ {
+		if tunnelMsg2[i] == 0x00 {
+			paddingBytes2 = tunnelMsg2[24:i]
+			break
+		}
+	}
+
+	require.NotEmpty(t, paddingBytes1, "Should have padding bytes")
+	require.Equal(t, len(paddingBytes1), len(paddingBytes2), "Padding lengths should match")
+
+	// Verify no zero bytes in padding (I2P spec requires non-zero)
+	for i, b := range paddingBytes1 {
+		assert.NotZero(t, b, "Padding byte %d should be non-zero", i)
+	}
+
+	// Verify padding is different between calls (random)
+	different := false
+	for i := range paddingBytes1 {
+		if paddingBytes1[i] != paddingBytes2[i] {
+			different = true
+			break
+		}
+	}
+	assert.True(t, different, "Padding should be random between calls")
+}

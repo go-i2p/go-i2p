@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -198,10 +199,23 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 	}
 
 	// Add random non-zero padding (bytes 24 to 24+paddingSize)
-	for i := 24; i < 24+paddingSize; i++ {
-		// Simple non-zero padding using incrementing pattern
-		// In production, this should use crypto/rand
-		msg[i] = byte((i % 255) + 1)
+	// Use crypto/rand for cryptographically secure random padding
+	if paddingSize > 0 {
+		paddingBytes := msg[24 : 24+paddingSize]
+		if _, err := rand.Read(paddingBytes); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "buildTunnelMessage",
+				"reason": "failed to generate random padding",
+				"error":  err,
+			}).Error("Random padding generation failed")
+			return nil, err
+		}
+		// Ensure non-zero padding bytes (I2P spec requires non-zero)
+		for i := range paddingBytes {
+			if paddingBytes[i] == 0 {
+				paddingBytes[i] = 1
+			}
+		}
 	}
 
 	// Zero byte separator

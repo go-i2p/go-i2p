@@ -1,10 +1,10 @@
 package ntcp2
 
 import (
-	"crypto/rand"
 	"os"
 	"path/filepath"
 
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
 	"github.com/samber/oops"
 )
