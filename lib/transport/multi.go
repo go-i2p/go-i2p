@@ -109,13 +109,16 @@ func (tmux *TransportMuxer) Name() string {
 	for _, t := range tmux.trans {
 		name += t.Name() + ", "
 	}
-	_name := name[len(name)-3:]
+	// Trim trailing ", " if present
+	if len(name) >= 2 && name[len(name)-2:] == ", " {
+		name = name[:len(name)-2]
+	}
 	log.WithFields(logger.Fields{
 		"at":     "(TransportMuxer) Name",
 		"reason": "name_generated",
-		"name":   _name,
+		"name":   name,
 	}).Debug("muxed transport name generated")
-	return _name
+	return name
 }
 
 // tryGetSessionFromTransport attempts to get a session from a compatible transport.

@@ -77,11 +77,13 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 }
 
 // ensureDirectoryExists creates the directory if it does not exist.
+// Uses 0700 permissions to protect key material from other users.
 // Returns an error if directory creation fails.
 func ensureDirectoryExists(dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		log.WithField("dir", dir).Debug("Creating keystore directory")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		// Use 0700 to protect private key material from other users
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			log.WithError(err).Error("Failed to create directory")
 			return err
 		}
@@ -168,7 +170,8 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 	log.WithField("at", "StoreKeys").Debug("Storing keys to disk")
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
 		log.WithField("dir", ks.dir).Debug("Creating directory for keys")
-		err := os.MkdirAll(ks.dir, 0o755)
+		// Use 0700 to protect private key material from other users
+		err := os.MkdirAll(ks.dir, 0o700)
 		if err != nil {
 			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to create directory")
 			return err

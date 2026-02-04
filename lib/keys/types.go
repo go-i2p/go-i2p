@@ -81,7 +81,8 @@ func (ks *KeyStoreImpl) StoreKeys() error {
 	// make sure the directory exists
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
 		log.WithField("dir", ks.dir).Debug("Creating keystore directory")
-		err := os.MkdirAll(ks.dir, 0o755)
+		// Use 0700 to protect private key material from other users
+		err := os.MkdirAll(ks.dir, 0o700)
 		if err != nil {
 			log.WithError(err).WithField("dir", ks.dir).Error("Failed to create keystore directory")
 			return err
