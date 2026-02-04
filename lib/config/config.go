@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/go-i2p/go-i2p/lib/util"
@@ -32,6 +31,9 @@ func InitConfig() {
 
 	// Update RouterConfigProperties
 	UpdateRouterConfig()
+
+	// Security warning: Check for default password
+	CheckDefaultPasswordWarning(viper.GetString("i2pcontrol.password"))
 }
 
 func setDefaults() {
@@ -227,14 +229,24 @@ func UpdateRouterConfig() {
 
 func createDefaultConfig(defaultConfigDir string) {
 	defaultConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
-	// Ensure directory exists
-	if err := os.MkdirAll(defaultConfigDir, 0o755); err != nil {
+	// Ensure directory exists with secure permissions (config may contain passwords)
+	if err := CreateSecureDirectory(defaultConfigDir); err != nil {
 		log.Fatalf("Could not create config directory: %s", err)
 	}
 
 	// Write current config file
 	if err := viper.SafeWriteConfig(); err != nil {
 		log.Fatalf("Could not write default config file: %s", err)
+	}
+
+	// Secure the config file (may contain sensitive data like I2PControl password)
+	if err := SecureExistingPath(defaultConfigFile, false); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "createDefaultConfig",
+			"reason": "config_file_permission_warning",
+			"path":   defaultConfigFile,
+			"error":  err.Error(),
+		}).Warn("could not secure config file permissions")
 	}
 
 	log.WithFields(logger.Fields{
