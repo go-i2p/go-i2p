@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -323,9 +324,47 @@ func TestReplacementRecommendation(t *testing.T) {
 
 // TestTestTunnel_Timeout verifies timeout handling
 func TestTestTunnel_Timeout(t *testing.T) {
-	t.Skip("Timeout test would require >5 seconds, skipping for fast test suite")
-	// This test would set a very short timeout and verify that
-	// tests time out appropriately. Skipped to keep test suite fast.
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(77777)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	// Configure sender that never responds
+	sender := newMockMessageSender()
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+	tester.SetTimeout(500 * time.Millisecond) // Short timeout
+
+	start := time.Now()
+	result := tester.TestTunnel(tunnelID)
+	elapsed := time.Since(start)
+
+	// Should fail due to timeout
+	if result.Success {
+		t.Error("Expected test to fail due to timeout")
+	}
+
+	if result.Error == nil {
+		t.Error("Expected timeout error")
+	}
+
+	// Verify timeout happened in expected time range
+	if elapsed < 400*time.Millisecond {
+		t.Errorf("Timeout happened too quickly: %v", elapsed)
+	}
+
+	if elapsed > 2*time.Second {
+		t.Errorf("Timeout took too long: %v", elapsed)
+	}
 }
 
 // createTestPool creates a minimal pool for testing
@@ -339,4 +378,280 @@ func createTestPool(t *testing.T) *Pool {
 
 	// Don't start maintenance for these tests
 	return pool
+}
+
+// mockMessageSender implements TunnelMessageSender for testing
+type mockMessageSender struct {
+	sentMessages map[TunnelID][]uint32
+	shouldFail   bool
+	mu           sync.Mutex
+}
+
+func newMockMessageSender() *mockMessageSender {
+	return &mockMessageSender{
+		sentMessages: make(map[TunnelID][]uint32),
+	}
+}
+
+func (m *mockMessageSender) SendTestMessage(tunnelID TunnelID, messageID uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.shouldFail {
+		return fmt.Errorf("mock send failure")
+	}
+
+	m.sentMessages[tunnelID] = append(m.sentMessages[tunnelID], messageID)
+	return nil
+}
+
+func (m *mockMessageSender) getLastMessageID(tunnelID TunnelID) (uint32, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	messages := m.sentMessages[tunnelID]
+	if len(messages) == 0 {
+		return 0, false
+	}
+	return messages[len(messages)-1], true
+}
+
+// TestSetMessageSender verifies message sender configuration
+func TestSetMessageSender(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	tester := NewTunnelTester(pool)
+
+	if tester.sender != nil {
+		t.Error("Expected no sender initially")
+	}
+
+	sender := newMockMessageSender()
+	tester.SetMessageSender(sender)
+
+	if tester.sender != sender {
+		t.Error("Sender not set correctly")
+	}
+}
+
+// TestRealEchoTest_Success verifies real echo test with response
+func TestRealEchoTest_Success(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(12345)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	sender := newMockMessageSender()
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+	tester.SetTimeout(2 * time.Second)
+
+	// Run test in goroutine since it will block
+	resultCh := make(chan TunnelTestResult, 1)
+	go func() {
+		resultCh <- tester.TestTunnel(tunnelID)
+	}()
+
+	// Wait a bit for the message to be sent
+	time.Sleep(50 * time.Millisecond)
+
+	// Get the message ID and simulate response
+	messageID, ok := sender.getLastMessageID(tunnelID)
+	if !ok {
+		t.Fatal("No message was sent")
+	}
+
+	// Simulate response
+	handled := tester.HandleTestResponse(messageID)
+	if !handled {
+		t.Error("Response was not handled")
+	}
+
+	// Get result
+	select {
+	case result := <-resultCh:
+		if !result.Success {
+			t.Errorf("Expected test to succeed, got error: %v", result.Error)
+		}
+		if result.Latency == 0 {
+			t.Error("Expected non-zero latency")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Test timed out waiting for result")
+	}
+}
+
+// TestRealEchoTest_Timeout verifies timeout when no response
+func TestRealEchoTest_Timeout(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(54321)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	sender := newMockMessageSender()
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+	tester.SetTimeout(100 * time.Millisecond) // Short timeout for test
+
+	result := tester.TestTunnel(tunnelID)
+
+	if result.Success {
+		t.Error("Expected test to fail due to timeout")
+	}
+
+	if result.Error == nil {
+		t.Error("Expected timeout error")
+	}
+}
+
+// TestRealEchoTest_SendFailure verifies handling of send failures
+func TestRealEchoTest_SendFailure(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(99999)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	sender := newMockMessageSender()
+	sender.shouldFail = true
+
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+
+	result := tester.TestTunnel(tunnelID)
+
+	if result.Success {
+		t.Error("Expected test to fail due to send failure")
+	}
+
+	if result.Error == nil {
+		t.Error("Expected error for send failure")
+	}
+}
+
+// TestHandleTestResponse_UnknownMessage verifies handling of unknown responses
+func TestHandleTestResponse_UnknownMessage(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	tester := NewTunnelTester(pool)
+
+	// Handle response for unknown message ID
+	handled := tester.HandleTestResponse(12345)
+	if handled {
+		t.Error("Should not handle unknown message ID")
+	}
+}
+
+// TestGenerateTestMessageID verifies unique ID generation
+func TestGenerateTestMessageID(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	tester := NewTunnelTester(pool)
+
+	ids := make(map[uint32]bool)
+	for i := 0; i < 100; i++ {
+		id, err := tester.generateTestMessageID()
+		if err != nil {
+			t.Fatalf("Failed to generate message ID: %v", err)
+		}
+
+		if ids[id] {
+			t.Errorf("Duplicate message ID generated: %d", id)
+		}
+		ids[id] = true
+	}
+}
+
+// TestPendingTestsCleanup verifies pending tests are cleaned up after completion
+func TestPendingTestsCleanup(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(11111)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	sender := newMockMessageSender()
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+	tester.SetTimeout(1 * time.Second)
+
+	// Run test that will timeout
+	_ = tester.TestTunnel(tunnelID)
+
+	// Check that pending test was cleaned up
+	tester.mu.Lock()
+	pendingCount := len(tester.pendingTests)
+	tester.mu.Unlock()
+
+	if pendingCount != 0 {
+		t.Errorf("Expected 0 pending tests after completion, got %d", pendingCount)
+	}
+}
+
+// TestFallbackToAgeBasedTest verifies fallback when no sender configured
+func TestFallbackToAgeBasedTest(t *testing.T) {
+	pool := createTestPool(t)
+	defer pool.Stop()
+
+	// Add a ready tunnel
+	tunnelID := TunnelID(22222)
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
+
+	// Create tester WITHOUT setting message sender
+	tester := NewTunnelTester(pool)
+
+	result := tester.TestTunnel(tunnelID)
+
+	// Should succeed using age-based fallback
+	if !result.Success {
+		t.Errorf("Expected fallback test to succeed, got error: %v", result.Error)
+	}
+
+	if result.Latency == 0 {
+		t.Error("Expected non-zero latency even for fallback")
+	}
 }

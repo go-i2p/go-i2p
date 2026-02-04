@@ -1,25 +1,49 @@
 package tunnel
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 )
+
+// TunnelMessageSender defines the interface for sending test messages through tunnels.
+// This abstraction allows the TunnelTester to remain decoupled from the transport layer.
+// The router or a higher-level component provides the actual implementation.
+type TunnelMessageSender interface {
+	// SendTestMessage sends a DeliveryStatus test message through the specified tunnel.
+	// Parameters:
+	//   - tunnelID: the tunnel to test
+	//   - messageID: unique identifier for the test message (used for response correlation)
+	// Returns error if the message could not be sent.
+	SendTestMessage(tunnelID TunnelID, messageID uint32) error
+}
+
+// pendingTest tracks an in-progress tunnel test
+type pendingTest struct {
+	tunnelID  TunnelID
+	startTime time.Time
+	done      chan error
+}
 
 // TunnelTester validates tunnel health and performance.
 // It sends test messages through tunnels and measures latency,
 // enabling automatic detection of failed or slow tunnels.
 //
 // Design decisions:
-// - Simple echo-based testing (send test message, wait for reply)
+// - Uses DeliveryStatus messages for echo-based testing
+// - Correlates responses using unique message IDs
 // - Configurable timeout (default 5 seconds)
 // - Latency tracking for tunnel selection optimization
-// - Non-blocking test execution (returns immediately, callbacks for results)
 // - Thread-safe for concurrent testing of multiple tunnels
 type TunnelTester struct {
-	pool    *Pool
-	timeout time.Duration
-	mu      sync.Mutex
+	pool         *Pool
+	sender       TunnelMessageSender
+	timeout      time.Duration
+	mu           sync.Mutex
+	pendingTests map[uint32]*pendingTest // messageID -> pendingTest
 }
 
 // TunnelTestResult contains the results of a tunnel test.
@@ -38,11 +62,25 @@ type TunnelTestResult struct {
 //
 // The tester is created with a default 5-second timeout.
 // Use SetTimeout to customize.
+// Use SetMessageSender to enable real I2NP-based testing.
 func NewTunnelTester(pool *Pool) *TunnelTester {
 	return &TunnelTester{
-		pool:    pool,
-		timeout: 5 * time.Second,
+		pool:         pool,
+		timeout:      5 * time.Second,
+		pendingTests: make(map[uint32]*pendingTest),
 	}
+}
+
+// SetMessageSender configures the message sender for real tunnel testing.
+// Without a sender configured, tests will use age-based health estimation.
+//
+// Parameters:
+// - sender: implementation of TunnelMessageSender (typically provided by router)
+func (tt *TunnelTester) SetMessageSender(sender TunnelMessageSender) {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	tt.sender = sender
+	log.WithField("at", "TunnelTester.SetMessageSender").Debug("Message sender configured for real tunnel testing")
 }
 
 // SetTimeout configures the test timeout.
@@ -139,25 +177,136 @@ func (tt *TunnelTester) performEchoTest(tunnel *TunnelState) error {
 	timeout := tt.timeout
 	tt.mu.Unlock()
 
-	// Simulate echo test with timeout
-	// In production, this would send actual I2NP test messages
+	// Check if we have a message sender for real testing
+	if tt.sender != nil {
+		return tt.performRealEchoTest(tunnel, timeout)
+	}
+
+	// Fallback: age-based health estimation when no sender is configured
+	return tt.performAgeBasedTest(tunnel, timeout)
+}
+
+// generateTestMessageID creates a cryptographically random 32-bit message ID
+// for correlating test requests with responses.
+func (tt *TunnelTester) generateTestMessageID() (uint32, error) {
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("failed to generate random message ID: %w", err)
+	}
+	return binary.BigEndian.Uint32(buf[:]), nil
+}
+
+// performRealEchoTest sends an actual DeliveryStatus message through the tunnel
+// and waits for a response to measure real round-trip latency.
+func (tt *TunnelTester) performRealEchoTest(tunnel *TunnelState, timeout time.Duration) error {
+	// Generate unique message ID for this test
+	messageID, err := tt.generateTestMessageID()
+	if err != nil {
+		return err
+	}
+
+	// Create pending test entry
+	pending := &pendingTest{
+		tunnelID:  tunnel.ID,
+		startTime: time.Now(),
+		done:      make(chan error, 1),
+	}
+
+	// Register the pending test
+	tt.mu.Lock()
+	tt.pendingTests[messageID] = pending
+	tt.mu.Unlock()
+
+	// Ensure cleanup
+	defer func() {
+		tt.mu.Lock()
+		delete(tt.pendingTests, messageID)
+		tt.mu.Unlock()
+	}()
+
+	// Send the test message
+	if err := tt.sender.SendTestMessage(tunnel.ID, messageID); err != nil {
+		log.WithFields(map[string]interface{}{
+			"at":         "TunnelTester.performRealEchoTest",
+			"tunnel_id":  tunnel.ID,
+			"message_id": messageID,
+			"error":      err,
+		}).Warn("Failed to send test message")
+		return fmt.Errorf("failed to send test message: %w", err)
+	}
+
+	log.WithFields(map[string]interface{}{
+		"at":         "TunnelTester.performRealEchoTest",
+		"tunnel_id":  tunnel.ID,
+		"message_id": messageID,
+	}).Debug("Test message sent, waiting for response")
+
+	// Wait for response or timeout
+	select {
+	case err := <-pending.done:
+		return err
+	case <-time.After(timeout):
+		log.WithFields(map[string]interface{}{
+			"at":         "TunnelTester.performRealEchoTest",
+			"tunnel_id":  tunnel.ID,
+			"message_id": messageID,
+			"timeout":    timeout,
+		}).Warn("Tunnel test timeout")
+		return fmt.Errorf("tunnel test timeout after %v", timeout)
+	}
+}
+
+// HandleTestResponse processes a DeliveryStatus response for a pending test.
+// This should be called by the message router when a DeliveryStatus message
+// is received that matches a pending test message ID.
+//
+// Parameters:
+// - messageID: the message ID from the DeliveryStatus response
+//
+// Returns true if the message was for a pending test, false otherwise.
+func (tt *TunnelTester) HandleTestResponse(messageID uint32) bool {
+	tt.mu.Lock()
+	pending, exists := tt.pendingTests[messageID]
+	tt.mu.Unlock()
+
+	if !exists {
+		return false
+	}
+
+	// Signal successful completion
+	select {
+	case pending.done <- nil:
+		log.WithFields(map[string]interface{}{
+			"at":         "TunnelTester.HandleTestResponse",
+			"tunnel_id":  pending.tunnelID,
+			"message_id": messageID,
+			"latency":    time.Since(pending.startTime),
+		}).Debug("Test response received")
+	default:
+		// Channel already closed or full
+	}
+
+	return true
+}
+
+// performAgeBasedTest uses tunnel age as a proxy for health when no message sender
+// is configured. This is a fallback for situations where real testing isn't available.
+func (tt *TunnelTester) performAgeBasedTest(tunnel *TunnelState, timeout time.Duration) error {
 	testChan := make(chan error, 1)
 
 	go func() {
-		// Simulate test latency (check tunnel age as proxy for health)
 		age := time.Since(tunnel.CreatedAt)
 
-		// Tunnels near expiration are considered less reliable
+		// Tunnels near expiration (within 1 minute of 10-minute lifetime) are less reliable
 		if age > 9*time.Minute {
-			testChan <- fmt.Errorf("tunnel near expiration")
+			testChan <- fmt.Errorf("tunnel near expiration (age: %v)", age)
 		} else {
-			// Simulate successful test
-			time.Sleep(50 * time.Millisecond) // Realistic latency
+			// Minimal delay to simulate test overhead
+			time.Sleep(10 * time.Millisecond)
 			testChan <- nil
 		}
 	}()
 
-	// Wait for test result or timeout
 	select {
 	case err := <-testChan:
 		return err
