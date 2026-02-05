@@ -839,6 +839,7 @@ type mockGarlicNetDB struct{}
 func (m *mockGarlicNetDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInfo {
 	return nil // Simulate not found
 }
+
 func (m *mockGarlicNetDB) GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet {
 	return nil // Simulate not found
 }

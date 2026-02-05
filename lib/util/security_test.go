@@ -374,7 +374,7 @@ func TestFileOperationsIntegration(t *testing.T) {
 
 	// Create a file
 	testFile := filepath.Join(tmpDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test content"), 0600); err != nil {
+	if err := os.WriteFile(testFile, []byte("test content"), 0o600); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 

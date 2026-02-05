@@ -158,9 +158,9 @@ func TestEmbeddedRouter_WaitOnNonRunning(t *testing.T) {
 // TestEmbeddedRouter_ErrorMessages tests error messages for safety.
 func TestEmbeddedRouter_ErrorMessages(t *testing.T) {
 	testCases := []struct {
-		name            string
-		action          func(*StandardEmbeddedRouter) error
-		expectError     bool
+		name             string
+		action           func(*StandardEmbeddedRouter) error
+		expectError      bool
 		shouldNotContain []string
 	}{
 		{
@@ -168,7 +168,7 @@ func TestEmbeddedRouter_ErrorMessages(t *testing.T) {
 			action: func(r *StandardEmbeddedRouter) error {
 				return r.Configure(nil)
 			},
-			expectError:     true,
+			expectError:      true,
 			shouldNotContain: []string{"password", "key", "secret"},
 		},
 		{
@@ -176,7 +176,7 @@ func TestEmbeddedRouter_ErrorMessages(t *testing.T) {
 			action: func(r *StandardEmbeddedRouter) error {
 				return r.Start()
 			},
-			expectError:     true,
+			expectError:      true,
 			shouldNotContain: []string{"password", "key", "secret"},
 		},
 	}

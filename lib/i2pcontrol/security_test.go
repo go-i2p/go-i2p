@@ -188,6 +188,7 @@ type mockStatsForAuth struct {
 func (m *mockStatsForAuth) GetBandwidthStats() BandwidthStats {
 	return BandwidthStats{InboundRate: 1000, OutboundRate: 2000}
 }
+
 func (m *mockStatsForAuth) GetRouterInfo() RouterInfoStats {
 	return RouterInfoStats{Version: "test", Uptime: 1000}
 }

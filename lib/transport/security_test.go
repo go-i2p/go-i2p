@@ -188,6 +188,7 @@ func (m *mockTransportWithAddr) Addr() net.Addr            { return m.addr }
 func (m *mockTransportWithAddr) SetIdentity(ident router_info.RouterInfo) error {
 	return nil
 }
+
 func (m *mockTransportWithAddr) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
 	return nil, nil
 }

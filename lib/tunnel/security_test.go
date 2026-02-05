@@ -42,8 +42,10 @@ type mockSecurityEncryptor struct {
 	simulateFail bool
 }
 
-var errMockEncryptionFailed = errors.New("mock encryption failed")
-var errMockDecryptionFailed = errors.New("mock decryption failed")
+var (
+	errMockEncryptionFailed = errors.New("mock encryption failed")
+	errMockDecryptionFailed = errors.New("mock decryption failed")
+)
 
 func (m *mockSecurityEncryptor) Encrypt(data []byte) ([]byte, error) {
 	m.encryptCalls++
