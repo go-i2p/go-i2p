@@ -233,6 +233,41 @@ type TunnelDefaults struct {
 	// MaintenanceInterval is how often to run pool maintenance
 	// Default: 30 seconds
 	MaintenanceInterval time.Duration
+
+	// === Participating Tunnel Limits ===
+	// These settings protect against resource exhaustion attacks
+
+	// MaxParticipatingTunnels is the hard limit on tunnels where we act as intermediate hop
+	// Default: 15000 (reasonable for typical hardware)
+	MaxParticipatingTunnels int
+
+	// ParticipatingLimitsEnabled enables global participating tunnel limits
+	// Default: true
+	ParticipatingLimitsEnabled bool
+
+	// PerSourceRateLimitEnabled enables per-source tunnel build request rate limiting
+	// Default: true
+	PerSourceRateLimitEnabled bool
+
+	// MaxBuildRequestsPerMinute is the maximum tunnel build requests per source per minute
+	// Default: 10 (legitimate routers rarely request >5/min)
+	MaxBuildRequestsPerMinute int
+
+	// BuildRequestBurstSize is the burst allowance for tunnel build requests
+	// Default: 3 (allows small bursts for tunnel rebuilds)
+	BuildRequestBurstSize int
+
+	// SourceBanDuration is how long to ban sources that exceed rate limits
+	// Default: 5 minutes
+	SourceBanDuration time.Duration
+}
+
+// SoftLimitParticipatingTunnels returns 50% of MaxParticipatingTunnels.
+// The soft limit is always derived, not independently configured.
+// Probabilistic rejection starts at the soft limit and increases toward 100%
+// as we approach the hard limit.
+func (t TunnelDefaults) SoftLimitParticipatingTunnels() int {
+	return t.MaxParticipatingTunnels / 2
 }
 
 // TransportDefaults contains default values for transport layer
@@ -395,6 +430,13 @@ func buildTunnelDefaults() TunnelDefaults {
 		BuildRetries:            3,
 		ReplaceBeforeExpiration: 2 * time.Minute,
 		MaintenanceInterval:     30 * time.Second,
+		// Participating tunnel limits (resource exhaustion protection)
+		MaxParticipatingTunnels:    15000,
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  true,
+		MaxBuildRequestsPerMinute:  10,
+		BuildRequestBurstSize:      3,
+		SourceBanDuration:          5 * time.Minute,
 	}
 }
 
@@ -672,6 +714,51 @@ func validateTunnel(tunnel TunnelDefaults) error {
 		}).Error("invalid tunnel configuration")
 		return newValidationError("Tunnel.BuildRetries must be at least 1")
 	}
+
+	// Validate participating tunnel limits (only when enabled)
+	if tunnel.ParticipatingLimitsEnabled {
+		if tunnel.MaxParticipatingTunnels < 100 {
+			log.WithFields(logger.Fields{
+				"at":                        "validateTunnelConfig",
+				"reason":                    "max_participating_tunnels_too_low",
+				"max_participating_tunnels": tunnel.MaxParticipatingTunnels,
+				"minimum_required":          100,
+			}).Error("invalid tunnel configuration")
+			return newValidationError("Tunnel.MaxParticipatingTunnels must be at least 100")
+		}
+	}
+
+	// Validate per-source rate limiting (only when enabled)
+	if tunnel.PerSourceRateLimitEnabled {
+		if tunnel.MaxBuildRequestsPerMinute < 1 {
+			log.WithFields(logger.Fields{
+				"at":                            "validateTunnelConfig",
+				"reason":                        "max_build_requests_per_minute_too_low",
+				"max_build_requests_per_minute": tunnel.MaxBuildRequestsPerMinute,
+				"minimum_required":              1,
+			}).Error("invalid tunnel configuration")
+			return newValidationError("Tunnel.MaxBuildRequestsPerMinute must be at least 1")
+		}
+		if tunnel.BuildRequestBurstSize < 1 {
+			log.WithFields(logger.Fields{
+				"at":                       "validateTunnelConfig",
+				"reason":                   "build_request_burst_size_too_low",
+				"build_request_burst_size": tunnel.BuildRequestBurstSize,
+				"minimum_required":         1,
+			}).Error("invalid tunnel configuration")
+			return newValidationError("Tunnel.BuildRequestBurstSize must be at least 1")
+		}
+		if tunnel.SourceBanDuration < 1*time.Minute {
+			log.WithFields(logger.Fields{
+				"at":                  "validateTunnelConfig",
+				"reason":              "source_ban_duration_too_low",
+				"source_ban_duration": tunnel.SourceBanDuration,
+				"minimum_required":    "1m",
+			}).Error("invalid tunnel configuration")
+			return newValidationError("Tunnel.SourceBanDuration must be at least 1 minute")
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"at":     "validateTunnelConfig",
 		"reason": "validation_passed",

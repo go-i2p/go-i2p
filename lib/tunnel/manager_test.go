@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // mockTunnelEncryptor is a simple mock for testing
@@ -428,5 +429,277 @@ func TestIdleAndExpiredParticipantCleanup(t *testing.T) {
 	}
 	if m.GetParticipant(33333) == nil {
 		t.Error("Healthy participant was incorrectly removed")
+	}
+}
+
+// TestNewManagerWithConfig verifies manager creation with custom configuration
+func TestNewManagerWithConfig(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 500
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	maxP, softL, enabled := m.GetLimitConfig()
+	if maxP != 500 {
+		t.Errorf("Expected maxParticipants=500, got %d", maxP)
+	}
+	if softL != 250 {
+		t.Errorf("Expected softLimit=250 (50%% of 500), got %d", softL)
+	}
+	if !enabled {
+		t.Error("Expected limits to be enabled")
+	}
+}
+
+// TestCanAcceptParticipant_LimitsDisabled verifies that when limits are disabled,
+// all requests are accepted
+func TestCanAcceptParticipant_LimitsDisabled(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 100
+	cfg.ParticipatingLimitsEnabled = false
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Add participants up to and beyond the "limit"
+	for i := 0; i < 150; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// Should still accept (limits disabled)
+	canAccept, reason := m.CanAcceptParticipant()
+	if !canAccept {
+		t.Errorf("Expected acceptance with limits disabled, got rejection: %s", reason)
+	}
+}
+
+// TestCanAcceptParticipant_HardLimit verifies that requests are rejected at hard limit
+func TestCanAcceptParticipant_HardLimit(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 100
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Add participants up to the hard limit
+	for i := 0; i < 100; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// Should reject at hard limit
+	canAccept, reason := m.CanAcceptParticipant()
+	if canAccept {
+		t.Error("Expected rejection at hard limit")
+	}
+	if reason != "hard_limit_reached" {
+		t.Errorf("Expected reason 'hard_limit_reached', got '%s'", reason)
+	}
+
+	// Verify rejection stats were incremented
+	total, _ := m.GetRejectStats()
+	if total == 0 {
+		t.Error("Expected rejection count to be incremented")
+	}
+}
+
+// TestCanAcceptParticipant_BelowSoftLimit verifies that requests are always accepted below soft limit
+func TestCanAcceptParticipant_BelowSoftLimit(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 1000
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Add participants to 40% capacity (below 50% soft limit)
+	for i := 0; i < 400; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// Should always accept below soft limit
+	for i := 0; i < 100; i++ {
+		canAccept, reason := m.CanAcceptParticipant()
+		if !canAccept {
+			t.Errorf("Expected acceptance below soft limit, got rejection: %s", reason)
+		}
+	}
+}
+
+// TestCanAcceptParticipant_SoftLimitProbabilistic verifies probabilistic rejection at soft limit
+func TestCanAcceptParticipant_SoftLimitProbabilistic(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 1000
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Add participants to 70% capacity (above soft limit but below hard limit)
+	for i := 0; i < 700; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// At 70% capacity, some requests should be rejected probabilistically
+	// Run many trials to verify probabilistic behavior
+	accepted := 0
+	rejected := 0
+	trials := 1000
+
+	for i := 0; i < trials; i++ {
+		canAccept, _ := m.CanAcceptParticipant()
+		if canAccept {
+			accepted++
+		} else {
+			rejected++
+		}
+	}
+
+	// At 70% capacity (20% into soft limit zone), reject probability should be ~58%
+	// Allow wide margin for randomness: expect some but not all to be rejected
+	if rejected == 0 {
+		t.Error("Expected some probabilistic rejections above soft limit, got none")
+	}
+	if accepted == 0 {
+		t.Error("Expected some acceptances above soft limit, got none")
+	}
+
+	// Verify rejection rate is reasonable (between 30% and 80%)
+	rejectRate := float64(rejected) / float64(trials)
+	if rejectRate < 0.30 || rejectRate > 0.80 {
+		t.Errorf("Unexpected rejection rate: %.2f (expected 0.30-0.80)", rejectRate)
+	}
+}
+
+// TestCanAcceptParticipant_CriticalZone verifies high rejection rate near hard limit
+func TestCanAcceptParticipant_CriticalZone(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 1000
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Add participants to 95% capacity (in critical zone, last 100 before hard limit)
+	for i := 0; i < 950; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// In critical zone, rejection rate should be very high (90%+)
+	accepted := 0
+	rejected := 0
+	trials := 500
+
+	for i := 0; i < trials; i++ {
+		canAccept, _ := m.CanAcceptParticipant()
+		if canAccept {
+			accepted++
+		} else {
+			rejected++
+		}
+	}
+
+	// Expect very high rejection rate in critical zone
+	rejectRate := float64(rejected) / float64(trials)
+	if rejectRate < 0.85 {
+		t.Errorf("Expected rejection rate >= 85%% in critical zone, got %.2f", rejectRate)
+	}
+}
+
+// TestRejectStats verifies rejection statistics tracking
+func TestRejectStats(t *testing.T) {
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = 10
+	cfg.ParticipatingLimitsEnabled = true
+
+	m := NewManagerWithConfig(cfg)
+	defer m.Stop()
+
+	// Fill to hard limit
+	for i := 0; i < 10; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+
+	// Trigger several rejections
+	for i := 0; i < 5; i++ {
+		m.CanAcceptParticipant()
+	}
+
+	total, recent := m.GetRejectStats()
+	if total != 5 {
+		t.Errorf("Expected 5 total rejections, got %d", total)
+	}
+	if recent != 5 {
+		t.Errorf("Expected 5 recent rejections, got %d", recent)
+	}
+
+	// Reset recent counter
+	m.ResetRecentRejectCount()
+	total, recent = m.GetRejectStats()
+	if total != 5 {
+		t.Errorf("Expected total rejections unchanged at 5, got %d", total)
+	}
+	if recent != 0 {
+		t.Errorf("Expected recent rejections reset to 0, got %d", recent)
+	}
+}
+
+// testTunnelConfig returns a TunnelDefaults config suitable for testing
+func testTunnelConfig() config.TunnelDefaults {
+	return config.TunnelDefaults{
+		MinPoolSize:                4,
+		MaxPoolSize:                6,
+		TunnelLength:               3,
+		TunnelLifetime:             10 * time.Minute,
+		TunnelTestInterval:         60 * time.Second,
+		TunnelTestTimeout:          5 * time.Second,
+		BuildTimeout:               90 * time.Second,
+		BuildRetries:               3,
+		ReplaceBeforeExpiration:    2 * time.Minute,
+		MaintenanceInterval:        30 * time.Second,
+		MaxParticipatingTunnels:    15000,
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  true,
+		MaxBuildRequestsPerMinute:  10,
+		BuildRequestBurstSize:      3,
+		SourceBanDuration:          5 * time.Minute,
 	}
 }

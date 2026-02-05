@@ -2,9 +2,12 @@ package tunnel
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
 )
 
@@ -16,10 +19,19 @@ import (
 // - Automatic cleanup of expired participant tunnels
 // - Thread-safe concurrent access
 // - Simple map-based storage for O(1) lookup
+// - Configurable participation limits to protect against resource exhaustion
 type Manager struct {
 	// participants tracks tunnels where this router is an intermediate hop
 	participants map[TunnelID]*Participant
 	mu           sync.RWMutex
+
+	// Participation limits (resource exhaustion protection)
+	maxParticipants int  // Hard limit on participating tunnels
+	limitsEnabled   bool // Whether limits are enforced
+
+	// Rejection statistics (atomic for lock-free access)
+	rejectCountTotal  uint64 // Total rejections due to limits
+	rejectCountRecent uint64 // Recent rejections (reset periodically)
 
 	// stopChan signals the cleanup goroutine to stop
 	stopChan chan struct{}
@@ -27,12 +39,26 @@ type Manager struct {
 	wg sync.WaitGroup
 }
 
-// NewManager creates a new tunnel manager.
+// NewManager creates a new tunnel manager with default configuration.
 // Starts a background goroutine to clean up expired participants.
+// For custom limits, use NewManagerWithConfig instead.
 func NewManager() *Manager {
+	return NewManagerWithConfig(config.Defaults().Tunnel)
+}
+
+// NewManagerWithConfig creates a new tunnel manager with the specified configuration.
+// This allows customizing participation limits and other tunnel settings.
+//
+// Parameters:
+// - cfg: TunnelDefaults containing limit configuration
+//
+// The manager will start a background cleanup goroutine automatically.
+func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
 	m := &Manager{
-		participants: make(map[TunnelID]*Participant),
-		stopChan:     make(chan struct{}),
+		participants:    make(map[TunnelID]*Participant),
+		maxParticipants: cfg.MaxParticipatingTunnels,
+		limitsEnabled:   cfg.ParticipatingLimitsEnabled,
+		stopChan:        make(chan struct{}),
 	}
 
 	// Start background cleanup routine
@@ -40,10 +66,13 @@ func NewManager() *Manager {
 	go m.cleanupLoop()
 
 	log.WithFields(logger.Fields{
-		"at":               "NewManager",
+		"at":               "NewManagerWithConfig",
 		"phase":            "tunnel_build",
 		"reason":           "tunnel manager initialized",
 		"cleanup_interval": "60s",
+		"max_participants": m.maxParticipants,
+		"limits_enabled":   m.limitsEnabled,
+		"soft_limit":       m.softLimit(),
 	}).Info("tunnel manager started")
 	return m
 }
@@ -145,6 +174,117 @@ func (m *Manager) ParticipantCount() int {
 	defer m.mu.RUnlock()
 
 	return len(m.participants)
+}
+
+// softLimit returns 50% of maxParticipants.
+// This is always derived, not independently configured.
+// Probabilistic rejection starts at the soft limit.
+func (m *Manager) softLimit() int {
+	return m.maxParticipants / 2
+}
+
+// CanAcceptParticipant checks if we can accept a new participating tunnel.
+// This implements a two-tier rejection system:
+// 1. Soft limit (50% of max): probabilistic rejection starts, increasing toward hard limit
+// 2. Hard limit (max): always reject
+//
+// The probabilistic rejection uses dynamic scaling:
+// - From soft limit to critical threshold (last 100): 50% → 90% rejection
+// - In critical zone (last 100 tunnels): 90% → 100% rejection
+//
+// Returns:
+// - canAccept: true if the tunnel build request should be accepted
+// - reason: human-readable reason if rejected (empty string if accepted)
+func (m *Manager) CanAcceptParticipant() (bool, string) {
+	if !m.limitsEnabled {
+		return true, ""
+	}
+
+	m.mu.RLock()
+	count := len(m.participants)
+	m.mu.RUnlock()
+
+	// Hard limit: always reject
+	if count >= m.maxParticipants {
+		atomic.AddUint64(&m.rejectCountTotal, 1)
+		atomic.AddUint64(&m.rejectCountRecent, 1)
+		log.WithFields(logger.Fields{
+			"at":                "Manager.CanAcceptParticipant",
+			"phase":             "tunnel_build",
+			"reason":            "hard_limit_reached",
+			"participant_count": count,
+			"max_participants":  m.maxParticipants,
+		}).Debug("rejecting tunnel build: hard limit reached")
+		return false, "hard_limit_reached"
+	}
+
+	// Soft limit: probabilistic rejection with dynamic scaling
+	softLimitValue := m.softLimit()
+	if count >= softLimitValue {
+		// Critical threshold is last 100 tunnels before hard limit
+		criticalThreshold := m.maxParticipants - 100
+		if criticalThreshold < softLimitValue {
+			// If max is small, critical threshold is at soft limit
+			criticalThreshold = softLimitValue
+		}
+
+		var rejectProb float64
+		if count >= criticalThreshold {
+			// Critical zone (last 100 tunnels): 90% → 100%
+			// Steep increase to strongly discourage new tunnels near capacity
+			criticalRange := float64(m.maxParticipants - criticalThreshold)
+			if criticalRange > 0 {
+				criticalRatio := float64(count-criticalThreshold) / criticalRange
+				rejectProb = 0.90 + (0.10 * criticalRatio)
+			} else {
+				rejectProb = 0.95
+			}
+		} else {
+			// Normal soft limit zone: 50% → 90%
+			// Gradual increase from soft limit to critical threshold
+			normalRange := float64(criticalThreshold - softLimitValue)
+			if normalRange > 0 {
+				normalRatio := float64(count-softLimitValue) / normalRange
+				rejectProb = 0.50 + (0.40 * normalRatio)
+			} else {
+				rejectProb = 0.70
+			}
+		}
+
+		if rand.Float64() < rejectProb {
+			atomic.AddUint64(&m.rejectCountTotal, 1)
+			atomic.AddUint64(&m.rejectCountRecent, 1)
+			log.WithFields(logger.Fields{
+				"at":                 "Manager.CanAcceptParticipant",
+				"phase":              "tunnel_build",
+				"reason":             "soft_limit_probabilistic_reject",
+				"participant_count":  count,
+				"soft_limit":         softLimitValue,
+				"reject_probability": rejectProb,
+			}).Debug("rejecting tunnel build: soft limit probabilistic rejection")
+			return false, "soft_limit_probabilistic_reject"
+		}
+	}
+
+	return true, ""
+}
+
+// GetRejectStats returns the current rejection statistics.
+// Returns total rejections and recent rejections since last reset.
+func (m *Manager) GetRejectStats() (total, recent uint64) {
+	return atomic.LoadUint64(&m.rejectCountTotal), atomic.LoadUint64(&m.rejectCountRecent)
+}
+
+// ResetRecentRejectCount resets the recent rejection counter.
+// This is typically called periodically for monitoring purposes.
+func (m *Manager) ResetRecentRejectCount() {
+	atomic.StoreUint64(&m.rejectCountRecent, 0)
+}
+
+// GetLimitConfig returns the current participation limit configuration.
+// Returns maxParticipants, softLimit, and whether limits are enabled.
+func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnabled bool) {
+	return m.maxParticipants, m.softLimit(), m.limitsEnabled
 }
 
 // cleanupLoop runs in a background goroutine and periodically
