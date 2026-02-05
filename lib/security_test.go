@@ -54,7 +54,6 @@ func TestAllRandomnessFromCryptoRand(t *testing.T) {
 
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("Failed to walk lib directory: %v", err)
 	}
@@ -225,7 +224,6 @@ func TestNoSwallowedErrorsInCriticalPaths(t *testing.T) {
 
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("Failed to walk directory: %v", err)
 	}
@@ -344,7 +342,6 @@ func TestChannelCloseSafety(t *testing.T) {
 
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("Failed to walk directory: %v", err)
 	}
@@ -389,7 +386,6 @@ func TestNoPanicsFromExternalInput(t *testing.T) {
 
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("Failed to walk directory: %v", err)
 	}

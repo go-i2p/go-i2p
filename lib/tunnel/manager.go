@@ -7,8 +7,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
+)
+
+// Build reply codes per I2P specification (TUNNEL-CREATION)
+const (
+	BuildReplyCodeAccepted            = 0  // Tunnel accepted
+	BuildReplyCodeProbabilisticReject = 10 // Rejected: probabilistic reject
+	BuildReplyCodeTransientOverload   = 20 // Rejected: transient overload
+	BuildReplyCodeBandwidth           = 30 // Rejected: bandwidth limit (used for most rejections)
+	BuildReplyCodeCritical            = 50 // Rejected: critical (router shutdown, etc.)
 )
 
 // Manager coordinates all tunnel operations including participant tracking.
@@ -20,6 +30,7 @@ import (
 // - Thread-safe concurrent access
 // - Simple map-based storage for O(1) lookup
 // - Configurable participation limits to protect against resource exhaustion
+// - Per-source rate limiting to prevent single-source flooding
 type Manager struct {
 	// participants tracks tunnels where this router is an intermediate hop
 	participants map[TunnelID]*Participant
@@ -28,6 +39,10 @@ type Manager struct {
 	// Participation limits (resource exhaustion protection)
 	maxParticipants int  // Hard limit on participating tunnels
 	limitsEnabled   bool // Whether limits are enforced
+
+	// Per-source rate limiting
+	sourceLimiter        *SourceLimiter // Rate limiter for per-source limiting
+	sourceLimiterEnabled bool           // Whether per-source limiting is enabled
 
 	// Rejection statistics (atomic for lock-free access)
 	rejectCountTotal  uint64 // Total rejections due to limits
@@ -53,12 +68,19 @@ func NewManager() *Manager {
 // - cfg: TunnelDefaults containing limit configuration
 //
 // The manager will start a background cleanup goroutine automatically.
+// If per-source rate limiting is enabled, a SourceLimiter will also be created.
 func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
 	m := &Manager{
-		participants:    make(map[TunnelID]*Participant),
-		maxParticipants: cfg.MaxParticipatingTunnels,
-		limitsEnabled:   cfg.ParticipatingLimitsEnabled,
-		stopChan:        make(chan struct{}),
+		participants:         make(map[TunnelID]*Participant),
+		maxParticipants:      cfg.MaxParticipatingTunnels,
+		limitsEnabled:        cfg.ParticipatingLimitsEnabled,
+		sourceLimiterEnabled: cfg.PerSourceRateLimitEnabled,
+		stopChan:             make(chan struct{}),
+	}
+
+	// Initialize per-source rate limiter if enabled
+	if cfg.PerSourceRateLimitEnabled {
+		m.sourceLimiter = NewSourceLimiterWithConfig(cfg)
 	}
 
 	// Start background cleanup routine
@@ -66,13 +88,14 @@ func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
 	go m.cleanupLoop()
 
 	log.WithFields(logger.Fields{
-		"at":               "NewManagerWithConfig",
-		"phase":            "tunnel_build",
-		"reason":           "tunnel manager initialized",
-		"cleanup_interval": "60s",
-		"max_participants": m.maxParticipants,
-		"limits_enabled":   m.limitsEnabled,
-		"soft_limit":       m.softLimit(),
+		"at":                     "NewManagerWithConfig",
+		"phase":                  "tunnel_build",
+		"reason":                 "tunnel manager initialized",
+		"cleanup_interval":       "60s",
+		"max_participants":       m.maxParticipants,
+		"limits_enabled":         m.limitsEnabled,
+		"soft_limit":             m.softLimit(),
+		"source_limiter_enabled": m.sourceLimiterEnabled,
 	}).Info("tunnel manager started")
 	return m
 }
@@ -287,6 +310,105 @@ func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnable
 	return m.maxParticipants, m.softLimit(), m.limitsEnabled
 }
 
+// ProcessBuildRequest validates a tunnel build request against all limits.
+// This should be called before accepting any participating tunnel.
+//
+// Parameters:
+// - sourceHash: The router hash of the requester (from BuildRequestRecord.OurIdent)
+//
+// Returns:
+// - accepted: Whether the request should be accepted
+// - rejectCode: I2P-compliant rejection code if not accepted (0 if accepted)
+// - reason: Human-readable reason for logging (empty if accepted)
+//
+// Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
+// rejections to hide the specific rejection reason from peers.
+func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
+	// Check 1: Global participating tunnel limit
+	if canAccept, limitReason := m.CanAcceptParticipant(); !canAccept {
+		log.WithFields(logger.Fields{
+			"at":                "Manager.ProcessBuildRequest",
+			"phase":             "tunnel_build",
+			"source":            truncateHash(sourceHash),
+			"reason":            limitReason,
+			"action":            "reject_build_request",
+			"participant_count": m.ParticipantCount(),
+		}).Warn("rejecting tunnel build request due to global limit")
+
+		// Use BANDWIDTH to hide specific rejection reason per I2P spec
+		return false, BuildReplyCodeBandwidth, limitReason
+	}
+
+	// Check 2: Per-source rate limiting (if enabled)
+	if m.sourceLimiter != nil && m.sourceLimiterEnabled {
+		if allowed, rateReason := m.sourceLimiter.AllowRequest(sourceHash); !allowed {
+			log.WithFields(logger.Fields{
+				"at":     "Manager.ProcessBuildRequest",
+				"phase":  "tunnel_build",
+				"source": truncateHash(sourceHash),
+				"reason": rateReason,
+				"action": "reject_build_request",
+			}).Warn("rejecting tunnel build request due to rate limit")
+
+			// Use BANDWIDTH to hide specific rejection reason per I2P spec
+			return false, BuildReplyCodeBandwidth, rateReason
+		}
+	}
+
+	return true, 0, ""
+}
+
+// GetSourceLimiterStats returns statistics about per-source rate limiting.
+// Returns nil if source limiting is not enabled.
+func (m *Manager) GetSourceLimiterStats() *SourceLimiterStats {
+	if m.sourceLimiter == nil {
+		return nil
+	}
+	stats := m.sourceLimiter.GetStats()
+	return &stats
+}
+
+// TunnelLimitStats provides visibility into protection mechanisms.
+type TunnelLimitStats struct {
+	// Global limits
+	CurrentParticipants    int
+	MaxParticipants        int
+	SoftLimitParticipants  int // Always 50% of MaxParticipants
+	GlobalRejectionsTotal  uint64
+	GlobalRejectionsRecent uint64
+
+	// Per-source limits (nil if not enabled)
+	SourceLimiter *SourceLimiterStats
+
+	// Health indicators
+	AtSoftLimit bool
+	AtHardLimit bool
+}
+
+// GetLimitStats returns comprehensive statistics about all protection mechanisms.
+func (m *Manager) GetLimitStats() TunnelLimitStats {
+	current := m.ParticipantCount()
+	total, recent := m.GetRejectStats()
+	softLimit := m.softLimit()
+
+	stats := TunnelLimitStats{
+		CurrentParticipants:    current,
+		MaxParticipants:        m.maxParticipants,
+		SoftLimitParticipants:  softLimit,
+		GlobalRejectionsTotal:  total,
+		GlobalRejectionsRecent: recent,
+		AtSoftLimit:            current >= softLimit,
+		AtHardLimit:            current >= m.maxParticipants,
+	}
+
+	if m.sourceLimiter != nil {
+		sourceLimiterStats := m.sourceLimiter.GetStats()
+		stats.SourceLimiter = &sourceLimiterStats
+	}
+
+	return stats
+}
+
 // cleanupLoop runs in a background goroutine and periodically
 // removes expired participant tunnels.
 //
@@ -366,6 +488,7 @@ func (m *Manager) cleanupExpiredParticipants() {
 
 // Stop gracefully stops the tunnel manager.
 // Waits for background goroutines to finish.
+// Also stops the source limiter if it was enabled.
 //
 // This should be called during router shutdown.
 func (m *Manager) Stop() {
@@ -375,6 +498,11 @@ func (m *Manager) Stop() {
 	}).Info("stopping tunnel manager")
 	close(m.stopChan)
 	m.wg.Wait()
+
+	// Stop the source limiter if it exists
+	if m.sourceLimiter != nil {
+		m.sourceLimiter.Stop()
+	}
 
 	m.mu.Lock()
 	participantCount := len(m.participants)
