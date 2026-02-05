@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"encoding/binary"
+	"fmt"
 	"sync"
 	"time"
 
@@ -756,7 +757,14 @@ func (sm *GarlicSessionManager) replenishTagWindowIfNeeded(session *GarlicSessio
 	if len(session.pendingTags) < 5 {
 		if err := sm.generateTagWindow(session); err != nil {
 			// Log error but don't fail - we can still process this message
-			_ = err
+			// Tag window replenishment is non-critical; message processing can continue
+			log.WithFields(logger.Fields{
+				"at":              "replenishTagWindowIfNeeded",
+				"remote_pubkey":   fmt.Sprintf("%x", session.RemotePublicKey[:8]),
+				"pending_tags":    len(session.pendingTags),
+				"message_counter": session.MessageCounter,
+				"error":           err.Error(),
+			}).Warn("Failed to replenish session tag window")
 		}
 	}
 }
