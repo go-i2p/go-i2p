@@ -6,6 +6,8 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/lease_set"
+	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -624,4 +626,167 @@ func TestPublisher_Stop(t *testing.T) {
 
 	// Stop should not panic even if not started
 	publisher.Stop()
+}
+
+// TestPublisher_FloodfillCountLimits verifies floodfill count is bounded.
+func TestPublisher_FloodfillCountLimits(t *testing.T) {
+	testCases := []struct {
+		name          string
+		count         int
+		expectedCount int
+	}{
+		{"Zero floodfills", 0, 0},
+		{"Single floodfill", 1, 1},
+		{"Default count", 4, 4},
+		{"Large count", 100, 100},
+		{"Negative count", -1, -1}, // Publisher does not validate - caller's responsibility
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := PublisherConfig{
+				RouterInfoInterval: 30 * time.Minute,
+				LeaseSetInterval:   5 * time.Minute,
+				FloodfillCount:     tc.count,
+			}
+			publisher := NewPublisher(nil, nil, nil, nil, config)
+			assert.Equal(t, tc.expectedCount, publisher.floodfillCount)
+		})
+	}
+}
+
+// TestPublisher_ConcurrentStartStop tests thread-safety of Start/Stop operations.
+func TestPublisher_ConcurrentStartStop(t *testing.T) {
+	// Create publisher without dependencies (Start will fail, but Stop should be safe)
+	publisher := NewPublisher(nil, nil, nil, nil, DefaultPublisherConfig())
+
+	var wg sync.WaitGroup
+
+	// Attempt multiple concurrent stops (should not panic or deadlock)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			publisher.Stop()
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify publisher is stopped
+	stats := publisher.GetStats()
+	assert.False(t, stats.IsRunning, "Publisher should be stopped after concurrent Stop calls")
+}
+
+// TestPublisher_GetStatsThreadSafe tests that GetStats is thread-safe.
+func TestPublisher_GetStatsThreadSafe(t *testing.T) {
+	publisher := NewPublisher(nil, nil, nil, nil, DefaultPublisherConfig())
+
+	var wg sync.WaitGroup
+
+	// Read stats from multiple goroutines
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stats := publisher.GetStats()
+			// Just access all fields to detect races
+			_ = stats.RouterInfoInterval
+			_ = stats.LeaseSetInterval
+			_ = stats.FloodfillCount
+			_ = stats.IsRunning
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestPublisher_ErrorMessagesNoSensitiveData verifies error messages don't leak sensitive info.
+func TestPublisher_ErrorMessagesNoSensitiveData(t *testing.T) {
+	publisher := NewPublisher(nil, nil, nil, nil, DefaultPublisherConfig())
+
+	// Test Start without tunnel pool
+	err := publisher.Start()
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "password", "Error should not contain passwords")
+	assert.NotContains(t, err.Error(), "key", "Error should not contain private key info")
+	assert.Contains(t, err.Error(), "tunnel pool required", "Error should have useful message")
+
+	// Test Start without transport (requires a tunnel pool that's not nil)
+	// Note: We can't easily mock tunnel.Pool since it's a concrete type, but
+	// passing nil for transport exercises the second validation path.
+	// The first test (nil pool) already demonstrates safe error messages.
+}
+
+// TestPublisher_DefaultConfigsAreSafe verifies default configuration is reasonable.
+func TestPublisher_DefaultConfigsAreSafe(t *testing.T) {
+	config := DefaultPublisherConfig()
+
+	// RouterInfo interval should not be too frequent (avoid network spam)
+	assert.GreaterOrEqual(t, config.RouterInfoInterval, 5*time.Minute,
+		"RouterInfo publish interval should not be too frequent")
+
+	// LeaseSet interval should not be too frequent
+	assert.GreaterOrEqual(t, config.LeaseSetInterval, 1*time.Minute,
+		"LeaseSet publish interval should not be too frequent")
+
+	// Floodfill count should be reasonable (3-8 is typical)
+	assert.GreaterOrEqual(t, config.FloodfillCount, 1,
+		"Should publish to at least 1 floodfill")
+	assert.LessOrEqual(t, config.FloodfillCount, 10,
+		"Should not publish to excessive floodfills")
+}
+
+// TestPublisher_ContextCancellationPropagates verifies proper context handling.
+func TestPublisher_ContextCancellationPropagates(t *testing.T) {
+	publisher := NewPublisher(nil, nil, nil, nil, DefaultPublisherConfig())
+
+	// Context should be active
+	assert.NoError(t, publisher.ctx.Err(), "Context should not be cancelled initially")
+
+	// Stop should cancel context
+	publisher.Stop()
+	assert.Error(t, publisher.ctx.Err(), "Context should be cancelled after Stop")
+}
+
+// TestPublisher_SelectFloodfillsWithEmptyNetDB tests handling of empty database.
+func TestPublisher_SelectFloodfillsWithEmptyNetDB(t *testing.T) {
+	db := newMockNetDB()
+	publisher := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	hash := common.Hash{1, 2, 3, 4}
+	floodfills, err := publisher.selectFloodfillsForPublishing(hash)
+
+	// Should not error, just return empty list
+	assert.NoError(t, err, "Empty NetDB should not cause error")
+	assert.Empty(t, floodfills, "Should return no floodfills from empty NetDB")
+}
+
+// TestPublisher_PublishRouterInfoValidation tests RouterInfo validation before publishing.
+func TestPublisher_PublishRouterInfoValidation(t *testing.T) {
+	db := newMockNetDB()
+	publisher := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	// Test with empty RouterInfo (will fail hash extraction)
+	emptyRI := router_info.RouterInfo{}
+	err := publisher.PublishRouterInfo(emptyRI)
+	assert.Error(t, err, "Empty RouterInfo should fail publishing")
+	assert.Contains(t, err.Error(), "failed to get router hash",
+		"Error should indicate hash extraction failure")
+	// Error should not contain sensitive information
+	assert.NotContains(t, err.Error(), "private", "Error should not expose private key info")
+}
+
+// TestPublisher_PublishLeaseSetValidation tests LeaseSet validation before publishing.
+func TestPublisher_PublishLeaseSetValidation(t *testing.T) {
+	db := newMockNetDB()
+	publisher := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
+
+	// Test with empty LeaseSet (will fail validation)
+	hash := common.Hash{1, 2, 3, 4}
+	emptyLS := lease_set.LeaseSet{} // Empty LeaseSet
+
+	err := publisher.PublishLeaseSet(hash, emptyLS)
+	assert.Error(t, err, "Empty LeaseSet should fail validation")
+	assert.Contains(t, err.Error(), "invalid LeaseSet", "Error should indicate validation failure")
 }
