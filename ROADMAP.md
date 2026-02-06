@@ -144,11 +144,10 @@
 
 ### Application Layer
 
-- **Client Applications**:
-  - 📋 I2CP implementation (goes in github.com/go-i2p/go-i2cp)
-  - 📋 Streaming library (goes in github.com/go-i2p/go-streaming)
-  - 📋 Datagram support (goes in github.com/go-i2p/go-datagrams)
-  - 📋 End-to-end encryption (Garlic routing)
+- ✅ **Client Applications**:
+  - ✅ I2CP implementation (goes in github.com/go-i2p/go-i2cp)
+  - ✅ Streaming library (goes in github.com/go-i2p/go-streaming)
+  - ✅ Datagram support (goes in github.com/go-i2p/go-datagrams)
 
 ### SSU2 Transport (Post-NTCP2)
 
