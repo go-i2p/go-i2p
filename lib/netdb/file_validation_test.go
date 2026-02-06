@@ -143,6 +143,12 @@ func TestCheckFilePathValid_AbsolutePath(t *testing.T) {
 // TestCheckFilePathValid_RelativePath tests handling of relative paths
 func TestCheckFilePathValid_RelativePath(t *testing.T) {
 	tmpDir := t.TempDir()
+
+	// Resolve symlinks to handle macOS /var -> /private/var
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+
 	db := NewStdNetDB(tmpDir)
 	require.NoError(t, db.Ensure())
 
