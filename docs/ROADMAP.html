@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1219 commits
+        📝 1249 commits
          • 📜 MIT License
       </div>
     </div>
@@ -101,6 +101,20 @@
 <li>✅ Gateway and endpoint implementations</li>
 <li>✅ Message ID correlation for request/reply tracking</li>
 <li>✅ 90-second timeout enforcement with cleanup</li>
+</ul></li>
+</ul>
+
+<h3 id="tunnel-participation-system">Tunnel Participation System</h3>
+
+<ul>
+<li>✅ <strong>Resource Exhaustion Protection</strong>: Complete protection against tunnel flooding
+
+<ul>
+<li>✅ Global participating tunnel limits (configurable, default 15000)</li>
+<li>✅ Two-tier rejection: soft limit (50%) with probabilistic rejection, hard limit (100%)</li>
+<li>✅ Per-source rate limiting with token bucket algorithm</li>
+<li>✅ Automatic banning for excessive requesters (&gt;10 rejections triggers 5min ban)</li>
+<li>✅ Incoming tunnel build request handler (ProcessBuildRequest wired into MessageProcessor)</li>
 </ul></li>
 </ul>
 
@@ -258,24 +272,23 @@
 </ul></li>
 </ul>
 
+<h3 id="application-layer">Application Layer</h3>
+
+<ul>
+<li>✅ <strong>Client Applications</strong>:
+
+<ul>
+<li>✅ I2CP implementation (goes in github.com/go-i2p/go-i2cp)</li>
+<li>✅ Streaming library (goes in github.com/go-i2p/go-streaming)</li>
+<li>✅ Datagram support (goes in github.com/go-i2p/go-datagrams)</li>
+</ul></li>
+</ul>
+
 <h2 id="in-progress-components">In Progress Components 🚧</h2>
 
 <h2 id="next-priority-components">Next Priority Components 🎯</h2>
 
 <h2 id="future-components">Future Components 📅</h2>
-
-<h3 id="application-layer">Application Layer</h3>
-
-<ul>
-<li><strong>Client Applications</strong>:
-
-<ul>
-<li>📋 I2CP implementation (goes in github.com/go-i2p/go-i2cp)</li>
-<li>📋 Streaming library (goes in github.com/go-i2p/go-streaming)</li>
-<li>📋 Datagram support (goes in github.com/go-i2p/go-datagrams)</li>
-<li>📋 End-to-end encryption (Garlic routing)</li>
-</ul></li>
-</ul>
 
 <h3 id="ssu2-transport-post-ntcp2">SSU2 Transport (Post-NTCP2)</h3>
 
@@ -308,7 +321,7 @@
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-02-06 02:23:09 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-02-06 03:22:25 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
