@@ -790,141 +790,196 @@ func (p *MessageProcessor) processVariableTunnelBuildMessage(msg I2NPMessage) er
 // - msg: The incoming I2NP tunnel build message
 // - isShortBuild: True for STBM format, false for VTB format
 func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBuild bool) error {
-	if p.participantManager == nil {
-		log.WithFields(logger.Fields{
-			"at":             "processTunnelBuildRequest",
-			"message_type":   msg.Type(),
-			"is_short_build": isShortBuild,
-		}).Warn("participant manager not configured - rejecting tunnel build request")
-		return fmt.Errorf("participant manager not configured - cannot process tunnel build requests")
+	if err := p.validateParticipantManager(isShortBuild, msg.Type()); err != nil {
+		return err
 	}
 
-	// Extract message data
-	baseMsg, ok := msg.(*BaseI2NPMessage)
-	if !ok {
-		return fmt.Errorf("tunnel build message does not extend BaseI2NPMessage")
+	data, err := p.extractBuildMessageData(msg)
+	if err != nil {
+		return err
 	}
 
-	data := baseMsg.GetData()
-	if len(data) == 0 {
-		return fmt.Errorf("tunnel build message contains no data")
-	}
-
-	// Parse build records based on message format
 	records, err := p.parseTunnelBuildRecords(data, isShortBuild)
 	if err != nil {
 		return fmt.Errorf("failed to parse tunnel build records: %w", err)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":             "processTunnelBuildRequest",
-		"message_id":     msg.MessageID(),
-		"record_count":   len(records),
-		"is_short_build": isShortBuild,
-	}).Debug("parsed tunnel build request")
-
-	// Process each record to find ones destined for us
-	// In a full implementation, we would:
-	// 1. Try to decrypt each record with our identity key
-	// 2. If decryption succeeds, this record is for us
-	// 3. Validate the request using ProcessBuildRequest
-	// 4. Create response record and forward the message
-
-	// For now, we process the first record that we can decrypt
-	// (simplified - in production, we'd check the toPeer field first)
-	for i, record := range records {
-		// Validate the build request against limits
-		accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
-
-		if accepted {
-			log.WithFields(logger.Fields{
-				"at":             "processTunnelBuildRequest",
-				"message_id":     msg.MessageID(),
-				"record_index":   i,
-				"receive_tunnel": record.ReceiveTunnel,
-				"source_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
-			}).Info("accepting tunnel build request")
-
-			// Register the participation
-			expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
-			if err := p.participantManager.RegisterParticipant(record.ReceiveTunnel, record.OurIdent, expiry); err != nil {
-				log.WithError(err).WithFields(logger.Fields{
-					"at":             "processTunnelBuildRequest",
-					"receive_tunnel": record.ReceiveTunnel,
-				}).Error("failed to register participant after acceptance")
-				// Continue anyway - the tunnel may still work
-			}
-		} else {
-			log.WithFields(logger.Fields{
-				"at":             "processTunnelBuildRequest",
-				"message_id":     msg.MessageID(),
-				"record_index":   i,
-				"receive_tunnel": record.ReceiveTunnel,
-				"reject_code":    rejectCode,
-				"reason":         reason,
-			}).Info("rejecting tunnel build request")
-		}
-
-		// TODO: Generate and send build reply message
-		// This requires:
-		// 1. Creating a BuildResponseRecord with accept/reject status
-		// 2. Encrypting the response with the reply key
-		// 3. Forwarding the message to the next hop (or reply tunnel)
-		_ = rejectCode // Will be used in reply generation
-	}
+	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
+	p.processAllBuildRecords(msg.MessageID(), records)
 
 	return nil
+}
+
+// validateParticipantManager checks if the participant manager is configured.
+func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType int) error {
+	if p.participantManager == nil {
+		log.WithFields(logger.Fields{
+			"at":             "processTunnelBuildRequest",
+			"message_type":   msgType,
+			"is_short_build": isShortBuild,
+		}).Warn("participant manager not configured - rejecting tunnel build request")
+		return fmt.Errorf("participant manager not configured - cannot process tunnel build requests")
+	}
+	return nil
+}
+
+// extractBuildMessageData extracts raw data from the tunnel build message.
+func (p *MessageProcessor) extractBuildMessageData(msg I2NPMessage) ([]byte, error) {
+	baseMsg, ok := msg.(*BaseI2NPMessage)
+	if !ok {
+		return nil, fmt.Errorf("tunnel build message does not extend BaseI2NPMessage")
+	}
+
+	data := baseMsg.GetData()
+	if len(data) == 0 {
+		return nil, fmt.Errorf("tunnel build message contains no data")
+	}
+
+	return data, nil
+}
+
+// logParsedBuildRequest logs the parsed build request details.
+func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isShortBuild bool) {
+	log.WithFields(logger.Fields{
+		"at":             "processTunnelBuildRequest",
+		"message_id":     messageID,
+		"record_count":   recordCount,
+		"is_short_build": isShortBuild,
+	}).Debug("parsed tunnel build request")
+}
+
+// processAllBuildRecords processes each build record to find ones destined for us.
+// In a full implementation, we would:
+// 1. Try to decrypt each record with our identity key
+// 2. If decryption succeeds, this record is for us
+// 3. Validate the request using ProcessBuildRequest
+// 4. Create response record and forward the message
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord) {
+	for i, record := range records {
+		p.processSingleBuildRecord(messageID, i, record)
+	}
+}
+
+// processSingleBuildRecord validates and processes a single build request record.
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord) {
+	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
+
+	if accepted {
+		p.handleAcceptedBuildRecord(messageID, index, record)
+	} else {
+		p.handleRejectedBuildRecord(messageID, index, record, rejectCode, reason)
+	}
+
+	// TODO: Generate and send build reply message
+	// This requires:
+	// 1. Creating a BuildResponseRecord with accept/reject status
+	// 2. Encrypting the response with the reply key
+	// 3. Forwarding the message to the next hop (or reply tunnel)
+	_ = rejectCode // Will be used in reply generation
+}
+
+// handleAcceptedBuildRecord logs acceptance and registers the tunnel participation.
+func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, record BuildRequestRecord) {
+	log.WithFields(logger.Fields{
+		"at":             "processTunnelBuildRequest",
+		"message_id":     messageID,
+		"record_index":   index,
+		"receive_tunnel": record.ReceiveTunnel,
+		"source_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
+	}).Info("accepting tunnel build request")
+
+	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
+	if err := p.participantManager.RegisterParticipant(record.ReceiveTunnel, record.OurIdent, expiry); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":             "processTunnelBuildRequest",
+			"receive_tunnel": record.ReceiveTunnel,
+		}).Error("failed to register participant after acceptance")
+		// Continue anyway - the tunnel may still work
+	}
+}
+
+// handleRejectedBuildRecord logs the rejection of a build request.
+func (p *MessageProcessor) handleRejectedBuildRecord(messageID, index int, record BuildRequestRecord, rejectCode byte, reason string) {
+	log.WithFields(logger.Fields{
+		"at":             "processTunnelBuildRequest",
+		"message_id":     messageID,
+		"record_index":   index,
+		"receive_tunnel": record.ReceiveTunnel,
+		"reject_code":    rejectCode,
+		"reason":         reason,
+	}).Info("rejecting tunnel build request")
 }
 
 // parseTunnelBuildRecords parses the build request records from message data.
 // Returns the parsed records or an error if parsing fails.
 func (p *MessageProcessor) parseTunnelBuildRecords(data []byte, isShortBuild bool) ([]BuildRequestRecord, error) {
+	recordCount, err := p.validateAndGetRecordCount(data)
+	if err != nil {
+		return nil, err
+	}
+
+	recordSize := p.getRecordSize(isShortBuild)
+	return p.parseRecordsFromData(data, recordCount, recordSize, isShortBuild)
+}
+
+// validateAndGetRecordCount validates the data and extracts the record count.
+func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 	if len(data) < 1 {
-		return nil, fmt.Errorf("insufficient data for record count")
+		return 0, fmt.Errorf("insufficient data for record count")
 	}
 
 	recordCount := int(data[0])
 	if recordCount < 1 || recordCount > 8 {
-		return nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+		return 0, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
 	}
 
+	return recordCount, nil
+}
+
+// getRecordSize returns the record size based on the build type.
+// Record sizes differ between STBM (218 bytes encrypted, 222 cleartext) and VTB (528 bytes).
+func (p *MessageProcessor) getRecordSize(isShortBuild bool) int {
+	if isShortBuild {
+		return 218 // STBM encrypted record size (ECIES)
+	}
+	return 528 // VTB encrypted record size
+}
+
+// parseRecordsFromData iterates through the data and parses each record.
+func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, recordSize int, isShortBuild bool) ([]BuildRequestRecord, error) {
 	records := make([]BuildRequestRecord, 0, recordCount)
 	offset := 1
-
-	// Record sizes differ between STBM (218 bytes encrypted, 222 cleartext) and VTB (528 bytes)
-	recordSize := 528 // VTB encrypted record size
-	if isShortBuild {
-		recordSize = 218 // STBM encrypted record size (ECIES)
-	}
 
 	for i := 0; i < recordCount; i++ {
 		if len(data)-offset < recordSize {
 			return nil, fmt.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
 		}
 
-		// Note: In a full implementation, we would:
-		// 1. Check the first 16 bytes (toPeer) to see if this record is for us
-		// 2. Decrypt the record if it's for us
-		// 3. Parse the cleartext record
-
-		// For now, attempt to read the record as cleartext (for testing)
-		// In production, this would be the decrypted cleartext
 		recordData := data[offset : offset+recordSize]
-
-		// Try to parse as cleartext (222 bytes for STBM cleartext)
-		if isShortBuild && len(recordData) >= 222 {
-			record, err := ReadBuildRequestRecord(recordData)
-			if err != nil {
-				log.WithError(err).WithField("record_index", i).Debug("failed to parse build request record")
-			} else {
-				records = append(records, record)
-			}
-		}
-
+		p.tryParseAndAppendRecord(&records, recordData, i, isShortBuild)
 		offset += recordSize
 	}
 
 	return records, nil
+}
+
+// tryParseAndAppendRecord attempts to parse a single record and appends it if successful.
+// Note: In a full implementation, we would:
+// 1. Check the first 16 bytes (toPeer) to see if this record is for us
+// 2. Decrypt the record if it's for us
+// 3. Parse the cleartext record
+// For now, attempt to read the record as cleartext (for testing).
+// In production, this would be the decrypted cleartext.
+func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
+	// Try to parse as cleartext (222 bytes for STBM cleartext)
+	if isShortBuild && len(recordData) >= 222 {
+		record, err := ReadBuildRequestRecord(recordData)
+		if err != nil {
+			log.WithError(err).WithField("record_index", index).Debug("failed to parse build request record")
+		} else {
+			*records = append(*records, record)
+		}
+	}
 }
 
 // buildRequest tracks a pending tunnel build request for correlation with replies.

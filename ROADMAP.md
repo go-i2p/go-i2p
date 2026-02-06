@@ -136,18 +136,18 @@
   - ✅ Database exploration and publishings (random selection, XOR distance, floodfill routing)
   - 📋 EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)(Partial support)
 
-## In Progress Components 🚧
-
-## Next Priority Components 🎯
-
-## Future Components 📅
-
 ### Application Layer
 
 - ✅ **Client Applications**:
   - ✅ I2CP implementation (goes in github.com/go-i2p/go-i2cp)
   - ✅ Streaming library (goes in github.com/go-i2p/go-streaming)
   - ✅ Datagram support (goes in github.com/go-i2p/go-datagrams)
+
+## In Progress Components 🚧
+
+## Next Priority Components 🎯
+
+## Future Components 📅
 
 ### SSU2 Transport (Post-NTCP2)
 

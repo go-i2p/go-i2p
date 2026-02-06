@@ -103,6 +103,25 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 	now := time.Now()
 	sl.totalRequests++
 
+	state := sl.getOrCreateSourceState(sourceHash, now)
+	state.requestCount++
+
+	if sl.isSourceBanned(state, sourceHash, now) {
+		return false, "source_banned"
+	}
+
+	sl.replenishTokens(state, now)
+
+	if state.tokens >= 1.0 {
+		state.tokens -= 1.0
+		return true, ""
+	}
+
+	return sl.handleRateLimitExceeded(state, sourceHash, now)
+}
+
+// getOrCreateSourceState retrieves existing source state or creates a new one.
+func (sl *SourceLimiter) getOrCreateSourceState(sourceHash common.Hash, now time.Time) *sourceState {
 	state, exists := sl.sources[sourceHash]
 	if !exists {
 		state = &sourceState{
@@ -111,10 +130,11 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 		}
 		sl.sources[sourceHash] = state
 	}
+	return state
+}
 
-	state.requestCount++
-
-	// Check ban status first
+// isSourceBanned checks if the source is currently banned and logs the rejection.
+func (sl *SourceLimiter) isSourceBanned(state *sourceState, sourceHash common.Hash, now time.Time) bool {
 	if now.Before(state.bannedUntil) {
 		state.rejectCount++
 		sl.totalRejections++
@@ -125,10 +145,13 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 			"source":       truncateHash(sourceHash),
 			"banned_until": state.bannedUntil.Format(time.RFC3339),
 		}).Debug("rejecting request from banned source")
-		return false, "source_banned"
+		return true
 	}
+	return false
+}
 
-	// Replenish tokens based on elapsed time
+// replenishTokens adds tokens based on elapsed time since last update.
+func (sl *SourceLimiter) replenishTokens(state *sourceState, now time.Time) {
 	elapsed := now.Sub(state.lastUpdate)
 	tokensToAdd := elapsed.Minutes() * float64(sl.maxRequestsPerMinute)
 	state.tokens += tokensToAdd
@@ -136,29 +159,16 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 		state.tokens = float64(sl.burstSize)
 	}
 	state.lastUpdate = now
+}
 
-	// Check if request is allowed (need at least 1 token)
-	if state.tokens >= 1.0 {
-		state.tokens -= 1.0
-		return true, ""
-	}
-
-	// Rate exceeded - increment reject count and potentially ban
+// handleRateLimitExceeded processes a rate limit violation and potentially bans the source.
+func (sl *SourceLimiter) handleRateLimitExceeded(state *sourceState, sourceHash common.Hash, now time.Time) (bool, string) {
 	state.rejectCount++
 	sl.totalRejections++
 
 	// Auto-ban if excessive rejections (more than 10 rejections)
 	if state.rejectCount > 10 {
-		state.bannedUntil = now.Add(sl.banDuration)
-		log.WithFields(logger.Fields{
-			"at":           "SourceLimiter.AllowRequest",
-			"phase":        "tunnel_build",
-			"reason":       "source_auto_banned",
-			"source":       truncateHash(sourceHash),
-			"reject_count": state.rejectCount,
-			"ban_duration": sl.banDuration,
-		}).Warn("auto-banning source due to excessive rate limit violations")
-		return false, "source_auto_banned"
+		return sl.applyAutoBan(state, sourceHash, now)
 	}
 
 	log.WithFields(logger.Fields{
@@ -170,6 +180,20 @@ func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string) {
 		"reject_count": state.rejectCount,
 	}).Debug("rejecting request due to rate limit")
 	return false, "rate_limit_exceeded"
+}
+
+// applyAutoBan bans a source due to excessive rate limit violations.
+func (sl *SourceLimiter) applyAutoBan(state *sourceState, sourceHash common.Hash, now time.Time) (bool, string) {
+	state.bannedUntil = now.Add(sl.banDuration)
+	log.WithFields(logger.Fields{
+		"at":           "SourceLimiter.AllowRequest",
+		"phase":        "tunnel_build",
+		"reason":       "source_auto_banned",
+		"source":       truncateHash(sourceHash),
+		"reject_count": state.rejectCount,
+		"ban_duration": sl.banDuration,
+	}).Warn("auto-banning source due to excessive rate limit violations")
+	return false, "source_auto_banned"
 }
 
 // IsBanned checks if a source is currently banned.

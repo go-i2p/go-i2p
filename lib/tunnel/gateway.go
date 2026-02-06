@@ -168,26 +168,38 @@ func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
 }
 
 // buildTunnelMessage constructs a complete tunnel message with padding and checksum.
+// Tunnel message structure:
+// [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Padding (variable)] [0x00] [Instructions] [Message]
 func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]byte, error) {
-	// Tunnel message structure:
-	// [Tunnel ID (4)] [IV (16)] [Checksum (4)] [Padding (variable)] [0x00] [Instructions] [Message]
-
 	totalSize := 1028 // Fixed tunnel message size
 	msg := make([]byte, totalSize)
 
-	// Tunnel ID (4 bytes)
-	binary.BigEndian.PutUint32(msg[0:4], uint32(g.nextHopID))
+	g.writeTunnelID(msg)
 
-	// IV will be filled by encryption layer (bytes 4-20)
-	// For now, we'll use zero IV - the encryption layer should handle this properly
-
-	// Checksum placeholder (bytes 20-24)
-	// Will be calculated after adding the data
-
-	// Calculate where to put the zero byte and data
 	dataSize := len(deliveryInstructions) + len(msgBytes)
 	paddingSize := totalSize - 24 - 1 - dataSize // -1 for zero byte
 
+	if err := g.validatePaddingSize(paddingSize, dataSize, totalSize); err != nil {
+		return nil, err
+	}
+
+	if err := g.writeRandomPadding(msg, paddingSize); err != nil {
+		return nil, err
+	}
+
+	g.writePayload(msg, paddingSize, deliveryInstructions, msgBytes)
+	g.writeChecksum(msg)
+
+	return msg, nil
+}
+
+// writeTunnelID writes the tunnel ID to the message header.
+func (g *Gateway) writeTunnelID(msg []byte) {
+	binary.BigEndian.PutUint32(msg[0:4], uint32(g.nextHopID))
+}
+
+// validatePaddingSize checks if the padding size is valid.
+func (g *Gateway) validatePaddingSize(paddingSize, dataSize, totalSize int) error {
 	if paddingSize < 0 {
 		log.WithFields(logger.Fields{
 			"at":         "buildTunnelMessage",
@@ -195,29 +207,41 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 			"total_size": totalSize,
 			"reason":     "negative padding size",
 		}).Error("Message too large for tunnel")
-		return nil, ErrMessageTooLarge
+		return ErrMessageTooLarge
+	}
+	return nil
+}
+
+// writeRandomPadding generates and writes random non-zero padding bytes.
+// Uses crypto/rand for cryptographically secure random padding.
+// I2P spec requires non-zero padding bytes.
+func (g *Gateway) writeRandomPadding(msg []byte, paddingSize int) error {
+	if paddingSize <= 0 {
+		return nil
 	}
 
-	// Add random non-zero padding (bytes 24 to 24+paddingSize)
-	// Use crypto/rand for cryptographically secure random padding
-	if paddingSize > 0 {
-		paddingBytes := msg[24 : 24+paddingSize]
-		if _, err := rand.Read(paddingBytes); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "buildTunnelMessage",
-				"reason": "failed to generate random padding",
-				"error":  err,
-			}).Error("Random padding generation failed")
-			return nil, err
-		}
-		// Ensure non-zero padding bytes (I2P spec requires non-zero)
-		for i := range paddingBytes {
-			if paddingBytes[i] == 0 {
-				paddingBytes[i] = 1
-			}
+	paddingBytes := msg[24 : 24+paddingSize]
+	if _, err := rand.Read(paddingBytes); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "buildTunnelMessage",
+			"reason": "failed to generate random padding",
+			"error":  err,
+		}).Error("Random padding generation failed")
+		return err
+	}
+
+	// Ensure non-zero padding bytes (I2P spec requires non-zero)
+	for i := range paddingBytes {
+		if paddingBytes[i] == 0 {
+			paddingBytes[i] = 1
 		}
 	}
 
+	return nil
+}
+
+// writePayload writes the zero separator, delivery instructions, and message to the buffer.
+func (g *Gateway) writePayload(msg []byte, paddingSize int, deliveryInstructions, msgBytes []byte) {
 	// Zero byte separator
 	msg[24+paddingSize] = 0x00
 
@@ -225,13 +249,14 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 	offset := 24 + paddingSize + 1
 	copy(msg[offset:], deliveryInstructions)
 	copy(msg[offset+len(deliveryInstructions):], msgBytes)
+}
 
-	// Calculate checksum: first 4 bytes of SHA256(data + IV)
+// writeChecksum calculates and writes the checksum.
+// Checksum is first 4 bytes of SHA256(data + IV).
+func (g *Gateway) writeChecksum(msg []byte) {
 	checksumData := append(msg[24:], msg[4:20]...)
 	hash := sha256.Sum256(checksumData)
 	copy(msg[20:24], hash[:4])
-
-	return msg, nil
 }
 
 // encryptTunnelMessage applies tunnel encryption to the message.

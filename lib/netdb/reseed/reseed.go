@@ -715,58 +715,96 @@ func (r Reseed) parseRouterInfoFiles(files []string) ([]router_info.RouterInfo, 
 // If limit <= 0, all files are parsed. Otherwise, parsing stops after successfully parsing 'limit' RouterInfos.
 // This minimizes memory usage when only a small number of RouterInfos is needed.
 func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]router_info.RouterInfo, error) {
+	r.logParseStart(len(files), limit)
+
+	stats := &parseStats{}
+	routerInfos := r.parseFilesUntilLimit(files, limit, stats)
+
+	r.logParseComplete(len(files), stats, len(routerInfos))
+	return routerInfos, nil
+}
+
+// parseStats tracks statistics during router info file parsing.
+type parseStats struct {
+	parseErrors  int
+	readErrors   int
+	skippedFiles int
+}
+
+// logParseStart logs the start of the parsing operation.
+func (r Reseed) logParseStart(totalFiles, limit int) {
 	log.WithFields(logger.Fields{
-		"total_files": len(files),
+		"total_files": totalFiles,
 		"limit":       limit,
 	}).Info("Parsing router info files")
+}
 
+// parseFilesUntilLimit iterates through files and parses them until the limit is reached.
+func (r Reseed) parseFilesUntilLimit(files []string, limit int, stats *parseStats) []router_info.RouterInfo {
 	var routerInfos []router_info.RouterInfo
-	var parseErrors int
-	var readErrors int
-	var skippedFiles int
 
 	for _, f := range files {
-		// Check if we've reached the limit
-		if limit > 0 && len(routerInfos) >= limit {
-			log.WithFields(logger.Fields{
-				"parsed":      len(routerInfos),
-				"limit":       limit,
-				"total_files": len(files),
-			}).Debug("Reached RouterInfo limit, stopping parse")
+		if r.hasReachedLimit(len(routerInfos), limit, len(files)) {
 			break
 		}
 
-		// Skip files that don't match RouterInfo naming pattern
 		if !r.isRouterInfoFile(f) {
-			skippedFiles++
+			stats.skippedFiles++
 			log.WithField("file", f).Debug("Skipping non-RouterInfo file")
 			continue
 		}
 
-		riB, err := os.ReadFile(f)
-		if err != nil {
-			readErrors++
-			log.WithError(err).WithField("file", f).Warn("Failed to read router info file")
-			continue
+		ri, ok := r.tryParseRouterInfoFile(f, stats)
+		if ok {
+			routerInfos = append(routerInfos, ri)
 		}
-		ri, _, err := router_info.ReadRouterInfo(riB)
-		if err != nil {
-			parseErrors++
-			log.WithError(err).WithField("file", f).Warn("Failed to parse router info")
-			continue
-		}
-		routerInfos = append(routerInfos, ri)
 	}
 
-	log.WithFields(logger.Fields{
-		"total_files":    len(files),
-		"skipped_files":  skippedFiles,
-		"parsed_success": len(routerInfos),
-		"read_errors":    readErrors,
-		"parse_errors":   parseErrors,
-	}).Info("Completed parsing router info files")
+	return routerInfos
+}
 
-	return routerInfos, nil
+// hasReachedLimit checks if the parsing limit has been reached.
+func (r Reseed) hasReachedLimit(parsed, limit, totalFiles int) bool {
+	if limit > 0 && parsed >= limit {
+		log.WithFields(logger.Fields{
+			"parsed":      parsed,
+			"limit":       limit,
+			"total_files": totalFiles,
+		}).Debug("Reached RouterInfo limit, stopping parse")
+		return true
+	}
+	return false
+}
+
+// tryParseRouterInfoFile attempts to read and parse a single router info file.
+// Returns the parsed RouterInfo and a boolean indicating success.
+func (r Reseed) tryParseRouterInfoFile(filePath string, stats *parseStats) (router_info.RouterInfo, bool) {
+	riB, err := os.ReadFile(filePath)
+	if err != nil {
+		stats.readErrors++
+		log.WithError(err).WithField("file", filePath).Warn("Failed to read router info file")
+		return router_info.RouterInfo{}, false
+	}
+
+	ri, _, err := router_info.ReadRouterInfo(riB)
+	if err != nil {
+		stats.parseErrors++
+		log.WithError(err).WithField("file", filePath).Warn("Failed to parse router info")
+		return router_info.RouterInfo{}, false
+	}
+
+	return ri, true
+}
+
+// logParseComplete logs the completion of the parsing operation.
+func (r Reseed) logParseComplete(totalFiles int, stats *parseStats, parsedSuccess int) {
+	log.WithFields(logger.Fields{
+		"total_files":    totalFiles,
+		"skipped_files":  stats.skippedFiles,
+		"parsed_success": parsedSuccess,
+		"read_errors":    stats.readErrors,
+		"parse_errors":   stats.parseErrors,
+	}).Info("Completed parsing router info files")
 }
 
 // cleanupZipFile removes the temporary zip file from disk.
