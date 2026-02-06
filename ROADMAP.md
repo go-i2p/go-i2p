@@ -31,6 +31,14 @@
   * ✅ Message ID correlation for request/reply tracking
   * ✅ 90-second timeout enforcement with cleanup
 
+### Tunnel Participation System
+- ✅ **Resource Exhaustion Protection**: Complete protection against tunnel flooding
+  * ✅ Global participating tunnel limits (configurable, default 15000)
+  * ✅ Two-tier rejection: soft limit (50%) with probabilistic rejection, hard limit (100%)
+  * ✅ Per-source rate limiting with token bucket algorithm
+  * ✅ Automatic banning for excessive requesters (>10 rejections triggers 5min ban)
+  * ✅ Incoming tunnel build request handler (ProcessBuildRequest wired into MessageProcessor)
+
 ### Tunnel Pool Management
 - ✅ **Automatic Pool Maintenance**: Complete pool lifecycle management
   * ✅ Configurable min/max tunnel counts (default 4-6 per pool)

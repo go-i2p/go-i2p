@@ -227,69 +227,95 @@ func (m *Manager) CanAcceptParticipant() (bool, string) {
 	count := len(m.participants)
 	m.mu.RUnlock()
 
-	// Hard limit: always reject
-	if count >= m.maxParticipants {
-		atomic.AddUint64(&m.rejectCountTotal, 1)
-		atomic.AddUint64(&m.rejectCountRecent, 1)
-		log.WithFields(logger.Fields{
-			"at":                "Manager.CanAcceptParticipant",
-			"phase":             "tunnel_build",
-			"reason":            "hard_limit_reached",
-			"participant_count": count,
-			"max_participants":  m.maxParticipants,
-		}).Debug("rejecting tunnel build: hard limit reached")
-		return false, "hard_limit_reached"
+	if rejected, reason := m.checkHardLimit(count); rejected {
+		return false, reason
 	}
 
-	// Soft limit: probabilistic rejection with dynamic scaling
-	softLimitValue := m.softLimit()
-	if count >= softLimitValue {
-		// Critical threshold is last 100 tunnels before hard limit
-		criticalThreshold := m.maxParticipants - 100
-		if criticalThreshold < softLimitValue {
-			// If max is small, critical threshold is at soft limit
-			criticalThreshold = softLimitValue
-		}
-
-		var rejectProb float64
-		if count >= criticalThreshold {
-			// Critical zone (last 100 tunnels): 90% → 100%
-			// Steep increase to strongly discourage new tunnels near capacity
-			criticalRange := float64(m.maxParticipants - criticalThreshold)
-			if criticalRange > 0 {
-				criticalRatio := float64(count-criticalThreshold) / criticalRange
-				rejectProb = 0.90 + (0.10 * criticalRatio)
-			} else {
-				rejectProb = 0.95
-			}
-		} else {
-			// Normal soft limit zone: 50% → 90%
-			// Gradual increase from soft limit to critical threshold
-			normalRange := float64(criticalThreshold - softLimitValue)
-			if normalRange > 0 {
-				normalRatio := float64(count-softLimitValue) / normalRange
-				rejectProb = 0.50 + (0.40 * normalRatio)
-			} else {
-				rejectProb = 0.70
-			}
-		}
-
-		if rand.Float64() < rejectProb {
-			atomic.AddUint64(&m.rejectCountTotal, 1)
-			atomic.AddUint64(&m.rejectCountRecent, 1)
-			log.WithFields(logger.Fields{
-				"at":                 "Manager.CanAcceptParticipant",
-				"phase":              "tunnel_build",
-				"reason":             "soft_limit_probabilistic_reject",
-				"participant_count":  count,
-				"soft_limit":         softLimitValue,
-				"reject_probability": rejectProb,
-			}).Debug("rejecting tunnel build: soft limit probabilistic rejection")
-			return false, "soft_limit_probabilistic_reject"
-		}
+	if rejected, reason := m.checkSoftLimit(count); rejected {
+		return false, reason
 	}
 
 	return true, ""
+}
+
+// checkHardLimit verifies if we've reached the maximum participant count.
+// Returns (rejected, reason) where rejected is true if at hard limit.
+func (m *Manager) checkHardLimit(count int) (bool, string) {
+	if count < m.maxParticipants {
+		return false, ""
+	}
+
+	atomic.AddUint64(&m.rejectCountTotal, 1)
+	atomic.AddUint64(&m.rejectCountRecent, 1)
+	log.WithFields(logger.Fields{
+		"at":                "Manager.CanAcceptParticipant",
+		"phase":             "tunnel_build",
+		"reason":            "hard_limit_reached",
+		"participant_count": count,
+		"max_participants":  m.maxParticipants,
+	}).Debug("rejecting tunnel build: hard limit reached")
+	return true, "hard_limit_reached"
+}
+
+// checkSoftLimit applies probabilistic rejection based on current load.
+// Returns (rejected, reason) where rejected is true if probabilistically rejected.
+func (m *Manager) checkSoftLimit(count int) (bool, string) {
+	softLimitValue := m.softLimit()
+	if count < softLimitValue {
+		return false, ""
+	}
+
+	rejectProb := m.calculateRejectProbability(count, softLimitValue)
+
+	if rand.Float64() < rejectProb {
+		atomic.AddUint64(&m.rejectCountTotal, 1)
+		atomic.AddUint64(&m.rejectCountRecent, 1)
+		log.WithFields(logger.Fields{
+			"at":                 "Manager.CanAcceptParticipant",
+			"phase":              "tunnel_build",
+			"reason":             "soft_limit_probabilistic_reject",
+			"participant_count":  count,
+			"soft_limit":         softLimitValue,
+			"reject_probability": rejectProb,
+		}).Debug("rejecting tunnel build: soft limit probabilistic rejection")
+		return true, "soft_limit_probabilistic_reject"
+	}
+
+	return false, ""
+}
+
+// calculateRejectProbability computes the rejection probability based on load.
+// Uses dynamic scaling with a critical zone for the last 100 tunnels.
+func (m *Manager) calculateRejectProbability(count, softLimitValue int) float64 {
+	criticalThreshold := m.maxParticipants - 100
+	if criticalThreshold < softLimitValue {
+		criticalThreshold = softLimitValue
+	}
+
+	if count >= criticalThreshold {
+		return m.calculateCriticalZoneProbability(count, criticalThreshold)
+	}
+	return m.calculateNormalZoneProbability(count, softLimitValue, criticalThreshold)
+}
+
+// calculateCriticalZoneProbability returns rejection probability for critical zone (90% → 100%).
+func (m *Manager) calculateCriticalZoneProbability(count, criticalThreshold int) float64 {
+	criticalRange := float64(m.maxParticipants - criticalThreshold)
+	if criticalRange > 0 {
+		criticalRatio := float64(count-criticalThreshold) / criticalRange
+		return 0.90 + (0.10 * criticalRatio)
+	}
+	return 0.95
+}
+
+// calculateNormalZoneProbability returns rejection probability for soft limit zone (50% → 90%).
+func (m *Manager) calculateNormalZoneProbability(count, softLimitValue, criticalThreshold int) float64 {
+	normalRange := float64(criticalThreshold - softLimitValue)
+	if normalRange > 0 {
+		normalRatio := float64(count-softLimitValue) / normalRange
+		return 0.50 + (0.40 * normalRatio)
+	}
+	return 0.70
 }
 
 // GetRejectStats returns the current rejection statistics.
@@ -356,6 +382,56 @@ func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, re
 	}
 
 	return true, 0, ""
+}
+
+// RegisterParticipant creates and registers a new participating tunnel.
+// This is called after ProcessBuildRequest returns accepted=true.
+//
+// Parameters:
+// - tunnelID: The tunnel ID for the participating tunnel
+// - sourceHash: The router hash of the requester (used for tracking)
+// - expiry: When the tunnel participation expires
+//
+// Returns an error if registration fails.
+//
+// Note: In a full implementation, this would also set up the decryption keys
+// from the build request record. For now, it creates a placeholder participant
+// to track the tunnel's existence and expiration.
+func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time) error {
+	// Calculate lifetime from expiry
+	lifetime := time.Until(expiry)
+	if lifetime <= 0 {
+		return fmt.Errorf("tunnel expiry is in the past")
+	}
+
+	// Create a placeholder participant
+	// In a full implementation, this would use the actual decryption keys
+	// from the build request record. For now, we create a minimal participant
+	// to track the tunnel's existence.
+	participant := &Participant{
+		tunnelID:     tunnelID,
+		createdAt:    time.Now(),
+		lifetime:     lifetime,
+		lastActivity: time.Now(),
+		idleTimeout:  DefaultIdleTimeout,
+		// decryption would be set from the build request record's LayerKey/IVKey
+	}
+
+	// Add to tracking
+	err := m.AddParticipant(participant)
+	if err != nil {
+		return fmt.Errorf("failed to add participant: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "Manager.RegisterParticipant",
+		"phase":       "tunnel_build",
+		"tunnel_id":   tunnelID,
+		"source_hash": fmt.Sprintf("%x", sourceHash[:8]),
+		"lifetime":    lifetime,
+	}).Info("registered participating tunnel")
+
+	return nil
 }
 
 // GetSourceLimiterStats returns statistics about per-source rate limiting.
@@ -445,10 +521,14 @@ func (m *Manager) cleanupExpiredParticipants() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	now := time.Now()
-	var expired []TunnelID
-	var idle []TunnelID
+	expired, idle := m.categorizeParticipants()
+	m.removeParticipants(expired, idle)
+	m.logCleanupResults(expired, idle)
+}
 
+// categorizeParticipants separates participants into expired and idle lists.
+func (m *Manager) categorizeParticipants() (expired, idle []TunnelID) {
+	now := time.Now()
 	for id, p := range m.participants {
 		if p.IsExpired(now) {
 			expired = append(expired, id)
@@ -456,15 +536,21 @@ func (m *Manager) cleanupExpiredParticipants() {
 			idle = append(idle, id)
 		}
 	}
+	return expired, idle
+}
 
+// removeParticipants deletes the specified tunnel IDs from the participants map.
+func (m *Manager) removeParticipants(expired, idle []TunnelID) {
 	for _, id := range expired {
 		delete(m.participants, id)
 	}
-
 	for _, id := range idle {
 		delete(m.participants, id)
 	}
+}
 
+// logCleanupResults logs information about cleaned up tunnels.
+func (m *Manager) logCleanupResults(expired, idle []TunnelID) {
 	if len(expired) > 0 {
 		log.WithFields(logger.Fields{
 			"at":        "Manager.cleanupExpiredParticipants",

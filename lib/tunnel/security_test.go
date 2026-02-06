@@ -11,6 +11,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/tunnel"
+	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // =============================================================================
@@ -1038,4 +1039,285 @@ func createValidTunnelMessage(t *testing.T) []byte {
 	copy(msg[20:24], hash[:4])
 
 	return msg
+}
+
+// =============================================================================
+// RESOURCE EXHAUSTION PROTECTION TESTS
+// =============================================================================
+
+// TestResourceExhaustion_TotalParticipantLimit verifies that the global participating
+// tunnel limit is properly enforced to protect against memory/CPU exhaustion.
+// This tests the hard limit where all requests are rejected unconditionally.
+func TestResourceExhaustion_TotalParticipantLimit(t *testing.T) {
+	// Use a larger limit to avoid soft limit probabilistic rejection during fill
+	cfg := config.TunnelDefaults{
+		MaxParticipatingTunnels:    1000,
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  false, // Disable per-source to test global only
+	}
+
+	manager := NewManagerWithConfig(cfg)
+	defer manager.Stop()
+
+	// Create test hash for a legitimate source
+	testHash := common.Hash{}
+	copy(testHash[:], []byte("test-router-hash-32-bytes-long!!"))
+
+	// Fill to just below soft limit (50% = 500) so we avoid probabilistic rejection
+	for i := 0; i < 400; i++ {
+		participant, err := NewParticipant(TunnelID(i), &mockSecurityEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant %d: %v", i, err)
+		}
+		err = manager.AddParticipant(participant)
+		if err != nil {
+			t.Fatalf("Failed to add participant %d: %v", i, err)
+		}
+	}
+
+	// Should accept below soft limit (400/1000 = 40%)
+	accepted, rejectCode, reason := manager.ProcessBuildRequest(testHash)
+	if !accepted {
+		t.Errorf("Expected acceptance below soft limit (400/1000), got rejection: code=%d reason=%s", rejectCode, reason)
+	}
+
+	// Fill to hard limit (1000/1000)
+	for i := 400; i < 1000; i++ {
+		participant, _ := NewParticipant(TunnelID(i), &mockSecurityEncryptor{})
+		manager.AddParticipant(participant)
+	}
+
+	// Should reject at hard limit (1000/1000)
+	accepted, rejectCode, reason = manager.ProcessBuildRequest(testHash)
+	if accepted {
+		t.Error("Expected rejection at hard limit (1000/1000)")
+	}
+	if rejectCode != BuildReplyCodeBandwidth {
+		t.Errorf("Expected reject code %d (BANDWIDTH), got %d", BuildReplyCodeBandwidth, rejectCode)
+	}
+	if reason != "hard_limit_reached" {
+		t.Errorf("Expected reason 'hard_limit_reached', got '%s'", reason)
+	}
+
+	// Verify stats show rejection
+	stats := manager.GetLimitStats()
+	if stats.GlobalRejectionsTotal == 0 {
+		t.Error("Expected rejection to be recorded in stats")
+	}
+	if !stats.AtHardLimit {
+		t.Error("Expected AtHardLimit to be true")
+	}
+
+	t.Logf("Security test passed: hard limit enforcement at %d participants", stats.CurrentParticipants)
+}
+
+// TestResourceExhaustion_PerSourceRateLimit verifies that per-source rate limiting
+// prevents a single malicious source from overwhelming the router with tunnel build requests.
+func TestResourceExhaustion_PerSourceRateLimit(t *testing.T) {
+	// Use small limits for testing
+	cfg := config.TunnelDefaults{
+		MaxParticipatingTunnels:    15000, // High enough to not trigger global limit
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  true,
+		MaxBuildRequestsPerMinute:  10,
+		BuildRequestBurstSize:      3, // Allow burst of 3, then rate limit
+		SourceBanDuration:          5 * time.Minute,
+	}
+
+	manager := NewManagerWithConfig(cfg)
+	defer manager.Stop()
+
+	// Malicious source trying to flood
+	attackerHash := common.Hash{}
+	copy(attackerHash[:], []byte("attacker-hash-32-bytes-long!!!!"))
+
+	// Legitimate source
+	legitimateHash := common.Hash{}
+	copy(legitimateHash[:], []byte("legitimate-hash-32-bytes-long!!"))
+
+	// First burst should succeed (up to burst size)
+	acceptedCount := 0
+	for i := 0; i < 3; i++ {
+		accepted, _, _ := manager.ProcessBuildRequest(attackerHash)
+		if accepted {
+			acceptedCount++
+		}
+	}
+	if acceptedCount != 3 {
+		t.Errorf("Expected all 3 burst requests to succeed, got %d", acceptedCount)
+	}
+
+	// Additional rapid requests should be rate limited
+	rejectedCount := 0
+	for i := 0; i < 5; i++ {
+		accepted, rejectCode, _ := manager.ProcessBuildRequest(attackerHash)
+		if !accepted {
+			rejectedCount++
+			if rejectCode != BuildReplyCodeBandwidth {
+				t.Errorf("Expected reject code %d, got %d", BuildReplyCodeBandwidth, rejectCode)
+			}
+		}
+	}
+	if rejectedCount == 0 {
+		t.Error("Expected some rapid requests to be rate limited")
+	}
+
+	// Meanwhile, legitimate source should still be able to request
+	accepted, _, _ := manager.ProcessBuildRequest(legitimateHash)
+	if !accepted {
+		t.Error("Legitimate source should not be affected by attacker's rate limit")
+	}
+
+	t.Logf("Security test passed: per-source rate limiting rejected %d rapid requests from attacker", rejectedCount)
+}
+
+// TestResourceExhaustion_AutoBanMechanism verifies that sources exceeding rate limits
+// repeatedly get automatically banned to reduce processing overhead.
+func TestResourceExhaustion_AutoBanMechanism(t *testing.T) {
+	cfg := config.TunnelDefaults{
+		MaxParticipatingTunnels:    15000,
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  true,
+		MaxBuildRequestsPerMinute:  10,
+		BuildRequestBurstSize:      1,               // Minimal burst to trigger bans quickly
+		SourceBanDuration:          1 * time.Second, // Short ban for testing
+	}
+
+	limiter := NewSourceLimiterWithConfig(cfg)
+	defer limiter.Stop()
+
+	// Malicious source that will be banned
+	attackerHash := common.Hash{}
+	copy(attackerHash[:], []byte("persistent-attacker-hash-32byte"))
+
+	// First request consumes the single burst token
+	allowed, _ := limiter.AllowRequest(attackerHash)
+	if !allowed {
+		t.Error("First request should be allowed")
+	}
+
+	// Generate enough rejections to trigger auto-ban (>10 rejections)
+	rejectionsBeforeBan := 0
+	for i := 0; i < 20; i++ {
+		allowed, reason := limiter.AllowRequest(attackerHash)
+		if !allowed {
+			rejectionsBeforeBan++
+			// After 10+ rejections, should switch to "source_banned"
+			if rejectionsBeforeBan > 10 && reason != "source_banned" {
+				// May still be "rate_limit_exceeded" on the 11th since ban happens after increment
+				if i > 11 && reason != "source_banned" {
+					t.Logf("Expected 'source_banned' after many rejections, got '%s' on iteration %d", reason, i)
+				}
+			}
+		}
+	}
+
+	// Verify the source is now banned
+	if !limiter.IsBanned(attackerHash) {
+		t.Error("Attacker should be banned after many rejections")
+	}
+
+	// Verify banned source is immediately rejected
+	allowed, reason := limiter.AllowRequest(attackerHash)
+	if allowed {
+		t.Error("Banned source should be rejected")
+	}
+	if reason != "source_banned" {
+		t.Errorf("Expected 'source_banned' reason, got '%s'", reason)
+	}
+
+	// Verify stats reflect the ban
+	stats := limiter.GetStats()
+	if stats.BannedSources == 0 {
+		t.Error("Expected at least one banned source in stats")
+	}
+
+	t.Logf("Security test passed: auto-ban triggered after %d rejections, banned sources: %d", rejectionsBeforeBan, stats.BannedSources)
+}
+
+// TestResourceExhaustion_SoftLimitGradualDegradation verifies that probabilistic rejection
+// gradually increases as we approach the hard limit, providing graceful degradation.
+func TestResourceExhaustion_SoftLimitGradualDegradation(t *testing.T) {
+	// Use larger limits for testing to allow proper soft/critical zone separation
+	// With max=1000, soft limit=500, critical threshold=900 (last 100)
+	cfg := config.TunnelDefaults{
+		MaxParticipatingTunnels:    1000,
+		ParticipatingLimitsEnabled: true,
+		PerSourceRateLimitEnabled:  false, // Focus on global soft limit behavior
+	}
+
+	manager := NewManagerWithConfig(cfg)
+	defer manager.Stop()
+
+	testHash := common.Hash{}
+	copy(testHash[:], []byte("test-router-hash-32-bytes-long!!"))
+
+	// Fill to exactly soft limit (50% = 500)
+	for i := 0; i < 500; i++ {
+		participant, _ := NewParticipant(TunnelID(i), &mockSecurityEncryptor{})
+		manager.AddParticipant(participant)
+	}
+
+	// At soft limit (500/1000), should start seeing probabilistic rejections
+	// Starting rate is ~50% rejection
+	softLimitRejections := 0
+	softLimitAcceptances := 0
+	trials := 100
+
+	for i := 0; i < trials; i++ {
+		canAccept, _ := manager.CanAcceptParticipant()
+		if canAccept {
+			softLimitAcceptances++
+		} else {
+			softLimitRejections++
+		}
+	}
+
+	// At exactly soft limit (50% of capacity), we expect roughly 50% rejection rate
+	// Allow variance due to randomness: 30%-70%
+	rejectionRate := float64(softLimitRejections) / float64(trials)
+	if rejectionRate < 0.30 || rejectionRate > 0.70 {
+		t.Errorf("Expected ~50%% rejection rate at soft limit, got %.2f%%", rejectionRate*100)
+	}
+
+	t.Logf("At soft limit (500/%d): rejection rate %.1f%% (%d/%d)",
+		cfg.MaxParticipatingTunnels, rejectionRate*100,
+		softLimitRejections, trials)
+
+	// Fill to 95% (950/1000) - this is in the critical zone (last 100)
+	for i := 500; i < 950; i++ {
+		participant, _ := NewParticipant(TunnelID(i), &mockSecurityEncryptor{})
+		manager.AddParticipant(participant)
+	}
+
+	// Reset counters
+	highLoadRejections := 0
+	highLoadAcceptances := 0
+	for i := 0; i < trials; i++ {
+		canAccept, _ := manager.CanAcceptParticipant()
+		if canAccept {
+			highLoadAcceptances++
+		} else {
+			highLoadRejections++
+		}
+	}
+
+	highRejectionRate := float64(highLoadRejections) / float64(trials)
+	t.Logf("At critical zone (950/%d): rejection rate %.1f%% (%d/%d)",
+		cfg.MaxParticipatingTunnels, highRejectionRate*100,
+		highLoadRejections, trials)
+
+	// At 95% (in critical zone), rejection rate should be >90%
+	if highRejectionRate < 0.85 {
+		t.Errorf("Expected >85%% rejection rate in critical zone, got %.2f%%", highRejectionRate*100)
+	}
+
+	// Verify graceful degradation: rejection rate should increase with load
+	if highRejectionRate <= rejectionRate {
+		t.Errorf("Expected higher rejection rate at 95%% load (%.2f%%) than at 50%% (%.2f%%)",
+			highRejectionRate*100, rejectionRate*100)
+	}
+
+	t.Logf("Security test passed: soft limit provides graceful degradation (50%% load: %.0f%% reject, 95%% load: %.0f%% reject)",
+		rejectionRate*100, highRejectionRate*100)
 }

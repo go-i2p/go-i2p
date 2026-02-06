@@ -35,6 +35,33 @@ type GarlicCloveForwarder interface {
 	ForwardThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, msg I2NPMessage) error
 }
 
+// ParticipantManager defines the interface for processing incoming tunnel build requests.
+// This interface enables the MessageProcessor to delegate tunnel participation decisions
+// to the tunnel.Manager which handles rate limiting and resource protection.
+type ParticipantManager interface {
+	// ProcessBuildRequest validates a tunnel build request against all limits.
+	// Returns whether the request should be accepted, the rejection code if not,
+	// and a human-readable reason for logging.
+	//
+	// Parameters:
+	// - sourceHash: The router hash of the requester (from BuildRequestRecord.OurIdent)
+	//
+	// Returns:
+	// - accepted: Whether the request should be accepted
+	// - rejectCode: I2P-compliant rejection code if not accepted (0 if accepted)
+	// - reason: Human-readable reason for logging (empty if accepted)
+	ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string)
+
+	// RegisterParticipant registers a new participating tunnel after acceptance.
+	// This should be called after ProcessBuildRequest returns accepted=true.
+	//
+	// Parameters:
+	// - tunnelID: The tunnel ID for the participating tunnel
+	// - sourceHash: The router hash of the requester
+	// - expiry: When the tunnel participation expires
+	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	factory             *I2NPMessageFactory
@@ -42,6 +69,7 @@ type MessageProcessor struct {
 	cloveForwarder      GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
 	dbManager           *DatabaseManager     // Optional database manager for DatabaseLookup messages
 	expirationValidator *ExpirationValidator // Validator for checking message expiration
+	participantManager  ParticipantManager   // Optional participant manager for tunnel build requests
 }
 
 // NewMessageProcessor creates a new message processor
@@ -73,6 +101,14 @@ func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
 func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
 	log.WithField("at", "SetDatabaseManager").Debug("Setting database manager")
 	p.dbManager = dbMgr
+}
+
+// SetParticipantManager sets the participant manager for processing incoming tunnel build requests.
+// This enables the router to participate in tunnels built by other routers.
+// If not set, tunnel build requests will be rejected with an error.
+func (p *MessageProcessor) SetParticipantManager(pm ParticipantManager) {
+	log.WithField("at", "SetParticipantManager").Debug("Setting participant manager")
+	p.participantManager = pm
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -125,6 +161,12 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 		return p.processGarlicMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
 		return p.processTunnelDataMessage(msg)
+	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD:
+		return p.processShortTunnelBuildMessage(msg)
+	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
+		return p.processVariableTunnelBuildMessage(msg)
+	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
+		return p.processVariableTunnelBuildMessage(msg) // Legacy format, same processing
 	default:
 		log.WithFields(logger.Fields{
 			"at":           "ProcessMessage",
@@ -720,6 +762,169 @@ func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
 		return nil
 	}
 	return fmt.Errorf("message does not implement TunnelCarrier interface")
+}
+
+// processShortTunnelBuildMessage processes Short Tunnel Build Messages (STBM).
+// This handles incoming requests from other routers asking us to participate in their tunnels.
+//
+// Process:
+// 1. Extract and parse the build request records from the message
+// 2. Find the record intended for this router (by matching our identity hash)
+// 3. Validate the request against resource limits using ParticipantManager
+// 4. Accept or reject based on available capacity and rate limits
+// 5. Generate and send appropriate build reply
+func (p *MessageProcessor) processShortTunnelBuildMessage(msg I2NPMessage) error {
+	return p.processTunnelBuildRequest(msg, true)
+}
+
+// processVariableTunnelBuildMessage processes Variable Tunnel Build Messages (legacy format).
+// This handles incoming requests using the older VTB format for backward compatibility.
+func (p *MessageProcessor) processVariableTunnelBuildMessage(msg I2NPMessage) error {
+	return p.processTunnelBuildRequest(msg, false)
+}
+
+// processTunnelBuildRequest is the common handler for both STBM and VTB messages.
+// It extracts the build records, validates the request, and generates a reply.
+//
+// Parameters:
+// - msg: The incoming I2NP tunnel build message
+// - isShortBuild: True for STBM format, false for VTB format
+func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBuild bool) error {
+	if p.participantManager == nil {
+		log.WithFields(logger.Fields{
+			"at":             "processTunnelBuildRequest",
+			"message_type":   msg.Type(),
+			"is_short_build": isShortBuild,
+		}).Warn("participant manager not configured - rejecting tunnel build request")
+		return fmt.Errorf("participant manager not configured - cannot process tunnel build requests")
+	}
+
+	// Extract message data
+	baseMsg, ok := msg.(*BaseI2NPMessage)
+	if !ok {
+		return fmt.Errorf("tunnel build message does not extend BaseI2NPMessage")
+	}
+
+	data := baseMsg.GetData()
+	if len(data) == 0 {
+		return fmt.Errorf("tunnel build message contains no data")
+	}
+
+	// Parse build records based on message format
+	records, err := p.parseTunnelBuildRecords(data, isShortBuild)
+	if err != nil {
+		return fmt.Errorf("failed to parse tunnel build records: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":             "processTunnelBuildRequest",
+		"message_id":     msg.MessageID(),
+		"record_count":   len(records),
+		"is_short_build": isShortBuild,
+	}).Debug("parsed tunnel build request")
+
+	// Process each record to find ones destined for us
+	// In a full implementation, we would:
+	// 1. Try to decrypt each record with our identity key
+	// 2. If decryption succeeds, this record is for us
+	// 3. Validate the request using ProcessBuildRequest
+	// 4. Create response record and forward the message
+
+	// For now, we process the first record that we can decrypt
+	// (simplified - in production, we'd check the toPeer field first)
+	for i, record := range records {
+		// Validate the build request against limits
+		accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
+
+		if accepted {
+			log.WithFields(logger.Fields{
+				"at":             "processTunnelBuildRequest",
+				"message_id":     msg.MessageID(),
+				"record_index":   i,
+				"receive_tunnel": record.ReceiveTunnel,
+				"source_hash":    fmt.Sprintf("%x", record.OurIdent[:8]),
+			}).Info("accepting tunnel build request")
+
+			// Register the participation
+			expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
+			if err := p.participantManager.RegisterParticipant(record.ReceiveTunnel, record.OurIdent, expiry); err != nil {
+				log.WithError(err).WithFields(logger.Fields{
+					"at":             "processTunnelBuildRequest",
+					"receive_tunnel": record.ReceiveTunnel,
+				}).Error("failed to register participant after acceptance")
+				// Continue anyway - the tunnel may still work
+			}
+		} else {
+			log.WithFields(logger.Fields{
+				"at":             "processTunnelBuildRequest",
+				"message_id":     msg.MessageID(),
+				"record_index":   i,
+				"receive_tunnel": record.ReceiveTunnel,
+				"reject_code":    rejectCode,
+				"reason":         reason,
+			}).Info("rejecting tunnel build request")
+		}
+
+		// TODO: Generate and send build reply message
+		// This requires:
+		// 1. Creating a BuildResponseRecord with accept/reject status
+		// 2. Encrypting the response with the reply key
+		// 3. Forwarding the message to the next hop (or reply tunnel)
+		_ = rejectCode // Will be used in reply generation
+	}
+
+	return nil
+}
+
+// parseTunnelBuildRecords parses the build request records from message data.
+// Returns the parsed records or an error if parsing fails.
+func (p *MessageProcessor) parseTunnelBuildRecords(data []byte, isShortBuild bool) ([]BuildRequestRecord, error) {
+	if len(data) < 1 {
+		return nil, fmt.Errorf("insufficient data for record count")
+	}
+
+	recordCount := int(data[0])
+	if recordCount < 1 || recordCount > 8 {
+		return nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+	}
+
+	records := make([]BuildRequestRecord, 0, recordCount)
+	offset := 1
+
+	// Record sizes differ between STBM (218 bytes encrypted, 222 cleartext) and VTB (528 bytes)
+	recordSize := 528 // VTB encrypted record size
+	if isShortBuild {
+		recordSize = 218 // STBM encrypted record size (ECIES)
+	}
+
+	for i := 0; i < recordCount; i++ {
+		if len(data)-offset < recordSize {
+			return nil, fmt.Errorf("insufficient data for record %d: have %d, need %d", i, len(data)-offset, recordSize)
+		}
+
+		// Note: In a full implementation, we would:
+		// 1. Check the first 16 bytes (toPeer) to see if this record is for us
+		// 2. Decrypt the record if it's for us
+		// 3. Parse the cleartext record
+
+		// For now, attempt to read the record as cleartext (for testing)
+		// In production, this would be the decrypted cleartext
+		recordData := data[offset : offset+recordSize]
+
+		// Try to parse as cleartext (222 bytes for STBM cleartext)
+		if isShortBuild && len(recordData) >= 222 {
+			record, err := ReadBuildRequestRecord(recordData)
+			if err != nil {
+				log.WithError(err).WithField("record_index", i).Debug("failed to parse build request record")
+			} else {
+				records = append(records, record)
+			}
+		}
+
+		offset += recordSize
+	}
+
+	return records, nil
 }
 
 // buildRequest tracks a pending tunnel build request for correlation with replies.

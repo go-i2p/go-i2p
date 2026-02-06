@@ -361,7 +361,23 @@ func logConfigurationSource() {
 }
 
 // manageRouterLifecycle handles the full router lifecycle: creation, startup, execution, and shutdown.
+// manageRouterLifecycle handles the complete router lifecycle from creation to shutdown.
 func manageRouterLifecycle() error {
+	if err := createAndConfigureRouter(); err != nil {
+		return err
+	}
+
+	registerSignalHandlers()
+
+	if err := startAndRunRouter(); err != nil {
+		return err
+	}
+
+	return closeRouter()
+}
+
+// createAndConfigureRouter creates and configures the embedded router instance.
+func createAndConfigureRouter() error {
 	var err error
 	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(config.RouterConfigProperties)
 	if err != nil {
@@ -375,11 +391,14 @@ func manageRouterLifecycle() error {
 		"reason": "embedded router created successfully",
 	}).Info("embedded router instance created")
 
-	// Configure the router
 	if err := embeddedRouter.Configure(config.RouterConfigProperties); err != nil {
 		return fmt.Errorf("failed to configure router: %w", err)
 	}
+	return nil
+}
 
+// registerSignalHandlers sets up reload and interrupt handlers for the router.
+func registerSignalHandlers() {
 	signals.RegisterReloadHandler(func() {
 		if err := viper.ReadInConfig(); err != nil {
 			log.Errorf("failed to reload config: %s", err)
@@ -401,7 +420,10 @@ func manageRouterLifecycle() error {
 			}
 		}
 	})
+}
 
+// startAndRunRouter starts the router and waits for it to complete.
+func startAndRunRouter() error {
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "startup",
@@ -420,7 +442,11 @@ func manageRouterLifecycle() error {
 	}).Info("embedded router started, entering main loop")
 
 	embeddedRouter.Wait()
+	return nil
+}
 
+// closeRouter performs final cleanup and closes the embedded router.
+func closeRouter() error {
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "shutdown",
@@ -430,7 +456,6 @@ func manageRouterLifecycle() error {
 	if err := embeddedRouter.Close(); err != nil {
 		return fmt.Errorf("failed to close router: %w", err)
 	}
-
 	return nil
 }
 

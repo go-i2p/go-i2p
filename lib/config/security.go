@@ -25,22 +25,42 @@ const StandardDirPermissions = 0o755
 // It ensures the path does not escape the specified base directory.
 // Returns the sanitized absolute path or an error if the path is invalid.
 func SanitizePath(basePath, userPath string) (string, error) {
-	if basePath == "" {
-		return "", fmt.Errorf("base path cannot be empty")
-	}
-
-	// Clean the base path first
-	cleanBase, err := filepath.Abs(filepath.Clean(basePath))
+	cleanBase, err := validateAndCleanBasePath(basePath)
 	if err != nil {
-		return "", fmt.Errorf("invalid base path: %w", err)
+		return "", err
 	}
 
-	// Handle empty user path as the base path itself
 	if userPath == "" {
 		return cleanBase, nil
 	}
 
-	// Resolve the user path
+	absResolved, err := resolveUserPath(cleanBase, userPath)
+	if err != nil {
+		return "", err
+	}
+
+	if err := validatePathWithinBase(cleanBase, absResolved, userPath, basePath); err != nil {
+		return "", err
+	}
+
+	return absResolved, nil
+}
+
+// validateAndCleanBasePath validates and returns the absolute clean base path.
+func validateAndCleanBasePath(basePath string) (string, error) {
+	if basePath == "" {
+		return "", fmt.Errorf("base path cannot be empty")
+	}
+
+	cleanBase, err := filepath.Abs(filepath.Clean(basePath))
+	if err != nil {
+		return "", fmt.Errorf("invalid base path: %w", err)
+	}
+	return cleanBase, nil
+}
+
+// resolveUserPath resolves the user path to an absolute path.
+func resolveUserPath(cleanBase, userPath string) (string, error) {
 	var resolvedPath string
 	if filepath.IsAbs(userPath) {
 		resolvedPath = filepath.Clean(userPath)
@@ -48,14 +68,15 @@ func SanitizePath(basePath, userPath string) (string, error) {
 		resolvedPath = filepath.Clean(filepath.Join(cleanBase, userPath))
 	}
 
-	// Convert to absolute for comparison
 	absResolved, err := filepath.Abs(resolvedPath)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
 	}
+	return absResolved, nil
+}
 
-	// Check that the resolved path is within the base directory
-	// Add trailing separator to base to ensure proper prefix matching
+// validatePathWithinBase ensures the resolved path is within the base directory.
+func validatePathWithinBase(cleanBase, absResolved, userPath, basePath string) error {
 	baseWithSep := cleanBase + string(filepath.Separator)
 	if absResolved != cleanBase && !strings.HasPrefix(absResolved, baseWithSep) {
 		log.WithFields(logger.Fields{
@@ -64,10 +85,9 @@ func SanitizePath(basePath, userPath string) (string, error) {
 			"base_path":     cleanBase,
 			"resolved_path": absResolved,
 		}).Warn("potential path traversal blocked")
-		return "", fmt.Errorf("path %q escapes base directory %q", userPath, basePath)
+		return fmt.Errorf("path %q escapes base directory %q", userPath, basePath)
 	}
-
-	return absResolved, nil
+	return nil
 }
 
 // ValidateConfigPath validates a configuration path is safe to use.
@@ -188,21 +208,31 @@ func SecureExistingPath(path string, isDir bool) error {
 		return err
 	}
 
-	var targetMode os.FileMode
-	if info.IsDir() {
-		if isDir {
-			targetMode = SecureDirPermissions
-		} else {
-			return fmt.Errorf("expected file but found directory: %s", path)
-		}
-	} else {
-		if !isDir {
-			targetMode = SecureFilePermissions
-		} else {
-			return fmt.Errorf("expected directory but found file: %s", path)
-		}
+	targetMode, err := determineTargetMode(info, path, isDir)
+	if err != nil {
+		return err
 	}
 
+	return applySecurePermissions(path, targetMode)
+}
+
+// determineTargetMode determines the appropriate permission mode based on path type.
+func determineTargetMode(info os.FileInfo, path string, expectDir bool) (os.FileMode, error) {
+	if info.IsDir() {
+		if expectDir {
+			return SecureDirPermissions, nil
+		}
+		return 0, fmt.Errorf("expected file but found directory: %s", path)
+	}
+
+	if !expectDir {
+		return SecureFilePermissions, nil
+	}
+	return 0, fmt.Errorf("expected directory but found file: %s", path)
+}
+
+// applySecurePermissions applies the target permissions and logs the change.
+func applySecurePermissions(path string, targetMode os.FileMode) error {
 	if err := os.Chmod(path, targetMode); err != nil {
 		return fmt.Errorf("failed to secure path %q: %w", path, err)
 	}
