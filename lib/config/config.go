@@ -111,6 +111,19 @@ func setDefaults() {
 	viper.SetDefault("performance.garlic_encryption_cache_size", defaults.Performance.GarlicEncryptionCacheSize)
 	viper.SetDefault("performance.fragment_cache_size", defaults.Performance.FragmentCacheSize)
 	viper.SetDefault("performance.cleanup_interval", defaults.Performance.CleanupInterval)
+
+	// Congestion defaults (Prop 162)
+	viper.SetDefault("router.congestion.d_flag_threshold", defaults.Congestion.DFlagThreshold)
+	viper.SetDefault("router.congestion.e_flag_threshold", defaults.Congestion.EFlagThreshold)
+	viper.SetDefault("router.congestion.g_flag_threshold", defaults.Congestion.GFlagThreshold)
+	viper.SetDefault("router.congestion.clear_d_flag_threshold", defaults.Congestion.ClearDFlagThreshold)
+	viper.SetDefault("router.congestion.clear_e_flag_threshold", defaults.Congestion.ClearEFlagThreshold)
+	viper.SetDefault("router.congestion.clear_g_flag_threshold", defaults.Congestion.ClearGFlagThreshold)
+	viper.SetDefault("router.congestion.averaging_window", defaults.Congestion.AveragingWindow)
+	viper.SetDefault("router.congestion.e_flag_age_threshold", defaults.Congestion.EFlagAgeThreshold)
+	viper.SetDefault("router.congestion.d_flag_capacity_multiplier", defaults.Congestion.DFlagCapacityMultiplier)
+	viper.SetDefault("router.congestion.e_flag_capacity_multiplier", defaults.Congestion.EFlagCapacityMultiplier)
+	viper.SetDefault("router.congestion.stale_e_flag_capacity_multiplier", defaults.Congestion.StaleEFlagCapacityMultiplier)
 }
 
 // NewRouterConfigFromViper creates a new RouterConfig from current viper settings

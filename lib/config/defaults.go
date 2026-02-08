@@ -39,6 +39,9 @@ type ConfigDefaults struct {
 
 	// Performance tuning defaults
 	Performance PerformanceDefaults
+
+	// Congestion advertisement defaults (Prop 162)
+	Congestion CongestionDefaults
 }
 
 // RouterDefaults contains default values for router configuration
@@ -343,6 +346,7 @@ func Defaults() ConfigDefaults {
 		Tunnel:      buildTunnelDefaults(),
 		Transport:   buildTransportDefaults(),
 		Performance: buildPerformanceDefaults(),
+		Congestion:  buildCongestionDefaults(),
 	}
 }
 
@@ -491,6 +495,7 @@ func runConfigValidators(cfg ConfigDefaults) error {
 		func() error { return validateTunnel(cfg.Tunnel) },
 		func() error { return validateTransport(cfg.Transport) },
 		func() error { return validatePerformance(cfg.Performance) },
+		func() error { return validateCongestion(cfg.Congestion) },
 	}
 
 	for _, validator := range validators {
@@ -829,6 +834,149 @@ func validatePerformance(performance PerformanceDefaults) error {
 		return newValidationError("Performance.MessageQueueSize must be at least 1")
 	}
 	log.Debug("Performance configuration validated successfully")
+	return nil
+}
+
+// validateCongestion validates congestion advertisement configuration settings.
+// Ensures thresholds are in valid ranges and maintain proper ordering.
+func validateCongestion(congestion CongestionDefaults) error {
+	log.WithFields(logger.Fields{
+		"at":     "validateCongestionConfig",
+		"reason": "validating_congestion_settings",
+		"phase":  "startup",
+	}).Debug("validating congestion configuration")
+
+	if err := validateCongestionThresholds(congestion); err != nil {
+		return err
+	}
+
+	if err := validateCongestionHysteresis(congestion); err != nil {
+		return err
+	}
+
+	if err := validateCongestionCapacityMultipliers(congestion); err != nil {
+		return err
+	}
+
+	if err := validateCongestionTiming(congestion); err != nil {
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "validateCongestionConfig",
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug("congestion configuration validated successfully")
+	return nil
+}
+
+// validateCongestionThresholds checks that D/E/G flag thresholds are valid and ordered.
+func validateCongestionThresholds(congestion CongestionDefaults) error {
+	// Thresholds must be in range [0.0, 1.0]
+	if congestion.DFlagThreshold < 0 || congestion.DFlagThreshold > 1 {
+		log.WithFields(logger.Fields{
+			"at":               "validateCongestionConfig",
+			"reason":           "d_flag_threshold_out_of_range",
+			"d_flag_threshold": congestion.DFlagThreshold,
+		}).Error("invalid congestion configuration")
+		return newValidationError("Congestion.DFlagThreshold must be between 0.0 and 1.0")
+	}
+	if congestion.EFlagThreshold < 0 || congestion.EFlagThreshold > 1 {
+		log.WithFields(logger.Fields{
+			"at":               "validateCongestionConfig",
+			"reason":           "e_flag_threshold_out_of_range",
+			"e_flag_threshold": congestion.EFlagThreshold,
+		}).Error("invalid congestion configuration")
+		return newValidationError("Congestion.EFlagThreshold must be between 0.0 and 1.0")
+	}
+	if congestion.GFlagThreshold < 0 || congestion.GFlagThreshold > 1 {
+		log.WithFields(logger.Fields{
+			"at":               "validateCongestionConfig",
+			"reason":           "g_flag_threshold_out_of_range",
+			"g_flag_threshold": congestion.GFlagThreshold,
+		}).Error("invalid congestion configuration")
+		return newValidationError("Congestion.GFlagThreshold must be between 0.0 and 1.0")
+	}
+
+	// Thresholds must be in ascending order: D < E < G
+	if congestion.DFlagThreshold >= congestion.EFlagThreshold {
+		log.WithFields(logger.Fields{
+			"at":               "validateCongestionConfig",
+			"reason":           "threshold_ordering_invalid",
+			"d_flag_threshold": congestion.DFlagThreshold,
+			"e_flag_threshold": congestion.EFlagThreshold,
+		}).Error("invalid congestion configuration")
+		return newValidationError("Congestion.DFlagThreshold must be less than EFlagThreshold")
+	}
+	if congestion.EFlagThreshold >= congestion.GFlagThreshold {
+		log.WithFields(logger.Fields{
+			"at":               "validateCongestionConfig",
+			"reason":           "threshold_ordering_invalid",
+			"e_flag_threshold": congestion.EFlagThreshold,
+			"g_flag_threshold": congestion.GFlagThreshold,
+		}).Error("invalid congestion configuration")
+		return newValidationError("Congestion.EFlagThreshold must be less than GFlagThreshold")
+	}
+	return nil
+}
+
+// validateCongestionHysteresis checks that clear thresholds provide proper hysteresis.
+func validateCongestionHysteresis(congestion CongestionDefaults) error {
+	// Clear thresholds must be in range [0.0, 1.0]
+	if congestion.ClearDFlagThreshold < 0 || congestion.ClearDFlagThreshold > 1 {
+		return newValidationError("Congestion.ClearDFlagThreshold must be between 0.0 and 1.0")
+	}
+	if congestion.ClearEFlagThreshold < 0 || congestion.ClearEFlagThreshold > 1 {
+		return newValidationError("Congestion.ClearEFlagThreshold must be between 0.0 and 1.0")
+	}
+	if congestion.ClearGFlagThreshold < 0 || congestion.ClearGFlagThreshold > 1 {
+		return newValidationError("Congestion.ClearGFlagThreshold must be between 0.0 and 1.0")
+	}
+
+	// Clear thresholds must be below their corresponding advertisement thresholds
+	if congestion.ClearDFlagThreshold >= congestion.DFlagThreshold {
+		return newValidationError("Congestion.ClearDFlagThreshold must be less than DFlagThreshold for hysteresis")
+	}
+	if congestion.ClearEFlagThreshold >= congestion.EFlagThreshold {
+		return newValidationError("Congestion.ClearEFlagThreshold must be less than EFlagThreshold for hysteresis")
+	}
+	if congestion.ClearGFlagThreshold >= congestion.GFlagThreshold {
+		return newValidationError("Congestion.ClearGFlagThreshold must be less than GFlagThreshold for hysteresis")
+	}
+	return nil
+}
+
+// validateCongestionCapacityMultipliers checks that capacity multipliers are valid.
+func validateCongestionCapacityMultipliers(congestion CongestionDefaults) error {
+	// Capacity multipliers must be in range (0.0, 1.0]
+	if congestion.DFlagCapacityMultiplier <= 0 || congestion.DFlagCapacityMultiplier > 1 {
+		return newValidationError("Congestion.DFlagCapacityMultiplier must be in range (0.0, 1.0]")
+	}
+	if congestion.EFlagCapacityMultiplier <= 0 || congestion.EFlagCapacityMultiplier > 1 {
+		return newValidationError("Congestion.EFlagCapacityMultiplier must be in range (0.0, 1.0]")
+	}
+	if congestion.StaleEFlagCapacityMultiplier <= 0 || congestion.StaleEFlagCapacityMultiplier > 1 {
+		return newValidationError("Congestion.StaleEFlagCapacityMultiplier must be in range (0.0, 1.0]")
+	}
+
+	// E flag multiplier should be less than or equal to D flag (E is more congested)
+	if congestion.EFlagCapacityMultiplier > congestion.DFlagCapacityMultiplier {
+		return newValidationError("Congestion.EFlagCapacityMultiplier should not exceed DFlagCapacityMultiplier")
+	}
+	return nil
+}
+
+// validateCongestionTiming checks that timing values are reasonable.
+func validateCongestionTiming(congestion CongestionDefaults) error {
+	// Averaging window must be at least 1 minute
+	if congestion.AveragingWindow < 1*time.Minute {
+		return newValidationError("Congestion.AveragingWindow must be at least 1 minute")
+	}
+
+	// E flag age threshold must be at least 1 minute
+	if congestion.EFlagAgeThreshold < 1*time.Minute {
+		return newValidationError("Congestion.EFlagAgeThreshold must be at least 1 minute")
+	}
 	return nil
 }
 
