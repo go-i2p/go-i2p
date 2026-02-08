@@ -422,3 +422,159 @@ func TestCongestionInfoProvider_ConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// =============================================================================
+// Composable CongestionFilter Tests
+// =============================================================================
+
+func TestCongestionFilter_Name(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	filter := NewCongestionFilter(provider)
+	assert.Equal(t, "CongestionFilter", filter.Name())
+}
+
+func TestCongestionFilter_AcceptsNonCongested(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	filter := NewCongestionFilter(provider)
+
+	// Empty RI can't get hash, so returns true (don't exclude on error)
+	ri := router_info.RouterInfo{}
+	assert.True(t, filter.Accept(ri))
+}
+
+func TestCongestionFilter_AcceptsDFlag(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	filter := NewCongestionFilter(provider)
+
+	hash := common.Hash{}
+	copy(hash[:], []byte("d_flag_peer_hash_123456"))
+	provider.SetFlag(hash, config.CongestionFlagD)
+
+	// D flag should be accepted (not excluded)
+	// Empty RI returns true due to IdentHash error
+	ri := router_info.RouterInfo{}
+	assert.True(t, filter.Accept(ri))
+}
+
+func TestCongestionFilter_AcceptsEFlag(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	filter := NewCongestionFilter(provider)
+
+	hash := common.Hash{}
+	copy(hash[:], []byte("e_flag_peer_hash_123456"))
+	provider.SetFlag(hash, config.CongestionFlagE)
+
+	// E flag should be accepted (not excluded)
+	ri := router_info.RouterInfo{}
+	assert.True(t, filter.Accept(ri))
+}
+
+// =============================================================================
+// Composable CongestionScorer Tests
+// =============================================================================
+
+func TestCongestionScorer_Name(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	cfg := testCongestionDefaults()
+	scorer := NewCongestionScorer(provider, cfg)
+	assert.Equal(t, "CongestionScorer", scorer.Name())
+}
+
+func TestCongestionScorer_FullScoreForNoCongestion(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	cfg := testCongestionDefaults()
+	scorer := NewCongestionScorer(provider, cfg)
+
+	// Empty RI can't get hash, returns 1.0
+	ri := router_info.RouterInfo{}
+	score := scorer.Score(ri)
+	assert.Equal(t, 1.0, score)
+}
+
+func TestCongestionScorer_ConfigurableMultipliers(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	cfg := config.CongestionDefaults{
+		DFlagCapacityMultiplier: 0.6,
+		EFlagCapacityMultiplier: 0.2,
+	}
+	scorer := NewCongestionScorer(provider, cfg)
+
+	// Verify scorer stores the config
+	assert.Equal(t, 0.6, scorer.cfg.DFlagCapacityMultiplier)
+	assert.Equal(t, 0.2, scorer.cfg.EFlagCapacityMultiplier)
+}
+
+// =============================================================================
+// Convenience Constructor Tests
+// =============================================================================
+
+func TestNewCongestionAwareStack_NilDB(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	selector, err := NewCongestionAwareStack(nil, provider)
+	assert.Nil(t, selector)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "db selector cannot be nil")
+}
+
+func TestNewCongestionAwareStack_NilProvider(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
+	selector, err := NewCongestionAwareStack(db, nil)
+	assert.Nil(t, selector)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "congestion info provider cannot be nil")
+}
+
+func TestNewCongestionAwareStack_Success(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
+	provider := newMockCongestionInfoProvider()
+
+	selector, err := NewCongestionAwareStack(db, provider)
+	assert.NoError(t, err)
+	assert.NotNil(t, selector)
+
+	// Should be a FilteringPeerSelector
+	_, ok := selector.(*FilteringPeerSelector)
+	assert.True(t, ok)
+}
+
+func TestNewCongestionAwareScoringStack_NilDB(t *testing.T) {
+	provider := newMockCongestionInfoProvider()
+	cfg := testCongestionDefaults()
+	selector, err := NewCongestionAwareScoringStack(nil, provider, cfg)
+	assert.Nil(t, selector)
+	assert.Error(t, err)
+}
+
+func TestNewCongestionAwareScoringStack_NilProvider(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
+	cfg := testCongestionDefaults()
+	selector, err := NewCongestionAwareScoringStack(db, nil, cfg)
+	assert.Nil(t, selector)
+	assert.Error(t, err)
+}
+
+func TestNewCongestionAwareScoringStack_Success(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
+	provider := newMockCongestionInfoProvider()
+	cfg := testCongestionDefaults()
+
+	selector, err := NewCongestionAwareScoringStack(db, provider, cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, selector)
+
+	// Outermost should be ScoringPeerSelector
+	_, ok := selector.(*ScoringPeerSelector)
+	assert.True(t, ok)
+}
+
+// =============================================================================
+// Interface Compliance for Composable Types
+// =============================================================================
+
+func TestCongestionFilter_InterfaceCompliance(t *testing.T) {
+	var _ PeerFilter = (*CongestionFilter)(nil)
+}
+
+func TestCongestionScorer_InterfaceCompliance(t *testing.T) {
+	var _ PeerScorer = (*CongestionScorer)(nil)
+}

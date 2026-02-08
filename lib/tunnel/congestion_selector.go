@@ -301,14 +301,126 @@ func (s *DefaultCongestionAwarePeerSelector) logSelectionSummary(requested, sele
 	}).Debug("peer selection summary")
 }
 
-// hashSetToSlice converts a hash set to a slice.
+// hashSetToSlice is a local alias for HashSetToSlice (for backward compatibility).
+// New code should use HashSetToSlice directly.
 func hashSetToSlice(set map[common.Hash]struct{}) []common.Hash {
-	result := make([]common.Hash, 0, len(set))
-	for h := range set {
-		result = append(result, h)
-	}
-	return result
+	return HashSetToSlice(set)
 }
 
 // Compile-time interface check
 var _ CongestionAwarePeerSelector = (*DefaultCongestionAwarePeerSelector)(nil)
+
+// =============================================================================
+// Composable Filters and Scorers for Selector Stacking
+// =============================================================================
+
+// CongestionFilter is a PeerFilter that excludes G-flagged peers.
+// Use with FilteringPeerSelector for composable congestion filtering.
+type CongestionFilter struct {
+	congestionInfo CongestionInfoProvider
+}
+
+// NewCongestionFilter creates a filter that excludes G-flagged peers.
+func NewCongestionFilter(congestionInfo CongestionInfoProvider) *CongestionFilter {
+	return &CongestionFilter{congestionInfo: congestionInfo}
+}
+
+func (f *CongestionFilter) Name() string { return "CongestionFilter" }
+
+func (f *CongestionFilter) Accept(ri router_info.RouterInfo) bool {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		return true // Can't determine, don't exclude
+	}
+
+	flag := f.congestionInfo.GetEffectiveCongestionFlag(hash)
+	// Reject G-flagged peers (rejecting all tunnels)
+	return flag != config.CongestionFlagG
+}
+
+// CongestionScorer is a PeerScorer that derates peers based on congestion flags.
+// Use with ScoringPeerSelector for composable congestion scoring.
+type CongestionScorer struct {
+	congestionInfo CongestionInfoProvider
+	cfg            config.CongestionDefaults
+}
+
+// NewCongestionScorer creates a scorer that derates congested peers.
+func NewCongestionScorer(congestionInfo CongestionInfoProvider, cfg config.CongestionDefaults) *CongestionScorer {
+	return &CongestionScorer{
+		congestionInfo: congestionInfo,
+		cfg:            cfg,
+	}
+}
+
+func (s *CongestionScorer) Name() string { return "CongestionScorer" }
+
+func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64 {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		return 1.0 // Can't determine, use full score
+	}
+
+	flag := s.congestionInfo.GetEffectiveCongestionFlag(hash)
+
+	switch flag {
+	case config.CongestionFlagG:
+		return 0.0 // Should be filtered out, but score 0 if reached
+	case config.CongestionFlagE:
+		return s.cfg.EFlagCapacityMultiplier
+	case config.CongestionFlagD:
+		return s.cfg.DFlagCapacityMultiplier
+	default:
+		return 1.0
+	}
+}
+
+// Compile-time interface checks for composable types
+var _ PeerFilter = (*CongestionFilter)(nil)
+var _ PeerScorer = (*CongestionScorer)(nil)
+
+// =============================================================================
+// Convenience Constructors for Stacked Selectors
+// =============================================================================
+
+// NewCongestionAwareStack creates a stacked selector with congestion filtering.
+// This is equivalent to:
+//
+//	FromNetDB(db).WithFilter(NewCongestionFilter(info)).Build()
+//
+// For more complex stacking, use PeerSelectorStack directly.
+func NewCongestionAwareStack(
+	db NetDBSelector,
+	congestionInfo CongestionInfoProvider,
+) (PeerSelector, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db selector cannot be nil")
+	}
+	if congestionInfo == nil {
+		return nil, fmt.Errorf("congestion info provider cannot be nil")
+	}
+
+	return FromNetDB(db).
+		WithFilter(NewCongestionFilter(congestionInfo)).
+		Build()
+}
+
+// NewCongestionAwareScoringStack creates a stacked selector with both
+// congestion filtering (excludes G) and scoring (derates D/E).
+func NewCongestionAwareScoringStack(
+	db NetDBSelector,
+	congestionInfo CongestionInfoProvider,
+	cfg config.CongestionDefaults,
+) (PeerSelector, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db selector cannot be nil")
+	}
+	if congestionInfo == nil {
+		return nil, fmt.Errorf("congestion info provider cannot be nil")
+	}
+
+	return FromNetDB(db).
+		WithFilter(NewCongestionFilter(congestionInfo)).
+		WithScoring(NewCongestionScorer(congestionInfo, cfg)).
+		Build()
+}
