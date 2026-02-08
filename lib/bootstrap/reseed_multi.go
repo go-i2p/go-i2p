@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"context"
 	"encoding/hex"
-	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/logger"
