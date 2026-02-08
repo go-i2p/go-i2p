@@ -2,12 +2,12 @@ package tunnel
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
 )
