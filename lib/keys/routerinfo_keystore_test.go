@@ -144,3 +144,170 @@ func TestRouterInfoKeystore_StoreKeys_SecurePermissions(t *testing.T) {
 		t.Errorf("Expected file permissions 0o600, got %o", perm)
 	}
 }
+
+// TestRouterInfoKeystore_BuildCapsString tests the caps string construction with congestion flags
+func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
+	ks := &RouterInfoKeystore{}
+
+	tests := []struct {
+		name           string
+		congestionFlag string
+		expected       string
+	}{
+		{
+			name:           "no congestion flag",
+			congestionFlag: "",
+			expected:       "NU",
+		},
+		{
+			name:           "D flag - medium congestion",
+			congestionFlag: "D",
+			expected:       "NUD",
+		},
+		{
+			name:           "E flag - high congestion",
+			congestionFlag: "E",
+			expected:       "NUE",
+		},
+		{
+			name:           "G flag - rejecting all",
+			congestionFlag: "G",
+			expected:       "NUG",
+		},
+		{
+			name:           "invalid flag - ignored",
+			congestionFlag: "X",
+			expected:       "NU",
+		},
+		{
+			name:           "lowercase d - ignored (case sensitive)",
+			congestionFlag: "d",
+			expected:       "NU",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ks.buildCapsString(tt.congestionFlag)
+			if result != tt.expected {
+				t.Errorf("buildCapsString(%q) = %q, want %q", tt.congestionFlag, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestRouterInfoKeystore_ConstructRouterInfo_WithCongestionFlag tests RouterInfo construction with congestion options
+func TestRouterInfoKeystore_ConstructRouterInfo_WithCongestionFlag(t *testing.T) {
+	// Create a temporary directory for the keystore
+	tmpDir, err := os.MkdirTemp("", "routerinfo_congestion_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a keystore
+	ks, err := NewRouterInfoKeystore(tmpDir, "test-router")
+	if err != nil {
+		t.Fatalf("Failed to create keystore: %v", err)
+	}
+
+	tests := []struct {
+		name            string
+		opts            []RouterInfoOptions
+		expectedCapsSub string // Expected substring in caps
+	}{
+		{
+			name:            "no options - base caps",
+			opts:            nil,
+			expectedCapsSub: "NU",
+		},
+		{
+			name: "with D flag",
+			opts: []RouterInfoOptions{
+				{CongestionFlag: "D"},
+			},
+			expectedCapsSub: "NUD",
+		},
+		{
+			name: "with E flag",
+			opts: []RouterInfoOptions{
+				{CongestionFlag: "E"},
+			},
+			expectedCapsSub: "NUE",
+		},
+		{
+			name: "with G flag",
+			opts: []RouterInfoOptions{
+				{CongestionFlag: "G"},
+			},
+			expectedCapsSub: "NUG",
+		},
+		{
+			name: "empty option struct",
+			opts: []RouterInfoOptions{
+				{},
+			},
+			expectedCapsSub: "NU",
+		},
+		{
+			name: "multiple options - last wins",
+			opts: []RouterInfoOptions{
+				{CongestionFlag: "D"},
+				{CongestionFlag: "E"},
+			},
+			expectedCapsSub: "NUE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ri, err := ks.ConstructRouterInfo(nil, tt.opts...)
+			if err != nil {
+				t.Fatalf("ConstructRouterInfo failed: %v", err)
+			}
+
+			if ri == nil {
+				t.Fatal("RouterInfo should not be nil")
+			}
+
+			// Get the caps from the RouterInfo
+			// RouterCapabilities may include I2P length prefix, so use Contains
+			caps := ri.RouterCapabilities()
+			if !strings.Contains(caps, tt.expectedCapsSub) {
+				t.Errorf("caps = %q, want %q", caps, tt.expectedCapsSub)
+			}
+		})
+	}
+}
+
+// TestRouterInfoKeystore_ConstructRouterInfo_BackwardCompatible tests backward compatibility
+func TestRouterInfoKeystore_ConstructRouterInfo_BackwardCompatible(t *testing.T) {
+	// Create a temporary directory for the keystore
+	tmpDir, err := os.MkdirTemp("", "routerinfo_compat_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a keystore
+	ks, err := NewRouterInfoKeystore(tmpDir, "test-router")
+	if err != nil {
+		t.Fatalf("Failed to create keystore: %v", err)
+	}
+
+	// Test that calling without options still works (backward compatible)
+	ri, err := ks.ConstructRouterInfo(nil)
+	if err != nil {
+		t.Fatalf("ConstructRouterInfo without options failed: %v", err)
+	}
+
+	if ri == nil {
+		t.Fatal("RouterInfo should not be nil")
+	}
+
+	caps := ri.RouterCapabilities()
+	// RouterCapabilities may include I2P length prefix, so use Contains
+	if !strings.Contains(caps, "NU") {
+		t.Errorf("caps %q does not contain 'NU'", caps)
+	}
+}

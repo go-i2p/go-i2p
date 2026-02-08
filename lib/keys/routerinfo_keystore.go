@@ -269,8 +269,17 @@ func (ks *RouterInfoKeystore) generateFallbackKeyID() string {
 	return fallbackID
 }
 
-// ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate
-func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress) (*router_info.RouterInfo, error) {
+// RouterInfoOptions contains optional parameters for constructing RouterInfo.
+// This allows extending ConstructRouterInfo without breaking existing callers.
+type RouterInfoOptions struct {
+	// CongestionFlag is the congestion capability flag to advertise (D/E/G or empty).
+	// Per PROP_162, this is appended after R/U in the caps string.
+	CongestionFlag string
+}
+
+// ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
+// The opts parameter allows specifying optional parameters like congestion flags.
+func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress, opts ...RouterInfoOptions) (*router_info.RouterInfo, error) {
 	log.WithFields(map[string]interface{}{
 		"at":            "ConstructRouterInfo",
 		"address_count": len(addresses),
@@ -294,7 +303,15 @@ func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.Ro
 		return nil, err
 	}
 
-	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey)
+	// Merge options (last one wins)
+	var options RouterInfoOptions
+	for _, opt := range opts {
+		if opt.CongestionFlag != "" {
+			options.CongestionFlag = opt.CongestionFlag
+		}
+	}
+
+	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey, options)
 	if err != nil {
 		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to assemble RouterInfo")
 		return nil, err
@@ -364,7 +381,7 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 }
 
 // assembleRouterInfo creates the final RouterInfo with all components and standard options
-func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey) (*router_info.RouterInfo, error) {
+func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey, opts RouterInfoOptions) (*router_info.RouterInfo, error) {
 	log.WithField("at", "assembleRouterInfo").Debug("Assembling RouterInfo with timestamp and options")
 
 	rawTime := ks.RouterTimestamper.GetCurrentTime()
@@ -372,16 +389,20 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	// Reference: https://geti2p.net/spec/ntcp2#datetime
 	publishedTime := rawTime.Round(time.Second)
 
+	// Build caps string - base caps then congestion flag per PROP_162
+	caps := ks.buildCapsString(opts.CongestionFlag)
+
 	options := map[string]string{
-		"caps":  "NU", // Standard capabilities - Not floodfill, Not Reachable
-		"netId": "2",  // Production network
+		"caps":  caps,
+		"netId": "2", // Production network
 	}
 
 	log.WithFields(map[string]interface{}{
-		"at":        "assembleRouterInfo",
-		"timestamp": publishedTime.Unix(),
-		"caps":      options["caps"],
-		"netId":     options["netId"],
+		"at":              "assembleRouterInfo",
+		"timestamp":       publishedTime.Unix(),
+		"caps":            options["caps"],
+		"netId":           options["netId"],
+		"congestion_flag": opts.CongestionFlag,
 	}).Debug("Creating RouterInfo with options")
 
 	ri, err := router_info.NewRouterInfo(
@@ -398,4 +419,28 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	}
 	log.WithField("at", "assembleRouterInfo").Debug("Successfully assembled RouterInfo")
 	return ri, nil
+}
+
+// buildCapsString constructs the capabilities string for RouterInfo.
+// Per PROP_162, congestion flags (D/E/G) are appended after R/U.
+// Base capabilities: NU = Not floodfill, Not Reachable
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string) string {
+	baseCaps := "NU"
+
+	// Per PROP_162: congestion flag is appended after R/U in caps
+	if congestionFlag == "" {
+		return baseCaps
+	}
+
+	// Validate congestion flag is one of D, E, or G
+	if congestionFlag != "D" && congestionFlag != "E" && congestionFlag != "G" {
+		log.WithFields(map[string]interface{}{
+			"at":              "buildCapsString",
+			"congestion_flag": congestionFlag,
+			"reason":          "invalid congestion flag, ignoring",
+		}).Warn("invalid congestion flag provided")
+		return baseCaps
+	}
+
+	return baseCaps + congestionFlag
 }
