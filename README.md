@@ -11,7 +11,7 @@ A pure Go implementation of the I2P router.
 - **Tunnel System**: Automatic tunnel building, pool management, and cryptographic processing
 - **Transport Layer**: Full NTCP2 implementation with session management
 
-The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have most of an I2CP client, part of a Streaming library, and almost none of a Datagrams library, all of which are requirements for SAMv3.3, which is what all our applications use. Therefore those are our next targets. After the turn of the year, we will return our focus to transports by implementing SSU2.
+The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal. After the turn of the year, we will return our focus to transports by implementing SSU2.
 
 **`go-i2p`'s network presence is HIGHLY DISTINCTIVE at this time.** This is because:
 
@@ -27,7 +27,7 @@ The core router functionality is now operational. We have tested functionality u
   - [X] [I2CP Client: https://github.com/go-i2p/go-i2cp](https://github.com/go-i2p/go-i2cp)
   - [X] [Datagrams: https://github.com/go-i2p/go-datagrams](https://github.com/go-i2p/go-datagrams)
   - [X] [Streaming: https://github.com/go-i2p/go-streaming](https://github.com/go-i2p/go-streaming)
-  - [ ] [SAM API v3.3: https://github.com/go-i2p/go-sam-bridge](https://github.com/go-i2p/go-sam-bridge)
+  - [X] [SAM API v3.3: https://github.com/go-i2p/go-sam-bridge](https://github.com/go-i2p/go-sam-bridge)
 - [Cryptographic primitives(see also: https://github.com/go-i2p/crypto)](https://github.com/go-i2p/crypto)
   - Signing
     - [X] ECDSA_SHA256_P256
