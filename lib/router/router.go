@@ -78,6 +78,10 @@ type Router struct {
 	// bandwidthTracker tracks bandwidth usage and calculates rolling averages
 	bandwidthTracker *BandwidthTracker
 
+	// congestionMonitor tracks local congestion state and determines D/E/G flags
+	// for RouterInfo advertisement per PROP_162
+	congestionMonitor *CongestionMonitor
+
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool
 	// reseedMutex protects concurrent access to isReseeding flag
@@ -360,6 +364,7 @@ func (r *Router) Stop() {
 	}
 
 	r.stopBandwidthTracker()
+	r.stopCongestionMonitor()
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
 	r.stopParticipantManager()
@@ -404,6 +409,107 @@ func (r *Router) stopBandwidthTracker() {
 	if r.bandwidthTracker != nil {
 		r.bandwidthTracker.Stop()
 		log.Debug("Bandwidth tracker stopped")
+	}
+}
+
+// startCongestionMonitor initializes and starts the congestion monitor (PROP_162).
+// The monitor tracks local congestion and determines D/E/G flags for RouterInfo caps.
+func (r *Router) startCongestionMonitor() {
+	// Get congestion config from global defaults
+	congestionCfg := config.Defaults().Congestion
+
+	// Create metrics collector that gathers data from router subsystems
+	collector := NewRouterMetricsCollector(
+		WithParticipantCount(r.getParticipantCount),
+		WithMaxParticipants(r.getMaxParticipants),
+		WithBandwidthRates(r.getBandwidthRatesForCongestion),
+		WithMaxBandwidth(r.getMaxBandwidth),
+		WithConnectionCount(r.getConnectionCount),
+		WithMaxConnections(r.getMaxConnections),
+		WithAcceptingTunnels(r.isAcceptingTunnels),
+	)
+
+	// Create and start the congestion monitor
+	r.congestionMonitor = NewCongestionMonitor(congestionCfg, collector)
+	r.congestionMonitor.Start()
+
+	log.WithFields(logger.Fields{
+		"at":               "(Router) startCongestionMonitor",
+		"phase":            "startup",
+		"reason":           "congestion monitor initialized",
+		"d_flag_threshold": congestionCfg.DFlagThreshold,
+		"e_flag_threshold": congestionCfg.EFlagThreshold,
+		"g_flag_threshold": congestionCfg.GFlagThreshold,
+	}).Debug("congestion monitor started with PROP_162 thresholds")
+}
+
+// Metrics collector helper methods for CongestionMonitor integration
+
+// getParticipantCount returns the current number of participating tunnels.
+func (r *Router) getParticipantCount() int {
+	if r.participantManager == nil {
+		return 0
+	}
+	return r.participantManager.ParticipantCount()
+}
+
+// getMaxParticipants returns the maximum number of participating tunnels allowed.
+func (r *Router) getMaxParticipants() int {
+	if r.participantManager == nil {
+		return 1000 // Default max if not configured
+	}
+	return r.participantManager.MaxParticipants()
+}
+
+// getBandwidthRatesForCongestion returns current bandwidth rates for congestion monitoring.
+func (r *Router) getBandwidthRatesForCongestion() (inbound, outbound uint64) {
+	return r.GetBandwidthRates()
+}
+
+// getMaxBandwidth returns the maximum bandwidth limit.
+func (r *Router) getMaxBandwidth() uint64 {
+	// Default to 1MB/s if not configured
+	// TODO: Make this configurable via RouterConfig
+	return 1024 * 1024
+}
+
+// getConnectionCount returns the current number of active transport connections.
+func (r *Router) getConnectionCount() int {
+	if r.TransportMuxer == nil {
+		return 0
+	}
+	// Count active sessions from all transports
+	count := 0
+	for _, t := range r.TransportMuxer.GetTransports() {
+		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
+			count += ntcp2Transport.GetSessionCount()
+		}
+	}
+	return count
+}
+
+// getMaxConnections returns the maximum number of transport connections allowed.
+func (r *Router) getMaxConnections() int {
+	// Default max connections
+	// TODO: Make this configurable via RouterConfig
+	return 200
+}
+
+// isAcceptingTunnels returns true if the router is accepting tunnel participation.
+func (r *Router) isAcceptingTunnels() bool {
+	// TODO: Add configuration option to disable tunnel participation
+	return true
+}
+
+// stopCongestionMonitor shuts down the congestion monitor if it is running.
+func (r *Router) stopCongestionMonitor() {
+	if r.congestionMonitor != nil {
+		r.congestionMonitor.Stop()
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopCongestionMonitor",
+			"phase":  "shutdown",
+			"reason": "congestion monitor stopped",
+		}).Debug("congestion monitor stopped")
 	}
 }
 
@@ -484,6 +590,15 @@ func (r *Router) Start() {
 		"step":   3,
 		"reason": "bandwidth tracker initialized",
 	}).Debug("bandwidth tracker started")
+
+	// Initialize and start congestion monitoring (PROP_162)
+	r.startCongestionMonitor()
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Start",
+		"phase":  "startup",
+		"step":   4,
+		"reason": "congestion monitor initialized",
+	}).Debug("congestion monitor started")
 
 	// Start I2CP server if enabled
 	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
@@ -657,6 +772,14 @@ func (r *Router) GetGarlicRouter() *GarlicMessageRouter {
 	r.runMux.RLock()
 	defer r.runMux.RUnlock()
 	return r.garlicRouter
+}
+
+// GetCongestionMonitor returns the congestion monitor for PROP_162 congestion cap tracking.
+// Returns nil if the congestion monitor has not been initialized yet.
+func (r *Router) GetCongestionMonitor() CongestionStateProvider {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.congestionMonitor
 }
 
 // ensureNetDBReady validates NetDB state and performs reseed if needed

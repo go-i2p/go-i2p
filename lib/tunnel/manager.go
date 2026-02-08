@@ -199,6 +199,12 @@ func (m *Manager) ParticipantCount() int {
 	return len(m.participants)
 }
 
+// MaxParticipants returns the maximum allowed number of participant tunnels.
+// This is the hard limit used for congestion monitoring (PROP_162).
+func (m *Manager) MaxParticipants() int {
+	return m.maxParticipants
+}
+
 // softLimit returns 50% of maxParticipants.
 // This is always derived, not independently configured.
 // Probabilistic rejection starts at the soft limit.
