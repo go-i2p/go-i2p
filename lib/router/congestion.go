@@ -1,0 +1,519 @@
+package router
+
+import (
+	"sync"
+	"time"
+
+	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/logger"
+)
+
+// CongestionStateProvider provides access to local router congestion state.
+// This interface is used by RouterInfo construction to determine which
+// congestion flag (D/E/G or none) should be advertised.
+type CongestionStateProvider interface {
+	// GetCongestionFlag returns the current congestion flag ("D", "E", "G", or "")
+	GetCongestionFlag() config.CongestionFlag
+
+	// GetCongestionLevel returns a numeric congestion level (0=none, 1=D, 2=E, 3=G)
+	GetCongestionLevel() int
+
+	// ShouldAdvertiseCongestion returns true if any congestion flag should be advertised
+	ShouldAdvertiseCongestion() bool
+}
+
+// CongestionMetricsCollector gathers metrics used to determine congestion state.
+// Implementations collect data from tunnel manager, bandwidth tracker, and transports.
+type CongestionMetricsCollector interface {
+	// GetParticipatingTunnelRatio returns current/max participating tunnels ratio
+	GetParticipatingTunnelRatio() float64
+
+	// GetBandwidthUtilization returns current bandwidth usage ratio (0.0-1.0)
+	GetBandwidthUtilization() float64
+
+	// GetConnectionUtilization returns connection count / max connections ratio
+	GetConnectionUtilization() float64
+
+	// IsAcceptingTunnels returns false if router is configured to reject all tunnels
+	IsAcceptingTunnels() bool
+}
+
+// CongestionSample represents a single congestion measurement at a point in time.
+type CongestionSample struct {
+	Timestamp                time.Time
+	ParticipatingTunnelRatio float64
+	BandwidthUtilization     float64
+	ConnectionUtilization    float64
+}
+
+// CongestionMonitor tracks local router congestion and determines the appropriate
+// congestion flag (D/E/G) to advertise in RouterInfo caps.
+//
+// Design decisions:
+// - Uses rolling average over configurable window (default 5 minutes per spec)
+// - Implements hysteresis to prevent flag flapping at threshold boundaries
+// - Thread-safe for concurrent access from RouterInfo publisher
+// - State machine: None → D → E → G with hysteresis thresholds for downgrades
+type CongestionMonitor struct {
+	mu sync.RWMutex
+
+	// Configuration
+	cfg config.CongestionDefaults
+
+	// Metrics source
+	collector CongestionMetricsCollector
+
+	// Rolling average samples
+	samples    []CongestionSample
+	maxSamples int
+
+	// Current state
+	currentFlag config.CongestionFlag
+
+	// Startup grace period - don't advertise congestion at startup
+	startupTime     time.Time
+	startupGraceSec int
+
+	// Background sampling
+	stopChan chan struct{}
+	wg       sync.WaitGroup
+}
+
+// NewCongestionMonitor creates a new congestion monitor with the given configuration.
+// The collector parameter provides metrics; if nil, a no-op collector is used.
+func NewCongestionMonitor(cfg config.CongestionDefaults, collector CongestionMetricsCollector) *CongestionMonitor {
+	// Default to 1-second sampling, calculate max samples from averaging window
+	sampleInterval := time.Second
+	maxSamples := int(cfg.AveragingWindow / sampleInterval)
+	if maxSamples < 10 {
+		maxSamples = 10 // Minimum 10 samples
+	}
+
+	m := &CongestionMonitor{
+		cfg:             cfg,
+		collector:       collector,
+		samples:         make([]CongestionSample, 0, maxSamples),
+		maxSamples:      maxSamples,
+		currentFlag:     config.CongestionFlagNone,
+		startupTime:     time.Now(),
+		startupGraceSec: 60, // 60 second startup grace period
+		stopChan:        make(chan struct{}),
+	}
+
+	// Use no-op collector if none provided
+	if m.collector == nil {
+		m.collector = &noopMetricsCollector{}
+	}
+
+	return m
+}
+
+// Start begins the background congestion sampling goroutine.
+func (m *CongestionMonitor) Start() {
+	m.wg.Add(1)
+	go m.samplingLoop()
+
+	log.WithFields(logger.Fields{
+		"at":               "CongestionMonitor.Start",
+		"reason":           "congestion monitoring started",
+		"averaging_window": m.cfg.AveragingWindow,
+		"max_samples":      m.maxSamples,
+	}).Debug("congestion monitor started")
+}
+
+// Stop stops the background sampling goroutine.
+func (m *CongestionMonitor) Stop() {
+	close(m.stopChan)
+	m.wg.Wait()
+
+	log.WithFields(logger.Fields{
+		"at":     "CongestionMonitor.Stop",
+		"reason": "congestion monitoring stopped",
+	}).Debug("congestion monitor stopped")
+}
+
+// samplingLoop periodically samples congestion metrics and updates state.
+func (m *CongestionMonitor) samplingLoop() {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.takeSample()
+		case <-m.stopChan:
+			return
+		}
+	}
+}
+
+// takeSample takes a new congestion sample and updates the state.
+func (m *CongestionMonitor) takeSample() {
+	sample := CongestionSample{
+		Timestamp:                time.Now(),
+		ParticipatingTunnelRatio: m.collector.GetParticipatingTunnelRatio(),
+		BandwidthUtilization:     m.collector.GetBandwidthUtilization(),
+		ConnectionUtilization:    m.collector.GetConnectionUtilization(),
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Add sample to rolling window
+	m.samples = append(m.samples, sample)
+	if len(m.samples) > m.maxSamples {
+		m.samples = m.samples[1:]
+	}
+
+	// Update congestion state based on rolling average
+	m.updateState()
+}
+
+// updateState calculates the rolling average and updates the congestion flag.
+// Must be called with m.mu held.
+func (m *CongestionMonitor) updateState() {
+	if len(m.samples) == 0 {
+		return
+	}
+
+	avgRatio := m.calculateAverageRatio()
+	newFlag := m.determineFlag(avgRatio)
+
+	if newFlag != m.currentFlag {
+		log.WithFields(logger.Fields{
+			"at":            "CongestionMonitor.updateState",
+			"reason":        "congestion state changed",
+			"old_flag":      m.currentFlag.String(),
+			"new_flag":      newFlag.String(),
+			"average_ratio": avgRatio,
+		}).Info("congestion flag changed")
+
+		m.currentFlag = newFlag
+	}
+}
+
+// calculateAverageRatio computes the weighted average congestion ratio.
+// Uses participating tunnel ratio as the primary metric.
+// Must be called with m.mu held.
+func (m *CongestionMonitor) calculateAverageRatio() float64 {
+	if len(m.samples) == 0 {
+		return 0
+	}
+
+	var sum float64
+	for _, s := range m.samples {
+		// Primary metric is participating tunnel ratio
+		// Could also incorporate bandwidth and connection utilization with weights
+		sum += s.ParticipatingTunnelRatio
+	}
+
+	return sum / float64(len(m.samples))
+}
+
+// determineFlag determines the appropriate congestion flag based on the ratio.
+// Implements hysteresis to prevent flag flapping.
+// Must be called with m.mu held.
+func (m *CongestionMonitor) determineFlag(ratio float64) config.CongestionFlag {
+	// If not accepting tunnels, always return G
+	if !m.collector.IsAcceptingTunnels() {
+		return config.CongestionFlagG
+	}
+
+	current := m.currentFlag
+
+	// Handle state transitions with hysteresis
+	switch current {
+	case config.CongestionFlagG:
+		// Stay G if still above ClearGFlagThreshold, downgrade to E otherwise
+		if ratio >= m.cfg.ClearGFlagThreshold {
+			return config.CongestionFlagG
+		}
+		// Below clear threshold - check if we should be at E or lower
+		if ratio >= m.cfg.EFlagThreshold {
+			return config.CongestionFlagE
+		}
+		if ratio >= m.cfg.DFlagThreshold {
+			return config.CongestionFlagD
+		}
+		return config.CongestionFlagNone
+
+	case config.CongestionFlagE:
+		// Check for upgrade to G first
+		if ratio >= m.cfg.GFlagThreshold {
+			return config.CongestionFlagG
+		}
+		// Stay E if still above ClearEFlagThreshold
+		if ratio >= m.cfg.ClearEFlagThreshold {
+			return config.CongestionFlagE
+		}
+		// Below clear threshold - check if we should be at D or None
+		if ratio >= m.cfg.DFlagThreshold {
+			return config.CongestionFlagD
+		}
+		return config.CongestionFlagNone
+
+	case config.CongestionFlagD:
+		// Check for upgrades first
+		if ratio >= m.cfg.GFlagThreshold {
+			return config.CongestionFlagG
+		}
+		if ratio >= m.cfg.EFlagThreshold {
+			return config.CongestionFlagE
+		}
+		// Stay D if still above ClearDFlagThreshold
+		if ratio >= m.cfg.ClearDFlagThreshold {
+			return config.CongestionFlagD
+		}
+		return config.CongestionFlagNone
+
+	default: // CongestionFlagNone
+		// Check for upgrades from no congestion
+		if ratio >= m.cfg.GFlagThreshold {
+			return config.CongestionFlagG
+		}
+		if ratio >= m.cfg.EFlagThreshold {
+			return config.CongestionFlagE
+		}
+		if ratio >= m.cfg.DFlagThreshold {
+			return config.CongestionFlagD
+		}
+		return config.CongestionFlagNone
+	}
+}
+
+// GetCongestionFlag returns the current congestion flag.
+// Returns empty string during startup grace period per spec (prevents restart detection).
+func (m *CongestionMonitor) GetCongestionFlag() config.CongestionFlag {
+	// Check startup grace period
+	if time.Since(m.startupTime) < time.Duration(m.startupGraceSec)*time.Second {
+		return config.CongestionFlagNone
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.currentFlag
+}
+
+// GetCongestionLevel returns the numeric congestion level (0=none, 1=D, 2=E, 3=G).
+func (m *CongestionMonitor) GetCongestionLevel() int {
+	return m.GetCongestionFlag().CongestionLevel()
+}
+
+// ShouldAdvertiseCongestion returns true if any congestion flag should be advertised.
+func (m *CongestionMonitor) ShouldAdvertiseCongestion() bool {
+	return m.GetCongestionFlag() != config.CongestionFlagNone
+}
+
+// GetCurrentRatio returns the current rolling average congestion ratio.
+// Useful for debugging and monitoring.
+func (m *CongestionMonitor) GetCurrentRatio() float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.calculateAverageRatio()
+}
+
+// GetSampleCount returns the current number of samples in the rolling window.
+func (m *CongestionMonitor) GetSampleCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return len(m.samples)
+}
+
+// ForceFlag allows manually setting the congestion flag for testing or emergency use.
+// This bypasses the normal state machine logic.
+func (m *CongestionMonitor) ForceFlag(flag config.CongestionFlag) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.currentFlag = flag
+
+	log.WithFields(logger.Fields{
+		"at":     "CongestionMonitor.ForceFlag",
+		"reason": "congestion flag manually set",
+		"flag":   flag.String(),
+	}).Warn("congestion flag manually forced")
+}
+
+// noopMetricsCollector is a no-op implementation for when no collector is provided.
+type noopMetricsCollector struct{}
+
+func (n *noopMetricsCollector) GetParticipatingTunnelRatio() float64 { return 0 }
+func (n *noopMetricsCollector) GetBandwidthUtilization() float64     { return 0 }
+func (n *noopMetricsCollector) GetConnectionUtilization() float64    { return 0 }
+func (n *noopMetricsCollector) IsAcceptingTunnels() bool             { return true }
+
+// Ensure interfaces are implemented
+var _ CongestionStateProvider = (*CongestionMonitor)(nil)
+var _ CongestionMetricsCollector = (*noopMetricsCollector)(nil)
+
+// RouterMetricsCollector collects congestion metrics from router subsystems.
+// This is the production implementation of CongestionMetricsCollector.
+type RouterMetricsCollector struct {
+	// participantCountFunc returns current participating tunnel count
+	participantCountFunc func() int
+	// maxParticipantsFunc returns max participating tunnel limit
+	maxParticipantsFunc func() int
+	// bandwidthRatesFunc returns current inbound/outbound bandwidth in bytes/sec
+	bandwidthRatesFunc func() (inbound, outbound uint64)
+	// maxBandwidthFunc returns configured max bandwidth in bytes/sec (0 = unlimited)
+	maxBandwidthFunc func() uint64
+	// connectionCountFunc returns current transport connection count
+	connectionCountFunc func() int
+	// maxConnectionsFunc returns max transport connections
+	maxConnectionsFunc func() int
+	// acceptingTunnelsFunc returns whether router is accepting tunnels
+	acceptingTunnelsFunc func() bool
+}
+
+// NewRouterMetricsCollector creates a RouterMetricsCollector with the provided functions.
+// Any nil function will use a safe default that returns zero or true.
+func NewRouterMetricsCollector(opts ...RouterMetricsOption) *RouterMetricsCollector {
+	c := &RouterMetricsCollector{
+		participantCountFunc: func() int { return 0 },
+		maxParticipantsFunc:  func() int { return 15000 },
+		bandwidthRatesFunc:   func() (uint64, uint64) { return 0, 0 },
+		maxBandwidthFunc:     func() uint64 { return 0 },
+		connectionCountFunc:  func() int { return 0 },
+		maxConnectionsFunc:   func() int { return 200 },
+		acceptingTunnelsFunc: func() bool { return true },
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+// RouterMetricsOption configures a RouterMetricsCollector.
+type RouterMetricsOption func(*RouterMetricsCollector)
+
+// WithParticipantCount sets the function to get current participant count.
+func WithParticipantCount(f func() int) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.participantCountFunc = f
+		}
+	}
+}
+
+// WithMaxParticipants sets the function to get max participants.
+func WithMaxParticipants(f func() int) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.maxParticipantsFunc = f
+		}
+	}
+}
+
+// WithBandwidthRates sets the function to get bandwidth rates.
+func WithBandwidthRates(f func() (inbound, outbound uint64)) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.bandwidthRatesFunc = f
+		}
+	}
+}
+
+// WithMaxBandwidth sets the function to get max bandwidth.
+func WithMaxBandwidth(f func() uint64) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.maxBandwidthFunc = f
+		}
+	}
+}
+
+// WithConnectionCount sets the function to get connection count.
+func WithConnectionCount(f func() int) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.connectionCountFunc = f
+		}
+	}
+}
+
+// WithMaxConnections sets the function to get max connections.
+func WithMaxConnections(f func() int) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.maxConnectionsFunc = f
+		}
+	}
+}
+
+// WithAcceptingTunnels sets the function to check if accepting tunnels.
+func WithAcceptingTunnels(f func() bool) RouterMetricsOption {
+	return func(c *RouterMetricsCollector) {
+		if f != nil {
+			c.acceptingTunnelsFunc = f
+		}
+	}
+}
+
+// GetParticipatingTunnelRatio returns current/max participating tunnels ratio.
+func (c *RouterMetricsCollector) GetParticipatingTunnelRatio() float64 {
+	count := c.participantCountFunc()
+	max := c.maxParticipantsFunc()
+
+	if max <= 0 {
+		return 0
+	}
+
+	ratio := float64(count) / float64(max)
+	if ratio > 1.0 {
+		ratio = 1.0
+	}
+	return ratio
+}
+
+// GetBandwidthUtilization returns current bandwidth usage ratio.
+func (c *RouterMetricsCollector) GetBandwidthUtilization() float64 {
+	inbound, outbound := c.bandwidthRatesFunc()
+	maxBandwidth := c.maxBandwidthFunc()
+
+	if maxBandwidth == 0 {
+		return 0 // Unlimited bandwidth
+	}
+
+	// Use the higher of inbound or outbound
+	current := inbound
+	if outbound > current {
+		current = outbound
+	}
+
+	ratio := float64(current) / float64(maxBandwidth)
+	if ratio > 1.0 {
+		ratio = 1.0
+	}
+	return ratio
+}
+
+// GetConnectionUtilization returns connection count / max connections ratio.
+func (c *RouterMetricsCollector) GetConnectionUtilization() float64 {
+	count := c.connectionCountFunc()
+	max := c.maxConnectionsFunc()
+
+	if max <= 0 {
+		return 0
+	}
+
+	ratio := float64(count) / float64(max)
+	if ratio > 1.0 {
+		ratio = 1.0
+	}
+	return ratio
+}
+
+// IsAcceptingTunnels returns whether the router is accepting tunnel participation.
+func (c *RouterMetricsCollector) IsAcceptingTunnels() bool {
+	return c.acceptingTunnelsFunc()
+}
+
+// Ensure RouterMetricsCollector implements CongestionMetricsCollector
+var _ CongestionMetricsCollector = (*RouterMetricsCollector)(nil)
