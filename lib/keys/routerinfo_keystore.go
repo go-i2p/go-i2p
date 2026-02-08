@@ -280,45 +280,57 @@ type RouterInfoOptions struct {
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
 // The opts parameter allows specifying optional parameters like congestion flags.
 func (ks *RouterInfoKeystore) ConstructRouterInfo(addresses []*router_address.RouterAddress, opts ...RouterInfoOptions) (*router_info.RouterInfo, error) {
-	log.WithFields(map[string]interface{}{
-		"at":            "ConstructRouterInfo",
-		"address_count": len(addresses),
-	}).Debug("Constructing RouterInfo")
+	ks.logConstructionStart(len(addresses))
 
 	publicKey, privateKey, err := ks.validateAndGetKeys()
 	if err != nil {
-		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to validate and get keys")
-		return nil, err
+		return nil, ks.logAndWrapError(err, "Failed to validate and get keys")
 	}
 
 	cert, err := ks.createEd25519Certificate()
 	if err != nil {
-		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to create certificate")
-		return nil, err
+		return nil, ks.logAndWrapError(err, "Failed to create certificate")
 	}
 
 	routerIdentity, err := ks.buildRouterIdentity(publicKey, cert)
 	if err != nil {
-		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to build router identity")
-		return nil, err
+		return nil, ks.logAndWrapError(err, "Failed to build router identity")
 	}
 
-	// Merge options (last one wins)
+	options := ks.mergeOptions(opts)
+
+	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey, options)
+	if err != nil {
+		return nil, ks.logAndWrapError(err, "Failed to assemble RouterInfo")
+	}
+
+	log.WithField("at", "ConstructRouterInfo").Debug("Successfully constructed RouterInfo")
+	return ri, nil
+}
+
+// logConstructionStart logs the start of RouterInfo construction.
+func (ks *RouterInfoKeystore) logConstructionStart(addressCount int) {
+	log.WithFields(map[string]interface{}{
+		"at":            "ConstructRouterInfo",
+		"address_count": addressCount,
+	}).Debug("Constructing RouterInfo")
+}
+
+// logAndWrapError logs an error and returns it for ConstructRouterInfo.
+func (ks *RouterInfoKeystore) logAndWrapError(err error, msg string) error {
+	log.WithError(err).WithField("at", "ConstructRouterInfo").Error(msg)
+	return err
+}
+
+// mergeOptions combines RouterInfoOptions, with later options taking precedence.
+func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoOptions {
 	var options RouterInfoOptions
 	for _, opt := range opts {
 		if opt.CongestionFlag != "" {
 			options.CongestionFlag = opt.CongestionFlag
 		}
 	}
-
-	ri, err := ks.assembleRouterInfo(routerIdentity, addresses, privateKey, options)
-	if err != nil {
-		log.WithError(err).WithField("at", "ConstructRouterInfo").Error("Failed to assemble RouterInfo")
-		return nil, err
-	}
-
-	log.WithField("at", "ConstructRouterInfo").Debug("Successfully constructed RouterInfo")
-	return ri, nil
+	return options
 }
 
 // validateAndGetKeys retrieves and validates the signing keys from the keystore

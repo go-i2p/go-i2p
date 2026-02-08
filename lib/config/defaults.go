@@ -922,18 +922,28 @@ func validateCongestionThresholds(congestion CongestionDefaults) error {
 
 // validateCongestionHysteresis checks that clear thresholds provide proper hysteresis.
 func validateCongestionHysteresis(congestion CongestionDefaults) error {
-	// Clear thresholds must be in range [0.0, 1.0]
-	if congestion.ClearDFlagThreshold < 0 || congestion.ClearDFlagThreshold > 1 {
+	if err := validateClearThresholdsInRange(congestion); err != nil {
+		return err
+	}
+	return validateClearThresholdsBelowAdvertise(congestion)
+}
+
+// validateClearThresholdsInRange checks that all clear thresholds are in [0.0, 1.0].
+func validateClearThresholdsInRange(congestion CongestionDefaults) error {
+	if !isValidThresholdRange(congestion.ClearDFlagThreshold) {
 		return newValidationError("Congestion.ClearDFlagThreshold must be between 0.0 and 1.0")
 	}
-	if congestion.ClearEFlagThreshold < 0 || congestion.ClearEFlagThreshold > 1 {
+	if !isValidThresholdRange(congestion.ClearEFlagThreshold) {
 		return newValidationError("Congestion.ClearEFlagThreshold must be between 0.0 and 1.0")
 	}
-	if congestion.ClearGFlagThreshold < 0 || congestion.ClearGFlagThreshold > 1 {
+	if !isValidThresholdRange(congestion.ClearGFlagThreshold) {
 		return newValidationError("Congestion.ClearGFlagThreshold must be between 0.0 and 1.0")
 	}
+	return nil
+}
 
-	// Clear thresholds must be below their corresponding advertisement thresholds
+// validateClearThresholdsBelowAdvertise ensures clear thresholds are below advertisement thresholds.
+func validateClearThresholdsBelowAdvertise(congestion CongestionDefaults) error {
 	if congestion.ClearDFlagThreshold >= congestion.DFlagThreshold {
 		return newValidationError("Congestion.ClearDFlagThreshold must be less than DFlagThreshold for hysteresis")
 	}
@@ -944,6 +954,11 @@ func validateCongestionHysteresis(congestion CongestionDefaults) error {
 		return newValidationError("Congestion.ClearGFlagThreshold must be less than GFlagThreshold for hysteresis")
 	}
 	return nil
+}
+
+// isValidThresholdRange checks if a threshold value is in the valid range [0.0, 1.0].
+func isValidThresholdRange(value float64) bool {
+	return value >= 0 && value <= 1
 }
 
 // validateCongestionCapacityMultipliers checks that capacity multipliers are valid.

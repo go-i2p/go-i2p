@@ -133,84 +133,125 @@ func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 	}
 
 	s.selectionMetrics.TotalSelections++
+	allExcluded := s.initExclusionSet(exclude)
 
-	// Track excluded peers including G-flagged ones we find
+	selectedPeers, retries, err := s.selectWithRetries(count, allExcluded)
+	if err != nil {
+		return nil, err
+	}
+
+	s.updateRetryMetrics(retries)
+	s.checkInsufficientPeers(count, len(selectedPeers), retries)
+	s.logSelectionSummary(count, len(selectedPeers), retries)
+
+	return selectedPeers, nil
+}
+
+// initExclusionSet creates a hash set from the initial exclude list.
+func (s *DefaultCongestionAwarePeerSelector) initExclusionSet(exclude []common.Hash) map[common.Hash]struct{} {
 	allExcluded := make(map[common.Hash]struct{}, len(exclude))
 	for _, h := range exclude {
 		allExcluded[h] = struct{}{}
 	}
+	return allExcluded
+}
 
+// selectWithRetries performs the retry loop to find non-G-flagged peers.
+func (s *DefaultCongestionAwarePeerSelector) selectWithRetries(
+	count int,
+	allExcluded map[common.Hash]struct{},
+) ([]router_info.RouterInfo, int, error) {
 	var selectedPeers []router_info.RouterInfo
 	retries := 0
 
 	for len(selectedPeers) < count && retries <= s.maxRetries {
-		needed := count - len(selectedPeers)
-		// Request extra to account for potential G-flag exclusions
-		requestCount := needed + (needed / 2) + 1
-
-		excludeList := hashSetToSlice(allExcluded)
-		candidates, err := s.underlying.SelectPeers(requestCount, excludeList)
+		candidates, err := s.fetchCandidates(count-len(selectedPeers), allExcluded)
 		if err != nil {
 			s.selectionMetrics.SelectionFailures++
-			return nil, fmt.Errorf("underlying selector error: %w", err)
+			return nil, retries, fmt.Errorf("underlying selector error: %w", err)
 		}
-
 		if len(candidates) == 0 {
-			break // No more peers available
+			break
 		}
 
-		// Filter and collect non-G peers
-		for _, ri := range candidates {
-			if len(selectedPeers) >= count {
-				break
-			}
-
-			hash, err := ri.IdentHash()
-			if err != nil {
-				continue
-			}
-
-			// Add to excluded so we don't select again
-			allExcluded[hash] = struct{}{}
-
-			if s.ShouldExcludePeer(ri) {
-				s.selectionMetrics.GFlagExclusions++
-				s.logPeerExclusion(hash, "G flag - rejecting all tunnels")
-				continue
-			}
-
-			// Track derating metrics
-			s.recordDeratingMetrics(hash)
-			selectedPeers = append(selectedPeers, ri)
-		}
-
-		if retries > 0 && s.retryDelay > 0 {
-			time.Sleep(s.retryDelay)
-		}
+		selectedPeers = s.filterAndCollectPeers(candidates, selectedPeers, count, allExcluded)
+		s.applyRetryDelay(retries)
 		retries++
 	}
 
-	// Update retry metrics
+	return selectedPeers, retries, nil
+}
+
+// fetchCandidates retrieves candidate peers from the underlying selector.
+func (s *DefaultCongestionAwarePeerSelector) fetchCandidates(
+	needed int,
+	allExcluded map[common.Hash]struct{},
+) ([]router_info.RouterInfo, error) {
+	requestCount := needed + (needed / 2) + 1
+	excludeList := hashSetToSlice(allExcluded)
+	return s.underlying.SelectPeers(requestCount, excludeList)
+}
+
+// filterAndCollectPeers filters G-flagged peers and collects valid ones.
+func (s *DefaultCongestionAwarePeerSelector) filterAndCollectPeers(
+	candidates []router_info.RouterInfo,
+	selectedPeers []router_info.RouterInfo,
+	count int,
+	allExcluded map[common.Hash]struct{},
+) []router_info.RouterInfo {
+	for _, ri := range candidates {
+		if len(selectedPeers) >= count {
+			break
+		}
+
+		hash, err := ri.IdentHash()
+		if err != nil {
+			continue
+		}
+
+		allExcluded[hash] = struct{}{}
+
+		if s.ShouldExcludePeer(ri) {
+			s.selectionMetrics.GFlagExclusions++
+			s.logPeerExclusion(hash, "G flag - rejecting all tunnels")
+			continue
+		}
+
+		s.recordDeratingMetrics(hash)
+		selectedPeers = append(selectedPeers, ri)
+	}
+	return selectedPeers
+}
+
+// applyRetryDelay applies configured delay between retries.
+func (s *DefaultCongestionAwarePeerSelector) applyRetryDelay(retries int) {
+	if retries > 0 && s.retryDelay > 0 {
+		time.Sleep(s.retryDelay)
+	}
+}
+
+// updateRetryMetrics updates the retry-related metrics.
+func (s *DefaultCongestionAwarePeerSelector) updateRetryMetrics(retries int) {
 	if retries > 1 {
 		s.selectionMetrics.selectionWithRetry++
 		s.selectionMetrics.totalRetryCount += int64(retries - 1)
 		s.selectionMetrics.AverageRetries = float64(s.selectionMetrics.totalRetryCount) /
 			float64(s.selectionMetrics.selectionWithRetry)
 	}
+}
 
-	if len(selectedPeers) < count {
+// checkInsufficientPeers logs a warning if not enough peers were found.
+func (s *DefaultCongestionAwarePeerSelector) checkInsufficientPeers(requested, selected, retries int) {
+	if selected < requested {
 		s.selectionMetrics.InsufficientPeers++
 		log.WithFields(logger.Fields{
 			"at":        "SelectPeersWithCongestionAwareness",
-			"requested": count,
-			"selected":  len(selectedPeers),
+			"requested": requested,
+			"selected":  selected,
 			"retries":   retries,
 			"reason":    "insufficient non-congested peers available",
 		}).Warn("could not find enough non-G-flagged peers")
 	}
-
-	s.logSelectionSummary(count, len(selectedPeers), retries)
-	return selectedPeers, nil
 }
 
 // ShouldExcludePeer returns true if the peer should be excluded due to G flag.

@@ -216,71 +216,86 @@ func (m *CongestionMonitor) calculateAverageRatio() float64 {
 // Implements hysteresis to prevent flag flapping.
 // Must be called with m.mu held.
 func (m *CongestionMonitor) determineFlag(ratio float64) config.CongestionFlag {
-	// If not accepting tunnels, always return G
 	if !m.collector.IsAcceptingTunnels() {
 		return config.CongestionFlagG
 	}
 
-	current := m.currentFlag
-
-	// Handle state transitions with hysteresis
-	switch current {
+	switch m.currentFlag {
 	case config.CongestionFlagG:
-		// Stay G if still above ClearGFlagThreshold, downgrade to E otherwise
-		if ratio >= m.cfg.ClearGFlagThreshold {
-			return config.CongestionFlagG
-		}
-		// Below clear threshold - check if we should be at E or lower
-		if ratio >= m.cfg.EFlagThreshold {
-			return config.CongestionFlagE
-		}
-		if ratio >= m.cfg.DFlagThreshold {
-			return config.CongestionFlagD
-		}
-		return config.CongestionFlagNone
-
+		return m.transitionFromGFlag(ratio)
 	case config.CongestionFlagE:
-		// Check for upgrade to G first
-		if ratio >= m.cfg.GFlagThreshold {
-			return config.CongestionFlagG
-		}
-		// Stay E if still above ClearEFlagThreshold
-		if ratio >= m.cfg.ClearEFlagThreshold {
-			return config.CongestionFlagE
-		}
-		// Below clear threshold - check if we should be at D or None
-		if ratio >= m.cfg.DFlagThreshold {
-			return config.CongestionFlagD
-		}
-		return config.CongestionFlagNone
-
+		return m.transitionFromEFlag(ratio)
 	case config.CongestionFlagD:
-		// Check for upgrades first
-		if ratio >= m.cfg.GFlagThreshold {
-			return config.CongestionFlagG
-		}
-		if ratio >= m.cfg.EFlagThreshold {
-			return config.CongestionFlagE
-		}
-		// Stay D if still above ClearDFlagThreshold
-		if ratio >= m.cfg.ClearDFlagThreshold {
-			return config.CongestionFlagD
-		}
-		return config.CongestionFlagNone
-
-	default: // CongestionFlagNone
-		// Check for upgrades from no congestion
-		if ratio >= m.cfg.GFlagThreshold {
-			return config.CongestionFlagG
-		}
-		if ratio >= m.cfg.EFlagThreshold {
-			return config.CongestionFlagE
-		}
-		if ratio >= m.cfg.DFlagThreshold {
-			return config.CongestionFlagD
-		}
-		return config.CongestionFlagNone
+		return m.transitionFromDFlag(ratio)
+	default:
+		return m.transitionFromNoFlag(ratio)
 	}
+}
+
+// transitionFromGFlag handles state transitions when currently at G flag.
+// Implements hysteresis: stays at G unless ratio drops below clear threshold.
+func (m *CongestionMonitor) transitionFromGFlag(ratio float64) config.CongestionFlag {
+	if ratio >= m.cfg.ClearGFlagThreshold {
+		return config.CongestionFlagG
+	}
+	return m.determineFlagByRatio(ratio)
+}
+
+// transitionFromEFlag handles state transitions when currently at E flag.
+// Checks for upgrade to G, or downgrade with hysteresis.
+func (m *CongestionMonitor) transitionFromEFlag(ratio float64) config.CongestionFlag {
+	if ratio >= m.cfg.GFlagThreshold {
+		return config.CongestionFlagG
+	}
+	if ratio >= m.cfg.ClearEFlagThreshold {
+		return config.CongestionFlagE
+	}
+	return m.determineFlagByRatioForD(ratio)
+}
+
+// transitionFromDFlag handles state transitions when currently at D flag.
+// Checks for upgrades to E/G, or downgrade with hysteresis.
+func (m *CongestionMonitor) transitionFromDFlag(ratio float64) config.CongestionFlag {
+	if ratio >= m.cfg.GFlagThreshold {
+		return config.CongestionFlagG
+	}
+	if ratio >= m.cfg.EFlagThreshold {
+		return config.CongestionFlagE
+	}
+	if ratio >= m.cfg.ClearDFlagThreshold {
+		return config.CongestionFlagD
+	}
+	return config.CongestionFlagNone
+}
+
+// transitionFromNoFlag handles state transitions from no congestion state.
+// Only checks for upgrades to D/E/G flags.
+func (m *CongestionMonitor) transitionFromNoFlag(ratio float64) config.CongestionFlag {
+	return m.determineFlagByRatio(ratio)
+}
+
+// determineFlagByRatio returns the appropriate flag based on ratio thresholds.
+// Used when transitioning down from G or up from None.
+func (m *CongestionMonitor) determineFlagByRatio(ratio float64) config.CongestionFlag {
+	if ratio >= m.cfg.GFlagThreshold {
+		return config.CongestionFlagG
+	}
+	if ratio >= m.cfg.EFlagThreshold {
+		return config.CongestionFlagE
+	}
+	if ratio >= m.cfg.DFlagThreshold {
+		return config.CongestionFlagD
+	}
+	return config.CongestionFlagNone
+}
+
+// determineFlagByRatioForD returns D or None based on ratio.
+// Used when downgrading from E flag.
+func (m *CongestionMonitor) determineFlagByRatioForD(ratio float64) config.CongestionFlag {
+	if ratio >= m.cfg.DFlagThreshold {
+		return config.CongestionFlagD
+	}
+	return config.CongestionFlagNone
 }
 
 // GetCongestionFlag returns the current congestion flag.

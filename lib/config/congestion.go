@@ -161,21 +161,24 @@ func buildCongestionDefaults() CongestionDefaults {
 // Returns CongestionFlagNone if no congestion flag is found.
 // Checks for D, E, G flags in priority order (G > E > D).
 func ParseCongestionFlag(caps string) CongestionFlag {
-	// Check in priority order: G (most severe) first
-	for _, r := range caps {
-		if r == 'G' {
-			return CongestionFlagG
-		}
+	if containsFlag(caps, 'G') {
+		return CongestionFlagG
 	}
-	for _, r := range caps {
-		if r == 'E' {
-			return CongestionFlagE
-		}
+	if containsFlag(caps, 'E') {
+		return CongestionFlagE
 	}
-	for _, r := range caps {
-		if r == 'D' {
-			return CongestionFlagD
-		}
+	if containsFlag(caps, 'D') {
+		return CongestionFlagD
 	}
 	return CongestionFlagNone
+}
+
+// containsFlag checks if a caps string contains the specified flag character.
+func containsFlag(caps string, flag rune) bool {
+	for _, r := range caps {
+		if r == flag {
+			return true
+		}
+	}
+	return false
 }
