@@ -36,18 +36,32 @@ func InitConfig() {
 	CheckDefaultPasswordWarning(viper.GetString("i2pcontrol.password"))
 }
 
+// setDefaults initializes all viper configuration defaults from the defaults.go definitions.
+// It delegates to category-specific helper functions for better maintainability.
 func setDefaults() {
-	// Get comprehensive defaults from defaults.go
 	defaults := Defaults()
+	setRouterDefaults(defaults)
+	setNetDBDefaults(defaults)
+	setBootstrapDefaults(defaults)
+	setI2CPDefaults(defaults)
+	setI2PControlDefaults(defaults)
+	setTunnelDefaults(defaults)
+	setTransportDefaults(defaults)
+	setPerformanceDefaults(defaults)
+	setCongestionDefaults(defaults)
+}
 
-	// Router defaults
+// setRouterDefaults configures router-level viper defaults.
+func setRouterDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("base_dir", defaults.Router.BaseDir)
 	viper.SetDefault("working_dir", defaults.Router.WorkingDir)
 	viper.SetDefault("router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval)
 	viper.SetDefault("router.message_expiration_time", defaults.Router.MessageExpirationTime)
 	viper.SetDefault("router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions)
+}
 
-	// NetDB defaults
+// setNetDBDefaults configures network database viper defaults.
+func setNetDBDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("netdb.path", defaults.NetDB.Path)
 	viper.SetDefault("netdb.max_router_infos", defaults.NetDB.MaxRouterInfos)
 	viper.SetDefault("netdb.max_lease_sets", defaults.NetDB.MaxLeaseSets)
@@ -55,16 +69,20 @@ func setDefaults() {
 	viper.SetDefault("netdb.lease_set_refresh_threshold", defaults.NetDB.LeaseSetRefreshThreshold)
 	viper.SetDefault("netdb.exploration_interval", defaults.NetDB.ExplorationInterval)
 	viper.SetDefault("netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled)
+}
 
-	// Bootstrap defaults
+// setBootstrapDefaults configures bootstrap/reseed viper defaults.
+func setBootstrapDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold)
 	viper.SetDefault("bootstrap.bootstrap_type", defaults.Bootstrap.BootstrapType)
 	viper.SetDefault("bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout)
 	viper.SetDefault("bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers)
 	viper.SetDefault("bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval)
 	viper.SetDefault("bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers)
+}
 
-	// I2CP defaults
+// setI2CPDefaults configures I2CP protocol viper defaults.
+func setI2CPDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("i2cp.enabled", defaults.I2CP.Enabled)
 	viper.SetDefault("i2cp.address", defaults.I2CP.Address)
 	viper.SetDefault("i2cp.network", defaults.I2CP.Network)
@@ -73,8 +91,10 @@ func setDefaults() {
 	viper.SetDefault("i2cp.session_timeout", defaults.I2CP.SessionTimeout)
 	viper.SetDefault("i2cp.read_timeout", defaults.I2CP.ReadTimeout)
 	viper.SetDefault("i2cp.write_timeout", defaults.I2CP.WriteTimeout)
+}
 
-	// I2PControl defaults
+// setI2PControlDefaults configures I2PControl RPC interface viper defaults.
+func setI2PControlDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("i2pcontrol.enabled", defaults.I2PControl.Enabled)
 	viper.SetDefault("i2pcontrol.address", defaults.I2PControl.Address)
 	viper.SetDefault("i2pcontrol.password", defaults.I2PControl.Password)
@@ -82,8 +102,10 @@ func setDefaults() {
 	viper.SetDefault("i2pcontrol.cert_file", defaults.I2PControl.CertFile)
 	viper.SetDefault("i2pcontrol.key_file", defaults.I2PControl.KeyFile)
 	viper.SetDefault("i2pcontrol.token_expiration", defaults.I2PControl.TokenExpiration)
+}
 
-	// Tunnel defaults
+// setTunnelDefaults configures tunnel management viper defaults.
+func setTunnelDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("tunnel.min_pool_size", defaults.Tunnel.MinPoolSize)
 	viper.SetDefault("tunnel.max_pool_size", defaults.Tunnel.MaxPoolSize)
 	viper.SetDefault("tunnel.length", defaults.Tunnel.TunnelLength)
@@ -94,8 +116,10 @@ func setDefaults() {
 	viper.SetDefault("tunnel.build_retries", defaults.Tunnel.BuildRetries)
 	viper.SetDefault("tunnel.replace_before_expiration", defaults.Tunnel.ReplaceBeforeExpiration)
 	viper.SetDefault("tunnel.maintenance_interval", defaults.Tunnel.MaintenanceInterval)
+}
 
-	// Transport defaults
+// setTransportDefaults configures transport layer viper defaults.
+func setTransportDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("transport.ntcp2_enabled", defaults.Transport.NTCP2Enabled)
 	viper.SetDefault("transport.ntcp2_port", defaults.Transport.NTCP2Port)
 	viper.SetDefault("transport.ntcp2_max_connections", defaults.Transport.NTCP2MaxConnections)
@@ -104,15 +128,19 @@ func setDefaults() {
 	viper.SetDefault("transport.connection_timeout", defaults.Transport.ConnectionTimeout)
 	viper.SetDefault("transport.idle_timeout", defaults.Transport.IdleTimeout)
 	viper.SetDefault("transport.max_message_size", defaults.Transport.MaxMessageSize)
+}
 
-	// Performance defaults
+// setPerformanceDefaults configures performance tuning viper defaults.
+func setPerformanceDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("performance.message_queue_size", defaults.Performance.MessageQueueSize)
 	viper.SetDefault("performance.worker_pool_size", defaults.Performance.WorkerPoolSize)
 	viper.SetDefault("performance.garlic_encryption_cache_size", defaults.Performance.GarlicEncryptionCacheSize)
 	viper.SetDefault("performance.fragment_cache_size", defaults.Performance.FragmentCacheSize)
 	viper.SetDefault("performance.cleanup_interval", defaults.Performance.CleanupInterval)
+}
 
-	// Congestion defaults (Prop 162)
+// setCongestionDefaults configures congestion control viper defaults per Prop 162.
+func setCongestionDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("router.congestion.d_flag_threshold", defaults.Congestion.DFlagThreshold)
 	viper.SetDefault("router.congestion.e_flag_threshold", defaults.Congestion.EFlagThreshold)
 	viper.SetDefault("router.congestion.g_flag_threshold", defaults.Congestion.GFlagThreshold)

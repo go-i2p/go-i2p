@@ -314,80 +314,96 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 }
 
 // getDefaultNetDbSearchPaths returns default search paths for netDb directories
-// based on the operating system
+// based on the operating system. It delegates to OS-specific helper functions.
 func getDefaultNetDbSearchPaths() []string {
-	paths := make([]string, 0)
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "getDefaultNetDbSearchPaths",
-			"phase":  "bootstrap",
-			"reason": "failed to determine user home directory",
-		}).Warn("failed to get user home directory")
-		homeDir = "~"
-	}
+	homeDir := getHomeDir()
 
 	switch runtime.GOOS {
 	case "linux":
-		// Java I2P default locations on Linux
-		paths = append(paths,
-			filepath.Join(homeDir, ".i2p/netDb"),
-			"/var/lib/i2p/i2p-config/netDb",
-			"/usr/share/i2p/netDb",
-		)
-		// i2pd default locations on Linux
-		paths = append(paths,
-			filepath.Join(homeDir, ".i2pd/netDb"),
-			"/var/lib/i2pd/netDb",
-		)
-
+		return getLinuxNetDbPaths(homeDir)
 	case "darwin":
-		// Java I2P default locations on macOS
-		paths = append(paths,
-			filepath.Join(homeDir, "Library/Application Support/i2p/netDb"),
-			filepath.Join(homeDir, ".i2p/netDb"),
-		)
-		// i2pd default locations on macOS
-		paths = append(paths,
-			filepath.Join(homeDir, "Library/Application Support/i2pd/netDb"),
-			filepath.Join(homeDir, ".i2pd/netDb"),
-		)
-
+		return getDarwinNetDbPaths(homeDir)
 	case "windows":
-		appData := os.Getenv("APPDATA")
-		if appData == "" {
-			// APPDATA environment variable not set - use standard fallback path
-			log.WithFields(logger.Fields{
-				"at":            "getDefaultNetDbSearchPaths",
-				"phase":         "bootstrap",
-				"reason":        "appdata_env_missing",
-				"os":            "windows",
-				"fallback_path": filepath.Join(homeDir, "AppData", "Roaming"),
-				"impact":        "using default Windows AppData location",
-			}).Warn("APPDATA environment variable not set, using default path")
-			appData = filepath.Join(homeDir, "AppData", "Roaming")
-		}
-
-		// Java I2P default locations on Windows
-		paths = append(paths,
-			filepath.Join(appData, "I2P/netDb"),
-			filepath.Join(homeDir, "i2p/netDb"),
-		)
-		// i2pd default locations on Windows
-		paths = append(paths,
-			filepath.Join(appData, "i2pd/netDb"),
-		)
-
+		return getWindowsNetDbPaths(homeDir)
 	default:
-		// Generic fallback
-		paths = append(paths,
-			filepath.Join(homeDir, ".i2p/netDb"),
-			filepath.Join(homeDir, ".i2pd/netDb"),
-		)
+		return getGenericNetDbPaths(homeDir)
 	}
+}
 
-	return paths
+// getHomeDir returns the user's home directory with fallback to "~".
+func getHomeDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "getHomeDir",
+			"phase":  "bootstrap",
+			"reason": "failed to determine user home directory",
+		}).Warn("failed to get user home directory")
+		return "~"
+	}
+	return homeDir
+}
+
+// getLinuxNetDbPaths returns netDb search paths for Linux systems.
+func getLinuxNetDbPaths(homeDir string) []string {
+	return []string{
+		// Java I2P default locations on Linux
+		filepath.Join(homeDir, ".i2p/netDb"),
+		"/var/lib/i2p/i2p-config/netDb",
+		"/usr/share/i2p/netDb",
+		// i2pd default locations on Linux
+		filepath.Join(homeDir, ".i2pd/netDb"),
+		"/var/lib/i2pd/netDb",
+	}
+}
+
+// getDarwinNetDbPaths returns netDb search paths for macOS systems.
+func getDarwinNetDbPaths(homeDir string) []string {
+	return []string{
+		// Java I2P default locations on macOS
+		filepath.Join(homeDir, "Library/Application Support/i2p/netDb"),
+		filepath.Join(homeDir, ".i2p/netDb"),
+		// i2pd default locations on macOS
+		filepath.Join(homeDir, "Library/Application Support/i2pd/netDb"),
+		filepath.Join(homeDir, ".i2pd/netDb"),
+	}
+}
+
+// getWindowsNetDbPaths returns netDb search paths for Windows systems.
+func getWindowsNetDbPaths(homeDir string) []string {
+	appData := getWindowsAppData(homeDir)
+	return []string{
+		// Java I2P default locations on Windows
+		filepath.Join(appData, "I2P/netDb"),
+		filepath.Join(homeDir, "i2p/netDb"),
+		// i2pd default locations on Windows
+		filepath.Join(appData, "i2pd/netDb"),
+	}
+}
+
+// getWindowsAppData returns the Windows APPDATA directory with fallback.
+func getWindowsAppData(homeDir string) string {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		log.WithFields(logger.Fields{
+			"at":            "getWindowsAppData",
+			"phase":         "bootstrap",
+			"reason":        "appdata_env_missing",
+			"os":            "windows",
+			"fallback_path": filepath.Join(homeDir, "AppData", "Roaming"),
+			"impact":        "using default Windows AppData location",
+		}).Warn("APPDATA environment variable not set, using default path")
+		return filepath.Join(homeDir, "AppData", "Roaming")
+	}
+	return appData
+}
+
+// getGenericNetDbPaths returns generic fallback netDb search paths.
+func getGenericNetDbPaths(homeDir string) []string {
+	return []string{
+		filepath.Join(homeDir, ".i2p/netDb"),
+		filepath.Join(homeDir, ".i2pd/netDb"),
+	}
 }
 
 // expandPath expands environment variables and ~ in paths
