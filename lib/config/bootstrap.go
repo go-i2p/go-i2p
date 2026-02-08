@@ -25,30 +25,36 @@ type BootstrapConfig struct {
 	// If set, this takes priority over remote reseed servers.
 	ReseedFilePath string
 	// ReseedServers is the list of remote reseed servers to contact.
-	// Only one default server is included; additional servers should be configured via config file.
+	// By default, uses KnownReseedServers which includes all verified I2P reseed servers.
 	ReseedServers []*ReseedConfig
 	// LocalNetDbPaths lists directories to search for existing RouterInfo files.
 	// Supports Java I2P and i2pd netDb directory formats.
 	// These paths are populated at runtime based on the operating system.
 	LocalNetDbPaths []string
+	// MinReseedServers is the minimum number of successful reseed servers required.
+	// If fewer servers respond successfully, the reseed operation fails.
+	// Set to 1 for backward compatibility; Java I2P uses 2 for enhanced security.
+	MinReseedServers int
+	// ReseedStrategy determines how RouterInfos from multiple servers are combined:
+	// - "union": Use all unique RouterInfos from any successful server (default)
+	// - "intersection": Only use RouterInfos present in ALL successful server responses
+	// - "random": Randomly select from union, weighted by appearance count
+	ReseedStrategy string
 }
 
 // default configuration for network bootstrap
-// Note: Reseed servers should be configured via config file.
-// Only reseed.i2pgit.org is included by default as it is maintained by the go-i2p dev team.
-// Additional reseed servers from the I2P network can be added via configuration.
+// Uses all known reseed servers from KnownReseedServers for maximum availability.
+// MinReseedServers defaults to 1 for backward compatibility.
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
 	BootstrapType:    "auto", // Default to composite (tries all methods)
 	ReseedFilePath:   "",     // No default reseed file
-	// Default reseed server (run by go-i2p dev team)
-	// Additional reseed servers should be configured via config file
-	ReseedServers: []*ReseedConfig{
-		{
-			Url:            "https://reseed.i2pgit.org/",
-			SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
-		},
-	},
+	// Use all known reseed servers for maximum availability
+	ReseedServers: KnownReseedServers,
 	// Local netDb paths are populated at runtime based on OS
 	LocalNetDbPaths: []string{},
+	// Minimum successful servers required (1 for backward compatibility)
+	MinReseedServers: DefaultMinReseedServers,
+	// Default to union strategy for maximum peer discovery
+	ReseedStrategy: ReseedStrategyUnion,
 }
