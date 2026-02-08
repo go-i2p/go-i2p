@@ -100,79 +100,104 @@ func (rb *ReseedBootstrap) shuffleServers() []*config.ReseedConfig {
 	return servers
 }
 
+// fetchState holds the shared state for concurrent server fetching operations.
+type fetchState struct {
+	results   []ReseedResult
+	resultsMu sync.Mutex
+	wg        sync.WaitGroup
+	success   int
+}
+
+// appendResult safely appends a result to the fetch state and updates the success count.
+func (fs *fetchState) appendResult(result ReseedResult) {
+	fs.resultsMu.Lock()
+	defer fs.resultsMu.Unlock()
+	fs.results = append(fs.results, result)
+	if result.Error == nil && len(result.RouterInfos) > 0 {
+		fs.success++
+	}
+}
+
+// hasEnoughSuccess checks if the minimum number of successful servers has been reached.
+func (fs *fetchState) hasEnoughSuccess(minServers int) bool {
+	fs.resultsMu.Lock()
+	defer fs.resultsMu.Unlock()
+	return fs.success >= minServers
+}
+
+// isContextCancelled checks if the context has been cancelled and logs the event.
+func isContextCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		log.WithFields(logger.Fields{
+			"at":     "(ReseedBootstrap) fetchFromServers",
+			"phase":  "bootstrap",
+			"reason": "context cancelled during server iteration",
+		}).Warn("stopping server iteration due to context cancellation")
+		return true
+	default:
+		return false
+	}
+}
+
+// logMinimumServersReached logs when the minimum number of successful servers is reached.
+func logMinimumServersReached(success, minServers int) {
+	log.WithFields(logger.Fields{
+		"at":      "(ReseedBootstrap) fetchFromServers",
+		"phase":   "bootstrap",
+		"reason":  "minimum servers reached",
+		"success": success,
+		"min":     minServers,
+	}).Debug("stopping iteration: minimum successful servers reached")
+}
+
+// fetchFromServerAsync performs an async fetch from a single server with semaphore control.
+func (rb *ReseedBootstrap) fetchFromServerAsync(ctx context.Context, srv *config.ReseedConfig, semaphore chan struct{}, fs *fetchState) {
+	defer fs.wg.Done()
+
+	// Acquire semaphore or handle context cancellation
+	select {
+	case semaphore <- struct{}{}:
+		defer func() { <-semaphore }()
+	case <-ctx.Done():
+		fs.appendResult(ReseedResult{
+			ServerURL: srv.Url,
+			Error:     ctx.Err(),
+		})
+		return
+	}
+
+	result := rb.fetchFromSingleServer(ctx, srv)
+	fs.appendResult(result)
+}
+
 // fetchFromServers fetches from servers concurrently until minServers succeed or all fail.
 // It uses a semaphore to limit concurrent requests.
 func (rb *ReseedBootstrap) fetchFromServers(ctx context.Context, servers []*config.ReseedConfig, minServers int) []ReseedResult {
-	var (
-		results   []ReseedResult
-		resultsMu sync.Mutex
-		wg        sync.WaitGroup
-		success   int
-	)
+	fs := &fetchState{
+		results: make([]ReseedResult, 0, len(servers)),
+	}
 
 	// Limit concurrent requests to avoid overwhelming the network
 	const maxConcurrent = 3
 	semaphore := make(chan struct{}, maxConcurrent)
 
 	for _, server := range servers {
-		// Check context cancellation
-		select {
-		case <-ctx.Done():
-			log.WithFields(logger.Fields{
-				"at":     "(ReseedBootstrap) fetchFromServers",
-				"phase":  "bootstrap",
-				"reason": "context cancelled during server iteration",
-			}).Warn("stopping server iteration due to context cancellation")
-			break
-		default:
-		}
-
-		// Check if we have enough successful results
-		resultsMu.Lock()
-		if success >= minServers {
-			resultsMu.Unlock()
-			log.WithFields(logger.Fields{
-				"at":      "(ReseedBootstrap) fetchFromServers",
-				"phase":   "bootstrap",
-				"reason":  "minimum servers reached",
-				"success": success,
-				"min":     minServers,
-			}).Debug("stopping iteration: minimum successful servers reached")
+		if isContextCancelled(ctx) {
 			break
 		}
-		resultsMu.Unlock()
 
-		wg.Add(1)
-		go func(srv *config.ReseedConfig) {
-			defer wg.Done()
+		if fs.hasEnoughSuccess(minServers) {
+			logMinimumServersReached(fs.success, minServers)
+			break
+		}
 
-			// Acquire semaphore
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				resultsMu.Lock()
-				results = append(results, ReseedResult{
-					ServerURL: srv.Url,
-					Error:     ctx.Err(),
-				})
-				resultsMu.Unlock()
-				return
-			}
-
-			result := rb.fetchFromSingleServer(ctx, srv)
-
-			resultsMu.Lock()
-			results = append(results, result)
-			if result.Error == nil && len(result.RouterInfos) > 0 {
-				success++
-			}
-			resultsMu.Unlock()
-		}(server)
+		fs.wg.Add(1)
+		go rb.fetchFromServerAsync(ctx, server, semaphore, fs)
 	}
 
-	wg.Wait()
-	return results
+	fs.wg.Wait()
+	return fs.results
 }
 
 // fetchFromSingleServer fetches RouterInfos from a single reseed server.
@@ -276,6 +301,18 @@ func (rb *ReseedBootstrap) unionStrategy(results []ReseedResult) []router_info.R
 	return combined
 }
 
+// filterByCount filters RouterInfos by their count, returning only those
+// that appear exactly the specified number of times.
+func filterByCount(ric *routerInfoCounts, requiredCount int) []router_info.RouterInfo {
+	var filtered []router_info.RouterInfo
+	for hash, count := range ric.counts {
+		if count == requiredCount {
+			filtered = append(filtered, ric.riMap[hash])
+		}
+	}
+	return filtered
+}
+
 // intersectionStrategy returns only RouterInfos present in ALL server responses.
 // This provides stronger validation but may result in fewer peers.
 func (rb *ReseedBootstrap) intersectionStrategy(results []ReseedResult) []router_info.RouterInfo {
@@ -283,29 +320,8 @@ func (rb *ReseedBootstrap) intersectionStrategy(results []ReseedResult) []router
 		return nil
 	}
 
-	// Count appearances of each RouterInfo
-	counts := make(map[string]int)
-	riMap := make(map[string]router_info.RouterInfo)
-
-	for _, r := range results {
-		seen := make(map[string]bool) // Track seen in this server to avoid double-counting
-		for _, ri := range r.RouterInfos {
-			hash := routerInfoHash(ri)
-			if !seen[hash] {
-				counts[hash]++
-				seen[hash] = true
-				riMap[hash] = ri
-			}
-		}
-	}
-
-	// Only keep RouterInfos present in ALL responses
-	var intersection []router_info.RouterInfo
-	for hash, count := range counts {
-		if count == len(results) {
-			intersection = append(intersection, riMap[hash])
-		}
-	}
+	ric := aggregateRouterInfos(results)
+	intersection := filterByCount(ric, len(results))
 
 	log.WithFields(logger.Fields{
 		"at":                   "(ReseedBootstrap) intersectionStrategy",
@@ -318,49 +334,80 @@ func (rb *ReseedBootstrap) intersectionStrategy(results []ReseedResult) []router
 	return intersection
 }
 
-// randomWeightedStrategy randomly selects RouterInfos, weighted by how many servers returned each.
-// RouterInfos returned by multiple servers are more likely to be selected.
-func (rb *ReseedBootstrap) randomWeightedStrategy(results []ReseedResult) []router_info.RouterInfo {
-	counts := make(map[string]int)
-	riMap := make(map[string]router_info.RouterInfo)
+// routerInfoCounts holds aggregated counts and RouterInfo mappings from multiple servers.
+type routerInfoCounts struct {
+	counts map[string]int
+	riMap  map[string]router_info.RouterInfo
+}
 
+// newRouterInfoCounts creates an initialized routerInfoCounts struct.
+func newRouterInfoCounts() *routerInfoCounts {
+	return &routerInfoCounts{
+		counts: make(map[string]int),
+		riMap:  make(map[string]router_info.RouterInfo),
+	}
+}
+
+// aggregateRouterInfos counts appearances of each RouterInfo across results.
+// Each RouterInfo is counted once per server (no double-counting within a server).
+func aggregateRouterInfos(results []ReseedResult) *routerInfoCounts {
+	ric := newRouterInfoCounts()
 	for _, r := range results {
 		seen := make(map[string]bool)
 		for _, ri := range r.RouterInfos {
 			hash := routerInfoHash(ri)
 			if !seen[hash] {
-				counts[hash]++
+				ric.counts[hash]++
 				seen[hash] = true
-				riMap[hash] = ri
+				ric.riMap[hash] = ri
 			}
 		}
 	}
+	return ric
+}
 
-	// Build weighted selection (RIs from multiple servers appear multiple times)
+// buildWeightedList creates a weighted list where RouterInfos appear
+// multiple times based on how many servers returned them.
+func buildWeightedList(ric *routerInfoCounts) []router_info.RouterInfo {
 	var weighted []router_info.RouterInfo
-	for hash, count := range counts {
-		ri := riMap[hash]
+	for hash, count := range ric.counts {
+		ri := ric.riMap[hash]
 		for i := 0; i < count; i++ {
 			weighted = append(weighted, ri)
 		}
 	}
+	return weighted
+}
 
-	// Shuffle weighted list
+// shuffleRouterInfos shuffles the given slice in place using a random source.
+func shuffleRouterInfos(infos []router_info.RouterInfo) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	rng.Shuffle(len(weighted), func(i, j int) {
-		weighted[i], weighted[j] = weighted[j], weighted[i]
+	rng.Shuffle(len(infos), func(i, j int) {
+		infos[i], infos[j] = infos[j], infos[i]
 	})
+}
 
-	// Deduplicate after shuffle (preserving weighted order)
+// deduplicateRouterInfos removes duplicates while preserving order.
+func deduplicateRouterInfos(infos []router_info.RouterInfo) []router_info.RouterInfo {
 	seen := make(map[string]bool)
 	var result []router_info.RouterInfo
-	for _, ri := range weighted {
+	for _, ri := range infos {
 		hash := routerInfoHash(ri)
 		if !seen[hash] {
 			result = append(result, ri)
 			seen[hash] = true
 		}
 	}
+	return result
+}
+
+// randomWeightedStrategy randomly selects RouterInfos, weighted by how many servers returned each.
+// RouterInfos returned by multiple servers are more likely to be selected.
+func (rb *ReseedBootstrap) randomWeightedStrategy(results []ReseedResult) []router_info.RouterInfo {
+	ric := aggregateRouterInfos(results)
+	weighted := buildWeightedList(ric)
+	shuffleRouterInfos(weighted)
+	result := deduplicateRouterInfos(weighted)
 
 	log.WithFields(logger.Fields{
 		"at":             "(ReseedBootstrap) randomWeightedStrategy",

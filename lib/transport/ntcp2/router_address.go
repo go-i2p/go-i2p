@@ -11,6 +11,80 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// logConversionStart logs the start of transport to RouterAddress conversion.
+func logConversionStart() {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "converting_transport_to_router_address",
+		"phase":  "startup",
+		"step":   1,
+	}).Debug("converting NTCP2Transport to RouterAddress")
+}
+
+// logNilTransportError logs an error when transport is nil.
+func logNilTransportError() {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "nil_transport",
+		"phase":  "startup",
+	}).Error("cannot convert nil transport to RouterAddress")
+}
+
+// logAddressExtractionError logs an error during address extraction.
+func logAddressExtractionError(err error) {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "address_extraction_failed",
+		"phase":  "startup",
+		"step":   2,
+		"error":  err.Error(),
+	}).Error("failed to extract transport address")
+}
+
+// logStaticKeyError logs an error during static key validation.
+func logStaticKeyError(err error) {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "static_key_validation_failed",
+		"phase":  "startup",
+		"step":   3,
+		"error":  err.Error(),
+	}).Error("failed to validate and extract static key")
+}
+
+// logOptionsBuildError logs an error during router address options building.
+func logOptionsBuildError(err error) {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "options_build_failed",
+		"phase":  "startup",
+		"step":   4,
+		"error":  err.Error(),
+	}).Error("failed to build router address options")
+}
+
+// logRouterAddressCreationError logs an error when creating RouterAddress fails.
+func logRouterAddressCreationError(err error) {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "router_address_creation_failed",
+		"phase":  "startup",
+		"step":   5,
+		"error":  err.Error(),
+	}).Error("failed to create RouterAddress")
+}
+
+// logConversionSuccess logs successful conversion of transport to RouterAddress.
+func logConversionSuccess(host, port string) {
+	log.WithFields(logger.Fields{
+		"at":     "ConvertToRouterAddress",
+		"reason": "conversion_successful",
+		"phase":  "startup",
+		"host":   host,
+		"port":   port,
+	}).Info("successfully converted NTCP2Transport to RouterAddress")
+}
+
 // ConvertToRouterAddress converts an NTCP2Transport's listening address to a RouterAddress
 // suitable for publishing in RouterInfo. This enables other routers to connect to this transport.
 //
@@ -23,82 +97,39 @@ import (
 // Returns a RouterAddress with transport style "ntcp2" and all required options,
 // or an error if address extraction or conversion fails.
 func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAddress, error) {
-	log.WithFields(logger.Fields{
-		"at":     "ConvertToRouterAddress",
-		"reason": "converting_transport_to_router_address",
-		"phase":  "startup",
-		"step":   1,
-	}).Debug("converting NTCP2Transport to RouterAddress")
+	logConversionStart()
+
 	if transport == nil {
-		log.WithFields(logger.Fields{
-			"at":     "ConvertToRouterAddress",
-			"reason": "nil_transport",
-			"phase":  "startup",
-		}).Error("cannot convert nil transport to RouterAddress")
+		logNilTransportError()
 		return nil, fmt.Errorf("transport cannot be nil")
 	}
 
 	host, port, err := extractTransportAddress(transport)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "ConvertToRouterAddress",
-			"reason": "address_extraction_failed",
-			"phase":  "startup",
-			"step":   2,
-			"error":  err.Error(),
-		}).Error("failed to extract transport address")
+		logAddressExtractionError(err)
 		return nil, err
 	}
 
 	staticKey, err := validateAndExtractStaticKey(transport)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "ConvertToRouterAddress",
-			"reason": "static_key_validation_failed",
-			"phase":  "startup",
-			"step":   3,
-			"error":  err.Error(),
-		}).Error("failed to validate and extract static key")
+		logStaticKeyError(err)
 		return nil, err
 	}
 
 	options, err := buildRouterAddressOptions(host, port, staticKey, transport.config.NTCP2Config)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "ConvertToRouterAddress",
-			"reason": "options_build_failed",
-			"phase":  "startup",
-			"step":   4,
-			"error":  err.Error(),
-		}).Error("failed to build router address options")
+		logOptionsBuildError(err)
 		return nil, err
 	}
 
 	expiration := time.Now().Add(2 * time.Hour)
-	routerAddress, err := router_address.NewRouterAddress(
-		10, // cost
-		expiration,
-		"ntcp2", // transport type
-		options,
-	)
+	routerAddress, err := router_address.NewRouterAddress(10, expiration, "ntcp2", options)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "ConvertToRouterAddress",
-			"reason": "router_address_creation_failed",
-			"phase":  "startup",
-			"step":   5,
-			"error":  err.Error(),
-		}).Error("failed to create RouterAddress")
+		logRouterAddressCreationError(err)
 		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":     "ConvertToRouterAddress",
-		"reason": "conversion_successful",
-		"phase":  "startup",
-		"host":   host,
-		"port":   port,
-	}).Info("successfully converted NTCP2Transport to RouterAddress")
+	logConversionSuccess(host, port)
 	return routerAddress, nil
 }
 

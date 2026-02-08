@@ -1549,6 +1549,80 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 	return nil, nil
 }
 
+// logHostLookupParseError logs an error when parsing host lookup payload fails.
+func logHostLookupParseError(sessionID uint16, payloadSize int, err error) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleHostLookup",
+		"sessionID":   sessionID,
+		"payloadSize": payloadSize,
+		"error":       err.Error(),
+	}).Error("failed_to_parse_host_lookup_payload")
+}
+
+// logHostLookupRequest logs a host lookup request.
+func logHostLookupRequest(sessionID uint16, lookupMsg *HostLookupPayload) {
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleHostLookup",
+		"sessionID":  sessionID,
+		"requestID":  lookupMsg.RequestID,
+		"lookupType": lookupMsg.LookupType,
+		"query":      lookupMsg.Query,
+	}).Info("host_lookup_requested")
+}
+
+// handleHostnameLookup handles hostname lookup type (not yet implemented).
+func handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPayload {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleHostLookup",
+		"requestID": lookupMsg.RequestID,
+		"query":     lookupMsg.Query,
+	}).Debug("hostname_lookup_not_implemented")
+	return &HostReplyPayload{
+		RequestID:   lookupMsg.RequestID,
+		ResultCode:  HostReplyError,
+		Destination: nil,
+	}
+}
+
+// handleUnknownLookupType handles unknown lookup types.
+func handleUnknownLookupType(lookupMsg *HostLookupPayload) *HostReplyPayload {
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleHostLookup",
+		"requestID":  lookupMsg.RequestID,
+		"lookupType": lookupMsg.LookupType,
+	}).Warn("unknown_lookup_type")
+	return &HostReplyPayload{
+		RequestID:   lookupMsg.RequestID,
+		ResultCode:  HostReplyError,
+		Destination: nil,
+	}
+}
+
+// buildHostReplyMessage constructs the host reply message from payload.
+func buildHostReplyMessage(sessionID uint16, replyPayload *HostReplyPayload) (*Message, error) {
+	replyData, err := replyPayload.MarshalBinary()
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": replyPayload.RequestID,
+			"error":     err.Error(),
+		}).Error("failed_to_marshal_host_reply")
+		return nil, fmt.Errorf("failed to marshal HostReply: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.handleHostLookup",
+		"requestID":  replyPayload.RequestID,
+		"resultCode": replyPayload.ResultCode,
+	}).Debug("returning_host_reply")
+
+	return &Message{
+		Type:      MessageTypeHostReply,
+		SessionID: sessionID,
+		Payload:   replyData,
+	}, nil
+}
+
 // handleHostLookup handles a destination lookup request by hash or hostname.
 // This allows clients to query for destination information.
 //
@@ -1558,85 +1632,25 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 //
 // For hash lookups, the destination is retrieved from the LeaseSet stored in NetDB.
 func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
-	// Parse host lookup payload
 	lookupMsg, err := ParseHostLookupPayload(msg.Payload)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.handleHostLookup",
-			"sessionID":   msg.SessionID,
-			"payloadSize": len(msg.Payload),
-			"error":       err.Error(),
-		}).Error("failed_to_parse_host_lookup_payload")
+		logHostLookupParseError(msg.SessionID, len(msg.Payload), err)
 		return nil, fmt.Errorf("failed to parse HostLookup payload: %w", err)
 	}
 
-	log.WithFields(logger.Fields{
-		"at":         "i2cp.Server.handleHostLookup",
-		"sessionID":  msg.SessionID,
-		"requestID":  lookupMsg.RequestID,
-		"lookupType": lookupMsg.LookupType,
-		"query":      lookupMsg.Query,
-	}).Info("host_lookup_requested")
+	logHostLookupRequest(msg.SessionID, lookupMsg)
 
 	var replyPayload *HostReplyPayload
-
-	// Handle different lookup types
 	switch lookupMsg.LookupType {
 	case HostLookupTypeHash:
-		// Lookup by destination hash - query NetDB for LeaseSet
 		replyPayload = s.lookupDestinationByHash(lookupMsg)
-
 	case HostLookupTypeHostname:
-		// Hostname lookup requires naming service integration
-		// Return "not implemented" error for now
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleHostLookup",
-			"requestID": lookupMsg.RequestID,
-			"query":     lookupMsg.Query,
-		}).Debug("hostname_lookup_not_implemented")
-		replyPayload = &HostReplyPayload{
-			RequestID:   lookupMsg.RequestID,
-			ResultCode:  HostReplyError,
-			Destination: nil,
-		}
-
+		replyPayload = handleHostnameLookup(lookupMsg)
 	default:
-		// Unknown lookup type
-		log.WithFields(logger.Fields{
-			"at":         "i2cp.Server.handleHostLookup",
-			"requestID":  lookupMsg.RequestID,
-			"lookupType": lookupMsg.LookupType,
-		}).Warn("unknown_lookup_type")
-		replyPayload = &HostReplyPayload{
-			RequestID:   lookupMsg.RequestID,
-			ResultCode:  HostReplyError,
-			Destination: nil,
-		}
+		replyPayload = handleUnknownLookupType(lookupMsg)
 	}
 
-	replyData, err := replyPayload.MarshalBinary()
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleHostLookup",
-			"requestID": lookupMsg.RequestID,
-			"error":     err.Error(),
-		}).Error("failed_to_marshal_host_reply")
-		return nil, fmt.Errorf("failed to marshal HostReply: %w", err)
-	}
-
-	response := &Message{
-		Type:      MessageTypeHostReply,
-		SessionID: msg.SessionID,
-		Payload:   replyData,
-	}
-
-	log.WithFields(logger.Fields{
-		"at":         "i2cp.Server.handleHostLookup",
-		"requestID":  lookupMsg.RequestID,
-		"resultCode": replyPayload.ResultCode,
-	}).Debug("returning_host_reply")
-
-	return response, nil
+	return buildHostReplyMessage(msg.SessionID, replyPayload)
 }
 
 // lookupDestinationByHash queries NetDB for a LeaseSet by hash and extracts the destination.

@@ -180,9 +180,8 @@ func (rb *ReseedBootstrap) checkContextCancellation(ctx context.Context, attempt
 	return false, nil
 }
 
-// attemptReseedFromServer attempts to reseed from a single server.
-func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
-	startTime := time.Now()
+// logReseedAttemptStart logs the start of a reseed attempt.
+func (rb *ReseedBootstrap) logReseedAttemptStart(server *config.ReseedConfig, attemptNumber int) {
 	log.WithFields(logger.Fields{
 		"at":            "(ReseedBootstrap) attemptReseedFromServer",
 		"phase":         "bootstrap",
@@ -192,25 +191,24 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 		"attempt":       attemptNumber,
 		"total_servers": len(rb.config.ReseedServers),
 	}).Info("attempting reseed from server")
+}
 
-	reseeder := reseed.NewReseed()
-	serverRIs, err := reseeder.SingleReseed(server.Url)
-	elapsed := time.Since(startTime)
+// logReseedAttemptFailed logs a failed reseed attempt.
+func logReseedAttemptFailed(err error, server *config.ReseedConfig, attemptNumber int, elapsed time.Duration) {
+	log.WithError(err).WithFields(logger.Fields{
+		"at":          "(ReseedBootstrap) attemptReseedFromServer",
+		"phase":       "bootstrap",
+		"step":        attemptNumber,
+		"reason":      "reseed attempt failed",
+		"server_url":  server.Url,
+		"attempt":     attemptNumber,
+		"duration_ms": elapsed.Milliseconds(),
+		"error_type":  fmt.Sprintf("%T", err),
+	}).Warn("reseed attempt failed")
+}
 
-	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":          "(ReseedBootstrap) attemptReseedFromServer",
-			"phase":       "bootstrap",
-			"step":        attemptNumber,
-			"reason":      "reseed attempt failed",
-			"server_url":  server.Url,
-			"attempt":     attemptNumber,
-			"duration_ms": elapsed.Milliseconds(),
-			"error_type":  fmt.Sprintf("%T", err),
-		}).Warn("reseed attempt failed")
-		return nil, oops.Errorf("reseed from %s failed: %v", server.Url, err)
-	}
-
+// logReseedRequestComplete logs successful completion of a reseed HTTP request.
+func logReseedRequestComplete(server *config.ReseedConfig, attemptNumber int, elapsed time.Duration, routerCount int) {
 	log.WithFields(logger.Fields{
 		"at":           "(ReseedBootstrap) attemptReseedFromServer",
 		"phase":        "bootstrap",
@@ -218,22 +216,24 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 		"reason":       "reseed request completed successfully",
 		"server_url":   server.Url,
 		"duration_ms":  elapsed.Milliseconds(),
-		"router_count": len(serverRIs),
+		"router_count": routerCount,
 	}).Debug("reseed HTTP request completed")
+}
 
-	// Validate RouterInfos and filter out invalid ones
-	validServerRIs := rb.validateAndFilterRouterInfos(serverRIs, server.Url)
-
+// logValidationComplete logs completion of RouterInfo validation.
+func logValidationComplete(server *config.ReseedConfig, totalReceived, validCount int) {
 	log.WithFields(logger.Fields{
 		"at":                 "(ReseedBootstrap) attemptReseedFromServer",
 		"phase":              "validation",
 		"reason":             "RouterInfo validation completed",
 		"server_url":         server.Url,
-		"total_received":     len(serverRIs),
-		"valid_after_filter": len(validServerRIs),
+		"total_received":     totalReceived,
+		"valid_after_filter": validCount,
 	}).Debug("RouterInfo validation completed for reseed server")
+}
 
-	// Warn if reseed took longer than expected
+// warnSlowReseed logs a warning if reseed took longer than expected.
+func warnSlowReseed(server *config.ReseedConfig, elapsed time.Duration) {
 	if elapsed.Seconds() > 30 {
 		log.WithFields(logger.Fields{
 			"at":          "(ReseedBootstrap) attemptReseedFromServer",
@@ -245,20 +245,45 @@ func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, 
 			"impact":      "may indicate network issues or server load",
 		}).Warn("reseed operation slower than expected")
 	}
+}
 
-	// Warn if insufficient routers received
-	if len(validServerRIs) < 50 {
+// warnInsufficientRouters logs a warning if too few valid routers were received.
+func warnInsufficientRouters(server *config.ReseedConfig, validCount int) {
+	if validCount < 50 {
 		log.WithFields(logger.Fields{
 			"at":           "(ReseedBootstrap) attemptReseedFromServer",
 			"phase":        "bootstrap",
 			"reason":       "insufficient valid routers from reseed server",
 			"server_url":   server.Url,
-			"router_count": len(validServerRIs),
+			"router_count": validCount,
 			"minimum":      50,
-			"shortfall":    50 - len(validServerRIs),
+			"shortfall":    50 - validCount,
 			"impact":       "may need additional reseed servers",
 		}).Warn("reseed returned fewer valid routers than recommended")
 	}
+}
+
+// attemptReseedFromServer attempts to reseed from a single server.
+func (rb *ReseedBootstrap) attemptReseedFromServer(server *config.ReseedConfig, attemptNumber int) ([]router_info.RouterInfo, error) {
+	startTime := time.Now()
+	rb.logReseedAttemptStart(server, attemptNumber)
+
+	reseeder := reseed.NewReseed()
+	serverRIs, err := reseeder.SingleReseed(server.Url)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		logReseedAttemptFailed(err, server, attemptNumber, elapsed)
+		return nil, oops.Errorf("reseed from %s failed: %v", server.Url, err)
+	}
+
+	logReseedRequestComplete(server, attemptNumber, elapsed, len(serverRIs))
+
+	validServerRIs := rb.validateAndFilterRouterInfos(serverRIs, server.Url)
+	logValidationComplete(server, len(serverRIs), len(validServerRIs))
+
+	warnSlowReseed(server, elapsed)
+	warnInsufficientRouters(server, len(validServerRIs))
 
 	return validServerRIs, nil
 }
