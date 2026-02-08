@@ -363,6 +363,7 @@ func (r *Router) Stop() {
 		}).Debug("router context cancelled")
 	}
 
+	r.stopTunnelManager()
 	r.stopBandwidthTracker()
 	r.stopCongestionMonitor()
 	r.stopI2CPServer()
@@ -513,6 +514,19 @@ func (r *Router) stopCongestionMonitor() {
 	}
 }
 
+// stopTunnelManager shuts down the tunnel manager if it exists.
+// This stops the tunnel pools and cleans up tunnel-related resources.
+func (r *Router) stopTunnelManager() {
+	if r.tunnelManager != nil {
+		r.tunnelManager.Stop()
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopTunnelManager",
+			"phase":  "shutdown",
+			"reason": "tunnel manager stopped",
+		}).Debug("tunnel manager stopped")
+	}
+}
+
 // stopParticipantManager shuts down the participant manager if it exists.
 func (r *Router) stopParticipantManager() {
 	if r.participantManager != nil {
@@ -542,10 +556,126 @@ func (r *Router) sendCloseSignal() {
 	}
 }
 
-// Close closes any internal state and finalizes router resources so that nothing can start up again
+// Close closes any internal state and finalizes router resources so that nothing can start up again.
+// This method performs final cleanup after Stop() to ensure all resources are released and the router
+// cannot be restarted. Call Stop() before Close() for graceful shutdown; Close() will call Stop()
+// if the router is still running.
+//
+// Resources released by Close():
+//   - Transport layer connections (via TransportMuxer.Close())
+//   - Active NTCP2 sessions
+//   - Message router references
+//   - Garlic router references
+//   - Tunnel manager references
+//   - Close channel
 func (r *Router) Close() error {
-	log.Warn("Closing router not implemented(?)")
-	return nil
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   1,
+		"reason": "finalizing router resources",
+	}).Info("closing router and releasing all resources")
+
+	// Ensure the router is stopped first
+	r.runMux.RLock()
+	isRunning := r.running
+	r.runMux.RUnlock()
+
+	if isRunning {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Close",
+			"phase":  "finalization",
+			"step":   2,
+			"reason": "router still running, calling Stop() first",
+		}).Debug("stopping router before close")
+		r.Stop()
+	}
+
+	var closeErr error
+
+	// Close all transport connections
+	if r.TransportMuxer != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Close",
+			"phase":  "finalization",
+			"step":   3,
+			"reason": "closing transport layer",
+		}).Debug("closing TransportMuxer")
+		if err := r.TransportMuxer.Close(); err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":     "(Router) Close",
+				"phase":  "finalization",
+				"reason": "transport close failed",
+			}).Warn("error closing transport muxer")
+			closeErr = err
+		}
+		r.TransportMuxer = nil
+	}
+
+	// Clear active NTCP2 sessions
+	r.sessionMutex.Lock()
+	sessionCount := len(r.activeSessions)
+	r.activeSessions = nil
+	r.sessionMutex.Unlock()
+	if sessionCount > 0 {
+		log.WithFields(logger.Fields{
+			"at":            "(Router) Close",
+			"phase":         "finalization",
+			"step":          4,
+			"reason":        "cleared active sessions",
+			"session_count": sessionCount,
+		}).Debug("active sessions cleared")
+	}
+
+	// Clear message routing components
+	r.messageRouter = nil
+	r.garlicRouter = nil
+	r.tunnelManager = nil
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   5,
+		"reason": "message routing components cleared",
+	}).Debug("message router, garlic router, and tunnel manager references cleared")
+
+	// Clear keystore reference (keys remain on disk for potential future use)
+	r.RouterInfoKeystore = nil
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   6,
+		"reason": "keystore reference cleared",
+	}).Debug("keystore reference cleared (keys preserved on disk)")
+
+	// Clear NetDB reference (already stopped, but clear reference to prevent reuse)
+	r.StdNetDB = nil
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   7,
+		"reason": "netdb reference cleared",
+	}).Debug("NetDB reference cleared")
+
+	// Close the close channel to signal complete finalization
+	if r.closeChnl != nil {
+		close(r.closeChnl)
+		r.closeChnl = nil
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Close",
+			"phase":  "finalization",
+			"step":   8,
+			"reason": "close channel finalized",
+		}).Debug("close channel closed")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   9,
+		"reason": "router finalization complete",
+	}).Info("router closed successfully - all resources released")
+
+	return closeErr
 }
 
 // Start starts router mainloop
@@ -1312,6 +1442,15 @@ func (r *Router) getSessionByHash(peerHash common.Hash) (*ntcp.NTCP2Session, err
 // NTCP2Session already implements the i2np.TransportSession interface.
 // If no active session exists, it attempts to establish an outbound connection.
 func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error) {
+	// Check if router is still running before proceeding
+	r.runMux.RLock()
+	running := r.running
+	r.runMux.RUnlock()
+
+	if !running {
+		return nil, errors.New("router is not running")
+	}
+
 	// First check for existing session
 	session, err := r.getSessionByHash(hash)
 	if err == nil {
@@ -1338,6 +1477,11 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, erro
 
 // retrieveRouterInfoWithTimeout looks up RouterInfo from NetDB with a timeout.
 func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.RouterInfo, error) {
+	// Check if NetDB is available
+	if r.StdNetDB == nil {
+		return nil, errors.New("router NetDB not available")
+	}
+
 	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
 	if routerInfoChan == nil {
 		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])

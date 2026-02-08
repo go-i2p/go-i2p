@@ -473,11 +473,23 @@ func (p *Pool) buildTunnelsWithBackoff(count int) {
 	p.lastBuildTime = now
 
 	// Attempt to build tunnels in separate goroutine to avoid blocking with lock held
-	go p.attemptBuildTunnelsAsync(count)
+	// Track this goroutine in the WaitGroup so Stop() can wait for it
+	p.maintWg.Add(1)
+	go func() {
+		defer p.maintWg.Done()
+		p.attemptBuildTunnelsAsync(count)
+	}()
 }
 
 // attemptBuildTunnelsAsync builds tunnels asynchronously and updates failure count
 func (p *Pool) attemptBuildTunnelsAsync(count int) {
+	// Check if context is cancelled before starting
+	select {
+	case <-p.ctx.Done():
+		return
+	default:
+	}
+
 	success := p.attemptBuildTunnels(count)
 
 	// Update failure count with lock
@@ -511,6 +523,20 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 
 	var successCount int
 	for i := 0; i < count; i++ {
+		// Check if context is cancelled before each build attempt
+		select {
+		case <-p.ctx.Done():
+			log.WithFields(logger.Fields{
+				"at":        "(Pool) attemptBuildTunnels",
+				"phase":     "tunnel_build",
+				"reason":    "context cancelled, aborting build attempts",
+				"completed": i,
+				"total":     count,
+			}).Debug("tunnel build loop interrupted by context cancellation")
+			return successCount > 0
+		default:
+		}
+
 		req := p.prepareBuildRequest(excludePeers)
 		tunnelID, err := p.executeBuildWithRetry(&req)
 		if err != nil {
@@ -584,6 +610,13 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 	var lastBuildPeers []common.Hash // Track peers from last build attempt
 
 	for retry := 0; retry < maxRetries; retry++ {
+		// Check if context is cancelled before each retry
+		select {
+		case <-p.ctx.Done():
+			return 0, fmt.Errorf("tunnel build cancelled: context done")
+		default:
+		}
+
 		if retry > 0 && len(lastBuildPeers) > 0 {
 			req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
 			log.WithFields(logger.Fields{

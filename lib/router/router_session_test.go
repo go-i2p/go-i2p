@@ -157,6 +157,7 @@ func TestSessionThreadSafety(t *testing.T) {
 func TestRouterImplementsSessionProvider(t *testing.T) {
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		running:        true, // Mark as running to allow session operations
 	}
 
 	// Compile-time check that Router implements SessionProvider
@@ -186,6 +187,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
 		StdNetDB:       netdb.NewStdNetDB(tempDir),
+		running:        true, // Mark as running to allow session operations
 	}
 
 	// Ensure NetDB is initialized
