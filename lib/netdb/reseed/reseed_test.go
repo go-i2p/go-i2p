@@ -15,6 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testPEMCertificate is a sample PEM certificate for testing PEM decoding.
+// This is a minimal self-signed certificate for testing purposes only.
+const testPEMCertificate = `-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAL4T4L5N8bHsMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
+c3RDTjAeFw0yNDAxMDEwMDAwMDBaFw0yNTAxMDEwMDAwMDBaMBExDzANBgNVBAMM
+BnRlc3RDTjBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC4+/1w6Hx9Qo8TAi5Pz5hQ
+rC5Jp6wL0x8Tm5pYYv5sT5e6h5sF2kR8kA8vI5cE5kM7pBVvU3jTz5tAh0D1Qz8p
+AgMBAAEwDQYJKoZIhvcNAQELBQADQQBhQf4hJBp5Qm5yQwI3RtF4J6h9Q5VxQfBq
+R6kPtZn3hX9B5lJ0kR8VpQpVBaF0V7xH5Q2V3R8kQ5VxQfBqR6kP
+-----END CERTIFICATE-----`
+
 // TestNewReseed verifies that a new Reseed instance is created correctly
 func TestNewReseed(t *testing.T) {
 	r := NewReseed()
@@ -127,7 +138,11 @@ func TestValidateReseedResponse(t *testing.T) {
 }
 
 // TestGetPublicKeyForSigner verifies signer certificate handling
+// Note: This test uses a mock certificate pool set up by setupTestProvider.
 func TestGetPublicKeyForSigner(t *testing.T) {
+	// Set up the mock certificate provider
+	setupTestProvider()
+
 	r := NewReseed()
 
 	tests := []struct {
@@ -137,8 +152,13 @@ func TestGetPublicKeyForSigner(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:        "known signer - hankhill19580",
-			signerID:    "hankhill19580@gmail.com",
+			name:        "known signer from mock pool",
+			signerID:    "test@example.com",
+			expectError: false,
+		},
+		{
+			name:        "another known signer from mock pool",
+			signerID:    "admin@testserver.org",
 			expectError: false,
 		},
 		{
@@ -174,6 +194,7 @@ func TestGetPublicKeyForSigner(t *testing.T) {
 }
 
 // TestValidateCertificate verifies certificate expiration checking
+// using the CertificatePool's ValidateCertificate method
 func TestValidateCertificate(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -211,7 +232,9 @@ func TestValidateCertificate(t *testing.T) {
 				NotAfter:  tt.notAfter,
 			}
 
-			err := validateCertificate(cert, "test-signer")
+			// Use the CertificatePool's ValidateCertificate method
+			cp := &CertificatePool{}
+			err := cp.ValidateCertificate(cert, "test-signer")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -234,7 +257,7 @@ func TestDecodePEM(t *testing.T) {
 	}{
 		{
 			name:        "valid PEM certificate",
-			input:       reseedHankhill19580Certificate,
+			input:       testPEMCertificate,
 			expectBlock: true,
 		},
 		{

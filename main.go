@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/embedded"
+	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
@@ -29,6 +31,12 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
+	// Register the certificate provider with the reseed package to break the import cycle.
+	// This allows reseed to access embedded certificates without importing embedded directly.
+	reseed.SetCertificateProvider(func() (fs.FS, error) {
+		return embedded.GetReseedCertificates()
+	})
+
 	cobra.OnInitialize(config.InitConfig)
 	registerGlobalFlags()
 	registerRouterFlags()

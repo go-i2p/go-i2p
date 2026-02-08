@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -25,50 +24,6 @@ import (
 
 const (
 	I2pUserAgent = "Wget/1.11.4"
-)
-
-// Reseed server signing certificates
-// These are X.509 certificates used to sign SU3 reseed files
-// Only this specific certificate is hard-coded and this is not the normal way to populate it.
-// This is done for convenience in testing only, a real implementation should distribute certificates and manage them properly.
-const (
-	// Certificate for hankhill19580@gmail.com (reseed.i2pgit.org)
-	// Valid from: 2020-05-07 to 2030-05-07
-	// Source: https://github.com/i2p/i2p.i2p/tree/master/installer/resources/certificates/reseed
-	reseedHankhill19580Certificate = `-----BEGIN CERTIFICATE-----
-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
-CCOJyu3XtyzFf+tAeixOnuQ=
------END CERTIFICATE-----`
 )
 
 type Reseed struct {
@@ -382,71 +337,27 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 }
 
 // getPublicKeyForSigner returns the public key for a known reseed signer.
+// It uses the embedded certificate pool to look up certificates by signer ID.
 // Returns an error if the signer is not recognized (fail-closed security).
 func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
-	var certPEM string
+	// Get the default certificate pool (loaded from embedded certificates)
+	certPool, err := GetDefaultCertificatePool()
+	if err != nil {
+		log.WithError(err).Error("Failed to load certificate pool")
+		return nil, oops.Errorf("failed to load certificate pool: %w", err)
+	}
 
-	switch signerID {
-	case "hankhill19580@gmail.com":
-		certPEM = reseedHankhill19580Certificate
-	default:
+	// Look up the certificate by signer ID
+	publicKey, err := certPool.GetPublicKey(signerID)
+	if err != nil {
 		// SECURITY: Reject unknown signers instead of allowing them
 		// This prevents use of untrusted/malicious certificates
-		log.WithField("signer_id", signerID).Error("Unknown reseed signer - rejecting for security")
-		return nil, oops.Errorf("unknown or untrusted reseed signer: %s", signerID)
-	}
-
-	// Parse the certificate
-	block, _ := decodePEM([]byte(certPEM))
-	if block == nil {
-		log.WithField("signer_id", signerID).Error("Failed to decode certificate PEM")
-		return nil, oops.Errorf("failed to decode certificate PEM for signer %s", signerID)
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		log.WithError(err).WithField("signer_id", signerID).Error("Failed to parse certificate")
-		return nil, oops.Errorf("failed to parse certificate for signer %s: %w", signerID, err)
-	}
-
-	// SECURITY: Validate certificate expiration
-	if err := validateCertificate(cert, signerID); err != nil {
-		return nil, err
+		log.WithError(err).WithField("signer_id", signerID).Error("Unknown or invalid reseed signer - rejecting for security")
+		return nil, oops.Errorf("unknown or untrusted reseed signer %s: %w", signerID, err)
 	}
 
 	log.WithField("signer_id", signerID).Info("Successfully loaded and validated certificate for reseed signer")
-	return cert.PublicKey, nil
-}
-
-// validateCertificate checks certificate validity including expiration dates.
-func validateCertificate(cert *x509.Certificate, signerID string) error {
-	now := time.Now()
-
-	if now.Before(cert.NotBefore) {
-		log.WithFields(logger.Fields{
-			"signer_id":  signerID,
-			"not_before": cert.NotBefore,
-			"now":        now,
-		}).Error("Certificate not yet valid")
-		return oops.Errorf("certificate for signer %s not yet valid (NotBefore: %v)", signerID, cert.NotBefore)
-	}
-
-	if now.After(cert.NotAfter) {
-		log.WithFields(logger.Fields{
-			"signer_id": signerID,
-			"not_after": cert.NotAfter,
-			"now":       now,
-		}).Error("Certificate expired")
-		return oops.Errorf("certificate for signer %s expired (NotAfter: %v)", signerID, cert.NotAfter)
-	}
-
-	log.WithFields(logger.Fields{
-		"signer_id":  signerID,
-		"not_before": cert.NotBefore,
-		"not_after":  cert.NotAfter,
-	}).Debug("Certificate validity period verified")
-
-	return nil
+	return publicKey, nil
 }
 
 // decodePEM is a simple PEM decoder that extracts the first PEM block
