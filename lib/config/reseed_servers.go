@@ -38,8 +38,10 @@ const ReseedStrategyIntersection = "intersection"
 const ReseedStrategyRandom = "random"
 
 // DefaultMinReseedServers is the minimum number of successful reseed servers required.
-// This matches Java I2P's MIN_RESEED_SERVERS = 2 for security.
-const DefaultMinReseedServers = 1
+// This matches Java I2P's MIN_RESEED_SERVERS = 2 for enhanced security through
+// multi-server confirmation. Using 2 servers helps detect compromised or malicious
+// reseed servers by requiring agreement from multiple independent sources.
+const DefaultMinReseedServers = 2
 
 // ValidReseedStrategies returns the list of valid reseed strategy values.
 func ValidReseedStrategies() []string {

@@ -24,6 +24,114 @@ func createMockResults(serverURLs []string, routerCounts []int, errors []error) 
 	return results
 }
 
+// Integration tests for GetPeers routing logic
+
+func TestShouldUseMultiServerReseed(t *testing.T) {
+	tests := []struct {
+		name             string
+		minReseedServers int
+		serverCount      int
+		expectedResult   bool
+	}{
+		{
+			name:             "multi-server mode when minServers > 1 and enough servers",
+			minReseedServers: 2,
+			serverCount:      3,
+			expectedResult:   true,
+		},
+		{
+			name:             "multi-server mode with exact minimum",
+			minReseedServers: 2,
+			serverCount:      2,
+			expectedResult:   true,
+		},
+		{
+			name:             "single-server mode when minServers == 1",
+			minReseedServers: 1,
+			serverCount:      5,
+			expectedResult:   false,
+		},
+		{
+			name:             "single-server mode when minServers == 0",
+			minReseedServers: 0,
+			serverCount:      5,
+			expectedResult:   false,
+		},
+		{
+			name:             "single-server fallback when not enough servers",
+			minReseedServers: 3,
+			serverCount:      2,
+			expectedResult:   false,
+		},
+		{
+			name:             "single-server fallback with empty server list",
+			minReseedServers: 2,
+			serverCount:      0,
+			expectedResult:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			servers := make([]*config.ReseedConfig, tc.serverCount)
+			for i := 0; i < tc.serverCount; i++ {
+				servers[i] = &config.ReseedConfig{Url: "https://server" + string(rune('1'+i)) + "/"}
+			}
+
+			cfg := &config.BootstrapConfig{
+				MinReseedServers: tc.minReseedServers,
+				ReseedServers:    servers,
+			}
+			rb := &ReseedBootstrap{config: cfg}
+
+			result := rb.shouldUseMultiServerReseed()
+			if result != tc.expectedResult {
+				t.Errorf("shouldUseMultiServerReseed() = %v, want %v", result, tc.expectedResult)
+			}
+		})
+	}
+}
+
+func TestDefaultConfigUsesMultiServer(t *testing.T) {
+	// Verify that DefaultBootstrapConfig enables multi-server mode
+	cfg := config.DefaultBootstrapConfig
+
+	// DefaultMinReseedServers should be 2 (Java I2P parity)
+	if cfg.MinReseedServers != 2 {
+		t.Errorf("DefaultBootstrapConfig.MinReseedServers = %d, want 2 (Java I2P parity)", cfg.MinReseedServers)
+	}
+
+	// KnownReseedServers should have enough servers for multi-server mode
+	if len(cfg.ReseedServers) < cfg.MinReseedServers {
+		t.Errorf("DefaultBootstrapConfig has %d servers but needs at least %d for multi-server mode",
+			len(cfg.ReseedServers), cfg.MinReseedServers)
+	}
+
+	// Create a ReseedBootstrap with default config and verify multi-server is enabled
+	rb := &ReseedBootstrap{config: &cfg}
+	if !rb.shouldUseMultiServerReseed() {
+		t.Error("DefaultBootstrapConfig should enable multi-server reseed mode")
+	}
+}
+
+func TestSingleServerModeBackwardCompatibility(t *testing.T) {
+	// Verify that setting MinReseedServers=1 disables multi-server mode
+	cfg := &config.BootstrapConfig{
+		MinReseedServers: 1,
+		ReseedServers: []*config.ReseedConfig{
+			{Url: "https://server1/"},
+			{Url: "https://server2/"},
+			{Url: "https://server3/"},
+		},
+		ReseedStrategy: config.ReseedStrategyUnion,
+	}
+
+	rb := &ReseedBootstrap{config: cfg}
+	if rb.shouldUseMultiServerReseed() {
+		t.Error("MinReseedServers=1 should disable multi-server mode for backward compatibility")
+	}
+}
+
 func TestFilterSuccessful(t *testing.T) {
 	tests := []struct {
 		name          string

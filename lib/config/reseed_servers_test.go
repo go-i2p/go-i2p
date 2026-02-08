@@ -127,8 +127,8 @@ func TestIsValidReseedStrategy(t *testing.T) {
 }
 
 func TestDefaultMinReseedServers(t *testing.T) {
-	// Should be 1 for backward compatibility
-	if DefaultMinReseedServers != 1 {
-		t.Errorf("DefaultMinReseedServers should be 1 for backward compatibility, got %d", DefaultMinReseedServers)
+	// Should be 2 for Java I2P parity (enhanced security through multi-server confirmation)
+	if DefaultMinReseedServers != 2 {
+		t.Errorf("DefaultMinReseedServers should be 2 for Java I2P parity, got %d", DefaultMinReseedServers)
 	}
 }

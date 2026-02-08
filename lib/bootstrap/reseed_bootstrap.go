@@ -46,10 +46,61 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 }
 
 // GetPeers implements the Bootstrap interface by obtaining RouterInfos
-// from configured reseed servers
+// from configured reseed servers.
+//
+// When MinReseedServers > 1 and enough servers are configured, it uses
+// MultiServerReseed for concurrent fetching with strategy-based result combination.
+// This matches Java I2P's security model requiring multiple server confirmation.
+//
+// Falls back to sequential single-server mode if multi-server reseed fails
+// or when MinReseedServers == 1.
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	rb.logReseedStart(n)
 
+	// Try multi-server reseed first if configured (Java I2P parity)
+	if rb.shouldUseMultiServerReseed() {
+		peers, err := rb.MultiServerReseed(ctx, n)
+		if err == nil && len(peers) > 0 {
+			rb.logMultiServerSuccess(len(peers), n)
+			return peers, nil
+		}
+		// Log failure and fall back to single-server mode
+		log.WithError(err).WithFields(logger.Fields{
+			"at":          "(ReseedBootstrap) GetPeers",
+			"phase":       "bootstrap",
+			"reason":      "multi-server reseed failed, falling back to single-server",
+			"min_servers": rb.config.MinReseedServers,
+			"peer_count":  len(peers),
+			"fallback":    "single_server_sequential",
+		}).Warn("multi-server reseed failed, attempting single-server fallback")
+	}
+
+	// Single-server sequential mode (original behavior)
+	return rb.singleServerReseed(ctx, n)
+}
+
+// shouldUseMultiServerReseed returns true if multi-server mode should be attempted.
+func (rb *ReseedBootstrap) shouldUseMultiServerReseed() bool {
+	return rb.config.MinReseedServers > 1 &&
+		len(rb.config.ReseedServers) >= rb.config.MinReseedServers
+}
+
+// logMultiServerSuccess logs successful completion of multi-server reseed.
+func (rb *ReseedBootstrap) logMultiServerSuccess(peerCount, requested int) {
+	log.WithFields(logger.Fields{
+		"at":                "(ReseedBootstrap) GetPeers",
+		"phase":             "bootstrap",
+		"step":              "complete",
+		"reason":            "multi-server reseed completed successfully",
+		"routers_obtained":  peerCount,
+		"routers_requested": requested,
+		"mode":              "multi_server",
+	}).Info("multi-server bootstrap peer acquisition completed")
+}
+
+// singleServerReseed performs sequential single-server reseed (original GetPeers logic).
+// This is used as a fallback when multi-server reseed fails or when MinReseedServers == 1.
+func (rb *ReseedBootstrap) singleServerReseed(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	state := &reseedState{
 		allRouterInfos: make([]router_info.RouterInfo, 0),
 	}
