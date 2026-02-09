@@ -1308,17 +1308,29 @@ func (db *StdNetDB) SkiplistFileForLeaseSet(hash common.Hash) string {
 }
 
 // StoreLeaseSet stores a LeaseSet entry in the database from I2NP DatabaseStore message.
-// This method validates, parses, caches, and persists LeaseSet data.
-// dataType should be 1 for standard LeaseSets (matching I2P protocol specification).
+// This method validates and dispatches to the appropriate typed store method based on dataType.
+// Accepts dataType 1 (LeaseSet), 3 (LeaseSet2), 5 (EncryptedLeaseSet), and 7 (MetaLeaseSet).
 func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing LeaseSet from DatabaseStore message")
 
-	// Validate data type (1 = standard LeaseSet in I2P protocol)
+	// Validate data type covers all LeaseSet variants (1, 3, 5, 7)
 	if err := validateLeaseSetDataType(dataType); err != nil {
 		return err
 	}
 
-	// Parse LeaseSet from raw bytes
+	// Dispatch to the appropriate typed store method
+	switch dataType {
+	case leaseSet2Type:
+		return db.StoreLeaseSet2(key, data, dataType)
+	case encryptedLeaseSetType:
+		return db.StoreEncryptedLeaseSet(key, data, dataType)
+	case metaLeaseSetType:
+		return db.StoreMetaLeaseSet(key, data, dataType)
+	default:
+		// Type 1: standard LeaseSet - handle inline
+	}
+
+	// Parse standard LeaseSet from raw bytes
 	ls, err := parseLeaseSetData(data)
 	if err != nil {
 		return err
@@ -1343,13 +1355,25 @@ func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) e
 	return nil
 }
 
-// validateLeaseSetDataType checks if the data type is valid for LeaseSet storage.
+// Valid LeaseSet data type constants matching I2NP DatabaseStore specification.
+// These mirror the constants in lib/i2np/database_store.go to avoid a circular import.
+const (
+	leaseSetType          byte = 1 // Standard LeaseSet
+	leaseSet2Type         byte = 3 // LeaseSet2 (standard since 0.9.38)
+	encryptedLeaseSetType byte = 5 // EncryptedLeaseSet (0.9.39+)
+	metaLeaseSetType      byte = 7 // MetaLeaseSet (0.9.40+)
+)
+
+// validateLeaseSetDataType checks if the data type is valid for any LeaseSet variant.
+// Accepts types 1 (LeaseSet), 3 (LeaseSet2), 5 (EncryptedLeaseSet), and 7 (MetaLeaseSet).
 func validateLeaseSetDataType(dataType byte) error {
-	if dataType != 1 {
-		log.WithField("type", dataType).Warn("Invalid data type for LeaseSet, expected 1")
-		return fmt.Errorf("invalid data type for LeaseSet: expected 1, got %d", dataType)
+	switch dataType {
+	case leaseSetType, leaseSet2Type, encryptedLeaseSetType, metaLeaseSetType:
+		return nil
+	default:
+		log.WithField("type", dataType).Warn("Invalid data type for LeaseSet")
+		return fmt.Errorf("invalid data type for LeaseSet: expected 1, 3, 5, or 7, got %d", dataType)
 	}
-	return nil
 }
 
 // parseLeaseSetData parses LeaseSet from raw bytes using the common library.

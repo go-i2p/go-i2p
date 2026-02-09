@@ -201,9 +201,15 @@ func TestValidateLeaseSetDataType(t *testing.T) {
 		dataType byte
 		wantErr  bool
 	}{
-		{"valid type 1", 1, false},
-		{"invalid type 0", 0, true},
+		{"valid type 1 (LeaseSet)", 1, false},
+		{"valid type 3 (LeaseSet2)", 3, false},
+		{"valid type 5 (EncryptedLeaseSet)", 5, false},
+		{"valid type 7 (MetaLeaseSet)", 7, false},
+		{"invalid type 0 (RouterInfo)", 0, true},
 		{"invalid type 2", 2, true},
+		{"invalid type 4", 4, true},
+		{"invalid type 6", 6, true},
+		{"invalid type 8", 8, true},
 		{"invalid type 255", 255, true},
 	}
 

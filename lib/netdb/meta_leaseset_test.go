@@ -243,14 +243,33 @@ func TestLeaseSetTypeDifferentiation(t *testing.T) {
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	testData := []byte{0x01, 0x02, 0x03}
 
-	// Type 1 should only work with StoreLeaseSet
+	// StoreLeaseSet accepts all valid LeaseSet types (1, 3, 5, 7) and dispatches
+	// Type 1 dispatches to standard LeaseSet parsing
 	err := db.StoreLeaseSet(testHash, testData, 1)
-	assert.Error(t, err) // Will fail due to invalid data, but type is correct
+	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
 
+	// Type 3 dispatches to StoreLeaseSet2
 	err = db.StoreLeaseSet(testHash, testData, 3)
+	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
+
+	// Type 5 dispatches to StoreEncryptedLeaseSet
+	err = db.StoreLeaseSet(testHash, testData, 5)
+	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
+
+	// Type 7 dispatches to StoreMetaLeaseSet
+	err = db.StoreLeaseSet(testHash, testData, 7)
+	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
+
+	// Invalid types should be rejected by StoreLeaseSet
+	err = db.StoreLeaseSet(testHash, testData, 0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid data type")
 
+	err = db.StoreLeaseSet(testHash, testData, 2)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid data type")
+
+	// Type-specific store methods still enforce strict type matching
 	// Type 3 should only work with StoreLeaseSet2
 	err = db.StoreLeaseSet2(testHash, testData, 3)
 	assert.Error(t, err) // Will fail due to invalid data, but type is correct

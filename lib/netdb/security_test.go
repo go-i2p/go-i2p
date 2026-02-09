@@ -518,8 +518,14 @@ func TestLeaseSetTypeDiscrimination_DataTypes(t *testing.T) {
 		validate func(byte) error
 		valid    bool
 	}{
-		{"LeaseSet type 1", 1, func(dt byte) error { return validateLeaseSetDataType(dt) }, true},
-		{"LeaseSet type 0 invalid", 0, func(dt byte) error { return validateLeaseSetDataType(dt) }, false},
+		// validateLeaseSetDataType accepts all valid LeaseSet types (1, 3, 5, 7)
+		{"LeaseSet type 1 via general validator", 1, func(dt byte) error { return validateLeaseSetDataType(dt) }, true},
+		{"LeaseSet2 type 3 via general validator", 3, func(dt byte) error { return validateLeaseSetDataType(dt) }, true},
+		{"EncryptedLeaseSet type 5 via general validator", 5, func(dt byte) error { return validateLeaseSetDataType(dt) }, true},
+		{"MetaLeaseSet type 7 via general validator", 7, func(dt byte) error { return validateLeaseSetDataType(dt) }, true},
+		{"RouterInfo type 0 invalid via general validator", 0, func(dt byte) error { return validateLeaseSetDataType(dt) }, false},
+		{"Invalid type 2 via general validator", 2, func(dt byte) error { return validateLeaseSetDataType(dt) }, false},
+		// Type-specific validators remain strict
 		{"LeaseSet2 type 3", 3, func(dt byte) error { return validateLeaseSet2DataType(dt) }, true},
 		{"LeaseSet2 type 1 invalid", 1, func(dt byte) error { return validateLeaseSet2DataType(dt) }, false},
 		{"EncryptedLeaseSet type 5", 5, func(dt byte) error { return validateEncryptedLeaseSetDataType(dt) }, true},
