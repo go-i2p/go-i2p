@@ -184,15 +184,16 @@ reply_tags ::
 */
 
 type DatabaseLookup struct {
-	Key           common.Hash
-	From          common.Hash
-	Flags         byte
-	ReplyTunnelID [4]byte
-	Size          int
-	ExcludedPeers []common.Hash
-	ReplyKey      session_key.SessionKey
-	Tags          int
-	ReplyTags     []session_tag.SessionTag
+	Key            common.Hash
+	From           common.Hash
+	Flags          byte
+	ReplyTunnelID  [4]byte
+	Size           int
+	ExcludedPeers  []common.Hash
+	ReplyKey       session_key.SessionKey
+	Tags           int
+	ReplyTags      []session_tag.SessionTag
+	ECIESReplyTags []session_tag.ECIESSessionTag
 }
 
 func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
@@ -295,12 +296,22 @@ func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte) error {
 	}
 	databaseLookup.Tags = tags
 
-	_, replyTags, err := readDatabaseLookupReplyTags(lengthAfter, data, tags)
-	if err != nil {
-		log.WithError(err).Error("Failed to read ReplyTags")
-		return err
+	ecies := (databaseLookup.Flags & 0x10) != 0
+	if ecies {
+		_, eciesTags, err := readDatabaseLookupECIESReplyTags(lengthAfter, data, tags)
+		if err != nil {
+			log.WithError(err).Error("Failed to read ECIESReplyTags")
+			return err
+		}
+		databaseLookup.ECIESReplyTags = eciesTags
+	} else {
+		_, replyTags, err := readDatabaseLookupReplyTags(lengthAfter, data, tags)
+		if err != nil {
+			log.WithError(err).Error("Failed to read ReplyTags")
+			return err
+		}
+		databaseLookup.ReplyTags = replyTags
 	}
-	databaseLookup.ReplyTags = replyTags
 
 	return nil
 }
@@ -451,6 +462,28 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 	return length + tags*32, reply_tags, nil
 }
 
+func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
+	tagSize := session_tag.ECIESSessionTagSize
+	if len(data) < length+tags*tagSize {
+		return length, []session_tag.ECIESSessionTag{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+	}
+	var reply_tags []session_tag.ECIESSessionTag
+	for i := 0; i < tags; i++ {
+		offset := length + i*tagSize
+		tag, err := session_tag.NewECIESSessionTagFromBytes(data[offset : offset+tagSize])
+		if err != nil {
+			return length, []session_tag.ECIESSessionTag{}, err
+		}
+		reply_tags = append(reply_tags, tag)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "i2np.database_lookup.readDatabaseLookupECIESReplyTags",
+		"reply_tags": reply_tags,
+	}).Debug("parsed_database_lookup_ecies_reply_tags")
+	return length + tags*tagSize, reply_tags, nil
+}
+
 // GetKey returns the lookup key
 func (d *DatabaseLookup) GetKey() common.Hash {
 	return d.Key
@@ -471,9 +504,19 @@ func (d *DatabaseLookup) GetReplyTags() []session_tag.SessionTag {
 	return d.ReplyTags
 }
 
+// GetECIESReplyTags returns the ECIES reply tags (8-byte)
+func (d *DatabaseLookup) GetECIESReplyTags() []session_tag.ECIESSessionTag {
+	return d.ECIESReplyTags
+}
+
 // GetTagCount returns the number of tags
 func (d *DatabaseLookup) GetTagCount() int {
 	return d.Tags
+}
+
+// IsECIES returns true if the ECIESFlag (bit 4) is set in the flags byte
+func (d *DatabaseLookup) IsECIES() bool {
+	return (d.Flags & 0x10) != 0
 }
 
 // Compile-time interface satisfaction checks

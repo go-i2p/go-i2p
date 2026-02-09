@@ -454,3 +454,153 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	assert.Equal(expectedReplyTags, databaseLookup.ReplyTags)
 	assert.Equal(err, nil)
 }
+
+func TestReadDatabaseLookupECIESReplyTagsTooLittleData(t *testing.T) {
+	assert := assert.New(t)
+
+	length := 99
+	data := make([]byte, length)
+	tags := 3
+	// Only add 2 bytes of tag data, but we need 3*8=24
+	data = append(data, make([]byte, 2)...)
+
+	length, replyTags, err := readDatabaseLookupECIESReplyTags(length, data, tags)
+	assert.Equal(99, length)
+	assert.Equal([]session_tag.ECIESSessionTag{}, replyTags)
+	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+}
+
+func TestReadDatabaseLookupECIESReplyTagsZeroTags(t *testing.T) {
+	assert := assert.New(t)
+
+	length := 99
+	data := make([]byte, length)
+	tags := 0
+
+	var expectedReplyTags []session_tag.ECIESSessionTag
+
+	length, replyTags, err := readDatabaseLookupECIESReplyTags(length, data, tags)
+	assert.Equal(expectedReplyTags, replyTags)
+	assert.Equal(99, length)
+	assert.Nil(err)
+}
+
+func TestReadDatabaseLookupECIESReplyTagsValidData(t *testing.T) {
+	assert := assert.New(t)
+
+	length := 50
+	data := make([]byte, length)
+	tags := 3
+
+	var expectedReplyTags []session_tag.ECIESSessionTag
+	for i := 0; i < tags; i++ {
+		tag := make([]byte, 8)
+		tag[0] = byte(i + 1)
+		tag[3] = 0xAB
+		eciesTag, err := session_tag.NewECIESSessionTagFromBytes(tag)
+		if err != nil {
+			assert.Fail("Failed to create ECIES session tag: %v", err)
+			return
+		}
+		expectedReplyTags = append(expectedReplyTags, eciesTag)
+		data = append(data, tag...)
+	}
+
+	length, replyTags, err := readDatabaseLookupECIESReplyTags(length, data, tags)
+	assert.Equal(expectedReplyTags, replyTags)
+	assert.Equal(50+8*tags, length)
+	assert.Nil(err)
+}
+
+func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
+	assert := assert.New(t)
+
+	// Build a complete DatabaseLookup message with ECIESFlag set
+	// Key (32 bytes)
+	data := make([]byte, 32)
+	for i := range 31 {
+		data[i] = 0x31
+	}
+	expectedKey := common.Hash(data)
+
+	// From (32 bytes)
+	from := make([]byte, 32)
+	from[14] = 0x69
+	from[27] = 0x15
+	data = append(data, from...)
+	expectedFrom := common.Hash(from)
+
+	// Flags: deliveryFlag=1 (bit 0) + ECIESFlag=1 (bit 4) = 0x11
+	expectedFlags := byte(0x11)
+	data = append(data, expectedFlags)
+
+	// ReplyTunnelID (4 bytes, because deliveryFlag=1)
+	tunnelIDData := make([]byte, 4)
+	tunnelIDData[0] = 0xff
+	tunnelIDData[2] = 0xf2
+	data = append(data, tunnelIDData...)
+	expectedTunnelID := [4]byte(tunnelIDData)
+
+	// Size (2 bytes) = 2 excluded peers
+	sizeData := []byte{0x0, 0x02}
+	data = append(data, sizeData...)
+	expectedSize := common.Integer(sizeData).Int()
+
+	// ExcludedPeers (2 * 32 bytes)
+	var expectedExcludedPeers []common.Hash
+	for i := 0; i < expectedSize; i++ {
+		peer := make([]byte, 32)
+		peer[5] = byte(0xDD + i)
+		peer[13] = 0x35
+		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
+		data = append(data, peer...)
+	}
+
+	// ReplyKey (32 bytes)
+	replyKeyData := make([]byte, 32)
+	replyKeyData[6] = 0x11
+	replyKeyData[14] = 0x13
+	data = append(data, replyKeyData...)
+	expectedReplyKey := session_key.SessionKey(replyKeyData)
+
+	// Tags count = 2
+	expectedTags := 2
+	data = append(data, byte(expectedTags))
+
+	// ECIES reply tags (2 * 8 bytes, not 32!)
+	var expectedECIESTags []session_tag.ECIESSessionTag
+	for i := 0; i < expectedTags; i++ {
+		tag := make([]byte, 8)
+		tag[0] = byte(i + 1)
+		tag[3] = 0xCC
+		tag[7] = byte(0xA0 + i)
+		eciesTag, err := session_tag.NewECIESSessionTagFromBytes(tag)
+		if err != nil {
+			assert.Fail("Failed to create ECIES session tag: %v", err)
+			return
+		}
+		expectedECIESTags = append(expectedECIESTags, eciesTag)
+		data = append(data, tag...)
+	}
+
+	databaseLookup, err := ReadDatabaseLookup(data)
+	assert.Nil(err)
+	assert.Equal(expectedKey, databaseLookup.Key)
+	assert.Equal(expectedFrom, databaseLookup.From)
+	assert.Equal(expectedFlags, databaseLookup.Flags)
+	assert.Equal(expectedTunnelID, databaseLookup.ReplyTunnelID)
+	assert.Equal(expectedSize, databaseLookup.Size)
+	assert.Equal(expectedExcludedPeers, databaseLookup.ExcludedPeers)
+	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
+	assert.Equal(expectedTags, databaseLookup.Tags)
+	assert.True(databaseLookup.IsECIES())
+	// ElGamal tags should be nil/empty since ECIESFlag is set
+	assert.Nil(databaseLookup.ReplyTags)
+	// ECIES tags should be populated
+	assert.Equal(expectedECIESTags, databaseLookup.ECIESReplyTags)
+	assert.Equal(2, len(databaseLookup.ECIESReplyTags))
+	// Verify each tag is 8 bytes
+	for _, tag := range databaseLookup.ECIESReplyTags {
+		assert.Equal(8, len(tag.Bytes()))
+	}
+}
