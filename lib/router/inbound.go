@@ -1,7 +1,6 @@
 package router
 
 import (
-	"encoding/binary"
 	"fmt"
 	"sync"
 
@@ -104,7 +103,7 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 // This is the main entry point for inbound message delivery.
 //
 // Process:
-// 1. Extract tunnel ID from the message
+// 1. Extract tunnel ID from the TunnelCarrier interface
 // 2. Find the corresponding session and endpoint
 // 3. Decrypt the tunnel message using the endpoint
 // 4. Deliver the decrypted I2NP message to the session
@@ -114,17 +113,9 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 //
 // Returns an error if processing fails at any step.
 //
-// Note on the tunnel message format:
-// According to the I2P spec, the wire format for TunnelData is 1028 bytes:
+// The wire format for TunnelData is 1028 bytes:
 //
 //	[Tunnel ID (4 bytes)] + [Encrypted Data (1024 bytes)]
-//
-// However, the I2NP TunnelDataMessage only stores [1024]byte. This appears to be
-// a mismatch in the current implementation. The TunnelDataMessage.Data should contain
-// the full encrypted tunnel payload INCLUDING the tunnel ID in the first 4 bytes,
-// for a total of 1024 bytes (not 1028). The endpoint expects 1028 bytes, so we need
-// to pad or reconstruct. For now, we'll work with what we have and pass the 1024 bytes
-// directly to the endpoint, which will need to be adjusted.
 func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 	// Extract tunnel data using interface
 	tunnelCarrier, ok := msg.(i2np.TunnelCarrier)
@@ -148,8 +139,8 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 		return fmt.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
 	}
 
-	// The tunnel ID is stored in the first 4 bytes of the tunnel data
-	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(data[0:4]))
+	// Extract the tunnel ID from the TunnelCarrier interface
+	tunnelID := tunnelCarrier.GetTunnelID()
 
 	log.WithFields(logger.Fields{
 		"at":        "HandleTunnelData",

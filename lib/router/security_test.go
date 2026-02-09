@@ -5,6 +5,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync"
 	"testing"
 	"time"
@@ -321,7 +322,13 @@ type mockTunnelCarrier struct {
 	msgID      int
 }
 
-func (m *mockTunnelCarrier) GetTunnelData() []byte          { return m.data }
+func (m *mockTunnelCarrier) GetTunnelData() []byte { return m.data }
+func (m *mockTunnelCarrier) GetTunnelID() tunnel.TunnelID {
+	if len(m.data) >= 4 {
+		return tunnel.TunnelID(binary.BigEndian.Uint32(m.data[0:4]))
+	}
+	return 0
+}
 func (m *mockTunnelCarrier) Type() int                      { return int(i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA) }
 func (m *mockTunnelCarrier) MessageID() int                 { return m.msgID }
 func (m *mockTunnelCarrier) SetMessageID(id int)            { m.msgID = id }

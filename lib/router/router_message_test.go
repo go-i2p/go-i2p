@@ -11,6 +11,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func TestRouteMessageWithoutNetDB(t *testing.T) {
 			createMsg: func() i2np.I2NPMessage {
 				var data [1024]byte
 				copy(data[:], "tunnel data")
-				return i2np.NewTunnelDataMessage(data)
+				return i2np.NewTunnelDataMessage(tunnel.TunnelID(1), data)
 			},
 		},
 	}

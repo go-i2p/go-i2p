@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -67,11 +68,13 @@ func TestDeliveryStatusMessage(t *testing.T) {
 func TestTunnelDataMessage(t *testing.T) {
 	var data [1024]byte
 	copy(data[:], "Test tunnel data")
+	tunnelID := tunnel.TunnelID(42)
 
-	msg := NewTunnelDataMessage(data)
+	msg := NewTunnelDataMessage(tunnelID, data)
 
 	// Test the message
 	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_DATA, msg.Type())
+	assert.Equal(t, tunnelID, msg.TunnelID)
 	assert.Equal(t, data, msg.Data)
 
 	// Marshal and unmarshal
@@ -81,5 +84,6 @@ func TestTunnelDataMessage(t *testing.T) {
 	msg2 := &TunnelDataMessage{BaseI2NPMessage: &BaseI2NPMessage{}}
 	err = msg2.UnmarshalBinary(marshaledData)
 	assert.NoError(t, err)
+	assert.Equal(t, tunnelID, msg2.TunnelID)
 	assert.Equal(t, data, msg2.Data)
 }

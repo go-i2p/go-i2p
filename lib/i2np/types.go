@@ -63,9 +63,11 @@ type PayloadCarrier interface {
 	GetPayload() []byte
 }
 
-// TunnelCarrier represents messages that carry tunnel-related data
+// TunnelCarrier represents messages that carry tunnel-related data.
+// Per I2P spec, TunnelData messages contain a 4-byte TunnelID and 1024 bytes of data.
 type TunnelCarrier interface {
 	GetTunnelData() []byte
+	GetTunnelID() tunnel.TunnelID
 }
 
 // BuildRecordReader represents types that can parse build request records

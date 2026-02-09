@@ -142,7 +142,7 @@ func TestDeliveryStatusMessage_BoundsChecking(t *testing.T) {
 	}
 }
 
-// TestTunnelDataMessage_BoundsChecking verifies exact size requirement
+// TestTunnelDataMessage_BoundsChecking verifies exact size requirement (1028 bytes: 4 TunnelID + 1024 Data)
 func TestTunnelDataMessage_BoundsChecking(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -151,9 +151,10 @@ func TestTunnelDataMessage_BoundsChecking(t *testing.T) {
 	}{
 		{"payload too short - 0 bytes", 0, true},
 		{"payload too short - 512 bytes", 512, true},
-		{"payload too short - 1023 bytes", 1023, true},
-		{"payload exactly 1024 bytes", 1024, false},
-		{"payload too long - 1025 bytes", 1025, true},
+		{"payload too short - 1024 bytes (missing TunnelID)", 1024, true},
+		{"payload too short - 1027 bytes", 1027, true},
+		{"payload exactly 1028 bytes", 1028, false},
+		{"payload too long - 1029 bytes", 1029, true},
 		{"payload too long - 2048 bytes", 2048, true},
 	}
 

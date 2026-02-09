@@ -85,7 +85,7 @@ func TestMessageProcessor(t *testing.T) {
 	// Test processing tunnel data message
 	var tunnelData [1024]byte
 	copy(tunnelData[:], "tunnel test data")
-	tunnelMsg := NewTunnelDataMessage(tunnelData)
+	tunnelMsg := NewTunnelDataMessage(tunnel.TunnelID(1), tunnelData)
 	err = processor.ProcessMessage(tunnelMsg)
 	assert.NoError(t, err)
 }
@@ -256,9 +256,9 @@ func TestConstructorInterfaces(t *testing.T) {
 	// Test TunnelCarrier constructor
 	var data [1024]byte
 	copy(data[:], "tunnel interface test")
-	tc := NewTunnelCarrier(data)
-	tunnelData := tc.GetTunnelData()
-	assert.Equal(t, data[:], tunnelData)
+	tc := NewTunnelCarrier(tunnel.TunnelID(1), data)
+	tunnelCarrierData := tc.GetTunnelData()
+	assert.Equal(t, data[:], tunnelCarrierData)
 }
 
 // Benchmark tests to ensure interface overhead is minimal

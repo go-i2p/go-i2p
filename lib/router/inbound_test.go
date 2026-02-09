@@ -320,14 +320,11 @@ func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
 func createMockTunnelDataMessage(tunnelID tunnelpkg.TunnelID) i2np.I2NPMessage {
 	var data [1024]byte
 
-	// Set tunnel ID
-	binary.BigEndian.PutUint32(data[0:4], uint32(tunnelID))
-
 	// Fill with random encrypted data
-	rand.Read(data[4:])
+	rand.Read(data[:])
 
-	// Create TunnelData message
-	msg := i2np.NewTunnelDataMessage(data)
+	// Create TunnelData message with explicit tunnel ID
+	msg := i2np.NewTunnelDataMessage(tunnelID, data)
 	return msg
 }
 
