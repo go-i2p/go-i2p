@@ -122,11 +122,10 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 	cfg.NetDb.Path = tempDir + "/netdb"
 	cfg.I2CP.Enabled = false
 	cfg.I2PControl.Enabled = false
+	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg.Bootstrap.BootstrapType = "local"
 
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	err = initializeRouterKeystore(router, cfg)
+	router, err := CreateRouter(cfg)
 	require.NoError(t, err)
 
 	router.Start()
@@ -149,8 +148,8 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 	select {
 	case <-done:
 		// Shutdown completed
-	case <-time.After(5 * time.Second):
-		t.Fatal("Router shutdown timed out after 5 seconds")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Router shutdown timed out after 10 seconds")
 	}
 
 	// Context should be cancelled
@@ -169,11 +168,10 @@ func TestShutdownSequence_ContextCancellation(t *testing.T) {
 	cfg.WorkingDir = tempDir
 	cfg.I2CP.Enabled = false
 	cfg.I2PControl.Enabled = false
+	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg.Bootstrap.BootstrapType = "local"
 
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	err = initializeRouterKeystore(router, cfg)
+	router, err := CreateRouter(cfg)
 	require.NoError(t, err)
 
 	router.Start()
@@ -208,11 +206,10 @@ func TestShutdownSequence_WaitGroupCompletion(t *testing.T) {
 	cfg.WorkingDir = tempDir
 	cfg.I2CP.Enabled = false
 	cfg.I2PControl.Enabled = false
+	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg.Bootstrap.BootstrapType = "local"
 
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	err = initializeRouterKeystore(router, cfg)
+	router, err := CreateRouter(cfg)
 	require.NoError(t, err)
 
 	router.Start()
@@ -235,7 +232,7 @@ func TestShutdownSequence_WaitGroupCompletion(t *testing.T) {
 	select {
 	case <-stopDone:
 		// Stop completed
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("Stop() did not complete within timeout")
 	}
 

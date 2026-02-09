@@ -33,6 +33,7 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 	// Create a router with active sessions
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		running:        true,
 	}
 
 	// Create a MessageRouter with configuration
@@ -72,6 +73,7 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
 		StdNetDB:       netdb.NewStdNetDB(tempDir),
+		running:        true,
 	}
 
 	// Ensure NetDB is initialized
@@ -99,6 +101,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		running:        true,
 	}
 
 	// Initialize the MessageRouter (without NetDB for this unit test)
@@ -130,6 +133,7 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 func TestSessionProviderThreadSafety(t *testing.T) {
 	router := &Router{
 		activeSessions: make(map[common.Hash]*ntcp.NTCP2Session),
+		running:        true,
 	}
 
 	// Add multiple sessions
