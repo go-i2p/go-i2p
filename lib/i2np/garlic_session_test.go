@@ -1012,3 +1012,143 @@ func TestTagSingleUse(t *testing.T) {
 		t.Error("Tag should be removed after first use (single-use tags)")
 	}
 }
+
+// TestInboundRatchetStateStored verifies that when the receiver decrypts a New Session
+// message, the inbound ratchet state is stored (not discarded). This validates the fix
+// for the CRITICAL BUG where initializeInboundRatchetState discarded DHRatchet,
+// SymmetricRatchet, and TagRatchet objects.
+func TestInboundRatchetStateStored(t *testing.T) {
+	// Create sender
+	senderSM, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate sender session manager: %v", err)
+	}
+
+	// Create receiver
+	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate receiver key pair: %v", err)
+	}
+
+	var receiverPubKey, receiverPrivKey [32]byte
+	copy(receiverPubKey[:], receiverPubBytes)
+	copy(receiverPrivKey[:], receiverPrivBytes)
+
+	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
+	if err != nil {
+		t.Fatalf("Failed to create receiver session manager: %v", err)
+	}
+
+	destHash := sha256.Sum256(receiverPubKey[:])
+
+	// Receiver should start with zero sessions
+	if receiverSM.GetSessionCount() != 0 {
+		t.Fatalf("Expected 0 sessions before decryption, got %d", receiverSM.GetSessionCount())
+	}
+
+	// Sender encrypts a New Session message
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("first message"))
+	if err := builder.AddLocalDeliveryClove(dataMsg, 1); err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt garlic message: %v", err)
+	}
+
+	// Receiver decrypts
+	_, _, err = receiverSM.DecryptGarlicMessage(ciphertext)
+	if err != nil {
+		t.Fatalf("Failed to decrypt garlic message: %v", err)
+	}
+
+	// After decrypting a New Session, the receiver should have stored a session
+	if receiverSM.GetSessionCount() != 1 {
+		t.Errorf("Expected 1 session stored after inbound decryption, got %d", receiverSM.GetSessionCount())
+	}
+
+	// The receiver should have tags indexed for the new session
+	receiverSM.mu.RLock()
+	tagCount := len(receiverSM.tagIndex)
+	receiverSM.mu.RUnlock()
+
+	if tagCount == 0 {
+		t.Error("Expected receiver to have indexed tags for the inbound session, got 0")
+	}
+}
+
+// TestInboundRatchetSessionHasValidRatchets verifies the stored inbound session
+// has non-nil ratchet objects that can be used for future message processing.
+func TestInboundRatchetSessionHasValidRatchets(t *testing.T) {
+	senderSM, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate sender session manager: %v", err)
+	}
+
+	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate receiver key pair: %v", err)
+	}
+
+	var receiverPubKey, receiverPrivKey [32]byte
+	copy(receiverPubKey[:], receiverPubBytes)
+	copy(receiverPrivKey[:], receiverPrivBytes)
+
+	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
+	if err != nil {
+		t.Fatalf("Failed to create receiver session manager: %v", err)
+	}
+
+	destHash := sha256.Sum256(receiverPubKey[:])
+
+	builder, err := NewGarlicBuilderWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create garlic builder: %v", err)
+	}
+
+	dataMsg := NewDataMessage([]byte("ratchet validation message"))
+	if err := builder.AddLocalDeliveryClove(dataMsg, 1); err != nil {
+		t.Fatalf("Failed to add clove: %v", err)
+	}
+
+	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
+	if err != nil {
+		t.Fatalf("Failed to encrypt: %v", err)
+	}
+
+	_, _, err = receiverSM.DecryptGarlicMessage(ciphertext)
+	if err != nil {
+		t.Fatalf("Failed to decrypt: %v", err)
+	}
+
+	// Inspect the stored session to verify ratchets are non-nil
+	receiverSM.mu.RLock()
+	defer receiverSM.mu.RUnlock()
+
+	for _, session := range receiverSM.sessions {
+		if session.DHRatchet == nil {
+			t.Error("Stored inbound session has nil DHRatchet")
+		}
+		if session.SymmetricRatchet == nil {
+			t.Error("Stored inbound session has nil SymmetricRatchet")
+		}
+		if session.TagRatchet == nil {
+			t.Error("Stored inbound session has nil TagRatchet")
+		}
+		if session.MessageCounter != 1 {
+			t.Errorf("Expected MessageCounter=1, got %d", session.MessageCounter)
+		}
+		if len(session.pendingTags) == 0 {
+			t.Error("Expected session to have pending tags for future lookups")
+		}
+		return // Only check the first (should be only) session
+	}
+
+	t.Error("No session found in receiver after decrypting New Session message")
+}

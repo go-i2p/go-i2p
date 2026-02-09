@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -507,7 +508,10 @@ func (sm *GarlicSessionManager) decryptNewSession(newSessionMsg []byte) ([]byte,
 		return nil, err
 	}
 
-	sm.initializeInboundRatchetState(parsedMsg.ephemeralPubKey, sessionKeys)
+	if err := sm.initializeInboundRatchetState(parsedMsg.ephemeralPubKey, sessionKeys); err != nil {
+		log.WithError(err).Error("Failed to initialize inbound ratchet state")
+		return nil, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at":             "decryptNewSession",
@@ -598,22 +602,33 @@ func decryptWithSessionKeys(parsedMsg *newSessionMessageComponents, symKey [32]b
 	return plaintext, nil
 }
 
-// initializeInboundRatchetState creates ratchet state for future messages from sender.
-// Note: Session storage is handled at a higher level after parsing the garlic message content.
-func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [32]byte, keys *sessionKeys) {
-	var ourPriv, theirPub [32]byte
-	copy(ourPriv[:], sm.ourPrivateKey[:])
-	copy(theirPub[:], ephemeralPubKey[:])
+// initializeInboundRatchetState creates and stores ratchet state for future messages
+// from a sender whose New Session message we just decrypted. Since the sender's
+// destination hash is not known until the garlic content is parsed, we key the session
+// by the SHA-256 hash of the ephemeral public key used in the handshake. The session
+// is also indexed by its pre-generated tags for O(1) lookup on subsequent messages.
+func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [32]byte, keys *sessionKeys) error {
+	session := createGarlicSession(ephemeralPubKey, keys, sm.ourPrivateKey)
 
-	dhRatchet := ratchet.NewDHRatchet(keys.rootKey, ourPriv, theirPub)
-	symRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
-	tagRatchet := ratchet.NewTagRatchet(keys.tagKey)
+	// Key the session by the hash of the ephemeral public key, since we do not yet
+	// know the sender's destination hash (it is inside the encrypted garlic payload).
+	sessionHash := common.Hash(sha256.Sum256(ephemeralPubKey[:]))
+	sm.sessions[sessionHash] = session
 
-	// Store session (Note: We would need to extract sender's destination hash from the garlic message)
-	// For now, we'll need to handle this at a higher level where we can parse the garlic content
-	_ = dhRatchet
-	_ = symRatchet
-	_ = tagRatchet
+	if err := sm.generateTagWindow(session); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at": "initializeInboundRatchetState",
+		}).Error("Failed to generate inbound tag window")
+		return oops.Wrapf(err, "failed to generate inbound tag window")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":            "initializeInboundRatchetState",
+		"session_count": len(sm.sessions),
+		"tag_count":     len(sm.tagIndex),
+	}).Debug("Inbound ratchet session stored successfully")
+
+	return nil
 }
 
 // decryptExistingSession decrypts an Existing Session message using ratchet state.
