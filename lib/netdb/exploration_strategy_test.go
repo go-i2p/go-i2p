@@ -1,13 +1,104 @@
 package netdb
 
 import (
+	"bytes"
+	"crypto/rand"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/common/keys_and_cert"
+	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_identity"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/signature"
+	"github.com/go-i2p/crypto/ed25519"
+	elgamal "github.com/go-i2p/crypto/elg"
+	"github.com/go-i2p/crypto/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// createTestRouterInfoWithOptions creates a valid RouterInfo with the specified options.
+// This helper is used to construct properly signed RouterInfo objects for testing
+// exploration strategy features like floodfill detection and bucket distribution.
+func createTestRouterInfoWithOptions(t *testing.T, options map[string]string) *router_info.RouterInfo {
+	t.Helper()
+
+	// Generate Ed25519 signing key pair
+	ed25519PrivKey, err := ed25519.GenerateEd25519Key()
+	require.NoError(t, err, "Failed to generate Ed25519 key")
+
+	ed25519PrivKeyTyped := ed25519PrivKey.(ed25519.Ed25519PrivateKey)
+	ed25519PubKeyRaw, err := ed25519PrivKeyTyped.Public()
+	require.NoError(t, err, "Failed to derive Ed25519 public key")
+
+	ed25519PubKey, ok := ed25519PubKeyRaw.(types.SigningPublicKey)
+	require.True(t, ok, "Failed to cast Ed25519 public key")
+
+	// Generate ElGamal encryption key pair
+	var elgPrivKey elgamal.PrivateKey
+	err = elgamal.ElgamalGenerate(&elgPrivKey.PrivateKey, rand.Reader)
+	require.NoError(t, err, "Failed to generate ElGamal key")
+
+	var elgPubKey elgamal.ElgPublicKey
+	yBytes := elgPrivKey.PublicKey.Y.Bytes()
+	require.LessOrEqual(t, len(yBytes), 256, "ElGamal public key Y too large")
+	copy(elgPubKey[256-len(yBytes):], yBytes)
+
+	// Create KEY certificate for Ed25519/ElGamal
+	var payload bytes.Buffer
+	signingType, err := common.NewIntegerFromInt(7, 2) // Ed25519
+	require.NoError(t, err)
+	cryptoType, err := common.NewIntegerFromInt(0, 2) // ElGamal
+	require.NoError(t, err)
+	payload.Write(*signingType)
+	payload.Write(*cryptoType)
+
+	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
+	require.NoError(t, err, "Failed to create certificate")
+
+	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
+	require.NoError(t, err, "Failed to create key certificate")
+
+	// Create padding
+	pubKeySize := keyCert.CryptoSize()
+	sigKeySize := keyCert.SignatureSize()
+	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
+	padding := make([]byte, paddingSize)
+	_, err = rand.Read(padding)
+	require.NoError(t, err, "Failed to generate padding")
+
+	// Create RouterIdentity
+	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, cert, padding)
+	require.NoError(t, err, "Failed to create router identity")
+
+	// Create router address
+	routerAddr, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", map[string]string{})
+	require.NoError(t, err, "Failed to create router address")
+
+	// Merge default options with provided options
+	mergedOptions := map[string]string{"router.version": "0.9.64"}
+	for k, v := range options {
+		mergedOptions[k] = v
+	}
+
+	// Create RouterInfo
+	ri, err := router_info.NewRouterInfo(
+		routerIdentity,
+		time.Now(),
+		[]*router_address.RouterAddress{routerAddr},
+		mergedOptions,
+		&ed25519PrivKeyTyped,
+		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
+	)
+	require.NoError(t, err, "Failed to create RouterInfo")
+
+	return ri
+}
 
 // TestNewAdaptiveStrategy verifies adaptive strategy initialization
 func TestNewAdaptiveStrategy(t *testing.T) {
@@ -119,23 +210,78 @@ func TestGenerateKeyInBucket_InvalidBucket(t *testing.T) {
 
 // TestUpdateStats verifies statistics tracking
 func TestUpdateStats(t *testing.T) {
-	db := NewStdNetDB("")
-
 	var ourHash common.Hash
 	copy(ourHash[:], []byte("test-router-hash-32-bytes-long!"))
 
-	_ = NewAdaptiveStrategy(ourHash)
+	strategy := NewAdaptiveStrategy(ourHash)
 
-	// Initially empty - use RouterNetDB for NetworkDatabase interface
-	_ = NewRouterNetDB(db)
-	// TODO: Create actual test with mock NetworkDatabase
-	// For now we just verify strategy can be created
-	// strategy.UpdateStats(db, ourHash)
-	// assert.Equal(t, 0, strategy.totalRouters)
-	// assert.Equal(t, 0, strategy.floodfillRouters)
+	t.Run("empty database", func(t *testing.T) {
+		db := newMockNetDB()
+		strategy.UpdateStats(db, ourHash)
 
-	// TODO: Add routers to NetDB and verify stats update
-	// This would require creating mock RouterInfo entries
+		assert.Equal(t, 0, strategy.totalRouters)
+		assert.Equal(t, 0, strategy.floodfillRouters)
+	})
+
+	t.Run("database with non-floodfill routers", func(t *testing.T) {
+		db := newMockNetDB()
+
+		// Create and store non-floodfill routers
+		for i := 0; i < 3; i++ {
+			ri := createTestRouterInfoWithOptions(t, map[string]string{
+				"caps": "R",
+			})
+			db.StoreRouterInfo(*ri)
+		}
+
+		strategy.UpdateStats(db, ourHash)
+
+		assert.Equal(t, 3, strategy.totalRouters)
+		assert.Equal(t, 0, strategy.floodfillRouters)
+	})
+
+	t.Run("database with floodfill routers", func(t *testing.T) {
+		db := newMockNetDB()
+
+		// Create floodfill routers (caps containing "f")
+		for i := 0; i < 2; i++ {
+			ri := createTestRouterInfoWithOptions(t, map[string]string{
+				"caps": "fR",
+			})
+			db.StoreRouterInfo(*ri)
+		}
+
+		// Create non-floodfill routers
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "R",
+		})
+		db.StoreRouterInfo(*ri)
+
+		strategy.UpdateStats(db, ourHash)
+
+		assert.Equal(t, 3, strategy.totalRouters)
+		assert.Equal(t, 2, strategy.floodfillRouters)
+	})
+
+	t.Run("stats reset on subsequent calls", func(t *testing.T) {
+		db := newMockNetDB()
+
+		// First call with routers
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "fR",
+		})
+		db.StoreRouterInfo(*ri)
+
+		strategy.UpdateStats(db, ourHash)
+		assert.Equal(t, 1, strategy.totalRouters)
+		assert.Equal(t, 1, strategy.floodfillRouters)
+
+		// Second call with empty DB should reset
+		emptyDB := newMockNetDB()
+		strategy.UpdateStats(emptyDB, ourHash)
+		assert.Equal(t, 0, strategy.totalRouters)
+		assert.Equal(t, 0, strategy.floodfillRouters)
+	})
 }
 
 // TestShouldExplore verifies exploration decision logic
@@ -355,15 +501,39 @@ func TestGenerateRandomHashFunc(t *testing.T) {
 
 // TestIsFloodfillRouter verifies floodfill detection
 func TestIsFloodfillRouter(t *testing.T) {
-	_ = NewAdaptiveStrategy(common.Hash{})
+	strategy := NewAdaptiveStrategy(common.Hash{})
 
-	// TODO: Create mock RouterInfo with floodfill capability
-	// This requires proper RouterInfo construction which depends on common package
-	// For now, we document the expected behavior:
-	// - Router with "caps" option containing "f" should return true
-	// - Router without "f" in caps should return false
+	t.Run("router with floodfill capability", func(t *testing.T) {
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "fR",
+		})
+		assert.True(t, strategy.isFloodfillRouter(*ri),
+			"Router with 'f' in caps should be detected as floodfill")
+	})
 
-	t.Skip("Requires mock RouterInfo creation")
+	t.Run("router without floodfill capability", func(t *testing.T) {
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "R",
+		})
+		assert.False(t, strategy.isFloodfillRouter(*ri),
+			"Router without 'f' in caps should not be detected as floodfill")
+	})
+
+	t.Run("router with multiple capabilities including floodfill", func(t *testing.T) {
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "fRN",
+		})
+		assert.True(t, strategy.isFloodfillRouter(*ri),
+			"Router with 'f' among multiple caps should be detected as floodfill")
+	})
+
+	t.Run("router with empty caps", func(t *testing.T) {
+		ri := createTestRouterInfoWithOptions(t, map[string]string{
+			"caps": "",
+		})
+		assert.False(t, strategy.isFloodfillRouter(*ri),
+			"Router with empty caps should not be detected as floodfill")
+	})
 }
 
 // BenchmarkCalculateBucket benchmarks bucket calculation

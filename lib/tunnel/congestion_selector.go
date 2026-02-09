@@ -417,8 +417,10 @@ func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64 {
 }
 
 // Compile-time interface checks for composable types
-var _ PeerFilter = (*CongestionFilter)(nil)
-var _ PeerScorer = (*CongestionScorer)(nil)
+var (
+	_ PeerFilter = (*CongestionFilter)(nil)
+	_ PeerScorer = (*CongestionScorer)(nil)
+)
 
 // =============================================================================
 // Convenience Constructors for Stacked Selectors

@@ -119,7 +119,7 @@ func logHopCountError(err error, hopCount int) {
 }
 
 // logPeerSelectionError logs an error when peer selection fails.
-func logPeerSelectionError(err error, hopCount int, excludeCount int) {
+func logPeerSelectionError(err error, hopCount, excludeCount int) {
 	log.WithError(err).WithFields(logger.Fields{
 		"at":            "(TunnelBuilder) CreateBuildRequest",
 		"phase":         "tunnel_build",

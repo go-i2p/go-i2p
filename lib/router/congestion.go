@@ -363,8 +363,10 @@ func (n *noopMetricsCollector) GetConnectionUtilization() float64    { return 0 
 func (n *noopMetricsCollector) IsAcceptingTunnels() bool             { return true }
 
 // Ensure interfaces are implemented
-var _ CongestionStateProvider = (*CongestionMonitor)(nil)
-var _ CongestionMetricsCollector = (*noopMetricsCollector)(nil)
+var (
+	_ CongestionStateProvider    = (*CongestionMonitor)(nil)
+	_ CongestionMetricsCollector = (*noopMetricsCollector)(nil)
+)
 
 // RouterMetricsCollector collects congestion metrics from router subsystems.
 // This is the production implementation of CongestionMetricsCollector.

@@ -53,11 +53,11 @@ func createMockCertFS() fs.FS {
 	return fstest.MapFS{
 		"test_at_example.com.crt": &fstest.MapFile{
 			Data: cert1,
-			Mode: 0644,
+			Mode: 0o644,
 		},
 		"admin_at_testserver.org.crt": &fstest.MapFile{
 			Data: cert2,
-			Mode: 0644,
+			Mode: 0o644,
 		},
 	}
 }

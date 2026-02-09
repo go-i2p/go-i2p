@@ -81,14 +81,14 @@ func ExtractCertificates(destDir string) error {
 		destPath := filepath.Join(destDir, relPath)
 
 		if d.IsDir() {
-			return os.MkdirAll(destPath, 0755)
+			return os.MkdirAll(destPath, 0o755)
 		}
 
 		data, err := CertificatesFS.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(destPath, data, 0644)
+		return os.WriteFile(destPath, data, 0o644)
 	})
 }
 
@@ -100,7 +100,7 @@ func ExtractReseedCertificates(destDir string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
 	}
 
@@ -119,6 +119,6 @@ func ExtractReseedCertificates(destDir string) error {
 		}
 
 		destPath := filepath.Join(destDir, path)
-		return os.WriteFile(destPath, data, 0644)
+		return os.WriteFile(destPath, data, 0o644)
 	})
 }
