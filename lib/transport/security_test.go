@@ -196,24 +196,92 @@ func (m *mockTransportWithAddr) Compatible(routerInfo router_info.RouterInfo) bo
 func (m *mockTransportWithAddr) Close() error                                      { return nil }
 func (m *mockTransportWithAddr) Name() string                                      { return "MockWithAddr" }
 
-// TestConnectionPoolingNoLimits verifies current lack of connection limits.
-// This test documents that connection pooling limits are NOT enforced,
-// which is a known gap that should be addressed for production use.
-func TestConnectionPoolingNoLimits(t *testing.T) {
-	// Create a muxer with a mock transport
+// TestConnectionPoolingLimitsEnforced verifies that connection pooling limits
+// are actively enforced by the TransportMuxer, preventing resource exhaustion.
+func TestConnectionPoolingLimitsEnforced(t *testing.T) {
+	// Create a muxer with a very small connection limit
+	transport := &mockTransportWithOrder{
+		name:       "LimitedTransport",
+		compatible: true,
+		callOrder:  &[]string{},
+		mu:         &sync.Mutex{},
+	}
+	muxer := MuxWithLimit(2, transport)
+
+	// First session should succeed
+	emptyRI := router_info.RouterInfo{}
+	_, err := muxer.GetSession(emptyRI)
+	require.NoError(t, err, "First session should succeed")
+	assert.Equal(t, 1, muxer.ActiveSessionCount(), "Should have 1 active session")
+
+	// Second session should succeed
+	_, err = muxer.GetSession(emptyRI)
+	require.NoError(t, err, "Second session should succeed")
+	assert.Equal(t, 2, muxer.ActiveSessionCount(), "Should have 2 active sessions")
+
+	// Third session should fail - pool is full
+	_, err = muxer.GetSession(emptyRI)
+	assert.Error(t, err, "Third session should be rejected")
+	assert.Equal(t, ErrConnectionPoolFull, err, "Error should be ErrConnectionPoolFull")
+	assert.Equal(t, 2, muxer.ActiveSessionCount(), "Should still have 2 active sessions")
+
+	// Release a session
+	muxer.ReleaseSession()
+	assert.Equal(t, 1, muxer.ActiveSessionCount(), "Should have 1 active session after release")
+
+	// Fourth session should succeed after release
+	_, err = muxer.GetSession(emptyRI)
+	require.NoError(t, err, "Session after release should succeed")
+	assert.Equal(t, 2, muxer.ActiveSessionCount(), "Should have 2 active sessions again")
+}
+
+// TestAcceptEnforcesConnectionLimit verifies that Accept respects the connection limit.
+func TestAcceptEnforcesConnectionLimit(t *testing.T) {
 	transport := &mockTransport{
 		acceptConn: &mockConn{},
 	}
-	muxer := Mux(transport)
+	muxer := MuxWithLimit(1, transport)
 
-	// Verify we can get multiple sessions without limits
-	// In a real implementation, there should be a configurable limit
+	// First accept should succeed
+	conn, err := muxer.Accept()
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	assert.Equal(t, 1, muxer.ActiveSessionCount())
 
-	t.Log("AUDIT FINDING: No connection pooling limits are enforced in TransportMuxer")
-	t.Log("Recommendation: Add MaxConnections configuration to prevent resource exhaustion")
+	// Second accept should fail - pool is full
+	conn, err = muxer.Accept()
+	assert.Error(t, err)
+	assert.Equal(t, ErrConnectionPoolFull, err)
+	assert.Nil(t, conn)
 
-	// This test passes to document the gap, not to enforce limits
-	assert.NotNil(t, muxer)
+	// Release and accept again
+	muxer.ReleaseSession()
+	conn, err = muxer.Accept()
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+}
+
+// TestDefaultMaxConnections verifies the default max connections value is used
+// when no explicit limit is set.
+func TestDefaultMaxConnections(t *testing.T) {
+	muxer := Mux()
+	assert.Equal(t, DefaultMaxConnections, muxer.getMaxConnections(),
+		"Default max connections should be %d", DefaultMaxConnections)
+}
+
+// TestCustomMaxConnections verifies that custom max connections values are respected.
+func TestCustomMaxConnections(t *testing.T) {
+	muxer := MuxWithLimit(100)
+	assert.Equal(t, 100, muxer.getMaxConnections(),
+		"Custom max connections should be 100")
+}
+
+// TestReleaseSessionFloor verifies that ReleaseSession doesn't go below zero.
+func TestReleaseSessionFloor(t *testing.T) {
+	muxer := Mux()
+	muxer.ReleaseSession()
+	assert.Equal(t, 0, muxer.ActiveSessionCount(),
+		"Active session count should not go below 0")
 }
 
 // TestErrorHandlingGracefulDegradation verifies that transport failures are handled gracefully.

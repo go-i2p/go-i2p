@@ -347,6 +347,17 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 
 func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
 	routerHashBytes := routerHash.Bytes()
+
+	// Enforce connection pool limit before dialing
+	if err := t.checkSessionLimit(); err != nil {
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash":   fmt.Sprintf("%x", routerHashBytes[:8]),
+			"session_count": t.GetSessionCount(),
+			"max_sessions":  t.config.GetMaxSessions(),
+		}).Warn("Connection pool full, rejecting outbound session")
+		return nil, err
+	}
+
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Creating new outbound NTCP2 session")
 
 	conn, err := t.dialNTCP2Connection(routerInfo)
@@ -580,6 +591,21 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 
 	t.sessions.Store(routerHash, session)
 	return session
+}
+
+// checkSessionLimit returns ErrConnectionPoolFull if the maximum number of
+// concurrent sessions has been reached. This prevents resource exhaustion.
+func (t *NTCP2Transport) checkSessionLimit() error {
+	maxSessions := t.config.GetMaxSessions()
+	currentCount := t.GetSessionCount()
+	if currentCount >= maxSessions {
+		t.logger.WithFields(map[string]interface{}{
+			"current_sessions": currentCount,
+			"max_sessions":     maxSessions,
+		}).Warn("Session limit reached")
+		return ErrConnectionPoolFull
+	}
+	return nil
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.

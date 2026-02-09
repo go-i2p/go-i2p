@@ -4,11 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 )
+
+// DefaultMaxConnections is the default maximum number of concurrent connections
+// across all muxed transports. This prevents resource exhaustion under heavy load.
+const DefaultMaxConnections = 1024
 
 // Compile-time check that TransportMuxer implements Transport interface
 var _ Transport = (*TransportMuxer)(nil)
@@ -18,6 +23,13 @@ var _ Transport = (*TransportMuxer)(nil)
 type TransportMuxer struct {
 	// the underlying transports we are using in order of most prominant to least
 	trans []Transport
+
+	// MaxConnections is the maximum number of concurrent sessions allowed
+	// across all transports in this muxer. 0 means use DefaultMaxConnections.
+	MaxConnections int
+
+	// activeSessionCount tracks the number of currently active sessions
+	activeSessionCount int32 // atomic
 }
 
 // mux a bunch of transports together
@@ -34,6 +46,30 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 		"reason": "created_successfully",
 	}).Debug("TransportMuxer created")
 	return tmux
+}
+
+// MuxWithLimit creates a TransportMuxer with a specified maximum connection limit.
+func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
+	tmux = Mux(t...)
+	tmux.MaxConnections = maxConnections
+	log.WithFields(logger.Fields{
+		"at":              "MuxWithLimit",
+		"max_connections": maxConnections,
+	}).Debug("TransportMuxer created with connection limit")
+	return tmux
+}
+
+// ReleaseSession decrements the active session counter.
+// This should be called when a session is closed to free up capacity.
+func (tmux *TransportMuxer) ReleaseSession() {
+	newCount := atomic.AddInt32(&tmux.activeSessionCount, -1)
+	if newCount < 0 {
+		atomic.StoreInt32(&tmux.activeSessionCount, 0)
+	}
+	log.WithFields(logger.Fields{
+		"at":              "(TransportMuxer) ReleaseSession",
+		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
+	}).Debug("session released")
 }
 
 // set the identity for every transport
@@ -185,6 +221,7 @@ func (tmux *TransportMuxer) logNoTransportError(routerInfo router_info.RouterInf
 // get a transport session given a router info
 // return session and nil if successful
 // return nil and ErrNoTransportAvailable if we failed to get a session
+// return nil and ErrConnectionPoolFull if the connection limit has been reached
 func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s TransportSession, err error) {
 	peerHash, _ := routerInfo.IdentHash()
 	log.WithFields(logger.Fields{
@@ -194,12 +231,18 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		"num_transports": len(tmux.trans),
 	}).Debug("attempting to get session")
 
+	// Enforce connection pool limit
+	if err := tmux.checkConnectionLimit(); err != nil {
+		return nil, err
+	}
+
 	for i, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
 			s, err = tmux.tryGetSessionFromTransport(t, routerInfo, i)
 			if err != nil {
 				continue
 			}
+			atomic.AddInt32(&tmux.activeSessionCount, 1)
 			return s, err
 		}
 	}
@@ -238,6 +281,7 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 // This implements the Transport interface requirement.
 // Returns the connection and nil on success.
 // Returns nil and ErrNoTransportAvailable if no transports are configured.
+// Returns nil and ErrConnectionPoolFull if the connection limit has been reached.
 func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 	log.WithFields(logger.Fields{
 		"at":              "(TransportMuxer) Accept",
@@ -247,6 +291,11 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 
 	if len(tmux.trans) == 0 {
 		return nil, ErrNoTransportAvailable
+	}
+
+	// Enforce connection pool limit
+	if err := tmux.checkConnectionLimit(); err != nil {
+		return nil, err
 	}
 
 	// Use the first transport for accepting connections
@@ -260,9 +309,11 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
+	atomic.AddInt32(&tmux.activeSessionCount, 1)
 	log.WithFields(logger.Fields{
-		"at":     "(TransportMuxer) Accept",
-		"reason": "connection_accepted",
+		"at":              "(TransportMuxer) Accept",
+		"reason":          "connection_accepted",
+		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
 	return conn, nil
 }
@@ -346,6 +397,37 @@ func (tmux *TransportMuxer) handleAcceptResult(res acceptResult) (net.Conn, erro
 type acceptResult struct {
 	conn net.Conn
 	err  error
+}
+
+// getMaxConnections returns the effective maximum connection limit.
+// Returns DefaultMaxConnections if MaxConnections is not set (0 or negative).
+func (tmux *TransportMuxer) getMaxConnections() int {
+	if tmux.MaxConnections <= 0 {
+		return DefaultMaxConnections
+	}
+	return tmux.MaxConnections
+}
+
+// ActiveSessionCount returns the current number of active sessions tracked by the muxer.
+func (tmux *TransportMuxer) ActiveSessionCount() int {
+	return int(atomic.LoadInt32(&tmux.activeSessionCount))
+}
+
+// checkConnectionLimit returns ErrConnectionPoolFull if the maximum number of
+// concurrent connections has been reached.
+func (tmux *TransportMuxer) checkConnectionLimit() error {
+	max := tmux.getMaxConnections()
+	current := int(atomic.LoadInt32(&tmux.activeSessionCount))
+	if current >= max {
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) checkConnectionLimit",
+			"reason":          "connection_pool_full",
+			"active_sessions": current,
+			"max_connections": max,
+		}).Warn("connection pool limit reached")
+		return ErrConnectionPoolFull
+	}
+	return nil
 }
 
 // GetTransports returns a copy of the slice of transports in this muxer.

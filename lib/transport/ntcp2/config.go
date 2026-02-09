@@ -5,10 +5,24 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// DefaultMaxSessions is the default maximum number of concurrent NTCP2 sessions.
+// This prevents resource exhaustion under heavy load.
+const DefaultMaxSessions = 512
+
 type Config struct {
 	ListenerAddress string // Address to listen on, e.g., ":42069"
 	WorkingDir      string // Working directory for persistent storage (e.g., ~/.go-i2p/config)
+	MaxSessions     int    // Maximum number of concurrent sessions (0 = use DefaultMaxSessions)
 	*ntcp2.NTCP2Config
+}
+
+// GetMaxSessions returns the effective maximum session limit.
+// Returns DefaultMaxSessions if MaxSessions is not set (0 or negative).
+func (c *Config) GetMaxSessions() int {
+	if c.MaxSessions <= 0 {
+		return DefaultMaxSessions
+	}
+	return c.MaxSessions
 }
 
 func NewConfig(listenerAddress string) (*Config, error) {
