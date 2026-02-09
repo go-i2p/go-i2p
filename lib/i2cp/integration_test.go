@@ -19,9 +19,12 @@ type mockTunnelBuilder struct {
 	nextID tunnel.TunnelID
 }
 
-func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
+func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
 	m.nextID++
-	return m.nextID, nil
+	return &tunnel.BuildTunnelResult{
+		TunnelID:   m.nextID,
+		PeerHashes: nil,
+	}, nil
 }
 
 // setupTestEnvironment creates a complete test environment with server, session, and tunnel pools

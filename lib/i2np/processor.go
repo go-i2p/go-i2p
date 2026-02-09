@@ -1243,8 +1243,22 @@ func (tm *TunnelManager) retryTunnelBuild(tunnelID tunnel.TunnelID, isInbound bo
 
 // BuildTunnel implements tunnel.BuilderInterface for automatic pool maintenance.
 // This adapter method wraps BuildTunnelFromRequest to match the interface signature.
-func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
-	return tm.BuildTunnelFromRequest(req)
+// It returns peer hashes extracted from the build request so that failed builds
+// can report which peers were involved for progressive exclusion on retry.
+func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
+	tunnelID, peerHashes, err := tm.BuildTunnelFromRequest(req)
+	if err != nil {
+		// Return partial result with peer hashes even on failure,
+		// so the caller can exclude these peers on retry
+		return &tunnel.BuildTunnelResult{
+			TunnelID:   0,
+			PeerHashes: peerHashes,
+		}, err
+	}
+	return &tunnel.BuildTunnelResult{
+		TunnelID:   tunnelID,
+		PeerHashes: peerHashes,
+	}, nil
 }
 
 // BuildTunnelFromRequest builds a tunnel from a BuildTunnelRequest using the tunnel.TunnelBuilder.
@@ -1255,12 +1269,15 @@ func (tm *TunnelManager) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.Tunn
 // 2. Generates a unique message ID for request/reply correlation
 // 3. Tracks the pending build request with reply decryption keys
 // 4. Sends the build request via appropriate transport
-// 5. Returns the tunnel ID for tracking
-func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
+// 5. Returns the tunnel ID, selected peer hashes, and any error
+func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, []common.Hash, error) {
 	result, messageID, err := tm.createBuildRequestAndID(req)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
+
+	// Extract peer hashes from the build result for caller tracking
+	peerHashes := tm.extractPeerHashes(result)
 
 	tunnelState := tm.createTunnelStateFromResult(result)
 	pool := tm.getPoolForTunnel(req.IsInbound)
@@ -1276,7 +1293,7 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 		len(result.Hops),
 	); regErr != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, fmt.Errorf("failed to register pending build: %w", regErr)
+		return 0, peerHashes, fmt.Errorf("failed to register pending build: %w", regErr)
 	}
 
 	// Schedule immediate cleanup on timeout (90 seconds per I2P spec)
@@ -1288,11 +1305,11 @@ func (tm *TunnelManager) BuildTunnelFromRequest(req tunnel.BuildTunnelRequest) (
 	err = tm.sendBuildMessage(result, messageID)
 	if err != nil {
 		tm.cleanupFailedBuild(result.TunnelID, messageID, req.IsInbound)
-		return 0, fmt.Errorf("failed to send build request: %w", err)
+		return 0, peerHashes, fmt.Errorf("failed to send build request: %w", err)
 	}
 
 	tm.logBuildRequestSent(result, messageID)
-	return result.TunnelID, nil
+	return result.TunnelID, peerHashes, nil
 }
 
 // createBuildRequestAndID validates prerequisites and creates the build request with message ID
@@ -1313,6 +1330,26 @@ func (tm *TunnelManager) createBuildRequestAndID(req tunnel.BuildTunnelRequest) 
 
 	messageID := tm.generateMessageID()
 	return result, messageID, nil
+}
+
+// extractPeerHashes extracts identity hashes from the selected peers in a build result.
+// Returns the hashes of all peers that were selected for the tunnel build,
+// enabling callers to track which peers participated in failed builds.
+func (tm *TunnelManager) extractPeerHashes(result *tunnel.TunnelBuildResult) []common.Hash {
+	if result == nil || len(result.Hops) == 0 {
+		return nil
+	}
+
+	hashes := make([]common.Hash, 0, len(result.Hops))
+	for i, peer := range result.Hops {
+		hash, err := peer.IdentHash()
+		if err != nil {
+			log.WithError(err).WithField("hop_index", i).Warn("Failed to extract peer hash from build result")
+			continue
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes
 }
 
 // createTunnelStateFromResult creates tunnel state tracking from build result

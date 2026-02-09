@@ -581,9 +581,12 @@ type mockTunnelBuilder struct {
 	mu     sync.Mutex
 }
 
-func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (tunnel.TunnelID, error) {
+func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.nextID++
-	return m.nextID, nil
+	return &tunnel.BuildTunnelResult{
+		TunnelID:   m.nextID,
+		PeerHashes: nil,
+	}, nil
 }

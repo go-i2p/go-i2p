@@ -98,20 +98,20 @@ func TestTunnelManager(t *testing.T) {
 		IsInbound: false,
 		HopCount:  3,
 	}
-	tunnelID, err := manager.BuildTunnel(req)
+	result, err := manager.BuildTunnel(req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient peers")
-	assert.Equal(t, tunnel.TunnelID(0), tunnelID)
+	assert.Equal(t, tunnel.TunnelID(0), result.TunnelID)
 
 	// Test with inbound tunnel build request - should also get error
 	inboundReq := tunnel.BuildTunnelRequest{
 		IsInbound: true,
 		HopCount:  2,
 	}
-	tunnelID, err = manager.BuildTunnel(inboundReq)
+	result, err = manager.BuildTunnel(inboundReq)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient peers")
-	assert.Equal(t, tunnel.TunnelID(0), tunnelID)
+	assert.Equal(t, tunnel.TunnelID(0), result.TunnelID)
 }
 
 func TestDatabaseManager(t *testing.T) {

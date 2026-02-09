@@ -12,16 +12,17 @@ import (
 
 // MockTunnelBuilder for testing pool maintenance
 type MockTunnelBuilder struct {
-	mu             sync.Mutex
-	buildCount     int
-	shouldFail     bool
-	lastRequest    BuildTunnelRequest
-	builtTunnels   []TunnelID
-	callbackPool   *Pool         // Allow builder to add tunnels to pool
-	completionChan chan struct{} // Signal when a build completes
+	mu               sync.Mutex
+	buildCount       int
+	shouldFail       bool
+	lastRequest      BuildTunnelRequest
+	builtTunnels     []TunnelID
+	callbackPool     *Pool         // Allow builder to add tunnels to pool
+	completionChan   chan struct{} // Signal when a build completes
+	failedPeerHashes []common.Hash // Peer hashes to return on failure
 }
 
-func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error) {
+func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -39,7 +40,11 @@ func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error
 	}()
 
 	if m.shouldFail {
-		return 0, assert.AnError
+		// Return peer hashes even on failure so pool can exclude them on retry
+		return &BuildTunnelResult{
+			TunnelID:   0,
+			PeerHashes: m.failedPeerHashes,
+		}, assert.AnError
 	}
 
 	// Generate a tunnel ID
@@ -57,7 +62,10 @@ func (m *MockTunnelBuilder) BuildTunnel(req BuildTunnelRequest) (TunnelID, error
 		m.callbackPool.AddTunnel(tunnel)
 	}
 
-	return tunnelID, nil
+	return &BuildTunnelResult{
+		TunnelID:   tunnelID,
+		PeerHashes: nil,
+	}, nil
 }
 
 // GetBuildCount returns the current build count in a thread-safe manner.

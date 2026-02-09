@@ -44,10 +44,20 @@ type PeerSelector interface {
 	SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
 }
 
+// BuildTunnelResult contains the result of a tunnel build attempt.
+// It provides the generated tunnel ID and the hashes of the peers
+// that were selected for this build, enabling callers to track which
+// peers participated in failed builds for exclusion on retry.
+type BuildTunnelResult struct {
+	TunnelID   TunnelID      // The assigned tunnel ID (0 on failure)
+	PeerHashes []common.Hash // Hashes of peers selected for this build attempt
+}
+
 // BuilderInterface defines interface for building tunnels
 type BuilderInterface interface {
-	// BuildTunnel initiates building a new tunnel with the specified parameters
-	BuildTunnel(req BuildTunnelRequest) (TunnelID, error)
+	// BuildTunnel initiates building a new tunnel with the specified parameters.
+	// Returns a BuildTunnelResult containing the tunnel ID and selected peer hashes.
+	BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error)
 }
 
 // PoolConfig defines configuration parameters for a tunnel pool
@@ -620,7 +630,7 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 		if retry > 0 && len(lastBuildPeers) > 0 {
 			req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
 			log.WithFields(logger.Fields{
-				"at":                  "Pool.attemptBuildTunnels",
+				"at":                  "Pool.executeBuildWithRetry",
 				"phase":               "tunnel_build",
 				"retry":               retry + 1,
 				"excluded_from_retry": len(lastBuildPeers),
@@ -628,15 +638,21 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 			}).Debug("excluding peers from previous failed attempt")
 		}
 
-		tunnelID, err := p.tunnelBuilder.BuildTunnel(*req)
+		result, err := p.tunnelBuilder.BuildTunnel(*req)
 		if err != nil {
 			p.logBuildFailure(err, retry, maxRetries, req)
-			// TODO: Extract peer hashes from build result for next retry
+			// Extract peer hashes from build result for next retry
+			lastBuildPeers = p.extractAndMarkFailedPeers(result)
 			continue
 		}
 
-		if !p.checkTunnelCollision(tunnelID, retry, maxRetries) {
-			return tunnelID, nil
+		// Extract peer hashes even on success (for logging/tracking)
+		if result != nil {
+			lastBuildPeers = result.PeerHashes
+		}
+
+		if !p.checkTunnelCollision(result.TunnelID, retry, maxRetries) {
+			return result.TunnelID, nil
 		}
 
 		// Last retry with collision
@@ -801,8 +817,10 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 	}
 
 	// Attempt to build the tunnel
-	newTunnelID, err := p.tunnelBuilder.BuildTunnel(req)
+	result, err := p.tunnelBuilder.BuildTunnel(req)
 	if err != nil {
+		// Mark peers from the failed attempt to avoid retrying them
+		p.extractAndMarkFailedPeers(result)
 		log.WithError(err).WithFields(logger.Fields{
 			"at":          "Pool.RetryTunnelBuild",
 			"phase":       "tunnel_build",
@@ -820,13 +838,35 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"phase":       "tunnel_build",
 		"operation":   "retry_success",
 		"original_id": tunnelID,
-		"new_id":      newTunnelID,
+		"new_id":      result.TunnelID,
 		"is_inbound":  isInbound,
 		"hop_count":   hopCount,
 		"reason":      "retry tunnel build initiated successfully",
 	}).Info("tunnel retry build initiated")
 
 	return nil
+}
+
+// extractAndMarkFailedPeers extracts peer hashes from a build result and marks
+// each peer as failed. Returns the peer hashes for progressive exclusion on retry.
+// Safe to call with a nil result (returns nil).
+func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Hash {
+	if result == nil || len(result.PeerHashes) == 0 {
+		return nil
+	}
+
+	for _, peerHash := range result.PeerHashes {
+		p.MarkPeerFailed(peerHash)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "Pool.extractAndMarkFailedPeers",
+		"phase":      "tunnel_build",
+		"peer_count": len(result.PeerHashes),
+		"reason":     "marked peers from failed build for cooldown exclusion",
+	}).Debug("extracted and marked failed peers from build result")
+
+	return result.PeerHashes
 }
 
 // BUG FIX #5: Failed peer tracking to avoid retry loops
