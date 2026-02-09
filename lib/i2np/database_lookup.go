@@ -519,6 +519,188 @@ func (d *DatabaseLookup) IsECIES() bool {
 	return (d.Flags & 0x10) != 0
 }
 
+// DatabaseLookup flag constants for constructing lookup messages
+const (
+	// DatabaseLookupFlagDirect means send reply directly (bit 0 = 0)
+	DatabaseLookupFlagDirect byte = 0x00
+	// DatabaseLookupFlagTunnel means send reply to a tunnel (bit 0 = 1)
+	DatabaseLookupFlagTunnel byte = 0x01
+	// DatabaseLookupFlagEncryption means encrypt reply (bit 1 = 1)
+	DatabaseLookupFlagEncryption byte = 0x02
+	// DatabaseLookupFlagTypeNormal is a normal lookup (bits 3-2 = 00)
+	DatabaseLookupFlagTypeNormal byte = 0x00
+	// DatabaseLookupFlagTypeLS is a LeaseSet lookup (bits 3-2 = 01)
+	DatabaseLookupFlagTypeLS byte = 0x04
+	// DatabaseLookupFlagTypeRI is a RouterInfo lookup (bits 3-2 = 10)
+	DatabaseLookupFlagTypeRI byte = 0x08
+	// DatabaseLookupFlagTypeExploration is an exploration lookup (bits 3-2 = 11)
+	DatabaseLookupFlagTypeExploration byte = 0x0C
+	// DatabaseLookupFlagECIES means use ECIES encryption for reply (bit 4 = 1)
+	DatabaseLookupFlagECIES byte = 0x10
+)
+
+// NewDatabaseLookup creates a new DatabaseLookup message for RouterInfo lookups.
+// This creates a simple direct-reply lookup without encryption.
+//
+// Parameters:
+//   - key: The hash of the RouterInfo/LeaseSet to look up
+//   - from: The hash of our router (where to send the reply)
+//   - lookupType: The type of lookup (DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS, etc.)
+//   - excludedPeers: Peers to exclude from DatabaseSearchReply (can be nil)
+func NewDatabaseLookup(key, from common.Hash, lookupType byte, excludedPeers []common.Hash) *DatabaseLookup {
+	log.WithFields(logger.Fields{
+		"at":            "NewDatabaseLookup",
+		"key":           key.String()[:8],
+		"from":          from.String()[:8],
+		"lookup_type":   lookupType,
+		"excluded_size": len(excludedPeers),
+	}).Debug("Creating DatabaseLookup message")
+
+	flags := DatabaseLookupFlagDirect | lookupType // Direct reply, specified lookup type
+
+	return &DatabaseLookup{
+		Key:            key,
+		From:           from,
+		Flags:          flags,
+		ReplyTunnelID:  [4]byte{}, // Not used for direct reply
+		Size:           len(excludedPeers),
+		ExcludedPeers:  excludedPeers,
+		ReplyKey:       session_key.SessionKey{}, // No encryption
+		Tags:           0,
+		ReplyTags:      nil,
+		ECIESReplyTags: nil,
+	}
+}
+
+// NewDatabaseLookupWithTunnel creates a DatabaseLookup that sends replies through a tunnel.
+//
+// Parameters:
+//   - key: The hash of the RouterInfo/LeaseSet to look up
+//   - replyGateway: The hash of the tunnel gateway router
+//   - replyTunnelID: The tunnel ID to send the reply through
+//   - lookupType: The type of lookup (DatabaseLookupFlagTypeRI, DatabaseLookupFlagTypeLS, etc.)
+//   - excludedPeers: Peers to exclude from DatabaseSearchReply (can be nil)
+func NewDatabaseLookupWithTunnel(key, replyGateway common.Hash, replyTunnelID [4]byte, lookupType byte, excludedPeers []common.Hash) *DatabaseLookup {
+	log.WithFields(logger.Fields{
+		"at":              "NewDatabaseLookupWithTunnel",
+		"key":             key.String()[:8],
+		"reply_gateway":   replyGateway.String()[:8],
+		"reply_tunnel_id": replyTunnelID,
+		"lookup_type":     lookupType,
+		"excluded_size":   len(excludedPeers),
+	}).Debug("Creating DatabaseLookup message with tunnel reply")
+
+	flags := DatabaseLookupFlagTunnel | lookupType // Tunnel reply, specified lookup type
+
+	return &DatabaseLookup{
+		Key:            key,
+		From:           replyGateway,
+		Flags:          flags,
+		ReplyTunnelID:  replyTunnelID,
+		Size:           len(excludedPeers),
+		ExcludedPeers:  excludedPeers,
+		ReplyKey:       session_key.SessionKey{},
+		Tags:           0,
+		ReplyTags:      nil,
+		ECIESReplyTags: nil,
+	}
+}
+
+// MarshalBinary serializes the DatabaseLookup message to binary format.
+// The format follows the I2NP specification for DatabaseLookup messages.
+func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":            "DatabaseLookup.MarshalBinary",
+		"key":           d.Key.String()[:8],
+		"flags":         d.Flags,
+		"excluded_size": d.Size,
+	}).Debug("Marshaling DatabaseLookup message")
+
+	// Calculate total size
+	// Base: key(32) + from(32) + flags(1) + size(2) = 67 bytes
+	totalSize := 32 + 32 + 1 + 2
+
+	// Add reply tunnel ID if tunnel reply flag is set
+	hasTunnelReply := (d.Flags & DatabaseLookupFlagTunnel) != 0
+	if hasTunnelReply {
+		totalSize += 4 // reply_tunnelId
+	}
+
+	// Add excluded peers
+	totalSize += d.Size * 32
+
+	// Add encryption fields if encryption flag is set
+	hasEncryption := (d.Flags & DatabaseLookupFlagEncryption) != 0
+	if hasEncryption {
+		totalSize += 32 + 1 // reply_key + tags count
+		if d.IsECIES() {
+			totalSize += d.Tags * 8 // ECIES tags are 8 bytes
+		} else {
+			totalSize += d.Tags * 32 // ElGamal tags are 32 bytes
+		}
+	}
+
+	result := make([]byte, totalSize)
+	offset := 0
+
+	// Key (32 bytes)
+	copy(result[offset:offset+32], d.Key[:])
+	offset += 32
+
+	// From (32 bytes)
+	copy(result[offset:offset+32], d.From[:])
+	offset += 32
+
+	// Flags (1 byte)
+	result[offset] = d.Flags
+	offset++
+
+	// Reply Tunnel ID (4 bytes, only if tunnel reply flag set)
+	if hasTunnelReply {
+		copy(result[offset:offset+4], d.ReplyTunnelID[:])
+		offset += 4
+	}
+
+	// Size (2 bytes, big endian)
+	result[offset] = byte(d.Size >> 8)
+	result[offset+1] = byte(d.Size)
+	offset += 2
+
+	// Excluded Peers (Size * 32 bytes)
+	for i := 0; i < d.Size && i < len(d.ExcludedPeers); i++ {
+		copy(result[offset:offset+32], d.ExcludedPeers[i][:])
+		offset += 32
+	}
+
+	// Encryption fields (only if encryption flag set)
+	if hasEncryption {
+		copy(result[offset:offset+32], d.ReplyKey[:])
+		offset += 32
+
+		result[offset] = byte(d.Tags)
+		offset++
+
+		if d.IsECIES() {
+			for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
+				copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
+				offset += 8
+			}
+		} else {
+			for i := 0; i < d.Tags && i < len(d.ReplyTags); i++ {
+				copy(result[offset:offset+32], d.ReplyTags[i].Bytes())
+				offset += 32
+			}
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "DatabaseLookup.MarshalBinary",
+		"result_size": len(result),
+	}).Debug("DatabaseLookup marshaled successfully")
+
+	return result, nil
+}
+
 // Compile-time interface satisfaction checks
 var (
 	_ DatabaseReader     = (*DatabaseLookup)(nil)
