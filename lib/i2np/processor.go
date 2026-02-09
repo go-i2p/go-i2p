@@ -62,6 +62,32 @@ type ParticipantManager interface {
 	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time) error
 }
 
+// BuildReplyForwarder defines the interface for forwarding tunnel build replies.
+// This interface enables the MessageProcessor to send build response messages
+// to the next hop in the tunnel or back through the reply tunnel.
+type BuildReplyForwarder interface {
+	// ForwardBuildReplyToRouter forwards a build reply message directly to a router.
+	// This is used when the next hop is a router that we have a direct transport connection to.
+	//
+	// Parameters:
+	// - routerHash: The hash of the router to forward to (NextIdent from BuildRequestRecord)
+	// - messageID: The I2NP message ID for the reply
+	// - encryptedRecords: The complete encrypted build reply records
+	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
+	ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool) error
+
+	// ForwardBuildReplyThroughTunnel forwards a build reply message through a reply tunnel.
+	// This is used when the build request specifies a reply tunnel for the response.
+	//
+	// Parameters:
+	// - gatewayHash: The hash of the tunnel gateway router
+	// - tunnelID: The tunnel ID to use for forwarding
+	// - messageID: The I2NP message ID for the reply
+	// - encryptedRecords: The complete encrypted build reply records
+	// - isShortBuild: Whether this is a Short Tunnel Build Message (STBM) format
+	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	factory             *I2NPMessageFactory
@@ -70,6 +96,8 @@ type MessageProcessor struct {
 	dbManager           *DatabaseManager     // Optional database manager for DatabaseLookup messages
 	expirationValidator *ExpirationValidator // Validator for checking message expiration
 	participantManager  ParticipantManager   // Optional participant manager for tunnel build requests
+	buildReplyForwarder BuildReplyForwarder  // Optional forwarder for tunnel build replies
+	buildRecordCrypto   *BuildRecordCrypto   // Crypto handler for encrypting build response records
 }
 
 // NewMessageProcessor creates a new message processor
@@ -78,6 +106,7 @@ func NewMessageProcessor() *MessageProcessor {
 	return &MessageProcessor{
 		factory:             NewI2NPMessageFactory(),
 		expirationValidator: NewExpirationValidator(),
+		buildRecordCrypto:   NewBuildRecordCrypto(),
 	}
 }
 
@@ -109,6 +138,14 @@ func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
 func (p *MessageProcessor) SetParticipantManager(pm ParticipantManager) {
 	log.WithField("at", "SetParticipantManager").Debug("Setting participant manager")
 	p.participantManager = pm
+}
+
+// SetBuildReplyForwarder sets the forwarder for sending tunnel build replies to the next hop.
+// This enables the router to participate in tunnel building by forwarding replies.
+// If not set, build requests will be processed but replies will not be sent (logged only).
+func (p *MessageProcessor) SetBuildReplyForwarder(forwarder BuildReplyForwarder) {
+	log.WithField("at", "SetBuildReplyForwarder").Debug("Setting build reply forwarder")
+	p.buildReplyForwarder = forwarder
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -861,21 +898,112 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 }
 
 // processSingleBuildRecord validates and processes a single build request record.
+// After validating and accepting/rejecting the request, it generates an encrypted
+// BuildResponseRecord and forwards it to the next hop.
 func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	if accepted {
 		p.handleAcceptedBuildRecord(messageID, index, record)
+		rejectCode = TUNNEL_BUILD_REPLY_SUCCESS // Explicitly set success code
 	} else {
 		p.handleRejectedBuildRecord(messageID, index, record, rejectCode, reason)
 	}
 
-	// TODO: Generate and send build reply message
-	// This requires:
-	// 1. Creating a BuildResponseRecord with accept/reject status
-	// 2. Encrypting the response with the reply key
-	// 3. Forwarding the message to the next hop (or reply tunnel)
-	_ = rejectCode // Will be used in reply generation
+	// Generate and send build reply message
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":             "processSingleBuildRecord",
+			"message_id":     messageID,
+			"record_index":   index,
+			"receive_tunnel": record.ReceiveTunnel,
+		}).Error("failed to generate and send build reply")
+	}
+}
+
+// generateAndSendBuildReply creates an encrypted BuildResponseRecord and forwards it.
+// This implements the core of tunnel participation response handling.
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte) error {
+	// Step 1: Generate random data for the response record
+	var randomData [495]byte
+	if _, err := rand.Read(randomData[:]); err != nil {
+		return fmt.Errorf("failed to generate random data for reply: %w", err)
+	}
+
+	// Step 2: Create the BuildResponseRecord with proper hash
+	responseRecord := CreateBuildResponseRecord(replyCode, randomData)
+
+	// Step 3: Encrypt the response record using the reply key and IV from the request
+	if p.buildRecordCrypto == nil {
+		log.WithFields(logger.Fields{
+			"at":           "generateAndSendBuildReply",
+			"message_id":   messageID,
+			"record_index": index,
+		}).Warn("build record crypto not initialized - cannot encrypt reply")
+		return fmt.Errorf("build record crypto not initialized")
+	}
+
+	encryptedReply, err := p.buildRecordCrypto.EncryptReplyRecord(
+		responseRecord,
+		record.ReplyKey,
+		record.ReplyIV,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt build response record: %w", err)
+	}
+
+	// Step 4: Forward the encrypted reply to the next hop
+	if err := p.forwardBuildReply(messageID, record, encryptedReply); err != nil {
+		return fmt.Errorf("failed to forward build reply: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":            "generateAndSendBuildReply",
+		"message_id":    messageID,
+		"record_index":  index,
+		"reply_code":    replyCode,
+		"next_tunnel":   record.NextTunnel,
+		"encrypted_len": len(encryptedReply),
+	}).Debug("generated and sent build reply successfully")
+
+	return nil
+}
+
+// forwardBuildReply sends the encrypted build reply to the appropriate next hop.
+// The next hop is determined by the NextIdent and NextTunnel fields in the BuildRequestRecord.
+func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte) error {
+	// Check if we have a forwarder configured
+	if p.buildReplyForwarder == nil {
+		log.WithFields(logger.Fields{
+			"at":          "forwardBuildReply",
+			"message_id":  messageID,
+			"next_ident":  fmt.Sprintf("%x", record.NextIdent[:8]),
+			"next_tunnel": record.NextTunnel,
+		}).Warn("build reply forwarder not configured - reply not sent")
+		return nil // Not an error - forwarder is optional
+	}
+
+	// Determine forwarding method based on NextTunnel value
+	// If NextTunnel is 0, forward directly to the next router
+	// If NextTunnel is non-zero, forward through the specified tunnel
+	if record.NextTunnel == 0 {
+		// Direct router forwarding
+		return p.buildReplyForwarder.ForwardBuildReplyToRouter(
+			record.NextIdent,
+			messageID,
+			encryptedReply,
+			false, // Assume not short build for VTB format
+		)
+	}
+
+	// Tunnel forwarding
+	return p.buildReplyForwarder.ForwardBuildReplyThroughTunnel(
+		record.NextIdent,
+		record.NextTunnel,
+		messageID,
+		encryptedReply,
+		false, // Assume not short build for VTB format
+	)
 }
 
 // handleAcceptedBuildRecord logs acceptance and registers the tunnel participation.
