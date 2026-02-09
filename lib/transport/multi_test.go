@@ -291,3 +291,228 @@ func BenchmarkAcceptWithTimeoutTimeout(b *testing.B) {
 		}
 	}
 }
+
+// trackingMockConn tracks when Close() is called
+type trackingMockConn struct {
+	mockConn
+	closeChan chan struct{}
+}
+
+func newTrackingMockConn() *trackingMockConn {
+	return &trackingMockConn{
+		closeChan: make(chan struct{}, 1),
+	}
+}
+
+func (t *trackingMockConn) Close() error {
+	t.closed = true
+	select {
+	case t.closeChan <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// slowAcceptTransport simulates a transport that takes a long time to accept
+type slowAcceptTransport struct {
+	delay     time.Duration
+	conn      net.Conn
+	cancelled chan struct{}
+}
+
+func newSlowAcceptTransport(delay time.Duration, conn net.Conn) *slowAcceptTransport {
+	return &slowAcceptTransport{
+		delay:     delay,
+		conn:      conn,
+		cancelled: make(chan struct{}),
+	}
+}
+
+func (s *slowAcceptTransport) Accept() (net.Conn, error) {
+	time.Sleep(s.delay)
+	return s.conn, nil
+}
+
+func (s *slowAcceptTransport) Addr() net.Addr                                 { return nil }
+func (s *slowAcceptTransport) SetIdentity(ident router_info.RouterInfo) error { return nil }
+func (s *slowAcceptTransport) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
+	return nil, nil
+}
+func (s *slowAcceptTransport) Compatible(routerInfo router_info.RouterInfo) bool { return true }
+func (s *slowAcceptTransport) Close() error                                      { return nil }
+func (s *slowAcceptTransport) Name() string                                      { return "SlowAcceptTransport" }
+
+// TestAcceptMultipleTransportsFirstWins tests that Accept returns connection from the first transport to complete
+func TestAcceptMultipleTransportsFirstWins(t *testing.T) {
+	// Create two transports with different delays
+	fastConn := &mockConn{}
+	slowConn := &mockConn{}
+
+	fastTransport := &mockTransport{
+		acceptDelay: 10 * time.Millisecond,
+		acceptConn:  fastConn,
+	}
+	slowTransport := &mockTransport{
+		acceptDelay: 200 * time.Millisecond,
+		acceptConn:  slowConn,
+	}
+
+	// Mux with slow transport first, fast transport second
+	muxer := Mux(slowTransport, fastTransport)
+
+	start := time.Now()
+	conn, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+	duration := time.Since(start)
+
+	require.NoError(t, err, "Should succeed with multi-transport accept")
+	require.NotNil(t, conn, "Should return a connection")
+
+	// Should return within the fast transport's time, not the slow one
+	assert.Less(t, duration, 100*time.Millisecond, "Should return quickly when fast transport succeeds")
+
+	// The returned connection should be from the fast transport
+	assert.Equal(t, fastConn, conn, "Should return the fast transport's connection")
+}
+
+// TestAcceptWithTimeoutClosesLeakedConnections tests that connections accepted after timeout are closed
+func TestAcceptWithTimeoutClosesLeakedConnections(t *testing.T) {
+	// Create a tracking connection that notifies when closed
+	trackedConn := newTrackingMockConn()
+
+	// Create transport that accepts AFTER the timeout
+	slowTransport := newSlowAcceptTransport(200*time.Millisecond, trackedConn)
+
+	muxer := Mux(slowTransport)
+
+	// Timeout before accept completes
+	conn, err := muxer.AcceptWithTimeout(50 * time.Millisecond)
+
+	require.Error(t, err, "Should timeout")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "Error should be deadline exceeded")
+	assert.Nil(t, conn, "Should return nil connection on timeout")
+
+	// Wait for the slow transport to complete and verify the connection was closed
+	select {
+	case <-trackedConn.closeChan:
+		// Success: connection was closed after timeout
+		assert.True(t, trackedConn.closed, "Leaked connection should be closed")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Timed out waiting for leaked connection to be closed")
+	}
+}
+
+// TestAcceptSecondTransportWinsWhenFirstFails tests fallback to second transport when first fails
+func TestAcceptSecondTransportWinsWhenFirstFails(t *testing.T) {
+	expectedConn := &mockConn{}
+
+	// First transport fails
+	failingTransport := &mockTransport{
+		acceptDelay: 10 * time.Millisecond,
+		acceptError: ErrNoTransportAvailable,
+	}
+	// Second transport succeeds
+	successTransport := &mockTransport{
+		acceptDelay: 20 * time.Millisecond,
+		acceptConn:  expectedConn,
+	}
+
+	muxer := Mux(failingTransport, successTransport)
+
+	conn, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+
+	require.NoError(t, err, "Should succeed with second transport")
+	require.NotNil(t, conn, "Should return a connection")
+	assert.Equal(t, expectedConn, conn, "Should return the second transport's connection")
+}
+
+// TestAcceptAllTransportsFail tests that proper error is returned when all transports fail
+func TestAcceptAllTransportsFail(t *testing.T) {
+	failTransport1 := &mockTransport{
+		acceptDelay: 10 * time.Millisecond,
+		acceptError: ErrNoTransportAvailable,
+	}
+	failTransport2 := &mockTransport{
+		acceptDelay: 20 * time.Millisecond,
+		acceptError: ErrNoTransportAvailable,
+	}
+
+	muxer := Mux(failTransport1, failTransport2)
+
+	conn, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+
+	require.Error(t, err, "Should return error when all transports fail")
+	assert.Equal(t, ErrNoTransportAvailable, err, "Should return the last error")
+	assert.Nil(t, conn, "Should return nil connection")
+}
+
+// TestAcceptClosesLateConnectionsAfterSuccess tests that connections arriving after success are closed
+func TestAcceptClosesLateConnectionsAfterSuccess(t *testing.T) {
+	// First transport returns quickly
+	fastConn := &mockConn{}
+	fastTransport := &mockTransport{
+		acceptDelay: 10 * time.Millisecond,
+		acceptConn:  fastConn,
+	}
+
+	// Second transport returns slowly with a tracked connection
+	slowConn := newTrackingMockConn()
+	slowTransport := newSlowAcceptTransport(200*time.Millisecond, slowConn)
+
+	muxer := Mux(fastTransport, slowTransport)
+
+	conn, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+
+	require.NoError(t, err, "Should succeed with fast transport")
+	require.NotNil(t, conn, "Should return a connection")
+	assert.Equal(t, fastConn, conn, "Should return fast transport's connection")
+
+	// Wait for slow transport to complete and verify its connection was closed
+	select {
+	case <-slowConn.closeChan:
+		// Success: late connection was closed
+		assert.True(t, slowConn.closed, "Late connection should be closed")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Timed out waiting for late connection to be closed")
+	}
+}
+
+// TestAcceptBasicMultiTransport tests basic Accept() with multiple transports
+func TestAcceptBasicMultiTransport(t *testing.T) {
+	// Create two transports with different delays
+	fastConn := &mockConn{}
+	slowConn := &mockConn{}
+
+	fastTransport := &mockTransport{
+		acceptDelay: 10 * time.Millisecond,
+		acceptConn:  fastConn,
+	}
+	slowTransport := &mockTransport{
+		acceptDelay: 500 * time.Millisecond,
+		acceptConn:  slowConn,
+	}
+
+	// Mux with slow transport first
+	muxer := Mux(slowTransport, fastTransport)
+
+	// Use a goroutine with channel to avoid blocking indefinitely
+	type result struct {
+		conn net.Conn
+		err  error
+	}
+	resChan := make(chan result, 1)
+
+	go func() {
+		conn, err := muxer.Accept()
+		resChan <- result{conn, err}
+	}()
+
+	select {
+	case res := <-resChan:
+		require.NoError(t, res.err, "Accept should succeed")
+		require.NotNil(t, res.conn, "Should return a connection")
+		// Should return the fast connection
+		assert.Equal(t, fastConn, res.conn, "Should return fast transport's connection")
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Accept took too long - should return fast connection quickly")
+	}
+}

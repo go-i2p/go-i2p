@@ -292,20 +292,21 @@ func TestErrorHandlingGracefulDegradation(t *testing.T) {
 	}
 
 	// Create transport that succeeds
+	successConn := &mockConn{}
 	successTransport := &mockTransport{
-		acceptConn: &mockConn{},
+		acceptConn: successConn,
 	}
 
 	muxer := Mux(failingTransport, successTransport)
 
-	// Verify muxer handles first transport failure gracefully
-	// Note: AcceptWithTimeout only uses first transport, which is a limitation
+	// Verify muxer handles first transport failure gracefully and falls back to second
 	conn, err := muxer.AcceptWithTimeout(100 * time.Millisecond)
-	assert.Error(t, err, "Should return error from first (failing) transport")
-	assert.Nil(t, conn)
+	assert.NoError(t, err, "Should succeed with second transport when first fails")
+	assert.NotNil(t, conn, "Should return connection from second transport")
+	assert.Equal(t, successConn, conn, "Should return the successful transport's connection")
 
-	t.Log("Note: TransportMuxer.AcceptWithTimeout only uses first transport (index 0)")
-	t.Log("This may be intentional for NTCP2-only support, but limits failover capability")
+	t.Log("TransportMuxer.AcceptWithTimeout now listens on all transports concurrently")
+	t.Log("When one transport fails, others can still succeed")
 }
 
 // TestSessionCleanupOnShutdown verifies sessions are properly closed during shutdown.
