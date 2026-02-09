@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync"
 
@@ -164,8 +165,13 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 		return nil
 	}
 
-	// The endpoint.Receive() expects exactly 1024 bytes of encrypted tunnel data
-	if err := entry.endpoint.Receive(data); err != nil {
+	// The endpoint.Receive() expects exactly 1028 bytes: 4-byte tunnel ID + 1024-byte data.
+	// Reconstruct the full wire-format message since GetTunnelData() strips the tunnel ID.
+	fullMsg := make([]byte, 1028)
+	binary.BigEndian.PutUint32(fullMsg[0:4], uint32(tunnelID))
+	copy(fullMsg[4:], data)
+
+	if err := entry.endpoint.Receive(fullMsg); err != nil {
 		log.WithFields(logger.Fields{
 			"tunnel_id":  tunnelID,
 			"session_id": entry.sessionID,
