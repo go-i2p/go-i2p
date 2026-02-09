@@ -532,18 +532,8 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 
 	var successCount int
 	for i := 0; i < count; i++ {
-		// Check if context is cancelled before each build attempt
-		select {
-		case <-p.ctx.Done():
-			log.WithFields(logger.Fields{
-				"at":        "(Pool) attemptBuildTunnels",
-				"phase":     "tunnel_build",
-				"reason":    "context cancelled, aborting build attempts",
-				"completed": i,
-				"total":     count,
-			}).Debug("tunnel build loop interrupted by context cancellation")
+		if p.isContextCancelled(i, count) {
 			return successCount > 0
-		default:
 		}
 
 		req := p.prepareBuildRequest(excludePeers)
@@ -552,19 +542,42 @@ func (p *Pool) attemptBuildTunnels(count int) bool {
 			continue
 		}
 
-		log.WithFields(logger.Fields{
-			"at":         "(Pool) attemptBuildTunnels",
-			"phase":      "tunnel_build",
-			"step":       i + 1,
-			"reason":     "tunnel build initiated",
-			"tunnel_id":  tunnelID,
-			"hop_count":  req.HopCount,
-			"is_inbound": req.IsInbound,
-		}).Debug("initiated tunnel build")
+		p.logBuildInitiated(i, tunnelID, req)
 		successCount++
 	}
 
 	return successCount > 0
+}
+
+// isContextCancelled checks if the pool context has been cancelled.
+// Logs the interruption with build progress details and returns true if cancelled.
+func (p *Pool) isContextCancelled(completed, total int) bool {
+	select {
+	case <-p.ctx.Done():
+		log.WithFields(logger.Fields{
+			"at":        "(Pool) attemptBuildTunnels",
+			"phase":     "tunnel_build",
+			"reason":    "context cancelled, aborting build attempts",
+			"completed": completed,
+			"total":     total,
+		}).Debug("tunnel build loop interrupted by context cancellation")
+		return true
+	default:
+		return false
+	}
+}
+
+// logBuildInitiated logs a successful tunnel build initiation.
+func (p *Pool) logBuildInitiated(step int, tunnelID TunnelID, req BuildTunnelRequest) {
+	log.WithFields(logger.Fields{
+		"at":         "(Pool) attemptBuildTunnels",
+		"phase":      "tunnel_build",
+		"step":       step + 1,
+		"reason":     "tunnel build initiated",
+		"tunnel_id":  tunnelID,
+		"hop_count":  req.HopCount,
+		"is_inbound": req.IsInbound,
+	}).Debug("initiated tunnel build")
 }
 
 // validateTunnelBuilder checks if the tunnel builder is configured.
@@ -616,51 +629,67 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 // Returns the tunnel ID on success or an error after all retries exhausted.
 func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) {
 	const maxRetries = 3
-	var lastBuildPeers []common.Hash // Track peers from last build attempt
+	var lastBuildPeers []common.Hash
 
 	for retry := 0; retry < maxRetries; retry++ {
-		// Check if context is cancelled before each retry
-		select {
-		case <-p.ctx.Done():
-			return 0, fmt.Errorf("tunnel build cancelled: context done")
-		default:
+		if err := p.checkRetryContext(); err != nil {
+			return 0, err
 		}
 
-		if retry > 0 && len(lastBuildPeers) > 0 {
-			req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
-			log.WithFields(logger.Fields{
-				"at":                  "Pool.executeBuildWithRetry",
-				"phase":               "tunnel_build",
-				"retry":               retry + 1,
-				"excluded_from_retry": len(lastBuildPeers),
-				"total_excluded":      len(req.ExcludePeers),
-			}).Debug("excluding peers from previous failed attempt")
-		}
+		p.excludePreviouslyFailedPeers(req, retry, lastBuildPeers)
 
 		result, err := p.tunnelBuilder.BuildTunnel(*req)
 		if err != nil {
 			p.logBuildFailure(err, retry, maxRetries, req)
-			// Extract peer hashes from build result for next retry
 			lastBuildPeers = p.extractAndMarkFailedPeers(result)
 			continue
 		}
 
-		// Extract peer hashes even on success (for logging/tracking)
-		if result != nil {
-			lastBuildPeers = result.PeerHashes
-		}
+		lastBuildPeers = p.extractPeerHashes(result)
 
 		if !p.checkTunnelCollision(result.TunnelID, retry, maxRetries) {
 			return result.TunnelID, nil
 		}
 
-		// Last retry with collision
 		if retry == maxRetries-1 {
 			return 0, fmt.Errorf("tunnel ID collision after %d retries", maxRetries)
 		}
 	}
 
 	return 0, fmt.Errorf("tunnel build failed after %d retries", maxRetries)
+}
+
+// checkRetryContext verifies the pool context is still active before a retry attempt.
+func (p *Pool) checkRetryContext() error {
+	select {
+	case <-p.ctx.Done():
+		return fmt.Errorf("tunnel build cancelled: context done")
+	default:
+		return nil
+	}
+}
+
+// excludePreviouslyFailedPeers appends peers from the last failed build attempt
+// to the exclusion list on retry, improving peer diversity.
+func (p *Pool) excludePreviouslyFailedPeers(req *BuildTunnelRequest, retry int, lastBuildPeers []common.Hash) {
+	if retry > 0 && len(lastBuildPeers) > 0 {
+		req.ExcludePeers = append(req.ExcludePeers, lastBuildPeers...)
+		log.WithFields(logger.Fields{
+			"at":                  "Pool.executeBuildWithRetry",
+			"phase":               "tunnel_build",
+			"retry":               retry + 1,
+			"excluded_from_retry": len(lastBuildPeers),
+			"total_excluded":      len(req.ExcludePeers),
+		}).Debug("excluding peers from previous failed attempt")
+	}
+}
+
+// extractPeerHashes returns the peer hashes from a successful build result.
+func (p *Pool) extractPeerHashes(result *BuildTunnelResult) []common.Hash {
+	if result != nil {
+		return result.PeerHashes
+	}
+	return nil
 }
 
 // logBuildFailure logs detailed information about a tunnel build failure.

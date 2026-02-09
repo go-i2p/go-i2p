@@ -616,47 +616,68 @@ func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
 		"excluded_size": d.Size,
 	}).Debug("Marshaling DatabaseLookup message")
 
-	// Calculate total size
+	totalSize := d.calculateMarshalSize()
+	result := make([]byte, totalSize)
+	offset := d.marshalFixedFields(result)
+	offset = d.marshalExcludedPeers(result, offset)
+	d.marshalEncryptionFields(result, offset)
+
+	log.WithFields(logger.Fields{
+		"at":          "DatabaseLookup.MarshalBinary",
+		"result_size": len(result),
+	}).Debug("DatabaseLookup marshaled successfully")
+
+	return result, nil
+}
+
+// calculateMarshalSize computes the total byte length needed for the serialized message.
+func (d *DatabaseLookup) calculateMarshalSize() int {
 	// Base: key(32) + from(32) + flags(1) + size(2) = 67 bytes
 	totalSize := 32 + 32 + 1 + 2
 
-	// Add reply tunnel ID if tunnel reply flag is set
-	hasTunnelReply := (d.Flags & DatabaseLookupFlagTunnel) != 0
-	if hasTunnelReply {
-		totalSize += 4 // reply_tunnelId
+	if d.hasTunnelReply() {
+		totalSize += 4
 	}
 
-	// Add excluded peers
 	totalSize += d.Size * 32
 
-	// Add encryption fields if encryption flag is set
-	hasEncryption := (d.Flags & DatabaseLookupFlagEncryption) != 0
-	if hasEncryption {
+	if d.hasEncryption() {
 		totalSize += 32 + 1 // reply_key + tags count
 		if d.IsECIES() {
-			totalSize += d.Tags * 8 // ECIES tags are 8 bytes
+			totalSize += d.Tags * 8
 		} else {
-			totalSize += d.Tags * 32 // ElGamal tags are 32 bytes
+			totalSize += d.Tags * 32
 		}
 	}
 
-	result := make([]byte, totalSize)
+	return totalSize
+}
+
+// hasTunnelReply returns true if the tunnel reply flag is set.
+func (d *DatabaseLookup) hasTunnelReply() bool {
+	return (d.Flags & DatabaseLookupFlagTunnel) != 0
+}
+
+// hasEncryption returns true if the encryption flag is set.
+func (d *DatabaseLookup) hasEncryption() bool {
+	return (d.Flags & DatabaseLookupFlagEncryption) != 0
+}
+
+// marshalFixedFields writes the key, from, flags, and reply tunnel ID into the buffer.
+// Returns the new offset after writing.
+func (d *DatabaseLookup) marshalFixedFields(result []byte) int {
 	offset := 0
 
-	// Key (32 bytes)
 	copy(result[offset:offset+32], d.Key[:])
 	offset += 32
 
-	// From (32 bytes)
 	copy(result[offset:offset+32], d.From[:])
 	offset += 32
 
-	// Flags (1 byte)
 	result[offset] = d.Flags
 	offset++
 
-	// Reply Tunnel ID (4 bytes, only if tunnel reply flag set)
-	if hasTunnelReply {
+	if d.hasTunnelReply() {
 		copy(result[offset:offset+4], d.ReplyTunnelID[:])
 		offset += 4
 	}
@@ -666,39 +687,43 @@ func (d *DatabaseLookup) MarshalBinary() ([]byte, error) {
 	result[offset+1] = byte(d.Size)
 	offset += 2
 
-	// Excluded Peers (Size * 32 bytes)
+	return offset
+}
+
+// marshalExcludedPeers writes the excluded peer hashes into the buffer.
+// Returns the new offset after writing.
+func (d *DatabaseLookup) marshalExcludedPeers(result []byte, offset int) int {
 	for i := 0; i < d.Size && i < len(d.ExcludedPeers); i++ {
 		copy(result[offset:offset+32], d.ExcludedPeers[i][:])
 		offset += 32
 	}
+	return offset
+}
 
-	// Encryption fields (only if encryption flag set)
-	if hasEncryption {
-		copy(result[offset:offset+32], d.ReplyKey[:])
-		offset += 32
-
-		result[offset] = byte(d.Tags)
-		offset++
-
-		if d.IsECIES() {
-			for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
-				copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
-				offset += 8
-			}
-		} else {
-			for i := 0; i < d.Tags && i < len(d.ReplyTags); i++ {
-				copy(result[offset:offset+32], d.ReplyTags[i].Bytes())
-				offset += 32
-			}
-		}
+// marshalEncryptionFields writes the reply key and session tags into the buffer
+// when encryption is requested.
+func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
+	if !d.hasEncryption() {
+		return
 	}
 
-	log.WithFields(logger.Fields{
-		"at":          "DatabaseLookup.MarshalBinary",
-		"result_size": len(result),
-	}).Debug("DatabaseLookup marshaled successfully")
+	copy(result[offset:offset+32], d.ReplyKey[:])
+	offset += 32
 
-	return result, nil
+	result[offset] = byte(d.Tags)
+	offset++
+
+	if d.IsECIES() {
+		for i := 0; i < d.Tags && i < len(d.ECIESReplyTags); i++ {
+			copy(result[offset:offset+8], d.ECIESReplyTags[i].Bytes())
+			offset += 8
+		}
+	} else {
+		for i := 0; i < d.Tags && i < len(d.ReplyTags); i++ {
+			copy(result[offset:offset+32], d.ReplyTags[i].Bytes())
+			offset += 32
+		}
+	}
 }
 
 // Compile-time interface satisfaction checks

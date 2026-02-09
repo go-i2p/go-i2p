@@ -98,50 +98,65 @@ func GetRouterConfig() *RouterConfig {
 	routerConfigMutex.RLock()
 	defer routerConfigMutex.RUnlock()
 
-	// Return a deep copy to prevent race conditions on nested structs
-	configCopy := &RouterConfig{
-		BaseDir:        RouterConfigProperties.BaseDir,
-		WorkingDir:     RouterConfigProperties.WorkingDir,
-		MaxBandwidth:   RouterConfigProperties.MaxBandwidth,
-		MaxConnections: RouterConfigProperties.MaxConnections,
-		AcceptTunnels:  RouterConfigProperties.AcceptTunnels,
-	}
-
-	if RouterConfigProperties.NetDb != nil {
-		netDbCopy := *RouterConfigProperties.NetDb
-		configCopy.NetDb = &netDbCopy
-	}
-
-	if RouterConfigProperties.Bootstrap != nil {
-		bootstrapCopy := *RouterConfigProperties.Bootstrap
-		// Deep copy slices
-		if RouterConfigProperties.Bootstrap.ReseedServers != nil {
-			bootstrapCopy.ReseedServers = make([]*ReseedConfig, len(RouterConfigProperties.Bootstrap.ReseedServers))
-			for i, server := range RouterConfigProperties.Bootstrap.ReseedServers {
-				if server != nil {
-					serverCopy := *server
-					bootstrapCopy.ReseedServers[i] = &serverCopy
-				}
-			}
-		}
-		if RouterConfigProperties.Bootstrap.LocalNetDbPaths != nil {
-			bootstrapCopy.LocalNetDbPaths = make([]string, len(RouterConfigProperties.Bootstrap.LocalNetDbPaths))
-			copy(bootstrapCopy.LocalNetDbPaths, RouterConfigProperties.Bootstrap.LocalNetDbPaths)
-		}
-		configCopy.Bootstrap = &bootstrapCopy
-	}
-
-	if RouterConfigProperties.I2CP != nil {
-		i2cpCopy := *RouterConfigProperties.I2CP
-		configCopy.I2CP = &i2cpCopy
-	}
-
-	if RouterConfigProperties.I2PControl != nil {
-		i2pControlCopy := *RouterConfigProperties.I2PControl
-		configCopy.I2PControl = &i2pControlCopy
-	}
+	configCopy := copyBaseFields(RouterConfigProperties)
+	copyNestedConfigs(configCopy, RouterConfigProperties)
 
 	return configCopy
+}
+
+// copyBaseFields creates a shallow copy of the scalar fields in a RouterConfig.
+func copyBaseFields(src *RouterConfig) *RouterConfig {
+	return &RouterConfig{
+		BaseDir:        src.BaseDir,
+		WorkingDir:     src.WorkingDir,
+		MaxBandwidth:   src.MaxBandwidth,
+		MaxConnections: src.MaxConnections,
+		AcceptTunnels:  src.AcceptTunnels,
+	}
+}
+
+// copyNestedConfigs deep-copies all nested configuration structs from src into dst.
+func copyNestedConfigs(dst, src *RouterConfig) {
+	if src.NetDb != nil {
+		netDbCopy := *src.NetDb
+		dst.NetDb = &netDbCopy
+	}
+
+	if src.Bootstrap != nil {
+		dst.Bootstrap = copyBootstrapConfig(src.Bootstrap)
+	}
+
+	if src.I2CP != nil {
+		i2cpCopy := *src.I2CP
+		dst.I2CP = &i2cpCopy
+	}
+
+	if src.I2PControl != nil {
+		i2pControlCopy := *src.I2PControl
+		dst.I2PControl = &i2pControlCopy
+	}
+}
+
+// copyBootstrapConfig creates a deep copy of a BootstrapConfig including its slices.
+func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
+	bootstrapCopy := *src
+
+	if src.ReseedServers != nil {
+		bootstrapCopy.ReseedServers = make([]*ReseedConfig, len(src.ReseedServers))
+		for i, server := range src.ReseedServers {
+			if server != nil {
+				serverCopy := *server
+				bootstrapCopy.ReseedServers[i] = &serverCopy
+			}
+		}
+	}
+
+	if src.LocalNetDbPaths != nil {
+		bootstrapCopy.LocalNetDbPaths = make([]string, len(src.LocalNetDbPaths))
+		copy(bootstrapCopy.LocalNetDbPaths, src.LocalNetDbPaths)
+	}
+
+	return &bootstrapCopy
 }
 
 // LockRouterConfigForWrite acquires an exclusive write lock on RouterConfigProperties.

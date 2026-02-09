@@ -272,27 +272,36 @@ func NewRouterManagerHandler(control interface {
 // Handle processes the RouterManager request.
 // Executes requested control operations.
 func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
-	// Parse request to see which operations are requested
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "invalid RouterManager parameters", err.Error())
 	}
 
 	result := make(map[string]interface{})
+	h.handleShutdown(req, result)
+	h.handleRestart(req, result)
+	h.handleReseed(req, result)
 
-	// Handle Shutdown request
+	if len(result) == 0 {
+		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "no operations specified", "specify at least one operation")
+	}
+
+	return result, nil
+}
+
+// handleShutdown initiates a graceful router shutdown if requested.
+func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
 	if _, ok := req["Shutdown"]; ok {
-		// Initiate shutdown in background (don't block RPC response)
 		go func() {
 			log.Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
 		}()
 		result["Shutdown"] = nil
 	}
+}
 
-	// Handle Restart request
-	// We perform a graceful shutdown; the process supervisor (systemd, Docker, etc.)
-	// is expected to restart the process automatically.
+// handleRestart performs a graceful shutdown for supervisor-managed restart if requested.
+func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
 	if _, ok := req["Restart"]; ok {
 		go func() {
 			log.Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
@@ -300,8 +309,10 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 		}()
 		result["Restart"] = nil
 	}
+}
 
-	// Handle Reseed request
+// handleReseed triggers a manual NetDB reseed operation if requested.
+func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
 	if _, ok := req["Reseed"]; ok {
 		go func() {
 			log.Info("Reseed requested via I2PControl")
@@ -311,13 +322,6 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 		}()
 		result["Reseed"] = nil
 	}
-
-	// If no operations requested, return error
-	if len(result) == 0 {
-		return nil, NewRPCErrorWithData(ErrCodeInvalidParams, "no operations specified", "specify at least one operation")
-	}
-
-	return result, nil
 }
 
 // NetworkSettingHandler implements the NetworkSetting RPC method.

@@ -606,7 +606,24 @@ func (r *Router) Close() error {
 		"reason": "finalizing router resources",
 	}).Info("closing router and releasing all resources")
 
-	// Ensure the router is stopped first
+	r.ensureStopped()
+	closeErr := r.closeTransports()
+	r.clearActiveSessions()
+	r.clearRoutingComponents()
+	r.finalizeCloseChannel()
+
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   9,
+		"reason": "router finalization complete",
+	}).Info("router closed successfully - all resources released")
+
+	return closeErr
+}
+
+// ensureStopped stops the router if it is still running.
+func (r *Router) ensureStopped() {
 	r.runMux.RLock()
 	isRunning := r.running
 	r.runMux.RUnlock()
@@ -620,33 +637,42 @@ func (r *Router) Close() error {
 		}).Debug("stopping router before close")
 		r.Stop()
 	}
+}
 
-	var closeErr error
-
-	// Close all transport connections
-	if r.TransportMuxer != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Router) Close",
-			"phase":  "finalization",
-			"step":   3,
-			"reason": "closing transport layer",
-		}).Debug("closing TransportMuxer")
-		if err := r.TransportMuxer.Close(); err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":     "(Router) Close",
-				"phase":  "finalization",
-				"reason": "transport close failed",
-			}).Warn("error closing transport muxer")
-			closeErr = err
-		}
-		r.TransportMuxer = nil
+// closeTransports closes the transport muxer and all underlying connections.
+// Returns the first error encountered during transport shutdown.
+func (r *Router) closeTransports() error {
+	if r.TransportMuxer == nil {
+		return nil
 	}
 
-	// Clear active NTCP2 sessions
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Close",
+		"phase":  "finalization",
+		"step":   3,
+		"reason": "closing transport layer",
+	}).Debug("closing TransportMuxer")
+
+	var closeErr error
+	if err := r.TransportMuxer.Close(); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) Close",
+			"phase":  "finalization",
+			"reason": "transport close failed",
+		}).Warn("error closing transport muxer")
+		closeErr = err
+	}
+	r.TransportMuxer = nil
+	return closeErr
+}
+
+// clearActiveSessions removes all active NTCP2 sessions from the router.
+func (r *Router) clearActiveSessions() {
 	r.sessionMutex.Lock()
 	sessionCount := len(r.activeSessions)
 	r.activeSessions = nil
 	r.sessionMutex.Unlock()
+
 	if sessionCount > 0 {
 		log.WithFields(logger.Fields{
 			"at":            "(Router) Close",
@@ -656,8 +682,11 @@ func (r *Router) Close() error {
 			"session_count": sessionCount,
 		}).Debug("active sessions cleared")
 	}
+}
 
-	// Clear message routing components
+// clearRoutingComponents releases all message routing, garlic routing,
+// tunnel manager, keystore, and NetDB references.
+func (r *Router) clearRoutingComponents() {
 	r.messageRouter = nil
 	r.garlicRouter = nil
 	r.tunnelManager = nil
@@ -668,7 +697,6 @@ func (r *Router) Close() error {
 		"reason": "message routing components cleared",
 	}).Debug("message router, garlic router, and tunnel manager references cleared")
 
-	// Clear keystore reference (keys remain on disk for potential future use)
 	r.RouterInfoKeystore = nil
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
@@ -677,7 +705,6 @@ func (r *Router) Close() error {
 		"reason": "keystore reference cleared",
 	}).Debug("keystore reference cleared (keys preserved on disk)")
 
-	// Clear NetDB reference (already stopped, but clear reference to prevent reuse)
 	r.StdNetDB = nil
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
@@ -685,8 +712,10 @@ func (r *Router) Close() error {
 		"step":   7,
 		"reason": "netdb reference cleared",
 	}).Debug("NetDB reference cleared")
+}
 
-	// Close the close channel to signal complete finalization
+// finalizeCloseChannel closes the router's close channel to signal complete finalization.
+func (r *Router) finalizeCloseChannel() {
 	if r.closeChnl != nil {
 		close(r.closeChnl)
 		r.closeChnl = nil
@@ -697,15 +726,6 @@ func (r *Router) Close() error {
 			"reason": "close channel finalized",
 		}).Debug("close channel closed")
 	}
-
-	log.WithFields(logger.Fields{
-		"at":     "(Router) Close",
-		"phase":  "finalization",
-		"step":   9,
-		"reason": "router finalization complete",
-	}).Info("router closed successfully - all resources released")
-
-	return closeErr
 }
 
 // Start starts router mainloop
