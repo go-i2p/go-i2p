@@ -7,6 +7,15 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// truncateHashString safely truncates a hash string to at most maxLen characters.
+// This prevents panics when the hash string is shorter than expected.
+func truncateHashString(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen]
+	}
+	return s
+}
+
 /*
 I2P I2NP DatabaseSearchReply
 https://geti2p.net/spec/i2np
@@ -69,8 +78,8 @@ type DatabaseSearchReply struct {
 func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *DatabaseSearchReply {
 	log.WithFields(logger.Fields{
 		"at":         "NewDatabaseSearchReply",
-		"key":        key.String()[:8],
-		"from":       from.String()[:8],
+		"key":        truncateHashString(key.String(), 8),
+		"from":       truncateHashString(from.String(), 8),
 		"peer_count": len(peerHashes),
 	}).Debug("Creating DatabaseSearchReply")
 
@@ -150,8 +159,8 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 
 	log.WithFields(logger.Fields{
 		"at":         "DatabaseSearchReply.UnmarshalBinary",
-		"key":        d.Key.String()[:8],
-		"from":       d.From.String()[:8],
+		"key":        truncateHashString(d.Key.String(), 8),
+		"from":       truncateHashString(d.From.String(), 8),
 		"peer_count": d.Count,
 	}).Debug("DatabaseSearchReply unmarshaled successfully")
 

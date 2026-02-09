@@ -59,7 +59,9 @@ type ParticipantManager interface {
 	// - tunnelID: The tunnel ID for the participating tunnel
 	// - sourceHash: The router hash of the requester
 	// - expiry: When the tunnel participation expires
-	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time) error
+	// - layerKey: The layer encryption key from the build request record
+	// - ivKey: The IV key from the build request record
+	RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
 }
 
 // BuildReplyForwarder defines the interface for forwarding tunnel build replies.
@@ -1017,7 +1019,7 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 	}).Info("accepting tunnel build request")
 
 	expiry := time.Now().Add(10 * time.Minute) // Tunnel lifetime per I2P spec
-	if err := p.participantManager.RegisterParticipant(record.ReceiveTunnel, record.OurIdent, expiry); err != nil {
+	if err := p.participantManager.RegisterParticipant(record.ReceiveTunnel, record.OurIdent, expiry, record.LayerKey, record.IVKey); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processTunnelBuildRequest",
 			"receive_tunnel": record.ReceiveTunnel,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,7 +112,7 @@ func (m *mockParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (ac
 	return false, m.rejectCode, m.rejectReason
 }
 
-func (m *mockParticipantManager) RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time) error {
+func (m *mockParticipantManager) RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.registeredCount++

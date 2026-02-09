@@ -7,7 +7,9 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/logger"
 )
@@ -400,31 +402,38 @@ func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, re
 //
 // Returns an error if registration fails.
 //
-// Note: In a full implementation, this would also set up the decryption keys
-// from the build request record. For now, it creates a placeholder participant
-// to track the tunnel's existence and expiration.
-func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time) error {
+// The layerKey and ivKey are extracted from the BuildRequestRecord and used
+// to create the AES encryptor for tunnel layer decryption.
+func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
 	// Calculate lifetime from expiry
 	lifetime := time.Until(expiry)
 	if lifetime <= 0 {
 		return fmt.Errorf("tunnel expiry is in the past")
 	}
 
-	// Create a placeholder participant
-	// In a full implementation, this would use the actual decryption keys
-	// from the build request record. For now, we create a minimal participant
-	// to track the tunnel's existence.
+	// Create the tunnel decryption using the layer and IV keys from the build request
+	// Convert session_key.SessionKey to tunnel.TunnelKey (both are [32]byte)
+	var tunnelLayerKey, tunnelIVKey tunnel.TunnelKey
+	copy(tunnelLayerKey[:], layerKey[:])
+	copy(tunnelIVKey[:], ivKey[:])
+
+	decryption, err := tunnel.NewAESEncryptor(tunnelLayerKey, tunnelIVKey)
+	if err != nil {
+		return fmt.Errorf("failed to create tunnel decryption: %w", err)
+	}
+
+	// Create the participant with proper decryption
 	participant := &Participant{
 		tunnelID:     tunnelID,
 		createdAt:    time.Now(),
 		lifetime:     lifetime,
 		lastActivity: time.Now(),
 		idleTimeout:  DefaultIdleTimeout,
-		// decryption would be set from the build request record's LayerKey/IVKey
+		decryption:   decryption,
 	}
 
 	// Add to tracking
-	err := m.AddParticipant(participant)
+	err = m.AddParticipant(participant)
 	if err != nil {
 		return fmt.Errorf("failed to add participant: %w", err)
 	}

@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/binary"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -21,6 +22,7 @@ import (
 // - Stateless processing for better performance
 // - Tracks creation time and expiration (tunnels typically last 10 minutes)
 // - Tracks last activity to detect idle tunnels (protection against resource exhaustion attacks)
+// - Thread-safe: lastActivity is protected by a mutex
 type Participant struct {
 	// tunnelID is this participant's tunnel ID (not used for processing,
 	// but kept for logging and debugging)
@@ -36,8 +38,12 @@ type Participant struct {
 	// Typically 10 minutes for I2P tunnels
 	lifetime time.Duration
 
+	// mu protects lastActivity from concurrent access
+	mu sync.Mutex
+
 	// lastActivity tracks when data was last processed through this tunnel
 	// Used to detect idle tunnels that may be part of a resource exhaustion attack
+	// Protected by mu
 	lastActivity time.Time
 
 	// idleTimeout is how long a tunnel can be idle before being dropped
@@ -119,7 +125,9 @@ func NewParticipant(tunnelID TunnelID, decryption tunnel.TunnelEncryptor) (*Part
 func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decryptedData []byte, err error) {
 	// Update last activity timestamp to track tunnel usage
 	// This helps detect idle tunnels that may be part of a resource exhaustion attack
+	p.mu.Lock()
 	p.lastActivity = time.Now()
+	p.mu.Unlock()
 
 	// Validate input size
 	if len(encryptedData) != 1028 {
@@ -199,7 +207,10 @@ func (p *Participant) CreatedAt() time.Time {
 }
 
 // LastActivity returns when data was last processed through this tunnel.
+// Thread-safe: protected by mutex.
 func (p *Participant) LastActivity() time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.lastActivity
 }
 
@@ -207,12 +218,15 @@ func (p *Participant) LastActivity() time.Time {
 // Returns true if no data has been processed within the idle timeout period.
 // This helps detect tunnels that may be part of a resource exhaustion attack
 // where attackers request excessive tunnels but send no data through them.
+// Thread-safe: protected by mutex.
 //
 // Parameters:
 // - now: the current time to check against
 //
 // This is used by the tunnel manager to clean up idle participants.
 func (p *Participant) IsIdle(now time.Time) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return now.Sub(p.lastActivity) > p.idleTimeout
 }
 

@@ -855,7 +855,11 @@ func (r *Router) initializeTunnelManager() {
 // This enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) garlic clove deliveries.
 func (r *Router) initializeGarlicRouter() {
 	// Get our router identity hash for reflexive delivery detection
-	routerHash := r.getOurRouterHash()
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		log.WithError(err).Error("Failed to get our router hash - garlic routing may not properly detect self-addressed messages")
+		// Continue with zero hash; the router can still function but reflexive routing won't work
+	}
 
 	// Wrap StdNetDB with adapter to match GarlicNetDB interface
 	garlicNetDB := newNetDBAdapter(r.StdNetDB)
@@ -892,22 +896,20 @@ func (r *Router) initializeGarlicRouter() {
 }
 
 // getOurRouterHash returns our router's identity hash.
-// Returns zero hash on error (garlic router will still function but won't detect reflexive routing).
-func (r *Router) getOurRouterHash() common.Hash {
+// Returns an error if the hash cannot be computed.
+func (r *Router) getOurRouterHash() (common.Hash, error) {
 	// Try to construct a RouterInfo to get our hash
 	ri, err := r.RouterInfoKeystore.ConstructRouterInfo(nil)
 	if err != nil {
-		log.WithError(err).Warn("Failed to construct RouterInfo for hash extraction, reflexive routing may not work")
-		return common.Hash{} // Return zero hash as fallback
+		return common.Hash{}, fmt.Errorf("failed to construct RouterInfo: %w", err)
 	}
 
 	hash, err := ri.IdentHash()
 	if err != nil {
-		log.WithError(err).Warn("Failed to get IdentHash from RouterInfo, reflexive routing may not work")
-		return common.Hash{} // Return zero hash as fallback
+		return common.Hash{}, fmt.Errorf("failed to get IdentHash: %w", err)
 	}
 
-	return hash
+	return hash, nil
 }
 
 // GetTunnelManager returns the tunnel manager in a thread-safe manner.

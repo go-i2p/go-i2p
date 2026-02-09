@@ -523,6 +523,7 @@ func runRouter() {
 			"config":     config.RouterConfigProperties != nil,
 			"suggestion": "check configuration values and system resources",
 		}).Errorf("failed to create i2p router: %s", err)
+		os.Exit(1)
 	}
 }
 
