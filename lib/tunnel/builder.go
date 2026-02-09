@@ -188,22 +188,23 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 		return nil, err
 	}
 
-	tunnelID, err := generateTunnelID()
+	hopTunnelIDs, err := generateHopTunnelIDs(req.HopCount)
 	if err != nil {
 		logTunnelIDError(err)
-		return nil, fmt.Errorf("failed to generate tunnel ID: %w", err)
+		return nil, fmt.Errorf("failed to generate hop tunnel IDs: %w", err)
 	}
-	logTunnelIDGenerated(tunnelID)
+	// The primary tunnel ID is the first hop's receive tunnel ID
+	logTunnelIDGenerated(hopTunnelIDs[0])
 
-	records, replyKeys, replyIVs, err := tb.createAllHopRecords(req, tunnelID, peers)
+	records, replyKeys, replyIVs, err := tb.createAllHopRecords(req, hopTunnelIDs, peers)
 	if err != nil {
 		return nil, err
 	}
 
-	logBuildRequestComplete(req, tunnelID, len(records))
+	logBuildRequestComplete(req, hopTunnelIDs[0], len(records))
 
 	return &TunnelBuildResult{
-		TunnelID:      tunnelID,
+		TunnelID:      hopTunnelIDs[0],
 		Hops:          peers,
 		Records:       records,
 		ReplyKeys:     replyKeys,
@@ -279,13 +280,36 @@ func (tb *TunnelBuilder) selectTunnelPeers(req BuildTunnelRequest) ([]router_inf
 	return peers, nil
 }
 
-// createAllHopRecords creates build request records for all tunnel hops.
-// Returns the records, reply keys, and reply IVs for each hop.
+// generateHopTunnelIDs generates a unique tunnel ID for each hop in the tunnel.
+// Per I2P spec, each hop must have its own receive tunnel ID so messages can
+// be independently routed through the chain.
+func generateHopTunnelIDs(hopCount int) ([]TunnelID, error) {
+	ids := make([]TunnelID, hopCount)
+	seen := make(map[TunnelID]bool, hopCount)
+	for i := 0; i < hopCount; i++ {
+		id, err := generateTunnelID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate tunnel ID for hop %d: %w", i, err)
+		}
+		// Ensure uniqueness across hops (collision is astronomically unlikely but we check anyway)
+		for seen[id] {
+			id, err = generateTunnelID()
+			if err != nil {
+				return nil, fmt.Errorf("failed to regenerate tunnel ID for hop %d: %w", i, err)
+			}
+		}
+		seen[id] = true
+		ids[i] = id
+	}
+	return ids, nil
+}
+
 // createAllHopRecords creates build records for all hops in a tunnel.
-// Returns the build records, reply keys, and reply IVs for each hop.
+// Each hop gets a unique tunnel ID. Returns the build records, reply keys,
+// reply IVs, and the per-hop tunnel IDs.
 func (tb *TunnelBuilder) createAllHopRecords(
 	req BuildTunnelRequest,
-	tunnelID TunnelID,
+	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
 ) ([]BuildRequestRecord, []session_key.SessionKey, [][16]byte, error) {
 	records := make([]BuildRequestRecord, req.HopCount)
@@ -293,7 +317,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 	replyIVs := make([][16]byte, req.HopCount)
 
 	for i := 0; i < req.HopCount; i++ {
-		record, replyKey, replyIV, err := tb.createHopRecord(i, req, tunnelID, peers)
+		record, replyKey, replyIV, err := tb.createHopRecord(i, req, hopTunnelIDs, peers)
 		if err != nil {
 			log.WithError(err).WithFields(logger.Fields{
 				"at":        "(TunnelBuilder) createAllHopRecords",
@@ -305,7 +329,7 @@ func (tb *TunnelBuilder) createAllHopRecords(
 			return nil, nil, nil, fmt.Errorf("failed to create record for hop %d: %w", i, err)
 		}
 
-		tb.logHopRecordCreation(i, req, tunnelID, peers[i])
+		tb.logHopRecordCreation(i, req, hopTunnelIDs[i], peers[i])
 
 		records[i] = record
 		replyKeys[i] = replyKey
@@ -363,7 +387,7 @@ func (tb *TunnelBuilder) logHopRecordCreation(hopIndex int, req BuildTunnelReque
 func (tb *TunnelBuilder) createHopRecord(
 	hopIndex int,
 	req BuildTunnelRequest,
-	tunnelID TunnelID,
+	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
 ) (BuildRequestRecord, session_key.SessionKey, [16]byte, error) {
 	layerKey, ivKey, replyKey, replyIV, err := generateHopCryptoKeys()
@@ -372,7 +396,7 @@ func (tb *TunnelBuilder) createHopRecord(
 	}
 
 	receiveTunnel, nextTunnel, ourIdent, nextIdent, err := tb.determineRoutingParams(
-		hopIndex, req, tunnelID, peers,
+		hopIndex, req, hopTunnelIDs, peers,
 	)
 	if err != nil {
 		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to determine routing params: %w", err)
@@ -466,7 +490,7 @@ func assembleBuildRecord(
 func (tb *TunnelBuilder) determineRoutingParams(
 	hopIndex int,
 	req BuildTunnelRequest,
-	tunnelID TunnelID,
+	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, ourIdent, nextIdent common.Hash, err error) {
 	ourIdent, err = peers[hopIndex].IdentHash()
@@ -475,12 +499,12 @@ func (tb *TunnelBuilder) determineRoutingParams(
 	}
 
 	if req.IsInbound {
-		receiveTunnel, nextTunnel, nextIdent, err = tb.determineInboundRouting(hopIndex, req, tunnelID, peers)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineInboundRouting(hopIndex, req, hopTunnelIDs, peers)
 		if err != nil {
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
 	} else {
-		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, tunnelID, peers)
+		receiveTunnel, nextTunnel, nextIdent, err = tb.determineOutboundRouting(hopIndex, hopTunnelIDs, peers)
 		if err != nil {
 			return 0, 0, common.Hash{}, common.Hash{}, err
 		}
@@ -492,26 +516,22 @@ func (tb *TunnelBuilder) determineRoutingParams(
 func (tb *TunnelBuilder) determineInboundRouting(
 	hopIndex int,
 	req BuildTunnelRequest,
-	tunnelID TunnelID,
+	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
-	isFirstHop := hopIndex == 0
 	isLastHop := hopIndex == len(peers)-1
 
 	// Inbound tunnel: messages flow from network toward us
-	if isFirstHop {
-		receiveTunnel = 0 // Endpoint receives from sender (unknown tunnel ID)
-	} else {
-		receiveTunnel = tunnelID // Middle/gateway receives from previous hop
-	}
+	// Each hop has its own unique receive tunnel ID from hopTunnelIDs
+	receiveTunnel = hopTunnelIDs[hopIndex]
 
 	if isLastHop {
-		// Gateway sends to our specified tunnel
+		// Gateway (last hop) sends to our specified tunnel
 		nextTunnel = req.ReplyTunnelID
 		nextIdent = req.ReplyGateway
 	} else {
-		// Endpoint/middle sends to next hop
-		nextTunnel = tunnelID
+		// Endpoint/middle sends to next hop using that hop's receive tunnel ID
+		nextTunnel = hopTunnelIDs[hopIndex+1]
 		nextIdent, err = peers[hopIndex+1].IdentHash()
 		if err != nil {
 			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
@@ -523,21 +543,22 @@ func (tb *TunnelBuilder) determineInboundRouting(
 
 func (tb *TunnelBuilder) determineOutboundRouting(
 	hopIndex int,
-	tunnelID TunnelID,
+	hopTunnelIDs []TunnelID,
 	peers []router_info.RouterInfo,
 ) (receiveTunnel, nextTunnel TunnelID, nextIdent common.Hash, err error) {
 	isLastHop := hopIndex == len(peers)-1
 
 	// Outbound tunnel: messages flow from us toward network
-	receiveTunnel = tunnelID // All hops receive with the tunnel ID
+	// Each hop has its own unique receive tunnel ID from hopTunnelIDs
+	receiveTunnel = hopTunnelIDs[hopIndex]
 
 	if isLastHop {
 		// Endpoint sends to destination (tunnel ID set per message)
 		nextTunnel = 0
 		nextIdent = common.Hash{} // Empty hash, set per message
 	} else {
-		// Gateway/middle sends to next hop
-		nextTunnel = tunnelID
+		// Gateway/middle sends to next hop using that hop's receive tunnel ID
+		nextTunnel = hopTunnelIDs[hopIndex+1]
 		nextIdent, err = peers[hopIndex+1].IdentHash()
 		if err != nil {
 			return 0, 0, common.Hash{}, fmt.Errorf("failed to get next hop identity at index %d: %w", hopIndex+1, err)
