@@ -56,7 +56,7 @@ func TestDatabaseStore_GetLeaseSetType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ds := &DatabaseStore{
-				Type: tt.typeField,
+				StoreType: tt.typeField,
 			}
 
 			result := ds.GetLeaseSetType()
@@ -83,7 +83,7 @@ func TestDatabaseStore_IsRouterInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := &DatabaseStore{Type: tt.typeField}
+			ds := &DatabaseStore{StoreType: tt.typeField}
 			if got := ds.IsRouterInfo(); got != tt.expected {
 				t.Errorf("IsRouterInfo() = %v, want %v", got, tt.expected)
 			}
@@ -109,7 +109,7 @@ func TestDatabaseStore_IsLeaseSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := &DatabaseStore{Type: tt.typeField}
+			ds := &DatabaseStore{StoreType: tt.typeField}
 			if got := ds.IsLeaseSet(); got != tt.expected {
 				t.Errorf("IsLeaseSet() = %v, want %v", got, tt.expected)
 			}
@@ -134,7 +134,7 @@ func TestDatabaseStore_IsLeaseSet2(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := &DatabaseStore{Type: tt.typeField}
+			ds := &DatabaseStore{StoreType: tt.typeField}
 			if got := ds.IsLeaseSet2(); got != tt.expected {
 				t.Errorf("IsLeaseSet2() = %v, want %v", got, tt.expected)
 			}
@@ -153,8 +153,8 @@ func TestDatabaseStore_NewDatabaseStore(t *testing.T) {
 	if ds.Key != key {
 		t.Errorf("Key not set correctly")
 	}
-	if ds.Type != dataType {
-		t.Errorf("Type = %d, want %d", ds.Type, dataType)
+	if ds.StoreType != dataType {
+		t.Errorf("Type = %d, want %d", ds.StoreType, dataType)
 	}
 	if len(ds.Data) != len(data) {
 		t.Errorf("Data length = %d, want %d", len(ds.Data), len(data))
@@ -178,7 +178,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "RouterInfo without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{1, 2, 3},
-				Type:          DATABASE_STORE_TYPE_ROUTER_INFO,
+				StoreType:          DATABASE_STORE_TYPE_ROUTER_INFO,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{10, 20, 30},
@@ -190,7 +190,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet2 without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{5, 6, 7},
-				Type:          DATABASE_STORE_TYPE_LEASESET2,
+				StoreType:          DATABASE_STORE_TYPE_LEASESET2,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{40, 50},
@@ -202,7 +202,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet with reply token",
 			store: &DatabaseStore{
 				Key:           common.Hash{8, 9, 10},
-				Type:          DATABASE_STORE_TYPE_LEASESET,
+				StoreType:          DATABASE_STORE_TYPE_LEASESET,
 				ReplyToken:    [4]byte{0, 0, 0, 1},
 				ReplyTunnelID: [4]byte{0, 0, 0, 100},
 				ReplyGateway:  common.Hash{11, 12, 13},
@@ -230,8 +230,8 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			}
 
 			// Verify type field at offset 32
-			if data[32] != tt.store.Type {
-				t.Errorf("Type field = %d, want %d", data[32], tt.store.Type)
+			if data[32] != tt.store.StoreType {
+				t.Errorf("Type field = %d, want %d", data[32], tt.store.StoreType)
 			}
 		})
 	}
@@ -245,7 +245,7 @@ func TestDatabaseStore_Getters(t *testing.T) {
 
 	ds := &DatabaseStore{
 		Key:  key,
-		Type: storeType,
+		StoreType: storeType,
 		Data: data,
 	}
 

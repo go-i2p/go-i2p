@@ -138,9 +138,10 @@ func TestDatabaseManager(t *testing.T) {
 	// Test database store
 	storeData := []byte("test data to store")
 	store := &DatabaseStore{
-		Key:  key,
-		Data: storeData,
-		Type: 0x00,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             key,
+		Data:            storeData,
+		StoreType:       0x00,
 	}
 
 	err = manager.StoreData(store)

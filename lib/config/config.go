@@ -208,7 +208,12 @@ func NewRouterConfigFromViper() *RouterConfig {
 
 // UpdateRouterConfig updates the global RouterConfigProperties from viper settings
 // DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state mutation
+// This function is thread-safe and can be called during SIGHUP reloads.
 func UpdateRouterConfig() {
+	// Acquire write lock to prevent data races during config reload
+	LockRouterConfigForWrite()
+	defer UnlockRouterConfigWrite()
+
 	// Update Router configuration
 	RouterConfigProperties.BaseDir = viper.GetString("base_dir")
 	RouterConfigProperties.WorkingDir = viper.GetString("working_dir")

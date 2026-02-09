@@ -341,7 +341,6 @@ func (p *Pool) maintainPool() {
 		// BUG FIX #5: Clean up expired failed peer entries
 		p.CleanupFailedPeers()
 
-		// Enhanced logging for tunnel pool health - Issue #4 from AUDIT.md
 		log.WithFields(logger.Fields{
 			"at":                   "Pool.maintainPool",
 			"phase":                "tunnel_build",
@@ -665,7 +664,7 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 }
 
 // logBuildFailure logs detailed information about a tunnel build failure.
-// Enhanced logging for Issue #3 from AUDIT.md - failures typically caused by session establishment failures.
+// Failures are typically caused by session establishment failures.
 func (p *Pool) logBuildFailure(err error, retry, maxRetries int, req *BuildTunnelRequest) {
 	log.WithFields(logger.Fields{
 		"at":             "Pool.attemptBuildTunnels",

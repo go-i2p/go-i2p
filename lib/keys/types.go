@@ -1,10 +1,11 @@
 package keys
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"sync"
 
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
@@ -23,6 +24,10 @@ type KeyStoreImpl struct {
 	dir        string
 	name       string
 	privateKey types.PrivateKey
+
+	// cachedKeyID stores the computed KeyID to ensure deterministic behavior
+	cachedKeyID     string
+	cachedKeyIDOnce sync.Once
 }
 
 func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImpl {
@@ -39,23 +44,35 @@ func NewKeyStoreImpl(dir, name string, privateKey types.PrivateKey) *KeyStoreImp
 }
 
 func (ks *KeyStoreImpl) KeyID() string {
+	// Use sync.Once to ensure deterministic KeyID across multiple calls
+	ks.cachedKeyIDOnce.Do(func() {
+		ks.cachedKeyID = ks.computeKeyID()
+	})
+	return ks.cachedKeyID
+}
+
+// computeKeyID generates a deterministic, filesystem-safe key identifier
+func (ks *KeyStoreImpl) computeKeyID() string {
 	if ks.name == "" {
-		log.WithField("at", "KeyID").Debug("Generating KeyID from public key")
+		log.WithField("at", "computeKeyID").Debug("Generating KeyID from public key")
 		public, err := ks.privateKey.Public()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get public key, generating fallback ID")
-			// Generate a random fallback ID to avoid file collisions
-			// Use a timestamp-based approach similar to RouterInfoKeystore
-			nowTime := time.Now().UnixNano()
-			fallbackID := fmt.Sprintf("unknown-%d-%d", os.Getpid(), int(nowTime%1000000))
+			// Generate a deterministic fallback ID using PID
+			// This is cached via sync.Once so it remains consistent
+			fallbackID := fmt.Sprintf("unknown-%d", os.Getpid())
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID
 		}
-		if len(public.Bytes()) > 10 {
-			return string(public.Bytes()[:10])
-		} else {
-			return string(public.Bytes())
+		// Use hex encoding to create a filesystem-safe identifier
+		// Raw binary bytes can contain null bytes, path separators, or other unsafe characters
+		keyBytes := public.Bytes()
+		if len(keyBytes) > 10 {
+			keyBytes = keyBytes[:10]
 		}
+		hexID := hex.EncodeToString(keyBytes)
+		log.WithField("key_id", hexID).Debug("Generated hex-encoded KeyID from public key")
+		return hexID
 	}
 	log.WithField("key_id", ks.name).Debug("Using configured KeyID")
 	return ks.name

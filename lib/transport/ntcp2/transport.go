@@ -390,9 +390,10 @@ func (t *NTCP2Transport) dialNTCP2Connection(routerInfo router_info.RouterInfo) 
 	t.logTCPConnectionAttempt(tcpAddrString, peerHashBytes)
 
 	tcpDialStart := time.Now()
-	if err := t.testTCPConnection(tcpAddrString, peerHashBytes, tcpDialStart); err != nil {
-		return nil, err
-	}
+	// Note: Previously there was a separate testTCPConnection() call here that would
+	// dial, immediately close, then dial again in performNTCP2Handshake. This doubled
+	// connection attempts, wasted file descriptors, and added latency. The actual
+	// NTCP2 handshake will fail with appropriate diagnostics if TCP is unreachable.
 
 	return t.performNTCP2Handshake(ntcp2Addr, tcpAddrString, peerHashBytes, config, tcpDialStart)
 }
@@ -500,21 +501,40 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 }
 
 // logHandshakeFailure logs detailed diagnostics for an NTCP2 handshake failure.
+// This includes TCP-level failures since we now do a single connection attempt.
 func (t *NTCP2Transport) logHandshakeFailure(tcpAddrString string, peerHashBytes []byte, err error, handshakeDuration time.Duration) {
-	// BUG FIX #3: Enhanced diagnostics with full peer identity
-	// Add complete peer hash for correlation with other systems
+	// Determine if this was a TCP-level failure or handshake-level failure
+	errorType := classifyDialError(err)
+	isTCPFailure := errorType == "timeout" || errorType == "connection_refused" ||
+		errorType == "host_unreachable" || errorType == "no_route" || errorType == "network_unreachable"
+
+	// IPv6 connectivity diagnostics
+	isIPv6 := strings.Contains(tcpAddrString, "[")
+
+	phase := "noise_handshake"
+	impact := "cannot establish secure channel"
+	if isTCPFailure {
+		phase = "tcp_dial"
+		impact = "network unreachable - check firewall/routing"
+	}
+
 	t.logger.WithFields(map[string]interface{}{
 		"remote_addr":    tcpAddrString,
 		"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
 		"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
-		"error_type":     classifyDialError(err),
+		"error_type":     errorType,
 		"error_message":  err.Error(),
 		"duration_ms":    handshakeDuration.Milliseconds(),
 		"syscall_error":  getSyscallError(err),
-		"tcp_success":    true, // TCP succeeded but handshake failed
-		"phase":          "noise_handshake",
-		"impact":         "cannot establish secure channel",
+		"is_ipv6":        isIPv6,
+		"phase":          phase,
+		"impact":         impact,
 	}).Error("Failed to dial NTCP2 connection")
+
+	if isTCPFailure {
+		t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
+			tcpAddrString, handshakeDuration.Milliseconds(), err, errorType)
+	}
 }
 
 // classifyDialError categorizes network dial errors for structured logging

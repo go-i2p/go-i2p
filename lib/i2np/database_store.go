@@ -120,8 +120,9 @@ data ::
 */
 
 type DatabaseStore struct {
+	*BaseI2NPMessage
 	Key           common.Hash
-	Type          byte
+	StoreType     byte
 	ReplyToken    [4]byte
 	ReplyTunnelID [4]byte
 	ReplyGateway  common.Hash
@@ -138,12 +139,13 @@ func NewDatabaseStore(key common.Hash, data []byte, dataType byte) *DatabaseStor
 	}).Debug("Creating new DatabaseStore message")
 
 	return &DatabaseStore{
-		Key:           key,
-		Type:          dataType,
-		ReplyToken:    [4]byte{0, 0, 0, 0}, // No reply token
-		ReplyTunnelID: [4]byte{0, 0, 0, 0}, // Direct response
-		ReplyGateway:  common.Hash{},       // No gateway
-		Data:          data,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             key,
+		StoreType:       dataType,
+		ReplyToken:      [4]byte{0, 0, 0, 0}, // No reply token
+		ReplyTunnelID:   [4]byte{0, 0, 0, 0}, // Direct response
+		ReplyGateway:    common.Hash{},       // No gateway
+		Data:            data,
 	}
 }
 
@@ -159,7 +161,7 @@ func (d *DatabaseStore) GetStoreData() []byte {
 
 // GetStoreType returns the store type
 func (d *DatabaseStore) GetStoreType() byte {
-	return d.Type
+	return d.StoreType
 }
 
 // GetLeaseSetType returns the LeaseSet type variant from bits 3-0 of the type field.
@@ -168,7 +170,7 @@ func (d *DatabaseStore) GetStoreType() byte {
 // or DATABASE_STORE_TYPE_META_LEASESET.
 func (d *DatabaseStore) GetLeaseSetType() int {
 	// Extract bits 3-0 for LeaseSet variant
-	typeField := int(d.Type & 0x0F)
+	typeField := int(d.StoreType & 0x0F)
 	return typeField
 }
 
@@ -195,7 +197,7 @@ func (d *DatabaseStore) IsLeaseSet2() bool {
 func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 	log.WithFields(logger.Fields{
 		"at":        "MarshalBinary",
-		"data_type": d.Type,
+		"data_type": d.StoreType,
 		"data_size": len(d.Data),
 		"key":       d.Key.String(),
 	}).Debug("Marshaling DatabaseStore message")
@@ -218,8 +220,8 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 	copy(result[offset:offset+32], d.Key[:])
 	offset += 32
 
-	// Type (1 byte)
-	result[offset] = d.Type
+	// StoreType (1 byte)
+	result[offset] = d.StoreType
 	offset++
 
 	// Reply Token (4 bytes)
@@ -258,8 +260,8 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	copy(d.Key[:], data[offset:offset+32])
 	offset += 32
 
-	// Type (1 byte)
-	d.Type = data[offset]
+	// StoreType (1 byte)
+	d.StoreType = data[offset]
 	offset++
 
 	// Reply Token (4 bytes)
@@ -283,10 +285,10 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 
 	// Data (remaining bytes) - validate size before allocation
 	dataLen := len(data) - offset
-	if err := validateDatabaseStoreSize(d.Type, dataLen); err != nil {
+	if err := validateDatabaseStoreSize(d.StoreType, dataLen); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "UnmarshalBinary",
-			"data_type": d.Type,
+			"data_type": d.StoreType,
 			"data_size": dataLen,
 			"error":     err.Error(),
 		}).Error("DatabaseStore data size validation failed")
@@ -298,7 +300,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 
 	log.WithFields(logger.Fields{
 		"at":        "UnmarshalBinary",
-		"data_type": d.Type,
+		"data_type": d.StoreType,
 		"data_size": len(d.Data),
 		"key":       fmt.Sprintf("%x", d.Key[:8]),
 		"has_reply": hasReply,

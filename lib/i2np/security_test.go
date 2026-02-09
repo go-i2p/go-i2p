@@ -622,12 +622,12 @@ func TestI2NPMessage_RoundTrip(t *testing.T) {
 		data, err := original.MarshalBinary()
 		require.NoError(t, err)
 
-		restored := &DatabaseStore{}
+		restored := &DatabaseStore{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)}
 		err = restored.UnmarshalBinary(data)
 		require.NoError(t, err)
 
 		assert.Equal(t, original.Key, restored.Key)
-		assert.Equal(t, original.Type, restored.Type)
+		assert.Equal(t, original.StoreType, restored.StoreType)
 		assert.Equal(t, original.Data, restored.Data)
 	})
 }

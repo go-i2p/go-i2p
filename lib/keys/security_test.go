@@ -13,8 +13,7 @@ import (
 )
 
 // TestCSPRNGUsage verifies that key generation uses cryptographically secure
-// random number generation (CSPRNG). This test addresses AUDIT.md Issue:
-// "Key Generation: Verify CSPRNG usage for all key generation"
+// random number generation (CSPRNG).
 func TestCSPRNGUsage(t *testing.T) {
 	// Generate multiple key pairs and verify they are all unique
 	// If not using CSPRNG, keys would be predictable or repeat
@@ -92,8 +91,7 @@ func TestKeyEntropyQuality(t *testing.T) {
 }
 
 // TestDirectoryPermissions verifies that keystore directories are created with
-// secure permissions (0700). This addresses AUDIT.md Issue:
-// "Key Storage: Are private keys protected in memory (no swapping)?"
+// secure permissions (0700).
 func TestDirectoryPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping file permission test on Windows")
@@ -169,8 +167,7 @@ func TestKeyFilePermissions(t *testing.T) {
 }
 
 // TestKeySerializationRoundTrip verifies that keys can be serialized and
-// deserialized without data loss. This addresses AUDIT.md Issue:
-// "Key Serialization: Proper encoding/decoding without data loss"
+// deserialized without data loss.
 func TestKeySerializationRoundTrip(t *testing.T) {
 	// Generate a key pair
 	pubKey, privKey, err := ed25519.GenerateEd25519KeyPair()
@@ -253,8 +250,7 @@ func TestKeyStoreFullRoundTrip(t *testing.T) {
 }
 
 // TestConcurrentKeyGeneration verifies that key generation is safe for
-// concurrent use. This addresses AUDIT.md Issue:
-// "Race Conditions: Concurrent key access safety"
+// concurrent use.
 func TestConcurrentKeyGeneration(t *testing.T) {
 	const goroutines = 10
 	const keysPerGoroutine = 5

@@ -192,14 +192,20 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 	switch msg.Type() {
 	case I2NP_MESSAGE_TYPE_DATA:
 		return p.processDataMessage(msg)
+	case I2NP_MESSAGE_TYPE_DATABASE_STORE:
+		return p.processDatabaseStoreMessage(msg)
 	case I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
 		return p.processDeliveryStatusMessage(msg)
 	case I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
 		return p.processDatabaseLookupMessage(msg)
+	case I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY:
+		return p.processDatabaseSearchReplyMessage(msg)
 	case I2NP_MESSAGE_TYPE_GARLIC:
 		return p.processGarlicMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
 		return p.processTunnelDataMessage(msg)
+	case I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY:
+		return p.processTunnelGatewayMessage(msg)
 	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD:
 		return p.processShortTunnelBuildMessage(msg)
 	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
@@ -224,6 +230,133 @@ func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
 		return nil
 	}
 	return fmt.Errorf("message does not implement PayloadCarrier interface")
+}
+
+// processDatabaseStoreMessage processes DatabaseStore messages received from floodfills or peers.
+// DatabaseStore messages contain RouterInfo or LeaseSet data that should be stored in our NetDB.
+func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
+	if p.dbManager == nil {
+		log.WithFields(logger.Fields{
+			"at":     "processDatabaseStoreMessage",
+			"reason": "no_database_manager",
+		}).Warn("DatabaseStore received but no database manager configured")
+		return fmt.Errorf("database manager not configured")
+	}
+
+	// Type assert to *DatabaseStore
+	dbStore, ok := msg.(*DatabaseStore)
+	if !ok {
+		log.WithFields(logger.Fields{
+			"at":     "processDatabaseStoreMessage",
+			"reason": "type_assertion_failed",
+		}).Error("Message is not a DatabaseStore")
+		return fmt.Errorf("message is not a DatabaseStore")
+	}
+
+	key := dbStore.GetStoreKey()
+	storeType := dbStore.GetStoreType()
+	data := dbStore.GetStoreData()
+
+	log.WithFields(logger.Fields{
+		"at":         "processDatabaseStoreMessage",
+		"key":        fmt.Sprintf("%x", key[:8]),
+		"store_type": storeType,
+		"data_size":  len(data),
+	}).Debug("Processing DatabaseStore message")
+
+	// Store in NetDB
+	if err := p.dbManager.netdb.StoreRouterInfo(key, data, storeType); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "processDatabaseStoreMessage",
+			"reason": "store_failed",
+			"key":    fmt.Sprintf("%x", key[:8]),
+		}).WithError(err).Error("Failed to store data in NetDB")
+		return fmt.Errorf("failed to store in NetDB: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "processDatabaseStoreMessage",
+		"key":        fmt.Sprintf("%x", key[:8]),
+		"store_type": storeType,
+	}).Debug("Successfully stored data in NetDB")
+
+	return nil
+}
+
+// processDatabaseSearchReplyMessage processes DatabaseSearchReply messages from peers.
+// These messages contain peer hash suggestions when a lookup fails to find the exact key.
+// The suggested peers can be queried in subsequent lookup attempts.
+func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) error {
+	// Type assert to *DatabaseSearchReply
+	searchReply, ok := msg.(*DatabaseSearchReply)
+	if !ok {
+		log.WithFields(logger.Fields{
+			"at":     "processDatabaseSearchReplyMessage",
+			"reason": "type_assertion_failed",
+		}).Error("Message is not a DatabaseSearchReply")
+		return fmt.Errorf("message is not a DatabaseSearchReply")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":          "processDatabaseSearchReplyMessage",
+		"key":         fmt.Sprintf("%x", searchReply.Key[:8]),
+		"from":        fmt.Sprintf("%x", searchReply.From[:8]),
+		"peer_count":  searchReply.Count,
+		"peer_hashes": len(searchReply.PeerHashes),
+	}).Debug("Processing DatabaseSearchReply message")
+
+	// Log the peer suggestions for debugging/monitoring
+	// In a full implementation, these would be added to a pending lookup queue
+	// to continue the iterative Kademlia lookup process
+	for i, peerHash := range searchReply.PeerHashes {
+		log.WithFields(logger.Fields{
+			"at":        "processDatabaseSearchReplyMessage",
+			"peer_idx":  i,
+			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+		}).Debug("Suggested peer from search reply")
+	}
+
+	return nil
+}
+
+// processTunnelGatewayMessage processes TunnelGateway messages.
+// These messages wrap I2NP messages destined for delivery through a tunnel.
+// The gateway extracts the inner message and forwards it into the tunnel.
+func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
+	// Type assert to *TunnelGateway
+	tgMsg, ok := msg.(*TunnelGateway)
+	if !ok {
+		log.WithFields(logger.Fields{
+			"at":     "processTunnelGatewayMessage",
+			"reason": "type_assertion_failed",
+		}).Error("Message is not a TunnelGateway")
+		return fmt.Errorf("message is not a TunnelGateway")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "processTunnelGatewayMessage",
+		"tunnel_id":    tgMsg.TunnelID,
+		"payload_size": tgMsg.Length,
+	}).Debug("Processing TunnelGateway message")
+
+	// The TunnelGateway message contains an inner I2NP message that needs to be
+	// forwarded through the specified tunnel. In a full implementation, this would:
+	// 1. Look up the tunnel by TunnelID
+	// 2. If we're the gateway for this tunnel, encrypt and forward the payload
+	// 3. If we're not the gateway, this is an error condition
+
+	// For now, we log the receipt and return success
+	// Full tunnel gateway processing requires tunnel manager integration
+	if tgMsg.Length == 0 || len(tgMsg.Data) == 0 {
+		log.WithFields(logger.Fields{
+			"at":        "processTunnelGatewayMessage",
+			"tunnel_id": tgMsg.TunnelID,
+			"reason":    "empty_payload",
+		}).Warn("TunnelGateway message has empty payload")
+		return fmt.Errorf("TunnelGateway message has empty payload")
+	}
+
+	return nil
 }
 
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface
@@ -1164,7 +1297,6 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	tm.replyProcessor = NewReplyProcessor(DefaultReplyProcessorConfig(), tm)
 
 	// Wire retry callback for both pools: tunnel build timeouts will automatically retry
-	// This fixes Issue #4 from AUDIT.md: "No retry callback configured"
 	tm.replyProcessor.SetRetryCallback(tm.retryTunnelBuild)
 
 	log.WithFields(logger.Fields{

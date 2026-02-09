@@ -10,8 +10,7 @@ import (
 )
 
 // TestKeyID_ConsistencyOnError verifies that KeyID returns the same fallback value
-// across multiple calls when privateKey.Public() fails. This test addresses
-// AUDIT.md Issue #10: RouterInfoKeystore KeyID Race Condition on Error.
+// across multiple calls when privateKey.Public() fails.
 func TestKeyID_ConsistencyOnError(t *testing.T) {
 	// Create a keystore with a nil private key to trigger the error path
 	ks := &RouterInfoKeystore{

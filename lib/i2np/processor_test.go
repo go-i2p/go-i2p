@@ -56,9 +56,10 @@ func TestDatabaseManager_StoreData_Success(t *testing.T) {
 
 	// Create DatabaseStore message
 	dbStore := &DatabaseStore{
-		Key:  testKey,
-		Data: testData,
-		Type: testType,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             testKey,
+		Data:            testData,
+		StoreType:       testType,
 	}
 
 	// Test StoreData
@@ -99,9 +100,10 @@ func TestDatabaseManager_StoreData_NetDBError(t *testing.T) {
 
 	// Create DatabaseStore message
 	dbStore := &DatabaseStore{
-		Key:  testKey,
-		Data: testData,
-		Type: testType,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             testKey,
+		Data:            testData,
+		StoreType:       testType,
 	}
 
 	// Test StoreData - should return the error from NetDB
@@ -130,9 +132,10 @@ func TestDatabaseManager_StoreData_NoNetDB(t *testing.T) {
 
 	// Create DatabaseStore message
 	dbStore := &DatabaseStore{
-		Key:  testKey,
-		Data: testData,
-		Type: testType,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             testKey,
+		Data:            testData,
+		StoreType:       testType,
 	}
 
 	// Test StoreData - should return error when no NetDB available
@@ -157,9 +160,9 @@ func TestMessageRouter_SetNetDB(t *testing.T) {
 	// Initially should have nil NetDB (will cause "no NetDB available" error)
 	var testKey common.Hash
 	dbStore := &DatabaseStore{
-		Key:  testKey,
-		Data: []byte("test"),
-		Type: 0,
+		Key:       testKey,
+		Data:      []byte("test"),
+		StoreType: 0,
 	}
 
 	err := router.RouteDatabaseMessage(dbStore)

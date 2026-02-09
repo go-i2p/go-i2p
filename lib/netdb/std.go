@@ -33,7 +33,7 @@ import (
 type StdNetDB struct {
 	DB          string
 	RouterInfos map[common.Hash]Entry
-	riMutex     sync.Mutex // mutex for RouterInfos
+	riMutex     sync.RWMutex // mutex for RouterInfos (RWMutex for read-heavy operations)
 	LeaseSets   map[common.Hash]Entry
 	lsMutex     sync.Mutex // mutex for LeaseSets
 
@@ -60,7 +60,7 @@ func NewStdNetDB(db string) *StdNetDB {
 	return &StdNetDB{
 		DB:             db,
 		RouterInfos:    make(map[common.Hash]Entry),
-		riMutex:        sync.Mutex{},
+		riMutex:        sync.RWMutex{},
 		LeaseSets:      make(map[common.Hash]Entry),
 		lsMutex:        sync.Mutex{},
 		leaseSetExpiry: make(map[common.Hash]time.Time),
@@ -79,9 +79,9 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 	}).Debug("getting RouterInfo")
 
 	// Check memory cache first
-	db.riMutex.Lock()
+	db.riMutex.RLock()
 	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
-		db.riMutex.Unlock()
+		db.riMutex.RUnlock()
 		log.WithFields(logger.Fields{
 			"at":     "(StdNetDB) GetRouterInfo",
 			"reason": "cache hit",
@@ -92,7 +92,7 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		close(chnl)
 		return chnl
 	}
-	db.riMutex.Unlock()
+	db.riMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadRouterInfoFromFile(hash)
@@ -168,14 +168,14 @@ func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo) {
 		"at":     "StdNetDB.GetAllRouterInfos",
 		"reason": "bulk_retrieval",
 	}).Debug("getting all RouterInfos")
-	db.riMutex.Lock()
+	db.riMutex.RLock()
 	ri = make([]router_info.RouterInfo, 0, len(db.RouterInfos))
 	for _, e := range db.RouterInfos {
 		if e.RouterInfo != nil {
 			ri = append(ri, *e.RouterInfo)
 		}
 	}
-	db.riMutex.Unlock()
+	db.riMutex.RUnlock()
 	return ri
 }
 
@@ -583,9 +583,9 @@ func (db *StdNetDB) Path() string {
 // Size returns the count of RouterInfos currently stored in the network database.
 // This is a direct in-memory count and does not require filesystem access.
 func (db *StdNetDB) Size() (routers int) {
-	db.riMutex.Lock()
+	db.riMutex.RLock()
 	routers = len(db.RouterInfos)
-	db.riMutex.Unlock()
+	db.riMutex.RUnlock()
 
 	log.WithField("count", routers).Debug("NetDB size calculated from in-memory RouterInfos")
 	return routers
@@ -1160,9 +1160,9 @@ func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error
 
 // isRouterInfoAlreadyLoaded checks if a RouterInfo with the given hash is already in memory.
 func (db *StdNetDB) isRouterInfoAlreadyLoaded(hash common.Hash) bool {
-	db.riMutex.Lock()
+	db.riMutex.RLock()
 	_, exists := db.RouterInfos[hash]
-	db.riMutex.Unlock()
+	db.riMutex.RUnlock()
 	return exists
 }
 
@@ -1257,9 +1257,9 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting RouterInfo bytes")
 
 	// Check memory cache first
-	db.riMutex.Lock()
+	db.riMutex.RLock()
 	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
-		db.riMutex.Unlock()
+		db.riMutex.RUnlock()
 		log.Debug("RouterInfo found in memory cache")
 
 		// Serialize the RouterInfo to bytes
@@ -1270,7 +1270,7 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 		}
 		return data, nil
 	}
-	db.riMutex.Unlock()
+	db.riMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadRouterInfoFromFile(hash)
@@ -2494,8 +2494,8 @@ func (db *StdNetDB) GetActivePeerCount() int {
 	count := 0
 
 	// Iterate through all tracked peers and count those with recent successful connections
-	db.riMutex.Lock()
-	defer db.riMutex.Unlock()
+	db.riMutex.RLock()
+	defer db.riMutex.RUnlock()
 
 	for hash := range db.RouterInfos {
 		stats := db.PeerTracker.GetStats(hash)
@@ -2528,8 +2528,8 @@ func (db *StdNetDB) GetFastPeerCount() int {
 	const minAttempts = 3
 	count := 0
 
-	db.riMutex.Lock()
-	defer db.riMutex.Unlock()
+	db.riMutex.RLock()
+	defer db.riMutex.RUnlock()
 
 	for hash := range db.RouterInfos {
 		stats := db.PeerTracker.GetStats(hash)
@@ -2569,8 +2569,8 @@ func (db *StdNetDB) GetHighCapacityPeerCount() int {
 	const minAttempts = 5
 	count := 0
 
-	db.riMutex.Lock()
-	defer db.riMutex.Unlock()
+	db.riMutex.RLock()
+	defer db.riMutex.RUnlock()
 
 	for hash := range db.RouterInfos {
 		stats := db.PeerTracker.GetStats(hash)

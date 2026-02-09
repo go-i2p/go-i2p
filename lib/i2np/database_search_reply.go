@@ -68,6 +68,7 @@ from ::
 */
 
 type DatabaseSearchReply struct {
+	*BaseI2NPMessage
 	Key        common.Hash
 	Count      int
 	PeerHashes []common.Hash
@@ -84,10 +85,11 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 	}).Debug("Creating DatabaseSearchReply")
 
 	return &DatabaseSearchReply{
-		Key:        key,
-		Count:      len(peerHashes),
-		PeerHashes: peerHashes,
-		From:       from,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY),
+		Key:             key,
+		Count:           len(peerHashes),
+		PeerHashes:      peerHashes,
+		From:            from,
 	}
 }
 

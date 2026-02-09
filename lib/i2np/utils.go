@@ -328,8 +328,9 @@ func CreateDatabaseQuery(key, from common.Hash, flags byte) DatabaseReader {
 // CreateDatabaseEntry creates a database store with interface methods
 func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWriter {
 	return &DatabaseStore{
-		Key:  key,
-		Data: data,
-		Type: dataType,
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		Key:             key,
+		Data:            data,
+		StoreType:       dataType,
 	}
 }

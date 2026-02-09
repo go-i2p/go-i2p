@@ -490,7 +490,7 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 
 	// Check if this is a RouterInfo
 	if !dbStore.IsRouterInfo() {
-		return nil, fmt.Errorf("response is not a RouterInfo (type=%d)", dbStore.Type)
+		return nil, fmt.Errorf("response is not a RouterInfo (type=%d)", dbStore.StoreType)
 	}
 
 	// Parse the RouterInfo from the data

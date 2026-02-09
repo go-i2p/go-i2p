@@ -90,7 +90,28 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	// Parse timestamp from I2P Date format
 	var date common.Date
 	copy(date[:], messageData[4:12])
+
+	// Validate the timestamp is reasonable
+	if date.IsZero() {
+		log.WithFields(logger.Fields{
+			"at":         "UnmarshalBinary",
+			"message_id": d.StatusMessageID,
+		}).Warn("DeliveryStatus message has zero/undefined timestamp")
+	}
+
 	d.Timestamp = date.Time()
+
+	// Additional validation: check if timestamp is reasonable (not too far in past/future)
+	// I2P messages should typically be within a few minutes of current time
+	timeDiff := time.Since(d.Timestamp)
+	if timeDiff < -10*time.Minute || timeDiff > 24*time.Hour {
+		log.WithFields(logger.Fields{
+			"at":         "UnmarshalBinary",
+			"message_id": d.StatusMessageID,
+			"timestamp":  d.Timestamp,
+			"time_diff":  timeDiff,
+		}).Warn("DeliveryStatus message has suspicious timestamp (may affect expiration checks)")
+	}
 
 	log.WithFields(logger.Fields{
 		"at":         "UnmarshalBinary",

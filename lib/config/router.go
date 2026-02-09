@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"sync"
 )
 
 // DefaultI2CPPort is the standard I2CP port
@@ -82,4 +83,75 @@ func DefaultRouterConfig() *RouterConfig {
 // DEPRECATED: This global variable is mutated by UpdateRouterConfig() creating
 // hidden dependencies and making testing difficult. Use NewRouterConfigFromViper()
 // instead to get a fresh config object without global state issues.
+// NOTE: Access to this variable is protected by routerConfigMutex to prevent
+// data races during SIGHUP config reloads.
 var RouterConfigProperties = DefaultRouterConfig()
+
+// routerConfigMutex protects RouterConfigProperties from concurrent access
+// during configuration updates (e.g., SIGHUP reload).
+var routerConfigMutex sync.RWMutex
+
+// GetRouterConfig returns a copy of the current router configuration.
+// This is the thread-safe way to access RouterConfigProperties.
+// The returned copy is safe to use without holding locks.
+func GetRouterConfig() *RouterConfig {
+	routerConfigMutex.RLock()
+	defer routerConfigMutex.RUnlock()
+
+	// Return a deep copy to prevent race conditions on nested structs
+	configCopy := &RouterConfig{
+		BaseDir:        RouterConfigProperties.BaseDir,
+		WorkingDir:     RouterConfigProperties.WorkingDir,
+		MaxBandwidth:   RouterConfigProperties.MaxBandwidth,
+		MaxConnections: RouterConfigProperties.MaxConnections,
+		AcceptTunnels:  RouterConfigProperties.AcceptTunnels,
+	}
+
+	if RouterConfigProperties.NetDb != nil {
+		netDbCopy := *RouterConfigProperties.NetDb
+		configCopy.NetDb = &netDbCopy
+	}
+
+	if RouterConfigProperties.Bootstrap != nil {
+		bootstrapCopy := *RouterConfigProperties.Bootstrap
+		// Deep copy slices
+		if RouterConfigProperties.Bootstrap.ReseedServers != nil {
+			bootstrapCopy.ReseedServers = make([]*ReseedConfig, len(RouterConfigProperties.Bootstrap.ReseedServers))
+			for i, server := range RouterConfigProperties.Bootstrap.ReseedServers {
+				if server != nil {
+					serverCopy := *server
+					bootstrapCopy.ReseedServers[i] = &serverCopy
+				}
+			}
+		}
+		if RouterConfigProperties.Bootstrap.LocalNetDbPaths != nil {
+			bootstrapCopy.LocalNetDbPaths = make([]string, len(RouterConfigProperties.Bootstrap.LocalNetDbPaths))
+			copy(bootstrapCopy.LocalNetDbPaths, RouterConfigProperties.Bootstrap.LocalNetDbPaths)
+		}
+		configCopy.Bootstrap = &bootstrapCopy
+	}
+
+	if RouterConfigProperties.I2CP != nil {
+		i2cpCopy := *RouterConfigProperties.I2CP
+		configCopy.I2CP = &i2cpCopy
+	}
+
+	if RouterConfigProperties.I2PControl != nil {
+		i2pControlCopy := *RouterConfigProperties.I2PControl
+		configCopy.I2PControl = &i2pControlCopy
+	}
+
+	return configCopy
+}
+
+// LockRouterConfigForWrite acquires an exclusive write lock on RouterConfigProperties.
+// This must be called before directly modifying RouterConfigProperties.
+// Always defer UnlockRouterConfigWrite() after acquiring the lock.
+func LockRouterConfigForWrite() {
+	routerConfigMutex.Lock()
+}
+
+// UnlockRouterConfigWrite releases the write lock on RouterConfigProperties.
+func UnlockRouterConfigWrite() {
+	routerConfigMutex.Unlock()
+}
