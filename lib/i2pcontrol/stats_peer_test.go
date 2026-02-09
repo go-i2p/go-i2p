@@ -53,6 +53,10 @@ func (m *mockRouterAccessForPeerStats) Stop() {
 	// Mock implementation - no-op for test
 }
 
+func (m *mockRouterAccessForPeerStats) Reseed() error {
+	return nil
+}
+
 // Helper to create test hash
 func testHash(suffix byte) common.Hash {
 	var hash common.Hash

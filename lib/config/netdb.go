@@ -8,6 +8,8 @@ import (
 type NetDbConfig struct {
 	// path to network database directory
 	Path string
+	// FloodfillEnabled determines if this router operates as a floodfill router
+	FloodfillEnabled bool
 }
 
 // default settings for netdb

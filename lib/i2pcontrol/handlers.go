@@ -244,13 +244,15 @@ func getStatusCode(running bool) int {
 //	  "Reseed": null
 //	}
 //
-// Note: Restart is not implemented initially.
+// Note: Restart performs a stop; the process supervisor is expected to restart the process.
 // Shutdown will stop the router gracefully.
 type RouterManagerHandler struct {
 	// RouterControl provides control operations
 	RouterControl interface {
 		// Stop initiates graceful router shutdown
 		Stop()
+		// Reseed triggers a manual NetDB reseed operation
+		Reseed() error
 	}
 }
 
@@ -258,7 +260,10 @@ type RouterManagerHandler struct {
 //
 // Parameters:
 //   - control: Router control interface (typically the Router itself)
-func NewRouterManagerHandler(control interface{ Stop() }) *RouterManagerHandler {
+func NewRouterManagerHandler(control interface {
+	Stop()
+	Reseed() error
+}) *RouterManagerHandler {
 	return &RouterManagerHandler{
 		RouterControl: control,
 	}
@@ -286,15 +291,25 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 	}
 
 	// Handle Restart request
+	// We perform a graceful shutdown; the process supervisor (systemd, Docker, etc.)
+	// is expected to restart the process automatically.
 	if _, ok := req["Restart"]; ok {
-		// Restart not yet implemented
-		return nil, NewRPCErrorWithData(ErrCodeNotImpl, "Restart not implemented", "use Shutdown and manually restart")
+		go func() {
+			log.Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
+			h.RouterControl.Stop()
+		}()
+		result["Restart"] = nil
 	}
 
 	// Handle Reseed request
 	if _, ok := req["Reseed"]; ok {
-		// Reseed not yet implemented
-		return nil, NewRPCErrorWithData(ErrCodeNotImpl, "Reseed not implemented", "automatic reseed occurs on startup")
+		go func() {
+			log.Info("Reseed requested via I2PControl")
+			if err := h.RouterControl.Reseed(); err != nil {
+				log.WithError(err).Error("Reseed via I2PControl failed")
+			}
+		}()
+		result["Reseed"] = nil
 	}
 
 	// If no operations requested, return error

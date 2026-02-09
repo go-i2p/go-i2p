@@ -7,13 +7,13 @@
 //   - NTCP2: TCP-based transport with Noise protocol encryption
 //   - SSU2: UDP-based transport (planned)
 //
-// # Transport Manager
+// # TransportMuxer
 //
-// The TransportManager coordinates all transports:
-//   - Maintains connection pool
-//   - Routes I2NP messages to appropriate transports
-//   - Handles connection lifecycle
-//   - Monitors transport health
+// The TransportMuxer multiplexes multiple transports into a single Transport interface:
+//   - Combines multiple transports in priority order
+//   - Accepts connections from all registered transports concurrently
+//   - Dials peers using the first compatible transport
+//   - Enforces connection limits across all transports
 //
 // # NTCP2 Transport
 //
@@ -27,37 +27,34 @@
 //
 // # Thread Safety
 //
-// TransportManager is safe for concurrent access:
-//   - Connection map protected by mutex
+// TransportMuxer is safe for concurrent access:
+//   - Connection counting uses atomic operations
 //   - Each transport manages its own connections
-//   - Message sending is thread-safe
+//   - Accept listens on all transports concurrently
 //
 // # Usage Example
 //
-//	// Create transport manager
-//	tm := transport.NewTransportManager(ourRouterInfo, netdb)
+//	// Create individual transports
+//	ntcp2Transport := ntcp2.NewTransport(config)
 //
-//	// Register NTCP2 transport
-//	ntcp2 := ntcp2.NewTransport(config)
-//	tm.RegisterTransport(ntcp2)
+//	// Multiplex transports together
+//	tmux := transport.Mux(ntcp2Transport)
+//	// Or with a connection limit:
+//	tmux := transport.MuxWithLimit(1024, ntcp2Transport)
 //
-//	// Send message to peer
-//	peerHash, err := peerRouterInfo.IdentHash()
-//	if err != nil {
-//	    log.Printf("Failed to get peer hash: %v", err)
-//	    return
-//	}
-//	if err := tm.SendMessage(peerHash, i2npMsg); err != nil {
-//	    log.Printf("Failed to send message: %v", err)
-//	}
+//	// Set identity for all transports
+//	tmux.SetIdentity(ourRouterInfo)
 //
-//	// Stop all transports
-//	tm.Shutdown()
+//	// Accept connections from any transport
+//	conn, err := tmux.Accept()
+//
+//	// Dial a peer
+//	conn, err := tmux.Dial(peerRouterInfo)
 //
 // # Connection Management
 //
 // Connections are automatically managed:
-//   - Idle connections closed after timeout
-//   - Failed connections retried with backoff
-//   - Connection limits enforced per transport
+//   - Connection limits enforced via MaxConnections
+//   - Session counting with atomic operations
+//   - ReleaseSession() frees capacity when connections close
 package transport

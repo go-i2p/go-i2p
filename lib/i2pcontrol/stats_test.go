@@ -76,6 +76,10 @@ func (m *mockRouterAccess) Stop() {
 	m.running = false
 }
 
+func (m *mockRouterAccess) Reseed() error {
+	return nil
+}
+
 // TestNewRouterStatsProvider tests stats provider creation
 func TestNewRouterStatsProvider(t *testing.T) {
 	router := &mockRouterAccess{running: true}

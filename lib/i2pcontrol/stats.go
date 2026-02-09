@@ -43,7 +43,10 @@ type RouterStatsProvider interface {
 
 	// GetRouterControl returns the underlying router control interface
 	// This is used by RouterManagerHandler to perform control operations (shutdown, restart, etc.)
-	GetRouterControl() interface{ Stop() }
+	GetRouterControl() interface {
+		Stop()
+		Reseed() error
+	}
 }
 
 // BandwidthStats contains bandwidth usage statistics.
@@ -126,11 +129,9 @@ type NetDBStats struct {
 	RouterInfos int
 
 	// LeaseSets is the count of LeaseSet entries in NetDB
-	// Currently returns 0 as LeaseSet counting is not implemented
 	LeaseSets int
 
 	// Floodfill indicates if we're operating as a floodfill router
-	// Currently returns false as floodfill status is not exposed
 	Floodfill bool
 }
 
@@ -217,6 +218,9 @@ type RouterAccess interface {
 
 	// Stop initiates graceful shutdown of the router
 	Stop()
+
+	// Reseed triggers a manual NetDB reseed operation
+	Reseed() error
 }
 
 // NewRouterStatsProvider creates a new statistics provider for the given router.
@@ -348,16 +352,16 @@ func (rsp *routerStatsProvider) GetTunnelStats() TunnelStats {
 }
 
 // GetNetDBStats returns network database statistics.
-// Collects statistics from NetDB.
+// Collects statistics from NetDB including RouterInfo count, LeaseSet count,
+// and floodfill status.
 func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
-	stats := NetDBStats{
-		LeaseSets: 0,     // LeaseSet counting not implemented
-		Floodfill: false, // Floodfill status not exposed
-	}
+	stats := NetDBStats{}
 
 	// Collect NetDB statistics if available
 	if netdb := rsp.router.GetNetDB(); netdb != nil {
 		stats.RouterInfos = netdb.GetRouterInfoCount()
+		stats.LeaseSets = netdb.GetLeaseSetCount()
+		stats.Floodfill = netdb.IsFloodfill()
 	}
 
 	return stats
@@ -500,8 +504,11 @@ func (rsp *routerStatsProvider) IsRunning() bool {
 }
 
 // GetRouterControl returns the underlying router control interface.
-// This allows RouterManagerHandler to perform control operations like shutdown.
-func (rsp *routerStatsProvider) GetRouterControl() interface{ Stop() } {
+// This allows RouterManagerHandler to perform control operations like shutdown and reseed.
+func (rsp *routerStatsProvider) GetRouterControl() interface {
+	Stop()
+	Reseed() error
+} {
 	return rsp.router
 }
 

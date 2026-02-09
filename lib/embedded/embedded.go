@@ -2,7 +2,9 @@ package embedded
 
 import (
 	"fmt"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/router"
@@ -203,6 +205,8 @@ func (e *StandardEmbeddedRouter) Stop() error {
 }
 
 // HardStop performs immediate termination without graceful cleanup.
+// Unlike Stop(), this does not wait for subsystems to shut down cleanly.
+// It calls Stop() with a short timeout, then forces process exit if shutdown hangs.
 // Use this only when Stop() fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
 	e.mu.Lock()
@@ -232,15 +236,30 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		"reason": "forcing immediate termination",
 	}).Warn("performing hard stop of embedded router")
 
-	// Force immediate stop
-	e.router.Stop()
-	e.running = false
+	// Attempt graceful stop with a 5-second timeout
+	done := make(chan struct{})
+	go func() {
+		e.router.Stop()
+		close(done)
+	}()
 
-	log.WithFields(logger.Fields{
-		"at":     "StandardEmbeddedRouter.HardStop",
-		"phase":  "shutdown",
-		"reason": "hard stop completed",
-	}).Info("embedded router hard stopped")
+	select {
+	case <-done:
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "graceful stop completed within timeout",
+		}).Info("embedded router hard stopped (graceful)")
+	case <-time.After(5 * time.Second):
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "graceful stop timed out, forcing exit",
+		}).Error("embedded router hard stop: graceful shutdown timed out, forcing process exit")
+		os.Exit(1)
+	}
+
+	e.running = false
 }
 
 // Wait blocks until the router shuts down.

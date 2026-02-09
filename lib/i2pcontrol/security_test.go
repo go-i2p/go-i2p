@@ -196,13 +196,17 @@ func (m *mockStatsForAuth) GetTunnelStats() TunnelStats     { return TunnelStats
 func (m *mockStatsForAuth) GetNetDBStats() NetDBStats       { return NetDBStats{} }
 func (m *mockStatsForAuth) GetNetworkConfig() NetworkConfig { return NetworkConfig{} }
 func (m *mockStatsForAuth) IsRunning() bool                 { return m.running }
-func (m *mockStatsForAuth) GetRouterControl() interface{ Stop() } {
+func (m *mockStatsForAuth) GetRouterControl() interface {
+	Stop()
+	Reseed() error
+} {
 	return &mockStopCtrl{}
 }
 
 type mockStopCtrl struct{}
 
-func (m *mockStopCtrl) Stop() {}
+func (m *mockStopCtrl) Stop()         {}
+func (m *mockStopCtrl) Reseed() error { return nil }
 
 // TestAuthorizationRequiredForProtectedMethods verifies protected methods require authentication.
 func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
@@ -992,6 +996,7 @@ func (m *mockRouterAccessBandwidth) GetBandwidthRates() (inbound, outbound uint6
 }
 func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil }
 func (m *mockRouterAccessBandwidth) Stop()                         {}
+func (m *mockRouterAccessBandwidth) Reseed() error                 { return nil }
 
 // TestBandwidthStatsZeroValues verifies zero bandwidth is handled correctly.
 func TestBandwidthStatsZeroValues(t *testing.T) {

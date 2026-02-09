@@ -372,10 +372,16 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 
 type mockRouterControl struct {
 	shutdownCalled bool
+	reseedCalled   bool
 }
 
 func (m *mockRouterControl) Stop() {
 	m.shutdownCalled = true
+}
+
+func (m *mockRouterControl) Reseed() error {
+	m.reseedCalled = true
+	return nil
 }
 
 func TestRouterManagerHandler_Shutdown(t *testing.T) {
@@ -406,14 +412,14 @@ func TestRouterManagerHandler_Restart(t *testing.T) {
 
 	params := json.RawMessage(`{"Restart": null}`)
 
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("Handle() expected error for Restart, got nil")
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil (Restart now implemented)", err)
 	}
 
-	rpcErr := err.(*RPCError)
-	if rpcErr.Code != ErrCodeNotImpl {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeNotImpl)
+	resultMap := result.(map[string]interface{})
+	if _, ok := resultMap["Restart"]; !ok {
+		t.Error("result should contain Restart key")
 	}
 }
 
@@ -423,14 +429,14 @@ func TestRouterManagerHandler_Reseed(t *testing.T) {
 
 	params := json.RawMessage(`{"Reseed": null}`)
 
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("Handle() expected error for Reseed, got nil")
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v, want nil (Reseed now implemented)", err)
 	}
 
-	rpcErr := err.(*RPCError)
-	if rpcErr.Code != ErrCodeNotImpl {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeNotImpl)
+	resultMap := result.(map[string]interface{})
+	if _, ok := resultMap["Reseed"]; !ok {
+		t.Error("result should contain Reseed key")
 	}
 }
 

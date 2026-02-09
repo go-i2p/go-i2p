@@ -26,6 +26,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
 )
 
@@ -845,18 +846,24 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 
 func (db *StdNetDB) Save() (err error) {
 	log.Debug("Saving all NetDB entries")
-	db.riMutex.Lock()
+
+	// Copy entries under read lock to avoid holding the lock during disk I/O
+	db.riMutex.RLock()
+	entriesToSave := make([]Entry, 0, len(db.RouterInfos))
 	for _, entry := range db.RouterInfos {
-		// Only save entries that have been loaded into memory
-		if entry.RouterInfo == nil {
-			continue
+		if entry.RouterInfo != nil {
+			entriesToSave = append(entriesToSave, entry)
 		}
+	}
+	db.riMutex.RUnlock()
+
+	// Perform disk I/O outside the lock
+	for _, entry := range entriesToSave {
 		if e := db.SaveEntry(&entry); e != nil {
 			err = e
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
-	db.riMutex.Unlock()
 	return err
 }
 
@@ -1292,6 +1299,13 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 // GetRouterInfoCount returns the total number of RouterInfo entries in the database
 func (db *StdNetDB) GetRouterInfoCount() int {
 	return db.Size()
+}
+
+// IsFloodfill returns whether this router is configured to operate as a floodfill router.
+// This checks the global router configuration for the floodfill flag.
+func (db *StdNetDB) IsFloodfill() bool {
+	cfg := config.GetRouterConfig()
+	return cfg.NetDb.FloodfillEnabled
 }
 
 // ======================================================================

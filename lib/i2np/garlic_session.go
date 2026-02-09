@@ -42,6 +42,7 @@ type GarlicSessionManager struct {
 
 // GarlicSession represents an active encrypted session with a remote destination.
 type GarlicSession struct {
+	mu               sync.Mutex // protects session state during crypto operations
 	RemotePublicKey  [32]byte
 	DHRatchet        *ratchet.DHRatchet
 	SymmetricRatchet *ratchet.SymmetricRatchet
@@ -100,10 +101,10 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 		"dest_hash":      destinationHash.String(),
 	}).Debug("Encrypting garlic message")
 
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
+	// Look up session under read lock only
+	sm.mu.RLock()
 	session, exists := sm.sessions[destinationHash]
+	sm.mu.RUnlock()
 
 	if !exists {
 		log.WithFields(logger.Fields{
@@ -111,6 +112,7 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 			"dest_hash": destinationHash.String(),
 		}).Debug("No existing session found, creating new session")
 		// New Session: Use ECIES ephemeral-static encryption
+		// encryptNewSession acquires write lock internally to store session state
 		return sm.encryptNewSession(destinationHash, destinationPubKey, plaintextGarlic)
 	}
 
@@ -120,11 +122,14 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 		"message_counter": session.MessageCounter,
 	}).Debug("Using existing session for encryption")
 	// Existing Session: Use ratchet-based encryption
+	// Crypto is performed without holding the session manager lock
 	return sm.encryptExistingSession(session, plaintextGarlic)
 }
 
 // encryptNewSession creates a new session and encrypts using ECIES.
 // This is used for the first message to a destination.
+// Crypto (key exchange + encryption) is performed without the session manager lock.
+// The lock is only acquired to store the new session state.
 //
 // Message format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 func (sm *GarlicSessionManager) encryptNewSession(
@@ -274,12 +279,17 @@ func constructNewSessionMessage(ephemeralPub []byte, payload *encryptedPayload) 
 }
 
 // storeNewSessionState initializes and stores ratchet state for future messages.
+// Acquires the session manager write lock to modify the sessions and tagIndex maps.
 func (sm *GarlicSessionManager) storeNewSessionState(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
 	keys *sessionKeys,
 ) error {
 	session := createGarlicSession(destinationPubKey, keys, sm.ourPrivateKey)
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	sm.sessions[destinationHash] = session
 
 	if err := sm.generateTagWindow(session); err != nil {
@@ -322,10 +332,16 @@ func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPriva
 
 // encryptExistingSession encrypts using ratchet state for an established session.
 // Message format: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+// The session's own mutex is held during ratchet advancement and state update,
+// but the session manager lock is NOT held — allowing concurrent encryption to
+// different destinations.
 func (sm *GarlicSessionManager) encryptExistingSession(
 	session *GarlicSession,
 	plaintextGarlic []byte,
 ) ([]byte, error) {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
 	log.WithFields(logger.Fields{
 		"at":              "encryptExistingSession",
 		"message_counter": session.MessageCounter,
@@ -432,10 +448,7 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 		"message_size": len(encryptedGarlic),
 	}).Debug("Decrypting garlic message")
 
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	// Check message length to determine type
+	// Check message length (no lock needed for stateless validation)
 	if len(encryptedGarlic) < 8 {
 		log.WithFields(logger.Fields{
 			"at":           "DecryptGarlicMessage",
@@ -448,13 +461,16 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 	var sessionTag [8]byte
 	copy(sessionTag[:], encryptedGarlic[0:8])
 
-	// Check if this matches an existing session tag
+	// Look up session by tag under write lock (findSessionByTag modifies tag index)
+	sm.mu.Lock()
 	session := sm.findSessionByTag(sessionTag)
+	sm.mu.Unlock()
+
 	if session != nil {
 		log.WithFields(logger.Fields{
 			"at": "DecryptGarlicMessage",
 		}).Debug("Found existing session for tag")
-		// Existing Session decryption
+		// Existing Session decryption — crypto performed outside the lock
 		return sm.decryptExistingSession(session, encryptedGarlic[8:], sessionTag)
 	}
 
@@ -462,6 +478,7 @@ func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]
 		"at": "DecryptGarlicMessage",
 	}).Debug("No session found for tag, attempting new session decryption")
 	// New Session decryption (no matching tag, use our private key)
+	// decryptNewSession acquires write lock internally to store inbound ratchet state
 	plaintext, err := sm.decryptNewSession(encryptedGarlic)
 	if err != nil {
 		log.WithError(err).Error("Failed to decrypt garlic message")
@@ -607,12 +624,17 @@ func decryptWithSessionKeys(parsedMsg *newSessionMessageComponents, symKey [32]b
 // destination hash is not known until the garlic content is parsed, we key the session
 // by the SHA-256 hash of the ephemeral public key used in the handshake. The session
 // is also indexed by its pre-generated tags for O(1) lookup on subsequent messages.
+// Acquires the session manager write lock to modify the sessions and tagIndex maps.
 func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [32]byte, keys *sessionKeys) error {
 	session := createGarlicSession(ephemeralPubKey, keys, sm.ourPrivateKey)
 
 	// Key the session by the hash of the ephemeral public key, since we do not yet
 	// know the sender's destination hash (it is inside the encrypted garlic payload).
 	sessionHash := common.Hash(sha256.Sum256(ephemeralPubKey[:]))
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	sm.sessions[sessionHash] = session
 
 	if err := sm.generateTagWindow(session); err != nil {
@@ -633,11 +655,16 @@ func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [3
 
 // decryptExistingSession decrypts an Existing Session message using ratchet state.
 // Message format (without session tag prefix): [nonce(12)] + [ciphertext(N)] + [tag(16)]
+// The session's own mutex is held during ratchet advancement and state update,
+// but the session manager lock is NOT held.
 func (sm *GarlicSessionManager) decryptExistingSession(
 	session *GarlicSession,
 	existingSessionMsg []byte,
 	sessionTag [8]byte,
 ) ([]byte, [8]byte, error) {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
 	log.WithFields(logger.Fields{
 		"at":              "decryptExistingSession",
 		"message_counter": session.MessageCounter,
