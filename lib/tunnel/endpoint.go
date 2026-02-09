@@ -119,12 +119,12 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 // Thread-safe: protects fragment map access with mutex.
 // Returns an error if processing fails at any step.
 func (e *Endpoint) Receive(encryptedData []byte) error {
-	if len(encryptedData) != 1024 {
+	if len(encryptedData) != 1028 {
 		log.WithFields(logger.Fields{
 			"at":       "(Endpoint) Receive",
 			"reason":   "invalid_data_size",
 			"size":     len(encryptedData),
-			"expected": 1024,
+			"expected": 1028,
 		}).Error("invalid tunnel data size")
 		return ErrInvalidTunnelData
 	}

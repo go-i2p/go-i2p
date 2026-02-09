@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -211,6 +212,146 @@ func TestBuildTunnelMessage(t *testing.T) {
 				assert.True(t, foundZero, "Should have zero byte separator")
 			}
 		})
+	}
+}
+
+// TestGatewayIVIsWritten verifies that buildTunnelMessage writes a non-zero
+// random IV at bytes 4-19, fixing CRITICAL BUG #5.
+func TestGatewayIVIsWritten(t *testing.T) {
+	gw := &Gateway{
+		tunnelID:  TunnelID(12345),
+		nextHopID: TunnelID(67890),
+	}
+
+	testMsg := []byte("test")
+	instructions, err := gw.createDeliveryInstructions(testMsg)
+	require.NoError(t, err)
+
+	tunnelMsg, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+	assert.Equal(t, 1028, len(tunnelMsg))
+
+	// Verify IV (bytes 4-19) is not all zeros
+	iv := tunnelMsg[4:20]
+	allZero := true
+	for _, b := range iv {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	assert.False(t, allZero, "IV bytes 4-19 should not be all zeros")
+}
+
+// TestGatewayIVIsRandom verifies that the IV differs between calls.
+func TestGatewayIVIsRandom(t *testing.T) {
+	gw := &Gateway{
+		tunnelID:  TunnelID(12345),
+		nextHopID: TunnelID(67890),
+	}
+
+	testMsg := []byte("test")
+	instructions, err := gw.createDeliveryInstructions(testMsg)
+	require.NoError(t, err)
+
+	msg1, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+
+	msg2, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+
+	iv1 := msg1[4:20]
+	iv2 := msg2[4:20]
+
+	different := false
+	for i := range iv1 {
+		if iv1[i] != iv2[i] {
+			different = true
+			break
+		}
+	}
+	assert.True(t, different, "IVs should differ between calls (random)")
+}
+
+// TestGatewayChecksumIncludesIV verifies the checksum is calculated using the IV.
+func TestGatewayChecksumIncludesIV(t *testing.T) {
+	gw := &Gateway{
+		tunnelID:  TunnelID(12345),
+		nextHopID: TunnelID(67890),
+	}
+
+	testMsg := []byte("test")
+	instructions, err := gw.createDeliveryInstructions(testMsg)
+	require.NoError(t, err)
+
+	tunnelMsg, err := gw.buildTunnelMessage(instructions, testMsg)
+	require.NoError(t, err)
+
+	// Verify checksum: first 4 bytes of SHA256(data_after_checksum + IV)
+	iv := tunnelMsg[4:20]
+	dataAfterChecksum := tunnelMsg[24:]
+	checksumData := append(dataAfterChecksum, iv...)
+	hash := sha256.Sum256(checksumData)
+	expectedChecksum := hash[:4]
+
+	actualChecksum := tunnelMsg[20:24]
+	assert.Equal(t, expectedChecksum, actualChecksum, "Checksum should be calculated from data + IV")
+}
+
+// mockPassthroughEncryptor implements TunnelEncryptor by returning data as-is.
+type mockPassthroughEncryptor struct{}
+
+func (m *mockPassthroughEncryptor) Encrypt(data []byte) ([]byte, error) {
+	result := make([]byte, len(data))
+	copy(result, data)
+	return result, nil
+}
+
+func (m *mockPassthroughEncryptor) Decrypt(data []byte) ([]byte, error) {
+	result := make([]byte, len(data))
+	copy(result, data)
+	return result, nil
+}
+
+func (m *mockPassthroughEncryptor) Type() tunnel.TunnelEncryptionType {
+	return tunnel.TunnelEncryptionAES
+}
+
+// TestEndpointAccepts1028Bytes verifies the Endpoint accepts 1028-byte messages,
+// fixing FUNCTIONAL MISMATCH #1.
+func TestEndpointAccepts1028Bytes(t *testing.T) {
+	handler := func(msg []byte) error { return nil }
+	mockEnc := &mockPassthroughEncryptor{}
+
+	ep, err := NewEndpoint(TunnelID(12345), mockEnc, handler)
+	require.NoError(t, err)
+	defer ep.Stop()
+
+	// 1028 bytes should not be rejected by the size check
+	// (may fail at checksum validation, but NOT at size validation)
+	testData := make([]byte, 1028)
+	err = ep.Receive(testData)
+	// The error should NOT be ErrInvalidTunnelData (size check)
+	if err != nil {
+		assert.NotErrorIs(t, err, ErrInvalidTunnelData,
+			"1028-byte messages should pass size validation")
+	}
+}
+
+// TestEndpointRejectsWrongSizes verifies the Endpoint still rejects non-1028 sizes.
+func TestEndpointRejectsWrongSizes(t *testing.T) {
+	handler := func(msg []byte) error { return nil }
+	mockEnc := &mockPassthroughEncryptor{}
+
+	ep, err := NewEndpoint(TunnelID(12345), mockEnc, handler)
+	require.NoError(t, err)
+	defer ep.Stop()
+
+	wrongSizes := []int{0, 100, 1024, 1027, 1029, 2000}
+	for _, size := range wrongSizes {
+		err := ep.Receive(make([]byte, size))
+		assert.ErrorIs(t, err, ErrInvalidTunnelData,
+			"size %d should be rejected", size)
 	}
 }
 

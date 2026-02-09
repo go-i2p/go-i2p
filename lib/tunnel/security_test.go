@@ -438,7 +438,7 @@ func TestEndpoint_ChecksumValidation(t *testing.T) {
 		defer ep.Stop()
 
 		// Create message with invalid checksum
-		tunnelData := make([]byte, 1024)
+		tunnelData := make([]byte, 1028)
 		tunnelData[20] = 0xFF // Corrupt checksum
 
 		err := ep.Receive(tunnelData)
@@ -996,12 +996,12 @@ func TestConcurrentAccess_ThreadSafety(t *testing.T) {
 // HELPER FUNCTIONS
 // =============================================================================
 
-// createValidTunnelMessage creates a valid 1024-byte tunnel message for testing.
+// createValidTunnelMessage creates a valid 1028-byte tunnel message for testing.
 func createValidTunnelMessage(t *testing.T) []byte {
 	t.Helper()
 
-	// Create 1024-byte message for endpoint (it expects 1024 bytes)
-	msg := make([]byte, 1024)
+	// Create 1028-byte message for endpoint (it expects 1028 bytes)
+	msg := make([]byte, 1028)
 
 	// Tunnel ID (bytes 0-3)
 	binary.BigEndian.PutUint32(msg[0:4], 12345)

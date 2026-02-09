@@ -176,6 +176,10 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 
 	g.writeTunnelID(msg)
 
+	if err := g.writeIV(msg); err != nil {
+		return nil, err
+	}
+
 	dataSize := len(deliveryInstructions) + len(msgBytes)
 	paddingSize := totalSize - 24 - 1 - dataSize // -1 for zero byte
 
@@ -196,6 +200,21 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 // writeTunnelID writes the tunnel ID to the message header.
 func (g *Gateway) writeTunnelID(msg []byte) {
 	binary.BigEndian.PutUint32(msg[0:4], uint32(g.nextHopID))
+}
+
+// writeIV generates a random 16-byte IV and writes it to bytes 4-19.
+// The IV is used as part of the tunnel message checksum calculation
+// and provides randomization for the encryption layer.
+func (g *Gateway) writeIV(msg []byte) error {
+	if _, err := rand.Read(msg[4:20]); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "buildTunnelMessage",
+			"reason": "failed to generate random IV",
+			"error":  err,
+		}).Error("IV generation failed")
+		return err
+	}
+	return nil
 }
 
 // validatePaddingSize checks if the padding size is valid.
