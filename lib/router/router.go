@@ -369,6 +369,7 @@ func (r *Router) Stop() {
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
 	r.stopParticipantManager()
+	r.stopGarlicRouter()
 	r.stopNetDB()
 	r.sendCloseSignal()
 
@@ -402,6 +403,28 @@ func (r *Router) stopNetDB() {
 			"phase":  "shutdown",
 			"reason": "network database stopped",
 		}).Debug("netDB stopped")
+	}
+}
+
+// stopGarlicRouter shuts down the garlic router if it exists and logs the result.
+// This cancels the background processPendingMessages goroutine to prevent goroutine leaks.
+func (r *Router) stopGarlicRouter() {
+	r.runMux.Lock()
+	gr := r.garlicRouter
+	r.runMux.Unlock()
+
+	if gr != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopGarlicRouter",
+			"phase":  "shutdown",
+			"reason": "stopping garlic router",
+		}).Debug("stopping garlic router")
+		gr.Stop()
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopGarlicRouter",
+			"phase":  "shutdown",
+			"reason": "garlic router stopped",
+		}).Debug("garlic router stopped")
 	}
 }
 

@@ -354,3 +354,64 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+// TestGarlicRouterStop tests that Stop() properly cancels the background goroutine
+func TestGarlicRouterStop(t *testing.T) {
+	gr := createTestGarlicRouter()
+
+	// Verify the router is running (has valid context and cancel)
+	if gr.ctx == nil {
+		t.Fatal("Context should be set after creation")
+	}
+	if gr.cancel == nil {
+		t.Fatal("Cancel function should be set after creation")
+	}
+
+	// Check that context is not yet cancelled
+	select {
+	case <-gr.ctx.Done():
+		t.Fatal("Context should not be cancelled before Stop()")
+	default:
+		// Expected - context is still active
+	}
+
+	// Stop the garlic router
+	gr.Stop()
+
+	// Verify context is now cancelled
+	select {
+	case <-gr.ctx.Done():
+		// Expected - context is cancelled after Stop()
+	default:
+		t.Error("Context should be cancelled after Stop()")
+	}
+}
+
+// TestGarlicRouterStopIdempotent tests that calling Stop() multiple times is safe
+func TestGarlicRouterStopIdempotent(t *testing.T) {
+	gr := createTestGarlicRouter()
+
+	// Stop multiple times should not panic
+	gr.Stop()
+	gr.Stop()
+	gr.Stop()
+
+	// Verify context is cancelled
+	select {
+	case <-gr.ctx.Done():
+		// Expected
+	default:
+		t.Error("Context should be cancelled after Stop()")
+	}
+}
+
+// TestGarlicRouterStopNilCancel tests that Stop() handles nil cancel safely
+func TestGarlicRouterStopNilCancel(t *testing.T) {
+	gr := createTestGarlicRouter()
+
+	// Simulate a case where cancel is nil (shouldn't happen but be safe)
+	gr.cancel = nil
+
+	// This should not panic
+	gr.Stop()
+}
