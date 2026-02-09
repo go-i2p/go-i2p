@@ -34,6 +34,15 @@ type RouterConfig struct {
 	I2CP *I2CPConfig
 	// I2PControl RPC server configuration
 	I2PControl *I2PControlConfig
+	// MaxBandwidth is the maximum bandwidth limit in bytes per second.
+	// Default: 1048576 (1 MB/s). Set to 0 for unlimited.
+	MaxBandwidth uint64
+	// MaxConnections is the maximum number of concurrent transport connections.
+	// Default: 200.
+	MaxConnections int
+	// AcceptTunnels controls whether the router participates in transit tunnels.
+	// Default: true.
+	AcceptTunnels bool
 }
 
 func defaultBase() string {
@@ -54,12 +63,15 @@ var DefaultI2CPConfig = I2CPConfig{
 
 // defaults for router
 var defaultRouterConfig = &RouterConfig{
-	NetDb:      &DefaultNetDbConfig,
-	Bootstrap:  &DefaultBootstrapConfig,
-	I2CP:       &DefaultI2CPConfig,
-	I2PControl: &DefaultI2PControlConfig,
-	BaseDir:    defaultBase(),
-	WorkingDir: defaultConfig(),
+	NetDb:          &DefaultNetDbConfig,
+	Bootstrap:      &DefaultBootstrapConfig,
+	I2CP:           &DefaultI2CPConfig,
+	I2PControl:     &DefaultI2PControlConfig,
+	BaseDir:        defaultBase(),
+	WorkingDir:     defaultConfig(),
+	MaxBandwidth:   1024 * 1024, // 1 MB/s
+	MaxConnections: 200,
+	AcceptTunnels:  true,
 }
 
 func DefaultRouterConfig() *RouterConfig {

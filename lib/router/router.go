@@ -467,11 +467,13 @@ func (r *Router) getBandwidthRatesForCongestion() (inbound, outbound uint64) {
 	return r.GetBandwidthRates()
 }
 
-// getMaxBandwidth returns the maximum bandwidth limit.
+// getMaxBandwidth returns the maximum bandwidth limit in bytes per second.
+// Reads from RouterConfig.MaxBandwidth, defaulting to 1 MB/s if not configured.
 func (r *Router) getMaxBandwidth() uint64 {
-	// Default to 1MB/s if not configured
-	// TODO: Make this configurable via RouterConfig
-	return 1024 * 1024
+	if r.cfg != nil && r.cfg.MaxBandwidth > 0 {
+		return r.cfg.MaxBandwidth
+	}
+	return 1024 * 1024 // Default 1 MB/s
 }
 
 // getConnectionCount returns the current number of active transport connections.
@@ -490,16 +492,21 @@ func (r *Router) getConnectionCount() int {
 }
 
 // getMaxConnections returns the maximum number of transport connections allowed.
+// Reads from RouterConfig.MaxConnections, defaulting to 200 if not configured.
 func (r *Router) getMaxConnections() int {
-	// Default max connections
-	// TODO: Make this configurable via RouterConfig
-	return 200
+	if r.cfg != nil && r.cfg.MaxConnections > 0 {
+		return r.cfg.MaxConnections
+	}
+	return 200 // Default max connections
 }
 
 // isAcceptingTunnels returns true if the router is accepting tunnel participation.
+// Reads from RouterConfig.AcceptTunnels.
 func (r *Router) isAcceptingTunnels() bool {
-	// TODO: Add configuration option to disable tunnel participation
-	return true
+	if r.cfg != nil {
+		return r.cfg.AcceptTunnels
+	}
+	return true // Default to accepting
 }
 
 // stopCongestionMonitor shuts down the congestion monitor if it is running.

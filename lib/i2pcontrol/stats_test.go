@@ -387,3 +387,79 @@ func BenchmarkGetNetDBStats(b *testing.B) {
 		_ = provider.GetNetDBStats()
 	}
 }
+
+// TestGetNetworkConfig_BandwidthLimitsFromConfig verifies that bandwidth limits
+// are reported from RouterConfig when configured.
+func TestGetNetworkConfig_BandwidthLimitsFromConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		maxBandwidth     uint64
+		wantBandwidthIn  int
+		wantBandwidthOut int
+	}{
+		{
+			name:             "default 1 MB/s",
+			maxBandwidth:     1024 * 1024,
+			wantBandwidthIn:  1024, // 1024 KB/s
+			wantBandwidthOut: 1024,
+		},
+		{
+			name:             "unlimited (zero)",
+			maxBandwidth:     0,
+			wantBandwidthIn:  0,
+			wantBandwidthOut: 0,
+		},
+		{
+			name:             "custom 5 MB/s",
+			maxBandwidth:     5 * 1024 * 1024,
+			wantBandwidthIn:  5120, // 5120 KB/s
+			wantBandwidthOut: 5120,
+		},
+		{
+			name:             "small 100 KB/s",
+			maxBandwidth:     100 * 1024,
+			wantBandwidthIn:  100,
+			wantBandwidthOut: 100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := &mockRouterAccess{
+				cfg: &config.RouterConfig{
+					MaxBandwidth: tt.maxBandwidth,
+				},
+				running: true,
+			}
+
+			provider := NewRouterStatsProvider(router, "0.1.0")
+			netCfg := provider.GetNetworkConfig()
+
+			if netCfg.BandwidthLimitIn != tt.wantBandwidthIn {
+				t.Errorf("BandwidthLimitIn = %d, want %d", netCfg.BandwidthLimitIn, tt.wantBandwidthIn)
+			}
+			if netCfg.BandwidthLimitOut != tt.wantBandwidthOut {
+				t.Errorf("BandwidthLimitOut = %d, want %d", netCfg.BandwidthLimitOut, tt.wantBandwidthOut)
+			}
+		})
+	}
+}
+
+// TestGetNetworkConfig_NilConfigReportsUnlimited verifies that a nil config
+// reports unlimited (0) bandwidth.
+func TestGetNetworkConfig_NilConfigReportsUnlimited(t *testing.T) {
+	router := &mockRouterAccess{
+		cfg:     nil,
+		running: true,
+	}
+
+	provider := NewRouterStatsProvider(router, "0.1.0")
+	netCfg := provider.GetNetworkConfig()
+
+	if netCfg.BandwidthLimitIn != 0 {
+		t.Errorf("BandwidthLimitIn = %d, want 0 (unlimited)", netCfg.BandwidthLimitIn)
+	}
+	if netCfg.BandwidthLimitOut != 0 {
+		t.Errorf("BandwidthLimitOut = %d, want 0 (unlimited)", netCfg.BandwidthLimitOut)
+	}
+}

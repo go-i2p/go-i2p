@@ -367,7 +367,7 @@ func (rsp *routerStatsProvider) GetNetDBStats() NetDBStats {
 // Extracts NTCP2 port, hostname, and bandwidth limits from the router.
 // Returns zero values if transport is not available or not NTCP2.
 func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
-	config := NetworkConfig{
+	netConfig := NetworkConfig{
 		NTCP2Port:         0,
 		NTCP2Address:      "",
 		NTCP2Hostname:     "",
@@ -375,10 +375,20 @@ func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 		BandwidthLimitOut: 0, // 0 means unlimited
 	}
 
+	// Report configured bandwidth limits from RouterConfig.
+	// These are independent of transport availability.
+	// Bandwidth limits are in KB/s for the I2PControl protocol.
+	cfg := rsp.router.GetConfig()
+	if cfg != nil && cfg.MaxBandwidth > 0 {
+		limitKBs := int(cfg.MaxBandwidth / 1024)
+		netConfig.BandwidthLimitIn = limitKBs
+		netConfig.BandwidthLimitOut = limitKBs
+	}
+
 	// Get transport address from router
 	addr := rsp.router.GetTransportAddr()
 	if addr == nil {
-		return config
+		return netConfig
 	}
 
 	// Extract address string (format is typically "ip:port")
@@ -388,24 +398,18 @@ func (rsp *routerStatsProvider) GetNetworkConfig() NetworkConfig {
 	}
 
 	if addrStr == "" {
-		return config
+		return netConfig
 	}
 
-	config.NTCP2Address = addrStr
+	netConfig.NTCP2Address = addrStr
 
 	// Parse hostname and port from address string
 	// Expected format: "127.0.0.1:12345" or "[::1]:12345" or "[2001:db8::1]:12345"
 	hostname, port := rsp.parseHostPort(addrStr)
-	config.NTCP2Hostname = hostname
-	config.NTCP2Port = port
+	netConfig.NTCP2Hostname = hostname
+	netConfig.NTCP2Port = port
 
-	// Bandwidth limits are not yet configurable in the router
-	// Return 0 (unlimited) for now
-	// TODO: Add bandwidth limit configuration to RouterConfig
-	config.BandwidthLimitIn = 0
-	config.BandwidthLimitOut = 0
-
-	return config
+	return netConfig
 }
 
 // parseHostPort extracts hostname and port from an address string.
