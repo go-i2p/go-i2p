@@ -33,6 +33,7 @@ type SourceLimiter struct {
 	totalRejections uint64
 
 	stopChan chan struct{}
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 }
 
@@ -331,7 +332,9 @@ func (sl *SourceLimiter) Stop() {
 		"at":     "SourceLimiter.Stop",
 		"reason": "shutdown_requested",
 	}).Info("stopping source limiter")
-	close(sl.stopChan)
+	sl.stopOnce.Do(func() {
+		close(sl.stopChan)
+	})
 	sl.wg.Wait()
 
 	sl.mu.Lock()

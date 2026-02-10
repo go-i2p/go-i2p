@@ -52,6 +52,8 @@ type Manager struct {
 
 	// stopChan signals the cleanup goroutine to stop
 	stopChan chan struct{}
+	// stopOnce ensures Stop() is idempotent and safe to call multiple times
+	stopOnce sync.Once
 	// wg tracks background goroutines
 	wg sync.WaitGroup
 }
@@ -597,7 +599,9 @@ func (m *Manager) Stop() {
 		"at":     "Manager.Stop",
 		"reason": "shutdown_requested",
 	}).Info("stopping tunnel manager")
-	close(m.stopChan)
+	m.stopOnce.Do(func() {
+		close(m.stopChan)
+	})
 	m.wg.Wait()
 
 	// Stop the source limiter if it exists

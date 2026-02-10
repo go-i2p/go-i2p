@@ -26,6 +26,9 @@ type NTCP2Transport struct {
 	config   *Config
 	identity router_info.RouterInfo
 
+	// Keystore for crypto key initialization (needed by SetIdentity)
+	keystore KeystoreProvider
+
 	// Session management
 	sessions sync.Map // map[string]*NTCP2Session (keyed by router hash)
 
@@ -71,7 +74,7 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	logger.Debug("Crypto keys initialized successfully")
 	config.NTCP2Config = ntcp2Config
 
-	transport := buildTransportInstance(config, identity, ctx, cancel, logger)
+	transport := buildTransportInstance(config, identity, keystore, ctx, cancel, logger)
 
 	if err := setupNetworkListener(transport, config, ntcp2Config); err != nil {
 		logger.WithError(err).Error("Failed to setup network listener")
@@ -150,10 +153,11 @@ func loadOrGenerateObfuscationIV(ntcp2Config *ntcp2.NTCP2Config, workingDir stri
 }
 
 // buildTransportInstance constructs the NTCP2Transport struct with initialized fields.
-func buildTransportInstance(config *Config, identity router_info.RouterInfo, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
+func buildTransportInstance(config *Config, identity router_info.RouterInfo, keystore KeystoreProvider, ctx context.Context, cancel context.CancelFunc, logger *logger.Entry) *NTCP2Transport {
 	return &NTCP2Transport{
 		config:   config,
 		identity: identity,
+		keystore: keystore,
 		ctx:      ctx,
 		cancel:   cancel,
 		logger:   logger,
@@ -231,6 +235,11 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	if err != nil {
 		return err
 	}
+
+	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, t.config.WorkingDir, t.cancel); err != nil {
+		return fmt.Errorf("failed to reinitialize crypto keys after identity update: %w", err)
+	}
+
 	t.config.NTCP2Config = ntcp2Config
 
 	if err := t.recreateListenerIfNeeded(ntcp2Config); err != nil {

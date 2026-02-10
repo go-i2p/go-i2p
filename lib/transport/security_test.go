@@ -379,8 +379,8 @@ func (m *mockTransportWithClose) Name() string {
 	return m.name
 }
 
-// TestMuxerCloseReturnsLastError verifies that Close returns the last error encountered.
-func TestMuxerCloseReturnsLastError(t *testing.T) {
+// TestMuxerCloseReturnsAllErrors verifies that Close collects all errors from transports.
+func TestMuxerCloseReturnsAllErrors(t *testing.T) {
 	expectedErr := errors.New("transport close error")
 
 	// First transport closes successfully
@@ -393,9 +393,10 @@ func TestMuxerCloseReturnsLastError(t *testing.T) {
 
 	muxer := Mux(transport1, transport2)
 
-	// Close should return the error from transport2
+	// Close should return an error that wraps the error from transport2
 	err := muxer.Close()
-	assert.Equal(t, expectedErr, err, "Close should return the last error encountered")
+	assert.Error(t, err, "Close should return an error when a transport fails")
+	assert.ErrorIs(t, err, expectedErr, "Close should contain the transport close error")
 }
 
 // mockTransportWithCloseError returns an error on close
@@ -429,6 +430,52 @@ func (m *mockTransportWithCloseError) Close() error {
 
 func (m *mockTransportWithCloseError) Name() string {
 	return "MockWithCloseError"
+}
+
+// TestMuxerCloseCollectsMultipleErrors verifies that Close collects errors from
+// multiple transports rather than only returning the last error.
+func TestMuxerCloseCollectsMultipleErrors(t *testing.T) {
+	err1 := errors.New("transport 1 close error")
+	err2 := errors.New("transport 2 close error")
+
+	transport1 := &mockTransportWithCloseError{closeErr: err1}
+	transport2 := &mockTransport{} // succeeds
+	transport3 := &mockTransportWithCloseError{closeErr: err2}
+
+	muxer := Mux(transport1, transport2, transport3)
+
+	err := muxer.Close()
+	require.Error(t, err, "Close should return an error when transports fail")
+
+	// Both errors should be present in the joined error
+	assert.ErrorIs(t, err, err1, "Close should contain error from transport 1")
+	assert.ErrorIs(t, err, err2, "Close should contain error from transport 2")
+}
+
+// TestMuxerCloseNoErrorWhenAllSucceed verifies Close returns nil when all close.
+func TestMuxerCloseNoErrorWhenAllSucceed(t *testing.T) {
+	transport1 := &mockTransport{}
+	transport2 := &mockTransport{}
+
+	muxer := Mux(transport1, transport2)
+
+	err := muxer.Close()
+	assert.NoError(t, err, "Close should return nil when all transports close successfully")
+}
+
+// TestMuxerCloseFirstErrorPreserved verifies that when the first transport fails
+// but subsequent ones succeed, the first error is not lost.
+func TestMuxerCloseFirstErrorPreserved(t *testing.T) {
+	expectedErr := errors.New("first transport error")
+
+	transport1 := &mockTransportWithCloseError{closeErr: expectedErr}
+	transport2 := &mockTransport{} // succeeds
+
+	muxer := Mux(transport1, transport2)
+
+	err := muxer.Close()
+	require.Error(t, err, "Close should return an error")
+	assert.ErrorIs(t, err, expectedErr, "Error from first transport should be preserved")
 }
 
 // TestNameGenerationCorrectness verifies the Name() method generates proper composite names.

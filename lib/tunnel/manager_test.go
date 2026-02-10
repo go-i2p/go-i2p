@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/stretchr/testify/assert"
 )
 
 // mockTunnelEncryptor is a simple mock for testing
@@ -322,6 +323,34 @@ func TestManagerStop(t *testing.T) {
 
 	// Verify we can still call methods safely (shouldn't panic)
 	_ = m.AddParticipant(nil) // Intentionally ignore error - testing nil handling after stop
+}
+
+// TestManagerStopIdempotent verifies that calling Stop() multiple times
+// does not panic (regression test for double-close of stopChan).
+func TestManagerStopIdempotent(t *testing.T) {
+	m := NewManager()
+
+	// Add some participants
+	for i := TunnelID(1); i <= 3; i++ {
+		p, _ := NewParticipant(i, &mockTunnelEncryptor{})
+		_ = m.AddParticipant(p)
+	}
+
+	// First stop should work normally
+	m.Stop()
+
+	// Second stop should NOT panic
+	assert.NotPanics(t, func() {
+		m.Stop()
+	}, "Second call to Stop() should not panic")
+
+	// Third stop should also be safe
+	assert.NotPanics(t, func() {
+		m.Stop()
+	}, "Third call to Stop() should not panic")
+
+	// Verify all participants still cleared
+	assert.Equal(t, 0, m.ParticipantCount(), "Participants should be cleared after stop")
 }
 
 // TestCleanupIdleParticipants verifies automatic cleanup of idle participants

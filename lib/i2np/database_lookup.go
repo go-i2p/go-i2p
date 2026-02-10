@@ -208,8 +208,14 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 		return databaseLookup, err
 	}
 
-	if err := parseEncryptionFields(&databaseLookup, data); err != nil {
-		return databaseLookup, err
+	// Per I2P spec, encryption fields (reply_key, tags, reply_tags) are only
+	// present when encryptionFlag (bit 1) or ECIESFlag (bit 4) is set.
+	// Parsing them unconditionally on unencrypted lookups would read past
+	// the excluded peers into garbage data.
+	if databaseLookup.hasEncryption() || (databaseLookup.Flags&DatabaseLookupFlagECIES) != 0 {
+		if err := parseEncryptionFields(&databaseLookup, data); err != nil {
+			return databaseLookup, err
+		}
 	}
 
 	log.Debug("DatabaseLookup read successfully")

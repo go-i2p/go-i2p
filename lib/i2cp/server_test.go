@@ -451,3 +451,26 @@ func BenchmarkServerCreateSession(b *testing.B) {
 		conn.Close()
 	}
 }
+
+// TestServerConnWriteMuInitialized verifies that the per-connection write mutex
+// map is properly initialized when creating a new server.
+func TestServerConnWriteMuInitialized(t *testing.T) {
+	config := &ServerConfig{
+		ListenAddr:  "localhost:0",
+		Network:     "tcp",
+		MaxSessions: 100,
+	}
+
+	server, err := NewServer(config)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	if server.connWriteMu == nil {
+		t.Fatal("connWriteMu should be initialized, not nil")
+	}
+
+	if len(server.connWriteMu) != 0 {
+		t.Fatalf("connWriteMu should be empty initially, got %d entries", len(server.connWriteMu))
+	}
+}

@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -113,15 +114,16 @@ func (tmux *TransportMuxer) Close() (err error) {
 		"reason":          "shutdown_requested",
 		"transport_count": len(tmux.trans),
 	}).Debug("closing all transports")
+	var errs []error
 	for i, t := range tmux.trans {
-		err = t.Close()
-		if err != nil {
+		if closeErr := t.Close(); closeErr != nil {
+			errs = append(errs, closeErr)
 			// Log error but continue closing remaining transports
 			log.WithFields(logger.Fields{
 				"at":              "(TransportMuxer) Close",
 				"reason":          "transport_close_failed",
 				"transport_index": i,
-				"error":           err.Error(),
+				"error":           closeErr.Error(),
 			}).Warn("error closing transport")
 		} else {
 			log.WithFields(logger.Fields{
@@ -135,7 +137,7 @@ func (tmux *TransportMuxer) Close() (err error) {
 		"at":     "(TransportMuxer) Close",
 		"reason": "all_transports_closed",
 	}).Debug("all transports closed")
-	return err
+	return errors.Join(errs...)
 }
 
 // the name of this transport with the names of all the ones that we mux

@@ -95,6 +95,10 @@ type Server struct {
 	running      bool
 	sessionConns map[uint16]net.Conn // Session ID -> active connection
 
+	// Per-connection write serialization to prevent concurrent writes
+	// from corrupting the I2CP wire stream
+	connWriteMu map[uint16]*sync.Mutex // Session ID -> write mutex
+
 	// Connection-level rate limiting to prevent abuse before session creation
 	connMutex  sync.RWMutex
 	connStates map[net.Conn]*connectionState
@@ -135,6 +139,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		config:            config,
 		manager:           NewSessionManager(),
 		sessionConns:      make(map[uint16]net.Conn),
+		connWriteMu:       make(map[uint16]*sync.Mutex),
 		connStates:        make(map[net.Conn]*connectionState),
 		leaseSetPublisher: config.LeaseSetPublisher,
 		ctx:               ctx,
@@ -335,6 +340,7 @@ func (s *Server) cleanupIdleSessions() {
 			// Remove from server's session tracking
 			s.mu.Lock()
 			delete(s.sessionConns, session.ID())
+			delete(s.connWriteMu, session.ID())
 			s.mu.Unlock()
 
 			// Remove from manager
@@ -410,12 +416,20 @@ func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 		sessionID := (*sessionPtr).ID()
 		s.mu.Lock()
 		delete(s.sessionConns, sessionID)
+		delete(s.connWriteMu, sessionID)
 		s.mu.Unlock()
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.cleanupSessionConnection",
 			"sessionID": sessionID,
 		}).Debug("client_disconnected")
 	}
+}
+
+// getConnWriteMutex returns the per-connection write mutex for the given session.
+// Returns nil if the session is not tracked. The caller must hold s.mu.RLock
+// to call this safely.
+func (s *Server) getConnWriteMutex(sessionID uint16) *sync.Mutex {
+	return s.connWriteMu[sessionID]
 }
 
 // cleanupConnectionState removes connection state tracking on disconnect.
@@ -499,7 +513,7 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 
 	s.handleNewSessionTracking(msg, sessionPtr, conn)
 
-	if err := s.sendResponse(conn, response); err != nil {
+	if err := s.sendResponse(conn, response, sessionPtr); err != nil {
 		return false
 	}
 
@@ -657,6 +671,7 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 	if *sessionPtr != nil && msg.Type == MessageTypeCreateSession {
 		s.mu.Lock()
 		s.sessionConns[(*sessionPtr).ID()] = conn
+		s.connWriteMu[(*sessionPtr).ID()] = &sync.Mutex{}
 		s.mu.Unlock()
 
 		s.wg.Add(1)
@@ -672,7 +687,8 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 }
 
 // sendResponse writes a response message to the connection if present.
-func (s *Server) sendResponse(conn net.Conn, response *Message) error {
+// Uses per-connection write mutex to prevent concurrent write corruption.
+func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Session) error {
 	if response != nil {
 		// Set write deadline if timeout is configured
 		if s.config.WriteTimeout > 0 {
@@ -690,7 +706,24 @@ func (s *Server) sendResponse(conn net.Conn, response *Message) error {
 			"sessionID":   response.SessionID,
 			"payloadSize": len(response.Payload),
 		}).Debug("sending_response")
-		if err := WriteMessage(conn, response); err != nil {
+
+		// Acquire per-connection write mutex if session exists
+		var writeMu *sync.Mutex
+		if *sessionPtr != nil {
+			s.mu.RLock()
+			writeMu = s.connWriteMu[(*sessionPtr).ID()]
+			s.mu.RUnlock()
+		}
+
+		if writeMu != nil {
+			writeMu.Lock()
+		}
+		err := WriteMessage(conn, response)
+		if writeMu != nil {
+			writeMu.Unlock()
+		}
+
+		if err != nil {
 			log.WithFields(logger.Fields{
 				"at":    "i2cp.Server.sendResponse",
 				"type":  MessageTypeName(response.Type),
@@ -1115,7 +1148,19 @@ func (s *Server) sendLeaseSetRequest(session *Session, conn net.Conn, sessionID 
 		Payload:   payload,
 	}
 
-	if err := WriteMessage(conn, msg); err != nil {
+	s.mu.RLock()
+	writeMu := s.connWriteMu[sessionID]
+	s.mu.RUnlock()
+
+	if writeMu != nil {
+		writeMu.Lock()
+	}
+	err = WriteMessage(conn, msg)
+	if writeMu != nil {
+		writeMu.Unlock()
+	}
+
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
 			"sessionID": sessionID,
@@ -2236,9 +2281,10 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 func (s *Server) sendStatusToClient(session *Session, statusMsg *Message) {
 	s.mu.RLock()
 	conn, exists := s.sessionConns[session.ID()]
+	writeMu := s.connWriteMu[session.ID()]
 	s.mu.RUnlock()
 
-	if !exists {
+	if !exists || writeMu == nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.sendStatusToClient",
 			"sessionID": session.ID(),
@@ -2256,7 +2302,10 @@ func (s *Server) sendStatusToClient(session *Session, statusMsg *Message) {
 		return
 	}
 
-	if _, err := conn.Write(data); err != nil {
+	writeMu.Lock()
+	_, err = conn.Write(data)
+	writeMu.Unlock()
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.sendStatusToClient",
 			"sessionID": session.ID(),
@@ -2569,8 +2618,21 @@ func (s *Server) prepareMessagePayload(
 }
 
 // sendMessageToClient sends a message to the client connection.
+// Uses per-connection write mutex to prevent concurrent write corruption.
 func (s *Server) sendMessageToClient(conn net.Conn, sessionID uint16, msg *Message) bool {
-	if err := WriteMessage(conn, msg); err != nil {
+	s.mu.RLock()
+	writeMu := s.connWriteMu[sessionID]
+	s.mu.RUnlock()
+
+	if writeMu != nil {
+		writeMu.Lock()
+	}
+	err := WriteMessage(conn, msg)
+	if writeMu != nil {
+		writeMu.Unlock()
+	}
+
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.sendMessageToClient",
 			"sessionID": sessionID,

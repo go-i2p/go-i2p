@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
@@ -211,7 +212,10 @@ func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte
 
 	// If the message fits in a single tunnel message, send without fragmentation
 	if len(msgBytes) <= maxSingle {
-		di := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
+		di, err := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
+		if err != nil {
+			return nil, err
+		}
 		encrypted, err := g.buildAndEncrypt(di, msgBytes)
 		if err != nil {
 			return nil, err
@@ -243,7 +247,10 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 	remaining := len(msgBytes) - firstPayloadMax
 	if remaining <= 0 {
 		// Fits in first fragment after all
-		di := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
+		di, err := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
+		if err != nil {
+			return nil, err
+		}
 		encrypted, err := g.buildAndEncrypt(di, msgBytes)
 		if err != nil {
 			return nil, err
@@ -260,7 +267,10 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 
 	// Build first fragment
 	firstData := msgBytes[:firstPayloadMax]
-	di := g.createDeliveryInstructionsForConfig(dc, firstData, true, msgID)
+	di, err := g.createDeliveryInstructionsForConfig(dc, firstData, true, msgID)
+	if err != nil {
+		return nil, err
+	}
 	encrypted, err := g.buildAndEncrypt(di, firstData)
 	if err != nil {
 		return nil, err
@@ -278,7 +288,10 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 		fragData := msgBytes[offset:end]
 		isLast := end >= len(msgBytes)
 
-		followDI := g.createFollowOnInstructions(msgID, fragNum, isLast, fragData)
+		followDI, err := g.createFollowOnInstructions(msgID, fragNum, isLast, fragData)
+		if err != nil {
+			return nil, err
+		}
 		encrypted, err := g.buildAndEncrypt(followDI, fragData)
 		if err != nil {
 			return nil, err
@@ -308,7 +321,7 @@ func (g *Gateway) buildAndEncrypt(di, payload []byte) ([]byte, error) {
 }
 
 // createDeliveryInstructionsForConfig creates delivery instructions for any delivery type.
-func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgBytes []byte, fragmented bool, msgID uint32) []byte {
+func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgBytes []byte, fragmented bool, msgID uint32) ([]byte, error) {
 	var di *DeliveryInstructions
 
 	switch dc.DeliveryType {
@@ -327,17 +340,13 @@ func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgByte
 
 	data, err := di.Bytes()
 	if err != nil {
-		// Fallback: build minimal DT_LOCAL instructions
-		instr := make([]byte, 3)
-		instr[0] = DT_LOCAL
-		binary.BigEndian.PutUint16(instr[1:3], uint16(len(msgBytes)))
-		return instr
+		return nil, fmt.Errorf("failed to serialize delivery instructions: %w", err)
 	}
-	return data
+	return data, nil
 }
 
 // createFollowOnInstructions creates follow-on fragment delivery instructions.
-func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast bool, fragData []byte) []byte {
+func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast bool, fragData []byte) ([]byte, error) {
 	di := &DeliveryInstructions{
 		fragmentType:   FOLLOW_ON_FRAGMENT,
 		fragmentNumber: fragNum,
@@ -348,10 +357,9 @@ func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast b
 
 	data, err := di.Bytes()
 	if err != nil {
-		// This should not happen for follow-on fragments
-		return nil
+		return nil, fmt.Errorf("failed to serialize follow-on fragment instructions: %w", err)
 	}
-	return data
+	return data, nil
 }
 
 // createDeliveryInstructions creates DT_LOCAL delivery instructions for a message.

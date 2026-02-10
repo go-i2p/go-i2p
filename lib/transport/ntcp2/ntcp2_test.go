@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
@@ -152,4 +154,34 @@ func (a *mockAddr) Network() string {
 
 func (a *mockAddr) String() string {
 	return a.address
+}
+
+// TestBuildTransportInstanceStoresKeystore verifies that buildTransportInstance
+// stores the keystore reference, which is required for SetIdentity to
+// reinitialize crypto keys.
+func TestBuildTransportInstanceStoresKeystore(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockKs := &mockKeystore{}
+	config := &Config{
+		ListenerAddress: "127.0.0.1:0",
+		WorkingDir:      t.TempDir(),
+	}
+
+	logger := logger.WithField("component", "test")
+
+	var identity router_info.RouterInfo // nil interface value
+	transport := buildTransportInstance(config, identity, mockKs, ctx, cancel, logger)
+
+	assert.NotNil(t, transport, "Transport should be created")
+	assert.NotNil(t, transport.keystore, "Keystore should be stored in transport")
+	assert.Same(t, mockKs, transport.keystore, "Keystore should be the same instance")
+}
+
+// mockKeystore implements KeystoreProvider for testing
+type mockKeystore struct{}
+
+func (m *mockKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionKey {
+	return nil
 }

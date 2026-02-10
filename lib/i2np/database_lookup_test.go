@@ -369,15 +369,28 @@ func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
 func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
-	length := 67
-	data := make([]byte, length)
-	expectedReplyKeyData := make([]byte, 32)
-	expectedReplyKeyData[3] = 0x31
-	expectedReplyKey := session_key.SessionKey(expectedReplyKeyData)
-	data = append(data, expectedReplyKeyData...)
+	// Build a message with encryption flag set but not enough data for
+	// the encryption fields (reply key, tags, reply tags).
+	// Key (32) + From (32) + Flags (1) + Size (2) = 67 bytes total,
+	// plus some extra bytes that are NOT enough for a full reply key.
+	var data []byte
 
-	databaseLookup, err := ReadDatabaseLookup(data)
-	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
+	// Key (32 bytes)
+	data = append(data, make([]byte, 32)...)
+
+	// From (32 bytes)
+	data = append(data, make([]byte, 32)...)
+
+	// Flags: encryption flag set (bit 1 = 0x02)
+	data = append(data, DatabaseLookupFlagEncryption)
+
+	// Size: 0 excluded peers
+	data = append(data, 0x00, 0x00)
+
+	// Only 10 bytes of reply key data — not enough for a 32-byte key
+	data = append(data, make([]byte, 10)...)
+
+	_, err := ReadDatabaseLookup(data)
 	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
 }
 
@@ -396,7 +409,9 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	data = append(data, from...)
 	expectedFrom := common.Hash(from)
 
-	expectedFlags := byte(0x1)
+	// Flags: tunnel reply (bit 0) AND encryption (bit 1) = 0x03
+	// Encryption flag must be set for encryption fields to be parsed.
+	expectedFlags := byte(0x03)
 	data = append(data, expectedFlags)
 
 	tunnelIDData := make([]byte, 4)
@@ -603,4 +618,177 @@ func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 	for _, tag := range databaseLookup.ECIESReplyTags {
 		assert.Equal(8, len(tag.Bytes()))
 	}
+}
+
+// TestReadDatabaseLookupNoEncryptionFlags verifies that a DatabaseLookup message
+// without encryption flags (bit 1 and bit 4 both unset) parses correctly and does
+// NOT attempt to read encryption fields past the excluded peers.
+// This is the most common case on the I2P network.
+func TestReadDatabaseLookupNoEncryptionFlags(t *testing.T) {
+	assert := assert.New(t)
+
+	// Build a minimal unencrypted DatabaseLookup:
+	// Key (32) + From (32) + Flags (1) + Size (2) = 67 bytes
+	// Flags = 0x00: direct reply, no encryption, normal lookup
+	var data []byte
+
+	// Key
+	key := make([]byte, 32)
+	key[0] = 0xAA
+	expectedKey := common.Hash(key)
+	data = append(data, key...)
+
+	// From
+	from := make([]byte, 32)
+	from[0] = 0xBB
+	expectedFrom := common.Hash(from)
+	data = append(data, from...)
+
+	// Flags: no encryption, no tunnel, normal lookup
+	expectedFlags := byte(0x00)
+	data = append(data, expectedFlags)
+
+	// Size: 0 excluded peers
+	data = append(data, 0x00, 0x00)
+
+	databaseLookup, err := ReadDatabaseLookup(data)
+	assert.Nil(err, "Unencrypted DatabaseLookup should parse without error")
+	assert.Equal(expectedKey, databaseLookup.Key)
+	assert.Equal(expectedFrom, databaseLookup.From)
+	assert.Equal(expectedFlags, databaseLookup.Flags)
+	assert.Equal(0, databaseLookup.Size)
+	// Encryption fields should be zero-valued since no encryption flag was set
+	assert.Equal(session_key.SessionKey{}, databaseLookup.ReplyKey)
+	assert.Equal(0, databaseLookup.Tags)
+	assert.Nil(databaseLookup.ReplyTags)
+	assert.Nil(databaseLookup.ECIESReplyTags)
+}
+
+// TestReadDatabaseLookupNoEncryptionWithExcludedPeers verifies parsing of
+// an unencrypted lookup with excluded peers — data ends right after the peers
+// and no garbage is read as encryption fields.
+func TestReadDatabaseLookupNoEncryptionWithExcludedPeers(t *testing.T) {
+	assert := assert.New(t)
+
+	var data []byte
+
+	// Key (32 bytes)
+	key := make([]byte, 32)
+	key[0] = 0x01
+	data = append(data, key...)
+
+	// From (32 bytes)
+	from := make([]byte, 32)
+	from[0] = 0x02
+	data = append(data, from...)
+
+	// Flags: tunnel reply, NO encryption, RI lookup (bits: 0b00001001 = 0x09)
+	flags := byte(DatabaseLookupFlagTunnel | DatabaseLookupFlagTypeRI)
+	data = append(data, flags)
+
+	// ReplyTunnelID (4 bytes, since tunnel flag is set)
+	data = append(data, 0x00, 0x00, 0x01, 0x00)
+
+	// Size: 2 excluded peers
+	data = append(data, 0x00, 0x02)
+
+	// 2 excluded peers (2 * 32 bytes)
+	peer1 := make([]byte, 32)
+	peer1[0] = 0xCC
+	data = append(data, peer1...)
+
+	peer2 := make([]byte, 32)
+	peer2[0] = 0xDD
+	data = append(data, peer2...)
+
+	// No encryption data follows — this is the end of the message.
+	// Previously the parser would try to read past here and fail.
+
+	databaseLookup, err := ReadDatabaseLookup(data)
+	assert.Nil(err, "Unencrypted DatabaseLookup with excluded peers should parse without error")
+	assert.Equal(flags, databaseLookup.Flags)
+	assert.Equal(2, databaseLookup.Size)
+	assert.Equal(2, len(databaseLookup.ExcludedPeers))
+	// Encryption fields must remain zero/nil
+	assert.Equal(session_key.SessionKey{}, databaseLookup.ReplyKey)
+	assert.Equal(0, databaseLookup.Tags)
+	assert.Nil(databaseLookup.ReplyTags)
+	assert.Nil(databaseLookup.ECIESReplyTags)
+}
+
+// TestReadDatabaseLookupWithEncryptionFlagStillWorks verifies that lookups
+// WITH the encryption flag set still parse encryption fields correctly.
+func TestReadDatabaseLookupWithEncryptionFlagStillWorks(t *testing.T) {
+	assert := assert.New(t)
+
+	var data []byte
+
+	// Key (32 bytes)
+	key := make([]byte, 32)
+	key[0] = 0x11
+	data = append(data, key...)
+
+	// From (32 bytes)
+	from := make([]byte, 32)
+	from[0] = 0x22
+	data = append(data, from...)
+
+	// Flags: encryption flag set (bit 1), direct reply
+	flags := byte(DatabaseLookupFlagEncryption)
+	data = append(data, flags)
+
+	// Size: 0 excluded peers
+	data = append(data, 0x00, 0x00)
+
+	// ReplyKey (32 bytes)
+	replyKey := make([]byte, 32)
+	replyKey[0] = 0xFF
+	expectedReplyKey := session_key.SessionKey(replyKey)
+	data = append(data, replyKey...)
+
+	// Tags: 1
+	data = append(data, 0x01)
+
+	// 1 ElGamal reply tag (32 bytes)
+	tagData := make([]byte, 32)
+	tagData[0] = 0xEE
+	data = append(data, tagData...)
+
+	databaseLookup, err := ReadDatabaseLookup(data)
+	assert.Nil(err, "Encrypted DatabaseLookup should parse without error")
+	assert.Equal(flags, databaseLookup.Flags)
+	assert.True(databaseLookup.hasEncryption())
+	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
+	assert.Equal(1, databaseLookup.Tags)
+	assert.Equal(1, len(databaseLookup.ReplyTags))
+}
+
+// TestReadDatabaseLookupExplorationNoEncryption verifies an exploration lookup
+// (bits 3-2 = 11) without encryption parses correctly.
+func TestReadDatabaseLookupExplorationNoEncryption(t *testing.T) {
+	assert := assert.New(t)
+
+	var data []byte
+
+	// Key (32 bytes)
+	data = append(data, make([]byte, 32)...)
+
+	// From (32 bytes)
+	data = append(data, make([]byte, 32)...)
+
+	// Flags: exploration, no encryption
+	flags := byte(DatabaseLookupFlagTypeExploration)
+	data = append(data, flags)
+
+	// Size: 1 excluded peer (all zeros = exploration marker)
+	data = append(data, 0x00, 0x01)
+	data = append(data, make([]byte, 32)...) // all-zero hash
+
+	databaseLookup, err := ReadDatabaseLookup(data)
+	assert.Nil(err, "Exploration lookup without encryption should parse without error")
+	assert.Equal(flags, databaseLookup.Flags)
+	assert.Equal(1, databaseLookup.Size)
+	// No encryption fields should be populated
+	assert.Equal(session_key.SessionKey{}, databaseLookup.ReplyKey)
+	assert.Equal(0, databaseLookup.Tags)
 }

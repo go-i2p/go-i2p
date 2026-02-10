@@ -279,7 +279,8 @@ func TestCreateDeliveryInstructionsForConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("LOCAL", func(t *testing.T) {
-		di := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
+		di, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
+		require.NoError(t, err)
 		assert.NotNil(t, di)
 		assert.True(t, len(di) >= 3, "LOCAL DI should be at least 3 bytes")
 	})
@@ -287,7 +288,8 @@ func TestCreateDeliveryInstructionsForConfig(t *testing.T) {
 	t.Run("TUNNEL", func(t *testing.T) {
 		var hash [32]byte
 		dc := TunnelDelivery(42, hash)
-		di := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		di, err := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		require.NoError(t, err)
 		assert.NotNil(t, di)
 		// TUNNEL should be at least 39 bytes (flag + tunnelID + hash + size)
 		assert.True(t, len(di) >= 35, "TUNNEL DI should be at least 35 bytes")
@@ -296,14 +298,17 @@ func TestCreateDeliveryInstructionsForConfig(t *testing.T) {
 	t.Run("ROUTER", func(t *testing.T) {
 		var hash [32]byte
 		dc := RouterDelivery(hash)
-		di := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		di, err := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		require.NoError(t, err)
 		assert.NotNil(t, di)
 		assert.True(t, len(di) >= 35, "ROUTER DI should be at least 35 bytes")
 	})
 
 	t.Run("Fragmented", func(t *testing.T) {
-		diUnfrag := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
-		diFrag := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), true, 12345)
+		diUnfrag, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
+		require.NoError(t, err)
+		diFrag, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), true, 12345)
+		require.NoError(t, err)
 		// Fragmented should be 4 bytes larger (message ID)
 		assert.Greater(t, len(diFrag), len(diUnfrag), "Fragmented DI should be larger")
 	})
@@ -315,10 +320,12 @@ func TestCreateFollowOnInstructions(t *testing.T) {
 	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
 	require.NoError(t, err)
 
-	di := gw.createFollowOnInstructions(42, 1, false, make([]byte, 100))
+	di, err := gw.createFollowOnInstructions(42, 1, false, make([]byte, 100))
+	require.NoError(t, err)
 	assert.NotNil(t, di, "Follow-on DI should not be nil")
 
-	diLast := gw.createFollowOnInstructions(42, 3, true, make([]byte, 50))
+	diLast, err := gw.createFollowOnInstructions(42, 3, true, make([]byte, 50))
+	require.NoError(t, err)
 	assert.NotNil(t, diLast, "Last follow-on DI should not be nil")
 }
 
@@ -333,4 +340,59 @@ func TestSendBackwardCompatibility(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Len(t, result, 1028, "Send() should produce a 1028-byte tunnel message")
+}
+
+// TestCreateDeliveryInstructionsForConfigReturnsError verifies that
+// createDeliveryInstructionsForConfig returns an error instead of silently
+// falling back to DT_LOCAL when serialization fails.
+func TestCreateDeliveryInstructionsForConfigReturnsError(t *testing.T) {
+	mockEncryptor := &passthroughEncryptor{}
+	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
+	require.NoError(t, err)
+
+	// Valid delivery configs should succeed
+	t.Run("ValidLocalDelivery", func(t *testing.T) {
+		di, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
+		require.NoError(t, err)
+		assert.NotNil(t, di)
+		// Verify it's actually DT_LOCAL and not silently changed
+		assert.Equal(t, byte(DT_LOCAL), di[0]&0xC0>>6, "Should be DT_LOCAL delivery type")
+	})
+
+	t.Run("ValidTunnelDelivery", func(t *testing.T) {
+		var hash [32]byte
+		dc := TunnelDelivery(42, hash)
+		di, err := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		require.NoError(t, err)
+		assert.NotNil(t, di)
+	})
+
+	t.Run("ValidRouterDelivery", func(t *testing.T) {
+		var hash [32]byte
+		dc := RouterDelivery(hash)
+		di, err := gw.createDeliveryInstructionsForConfig(dc, make([]byte, 50), false, 0)
+		require.NoError(t, err)
+		assert.NotNil(t, di)
+	})
+}
+
+// TestCreateFollowOnInstructionsReturnsError verifies that
+// createFollowOnInstructions returns an error instead of nil when serialization fails.
+func TestCreateFollowOnInstructionsReturnsError(t *testing.T) {
+	mockEncryptor := &passthroughEncryptor{}
+	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
+	require.NoError(t, err)
+
+	// Valid follow-on instructions should succeed
+	t.Run("ValidFirstFollowOn", func(t *testing.T) {
+		di, err := gw.createFollowOnInstructions(42, 1, false, make([]byte, 100))
+		require.NoError(t, err)
+		assert.NotNil(t, di, "Valid follow-on instructions should not be nil")
+	})
+
+	t.Run("ValidLastFollowOn", func(t *testing.T) {
+		di, err := gw.createFollowOnInstructions(42, 3, true, make([]byte, 50))
+		require.NoError(t, err)
+		assert.NotNil(t, di, "Valid last follow-on instructions should not be nil")
+	})
 }
