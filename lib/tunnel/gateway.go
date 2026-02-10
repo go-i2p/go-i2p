@@ -299,7 +299,7 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 }
 
 // buildAndEncrypt builds a tunnel message from delivery instructions and payload, then encrypts it.
-func (g *Gateway) buildAndEncrypt(di []byte, payload []byte) ([]byte, error) {
+func (g *Gateway) buildAndEncrypt(di, payload []byte) ([]byte, error) {
 	tunnelMsg, err := g.buildTunnelMessage(di, payload)
 	if err != nil {
 		return nil, err
