@@ -109,6 +109,14 @@ type TunnelDataHandler interface {
 	HandleTunnelData(msg I2NPMessage) error
 }
 
+// SearchReplyHandler defines the interface for delivering DatabaseSearchReply
+// suggestions to pending iterative Kademlia lookups.
+type SearchReplyHandler interface {
+	// HandleSearchReply delivers suggested peer hashes from a DatabaseSearchReply.
+	// The key is the lookup target hash, and peerHashes are the suggested peers.
+	HandleSearchReply(key common.Hash, peerHashes []common.Hash)
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	mu                   sync.RWMutex
@@ -122,6 +130,7 @@ type MessageProcessor struct {
 	buildRecordCrypto    *BuildRecordCrypto   // Crypto handler for encrypting build response records
 	tunnelGatewayHandler TunnelGatewayHandler // Optional handler for tunnel gateway messages
 	tunnelDataHandler    TunnelDataHandler    // Optional handler for inbound tunnel data messages
+	searchReplyHandler   SearchReplyHandler   // Optional handler for DatabaseSearchReply suggestions
 }
 
 // NewMessageProcessor creates a new message processor
@@ -202,6 +211,16 @@ func (p *MessageProcessor) SetTunnelDataHandler(handler TunnelDataHandler) {
 	defer p.mu.Unlock()
 	log.WithField("at", "SetTunnelDataHandler").Debug("Setting tunnel data handler")
 	p.tunnelDataHandler = handler
+}
+
+// SetSearchReplyHandler sets the handler for delivering DatabaseSearchReply suggestions
+// to pending iterative Kademlia lookups. When set, peer suggestions from search replies
+// are forwarded to this handler for follow-up queries.
+func (p *MessageProcessor) SetSearchReplyHandler(handler SearchReplyHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetSearchReplyHandler").Debug("Setting search reply handler")
+	p.searchReplyHandler = handler
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -344,7 +363,7 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 
 // processDatabaseSearchReplyMessage processes DatabaseSearchReply messages from peers.
 // These messages contain peer hash suggestions when a lookup fails to find the exact key.
-// The suggested peers can be queried in subsequent lookup attempts.
+// The suggested peers are delivered to the search reply handler for iterative lookup follow-up.
 func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) error {
 	// Type assert to *DatabaseSearchReply
 	searchReply, ok := msg.(*DatabaseSearchReply)
@@ -364,15 +383,23 @@ func (p *MessageProcessor) processDatabaseSearchReplyMessage(msg I2NPMessage) er
 		"peer_hashes": len(searchReply.PeerHashes),
 	}).Debug("Processing DatabaseSearchReply message")
 
-	// Log the peer suggestions for debugging/monitoring
-	// In a full implementation, these would be added to a pending lookup queue
-	// to continue the iterative Kademlia lookup process
-	for i, peerHash := range searchReply.PeerHashes {
+	// Deliver suggestions to the search reply handler for iterative Kademlia lookup
+	if p.searchReplyHandler != nil && len(searchReply.PeerHashes) > 0 {
+		p.searchReplyHandler.HandleSearchReply(searchReply.Key, searchReply.PeerHashes)
 		log.WithFields(logger.Fields{
-			"at":        "processDatabaseSearchReplyMessage",
-			"peer_idx":  i,
-			"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
-		}).Debug("Suggested peer from search reply")
+			"at":          "processDatabaseSearchReplyMessage",
+			"key":         fmt.Sprintf("%x", searchReply.Key[:8]),
+			"suggestions": len(searchReply.PeerHashes),
+		}).Debug("Delivered search reply suggestions to handler")
+	} else {
+		// Log peer suggestions for debugging when no handler is set
+		for i, peerHash := range searchReply.PeerHashes {
+			log.WithFields(logger.Fields{
+				"at":        "processDatabaseSearchReplyMessage",
+				"peer_idx":  i,
+				"peer_hash": fmt.Sprintf("%x", peerHash[:8]),
+			}).Debug("Suggested peer from search reply (no handler configured)")
+		}
 	}
 
 	return nil

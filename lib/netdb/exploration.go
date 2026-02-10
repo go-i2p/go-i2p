@@ -23,6 +23,9 @@ type Explorer struct {
 	// tunnel pool to use for lookups
 	pool *tunnel.Pool
 
+	// transport for sending lookup messages to peers
+	transport LookupTransport
+
 	// exploration strategy (adaptive or random)
 	strategy ExplorationStrategy
 
@@ -70,6 +73,10 @@ type ExplorerConfig struct {
 	// Required for adaptive strategy
 	OurHash common.Hash
 
+	// Transport is the lookup transport for sending DatabaseLookup messages.
+	// Required for the explorer to perform actual network lookups.
+	Transport LookupTransport
+
 	// StatsUpdateInterval determines how often to update strategy statistics (default: 1 minute)
 	StatsUpdateInterval time.Duration
 }
@@ -96,6 +103,7 @@ func NewExplorer(db NetworkDatabase, pool *tunnel.Pool, config ExplorerConfig) *
 	explorer := &Explorer{
 		db:             db,
 		pool:           pool,
+		transport:      config.Transport,
 		ctx:            ctx,
 		cancel:         cancel,
 		interval:       config.Interval,
@@ -154,6 +162,21 @@ func (e *Explorer) Stop() {
 		"at":     "(Explorer) Stop",
 		"reason": "shutdown_complete",
 	}).Info("database exploration stopped")
+}
+
+// SetTransport sets the lookup transport for network-based exploration lookups.
+// This should be called before Start() to enable the explorer to query remote peers.
+func (e *Explorer) SetTransport(transport LookupTransport) {
+	e.transport = transport
+	log.WithFields(logger.Fields{
+		"at":     "(Explorer) SetTransport",
+		"reason": "transport_configured",
+	}).Debug("lookup transport set on explorer")
+}
+
+// SetOurHash sets our router's identity hash for lookup message construction.
+func (e *Explorer) SetOurHash(hash common.Hash) {
+	e.ourHash = hash
 }
 
 // explorationLoop runs periodic exploration rounds
@@ -257,18 +280,23 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 		"hash":  fmt.Sprintf("%x", lookupHash[:8]),
 	}).Debug("Performing exploratory lookup")
 
-	// Create resolver for this lookup
-	resolver := NewKademliaResolver(e.db, e.pool)
+	// Create a transport-capable resolver so lookups can reach the network.
+	// Without a transport, the resolver can only check local storage.
+	var resolver Resolver
+	if e.transport != nil {
+		resolver = NewKademliaResolverWithTransport(e.db, e.pool, e.transport, e.ourHash)
+	} else {
+		resolver = NewKademliaResolver(e.db, e.pool)
+	}
 	if resolver == nil {
 		return fmt.Errorf("failed to create resolver")
 	}
 
-	// Perform lookup with timeout
-	// The KademliaResolver will send DatabaseLookup messages with exploration flag
-	_, err := resolver.Lookup(lookupHash, e.lookupTimeout)
-	// Note: We expect most exploratory lookups to fail (no exact match for random hash)
+	// Perform lookup with timeout.
+	// We expect most exploratory lookups to fail (no exact match for random hash).
 	// The value is in the DatabaseSearchReply messages we receive, which contain
-	// references to non-floodfill routers that get stored in NetDB
+	// references to non-floodfill routers that get stored in NetDB via iterative lookup.
+	_, err := resolver.Lookup(lookupHash, e.lookupTimeout)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"index": index,

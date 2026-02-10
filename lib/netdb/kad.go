@@ -3,6 +3,7 @@ package netdb
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -185,68 +186,168 @@ func (kr *KademliaResolver) validateRemoteLookupCapability() error {
 	return nil
 }
 
-// performRemoteLookup starts the Kademlia lookup process in a goroutine.
+const (
+	// MaxIterativeLookupHops is the maximum number of iterative lookup rounds.
+	// Each round queries the closest unqueried peers and follows suggestions.
+	MaxIterativeLookupHops = 5
+
+	// MaxConcurrentQueries is the number of peers queried in parallel per round.
+	MaxConcurrentQueries = 3
+)
+
+// performRemoteLookup executes an iterative Kademlia lookup in a goroutine.
+// It queries the closest known peers, follows peer suggestions from
+// DatabaseSearchReply messages, and repeats up to MaxIterativeLookupHops rounds.
 func (kr *KademliaResolver) performRemoteLookup(ctx context.Context, h common.Hash, timeout time.Duration, resultChan chan *router_info.RouterInfo, errChan chan error) {
 	log.WithFields(logger.Fields{
-		"at":      "performRemoteLookup",
-		"hash":    fmt.Sprintf("%x", h[:8]),
-		"timeout": timeout,
-	}).Debug("Starting remote Kademlia lookup")
+		"at":       "performRemoteLookup",
+		"hash":     fmt.Sprintf("%x", h[:8]),
+		"timeout":  timeout,
+		"max_hops": MaxIterativeLookupHops,
+	}).Debug("Starting iterative Kademlia lookup")
 	go func() {
-		// Find the closest peers we know to the target hash
-		closestPeers := kr.findClosestPeers(h)
-		if len(closestPeers) == 0 {
-			log.WithFields(logger.Fields{
-				"at":     "performRemoteLookup",
-				"hash":   fmt.Sprintf("%x", h[:8]),
-				"reason": "no peers available",
-			}).Error("Kademlia lookup failed")
-			errChan <- fmt.Errorf("insufficient peers available for lookup")
-			return
+		ri, err := kr.iterativeLookup(ctx, h)
+		if ri != nil {
+			resultChan <- ri
+		} else if err != nil {
+			errChan <- err
+		} else {
+			errChan <- fmt.Errorf("router info not found in kademlia lookup")
 		}
-
-		log.WithFields(logger.Fields{
-			"at":         "performRemoteLookup",
-			"hash":       fmt.Sprintf("%x", h[:8]),
-			"peer_count": len(closestPeers),
-		}).Debug("Found closest peers for lookup")
-
-		// Query each closest peer in parallel
-		kr.queryClosestPeers(ctx, closestPeers, h, resultChan)
-
-		// Allow some time for queries to complete, but eventually give up
-		kr.handleLookupTimeout(ctx, timeout, errChan)
 	}()
 }
 
-// queryClosestPeers queries each of the closest peers in parallel.
-func (kr *KademliaResolver) queryClosestPeers(ctx context.Context, peers []common.Hash, target common.Hash, resultChan chan *router_info.RouterInfo) {
-	for _, peer := range peers {
-		go func(p common.Hash) {
-			ri, err := kr.queryPeer(ctx, p, target)
-			if err != nil {
-				log.WithFields(logger.Fields{
-					"peer":  p,
-					"error": err,
-				}).Debug("Peer query failed")
-				return
-			}
-
-			if ri != nil {
-				resultChan <- ri
-			}
-		}(peer)
-	}
+// iterativeQueryResult holds the result from querying a single peer.
+type iterativeQueryResult struct {
+	ri          *router_info.RouterInfo
+	suggestions []common.Hash
+	err         error
 }
 
-// handleLookupTimeout manages the timeout for the lookup operation.
-func (kr *KademliaResolver) handleLookupTimeout(ctx context.Context, timeout time.Duration, errChan chan error) {
-	select {
-	case <-time.After(timeout - time.Second): // Leave 1s buffer for the main select
-		errChan <- fmt.Errorf("router info not found in kademlia lookup")
-	case <-ctx.Done():
-		// Context was already canceled, main select will handle it
+// iterativeLookup performs an iterative Kademlia lookup following peer suggestions.
+// It maintains sets of queried and unqueried peers, querying the closest unqueried
+// peers each round and adding suggestions from DatabaseSearchReply responses.
+func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.Hash) (*router_info.RouterInfo, error) {
+	queried := make(map[common.Hash]bool)
+	unqueried := make(map[common.Hash]bool)
+
+	// Seed with the closest peers we know
+	closestPeers := kr.findClosestPeers(target)
+	if len(closestPeers) == 0 {
+		return nil, fmt.Errorf("insufficient peers available for lookup")
 	}
+	for _, p := range closestPeers {
+		unqueried[p] = true
+	}
+
+	for hop := 0; hop < MaxIterativeLookupHops; hop++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		// Pick the closest unqueried peers for this round
+		batch := kr.selectClosestUnqueried(target, unqueried, MaxConcurrentQueries)
+		if len(batch) == 0 {
+			log.WithFields(logger.Fields{
+				"at":   "iterativeLookup",
+				"hop":  hop,
+				"hash": fmt.Sprintf("%x", target[:8]),
+			}).Debug("No more unqueried peers, lookup exhausted")
+			break
+		}
+
+		log.WithFields(logger.Fields{
+			"at":         "iterativeLookup",
+			"hop":        hop,
+			"batch_size": len(batch),
+			"unqueried":  len(unqueried),
+			"queried":    len(queried),
+		}).Debug("Starting iterative lookup round")
+
+		// Query the batch in parallel
+		results := kr.queryBatchParallel(ctx, batch, target)
+
+		// Mark batch peers as queried
+		for _, p := range batch {
+			queried[p] = true
+			delete(unqueried, p)
+		}
+
+		// Process results
+		for _, result := range results {
+			if result.ri != nil {
+				return result.ri, nil
+			}
+			// Add new suggestions to unqueried set
+			for _, suggestion := range result.suggestions {
+				if !queried[suggestion] && !unqueried[suggestion] {
+					unqueried[suggestion] = true
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("router info not found after %d iterative hops", MaxIterativeLookupHops)
+}
+
+// selectClosestUnqueried picks the closest unqueried peers by XOR distance to the target.
+func (kr *KademliaResolver) selectClosestUnqueried(target common.Hash, unqueried map[common.Hash]bool, count int) []common.Hash {
+	peers := make([]peerDistance, 0, len(unqueried))
+	for h := range unqueried {
+		dist := kr.calculateXORDistance(target, h)
+		peers = append(peers, peerDistance{hash: h, distance: dist})
+	}
+
+	sort.Slice(peers, func(i, j int) bool {
+		return kr.compareDistances(peers[i].distance, peers[j].distance)
+	})
+
+	if count > len(peers) {
+		count = len(peers)
+	}
+
+	result := make([]common.Hash, count)
+	for i := 0; i < count; i++ {
+		result[i] = peers[i].hash
+	}
+	return result
+}
+
+// queryBatchParallel queries multiple peers concurrently and collects their results.
+func (kr *KademliaResolver) queryBatchParallel(ctx context.Context, peers []common.Hash, target common.Hash) []iterativeQueryResult {
+	resultsCh := make(chan iterativeQueryResult, len(peers))
+	var wg sync.WaitGroup
+
+	for _, peer := range peers {
+		wg.Add(1)
+		go func(p common.Hash) {
+			defer wg.Done()
+			ri, err := kr.queryPeer(ctx, p, target)
+			result := iterativeQueryResult{ri: ri, err: err}
+
+			// Extract suggestions from SearchReplyError
+			var searchReplyErr *SearchReplyError
+			if errors.As(err, &searchReplyErr) {
+				result.suggestions = searchReplyErr.Suggestions
+				log.WithFields(logger.Fields{
+					"at":          "queryBatchParallel",
+					"peer":        fmt.Sprintf("%x", p[:8]),
+					"suggestions": len(searchReplyErr.Suggestions),
+				}).Debug("Peer returned suggestions for iterative follow-up")
+			}
+
+			resultsCh <- result
+		}(peer)
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	results := make([]iterativeQueryResult, 0, len(peers))
+	for r := range resultsCh {
+		results = append(results, r)
+	}
+	return results
 }
 
 // collectLookupResult waits for and processes the lookup result.
@@ -523,27 +624,33 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 	return &ri, nil
 }
 
+// SearchReplyError is returned when a peer responds with a DatabaseSearchReply
+// instead of a DatabaseStore. It contains the suggested peer hashes for iterative lookup.
+type SearchReplyError struct {
+	Suggestions []common.Hash
+}
+
+func (e *SearchReplyError) Error() string {
+	return fmt.Sprintf("peer did not have target, suggested %d alternatives", len(e.Suggestions))
+}
+
 // processDatabaseSearchReplyResponse handles a DatabaseSearchReply, which indicates
 // the peer doesn't have the target but suggests other peers to try.
+// Returns a SearchReplyError containing the suggested peer hashes for iterative lookup.
 func (kr *KademliaResolver) processDatabaseSearchReplyResponse(data []byte, targetHash common.Hash) (*router_info.RouterInfo, error) {
 	searchReply, err := i2np.ReadDatabaseSearchReply(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DatabaseSearchReply: %w", err)
 	}
 
-	// Log the suggested peers (these could be used for iterative lookups)
 	if len(searchReply.PeerHashes) > 0 {
 		log.WithFields(logger.Fields{
 			"at":          "processDatabaseSearchReplyResponse",
 			"target":      fmt.Sprintf("%x", targetHash[:8]),
 			"from":        fmt.Sprintf("%x", searchReply.From[:8]),
 			"suggestions": len(searchReply.PeerHashes),
-		}).Debug("Peer returned suggestions")
-
-		// Store the suggested peer hashes for potential future lookups
-		// In a full implementation, we would use these to continue iterative lookups
+		}).Debug("Peer returned suggestions for iterative lookup")
 	}
 
-	// Return nil RouterInfo - the peer didn't have it
-	return nil, fmt.Errorf("peer did not have target, suggested %d alternatives", len(searchReply.PeerHashes))
+	return nil, &SearchReplyError{Suggestions: searchReply.PeerHashes}
 }
