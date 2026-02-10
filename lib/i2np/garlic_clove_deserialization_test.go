@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -103,7 +104,7 @@ func TestDeserializeGarlicClove_InsufficientDataForMessage(t *testing.T) {
 	cloveData := []byte{0x00}
 
 	// Build I2NP header claiming 500 bytes of data
-	i2npHeader := buildI2NPHeader(500)
+	i2npHeader := buildI2NPHeader(500, 0x00)
 	cloveData = append(cloveData, i2npHeader...)
 
 	// But only provide 100 bytes of actual data
@@ -220,15 +221,19 @@ func buildTestGarlicCloveData(messageSize int) []byte {
 	// 1. Delivery Instructions (LOCAL = 0x00, no additional data)
 	buf = append(buf, 0x00)
 
-	// 2. I2NP Message Header (16 bytes) + Data
-	i2npHeader := buildI2NPHeader(messageSize)
-	buf = append(buf, i2npHeader...)
-
 	// I2NP message data (filled with test pattern)
 	messageData := make([]byte, messageSize)
 	for i := range messageData {
 		messageData[i] = byte(i % 256)
 	}
+
+	// Compute correct checksum: first byte of SHA-256 over message data
+	hash := sha256.Sum256(messageData)
+	checksum := hash[0]
+
+	// 2. I2NP Message Header (16 bytes) + Data
+	i2npHeader := buildI2NPHeader(messageSize, checksum)
+	buf = append(buf, i2npHeader...)
 	buf = append(buf, messageData...)
 
 	// 3. Clove Trailer
@@ -251,7 +256,7 @@ func buildTestGarlicCloveData(messageSize int) []byte {
 }
 
 // buildI2NPHeader creates a valid I2NP NTCP header (16 bytes) with the specified message size.
-func buildI2NPHeader(messageSize int) []byte {
+func buildI2NPHeader(messageSize int, checksum byte) []byte {
 	header := make([]byte, 16)
 
 	// Type (1 byte) - use Data message type (20)
@@ -267,8 +272,8 @@ func buildI2NPHeader(messageSize int) []byte {
 	// Size (2 bytes) - the actual message data size
 	binary.BigEndian.PutUint16(header[13:15], uint16(messageSize))
 
-	// Checksum (1 byte) - simplified (not real SHA256)
-	header[15] = 0xAB
+	// Checksum (1 byte) - first byte of SHA-256 of message data
+	header[15] = checksum
 
 	return header
 }

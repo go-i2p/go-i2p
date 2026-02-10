@@ -2,8 +2,6 @@ package i2np
 
 import (
 	"testing"
-
-	common "github.com/go-i2p/common/data"
 )
 
 // TestShortTunnelBuildReplyImplementsTunnelReplyHandler verifies interface satisfaction
@@ -223,7 +221,7 @@ func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 	}
 }
 
-// Helper function to create a test BuildResponseRecord
+// Helper function to create a test BuildResponseRecord with correct hash
 func createTestBuildResponseRecord(replyCode byte) BuildResponseRecord {
 	var randomData [495]byte
 	// Fill with some test data
@@ -231,11 +229,7 @@ func createTestBuildResponseRecord(replyCode byte) BuildResponseRecord {
 		randomData[i] = byte(i % 256)
 	}
 
-	return BuildResponseRecord{
-		Hash:       common.Hash{},
-		RandomData: randomData,
-		Reply:      replyCode,
-	}
+	return CreateBuildResponseRecord(replyCode, randomData)
 }
 
 // Helper function to check if a string contains a substring

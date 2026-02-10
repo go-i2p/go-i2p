@@ -221,11 +221,11 @@ func TestSigChanInitialized(t *testing.T) {
 	}
 }
 
-// TestSigChanIsUnbuffered verifies channel properties.
-func TestSigChanIsUnbuffered(t *testing.T) {
-	// The channel is unbuffered (capacity 0) which means
-	// sends will block until received
-	if cap(sigChan) != 0 {
-		t.Errorf("Expected unbuffered channel, got capacity %d", cap(sigChan))
+// TestSigChanIsBuffered verifies channel is buffered to avoid missing signals.
+func TestSigChanIsBuffered(t *testing.T) {
+	// The channel is buffered (capacity 1) so that signal.Notify
+	// does not drop signals when no receiver is ready.
+	if cap(sigChan) != 1 {
+		t.Errorf("Expected buffered channel with capacity 1, got capacity %d", cap(sigChan))
 	}
 }

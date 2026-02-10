@@ -18,7 +18,7 @@ func UserHome() string {
 		}
 		// Last resort on Windows
 		if home := os.Getenv("USERPROFILE"); home != "" {
-			log.WithError(err).Warn("os.UserHomeDir failed, falling back to %USERPROFILE%")
+			log.WithError(err).Warn("os.UserHomeDir failed, falling back to USERPROFILE")
 			return home
 		}
 		log.WithError(err).Error("Unable to determine home directory; defaulting to /tmp")

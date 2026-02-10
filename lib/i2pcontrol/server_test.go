@@ -450,9 +450,11 @@ func TestHTTPErrors(t *testing.T) {
 			t.Errorf("Expected status 200 for OPTIONS, got %d", resp.StatusCode)
 		}
 
-		// Verify CORS headers
-		if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != "*" {
-			t.Errorf("Expected CORS origin *, got %s", origin)
+		// Verify CORS headers - origin should match the server's own address (not "*")
+		// to prevent CSRF attacks per the implementation's security design
+		expectedOrigin := fmt.Sprintf("http://%s", cfg.Address)
+		if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != expectedOrigin {
+			t.Errorf("Expected CORS origin %s, got %s", expectedOrigin, origin)
 		}
 	})
 }
