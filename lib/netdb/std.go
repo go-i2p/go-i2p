@@ -1050,6 +1050,10 @@ func (db *StdNetDB) Ensure() (err error) {
 		if loadErr := db.loadExistingRouterInfos(); loadErr != nil {
 			log.WithError(loadErr).Warn("Failed to load some existing RouterInfos, continuing anyway")
 		}
+		// Load existing LeaseSets from disk into memory (skipping expired ones)
+		if loadErr := db.loadExistingLeaseSets(); loadErr != nil {
+			log.WithError(loadErr).Warn("Failed to load some existing LeaseSets, continuing anyway")
+		}
 	}
 	return err
 }
@@ -1210,6 +1214,152 @@ func (db *StdNetDB) storeRouterInfo(hash common.Hash, ri *router_info.RouterInfo
 		RouterInfo: ri,
 	}
 	db.riMutex.Unlock()
+}
+
+// loadExistingLeaseSets scans the NetDB directory and loads all unexpired LeaseSet files into memory.
+// Expired LeaseSets are removed from disk during the scan.
+func (db *StdNetDB) loadExistingLeaseSets() error {
+	basePath := db.Path()
+	loaded := 0
+	expired := 0
+	errors := 0
+
+	log.WithField("path", basePath).Info("Loading existing LeaseSets from NetDB")
+
+	// Walk through all l* subdirectories in the skiplist
+	for _, c := range base64.I2PEncodeAlphabet {
+		dirPath := filepath.Join(basePath, fmt.Sprintf("l%c", c))
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			// Skip if directory doesn't exist or can't be read
+			continue
+		}
+
+		for _, dirEntry := range entries {
+			if dirEntry.IsDir() || !strings.HasSuffix(dirEntry.Name(), ".dat") || !strings.HasPrefix(dirEntry.Name(), "leaseSet-") {
+				continue
+			}
+
+			filePath := filepath.Join(dirPath, dirEntry.Name())
+			hash, err := db.extractHashFromLeaseSetFilename(dirEntry.Name())
+			if err != nil {
+				log.WithError(err).WithField("filename", dirEntry.Name()).Debug("Failed to decode hash from LeaseSet filename")
+				errors++
+				continue
+			}
+
+			// Skip if already loaded
+			db.lsMutex.RLock()
+			_, exists := db.LeaseSets[hash]
+			db.lsMutex.RUnlock()
+			if exists {
+				continue
+			}
+
+			entry, err := db.loadLeaseSetEntryFromFile(filePath)
+			if err != nil {
+				log.WithError(err).WithField("file", dirEntry.Name()).Debug("Failed to load LeaseSet from file")
+				errors++
+				continue
+			}
+
+			// Check expiration and discard if already expired
+			if db.isLeaseSetEntryExpired(entry) {
+				log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removing expired LeaseSet file")
+				os.Remove(filePath)
+				expired++
+				continue
+			}
+
+			// Store in memory and track expiration
+			db.cacheLeaseSetEntry(hash, entry)
+			loaded++
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"loaded":  loaded,
+		"expired": expired,
+		"errors":  errors,
+		"total":   loaded + expired + errors,
+	}).Info("Completed loading LeaseSets from NetDB")
+
+	return nil
+}
+
+// extractHashFromLeaseSetFilename extracts and decodes the hash from a LeaseSet filename.
+// Expected format: leaseSet-<base64hash>.dat
+func (db *StdNetDB) extractHashFromLeaseSetFilename(filename string) (common.Hash, error) {
+	var hash common.Hash
+
+	hashStr := strings.TrimPrefix(filename, "leaseSet-")
+	hashStr = strings.TrimSuffix(hashStr, ".dat")
+
+	hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
+	if err != nil {
+		return hash, err
+	}
+
+	copy(hash[:], hashBytes)
+	return hash, nil
+}
+
+// loadLeaseSetEntryFromFile reads an Entry from a LeaseSet .dat file.
+func (db *StdNetDB) loadLeaseSetEntryFromFile(filePath string) (*Entry, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open LeaseSet file: %w", err)
+	}
+	defer f.Close()
+
+	entry := &Entry{}
+	if err := entry.ReadFrom(f); err != nil {
+		return nil, fmt.Errorf("failed to read LeaseSet entry: %w", err)
+	}
+
+	return entry, nil
+}
+
+// isLeaseSetEntryExpired checks whether a LeaseSet entry has already expired.
+func (db *StdNetDB) isLeaseSetEntryExpired(entry *Entry) bool {
+	now := time.Now()
+
+	if entry.LeaseSet != nil {
+		exp, err := entry.LeaseSet.NewestExpiration()
+		if err == nil && now.After(exp.Time()) {
+			return true
+		}
+		return false
+	}
+	if entry.LeaseSet2 != nil {
+		return now.After(entry.LeaseSet2.ExpirationTime())
+	}
+	if entry.EncryptedLeaseSet != nil {
+		return now.After(entry.EncryptedLeaseSet.ExpirationTime())
+	}
+	if entry.MetaLeaseSet != nil {
+		return now.After(entry.MetaLeaseSet.ExpirationTime())
+	}
+	// Unknown type — treat as expired
+	return true
+}
+
+// cacheLeaseSetEntry adds a loaded LeaseSet entry to the in-memory cache and tracks its expiration.
+func (db *StdNetDB) cacheLeaseSetEntry(hash common.Hash, entry *Entry) {
+	db.lsMutex.Lock()
+	db.LeaseSets[hash] = *entry
+	db.lsMutex.Unlock()
+
+	// Track expiration for cleanup
+	if entry.LeaseSet != nil {
+		db.trackLeaseSetExpiration(hash, *entry.LeaseSet)
+	} else if entry.LeaseSet2 != nil {
+		db.trackLeaseSet2Expiration(hash, *entry.LeaseSet2)
+	} else if entry.EncryptedLeaseSet != nil {
+		db.trackEncryptedLeaseSetExpiration(hash, *entry.EncryptedLeaseSet)
+	} else if entry.MetaLeaseSet != nil {
+		db.trackMetaLeaseSetExpiration(hash, *entry.MetaLeaseSet)
+	}
 }
 
 // create base network database directory
