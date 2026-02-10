@@ -319,6 +319,16 @@ func (rb *ReseedBootstrap) validateAndFilterRouterInfos(routerInfos []router_inf
 				"router_hash": GetRouterHashString(ri),
 				"server_url":  serverUrl,
 			}).Debug("skipping invalid RouterInfo from reseed server")
+		} else if err := VerifyRouterInfoSignature(ri); err != nil {
+			stats.RecordInvalid("signature verification failed")
+			log.WithFields(logger.Fields{
+				"at":          "(ReseedBootstrap) validateAndFilterRouterInfos",
+				"phase":       "validation",
+				"reason":      "RouterInfo signature verification failed",
+				"error":       err.Error(),
+				"router_hash": GetRouterHashString(ri),
+				"server_url":  serverUrl,
+			}).Warn("rejecting RouterInfo with invalid signature")
 		} else {
 			stats.RecordValid()
 			validRouterInfos = append(validRouterInfos, ri)
