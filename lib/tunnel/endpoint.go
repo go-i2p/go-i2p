@@ -14,6 +14,24 @@ import (
 // It receives the unwrapped message bytes and returns an error if processing fails.
 type MessageHandler func(msgBytes []byte) error
 
+// MessageForwarder handles routing messages to non-local delivery targets.
+// When the tunnel endpoint receives a message with DT_TUNNEL or DT_ROUTER
+// delivery type, it delegates to this interface for proper forwarding.
+type MessageForwarder interface {
+	// ForwardToTunnel sends a message to a specific tunnel on a gateway router.
+	// Parameters:
+	//   - tunnelID: the destination tunnel ID
+	//   - gatewayHash: the hash of the gateway router
+	//   - msgBytes: the message payload
+	ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error
+
+	// ForwardToRouter sends a message directly to a router.
+	// Parameters:
+	//   - routerHash: the hash of the destination router
+	//   - msgBytes: the message payload
+	ForwardToRouter(routerHash [32]byte, msgBytes []byte) error
+}
+
 // Endpoint handles receiving encrypted tunnel messages,
 // decrypting them, and extracting I2NP messages.
 //
@@ -26,10 +44,12 @@ type MessageHandler func(msgBytes []byte) error
 // - Automatic cleanup of stale fragments (default: 60 seconds)
 // - Thread-safe for concurrent message processing
 // - Clear error handling and logging
+// - Routes DT_TUNNEL and DT_ROUTER messages via MessageForwarder
 type Endpoint struct {
 	tunnelID        TunnelID
 	decryption      tunnel.TunnelEncryptor
 	handler         MessageHandler
+	forwarder       MessageForwarder
 	fragmentsMutex  sync.Mutex
 	fragments       map[uint32]*fragmentAssembler
 	fragmentTimeout time.Duration
@@ -49,6 +69,8 @@ type Endpoint struct {
 type fragmentAssembler struct {
 	fragments    map[int][]byte // fragment number -> fragment data
 	deliveryType byte           // Delivery type from first fragment
+	tunnelID     uint32         // Destination tunnel ID (DT_TUNNEL only)
+	hash         [32]byte       // Gateway or router hash (DT_TUNNEL, DT_ROUTER)
 	totalCount   int            // Expected number of fragments (0 until last fragment seen)
 	receivedMask uint64         // Bitmap of received fragments (supports up to 64 fragments)
 	createdAt    time.Time      // Timestamp when first fragment was received
@@ -104,6 +126,12 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 		"tunnel_id": tunnelID,
 	}).Debug("created tunnel endpoint")
 	return ep, nil
+}
+
+// SetForwarder sets the message forwarder for routing DT_TUNNEL and DT_ROUTER messages.
+// If not set, non-local messages will be logged and dropped (backward compatible).
+func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
+	e.forwarder = forwarder
 }
 
 // Receive processes an encrypted tunnel message.
@@ -316,7 +344,7 @@ func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData [
 
 	// Handle non-fragmented messages
 	if !fragmented {
-		return e.deliverNonFragmentedMessage(deliveryType, fragmentData)
+		return e.deliverWithInstructions(deliveryType, di, fragmentData)
 	}
 
 	// Handle fragmented messages
@@ -325,17 +353,61 @@ func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData [
 		return err
 	}
 
-	return e.storeFirstFragment(msgID, deliveryType, fragmentData)
+	return e.storeFirstFragmentWithDI(msgID, deliveryType, di, fragmentData)
 }
 
-// deliverNonFragmentedMessage delivers a complete non-fragmented message immediately.
-// Returns nil for non-local delivery types as they are not processed at this endpoint.
-func (e *Endpoint) deliverNonFragmentedMessage(deliveryType byte, fragmentData []byte) error {
-	if deliveryType == DT_LOCAL {
-		return e.handler(fragmentData)
+// deliverWithInstructions delivers a message using routing info from delivery instructions.
+func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstructions, msgBytes []byte) error {
+	switch deliveryType {
+	case DT_LOCAL:
+		return e.handler(msgBytes)
+	case DT_TUNNEL:
+		return e.deliverViaForwarder(DT_TUNNEL, di.tunnelID, di.hash, msgBytes)
+	case DT_ROUTER:
+		return e.deliverViaForwarder(DT_ROUTER, 0, di.hash, msgBytes)
+	default:
+		log.WithField("delivery_type", deliveryType).Debug("Unknown delivery type, skipping")
+		return nil
 	}
-	log.WithField("delivery_type", deliveryType).Debug("Non-local delivery, skipping")
-	return nil
+}
+
+// deliverViaForwarder routes a message to a non-local destination using the forwarder.
+func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash [32]byte, msgBytes []byte) error {
+	if e.forwarder == nil {
+		log.WithField("delivery_type", deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
+		return nil
+	}
+
+	switch deliveryType {
+	case DT_TUNNEL:
+		log.WithFields(map[string]interface{}{
+			"delivery_type": "DT_TUNNEL",
+			"tunnel_id":     tunnelID,
+		}).Debug("Forwarding message to tunnel")
+		return e.forwarder.ForwardToTunnel(tunnelID, hash, msgBytes)
+	case DT_ROUTER:
+		log.WithField("delivery_type", "DT_ROUTER").Debug("Forwarding message to router")
+		return e.forwarder.ForwardToRouter(hash, msgBytes)
+	default:
+		return nil
+	}
+}
+
+// storeFirstFragmentWithDI stores the first fragment with routing info from delivery instructions.
+func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di *DeliveryInstructions, fragmentData []byte) error {
+	e.fragmentsMutex.Lock()
+	defer e.fragmentsMutex.Unlock()
+
+	assembler := e.ensureAssemblerExists(msgID, deliveryType)
+	// Store routing info from DI for later delivery
+	if deliveryType == DT_TUNNEL {
+		assembler.tunnelID = di.tunnelID
+		assembler.hash = di.hash
+	} else if deliveryType == DT_ROUTER {
+		assembler.hash = di.hash
+	}
+	e.recordFirstFragmentData(assembler, fragmentData, msgID)
+	return e.checkFragmentCompletion(msgID, assembler)
 }
 
 // storeFirstFragment stores the first fragment of a multi-fragment message.
@@ -536,13 +608,25 @@ func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembl
 	// Clean up
 	delete(e.fragments, msgID)
 
-	// Deliver if local
-	if assembler.deliveryType == DT_LOCAL {
+	// Route based on delivery type
+	switch assembler.deliveryType {
+	case DT_LOCAL:
 		return e.handler(completeMsg)
+	case DT_TUNNEL, DT_ROUTER:
+		if e.forwarder == nil {
+			log.WithField("delivery_type", assembler.deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
+			return nil
+		}
+		log.WithFields(map[string]interface{}{
+			"delivery_type": assembler.deliveryType,
+			"message_id":    msgID,
+			"total_size":    totalSize,
+		}).Debug("Routing reassembled non-local message to forwarder")
+		return e.deliverViaForwarder(assembler.deliveryType, assembler.tunnelID, assembler.hash, completeMsg)
+	default:
+		log.WithField("delivery_type", assembler.deliveryType).Debug("Unknown delivery type, skipping")
+		return nil
 	}
-
-	log.WithField("delivery_type", assembler.deliveryType).Debug("Non-local delivery, skipping")
-	return nil
 }
 
 // TunnelID returns the ID of this endpoint's tunnel

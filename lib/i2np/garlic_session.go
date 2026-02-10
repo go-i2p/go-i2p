@@ -51,7 +51,19 @@ type GarlicSession struct {
 	MessageCounter   uint32
 	// pendingTags tracks tags we expect to receive (tag window for out-of-order messages)
 	pendingTags [][8]byte
+	// dhRatchetCounter tracks messages since last DH ratchet rotation
+	dhRatchetCounter uint32
+	// newEphemeralPub holds the new ephemeral public key to send to the peer
+	// when a DH ratchet step has occurred but the peer hasn't acknowledged it yet
+	newEphemeralPub *[32]byte
 }
+
+const (
+	// DHRatchetInterval is the number of messages between DH ratchet rotations.
+	// After this many messages, a DH ratchet step is performed to rotate keys,
+	// providing forward secrecy: compromise of current keys cannot reveal past messages.
+	DHRatchetInterval = 50
+)
 
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
 // The private key is used for decrypting New Session messages.
@@ -378,7 +390,19 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 }
 
 // advanceRatchets advances the symmetric and tag ratchets to generate message key and session tag.
+// Periodically performs a DH ratchet step for forward secrecy.
 func advanceRatchets(session *GarlicSession) (messageKey [32]byte, sessionTag [8]byte, err error) {
+	// Check if DH ratchet rotation is needed for forward secrecy
+	session.dhRatchetCounter++
+	if session.dhRatchetCounter >= DHRatchetInterval {
+		if err := performDHRatchetStep(session); err != nil {
+			log.WithError(err).Warn("DH ratchet rotation failed, continuing with symmetric ratchet")
+			// Non-fatal: continue with existing symmetric ratchet keys
+		} else {
+			session.dhRatchetCounter = 0
+		}
+	}
+
 	// Step 1: Advance symmetric ratchet to get message key
 	messageKey, _, err = session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
 	if err != nil {
@@ -396,6 +420,86 @@ func advanceRatchets(session *GarlicSession) (messageKey [32]byte, sessionTag [8
 	session.pendingTags = append(session.pendingTags, sessionTag)
 
 	return messageKey, sessionTag, nil
+}
+
+// performDHRatchetStep performs a Diffie-Hellman ratchet step for forward secrecy.
+// This generates a new ephemeral key pair, performs the DH exchange, and derives
+// fresh symmetric and tag ratchet keys. After this step, compromise of previous
+// keys cannot decrypt future messages.
+//
+// DH ratchet flow:
+// 1. Generate new ephemeral key pair (updates internal private key)
+// 2. Perform DH ratchet: DH(newPrivKey, theirPubKey) → new rootKey + sendingChainKey
+// 3. Re-initialize symmetric ratchet with new sending chain key
+// 4. Re-initialize tag ratchet with key derived from new root key
+// 5. Store new ephemeral public key for transmission to peer
+func performDHRatchetStep(session *GarlicSession) error {
+	// Step 1: Generate new ephemeral key pair
+	newPubKey, err := session.DHRatchet.GenerateNewKeyPair()
+	if err != nil {
+		return oops.Wrapf(err, "failed to generate new ephemeral key pair")
+	}
+
+	// Step 2: Perform DH ratchet — derives new root key and sending chain key
+	sendingChainKey, _, err := session.DHRatchet.PerformRatchet()
+	if err != nil {
+		return oops.Wrapf(err, "failed to perform DH ratchet")
+	}
+
+	// Step 3: Re-initialize symmetric ratchet with fresh sending chain key
+	session.SymmetricRatchet = ratchet.NewSymmetricRatchet(sendingChainKey)
+
+	// Step 4: Derive a new tag key from the sending chain key
+	// Use a simple derivation: SHA-256 of the chain key with a domain separator
+	tagKeyInput := sha256.Sum256(append(sendingChainKey[:], []byte("TagRatchetKey")...))
+	session.TagRatchet = ratchet.NewTagRatchet(tagKeyInput)
+
+	// Step 5: Store new ephemeral public key to send to peer
+	session.newEphemeralPub = &newPubKey
+
+	log.WithFields(logger.Fields{
+		"at":              "performDHRatchetStep",
+		"message_counter": session.MessageCounter,
+		"new_pub_key":     fmt.Sprintf("%x", newPubKey[:8]),
+	}).Debug("DH ratchet rotation completed")
+
+	return nil
+}
+
+// ProcessIncomingDHRatchet processes a DH ratchet key received from a peer.
+// This updates the peer's public key in our DH ratchet and derives fresh
+// receiving chain keys.
+func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(session *GarlicSession, newRemotePubKey [32]byte) error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	// Update the remote party's public key
+	if err := session.DHRatchet.UpdateKeys(newRemotePubKey[:]); err != nil {
+		return oops.Wrapf(err, "failed to update remote DH public key")
+	}
+
+	// Perform DH ratchet from our side to derive receiving chain key
+	_, receivingChainKey, err := session.DHRatchet.PerformRatchet()
+	if err != nil {
+		return oops.Wrapf(err, "failed to perform receiving DH ratchet")
+	}
+
+	// Re-initialize our symmetric ratchet for receiving
+	session.SymmetricRatchet = ratchet.NewSymmetricRatchet(receivingChainKey)
+
+	// Re-initialize tag ratchet
+	tagKeyInput := sha256.Sum256(append(receivingChainKey[:], []byte("TagRatchetKey")...))
+	session.TagRatchet = ratchet.NewTagRatchet(tagKeyInput)
+
+	// Update remote public key
+	session.RemotePublicKey = newRemotePubKey
+
+	log.WithFields(logger.Fields{
+		"at":              "ProcessIncomingDHRatchet",
+		"message_counter": session.MessageCounter,
+	}).Debug("Processed incoming DH ratchet from peer")
+
+	return nil
 }
 
 // encryptWithSessionKey encrypts plaintext using ChaCha20-Poly1305 with the message key.
