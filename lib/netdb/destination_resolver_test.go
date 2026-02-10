@@ -195,14 +195,14 @@ func TestExtractKeyFromLeaseSet2_NotLeaseSet2(t *testing.T) {
 	_, err := rand.Read(destHash[:])
 	require.NoError(t, err)
 
-	// Store data that doesn't start with 0x07 (LeaseSet2 marker)
+	// Store data that is not a valid LeaseSet2 structure
 	notLS2Data := []byte{0x01, 0x02, 0x03, 0x04}
 	netdb.StoreLeaseSet(destHash, notLS2Data)
 
-	// Should fail with "unsupported lease set type"
+	// Should fail because data cannot be parsed as LeaseSet2
 	_, err = resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported lease set type")
+	assert.Contains(t, err.Error(), "failed to parse LeaseSet2")
 }
 
 // TestExtractKeyFromLeaseSet2_EmptyData tests handling of empty data
@@ -220,7 +220,7 @@ func TestExtractKeyFromLeaseSet2_EmptyData(t *testing.T) {
 	// Should fail due to empty data
 	_, err = resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported lease set type")
+	assert.Contains(t, err.Error(), "empty lease set data")
 }
 
 // TestExtractKeyFromLeaseSet2_WithX25519Key tests successful X25519 key extraction from LeaseSet2
@@ -235,9 +235,9 @@ func TestExtractKeyFromLeaseSet2_WithX25519Key(t *testing.T) {
 	// 3. Extract and verify the X25519 key
 	//
 	// Implementation blocked on: proper LeaseSet2 test fixture creation
-	// The destination_resolver.go code already has the correct logic:
-	// - Checks for type byte 0x07
-	// - Calls lease_set2.ReadLeaseSet2()
+	// The destination_resolver.go code has the correct logic:
+	// - Validates data is non-empty
+	// - Calls lease_set2.ReadLeaseSet2() for parsing
 	// - Extracts X25519 keys from EncryptionKeys()
 	// - Returns [32]byte key for garlic encryption
 }
@@ -267,4 +267,65 @@ func BenchmarkResolveDestination_NotFound(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = resolver.ResolveDestination(destHash)
 	}
+}
+
+// TestValidateLeaseSet2Format_EmptyData verifies empty data is rejected
+func TestValidateLeaseSet2Format_EmptyData(t *testing.T) {
+	netdb := newMockNetDB()
+	resolver := NewDestinationResolver(netdb)
+
+	err := resolver.validateLeaseSet2Format([]byte{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty lease set data")
+}
+
+// TestValidateLeaseSet2Format_NilData verifies nil data is rejected
+func TestValidateLeaseSet2Format_NilData(t *testing.T) {
+	netdb := newMockNetDB()
+	resolver := NewDestinationResolver(netdb)
+
+	err := resolver.validateLeaseSet2Format(nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty lease set data")
+}
+
+// TestValidateLeaseSet2Format_NonEmptyData verifies non-empty data passes validation.
+// The actual format checking is delegated to ReadLeaseSet2, so any non-empty data
+// passes this preliminary check.
+func TestValidateLeaseSet2Format_NonEmptyData(t *testing.T) {
+	netdb := newMockNetDB()
+	resolver := NewDestinationResolver(netdb)
+
+	// Any non-empty data should pass the format validation check.
+	// The detailed parsing happens in ReadLeaseSet2.
+	testCases := [][]byte{
+		{0x01},
+		{0x03},
+		{0x07},
+		{0x00, 0x01, 0x02, 0x03},
+		make([]byte, 100),
+	}
+
+	for _, data := range testCases {
+		err := resolver.validateLeaseSet2Format(data)
+		assert.NoError(t, err, "Non-empty data should pass format validation")
+	}
+}
+
+// TestExtractKeyFromLeaseSet2_ShortData verifies that short but non-empty data
+// fails at the ReadLeaseSet2 parsing stage, not at format validation.
+func TestExtractKeyFromLeaseSet2_ShortData(t *testing.T) {
+	netdb := newMockNetDB()
+	resolver := NewDestinationResolver(netdb)
+
+	var destHash common.Hash
+	_, err := rand.Read(destHash[:])
+	require.NoError(t, err)
+
+	// Store short data - passes format validation but fails parsing
+	netdb.StoreLeaseSet(destHash, []byte{0x03, 0x04, 0x05})
+
+	_, err = resolver.extractKeyFromLeaseSet2(destHash)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse LeaseSet2")
 }

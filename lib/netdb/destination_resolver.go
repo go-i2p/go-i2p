@@ -128,11 +128,14 @@ func (dr *DestinationResolver) parseLeaseSet2(lsBytes []byte) (lease_set2.LeaseS
 	return ls2, nil
 }
 
-// validateLeaseSet2Format checks if bytes represent a valid LeaseSet2.
-// LeaseSet2 starts with type byte 0x07.
+// validateLeaseSet2Format checks if bytes could represent a valid LeaseSet2.
+// The raw bytes from GetLeaseSetBytes do not contain a type prefix byte;
+// they are the direct serialization of the LeaseSet structure (starting with
+// the destination). We only check that data is non-empty here and rely on
+// ReadLeaseSet2 for full format validation.
 func (dr *DestinationResolver) validateLeaseSet2Format(lsBytes []byte) error {
-	if len(lsBytes) == 0 || lsBytes[0] != 0x07 {
-		return fmt.Errorf("unsupported lease set type")
+	if len(lsBytes) == 0 {
+		return fmt.Errorf("empty lease set data")
 	}
 	return nil
 }
