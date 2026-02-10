@@ -98,6 +98,9 @@ type Router struct {
 	isReseeding bool
 	// reseedMutex protects concurrent access to isReseeding flag
 	reseedMutex sync.RWMutex
+
+	// keystoreMux protects concurrent access to RouterInfoKeystore
+	keystoreMux sync.RWMutex
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -791,7 +794,9 @@ func (r *Router) clearRoutingComponents() {
 		"reason": "message routing components cleared",
 	}).Debug("message router, garlic router, tunnel manager, and publisher references cleared")
 
+	r.keystoreMux.Lock()
 	r.RouterInfoKeystore = nil
+	r.keystoreMux.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
 		"phase":  "finalization",

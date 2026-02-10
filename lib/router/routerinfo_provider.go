@@ -1,6 +1,8 @@
 package router
 
 import (
+	"fmt"
+
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
@@ -31,13 +33,22 @@ type routerInfoProvider struct {
 //
 // Returns an error if the RouterInfo cannot be constructed.
 func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
+	// Guard against nil keystore (can happen during shutdown)
+	p.router.keystoreMux.RLock()
+	ks := p.router.RouterInfoKeystore
+	p.router.keystoreMux.RUnlock()
+
+	if ks == nil {
+		return nil, fmt.Errorf("router keystore not available (router may be shutting down)")
+	}
+
 	// Build options with congestion flag if available
 	opts := p.buildRouterInfoOptions()
 
 	// Construct RouterInfo from the keystore
 	// nil addresses means it will use default/empty addresses
 	// In a full implementation, this would include actual NTCP2/SSU2 addresses
-	ri, err := p.router.RouterInfoKeystore.ConstructRouterInfo(nil, opts)
+	ri, err := ks.ConstructRouterInfo(nil, opts)
 	if err != nil {
 		return nil, err
 	}
