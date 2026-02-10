@@ -86,7 +86,6 @@ func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 
 	reply := NewShortTunnelBuildReply(records)
 	err := reply.ProcessReply()
-
 	if err != nil {
 		t.Errorf("ProcessReply should succeed when all hops accept, got error: %v", err)
 	}

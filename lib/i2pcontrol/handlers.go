@@ -263,7 +263,8 @@ type RouterManagerHandler struct {
 func NewRouterManagerHandler(control interface {
 	Stop()
 	Reseed() error
-}) *RouterManagerHandler {
+},
+) *RouterManagerHandler {
 	return &RouterManagerHandler{
 		RouterControl: control,
 	}

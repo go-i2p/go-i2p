@@ -178,7 +178,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "RouterInfo without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{1, 2, 3},
-				StoreType:          DATABASE_STORE_TYPE_ROUTER_INFO,
+				StoreType:     DATABASE_STORE_TYPE_ROUTER_INFO,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{10, 20, 30},
@@ -190,7 +190,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet2 without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{5, 6, 7},
-				StoreType:          DATABASE_STORE_TYPE_LEASESET2,
+				StoreType:     DATABASE_STORE_TYPE_LEASESET2,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{40, 50},
@@ -202,7 +202,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet with reply token",
 			store: &DatabaseStore{
 				Key:           common.Hash{8, 9, 10},
-				StoreType:          DATABASE_STORE_TYPE_LEASESET,
+				StoreType:     DATABASE_STORE_TYPE_LEASESET,
 				ReplyToken:    [4]byte{0, 0, 0, 1},
 				ReplyTunnelID: [4]byte{0, 0, 0, 100},
 				ReplyGateway:  common.Hash{11, 12, 13},
@@ -244,9 +244,9 @@ func TestDatabaseStore_Getters(t *testing.T) {
 	storeType := byte(DATABASE_STORE_TYPE_LEASESET2)
 
 	ds := &DatabaseStore{
-		Key:  key,
+		Key:       key,
 		StoreType: storeType,
-		Data: data,
+		Data:      data,
 	}
 
 	if got := ds.GetStoreKey(); got != key {

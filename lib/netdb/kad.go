@@ -66,7 +66,7 @@ func (h *LookupResponseHandler) UnregisterPending(messageID int) {
 }
 
 // HandleResponse delivers a response to the waiting lookup if one exists
-func (h *LookupResponseHandler) HandleResponse(messageID int, msgType int, data []byte) bool {
+func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []byte) bool {
 	h.mu.Lock()
 	ch, ok := h.pending[messageID]
 	if ok {
