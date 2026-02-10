@@ -1,3 +1,14 @@
+Release notes for: `go-i2p` Version `0.1.4`
+==========================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+This release refactors several netDb subsystems to be more flexible when selecting peers.
+We have implemented congestion cap handling, both honoring remote congestion caps and broadcasting our own congestion state.
+We have implemented proper reseeding, downloading RouterInfos from multiple sources, verifying TLS and SU3 certificates, to meet the reseed security model.
+We have fixed dozens of bugs all over the codebase and closed multiple functional gaps.
+
 Release notes for: `go-i2p` Version `0.1.3`
 ==========================================
 
