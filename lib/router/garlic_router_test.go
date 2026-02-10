@@ -170,6 +170,7 @@ func TestNewGarlicMessageRouter(t *testing.T) {
 	routerHash := common.Hash{1, 2, 3, 4}
 
 	gr := NewGarlicMessageRouter(netdb, nil, nil, routerHash)
+	defer gr.Stop()
 
 	if gr == nil {
 		t.Fatal("NewGarlicMessageRouter returned nil")
@@ -184,6 +185,7 @@ func TestNewGarlicMessageRouter(t *testing.T) {
 // Test SetMessageProcessor - simplified to avoid type issues
 func TestSetMessageProcessor(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 	processor := i2np.NewMessageProcessor()
 
 	gr.SetMessageProcessor(processor)
@@ -219,6 +221,7 @@ func TestForwardToDestination(t *testing.T) {
 // Test ForwardToRouter - reflexive delivery
 func TestForwardToRouter_Reflexive(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 	processor := i2np.NewMessageProcessor()
 	gr.SetMessageProcessor(processor)
 
@@ -243,6 +246,7 @@ func TestForwardToRouter_Reflexive(t *testing.T) {
 // Test ForwardToRouter - reflexive delivery without processor
 func TestForwardToRouter_ReflexiveNoProcessor(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 	// Don't set processor
 
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
@@ -262,6 +266,7 @@ func TestForwardToRouter_ReflexiveNoProcessor(t *testing.T) {
 // Test ForwardToRouter - router not found in NetDB
 func TestForwardToRouter_NotFound(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
 	unknownHash := common.Hash{99, 88, 77, 66}
@@ -281,6 +286,7 @@ func TestForwardToRouter_NotFound(t *testing.T) {
 // Test ForwardToRouter - successful forwarding
 func TestForwardToRouter_Success(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 
 	// Create a test router info and add to NetDB
 	peerHash := common.Hash{50, 60, 70, 80}
@@ -306,6 +312,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 // Test ForwardThroughTunnel - gateway not in NetDB
 func TestForwardThroughTunnel(t *testing.T) {
 	gr := createTestGarlicRouter()
+	defer gr.Stop()
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
 	gatewayHash := common.Hash{11, 22, 33, 44}
 	tunnelID := tunnel.TunnelID(12345)
@@ -409,9 +416,12 @@ func TestGarlicRouterStopIdempotent(t *testing.T) {
 func TestGarlicRouterStopNilCancel(t *testing.T) {
 	gr := createTestGarlicRouter()
 
-	// Simulate a case where cancel is nil (shouldn't happen but be safe)
+	// First, properly stop the background goroutine so it's not leaked
+	gr.Stop()
+
+	// Now simulate a case where cancel is nil (shouldn't happen but be safe)
 	gr.cancel = nil
 
-	// This should not panic
+	// Calling Stop() again with nil cancel should not panic
 	gr.Stop()
 }
