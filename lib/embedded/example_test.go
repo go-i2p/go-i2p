@@ -16,6 +16,12 @@ import (
 // Example demonstrates how to embed an I2P router in your application.
 // This shows the basic lifecycle: create, configure, start, wait, and cleanup.
 func Test_Example(t *testing.T) {
+	// This integration test requires network access for reseeding.
+	// In CI or isolated environments, skip it.
+	if os.Getenv("GO_I2P_INTEGRATION") == "" {
+		t.Skip("skipping integration test; set GO_I2P_INTEGRATION=1 to run")
+	}
+
 	// Load default configuration
 	cfg := config.DefaultRouterConfig()
 	cfg.I2CP.Address = net.JoinHostPort("localhost", "19876")
