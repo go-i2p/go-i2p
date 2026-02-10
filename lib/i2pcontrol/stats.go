@@ -540,6 +540,11 @@ type RealRouter struct {
 		GetParticipantManager() *tunnel.Manager
 		GetConfig() *config.RouterConfig
 		IsRunning() bool
+		IsReseeding() bool
+		GetBandwidthRates() (inbound, outbound uint64)
+		Stop()
+		Reseed() error
+		GetTransportAddr() interface{}
 	}
 }
 
@@ -567,3 +572,31 @@ func (rr RealRouter) GetConfig() *config.RouterConfig {
 func (rr RealRouter) IsRunning() bool {
 	return rr.Router.IsRunning()
 }
+
+// IsReseeding returns whether the router is currently reseeding (implements RouterAccess)
+func (rr RealRouter) IsReseeding() bool {
+	return rr.Router.IsReseeding()
+}
+
+// GetBandwidthRates returns current bandwidth rates (implements RouterAccess)
+func (rr RealRouter) GetBandwidthRates() (inbound, outbound uint64) {
+	return rr.Router.GetBandwidthRates()
+}
+
+// Stop initiates graceful shutdown (implements RouterAccess)
+func (rr RealRouter) Stop() {
+	rr.Router.Stop()
+}
+
+// Reseed triggers a manual NetDB reseed (implements RouterAccess)
+func (rr RealRouter) Reseed() error {
+	return rr.Router.Reseed()
+}
+
+// GetTransportAddr returns the listening address of the first transport (implements RouterAccess)
+func (rr RealRouter) GetTransportAddr() interface{} {
+	return rr.Router.GetTransportAddr()
+}
+
+// Compile-time interface satisfaction check
+var _ RouterAccess = RealRouter{}

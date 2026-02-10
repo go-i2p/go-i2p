@@ -674,10 +674,10 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 	}
 	offset += bytesRead
 
-	// Parse and skip I2NP message
-	messageLength, err := readI2NPMessageLength(data, offset)
+	// Parse I2NP message from the embedded bytes
+	i2npMsg, messageLength, err := parseEmbeddedI2NPMessage(data, offset)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, oops.Wrapf(err, "failed to parse embedded I2NP message")
 	}
 	offset += messageLength
 
@@ -690,11 +690,35 @@ func deserializeGarlicClove(data []byte, nestingDepth int) (*GarlicClove, int, e
 
 	return &GarlicClove{
 		DeliveryInstructions: *di,
-		I2NPMessage:          nil, // Would be populated by full I2NP parser
+		I2NPMessage:          i2npMsg,
 		CloveID:              cloveID,
 		Expiration:           expiration,
 		Certificate:          cert,
 	}, offset, nil
+}
+
+// parseEmbeddedI2NPMessage parses an I2NP message embedded within a garlic clove.
+// It reads the standard NTCP I2NP header (16 bytes) to determine the message type
+// and payload size, then creates a properly typed I2NPMessage carrying the payload.
+func parseEmbeddedI2NPMessage(data []byte, offset int) (I2NPMessage, int, error) {
+	messageLength, err := readI2NPMessageLength(data, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(data) < offset+messageLength {
+		return nil, 0, oops.Errorf("insufficient data for embedded I2NP message: need %d, have %d", offset+messageLength, len(data))
+	}
+
+	// The first byte of the I2NP header is the message type
+	msgType := int(data[offset])
+	msg := NewBaseI2NPMessage(msgType)
+
+	// UnmarshalBinary will parse the full NTCP-format header + payload
+	if err := msg.UnmarshalBinary(data[offset : offset+messageLength]); err != nil {
+		return nil, 0, oops.Wrapf(err, "failed to unmarshal embedded I2NP message (type %d)", msgType)
+	}
+
+	return msg, messageLength, nil
 }
 
 // readI2NPMessageLength validates I2NP message header and returns total message length.

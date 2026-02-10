@@ -90,16 +90,28 @@ type BuildReplyForwarder interface {
 	ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error
 }
 
+// TunnelGatewayHandler defines the interface for handling TunnelGateway messages.
+// When a TunnelGateway message arrives, the handler looks up the tunnel by ID,
+// encrypts the payload using the tunnel's layered encryption, and forwards the
+// resulting TunnelData message to the next hop.
+type TunnelGatewayHandler interface {
+	// HandleGateway processes an incoming TunnelGateway message by looking up the tunnel,
+	// encrypting the payload, and forwarding it to the next hop.
+	HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
-	factory             *I2NPMessageFactory
-	garlicSessions      *GarlicSessionManager
-	cloveForwarder      GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
-	dbManager           *DatabaseManager     // Optional database manager for DatabaseLookup messages
-	expirationValidator *ExpirationValidator // Validator for checking message expiration
-	participantManager  ParticipantManager   // Optional participant manager for tunnel build requests
-	buildReplyForwarder BuildReplyForwarder  // Optional forwarder for tunnel build replies
-	buildRecordCrypto   *BuildRecordCrypto   // Crypto handler for encrypting build response records
+	mu                   sync.RWMutex
+	factory              *I2NPMessageFactory
+	garlicSessions       *GarlicSessionManager
+	cloveForwarder       GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager            *DatabaseManager     // Optional database manager for DatabaseLookup messages
+	expirationValidator  *ExpirationValidator // Validator for checking message expiration
+	participantManager   ParticipantManager   // Optional participant manager for tunnel build requests
+	buildReplyForwarder  BuildReplyForwarder  // Optional forwarder for tunnel build replies
+	buildRecordCrypto    *BuildRecordCrypto   // Crypto handler for encrypting build response records
+	tunnelGatewayHandler TunnelGatewayHandler // Optional handler for tunnel gateway messages
 }
 
 // NewMessageProcessor creates a new message processor
@@ -115,6 +127,8 @@ func NewMessageProcessor() *MessageProcessor {
 // SetGarlicSessionManager sets the garlic session manager for decrypting garlic messages.
 // This must be called before processing garlic messages, otherwise they will fail with an error.
 func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	log.WithField("at", "SetGarlicSessionManager").Debug("Setting garlic session manager")
 	p.garlicSessions = garlicMgr
 }
@@ -123,6 +137,8 @@ func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManag
 // This is optional - if not set, only LOCAL delivery (0x00) will be processed.
 // The forwarder enables DESTINATION (0x01), ROUTER (0x02), and TUNNEL (0x03) deliveries.
 func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	log.WithField("at", "SetCloveForwarder").Debug("Setting garlic clove forwarder")
 	p.cloveForwarder = forwarder
 }
@@ -130,6 +146,8 @@ func (p *MessageProcessor) SetCloveForwarder(forwarder GarlicCloveForwarder) {
 // SetDatabaseManager sets the database manager for processing DatabaseLookup messages.
 // This must be called before processing DatabaseLookup messages, otherwise they will fail with an error.
 func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	log.WithField("at", "SetDatabaseManager").Debug("Setting database manager")
 	p.dbManager = dbMgr
 }
@@ -138,6 +156,8 @@ func (p *MessageProcessor) SetDatabaseManager(dbMgr *DatabaseManager) {
 // This enables the router to participate in tunnels built by other routers.
 // If not set, tunnel build requests will be rejected with an error.
 func (p *MessageProcessor) SetParticipantManager(pm ParticipantManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	log.WithField("at", "SetParticipantManager").Debug("Setting participant manager")
 	p.participantManager = pm
 }
@@ -146,14 +166,29 @@ func (p *MessageProcessor) SetParticipantManager(pm ParticipantManager) {
 // This enables the router to participate in tunnel building by forwarding replies.
 // If not set, build requests will be processed but replies will not be sent (logged only).
 func (p *MessageProcessor) SetBuildReplyForwarder(forwarder BuildReplyForwarder) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	log.WithField("at", "SetBuildReplyForwarder").Debug("Setting build reply forwarder")
 	p.buildReplyForwarder = forwarder
+}
+
+// SetTunnelGatewayHandler sets the handler for processing TunnelGateway messages.
+// When set, incoming TunnelGateway messages will be delegated to this handler for
+// tunnel lookup, encryption, and forwarding. If not set, TunnelGateway messages
+// will be validated but not forwarded.
+func (p *MessageProcessor) SetTunnelGatewayHandler(handler TunnelGatewayHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetTunnelGatewayHandler").Debug("Setting tunnel gateway handler")
+	p.tunnelGatewayHandler = handler
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
 // If not set, a default validator with 5-minute tolerance is used.
 func (p *MessageProcessor) SetExpirationValidator(v *ExpirationValidator) {
 	if v != nil {
+		p.mu.Lock()
+		defer p.mu.Unlock()
 		p.expirationValidator = v
 	}
 }
@@ -177,6 +212,9 @@ func (p *MessageProcessor) EnableExpirationCheck() {
 // Messages are first validated for expiration before processing.
 // Expired messages are rejected with ERR_I2NP_MESSAGE_EXPIRED.
 func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
 		"message_type": msg.Type(),
@@ -339,14 +377,6 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 		"payload_size": tgMsg.Length,
 	}).Debug("Processing TunnelGateway message")
 
-	// The TunnelGateway message contains an inner I2NP message that needs to be
-	// forwarded through the specified tunnel. In a full implementation, this would:
-	// 1. Look up the tunnel by TunnelID
-	// 2. If we're the gateway for this tunnel, encrypt and forward the payload
-	// 3. If we're not the gateway, this is an error condition
-
-	// For now, we log the receipt and return success
-	// Full tunnel gateway processing requires tunnel manager integration
 	if tgMsg.Length == 0 || len(tgMsg.Data) == 0 {
 		log.WithFields(logger.Fields{
 			"at":        "processTunnelGatewayMessage",
@@ -356,7 +386,27 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 		return fmt.Errorf("TunnelGateway message has empty payload")
 	}
 
-	return nil
+	// Delegate to the tunnel gateway handler if one is configured.
+	// The handler is responsible for looking up the tunnel, encrypting
+	// the payload with layered encryption, and forwarding to the next hop.
+	if p.tunnelGatewayHandler != nil {
+		if err := p.tunnelGatewayHandler.HandleGateway(tgMsg.TunnelID, tgMsg.Data); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "processTunnelGatewayMessage",
+				"tunnel_id": tgMsg.TunnelID,
+				"error":     err,
+			}).Error("Failed to handle TunnelGateway message")
+			return fmt.Errorf("tunnel gateway handling failed: %w", err)
+		}
+		return nil
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "processTunnelGatewayMessage",
+		"tunnel_id": tgMsg.TunnelID,
+		"reason":    "no tunnel gateway handler configured",
+	}).Warn("TunnelGateway message received but no handler configured")
+	return fmt.Errorf("no tunnel gateway handler configured")
 }
 
 // processDeliveryStatusMessage processes delivery status messages using StatusReporter interface

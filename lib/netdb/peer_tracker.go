@@ -295,16 +295,17 @@ func (pt *PeerTracker) GetSummary() map[string]interface{} {
 	totalSuccesses := 0
 	staleCount := 0
 
-	for hash, stats := range pt.stats {
+	for _, stats := range pt.stats {
 		totalAttempts += stats.TotalAttempts
 		totalSuccesses += stats.SuccessCount
 
-		// Count stale peers (unlock temporarily for IsLikelyStale check)
-		pt.mu.RUnlock()
-		if pt.IsLikelyStale(hash) {
+		// Inline staleness check to avoid releasing the lock mid-iteration.
+		// This mirrors the logic in IsLikelyStale/hasExcessiveConsecutiveFailures/
+		// hasLowSuccessRate/hasRecentFailuresWithoutSuccess without acquiring a
+		// separate RLock that would require us to drop our own.
+		if isStaleUnlocked(stats) {
 			staleCount++
 		}
-		pt.mu.RLock()
 	}
 
 	overallSuccessRate := 0.0
@@ -319,4 +320,28 @@ func (pt *PeerTracker) GetSummary() map[string]interface{} {
 		"overall_success_rate": overallSuccessRate,
 		"likely_stale_peers":   staleCount,
 	}
+}
+
+// isStaleUnlocked performs the staleness check without acquiring any locks.
+// Caller must hold at least pt.mu.RLock.
+func isStaleUnlocked(stats *PeerStats) bool {
+	// Excessive consecutive failures (threshold: 3)
+	if stats.ConsecutiveFails >= 3 {
+		return true
+	}
+	// Low success rate with enough attempts
+	if stats.TotalAttempts >= 5 {
+		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
+		if successRate < 0.25 {
+			return true
+		}
+	}
+	// Recent failures without recent success
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
+		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
+			return true
+		}
+	}
+	return false
 }

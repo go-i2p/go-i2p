@@ -170,8 +170,8 @@ func NewRouterConfigFromViper() *RouterConfig {
 			"reason": "reseed_servers_parse_error",
 			"phase":  "startup",
 			"error":  err.Error(),
-		}).Warn("error parsing reseed servers, using empty list")
-		reseedServers = []*ReseedConfig{}
+		}).Warn("error parsing reseed servers, falling back to known servers")
+		reseedServers = KnownReseedServers
 	}
 
 	var localNetDbPaths []string
@@ -196,13 +196,28 @@ func NewRouterConfigFromViper() *RouterConfig {
 		MaxSessions: viper.GetInt("i2cp.max_sessions"),
 	}
 
+	// Create I2PControl configuration
+	i2pControlConfig := &I2PControlConfig{
+		Enabled:         viper.GetBool("i2pcontrol.enabled"),
+		Address:         viper.GetString("i2pcontrol.address"),
+		Password:        viper.GetString("i2pcontrol.password"),
+		UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
+		CertFile:        viper.GetString("i2pcontrol.cert_file"),
+		KeyFile:         viper.GetString("i2pcontrol.key_file"),
+		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
+	}
+
 	// Create and return new RouterConfig
 	return &RouterConfig{
-		BaseDir:    viper.GetString("base_dir"),
-		WorkingDir: viper.GetString("working_dir"),
-		NetDb:      netDbConfig,
-		Bootstrap:  bootstrapConfig,
-		I2CP:       i2cpConfig,
+		BaseDir:        viper.GetString("base_dir"),
+		WorkingDir:     viper.GetString("working_dir"),
+		NetDb:          netDbConfig,
+		Bootstrap:      bootstrapConfig,
+		I2CP:           i2cpConfig,
+		I2PControl:     i2pControlConfig,
+		MaxBandwidth:   viper.GetUint64("router.max_bandwidth"),
+		MaxConnections: viper.GetInt("router.max_connections"),
+		AcceptTunnels:  viper.GetBool("router.accept_tunnels"),
 	}
 }
 
@@ -231,8 +246,8 @@ func UpdateRouterConfig() {
 			"reason": "reseed_servers_parse_error",
 			"phase":  "startup",
 			"error":  err.Error(),
-		}).Warn("error parsing reseed servers, using empty list")
-		reseedServers = []*ReseedConfig{}
+		}).Warn("error parsing reseed servers, falling back to known servers")
+		reseedServers = KnownReseedServers
 	}
 
 	var localNetDbPaths []string

@@ -159,9 +159,8 @@ func (s *ShortTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record Build
 			"hop_index":     hopIndex,
 			"provided_hash": fmt.Sprintf("%x", record.Hash[:8]),
 			"computed_hash": fmt.Sprintf("%x", computedHash[:8]),
-		}).Debug("Record hash mismatch (may be expected for encrypted records)")
-		// Note: Hash verification may fail for encrypted records that haven't been decrypted
-		// This is expected behavior - the actual verification happens after decryption
+		}).Warn("Record hash mismatch - integrity check failed")
+		return fmt.Errorf("record %d hash mismatch: provided %x, computed %x", hopIndex, record.Hash[:8], computedHash[:8])
 	}
 
 	return nil

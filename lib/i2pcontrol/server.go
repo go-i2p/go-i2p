@@ -294,8 +294,16 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 }
 
 // setCORSHeaders configures Cross-Origin Resource Sharing headers for JSON-RPC requests.
+// The origin is restricted to the server's own address to prevent CSRF attacks.
 func (s *Server) setCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Derive the allowed origin from the configured listen address.
+	// For "localhost:7650" this produces "http://localhost:7650" (or https if configured).
+	scheme := "http"
+	if s.config.UseHTTPS {
+		scheme = "https"
+	}
+	origin := fmt.Sprintf("%s://%s", scheme, s.config.Address)
+	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }

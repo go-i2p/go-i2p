@@ -110,6 +110,12 @@ type Server struct {
 	wg     sync.WaitGroup
 }
 
+// GetSessionManager returns the underlying SessionManager.
+// This is used by the Router to wire InboundMessageHandler for tunnel-to-session delivery.
+func (s *Server) GetSessionManager() *SessionManager {
+	return s.manager
+}
+
 // NewServer creates a new I2CP server
 func NewServer(config *ServerConfig) (*Server, error) {
 	if config == nil {

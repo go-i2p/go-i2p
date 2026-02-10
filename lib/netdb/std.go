@@ -36,7 +36,7 @@ type StdNetDB struct {
 	RouterInfos map[common.Hash]Entry
 	riMutex     sync.RWMutex // mutex for RouterInfos (RWMutex for read-heavy operations)
 	LeaseSets   map[common.Hash]Entry
-	lsMutex     sync.Mutex // mutex for LeaseSets
+	lsMutex     sync.RWMutex // mutex for LeaseSets (RWMutex for read-heavy operations)
 
 	// Expiration tracking for LeaseSets
 	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
@@ -63,7 +63,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		RouterInfos:    make(map[common.Hash]Entry),
 		riMutex:        sync.RWMutex{},
 		LeaseSets:      make(map[common.Hash]Entry),
-		lsMutex:        sync.Mutex{},
+		lsMutex:        sync.RWMutex{},
 		leaseSetExpiry: make(map[common.Hash]time.Time),
 		expiryMutex:    sync.RWMutex{},
 		PeerTracker:    NewPeerTracker(), // HIGH PRIORITY FIX #3: Initialize peer tracking
@@ -1481,16 +1481,16 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 	log.WithField("hash", hash).Debug("Getting LeaseSet")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("LeaseSet found in memory cache")
 		chnl = make(chan lease_set.LeaseSet, 1)
 		chnl <- *ls.LeaseSet
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -1557,9 +1557,9 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting LeaseSet bytes")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("LeaseSet found in memory cache")
 
 		// Serialize the LeaseSet to bytes
@@ -1570,7 +1570,7 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 		}
 		return data, nil
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -1591,8 +1591,8 @@ func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 
 // GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
 func (db *StdNetDB) GetLeaseSetCount() int {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
+	db.lsMutex.RLock()
+	defer db.lsMutex.RUnlock()
 	return len(db.LeaseSets)
 }
 

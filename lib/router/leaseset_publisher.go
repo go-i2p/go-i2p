@@ -60,10 +60,11 @@ func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte
 // storeInLocalNetDB stores the LeaseSet in the router's local NetDB.
 // This makes the LeaseSet immediately available for local lookups.
 func (p *LeaseSetPublisher) storeInLocalNetDB(key common.Hash, data []byte) error {
-	// dataType=1 indicates LeaseSet (as per I2NP protocol specification)
-	const leaseSetDataType = 1
+	// dataType=3 indicates LeaseSet2 (as per I2NP DatabaseStore spec, bits 3-0 = 0x03)
+	// This must match the type used in distributeToNetwork for consistency.
+	const leaseSet2DataType = 3
 
-	if err := p.router.StdNetDB.StoreLeaseSet(key, data, leaseSetDataType); err != nil {
+	if err := p.router.StdNetDB.StoreLeaseSet(key, data, leaseSet2DataType); err != nil {
 		log.WithFields(logger.Fields{
 			"at":    "router.LeaseSetPublisher.storeInLocalNetDB",
 			"key":   fmt.Sprintf("%x", key[:8]),

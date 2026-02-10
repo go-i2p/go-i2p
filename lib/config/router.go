@@ -76,7 +76,10 @@ var defaultRouterConfig = &RouterConfig{
 }
 
 func DefaultRouterConfig() *RouterConfig {
-	return defaultRouterConfig
+	// Return a deep copy so callers cannot mutate the package-level default.
+	cfg := copyBaseFields(defaultRouterConfig)
+	copyNestedConfigs(cfg, defaultRouterConfig)
+	return cfg
 }
 
 // RouterConfigProperties is a global mutable configuration object

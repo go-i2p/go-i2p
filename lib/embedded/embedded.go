@@ -2,7 +2,6 @@ package embedded
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -34,6 +33,19 @@ type EmbeddedRouter interface {
 	// HardStop performs immediate termination of the router without waiting
 	// for graceful cleanup. Use only when Stop() is insufficient.
 	HardStop()
+
+	// Wait blocks until the router has stopped.
+	Wait()
+
+	// Close releases all resources held by the router. The router must be
+	// stopped before Close is called.
+	Close() error
+
+	// IsRunning reports whether the router is currently operational.
+	IsRunning() bool
+
+	// IsConfigured reports whether Configure has been called successfully.
+	IsConfigured() bool
 }
 
 // StandardEmbeddedRouter is the standard implementation of EmbeddedRouter.
@@ -255,8 +267,10 @@ func (e *StandardEmbeddedRouter) HardStop() {
 			"at":     "StandardEmbeddedRouter.HardStop",
 			"phase":  "shutdown",
 			"reason": "graceful stop timed out, forcing exit",
-		}).Error("embedded router hard stop: graceful shutdown timed out, forcing process exit")
-		os.Exit(1)
+		}).Error("embedded router hard stop: graceful shutdown timed out")
+		// Do NOT call os.Exit here — it kills the entire process and prevents
+		// callers (tests, embedding applications) from performing their own cleanup.
+		// Instead, mark the router as stopped and return so the caller can decide.
 	}
 
 	e.running = false

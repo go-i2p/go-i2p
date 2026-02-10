@@ -2,32 +2,48 @@ package signals
 
 import (
 	"os"
+	"sync"
 )
 
-var sigChan = make(chan os.Signal)
+// sigChan is buffered to avoid missing signals delivered while no receiver is ready.
+var sigChan = make(chan os.Signal, 1)
 
 type Handler func()
 
-var reloaders []Handler
+var (
+	mu           sync.RWMutex
+	reloaders    []Handler
+	interrupters []Handler
+)
 
 func RegisterReloadHandler(f Handler) {
+	mu.Lock()
+	defer mu.Unlock()
 	reloaders = append(reloaders, f)
 }
 
 func handleReload() {
-	for idx := range reloaders {
-		reloaders[idx]()
+	mu.RLock()
+	snapshot := make([]Handler, len(reloaders))
+	copy(snapshot, reloaders)
+	mu.RUnlock()
+	for _, h := range snapshot {
+		h()
 	}
 }
 
-var interrupters []Handler
-
 func RegisterInterruptHandler(f Handler) {
+	mu.Lock()
+	defer mu.Unlock()
 	interrupters = append(interrupters, f)
 }
 
 func handleInterrupted() {
-	for idx := range interrupters {
-		interrupters[idx]()
+	mu.RLock()
+	snapshot := make([]Handler, len(interrupters))
+	copy(snapshot, interrupters)
+	mu.RUnlock()
+	for _, h := range snapshot {
+		h()
 	}
 }

@@ -93,6 +93,7 @@ type GarlicMessageRouter struct {
 	pendingMutex sync.RWMutex                     // Protects pendingMsgs map
 	ctx          context.Context                  // Context for graceful shutdown
 	cancel       context.CancelFunc               // Cancel function for shutdown
+	wg           sync.WaitGroup                   // Tracks background goroutines
 }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
@@ -120,7 +121,11 @@ func NewGarlicMessageRouter(
 	}
 
 	// Start background goroutine to process pending messages
-	go gr.processPendingMessages()
+	gr.wg.Add(1)
+	go func() {
+		defer gr.wg.Done()
+		gr.processPendingMessages()
+	}()
 
 	return gr
 }
@@ -560,12 +565,13 @@ func (gr *GarlicMessageRouter) forwardToTunnelGateway(gatewayHash common.Hash, t
 }
 
 // Stop gracefully shuts down the garlic message router.
-// This stops the background message processing goroutine.
+// This stops the background message processing goroutine and waits for it to finish.
 func (gr *GarlicMessageRouter) Stop() {
 	log.WithField("at", "Stop").Debug("Stopping garlic message router")
 	if gr.cancel != nil {
 		gr.cancel()
 	}
+	gr.wg.Wait()
 	log.WithField("at", "Stop").Debug("Garlic message router stopped")
 }
 

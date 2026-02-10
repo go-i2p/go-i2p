@@ -82,6 +82,12 @@ type Router struct {
 	// for RouterInfo advertisement per PROP_162
 	congestionMonitor *CongestionMonitor
 
+	// inboundHandler processes inbound tunnel messages and delivers to I2CP sessions
+	inboundHandler *InboundMessageHandler
+
+	// routerInfoProv provides the local RouterInfo to the NetDB publisher
+	routerInfoProv *routerInfoProvider
+
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool
 	// reseedMutex protects concurrent access to isReseeding flag
@@ -790,6 +796,29 @@ func (r *Router) Start() {
 	// Start I2PControl server if enabled
 	if err := r.startI2PControlServer(); err != nil {
 		log.WithError(err).Error("Failed to start I2PControl server")
+	}
+
+	// Wire routerInfoProvider so the NetDB publisher can access the local RouterInfo
+	r.routerInfoProv = newRouterInfoProvider(r)
+	if r.congestionMonitor != nil {
+		r.routerInfoProv.SetCongestionMonitor(r.congestionMonitor)
+	}
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Start",
+		"phase":  "startup",
+		"step":   5,
+		"reason": "routerInfoProvider wired",
+	}).Debug("router info provider initialized")
+
+	// Wire InboundMessageHandler for tunnel-to-I2CP message delivery
+	if r.i2cpServer != nil {
+		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Start",
+			"phase":  "startup",
+			"step":   6,
+			"reason": "InboundMessageHandler wired to I2CP session manager",
+		}).Debug("inbound message handler initialized")
 	}
 
 	// Track mainloop goroutine for clean shutdown

@@ -375,8 +375,8 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 }
 
 // buildBootstrapDefaults creates default bootstrap configuration values.
-// Note: Only reseed.i2pgit.org is included by default as it is maintained by the go-i2p dev team.
-// Additional reseed servers from the I2P network should be configured via config file.
+// Uses all KnownReseedServers for maximum network availability, consistent
+// with DefaultBootstrapConfig.
 func buildBootstrapDefaults() BootstrapDefaults {
 	return BootstrapDefaults{
 		LowPeerThreshold:    10,
@@ -384,12 +384,7 @@ func buildBootstrapDefaults() BootstrapDefaults {
 		ReseedTimeout:       60 * time.Second,
 		MinimumReseedPeers:  50,
 		ReseedRetryInterval: 5 * time.Minute,
-		ReseedServers: []*ReseedConfig{
-			{
-				Url:            "https://reseed.i2pgit.org/",
-				SU3Fingerprint: "hankhill19580_at_gmail.com.crt",
-			},
-		},
+		ReseedServers:       KnownReseedServers,
 	}
 }
 
