@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"sync"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -13,6 +14,7 @@ import (
 // to the I2P network via DatabaseStore messages.
 type LeaseSetPublisher struct {
 	router *Router
+	wg     sync.WaitGroup // Tracks background distributeToNetwork goroutines
 }
 
 // NewLeaseSetPublisher creates a new LeaseSetPublisher for the given router.
@@ -46,8 +48,12 @@ func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte
 		return fmt.Errorf("failed to store LeaseSet in local NetDB: %w", err)
 	}
 
-	// Distribute to network (non-blocking, errors logged but not returned)
-	go p.distributeToNetwork(key, leaseSetData)
+	// Distribute to network (non-blocking, tracked by WaitGroup for clean shutdown)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.distributeToNetwork(key, leaseSetData)
+	}()
 
 	log.WithFields(logger.Fields{
 		"at":  "router.LeaseSetPublisher.PublishLeaseSet",
@@ -168,4 +174,11 @@ func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.Da
 	session.QueueSendI2NP(msg)
 
 	return nil
+}
+
+// Wait blocks until all background distributeToNetwork goroutines have completed.
+// This should be called during router shutdown to ensure no goroutines outlive
+// the router's lifecycle and access closed transport sessions or NetDB.
+func (p *LeaseSetPublisher) Wait() {
+	p.wg.Wait()
 }

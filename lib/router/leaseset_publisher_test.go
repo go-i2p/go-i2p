@@ -3,6 +3,7 @@ package router
 import (
 	"crypto/sha256"
 	"testing"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -130,4 +131,59 @@ func TestPublishLeaseSetHashMismatch(t *testing.T) {
 	err := publisher.PublishLeaseSet(wrongHash, invalidLeaseSetData)
 	assert.Error(t, err, "PublishLeaseSet should fail with invalid data")
 	assert.Contains(t, err.Error(), "NetDB", "Error should mention NetDB storage failure")
+}
+
+// TestLeaseSetPublisherWaitCompletesAfterDistribution tests that Wait() blocks
+// until all background distributeToNetwork goroutines have completed.
+func TestLeaseSetPublisherWaitCompletesAfterDistribution(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	// distributeToNetwork runs as a tracked goroutine via PublishLeaseSet.
+	// Even though PublishLeaseSet will fail at storeInLocalNetDB (invalid data),
+	// we can directly test the wg mechanism by calling distributeToNetwork manually.
+	var testHash common.Hash
+	copy(testHash[:], []byte("test_hash_fills_32_bytes_exactly"))
+
+	publisher.wg.Add(1)
+	go func() {
+		defer publisher.wg.Done()
+		publisher.distributeToNetwork(testHash, []byte("test data"))
+	}()
+
+	// Wait should not block indefinitely — the goroutine should complete quickly
+	// since there are no floodfill routers to contact
+	done := make(chan struct{})
+	go func() {
+		publisher.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success — Wait() returned
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait() did not return within 5 seconds — goroutine leak")
+	}
+}
+
+// TestLeaseSetPublisherWaitWithNoGoroutines tests that Wait() returns immediately
+// when no background goroutines have been launched.
+func TestLeaseSetPublisherWaitWithNoGoroutines(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	// Wait should return immediately when no goroutines have been launched
+	done := make(chan struct{})
+	go func() {
+		publisher.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(1 * time.Second):
+		t.Fatal("Wait() blocked with no goroutines")
+	}
 }

@@ -2499,8 +2499,9 @@ func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leases
 	}).Debug("Tracked MetaLeaseSet expiration")
 }
 
-// StartExpirationCleaner starts a background goroutine that periodically removes expired LeaseSets.
-// The cleanup runs every minute and removes any LeaseSets whose expiration time has passed.
+// StartExpirationCleaner starts a background goroutine that periodically removes expired LeaseSets
+// and prunes stale peer tracking entries.
+// The cleanup runs every minute for LeaseSets and every 10 minutes for peer tracking.
 // This method should be called once during NetDB initialization.
 // Use Stop() to gracefully shut down the cleanup goroutine.
 func (db *StdNetDB) StartExpirationCleaner() {
@@ -2513,10 +2514,25 @@ func (db *StdNetDB) StartExpirationCleaner() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
+		// Peer pruning runs every 10 ticks (10 minutes)
+		tickCount := 0
+
 		for {
 			select {
 			case <-ticker.C:
 				db.cleanExpiredLeaseSets()
+
+				// Prune stale peer tracking entries every 10 minutes
+				tickCount++
+				if tickCount%10 == 0 && db.PeerTracker != nil {
+					const peerMaxAge = 24 * time.Hour
+					pruned := db.PeerTracker.PruneOldEntries(peerMaxAge)
+					if pruned > 0 {
+						log.WithFields(logger.Fields{
+							"pruned": pruned,
+						}).Info("Pruned stale peer tracker entries")
+					}
+				}
 			case <-db.ctx.Done():
 				log.Info("Stopping LeaseSet expiration cleaner")
 				return

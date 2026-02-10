@@ -88,6 +88,12 @@ type Router struct {
 	// routerInfoProv provides the local RouterInfo to the NetDB publisher
 	routerInfoProv *routerInfoProvider
 
+	// publisher publishes our RouterInfo and LeaseSets to floodfill routers
+	publisher *netdb.Publisher
+
+	// leaseSetPublisher handles LeaseSet publication to local NetDB and network
+	leaseSetPublisher *LeaseSetPublisher
+
 	// isReseeding tracks whether the router is currently performing a reseed operation
 	isReseeding bool
 	// reseedMutex protects concurrent access to isReseeding flag
@@ -372,6 +378,7 @@ func (r *Router) Stop() {
 	r.stopTunnelManager()
 	r.stopBandwidthTracker()
 	r.stopCongestionMonitor()
+	r.stopPublisher()
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
 	r.stopParticipantManager()
@@ -550,6 +557,79 @@ func (r *Router) stopCongestionMonitor() {
 	}
 }
 
+// stopPublisher shuts down the NetDB publisher if it is running.
+// The publisher periodically republishes our RouterInfo and LeaseSets to floodfill routers.
+func (r *Router) stopPublisher() {
+	if r.publisher != nil {
+		r.publisher.Stop()
+		r.publisher = nil
+		log.WithFields(logger.Fields{
+			"at":     "(Router) stopPublisher",
+			"phase":  "shutdown",
+			"reason": "netdb publisher stopped",
+		}).Debug("NetDB publisher stopped")
+	}
+}
+
+// startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet
+// publishing to floodfill routers. The publisher requires NetDB, transport, and a tunnel pool.
+// If prerequisites are not met, a warning is logged and publishing is skipped.
+func (r *Router) startPublisher() {
+	// Verify prerequisites
+	if r.StdNetDB == nil {
+		log.Warn("Cannot start publisher: NetDB not initialized")
+		return
+	}
+	if r.TransportMuxer == nil {
+		log.Warn("Cannot start publisher: TransportMuxer not initialized")
+		return
+	}
+
+	// Get tunnel pool from tunnel manager
+	var tunnelPool *tunnel.Pool
+	if r.tunnelManager != nil {
+		tunnelPool = r.tunnelManager.GetPool()
+	}
+	if tunnelPool == nil {
+		log.Warn("Cannot start publisher: tunnel pool not available")
+		return
+	}
+
+	// Create adapters to bridge interface differences
+	dbAdapter := &publisherNetDBAdapter{db: r.StdNetDB}
+	transportAdapter := &publisherTransportAdapter{muxer: r.TransportMuxer}
+
+	// Use the routerInfoProvider that was wired in Start()
+	var riProvider netdb.RouterInfoProvider
+	if r.routerInfoProv != nil {
+		riProvider = r.routerInfoProv
+	}
+
+	// Create and start the publisher
+	publisherConfig := netdb.DefaultPublisherConfig()
+	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
+
+	if err := r.publisher.Start(); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) startPublisher",
+			"phase":  "startup",
+			"reason": "publisher start failed",
+		}).Warn("Failed to start NetDB publisher, RouterInfo will not be republished")
+		r.publisher = nil
+		return
+	}
+
+	log.WithFields(logger.Fields{
+		"at":                   "(Router) startPublisher",
+		"phase":                "startup",
+		"reason":               "publisher started successfully",
+		"router_info_interval": publisherConfig.RouterInfoInterval,
+		"lease_set_interval":   publisherConfig.LeaseSetInterval,
+		"floodfill_count":      publisherConfig.FloodfillCount,
+		"has_ri_provider":      riProvider != nil,
+	}).Info("NetDB publisher started for periodic RouterInfo and LeaseSet publishing")
+}
+
 // stopTunnelManager shuts down the tunnel manager if it exists.
 // This stops the tunnel pools and cleans up tunnel-related resources.
 func (r *Router) stopTunnelManager() {
@@ -572,6 +652,12 @@ func (r *Router) stopParticipantManager() {
 }
 
 func (r *Router) stopI2CPServer() {
+	// Wait for any in-flight LeaseSet distribution goroutines to complete
+	// before stopping the I2CP server, as they may access transport sessions.
+	if r.leaseSetPublisher != nil {
+		r.leaseSetPublisher.Wait()
+		log.Debug("LeaseSet publisher goroutines drained")
+	}
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {
 			log.WithError(err).Error("Failed to stop I2CP server")
@@ -696,12 +782,14 @@ func (r *Router) clearRoutingComponents() {
 	r.messageRouter = nil
 	r.garlicRouter = nil
 	r.tunnelManager = nil
+	r.inboundHandler = nil
+	r.publisher = nil
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
 		"phase":  "finalization",
 		"step":   5,
 		"reason": "message routing components cleared",
-	}).Debug("message router, garlic router, and tunnel manager references cleared")
+	}).Debug("message router, garlic router, tunnel manager, and publisher references cleared")
 
 	r.RouterInfoKeystore = nil
 	log.WithFields(logger.Fields{
@@ -862,7 +950,14 @@ func (r *Router) initializeMessageRouter() {
 	// Initialize garlic message router for handling garlic clove forwarding
 	r.initializeGarlicRouter()
 
-	log.Debug("Message router initialized with NetDB, peer selection, session provider, and garlic forwarding")
+	// Wire InboundMessageHandler as the TunnelData handler on the message processor.
+	// This enables inbound tunnel messages to be decrypted and delivered to I2CP sessions.
+	if r.inboundHandler != nil {
+		r.messageRouter.GetProcessor().SetTunnelDataHandler(r.inboundHandler)
+		log.Debug("InboundMessageHandler wired as TunnelData handler on message processor")
+	}
+
+	log.Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, and garlic forwarding")
 }
 
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
@@ -1199,6 +1294,11 @@ func (r *Router) mainloop() {
 
 	r.initializeMessageRouter()
 
+	// Start the NetDB publisher to periodically publish our RouterInfo and LeaseSets
+	// to floodfill routers. This requires NetDB, tunnel pool, transport, and routerInfoProvider
+	// to all be initialized first.
+	r.startPublisher()
+
 	// Start session monitors for inbound message processing
 	r.startSessionMonitors()
 
@@ -1445,11 +1545,12 @@ func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
 
 // startI2CPServer initializes and starts the I2CP server
 func (r *Router) startI2CPServer() error {
+	r.leaseSetPublisher = NewLeaseSetPublisher(r)
 	serverConfig := &i2cp.ServerConfig{
 		ListenAddr:        r.cfg.I2CP.Address,
 		Network:           r.cfg.I2CP.Network,
 		MaxSessions:       r.cfg.I2CP.MaxSessions,
-		LeaseSetPublisher: NewLeaseSetPublisher(r),
+		LeaseSetPublisher: r.leaseSetPublisher,
 	}
 
 	server, err := i2cp.NewServer(serverConfig)

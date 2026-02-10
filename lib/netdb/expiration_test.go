@@ -440,3 +440,59 @@ func TestCleanerRunsPeriodically(t *testing.T) {
 	db.lsMutex.Unlock()
 	assert.False(t, exists, "Expired LeaseSet should be removed")
 }
+
+// TestPeerTrackerPruningIntegration verifies that PeerTracker.PruneOldEntries is
+// invoked by the expiration cleaner goroutine. We simulate the pruning trigger
+// by directly calling PruneOldEntries (since the ticker-based invocation runs every
+// 10 minutes and is impractical to wait for in tests) and verify the PeerTracker
+// is properly initialized and accessible from StdNetDB.
+func TestPeerTrackerPruningIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := NewStdNetDB(tmpDir)
+	require.NotNil(t, db)
+	require.NotNil(t, db.PeerTracker, "PeerTracker should be initialized")
+
+	// Add peer entries — one recent, one old
+	recentHash := testHash(0xAA)
+	oldHash := testHash(0xBB)
+
+	db.PeerTracker.RecordAttempt(recentHash)
+	db.PeerTracker.RecordAttempt(oldHash)
+
+	// Manually age the old entry
+	db.PeerTracker.mu.Lock()
+	if stats, ok := db.PeerTracker.stats[oldHash]; ok {
+		stats.LastAttempt = time.Now().Add(-25 * time.Hour)
+	}
+	db.PeerTracker.mu.Unlock()
+
+	// Prune entries older than 24 hours (same as the cleaner uses)
+	pruned := db.PeerTracker.PruneOldEntries(24 * time.Hour)
+	assert.Equal(t, 1, pruned, "Should have pruned 1 old entry")
+
+	// Recent peer should still exist
+	assert.NotNil(t, db.PeerTracker.GetStats(recentHash), "Recent peer should still be tracked")
+	// Old peer should be removed
+	assert.Nil(t, db.PeerTracker.GetStats(oldHash), "Old peer should have been pruned")
+}
+
+// TestPeerTrackerAvailableInNetDB verifies PeerTracker is wired into StdNetDB
+// and can be used for peer reputation queries.
+func TestPeerTrackerAvailableInNetDB(t *testing.T) {
+	tmpDir := t.TempDir()
+	db := NewStdNetDB(tmpDir)
+	require.NotNil(t, db)
+	require.NotNil(t, db.PeerTracker)
+
+	hash := testHash(0xCC)
+
+	// Record activity through the NetDB's PeerTracker
+	db.PeerTracker.RecordSuccess(hash, 100)
+	db.PeerTracker.RecordSuccess(hash, 200)
+
+	stats := db.PeerTracker.GetStats(hash)
+	require.NotNil(t, stats)
+	assert.Equal(t, 2, stats.SuccessCount)
+	assert.Equal(t, int64(150), stats.AvgResponseTimeMs)
+	assert.False(t, db.PeerTracker.IsLikelyStale(hash))
+}

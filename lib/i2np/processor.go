@@ -100,6 +100,15 @@ type TunnelGatewayHandler interface {
 	HandleGateway(tunnelID tunnel.TunnelID, payload []byte) error
 }
 
+// TunnelDataHandler defines the interface for handling incoming TunnelData messages.
+// When a TunnelData message arrives at our tunnel endpoint, the handler decrypts
+// it and delivers the embedded I2NP message to the appropriate I2CP session.
+type TunnelDataHandler interface {
+	// HandleTunnelData processes an incoming TunnelData message by looking up the
+	// tunnel endpoint, decrypting the payload, and delivering it to the owning session.
+	HandleTunnelData(msg I2NPMessage) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	mu                   sync.RWMutex
@@ -112,6 +121,7 @@ type MessageProcessor struct {
 	buildReplyForwarder  BuildReplyForwarder  // Optional forwarder for tunnel build replies
 	buildRecordCrypto    *BuildRecordCrypto   // Crypto handler for encrypting build response records
 	tunnelGatewayHandler TunnelGatewayHandler // Optional handler for tunnel gateway messages
+	tunnelDataHandler    TunnelDataHandler    // Optional handler for inbound tunnel data messages
 }
 
 // NewMessageProcessor creates a new message processor
@@ -181,6 +191,17 @@ func (p *MessageProcessor) SetTunnelGatewayHandler(handler TunnelGatewayHandler)
 	defer p.mu.Unlock()
 	log.WithField("at", "SetTunnelGatewayHandler").Debug("Setting tunnel gateway handler")
 	p.tunnelGatewayHandler = handler
+}
+
+// SetTunnelDataHandler sets the handler for processing inbound TunnelData messages.
+// When set, incoming TunnelData messages will be delegated to this handler for
+// tunnel endpoint decryption and I2CP session delivery. If not set, TunnelData
+// messages will be validated but not delivered to any session.
+func (p *MessageProcessor) SetTunnelDataHandler(handler TunnelDataHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetTunnelDataHandler").Debug("Setting tunnel data handler")
+	p.tunnelDataHandler = handler
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -976,14 +997,29 @@ func (p *MessageProcessor) parseI2NPMessage(data []byte) (I2NPMessage, int, erro
 	return msg, bytesRead, nil
 }
 
-// processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface
+// processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface.
+// If a TunnelDataHandler is configured, the message is delegated for endpoint decryption
+// and delivery to the owning I2CP session. Otherwise the message is validated and logged.
 func (p *MessageProcessor) processTunnelDataMessage(msg I2NPMessage) error {
-	if tunnelCarrier, ok := msg.(TunnelCarrier); ok {
-		data := tunnelCarrier.GetTunnelData()
-		log.WithField("data_size", len(data)).Debug("Processing tunnel data message")
-		return nil
+	if _, ok := msg.(TunnelCarrier); !ok {
+		return fmt.Errorf("message does not implement TunnelCarrier interface")
 	}
-	return fmt.Errorf("message does not implement TunnelCarrier interface")
+
+	// Delegate to handler if available
+	if p.tunnelDataHandler != nil {
+		log.WithField("at", "processTunnelDataMessage").Debug("Delegating TunnelData to handler")
+		return p.tunnelDataHandler.HandleTunnelData(msg)
+	}
+
+	// No handler configured — validate only
+	tunnelCarrier := msg.(TunnelCarrier)
+	data := tunnelCarrier.GetTunnelData()
+	log.WithFields(logger.Fields{
+		"at":        "processTunnelDataMessage",
+		"data_size": len(data),
+		"reason":    "no tunnel data handler configured",
+	}).Debug("TunnelData message validated but not delivered")
+	return nil
 }
 
 // processShortTunnelBuildMessage processes Short Tunnel Build Messages (STBM).
