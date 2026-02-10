@@ -211,3 +211,116 @@ func (m *mockNetConn) SetReadDeadline(t time.Time) error {
 func (m *mockNetConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
+
+// TestRouteMessageGarlicAndTunnelGateway tests that garlic (type 11) and
+// tunnel gateway (type 19) messages are routed through the MessageRouter
+// instead of being rejected with "unsupported message type".
+func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
+	router := &Router{
+		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+			MaxRetries:     3,
+			DefaultTimeout: 30,
+			EnableLogging:  false,
+		}),
+	}
+
+	peerHash := common.Hash{}
+	copy(peerHash[:], "test_peer_000000000000000000000")
+
+	t.Run("Garlic message is not rejected as unsupported", func(t *testing.T) {
+		// Create a base message with type GARLIC (11)
+		msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_GARLIC)
+		msg.SetData([]byte("encrypted garlic payload"))
+
+		err := router.routeMessage(msg, peerHash)
+		// The message may fail downstream (no garlic session configured),
+		// but it must NOT fail with "unsupported message type: 11"
+		if err != nil {
+			assert.NotContains(t, err.Error(), "unsupported message type",
+				"Garlic messages should not be rejected as unsupported")
+		}
+	})
+
+	t.Run("TunnelGateway message is not rejected as unsupported", func(t *testing.T) {
+		// Create a TunnelGateway message
+		msg := i2np.NewTunnelGatewayMessage(tunnel.TunnelID(42), []byte("tunnel payload data"))
+
+		err := router.routeMessage(msg, peerHash)
+		// The message may fail downstream (no tunnel gateway handler configured),
+		// but it must NOT fail with "unsupported message type: 19"
+		if err != nil {
+			assert.NotContains(t, err.Error(), "unsupported message type",
+				"TunnelGateway messages should not be rejected as unsupported")
+		}
+	})
+}
+
+// TestRouteMessageAllSupportedTypes verifies that no defined I2NP message type
+// falls through to the "unsupported message type" default case.
+func TestRouteMessageAllSupportedTypes(t *testing.T) {
+	router := &Router{
+		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+			MaxRetries:     3,
+			DefaultTimeout: 30,
+			EnableLogging:  false,
+		}),
+	}
+
+	peerHash := common.Hash{}
+
+	// Every message type that the router should accept
+	supportedTypes := []struct {
+		name    string
+		msgType int
+	}{
+		{"DatabaseStore", i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE},
+		{"DatabaseLookup", i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP},
+		{"DatabaseSearchReply", i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY},
+		{"DeliveryStatus", i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS},
+		{"Garlic", i2np.I2NP_MESSAGE_TYPE_GARLIC},
+		{"TunnelData", i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA},
+		{"TunnelGateway", i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY},
+		{"Data", i2np.I2NP_MESSAGE_TYPE_DATA},
+		{"TunnelBuild", i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD},
+		{"TunnelBuildReply", i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY},
+		{"VariableTunnelBuild", i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD},
+		{"VariableTunnelBuildReply", i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY},
+	}
+
+	for _, tc := range supportedTypes {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := i2np.NewBaseI2NPMessage(tc.msgType)
+			msg.SetData([]byte("test payload"))
+
+			err := router.routeMessage(msg, peerHash)
+			// If there's an error, it should be a processing error, not "unsupported"
+			if err != nil {
+				assert.NotContains(t, err.Error(), "unsupported message type",
+					"Message type %d (%s) should be supported", tc.msgType, tc.name)
+			}
+		})
+	}
+}
+
+// TestRouteMessageUnsupportedTypeStillRejected verifies that truly unknown
+// message types are still properly rejected.
+func TestRouteMessageUnsupportedTypeStillRejected(t *testing.T) {
+	router := &Router{
+		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+			MaxRetries:     3,
+			DefaultTimeout: 30,
+			EnableLogging:  false,
+		}),
+	}
+
+	peerHash := common.Hash{}
+
+	// Use an invalid/undefined message type
+	msg := i2np.NewBaseI2NPMessage(255)
+	msg.SetData([]byte("test"))
+
+	err := router.routeMessage(msg, peerHash)
+	require.Error(t, err, "Unknown message types should be rejected")
+	assert.Contains(t, err.Error(), "unsupported message type",
+		"Error should indicate unsupported message type")
+}

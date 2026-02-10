@@ -1489,7 +1489,18 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 	case i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
 		return r.messageRouter.RouteMessage(msg)
 
+	case i2np.I2NP_MESSAGE_TYPE_GARLIC:
+		// Route garlic messages to the MessageProcessor for decryption and clove processing.
+		// The processor handles ECIES-X25519-AEAD-Ratchet decryption and clove routing.
+		return r.messageRouter.RouteMessage(msg)
+
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA:
+		return r.messageRouter.RouteMessage(msg)
+
+	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY:
+		// Route TunnelGateway messages to the MessageProcessor for tunnel injection.
+		// The processor delegates to the configured tunnelGatewayHandler for
+		// layered encryption and forwarding to the next hop.
 		return r.messageRouter.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
