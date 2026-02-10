@@ -375,20 +375,23 @@ func (rb *ReseedBootstrap) hasEnoughPeers(requested, obtained int) bool {
 
 // validateResults checks if we obtained any router infos and returns an error if not.
 func (rb *ReseedBootstrap) validateResults(allRouterInfos []router_info.RouterInfo, lastErr error, attemptedServers, successfulServers int) error {
-	if len(allRouterInfos) == 0 && lastErr != nil {
+	if len(allRouterInfos) == 0 {
+		detail := "no peers obtained"
+		if lastErr != nil {
+			detail = lastErr.Error()
+		}
 		log.WithFields(logger.Fields{
 			"at":                 "(ReseedBootstrap) validateResults",
 			"phase":              "bootstrap",
-			"reason":             "all reseed attempts failed",
+			"reason":             "reseed yielded zero peers",
 			"attempted_servers":  attemptedServers,
 			"successful_servers": successfulServers,
 			"failed_servers":     attemptedServers - successfulServers,
 			"router_count":       0,
-			"last_error":         lastErr.Error(),
-			"error_type":         fmt.Sprintf("%T", lastErr),
-			"recommendation":     "check network connectivity, firewall, and DNS resolution",
-		}).Error("all reseed attempts failed, no peers obtained")
-		return oops.Errorf("all reseed attempts failed: %w", lastErr)
+			"last_error":         detail,
+			"recommendation":     "check network connectivity, firewall, DNS resolution, and RouterInfo validation rules",
+		}).Error("reseed completed with zero peers")
+		return oops.Errorf("reseed yielded zero peers (attempted %d servers): %s", attemptedServers, detail)
 	}
 	return nil
 }

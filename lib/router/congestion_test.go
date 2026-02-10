@@ -47,10 +47,23 @@ func (m *mockMetricsCollector) IsAcceptingTunnels() bool {
 	return m.acceptingTunnels
 }
 
+// SetRatio sets all three congestion metrics to the same value so that the
+// weighted average equals this value regardless of weight distribution.
 func (m *mockMetricsCollector) SetRatio(ratio float64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.participatingTunnelRatio = ratio
+	m.bandwidthUtilization = ratio
+	m.connectionUtilization = ratio
+}
+
+// SetAllMetrics sets all three congestion metrics at once.
+func (m *mockMetricsCollector) SetAllMetrics(tunnel, bandwidth, connection float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.participatingTunnelRatio = tunnel
+	m.bandwidthUtilization = bandwidth
+	m.connectionUtilization = connection
 }
 
 func (m *mockMetricsCollector) SetAcceptingTunnels(accepting bool) {
@@ -626,5 +639,44 @@ func TestCongestionMonitor_RollingAverage(t *testing.T) {
 	}
 	if ratio := monitor.GetCurrentRatio(); ratio < 0.89 || ratio > 0.91 {
 		t.Errorf("after 5 more samples at 0.90, ratio = %v, want ~0.90", ratio)
+	}
+}
+
+// TestCongestionMonitor_BandwidthSaturationTriggersCongestion verifies that
+// high bandwidth utilization alone can trigger congestion flags even when
+// participating tunnel ratio is low (the bug fixed by incorporating all metrics).
+func TestCongestionMonitor_BandwidthSaturationTriggersCongestion(t *testing.T) {
+	cfg := config.Defaults().Congestion
+	collector := newMockCollector()
+	monitor := NewCongestionMonitor(cfg, collector)
+	monitor.startupGraceSec = 0
+
+	// Low tunnel ratio but fully saturated bandwidth and connections
+	collector.SetAllMetrics(0.10, 1.0, 1.0)
+
+	for i := 0; i < 10; i++ {
+		monitor.takeSample()
+	}
+
+	// Expected weighted ratio: 0.10*0.50 + 1.0*0.25 + 1.0*0.25 = 0.55
+	ratio := monitor.GetCurrentRatio()
+	if ratio < 0.54 || ratio > 0.56 {
+		t.Errorf("bandwidth-saturated ratio = %v, want ~0.55", ratio)
+	}
+
+	// With zero tunnels but full bandwidth/connections:
+	// ratio should still be non-zero (0.50), showing bandwidth impact
+	collector.SetAllMetrics(0.0, 1.0, 1.0)
+	monitor.mu.Lock()
+	monitor.samples = nil
+	monitor.currentFlag = config.CongestionFlagNone
+	monitor.mu.Unlock()
+
+	for i := 0; i < 10; i++ {
+		monitor.takeSample()
+	}
+	ratio = monitor.GetCurrentRatio()
+	if ratio < 0.49 || ratio > 0.51 {
+		t.Errorf("zero-tunnel but saturated ratio = %v, want ~0.50", ratio)
 	}
 }

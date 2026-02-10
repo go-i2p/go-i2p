@@ -3,6 +3,7 @@ package i2cp
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +17,11 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
+
+// errClientDisconnected is a sentinel error returned by handleDisconnect to
+// signal that the client has gracefully disconnected and the connection loop
+// should terminate without logging a spurious read-error.
+var errClientDisconnected = errors.New("client disconnected")
 
 // ServerConfig holds configuration for the I2CP server
 type ServerConfig struct {
@@ -508,6 +514,9 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 
 	response, err := s.processClientMessage(msg, sessionPtr)
 	if err != nil {
+		if errors.Is(err, errClientDisconnected) {
+			return false // Client disconnected gracefully — stop the loop
+		}
 		return true // Continue despite processing error
 	}
 
@@ -1595,9 +1604,9 @@ func (s *Server) handleDisconnect(msg *Message, sessionPtr **Session) (*Message,
 		*sessionPtr = nil
 	}
 
-	// Returning nil signals the connection should be closed gracefully
-	// No response message is sent - client expects connection to close
-	return nil, nil
+	// Return sentinel error to break the connection loop cleanly.
+	// No response message is sent — client expects the connection to close.
+	return nil, errClientDisconnected
 }
 
 // logHostLookupParseError logs an error when parsing host lookup payload fails.

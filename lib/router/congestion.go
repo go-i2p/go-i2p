@@ -195,18 +195,31 @@ func (m *CongestionMonitor) updateState() {
 }
 
 // calculateAverageRatio computes the weighted average congestion ratio.
-// Uses participating tunnel ratio as the primary metric.
+// Incorporates participating tunnel ratio, bandwidth utilization, and connection
+// utilization per PROP_162.  The weights reflect the relative importance of each
+// metric: tunnel participation is the primary signal, while bandwidth and
+// connection saturation act as secondary indicators.
 // Must be called with m.mu held.
 func (m *CongestionMonitor) calculateAverageRatio() float64 {
 	if len(m.samples) == 0 {
 		return 0
 	}
 
+	// Weights for the three congestion dimensions.
+	// Participating tunnel ratio is the primary metric (weight 0.5).
+	// Bandwidth and connection utilization each contribute 0.25.
+	const (
+		tunnelWeight     = 0.50
+		bandwidthWeight  = 0.25
+		connectionWeight = 0.25
+	)
+
 	var sum float64
 	for _, s := range m.samples {
-		// Primary metric is participating tunnel ratio
-		// Could also incorporate bandwidth and connection utilization with weights
-		sum += s.ParticipatingTunnelRatio
+		weighted := s.ParticipatingTunnelRatio*tunnelWeight +
+			s.BandwidthUtilization*bandwidthWeight +
+			s.ConnectionUtilization*connectionWeight
+		sum += weighted
 	}
 
 	return sum / float64(len(m.samples))
