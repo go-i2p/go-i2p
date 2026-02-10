@@ -166,7 +166,9 @@ func (e *StandardEmbeddedRouter) Start() error {
 	}).Info("starting embedded router")
 
 	// Start the router subsystems
-	e.router.Start()
+	if err := e.router.Start(); err != nil {
+		return fmt.Errorf("router startup failed: %w", err)
+	}
 	e.running = true
 
 	log.WithFields(logger.Fields{

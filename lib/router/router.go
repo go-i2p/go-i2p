@@ -101,6 +101,11 @@ type Router struct {
 
 	// keystoreMux protects concurrent access to RouterInfoKeystore
 	keystoreMux sync.RWMutex
+
+	// startupErr receives any error from the mainloop goroutine during
+	// startup-critical initialization (NetDB, I2CP, I2PControl).  Start()
+	// blocks on this channel so callers get a synchronous error report.
+	startupErr chan error
 }
 
 // CreateRouter creates a router with the provided configuration
@@ -444,7 +449,7 @@ func (r *Router) stopGarlicRouter() {
 	}
 }
 
-// stopI2CPServer shuts down the I2CP server if it is running and logs the result.
+// stopBandwidthTracker shuts down the bandwidth tracker if it is running and logs the result.
 func (r *Router) stopBandwidthTracker() {
 	if r.bandwidthTracker != nil {
 		r.bandwidthTracker.Stop()
@@ -827,8 +832,9 @@ func (r *Router) finalizeCloseChannel() {
 	}
 }
 
-// Start starts router mainloop
-func (r *Router) Start() {
+// Start starts router mainloop and returns an error if startup-critical
+// subsystems (NetDB, I2CP, I2PControl) fail to initialize.
+func (r *Router) Start() error {
 	r.runMux.Lock()
 	defer r.runMux.Unlock()
 
@@ -839,7 +845,7 @@ func (r *Router) Start() {
 			"reason": "router is already running",
 			"state":  "running",
 		}).Warn("attempted to start already running router")
-		return
+		return nil
 	}
 	log.WithFields(logger.Fields{
 		"at":           "(Router) Start",
@@ -879,18 +885,6 @@ func (r *Router) Start() {
 		"reason": "congestion monitor initialized",
 	}).Debug("congestion monitor started")
 
-	// Start I2CP server if enabled
-	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
-		if err := r.startI2CPServer(); err != nil {
-			log.WithError(err).Error("Failed to start I2CP server")
-		}
-	}
-
-	// Start I2PControl server if enabled
-	if err := r.startI2PControlServer(); err != nil {
-		log.WithError(err).Error("Failed to start I2PControl server")
-	}
-
 	// Wire routerInfoProvider so the NetDB publisher can access the local RouterInfo
 	r.routerInfoProv = newRouterInfoProvider(r)
 	if r.congestionMonitor != nil {
@@ -903,16 +897,8 @@ func (r *Router) Start() {
 		"reason": "routerInfoProvider wired",
 	}).Debug("router info provider initialized")
 
-	// Wire InboundMessageHandler for tunnel-to-I2CP message delivery
-	if r.i2cpServer != nil {
-		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
-		log.WithFields(logger.Fields{
-			"at":     "(Router) Start",
-			"phase":  "startup",
-			"step":   6,
-			"reason": "InboundMessageHandler wired to I2CP session manager",
-		}).Debug("inbound message handler initialized")
-	}
+	// Buffered channel: mainloop sends exactly one error (nil on success)
+	r.startupErr = make(chan error, 1)
 
 	// Track mainloop goroutine for clean shutdown
 	r.wg.Add(1)
@@ -920,6 +906,23 @@ func (r *Router) Start() {
 		defer r.wg.Done()
 		r.mainloop()
 	}()
+
+	// Block until startup-critical initialization completes in mainloop
+	if err := <-r.startupErr; err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "(Router) Start",
+			"phase":  "startup",
+			"reason": "startup-critical subsystem failed",
+		}).Error("router startup failed")
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "(Router) Start",
+		"phase":  "running",
+		"reason": "all startup-critical subsystems initialized",
+	}).Info("router started successfully")
+	return nil
 }
 
 // initializeNetDB creates and configures the network database
@@ -1283,6 +1286,7 @@ func (r *Router) mainloop() {
 
 	if err := r.initializeNetDB(); err != nil {
 		log.WithError(err).Error("Failed to initialize NetDB")
+		r.startupErr <- fmt.Errorf("NetDB initialization failed: %w", err)
 		r.Stop()
 		return
 	}
@@ -1293,8 +1297,36 @@ func (r *Router) mainloop() {
 			"at":     "(Router) mainloop",
 			"reason": err.Error(),
 		}).Error("NetDB startup failed")
+		r.startupErr <- fmt.Errorf("NetDB readiness check failed: %w", err)
 		r.Stop()
 		return
+	}
+
+	// Start I2CP server AFTER NetDB is initialized so that
+	// server.SetNetDB receives a valid (non-nil) StdNetDB reference.
+	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
+		if err := r.startI2CPServer(); err != nil {
+			r.startupErr <- fmt.Errorf("I2CP server startup failed: %w", err)
+			r.Stop()
+			return
+		}
+	}
+
+	// Start I2PControl server if enabled
+	if err := r.startI2PControlServer(); err != nil {
+		r.startupErr <- fmt.Errorf("I2PControl server startup failed: %w", err)
+		r.Stop()
+		return
+	}
+
+	// Wire InboundMessageHandler for tunnel-to-I2CP message delivery
+	// (requires I2CP server to be started)
+	if r.i2cpServer != nil {
+		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
+		log.WithFields(logger.Fields{
+			"at":     "(Router) mainloop",
+			"reason": "InboundMessageHandler wired to I2CP session manager",
+		}).Debug("inbound message handler initialized")
 	}
 
 	r.initializeMessageRouter()
@@ -1303,6 +1335,9 @@ func (r *Router) mainloop() {
 	// to floodfill routers. This requires NetDB, tunnel pool, transport, and routerInfoProvider
 	// to all be initialized first.
 	r.startPublisher()
+
+	// Signal Start() that all startup-critical initialization succeeded
+	r.startupErr <- nil
 
 	// Start session monitors for inbound message processing
 	r.startSessionMonitors()
