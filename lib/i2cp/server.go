@@ -1087,12 +1087,15 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 		"sessionID": sessionID,
 	}).Info("session_destroyed")
 
-	// Per I2CP spec, return SessionStatus(Destroyed) to confirm session termination
-	// Status code 0 = Destroyed
+	// Per I2CP spec, SessionStatus payload is SessionID(2 bytes) + Status(1 byte).
+	// Status code 0 = Destroyed.
+	payload := make([]byte, 3)
+	binary.BigEndian.PutUint16(payload[0:2], sessionID)
+	payload[2] = 0x00 // Destroyed
 	return &Message{
 		Type:      MessageTypeSessionStatus,
 		SessionID: sessionID,
-		Payload:   []byte{0}, // Status 0 = Destroyed
+		Payload:   payload,
 	}, nil
 }
 
@@ -1289,29 +1292,34 @@ func startLeaseSetMaintenance(session *Session, sessionID uint16) {
 //	  4 bytes:  tunnel ID (big endian uint32)
 //	  8 bytes:  end date (milliseconds since epoch, big endian uint64)
 func (s *Server) buildRequestVariableLeaseSetPayload(tunnels []*tunnel.TunnelState) ([]byte, error) {
-	if len(tunnels) == 0 {
-		return nil, fmt.Errorf("no tunnels provided")
+	// Filter out nil and zero-hop tunnels first so the lease count byte
+	// in the payload matches the number of leases actually written.
+	validTunnels := make([]*tunnel.TunnelState, 0, len(tunnels))
+	for _, tun := range tunnels {
+		if tun != nil && len(tun.Hops) > 0 {
+			validTunnels = append(validTunnels, tun)
+		}
 	}
 
-	if len(tunnels) > 16 {
+	if len(validTunnels) == 0 {
+		return nil, fmt.Errorf("no valid tunnels provided")
+	}
+
+	if len(validTunnels) > 16 {
 		// Limit to 16 leases to keep LeaseSet size reasonable
-		tunnels = tunnels[:16]
+		validTunnels = validTunnels[:16]
 	}
 
 	// Calculate payload size: 1 byte count + N * (32 + 4 + 8) bytes
-	payloadSize := 1 + len(tunnels)*44
+	payloadSize := 1 + len(validTunnels)*44
 	payload := make([]byte, payloadSize)
 
-	payload[0] = byte(len(tunnels))
+	payload[0] = byte(len(validTunnels))
 
 	offset := 1
 	now := time.Now()
 
-	for _, tun := range tunnels {
-		if tun == nil || len(tun.Hops) == 0 {
-			continue
-		}
-
+	for _, tun := range validTunnels {
 		// Gateway router hash (32 bytes)
 		copy(payload[offset:offset+32], tun.Hops[0][:])
 		offset += 32

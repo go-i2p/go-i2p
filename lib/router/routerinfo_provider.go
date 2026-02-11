@@ -5,9 +5,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
+	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/go-i2p/logger"
 )
 
@@ -49,15 +51,40 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 	// Build options with congestion flag if available
 	opts := p.buildRouterInfoOptions()
 
-	// Construct RouterInfo from the keystore
-	// nil addresses means it will use default/empty addresses
-	// In a full implementation, this would include actual NTCP2/SSU2 addresses
-	ri, err := ks.ConstructRouterInfo(nil, opts)
+	// Collect transport addresses from the TransportMuxer so that published
+	// RouterInfo includes our actual NTCP2 listening address(es). Without
+	// this, peers looking us up in NetDB would see no addresses and be
+	// unable to connect.
+	addresses := p.collectTransportAddresses()
+
+	ri, err := ks.ConstructRouterInfo(addresses, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return ri, nil
+}
+
+// collectTransportAddresses gathers RouterAddress entries from all active
+// transports in the router's TransportMuxer. Returns nil if the muxer is not
+// yet initialized (e.g. during early startup).
+func (p *routerInfoProvider) collectTransportAddresses() []*router_address.RouterAddress {
+	if p.router.TransportMuxer == nil {
+		return nil
+	}
+
+	var addresses []*router_address.RouterAddress
+	for _, t := range p.router.TransportMuxer.GetTransports() {
+		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
+			addr, err := ntcp.ConvertToRouterAddress(ntcp2Transport)
+			if err != nil {
+				log.WithError(err).Warn("Failed to convert transport to RouterAddress")
+				continue
+			}
+			addresses = append(addresses, addr)
+		}
+	}
+	return addresses
 }
 
 // buildRouterInfoOptions constructs RouterInfoOptions with the current congestion flag.

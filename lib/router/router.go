@@ -1431,7 +1431,11 @@ func (r *Router) handleNewConnection(conn net.Conn) {
 	}
 
 	r.addSession(peerHash, session)
-	go r.processSessionMessages(session, peerHash)
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.processSessionMessages(session, peerHash)
+	}()
 
 	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Info("Started monitoring new inbound session")
 }
