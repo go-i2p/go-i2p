@@ -110,7 +110,7 @@ func TestAcceptWithTimeoutSuccess(t *testing.T) {
 	// Verify success
 	require.NoError(t, err, "AcceptWithTimeout should succeed when connection arrives before timeout")
 	require.NotNil(t, conn, "Should return valid connection")
-	assert.Equal(t, mockConn, conn, "Should return the mock connection")
+	assert.Equal(t, mockConn, conn.(*trackedConn).Conn, "Should return the mock connection")
 }
 
 // TestAcceptWithTimeoutExpires tests timeout behavior when no connection arrives
@@ -371,7 +371,7 @@ func TestAcceptMultipleTransportsFirstWins(t *testing.T) {
 	assert.Less(t, duration, 100*time.Millisecond, "Should return quickly when fast transport succeeds")
 
 	// The returned connection should be from the fast transport
-	assert.Equal(t, fastConn, conn, "Should return the fast transport's connection")
+	assert.Equal(t, fastConn, conn.(*trackedConn).Conn, "Should return the fast transport's connection")
 }
 
 // TestAcceptWithTimeoutClosesLeakedConnections tests that connections accepted after timeout are closed
@@ -422,7 +422,7 @@ func TestAcceptSecondTransportWinsWhenFirstFails(t *testing.T) {
 
 	require.NoError(t, err, "Should succeed with second transport")
 	require.NotNil(t, conn, "Should return a connection")
-	assert.Equal(t, expectedConn, conn, "Should return the second transport's connection")
+	assert.Equal(t, expectedConn, conn.(*trackedConn).Conn, "Should return the second transport's connection")
 }
 
 // TestAcceptAllTransportsFail tests that proper error is returned when all transports fail
@@ -464,7 +464,7 @@ func TestAcceptClosesLateConnectionsAfterSuccess(t *testing.T) {
 
 	require.NoError(t, err, "Should succeed with fast transport")
 	require.NotNil(t, conn, "Should return a connection")
-	assert.Equal(t, fastConn, conn, "Should return fast transport's connection")
+	assert.Equal(t, fastConn, conn.(*trackedConn).Conn, "Should return fast transport's connection")
 
 	// Wait for slow transport to complete and verify its connection was closed
 	select {
@@ -511,7 +511,7 @@ func TestAcceptBasicMultiTransport(t *testing.T) {
 		require.NoError(t, res.err, "Accept should succeed")
 		require.NotNil(t, res.conn, "Should return a connection")
 		// Should return the fast connection
-		assert.Equal(t, fastConn, res.conn, "Should return fast transport's connection")
+		assert.Equal(t, fastConn, res.conn.(*trackedConn).Conn, "Should return fast transport's connection")
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("Accept took too long - should return fast connection quickly")
 	}

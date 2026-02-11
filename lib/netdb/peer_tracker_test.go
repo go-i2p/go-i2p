@@ -95,9 +95,13 @@ func TestGetSuccessRate(t *testing.T) {
 	assert.Equal(t, -1.0, rate)
 
 	// 3 successes, 1 failure = 75% success rate
+	pt.RecordAttempt(hash)
 	pt.RecordSuccess(hash, 50)
+	pt.RecordAttempt(hash)
 	pt.RecordSuccess(hash, 60)
+	pt.RecordAttempt(hash)
 	pt.RecordSuccess(hash, 70)
+	pt.RecordAttempt(hash)
 	pt.RecordFailure(hash, "timeout")
 
 	rate = pt.GetSuccessRate(hash)
@@ -123,8 +127,10 @@ func TestIsLikelyStale_LowSuccessRate(t *testing.T) {
 	hash := testHash(7)
 
 	// Record 5 attempts with 1 success (20% success rate)
+	pt.RecordAttempt(hash)
 	pt.RecordSuccess(hash, 100)
 	for i := 0; i < 4; i++ {
+		pt.RecordAttempt(hash)
 		pt.RecordFailure(hash, "connection refused")
 	}
 
@@ -160,16 +166,21 @@ func TestGetReliablePeers(t *testing.T) {
 
 	// Peer 1: High success rate (4/5 = 80%)
 	for i := 0; i < 4; i++ {
+		pt.RecordAttempt(hash1)
 		pt.RecordSuccess(hash1, 50)
 	}
+	pt.RecordAttempt(hash1)
 	pt.RecordFailure(hash1, "timeout")
 
 	// Peer 2: Low attempts (insufficient data)
+	pt.RecordAttempt(hash2)
 	pt.RecordSuccess(hash2, 50)
 
 	// Peer 3: Low success rate (1/5 = 20%)
+	pt.RecordAttempt(hash3)
 	pt.RecordSuccess(hash3, 50)
 	for i := 0; i < 4; i++ {
+		pt.RecordAttempt(hash3)
 		pt.RecordFailure(hash3, "connection refused")
 	}
 
@@ -210,14 +221,20 @@ func TestGetSummary(t *testing.T) {
 	hash1 := testHash(30)
 	hash2 := testHash(31)
 
-	// Peer 1: 2 successes, 1 failure
+	// Peer 1: 3 attempts — 2 successes, 1 failure
+	pt.RecordAttempt(hash1)
 	pt.RecordSuccess(hash1, 50)
+	pt.RecordAttempt(hash1)
 	pt.RecordSuccess(hash1, 60)
+	pt.RecordAttempt(hash1)
 	pt.RecordFailure(hash1, "timeout")
 
-	// Peer 2: 1 success, 2 failures
+	// Peer 2: 3 attempts — 1 success, 2 failures
+	pt.RecordAttempt(hash2)
 	pt.RecordSuccess(hash2, 70)
+	pt.RecordAttempt(hash2)
 	pt.RecordFailure(hash2, "connection refused")
+	pt.RecordAttempt(hash2)
 	pt.RecordFailure(hash2, "connection refused")
 
 	summary := pt.GetSummary()

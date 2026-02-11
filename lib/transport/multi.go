@@ -255,7 +255,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 				continue
 			}
 			atomic.AddInt32(&tmux.activeSessionCount, 1)
-			return s, err
+			return &trackedSession{TransportSession: s, mux: tmux}, err
 		}
 	}
 
@@ -403,7 +403,7 @@ func (tmux *TransportMuxer) handleAcceptSuccess(res acceptResult, cancel context
 		"transport_index": res.transportIndex,
 		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
 	}).Debug("accept succeeded")
-	return res.conn
+	return &trackedConn{Conn: res.conn, mux: tmux}
 }
 
 // collectAcceptResult waits for the first successful accept or exhaustion of all
@@ -520,4 +520,39 @@ func (tmux *TransportMuxer) GetTransports() []Transport {
 	transports := make([]Transport, len(tmux.trans))
 	copy(transports, tmux.trans)
 	return transports
+}
+
+// trackedSession wraps a TransportSession to auto-decrement the active
+// session counter when Close() is called. This prevents counter drift
+// that occurs when callers forget to call ReleaseSession().
+type trackedSession struct {
+	TransportSession
+	mux      *TransportMuxer
+	released int32 // atomic; 1 = already released
+}
+
+// Close closes the underlying session and decrements the active session
+// counter exactly once, even if Close is called multiple times.
+func (ts *trackedSession) Close() error {
+	if atomic.CompareAndSwapInt32(&ts.released, 0, 1) {
+		ts.mux.ReleaseSession()
+	}
+	return ts.TransportSession.Close()
+}
+
+// trackedConn wraps a net.Conn to auto-decrement the active session
+// counter when Close() is called.
+type trackedConn struct {
+	net.Conn
+	mux      *TransportMuxer
+	released int32 // atomic
+}
+
+// Close closes the underlying connection and decrements the active session
+// counter exactly once.
+func (tc *trackedConn) Close() error {
+	if atomic.CompareAndSwapInt32(&tc.released, 0, 1) {
+		tc.mux.ReleaseSession()
+	}
+	return tc.Conn.Close()
 }

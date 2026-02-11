@@ -41,6 +41,7 @@ func TestGetActivePeerCount(t *testing.T) {
 	db.riMutex.Unlock()
 
 	// Record peer 1 as active (recent success)
+	db.PeerTracker.RecordAttempt(hash1)
 	db.PeerTracker.RecordSuccess(hash1, 100)
 
 	// Record peer 2 as inactive - manually modify the internal stats
@@ -86,16 +87,20 @@ func TestGetFastPeerCount(t *testing.T) {
 
 	// Record peer 1 as fast (< 500ms, enough attempts)
 	for i := 0; i < 5; i++ {
+		db.PeerTracker.RecordAttempt(hash1)
 		db.PeerTracker.RecordSuccess(hash1, 200) // 200ms response time
 	}
 
 	// Record peer 2 as slow (> 500ms)
 	for i := 0; i < 5; i++ {
+		db.PeerTracker.RecordAttempt(hash2)
 		db.PeerTracker.RecordSuccess(hash2, 800) // 800ms response time
 	}
 
 	// Record peer 3 with too few attempts (only 2, needs 3)
+	db.PeerTracker.RecordAttempt(hash3)
 	db.PeerTracker.RecordSuccess(hash3, 100)
+	db.PeerTracker.RecordAttempt(hash3)
 	db.PeerTracker.RecordSuccess(hash3, 100)
 
 	// Should count only peer 1 as fast
@@ -129,11 +134,13 @@ func TestGetHighCapacityPeerCount(t *testing.T) {
 
 	// Record peer 1 as high capacity (high success rate, low latency, enough attempts)
 	for i := 0; i < 10; i++ {
+		db.PeerTracker.RecordAttempt(hash1)
 		db.PeerTracker.RecordSuccess(hash1, 300) // 300ms response time
 	}
 
 	// Record peer 2 with low success rate (< 80%)
 	for i := 0; i < 10; i++ {
+		db.PeerTracker.RecordAttempt(hash2)
 		if i < 6 {
 			db.PeerTracker.RecordSuccess(hash2, 300)
 		} else {
@@ -143,11 +150,13 @@ func TestGetHighCapacityPeerCount(t *testing.T) {
 
 	// Record peer 3 as slow (> 1000ms average)
 	for i := 0; i < 10; i++ {
+		db.PeerTracker.RecordAttempt(hash3)
 		db.PeerTracker.RecordSuccess(hash3, 1500) // 1500ms response time
 	}
 
 	// Record peer 4 as stale (consecutive failures)
 	for i := 0; i < 5; i++ {
+		db.PeerTracker.RecordAttempt(hash4)
 		if i < 2 {
 			db.PeerTracker.RecordSuccess(hash4, 300)
 		} else {
@@ -202,6 +211,7 @@ func TestMultiplePeerClassifications(t *testing.T) {
 
 	// Record excellent performance
 	for i := 0; i < 10; i++ {
+		db.PeerTracker.RecordAttempt(hash)
 		db.PeerTracker.RecordSuccess(hash, 200) // Fast response time
 	}
 

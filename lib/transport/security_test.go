@@ -147,7 +147,12 @@ func TestMuxerAccept(t *testing.T) {
 
 	conn, err := muxer.Accept()
 	require.NoError(t, err)
-	assert.Equal(t, expectedConn, conn)
+	tc, ok := conn.(*trackedConn)
+	if ok {
+		assert.Equal(t, expectedConn, tc.Conn)
+	} else {
+		assert.Equal(t, expectedConn, conn)
+	}
 }
 
 // TestMuxerAcceptNoTransport verifies Accept returns error when no transport available.
@@ -303,7 +308,11 @@ func TestErrorHandlingGracefulDegradation(t *testing.T) {
 	conn, err := muxer.AcceptWithTimeout(100 * time.Millisecond)
 	assert.NoError(t, err, "Should succeed with second transport when first fails")
 	assert.NotNil(t, conn, "Should return connection from second transport")
-	assert.Equal(t, successConn, conn, "Should return the successful transport's connection")
+	if tc, ok := conn.(*trackedConn); ok {
+		assert.Equal(t, successConn, tc.Conn, "Should return the successful transport's connection")
+	} else {
+		assert.Equal(t, successConn, conn, "Should return the successful transport's connection")
+	}
 
 	t.Log("TransportMuxer.AcceptWithTimeout now listens on all transports concurrently")
 	t.Log("When one transport fails, others can still succeed")
