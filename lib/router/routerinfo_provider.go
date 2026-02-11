@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-i2p/common/router_info"
@@ -16,6 +17,7 @@ import (
 // the congestion flag is included in the RouterInfo caps.
 type routerInfoProvider struct {
 	router            *Router
+	monitorMu         sync.RWMutex
 	congestionMonitor CongestionStateProvider
 	// lastCongestionFlag tracks the previous congestion flag for change detection.
 	// Uses atomic.Value for thread-safe read/write from concurrent GetRouterInfo() calls.
@@ -61,11 +63,14 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 // buildRouterInfoOptions constructs RouterInfoOptions with the current congestion flag.
 // Returns empty options if no congestion monitor is configured.
 func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
-	if p.congestionMonitor == nil {
+	p.monitorMu.RLock()
+	monitor := p.congestionMonitor
+	p.monitorMu.RUnlock()
+	if monitor == nil {
 		return keys.RouterInfoOptions{}
 	}
 
-	flag := p.congestionMonitor.GetCongestionFlag()
+	flag := monitor.GetCongestionFlag()
 	flagStr := flag.String()
 
 	// Log if congestion state changed (thread-safe via atomic.Value)
@@ -89,7 +94,9 @@ func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
 // SetCongestionMonitor sets the congestion state provider for the routerinfo_provider.
 // This is called by the Router during initialization to wire up congestion monitoring.
 func (p *routerInfoProvider) SetCongestionMonitor(monitor CongestionStateProvider) {
+	p.monitorMu.Lock()
 	p.congestionMonitor = monitor
+	p.monitorMu.Unlock()
 
 	log.WithFields(logger.Fields{
 		"at":     "routerInfoProvider.SetCongestionMonitor",
@@ -100,10 +107,13 @@ func (p *routerInfoProvider) SetCongestionMonitor(monitor CongestionStateProvide
 // GetCongestionFlag returns the current congestion flag or empty string if no monitor.
 // This is useful for external components to check the current congestion state.
 func (p *routerInfoProvider) GetCongestionFlag() string {
-	if p.congestionMonitor == nil {
+	p.monitorMu.RLock()
+	monitor := p.congestionMonitor
+	p.monitorMu.RUnlock()
+	if monitor == nil {
 		return ""
 	}
-	return p.congestionMonitor.GetCongestionFlag().String()
+	return monitor.GetCongestionFlag().String()
 }
 
 // newRouterInfoProvider creates a RouterInfoProvider for the given router.

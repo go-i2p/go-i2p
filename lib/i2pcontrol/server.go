@@ -324,11 +324,11 @@ func (s *Server) validateHTTPRequest(r *http.Request) *RPCError {
 
 // readRequestBody reads and returns the HTTP request body with a 1MB size limit.
 func (s *Server) readRequestBody(r *http.Request) ([]byte, *RPCError) {
+	defer r.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		return nil, NewRPCError(ErrCodeInternalError, "Failed to read request body")
 	}
-	defer r.Body.Close()
 	return body, nil
 }
 

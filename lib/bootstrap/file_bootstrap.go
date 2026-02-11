@@ -400,6 +400,15 @@ func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.
 				"error":       err.Error(),
 				"router_hash": GetRouterHashString(ri),
 			}).Debug("skipping invalid RouterInfo from reseed")
+		} else if err := VerifyRouterInfoSignature(ri); err != nil {
+			stats.RecordInvalid("signature verification failed")
+			log.WithFields(logger.Fields{
+				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
+				"phase":       "validation",
+				"reason":      "RouterInfo signature verification failed",
+				"error":       err.Error(),
+				"router_hash": GetRouterHashString(ri),
+			}).Warn("rejecting RouterInfo with invalid signature")
 		} else {
 			stats.RecordValid()
 			validRouterInfos = append(validRouterInfos, ri)

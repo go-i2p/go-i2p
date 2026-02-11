@@ -486,12 +486,19 @@ func (rsp *routerStatsProvider) findLastColon(addrStr string) int {
 }
 
 // parsePort converts a port string to an integer.
-// Returns 0 if the string is not a valid port number.
+// Returns 0 if the string is empty, contains non-digit characters,
+// or the result is outside the valid port range (1–65535).
 func (rsp *routerStatsProvider) parsePort(portStr string) int {
+	if len(portStr) == 0 {
+		return 0
+	}
 	port := 0
 	for _, ch := range portStr {
 		if ch >= '0' && ch <= '9' {
 			port = port*10 + int(ch-'0')
+			if port > 65535 {
+				return 0
+			}
 		} else {
 			// Invalid character
 			return 0

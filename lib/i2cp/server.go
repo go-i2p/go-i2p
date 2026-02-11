@@ -455,14 +455,28 @@ func (s *Server) logClientConnected(conn net.Conn) {
 	}).Info("client_connected")
 }
 
-// cleanupSessionConnection removes the session connection mapping on disconnect.
+// cleanupSessionConnection removes the session connection mapping on disconnect
+// and properly destroys the session to release all associated resources.
 func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	if *sessionPtr != nil {
-		sessionID := (*sessionPtr).ID()
+		session := *sessionPtr
+		sessionID := session.ID()
+
+		// Remove connection mappings first
 		s.mu.Lock()
 		delete(s.sessionConns, sessionID)
 		delete(s.connWriteMu, sessionID)
 		s.mu.Unlock()
+
+		// Destroy the session via the manager, which calls session.Stop()
+		// to release tunnel pools, goroutines, channels, and other resources.
+		if err := s.manager.DestroySession(sessionID); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.cleanupSessionConnection",
+				"sessionID": sessionID,
+			}).WithError(err).Warn("failed to destroy session on disconnect")
+		}
+
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.cleanupSessionConnection",
 			"sessionID": sessionID,

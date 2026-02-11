@@ -76,6 +76,7 @@ type CongestionMonitor struct {
 
 	// Background sampling
 	stopChan chan struct{}
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 }
 
@@ -122,14 +123,17 @@ func (m *CongestionMonitor) Start() {
 }
 
 // Stop stops the background sampling goroutine.
+// Safe to call multiple times; only the first call has effect.
 func (m *CongestionMonitor) Stop() {
-	close(m.stopChan)
-	m.wg.Wait()
+	m.stopOnce.Do(func() {
+		close(m.stopChan)
+		m.wg.Wait()
 
-	log.WithFields(logger.Fields{
-		"at":     "CongestionMonitor.Stop",
-		"reason": "congestion monitoring stopped",
-	}).Debug("congestion monitor stopped")
+		log.WithFields(logger.Fields{
+			"at":     "CongestionMonitor.Stop",
+			"reason": "congestion monitoring stopped",
+		}).Debug("congestion monitor stopped")
+	})
 }
 
 // samplingLoop periodically samples congestion metrics and updates state.

@@ -21,6 +21,14 @@ type ReseedBootstrap struct {
 
 // NewReseedBootstrap creates a new reseeder with the provided configuration
 func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
+	if config == nil {
+		log.WithFields(logger.Fields{
+			"at":     "(ReseedBootstrap) NewReseedBootstrap",
+			"phase":  "bootstrap",
+			"reason": "nil config provided",
+		}).Warn("cannot create reseed bootstrap: nil config")
+		return &ReseedBootstrap{}
+	}
 	log.WithFields(logger.Fields{
 		"at":                  "(ReseedBootstrap) NewReseedBootstrap",
 		"phase":               "bootstrap",
@@ -55,6 +63,9 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 // Falls back to sequential single-server mode if multi-server reseed fails
 // or when MinReseedServers == 1.
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	if rb.config == nil {
+		return nil, fmt.Errorf("reseed bootstrap not configured")
+	}
 	rb.logReseedStart(n)
 
 	// Try multi-server reseed first if configured (Java I2P parity)

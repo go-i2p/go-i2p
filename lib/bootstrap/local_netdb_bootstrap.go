@@ -245,6 +245,30 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 			return nil
 		}
 
+		// Validate structural integrity
+		if err := ValidateRouterInfo(ri); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "(LocalNetDbBootstrap) createWalkFunction",
+				"phase":  "validation",
+				"reason": "invalid RouterInfo",
+				"file":   filePath,
+				"error":  err.Error(),
+			}).Debug("skipping invalid RouterInfo from local netDb")
+			return nil
+		}
+
+		// Verify cryptographic signature
+		if err := VerifyRouterInfoSignature(ri); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "(LocalNetDbBootstrap) createWalkFunction",
+				"phase":  "validation",
+				"reason": "signature verification failed",
+				"file":   filePath,
+				"error":  err.Error(),
+			}).Warn("rejecting RouterInfo with invalid signature from local netDb")
+			return nil
+		}
+
 		*routerInfos = append(*routerInfos, ri)
 		*count++
 

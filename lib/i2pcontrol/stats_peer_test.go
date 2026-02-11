@@ -100,11 +100,13 @@ func TestGetRouterInfo_PeerClassification(t *testing.T) {
 
 	// Record peer 1 as active and fast (low latency)
 	for i := 0; i < 5; i++ {
+		db.PeerTracker.RecordAttempt(hash1)
 		db.PeerTracker.RecordSuccess(hash1, 100) // 100ms response time
 	}
 
 	// Record peer 2 as high capacity (high success rate, low latency, many attempts)
 	for i := 0; i < 10; i++ {
+		db.PeerTracker.RecordAttempt(hash2)
 		db.PeerTracker.RecordSuccess(hash2, 400) // 400ms response time
 	}
 
@@ -112,6 +114,7 @@ func TestGetRouterInfo_PeerClassification(t *testing.T) {
 	// Note: Can't easily simulate "old" success from this package,
 	// so we'll just make it slow which excludes it from fast/high-capacity
 	for i := 0; i < 5; i++ {
+		db.PeerTracker.RecordAttempt(hash3)
 		db.PeerTracker.RecordSuccess(hash3, 2000) // 2000ms response time - very slow
 	}
 
@@ -183,18 +186,22 @@ func TestGetRouterInfo_PeerStats_VariedQuality(t *testing.T) {
 		switch i {
 		case 0, 1, 2: // Active and fast peers
 			for j := 0; j < 5; j++ {
+				db.PeerTracker.RecordAttempt(hash)
 				db.PeerTracker.RecordSuccess(hash, 200)
 			}
 		case 3, 4: // High capacity peers
 			for j := 0; j < 10; j++ {
+				db.PeerTracker.RecordAttempt(hash)
 				db.PeerTracker.RecordSuccess(hash, 600)
 			}
 		case 5, 6: // Slow peers
 			for j := 0; j < 5; j++ {
+				db.PeerTracker.RecordAttempt(hash)
 				db.PeerTracker.RecordSuccess(hash, 1500)
 			}
 		case 7, 8: // Slow and low success rate peers (won't qualify for high-capacity)
 			for j := 0; j < 10; j++ {
+				db.PeerTracker.RecordAttempt(hash)
 				if j < 4 {
 					db.PeerTracker.RecordSuccess(hash, 1200) // Slow but some success
 				} else {
