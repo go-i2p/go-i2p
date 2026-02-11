@@ -131,6 +131,7 @@ type MessageProcessor struct {
 	tunnelGatewayHandler TunnelGatewayHandler // Optional handler for tunnel gateway messages
 	tunnelDataHandler    TunnelDataHandler    // Optional handler for inbound tunnel data messages
 	searchReplyHandler   SearchReplyHandler   // Optional handler for DatabaseSearchReply suggestions
+	ourRouterHash        common.Hash          // Our router identity hash for filtering build records
 }
 
 // NewMessageProcessor creates a new message processor
@@ -221,6 +222,15 @@ func (p *MessageProcessor) SetSearchReplyHandler(handler SearchReplyHandler) {
 	defer p.mu.Unlock()
 	log.WithField("at", "SetSearchReplyHandler").Debug("Setting search reply handler")
 	p.searchReplyHandler = handler
+}
+
+// SetOurRouterHash sets our router's identity hash so that processAllBuildRecords
+// can skip records not destined for this router.
+func (p *MessageProcessor) SetOurRouterHash(hash common.Hash) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetOurRouterHash").Debug("Setting our router hash for build record filtering")
+	p.ourRouterHash = hash
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.
@@ -1110,7 +1120,7 @@ func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBui
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
-	p.processAllBuildRecords(msg.MessageID(), records)
+	p.processAllBuildRecords(msg.MessageID(), records, isShortBuild)
 
 	return nil
 }
@@ -1154,21 +1164,35 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 }
 
 // processAllBuildRecords processes each build record to find ones destined for us.
-// In a full implementation, we would:
+// Only the record matching our router identity (OurIdent) is processed locally;
+// the others belong to different hops and are skipped.
+// In a full implementation with encrypted records, we would:
 // 1. Try to decrypt each record with our identity key
 // 2. If decryption succeeds, this record is for us
 // 3. Validate the request using ProcessBuildRequest
 // 4. Create response record and forward the message
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord) {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, isShortBuild bool) {
+	var zeroHash common.Hash
+	hasOurHash := p.ourRouterHash != zeroHash
+
 	for i, record := range records {
-		p.processSingleBuildRecord(messageID, i, record)
+		if hasOurHash && record.OurIdent != p.ourRouterHash {
+			log.WithFields(logger.Fields{
+				"at":           "processAllBuildRecords",
+				"message_id":   messageID,
+				"record_index": i,
+				"record_ident": fmt.Sprintf("%x", record.OurIdent[:8]),
+			}).Debug("Skipping build record not destined for us")
+			continue
+		}
+		p.processSingleBuildRecord(messageID, i, record, isShortBuild)
 	}
 }
 
 // processSingleBuildRecord validates and processes a single build request record.
 // After validating and accepting/rejecting the request, it generates an encrypted
 // BuildResponseRecord and forwards it to the next hop.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord) {
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, isShortBuild bool) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	if accepted {
@@ -1179,7 +1203,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	}
 
 	// Generate and send build reply message
-	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode); err != nil {
+	if err := p.generateAndSendBuildReply(messageID, index, record, rejectCode, isShortBuild); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":             "processSingleBuildRecord",
 			"message_id":     messageID,
@@ -1191,7 +1215,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 
 // generateAndSendBuildReply creates an encrypted BuildResponseRecord and forwards it.
 // This implements the core of tunnel participation response handling.
-func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte) error {
+func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, record BuildRequestRecord, replyCode byte, isShortBuild bool) error {
 	// Step 1: Generate random data for the response record
 	var randomData [495]byte
 	if _, err := rand.Read(randomData[:]); err != nil {
@@ -1221,7 +1245,7 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 	}
 
 	// Step 4: Forward the encrypted reply to the next hop
-	if err := p.forwardBuildReply(messageID, record, encryptedReply); err != nil {
+	if err := p.forwardBuildReply(messageID, record, encryptedReply, isShortBuild); err != nil {
 		return fmt.Errorf("failed to forward build reply: %w", err)
 	}
 
@@ -1239,7 +1263,7 @@ func (p *MessageProcessor) generateAndSendBuildReply(messageID, index int, recor
 
 // forwardBuildReply sends the encrypted build reply to the appropriate next hop.
 // The next hop is determined by the NextIdent and NextTunnel fields in the BuildRequestRecord.
-func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte) error {
+func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestRecord, encryptedReply []byte, isShortBuild bool) error {
 	// Check if we have a forwarder configured
 	if p.buildReplyForwarder == nil {
 		log.WithFields(logger.Fields{
@@ -1260,7 +1284,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 			record.NextIdent,
 			messageID,
 			encryptedReply,
-			false, // Assume not short build for VTB format
+			isShortBuild,
 		)
 	}
 
@@ -1270,7 +1294,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 		record.NextTunnel,
 		messageID,
 		encryptedReply,
-		false, // Assume not short build for VTB format
+		isShortBuild,
 	)
 }
 

@@ -280,6 +280,17 @@ func (e *Endpoint) processInstructionLoop(data []byte) error {
 			break // Insufficient data
 		}
 
+		// Reject zero-length fragments to prevent an infinite loop.
+		// A fragment with size 0 would cause data = remainder[0:] which
+		// never advances the slice, spinning the loop forever.
+		if fragSize == 0 {
+			log.WithFields(logger.Fields{
+				"at":     "(Endpoint) processInstructionLoop",
+				"reason": "zero_length_fragment",
+			}).Error("delivery instruction has zero-length fragment, aborting to prevent infinite loop")
+			return ErrInvalidTunnelData
+		}
+
 		if err := e.processFragmentByType(di, fragmentData); err != nil {
 			return err
 		}

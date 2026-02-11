@@ -332,12 +332,17 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 		return fmt.Errorf("failed to select floodfills: %w", err)
 	}
 
-	// Send DatabaseStore message to each selected floodfill
+	// Send DatabaseStore message to each selected floodfill.
+	// Per I2P spec, RouterInfo data in DatabaseStore must be gzip-compressed.
 	riBytes, err := ri.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to serialize RouterInfo: %w", err)
 	}
-	return p.sendDatabaseStoreMessages(hash, riBytes, i2np.DATABASE_STORE_TYPE_ROUTER_INFO, floodfills)
+	compressed, err := gzipCompress(riBytes)
+	if err != nil {
+		return fmt.Errorf("failed to gzip-compress RouterInfo: %w", err)
+	}
+	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DATABASE_STORE_TYPE_ROUTER_INFO, floodfills)
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash

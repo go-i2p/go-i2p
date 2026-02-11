@@ -450,6 +450,21 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 			}).Info("Reusing existing NTCP2 session")
 			return ntcp2Session, true
 		}
+		// Inbound connections are stored as net.Conn by Accept().
+		// Promote the raw conn to a full NTCP2Session so that GetSession
+		// can return it and we avoid creating a redundant outbound connection.
+		if conn, ok := session.(net.Conn); ok {
+			promoted := NewNTCP2Session(conn, t.ctx, t.logger)
+			promoted.SetCleanupCallback(func() {
+				t.removeSession(routerHash)
+			})
+			t.sessions.Store(routerHash, promoted)
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to NTCP2Session")
+			return promoted, true
+		}
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("No existing session found")
@@ -716,13 +731,21 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash) *NTCP2Session {
 	session := NewNTCP2Session(conn, t.ctx, t.logger)
 
+	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
+	if loaded {
+		// A session already exists for this peer. Close the newly created
+		// session (and its goroutines) to avoid leaking resources, then
+		// return the existing one. Do NOT set a cleanup callback on the
+		// new session — closing it must not remove the existing entry.
+		session.Close()
+		return existing.(*NTCP2Session)
+	}
+
+	// We won the store — wire up the cleanup callback and bump the count.
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
-
-	if _, loaded := t.sessions.LoadOrStore(routerHash, session); !loaded {
-		atomic.AddInt32(&t.sessionCount, 1)
-	}
+	atomic.AddInt32(&t.sessionCount, 1)
 	return session
 }
 

@@ -45,10 +45,18 @@ type GarlicSession struct {
 	mu               sync.Mutex // protects session state during crypto operations
 	RemotePublicKey  [32]byte
 	DHRatchet        *ratchet.DHRatchet
-	SymmetricRatchet *ratchet.SymmetricRatchet
-	TagRatchet       *ratchet.TagRatchet
-	LastUsed         time.Time
-	MessageCounter   uint32
+	SymmetricRatchet *ratchet.SymmetricRatchet // sending chain
+	TagRatchet       *ratchet.TagRatchet       // sending tags
+	// RecvSymmetricRatchet is the receiving chain ratchet. A proper Double Ratchet
+	// protocol requires separate sending and receiving chain states so that
+	// ProcessIncomingDHRatchet does not overwrite the sending ratchet.
+	RecvSymmetricRatchet *ratchet.SymmetricRatchet
+	// RecvTagRatchet is the receiving tag ratchet (separate from the send tag ratchet).
+	RecvTagRatchet *ratchet.TagRatchet
+	LastUsed       time.Time
+	MessageCounter uint32
+	// recvCounter tracks the number of messages received (for symmetric ratchet advancement)
+	recvCounter uint32
 	// pendingTags tracks tags we expect to receive (tag window for out-of-order messages)
 	pendingTags [][8]byte
 	// dhRatchetCounter tracks messages since last DH ratchet rotation
@@ -331,6 +339,8 @@ func (sm *GarlicSessionManager) storeNewSessionState(
 }
 
 // createGarlicSession initializes a new GarlicSession with ratchet state.
+// Both send and receive ratchets are initialized from the same root key;
+// they diverge once the first DH ratchet step occurs.
 func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPrivateKey [32]byte) *GarlicSession {
 	var ourPriv, theirPub [32]byte
 	copy(ourPriv[:], ourPrivateKey[:])
@@ -339,15 +349,19 @@ func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPriva
 	dhRatchet := ratchet.NewDHRatchet(keys.rootKey, ourPriv, theirPub)
 	symRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
 	tagRatchet := ratchet.NewTagRatchet(keys.tagKey)
+	recvSymRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
+	recvTagRatchet := ratchet.NewTagRatchet(keys.tagKey)
 
 	return &GarlicSession{
-		RemotePublicKey:  destinationPubKey,
-		DHRatchet:        dhRatchet,
-		SymmetricRatchet: symRatchet,
-		TagRatchet:       tagRatchet,
-		LastUsed:         time.Now(),
-		MessageCounter:   1,
-		pendingTags:      make([][8]byte, 0, 10),
+		RemotePublicKey:      destinationPubKey,
+		DHRatchet:            dhRatchet,
+		SymmetricRatchet:     symRatchet,
+		TagRatchet:           tagRatchet,
+		RecvSymmetricRatchet: recvSymRatchet,
+		RecvTagRatchet:       recvTagRatchet,
+		LastUsed:             time.Now(),
+		MessageCounter:       1,
+		pendingTags:          make([][8]byte, 0, 10),
 	}
 }
 
@@ -507,12 +521,12 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(session *GarlicSession,
 		return oops.Wrapf(err, "failed to perform receiving DH ratchet")
 	}
 
-	// Re-initialize our symmetric ratchet for receiving
-	session.SymmetricRatchet = ratchet.NewSymmetricRatchet(receivingChainKey)
+	// Re-initialize receiving symmetric ratchet (NOT the sending one)
+	session.RecvSymmetricRatchet = ratchet.NewSymmetricRatchet(receivingChainKey)
 
-	// Re-initialize tag ratchet
+	// Re-initialize receiving tag ratchet (NOT the sending one)
 	tagKeyInput := sha256.Sum256(append(receivingChainKey[:], []byte("TagRatchetKey")...))
-	session.TagRatchet = ratchet.NewTagRatchet(tagKeyInput)
+	session.RecvTagRatchet = ratchet.NewTagRatchet(tagKeyInput)
 
 	// Update remote public key
 	session.RemotePublicKey = newRemotePubKey
@@ -818,13 +832,14 @@ func (sm *GarlicSessionManager) decryptExistingSession(
 		return nil, [8]byte{}, err
 	}
 
-	// Update session state
+	// Update session state — increment recvCounter (not MessageCounter, which
+	// tracks the sending chain) so that send and receive advance independently.
 	session.LastUsed = time.Now()
-	session.MessageCounter++
+	session.recvCounter++
 
 	log.WithFields(logger.Fields{
 		"at":              "decryptExistingSession",
-		"message_counter": session.MessageCounter,
+		"message_counter": session.recvCounter,
 		"plaintext_size":  len(plaintext),
 	}).Debug("Existing session decrypted successfully")
 
@@ -850,9 +865,16 @@ func parseExistingSessionMessage(existingSessionMsg []byte) (nonce, ciphertext [
 	return nonce, ciphertext, tag, nil
 }
 
-// deriveDecryptionKey derives the message key from the session's ratchet state.
+// deriveDecryptionKey derives the message key from the session's receiving ratchet state.
+// Uses RecvSymmetricRatchet (with fallback to SymmetricRatchet for sessions created
+// before the send/recv separation) and recvCounter to keep decryption independent
+// of the sending chain.
 func deriveDecryptionKey(session *GarlicSession) ([32]byte, error) {
-	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	recvRatchet := session.RecvSymmetricRatchet
+	if recvRatchet == nil {
+		recvRatchet = session.SymmetricRatchet
+	}
+	messageKey, _, err := recvRatchet.DeriveMessageKeyAndAdvance(session.recvCounter)
 	if err != nil {
 		return [32]byte{}, oops.Wrapf(err, "failed to derive message key")
 	}
@@ -963,9 +985,16 @@ func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error 
 		"target_window_size":   tagWindowSize,
 	}).Debug("Generating session tag window")
 
-	// Generate tags up to the window size
+	// Generate tags up to the window size using the receiving tag ratchet.
+	// Tags are generated from RecvTagRatchet (not the sending TagRatchet) so
+	// that the peer's sent tags match our expected receiving tags.
+	tagRatchet := session.RecvTagRatchet
+	if tagRatchet == nil {
+		// Fallback for sessions created before the send/recv split.
+		tagRatchet = session.TagRatchet
+	}
 	for len(session.pendingTags) < tagWindowSize {
-		tag, err := session.TagRatchet.GenerateNextTag()
+		tag, err := tagRatchet.GenerateNextTag()
 		if err != nil {
 			log.WithError(err).Error("Failed to generate session tag")
 			return oops.Wrapf(err, "failed to generate session tag")

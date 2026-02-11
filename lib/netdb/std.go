@@ -806,6 +806,9 @@ func (db *StdNetDB) Exists() bool {
 }
 
 func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
+	if e.RouterInfo == nil {
+		return fmt.Errorf("cannot save entry: RouterInfo is nil (only RouterInfo entries can be persisted to the NetDB skiplist)")
+	}
 	var f io.WriteCloser
 	h, err := e.RouterInfo.IdentHash()
 	if err != nil {
@@ -966,15 +969,25 @@ func verifyRouterInfoHash(key common.Hash, ri router_info.RouterInfo) error {
 	return nil
 }
 
-// addRouterInfoToCache adds a RouterInfo entry to the in-memory cache if it doesn't exist.
-// Returns true if the entry was added, false if it already existed.
+// addRouterInfoToCache adds a RouterInfo entry to the in-memory cache.
+// If an entry already exists, it is replaced only if the new RouterInfo
+// has a more recent Published timestamp. Returns true if the entry was
+// added or updated.
 func (db *StdNetDB) addRouterInfoToCache(key common.Hash, ri router_info.RouterInfo) bool {
 	db.riMutex.Lock()
 	defer db.riMutex.Unlock()
 
-	if _, exists := db.RouterInfos[key]; exists {
-		log.WithField("hash", key).Debug("RouterInfo already exists in memory, skipping")
-		return false
+	if existing, exists := db.RouterInfos[key]; exists {
+		// Replace only if the new entry is newer.
+		if existing.RouterInfo != nil {
+			existPub := existing.RouterInfo.Published()
+			newPub := ri.Published()
+			if existPub != nil && newPub != nil && !newPub.Time().After(existPub.Time()) {
+				log.WithField("hash", key).Debug("RouterInfo already exists with same or newer timestamp, skipping")
+				return false
+			}
+		}
+		log.WithField("hash", key).Debug("Replacing stale RouterInfo with newer version")
 	}
 
 	db.RouterInfos[key] = Entry{
@@ -1574,15 +1587,25 @@ func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
 }
 
 // addLeaseSetToCache adds a LeaseSet entry to the in-memory cache if it doesn't exist.
-// Returns true if the entry was added, false if it already existed.
+// addLeaseSetToCache adds a LeaseSet entry to the in-memory cache.
+// If an entry already exists, it is replaced only if the new LeaseSet
+// has newer lease expirations. Returns true if the entry was added or updated.
 // Also tracks the expiration time for automatic cleanup.
 func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 
-	if _, exists := db.LeaseSets[key]; exists {
-		log.WithField("hash", key).Debug("LeaseSet already exists in memory, skipping")
-		return false
+	if existing, exists := db.LeaseSets[key]; exists {
+		// Compare by newest expiration — a LeaseSet with later expirations is newer.
+		if existing.LeaseSet != nil {
+			existExp, err1 := existing.LeaseSet.NewestExpiration()
+			newExp, err2 := ls.NewestExpiration()
+			if err1 == nil && err2 == nil && !newExp.Time().After(existExp.Time()) {
+				log.WithField("hash", key).Debug("LeaseSet already exists with same or newer expiration, skipping")
+				return false
+			}
+		}
+		log.WithField("hash", key).Debug("Replacing stale LeaseSet with newer version")
 	}
 
 	db.LeaseSets[key] = Entry{
@@ -1825,15 +1848,22 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	return nil
 }
 
-// addLeaseSet2ToCache adds a LeaseSet2 entry to the in-memory cache if it doesn't exist.
-// Returns true if the entry was added, false if it already existed.
+// addLeaseSet2ToCache adds a LeaseSet2 entry to the in-memory cache.
+// If an entry already exists, it is replaced only if the new LeaseSet2
+// has a more recent Published timestamp. Returns true if the entry was
+// added or updated.
 func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet2) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 
-	if _, exists := db.LeaseSets[key]; exists {
-		log.WithField("hash", key).Debug("LeaseSet2 already exists in memory (as LeaseSet entry), skipping")
-		return false
+	if existing, exists := db.LeaseSets[key]; exists {
+		if existing.LeaseSet2 != nil {
+			if !ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime()) {
+				log.WithField("hash", key).Debug("LeaseSet2 already exists with same or newer timestamp, skipping")
+				return false
+			}
+		}
+		log.WithField("hash", key).Debug("Replacing stale LeaseSet2 with newer version")
 	}
 
 	db.LeaseSets[key] = Entry{
@@ -2051,15 +2081,21 @@ func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.Encrypt
 	return nil
 }
 
-// addEncryptedLeaseSetToCache adds an EncryptedLeaseSet entry to the in-memory cache if it doesn't exist.
-// Returns true if the entry was added, false if it already existed.
+// addEncryptedLeaseSetToCache adds an EncryptedLeaseSet entry to the in-memory cache.
+// If an entry already exists, it is replaced only if the new EncryptedLeaseSet
+// has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addEncryptedLeaseSetToCache(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 
-	if _, exists := db.LeaseSets[key]; exists {
-		log.WithField("hash", key).Debug("EncryptedLeaseSet already exists in memory, skipping")
-		return false
+	if existing, exists := db.LeaseSets[key]; exists {
+		if existing.EncryptedLeaseSet != nil {
+			if !els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime()) {
+				log.WithField("hash", key).Debug("EncryptedLeaseSet already exists with same or newer timestamp, skipping")
+				return false
+			}
+		}
+		log.WithField("hash", key).Debug("Replacing stale EncryptedLeaseSet with newer version")
 	}
 
 	db.LeaseSets[key] = Entry{
@@ -2277,15 +2313,21 @@ func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) err
 	return nil
 }
 
-// addMetaLeaseSetToCache adds a MetaLeaseSet entry to the in-memory cache if it doesn't exist.
-// Returns true if the entry was added, false if it already existed.
+// addMetaLeaseSetToCache adds a MetaLeaseSet entry to the in-memory cache.
+// If an entry already exists, it is replaced only if the new MetaLeaseSet
+// has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addMetaLeaseSetToCache(key common.Hash, mls meta_leaseset.MetaLeaseSet) bool {
 	db.lsMutex.Lock()
 	defer db.lsMutex.Unlock()
 
-	if _, exists := db.LeaseSets[key]; exists {
-		log.WithField("hash", key).Debug("MetaLeaseSet already exists in memory, skipping")
-		return false
+	if existing, exists := db.LeaseSets[key]; exists {
+		if existing.MetaLeaseSet != nil {
+			if !mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime()) {
+				log.WithField("hash", key).Debug("MetaLeaseSet already exists with same or newer timestamp, skipping")
+				return false
+			}
+		}
+		log.WithField("hash", key).Debug("Replacing stale MetaLeaseSet with newer version")
 	}
 
 	db.LeaseSets[key] = Entry{

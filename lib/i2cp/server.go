@@ -2546,7 +2546,8 @@ func (s *Server) SetNetDB(netdb interface {
 // to return real configured bandwidth limits instead of hardcoded defaults.
 func (s *Server) SetBandwidthProvider(bp interface {
 	GetBandwidthLimits() (inbound, outbound uint32)
-}) {
+},
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.bandwidthProvider = bp

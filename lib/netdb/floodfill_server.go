@@ -68,7 +68,7 @@ type peerLimit struct {
 
 // NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
 // per peer per minute with burst capacity.
-func NewFloodfillRateLimiter(maxPerMinute int, burstSize int) *FloodfillRateLimiter {
+func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter {
 	rl := &FloodfillRateLimiter{
 		peers:      make(map[common.Hash]*peerLimit),
 		maxBurst:   burstSize,
