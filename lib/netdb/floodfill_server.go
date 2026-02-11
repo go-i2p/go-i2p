@@ -42,9 +42,102 @@ type FloodfillServer struct {
 	// floodCount is how many closest floodfills to flood data to
 	floodCount int
 
+	// lookupLimiter provides per-peer rate limiting for lookup and flood requests
+	lookupLimiter *FloodfillRateLimiter
+
 	// ctx and cancel for lifecycle management
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+// FloodfillRateLimiter provides per-peer rate limiting for floodfill operations.
+// Uses a token-bucket algorithm with automatic cleanup of stale entries.
+type FloodfillRateLimiter struct {
+	mu         sync.Mutex
+	peers      map[common.Hash]*peerLimit
+	maxBurst   int     // max tokens (requests) per peer
+	refillRate float64 // tokens added per second
+	stopChan   chan struct{}
+	wg         sync.WaitGroup
+}
+
+type peerLimit struct {
+	tokens     float64
+	lastUpdate time.Time
+}
+
+// NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
+// per peer per minute with burst capacity.
+func NewFloodfillRateLimiter(maxPerMinute int, burstSize int) *FloodfillRateLimiter {
+	rl := &FloodfillRateLimiter{
+		peers:      make(map[common.Hash]*peerLimit),
+		maxBurst:   burstSize,
+		refillRate: float64(maxPerMinute) / 60.0,
+		stopChan:   make(chan struct{}),
+	}
+	rl.wg.Add(1)
+	go rl.cleanupLoop()
+	return rl
+}
+
+// Allow returns true if the peer is within its rate limit.
+func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	pl, exists := rl.peers[peer]
+	if !exists {
+		rl.peers[peer] = &peerLimit{
+			tokens:     float64(rl.maxBurst) - 1,
+			lastUpdate: now,
+		}
+		return true
+	}
+
+	// Refill tokens based on elapsed time
+	elapsed := now.Sub(pl.lastUpdate).Seconds()
+	pl.tokens += elapsed * rl.refillRate
+	if pl.tokens > float64(rl.maxBurst) {
+		pl.tokens = float64(rl.maxBurst)
+	}
+	pl.lastUpdate = now
+
+	if pl.tokens >= 1.0 {
+		pl.tokens -= 1.0
+		return true
+	}
+	return false
+}
+
+// cleanupLoop periodically removes stale entries (peers with full token buckets
+// that haven't been seen recently).
+func (rl *FloodfillRateLimiter) cleanupLoop() {
+	defer rl.wg.Done()
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			for peer, pl := range rl.peers {
+				// Remove entries idle for > 10 minutes
+				if now.Sub(pl.lastUpdate) > 10*time.Minute {
+					delete(rl.peers, peer)
+				}
+			}
+			rl.mu.Unlock()
+		case <-rl.stopChan:
+			return
+		}
+	}
+}
+
+// Stop shuts down the rate limiter's cleanup goroutine.
+func (rl *FloodfillRateLimiter) Stop() {
+	close(rl.stopChan)
+	rl.wg.Wait()
 }
 
 // FloodfillTransport defines the interface for sending I2NP messages back to lookup
@@ -89,13 +182,14 @@ func NewFloodfillServer(db *StdNetDB, transport FloodfillTransport, config Flood
 	}
 
 	fs := &FloodfillServer{
-		db:         db,
-		transport:  transport,
-		ourHash:    config.OurHash,
-		enabled:    config.Enabled,
-		floodCount: floodCount,
-		ctx:        ctx,
-		cancel:     cancel,
+		db:            db,
+		transport:     transport,
+		ourHash:       config.OurHash,
+		enabled:       config.Enabled,
+		floodCount:    floodCount,
+		lookupLimiter: NewFloodfillRateLimiter(60, 10), // 60 requests/min per peer, burst of 10
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 
 	log.WithFields(logger.Fields{
@@ -132,6 +226,9 @@ func (fs *FloodfillServer) IsEnabled() bool {
 // Stop shuts down the floodfill server.
 func (fs *FloodfillServer) Stop() {
 	fs.cancel()
+	if fs.lookupLimiter != nil {
+		fs.lookupLimiter.Stop()
+	}
 	log.Debug("Floodfill server stopped")
 }
 
@@ -152,6 +249,13 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	if !enabled {
 		log.Debug("Floodfill server not enabled, ignoring lookup")
 		return fmt.Errorf("floodfill server not enabled")
+	}
+
+	// Rate limit per source peer
+	if fs.lookupLimiter != nil && !fs.lookupLimiter.Allow(lookup.From) {
+		log.WithField("from", fmt.Sprintf("%x", lookup.From[:8])).
+			Warn("Rate limiting DatabaseLookup from peer")
+		return fmt.Errorf("rate limited")
 	}
 
 	key := lookup.Key

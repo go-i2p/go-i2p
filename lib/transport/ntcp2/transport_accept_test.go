@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -320,6 +321,7 @@ func TestAccept_MixedInboundOutbound(t *testing.T) {
 	var outboundHash data.Hash
 	copy(outboundHash[:], []byte("outbound-peer-hash-for-testing!!"))
 	transport.sessions.Store(outboundHash, "outbound-placeholder")
+	atomic.AddInt32(&transport.sessionCount, 1)
 	assert.Equal(t, 1, transport.GetSessionCount())
 
 	// Accept an inbound connection
@@ -334,7 +336,7 @@ func TestAccept_MixedInboundOutbound(t *testing.T) {
 		"closing inbound should only decrement inbound session")
 
 	// Remove outbound
-	transport.sessions.Delete(outboundHash)
+	transport.removeSession(outboundHash)
 	assert.Equal(t, 0, transport.GetSessionCount())
 }
 

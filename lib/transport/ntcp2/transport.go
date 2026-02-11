@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,7 +31,8 @@ type NTCP2Transport struct {
 	keystore KeystoreProvider
 
 	// Session management
-	sessions sync.Map // map[string]*NTCP2Session (keyed by router hash)
+	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
+	sessionCount int32    // atomic O(1) session counter
 
 	// Lifecycle management
 	ctx    context.Context
@@ -235,7 +237,9 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	// session from the returned conn (in createSessionFromConn), and having two
 	// sessions with send/receive workers on the same conn would corrupt the stream.
 	peerHash := t.extractPeerHash(conn)
-	t.sessions.Store(peerHash, conn)
+	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); !loaded {
+		atomic.AddInt32(&t.sessionCount, 1)
+	}
 
 	// Wrap the connection so that closing it also removes it from the session map,
 	// preventing session counter drift.
@@ -434,7 +438,9 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 					"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 					"reason":      ntcp2Session.ctx.Err().Error(),
 				}).Info("Evicting stale NTCP2 session")
-				t.sessions.Delete(routerHash)
+				if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
+					atomic.AddInt32(&t.sessionCount, -1)
+				}
 				return nil, false
 			}
 			routerHashBytes := routerHash.Bytes()
@@ -714,7 +720,9 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		t.removeSession(routerHash)
 	})
 
-	t.sessions.Store(routerHash, session)
+	if _, loaded := t.sessions.LoadOrStore(routerHash, session); !loaded {
+		atomic.AddInt32(&t.sessionCount, 1)
+	}
 	return session
 }
 
@@ -753,18 +761,16 @@ func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 // removeSession removes a session from the session map (called by session cleanup callback)
 func (t *NTCP2Transport) removeSession(routerHash data.Hash) {
 	routerHashBytes := routerHash.Bytes()
-	t.sessions.Delete(routerHash)
+	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
+		atomic.AddInt32(&t.sessionCount, -1)
+	}
 	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Info("Removed session from transport session map")
 }
 
 // GetSessionCount returns the number of active sessions managed by this transport.
+// Uses an atomic counter for O(1) performance instead of iterating the session map.
 func (t *NTCP2Transport) GetSessionCount() int {
-	count := 0
-	t.sessions.Range(func(key, value interface{}) bool {
-		count++
-		return true
-	})
-	return count
+	return int(atomic.LoadInt32(&t.sessionCount))
 }
 
 // GetTotalBandwidth returns the total bytes sent and received across all active sessions.
@@ -827,7 +833,9 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 	t.sessions.Range(func(key, value interface{}) bool {
 		sessionCount++
 		t.closeIndividualSession(key, value)
-		t.sessions.Delete(key)
+		if _, loaded := t.sessions.LoadAndDelete(key); loaded {
+			atomic.AddInt32(&t.sessionCount, -1)
+		}
 		return true
 	})
 

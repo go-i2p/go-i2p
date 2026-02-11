@@ -39,6 +39,7 @@ type NTCP2Session struct {
 	wg sync.WaitGroup
 
 	// Cleanup callback (called when session closes)
+	callbackMu      sync.Mutex // protects cleanupCallback field
 	cleanupCallback func()
 	cleanupOnce     sync.Once
 
@@ -146,16 +147,23 @@ func (s *NTCP2Session) Close() error {
 	return err
 }
 
-// SetCleanupCallback sets a callback function that will be called when the session closes
+// SetCleanupCallback sets a callback function that will be called when the session closes.
+// Thread-safe: protected by callbackMu to prevent data race with callCleanupCallback.
 func (s *NTCP2Session) SetCleanupCallback(callback func()) {
+	s.callbackMu.Lock()
 	s.cleanupCallback = callback
+	s.callbackMu.Unlock()
 }
 
-// callCleanupCallback calls the cleanup callback (once) if it's set
+// callCleanupCallback calls the cleanup callback (once) if it's set.
+// Thread-safe: reads cleanupCallback under callbackMu.
 func (s *NTCP2Session) callCleanupCallback() {
 	s.cleanupOnce.Do(func() {
-		if s.cleanupCallback != nil {
-			s.cleanupCallback()
+		s.callbackMu.Lock()
+		cb := s.cleanupCallback
+		s.callbackMu.Unlock()
+		if cb != nil {
+			cb()
 		}
 	})
 }

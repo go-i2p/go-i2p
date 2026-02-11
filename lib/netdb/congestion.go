@@ -44,9 +44,12 @@ type PeerCongestionInfo interface {
 
 // CongestionCache caches parsed congestion flags to avoid repeated parsing.
 // The cache is invalidated when RouterInfo is updated.
+// It enforces a maximum size and TTL to prevent unbounded memory growth.
 type CongestionCache struct {
-	mu    sync.RWMutex
-	flags map[common.Hash]cachedFlag
+	mu      sync.RWMutex
+	flags   map[common.Hash]cachedFlag
+	maxSize int           // maximum entries; 0 means unlimited (for backward compat)
+	ttl     time.Duration // entries older than this are evicted on access; 0 means no TTL
 }
 
 // cachedFlag stores a parsed congestion flag with its parse timestamp.
@@ -56,26 +59,34 @@ type cachedFlag struct {
 	riAge    time.Time // RouterInfo published time for staleness check
 }
 
-// NewCongestionCache creates a new congestion flag cache.
+// NewCongestionCache creates a new congestion flag cache with default limits.
+// Default: max 2048 entries, 30-minute TTL.
 func NewCongestionCache() *CongestionCache {
 	return &CongestionCache{
-		flags: make(map[common.Hash]cachedFlag),
+		flags:   make(map[common.Hash]cachedFlag),
+		maxSize: 2048,
+		ttl:     30 * time.Minute,
 	}
 }
 
 // Get retrieves a cached congestion flag for a peer.
-// Returns the flag and true if found, or CongestionFlagNone and false if not cached.
+// Returns the flag and true if found and not expired, or CongestionFlagNone and false otherwise.
 func (c *CongestionCache) Get(hash common.Hash) (config.CongestionFlag, time.Time, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	if cached, ok := c.flags[hash]; ok {
+		// Check TTL if configured
+		if c.ttl > 0 && time.Since(cached.parsedAt) > c.ttl {
+			return config.CongestionFlagNone, time.Time{}, false
+		}
 		return cached.flag, cached.riAge, true
 	}
 	return config.CongestionFlagNone, time.Time{}, false
 }
 
 // Set stores a congestion flag in the cache.
+// If the cache exceeds its maximum size, the oldest entry is evicted.
 func (c *CongestionCache) Set(hash common.Hash, flag config.CongestionFlag, riAge time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -84,6 +95,30 @@ func (c *CongestionCache) Set(hash common.Hash, flag config.CongestionFlag, riAg
 		flag:     flag,
 		parsedAt: time.Now(),
 		riAge:    riAge,
+	}
+
+	// Evict if over capacity
+	if c.maxSize > 0 && len(c.flags) > c.maxSize {
+		c.evictOldest()
+	}
+}
+
+// evictOldest removes the entry with the oldest parsedAt timestamp.
+// Must be called with c.mu held.
+func (c *CongestionCache) evictOldest() {
+	var oldestHash common.Hash
+	var oldestTime time.Time
+	first := true
+
+	for h, cf := range c.flags {
+		if first || cf.parsedAt.Before(oldestTime) {
+			oldestHash = h
+			oldestTime = cf.parsedAt
+			first = false
+		}
+	}
+	if !first {
+		delete(c.flags, oldestHash)
 	}
 }
 

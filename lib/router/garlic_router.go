@@ -603,57 +603,74 @@ func (gr *GarlicMessageRouter) processPendingMessages() {
 	}
 }
 
-// retryPendingLookups attempts to resolve pending destinations and forward queued messages.
-func (gr *GarlicMessageRouter) retryPendingLookups() {
-	gr.pendingMutex.Lock()
-	defer gr.pendingMutex.Unlock()
+// forwardWork represents resolved forwarding work to be executed outside the lock.
+type forwardWork struct {
+	destHash    common.Hash
+	gatewayHash common.Hash
+	tunnelID    tunnel.TunnelID
+	messages    []pendingMessage
+}
 
+// retryPendingLookups attempts to resolve pending destinations and forward queued messages.
+// It collects resolved work under the lock, then forwards messages after releasing the lock
+// to avoid holding pendingMutex during potentially blocking network I/O.
+func (gr *GarlicMessageRouter) retryPendingLookups() {
+	var work []forwardWork
+
+	// Phase 1: Resolve LeaseSets and collect work under lock
+	gr.pendingMutex.Lock()
 	now := time.Now()
 
 	for destHash, messages := range gr.pendingMsgs {
-		gr.processPendingDestination(destHash, messages, now)
-	}
-}
-
-// processPendingDestination handles lookup retry and message processing for a single destination.
-// It attempts to retrieve the LeaseSet and either forwards queued messages or cleans up expired ones.
-func (gr *GarlicMessageRouter) processPendingDestination(destHash common.Hash, messages []pendingMessage, now time.Time) {
-	// Skip if no messages for this destination
-	if len(messages) == 0 {
-		delete(gr.pendingMsgs, destHash)
-		return
-	}
-
-	// Try to get LeaseSet
-	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
-	if leaseSetChan == nil {
-		// LeaseSet still not found, clean up expired messages
-		gr.cleanupExpiredMessages(destHash, messages, now)
-		return
-	}
-
-	// Attempt to read LeaseSet and process accordingly
-	gr.attemptLeaseSetRetrieval(destHash, messages, now, leaseSetChan)
-}
-
-// attemptLeaseSetRetrieval tries to retrieve a LeaseSet with a short timeout and processes or cleans up messages.
-// This performs a non-blocking read from the LeaseSet channel.
-func (gr *GarlicMessageRouter) attemptLeaseSetRetrieval(destHash common.Hash, messages []pendingMessage, now time.Time, leaseSetChan chan lease_set.LeaseSet) {
-	select {
-	case ls, ok := <-leaseSetChan:
-		if !ok {
-			gr.cleanupExpiredMessages(destHash, messages, now)
-			return
+		if len(messages) == 0 {
+			delete(gr.pendingMsgs, destHash)
+			continue
 		}
 
-		// LeaseSet found! Process all pending messages
-		// Note: processPendingMessagesForDestination will validate the LeaseSet
-		// and handle invalid cases by cleaning up the queue
-		gr.processPendingMessagesForDestination(destHash, ls, messages)
+		// Try to get LeaseSet (non-blocking)
+		leaseSetChan := gr.netdb.GetLeaseSet(destHash)
+		if leaseSetChan == nil {
+			gr.cleanupExpiredMessages(destHash, messages, now)
+			continue
+		}
 
-	default:
-		// LeaseSet not immediately available, clean up expired
-		gr.cleanupExpiredMessages(destHash, messages, now)
+		select {
+		case ls, ok := <-leaseSetChan:
+			if !ok {
+				gr.cleanupExpiredMessages(destHash, messages, now)
+				continue
+			}
+
+			// LeaseSet found — extract valid lease under the lock
+			gatewayHash, tunnelID, err := gr.extractValidLease(destHash, ls)
+			if err != nil {
+				delete(gr.pendingMsgs, destHash)
+				continue
+			}
+
+			// Collect the work; remove from pending map
+			work = append(work, forwardWork{
+				destHash:    destHash,
+				gatewayHash: gatewayHash,
+				tunnelID:    tunnelID,
+				messages:    messages,
+			})
+			delete(gr.pendingMsgs, destHash)
+
+		default:
+			// LeaseSet not immediately available, clean up expired
+			gr.cleanupExpiredMessages(destHash, messages, now)
+		}
+	}
+	gr.pendingMutex.Unlock()
+
+	// Phase 2: Forward messages outside the lock (may block on network I/O)
+	for _, fw := range work {
+		log.WithFields(logger.Fields{
+			"dest_hash":     fmt.Sprintf("%x", fw.destHash[:8]),
+			"message_count": len(fw.messages),
+		}).Info("LeaseSet found, processing pending messages")
+		gr.forwardPendingMessages(fw.destHash, fw.gatewayHash, fw.tunnelID, fw.messages)
 	}
 }
 
@@ -678,31 +695,6 @@ func (gr *GarlicMessageRouter) cleanupExpiredMessages(destHash common.Hash, mess
 	} else {
 		delete(gr.pendingMsgs, destHash)
 	}
-}
-
-// processPendingMessagesForDestination forwards all queued messages for a destination.
-func (gr *GarlicMessageRouter) processPendingMessagesForDestination(
-	destHash common.Hash,
-	leaseSet lease_set.LeaseSet,
-	messages []pendingMessage,
-) {
-	log.WithFields(logger.Fields{
-		"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
-		"message_count": len(messages),
-	}).Info("LeaseSet found, processing pending messages")
-
-	// Extract and validate lease
-	gatewayHash, tunnelID, err := gr.extractValidLease(destHash, leaseSet)
-	if err != nil {
-		delete(gr.pendingMsgs, destHash)
-		return
-	}
-
-	// Forward all pending messages through the selected tunnel
-	gr.forwardPendingMessages(destHash, gatewayHash, tunnelID, messages)
-
-	// Remove all processed messages
-	delete(gr.pendingMsgs, destHash)
 }
 
 // extractValidLease extracts and validates the best lease from a LeaseSet.

@@ -54,6 +54,7 @@ type Endpoint struct {
 	fragments       map[uint32]*fragmentAssembler
 	fragmentTimeout time.Duration
 	stopChan        chan struct{}
+	wg              sync.WaitGroup // tracks cleanupFragments goroutine
 }
 
 // fragmentAssembler tracks fragments for a single message being reassembled.
@@ -118,7 +119,11 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	}
 
 	// Start background cleanup goroutine
-	go ep.cleanupFragments()
+	ep.wg.Add(1)
+	go func() {
+		defer ep.wg.Done()
+		ep.cleanupFragments()
+	}()
 
 	log.WithFields(logger.Fields{
 		"at":        "NewEndpoint",
@@ -647,6 +652,7 @@ func (e *Endpoint) ClearFragments() {
 // Should be called when the endpoint is no longer needed to prevent resource leaks.
 func (e *Endpoint) Stop() {
 	close(e.stopChan)
+	e.wg.Wait()
 	log.WithField("tunnel_id", e.tunnelID).Debug("Stopped tunnel endpoint")
 }
 
