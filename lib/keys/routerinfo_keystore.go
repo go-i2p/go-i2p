@@ -66,10 +66,13 @@ func NewRouterInfoKeystore(dir, name string) (*RouterInfoKeystore, error) {
 		return nil, err
 	}
 
-	// Generate X25519 encryption key pair for router
-	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
+	// Load or generate X25519 encryption key pair for router.
+	// The encryption key is persisted to disk so that the router maintains
+	// a stable NTCP2 static key across restarts. Without persistence,
+	// peers' cached session data would be invalidated on every restart.
+	encryptionPubKey, encryptionPrivKey, err := loadOrGenerateEncryptionKey(dir, name)
 	if err != nil {
-		log.WithError(err).Error("Failed to generate X25519 encryption key")
+		log.WithError(err).Error("Failed to load or generate X25519 encryption key")
 		return nil, err
 	}
 
@@ -123,6 +126,55 @@ func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 	}
 
 	return loadExistingKey(keyData)
+}
+
+// loadOrGenerateEncryptionKey loads an existing X25519 encryption private key
+// from disk, or generates a new one if none exists. The public key is derived
+// from the private key. This ensures the router's NTCP2 static key remains
+// stable across restarts.
+func loadOrGenerateEncryptionKey(dir, name string) (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
+	fullPath := filepath.Join(dir, name+".enc.key")
+
+	// Try to load existing encryption key
+	if keyData, err := os.ReadFile(fullPath); err == nil {
+		log.WithField("path", fullPath).Debug("Loading existing X25519 encryption key")
+		privKey, err := curve25519.NewCurve25519PrivateKey(keyData)
+		if err != nil {
+			log.WithError(err).Error("Failed to reconstruct X25519 private key from disk")
+			return nil, nil, err
+		}
+		pubKey, err := privKey.Public()
+		if err != nil {
+			log.WithError(err).Error("Failed to derive X25519 public key")
+			return nil, nil, err
+		}
+		receivingPubKey, ok := pubKey.(types.ReceivingPublicKey)
+		if !ok {
+			return nil, nil, oops.Errorf("X25519 public key does not implement ReceivingPublicKey")
+		}
+		log.WithField("path", fullPath).Debug("Successfully loaded X25519 encryption key from disk")
+		return receivingPubKey, privKey, nil
+	}
+
+	// Generate new encryption key pair
+	log.WithField("path", fullPath).Debug("Generating new X25519 encryption key")
+	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Persist the private key to disk immediately
+	if err := os.WriteFile(fullPath, encryptionPrivKey.Bytes(), 0o600); err != nil {
+		log.WithError(err).Error("Failed to write X25519 encryption key to disk")
+		return nil, nil, err
+	}
+
+	receivingPubKey, ok := encryptionPubKey.(types.ReceivingPublicKey)
+	if !ok {
+		return nil, nil, oops.Errorf("X25519 public key does not implement ReceivingPublicKey")
+	}
+	log.WithField("path", fullPath).Debug("Generated and stored new X25519 encryption key")
+	return receivingPubKey, encryptionPrivKey, nil
 }
 
 // initializeKeystore constructs and returns a configured RouterInfoKeystore
@@ -191,18 +243,34 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 			return err
 		}
 	}
-	// on the disk somewhere
-	filename := filepath.Join(ks.dir, ks.KeyID()+".key")
+
+	// Store Ed25519 signing private key
+	sigFilename := filepath.Join(ks.dir, ks.KeyID()+".key")
 	log.WithFields(map[string]interface{}{
 		"at":   "StoreKeys",
-		"file": filename,
-	}).Debug("Writing key file")
-	err := os.WriteFile(filename, ks.privateKey.Bytes(), 0o600)
-	if err != nil {
-		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write key file")
+		"file": sigFilename,
+	}).Debug("Writing signing key file")
+	if err := os.WriteFile(sigFilename, ks.privateKey.Bytes(), 0o600); err != nil {
+		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write signing key file")
 		return err
 	}
-	log.WithField("at", "StoreKeys").Debug("Successfully stored keys")
+
+	// Store X25519 encryption private key so it persists across restarts.
+	// Without this, the router would get a new NTCP2 static key on every
+	// restart, invalidating all peers' cached session data.
+	if ks.encryptionPrivKey != nil {
+		encFilename := filepath.Join(ks.dir, ks.KeyID()+".enc.key")
+		log.WithFields(map[string]interface{}{
+			"at":   "StoreKeys",
+			"file": encFilename,
+		}).Debug("Writing encryption key file")
+		if err := os.WriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
+			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write encryption key file")
+			return err
+		}
+	}
+
+	log.WithField("at", "StoreKeys").Debug("Successfully stored all keys")
 	return nil
 }
 
