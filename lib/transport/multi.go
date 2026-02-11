@@ -380,30 +380,45 @@ func (tmux *TransportMuxer) validateTransports() error {
 }
 
 // startAcceptGoroutines launches concurrent accept operations on all transports.
-// Each goroutine sends its result to the returned channel. If the context is
-// cancelled before the result is sent, any accepted connection is closed to
-// prevent resource leaks.
+// Each goroutine ALWAYS sends its result to the returned channel (which is buffered
+// to len(tmux.trans)). This ensures goroutines always exit promptly after Accept()
+// returns, even if the context is already cancelled. The caller is responsible for
+// draining late results from the channel via drainLateAcceptResults.
 func (tmux *TransportMuxer) startAcceptGoroutines(ctx context.Context, caller string) chan acceptResult {
 	resultChan := make(chan acceptResult, len(tmux.trans))
 	for i, t := range tmux.trans {
 		go func(transport Transport, index int) {
 			conn, err := transport.Accept()
-			select {
-			case <-ctx.Done():
-				if conn != nil {
-					conn.Close()
-					log.WithFields(logger.Fields{
-						"at":              caller,
-						"reason":          "connection_closed_after_cancel",
-						"transport_index": index,
-					}).Debug("closed connection from cancelled accept")
-				}
-			default:
-				resultChan <- acceptResult{conn: conn, err: err, transportIndex: index}
-			}
+			// Always send to the buffered channel so this goroutine can exit.
+			// The channel is large enough (len(tmux.trans)) to never block.
+			resultChan <- acceptResult{conn: conn, err: err, transportIndex: index}
 		}(t, i)
 	}
 	return resultChan
+}
+
+// drainLateAcceptResults spawns a background goroutine that reads remaining
+// results from the channel after a successful accept or timeout. Connections
+// arriving late are closed to prevent resource leaks. The goroutine exits
+// once all transport goroutines have reported in (totalTransports results).
+func (tmux *TransportMuxer) drainLateAcceptResults(resultChan chan acceptResult, received int, totalTransports int, caller string) {
+	remaining := totalTransports - received
+	if remaining <= 0 {
+		return
+	}
+	go func() {
+		for i := 0; i < remaining; i++ {
+			res := <-resultChan
+			if res.conn != nil {
+				res.conn.Close()
+				log.WithFields(logger.Fields{
+					"at":              caller,
+					"reason":          "connection_closed_late_arrival",
+					"transport_index": res.transportIndex,
+				}).Debug("closed late-arriving connection after accept completed")
+			}
+		}
+	}()
 }
 
 // handleAcceptSuccess logs the accepted connection.
@@ -421,7 +436,8 @@ func (tmux *TransportMuxer) handleAcceptSuccess(res acceptResult, cancel context
 
 // collectAcceptResult waits for the first successful accept or exhaustion of all
 // transports. When ctx is non-nil, the context's deadline is also monitored so
-// that a timeout can be reported via ctx.Err().
+// that a timeout can be reported via ctx.Err(). Late-arriving results are
+// drained in the background to prevent goroutine leaks.
 func (tmux *TransportMuxer) collectAcceptResult(resultChan chan acceptResult, cancel context.CancelFunc, caller string, ctx context.Context) (net.Conn, error) {
 	if ctx != nil {
 		return tmux.collectWithTimeout(resultChan, cancel, caller, ctx)
@@ -431,13 +447,17 @@ func (tmux *TransportMuxer) collectAcceptResult(resultChan chan acceptResult, ca
 
 // collectWithTimeout waits for accept results while also monitoring a context deadline.
 // Returns context.DeadlineExceeded if the timeout fires before a connection is accepted.
+// Late-arriving results are drained in the background to prevent goroutine leaks.
 func (tmux *TransportMuxer) collectWithTimeout(resultChan chan acceptResult, cancel context.CancelFunc, caller string, ctx context.Context) (net.Conn, error) {
 	var lastErr error
 	failCount := 0
+	received := 0
 	for failCount < len(tmux.trans) {
 		select {
 		case res := <-resultChan:
+			received++
 			if conn := tmux.processAcceptResult(res, &lastErr, &failCount, cancel, caller); conn != nil {
+				tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
 				return conn, nil
 			}
 		case <-ctx.Done():
@@ -445,6 +465,7 @@ func (tmux *TransportMuxer) collectWithTimeout(resultChan chan acceptResult, can
 				"at":     caller,
 				"reason": "timeout_exceeded",
 			}).Debug("accept timed out")
+			tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
 			return nil, ctx.Err()
 		}
 	}
@@ -452,12 +473,16 @@ func (tmux *TransportMuxer) collectWithTimeout(resultChan chan acceptResult, can
 }
 
 // collectWithoutTimeout waits for accept results from all transports without a deadline.
+// Late-arriving results are drained in the background to prevent goroutine leaks.
 func (tmux *TransportMuxer) collectWithoutTimeout(resultChan chan acceptResult, cancel context.CancelFunc, caller string) (net.Conn, error) {
 	var lastErr error
 	failCount := 0
+	received := 0
 	for failCount < len(tmux.trans) {
 		res := <-resultChan
+		received++
 		if conn := tmux.processAcceptResult(res, &lastErr, &failCount, cancel, caller); conn != nil {
+			tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
 			return conn, nil
 		}
 	}
