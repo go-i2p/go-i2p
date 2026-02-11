@@ -78,6 +78,8 @@ func setBootstrapDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout)
 	viper.SetDefault("bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers)
 	viper.SetDefault("bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval)
+	viper.SetDefault("bootstrap.min_reseed_servers", DefaultMinReseedServers)
+	viper.SetDefault("bootstrap.reseed_strategy", ReseedStrategyUnion)
 	viper.SetDefault("bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers)
 }
 
@@ -159,7 +161,13 @@ func setCongestionDefaults(defaults ConfigDefaults) {
 func NewRouterConfigFromViper() *RouterConfig {
 	// Create NetDb configuration
 	netDbConfig := &NetDbConfig{
-		Path: viper.GetString("netdb.path"),
+		Path:                     viper.GetString("netdb.path"),
+		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
+		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
+		ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
+		LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
+		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
+		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
 	}
 
 	// Create Bootstrap configuration
@@ -186,6 +194,8 @@ func NewRouterConfigFromViper() *RouterConfig {
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
 		LocalNetDbPaths:  localNetDbPaths,
+		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
+		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
 	}
 
 	// Create I2CP configuration
@@ -235,7 +245,13 @@ func UpdateRouterConfig() {
 
 	// Update NetDb configuration
 	RouterConfigProperties.NetDb = &NetDbConfig{
-		Path: viper.GetString("netdb.path"),
+		Path:                     viper.GetString("netdb.path"),
+		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
+		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
+		ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
+		LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
+		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
+		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
 	}
 
 	// Update Bootstrap configuration
@@ -266,6 +282,8 @@ func UpdateRouterConfig() {
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
 		ReseedServers:    reseedServers,
 		LocalNetDbPaths:  localNetDbPaths,
+		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
+		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
 	}
 
 	// Update I2CP configuration

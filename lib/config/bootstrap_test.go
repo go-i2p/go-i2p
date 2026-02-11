@@ -65,3 +65,46 @@ func TestBootstrapConfig_NewFieldsAccessible(t *testing.T) {
 		t.Errorf("ReseedStrategy not set correctly")
 	}
 }
+
+// TestBootstrapConfigViperRoundTrip verifies that MinReseedServers and
+// ReseedStrategy are populated from viper in NewRouterConfigFromViper.
+func TestBootstrapConfigViperRoundTrip(t *testing.T) {
+	InitConfig()
+
+	cfg := NewRouterConfigFromViper()
+	if cfg.Bootstrap == nil {
+		t.Fatal("Bootstrap config should not be nil")
+	}
+
+	if cfg.Bootstrap.MinReseedServers == 0 {
+		t.Error("MinReseedServers should be populated from viper defaults, got 0")
+	}
+	if cfg.Bootstrap.MinReseedServers != DefaultMinReseedServers {
+		t.Errorf("MinReseedServers = %d, want %d", cfg.Bootstrap.MinReseedServers, DefaultMinReseedServers)
+	}
+	if cfg.Bootstrap.ReseedStrategy == "" {
+		t.Error("ReseedStrategy should be populated from viper defaults, got empty string")
+	}
+	if cfg.Bootstrap.ReseedStrategy != ReseedStrategyUnion {
+		t.Errorf("ReseedStrategy = %q, want %q", cfg.Bootstrap.ReseedStrategy, ReseedStrategyUnion)
+	}
+}
+
+// TestBootstrapConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
+// MinReseedServers and ReseedStrategy from viper.
+func TestBootstrapConfigUpdateRoundTrip(t *testing.T) {
+	InitConfig()
+	UpdateRouterConfig()
+
+	bootstrap := RouterConfigProperties.Bootstrap
+	if bootstrap == nil {
+		t.Fatal("Bootstrap config should not be nil after UpdateRouterConfig")
+	}
+
+	if bootstrap.MinReseedServers == 0 {
+		t.Error("MinReseedServers should be populated after UpdateRouterConfig, got 0")
+	}
+	if bootstrap.ReseedStrategy == "" {
+		t.Error("ReseedStrategy should be populated after UpdateRouterConfig, got empty string")
+	}
+}

@@ -662,9 +662,13 @@ func (r *Router) stopParticipantManager() {
 func (r *Router) stopI2CPServer() {
 	// Wait for any in-flight LeaseSet distribution goroutines to complete
 	// before stopping the I2CP server, as they may access transport sessions.
+	// Use a 30-second timeout to prevent indefinite hangs during network partitions.
 	if r.leaseSetPublisher != nil {
-		r.leaseSetPublisher.Wait()
-		log.Debug("LeaseSet publisher goroutines drained")
+		if err := r.leaseSetPublisher.WaitWithTimeout(30 * time.Second); err != nil {
+			log.WithError(err).Warn("LeaseSet publisher goroutines did not drain within timeout")
+		} else {
+			log.Debug("LeaseSet publisher goroutines drained")
+		}
 	}
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {

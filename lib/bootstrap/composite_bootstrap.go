@@ -61,19 +61,60 @@ func NewCompositeBootstrap(cfg *config.BootstrapConfig) *CompositeBootstrap {
 	return cb
 }
 
-// GetPeers implements the Bootstrap interface by trying file first (if specified),
-// then reseed, then falling back to local netDb if both fail
+// GetPeers implements the Bootstrap interface. When BootstrapType is "auto"
+// (default), it tries all methods in sequence: file → reseed → local netDb.
+// When set to a specific type ("file", "reseed", "local"), only that method
+// is used. This allows users in air-gapped environments to prevent remote
+// reseed connections, or to force a specific bootstrap strategy.
 func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	bootstrapType := "auto"
+	if cb.config != nil && cb.config.BootstrapType != "" {
+		bootstrapType = cb.config.BootstrapType
+	}
+
 	log.WithFields(logger.Fields{
 		"at":              "(CompositeBootstrap) GetPeers",
 		"phase":           "bootstrap",
 		"step":            "start",
-		"reason":          "starting composite bootstrap with fallback strategy",
+		"reason":          "starting composite bootstrap",
 		"requested_peers": n,
 		"has_file_source": cb.fileBootstrap != nil,
-		"strategy":        "file -> reseed -> local_netdb",
+		"bootstrap_type":  bootstrapType,
 	}).Info("starting composite bootstrap")
 
+	switch bootstrapType {
+	case "file":
+		return cb.getPeersFileOnly(ctx, n)
+	case "reseed":
+		return cb.getPeersReseedOnly(ctx, n)
+	case "local":
+		return cb.getPeersLocalOnly(ctx, n)
+	default:
+		// "auto" or unrecognized: try all methods in sequence
+		return cb.getPeersAutoFallback(ctx, n)
+	}
+}
+
+// getPeersFileOnly uses only the file bootstrap method.
+func (cb *CompositeBootstrap) getPeersFileOnly(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	if cb.fileBootstrap == nil {
+		return nil, fmt.Errorf("bootstrap type is 'file' but no reseed file path is configured")
+	}
+	return tryFileBootstrap(cb.fileBootstrap, ctx, n)
+}
+
+// getPeersReseedOnly uses only the remote reseed bootstrap method.
+func (cb *CompositeBootstrap) getPeersReseedOnly(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	return tryReseedBootstrap(cb.reseedBootstrap, ctx, n)
+}
+
+// getPeersLocalOnly uses only the local netDb bootstrap method.
+func (cb *CompositeBootstrap) getPeersLocalOnly(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
+	return tryLocalNetDbBootstrap(cb.localNetDbBootstrap, ctx, n)
+}
+
+// getPeersAutoFallback tries all methods in sequence: file → reseed → local netDb.
+func (cb *CompositeBootstrap) getPeersAutoFallback(ctx context.Context, n int) ([]router_info.RouterInfo, error) {
 	// Collect errors from all methods for better debugging
 	var fileErr, reseedErr, netDbErr error
 

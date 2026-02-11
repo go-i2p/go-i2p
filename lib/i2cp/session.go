@@ -1404,6 +1404,86 @@ func (s *Session) CurrentLeaseSet() []byte {
 	return s.currentLeaseSet
 }
 
+// SetCurrentLeaseSet caches externally-provided LeaseSet bytes (e.g. from CreateLeaseSet2).
+// Updates the currentLeaseSet and leaseSetPublishedAt timestamp.
+func (s *Session) SetCurrentLeaseSet(leaseSetBytes []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.currentLeaseSet = leaseSetBytes
+	s.leaseSetPublishedAt = time.Now()
+}
+
+// ValidateLeaseSet2Data parses and validates client-provided LeaseSet2 bytes.
+// Ensures the data is structurally valid and that the embedded destination
+// matches the session's destination. Returns an error if validation fails.
+//
+// Checks performed:
+//  1. Structural parsing via ReadLeaseSet2 (validates all fields and signature)
+//  2. Destination match: the LeaseSet2's destination must match this session's destination
+//  3. Expiration: the LeaseSet2 must not already be expired
+func (s *Session) ValidateLeaseSet2Data(leaseSetBytes []byte) error {
+	// Parse the LeaseSet2 to verify structural validity
+	ls2, _, err := lease_set2.ReadLeaseSet2(leaseSetBytes)
+	if err != nil {
+		return fmt.Errorf("invalid LeaseSet2 structure: %w", err)
+	}
+
+	// Verify the LeaseSet2's destination matches this session's destination
+	s.mu.RLock()
+	sessionDest := s.destination
+	s.mu.RUnlock()
+
+	if sessionDest == nil {
+		return fmt.Errorf("session has no destination configured")
+	}
+
+	if err := matchDestinations(sessionDest, ls2.Destination()); err != nil {
+		return fmt.Errorf("destination mismatch: %w", err)
+	}
+
+	// Verify the LeaseSet2 is not already expired
+	if ls2.IsExpired() {
+		return fmt.Errorf("LeaseSet2 is already expired (published: %v, expires offset: %d)",
+			ls2.PublishedTime(), ls2.Expires())
+	}
+
+	return nil
+}
+
+// matchDestinations compares two destinations by their signing public keys.
+// The signing public key is the identity-critical component and is stable
+// across serialization round-trips (construct → serialize → parse).
+// Returns nil if they match, or an error describing the mismatch.
+func matchDestinations(sessionDest *destination.Destination, lsDest destination.Destination) error {
+	sessionSPK, err := sessionDest.SigningPublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to get session signing public key: %w", err)
+	}
+
+	lsSPK, err := lsDest.SigningPublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to get LeaseSet2 signing public key: %w", err)
+	}
+
+	sessionSPKBytes := sessionSPK.Bytes()
+	lsSPKBytes := lsSPK.Bytes()
+
+	if len(sessionSPKBytes) != len(lsSPKBytes) {
+		return fmt.Errorf("signing key length mismatch: session=%d, leaseset=%d",
+			len(sessionSPKBytes), len(lsSPKBytes))
+	}
+
+	sessionHash := data.HashData(sessionSPKBytes)
+	lsHash := data.HashData(lsSPKBytes)
+
+	if sessionHash != lsHash {
+		return fmt.Errorf("LeaseSet2 destination hash %x does not match session destination hash %x",
+			lsHash[:8], sessionHash[:8])
+	}
+
+	return nil
+}
+
 // LeaseSetAge returns how long ago the current LeaseSet was published.
 // Returns 0 if no LeaseSet exists.
 func (s *Session) LeaseSetAge() time.Duration {

@@ -1,8 +1,10 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -181,4 +183,39 @@ func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.Da
 // the router's lifecycle and access closed transport sessions or NetDB.
 func (p *LeaseSetPublisher) Wait() {
 	p.wg.Wait()
+}
+
+// WaitWithTimeout blocks until all background goroutines have completed or the
+// timeout expires, whichever comes first. Returns nil if all goroutines completed,
+// or context.DeadlineExceeded if the timeout was reached.
+//
+// This is the preferred shutdown method: it prevents indefinite hangs when a
+// network call to a floodfill router is stuck (e.g., unreachable peer, network
+// partition). Typical timeout: 30 seconds.
+func (p *LeaseSetPublisher) WaitWithTimeout(timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return p.WaitWithContext(ctx)
+}
+
+// WaitWithContext blocks until all background goroutines have completed or the
+// context is cancelled/expired. Returns nil if all goroutines completed, or the
+// context's error if the context was done first.
+func (p *LeaseSetPublisher) WaitWithContext(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		log.WithFields(logger.Fields{
+			"at":    "router.LeaseSetPublisher.WaitWithContext",
+			"error": ctx.Err(),
+		}).Warn("shutdown_timeout_waiting_for_leaseset_distribution")
+		return ctx.Err()
+	}
 }

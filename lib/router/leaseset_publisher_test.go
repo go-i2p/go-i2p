@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"crypto/sha256"
 	"testing"
 	"time"
@@ -186,4 +187,74 @@ func TestLeaseSetPublisherWaitWithNoGoroutines(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Wait() blocked with no goroutines")
 	}
+}
+
+// TestLeaseSetPublisherWaitWithTimeout tests that WaitWithTimeout returns nil
+// when goroutines complete within the deadline.
+func TestLeaseSetPublisherWaitWithTimeout(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	var testHash common.Hash
+	copy(testHash[:], []byte("test_hash_fills_32_bytes_exactly"))
+
+	publisher.wg.Add(1)
+	go func() {
+		defer publisher.wg.Done()
+		publisher.distributeToNetwork(testHash, []byte("test data"))
+	}()
+
+	// Should complete quickly (no real floodfill routers) within timeout
+	err := publisher.WaitWithTimeout(5 * time.Second)
+	assert.NoError(t, err, "WaitWithTimeout should succeed when goroutines complete in time")
+}
+
+// TestLeaseSetPublisherWaitWithTimeoutExpires tests that WaitWithTimeout returns
+// a deadline error when goroutines do not complete within the timeout.
+func TestLeaseSetPublisherWaitWithTimeoutExpires(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	// Add a goroutine that blocks for a long time
+	publisher.wg.Add(1)
+	go func() {
+		defer publisher.wg.Done()
+		time.Sleep(10 * time.Second)
+	}()
+
+	// WaitWithTimeout should return after the short timeout
+	err := publisher.WaitWithTimeout(100 * time.Millisecond)
+	assert.Error(t, err, "WaitWithTimeout should return error when timeout expires")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "Error should be DeadlineExceeded")
+}
+
+// TestLeaseSetPublisherWaitWithContext tests that WaitWithContext respects
+// context cancellation.
+func TestLeaseSetPublisherWaitWithContext(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	// Add a goroutine that blocks for a long time
+	publisher.wg.Add(1)
+	go func() {
+		defer publisher.wg.Done()
+		time.Sleep(10 * time.Second)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel immediately
+	cancel()
+
+	err := publisher.WaitWithContext(ctx)
+	assert.Error(t, err, "WaitWithContext should return error when context is cancelled")
+}
+
+// TestLeaseSetPublisherWaitWithTimeoutNoGoroutines tests that WaitWithTimeout
+// returns nil immediately when no goroutines are pending.
+func TestLeaseSetPublisherWaitWithTimeoutNoGoroutines(t *testing.T) {
+	router := setupTestRouter(t)
+	publisher := NewLeaseSetPublisher(router)
+
+	err := publisher.WaitWithTimeout(1 * time.Second)
+	assert.NoError(t, err, "WaitWithTimeout should succeed immediately with no goroutines")
 }
