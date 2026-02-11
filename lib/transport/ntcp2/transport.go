@@ -201,19 +201,105 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 }
 
 // Accept accepts an incoming session.
+// The accepted connection is tracked in the transport's session map so that
+// GetSessionCount() and checkSessionLimit() accurately reflect both inbound
+// and outbound sessions. A cleanup callback is registered to remove the
+// tracking entry when the connection is closed.
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	if t.listener == nil {
 		t.logger.Error("Accept called but listener is nil")
 		return nil, ErrSessionClosed
 	}
+
+	// Enforce session limit before accepting
+	if err := t.checkSessionLimit(); err != nil {
+		t.logger.WithFields(map[string]interface{}{
+			"session_count": t.GetSessionCount(),
+			"max_sessions":  t.config.GetMaxSessions(),
+		}).Warn("Rejecting inbound connection: session limit reached")
+		return nil, err
+	}
+
 	t.logger.Debug("Accepting incoming NTCP2 connection")
 	conn, err := t.listener.Accept()
 	if err != nil {
 		t.logger.WithError(err).Warn("Failed to accept incoming connection")
 		return nil, err
 	}
-	t.logger.WithField("remote_addr", conn.RemoteAddr().String()).Info("Accepted incoming NTCP2 connection")
-	return conn, nil
+
+	// Track the inbound connection for accurate session counting.
+	// We store the raw conn as a placeholder in the session map keyed by a hash
+	// derived from the connection's remote address. This ensures GetSessionCount()
+	// includes inbound connections and checkSessionLimit() prevents exceeding MaxSessions.
+	// We do NOT create an NTCP2Session here because the router layer creates its own
+	// session from the returned conn (in createSessionFromConn), and having two
+	// sessions with send/receive workers on the same conn would corrupt the stream.
+	peerHash := t.extractPeerHash(conn)
+	t.sessions.Store(peerHash, conn)
+
+	// Wrap the connection so that closing it also removes it from the session map,
+	// preventing session counter drift.
+	wrappedConn := &trackedConn{
+		Conn: conn,
+		onClose: func() {
+			t.removeSession(peerHash)
+		},
+	}
+
+	t.logger.WithFields(map[string]interface{}{
+		"remote_addr":   conn.RemoteAddr().String(),
+		"peer_hash":     fmt.Sprintf("%x", peerHash[:8]),
+		"session_count": t.GetSessionCount(),
+	}).Info("Accepted and tracked incoming NTCP2 connection")
+	return wrappedConn, nil
+}
+
+// extractPeerHash extracts the peer's router hash from an accepted connection.
+// Returns a hash derived from the NTCP2Addr if available, or a hash derived
+// from the remote address as a fallback key for session map tracking.
+func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
+	var peerHash data.Hash
+
+	if ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.NTCP2Addr); ok {
+		hashBytes := ntcpAddr.RouterHash()
+		if len(hashBytes) == 32 {
+			copy(peerHash[:], hashBytes)
+			// If the hash is non-zero, use it directly
+			var zeroHash data.Hash
+			if peerHash != zeroHash {
+				return peerHash
+			}
+		}
+	}
+
+	// Fallback: generate a unique key from the remote address.
+	// This handles the case where the noise handshake doesn't yet populate
+	// the router hash (currently returns zeros for inbound connections).
+	addrStr := conn.RemoteAddr().String()
+	addrBytes := []byte(addrStr)
+	copy(peerHash[:], addrBytes)
+	// Set a marker byte to distinguish address-derived hashes
+	if len(addrBytes) < 32 {
+		peerHash[31] = 0xFF // marker for address-derived hash
+	}
+
+	return peerHash
+}
+
+// trackedConn wraps a net.Conn to execute a cleanup function when closed.
+// This ensures inbound connections are removed from the session tracking map
+// when the connection is closed, preventing session counter drift.
+type trackedConn struct {
+	net.Conn
+	onClose   func()
+	closeOnce sync.Once
+}
+
+// Close closes the underlying connection and runs the cleanup callback exactly once.
+func (tc *trackedConn) Close() error {
+	err := tc.Conn.Close()
+	tc.closeOnce.Do(tc.onClose)
+	return err
 }
 
 // Addr returns the network address the transport is bound to.

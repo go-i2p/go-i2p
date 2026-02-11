@@ -1676,7 +1676,10 @@ func (tm *TunnelManager) sendBuildMessage(result *tunnel.TunnelBuildResult, mess
 		return err
 	}
 
-	buildMsg := tm.selectBuildMessage(result, messageID)
+	buildMsg, err := tm.selectBuildMessage(result, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to create build message: %w", err)
+	}
 	tm.queueBuildMessageToGateway(session, buildMsg, messageID, peerHash, result.UseShortBuild)
 
 	return nil
@@ -1706,7 +1709,9 @@ func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (Tra
 }
 
 // selectBuildMessage creates the appropriate build message based on UseShortBuild flag.
-func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
+// Each build record is encrypted with the corresponding hop's public encryption key
+// using ECIES-X25519-AEAD before being placed into the message.
+func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
 	if result.UseShortBuild {
 		// Use Short Tunnel Build Message (modern)
 		return tm.createShortTunnelBuildMessage(result, messageID)
@@ -1728,7 +1733,9 @@ func (tm *TunnelManager) queueBuildMessageToGateway(session TransportSession, bu
 }
 
 // createShortTunnelBuildMessage creates a Short Tunnel Build Message (STBM).
-func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
+// Each build record is encrypted with the corresponding hop's X25519 public key
+// using ECIES-X25519-AEAD encryption before being placed into the message.
+func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
 	// Convert tunnel.BuildRequestRecord to i2np.BuildRequestRecord
 	i2npRecords := make([]BuildRequestRecord, len(result.Records))
 	for i, rec := range result.Records {
@@ -1748,26 +1755,52 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 		}
 	}
 
-	// Create Short Tunnel Build (STBM) using the builder constructor
-	stbm := NewShortTunnelBuilder(i2npRecords)
+	// Encrypt each record with the corresponding hop's public key.
+	// Each encrypted record is 528 bytes (16-byte identity hash prefix + 512 bytes ECIES ciphertext).
+	encryptedRecords := make([][528]byte, len(i2npRecords))
+	for i, record := range i2npRecords {
+		if i >= len(result.Hops) {
+			return nil, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
+		}
+		encrypted, err := EncryptBuildRequestRecord(record, result.Hops[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
+		}
+		encryptedRecords[i] = encrypted
+	}
+
+	// Serialize encrypted records: [count:1][encrypted_records...]
+	// Each encrypted record is 528 bytes
+	data := make([]byte, 1+len(encryptedRecords)*528)
+	data[0] = byte(len(encryptedRecords))
+	for i, enc := range encryptedRecords {
+		copy(data[1+i*528:1+(i+1)*528], enc[:])
+	}
 
 	// Wrap in I2NP message
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD)
 	msg.SetMessageID(messageID)
+	msg.SetData(data)
 
-	// Serialize ShortTunnelBuild to bytes and set as message data
-	msg.SetData(stbm.(*ShortTunnelBuild).Bytes())
+	log.WithFields(logger.Fields{
+		"at":           "createShortTunnelBuildMessage",
+		"record_count": len(encryptedRecords),
+		"data_size":    len(data),
+		"encrypted":    true,
+	}).Debug("Created encrypted Short Tunnel Build message")
 
-	return msg
+	return msg, nil
 }
 
 // createVariableTunnelBuildMessage creates a Variable Tunnel Build Message (legacy).
-func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) I2NPMessage {
-	// Convert to fixed 8-record array (pad with empty records if needed)
-	var records [8]BuildRequestRecord
+// Each build record is encrypted with the corresponding hop's X25519 public key
+// using ECIES-X25519-AEAD encryption before being placed into the message.
+func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+	// Convert to i2np.BuildRequestRecord and encrypt each with the hop's public key
+	var encryptedData [8][528]byte
 	for i := 0; i < 8 && i < len(result.Records); i++ {
 		rec := result.Records[i]
-		records[i] = BuildRequestRecord{
+		i2npRecord := BuildRequestRecord{
 			ReceiveTunnel: rec.ReceiveTunnel,
 			OurIdent:      rec.OurIdent,
 			NextTunnel:    rec.NextTunnel,
@@ -1781,11 +1814,35 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 			SendMessageID: rec.SendMessageID,
 			Padding:       rec.Padding,
 		}
+
+		if i >= len(result.Hops) {
+			return nil, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
+		}
+		encrypted, err := EncryptBuildRequestRecord(i2npRecord, result.Hops[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
+		}
+		encryptedData[i] = encrypted
 	}
 
-	msg := NewTunnelBuildMessage(records)
+	// Serialize all 8 encrypted records (empty slots are zero-filled 528-byte records)
+	data := make([]byte, 8*528)
+	for i := 0; i < 8; i++ {
+		copy(data[i*528:(i+1)*528], encryptedData[i][:])
+	}
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD)
 	msg.SetMessageID(messageID)
-	return msg
+	msg.SetData(data)
+
+	log.WithFields(logger.Fields{
+		"at":           "createVariableTunnelBuildMessage",
+		"record_count": len(result.Records),
+		"data_size":    len(data),
+		"encrypted":    true,
+	}).Debug("Created encrypted Variable Tunnel Build message")
+
+	return msg, nil
 }
 
 // generateMessageID generates a unique message ID for tracking build requests.
