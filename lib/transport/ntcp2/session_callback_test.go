@@ -41,7 +41,13 @@ func TestSetCleanupCallback_NoRace(t *testing.T) {
 	var callCount int32
 	var wg sync.WaitGroup
 
-	// Concurrently set the callback while trying to call it
+	// Set the callback first so we know it's in place
+	session.SetCleanupCallback(func() {
+		atomic.AddInt32(&callCount, 1)
+	})
+
+	// Concurrently overwrite the callback while trying to call it.
+	// The race detector should not trigger on the mutex-protected access.
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -59,7 +65,7 @@ func TestSetCleanupCallback_NoRace(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// The callback should have been called exactly once
+	// The callback should have been called exactly once (via cleanupOnce)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&callCount),
 		"cleanup callback should fire exactly once")
 }

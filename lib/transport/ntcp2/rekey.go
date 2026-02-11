@@ -80,9 +80,7 @@ func (rs *rekeyState) needsRekey() bool {
 // Returns true if rekeying was performed, false if the connection does not support it.
 // If the connection does not implement Rekeyer, this is a no-op (forward-compatible:
 // once go-noise exposes Rekey() on NTCP2Conn or NoiseConn, this will automatically work).
-func attemptRekey(conn interface{}, rs *rekeyState, logger interface {
-	WithField(string, interface{}) interface{ Debug(string) }
-}) bool {
+func attemptRekey(conn interface{}, rs *rekeyState) bool {
 	rekeyer, ok := conn.(Rekeyer)
 	if !ok {
 		// Connection does not support rekeying yet.
