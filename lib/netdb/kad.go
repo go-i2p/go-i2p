@@ -426,12 +426,9 @@ func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.
 }
 
 // calculateXORDistance calculates the XOR distance between two hashes.
+// Delegates to the shared CalculateXORDistance function.
 func (kr *KademliaResolver) calculateXORDistance(target, peer common.Hash) []byte {
-	distance := make([]byte, len(target))
-	for i := 0; i < len(target); i++ {
-		distance[i] = target[i] ^ peer[i]
-	}
-	return distance
+	return CalculateXORDistance(target, peer)
 }
 
 // selectClosestPeers sorts peers by distance and returns the K closest ones.
@@ -462,16 +459,9 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 }
 
 // compareDistances compares two distance byte arrays (big endian comparison).
+// Delegates to the shared CompareXORDistances function.
 func (kr *KademliaResolver) compareDistances(dist1, dist2 []byte) bool {
-	for k := 0; k < len(dist1); k++ {
-		if dist1[k] < dist2[k] {
-			return true
-		}
-		if dist1[k] > dist2[k] {
-			return false
-		}
-	}
-	return false // Equal distances
+	return CompareXORDistances(dist1, dist2)
 }
 
 // queryPeer sends a DatabaseLookup request to a specific peer and waits for a response.

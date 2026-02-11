@@ -486,13 +486,9 @@ func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []r
 }
 
 // isFloodfillRouter checks if a RouterInfo represents a floodfill router.
-// Returns true if the router's "caps" option contains 'f'.
+// Delegates to the shared IsFloodfillRouter function.
 func (db *StdNetDB) isFloodfillRouter(ri router_info.RouterInfo) bool {
-	options := ri.Options()
-	capsKey, _ := common.ToI2PString("caps")
-	capsValue := options.Values().Get(capsKey)
-	caps, _ := capsValue.Data()
-	return strings.Contains(caps, "f")
+	return IsFloodfillRouter(ri)
 }
 
 // routerDistance represents a router with its calculated XOR distance from target.
@@ -545,27 +541,16 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 }
 
 // calculateXORDistance calculates the XOR distance between two hashes.
-// XOR distance is the bitwise XOR of the two hashes, used in Kademlia DHT.
+// Delegates to the shared CalculateXORDistance function.
 func (db *StdNetDB) calculateXORDistance(hash1, hash2 common.Hash) []byte {
-	distance := make([]byte, len(hash1))
-	for i := 0; i < len(hash1); i++ {
-		distance[i] = hash1[i] ^ hash2[i]
-	}
-	return distance
+	return CalculateXORDistance(hash1, hash2)
 }
 
 // compareXORDistances compares two XOR distances using big-endian byte comparison.
 // Returns true if dist1 < dist2 (dist1 is closer).
+// Delegates to the shared CompareXORDistances function.
 func (db *StdNetDB) compareXORDistances(dist1, dist2 []byte) bool {
-	for i := 0; i < len(dist1); i++ {
-		if dist1[i] < dist2[i] {
-			return true
-		}
-		if dist1[i] > dist2[i] {
-			return false
-		}
-	}
-	return false // Equal distances
+	return CompareXORDistances(dist1, dist2)
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in

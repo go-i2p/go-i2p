@@ -2,7 +2,6 @@ package netdb
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	common "github.com/go-i2p/common/data"
@@ -251,13 +250,12 @@ func (s *AdaptiveStrategy) GetStats() StrategyStats {
 }
 
 // computeXORDistance calculates the XOR distance between two hashes.
-// The XOR distance represents the bitwise difference between the hashes.
+// Delegates to the shared CalculateXORDistance function.
 func computeXORDistance(hash1, hash2 common.Hash) common.Hash {
-	var distance common.Hash
-	for i := 0; i < 32; i++ {
-		distance[i] = hash1[i] ^ hash2[i]
-	}
-	return distance
+	dist := CalculateXORDistance(hash1, hash2)
+	var result common.Hash
+	copy(result[:], dist)
+	return result
 }
 
 // findMostSignificantDifferingBit locates the position of the most significant bit
@@ -383,14 +381,9 @@ func (s *AdaptiveStrategy) GetFloodfillGaps() []int {
 }
 
 // isFloodfillRouter checks if a RouterInfo represents a floodfill router.
-// Returns true if the router's "caps" option contains 'f'.
-// This uses the same logic as StdNetDB.isFloodfillRouter
+// Delegates to the shared IsFloodfillRouter function.
 func (s *AdaptiveStrategy) isFloodfillRouter(ri router_info.RouterInfo) bool {
-	options := ri.Options()
-	capsKey, _ := common.ToI2PString("caps")
-	capsValue := options.Values().Get(capsKey)
-	caps, _ := capsValue.Data()
-	return strings.Contains(caps, "f")
+	return IsFloodfillRouter(ri)
 }
 
 // Compile-time interface check
