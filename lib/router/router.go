@@ -1263,6 +1263,9 @@ func (r *Router) runMainLoop() {
 		"at": "(Router) mainloop",
 	}).Debug("Router ready with database message processing enabled")
 
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
 	for {
 		r.runMux.RLock()
 		shouldRun := r.running
@@ -1276,8 +1279,8 @@ func (r *Router) runMainLoop() {
 		case <-r.closeChnl:
 			log.Debug("Router received close signal in mainloop")
 			return
-		case <-time.After(time.Second):
-			// Continue loop after 1 second timeout
+		case <-ticker.C:
+			// Continue loop after 1 second tick
 		}
 	}
 }

@@ -102,19 +102,27 @@ func (rb *ReseedBootstrap) shuffleServers() []*config.ReseedConfig {
 
 // fetchState holds the shared state for concurrent server fetching operations.
 type fetchState struct {
-	results   []ReseedResult
-	resultsMu sync.Mutex
-	wg        sync.WaitGroup
-	success   int
+	results    []ReseedResult
+	resultsMu  sync.Mutex
+	wg         sync.WaitGroup
+	success    int
+	minServers int                // cancel context when this many servers succeed
+	cancelFunc context.CancelFunc // cancel remaining fetches when enough succeed
 }
 
 // appendResult safely appends a result to the fetch state and updates the success count.
+// When enough servers have succeeded, cancels the context to stop remaining fetches.
 func (fs *fetchState) appendResult(result ReseedResult) {
 	fs.resultsMu.Lock()
 	defer fs.resultsMu.Unlock()
 	fs.results = append(fs.results, result)
 	if result.Error == nil && len(result.RouterInfos) > 0 {
 		fs.success++
+		// Cancel remaining fetches when we have enough successful responses.
+		// This prevents contacting more reseed servers than necessary.
+		if fs.success >= fs.minServers && fs.cancelFunc != nil {
+			fs.cancelFunc()
+		}
 	}
 }
 
@@ -172,18 +180,26 @@ func (rb *ReseedBootstrap) fetchFromServerAsync(ctx context.Context, srv *config
 }
 
 // fetchFromServers fetches from servers concurrently until minServers succeed or all fail.
-// It uses a semaphore to limit concurrent requests.
+// It uses a semaphore to limit concurrent requests and cancels remaining requests
+// once enough servers have responded successfully to avoid unnecessary network exposure.
 func (rb *ReseedBootstrap) fetchFromServers(ctx context.Context, servers []*config.ReseedConfig, minServers int) []ReseedResult {
 	fs := &fetchState{
-		results: make([]ReseedResult, 0, len(servers)),
+		results:    make([]ReseedResult, 0, len(servers)),
+		minServers: minServers,
 	}
+
+	// Create a cancellable context: cancelled when enough servers succeed.
+	// This prevents contacting more servers than necessary (privacy concern).
+	fetchCtx, fetchCancel := context.WithCancel(ctx)
+	defer fetchCancel()
+	fs.cancelFunc = fetchCancel
 
 	// Limit concurrent requests to avoid overwhelming the network
 	const maxConcurrent = 3
 	semaphore := make(chan struct{}, maxConcurrent)
 
 	for _, server := range servers {
-		if isContextCancelled(ctx) {
+		if isContextCancelled(fetchCtx) {
 			break
 		}
 
@@ -193,7 +209,7 @@ func (rb *ReseedBootstrap) fetchFromServers(ctx context.Context, servers []*conf
 		}
 
 		fs.wg.Add(1)
-		go rb.fetchFromServerAsync(ctx, server, semaphore, fs)
+		go rb.fetchFromServerAsync(fetchCtx, server, semaphore, fs)
 	}
 
 	fs.wg.Wait()
