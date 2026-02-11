@@ -2077,7 +2077,11 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 	)
 
 	// Route message asynchronously with status tracking
-	go s.routeMessageWithStatus(session, messageID, sendMsg)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.routeMessageWithStatus(session, messageID, sendMsg)
+	}()
 
 	// Return immediate acceptance response
 	return acceptMsg, nil
@@ -2194,7 +2198,11 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 	)
 
 	// Route message asynchronously with status tracking and expiration
-	go s.routeMessageExpiresWithStatus(session, messageID, sendMsgExpires)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.routeMessageExpiresWithStatus(session, messageID, sendMsgExpires)
+	}()
 
 	// Return immediate acceptance response
 	return acceptMsg, nil

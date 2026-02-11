@@ -79,6 +79,16 @@ func extractNTCP2Transport(addr *router_address.RouterAddress) bool {
 	return strings.EqualFold(string(styleBytes), "ntcp2")
 }
 
+// extractSSU2Transport checks if a RouterAddress uses the SSU2 transport style.
+func extractSSU2Transport(addr *router_address.RouterAddress) bool {
+	style := addr.TransportStyle()
+	styleBytes, err := style.Data()
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(string(styleBytes), "ssu2")
+}
+
 // validateDirectHost checks if a RouterAddress has a valid, directly accessible host.
 // Returns true if host extraction succeeds and the host is not nil, false otherwise.
 func validateDirectHost(addr *router_address.RouterAddress) bool {
@@ -108,6 +118,37 @@ func HasDirectNTCP2Connectivity(ri router_info.RouterInfo) bool {
 
 	for _, addr := range addresses {
 		if !extractNTCP2Transport(addr) {
+			continue
+		}
+
+		if !validateDirectHost(addr) {
+			continue
+		}
+
+		if !validateDirectPort(addr) {
+			continue
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// HasDirectConnectivity checks if a RouterInfo has at least one address (NTCP2 or SSU2)
+// with direct connectivity (host and port present, not introducer-only).
+// This is a broader check than HasDirectNTCP2Connectivity that also accepts
+// SSU2-only routers, which are valid directly connectable peers.
+func HasDirectConnectivity(ri router_info.RouterInfo) bool {
+	addresses := ri.RouterAddresses()
+	if len(addresses) == 0 {
+		return false
+	}
+
+	for _, addr := range addresses {
+		isNTCP2 := extractNTCP2Transport(addr)
+		isSSU2 := extractSSU2Transport(addr)
+		if !isNTCP2 && !isSSU2 {
 			continue
 		}
 

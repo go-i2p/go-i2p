@@ -245,9 +245,11 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 
 	// Use the reseed package to process the SU3 file with limit
 	// Request more than limit to account for invalid RouterInfos
-	requestLimit := limit * 2
+	var requestLimit int
 	if limit <= 0 {
 		requestLimit = 0 // No limit
+	} else {
+		requestLimit = limit * 2
 	}
 
 	reseeder := reseed.NewReseed()
@@ -317,9 +319,11 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 
 	// Use the reseed package to process the zip file with limit
 	// Request more than limit to account for invalid RouterInfos
-	requestLimit := limit * 2
+	var requestLimit int
 	if limit <= 0 {
 		requestLimit = 0 // No limit
+	} else {
+		requestLimit = limit * 2
 	}
 
 	reseeder := reseed.NewReseed()
@@ -380,7 +384,7 @@ func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.
 	for _, ri := range routerInfos {
 		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE validation
 		// This prevents ERROR logs from common package when checking introducer-only addresses
-		if !HasDirectNTCP2Connectivity(ri) {
+		if !HasDirectConnectivity(ri) {
 			stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
 			log.WithFields(logger.Fields{
 				"at":          "(FileBootstrap) validateAndFilterRouterInfos",

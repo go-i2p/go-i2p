@@ -776,12 +776,24 @@ func (r *Router) closeTransports() error {
 	return closeErr
 }
 
-// clearActiveSessions removes all active NTCP2 sessions from the router.
+// clearActiveSessions closes and removes all active NTCP2 sessions from the router.
 func (r *Router) clearActiveSessions() {
 	r.sessionMutex.Lock()
-	sessionCount := len(r.activeSessions)
+	sessions := r.activeSessions
 	r.activeSessions = nil
 	r.sessionMutex.Unlock()
+
+	sessionCount := len(sessions)
+	for hash, session := range sessions {
+		if err := session.Close(); err != nil {
+			log.WithFields(logger.Fields{
+				"at":        "(Router) clearActiveSessions",
+				"phase":     "finalization",
+				"peer_hash": fmt.Sprintf("%x", hash[:8]),
+				"error":     err.Error(),
+			}).Warn("failed to close NTCP2 session during shutdown")
+		}
+	}
 
 	if sessionCount > 0 {
 		log.WithFields(logger.Fields{

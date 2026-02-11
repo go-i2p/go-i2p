@@ -308,7 +308,7 @@ func (rb *ReseedBootstrap) validateAndFilterRouterInfos(routerInfos []router_inf
 	for _, ri := range routerInfos {
 		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE validation
 		// This prevents ERROR logs from common package when checking introducer-only addresses
-		if !HasDirectNTCP2Connectivity(ri) {
+		if !HasDirectConnectivity(ri) {
 			stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
 			log.WithFields(logger.Fields{
 				"at":          "(ReseedBootstrap) validateAndFilterRouterInfos",

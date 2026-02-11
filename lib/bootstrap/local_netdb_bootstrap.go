@@ -235,7 +235,7 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 
 		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE adding to bootstrap peers
 		// This prevents ERROR logs from common package when checking introducer-only addresses
-		if !HasDirectNTCP2Connectivity(ri) {
+		if !HasDirectConnectivity(ri) {
 			log.WithFields(logger.Fields{
 				"at":     "(LocalNetDbBootstrap) createWalkFunction",
 				"phase":  "pre-filter",

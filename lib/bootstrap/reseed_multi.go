@@ -64,11 +64,14 @@ func (rb *ReseedBootstrap) MultiServerReseed(ctx context.Context, n int) ([]rout
 
 	combined := rb.applyStrategy(successfulResults)
 
-	// Shuffle results for randomization
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	rng.Shuffle(len(combined), func(i, j int) {
-		combined[i], combined[j] = combined[j], combined[i]
-	})
+	// Shuffle results for randomization, unless the random weighted strategy
+	// was used (which already returns a weighted-shuffled order that should be preserved).
+	if rb.config.ReseedStrategy != config.ReseedStrategyRandom {
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		rng.Shuffle(len(combined), func(i, j int) {
+			combined[i], combined[j] = combined[j], combined[i]
+		})
+	}
 
 	// Limit results if requested
 	if n > 0 && len(combined) > n {
@@ -427,11 +430,20 @@ func deduplicateRouterInfos(infos []router_info.RouterInfo) []router_info.Router
 }
 
 // randomWeightedStrategy randomly selects RouterInfos, weighted by how many servers returned each.
-// RouterInfos returned by multiple servers are more likely to be selected.
+// RouterInfos returned by multiple servers are more likely to appear earlier in the result,
+// making them more likely to be selected when the caller applies a limit.
+// The algorithm shuffles a weighted list (where each RouterInfo appears count times),
+// then deduplicates by taking the first occurrence of each entry.
+// Because higher-weighted items have more copies in the shuffled list,
+// they are statistically more likely to appear earlier after the shuffle.
 func (rb *ReseedBootstrap) randomWeightedStrategy(results []ReseedResult) []router_info.RouterInfo {
 	ric := aggregateRouterInfos(results)
 	weighted := buildWeightedList(ric)
 	shuffleRouterInfos(weighted)
+
+	// Deduplicate by first occurrence in the shuffled weighted list.
+	// Higher-weighted entries (more copies) are more likely to have an
+	// earlier first occurrence, providing the weighted selection bias.
 	result := deduplicateRouterInfos(weighted)
 
 	log.WithFields(logger.Fields{
