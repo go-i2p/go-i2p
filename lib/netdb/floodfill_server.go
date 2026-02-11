@@ -342,11 +342,25 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 }
 
 // lookupLeaseSet looks up a LeaseSet by hash.
+// Checks all LeaseSet variants: LeaseSet2, EncryptedLeaseSet, MetaLeaseSet,
+// and original LeaseSet.
 func (fs *FloodfillServer) lookupLeaseSet(key common.Hash) ([]byte, byte, error) {
 	// Try LeaseSet2 first (most common modern format)
 	data, err := fs.db.GetLeaseSet2Bytes(key)
 	if err == nil && len(data) > 0 {
 		return data, i2np.DATABASE_STORE_TYPE_LEASESET2, nil
+	}
+
+	// Try EncryptedLeaseSet
+	data, err = fs.db.GetEncryptedLeaseSetBytes(key)
+	if err == nil && len(data) > 0 {
+		return data, i2np.DATABASE_STORE_TYPE_ENCRYPTED_LEASESET, nil
+	}
+
+	// Try MetaLeaseSet
+	data, err = fs.db.GetMetaLeaseSetBytes(key)
+	if err == nil && len(data) > 0 {
+		return data, i2np.DATABASE_STORE_TYPE_META_LEASESET, nil
 	}
 
 	// Try original LeaseSet

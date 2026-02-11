@@ -11,8 +11,12 @@ var (
 )
 
 // RegisterCloser registers an io.Closer to be closed during shutdown.
+// Nil closers are silently ignored to prevent panics in CloseAll.
 // This function is thread-safe.
 func RegisterCloser(c io.Closer) {
+	if c == nil {
+		return
+	}
 	closeMutex.Lock()
 	defer closeMutex.Unlock()
 	closeOnExit = append(closeOnExit, c)

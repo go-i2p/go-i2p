@@ -297,7 +297,8 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 	if transport != nil {
 		resolver = NewKademliaResolverWithTransport(e.db, e.pool, transport, ourHash)
 	} else {
-		resolver = NewKademliaResolver(e.db, e.pool)
+		log.Warn("Exploratory lookup skipped: no transport available, cannot reach network peers")
+		return fmt.Errorf("no transport available for exploratory lookup")
 	}
 	if resolver == nil {
 		return fmt.Errorf("failed to create resolver")

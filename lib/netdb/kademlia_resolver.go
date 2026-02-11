@@ -64,7 +64,9 @@ func NewKademliaResolverWithTransport(netDb NetworkDatabase, pool *tunnel.Pool, 
 // SetTransport sets the lookup transport for network-based DHT lookups.
 // This must be called before performing remote lookups if not set via constructor.
 func (kr *KademliaResolver) SetTransport(transport LookupTransport) {
+	kr.mu.Lock()
 	kr.transport = transport
+	kr.mu.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "KademliaResolver.SetTransport",
 		"reason": "transport_configured",
@@ -73,7 +75,9 @@ func (kr *KademliaResolver) SetTransport(transport LookupTransport) {
 
 // SetOurHash sets our router's identity hash for constructing lookup messages.
 func (kr *KademliaResolver) SetOurHash(hash common.Hash) {
+	kr.mu.Lock()
 	kr.ourHash = hash
+	kr.mu.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "KademliaResolver.SetOurHash",
 		"reason": "our_hash_configured",

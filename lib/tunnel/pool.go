@@ -325,8 +325,10 @@ func (p *Pool) maintenanceLoop() {
 
 // maintainPool checks pool health and builds tunnels if needed
 func (p *Pool) maintainPool() {
+	var needed int
+
+	// Hold mutex only for inspection and calculation
 	p.mutex.Lock()
-	defer p.mutex.Unlock()
 
 	// Clean up expired tunnels
 	p.cleanupExpiredTunnelsLocked()
@@ -335,29 +337,35 @@ func (p *Pool) maintainPool() {
 	activeCount, nearExpiry := p.countTunnelsLocked()
 
 	// Determine how many new tunnels to build
-	needed := p.calculateNeededTunnels(activeCount, nearExpiry)
+	needed = p.calculateNeededTunnels(activeCount, nearExpiry)
+
+	p.mutex.Unlock()
 
 	if needed > 0 {
-		// BUG FIX #5: Clean up expired failed peer entries
+		// Clean up failed peers outside p.mutex to avoid lock-ordering issues
+		// with failedPeersMu (ABBA deadlock prevention)
 		p.CleanupFailedPeers()
 
 		log.WithFields(logger.Fields{
-			"at":                   "Pool.maintainPool",
-			"phase":                "tunnel_build",
-			"step":                 "determine_needs",
-			"operation":            "check_pool_health",
-			"reason":               "tunnel pool below threshold",
-			"active":               activeCount,
-			"near_expiry":          nearExpiry,
-			"needed":               needed,
-			"min_tunnels":          p.config.MinTunnels,
-			"max_tunnels":          p.config.MaxTunnels,
-			"is_inbound":           p.config.IsInbound,
-			"consecutive_failures": p.buildFailures,
+			"at":          "Pool.maintainPool",
+			"phase":       "tunnel_build",
+			"step":        "determine_needs",
+			"operation":   "check_pool_health",
+			"reason":      "tunnel pool below threshold",
+			"needed":      needed,
+			"min_tunnels": p.config.MinTunnels,
+			"max_tunnels": p.config.MaxTunnels,
+			"is_inbound":  p.config.IsInbound,
 		}).Warn("tunnel pool below minimum, building replacement tunnels")
+
+		// Re-acquire mutex for buildTunnelsWithBackoff which accesses
+		// p.buildFailures and p.lastBuildTime
+		p.mutex.Lock()
 
 		// Build tunnels with exponential backoff on failures
 		p.buildTunnelsWithBackoff(needed)
+
+		p.mutex.Unlock()
 
 		// Log completion of build attempt
 		log.WithFields(logger.Fields{

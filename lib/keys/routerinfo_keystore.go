@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -95,8 +96,21 @@ func ensureDirectoryExists(dir string) error {
 // If no key exists, it generates a new key. Returns the loaded or generated
 // private key, or an error if the operation fails.
 func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
-	fullPath := filepath.Join(dir, name)
+	// Use the same naming convention as StoreKeys: name + ".key"
+	fullPath := filepath.Join(dir, name+".key")
+	// Also check the legacy path without ".key" suffix for backward compatibility
+	legacyPath := filepath.Join(dir, name)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		// Check legacy path
+		if _, err := os.Stat(legacyPath); err == nil {
+			log.WithField("path", legacyPath).Debug("Loading existing key from legacy path")
+			keyData, err := os.ReadFile(legacyPath)
+			if err != nil {
+				log.WithError(err).Error("Failed to read legacy key file")
+				return nil, err
+			}
+			return loadExistingKey(keyData)
+		}
 		log.WithField("path", fullPath).Debug("Generating new key")
 		return generateNewKey()
 	}
@@ -251,21 +265,19 @@ func (ks *RouterInfoKeystore) tryGenerateKeyIDFromPrivateKey() (keyID string, ne
 	return hex.EncodeToString(public.Bytes()), false
 }
 
-// generateFallbackKeyID creates a fallback KeyID when private key is unavailable.
-// This should only be called once per keystore instance via sync.Once.
+// generateFallbackKeyID creates a deterministic fallback KeyID when private key is unavailable.
+// Uses a hash of the keystore directory path to produce a consistent ID across restarts,
+// preventing key file orphaning. This should only be called once per keystore instance via sync.Once.
 func (ks *RouterInfoKeystore) generateFallbackKeyID() string {
-	log.WithField("at", "generateFallbackKeyID").Warn("Generating fallback KeyID")
-	randomBytes := make([]byte, 4)
-	if _, err := rand.Read(randomBytes); err != nil {
-		log.WithError(err).WithField("at", "generateFallbackKeyID").Error("Random generation failed, using fixed fallback")
-		// If random generation fails, use a fixed fallback
-		return "fallback-key"
-	}
-	fallbackID := "fallback-" + hex.EncodeToString(randomBytes)
+	log.WithField("at", "generateFallbackKeyID").Warn("Generating deterministic fallback KeyID from directory path")
+	// Use a deterministic derivation from the directory path so the same
+	// keystore directory always produces the same fallback ID across restarts.
+	dirHash := sha256.Sum256([]byte(ks.dir))
+	fallbackID := "fallback-" + hex.EncodeToString(dirHash[:4])
 	log.WithFields(map[string]interface{}{
 		"at":    "generateFallbackKeyID",
 		"keyID": fallbackID,
-	}).Debug("Generated fallback KeyID")
+	}).Debug("Generated deterministic fallback KeyID")
 	return fallbackID
 }
 

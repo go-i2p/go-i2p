@@ -5,11 +5,13 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/embedded"
 	"github.com/go-i2p/go-i2p/lib/netdb/reseed"
+	"github.com/go-i2p/go-i2p/lib/util"
 	"github.com/go-i2p/go-i2p/lib/util/signals"
 	"github.com/go-i2p/logger"
 	"github.com/spf13/cobra"
@@ -18,8 +20,9 @@ import (
 )
 
 var (
-	embeddedRouter *embedded.StandardEmbeddedRouter
-	log            = logger.GetGoI2PLogger()
+	embeddedRouter   *embedded.StandardEmbeddedRouter
+	embeddedRouterMu sync.Mutex
+	log              = logger.GetGoI2PLogger()
 )
 
 var RootCmd = &cobra.Command{
@@ -386,6 +389,9 @@ func manageRouterLifecycle() error {
 
 // createAndConfigureRouter creates and configures the embedded router instance.
 func createAndConfigureRouter() error {
+	embeddedRouterMu.Lock()
+	defer embeddedRouterMu.Unlock()
+
 	var err error
 	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(config.RouterConfigProperties)
 	if err != nil {
@@ -416,6 +422,8 @@ func registerSignalHandlers() {
 	})
 
 	signals.RegisterInterruptHandler(func() {
+		embeddedRouterMu.Lock()
+		defer embeddedRouterMu.Unlock()
 		if embeddedRouter != nil && embeddedRouter.IsRunning() {
 			log.WithFields(logger.Fields{
 				"at":     "runRouter",
@@ -464,6 +472,10 @@ func closeRouter() error {
 	if err := embeddedRouter.Close(); err != nil {
 		return fmt.Errorf("failed to close router: %w", err)
 	}
+
+	// Close all resources registered via util.RegisterCloser
+	util.CloseAll()
+
 	return nil
 }
 

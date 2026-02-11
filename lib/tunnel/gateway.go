@@ -492,9 +492,15 @@ func (g *Gateway) writePayload(msg []byte, paddingSize int, deliveryInstructions
 
 // writeChecksum calculates and writes the checksum.
 // Checksum is first 4 bytes of SHA256(data + IV).
+// Uses a separate buffer to avoid corrupting memory beyond the message
+// when the backing array of msg has excess capacity.
 func (g *Gateway) writeChecksum(msg []byte) {
-	checksumData := append(msg[24:], msg[4:20]...)
-	hash := sha256.Sum256(checksumData)
+	data := msg[24:]
+	iv := msg[4:20]
+	buf := make([]byte, len(data)+len(iv))
+	copy(buf, data)
+	copy(buf[len(data):], iv)
+	hash := sha256.Sum256(buf)
 	copy(msg[20:24], hash[:4])
 }
 

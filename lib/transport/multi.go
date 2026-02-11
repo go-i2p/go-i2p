@@ -243,7 +243,7 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		"num_transports": len(tmux.trans),
 	}).Debug("attempting to get session")
 
-	// Enforce connection pool limit
+	// Enforce connection pool limit (atomically reserves a slot)
 	if err := tmux.checkConnectionLimit(); err != nil {
 		return nil, err
 	}
@@ -254,10 +254,13 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 			if err != nil {
 				continue
 			}
-			atomic.AddInt32(&tmux.activeSessionCount, 1)
+			// Slot was already reserved by checkConnectionLimit
 			return &trackedSession{TransportSession: s, mux: tmux}, err
 		}
 	}
+
+	// No session established — release the reserved slot
+	atomic.AddInt32(&tmux.activeSessionCount, -1)
 
 	tmux.logNoTransportError(routerInfo)
 	err = ErrNoTransportAvailable
@@ -496,21 +499,28 @@ func (tmux *TransportMuxer) ActiveSessionCount() int {
 	return int(atomic.LoadInt32(&tmux.activeSessionCount))
 }
 
-// checkConnectionLimit returns ErrConnectionPoolFull if the maximum number of
-// concurrent connections has been reached.
+// checkConnectionLimit atomically reserves a connection slot. Returns
+// ErrConnectionPoolFull if the maximum number of concurrent connections
+// has been reached, or nil on success. The caller MUST call
+// releaseConnectionSlot if the session creation ultimately fails.
 func (tmux *TransportMuxer) checkConnectionLimit() error {
-	max := tmux.getMaxConnections()
-	current := int(atomic.LoadInt32(&tmux.activeSessionCount))
-	if current >= max {
-		log.WithFields(logger.Fields{
-			"at":              "(TransportMuxer) checkConnectionLimit",
-			"reason":          "connection_pool_full",
-			"active_sessions": current,
-			"max_connections": max,
-		}).Warn("connection pool limit reached")
-		return ErrConnectionPoolFull
+	max := int32(tmux.getMaxConnections())
+	for {
+		current := atomic.LoadInt32(&tmux.activeSessionCount)
+		if current >= max {
+			log.WithFields(logger.Fields{
+				"at":              "(TransportMuxer) checkConnectionLimit",
+				"reason":          "connection_pool_full",
+				"active_sessions": int(current),
+				"max_connections": int(max),
+			}).Warn("connection pool limit reached")
+			return ErrConnectionPoolFull
+		}
+		if atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, current+1) {
+			return nil
+		}
+		// CAS failed — another goroutine changed the counter; retry
 	}
-	return nil
 }
 
 // GetTransports returns a copy of the slice of transports in this muxer.

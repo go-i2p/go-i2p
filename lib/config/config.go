@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/go-i2p/go-i2p/lib/util"
@@ -27,7 +29,10 @@ func InitConfig() {
 	setDefaults()
 
 	// handle config file creating it if needed
-	handleConfigFile()
+	if err := handleConfigFile(); err != nil {
+		log.WithError(err).Error("fatal configuration error")
+		os.Exit(1)
+	}
 
 	// Update RouterConfigProperties
 	UpdateRouterConfig()
@@ -306,16 +311,16 @@ func UpdateRouterConfig() {
 	}
 }
 
-func createDefaultConfig(defaultConfigDir string) {
+func createDefaultConfig(defaultConfigDir string) error {
 	defaultConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
 	// Ensure directory exists with secure permissions (config may contain passwords)
 	if err := CreateSecureDirectory(defaultConfigDir); err != nil {
-		log.Fatalf("Could not create config directory: %s", err)
+		return fmt.Errorf("could not create config directory: %w", err)
 	}
 
 	// Write current config file
 	if err := viper.SafeWriteConfig(); err != nil {
-		log.Fatalf("Could not write default config file: %s", err)
+		return fmt.Errorf("could not write default config file: %w", err)
 	}
 
 	// Secure the config file (may contain sensitive data like I2PControl password)
@@ -335,18 +340,21 @@ func createDefaultConfig(defaultConfigDir string) {
 		"config_file": defaultConfigFile,
 		"config_dir":  defaultConfigDir,
 	}).Debug("created default configuration")
+	return nil
 }
 
-func handleConfigFile() {
+func handleConfigFile() error {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			if CfgFile != "" {
-				log.Fatalf("Config file %s is not found: %s", CfgFile, err)
+				return fmt.Errorf("config file %s is not found: %w", CfgFile, err)
 			} else {
-				createDefaultConfig(BuildI2PDirPath())
+				if err := createDefaultConfig(BuildI2PDirPath()); err != nil {
+					return err
+				}
 			}
 		} else {
-			log.Fatalf("Error reading config file: %s", err)
+			return fmt.Errorf("error reading config file: %w", err)
 		}
 	} else {
 		log.WithFields(logger.Fields{
@@ -356,6 +364,7 @@ func handleConfigFile() {
 			"config_file": viper.ConfigFileUsed(),
 		}).Debug("using config file")
 	}
+	return nil
 }
 
 func BuildI2PDirPath() string {

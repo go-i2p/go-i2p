@@ -93,6 +93,9 @@ type KademliaResolver struct {
 	// what tunnel pool to use when doing lookup
 	// if nil the lookup will be done directly
 	pool *tunnel.Pool
+	// mu protects transport and ourHash which may be set after construction
+	// via SetTransport / SetOurHash while queryPeer reads them concurrently.
+	mu sync.RWMutex
 	// transport for sending lookup messages (optional)
 	transport LookupTransport
 	// our router hash for constructing lookup messages
@@ -473,8 +476,15 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 		"target": fmt.Sprintf("%x", target[:8]),
 	}).Debug("Querying peer for RouterInfo")
 
+	// Snapshot transport and ourHash under read lock to avoid races
+	// with SetTransport / SetOurHash called from another goroutine.
+	kr.mu.RLock()
+	transport := kr.transport
+	ourHash := kr.ourHash
+	kr.mu.RUnlock()
+
 	// Check if transport is configured
-	if kr.transport == nil {
+	if transport == nil {
 		log.WithFields(logger.Fields{
 			"at":     "queryPeer",
 			"peer":   fmt.Sprintf("%x", peer[:8]),
@@ -491,7 +501,7 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	}
 
 	// Determine which hash to use as "from" in the lookup
-	fromHash := kr.ourHash
+	fromHash := ourHash
 	var emptyHash common.Hash
 	if fromHash == emptyHash {
 		// If ourHash is not set, use the peer hash as a fallback
@@ -507,7 +517,7 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	lookup := i2np.NewDatabaseLookup(target, fromHash, i2np.DatabaseLookupFlagTypeRI, nil)
 
 	// Send the lookup and wait for response
-	responseData, msgType, err := kr.transport.SendDatabaseLookup(ctx, *peerRI, lookup)
+	responseData, msgType, err := transport.SendDatabaseLookup(ctx, *peerRI, lookup)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "queryPeer",

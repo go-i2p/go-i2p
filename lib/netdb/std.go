@@ -840,7 +840,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 func (db *StdNetDB) Save() (err error) {
 	log.Debug("Saving all NetDB entries")
 
-	// Copy entries under read lock to avoid holding the lock during disk I/O
+	// Copy RouterInfo entries under read lock to avoid holding the lock during disk I/O
 	db.riMutex.RLock()
 	entriesToSave := make([]Entry, 0, len(db.RouterInfos))
 	for _, entry := range db.RouterInfos {
@@ -857,6 +857,34 @@ func (db *StdNetDB) Save() (err error) {
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
+
+	// Save LeaseSet entries (all variants)
+	db.lsMutex.RLock()
+	type lsEntry struct {
+		hash  common.Hash
+		entry Entry
+	}
+	lsEntries := make([]lsEntry, 0, len(db.LeaseSets))
+	for h, entry := range db.LeaseSets {
+		lsEntries = append(lsEntries, lsEntry{hash: h, entry: entry})
+	}
+	db.lsMutex.RUnlock()
+
+	for _, ls := range lsEntries {
+		fpath := db.SkiplistFileForLeaseSet(ls.hash)
+		f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o700)
+		if ferr != nil {
+			err = ferr
+			log.WithError(ferr).WithField("hash", ls.hash).Error("Failed to open file for saving LeaseSet entry")
+			continue
+		}
+		if werr := ls.entry.WriteTo(f); werr != nil {
+			err = werr
+			log.WithError(werr).WithField("hash", ls.hash).Error("Failed to write LeaseSet entry")
+		}
+		f.Close()
+	}
+
 	return err
 }
 
@@ -911,6 +939,16 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 		hash, err := ri.IdentHash()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get router hash during reseed, skipping")
+			continue
+		}
+		// Verify cryptographic signature before trusting RouterInfo from reseed.
+		// The SU3 container signature only authenticates the reseed server,
+		// not the individual RouterInfos within it.
+		if err := verifyRouterInfoSignature(ri); err != nil {
+			log.WithFields(logger.Fields{
+				"hash":  hash,
+				"error": err.Error(),
+			}).Warn("Rejecting RouterInfo from reseed: invalid signature")
 			continue
 		}
 		if _, exists := db.RouterInfos[hash]; !exists {
@@ -1657,13 +1695,22 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok {
 		db.lsMutex.RUnlock()
-		log.Debug("LeaseSet found in memory cache")
-		chnl = make(chan lease_set.LeaseSet, 1)
-		chnl <- *ls.LeaseSet
-		close(chnl)
-		return chnl
+		// The entry exists but may hold a different LeaseSet variant
+		// (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet). Only return
+		// if this entry actually contains a classic LeaseSet.
+		if ls.LeaseSet != nil {
+			log.Debug("LeaseSet found in memory cache")
+			chnl = make(chan lease_set.LeaseSet, 1)
+			chnl <- *ls.LeaseSet
+			close(chnl)
+			return chnl
+		}
+		// Entry exists but is a different type — fall through to file load
+		// which may contain a classic LeaseSet serialization.
+		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet, trying filesystem")
+	} else {
+		db.lsMutex.RUnlock()
 	}
-	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
