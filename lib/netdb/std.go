@@ -40,7 +40,11 @@ type StdNetDB struct {
 
 	// Expiration tracking for LeaseSets
 	leaseSetExpiry map[common.Hash]time.Time // maps hash to expiration time
-	expiryMutex    sync.RWMutex              // mutex for expiry tracking
+
+	// Expiration tracking for RouterInfos (based on published date + RouterInfoMaxAge)
+	routerInfoExpiry map[common.Hash]time.Time // maps hash to expiration time
+
+	expiryMutex sync.RWMutex // mutex for expiry tracking (shared for both LeaseSets and RouterInfos)
 
 	// HIGH PRIORITY FIX #3: Peer connection tracking and reputation
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
@@ -59,16 +63,17 @@ func NewStdNetDB(db string) *StdNetDB {
 	}).Debug("creating new StdNetDB")
 	ctx, cancel := context.WithCancel(context.Background())
 	return &StdNetDB{
-		DB:             db,
-		RouterInfos:    make(map[common.Hash]Entry),
-		riMutex:        sync.RWMutex{},
-		LeaseSets:      make(map[common.Hash]Entry),
-		lsMutex:        sync.RWMutex{},
-		leaseSetExpiry: make(map[common.Hash]time.Time),
-		expiryMutex:    sync.RWMutex{},
-		PeerTracker:    NewPeerTracker(), // HIGH PRIORITY FIX #3: Initialize peer tracking
-		ctx:            ctx,
-		cancel:         cancel,
+		DB:               db,
+		RouterInfos:      make(map[common.Hash]Entry),
+		riMutex:          sync.RWMutex{},
+		LeaseSets:        make(map[common.Hash]Entry),
+		lsMutex:          sync.RWMutex{},
+		leaseSetExpiry:   make(map[common.Hash]time.Time),
+		routerInfoExpiry: make(map[common.Hash]time.Time),
+		expiryMutex:      sync.RWMutex{},
+		PeerTracker:      NewPeerTracker(), // HIGH PRIORITY FIX #3: Initialize peer tracking
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 }
 
@@ -1012,8 +1017,18 @@ func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte)
 		return err
 	}
 
+	// Verify cryptographic signature to prevent forged RouterInfo entries
+	if err := verifyRouterInfoSignature(ri); err != nil {
+		return err
+	}
+
 	if !db.addRouterInfoToCache(key, ri) {
 		return nil
+	}
+
+	// Track expiration based on published date
+	if published := ri.Published(); published != nil && !published.Time().IsZero() {
+		db.trackRouterInfoExpiration(key, published.Time())
 	}
 
 	if err := db.persistRouterInfoToFilesystem(key, ri); err != nil {
@@ -2490,7 +2505,7 @@ func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leases
 // This method should be called once during NetDB initialization.
 // Use Stop() to gracefully shut down the cleanup goroutine.
 func (db *StdNetDB) StartExpirationCleaner() {
-	log.Info("Starting LeaseSet expiration cleaner (runs every 1 minute)")
+	log.Info("Starting expiration cleaner (LeaseSets every 1 min, RouterInfos every 10 min)")
 
 	db.cleanupWg.Add(1)
 	go func() {
@@ -2499,7 +2514,7 @@ func (db *StdNetDB) StartExpirationCleaner() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
-		// Peer pruning runs every 10 ticks (10 minutes)
+		// RouterInfo and peer pruning runs every 10 ticks (10 minutes)
 		tickCount := 0
 
 		for {
@@ -2507,19 +2522,24 @@ func (db *StdNetDB) StartExpirationCleaner() {
 			case <-ticker.C:
 				db.cleanExpiredLeaseSets()
 
-				// Prune stale peer tracking entries every 10 minutes
 				tickCount++
-				if tickCount%10 == 0 && db.PeerTracker != nil {
-					const peerMaxAge = 24 * time.Hour
-					pruned := db.PeerTracker.PruneOldEntries(peerMaxAge)
-					if pruned > 0 {
-						log.WithFields(logger.Fields{
-							"pruned": pruned,
-						}).Info("Pruned stale peer tracker entries")
+				if tickCount%10 == 0 {
+					// Clean expired RouterInfos every 10 minutes
+					db.cleanExpiredRouterInfos()
+
+					// Prune stale peer tracking entries every 10 minutes
+					if db.PeerTracker != nil {
+						const peerMaxAge = 24 * time.Hour
+						pruned := db.PeerTracker.PruneOldEntries(peerMaxAge)
+						if pruned > 0 {
+							log.WithFields(logger.Fields{
+								"pruned": pruned,
+							}).Info("Pruned stale peer tracker entries")
+						}
 					}
 				}
 			case <-db.ctx.Done():
-				log.Info("Stopping LeaseSet expiration cleaner")
+				log.Info("Stopping expiration cleaner")
 				return
 			}
 		}
