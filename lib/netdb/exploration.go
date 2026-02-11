@@ -32,6 +32,9 @@ type Explorer struct {
 	// our router hash for bucket calculations
 	ourHash common.Hash
 
+	// fieldMu protects transport and ourHash from concurrent read/write access
+	fieldMu sync.RWMutex
+
 	// exploration control
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -167,7 +170,9 @@ func (e *Explorer) Stop() {
 // SetTransport sets the lookup transport for network-based exploration lookups.
 // This should be called before Start() to enable the explorer to query remote peers.
 func (e *Explorer) SetTransport(transport LookupTransport) {
+	e.fieldMu.Lock()
 	e.transport = transport
+	e.fieldMu.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Explorer) SetTransport",
 		"reason": "transport_configured",
@@ -176,7 +181,9 @@ func (e *Explorer) SetTransport(transport LookupTransport) {
 
 // SetOurHash sets our router's identity hash for lookup message construction.
 func (e *Explorer) SetOurHash(hash common.Hash) {
+	e.fieldMu.Lock()
 	e.ourHash = hash
+	e.fieldMu.Unlock()
 }
 
 // explorationLoop runs periodic exploration rounds
@@ -283,8 +290,12 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 	// Create a transport-capable resolver so lookups can reach the network.
 	// Without a transport, the resolver can only check local storage.
 	var resolver Resolver
-	if e.transport != nil {
-		resolver = NewKademliaResolverWithTransport(e.db, e.pool, e.transport, e.ourHash)
+	e.fieldMu.RLock()
+	transport := e.transport
+	ourHash := e.ourHash
+	e.fieldMu.RUnlock()
+	if transport != nil {
+		resolver = NewKademliaResolverWithTransport(e.db, e.pool, transport, ourHash)
 	} else {
 		resolver = NewKademliaResolver(e.db, e.pool)
 	}
@@ -330,7 +341,10 @@ func (e *Explorer) statsUpdateLoop() {
 // updateStrategyStatsIfPresent updates strategy statistics if a strategy is configured.
 func (e *Explorer) updateStrategyStatsIfPresent() {
 	if e.strategy != nil {
-		e.strategy.UpdateStats(e.db, e.ourHash)
+		e.fieldMu.RLock()
+		hash := e.ourHash
+		e.fieldMu.RUnlock()
+		e.strategy.UpdateStats(e.db, hash)
 	}
 }
 

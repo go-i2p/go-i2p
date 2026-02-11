@@ -78,7 +78,6 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	}
 
 	stats.SuccessCount++
-	stats.TotalAttempts++
 	stats.LastSuccess = time.Now()
 	stats.ConsecutiveFails = 0 // Reset consecutive failure counter
 
@@ -110,7 +109,6 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	}
 
 	stats.FailureCount++
-	stats.TotalAttempts++
 	stats.LastFailure = time.Now()
 	stats.ConsecutiveFails++
 

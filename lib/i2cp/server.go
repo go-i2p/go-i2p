@@ -92,6 +92,12 @@ type Server struct {
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	}
 
+	// BandwidthLimitsProvider supplies configured bandwidth limits (bytes/sec).
+	// If nil, the server falls back to a conservative default.
+	bandwidthProvider interface {
+		GetBandwidthLimits() (inbound, outbound uint32)
+	}
+
 	// Tunnel infrastructure for session tunnel pool initialization
 	tunnelBuilder tunnel.BuilderInterface
 	peerSelector  tunnel.PeerSelector
@@ -1550,11 +1556,14 @@ func (s *Server) handleGetBandwidthLimits(msg *Message) (*Message, error) {
 	// [inbound_limit:4][outbound_limit:4]
 	// Values are in bytes per second (0 = unlimited)
 
-	// Default bandwidth limits (in bytes per second)
-	var (
-		inboundLimit  uint32 = 100 * 1024 * 1024 // 100 MB/s inbound
-		outboundLimit uint32 = 100 * 1024 * 1024 // 100 MB/s outbound
-	)
+	var inboundLimit, outboundLimit uint32
+	if s.bandwidthProvider != nil {
+		inboundLimit, outboundLimit = s.bandwidthProvider.GetBandwidthLimits()
+	} else {
+		// Fallback: use a conservative default (1 MB/s) when no provider is configured
+		inboundLimit = 1024 * 1024
+		outboundLimit = 1024 * 1024
+	}
 
 	payload := make([]byte, 8)
 
@@ -2503,6 +2512,16 @@ func (s *Server) SetNetDB(netdb interface {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.netdb = netdb
+}
+
+// SetBandwidthProvider sets the provider used by handleGetBandwidthLimits
+// to return real configured bandwidth limits instead of hardcoded defaults.
+func (s *Server) SetBandwidthProvider(bp interface {
+	GetBandwidthLimits() (inbound, outbound uint32)
+}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bandwidthProvider = bp
 }
 
 // IsRunning returns whether the server is currently running

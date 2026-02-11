@@ -1882,16 +1882,16 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	log.WithField("hash", hash).Debug("Getting LeaseSet2")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("LeaseSet2 found in memory cache")
 		chnl = make(chan lease_set2.LeaseSet2, 1)
 		chnl <- *ls.LeaseSet2
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -1940,9 +1940,9 @@ func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting LeaseSet2 bytes")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("LeaseSet2 found in memory cache")
 
 		// Serialize the LeaseSet2 to bytes
@@ -1953,7 +1953,7 @@ func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 		}
 		return data, nil
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -2108,16 +2108,16 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 	log.WithField("hash", hash).Debug("Getting EncryptedLeaseSet")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.EncryptedLeaseSet != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("EncryptedLeaseSet found in memory cache")
 		chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
 		chnl <- *ls.EncryptedLeaseSet
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -2166,9 +2166,9 @@ func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) 
 	log.WithField("hash", hash).Debug("Getting EncryptedLeaseSet bytes")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.EncryptedLeaseSet != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("EncryptedLeaseSet found in memory cache")
 
 		// Serialize the EncryptedLeaseSet to bytes
@@ -2179,7 +2179,7 @@ func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) 
 		}
 		return data, nil
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -2334,16 +2334,16 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 	log.WithField("hash", hash).Debug("Getting MetaLeaseSet")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.MetaLeaseSet != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("MetaLeaseSet found in memory cache")
 		chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
 		chnl <- *ls.MetaLeaseSet
 		close(chnl)
 		return chnl
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -2392,9 +2392,9 @@ func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	log.WithField("hash", hash).Debug("Getting MetaLeaseSet bytes")
 
 	// Check memory cache first
-	db.lsMutex.Lock()
+	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.MetaLeaseSet != nil {
-		db.lsMutex.Unlock()
+		db.lsMutex.RUnlock()
 		log.Debug("MetaLeaseSet found in memory cache")
 
 		// Serialize the MetaLeaseSet to bytes
@@ -2405,7 +2405,7 @@ func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 		}
 		return data, nil
 	}
-	db.lsMutex.Unlock()
+	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
@@ -2643,8 +2643,8 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
 	log.Debug("Getting all LeaseSets from database")
 
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
+	db.lsMutex.RLock()
+	defer db.lsMutex.RUnlock()
 
 	// Pre-allocate slice with capacity to avoid reallocation
 	result := make([]LeaseSetEntry, 0, len(db.LeaseSets))

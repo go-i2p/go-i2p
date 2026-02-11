@@ -78,6 +78,9 @@ type Router struct {
 	// bandwidthTracker tracks bandwidth usage and calculates rolling averages
 	bandwidthTracker *BandwidthTracker
 
+	// closeOnce ensures finalizeCloseChannel is safe to call concurrently
+	closeOnce sync.Once
+
 	// congestionMonitor tracks local congestion state and determines D/E/G flags
 	// for RouterInfo advertisement per PROP_162
 	congestionMonitor *CongestionMonitor
@@ -314,6 +317,9 @@ func (r *Router) GetTransportAddr() interface{} {
 
 // create router from configuration
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
+	if c == nil {
+		return nil, fmt.Errorf("router config cannot be nil")
+	}
 	log.WithFields(logger.Fields{
 		"at":          "(Router) FromConfig",
 		"phase":       "startup",
@@ -824,16 +830,18 @@ func (r *Router) clearRoutingComponents() {
 
 // finalizeCloseChannel closes the router's close channel to signal complete finalization.
 func (r *Router) finalizeCloseChannel() {
-	if r.closeChnl != nil {
-		close(r.closeChnl)
-		r.closeChnl = nil
-		log.WithFields(logger.Fields{
-			"at":     "(Router) Close",
-			"phase":  "finalization",
-			"step":   8,
-			"reason": "close channel finalized",
-		}).Debug("close channel closed")
-	}
+	r.closeOnce.Do(func() {
+		if r.closeChnl != nil {
+			close(r.closeChnl)
+			r.closeChnl = nil
+			log.WithFields(logger.Fields{
+				"at":     "(Router) Close",
+				"phase":  "finalization",
+				"step":   8,
+				"reason": "close channel finalized",
+			}).Debug("close channel closed")
+		}
+	})
 }
 
 // Start starts router mainloop and returns an error if startup-critical
@@ -1619,6 +1627,9 @@ func (r *Router) startI2CPServer() error {
 	// Set NetDB for HostLookup functionality
 	server.SetNetDB(r.StdNetDB)
 
+	// Provide real bandwidth limits from router config
+	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})
+
 	// Configure tunnel infrastructure for session tunnel pool initialization
 	if r.tunnelManager != nil {
 		server.SetTunnelBuilder(r.tunnelManager)
@@ -1850,4 +1861,23 @@ func hasNTCP2Address(routerInfo router_info.RouterInfo) bool {
 		}
 	}
 	return false
+}
+
+// routerBandwidthProvider adapts the router config to the I2CP bandwidth
+// limits interface so the I2CP server returns the real configured limit
+// instead of a hardcoded value.
+type routerBandwidthProvider struct {
+	cfg *config.RouterConfig
+}
+
+// GetBandwidthLimits returns the router's configured MaxBandwidth for both
+// inbound and outbound directions. If MaxBandwidth is 0 (unlimited) or
+// exceeds uint32 range, it clamps to math.MaxUint32.
+func (bp *routerBandwidthProvider) GetBandwidthLimits() (inbound, outbound uint32) {
+	bw := bp.cfg.MaxBandwidth
+	if bw == 0 || bw > uint64(^uint32(0)) {
+		return ^uint32(0), ^uint32(0) // unlimited
+	}
+	limit := uint32(bw)
+	return limit, limit
 }

@@ -339,6 +339,15 @@ func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string
 	// Currently no direct lifetime option in I2CP
 	// Java I2P uses fixed 10-minute lifetime with some variance
 	// Keep default for now
+	for key, val := range options {
+		if key == "inbound.lengthVariance" || key == "outbound.lengthVariance" {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelLifetimeOptions",
+				"option": key,
+				"value":  val,
+			}).Warn("tunnel lifetime option acknowledged but not yet implemented")
+		}
+	}
 }
 
 // applyMessageOptions applies message-related configuration options.
@@ -347,6 +356,15 @@ func applyMessageOptions(config *SessionConfig, options map[string]string) {
 	// Message reliability and compression not yet implemented in SessionConfig
 	// These would affect message delivery guarantees and payload compression
 	// Currently all messages use best-effort delivery
+	for key, val := range options {
+		if key == "i2cp.messageReliability" || key == "i2cp.gzip" {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyMessageOptions",
+				"option": key,
+				"value":  val,
+			}).Warn("message option acknowledged but not yet implemented")
+		}
+	}
 }
 
 // applyMetadataOptions applies metadata configuration options.
