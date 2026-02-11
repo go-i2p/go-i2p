@@ -251,8 +251,8 @@ func TestRouterInfoProvider_CongestionFlagChangeTracking(t *testing.T) {
 	if opts.CongestionFlag != "" {
 		t.Errorf("First call: expected empty flag, got %q", opts.CongestionFlag)
 	}
-	if provider.lastCongestionFlag != "" {
-		t.Errorf("First call: lastCongestionFlag should be empty, got %q", provider.lastCongestionFlag)
+	if flag, _ := provider.lastCongestionFlag.Load().(string); flag != "" {
+		t.Errorf("First call: lastCongestionFlag should be empty, got %q", flag)
 	}
 
 	// Change the flag
@@ -263,8 +263,8 @@ func TestRouterInfoProvider_CongestionFlagChangeTracking(t *testing.T) {
 	if opts.CongestionFlag != "D" {
 		t.Errorf("Second call: expected 'D', got %q", opts.CongestionFlag)
 	}
-	if provider.lastCongestionFlag != "D" {
-		t.Errorf("Second call: lastCongestionFlag should be 'D', got %q", provider.lastCongestionFlag)
+	if flag, _ := provider.lastCongestionFlag.Load().(string); flag != "D" {
+		t.Errorf("Second call: lastCongestionFlag should be 'D', got %q", flag)
 	}
 
 	// Change to E
@@ -275,8 +275,8 @@ func TestRouterInfoProvider_CongestionFlagChangeTracking(t *testing.T) {
 	if opts.CongestionFlag != "E" {
 		t.Errorf("Third call: expected 'E', got %q", opts.CongestionFlag)
 	}
-	if provider.lastCongestionFlag != "E" {
-		t.Errorf("Third call: lastCongestionFlag should be 'E', got %q", provider.lastCongestionFlag)
+	if flag, _ := provider.lastCongestionFlag.Load().(string); flag != "E" {
+		t.Errorf("Third call: lastCongestionFlag should be 'E', got %q", flag)
 	}
 }
 

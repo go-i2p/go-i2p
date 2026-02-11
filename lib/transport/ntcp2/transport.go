@@ -341,6 +341,16 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
 	if session, exists := t.sessions.Load(routerHash); exists {
 		if ntcp2Session, ok := session.(*NTCP2Session); ok {
+			// Check if the session is still alive (context not cancelled, connection not closed)
+			if ntcp2Session.ctx.Err() != nil {
+				routerHashBytes := routerHash.Bytes()
+				t.logger.WithFields(map[string]interface{}{
+					"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+					"reason":      ntcp2Session.ctx.Err().Error(),
+				}).Info("Evicting stale NTCP2 session")
+				t.sessions.Delete(routerHash)
+				return nil, false
+			}
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash":     fmt.Sprintf("%x", routerHashBytes[:8]),

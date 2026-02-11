@@ -279,6 +279,9 @@ func (rb *ReseedBootstrap) unionStrategy(results []ReseedResult) []router_info.R
 	for _, r := range results {
 		for _, ri := range r.RouterInfos {
 			hash := routerInfoHash(ri)
+			if hash == "" {
+				continue // skip RouterInfos with broken identity hashes
+			}
 			if _, exists := seen[hash]; !exists {
 				seen[hash] = ri
 			}
@@ -356,6 +359,9 @@ func aggregateRouterInfos(results []ReseedResult) *routerInfoCounts {
 		seen := make(map[string]bool)
 		for _, ri := range r.RouterInfos {
 			hash := routerInfoHash(ri)
+			if hash == "" {
+				continue // skip RouterInfos with broken identity hashes
+			}
 			if !seen[hash] {
 				ric.counts[hash]++
 				seen[hash] = true
@@ -393,6 +399,9 @@ func deduplicateRouterInfos(infos []router_info.RouterInfo) []router_info.Router
 	var result []router_info.RouterInfo
 	for _, ri := range infos {
 		hash := routerInfoHash(ri)
+		if hash == "" {
+			continue // skip RouterInfos with broken identity hashes
+		}
 		if !seen[hash] {
 			result = append(result, ri)
 			seen[hash] = true
@@ -423,11 +432,13 @@ func (rb *ReseedBootstrap) randomWeightedStrategy(results []ReseedResult) []rout
 // routerInfoHash generates a unique hash for a RouterInfo based on its identity.
 // Unlike GetRouterHashString which truncates for logging, this returns the full hash
 // for accurate deduplication in strategy functions.
+// Returns empty string if the identity hash cannot be computed, indicating
+// the RouterInfo should be excluded from strategy processing.
 func routerInfoHash(ri router_info.RouterInfo) string {
 	hash, err := ri.IdentHash()
 	if err != nil {
-		// Fall back to empty string on error - this RouterInfo won't deduplicate properly
-		// but the caller should have validated the RouterInfo already
+		// Return empty string; callers must skip entries with empty hash
+		// to prevent all errored RouterInfos from colliding on the same key.
 		return ""
 	}
 	return hex.EncodeToString(hash[:])

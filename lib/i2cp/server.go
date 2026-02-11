@@ -109,6 +109,11 @@ type Server struct {
 	connMutex  sync.RWMutex
 	connStates map[net.Conn]*connectionState
 
+	// Active TCP connection counter (separate from session count).
+	// Prevents resource exhaustion from unauthenticated TCP connections
+	// that haven't created sessions yet.
+	activeConnCount atomic.Int32
+
 	// LeaseSet publishing
 	leaseSetPublisher LeaseSetPublisher
 
@@ -368,19 +373,41 @@ func (s *Server) handleAcceptError(err error) bool {
 	}
 }
 
-// shouldRejectConnection checks if a connection should be rejected due to session limits.
+// shouldRejectConnection checks if a connection should be rejected due to
+// connection or session limits. Tracks active TCP connections separately from
+// sessions to prevent resource exhaustion from unauthenticated connections.
 // Closes the connection if rejected.
 func (s *Server) shouldRejectConnection(conn net.Conn) bool {
-	if s.manager.SessionCount() >= s.config.MaxSessions {
+	connCount := s.activeConnCount.Load()
+	sessionCount := s.manager.SessionCount()
+	maxSessions := s.config.MaxSessions
+
+	// Reject if either active connections OR sessions exceed the limit.
+	// Use 2x MaxSessions as the connection limit to allow some headroom
+	// for connections that haven't created sessions yet.
+	maxConns := maxSessions * 2
+	if int(connCount) >= maxConns {
 		log.WithFields(logger.Fields{
 			"at":           "i2cp.Server.shouldRejectConnection",
-			"sessionCount": s.manager.SessionCount(),
-			"maxSessions":  s.config.MaxSessions,
+			"activeConns":  connCount,
+			"maxConns":     maxConns,
+			"sessionCount": sessionCount,
+			"remoteAddr":   conn.RemoteAddr().String(),
+		}).Warn("max_connections_reached_rejecting")
+		conn.Close()
+		return true
+	}
+	if sessionCount >= maxSessions {
+		log.WithFields(logger.Fields{
+			"at":           "i2cp.Server.shouldRejectConnection",
+			"sessionCount": sessionCount,
+			"maxSessions":  maxSessions,
 			"remoteAddr":   conn.RemoteAddr().String(),
 		}).Warn("max_sessions_reached_rejecting_connection")
 		conn.Close()
 		return true
 	}
+	s.activeConnCount.Add(1)
 	return false
 }
 
@@ -438,11 +465,13 @@ func (s *Server) getConnWriteMutex(sessionID uint16) *sync.Mutex {
 	return s.connWriteMu[sessionID]
 }
 
-// cleanupConnectionState removes connection state tracking on disconnect.
+// cleanupConnectionState removes connection state tracking on disconnect
+// and decrements the active connection counter.
 func (s *Server) cleanupConnectionState(conn net.Conn) {
 	s.connMutex.Lock()
 	delete(s.connStates, conn)
 	s.connMutex.Unlock()
+	s.activeConnCount.Add(-1)
 }
 
 // readProtocolByte reads and validates the I2CP protocol version byte (0x2a).

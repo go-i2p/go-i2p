@@ -62,10 +62,20 @@ func MuxWithLimit(maxConnections int, t ...Transport) (tmux *TransportMuxer) {
 
 // ReleaseSession decrements the active session counter.
 // This should be called when a session is closed to free up capacity.
+// Uses CompareAndSwap loop to prevent TOCTOU race when concurrent
+// ReleaseSession calls would both see a negative value.
 func (tmux *TransportMuxer) ReleaseSession() {
-	newCount := atomic.AddInt32(&tmux.activeSessionCount, -1)
-	if newCount < 0 {
-		atomic.StoreInt32(&tmux.activeSessionCount, 0)
+	for {
+		current := atomic.LoadInt32(&tmux.activeSessionCount)
+		if current <= 0 {
+			// Already at zero or somehow negative; clamp to zero
+			atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, 0)
+			break
+		}
+		if atomic.CompareAndSwapInt32(&tmux.activeSessionCount, current, current-1) {
+			break
+		}
+		// CAS failed, another goroutine modified it; retry
 	}
 	log.WithFields(logger.Fields{
 		"at":              "(TransportMuxer) ReleaseSession",

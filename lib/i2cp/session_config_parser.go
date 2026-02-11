@@ -247,6 +247,7 @@ func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) 
 				"value":  length,
 			}).Debug("applied_tunnel_length_option")
 			config.InboundTunnelLength = length
+			markExplicitlySet(config, "InboundTunnelLength")
 		} else {
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyTunnelLengthOptions",
@@ -265,6 +266,7 @@ func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) 
 				"value":  length,
 			}).Debug("applied_tunnel_length_option")
 			config.OutboundTunnelLength = length
+			markExplicitlySet(config, "OutboundTunnelLength")
 		} else {
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyTunnelLengthOptions",
@@ -274,6 +276,14 @@ func applyTunnelLengthOptions(config *SessionConfig, options map[string]string) 
 			}).Warn("invalid_outbound_length_option_using_default")
 		}
 	}
+}
+
+// markExplicitlySet records that a field was explicitly set during parsing.
+func markExplicitlySet(config *SessionConfig, field string) {
+	if config.ExplicitlySetFields == nil {
+		config.ExplicitlySetFields = make(map[string]bool)
+	}
+	config.ExplicitlySetFields[field] = true
 }
 
 // applyTunnelQuantityOptions applies tunnel quantity configuration options.

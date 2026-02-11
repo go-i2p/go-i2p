@@ -172,6 +172,8 @@ func (gr *GarlicMessageRouter) ForwardToDestination(destHash common.Hash, msg i2
 
 // lookupLeaseSetWithTimeout attempts to retrieve a LeaseSet from NetDB with timeout.
 // Returns the LeaseSet and a boolean indicating if the message should be queued.
+// Uses a timer (not time.After) to prevent timer leak on success, and drains
+// the channel on timeout to prevent the sender goroutine from blocking forever.
 func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (lease_set.LeaseSet, bool) {
 	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
 	if leaseSetChan == nil {
@@ -179,6 +181,9 @@ func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (
 			Debug("LeaseSet not found, queueing message for async lookup")
 		return lease_set.LeaseSet{}, true
 	}
+
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
 
 	select {
 	case ls, ok := <-leaseSetChan:
@@ -188,7 +193,12 @@ func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (
 			return lease_set.LeaseSet{}, true
 		}
 		return ls, false
-	case <-time.After(1 * time.Second):
+	case <-timer.C:
+		// Drain the channel in a background goroutine to prevent the
+		// NetDB sender from blocking forever on an abandoned channel.
+		go func() {
+			<-leaseSetChan
+		}()
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
 		return lease_set.LeaseSet{}, true

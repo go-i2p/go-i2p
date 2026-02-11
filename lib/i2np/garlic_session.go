@@ -53,6 +53,10 @@ type GarlicSession struct {
 	pendingTags [][8]byte
 	// dhRatchetCounter tracks messages since last DH ratchet rotation
 	dhRatchetCounter uint32
+	// consecutiveDHFailures tracks how many DH ratchet steps have failed in a row.
+	// When this exceeds MaxConsecutiveDHFailures, the session should be reset
+	// to restore forward secrecy.
+	consecutiveDHFailures uint32
 	// newEphemeralPub holds the new ephemeral public key to send to the peer
 	// when a DH ratchet step has occurred but the peer hasn't acknowledged it yet
 	newEphemeralPub *[32]byte
@@ -63,6 +67,11 @@ const (
 	// After this many messages, a DH ratchet step is performed to rotate keys,
 	// providing forward secrecy: compromise of current keys cannot reveal past messages.
 	DHRatchetInterval = 50
+
+	// MaxConsecutiveDHFailures is the maximum number of consecutive DH ratchet
+	// failures before the session is considered degraded and should be reset.
+	// This prevents silent forward secrecy degradation.
+	MaxConsecutiveDHFailures = 3
 )
 
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
@@ -396,10 +405,24 @@ func advanceRatchets(session *GarlicSession) (messageKey [32]byte, sessionTag [8
 	session.dhRatchetCounter++
 	if session.dhRatchetCounter >= DHRatchetInterval {
 		if err := performDHRatchetStep(session); err != nil {
-			log.WithError(err).Warn("DH ratchet rotation failed, continuing with symmetric ratchet")
-			// Non-fatal: continue with existing symmetric ratchet keys
+			session.consecutiveDHFailures++
+			if session.consecutiveDHFailures >= MaxConsecutiveDHFailures {
+				log.WithFields(logger.Fields{
+					"at":                   "advanceRatchets",
+					"consecutive_failures": session.consecutiveDHFailures,
+					"max_failures":         MaxConsecutiveDHFailures,
+					"reason":               "forward secrecy degraded, session should be reset",
+				}).Error("DH ratchet failed too many times, session forward secrecy compromised")
+				return [32]byte{}, [8]byte{}, oops.Wrapf(err,
+					"DH ratchet failed %d consecutive times (max %d), forward secrecy compromised",
+					session.consecutiveDHFailures, MaxConsecutiveDHFailures)
+			}
+			log.WithError(err).WithField("consecutive_failures", session.consecutiveDHFailures).
+				Warn("DH ratchet rotation failed, continuing with symmetric ratchet")
+			// Non-fatal for now: continue with existing symmetric ratchet keys
 		} else {
 			session.dhRatchetCounter = 0
+			session.consecutiveDHFailures = 0
 		}
 	}
 

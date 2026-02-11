@@ -19,9 +19,10 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// simpleRateLimiter implements a token bucket rate limiter
+// simpleRateLimiter implements a token bucket rate limiter with fractional
+// token tracking for smooth delivery at low rates.
 type simpleRateLimiter struct {
-	tokens    int       // Current token count
+	tokens    float64   // Current token count (fractional for smooth low-rate delivery)
 	maxTokens int       // Maximum tokens (burst size)
 	rate      int       // Tokens added per second
 	lastCheck time.Time // Last time tokens were added
@@ -31,7 +32,7 @@ type simpleRateLimiter struct {
 // newSimpleRateLimiter creates a new rate limiter
 func newSimpleRateLimiter(rate, burst int) *simpleRateLimiter {
 	return &simpleRateLimiter{
-		tokens:    burst,
+		tokens:    float64(burst),
 		maxTokens: burst,
 		rate:      rate,
 		lastCheck: time.Now(),
@@ -59,19 +60,18 @@ func (rl *simpleRateLimiter) allow() bool {
 		elapsed = maxAccumulationWindow
 	}
 
-	// Add tokens based on elapsed time
-	tokensToAdd := int(elapsed.Seconds() * float64(rl.rate))
-	if tokensToAdd > 0 {
-		rl.tokens += tokensToAdd
-		if rl.tokens > rl.maxTokens {
-			rl.tokens = rl.maxTokens
-		}
-		rl.lastCheck = now
+	// Add tokens based on elapsed time (fractional for smooth low-rate delivery)
+	tokensToAdd := elapsed.Seconds() * float64(rl.rate)
+	rl.tokens += tokensToAdd
+	if rl.tokens > float64(rl.maxTokens) {
+		rl.tokens = float64(rl.maxTokens)
 	}
+	// Always update lastCheck to prevent token accumulation drift
+	rl.lastCheck = now
 
 	// Check if we have a token available
-	if rl.tokens > 0 {
-		rl.tokens--
+	if rl.tokens >= 1.0 {
+		rl.tokens -= 1.0
 		return true
 	}
 
@@ -98,7 +98,12 @@ type SessionConfig struct {
 	// EncryptedLeaseSet configuration (requires Ed25519 destination)
 	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
 	BlindingSecret       []byte // Secret for destination blinding (if empty, random generated)
-	LeaseSetExpiration   uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
+
+	// ExplicitlySetFields tracks which fields were explicitly set by the client
+	// during reconfiguration, allowing zero values (e.g., zero-hop tunnels) to
+	// be distinguished from "not provided".
+	ExplicitlySetFields map[string]bool
+	LeaseSetExpiration  uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
 
 	// Session metadata
 	Nickname string // Optional nickname for debugging
@@ -574,11 +579,12 @@ func mergeConfigUpdates(existing, newConfig *SessionConfig) {
 }
 
 // mergeTunnelParameters updates tunnel-related configuration fields.
+// Uses ExplicitlySetFields to allow zero values (zero-hop tunnels).
 func mergeTunnelParameters(existing, newConfig *SessionConfig) {
-	if newConfig.InboundTunnelLength > 0 {
+	if isExplicitlySet(newConfig, "InboundTunnelLength") || newConfig.InboundTunnelLength > 0 {
 		existing.InboundTunnelLength = newConfig.InboundTunnelLength
 	}
-	if newConfig.OutboundTunnelLength > 0 {
+	if isExplicitlySet(newConfig, "OutboundTunnelLength") || newConfig.OutboundTunnelLength > 0 {
 		existing.OutboundTunnelLength = newConfig.OutboundTunnelLength
 	}
 	if newConfig.InboundTunnelCount > 0 {
@@ -590,6 +596,14 @@ func mergeTunnelParameters(existing, newConfig *SessionConfig) {
 	if newConfig.TunnelLifetime > 0 {
 		existing.TunnelLifetime = newConfig.TunnelLifetime
 	}
+}
+
+// isExplicitlySet checks whether a field was explicitly set in the session config.
+func isExplicitlySet(config *SessionConfig, field string) bool {
+	if config.ExplicitlySetFields == nil {
+		return false
+	}
+	return config.ExplicitlySetFields[field]
 }
 
 // mergeMessageParameters updates message-related configuration fields.

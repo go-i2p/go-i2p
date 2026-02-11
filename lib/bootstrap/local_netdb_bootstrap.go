@@ -301,10 +301,17 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 
 	// Validate expiration: RouterInfos are valid for 24 hours per I2P specification
 	const routerInfoMaxAge = 24 * time.Hour
+	// Allow a small clock skew tolerance for future-dated RouterInfos
+	const maxClockSkew = 10 * time.Minute
 	publishedDate := ri.Published()
 	if publishedDate != nil {
 		publishedTime := publishedDate.Time()
 		age := time.Since(publishedTime)
+		if age < -maxClockSkew {
+			// RouterInfo is dated in the future beyond clock skew tolerance.
+			// This may indicate a forged timestamp to bypass expiration checks.
+			return router_info.RouterInfo{}, fmt.Errorf("RouterInfo has future timestamp (published %v in the future, max clock skew %v)", -age.Round(time.Second), maxClockSkew)
+		}
 		if age > routerInfoMaxAge {
 			return router_info.RouterInfo{}, fmt.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
 		}
