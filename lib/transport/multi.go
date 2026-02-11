@@ -317,7 +317,12 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 	defer cancel()
 
 	resultChan := tmux.startAcceptGoroutines(ctx, "(TransportMuxer) Accept")
-	return tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) Accept", nil)
+	conn, err := tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) Accept", nil)
+	if err != nil {
+		// Release the slot reserved by checkConnectionLimit on failure
+		atomic.AddInt32(&tmux.activeSessionCount, -1)
+	}
+	return conn, err
 }
 
 // Addr returns the address of the first transport's listener.
@@ -357,7 +362,12 @@ func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, 
 	defer cancel()
 
 	resultChan := tmux.startAcceptGoroutines(ctx, "(TransportMuxer) AcceptWithTimeout")
-	return tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) AcceptWithTimeout", ctx)
+	conn, err := tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) AcceptWithTimeout", ctx)
+	if err != nil {
+		// Release the slot reserved by checkConnectionLimit on failure
+		atomic.AddInt32(&tmux.activeSessionCount, -1)
+	}
+	return conn, err
 }
 
 // validateTransports checks that at least one transport is configured.
@@ -396,10 +406,10 @@ func (tmux *TransportMuxer) startAcceptGoroutines(ctx context.Context, caller st
 	return resultChan
 }
 
-// handleAcceptSuccess increments the session counter and logs the accepted connection.
+// handleAcceptSuccess logs the accepted connection.
+// The session counter was already reserved by checkConnectionLimit.
 func (tmux *TransportMuxer) handleAcceptSuccess(res acceptResult, cancel context.CancelFunc, caller string) net.Conn {
 	cancel()
-	atomic.AddInt32(&tmux.activeSessionCount, 1)
 	log.WithFields(logger.Fields{
 		"at":              caller,
 		"reason":          "connection_accepted",

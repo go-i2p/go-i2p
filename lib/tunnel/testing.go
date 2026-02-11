@@ -341,6 +341,42 @@ func (tt *TunnelTester) TestAllTunnels() []TunnelTestResult {
 	return results
 }
 
+// TestAllTunnelsAsync tests all ready tunnels in the pool concurrently.
+// This avoids the O(n * timeout) latency of sequential testing.
+// The results are collected and returned in no particular order.
+func (tt *TunnelTester) TestAllTunnelsAsync() []TunnelTestResult {
+	tt.pool.mutex.RLock()
+	tunnelIDs := make([]TunnelID, 0, len(tt.pool.tunnels))
+	for id, tunnel := range tt.pool.tunnels {
+		if tunnel.State == TunnelReady {
+			tunnelIDs = append(tunnelIDs, id)
+		}
+	}
+	tt.pool.mutex.RUnlock()
+
+	if len(tunnelIDs) == 0 {
+		return nil
+	}
+
+	resultCh := make(chan TunnelTestResult, len(tunnelIDs))
+	var wg sync.WaitGroup
+	for _, id := range tunnelIDs {
+		wg.Add(1)
+		go func(tid TunnelID) {
+			defer wg.Done()
+			resultCh <- tt.TestTunnel(tid)
+		}(id)
+	}
+	wg.Wait()
+	close(resultCh)
+
+	results := make([]TunnelTestResult, 0, len(tunnelIDs))
+	for r := range resultCh {
+		results = append(results, r)
+	}
+	return results
+}
+
 // HealthCheckResult summarizes the health of the tunnel pool.
 type HealthCheckResult struct {
 	TotalTunnels     int

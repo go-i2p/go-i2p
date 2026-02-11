@@ -91,34 +91,28 @@ func (c *CongestionCache) Set(hash common.Hash, flag config.CongestionFlag, riAg
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Evict before inserting if at capacity, to avoid evicting the new entry
+	if c.maxSize > 0 && len(c.flags) >= c.maxSize {
+		// Don't evict the entry we're about to set if it already exists
+		c.evictEntry(hash)
+	}
+
 	c.flags[hash] = cachedFlag{
 		flag:     flag,
 		parsedAt: time.Now(),
 		riAge:    riAge,
 	}
-
-	// Evict if over capacity
-	if c.maxSize > 0 && len(c.flags) > c.maxSize {
-		c.evictOldest()
-	}
 }
 
-// evictOldest removes the entry with the oldest parsedAt timestamp.
+// evictEntry removes a random entry from the cache, skipping the given hash.
+// Uses O(1) random eviction by leveraging Go's randomized map iteration order.
 // Must be called with c.mu held.
-func (c *CongestionCache) evictOldest() {
-	var oldestHash common.Hash
-	var oldestTime time.Time
-	first := true
-
-	for h, cf := range c.flags {
-		if first || cf.parsedAt.Before(oldestTime) {
-			oldestHash = h
-			oldestTime = cf.parsedAt
-			first = false
+func (c *CongestionCache) evictEntry(skipHash common.Hash) {
+	for h := range c.flags {
+		if h != skipHash {
+			delete(c.flags, h)
+			return
 		}
-	}
-	if !first {
-		delete(c.flags, oldestHash)
 	}
 }
 
