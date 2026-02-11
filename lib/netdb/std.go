@@ -362,21 +362,29 @@ func logPeerFilteringResults(allRouterInfos, available []router_info.RouterInfo,
 	}).Info("Peer filtering complete")
 }
 
-// selectRandomPeers randomly selects the requested number of peers from available pool
+// selectRandomPeers randomly selects the requested number of peers from available pool.
+// Uses Fisher-Yates shuffle to avoid degenerate O(n²) behavior of rejection sampling
+// when count approaches len(available).
 func (db *StdNetDB) selectRandomPeers(available []router_info.RouterInfo, count int) []router_info.RouterInfo {
-	selected := make([]router_info.RouterInfo, count)
-	selectedIndices := make(map[int]bool)
+	if count > len(available) {
+		count = len(available)
+	}
+	if count <= 0 || len(available) == 0 {
+		return nil
+	}
 
+	// Create index slice and Fisher-Yates shuffle the first 'count' elements
+	indices := make([]int, len(available))
+	for i := range indices {
+		indices[i] = i
+	}
+	rand.Shuffle(len(indices), func(i, j int) {
+		indices[i], indices[j] = indices[j], indices[i]
+	})
+
+	selected := make([]router_info.RouterInfo, count)
 	for i := 0; i < count; i++ {
-		var idx int
-		for {
-			idx = rand.Intn(len(available))
-			if !selectedIndices[idx] {
-				selectedIndices[idx] = true
-				break
-			}
-		}
-		selected[i] = available[idx]
+		selected[i] = available[indices[i]]
 	}
 	return selected
 }

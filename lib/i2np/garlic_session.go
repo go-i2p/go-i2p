@@ -1117,7 +1117,7 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	if _, err := rand.Read(msgIDBytes); err != nil {
 		return nil, oops.Wrapf(err, "failed to generate message ID")
 	}
-	messageID := int(binary.BigEndian.Uint32(msgIDBytes))
+	messageID := int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
 
 	// Create I2NP Garlic message (type 11)
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_GARLIC)

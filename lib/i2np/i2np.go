@@ -55,16 +55,19 @@ type BaseI2NPMessage struct {
 	data       []byte
 }
 
-// generateRandomMessageID creates a random 4-byte message ID
-// Returns 0 on error (caller should handle by setting explicitly)
+// generateRandomMessageID creates a random 4-byte message ID.
+// The result is masked to 31 bits (0x7FFFFFFF) to ensure a positive value
+// on all platforms, including 32-bit systems where int is 32 bits.
+// Panics if the system's secure random number generator fails, as this
+// indicates a critical system-level problem.
 func generateRandomMessageID() int {
 	msgIDBytes := make([]byte, 4)
 	if _, err := rand.Read(msgIDBytes); err != nil {
-		// Fall back to 0 if random generation fails
-		// Callers can still set message ID explicitly if needed
-		return 0
+		panic("i2np: crypto/rand failed: " + err.Error())
 	}
-	return int(binary.BigEndian.Uint32(msgIDBytes))
+	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
+	// On 32-bit systems, int(uint32(x)) with the high bit set wraps to negative.
+	return int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message
@@ -167,7 +170,8 @@ func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
 
 	// Parse header
 	m.type_ = int(data[0])
-	m.messageID = int(data[1])<<24 | int(data[2])<<16 | int(data[3])<<8 | int(data[4])
+	// Mask to 31 bits to guarantee positive int on 32-bit platforms
+	m.messageID = (int(data[1])<<24 | int(data[2])<<16 | int(data[3])<<8 | int(data[4])) & 0x7FFFFFFF
 
 	// Parse expiration
 	var expDate datalib.Date

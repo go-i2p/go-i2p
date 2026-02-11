@@ -58,7 +58,7 @@ func NewGarlicBuilderWithDefaults() (*GarlicBuilder, error) {
 		log.WithError(err).Error("Failed to generate random message ID")
 		return nil, oops.Wrapf(err, "failed to generate random message ID")
 	}
-	messageID := int(binary.BigEndian.Uint32(msgIDBytes))
+	messageID := int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
 
 	// Default expiration: 10 seconds from now (typical for garlic messages)
 	expiration := time.Now().Add(10 * time.Second)
@@ -649,7 +649,7 @@ func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int,
 	cert := *certificate.NewCertificate()
 	offset += 3
 
-	messageID := int(binary.BigEndian.Uint32(data[offset : offset+4]))
+	messageID := int(binary.BigEndian.Uint32(data[offset:offset+4]) & 0x7FFFFFFF)
 	offset += 4
 
 	expirationMs := binary.BigEndian.Uint64(data[offset : offset+8])

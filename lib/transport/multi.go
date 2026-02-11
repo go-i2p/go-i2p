@@ -401,7 +401,7 @@ func (tmux *TransportMuxer) startAcceptGoroutines(ctx context.Context, caller st
 // results from the channel after a successful accept or timeout. Connections
 // arriving late are closed to prevent resource leaks. The goroutine exits
 // once all transport goroutines have reported in (totalTransports results).
-func (tmux *TransportMuxer) drainLateAcceptResults(resultChan chan acceptResult, received int, totalTransports int, caller string) {
+func (tmux *TransportMuxer) drainLateAcceptResults(resultChan chan acceptResult, received, totalTransports int, caller string) {
 	remaining := totalTransports - received
 	if remaining <= 0 {
 		return

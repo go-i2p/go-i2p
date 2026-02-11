@@ -597,14 +597,13 @@ func generateSessionKey() (session_key.SessionKey, error) {
 }
 
 // generateMessageID creates a random message ID for tracking build requests.
-// Message IDs are 32-bit unsigned integers.
+// The result is masked to 31 bits to ensure a positive value on all platforms,
+// including 32-bit systems where int is 32 bits.
 func generateMessageID() int {
 	var buf [4]byte
-	// rand.Read from crypto/rand only errors if the system's secure random
-	// number generator fails. This is extremely rare and if it happens, the
-	// system has bigger problems. Using a zero ID is safe as message IDs
-	// are used for correlation, not security.
-	_, _ = rand.Read(buf[:])
-
-	return int(uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3]))
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic("tunnel: crypto/rand failed: " + err.Error())
+	}
+	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
+	return int((uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])) & 0x7FFFFFFF)
 }
