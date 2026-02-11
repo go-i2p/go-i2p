@@ -11,9 +11,8 @@ import (
 const RekeyThreshold uint64 = 65535
 
 // Rekeyer is an interface for connections that support cryptographic rekeying.
-// This is a forward-compatible interface: the underlying go-noise library's
-// NTCP2Conn or NoiseConn does not currently expose Rekey(), but when it does,
-// this interface will allow automatic integration.
+// The go-noise library's NTCP2Conn and NoiseConn both implement this interface
+// (since go-noise v0.1.4), so rekeying is fully functional for NTCP2 sessions.
 //
 // Implementations must be safe for concurrent use.
 type Rekeyer interface {
@@ -78,13 +77,13 @@ func (rs *rekeyState) needsRekey() bool {
 
 // attemptRekey tries to rekey the connection if it implements the Rekeyer interface.
 // Returns true if rekeying was performed, false if the connection does not support it.
-// If the connection does not implement Rekeyer, this is a no-op (forward-compatible:
-// once go-noise exposes Rekey() on NTCP2Conn or NoiseConn, this will automatically work).
+// With go-noise v0.1.4+, NTCP2Conn implements Rekeyer, so this will succeed for
+// all real NTCP2 sessions. The type assertion allows graceful fallback for mock
+// connections in tests or non-NTCP2 transports.
 func attemptRekey(conn interface{}, rs *rekeyState) bool {
 	rekeyer, ok := conn.(Rekeyer)
 	if !ok {
-		// Connection does not support rekeying yet.
-		// This is expected until go-noise exposes the Rekey method.
+		// Connection does not support rekeying (e.g., mock conn in tests).
 		// Reset counters to avoid checking on every message.
 		rs.resetCounters()
 		return false
