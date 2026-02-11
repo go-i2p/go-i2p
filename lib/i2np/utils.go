@@ -1,6 +1,8 @@
 package i2np
 
 import (
+	"encoding/binary"
+
 	common "github.com/go-i2p/common/data"
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -252,8 +254,14 @@ func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
 	}
 
+	// SSU short expiration is a 4-byte unsigned integer in seconds since epoch.
+	// Date stores milliseconds since epoch as an 8-byte big-endian integer,
+	// so we must convert seconds to milliseconds before encoding.
+	seconds := binary.BigEndian.Uint32(data[1:5])
+	milliseconds := uint64(seconds) * 1000
+
 	date := datalib.Date{}
-	copy(date[4:], data[1:5])
+	binary.BigEndian.PutUint64(date[:], milliseconds)
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPSSUMessageExpiration",

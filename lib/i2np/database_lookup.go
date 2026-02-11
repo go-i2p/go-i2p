@@ -647,7 +647,7 @@ func (d *DatabaseLookup) calculateMarshalSize() int {
 
 	totalSize += d.Size * 32
 
-	if d.hasEncryption() {
+	if d.hasAnyEncryption() {
 		totalSize += 32 + 1 // reply_key + tags count
 		if d.IsECIES() {
 			totalSize += d.Tags * 8
@@ -667,6 +667,13 @@ func (d *DatabaseLookup) hasTunnelReply() bool {
 // hasEncryption returns true if the encryption flag is set.
 func (d *DatabaseLookup) hasEncryption() bool {
 	return (d.Flags & DatabaseLookupFlagEncryption) != 0
+}
+
+// hasAnyEncryption returns true if either the ElGamal encryption flag (bit 1)
+// or the ECIES flag (bit 4) is set. Both indicate that reply_key, tags, and
+// reply_tags fields are present in the wire format.
+func (d *DatabaseLookup) hasAnyEncryption() bool {
+	return d.hasEncryption() || d.IsECIES()
 }
 
 // marshalFixedFields writes the key, from, flags, and reply tunnel ID into the buffer.
@@ -709,7 +716,7 @@ func (d *DatabaseLookup) marshalExcludedPeers(result []byte, offset int) int {
 // marshalEncryptionFields writes the reply key and session tags into the buffer
 // when encryption is requested.
 func (d *DatabaseLookup) marshalEncryptionFields(result []byte, offset int) {
-	if !d.hasEncryption() {
+	if !d.hasAnyEncryption() {
 		return
 	}
 
