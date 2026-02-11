@@ -493,6 +493,7 @@ func TestPeerTrackerAvailableInNetDB(t *testing.T) {
 	stats := db.PeerTracker.GetStats(hash)
 	require.NotNil(t, stats)
 	assert.Equal(t, 2, stats.SuccessCount)
-	assert.Equal(t, int64(150), stats.AvgResponseTimeMs)
+	// Exponential moving average with alpha=0.2: 0.2*200 + 0.8*100 = 120
+	assert.Equal(t, int64(120), stats.AvgResponseTimeMs)
 	assert.False(t, db.PeerTracker.IsLikelyStale(hash))
 }

@@ -359,9 +359,13 @@ func (kr *KademliaResolver) collectLookupResult(resultChan chan *router_info.Rou
 	case result := <-resultChan:
 		// Store the result in our local database
 		kr.NetworkDatabase.StoreRouterInfo(*result)
+		hashStr := "unknown"
+		if ih, err := result.IdentHash(); err == nil {
+			hashStr = fmt.Sprintf("%x", ih[:8])
+		}
 		log.WithFields(logger.Fields{
 			"at":   "collectLookupResult",
-			"hash": fmt.Sprintf("%x", result),
+			"hash": hashStr,
 		}).Debug("Kademlia lookup successful, stored RouterInfo")
 		return result, nil
 	case err := <-errChan:

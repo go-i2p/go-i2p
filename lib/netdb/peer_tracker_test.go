@@ -254,7 +254,8 @@ func TestAvgResponseTime(t *testing.T) {
 
 	pt.RecordSuccess(hash, 200)
 	stats = pt.GetStats(hash)
-	assert.Equal(t, int64(150), stats.AvgResponseTimeMs) // (100 + 200) / 2
+	// Exponential moving average with alpha=0.2: 0.2*200 + 0.8*100 = 120
+	assert.Equal(t, int64(120), stats.AvgResponseTimeMs)
 }
 
 func TestGetStats_NonExistent(t *testing.T) {

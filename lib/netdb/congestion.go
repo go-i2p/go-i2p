@@ -72,17 +72,30 @@ func NewCongestionCache() *CongestionCache {
 // Get retrieves a cached congestion flag for a peer.
 // Returns the flag and true if found and not expired, or CongestionFlagNone and false otherwise.
 func (c *CongestionCache) Get(hash common.Hash) (config.CongestionFlag, time.Time, bool) {
+	// First try with a read lock for the common (non-expired) path
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	cached, ok := c.flags[hash]
+	c.mu.RUnlock()
 
-	if cached, ok := c.flags[hash]; ok {
-		// Check TTL if configured
-		if c.ttl > 0 && time.Since(cached.parsedAt) > c.ttl {
-			return config.CongestionFlagNone, time.Time{}, false
-		}
-		return cached.flag, cached.riAge, true
+	if !ok {
+		return config.CongestionFlagNone, time.Time{}, false
 	}
-	return config.CongestionFlagNone, time.Time{}, false
+
+	// Check TTL if configured
+	if c.ttl > 0 && time.Since(cached.parsedAt) > c.ttl {
+		// Evict the expired entry under a write lock
+		c.mu.Lock()
+		// Re-check under write lock (another goroutine may have already evicted)
+		if current, stillExists := c.flags[hash]; stillExists {
+			if c.ttl > 0 && time.Since(current.parsedAt) > c.ttl {
+				delete(c.flags, hash)
+			}
+		}
+		c.mu.Unlock()
+		return config.CongestionFlagNone, time.Time{}, false
+	}
+
+	return cached.flag, cached.riAge, true
 }
 
 // Set stores a congestion flag in the cache.

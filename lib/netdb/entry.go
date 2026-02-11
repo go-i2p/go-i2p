@@ -216,7 +216,7 @@ func (e *Entry) ReadFrom(r io.Reader) (err error) {
 // readEntryType reads and returns the entry type indicator from the reader.
 func (e *Entry) readEntryType(r io.Reader) (byte, error) {
 	typeBytes := make([]byte, 1)
-	if _, err := r.Read(typeBytes); err != nil {
+	if _, err := io.ReadFull(r, typeBytes); err != nil {
 		return 0, fmt.Errorf("failed to read entry type: %w", err)
 	}
 	return typeBytes[0], nil
@@ -240,7 +240,7 @@ func (e *Entry) readEntryData(r io.Reader) ([]byte, error) {
 // readDataLength reads and returns the data length from the reader.
 func (e *Entry) readDataLength(r io.Reader) (uint16, error) {
 	lenBytes := make([]byte, 2)
-	if _, err := r.Read(lenBytes); err != nil {
+	if _, err := io.ReadFull(r, lenBytes); err != nil {
 		return 0, fmt.Errorf("failed to read length: %w", err)
 	}
 	return binary.BigEndian.Uint16(lenBytes), nil

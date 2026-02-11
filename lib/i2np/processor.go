@@ -1894,9 +1894,9 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 func (tm *TunnelManager) generateMessageID() int {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		// Fallback to time-based if rand fails (should never happen)
-		log.WithError(err).Warn("Failed to generate random message ID, using time-based fallback")
-		return int(time.Now().UnixNano() & 0x7FFFFFFF)
+		// crypto/rand failure indicates a critical system-level problem.
+		// A time-based fallback is predictable and creates collision risk.
+		panic("go-i2p: failed to read from crypto/rand for message ID: " + err.Error())
 	}
 	// Use only 31 bits to ensure positive int on all platforms
 	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF)
@@ -1983,9 +1983,9 @@ func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.Rou
 func (tm *TunnelManager) generateTunnelID() tunnel.TunnelID {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		// Fallback to time-based if rand fails (should never happen)
-		log.WithError(err).Warn("Failed to generate random tunnel ID, using time-based fallback")
-		return tunnel.TunnelID(time.Now().UnixNano() & 0xFFFFFFFF)
+		// crypto/rand failure indicates a critical system-level problem.
+		// A time-based fallback is predictable and creates collision risk on coarse clocks.
+		panic("go-i2p: failed to read from crypto/rand for tunnel ID: " + err.Error())
 	}
 	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:]))
 }

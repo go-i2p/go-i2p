@@ -51,6 +51,9 @@ type Publisher struct {
 	// tunnel pool for sending DatabaseStore messages
 	pool *tunnel.Pool
 
+	// fieldMu protects transport from concurrent read/write
+	fieldMu sync.RWMutex
+
 	// transport for sending I2NP messages to gateway routers
 	transport TransportManager
 
@@ -387,12 +390,18 @@ func (p *Publisher) sendDatabaseStoreMessages(hash common.Hash, data []byte, dat
 	}
 
 	if len(errors) > 0 {
+		// Build a summary of error messages for debugging
+		errMsgs := make([]string, 0, len(errors))
+		for _, e := range errors {
+			errMsgs = append(errMsgs, e.Error())
+		}
 		log.WithFields(logger.Fields{
-			"hash":   fmt.Sprintf("%x", hash[:8]),
-			"errors": len(errors),
-			"total":  len(floodfills),
+			"hash":         fmt.Sprintf("%x", hash[:8]),
+			"errors":       len(errors),
+			"total":        len(floodfills),
+			"error_detail": errMsgs,
 		}).Warn("Some DatabaseStore messages failed to send")
-		return fmt.Errorf("failed to send to %d of %d floodfills", len(errors), len(floodfills))
+		return fmt.Errorf("failed to send to %d of %d floodfills: first error: %w", len(errors), len(floodfills), errors[0])
 	}
 
 	log.WithFields(logger.Fields{
@@ -520,7 +529,13 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	}
 
 	// Get or create transport session to gateway router
-	session, err := p.transport.GetSession(*gatewayRouterInfo)
+	p.fieldMu.RLock()
+	transport := p.transport
+	p.fieldMu.RUnlock()
+	if transport == nil {
+		return fmt.Errorf("transport manager not available")
+	}
+	session, err := transport.GetSession(*gatewayRouterInfo)
 	if err != nil {
 		return fmt.Errorf("failed to get transport session to gateway: %w", err)
 	}
@@ -558,7 +573,9 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 // SetTransport sets the transport manager after publisher creation.
 // This allows the transport to be configured after initial publisher setup.
 func (p *Publisher) SetTransport(transport TransportManager) {
+	p.fieldMu.Lock()
 	p.transport = transport
+	p.fieldMu.Unlock()
 }
 
 // GetStats returns statistics about publishing activity

@@ -81,11 +81,15 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	stats.LastSuccess = time.Now()
 	stats.ConsecutiveFails = 0 // Reset consecutive failure counter
 
-	// Update average response time (simple moving average)
+	// Update average response time using exponential moving average.
+	// Alpha of 0.2 gives new samples 20% weight, providing a stable average
+	// that smoothly adapts to changing conditions without being overly
+	// reactive to individual outliers.
 	if stats.AvgResponseTimeMs == 0 {
 		stats.AvgResponseTimeMs = responseTimeMs
 	} else {
-		stats.AvgResponseTimeMs = (stats.AvgResponseTimeMs + responseTimeMs) / 2
+		const alpha = 0.2
+		stats.AvgResponseTimeMs = int64(alpha*float64(responseTimeMs) + (1-alpha)*float64(stats.AvgResponseTimeMs))
 	}
 
 	log.WithFields(logger.Fields{
