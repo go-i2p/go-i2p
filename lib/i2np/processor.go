@@ -251,9 +251,20 @@ func (p *MessageProcessor) EnableExpirationCheck() {
 // ProcessMessage processes any I2NP message using interfaces.
 // Messages are first validated for expiration before processing.
 // Expired messages are rejected with ERR_I2NP_MESSAGE_EXPIRED.
+//
+// The lock is acquired only to snapshot handler references and validate
+// expiration, then released before dispatching. This avoids a deadlock
+// when processing garlic messages with LOCAL delivery cloves, which
+// recursively call ProcessMessage (RLock is not re-entrant when a
+// concurrent writer is waiting).
 func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
+	// Snapshot the expiration validator under the read lock, then release.
+	// The process* methods read handler fields that are only mutated by
+	// Set* methods during initialization, so they are safe to access
+	// without holding the lock after the snapshot.
 	p.mu.RLock()
-	defer p.mu.RUnlock()
+	ev := p.expirationValidator
+	p.mu.RUnlock()
 
 	log.WithFields(logger.Fields{
 		"at":           "ProcessMessage",
@@ -261,12 +272,21 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 	}).Debug("Processing I2NP message")
 
 	// Validate message expiration before processing
-	if p.expirationValidator != nil {
-		if err := p.expirationValidator.ValidateMessage(msg); err != nil {
+	if ev != nil {
+		if err := ev.ValidateMessage(msg); err != nil {
 			return err
 		}
 	}
 
+	// Dispatch without holding the lock so that garlic LOCAL delivery
+	// cloves can safely re-enter ProcessMessage.
+	return p.processMessageDispatch(msg)
+}
+
+// processMessageDispatch routes a message to the appropriate handler.
+// It must be called without p.mu held to allow safe re-entrant calls
+// from garlic LOCAL delivery (handleLocalDelivery → ProcessMessage).
+func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 	switch msg.Type() {
 	case I2NP_MESSAGE_TYPE_DATA:
 		return p.processDataMessage(msg)
@@ -292,7 +312,7 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 		return p.processVariableTunnelBuildMessage(msg) // Legacy format, same processing
 	default:
 		log.WithFields(logger.Fields{
-			"at":           "ProcessMessage",
+			"at":           "processMessageDispatch",
 			"message_type": msg.Type(),
 			"reason":       "unknown message type",
 		}).Error("Cannot process message")

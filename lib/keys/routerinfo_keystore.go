@@ -369,9 +369,14 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 		return nil, err
 	}
 
+	signingPubKey, ok := publicKey.(types.SigningPublicKey)
+	if !ok {
+		return nil, oops.Errorf("public key does not implement SigningPublicKey (got %T)", publicKey)
+	}
+
 	routerIdentity, err := router_identity.NewRouterIdentity(
 		ks.encryptionPubKey,
-		publicKey.(types.SigningPublicKey),
+		signingPubKey,
 		cert,
 		padding,
 	)
@@ -384,6 +389,10 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 // generateIdentityPaddingFromSizes creates random padding bytes for RouterIdentity structure
 func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKeySize int) ([]byte, error) {
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
+	if paddingSize < 0 {
+		return nil, oops.Errorf("key sizes exceed KEYS_AND_CERT_DATA_SIZE: pubKeySize=%d + sigKeySize=%d = %d > %d",
+			pubKeySize, sigKeySize, pubKeySize+sigKeySize, keys_and_cert.KEYS_AND_CERT_DATA_SIZE)
+	}
 	padding := make([]byte, paddingSize)
 	_, err := rand.Read(padding)
 	if err != nil {
@@ -395,6 +404,13 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 // assembleRouterInfo creates the final RouterInfo with all components and standard options
 func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity.RouterIdentity, addresses []*router_address.RouterAddress, privateKey types.PrivateKey, opts RouterInfoOptions) (*router_info.RouterInfo, error) {
 	log.WithField("at", "assembleRouterInfo").Debug("Assembling RouterInfo with timestamp and options")
+
+	// Validate key type early to fail fast with a descriptive error
+	// instead of panicking on an unchecked type assertion later.
+	signingPrivKey, ok := privateKey.(types.SigningPrivateKey)
+	if !ok {
+		return nil, oops.Errorf("private key does not implement SigningPrivateKey (got %T)", privateKey)
+	}
 
 	rawTime := ks.RouterTimestamper.GetCurrentTime()
 	// Round to nearest second per NTCP2 spec to prevent clock bias in the network
@@ -422,7 +438,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 		publishedTime,
 		addresses,
 		options,
-		privateKey.(types.SigningPrivateKey),
+		signingPrivKey,
 		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
 	)
 	if err != nil {

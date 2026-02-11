@@ -882,6 +882,14 @@ func (sm *GarlicSessionManager) findSessionByTag(tag [8]byte) *GarlicSession {
 		return nil
 	}
 
+	// Hold session.mu while reading and modifying session-level state
+	// (LastUsed, pendingTags, TagRatchet) to prevent races with
+	// encryptExistingSession which also holds session.mu.
+	// Lock ordering: sm.mu (held by caller) → session.mu (acquired here)
+	// is safe because encryptExistingSession only acquires session.mu.
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
 	if !sm.isSessionValid(session) {
 		sm.cleanupExpiredTag(tag)
 		return nil
