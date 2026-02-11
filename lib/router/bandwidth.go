@@ -92,8 +92,15 @@ func (bt *BandwidthTracker) takeSample(getBandwidth func() (sent, received uint6
 	defer bt.mu.Unlock()
 
 	// Calculate bytes transferred since last sample
-	bytesSent := sent - bt.lastSample.bytesSent
-	bytesReceived := received - bt.lastSample.bytesReceived
+	// Guard against underflow: if counters were reset (reconnect, transport swap),
+	// the current value may be less than the last sample.
+	var bytesSent, bytesReceived uint64
+	if sent >= bt.lastSample.bytesSent {
+		bytesSent = sent - bt.lastSample.bytesSent
+	}
+	if received >= bt.lastSample.bytesReceived {
+		bytesReceived = received - bt.lastSample.bytesReceived
+	}
 
 	// Store the new sample
 	sample := BandwidthSample{

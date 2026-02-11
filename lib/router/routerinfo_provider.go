@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/keys"
@@ -16,8 +17,9 @@ import (
 type routerInfoProvider struct {
 	router            *Router
 	congestionMonitor CongestionStateProvider
-	// lastCongestionFlag tracks the previous congestion flag for change detection
-	lastCongestionFlag string
+	// lastCongestionFlag tracks the previous congestion flag for change detection.
+	// Uses atomic.Value for thread-safe read/write from concurrent GetRouterInfo() calls.
+	lastCongestionFlag atomic.Value // stores string
 }
 
 // GetRouterInfo constructs and returns the current RouterInfo for this router.
@@ -66,16 +68,17 @@ func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
 	flag := p.congestionMonitor.GetCongestionFlag()
 	flagStr := flag.String()
 
-	// Log if congestion state changed
-	if flagStr != p.lastCongestionFlag {
+	// Log if congestion state changed (thread-safe via atomic.Value)
+	oldFlag, _ := p.lastCongestionFlag.Load().(string)
+	if flagStr != oldFlag {
 		log.WithFields(logger.Fields{
 			"at":       "routerInfoProvider.buildRouterInfoOptions",
-			"old_flag": p.lastCongestionFlag,
+			"old_flag": oldFlag,
 			"new_flag": flagStr,
 			"reason":   "congestion flag changed, will be reflected in next RouterInfo",
 		}).Info("congestion flag updated")
 
-		p.lastCongestionFlag = flagStr
+		p.lastCongestionFlag.Store(flagStr)
 	}
 
 	return keys.RouterInfoOptions{

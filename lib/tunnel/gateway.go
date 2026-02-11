@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"
@@ -229,8 +230,7 @@ func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte
 
 // sendFragmented splits a message into fragments and sends each as a separate tunnel message.
 func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
-	g.msgIDSeq++
-	msgID := g.msgIDSeq
+	msgID := atomic.AddUint32(&g.msgIDSeq, 1)
 
 	// First fragment: uses full delivery instructions with fragmented flag + message ID
 	firstDISize := deliveryInstructionsSize(dc, true)
