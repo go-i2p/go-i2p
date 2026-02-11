@@ -65,11 +65,12 @@ func DefaultServerConfig() *ServerConfig {
 	}
 }
 
-// connectionState tracks per-connection rate limiting state
+// connectionState tracks per-connection rate limiting and authentication state
 type connectionState struct {
 	lastMessageTime time.Time
 	messageCount    int
 	bytesRead       uint64
+	authenticated   bool // true if this connection has been authenticated (or auth not required)
 }
 
 // Server is an I2CP protocol server that accepts client connections
@@ -97,6 +98,11 @@ type Server struct {
 	bandwidthProvider interface {
 		GetBandwidthLimits() (inbound, outbound uint32)
 	}
+
+	// Optional authentication for I2CP connections.
+	// When set, clients must provide valid credentials via GetDate options
+	// before session-mutating operations (CreateSession, etc.) are allowed.
+	authenticator Authenticator
 
 	// Tunnel infrastructure for session tunnel pool initialization
 	tunnelBuilder tunnel.BuilderInterface
@@ -546,6 +552,28 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 	}
 
 	s.logReceivedMessage(msg)
+
+	// Attempt authentication from GetDate messages (I2CP clients send credentials
+	// via i2cp.username/i2cp.password options in the GetDate payload).
+	if msg.Type == MessageTypeGetDate {
+		s.attemptAuthFromGetDate(conn, msg)
+	}
+
+	// Check authentication for session-mutating operations.
+	// GetDate, GetBandwidthLimits, HostLookup, and Disconnect are allowed
+	// without authentication (needed for handshake and graceful disconnect).
+	if s.requiresAuthentication(msg.Type) {
+		state := s.getOrCreateConnectionState(conn)
+		if !s.isConnectionAuthenticated(state) {
+			log.WithFields(logger.Fields{
+				"at":         "i2cp.Server.processOneMessage",
+				"msgType":    MessageTypeName(msg.Type),
+				"remoteAddr": conn.RemoteAddr().String(),
+			}).Warn("unauthenticated_client_rejected")
+			// Send disconnect and close connection
+			return false
+		}
+	}
 
 	response, err := s.processClientMessage(msg, sessionPtr)
 	if err != nil {

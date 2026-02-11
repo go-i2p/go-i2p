@@ -26,6 +26,9 @@ type NTCP2Session struct {
 	bytesSent     uint64 // atomic: total bytes sent over this session
 	bytesReceived uint64 // atomic: total bytes received over this session
 
+	// Rekeying state — tracks message counts for periodic rekeying
+	rekeyState *rekeyState
+
 	// Error handling
 	lastError error
 	errorOnce sync.Once
@@ -63,6 +66,7 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 		ctx:           sessionCtx,
 		cancel:        cancel,
 		logger:        sessionLogger,
+		rekeyState:    newRekeyState(),
 		sendQueueSize: 0,
 		lastError:     nil,
 		errorOnce:     sync.Once{},
@@ -226,6 +230,10 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 	// Track outbound bandwidth
 	atomic.AddUint64(&s.bytesSent, uint64(bytesWritten))
 	s.logger.WithField("bytes_written", bytesWritten).Debug("Message written successfully")
+
+	// Track message count for rekeying
+	s.checkRekey(s.rekeyState.recordSent())
+
 	return true
 }
 
@@ -294,11 +302,38 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 	select {
 	case s.recvChan <- msg:
 		s.logger.Debug("Message queued to receive channel successfully")
+
+		// Track message count for rekeying
+		s.checkRekey(s.rekeyState.recordReceived())
+
 		return true
 	case <-s.ctx.Done():
 		s.logger.Warn("Cannot queue received message - session is closed")
 		return false
 	}
+}
+
+// checkRekey checks if the session needs rekeying based on message count.
+// If the threshold is reached, attempts to rekey the underlying connection.
+func (s *NTCP2Session) checkRekey(totalMessages uint64) {
+	if totalMessages >= RekeyThreshold {
+		s.logger.WithFields(map[string]interface{}{
+			"total_messages": totalMessages,
+			"threshold":      RekeyThreshold,
+		}).Info("Rekey threshold reached, attempting session rekey")
+		if attemptRekey(s.conn, s.rekeyState) {
+			s.logger.WithField("rekey_count", s.rekeyState.getRekeyCount()).Info("Session rekeyed successfully")
+		} else {
+			s.logger.Debug("Session rekeying not available (connection does not implement Rekeyer)")
+		}
+	}
+}
+
+// GetRekeyStats returns rekeying statistics for this session:
+// messagesSinceRekey is the count of messages since the last rekey (or session start),
+// rekeyCount is the total number of successful rekeys performed.
+func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
+	return s.rekeyState.totalMessages(), s.rekeyState.getRekeyCount()
 }
 
 // setError sets the last error (once) and cancels the session context.

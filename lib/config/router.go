@@ -19,6 +19,17 @@ type I2CPConfig struct {
 	Network string
 	// Maximum number of concurrent sessions
 	MaxSessions int
+
+	// Username for optional I2CP authentication.
+	// When both Username and Password are set, clients must provide
+	// matching credentials via GetDate options (i2cp.username/i2cp.password)
+	// before session-mutating operations are allowed.
+	// Leave empty to disable authentication (default).
+	Username string
+
+	// Password for optional I2CP authentication.
+	// See Username for details.
+	Password string
 }
 
 // router.config options
