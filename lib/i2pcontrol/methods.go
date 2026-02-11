@@ -228,10 +228,16 @@ func (mr *MethodRegistry) HandleRequest(ctx context.Context, requestData []byte)
 		return NewErrorResponse(nil, NewRPCError(ErrCodeParseError, err.Error()))
 	}
 
+	return mr.HandleParsedRequest(ctx, req)
+}
+
+// HandleParsedRequest processes an already-parsed JSON-RPC request and returns a response.
+// This avoids double-parsing when the caller has already parsed the request (e.g., for authentication).
+func (mr *MethodRegistry) HandleParsedRequest(ctx context.Context, req *Request) *Response {
 	// Check if this is a notification (no response needed)
 	if req.IsNotification() {
 		log.WithFields(map[string]interface{}{
-			"at":     "MethodRegistry.HandleRequest",
+			"at":     "MethodRegistry.HandleParsedRequest",
 			"method": req.Method,
 		}).Debug("received notification (no response will be sent)")
 

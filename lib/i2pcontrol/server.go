@@ -290,7 +290,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.registry.HandleRequest(r.Context(), body)
+	resp := s.registry.HandleParsedRequest(r.Context(), req)
 	s.writeResponse(w, resp)
 }
 

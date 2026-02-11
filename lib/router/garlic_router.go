@@ -760,10 +760,10 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	}
 	if totalPending >= maxGlobalPendingMessages {
 		log.WithFields(logger.Fields{
-			"at":             "queuePendingMessage",
-			"dest_hash":      fmt.Sprintf("%x", destHash[:8]),
-			"total_pending":  totalPending,
-			"max_global":     maxGlobalPendingMessages,
+			"at":            "queuePendingMessage",
+			"dest_hash":     fmt.Sprintf("%x", destHash[:8]),
+			"total_pending": totalPending,
+			"max_global":    maxGlobalPendingMessages,
 		}).Error("Global pending message limit reached")
 		return fmt.Errorf("global pending message limit reached (%d)", totalPending)
 	}
