@@ -2402,14 +2402,20 @@ func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessag
 	}
 }
 
+// ErrNoDestinationResolver is returned when a message cannot be routed because
+// no destination resolver has been configured on the I2CP server. Without a
+// resolver, the server cannot look up the recipient's public key, so encryption
+// (and therefore routing) is impossible.
+var ErrNoDestinationResolver = errors.New("no destination resolver configured: cannot resolve encryption key")
+
 // resolveDestinationKey looks up the destination's encryption public key from NetDB.
 // Returns the X25519 public key needed for ECIES-X25519-AEAD garlic encryption.
-// Falls back to zero key if no resolver is configured (for testing/development).
+// Returns ErrNoDestinationResolver if no resolver has been set via SetDestinationResolver.
 func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 	if s.destinationResolver == nil {
 		log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
-			Warn("no_destination_resolver_configured_using_zero_key")
-		return [32]byte{}, nil
+			Error("no_destination_resolver_configured")
+		return [32]byte{}, ErrNoDestinationResolver
 	}
 
 	pubKey, err := s.destinationResolver.ResolveDestination(destHash)

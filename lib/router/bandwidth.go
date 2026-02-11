@@ -30,6 +30,7 @@ type BandwidthTracker struct {
 	outboundRate15s atomic.Uint64
 
 	stopChan chan struct{}
+	stopOnce sync.Once // guards stopChan close to prevent double-close panics
 	wg       sync.WaitGroup
 }
 
@@ -51,8 +52,11 @@ func (bt *BandwidthTracker) Start(getBandwidth func() (sent, received uint64)) {
 }
 
 // Stop stops the bandwidth tracking goroutine.
+// It is safe to call Stop multiple times; only the first call closes the channel.
 func (bt *BandwidthTracker) Stop() {
-	close(bt.stopChan)
+	bt.stopOnce.Do(func() {
+		close(bt.stopChan)
+	})
 	bt.wg.Wait()
 }
 
