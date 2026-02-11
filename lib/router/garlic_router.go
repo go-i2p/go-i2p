@@ -21,6 +21,8 @@ import (
 const (
 	// maxPendingMessages limits the number of queued messages per destination
 	maxPendingMessages = 100
+	// maxGlobalPendingMessages limits the total number of queued messages across all destinations
+	maxGlobalPendingMessages = 5000
 	// pendingMessageTimeout is how long to wait for a LeaseSet before discarding messages
 	pendingMessageTimeout = 30 * time.Second
 	// lookupRetryInterval is how often to retry failed lookups
@@ -751,7 +753,22 @@ func (gr *GarlicMessageRouter) queuePendingMessage(destHash common.Hash, msg i2n
 	gr.pendingMutex.Lock()
 	defer gr.pendingMutex.Unlock()
 
-	// Check if we already have too many pending messages for this destination
+	// Check global pending message limit across all destinations
+	totalPending := 0
+	for _, msgs := range gr.pendingMsgs {
+		totalPending += len(msgs)
+	}
+	if totalPending >= maxGlobalPendingMessages {
+		log.WithFields(logger.Fields{
+			"at":             "queuePendingMessage",
+			"dest_hash":      fmt.Sprintf("%x", destHash[:8]),
+			"total_pending":  totalPending,
+			"max_global":     maxGlobalPendingMessages,
+		}).Error("Global pending message limit reached")
+		return fmt.Errorf("global pending message limit reached (%d)", totalPending)
+	}
+
+	// Check per-destination pending message limit
 	if existing, ok := gr.pendingMsgs[destHash]; ok && len(existing) >= maxPendingMessages {
 		log.WithFields(logger.Fields{
 			"at":            "queuePendingMessage",

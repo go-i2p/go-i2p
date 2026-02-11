@@ -312,7 +312,10 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
+	// Limit read size to prevent OOM from maliciously large files.
+	// RouterInfo files are typically < 10 KB; 64 KB is a generous upper bound.
+	const maxRouterInfoSize = 64 * 1024
+	data, err := io.ReadAll(io.LimitReader(file, maxRouterInfoSize))
 	if err != nil {
 		return router_info.RouterInfo{}, fmt.Errorf("failed to read file: %w", err)
 	}
@@ -370,7 +373,7 @@ func getHomeDir() string {
 			"phase":  "bootstrap",
 			"reason": "failed to determine user home directory",
 		}).Warn("failed to get user home directory")
-		return "~"
+		return ""
 	}
 	return homeDir
 }
