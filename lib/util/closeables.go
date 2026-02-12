@@ -24,18 +24,23 @@ func RegisterCloser(c io.Closer) {
 }
 
 // CloseAll closes all registered io.Closer instances and clears the list.
-// This function is thread-safe.
+// This function is thread-safe. The list is copied under the lock, then
+// each closer is closed outside the lock to prevent slow Close() calls
+// from blocking RegisterCloser() or other callers.
 func CloseAll() {
 	closeMutex.Lock()
-	defer closeMutex.Unlock()
+	// Copy the slice and clear the original under the lock
+	closers := make([]io.Closer, len(closeOnExit))
+	copy(closers, closeOnExit)
+	closeOnExit = nil
+	closeMutex.Unlock()
 
-	log.WithField("count", len(closeOnExit)).Debug("Closing all registered closers")
+	log.WithField("count", len(closers)).Debug("Closing all registered closers")
 
-	for idx := range closeOnExit {
-		if err := closeOnExit[idx].Close(); err != nil {
+	for idx := range closers {
+		if err := closers[idx].Close(); err != nil {
 			log.WithError(err).Warn("Error closing resource")
 		}
 	}
-	closeOnExit = nil
 	log.Debug("All closers closed")
 }

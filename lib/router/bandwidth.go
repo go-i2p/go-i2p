@@ -150,8 +150,9 @@ func (bt *BandwidthTracker) updateRates() {
 		bt.outboundRate1s.Store(lastSample.bytesSent)
 	}
 
-	// Calculate 15-second rates (average of all samples in 15s window)
+	// Calculate 15-second rates (average over actual elapsed time)
 	var totalSent, totalReceived uint64
+	var oldestTimestamp time.Time
 	var count int
 	for i := len(bt.samples) - 1; i >= 0; i-- {
 		sample := bt.samples[i]
@@ -161,13 +162,25 @@ func (bt *BandwidthTracker) updateRates() {
 		}
 		totalSent += sample.bytesSent
 		totalReceived += sample.bytesReceived
+		if count == 0 || sample.timestamp.Before(oldestTimestamp) {
+			oldestTimestamp = sample.timestamp
+		}
 		count++
 	}
 
 	if count > 0 {
-		// Average bytes per sample (samples are 1 second apart)
-		bt.inboundRate15s.Store(totalReceived / uint64(count))
-		bt.outboundRate15s.Store(totalSent / uint64(count))
+		// Use actual elapsed time for accurate rate calculation,
+		// not sample count which assumes exactly 1 sample per second.
+		elapsed := now.Sub(oldestTimestamp)
+		if elapsed < time.Second {
+			elapsed = time.Second // minimum 1 second to avoid division by zero
+		}
+		elapsedSecs := uint64(elapsed / time.Second)
+		if elapsedSecs == 0 {
+			elapsedSecs = 1
+		}
+		bt.inboundRate15s.Store(totalReceived / elapsedSecs)
+		bt.outboundRate15s.Store(totalSent / elapsedSecs)
 	} else {
 		bt.inboundRate15s.Store(0)
 		bt.outboundRate15s.Store(0)

@@ -1632,11 +1632,13 @@ type TunnelManager struct {
 	buildMutex      sync.RWMutex          // Protect pending builds map
 	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
 	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
+	cleanupOnce     sync.Once             // Ensures cleanup goroutine starts at most once
 	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
-// Starts a background goroutine for cleaning up expired build requests.
+// The background cleanup goroutine is started lazily on the first build request,
+// avoiding resource leaks if the TunnelManager is created but never used.
 // Creates separate inbound and outbound tunnel pools for proper statistics tracking.
 func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	// Create separate pools for inbound and outbound tunnels
@@ -1668,9 +1670,8 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		"reason": "retry callback configured for automatic tunnel build retry",
 	}).Debug("tunnel manager initialized with retry callback")
 
-	// Start periodic cleanup of expired build requests (every 30 seconds)
-	tm.cleanupTicker = time.NewTicker(30 * time.Second)
-	go tm.cleanupExpiredBuilds()
+	// Cleanup goroutine is started lazily via ensureCleanupStarted()
+	// to avoid resource leaks when TunnelManager is created but never used.
 
 	log.WithFields(logger.Fields{
 		"at":     "NewTunnelManager",
@@ -1679,6 +1680,16 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 	}).Debug("tunnel manager created")
 
 	return tm
+}
+
+// ensureCleanupStarted lazily starts the background cleanup goroutine.
+// Safe to call multiple times; the goroutine is started at most once.
+func (tm *TunnelManager) ensureCleanupStarted() {
+	tm.cleanupOnce.Do(func() {
+		tm.cleanupTicker = time.NewTicker(30 * time.Second)
+		go tm.cleanupExpiredBuilds()
+		log.Debug("Tunnel manager cleanup goroutine started (lazy)")
+	})
 }
 
 // Stop gracefully stops the tunnel manager and cleans up resources.
@@ -1875,6 +1886,9 @@ func (tm *TunnelManager) createTunnelStateFromResult(result *tunnel.TunnelBuildR
 
 // trackPendingBuild records the pending build request for reply correlation
 func (tm *TunnelManager) trackPendingBuild(result *tunnel.TunnelBuildResult, messageID int) {
+	// Lazily start the cleanup goroutine on the first build request
+	tm.ensureCleanupStarted()
+
 	tm.buildMutex.Lock()
 	defer tm.buildMutex.Unlock()
 
