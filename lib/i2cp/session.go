@@ -244,13 +244,24 @@ func ensureValidConfig(config *SessionConfig) *SessionConfig {
 	return config
 }
 
-// prepareDestinationAndKeys generates a new destination with keys if not provided,
-// or returns the existing destination with nil keys.
+// prepareDestinationAndKeys generates a DestinationKeyStore for the session.
+// If no destination is provided, a fresh destination and keys are generated.
+// If a destination is provided, fresh keys are still generated because the
+// session needs private keys for LeaseSet signing and message decryption.
+// The client-provided destination is replaced with one that has matching keys.
 func prepareDestinationAndKeys(dest *destination.Destination) (*keys.DestinationKeyStore, *destination.Destination, error) {
 	if dest != nil {
-		return nil, dest, nil
+		log.WithFields(logger.Fields{
+			"at":     "prepareDestinationAndKeys",
+			"reason": "external_destination_provided",
+		}).Info("Client provided external destination; generating fresh keys " +
+			"(external destination replaced with key-compatible destination)")
 	}
 
+	// Always generate a full keystore with matching keys and destination.
+	// When dest != nil, we still need private keys for LeaseSet signing.
+	// Since we can't derive private keys from the external destination's
+	// public keys, we generate a fresh identity.
 	keyStore, err := keys.NewDestinationKeyStore()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate keys: %w", err)
