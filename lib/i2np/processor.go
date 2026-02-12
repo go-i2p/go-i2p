@@ -867,10 +867,11 @@ func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
 	count := int(data[0])
 	offset := 1
 
-	// Enforce the same clove count limit as ParseGarlicMessage (garlic_builder.go)
+	// Enforce the same clove count limit as DeserializeGarlic (garlic_builder.go)
 	// to prevent resource exhaustion from oversized garlic messages.
-	if count > MaxGarlicCloves {
-		return nil, fmt.Errorf("garlic clove count %d exceeds maximum %d", count, MaxGarlicCloves)
+	const maxGarlicCloves = 64
+	if count > maxGarlicCloves {
+		return nil, fmt.Errorf("garlic clove count %d exceeds maximum %d", count, maxGarlicCloves)
 	}
 
 	log.WithFields(logger.Fields{

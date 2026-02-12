@@ -111,7 +111,10 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	}
 
 	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
-	notifyStatusCallback(statusCallback, messageID, MessageStatusSuccess, payload)
+	// Report MessageStatusAccepted (not MessageStatusSuccess) because gateway
+	// acceptance does not confirm end-to-end delivery. Per I2CP semantics,
+	// guaranteed success should only be reported after delivery confirmation.
+	notifyStatusCallback(statusCallback, messageID, MessageStatusAccepted, payload)
 
 	return nil
 }
