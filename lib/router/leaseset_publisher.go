@@ -17,12 +17,14 @@ import (
 type LeaseSetPublisher struct {
 	router *Router
 	wg     sync.WaitGroup // Tracks background distributeToNetwork goroutines
+	sem    chan struct{}  // Semaphore to limit concurrent distribution goroutines
 }
 
 // NewLeaseSetPublisher creates a new LeaseSetPublisher for the given router.
 func NewLeaseSetPublisher(r *Router) *LeaseSetPublisher {
 	return &LeaseSetPublisher{
 		router: r,
+		sem:    make(chan struct{}, 8), // Limit to 8 concurrent distribution goroutines
 	}
 }
 
@@ -51,9 +53,12 @@ func (p *LeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte
 	}
 
 	// Distribute to network (non-blocking, tracked by WaitGroup for clean shutdown)
+	// Semaphore limits concurrency to prevent goroutine explosion under high churn.
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		p.sem <- struct{}{}        // acquire slot (blocks if 8 already running)
+		defer func() { <-p.sem }() // release slot
 		p.distributeToNetwork(key, leaseSetData)
 	}()
 

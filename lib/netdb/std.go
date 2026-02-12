@@ -2045,19 +2045,31 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 }
 
 // parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
+// If a cached entry already exists, the new entry replaces it only if it has a
+// newer published timestamp, preventing stale data from persisting.
 func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease_set2.LeaseSet2, error) {
 	ls2, _, err := lease_set2.ReadLeaseSet2(data)
 	if err != nil {
 		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
-	// Add to cache if not already present
+	// Add to cache, or replace if newer
 	db.lsMutex.Lock()
-	if _, ok := db.LeaseSets[hash]; !ok {
-		log.Debug("Adding LeaseSet2 to memory cache")
-		db.LeaseSets[hash] = Entry{
-			LeaseSet2: &ls2,
+	if existing, ok := db.LeaseSets[hash]; ok {
+		// Compare timestamps: only replace if the new entry is strictly newer
+		if existing.LeaseSet2 != nil {
+			if !ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime()) {
+				db.lsMutex.Unlock()
+				log.Debug("Skipping LeaseSet2 update — cached version is same or newer")
+				return ls2, nil
+			}
 		}
+		log.Debug("Replacing stale LeaseSet2 in memory cache")
+	} else {
+		log.Debug("Adding LeaseSet2 to memory cache")
+	}
+	db.LeaseSets[hash] = Entry{
+		LeaseSet2: &ls2,
 	}
 	db.lsMutex.Unlock()
 

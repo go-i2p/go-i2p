@@ -332,22 +332,34 @@ func validatePortData(addr *router_address.RouterAddress, hostData string) (stri
 	return port, nil
 }
 
-// validateTCPResolution resolves the TCP address to validate that the host:port combination is valid.
-// Returns an error if the address cannot be resolved.
+// validateTCPResolution validates that the host:port combination forms a syntactically
+// valid TCP address. Unlike the previous implementation, this does NOT perform live
+// DNS resolution, which was slow and caused valid RouterInfos to be rejected during
+// reseed processing due to transient DNS failures.
 func validateTCPResolution(hostData, port string) error {
+	// Validate host is non-empty
+	if hostData == "" {
+		return fmt.Errorf("NTCP2 address has empty host")
+	}
+
+	// Validate port is a valid number in range (already parsed by caller, but
+	// verify the combined address is well-formed)
 	hostPort := net.JoinHostPort(hostData, port)
-	_, err := net.ResolveTCPAddr("tcp", hostPort)
+
+	// Use net.SplitHostPort to verify the address is syntactically valid
+	// without performing DNS resolution
+	_, _, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "validateTCPResolution",
 			"phase":     "validation",
 			"transport": "ntcp2",
-			"reason":    "cannot resolve host:port as valid TCP address",
+			"reason":    "malformed host:port",
 			"host_port": hostPort,
 			"error":     err.Error(),
-			"impact":    "peer address is malformed or unresolvable",
+			"impact":    "peer address is syntactically invalid",
 		}).Warn("Invalid NTCP2 address discovered")
-		return fmt.Errorf("NTCP2 address cannot resolve %s: %w", hostPort, err)
+		return fmt.Errorf("NTCP2 address is malformed %s: %w", hostPort, err)
 	}
 	return nil
 }

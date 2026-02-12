@@ -69,9 +69,10 @@ type StandardEmbeddedRouter struct {
 }
 
 // NewStandardEmbeddedRouter creates a new embedded router instance.
-// The router must be configured with Configure() before calling Start().
+// The router is automatically configured with the provided config.
+// Call Start() to begin router operations.
 //
-// Returns error if the configuration is nil or invalid.
+// Returns error if the configuration is nil or invalid, or if router creation fails.
 func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration cannot be nil")
@@ -83,11 +84,19 @@ func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRoute
 		"reason": "creating embedded router instance",
 	}).Debug("creating new standard embedded router")
 
-	return &StandardEmbeddedRouter{
+	e := &StandardEmbeddedRouter{
 		cfg:        cfg,
 		configured: false,
 		running:    false,
-	}, nil
+	}
+
+	// Auto-configure the router so callers don't need a separate Configure() call.
+	// Configure() creates the underlying router instance using the provided config.
+	if err := e.Configure(cfg); err != nil {
+		return nil, fmt.Errorf("auto-configure failed: %w", err)
+	}
+
+	return e, nil
 }
 
 // Configure initializes the router with the provided configuration.
@@ -224,9 +233,9 @@ func (e *StandardEmbeddedRouter) Stop() error {
 // Use this only when Stop() fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if !e.running {
+		e.mu.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.HardStop",
 			"phase":  "shutdown",
@@ -236,6 +245,7 @@ func (e *StandardEmbeddedRouter) HardStop() {
 	}
 
 	if e.router == nil {
+		e.mu.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.HardStop",
 			"phase":  "shutdown",
@@ -250,10 +260,15 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		"reason": "forcing immediate termination",
 	}).Warn("performing hard stop of embedded router")
 
-	// Attempt graceful stop with a 5-second timeout
+	// Capture router ref and release mutex before the blocking wait,
+	// so other methods (IsRunning, Wait) are not blocked for up to 5 seconds.
+	router := e.router
+	e.mu.Unlock()
+
+	// Attempt graceful stop with a 5-second timeout (mutex NOT held)
 	done := make(chan struct{})
 	go func() {
-		e.router.Stop()
+		router.Stop()
 		close(done)
 	}()
 
@@ -275,7 +290,10 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		// Instead, mark the router as stopped and return so the caller can decide.
 	}
 
+	// Re-acquire mutex to update running state
+	e.mu.Lock()
 	e.running = false
+	e.mu.Unlock()
 }
 
 // Wait blocks until the router shuts down.

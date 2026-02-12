@@ -182,7 +182,12 @@ func (e *Entry) writeEntryType(w io.Writer, entryType byte) error {
 }
 
 // writeDataLength writes the data length as a 2-byte big-endian value.
+// Returns an error if the data length exceeds the maximum representable
+// by uint16 (65535 bytes).
 func (e *Entry) writeDataLength(w io.Writer, length int) error {
+	if length > 65535 {
+		return fmt.Errorf("entry data too large for uint16 length field: %d bytes (max 65535)", length)
+	}
 	lenBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(lenBytes, uint16(length))
 	if _, err := w.Write(lenBytes); err != nil {
