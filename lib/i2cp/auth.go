@@ -25,7 +25,11 @@ type PasswordAuthenticator struct {
 
 // NewPasswordAuthenticator creates an authenticator that accepts a single
 // username/password pair. Both fields are required and must be non-empty.
+// Panics if username or password is empty.
 func NewPasswordAuthenticator(username, password string) *PasswordAuthenticator {
+	if username == "" || password == "" {
+		panic("i2cp: NewPasswordAuthenticator requires non-empty username and password")
+	}
 	return &PasswordAuthenticator{
 		username: username,
 		password: password,

@@ -750,18 +750,32 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 }
 
 // checkSessionLimit returns ErrConnectionPoolFull if the maximum number of
-// concurrent sessions has been reached. This prevents resource exhaustion.
+// concurrent sessions has been reached. Uses atomic compare-and-swap to
+// reserve a session slot, preventing TOCTOU races under concurrent access.
+// If the caller does not actually use the slot, they must call unreserveSessionSlot.
 func (t *NTCP2Transport) checkSessionLimit() error {
 	maxSessions := t.config.GetMaxSessions()
-	currentCount := t.GetSessionCount()
-	if currentCount >= maxSessions {
-		t.logger.WithFields(map[string]interface{}{
-			"current_sessions": currentCount,
-			"max_sessions":     maxSessions,
-		}).Warn("Session limit reached")
-		return ErrConnectionPoolFull
+	for {
+		current := atomic.LoadInt32(&t.sessionCount)
+		if int(current) >= maxSessions {
+			t.logger.WithFields(map[string]interface{}{
+				"current_sessions": int(current),
+				"max_sessions":     maxSessions,
+			}).Warn("Session limit reached")
+			return ErrConnectionPoolFull
+		}
+		// Atomically reserve a slot
+		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current+1) {
+			return nil
+		}
+		// CAS failed — another goroutine changed the count, retry
 	}
-	return nil
+}
+
+// unreserveSessionSlot releases a session slot reserved by checkSessionLimit
+// when the session was not actually established (e.g., handshake failure).
+func (t *NTCP2Transport) unreserveSessionSlot() {
+	atomic.AddInt32(&t.sessionCount, -1)
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.

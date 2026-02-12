@@ -78,7 +78,7 @@ func TestServer_AuthenticateConnection_Success(t *testing.T) {
 
 	state := &connectionState{}
 	assert.True(t, server.authenticateConnection(state, "user", "pass"))
-	assert.True(t, state.authenticated)
+	assert.True(t, state.authenticated.Load())
 	assert.True(t, server.isConnectionAuthenticated(state))
 }
 
@@ -92,7 +92,7 @@ func TestServer_AuthenticateConnection_Failure(t *testing.T) {
 
 	state := &connectionState{}
 	assert.False(t, server.authenticateConnection(state, "user", "wrong"))
-	assert.False(t, state.authenticated)
+	assert.False(t, state.authenticated.Load())
 	assert.False(t, server.isConnectionAuthenticated(state))
 }
 
