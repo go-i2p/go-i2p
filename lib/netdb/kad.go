@@ -599,7 +599,8 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 	}
 
 	// Parse the RouterInfo from the data
-	// For RouterInfo, the data is a 2-byte length followed by gzip-compressed RouterInfo
+	// Per I2P spec, RouterInfo in DatabaseStore is:
+	//   2-byte big-endian compressed length, followed by gzip-compressed RouterInfo
 	storeData := dbStore.GetStoreData()
 	if len(storeData) < 2 {
 		return nil, fmt.Errorf("RouterInfo data too short")
@@ -608,11 +609,26 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 	// First 2 bytes are the compressed length
 	compressedLen := int(binary.BigEndian.Uint16(storeData[:2]))
 	if len(storeData) < 2+compressedLen {
-		return nil, fmt.Errorf("RouterInfo data truncated")
+		return nil, fmt.Errorf("RouterInfo data truncated: need %d bytes, have %d", 2+compressedLen, len(storeData))
 	}
 
-	// Parse the RouterInfo (it handles decompression internally)
-	ri, _, err := router_info.ReadRouterInfo(storeData)
+	// Extract the gzip-compressed RouterInfo bytes (skip the 2-byte length prefix)
+	compressedData := storeData[2 : 2+compressedLen]
+
+	// Decompress the gzip data
+	decompressed, err := gzipDecompress(compressedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress RouterInfo: %w", err)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":               "processDatabaseStoreResponse",
+		"compressed_len":   compressedLen,
+		"decompressed_len": len(decompressed),
+	}).Debug("Decompressed RouterInfo from DatabaseStore")
+
+	// Parse the RouterInfo from the decompressed data
+	ri, _, err := router_info.ReadRouterInfo(decompressed)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}

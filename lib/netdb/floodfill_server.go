@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -537,6 +538,29 @@ func gzipCompress(data []byte) ([]byte, error) {
 	}
 	if err := w.Close(); err != nil {
 		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// gzipDecompress decompresses gzip-compressed data.
+// Used to decompress RouterInfo payloads in DatabaseStore messages,
+// which are gzip-compressed per the I2P specification.
+func gzipDecompress(data []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("gzip: failed to create reader: %w", err)
+	}
+	defer r.Close()
+	var buf bytes.Buffer
+	// Limit decompressed size to 64 KiB to prevent zip-bomb attacks.
+	// A valid RouterInfo is typically under 4 KiB.
+	const maxDecompressedSize = 64 * 1024
+	limited := io.LimitReader(r, maxDecompressedSize+1)
+	if _, err := buf.ReadFrom(limited); err != nil {
+		return nil, fmt.Errorf("gzip: decompression failed: %w", err)
+	}
+	if buf.Len() > maxDecompressedSize {
+		return nil, fmt.Errorf("gzip: decompressed data exceeds %d bytes, possible zip bomb", maxDecompressedSize)
 	}
 	return buf.Bytes(), nil
 }

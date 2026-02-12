@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -205,6 +206,39 @@ func TestGzipCompress(t *testing.T) {
 	}
 	if len(compressed) >= len(original) {
 		t.Log("Compressed data is not smaller (expected for very short inputs)")
+	}
+}
+
+func TestGzipDecompress(t *testing.T) {
+	original := []byte("test data for decompression, test data for decompression, test data for decompression")
+
+	// Compress first
+	compressed, err := gzipCompress(original)
+	if err != nil {
+		t.Fatalf("gzipCompress failed: %v", err)
+	}
+
+	// Decompress and verify roundtrip
+	decompressed, err := gzipDecompress(compressed)
+	if err != nil {
+		t.Fatalf("gzipDecompress failed: %v", err)
+	}
+	if !bytes.Equal(original, decompressed) {
+		t.Errorf("Roundtrip mismatch: got %q, want %q", decompressed, original)
+	}
+}
+
+func TestGzipDecompressInvalidData(t *testing.T) {
+	// Should fail on non-gzip data
+	_, err := gzipDecompress([]byte("not gzip data"))
+	if err == nil {
+		t.Error("Expected error for non-gzip data, got nil")
+	}
+
+	// Should fail on empty data
+	_, err = gzipDecompress([]byte{})
+	if err == nil {
+		t.Error("Expected error for empty data, got nil")
 	}
 }
 
