@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	cryptotunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
@@ -83,6 +84,50 @@ func (h *InboundMessageHandler) RegisterTunnel(tunnelID tunnel.TunnelID, session
 	}).Debug("Registered inbound tunnel for session")
 
 	return nil
+}
+
+// CreateEndpointForSession creates a tunnel endpoint with the message handler
+// already wired to deliver decrypted messages to the specified I2CP session.
+// The returned endpoint is also registered with this handler.
+//
+// This is the preferred way to create inbound tunnel endpoints, as it ensures
+// the decrypted message delivery pipeline (tunnel → I2CP) is complete.
+//
+// Parameters:
+// - tunnelID: the ID of the inbound tunnel
+// - sessionID: the I2CP session ID that owns this tunnel
+// - decryption: the tunnel decryption object for layered decryption
+//
+// Returns the created endpoint or an error if creation or registration fails.
+func (h *InboundMessageHandler) CreateEndpointForSession(tunnelID tunnel.TunnelID, sessionID uint16, decryption cryptotunnel.TunnelEncryptor) (*tunnel.Endpoint, error) {
+	// Create the message handler that delivers decrypted messages to the I2CP session
+	messageHandler := h.createMessageHandler(sessionID)
+
+	// Create the endpoint with the handler wired in
+	endpoint, err := tunnel.NewEndpoint(tunnelID, decryption, messageHandler)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":         "CreateEndpointForSession",
+			"tunnel_id":  tunnelID,
+			"session_id": sessionID,
+			"reason":     "endpoint creation failed",
+		}).WithError(err).Error("Failed to create endpoint")
+		return nil, fmt.Errorf("failed to create endpoint: %w", err)
+	}
+
+	// Register the tunnel
+	if err := h.RegisterTunnel(tunnelID, sessionID, endpoint); err != nil {
+		endpoint.Stop()
+		return nil, err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "CreateEndpointForSession",
+		"tunnel_id":  tunnelID,
+		"session_id": sessionID,
+	}).Debug("Created and registered inbound endpoint with I2CP message handler")
+
+	return endpoint, nil
 }
 
 // UnregisterTunnel removes an inbound tunnel from the handler.

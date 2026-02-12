@@ -117,21 +117,40 @@ type SearchReplyHandler interface {
 	HandleSearchReply(key common.Hash, peerHashes []common.Hash)
 }
 
+// DataMessageHandler defines the interface for handling incoming Data messages.
+// Data messages carry end-to-end payloads that need to be delivered to I2CP sessions.
+type DataMessageHandler interface {
+	// HandleDataMessage processes a Data message payload.
+	// The payload is the raw message bytes extracted from the I2NP Data message.
+	HandleDataMessage(payload []byte) error
+}
+
+// DeliveryStatusHandler defines the interface for handling delivery status confirmations.
+// When a DeliveryStatus message is received, it notifies the original sender that their
+// message was delivered, completing the delivery confirmation loop.
+type DeliveryStatusHandler interface {
+	// HandleDeliveryStatus processes a delivery status notification.
+	// msgID is the original message ID being confirmed, timestamp is when it was delivered.
+	HandleDeliveryStatus(msgID int, timestamp time.Time) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
-	mu                   sync.RWMutex
-	factory              *I2NPMessageFactory
-	garlicSessions       *GarlicSessionManager
-	cloveForwarder       GarlicCloveForwarder // Optional delegate for non-LOCAL garlic clove delivery
-	dbManager            *DatabaseManager     // Optional database manager for DatabaseLookup messages
-	expirationValidator  *ExpirationValidator // Validator for checking message expiration
-	participantManager   ParticipantManager   // Optional participant manager for tunnel build requests
-	buildReplyForwarder  BuildReplyForwarder  // Optional forwarder for tunnel build replies
-	buildRecordCrypto    *BuildRecordCrypto   // Crypto handler for encrypting build response records
-	tunnelGatewayHandler TunnelGatewayHandler // Optional handler for tunnel gateway messages
-	tunnelDataHandler    TunnelDataHandler    // Optional handler for inbound tunnel data messages
-	searchReplyHandler   SearchReplyHandler   // Optional handler for DatabaseSearchReply suggestions
-	ourRouterHash        common.Hash          // Our router identity hash for filtering build records
+	mu                    sync.RWMutex
+	factory               *I2NPMessageFactory
+	garlicSessions        *GarlicSessionManager
+	cloveForwarder        GarlicCloveForwarder  // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager             *DatabaseManager      // Optional database manager for DatabaseLookup messages
+	expirationValidator   *ExpirationValidator  // Validator for checking message expiration
+	participantManager    ParticipantManager    // Optional participant manager for tunnel build requests
+	buildReplyForwarder   BuildReplyForwarder   // Optional forwarder for tunnel build replies
+	buildRecordCrypto     *BuildRecordCrypto    // Crypto handler for encrypting build response records
+	tunnelGatewayHandler  TunnelGatewayHandler  // Optional handler for tunnel gateway messages
+	tunnelDataHandler     TunnelDataHandler     // Optional handler for inbound tunnel data messages
+	searchReplyHandler    SearchReplyHandler    // Optional handler for DatabaseSearchReply suggestions
+	dataMessageHandler    DataMessageHandler    // Optional handler for Data message payloads
+	deliveryStatusHandler DeliveryStatusHandler // Optional handler for delivery status confirmations
+	ourRouterHash         common.Hash           // Our router identity hash for filtering build records
 }
 
 // NewMessageProcessor creates a new message processor
@@ -222,6 +241,26 @@ func (p *MessageProcessor) SetSearchReplyHandler(handler SearchReplyHandler) {
 	defer p.mu.Unlock()
 	log.WithField("at", "SetSearchReplyHandler").Debug("Setting search reply handler")
 	p.searchReplyHandler = handler
+}
+
+// SetDataMessageHandler sets the handler for processing incoming Data message payloads.
+// When set, Data message payloads are forwarded to this handler for delivery to the
+// appropriate I2CP session. If not set, Data messages are logged but discarded.
+func (p *MessageProcessor) SetDataMessageHandler(handler DataMessageHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetDataMessageHandler").Debug("Setting data message handler")
+	p.dataMessageHandler = handler
+}
+
+// SetDeliveryStatusHandler sets the handler for processing delivery status confirmations.
+// When set, delivery status notifications are forwarded to this handler to confirm
+// message delivery. If not set, DeliveryStatus messages are logged but discarded.
+func (p *MessageProcessor) SetDeliveryStatusHandler(handler DeliveryStatusHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetDeliveryStatusHandler").Debug("Setting delivery status handler")
+	p.deliveryStatusHandler = handler
 }
 
 // SetOurRouterHash sets our router's identity hash so that processAllBuildRecords
@@ -330,14 +369,28 @@ func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 	}
 }
 
-// processDataMessage processes data messages using PayloadCarrier interface
+// processDataMessage processes data messages using PayloadCarrier interface.
+// If a DataMessageHandler is configured, the payload is forwarded for delivery.
+// Otherwise, the payload is logged and discarded.
 func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
-	if payloadCarrier, ok := msg.(PayloadCarrier); ok {
-		payload := payloadCarrier.GetPayload()
-		log.WithField("payload_size", len(payload)).Debug("Processing data message")
-		return nil
+	payloadCarrier, ok := msg.(PayloadCarrier)
+	if !ok {
+		return fmt.Errorf("message does not implement PayloadCarrier interface")
 	}
-	return fmt.Errorf("message does not implement PayloadCarrier interface")
+
+	payload := payloadCarrier.GetPayload()
+	log.WithField("payload_size", len(payload)).Debug("Processing data message")
+
+	if p.dataMessageHandler != nil {
+		return p.dataMessageHandler.HandleDataMessage(payload)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "processDataMessage",
+		"payload_size": len(payload),
+		"reason":       "no handler configured",
+	}).Warn("Data message payload discarded - no DataMessageHandler set")
+	return nil
 }
 
 // processDatabaseStoreMessage processes DatabaseStore messages received from floodfills or peers.
@@ -487,18 +540,32 @@ func (p *MessageProcessor) processTunnelGatewayMessage(msg I2NPMessage) error {
 	return fmt.Errorf("no tunnel gateway handler configured")
 }
 
-// processDeliveryStatusMessage processes delivery status messages using StatusReporter interface
+// processDeliveryStatusMessage processes delivery status messages using StatusReporter interface.
+// If a DeliveryStatusHandler is configured, the status is forwarded to confirm delivery.
+// Otherwise, the status is logged and discarded.
 func (p *MessageProcessor) processDeliveryStatusMessage(msg I2NPMessage) error {
-	if statusReporter, ok := msg.(StatusReporter); ok {
-		msgID := statusReporter.GetStatusMessageID()
-		timestamp := statusReporter.GetTimestamp()
-		log.WithFields(logger.Fields{
-			"message_id": msgID,
-			"timestamp":  timestamp,
-		}).Debug("Processing delivery status")
-		return nil
+	statusReporter, ok := msg.(StatusReporter)
+	if !ok {
+		return fmt.Errorf("message does not implement StatusReporter interface")
 	}
-	return fmt.Errorf("message does not implement StatusReporter interface")
+
+	msgID := statusReporter.GetStatusMessageID()
+	timestamp := statusReporter.GetTimestamp()
+	log.WithFields(logger.Fields{
+		"message_id": msgID,
+		"timestamp":  timestamp,
+	}).Debug("Processing delivery status")
+
+	if p.deliveryStatusHandler != nil {
+		return p.deliveryStatusHandler.HandleDeliveryStatus(msgID, timestamp)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "processDeliveryStatusMessage",
+		"message_id": msgID,
+		"reason":     "no handler configured",
+	}).Warn("Delivery status discarded - no DeliveryStatusHandler set")
+	return nil
 }
 
 // processDatabaseLookupMessage processes database lookup messages using DatabaseReader interface

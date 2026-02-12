@@ -5,6 +5,7 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/stretchr/testify/assert"
 )
 
 // mockNetDBStore implements NetDBStore interface for testing
@@ -245,4 +246,128 @@ func TestNetDBStore_DispatchByType(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockDataMessageHandler implements DataMessageHandler for testing
+type mockDataMessageHandler struct {
+	received []byte
+	err      error
+}
+
+func (m *mockDataMessageHandler) HandleDataMessage(payload []byte) error {
+	m.received = payload
+	return m.err
+}
+
+// mockDeliveryStatusHandler implements DeliveryStatusHandler for testing
+type mockDeliveryStatusHandler struct {
+	receivedMsgID     int
+	receivedTimestamp time.Time
+	err               error
+}
+
+func (m *mockDeliveryStatusHandler) HandleDeliveryStatus(msgID int, timestamp time.Time) error {
+	m.receivedMsgID = msgID
+	m.receivedTimestamp = timestamp
+	return m.err
+}
+
+// TestProcessDataMessage_WithHandler tests that data messages are forwarded to the handler
+func TestProcessDataMessage_WithHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+	handler := &mockDataMessageHandler{}
+	processor.SetDataMessageHandler(handler)
+
+	// Create a data message with a payload
+	payload := []byte("test payload data for I2CP delivery")
+	msg := NewDataMessage(payload)
+
+	err := processor.processDataMessage(msg)
+	assert.NoError(t, err)
+	assert.Equal(t, payload, handler.received)
+}
+
+// TestProcessDataMessage_WithoutHandler tests that data messages are logged but not an error
+func TestProcessDataMessage_WithoutHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	payload := []byte("test payload data")
+	msg := NewDataMessage(payload)
+
+	err := processor.processDataMessage(msg)
+	assert.NoError(t, err) // Should not error, just log a warning
+}
+
+// TestProcessDataMessage_HandlerError tests that handler errors are propagated
+func TestProcessDataMessage_HandlerError(t *testing.T) {
+	processor := NewMessageProcessor()
+	handler := &mockDataMessageHandler{err: &testError{"handler failed"}}
+	processor.SetDataMessageHandler(handler)
+
+	payload := []byte("test payload")
+	msg := NewDataMessage(payload)
+
+	err := processor.processDataMessage(msg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "handler failed")
+}
+
+// TestProcessDeliveryStatusMessage_WithHandler tests that delivery status is forwarded
+func TestProcessDeliveryStatusMessage_WithHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+	handler := &mockDeliveryStatusHandler{}
+	processor.SetDeliveryStatusHandler(handler)
+
+	timestamp := time.Now()
+	msg := NewDeliveryStatusReporter(12345, timestamp)
+
+	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	assert.NoError(t, err)
+	assert.Equal(t, 12345, handler.receivedMsgID)
+	assert.WithinDuration(t, timestamp, handler.receivedTimestamp, time.Second)
+}
+
+// TestProcessDeliveryStatusMessage_WithoutHandler tests no-handler case
+func TestProcessDeliveryStatusMessage_WithoutHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	timestamp := time.Now()
+	msg := NewDeliveryStatusReporter(12345, timestamp)
+
+	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	assert.NoError(t, err) // Should not error, just log a warning
+}
+
+// TestProcessDeliveryStatusMessage_HandlerError tests handler error propagation
+func TestProcessDeliveryStatusMessage_HandlerError(t *testing.T) {
+	processor := NewMessageProcessor()
+	handler := &mockDeliveryStatusHandler{err: &testError{"status handler failed"}}
+	processor.SetDeliveryStatusHandler(handler)
+
+	timestamp := time.Now()
+	msg := NewDeliveryStatusReporter(12345, timestamp)
+
+	err := processor.processDeliveryStatusMessage(msg.(I2NPMessage))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "status handler failed")
+}
+
+// TestSetDataMessageHandler tests setter
+func TestSetDataMessageHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+	assert.Nil(t, processor.dataMessageHandler)
+
+	handler := &mockDataMessageHandler{}
+	processor.SetDataMessageHandler(handler)
+	assert.NotNil(t, processor.dataMessageHandler)
+}
+
+// TestSetDeliveryStatusHandler tests setter
+func TestSetDeliveryStatusHandler(t *testing.T) {
+	processor := NewMessageProcessor()
+	assert.Nil(t, processor.deliveryStatusHandler)
+
+	handler := &mockDeliveryStatusHandler{}
+	processor.SetDeliveryStatusHandler(handler)
+	assert.NotNil(t, processor.deliveryStatusHandler)
 }

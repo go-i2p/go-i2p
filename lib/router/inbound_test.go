@@ -333,3 +333,70 @@ func createMockDataMessage() i2np.I2NPMessage {
 	payload := []byte("test payload data")
 	return i2np.NewDataMessage(payload)
 }
+
+// TestCreateEndpointForSession tests creating an endpoint with I2CP handler wired in
+func TestCreateEndpointForSession(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+
+	// Create a session first
+	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
+	require.NoError(t, err)
+
+	sessionID := session.ID()
+	tunnelID := tunnelpkg.TunnelID(54321)
+	mockDecryptor := &mockTunnelEncryptor{}
+
+	// Create endpoint for session
+	endpoint, err := handler.CreateEndpointForSession(tunnelID, sessionID, mockDecryptor)
+	assert.NoError(t, err)
+	assert.NotNil(t, endpoint)
+
+	// Verify tunnel is registered
+	assert.Equal(t, 1, handler.GetTunnelCount())
+	retrievedSessionID, exists := handler.GetTunnelSession(tunnelID)
+	assert.True(t, exists)
+	assert.Equal(t, sessionID, retrievedSessionID)
+
+	// Clean up
+	endpoint.Stop()
+}
+
+// TestCreateEndpointForSession_DuplicateTunnel tests duplicate tunnel ID detection
+func TestCreateEndpointForSession_DuplicateTunnel(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+
+	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
+	require.NoError(t, err)
+
+	sessionID := session.ID()
+	tunnelID := tunnelpkg.TunnelID(54321)
+	mockDecryptor := &mockTunnelEncryptor{}
+
+	// Create first endpoint
+	endpoint1, err := handler.CreateEndpointForSession(tunnelID, sessionID, mockDecryptor)
+	require.NoError(t, err)
+	defer endpoint1.Stop()
+
+	// Try to create another with same tunnel ID
+	_, err = handler.CreateEndpointForSession(tunnelID, sessionID, mockDecryptor)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
+}
+
+// TestCreateEndpointForSession_NilDecryptor tests nil decryptor rejection
+func TestCreateEndpointForSession_NilDecryptor(t *testing.T) {
+	sessionManager := i2cp.NewSessionManager()
+	handler := NewInboundMessageHandler(sessionManager)
+
+	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
+	require.NoError(t, err)
+
+	tunnelID := tunnelpkg.TunnelID(54321)
+
+	// Try to create endpoint with nil decryptor
+	_, err = handler.CreateEndpointForSession(tunnelID, session.ID(), nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create endpoint")
+}

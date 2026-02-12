@@ -169,6 +169,13 @@ func (r *RouterNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	return r.db.GetLeaseSetBytes(hash)
 }
 
+// GetLeaseSet2Bytes retrieves raw LeaseSet2 data by its hash for direct router operations.
+// Returns the serialized LeaseSet2 bytes and any error encountered.
+func (r *RouterNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
+	log.WithField("hash", hash).Debug("RouterNetDB: Getting LeaseSet2 bytes for direct operation")
+	return r.db.GetLeaseSet2Bytes(hash)
+}
+
 // StoreLeaseSet stores a LeaseSet in the database from direct router operations.
 // key is the destination hash, data is the serialized LeaseSet,
 // and dataType indicates the LeaseSet type (1 for standard LeaseSet).

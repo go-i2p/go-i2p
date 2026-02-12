@@ -14,18 +14,25 @@ import (
 // DestinationResolver resolves I2P destinations to their encryption public keys.
 // It looks up LeaseSets from the NetDB and extracts the appropriate encryption key
 // based on the destination's key type (ElGamal for legacy, X25519 for modern).
+//
+// The resolver tries LeaseSet2 first (modern default since I2P 0.9.38), then falls
+// back to classic LeaseSet. EncryptedLeaseSets are not supported because they require
+// the recipient's private key and auth cookie to decrypt. MetaLeaseSets are directories
+// of other LeaseSets and would require recursive resolution.
 type DestinationResolver struct {
 	netdb interface {
 		GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+		GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 	}
 }
 
 // NewDestinationResolver creates a new destination resolver with the given NetDB.
-// The netdb parameter must implement GetLeaseSet and GetLeaseSetBytes methods.
+// The netdb parameter must implement GetLeaseSet, GetLeaseSetBytes, and GetLeaseSet2Bytes methods.
 func NewDestinationResolver(netdb interface {
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 },
 ) *DestinationResolver {
 	return &DestinationResolver{
@@ -36,10 +43,11 @@ func NewDestinationResolver(netdb interface {
 // ResolveDestination looks up a destination by its hash and returns the encryption public key.
 // This supports both legacy LeaseSets (with ElGamal keys) and modern LeaseSet2 (with X25519 keys).
 //
-// The resolution process:
-// 1. Look up the LeaseSet from NetDB using the destination hash
-// 2. Extract the encryption key based on the LeaseSet type
-// 3. Return the key in [32]byte format suitable for ECIES-X25519-AEAD encryption
+// The resolution process tries LeaseSet2 first (the modern default since I2P 0.9.38),
+// then falls back to classic LeaseSet:
+// 1. Try to get LeaseSet2 bytes from NetDB and extract X25519 key
+// 2. If LeaseSet2 not found, try classic LeaseSet bytes parsed as LeaseSet2
+// 3. If that also fails, try classic LeaseSet lookup and extract from legacy format
 //
 // Returns:
 // - publicKey: The X25519 public key for garlic encryption (32 bytes)
@@ -51,7 +59,17 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
 	}).Debug("resolving destination")
 
-	// Try to get LeaseSet from NetDB
+	// Try LeaseSet2 first (modern default since I2P 0.9.38)
+	if key, err := dr.extractKeyFromLeaseSet2Direct(destHash); err == nil {
+		return key, nil
+	}
+
+	// Try classic LeaseSet bytes parsed as LeaseSet2 (some stores may use classic bytes bucket)
+	if key, err := dr.extractKeyFromLeaseSet2(destHash); err == nil {
+		return key, nil
+	}
+
+	// Fall back to classic LeaseSet lookup
 	lsChan := dr.netdb.GetLeaseSet(destHash)
 
 	if lsChan == nil {
@@ -74,16 +92,30 @@ func (dr *DestinationResolver) ResolveDestination(destHash common.Hash) ([32]byt
 		return [32]byte{}, fmt.Errorf("failed to retrieve LeaseSet for destination %x", destHash[:8])
 	}
 
-	// Try to extract key from LeaseSet2 first (modern format)
-	if key, err := dr.extractKeyFromLeaseSet2(destHash); err == nil {
-		return key, nil
-	}
-
-	// Fall back to legacy LeaseSet format
+	// Extract key from legacy LeaseSet format
 	return dr.extractKeyFromLegacyLeaseSet(ls)
 }
 
+// extractKeyFromLeaseSet2Direct attempts to extract X25519 encryption key from LeaseSet2
+// using the dedicated GetLeaseSet2Bytes method. This is the preferred path since
+// LeaseSet2 is the modern default (since I2P 0.9.38) and is stored separately in NetDB.
+func (dr *DestinationResolver) extractKeyFromLeaseSet2Direct(destHash common.Hash) ([32]byte, error) {
+	lsBytes, err := dr.netdb.GetLeaseSet2Bytes(destHash)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	ls2, err := dr.parseLeaseSet2(lsBytes)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	return dr.findX25519KeyInLeaseSet2(ls2, destHash)
+}
+
 // extractKeyFromLeaseSet2 attempts to extract X25519 encryption key from LeaseSet2.
+// This uses classic GetLeaseSetBytes as a fallback — some stores may keep LeaseSet2 data
+// in the classic bytes bucket.
 // LeaseSet2 can have multiple encryption keys with different types.
 // We prefer X25519 (type 4) for ECIES-X25519-AEAD encryption.
 func (dr *DestinationResolver) extractKeyFromLeaseSet2(destHash common.Hash) ([32]byte, error) {
