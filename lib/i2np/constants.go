@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"github.com/samber/oops"
+	"errors"
 )
 
 // I2NP Message Type Constants
@@ -24,14 +24,15 @@ const (
 )
 
 // I2NP Error Constants
+// These use errors.New (not oops.Errorf) so callers can match them with errors.Is().
 // Moved from: header.go, build_request_record.go, build_response_record.go, database_lookup.go
 var (
-	ERR_I2NP_NOT_ENOUGH_DATA                  = oops.Errorf("not enough i2np header data")
-	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = oops.Errorf("not enough i2np build request record data")
-	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = oops.Errorf("not enough i2np build response record data")
-	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = oops.Errorf("not enough i2np database lookup data")
-	ERR_DATABASE_LOOKUP_INVALID_SIZE          = oops.Errorf("database lookup excluded peers size exceeds protocol limit")
-	ERR_I2NP_MESSAGE_EXPIRED                  = oops.Errorf("i2np message has expired")
+	ERR_I2NP_NOT_ENOUGH_DATA                  = errors.New("not enough i2np header data")
+	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = errors.New("not enough i2np build request record data")
+	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build response record data")
+	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
+	ERR_DATABASE_LOOKUP_INVALID_SIZE          = errors.New("database lookup excluded peers size exceeds protocol limit")
+	ERR_I2NP_MESSAGE_EXPIRED                  = errors.New("i2np message has expired")
 )
 
 // Default expiration tolerance for clock skew (5 minutes into the past)

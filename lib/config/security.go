@@ -60,6 +60,9 @@ func validateAndCleanBasePath(basePath string) (string, error) {
 }
 
 // resolveUserPath resolves the user path to an absolute path.
+// Symlinks are resolved via filepath.EvalSymlinks to prevent symlink-based
+// directory traversal attacks where a symlink inside the base directory
+// points to a location outside it.
 func resolveUserPath(cleanBase, userPath string) (string, error) {
 	var resolvedPath string
 	if filepath.IsAbs(userPath) {
@@ -72,7 +75,27 @@ func resolveUserPath(cleanBase, userPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
 	}
-	return absResolved, nil
+
+	// Resolve symlinks to detect symlink-based traversal.
+	// A symlink inside the base directory could point outside it,
+	// bypassing the prefix check in validatePathWithinBase.
+	// If the path doesn't exist yet (e.g., creating a new file),
+	// EvalSymlinks will fail — in that case, resolve the parent directory
+	// and append the filename.
+	evaluated, err := filepath.EvalSymlinks(absResolved)
+	if err != nil {
+		// Path doesn't exist yet — resolve the parent directory instead
+		parentDir := filepath.Dir(absResolved)
+		evaluatedParent, parentErr := filepath.EvalSymlinks(parentDir)
+		if parentErr != nil {
+			// Parent also doesn't exist — use the original resolved path.
+			// The path will be validated against the base in validatePathWithinBase.
+			return absResolved, nil
+		}
+		return filepath.Join(evaluatedParent, filepath.Base(absResolved)), nil
+	}
+
+	return evaluated, nil
 }
 
 // validatePathWithinBase ensures the resolved path is within the base directory.

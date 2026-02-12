@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,18 @@ type TransportMuxer struct {
 
 	// activeSessionCount tracks the number of currently active sessions
 	activeSessionCount int32 // atomic
+
+	// acceptChan is a persistent channel fed by long-lived accept goroutines.
+	// Lazily initialised by ensureAcceptLoop. Connections arriving here are
+	// not yet counted against the connection limit — the caller of Accept /
+	// AcceptWithTimeout must still call checkConnectionLimit.
+	acceptChan chan acceptResult
+
+	// acceptOnce guards one-time startup of the persistent accept loop.
+	acceptOnce sync.Once
+
+	// acceptDone is closed when Close() is called to signal accept goroutines to exit.
+	acceptDone chan struct{}
 }
 
 // mux a bunch of transports together
@@ -40,7 +53,9 @@ func Mux(t ...Transport) (tmux *TransportMuxer) {
 		"reason":          "initialization",
 		"transport_count": len(t),
 	}).Debug("creating new TransportMuxer")
-	tmux = new(TransportMuxer)
+	tmux = &TransportMuxer{
+		acceptDone: make(chan struct{}),
+	}
 	tmux.trans = append(tmux.trans, t...)
 	log.WithFields(logger.Fields{
 		"at":     "Mux",
@@ -124,6 +139,18 @@ func (tmux *TransportMuxer) Close() (err error) {
 		"reason":          "shutdown_requested",
 		"transport_count": len(tmux.trans),
 	}).Debug("closing all transports")
+
+	// Signal the persistent accept loop goroutines to stop.
+	// This is safe to call even if the loop was never started (channel is
+	// created in the constructor). Closing a channel is idempotent in the
+	// sense that select-on-closed returns immediately.
+	select {
+	case <-tmux.acceptDone:
+		// already closed
+	default:
+		close(tmux.acceptDone)
+	}
+
 	var errs []error
 	for i, t := range tmux.trans {
 		if closeErr := t.Close(); closeErr != nil {
@@ -294,7 +321,7 @@ func (tmux *TransportMuxer) Compatible(routerInfo router_info.RouterInfo) bool {
 
 // Accept accepts an incoming connection from any available transport.
 // This implements the Transport interface requirement.
-// It listens on ALL transports concurrently and returns the first connection.
+// It listens on ALL transports via a persistent accept loop and returns the first connection.
 // Returns the connection and nil on success.
 // Returns nil and ErrNoTransportAvailable if no transports are configured.
 // Returns nil and ErrConnectionPoolFull if the connection limit has been reached.
@@ -313,16 +340,30 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	tmux.ensureAcceptLoop()
 
-	resultChan := tmux.startAcceptGoroutines(ctx, "(TransportMuxer) Accept")
-	conn, err := tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) Accept", nil)
-	if err != nil {
-		// Release the slot reserved by checkConnectionLimit on failure
+	select {
+	case res, ok := <-tmux.acceptChan:
+		if !ok {
+			// Channel closed — muxer is shutting down
+			atomic.AddInt32(&tmux.activeSessionCount, -1)
+			return nil, errors.New("transport muxer closed")
+		}
+		if res.err != nil {
+			atomic.AddInt32(&tmux.activeSessionCount, -1)
+			return nil, res.err
+		}
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) Accept",
+			"reason":          "connection_accepted",
+			"transport_index": res.transportIndex,
+			"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
+		}).Debug("accept succeeded")
+		return &trackedConn{Conn: res.conn, mux: tmux}, nil
+	case <-tmux.acceptDone:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
+		return nil, errors.New("transport muxer closed")
 	}
-	return conn, err
 }
 
 // Addr returns the address of the first transport's listener.
@@ -336,9 +377,8 @@ func (tmux *TransportMuxer) Addr() net.Addr {
 }
 
 // AcceptWithTimeout accepts an incoming connection with a timeout.
-// This method listens on ALL transports concurrently with a timeout context,
+// This method listens on ALL transports via a persistent accept loop with a timeout,
 // enabling graceful shutdown of session monitoring loops.
-// When the timeout fires, any connections accepted after cancellation are properly closed.
 // Returns the connection and nil on success.
 // Returns nil and context.DeadlineExceeded if the timeout expires.
 // Returns nil and any other error from the underlying transport Accept().
@@ -358,16 +398,39 @@ func (tmux *TransportMuxer) AcceptWithTimeout(timeout time.Duration) (net.Conn, 
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	tmux.ensureAcceptLoop()
 
-	resultChan := tmux.startAcceptGoroutines(ctx, "(TransportMuxer) AcceptWithTimeout")
-	conn, err := tmux.collectAcceptResult(resultChan, cancel, "(TransportMuxer) AcceptWithTimeout", ctx)
-	if err != nil {
-		// Release the slot reserved by checkConnectionLimit on failure
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case res, ok := <-tmux.acceptChan:
+		if !ok {
+			atomic.AddInt32(&tmux.activeSessionCount, -1)
+			return nil, errors.New("transport muxer closed")
+		}
+		if res.err != nil {
+			atomic.AddInt32(&tmux.activeSessionCount, -1)
+			return nil, res.err
+		}
+		log.WithFields(logger.Fields{
+			"at":              "(TransportMuxer) AcceptWithTimeout",
+			"reason":          "connection_accepted",
+			"transport_index": res.transportIndex,
+			"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
+		}).Debug("accept succeeded")
+		return &trackedConn{Conn: res.conn, mux: tmux}, nil
+	case <-timer.C:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
+		log.WithFields(logger.Fields{
+			"at":     "(TransportMuxer) AcceptWithTimeout",
+			"reason": "timeout_exceeded",
+		}).Debug("accept timed out")
+		return nil, context.DeadlineExceeded
+	case <-tmux.acceptDone:
+		atomic.AddInt32(&tmux.activeSessionCount, -1)
+		return nil, errors.New("transport muxer closed")
 	}
-	return conn, err
 }
 
 // validateTransports checks that at least one transport is configured.
@@ -379,139 +442,55 @@ func (tmux *TransportMuxer) validateTransports() error {
 	return nil
 }
 
-// startAcceptGoroutines launches concurrent accept operations on all transports.
-// Each goroutine ALWAYS sends its result to the returned channel (which is buffered
-// to len(tmux.trans)). This ensures goroutines always exit promptly after Accept()
-// returns, even if the context is already cancelled. The caller is responsible for
-// draining late results from the channel via drainLateAcceptResults.
-func (tmux *TransportMuxer) startAcceptGoroutines(ctx context.Context, caller string) chan acceptResult {
-	resultChan := make(chan acceptResult, len(tmux.trans))
-	for i, t := range tmux.trans {
-		go func(transport Transport, index int) {
-			conn, err := transport.Accept()
-			// Always send to the buffered channel so this goroutine can exit.
-			// The channel is large enough (len(tmux.trans)) to never block.
-			resultChan <- acceptResult{conn: conn, err: err, transportIndex: index}
-		}(t, i)
-	}
-	return resultChan
-}
-
-// drainLateAcceptResults spawns a background goroutine that reads remaining
-// results from the channel after a successful accept or timeout. Connections
-// arriving late are closed to prevent resource leaks. The goroutine exits
-// once all transport goroutines have reported in (totalTransports results).
-func (tmux *TransportMuxer) drainLateAcceptResults(resultChan chan acceptResult, received, totalTransports int, caller string) {
-	remaining := totalTransports - received
-	if remaining <= 0 {
-		return
-	}
-	go func() {
-		for i := 0; i < remaining; i++ {
-			res := <-resultChan
-			if res.conn != nil {
-				res.conn.Close()
-				log.WithFields(logger.Fields{
-					"at":              caller,
-					"reason":          "connection_closed_late_arrival",
-					"transport_index": res.transportIndex,
-				}).Debug("closed late-arriving connection after accept completed")
-			}
+// ensureAcceptLoop starts the persistent accept goroutines exactly once.
+// Each transport gets one long-lived goroutine that continuously calls Accept()
+// and feeds results into the shared acceptChan. Goroutines exit when their
+// transport.Accept() returns an error after Close() has been called, or
+// when acceptDone is closed.
+func (tmux *TransportMuxer) ensureAcceptLoop() {
+	tmux.acceptOnce.Do(func() {
+		// Buffer large enough so goroutines can always send without blocking
+		tmux.acceptChan = make(chan acceptResult, len(tmux.trans)*4)
+		for i, t := range tmux.trans {
+			go func(transport Transport, index int) {
+				for {
+					conn, err := transport.Accept()
+					select {
+					case <-tmux.acceptDone:
+						// Muxer is shutting down — close any just-accepted connection
+						if conn != nil {
+							conn.Close()
+						}
+						return
+					default:
+					}
+					if err != nil {
+						log.WithFields(logger.Fields{
+							"at":              "(TransportMuxer) acceptLoop",
+							"transport_index": index,
+							"error":           err.Error(),
+						}).Debug("accept error from transport")
+						// If the transport was closed, stop looping
+						// Check acceptDone again to avoid re-sending after shutdown
+						select {
+						case <-tmux.acceptDone:
+							return
+						default:
+						}
+						// Temporary error — brief back-off then retry
+						time.Sleep(50 * time.Millisecond)
+						continue
+					}
+					select {
+					case tmux.acceptChan <- acceptResult{conn: conn, err: nil, transportIndex: index}:
+					case <-tmux.acceptDone:
+						conn.Close()
+						return
+					}
+				}
+			}(t, i)
 		}
-	}()
-}
-
-// handleAcceptSuccess logs the accepted connection.
-// The session counter was already reserved by checkConnectionLimit.
-func (tmux *TransportMuxer) handleAcceptSuccess(res acceptResult, cancel context.CancelFunc, caller string) net.Conn {
-	cancel()
-	log.WithFields(logger.Fields{
-		"at":              caller,
-		"reason":          "connection_accepted",
-		"transport_index": res.transportIndex,
-		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
-	}).Debug("accept succeeded")
-	return &trackedConn{Conn: res.conn, mux: tmux}
-}
-
-// collectAcceptResult waits for the first successful accept or exhaustion of all
-// transports. When ctx is non-nil, the context's deadline is also monitored so
-// that a timeout can be reported via ctx.Err(). Late-arriving results are
-// drained in the background to prevent goroutine leaks.
-func (tmux *TransportMuxer) collectAcceptResult(resultChan chan acceptResult, cancel context.CancelFunc, caller string, ctx context.Context) (net.Conn, error) {
-	if ctx != nil {
-		return tmux.collectWithTimeout(resultChan, cancel, caller, ctx)
-	}
-	return tmux.collectWithoutTimeout(resultChan, cancel, caller)
-}
-
-// collectWithTimeout waits for accept results while also monitoring a context deadline.
-// Returns context.DeadlineExceeded if the timeout fires before a connection is accepted.
-// Late-arriving results are drained in the background to prevent goroutine leaks.
-func (tmux *TransportMuxer) collectWithTimeout(resultChan chan acceptResult, cancel context.CancelFunc, caller string, ctx context.Context) (net.Conn, error) {
-	var lastErr error
-	failCount := 0
-	received := 0
-	for failCount < len(tmux.trans) {
-		select {
-		case res := <-resultChan:
-			received++
-			if conn := tmux.processAcceptResult(res, &lastErr, &failCount, cancel, caller); conn != nil {
-				tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
-				return conn, nil
-			}
-		case <-ctx.Done():
-			log.WithFields(logger.Fields{
-				"at":     caller,
-				"reason": "timeout_exceeded",
-			}).Debug("accept timed out")
-			tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
-			return nil, ctx.Err()
-		}
-	}
-	return nil, tmux.logAllFailed(lastErr, caller)
-}
-
-// collectWithoutTimeout waits for accept results from all transports without a deadline.
-// Late-arriving results are drained in the background to prevent goroutine leaks.
-func (tmux *TransportMuxer) collectWithoutTimeout(resultChan chan acceptResult, cancel context.CancelFunc, caller string) (net.Conn, error) {
-	var lastErr error
-	failCount := 0
-	received := 0
-	for failCount < len(tmux.trans) {
-		res := <-resultChan
-		received++
-		if conn := tmux.processAcceptResult(res, &lastErr, &failCount, cancel, caller); conn != nil {
-			tmux.drainLateAcceptResults(resultChan, received, len(tmux.trans), caller)
-			return conn, nil
-		}
-	}
-	return nil, tmux.logAllFailed(lastErr, caller)
-}
-
-// logAllFailed logs that all transport accept operations have failed and returns the last error.
-func (tmux *TransportMuxer) logAllFailed(lastErr error, caller string) error {
-	log.WithFields(logger.Fields{
-		"at":     caller,
-		"reason": "all_accepts_failed",
-	}).Debug("all transport accepts failed")
-	return lastErr
-}
-
-// processAcceptResult handles a single accept result from the result channel.
-// Returns the connection if successful, or nil if the transport failed.
-func (tmux *TransportMuxer) processAcceptResult(res acceptResult, lastErr *error, failCount *int, cancel context.CancelFunc, caller string) net.Conn {
-	if res.err == nil && res.conn != nil {
-		return tmux.handleAcceptSuccess(res, cancel, caller)
-	}
-	*lastErr = res.err
-	*failCount++
-	log.WithFields(logger.Fields{
-		"at":              caller,
-		"reason":          "transport_accept_failed",
-		"transport_index": res.transportIndex,
-	}).Debug("accept failed from transport")
-	return nil
+	})
 }
 
 type acceptResult struct {

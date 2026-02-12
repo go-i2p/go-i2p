@@ -21,7 +21,16 @@ func CheckFileExists(fpath string) bool {
 // CheckFileAge checks if a file is older than maxAge minutes.
 // Returns false if the file does not exist or on stat error.
 // Returns true if file exists and its modification time is older than maxAge minutes.
+// A maxAge <= 0 is clamped to 0, meaning any existing file is considered "old".
 func CheckFileAge(fpath string, maxAge int) bool {
+	if maxAge < 0 {
+		log.WithFields(map[string]interface{}{
+			"at":      "CheckFileAge",
+			"path":    fpath,
+			"max_age": maxAge,
+		}).Warn("negative maxAge clamped to 0")
+		maxAge = 0
+	}
 	info, err := os.Stat(fpath)
 	if err != nil {
 		log.WithFields(map[string]interface{}{

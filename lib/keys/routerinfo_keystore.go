@@ -308,6 +308,12 @@ func (ks *RouterInfoKeystore) KeyID() string {
 		return cachedID
 	}
 
+	// Cache the successfully generated KeyID so we don't re-derive
+	// the public key on every subsequent call.
+	ks.keyIDMutex.Lock()
+	ks.cachedKeyID = keyID
+	ks.keyIDMutex.Unlock()
+
 	return keyID
 }
 

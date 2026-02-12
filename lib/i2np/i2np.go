@@ -3,6 +3,7 @@ package i2np
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	datalib "github.com/go-i2p/common/data"
@@ -70,15 +71,15 @@ func generateRandomMessageID() (int, error) {
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message.
-// If crypto/rand fails to generate a message ID, a time-based fallback is used
-// and the error is logged. This avoids panicking in library code while still
-// producing a usable (though less random) message ID.
+// Panics if crypto/rand fails to generate a message ID, since predictable
+// message IDs would enable correlation attacks by network observers.
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	msgID, err := generateRandomMessageID()
 	if err != nil {
-		log.WithError(err).Error("Failed to generate random message ID, using time-based fallback")
-		// Fallback: use lower 31 bits of UnixNano for a non-cryptographic but functional ID
-		msgID = int(time.Now().UnixNano() & 0x7FFFFFFF)
+		// A failed CSPRNG indicates a critical system problem.
+		// Panicking is preferable to silently producing predictable
+		// message IDs that could be exploited for traffic analysis.
+		panic(fmt.Sprintf("i2np: cannot generate random message ID: %v", err))
 	}
 	return &BaseI2NPMessage{
 		type_:      msgType,
@@ -128,8 +129,22 @@ func (m *BaseI2NPMessage) GetData() []byte {
 	return m.data
 }
 
-// MarshalBinary serializes the I2NP message according to NTCP format
+// MaxI2NPStandardPayload is the maximum payload size for I2NP messages using
+// the standard 16-byte header. The size field is 2 bytes (uint16), so the
+// maximum representable value is 65535.
+const MaxI2NPStandardPayload = 65535
+
+// MarshalBinary serializes the I2NP message according to NTCP format.
+// Returns an error if the payload exceeds 65535 bytes (the 2-byte size field limit).
 func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
+	// Validate payload size against the 2-byte (uint16) size field limit.
+	// Without this check, payloads >65535 silently truncate via integer
+	// overflow, producing corrupted wire format.
+	if len(m.data) > MaxI2NPStandardPayload {
+		return nil, oops.Errorf("i2np: payload size %d exceeds maximum %d for standard header",
+			len(m.data), MaxI2NPStandardPayload)
+	}
+
 	// Calculate checksum of data
 	hash := sha256.Sum256(m.data)
 	checksum := hash[0]

@@ -14,7 +14,10 @@ var CfgFile string
 
 const GOI2P_BASE_DIR = ".go-i2p"
 
-func InitConfig() {
+// InitConfig initializes the configuration subsystem: loads or creates the
+// config file, sets defaults, and updates the router config.
+// Returns an error if the config file cannot be read or created.
+func InitConfig() error {
 	if CfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(CfgFile)
@@ -30,8 +33,7 @@ func InitConfig() {
 
 	// handle config file creating it if needed
 	if err := handleConfigFile(); err != nil {
-		log.WithError(err).Error("fatal configuration error")
-		os.Exit(1)
+		return fmt.Errorf("fatal configuration error: %w", err)
 	}
 
 	// Update RouterConfigProperties
@@ -39,6 +41,18 @@ func InitConfig() {
 
 	// Security warning: Check for default password
 	CheckDefaultPasswordWarning(viper.GetString("i2pcontrol.password"))
+
+	return nil
+}
+
+// InitConfigOrExit initializes config and terminates the process on failure.
+// This is a convenience wrapper for CLI entry points that cannot handle errors.
+// Library code and tests should call InitConfig() instead.
+func InitConfigOrExit() {
+	if err := InitConfig(); err != nil {
+		log.WithError(err).Error("fatal configuration error")
+		os.Exit(1)
+	}
 }
 
 // setDefaults initializes all viper configuration defaults from the defaults.go definitions.

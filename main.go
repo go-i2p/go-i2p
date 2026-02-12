@@ -40,7 +40,7 @@ func init() {
 		return embedded.GetReseedCertificates()
 	})
 
-	cobra.OnInitialize(config.InitConfig)
+	cobra.OnInitialize(config.InitConfigOrExit)
 	registerGlobalFlags()
 	registerRouterFlags()
 	registerNetDbFlags()

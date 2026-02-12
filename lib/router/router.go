@@ -315,7 +315,14 @@ func (r *Router) GetTransportAddr() interface{} {
 	return transports[0].Addr()
 }
 
-// create router from configuration
+// FromConfig creates a minimal Router stub from config. This is a low-level
+// internal function used by CreateRouter. It only initializes cfg and closeChnl.
+//
+// WARNING: Do not use FromConfig directly unless you intend to manually
+// initialize the keystore, transport, and other subsystems afterward.
+// Use CreateRouter instead, which fully initializes the router.
+// Calling Start() on a router created solely via FromConfig will return
+// an error because required subsystems (keystore, transport) are nil.
 func FromConfig(c *config.RouterConfig) (r *Router, err error) {
 	if c == nil {
 		return nil, fmt.Errorf("router config cannot be nil")
@@ -861,9 +868,20 @@ func (r *Router) finalizeCloseChannel() {
 
 // Start starts router mainloop and returns an error if startup-critical
 // subsystems (NetDB, I2CP, I2PControl) fail to initialize.
+// The router must be created via CreateRouter (not bare FromConfig) so that
+// the keystore and transport are properly initialized before Start is called.
 func (r *Router) Start() error {
 	r.runMux.Lock()
 	defer r.runMux.Unlock()
+
+	// Guard: verify required subsystems were initialized by CreateRouter.
+	// FromConfig alone only sets cfg and closeChnl, leaving these nil.
+	if r.RouterInfoKeystore == nil {
+		return fmt.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
+	}
+	if r.TransportMuxer == nil {
+		return fmt.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
+	}
 
 	if r.running {
 		log.WithFields(logger.Fields{

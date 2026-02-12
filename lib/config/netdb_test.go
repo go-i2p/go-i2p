@@ -36,7 +36,9 @@ func TestDefaultNetDbConfig(t *testing.T) {
 // TestNetDbConfigViperRoundTrip verifies that NetDbConfig fields are populated
 // from viper when using NewRouterConfigFromViper.
 func TestNetDbConfigViperRoundTrip(t *testing.T) {
-	InitConfig()
+	if err := InitConfig(); err != nil {
+		t.Fatalf("InitConfig failed: %v", err)
+	}
 
 	cfg := NewRouterConfigFromViper()
 	if cfg.NetDb == nil {
@@ -63,7 +65,9 @@ func TestNetDbConfigViperRoundTrip(t *testing.T) {
 // TestNetDbConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // all NetDbConfig fields from viper.
 func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
-	InitConfig()
+	if err := InitConfig(); err != nil {
+		t.Fatalf("InitConfig failed: %v", err)
+	}
 	UpdateRouterConfig()
 
 	netdb := RouterConfigProperties.NetDb

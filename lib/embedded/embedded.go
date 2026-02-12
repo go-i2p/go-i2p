@@ -101,12 +101,22 @@ func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRoute
 
 // Configure initializes the router with the provided configuration.
 // This method creates the underlying router instance but does not start it.
+//
+// Note: NewStandardEmbeddedRouter already calls Configure() internally.
+// Callers using the constructor do NOT need to call Configure() again.
+// Calling Configure() on an already-configured router returns nil (no-op)
+// to prevent errors from the documented constructor + Configure pattern.
 func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.configured {
-		return fmt.Errorf("router is already configured")
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.Configure",
+			"phase":  "configuration",
+			"reason": "router is already configured",
+		}).Debug("Configure called on already-configured router (no-op)")
+		return nil
 	}
 
 	if e.running {
@@ -229,7 +239,7 @@ func (e *StandardEmbeddedRouter) Stop() error {
 
 // HardStop performs immediate termination without graceful cleanup.
 // Unlike Stop(), this does not wait for subsystems to shut down cleanly.
-// It calls Stop() with a short timeout, then forces process exit if shutdown hangs.
+// It calls Stop() with a short timeout, then marks the router stopped.
 // Use this only when Stop() fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
 	e.mu.Lock()
@@ -260,9 +270,12 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		"reason": "forcing immediate termination",
 	}).Warn("performing hard stop of embedded router")
 
-	// Capture router ref and release mutex before the blocking wait,
-	// so other methods (IsRunning, Wait) are not blocked for up to 5 seconds.
+	// Mark as not running BEFORE releasing the mutex so concurrent
+	// Stop()/IsRunning() calls see the correct state immediately.
+	// This prevents the double-stop race where Stop() also tries
+	// to stop the router while HardStop's goroutine is doing so.
 	router := e.router
+	e.running = false
 	e.mu.Unlock()
 
 	// Attempt graceful stop with a 5-second timeout (mutex NOT held)
@@ -287,13 +300,9 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		}).Error("embedded router hard stop: graceful shutdown timed out")
 		// Do NOT call os.Exit here — it kills the entire process and prevents
 		// callers (tests, embedding applications) from performing their own cleanup.
-		// Instead, mark the router as stopped and return so the caller can decide.
+		// The stop goroutine will continue in the background; the router is already
+		// marked as not running.
 	}
-
-	// Re-acquire mutex to update running state
-	e.mu.Lock()
-	e.running = false
-	e.mu.Unlock()
 }
 
 // Wait blocks until the router shuts down.

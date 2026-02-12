@@ -21,12 +21,30 @@ import (
 // 3. Token stored with expiration timestamp
 // 4. Client includes token in subsequent RPC requests
 // 5. Server validates token before processing requests
+//
+// Rate limiting: After maxFailedAttempts consecutive failures, authentication
+// is locked out for failedAttemptLockout duration to prevent brute-force attacks.
 type AuthManager struct {
 	password string               // Configured password for authentication
 	tokens   map[string]time.Time // Active tokens with expiration times
 	mu       sync.RWMutex         // Protects tokens map
 	secret   []byte               // HMAC secret key for token generation
+
+	// Rate limiting fields
+	failedAttempts    int       // Consecutive failed authentication attempts
+	lastFailedAttempt time.Time // Time of the last failed attempt
+	lockoutUntil      time.Time // Time until which auth is locked out
+	rateLimitMu       sync.Mutex
 }
+
+const (
+	// maxFailedAttempts is the number of consecutive failed auth attempts
+	// before a lockout is applied.
+	maxFailedAttempts = 10
+	// failedAttemptLockout is how long authentication is locked after
+	// maxFailedAttempts consecutive failures.
+	failedAttemptLockout = 5 * time.Minute
+)
 
 // NewAuthManager creates a new authentication manager.
 // The password is used to validate authentication requests.
@@ -57,14 +75,31 @@ func NewAuthManager(password string) (*AuthManager, error) {
 // The token is a base64-encoded HMAC-SHA256 signature of the current
 // timestamp, ensuring uniqueness and cryptographic security.
 //
+// Rate limiting: After maxFailedAttempts consecutive failures, authentication
+// is locked out for failedAttemptLockout duration. Successful authentication
+// resets the failure counter.
+//
 // Parameters:
 //   - password: The password to authenticate
 //   - expiration: How long the token should remain valid
 //
 // Returns:
 //   - token: Base64-encoded authentication token
-//   - error: If password is invalid or token generation fails
+//   - error: If password is invalid, token generation fails, or rate limited
 func (am *AuthManager) Authenticate(password string, expiration time.Duration) (string, error) {
+	// Check rate limiting before validating password
+	am.rateLimitMu.Lock()
+	if !am.lockoutUntil.IsZero() && time.Now().Before(am.lockoutUntil) {
+		remaining := time.Until(am.lockoutUntil).Round(time.Second)
+		am.rateLimitMu.Unlock()
+		log.WithFields(map[string]interface{}{
+			"at":        "AuthManager.Authenticate",
+			"remaining": remaining.String(),
+		}).Warn("authentication rate limited")
+		return "", fmt.Errorf("too many failed attempts, locked out for %s", remaining)
+	}
+	am.rateLimitMu.Unlock()
+
 	// Read password with lock to prevent race with ChangePassword
 	am.mu.RLock()
 	currentPassword := am.password
@@ -72,8 +107,27 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 
 	// Validate password using constant-time comparison to prevent timing attacks
 	if !hmac.Equal([]byte(password), []byte(currentPassword)) {
+		// Track failed attempt for rate limiting
+		am.rateLimitMu.Lock()
+		am.failedAttempts++
+		am.lastFailedAttempt = time.Now()
+		if am.failedAttempts >= maxFailedAttempts {
+			am.lockoutUntil = time.Now().Add(failedAttemptLockout)
+			log.WithFields(map[string]interface{}{
+				"at":       "AuthManager.Authenticate",
+				"attempts": am.failedAttempts,
+				"lockout":  failedAttemptLockout.String(),
+			}).Warn("authentication lockout triggered")
+		}
+		am.rateLimitMu.Unlock()
 		return "", fmt.Errorf("invalid password")
 	}
+
+	// Successful authentication — reset failure counter
+	am.rateLimitMu.Lock()
+	am.failedAttempts = 0
+	am.lockoutUntil = time.Time{}
+	am.rateLimitMu.Unlock()
 
 	// Generate token from current timestamp
 	// Using time ensures each token is unique even for rapid requests

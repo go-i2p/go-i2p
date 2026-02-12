@@ -69,7 +69,9 @@ func TestBootstrapConfig_NewFieldsAccessible(t *testing.T) {
 // TestBootstrapConfigViperRoundTrip verifies that MinReseedServers and
 // ReseedStrategy are populated from viper in NewRouterConfigFromViper.
 func TestBootstrapConfigViperRoundTrip(t *testing.T) {
-	InitConfig()
+	if err := InitConfig(); err != nil {
+		t.Fatalf("InitConfig failed: %v", err)
+	}
 
 	cfg := NewRouterConfigFromViper()
 	if cfg.Bootstrap == nil {
@@ -93,7 +95,9 @@ func TestBootstrapConfigViperRoundTrip(t *testing.T) {
 // TestBootstrapConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // MinReseedServers and ReseedStrategy from viper.
 func TestBootstrapConfigUpdateRoundTrip(t *testing.T) {
-	InitConfig()
+	if err := InitConfig(); err != nil {
+		t.Fatalf("InitConfig failed: %v", err)
+	}
 	UpdateRouterConfig()
 
 	bootstrap := RouterConfigProperties.Bootstrap

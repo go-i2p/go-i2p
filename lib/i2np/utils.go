@@ -185,12 +185,15 @@ func ReadI2NPType(data []byte) (int, error) {
 
 	message_type := datalib.Integer([]byte{data[0]})
 
+	// Types 4-9 and 12-17 are currently unassigned in the I2NP spec.
+	// Log at Debug level instead of Warn to avoid spurious warnings for
+	// types that may be assigned in future spec revisions.
 	if (message_type.Int() >= 4 && message_type.Int() <= 9) ||
 		(message_type.Int() >= 12 && message_type.Int() <= 17) {
 		log.WithFields(logger.Fields{
 			"at":   "i2np.ReadI2NPType",
 			"type": message_type,
-		}).Warn("unknown_i2np_type")
+		}).Debug("unassigned_i2np_type")
 	}
 
 	if message_type.Int() >= 224 && message_type.Int() <= 254 {
