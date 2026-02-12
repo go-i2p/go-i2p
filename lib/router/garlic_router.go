@@ -425,7 +425,12 @@ func (gr *GarlicMessageRouter) checkNetDBForRouter(routerHash common.Hash) (chan
 
 // waitForRouterInfo waits for RouterInfo data to arrive on the channel with a timeout.
 // Returns the RouterInfo if successfully received, or an error on timeout or channel closure.
+// Uses time.NewTimer (not time.After) to prevent timer leak on success, and drains
+// the channel on timeout to prevent goroutine leaks in the producer.
 func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info.RouterInfo, routerHash common.Hash) (router_info.RouterInfo, error) {
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
+
 	select {
 	case ri, ok := <-routerInfoChan:
 		if !ok {
@@ -437,7 +442,11 @@ func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info
 			return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
 		}
 		return ri, nil
-	case <-time.After(1 * time.Second):
+	case <-timer.C:
+		// Drain the channel in a background goroutine to prevent the producer from leaking
+		go func() {
+			<-routerInfoChan
+		}()
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",
 			"router_hash": fmt.Sprintf("%x", routerHash[:8]),

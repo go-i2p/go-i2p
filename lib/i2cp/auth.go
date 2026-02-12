@@ -66,7 +66,7 @@ func (s *Server) isConnectionAuthenticated(state *connectionState) bool {
 	if !s.isAuthenticationRequired() {
 		return true // No authenticator configured — allow all
 	}
-	return state.authenticated
+	return state.authenticated.Load()
 }
 
 // authenticateConnection validates credentials against the configured authenticator.
@@ -82,7 +82,7 @@ func (s *Server) authenticateConnection(state *connectionState, username, passwo
 	}
 
 	if auth.Authenticate(username, password) {
-		state.authenticated = true
+		state.authenticated.Store(true)
 		return true
 	}
 	return false

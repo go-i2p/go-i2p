@@ -534,27 +534,19 @@ func (s *Session) handleQueueFull() error {
 // QueueIncomingMessageWithID queues a message for delivery to the client with a message ID.
 // This is a higher-level method that wraps the payload in a MessagePayloadPayload structure
 // before queuing it for delivery. The message ID can be used for tracking and correlation.
-// Returns an error if the session is not active or the queue is full.
+// Returns an error if the session is not active, rate limited, or the queue is full.
 func (s *Session) QueueIncomingMessageWithID(messageID uint32, payload []byte) error {
-	s.mu.RLock()
-	active := s.active
-	s.mu.RUnlock()
-
-	if !active {
-		return fmt.Errorf("session %d not active", s.id)
+	if err := s.checkSessionActive(); err != nil {
+		return err
 	}
 
-	msg := &IncomingMessage{
-		Payload:   payload,
-		Timestamp: time.Now(),
+	if err := s.checkRateLimit(); err != nil {
+		return err
 	}
 
-	select {
-	case s.incomingMessages <- msg:
-		return nil
-	default:
-		return fmt.Errorf("incoming message queue full for session %d", s.id)
-	}
+	s.updateActivity()
+	msg := s.createIncomingMessage(payload)
+	return s.enqueueMessageWithMonitoring(msg)
 }
 
 // ReceiveMessage blocks until a message is available or the session is stopped
@@ -580,9 +572,10 @@ func (s *Session) Reconfigure(newConfig *SessionConfig) error {
 		return err
 	}
 
-	oldConfig := s.config
+	// Value copy of config before mutation so logConfigurationChanges sees the diff
+	oldConfigCopy := *s.config
 	mergeConfigUpdates(s.config, newConfig)
-	logConfigurationChanges(s.id, oldConfig, s.config)
+	logConfigurationChanges(s.id, &oldConfigCopy, s.config)
 
 	return nil
 }

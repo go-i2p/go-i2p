@@ -79,7 +79,7 @@ type connectionState struct {
 	lastMessageTime time.Time
 	messageCount    int
 	bytesRead       uint64
-	authenticated   bool // true if this connection has been authenticated (or auth not required)
+	authenticated   atomic.Bool // true if this connection has been authenticated (or auth not required)
 }
 
 // Server is an I2CP protocol server that accepts client connections

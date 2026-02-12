@@ -1616,10 +1616,15 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 // addSession registers a new active session by peer hash.
 // This method is called when a new NTCP2 connection is established,
 // allowing the router to track active sessions for message routing.
-// Thread-safe for concurrent access.
+// Thread-safe for concurrent access. No-ops if the session map is nil (after shutdown).
 func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
 	r.sessionMutex.Lock()
 	defer r.sessionMutex.Unlock()
+
+	if r.activeSessions == nil {
+		log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Warn("Cannot add session: router is shutting down")
+		return
+	}
 
 	r.activeSessions[peerHash] = session
 	log.WithField("peer_hash", fmt.Sprintf("%x", peerHash[:8])).Debug("Added active session")
