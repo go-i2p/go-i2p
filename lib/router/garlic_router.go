@@ -55,11 +55,22 @@ type netDBAdapter struct {
 }
 
 // StoreRouterInfo adapts the StdNetDB.StoreRouterInfo method to match GarlicNetDB interface.
-// This is a no-op for now as garlic routing doesn't need to store RouterInfos.
+// It serializes the RouterInfo and stores it in the underlying NetDB, allowing the router
+// to learn about new peers via garlic messages (e.g., DatabaseStore cloves).
 func (a *netDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
-	// No-op: garlic router doesn't need to store RouterInfos, only read them
-	// If needed in the future, this could serialize the RouterInfo and call
-	// a.StdNetDB.StoreRouterInfo(hash, data, type)
+	hash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get identity hash from RouterInfo received via garlic, discarding")
+		return
+	}
+	data, err := ri.Bytes()
+	if err != nil {
+		log.WithError(err).Warn("Failed to serialize RouterInfo received via garlic, discarding")
+		return
+	}
+	if err := a.StdNetDB.StoreRouterInfo(hash, data, 0); err != nil {
+		log.WithError(err).WithField("hash", fmt.Sprintf("%x", hash[:8])).Warn("Failed to store RouterInfo received via garlic")
+	}
 }
 
 // newNetDBAdapter creates an adapter that wraps StdNetDB for use with GarlicMessageRouter.
