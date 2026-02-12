@@ -372,8 +372,8 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 		"data_size":  len(data),
 	}).Debug("Processing DatabaseStore message")
 
-	// Store in NetDB
-	if err := p.dbManager.netdb.StoreRouterInfo(key, data, storeType); err != nil {
+	// Store in NetDB — dispatched by type to appropriate handler
+	if err := p.dbManager.netdb.Store(key, data, storeType); err != nil {
 		log.WithFields(logger.Fields{
 			"at":     "processDatabaseStoreMessage",
 			"reason": "store_failed",
@@ -2404,9 +2404,15 @@ type DatabaseManager struct {
 	}
 }
 
-// NetDBStore defines the interface for storing RouterInfo entries
+// NetDBStore defines the interface for storing network database entries.
+// Implementations must dispatch to the appropriate storage method based on dataType:
+//   - 0: RouterInfo
+//   - 1: LeaseSet
+//   - 3: LeaseSet2
+//   - 5: EncryptedLeaseSet
+//   - 7: MetaLeaseSet
 type NetDBStore interface {
-	StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+	Store(key common.Hash, data []byte, dataType byte) error
 }
 
 // NetDBRetriever defines the interface for retrieving RouterInfo entries
@@ -2812,10 +2818,10 @@ func (dm *DatabaseManager) StoreData(writer DatabaseWriter) error {
 		"data_size": len(data),
 		"data_type": dataType,
 		"key":       fmt.Sprintf("%x", key[:8]),
-	}).Debug("Storing RouterInfo data")
+	}).Debug("Storing data in NetDB")
 
 	if dm.netdb != nil {
-		return dm.netdb.StoreRouterInfo(key, data, dataType)
+		return dm.netdb.Store(key, data, dataType)
 	}
 
 	return fmt.Errorf("no NetDB available for storage")

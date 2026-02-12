@@ -53,6 +53,35 @@ func (r *RouterNetDB) GetAllRouterInfos() []router_info.RouterInfo {
 	return r.db.GetAllRouterInfos()
 }
 
+// Store stores a network database entry, dispatching to the appropriate handler
+// based on the data type:
+//   - 0: RouterInfo
+//   - 1: LeaseSet
+//   - 3: LeaseSet2
+//   - 5: EncryptedLeaseSet
+//   - 7: MetaLeaseSet
+func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
+	switch dataType {
+	case 0:
+		log.WithField("hash", key).Debug("RouterNetDB: Storing RouterInfo")
+		return r.db.StoreRouterInfo(key, data, dataType)
+	case 1:
+		log.WithField("hash", key).Debug("RouterNetDB: Storing LeaseSet")
+		return r.db.StoreLeaseSet(key, data, dataType)
+	case 3:
+		log.WithField("hash", key).Debug("RouterNetDB: Storing LeaseSet2")
+		return r.db.StoreLeaseSet2(key, data, dataType)
+	case 5:
+		log.WithField("hash", key).Debug("RouterNetDB: Storing EncryptedLeaseSet")
+		return r.db.StoreEncryptedLeaseSet(key, data, dataType)
+	case 7:
+		log.WithField("hash", key).Debug("RouterNetDB: Storing MetaLeaseSet")
+		return r.db.StoreMetaLeaseSet(key, data, dataType)
+	default:
+		return fmt.Errorf("unknown database store type: %d", dataType)
+	}
+}
+
 // StoreRouterInfo stores a RouterInfo entry in the database.
 // key is the router identity hash, data is the serialized RouterInfo,
 // and dataType should be 0 for RouterInfo.

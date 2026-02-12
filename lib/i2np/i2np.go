@@ -58,23 +58,31 @@ type BaseI2NPMessage struct {
 // generateRandomMessageID creates a random 4-byte message ID.
 // The result is masked to 31 bits (0x7FFFFFFF) to ensure a positive value
 // on all platforms, including 32-bit systems where int is 32 bits.
-// Panics if the system's secure random number generator fails, as this
-// indicates a critical system-level problem.
-func generateRandomMessageID() int {
+// Returns an error if the system's secure random number generator fails.
+func generateRandomMessageID() (int, error) {
 	msgIDBytes := make([]byte, 4)
 	if _, err := rand.Read(msgIDBytes); err != nil {
-		panic("i2np: crypto/rand failed: " + err.Error())
+		return 0, oops.Errorf("i2np: crypto/rand failed: %w", err)
 	}
 	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
 	// On 32-bit systems, int(uint32(x)) with the high bit set wraps to negative.
-	return int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
+	return int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF), nil
 }
 
-// NewBaseI2NPMessage creates a new base I2NP message
+// NewBaseI2NPMessage creates a new base I2NP message.
+// If crypto/rand fails to generate a message ID, a time-based fallback is used
+// and the error is logged. This avoids panicking in library code while still
+// producing a usable (though less random) message ID.
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
+	msgID, err := generateRandomMessageID()
+	if err != nil {
+		log.WithError(err).Error("Failed to generate random message ID, using time-based fallback")
+		// Fallback: use lower 31 bits of UnixNano for a non-cryptographic but functional ID
+		msgID = int(time.Now().UnixNano() & 0x7FFFFFFF)
+	}
 	return &BaseI2NPMessage{
 		type_:      msgType,
-		messageID:  generateRandomMessageID(),        // Random by default per spec
+		messageID:  msgID,
 		expiration: time.Now().Add(60 * time.Second), // Default 60s per spec recommendation
 		data:       []byte{},
 	}

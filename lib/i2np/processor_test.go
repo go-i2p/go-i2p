@@ -20,7 +20,7 @@ func newMockNetDBStore() *mockNetDBStore {
 	}
 }
 
-func (m *mockNetDBStore) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
+func (m *mockNetDBStore) Store(key common.Hash, data []byte, dataType byte) error {
 	m.callCount++
 	if m.storeFunc != nil {
 		return m.storeFunc(key, data, dataType)
@@ -70,7 +70,7 @@ func TestDatabaseManager_StoreData_Success(t *testing.T) {
 
 	// Verify mock was called
 	if mockStore.callCount != 1 {
-		t.Errorf("Expected 1 call to StoreRouterInfo, got %d", mockStore.callCount)
+		t.Errorf("Expected 1 call to Store, got %d", mockStore.callCount)
 	}
 
 	// Verify data was stored
@@ -117,7 +117,7 @@ func TestDatabaseManager_StoreData_NetDBError(t *testing.T) {
 
 	// Verify mock was called
 	if mockStore.callCount != 1 {
-		t.Errorf("Expected 1 call to StoreRouterInfo, got %d", mockStore.callCount)
+		t.Errorf("Expected 1 call to Store, got %d", mockStore.callCount)
 	}
 }
 
@@ -182,7 +182,7 @@ func TestMessageRouter_SetNetDB(t *testing.T) {
 		t.Errorf("Expected no error after setting NetDB, got: %v", err)
 	}
 	if mockStore.callCount != 1 {
-		t.Errorf("Expected 1 call to StoreRouterInfo after setting NetDB, got %d", mockStore.callCount)
+		t.Errorf("Expected 1 call to Store after setting NetDB, got %d", mockStore.callCount)
 	}
 }
 
@@ -197,4 +197,52 @@ func containsString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestNetDBStore_DispatchByType verifies that the NetDBStore interface's Store method
+// is called with the correct data type for all DatabaseStore types, ensuring that
+// LeaseSets are not misrouted through RouterInfo-only storage.
+func TestNetDBStore_DispatchByType(t *testing.T) {
+	tests := []struct {
+		name     string
+		dataType byte
+	}{
+		{"RouterInfo", 0},
+		{"LeaseSet", 1},
+		{"LeaseSet2", 3},
+		{"EncryptedLeaseSet", 5},
+		{"MetaLeaseSet", 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var receivedType byte
+			mockStore := newMockNetDBStore()
+			mockStore.storeFunc = func(key common.Hash, data []byte, dataType byte) error {
+				receivedType = dataType
+				return nil
+			}
+
+			dm := NewDatabaseManager(mockStore)
+
+			var testKey common.Hash
+			copy(testKey[:], "test-key-for-dispatch-test-12345")
+
+			dbStore := &DatabaseStore{
+				BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+				Key:             testKey,
+				Data:            []byte("test-data"),
+				StoreType:       tt.dataType,
+			}
+
+			err := dm.StoreData(dbStore)
+			if err != nil {
+				t.Errorf("StoreData with type %d should not error: %v", tt.dataType, err)
+			}
+
+			if receivedType != tt.dataType {
+				t.Errorf("Expected Store called with dataType %d, got %d", tt.dataType, receivedType)
+			}
+		})
+	}
 }

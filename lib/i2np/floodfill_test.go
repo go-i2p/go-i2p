@@ -23,7 +23,7 @@ func newMockFloodfillNetDB() *mockFloodfillNetDB {
 }
 
 // NetDBStore interface
-func (m *mockFloodfillNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
+func (m *mockFloodfillNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	m.routerInfos[key] = data
 	return nil
 }
@@ -291,7 +291,7 @@ func TestDatabaseManager_PerformLookup_Found(t *testing.T) {
 	// Add RouterInfo data to NetDB
 	targetKey := common.Hash{0xFF}
 	routerInfoData := []byte{1, 2, 3, 4, 5} // Mock RouterInfo bytes
-	if err := mockNetDB.StoreRouterInfo(targetKey, routerInfoData, 0); err != nil {
+	if err := mockNetDB.Store(targetKey, routerInfoData, 0); err != nil {
 		t.Fatalf("Failed to store router info: %v", err)
 	}
 

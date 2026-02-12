@@ -165,7 +165,10 @@ func TestGenerateMessageID(t *testing.T) {
 	ids := make(map[int]bool)
 
 	for i := 0; i < 100; i++ {
-		id := generateMessageID()
+		id, err := generateMessageID()
+		if err != nil {
+			t.Fatalf("generateMessageID() returned unexpected error: %v", err)
+		}
 		ids[id] = true
 	}
 
@@ -173,6 +176,38 @@ func TestGenerateMessageID(t *testing.T) {
 	if len(ids) < 90 {
 		t.Errorf("expected mostly unique message IDs (>90), got %d unique out of 100", len(ids))
 	}
+}
+
+// TestGenerateMessageID_ReturnsError verifies that generateMessageID returns
+// an error value (nil on success) rather than panicking.
+func TestGenerateMessageID_ReturnsError(t *testing.T) {
+	id, err := generateMessageID()
+	if err != nil {
+		t.Fatalf("generateMessageID() returned unexpected error: %v", err)
+	}
+	if id < 0 {
+		t.Errorf("expected non-negative message ID, got %d", id)
+	}
+	if id > 0x7FFFFFFF {
+		t.Errorf("expected message ID to fit in 31 bits, got %d", id)
+	}
+}
+
+// TestGenerateMessageID_NoPanic verifies that generateMessageID never panics.
+func TestGenerateMessageID_NoPanic(t *testing.T) {
+	done := make(chan bool)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("generateMessageID panicked: %v", r)
+			}
+			done <- true
+		}()
+		for i := 0; i < 100; i++ {
+			_, _ = generateMessageID()
+		}
+	}()
+	<-done
 }
 
 // TestGenerateHopTunnelIDs verifies that generateHopTunnelIDs returns

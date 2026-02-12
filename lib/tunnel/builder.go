@@ -407,9 +407,15 @@ func (tb *TunnelBuilder) createHopRecord(
 		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, err
 	}
 
+	sendMessageID, err := generateMessageID()
+	if err != nil {
+		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to generate message ID: %w", err)
+	}
+
 	record := assembleBuildRecord(
 		receiveTunnel, nextTunnel, ourIdent, nextIdent,
 		layerKey, ivKey, replyKey, replyIV, padding,
+		sendMessageID,
 	)
 
 	return record, replyKey, replyIV, nil
@@ -459,6 +465,7 @@ func assembleBuildRecord(
 	layerKey, ivKey, replyKey session_key.SessionKey,
 	replyIV [16]byte,
 	padding [29]byte,
+	sendMessageID int,
 ) BuildRequestRecord {
 	return BuildRequestRecord{
 		ReceiveTunnel: receiveTunnel,
@@ -471,7 +478,7 @@ func assembleBuildRecord(
 		ReplyIV:       replyIV,
 		Flag:          0,
 		RequestTime:   time.Now(),
-		SendMessageID: generateMessageID(),
+		SendMessageID: sendMessageID,
 		Padding:       padding,
 	}
 }
@@ -599,11 +606,12 @@ func generateSessionKey() (session_key.SessionKey, error) {
 // generateMessageID creates a random message ID for tracking build requests.
 // The result is masked to 31 bits to ensure a positive value on all platforms,
 // including 32-bit systems where int is 32 bits.
-func generateMessageID() int {
+// Returns an error if the system's secure random number generator fails.
+func generateMessageID() (int, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		panic("tunnel: crypto/rand failed: " + err.Error())
+		return 0, fmt.Errorf("tunnel: crypto/rand failed: %w", err)
 	}
 	// Mask to 31 bits to guarantee positive int on 32-bit platforms.
-	return int((uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])) & 0x7FFFFFFF)
+	return int((uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])) & 0x7FFFFFFF), nil
 }

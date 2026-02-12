@@ -1059,6 +1059,30 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 	return nil
 }
 
+// Store dispatches a DatabaseStore message to the appropriate handler based on data type.
+// This implements the NetDBStore interface used by the I2NP message processor.
+//   - 0: RouterInfo
+//   - 1: LeaseSet
+//   - 3: LeaseSet2
+//   - 5: EncryptedLeaseSet
+//   - 7: MetaLeaseSet
+func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
+	switch dataType {
+	case 0:
+		return db.StoreRouterInfo(key, data, dataType)
+	case 1:
+		return db.StoreLeaseSet(key, data, dataType)
+	case 3:
+		return db.StoreLeaseSet2(key, data, dataType)
+	case 5:
+		return db.StoreEncryptedLeaseSet(key, data, dataType)
+	case 7:
+		return db.StoreMetaLeaseSet(key, data, dataType)
+	default:
+		return fmt.Errorf("unknown database store type: %d", dataType)
+	}
+}
+
 // StoreRouterInfo stores a RouterInfo entry in the database from I2NP DatabaseStore message.
 func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")

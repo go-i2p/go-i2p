@@ -14,7 +14,8 @@ import (
 func TestGenerateRandomMessageID_AlwaysPositive(t *testing.T) {
 	// Generate many IDs and verify all are positive
 	for i := 0; i < 1000; i++ {
-		id := generateRandomMessageID()
+		id, err := generateRandomMessageID()
+		require.NoError(t, err, "generateRandomMessageID should not error (iteration %d)", i)
 		assert.GreaterOrEqual(t, id, 0, "message ID must be non-negative (iteration %d)", i)
 		// Also verify it fits in 31 bits
 		assert.LessOrEqual(t, id, 0x7FFFFFFF, "message ID must fit in 31 bits (iteration %d)", i)
@@ -27,7 +28,8 @@ func TestGenerateRandomMessageID_AlwaysPositive(t *testing.T) {
 // strongly suggests a fallback-to-0 bug rather than genuine randomness.
 func TestGenerateRandomMessageID_NeverZero(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		id := generateRandomMessageID()
+		id, err := generateRandomMessageID()
+		require.NoError(t, err, "generateRandomMessageID should not error (iteration %d)", i)
 		// While technically possible, getting 0 from 31 random bits is
 		// ~1 in 2 billion. If we see it in 100 tries, something is wrong.
 		if id == 0 {
@@ -40,7 +42,8 @@ func TestGenerateRandomMessageID_NeverZero(t *testing.T) {
 func TestGenerateRandomMessageID_Uniqueness(t *testing.T) {
 	ids := make(map[int]bool)
 	for i := 0; i < 100; i++ {
-		id := generateRandomMessageID()
+		id, err := generateRandomMessageID()
+		require.NoError(t, err, "generateRandomMessageID should not error (iteration %d)", i)
 		ids[id] = true
 	}
 	// With 31 bits of randomness, 100 IDs should all be unique
@@ -149,4 +152,52 @@ func TestNewBaseI2NPMessage_MessageIDPositive(t *testing.T) {
 		assert.GreaterOrEqual(t, msg.MessageID(), 0,
 			"newly created message should have non-negative ID (iteration %d)", i)
 	}
+}
+
+// TestGenerateRandomMessageID_ReturnsError verifies that generateRandomMessageID
+// returns an error (not a panic) on success, and the error value is nil.
+func TestGenerateRandomMessageID_ReturnsError(t *testing.T) {
+	id, err := generateRandomMessageID()
+	require.NoError(t, err, "generateRandomMessageID should succeed under normal conditions")
+	assert.GreaterOrEqual(t, id, 0, "returned ID should be non-negative")
+	assert.LessOrEqual(t, id, 0x7FFFFFFF, "returned ID should fit in 31 bits")
+}
+
+// TestGenerateRandomMessageID_NoPanic verifies that generateRandomMessageID
+// never panics (it returns an error instead). We verify this by calling the
+// function in a goroutine with recover() — if it panics, the test fails.
+func TestGenerateRandomMessageID_NoPanic(t *testing.T) {
+	done := make(chan bool)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("generateRandomMessageID panicked: %v", r)
+			}
+			done <- true
+		}()
+		for i := 0; i < 100; i++ {
+			_, _ = generateRandomMessageID()
+		}
+	}()
+	<-done
+}
+
+// TestNewBaseI2NPMessage_NoPanic verifies that NewBaseI2NPMessage never panics.
+// Even if generateRandomMessageID were to fail, NewBaseI2NPMessage should use a
+// time-based fallback rather than crashing.
+func TestNewBaseI2NPMessage_NoPanic(t *testing.T) {
+	done := make(chan bool)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("NewBaseI2NPMessage panicked: %v", r)
+			}
+			done <- true
+		}()
+		for i := 0; i < 100; i++ {
+			msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+			assert.NotNil(t, msg)
+		}
+	}()
+	<-done
 }
