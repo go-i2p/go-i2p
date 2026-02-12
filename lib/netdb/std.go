@@ -1116,7 +1116,7 @@ func (db *StdNetDB) persistRouterInfoToFilesystem(key common.Hash, ri router_inf
 func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case 0:
-		return db.StoreRouterInfo(key, data, dataType)
+		return db.StoreRouterInfoFromMessage(key, data, dataType)
 	case 1:
 		return db.StoreLeaseSet(key, data, dataType)
 	case 3:
@@ -1130,8 +1130,10 @@ func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	}
 }
 
-// StoreRouterInfo stores a RouterInfo entry in the database from I2NP DatabaseStore message.
-func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
+// StoreRouterInfoFromMessage stores a RouterInfo entry in the database from I2NP DatabaseStore message.
+// It takes the pre-computed identity hash, raw serialized data, and data type byte.
+// This is used internally by Store() and by adapters that receive RouterInfo from network messages.
+func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing RouterInfo from DatabaseStore message")
 
 	if err := validateRouterInfoDataType(dataType); err != nil {
@@ -1167,6 +1169,28 @@ func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte)
 
 	log.WithField("hash", key).Debug("Successfully stored RouterInfo")
 	return nil
+}
+
+// StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.
+// It computes the identity hash, serializes the RouterInfo, and delegates to StoreRouterInfoFromMessage
+// for full validation (hash verification, signature check, caching, and filesystem persistence).
+func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).WithField("at", "StdNetDB.StoreRouterInfo").Warn("cannot store RouterInfo without identity hash")
+		return
+	}
+	data, err := ri.Bytes()
+	if err != nil {
+		log.WithError(err).WithField("at", "StdNetDB.StoreRouterInfo").Warn("cannot serialize RouterInfo")
+		return
+	}
+	if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":   "StdNetDB.StoreRouterInfo",
+			"hash": hash.String(),
+		}).Warn("failed to store RouterInfo in NetDB")
+	}
 }
 
 // ensure that the network database exists and load existing RouterInfos

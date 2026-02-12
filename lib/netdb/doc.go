@@ -35,7 +35,7 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	if err := db.StoreRouterInfo(hash, data, 0); err != nil {
+//	if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
 //	    log.Printf("Failed to store: %v", err)
 //	}
 //

@@ -231,7 +231,7 @@ func TestStress_1000RouterInfoNetDB(t *testing.T) {
 			copy(data, riHash[:])
 
 			// Store in NetDB (note: this will fail validation but tests concurrent access)
-			err := db.StoreRouterInfo(riHash, data, 0)
+			err := db.StoreRouterInfoFromMessage(riHash, data, 0)
 			if err != nil {
 				storeErrors <- fmt.Errorf("RouterInfo %d storage failed: %w", idx, err)
 			}

@@ -21,7 +21,7 @@ func TestIdentHashErrorHandling(t *testing.T) {
 		var hash common.Hash
 		invalidData := []byte{0x01, 0x02}
 
-		storeErr := db.StoreRouterInfo(hash, invalidData, 0)
+		storeErr := db.StoreRouterInfoFromMessage(hash, invalidData, 0)
 		if storeErr == nil {
 			t.Error("Expected error when storing invalid RouterInfo data, got nil")
 		}
@@ -63,7 +63,7 @@ func TestBytesErrorHandling(t *testing.T) {
 		var testHash common.Hash
 		emptyData := []byte{}
 
-		err := db.StoreRouterInfo(testHash, emptyData, 0)
+		err := db.StoreRouterInfoFromMessage(testHash, emptyData, 0)
 		if err == nil {
 			t.Error("Expected error for empty data, got nil")
 		}
@@ -79,7 +79,7 @@ func TestBytesErrorHandling(t *testing.T) {
 		var testHash common.Hash
 
 		// Test with nil data
-		err := db.StoreRouterInfo(testHash, nil, 0)
+		err := db.StoreRouterInfoFromMessage(testHash, nil, 0)
 		if err == nil {
 			t.Error("Expected error for nil data, got nil")
 		}
@@ -154,7 +154,7 @@ func TestErrorPropagation(t *testing.T) {
 		var testHash common.Hash
 		invalidData := []byte{0x00}
 
-		err := db.StoreRouterInfo(testHash, invalidData, 0)
+		err := db.StoreRouterInfoFromMessage(testHash, invalidData, 0)
 		if err == nil {
 			t.Error("Expected error to propagate from StoreRouterInfo with invalid data")
 		}
@@ -182,7 +182,7 @@ func TestErrorPropagation(t *testing.T) {
 		testData := []byte{0x01, 0x02}
 
 		// Use invalid data type (should be 0 for RouterInfo)
-		err := db.StoreRouterInfo(testHash, testData, 99)
+		err := db.StoreRouterInfoFromMessage(testHash, testData, 99)
 		if err == nil {
 			t.Error("Expected error for invalid data type")
 		}
@@ -207,7 +207,7 @@ func TestGracefulDegradation(t *testing.T) {
 		hash1[0] = 0x01
 		invalidData := []byte{0x00}
 
-		_ = db.StoreRouterInfo(hash1, invalidData, 0) // Will fail
+		_ = db.StoreRouterInfoFromMessage(hash1, invalidData, 0) // Will fail
 
 		// NetDB should still be operational - verify by checking it exists
 		if !db.Exists() {
@@ -258,7 +258,7 @@ func TestConcurrentErrorHandling(t *testing.T) {
 				invalidData := []byte{byte(idx)}
 
 				// All will fail but shouldn't cause race conditions
-				_ = db.StoreRouterInfo(hash, invalidData, 0)
+				_ = db.StoreRouterInfoFromMessage(hash, invalidData, 0)
 				done <- true
 			}(i)
 		}

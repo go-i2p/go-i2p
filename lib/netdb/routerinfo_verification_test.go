@@ -46,7 +46,7 @@ func TestStoreRouterInfo_SignatureVerification_RejectsInvalidData(t *testing.T) 
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	invalidData := []byte{0x00, 0x01, 0x02} // too short to parse
 
-	err := db.StoreRouterInfo(testHash, invalidData, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, invalidData, 0)
 	assert.Error(t, err, "should fail: data cannot be parsed")
 }
 
@@ -60,7 +60,7 @@ func TestStoreRouterInfo_StillRejectsInvalidDataType(t *testing.T) {
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	testData := []byte{0x01, 0x02, 0x03}
 
-	err := db.StoreRouterInfo(testHash, testData, 1) // invalid type
+	err := db.StoreRouterInfoFromMessage(testHash, testData, 1) // invalid type
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid data type")
 }
@@ -76,6 +76,6 @@ func TestStoreRouterInfo_StillRejectsHashMismatch(t *testing.T) {
 	// This data should fail at parse or hash mismatch before reaching signature verification
 	testData := []byte{0x01, 0x02, 0x03}
 
-	err := db.StoreRouterInfo(testHash, testData, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, testData, 0)
 	assert.Error(t, err, "should fail at parse or hash check")
 }

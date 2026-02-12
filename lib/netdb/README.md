@@ -45,7 +45,7 @@ StdNetDB is safe for concurrent access:
     if err != nil {
         log.Fatal(err)
     }
-    if err := db.StoreRouterInfo(hash, data, 0); err != nil {
+    if err := db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
         log.Printf("Failed to store: %v", err)
     }
 
@@ -963,13 +963,13 @@ StoreMetaLeaseSet stores a MetaLeaseSet in the database from direct router
 operations. key is the destination hash, data is the serialized MetaLeaseSet,
 and dataType should be 7 for MetaLeaseSet.
 
-#### func (*RouterNetDB) StoreRouterInfo
+#### func (*RouterNetDB) StoreRouterInfoFromMessage
 
 ```go
-func (r *RouterNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error
 ```
-StoreRouterInfo stores a RouterInfo entry in the database. key is the router
-identity hash, data is the serialized RouterInfo, and dataType should be 0 for
+StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an I2NP DatabaseStore message.
+key is the router identity hash, data is the serialized RouterInfo, and dataType should be 0 for
 RouterInfo.
 
 #### type StdNetDB
@@ -1331,12 +1331,12 @@ DatabaseStore message. This method validates, parses, caches, and persists
 MetaLeaseSet data. dataType should be 7 for MetaLeaseSet (matching I2P protocol
 specification).
 
-#### func (*StdNetDB) StoreRouterInfo
+#### func (*StdNetDB) StoreRouterInfoFromMessage
 
 ```go
-func (db *StdNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error
+func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error
 ```
-StoreRouterInfo stores a RouterInfo entry in the database from I2NP
+StoreRouterInfoFromMessage stores a RouterInfo entry in the database from I2NP
 DatabaseStore message.
 
 #### type StrategyStats

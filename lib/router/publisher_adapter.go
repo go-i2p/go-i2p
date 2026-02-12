@@ -43,7 +43,7 @@ func (a *publisherNetDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
 		}).Warn("cannot store RouterInfo")
 		return
 	}
-	if err := a.db.StoreRouterInfo(hash, data, 0); err != nil {
+	if err := a.db.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":   "publisherNetDBAdapter.StoreRouterInfo",
 			"hash": hash.String(),

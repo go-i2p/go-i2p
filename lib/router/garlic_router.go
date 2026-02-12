@@ -68,7 +68,7 @@ func (a *netDBAdapter) StoreRouterInfo(ri router_info.RouterInfo) {
 		log.WithError(err).Warn("Failed to serialize RouterInfo received via garlic, discarding")
 		return
 	}
-	if err := a.StdNetDB.StoreRouterInfo(hash, data, 0); err != nil {
+	if err := a.StdNetDB.StoreRouterInfoFromMessage(hash, data, 0); err != nil {
 		log.WithError(err).WithField("hash", fmt.Sprintf("%x", hash[:8])).Warn("Failed to store RouterInfo received via garlic")
 	}
 }

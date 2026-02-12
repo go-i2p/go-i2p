@@ -64,7 +64,7 @@ func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case 0:
 		log.WithField("hash", key).Debug("RouterNetDB: Storing RouterInfo")
-		return r.db.StoreRouterInfo(key, data, dataType)
+		return r.db.StoreRouterInfoFromMessage(key, data, dataType)
 	case 1:
 		log.WithField("hash", key).Debug("RouterNetDB: Storing LeaseSet")
 		return r.db.StoreLeaseSet(key, data, dataType)
@@ -82,12 +82,19 @@ func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error {
 	}
 }
 
-// StoreRouterInfo stores a RouterInfo entry in the database.
+// StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an I2NP DatabaseStore message.
 // key is the router identity hash, data is the serialized RouterInfo,
 // and dataType should be 0 for RouterInfo.
-func (r *RouterNetDB) StoreRouterInfo(key common.Hash, data []byte, dataType byte) error {
-	log.WithField("hash", key).Debug("RouterNetDB: Storing RouterInfo")
-	return r.db.StoreRouterInfo(key, data, dataType)
+func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error {
+	log.WithField("hash", key).Debug("RouterNetDB: Storing RouterInfo from message")
+	return r.db.StoreRouterInfoFromMessage(key, data, dataType)
+}
+
+// StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.
+// It delegates to the underlying StdNetDB.StoreRouterInfo.
+func (r *RouterNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
+	log.Debug("RouterNetDB: Storing RouterInfo")
+	r.db.StoreRouterInfo(ri)
 }
 
 // GetRouterInfoBytes retrieves raw RouterInfo data by its hash.

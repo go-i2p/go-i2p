@@ -44,7 +44,7 @@ func TestStdNetDB_StoreRouterInfo_InvalidDataType(t *testing.T) {
 	_, testData, testHash := createTestRouterInfo()
 
 	// Test with invalid data type (should be 0 for RouterInfo)
-	err := db.StoreRouterInfo(testHash, testData, 1)
+	err := db.StoreRouterInfoFromMessage(testHash, testData, 1)
 	if err == nil {
 		t.Error("Expected error for invalid data type, got nil")
 	}
@@ -66,7 +66,7 @@ func TestStdNetDB_StoreRouterInfo_ParseError(t *testing.T) {
 	var testHash common.Hash
 	copy(testHash[:], invalidData)
 
-	err := db.StoreRouterInfo(testHash, invalidData, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, invalidData, 0)
 	if err == nil {
 		t.Error("Expected error for invalid RouterInfo data, got nil")
 	}
@@ -86,7 +86,7 @@ func TestStdNetDB_StoreRouterInfo_EmptyData(t *testing.T) {
 	var testHash common.Hash
 	emptyData := []byte{}
 
-	err := db.StoreRouterInfo(testHash, emptyData, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, emptyData, 0)
 	if err == nil {
 		t.Error("Expected error for empty data, got nil")
 	}
@@ -106,7 +106,7 @@ func TestStdNetDB_StoreRouterInfo_NilHandling(t *testing.T) {
 	var testHash common.Hash
 
 	// Test with nil data
-	err := db.StoreRouterInfo(testHash, nil, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, nil, 0)
 	if err == nil {
 		t.Error("Expected error for nil data, got nil")
 	}
@@ -132,12 +132,12 @@ func TestStdNetDB_StoreRouterInfo_ConcurrentAccess(t *testing.T) {
 	done2 := make(chan bool)
 
 	go func() {
-		_ = db.StoreRouterInfo(hash1, testData, 0) // Will fail but test concurrency
+		_ = db.StoreRouterInfoFromMessage(hash1, testData, 0) // Will fail but test concurrency
 		done1 <- true
 	}()
 
 	go func() {
-		_ = db.StoreRouterInfo(hash2, testData, 0) // Will fail but test concurrency
+		_ = db.StoreRouterInfoFromMessage(hash2, testData, 0) // Will fail but test concurrency
 		done2 <- true
 	}()
 
@@ -155,7 +155,7 @@ func TestStdNetDB_StoreRouterInfo_DirectoryCreation(t *testing.T) {
 	// Don't call Create() first to test automatic directory handling
 	_, testData, testHash := createTestRouterInfo()
 
-	err := db.StoreRouterInfo(testHash, testData, 0)
+	err := db.StoreRouterInfoFromMessage(testHash, testData, 0)
 	// This will fail due to parsing, but directory structure should be attempted
 	if err == nil {
 		t.Error("Expected error due to parsing issues, got nil")

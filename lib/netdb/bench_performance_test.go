@@ -109,7 +109,7 @@ func BenchmarkStoreRouterInfo(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		err := db.StoreRouterInfo(hash, bytes, 0)
+		err := db.StoreRouterInfoFromMessage(hash, bytes, 0)
 		if err != nil {
 			b.Fatalf("Store failed: %v", err)
 		}
@@ -138,7 +138,7 @@ func BenchmarkGetRouterInfo(b *testing.B) {
 		b.Fatalf("Failed to serialize: %v", err)
 	}
 
-	err = db.StoreRouterInfo(hash, bytes, 0)
+	err = db.StoreRouterInfoFromMessage(hash, bytes, 0)
 	if err != nil {
 		b.Fatalf("Store failed: %v", err)
 	}
@@ -180,7 +180,7 @@ func BenchmarkConcurrentReads(b *testing.B) {
 			b.Fatalf("Failed to serialize: %v", err)
 		}
 
-		err = db.StoreRouterInfo(hash, bytes, 0)
+		err = db.StoreRouterInfoFromMessage(hash, bytes, 0)
 		if err != nil {
 			b.Fatalf("Store failed: %v", err)
 		}
@@ -241,7 +241,7 @@ func BenchmarkConcurrentWrites(b *testing.B) {
 		i := 0
 		for pb.Next() {
 			idx := i % 100
-			_ = db.StoreRouterInfo(routerInfos[idx].hash, routerInfos[idx].bytes, 0)
+			_ = db.StoreRouterInfoFromMessage(routerInfos[idx].hash, routerInfos[idx].bytes, 0)
 			i++
 		}
 	})
