@@ -168,12 +168,13 @@ func parseSessionOptions(optionsBytes []byte) (*SessionConfig, error) {
 	// Parse options mapping
 	mapping, _, errs := data.ReadMapping(optionsBytes)
 	if len(errs) > 0 {
-		// If mapping can't be parsed, log warning but return defaults
+		// If mapping can't be parsed, return an error so the client is aware
+		// of the misconfiguration rather than silently using defaults.
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.parseSessionOptions",
 			"errors": fmt.Sprintf("%v", errs),
-		}).Warn("failed_to_parse_options_mapping_using_defaults")
-		return config, nil
+		}).Warn("failed_to_parse_options_mapping")
+		return nil, fmt.Errorf("failed to parse session options mapping: %v", errs)
 	}
 
 	// Convert mapping to Go map for easier access

@@ -336,8 +336,9 @@ type mockTransportSession struct {
 	messages []I2NPMessage
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg I2NPMessage) {
+func (m *mockTransportSession) QueueSendI2NP(msg I2NPMessage) error {
 	m.messages = append(m.messages, msg)
+	return nil
 }
 
 func (m *mockTransportSession) SendQueueSize() int {

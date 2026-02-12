@@ -186,8 +186,10 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
-		}).Error("tunnel_has_no_hops")
-		return nil, fmt.Errorf("tunnel hops required for tunnel %d", selectedTunnel.ID)
+		}).Debug("zero_hop_tunnel_selected")
+		// Zero-hop tunnels are valid in I2P (used for testing and
+		// low-latency configurations). The message will be delivered
+		// directly to the destination without intermediate hops.
 	}
 
 	log.WithFields(logger.Fields{
@@ -329,6 +331,7 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 }
 
 // sendThroughGateway sends the garlic message to the tunnel gateway.
+// For zero-hop tunnels, sends directly to the destination.
 func (mr *MessageRouter) sendThroughGateway(
 	session *Session,
 	selectedTunnel *tunnel.TunnelState,
@@ -339,15 +342,20 @@ func (mr *MessageRouter) sendThroughGateway(
 		return fmt.Errorf("transport send function not initialized for session %d", session.ID())
 	}
 
-	gatewayHash := selectedTunnel.Hops[0]
+	// Zero-hop tunnel: send directly to the destination
+	targetHash := destinationHash
+	if len(selectedTunnel.Hops) > 0 {
+		targetHash = selectedTunnel.Hops[0]
+	}
 
-	if err := mr.transportSend(gatewayHash, garlicMsg); err != nil {
+	if err := mr.transportSend(targetHash, garlicMsg); err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.sendThroughGateway",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
-			"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
+			"target":      fmt.Sprintf("%x", targetHash[:8]),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
+			"zeroHop":     len(selectedTunnel.Hops) == 0,
 			"error":       err,
 		}).Error("failed_to_send_to_gateway")
 		return fmt.Errorf("failed to send message to gateway: %w", err)
@@ -362,12 +370,15 @@ func (mr *MessageRouter) logSuccessfulRouting(
 	destinationHash common.Hash,
 	payloadSize int,
 ) {
-	gatewayHash := selectedTunnel.Hops[0]
+	gatewayStr := "direct"
+	if len(selectedTunnel.Hops) > 0 {
+		gatewayStr = fmt.Sprintf("%x", selectedTunnel.Hops[0][:8])
+	}
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":   session.ID(),
 		"tunnelID":    selectedTunnel.ID,
-		"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
+		"gateway":     gatewayStr,
 		"destination": fmt.Sprintf("%x", destinationHash[:8]),
 		"payloadSize": payloadSize,
 	}).Info("message_routed_successfully")

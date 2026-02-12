@@ -236,6 +236,21 @@ func HasDirectConnectivity(addr *router_address.RouterAddress) bool {
 	return true
 }
 
+// HasDialableNTCP2Address checks if a RouterInfo has at least one directly
+// dialable NTCP2 address (i.e., an NTCP2 address with a valid host and port).
+// Introducer-only addresses are not dialable and will return false.
+func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
+	if routerInfo == nil {
+		return false
+	}
+	for _, addr := range routerInfo.RouterAddresses() {
+		if HasDirectConnectivity(addr) {
+			return true
+		}
+	}
+	return false
+}
+
 // Check if RouterInfo supports NTCP2
 // TODO: This should be moved to router_info package
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {

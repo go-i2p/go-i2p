@@ -296,12 +296,19 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.HardStop",
 			"phase":  "shutdown",
-			"reason": "graceful stop timed out, forcing exit",
+			"reason": "graceful stop timed out, forcing resource release",
 		}).Error("embedded router hard stop: graceful shutdown timed out")
-		// Do NOT call os.Exit here — it kills the entire process and prevents
-		// callers (tests, embedding applications) from performing their own cleanup.
-		// The stop goroutine will continue in the background; the router is already
-		// marked as not running.
+		// Force-close the router to release resources even though the
+		// graceful Stop() goroutine is still running in the background.
+		// Close() calls ensureStopped() internally and releases transports,
+		// sessions, and routing components.
+		if err := router.Close(); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "StandardEmbeddedRouter.HardStop",
+				"phase": "shutdown",
+				"error": err.Error(),
+			}).Error("force close after timeout failed")
+		}
 	}
 }
 

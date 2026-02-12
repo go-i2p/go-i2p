@@ -91,10 +91,11 @@ func newMockTransportSession() *mockTransportSession {
 	}
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) {
+func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sentMessages = append(m.sentMessages, msg)
+	return nil
 }
 
 func (m *mockTransportSession) GetSentMessages() []i2np.I2NPMessage {

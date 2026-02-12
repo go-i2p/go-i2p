@@ -867,6 +867,12 @@ func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
 	count := int(data[0])
 	offset := 1
 
+	// Enforce the same clove count limit as ParseGarlicMessage (garlic_builder.go)
+	// to prevent resource exhaustion from oversized garlic messages.
+	if count > MaxGarlicCloves {
+		return nil, fmt.Errorf("garlic clove count %d exceeds maximum %d", count, MaxGarlicCloves)
+	}
+
 	log.WithFields(logger.Fields{
 		"count":     count,
 		"data_size": len(data),
@@ -2650,7 +2656,7 @@ type FloodfillSelector interface {
 
 // TransportSession defines the interface for sending I2NP messages back to requesters
 type TransportSession interface {
-	QueueSendI2NP(msg I2NPMessage)
+	QueueSendI2NP(msg I2NPMessage) error
 	SendQueueSize() int
 }
 

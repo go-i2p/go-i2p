@@ -11,9 +11,8 @@ import (
 // a session between 2 routers for tranmitting i2np messages securly
 type TransportSession interface {
 	// queue an i2np message to be sent over the session
-	// will block as long as the send queue is full
-	// does not block if the queue is not full
-	QueueSendI2NP(msg i2np.I2NPMessage)
+	// returns an error if the session is closed or the send queue is full
+	QueueSendI2NP(msg i2np.I2NPMessage) error
 	// return how many i2np messages are not completely sent yet
 	SendQueueSize() int
 	// blocking read the next fully recv'd i2np message from this session

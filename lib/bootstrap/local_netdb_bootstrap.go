@@ -326,8 +326,11 @@ func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_i
 		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
-	// Validate expiration: RouterInfos are valid for 24 hours per I2P specification
-	const routerInfoMaxAge = 24 * time.Hour
+	// Validate expiration: RouterInfos use the same max age as the netdb package
+	// (48 hours) to ensure consistency. Using a shorter threshold here would
+	// reject RouterInfos that the netdb itself considers valid, causing
+	// unnecessary reseed operations.
+	const routerInfoMaxAge = 48 * time.Hour
 	// Allow a small clock skew tolerance for future-dated RouterInfos
 	const maxClockSkew = 10 * time.Minute
 	publishedDate := ri.Published()

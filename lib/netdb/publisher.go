@@ -28,8 +28,8 @@ type TransportManager interface {
 // TransportSession represents a session for sending I2NP messages to a router.
 type TransportSession interface {
 	// QueueSendI2NP queues an I2NP message to be sent over the session.
-	// Will block as long as the send queue is full.
-	QueueSendI2NP(msg i2np.I2NPMessage)
+	// Returns an error if the session is closed or send queue is full.
+	QueueSendI2NP(msg i2np.I2NPMessage) error
 }
 
 // RouterInfoProvider provides access to the local router's RouterInfo.

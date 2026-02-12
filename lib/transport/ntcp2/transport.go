@@ -801,20 +801,21 @@ func (t *NTCP2Transport) unreserveSessionSlot() {
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.
+// It checks that the RouterInfo has at least one directly dialable NTCP2 address
+// (i.e., one with a valid host and port), not just any NTCP2 address listing.
 func (t *NTCP2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
-	supported := SupportsNTCP2(&routerInfo)
+	dialable := HasDialableNTCP2Address(&routerInfo)
 	routerHash, err := routerInfo.IdentHash()
 	if err != nil {
 		t.logger.WithError(err).Warn("Failed to get router hash for compatibility check")
-		// Still return compatibility result based on NTCP2 support
-		return supported
+		return dialable
 	}
 	routerHashBytes := routerHash.Bytes()
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-		"supported":   supported,
+		"dialable":    dialable,
 	}).Debug("Checking NTCP2 compatibility")
-	return supported
+	return dialable
 }
 
 // removeSession removes a session from the session map (called by session cleanup callback)

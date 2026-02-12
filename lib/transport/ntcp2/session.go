@@ -2,6 +2,7 @@ package ntcp2
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -103,8 +104,8 @@ func (s *NTCP2Session) StartWorkers() {
 }
 
 // QueueSendI2NP queues an I2NP message to be sent over the session.
-// Will block as long as the send queue is full.
-func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) {
+// Returns an error if the session is closed or the send queue is full after a timeout.
+func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
 	s.logger.WithFields(map[string]interface{}{
 		"message_type":       msg.Type(),
 		"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
@@ -114,10 +115,16 @@ func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) {
 	case s.sendQueue <- msg:
 		newSize := atomic.AddInt32(&s.sendQueueSize, 1)
 		s.logger.WithField("queue_size", newSize).Debug("Message queued successfully")
+		return nil
 	case <-s.ctx.Done():
-		s.logger.Warn("Cannot queue message - session is closed")
-		// Session is closed, ignore the message
-		return
+		s.logger.WithField("message_type", msg.Type()).Warn("Cannot queue message - session is closed")
+		return fmt.Errorf("session closed, message dropped (type=%d)", msg.Type())
+	case <-time.After(500 * time.Millisecond):
+		s.logger.WithFields(map[string]interface{}{
+			"message_type":       msg.Type(),
+			"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
+		}).Warn("Send queue full after timeout, dropping message")
+		return fmt.Errorf("send queue full, message dropped (type=%d)", msg.Type())
 	}
 }
 

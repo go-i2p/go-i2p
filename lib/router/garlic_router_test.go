@@ -136,8 +136,9 @@ func newMockTransportSession() *mockTransportSession {
 	}
 }
 
-func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) {
+func (m *mockTransportSession) QueueSendI2NP(msg i2np.I2NPMessage) error {
 	m.queuedMessages = append(m.queuedMessages, msg)
+	return nil
 }
 
 func (m *mockTransportSession) SendQueueSize() int {
