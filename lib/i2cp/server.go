@@ -807,17 +807,19 @@ func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Ses
 			"payloadSize": len(response.Payload),
 		}).Debug("sending_response")
 
-		// Acquire per-connection write mutex if session exists
+		// Acquire per-connection write mutex if session exists.
+		// Hold s.mu.RLock through the write operation to prevent the session
+		// (and its writeMu) from being deleted between lookup and use.
 		var writeMu *sync.Mutex
 		if *sessionPtr != nil {
 			s.mu.RLock()
 			writeMu = s.connWriteMu[(*sessionPtr).ID()]
+			if writeMu != nil {
+				writeMu.Lock()
+			}
 			s.mu.RUnlock()
 		}
 
-		if writeMu != nil {
-			writeMu.Lock()
-		}
 		err := WriteMessage(conn, response)
 		if writeMu != nil {
 			writeMu.Unlock()

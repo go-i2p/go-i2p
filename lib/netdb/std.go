@@ -733,18 +733,27 @@ func (db *StdNetDB) countValidRouterInfos() (int, error) {
 
 // processWalkEntry handles each entry encountered during the directory walk.
 func (db *StdNetDB) processWalkEntry(fname string, info os.FileInfo, err error, count *int) error {
+	// If err is set, info may be nil (e.g., permission denied).
+	// Log and skip this entry rather than aborting the entire walk.
+	if err != nil {
+		log.WithError(err).WithField("file", fname).Warn("Skipping entry due to walk error")
+		return nil
+	}
+
 	if info.IsDir() {
-		return db.handleDirectoryWalk(fname, err)
+		return db.handleDirectoryWalk(fname, nil)
 	}
 
 	// Only process files with .dat extension (RouterInfo files)
 	if db.CheckFilePathValid(fname) {
 		if err := db.processRouterInfoFile(fname, count); err != nil {
-			return err
+			// Log and continue rather than aborting the walk for a single bad file
+			log.WithError(err).WithField("file", fname).Warn("Skipping invalid RouterInfo file")
+			return nil
 		}
 	}
 	// Silently skip non-.dat files (no warning needed)
-	return err
+	return nil
 }
 
 // handleDirectoryWalk processes directory entries during the walk.
@@ -1786,7 +1795,9 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to load LeaseSet from file")
-		return nil
+		emptyChnl := make(chan lease_set.LeaseSet)
+		close(emptyChnl)
+		return emptyChnl
 	}
 
 	chnl = make(chan lease_set.LeaseSet, 1)

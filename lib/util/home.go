@@ -21,7 +21,8 @@ func UserHome() string {
 			log.WithError(err).Warn("os.UserHomeDir failed, falling back to USERPROFILE")
 			return home
 		}
-		log.WithError(err).Error("Unable to determine home directory; defaulting to /tmp")
+		log.WithError(err).Error("Unable to determine home directory; defaulting to temp dir — " +
+			"I2P data will be stored in a world-readable location. Set $HOME to fix this.")
 		return os.TempDir()
 	}
 

@@ -348,14 +348,20 @@ func (s *DefaultCongestionAwarePeerSelector) logPeerExclusion(hash common.Hash, 
 
 // logSelectionSummary logs a summary of the selection operation.
 func (s *DefaultCongestionAwarePeerSelector) logSelectionSummary(requested, selected, retries int) {
+	s.metricsMu.Lock()
+	gExcl := s.selectionMetrics.GFlagExclusions
+	dDer := s.selectionMetrics.DFlagDeratings
+	eDer := s.selectionMetrics.EFlagDeratings
+	s.metricsMu.Unlock()
+
 	log.WithFields(logger.Fields{
 		"at":           "SelectPeersWithCongestionAwareness",
 		"requested":    requested,
 		"selected":     selected,
 		"retries":      retries,
-		"g_exclusions": s.selectionMetrics.GFlagExclusions,
-		"d_deratings":  s.selectionMetrics.DFlagDeratings,
-		"e_deratings":  s.selectionMetrics.EFlagDeratings,
+		"g_exclusions": gExcl,
+		"d_deratings":  dDer,
+		"e_deratings":  eDer,
 		"reason":       "selection complete",
 	}).Debug("peer selection summary")
 }

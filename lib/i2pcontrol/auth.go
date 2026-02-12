@@ -220,8 +220,9 @@ func (am *AuthManager) generateToken(timestamp int64) string {
 	// are not predictable even if an attacker knows the timestamp.
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
-		// Fallback: still include timestamp; security is reduced but functional
-		nonce = []byte("fallback")
+		// If the system CSPRNG fails, tokens cannot be secure.
+		// Panic rather than silently producing predictable tokens.
+		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
 	}
 
 	h := hmac.New(sha256.New, am.secret)

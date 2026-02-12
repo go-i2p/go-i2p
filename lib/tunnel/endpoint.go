@@ -50,6 +50,7 @@ type Endpoint struct {
 	decryption      tunnel.TunnelEncryptor
 	handler         MessageHandler
 	forwarder       MessageForwarder
+	forwarderMu     sync.RWMutex // protects forwarder field
 	fragmentsMutex  sync.Mutex
 	fragments       map[uint32]*fragmentAssembler
 	fragmentTimeout time.Duration
@@ -136,7 +137,9 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 // SetForwarder sets the message forwarder for routing DT_TUNNEL and DT_ROUTER messages.
 // If not set, non-local messages will be logged and dropped (backward compatible).
 func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
+	e.forwarderMu.Lock()
 	e.forwarder = forwarder
+	e.forwarderMu.Unlock()
 }
 
 // Receive processes an encrypted tunnel message.
@@ -392,7 +395,11 @@ func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstru
 
 // deliverViaForwarder routes a message to a non-local destination using the forwarder.
 func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash [32]byte, msgBytes []byte) error {
-	if e.forwarder == nil {
+	e.forwarderMu.RLock()
+	fwd := e.forwarder
+	e.forwarderMu.RUnlock()
+
+	if fwd == nil {
 		log.WithField("delivery_type", deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
 		return nil
 	}
@@ -403,10 +410,10 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 			"delivery_type": "DT_TUNNEL",
 			"tunnel_id":     tunnelID,
 		}).Debug("Forwarding message to tunnel")
-		return e.forwarder.ForwardToTunnel(tunnelID, hash, msgBytes)
+		return fwd.ForwardToTunnel(tunnelID, hash, msgBytes)
 	case DT_ROUTER:
 		log.WithField("delivery_type", "DT_ROUTER").Debug("Forwarding message to router")
-		return e.forwarder.ForwardToRouter(hash, msgBytes)
+		return fwd.ForwardToRouter(hash, msgBytes)
 	default:
 		return nil
 	}
@@ -632,7 +639,10 @@ func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembl
 	case DT_LOCAL:
 		return e.handler(completeMsg)
 	case DT_TUNNEL, DT_ROUTER:
-		if e.forwarder == nil {
+		e.forwarderMu.RLock()
+		fwd := e.forwarder
+		e.forwarderMu.RUnlock()
+		if fwd == nil {
 			log.WithField("delivery_type", assembler.deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
 			return nil
 		}

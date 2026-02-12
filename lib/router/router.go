@@ -808,12 +808,15 @@ func (r *Router) clearActiveSessions() {
 
 // clearRoutingComponents releases all message routing, garlic routing,
 // tunnel manager, keystore, and NetDB references.
+// Acquires runMux to prevent concurrent reads of these fields during shutdown.
 func (r *Router) clearRoutingComponents() {
+	r.runMux.Lock()
 	r.messageRouter = nil
 	r.garlicRouter = nil
 	r.tunnelManager = nil
 	r.inboundHandler = nil
 	r.publisher = nil
+	r.runMux.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
 		"phase":  "finalization",
@@ -1759,6 +1762,9 @@ func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.R
 		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])
 	}
 
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+
 	select {
 	case routerInfo, ok := <-routerInfoChan:
 		if !ok {
@@ -1766,7 +1772,7 @@ func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.R
 		}
 		return &routerInfo, nil
 
-	case <-time.After(30 * time.Second):
+	case <-timer.C:
 		r.logRouterInfoTimeout(hash)
 		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])
 	}

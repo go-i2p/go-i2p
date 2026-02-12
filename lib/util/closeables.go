@@ -23,10 +23,12 @@ func RegisterCloser(c io.Closer) {
 	log.WithField("count", len(closeOnExit)).Debug("Registered closer")
 }
 
-// CloseAll closes all registered io.Closer instances and clears the list.
-// This function is thread-safe. The list is copied under the lock, then
-// each closer is closed outside the lock to prevent slow Close() calls
-// from blocking RegisterCloser() or other callers.
+// CloseAll closes all registered io.Closer instances in reverse (LIFO) order
+// and clears the list. LIFO ordering ensures resources are released in the
+// opposite order of their registration, which is important when later resources
+// depend on earlier ones. Each closer is protected by recover() to prevent one
+// panicking closer from aborting the remaining closers.
+// This function is thread-safe.
 func CloseAll() {
 	closeMutex.Lock()
 	// Copy the slice and clear the original under the lock
@@ -35,12 +37,20 @@ func CloseAll() {
 	closeOnExit = nil
 	closeMutex.Unlock()
 
-	log.WithField("count", len(closers)).Debug("Closing all registered closers")
+	log.WithField("count", len(closers)).Debug("Closing all registered closers (LIFO order)")
 
-	for idx := range closers {
-		if err := closers[idx].Close(); err != nil {
-			log.WithError(err).Warn("Error closing resource")
-		}
+	// Close in reverse (LIFO) order
+	for i := len(closers) - 1; i >= 0; i-- {
+		func(c io.Closer) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.WithField("panic", r).Warn("Panic while closing resource")
+				}
+			}()
+			if err := c.Close(); err != nil {
+				log.WithError(err).Warn("Error closing resource")
+			}
+		}(closers[i])
 	}
 	log.Debug("All closers closed")
 }

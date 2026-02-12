@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/logger"
@@ -254,6 +255,11 @@ func (s *NTCP2Session) writeFramedData(framedData []byte) bool {
 	return true
 }
 
+// ntcp2ReadDeadline is the maximum time to wait for a message from a peer
+// before checking if the session should stop. This prevents goroutine leaks
+// when a peer goes silent without closing the connection.
+const ntcp2ReadDeadline = 5 * time.Minute
+
 // receiveWorker handles receiving I2NP messages from the NTCP2 connection.
 func (s *NTCP2Session) receiveWorker() {
 	defer s.wg.Done()
@@ -267,8 +273,22 @@ func (s *NTCP2Session) receiveWorker() {
 			return
 		}
 
+		// Set a read deadline so we periodically check shouldStopReceiving()
+		// even if the peer goes silent. Without this, readNextMessage blocks
+		// forever on a silent peer, leaking the goroutine.
+		if err := s.conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
+			s.logger.WithError(err).Error("Failed to set read deadline")
+			s.setError(WrapNTCP2Error(err, "setting read deadline"))
+			return
+		}
+
 		msg, err := s.readNextMessage(unframer)
 		if err != nil {
+			// If this is a timeout, loop back to check shouldStopReceiving
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				s.logger.Debug("Read deadline expired, checking session state")
+				continue
+			}
 			s.handleReceiveError(err)
 			return
 		}

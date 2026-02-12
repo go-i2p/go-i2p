@@ -340,16 +340,26 @@ func validateReseedResponse(response *http.Response, uri string) error {
 }
 
 // readSU3File reads and parses the SU3 file from the response body.
+// Limits reads to 50 MB to prevent memory exhaustion from malicious servers.
 func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 	// Buffer the entire response to ensure complete data is available.
 	// This prevents issues with streaming/incomplete reads that can cause
 	// "Signature shorter than expected" errors when the su3 library tries
 	// to read the signature bytes from the end of the file.
+	//
+	// Limit to 50 MB — reseed bundles are typically a few MB. This prevents
+	// a malicious server from sending an unbounded stream.
+	const maxReseedSize = 50 << 20 // 50 MB
 	log.Debug("Buffering complete SU3 response")
-	bufferedData, err := io.ReadAll(body)
+	limitedReader := io.LimitReader(body, maxReseedSize+1)
+	bufferedData, err := io.ReadAll(limitedReader)
 	if err != nil {
 		log.WithError(err).Error("Failed to buffer SU3 response")
 		return nil, oops.Errorf("failed to buffer SU3 response: %w", err)
+	}
+	if len(bufferedData) > maxReseedSize {
+		log.WithField("size_bytes", len(bufferedData)).Error("SU3 response exceeds maximum allowed size")
+		return nil, oops.Errorf("SU3 response exceeds maximum allowed size of %d bytes", maxReseedSize)
 	}
 	log.WithField("size_bytes", len(bufferedData)).Debug("Buffered SU3 response")
 

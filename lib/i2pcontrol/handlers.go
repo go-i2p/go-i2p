@@ -293,6 +293,11 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 // handleShutdown initiates a graceful router shutdown if requested.
 func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
 	if _, ok := req["Shutdown"]; ok {
+		if h.RouterControl == nil {
+			log.Warn("Shutdown requested but RouterControl is nil")
+			result["Shutdown"] = "error: router control not available"
+			return
+		}
 		go func() {
 			log.Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
@@ -304,6 +309,11 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 // handleRestart performs a graceful shutdown for supervisor-managed restart if requested.
 func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
 	if _, ok := req["Restart"]; ok {
+		if h.RouterControl == nil {
+			log.Warn("Restart requested but RouterControl is nil")
+			result["Restart"] = "error: router control not available"
+			return
+		}
 		go func() {
 			log.Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
 			h.RouterControl.Stop()
@@ -315,6 +325,11 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 // handleReseed triggers a manual NetDB reseed operation if requested.
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
 	if _, ok := req["Reseed"]; ok {
+		if h.RouterControl == nil {
+			log.Warn("Reseed requested but RouterControl is nil")
+			result["Reseed"] = "error: router control not available"
+			return
+		}
 		go func() {
 			log.Info("Reseed requested via I2PControl")
 			if err := h.RouterControl.Reseed(); err != nil {

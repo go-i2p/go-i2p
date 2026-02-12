@@ -136,6 +136,21 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	sm.mu.RUnlock()
 
 	if !exists {
+		// Double-checked locking: acquire write lock and re-check to prevent
+		// two goroutines from both creating a session for the same destination.
+		sm.mu.Lock()
+		session, exists = sm.sessions[destinationHash]
+		if exists {
+			sm.mu.Unlock()
+			log.WithFields(logger.Fields{
+				"at":              "EncryptGarlicMessage",
+				"dest_hash":       destinationHash.String(),
+				"message_counter": session.MessageCounter,
+			}).Debug("Session found after double-check, using existing session")
+			return sm.encryptExistingSession(session, plaintextGarlic)
+		}
+		sm.mu.Unlock()
+
 		log.WithFields(logger.Fields{
 			"at":        "EncryptGarlicMessage",
 			"dest_hash": destinationHash.String(),

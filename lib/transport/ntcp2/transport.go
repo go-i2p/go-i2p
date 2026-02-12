@@ -123,14 +123,18 @@ func loadStaticKeyFromRouter(ntcp2Config *ntcp2.NTCP2Config, identity router_inf
 	// Extract X25519 encryption private key from RouterInfoKeystore
 	encryptionPrivKey := keystore.GetEncryptionPrivateKey()
 	if encryptionPrivKey == nil {
-		cancel()
+		if cancel != nil {
+			cancel()
+		}
 		return WrapNTCP2Error(fmt.Errorf("encryption private key is nil"), "retrieving encryption key from keystore")
 	}
 
 	// Use the encryption private key as the NTCP2 static key
 	ntcp2Config.StaticKey = encryptionPrivKey.Bytes()
 	if len(ntcp2Config.StaticKey) != 32 {
-		cancel()
+		if cancel != nil {
+			cancel()
+		}
 		return WrapNTCP2Error(fmt.Errorf("invalid static key size: expected 32 bytes, got %d", len(ntcp2Config.StaticKey)), "loading static key")
 	}
 	return nil
@@ -146,7 +150,9 @@ func loadOrGenerateObfuscationIV(ntcp2Config *ntcp2.NTCP2Config, workingDir stri
 	persistentCfg := NewPersistentConfig(workingDir)
 	iv, err := persistentCfg.LoadOrGenerateObfuscationIV()
 	if err != nil {
-		cancel()
+		if cancel != nil {
+			cancel()
+		}
 		return WrapNTCP2Error(err, "loading obfuscation IV")
 	}
 
@@ -328,7 +334,7 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return err
 	}
 
-	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, t.config.WorkingDir, t.cancel); err != nil {
+	if err := initializeCryptoKeys(ntcp2Config, ident, t.keystore, t.config.WorkingDir, nil); err != nil {
 		return fmt.Errorf("failed to reinitialize crypto keys after identity update: %w", err)
 	}
 
@@ -780,8 +786,18 @@ func (t *NTCP2Transport) checkSessionLimit() error {
 
 // unreserveSessionSlot releases a session slot reserved by checkSessionLimit
 // when the session was not actually established (e.g., handshake failure).
+// Uses CAS loop to prevent the counter from going negative.
 func (t *NTCP2Transport) unreserveSessionSlot() {
-	atomic.AddInt32(&t.sessionCount, -1)
+	for {
+		current := atomic.LoadInt32(&t.sessionCount)
+		if current <= 0 {
+			t.logger.Warn("unreserveSessionSlot called but session count is already zero")
+			return
+		}
+		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
+			return
+		}
+	}
 }
 
 // Compatible returns true if a routerInfo is compatible with this transport.

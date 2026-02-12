@@ -28,7 +28,16 @@ func handleReload() {
 	copy(snapshot, reloaders)
 	mu.RUnlock()
 	for _, h := range snapshot {
-		h()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Log would be better but signals package has no logger;
+					// at minimum, prevent one panicking handler from aborting
+					// all remaining handlers.
+				}
+			}()
+			h()
+		}()
 	}
 }
 
@@ -44,6 +53,14 @@ func handleInterrupted() {
 	copy(snapshot, interrupters)
 	mu.RUnlock()
 	for _, h := range snapshot {
-		h()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Prevent one panicking handler from aborting
+					// all remaining handlers.
+				}
+			}()
+			h()
+		}()
 	}
 }

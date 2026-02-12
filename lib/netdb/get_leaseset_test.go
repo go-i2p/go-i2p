@@ -27,9 +27,11 @@ func TestGetLeaseSet_NilLeaseSetField(t *testing.T) {
 	}
 	db.lsMutex.Unlock()
 
-	// GetLeaseSet must NOT panic. It should return nil (no classic LeaseSet).
+	// GetLeaseSet must NOT panic. It should return a closed channel (no classic LeaseSet).
 	chnl := db.GetLeaseSet(hash)
-	assert.Nil(t, chnl, "GetLeaseSet should return nil when entry holds a LeaseSet2, not a classic LeaseSet")
+	assert.NotNil(t, chnl, "GetLeaseSet should return a closed channel, not nil")
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed when entry holds a LeaseSet2, not a classic LeaseSet")
 }
 
 // TestGetLeaseSet_MissingEntry ensures GetLeaseSet returns nil for a
@@ -41,5 +43,7 @@ func TestGetLeaseSet_MissingEntry(t *testing.T) {
 	copy(hash[:], []byte("nonexistent-hash-32-bytes-long!!"))
 
 	chnl := db.GetLeaseSet(hash)
-	assert.Nil(t, chnl, "GetLeaseSet should return nil for missing hash")
+	assert.NotNil(t, chnl, "GetLeaseSet should return a closed channel, not nil")
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed for missing hash")
 }
