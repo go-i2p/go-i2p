@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -1077,6 +1078,31 @@ func (sm *GarlicSessionManager) GetSessionCount() int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return len(sm.sessions)
+}
+
+// StartCleanupLoop starts a background goroutine that periodically cleans up
+// expired sessions and their associated tag index entries. The loop runs every
+// 2 minutes and stops when the provided context is cancelled.
+// This prevents unbounded growth of the session and tag index maps.
+func (sm *GarlicSessionManager) StartCleanupLoop(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				sm.CleanupExpiredSessions()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	log.WithFields(logger.Fields{
+		"at":       "GarlicSessionManager.StartCleanupLoop",
+		"interval": "2m",
+	}).Debug("Started garlic session cleanup loop")
 }
 
 // GenerateGarlicSessionManager creates a garlic session manager with a freshly generated key pair.

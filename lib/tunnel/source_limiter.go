@@ -236,6 +236,9 @@ func (sl *SourceLimiter) cleanupLoop() {
 // Entries are removed if:
 // - Last update was more than 10 minutes ago, AND
 // - Source is not currently banned
+//
+// When a significant number of entries are removed, the map is compacted to
+// release memory from Go's never-shrinking map backing store.
 func (sl *SourceLimiter) cleanup() {
 	sl.mu.Lock()
 	defer sl.mu.Unlock()
@@ -252,13 +255,24 @@ func (sl *SourceLimiter) cleanup() {
 		}
 	}
 
+	// Compact the map when we removed a significant number of entries
+	// to reclaim memory from Go's never-shrinking map backing store.
+	remaining := len(sl.sources)
+	if removed > 0 && removed > remaining {
+		compacted := make(map[common.Hash]*sourceState, remaining)
+		for k, v := range sl.sources {
+			compacted[k] = v
+		}
+		sl.sources = compacted
+	}
+
 	if removed > 0 {
 		log.WithFields(logger.Fields{
 			"at":        "SourceLimiter.cleanup",
 			"phase":     "tunnel_build",
 			"reason":    "stale_entry_cleanup",
 			"removed":   removed,
-			"remaining": len(sl.sources),
+			"remaining": remaining,
 		}).Debug("cleaned up stale source limiter entries")
 	}
 }

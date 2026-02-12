@@ -69,6 +69,7 @@ type CongestionMonitor struct {
 
 	// Current state
 	currentFlag config.CongestionFlag
+	forcedFlag  bool // Set by ForceFlag; prevents updateState from overwriting
 
 	// Startup grace period - don't advertise congestion at startup
 	startupTime     time.Time
@@ -177,7 +178,12 @@ func (m *CongestionMonitor) takeSample() {
 
 // updateState calculates the rolling average and updates the congestion flag.
 // Must be called with m.mu held.
+// Skips updates when the flag has been manually forced via ForceFlag().
 func (m *CongestionMonitor) updateState() {
+	if m.forcedFlag {
+		return
+	}
+
 	if len(m.samples) == 0 {
 		return
 	}
@@ -357,18 +363,34 @@ func (m *CongestionMonitor) GetSampleCount() int {
 }
 
 // ForceFlag allows manually setting the congestion flag for testing or emergency use.
-// This bypasses the normal state machine logic.
+// This bypasses the normal state machine logic. The forced flag persists until
+// ClearForceFlag() is called, preventing updateState() from overwriting it.
 func (m *CongestionMonitor) ForceFlag(flag config.CongestionFlag) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.currentFlag = flag
+	m.forcedFlag = true
 
 	log.WithFields(logger.Fields{
 		"at":     "CongestionMonitor.ForceFlag",
 		"reason": "congestion flag manually set",
 		"flag":   flag.String(),
 	}).Warn("congestion flag manually forced")
+}
+
+// ClearForceFlag clears a previously forced congestion flag, allowing the
+// normal state machine logic to resume determining the flag from samples.
+func (m *CongestionMonitor) ClearForceFlag() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.forcedFlag = false
+
+	log.WithFields(logger.Fields{
+		"at":     "CongestionMonitor.ClearForceFlag",
+		"reason": "forced congestion flag cleared",
+	}).Info("forced congestion flag cleared, resuming automatic monitoring")
 }
 
 // noopMetricsCollector is a no-op implementation for when no collector is provided.
