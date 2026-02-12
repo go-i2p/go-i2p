@@ -37,6 +37,9 @@ func TestCreateReseedHTTPClient(t *testing.T) {
 	// Verify TLS 1.2 minimum
 	assert.Equal(t, uint16(0x0303), transport.TLSClientConfig.MinVersion) // TLS 1.2
 
+	// Verify TLS handshake timeout is set (prevents hung handshakes from consuming full request timeout)
+	assert.Equal(t, 10*time.Second, transport.TLSHandshakeTimeout)
+
 	// Verify InsecureSkipVerify is NOT set
 	assert.False(t, transport.TLSClientConfig.InsecureSkipVerify)
 }
@@ -419,6 +422,63 @@ func TestEnsureReseedPath_DoesNotModifyOriginal(t *testing.T) {
 	assert.Equal(t, original, u.String())
 	// Result should have path appended
 	assert.Equal(t, "https://reseed.i2pgit.org/i2pseeds.su3", result.String())
+}
+
+// TestPerformReseedRequest_RejectsHTTP verifies that plain HTTP URLs are rejected
+// for security. Reseed over HTTP would expose the request to MITM attacks.
+func TestPerformReseedRequest_RejectsHTTP(t *testing.T) {
+	r := NewReseed()
+
+	tests := []struct {
+		name        string
+		uri         string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "plain HTTP is rejected",
+			uri:         "http://reseed.example.com/i2pseeds.su3",
+			expectError: true,
+			errorMsg:    "HTTPS",
+		},
+		{
+			name:        "empty scheme is rejected",
+			uri:         "://reseed.example.com/i2pseeds.su3",
+			expectError: true,
+			// url.Parse may fail or scheme will be empty
+		},
+		{
+			name:        "ftp scheme is rejected",
+			uri:         "ftp://reseed.example.com/i2pseeds.su3",
+			expectError: true,
+			errorMsg:    "HTTPS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := r.performReseedRequest(tt.uri)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			}
+		})
+	}
+}
+
+// TestPerformReseedRequest_AcceptsHTTPS verifies that HTTPS URLs are accepted.
+// Note: This test will fail to connect (no server), but should NOT fail on scheme validation.
+func TestPerformReseedRequest_AcceptsHTTPS(t *testing.T) {
+	r := NewReseed()
+
+	// HTTPS should pass scheme validation but will fail on connection (expected)
+	_, err := r.performReseedRequest("https://nonexistent.example.com:9999/i2pseeds.su3")
+	require.Error(t, err)
+	// The error should be a connection error, NOT a scheme error
+	assert.NotContains(t, err.Error(), "HTTPS")
+	assert.NotContains(t, err.Error(), "scheme")
 }
 
 // TestCreateReseedHTTPClient_HasRootCAs verifies the TLS config has a custom RootCAs pool

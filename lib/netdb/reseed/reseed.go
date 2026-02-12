@@ -182,6 +182,8 @@ func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rout
 
 // performReseedRequest creates and executes an HTTP request to the reseed server.
 // If the URL does not already include the standard SU3 path, it is appended automatically.
+// SECURITY: Only HTTPS URLs are accepted. Plain HTTP would expose the reseed
+// request to network observers, enabling traffic analysis and MITM attacks.
 func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
@@ -190,6 +192,17 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	if err != nil {
 		log.WithError(err).WithField("uri", uri).Error("Failed to parse reseed URI")
 		return nil, err
+	}
+
+	// Reject non-HTTPS schemes to prevent sending reseed requests in the clear.
+	// Plain HTTP would allow network observers to identify I2P users and
+	// potentially inject malicious RouterInfos via MITM.
+	if URL.Scheme != "https" {
+		log.WithFields(logger.Fields{
+			"uri":    uri,
+			"scheme": URL.Scheme,
+		}).Error("Refusing reseed over insecure scheme — only HTTPS is allowed")
+		return nil, fmt.Errorf("reseed requires HTTPS, got scheme %q for %s", URL.Scheme, uri)
 	}
 
 	// Append standard reseed path if not already present
@@ -248,8 +261,9 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 	}
 
 	transport := http.Transport{
-		DialContext:     dialContext,
-		TLSClientConfig: tlsConfig,
+		DialContext:         dialContext,
+		TLSClientConfig:     tlsConfig,
+		TLSHandshakeTimeout: 10 * time.Second, // Prevent a hung TLS handshake from consuming the full request timeout
 	}
 
 	return &http.Client{
