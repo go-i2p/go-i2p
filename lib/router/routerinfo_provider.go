@@ -57,6 +57,9 @@ func (p *routerInfoProvider) GetRouterInfo() (*router_info.RouterInfo, error) {
 	// unable to connect.
 	addresses := p.collectTransportAddresses()
 
+	// Router is reachable if it has at least one transport address
+	opts.Reachable = len(addresses) > 0
+
 	ri, err := ks.ConstructRouterInfo(addresses, opts)
 	if err != nil {
 		return nil, err

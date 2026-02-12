@@ -153,45 +153,58 @@ func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
 	tests := []struct {
 		name           string
 		congestionFlag string
+		reachable      bool
 		expected       string
 	}{
 		{
-			name:           "no congestion flag",
+			name:           "no congestion flag, unreachable",
 			congestionFlag: "",
+			reachable:      false,
 			expected:       "NU",
 		},
 		{
-			name:           "D flag - medium congestion",
+			name:           "no congestion flag, reachable",
+			congestionFlag: "",
+			reachable:      true,
+			expected:       "NR",
+		},
+		{
+			name:           "D flag - medium congestion, unreachable",
 			congestionFlag: "D",
+			reachable:      false,
 			expected:       "NUD",
 		},
 		{
-			name:           "E flag - high congestion",
+			name:           "E flag - high congestion, reachable",
 			congestionFlag: "E",
-			expected:       "NUE",
+			reachable:      true,
+			expected:       "NRE",
 		},
 		{
 			name:           "G flag - rejecting all",
 			congestionFlag: "G",
+			reachable:      false,
 			expected:       "NUG",
 		},
 		{
 			name:           "invalid flag - ignored",
 			congestionFlag: "X",
+			reachable:      false,
 			expected:       "NU",
 		},
 		{
 			name:           "lowercase d - ignored (case sensitive)",
 			congestionFlag: "d",
+			reachable:      false,
 			expected:       "NU",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ks.buildCapsString(tt.congestionFlag)
+			result := ks.buildCapsString(tt.congestionFlag, tt.reachable)
 			if result != tt.expected {
-				t.Errorf("buildCapsString(%q) = %q, want %q", tt.congestionFlag, result, tt.expected)
+				t.Errorf("buildCapsString(%q, %v) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
 			}
 		})
 	}

@@ -355,6 +355,10 @@ type RouterInfoOptions struct {
 	// CongestionFlag is the congestion capability flag to advertise (D/E/G or empty).
 	// Per PROP_162, this is appended after R/U in the caps string.
 	CongestionFlag string
+	// Reachable indicates whether the router has at least one active transport
+	// address and can accept inbound connections. When true, the caps string
+	// uses "R" (Reachable); when false, "U" (Unreachable).
+	Reachable bool
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
@@ -408,6 +412,9 @@ func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoO
 	for _, opt := range opts {
 		if opt.CongestionFlag != "" {
 			options.CongestionFlag = opt.CongestionFlag
+		}
+		if opt.Reachable {
+			options.Reachable = true
 		}
 	}
 	return options
@@ -498,7 +505,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	publishedTime := rawTime.Round(time.Second)
 
 	// Build caps string - base caps then congestion flag per PROP_162
-	caps := ks.buildCapsString(opts.CongestionFlag)
+	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable)
 
 	options := map[string]string{
 		"caps":  caps,
@@ -531,9 +538,13 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 // buildCapsString constructs the capabilities string for RouterInfo.
 // Per PROP_162, congestion flags (D/E/G) are appended after R/U.
-// Base capabilities: NU = Not floodfill, Not Reachable
-func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string) string {
-	baseCaps := "NU"
+// Capabilities: N = Not floodfill, R = Reachable, U = Unreachable
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable bool) string {
+	reachabilityFlag := "U"
+	if reachable {
+		reachabilityFlag = "R"
+	}
+	baseCaps := "N" + reachabilityFlag
 
 	// Per PROP_162: congestion flag is appended after R/U in caps
 	if congestionFlag == "" {
