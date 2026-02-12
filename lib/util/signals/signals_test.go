@@ -1,6 +1,8 @@
 package signals
 
 import (
+	"bytes"
+	"os"
 	"sync"
 	"testing"
 )
@@ -186,28 +188,35 @@ func TestEmptyHandlerList(t *testing.T) {
 	handleInterrupted()
 }
 
-// TestNilHandlerPanic tests that nil handlers would panic if called.
-// This documents current behavior - handlers must be non-nil.
+// TestNilHandlerBehavior verifies that nil handlers are silently rejected
+// by RegisterReloadHandler and RegisterInterruptHandler.
 func TestNilHandlerBehavior(t *testing.T) {
 	// Save original state
 	originalReloaders := reloaders
-	defer func() { reloaders = originalReloaders }()
+	originalInterrupters := interrupters
+	defer func() {
+		reloaders = originalReloaders
+		interrupters = originalInterrupters
+	}()
 
 	// Reset state
 	reloaders = nil
+	interrupters = nil
 
-	// Registering a nil handler is allowed by the API but will panic when called
-	// This test documents this behavior
-	reloaders = append(reloaders, nil)
+	// Registering nil handlers should be silently ignored
+	RegisterReloadHandler(nil)
+	RegisterInterruptHandler(nil)
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Log("Note: nil handler did not panic (if handler list check was added)")
-		}
-	}()
+	if len(reloaders) != 0 {
+		t.Errorf("nil reload handler should not be registered, got %d handlers", len(reloaders))
+	}
+	if len(interrupters) != 0 {
+		t.Errorf("nil interrupt handler should not be registered, got %d handlers", len(interrupters))
+	}
 
-	// This may panic depending on implementation
-	// The current implementation will panic on nil handler
+	// Should not panic with empty lists
+	handleReload()
+	handleInterrupted()
 }
 
 // =============================================================================
@@ -227,5 +236,128 @@ func TestSigChanIsBuffered(t *testing.T) {
 	// does not drop signals when no receiver is ready.
 	if cap(sigChan) != 1 {
 		t.Errorf("Expected buffered channel with capacity 1, got capacity %d", cap(sigChan))
+	}
+}
+
+// =============================================================================
+// Panic Recovery Tests
+// =============================================================================
+
+// TestReloadHandlerPanicRecovery verifies that a panicking reload handler
+// is recovered and remaining handlers still execute.
+func TestReloadHandlerPanicRecovery(t *testing.T) {
+	originalReloaders := reloaders
+	defer func() { reloaders = originalReloaders }()
+	reloaders = nil
+
+	calledAfterPanic := false
+
+	RegisterReloadHandler(func() {
+		panic("test panic in reload handler")
+	})
+	RegisterReloadHandler(func() {
+		calledAfterPanic = true
+	})
+
+	// Capture stderr to verify panic is logged
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	handleReload()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	b := make([]byte, 1024)
+	n, _ := r.Read(b)
+	buf.Write(b[:n])
+	stderrOutput := buf.String()
+
+	if !calledAfterPanic {
+		t.Error("Handler after panicking handler was not called")
+	}
+	if len(stderrOutput) == 0 {
+		t.Error("Expected panic to be logged to stderr")
+	}
+}
+
+// TestInterruptHandlerPanicRecovery verifies that a panicking interrupt handler
+// is recovered and remaining handlers still execute.
+func TestInterruptHandlerPanicRecovery(t *testing.T) {
+	originalInterrupters := interrupters
+	defer func() { interrupters = originalInterrupters }()
+	interrupters = nil
+
+	calledAfterPanic := false
+
+	RegisterInterruptHandler(func() {
+		panic("test panic in interrupt handler")
+	})
+	RegisterInterruptHandler(func() {
+		calledAfterPanic = true
+	})
+
+	// Capture stderr to verify panic is logged
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	handleInterrupted()
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	b := make([]byte, 1024)
+	n, _ := r.Read(b)
+	buf.Write(b[:n])
+	stderrOutput := buf.String()
+
+	if !calledAfterPanic {
+		t.Error("Handler after panicking handler was not called")
+	}
+	if len(stderrOutput) == 0 {
+		t.Error("Expected panic to be logged to stderr")
+	}
+}
+
+// TestConcurrentRegistration verifies thread-safe registration of handlers.
+func TestConcurrentRegistration(t *testing.T) {
+	originalReloaders := reloaders
+	originalInterrupters := interrupters
+	defer func() {
+		reloaders = originalReloaders
+		interrupters = originalInterrupters
+	}()
+	reloaders = nil
+	interrupters = nil
+
+	var wg sync.WaitGroup
+	numGoroutines := 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			RegisterReloadHandler(func() {})
+		}()
+		go func() {
+			defer wg.Done()
+			RegisterInterruptHandler(func() {})
+		}()
+	}
+
+	wg.Wait()
+
+	mu.RLock()
+	reloadCount := len(reloaders)
+	interruptCount := len(interrupters)
+	mu.RUnlock()
+
+	if reloadCount != numGoroutines {
+		t.Errorf("Expected %d reload handlers, got %d", numGoroutines, reloadCount)
+	}
+	if interruptCount != numGoroutines {
+		t.Errorf("Expected %d interrupt handlers, got %d", numGoroutines, interruptCount)
 	}
 }

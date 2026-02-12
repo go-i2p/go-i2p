@@ -1,6 +1,7 @@
 package signals
 
 import (
+	"fmt"
 	"os"
 	"sync"
 )
@@ -17,6 +18,9 @@ var (
 )
 
 func RegisterReloadHandler(f Handler) {
+	if f == nil {
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	reloaders = append(reloaders, f)
@@ -31,9 +35,9 @@ func handleReload() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					// Log would be better but signals package has no logger;
-					// at minimum, prevent one panicking handler from aborting
-					// all remaining handlers.
+					// The signals package has no logger; write directly to stderr
+					// so panicking handlers are visible in logs/console.
+					fmt.Fprintf(os.Stderr, "signals: panic in reload handler: %v\n", r)
 				}
 			}()
 			h()
@@ -42,6 +46,9 @@ func handleReload() {
 }
 
 func RegisterInterruptHandler(f Handler) {
+	if f == nil {
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	interrupters = append(interrupters, f)
@@ -56,8 +63,9 @@ func handleInterrupted() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					// Prevent one panicking handler from aborting
-					// all remaining handlers.
+					// The signals package has no logger; write directly to stderr
+					// so panicking handlers are visible in logs/console.
+					fmt.Fprintf(os.Stderr, "signals: panic in interrupt handler: %v\n", r)
 				}
 			}()
 			h()
