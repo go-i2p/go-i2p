@@ -49,7 +49,9 @@ func TestClientNetDB_LeaseSetOperations(t *testing.T) {
 	copy(testHash[:], "test-leaseset-hash-00000000000")
 
 	chnl := clientDB.GetLeaseSet(testHash)
-	assert.Nil(t, chnl, "Non-existent LeaseSet should return nil channel")
+	assert.NotNil(t, chnl, "Non-existent LeaseSet should return a closed channel, not nil")
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed for non-existent LeaseSet")
 
 	// Test GetLeaseSetBytes for non-existent entry
 	_, err := clientDB.GetLeaseSetBytes(testHash)
