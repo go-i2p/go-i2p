@@ -577,20 +577,21 @@ func (tb *TunnelBuilder) determineOutboundRouting(
 
 // generateTunnelID creates a cryptographically random tunnel ID.
 // Tunnel IDs are 32-bit unsigned integers used to route messages through tunnels.
+// Zero is not a valid tunnel ID, so we retry up to a bounded number of times.
 func generateTunnelID() (TunnelID, error) {
-	var buf [4]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("failed to read random data: %w", err)
-	}
+	const maxAttempts = 8
+	for i := 0; i < maxAttempts; i++ {
+		var buf [4]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return 0, fmt.Errorf("failed to read random data: %w", err)
+		}
 
-	// Convert to TunnelID, ensuring it's non-zero
-	id := TunnelID(uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3]))
-	if id == 0 {
-		// Retry if we got zero (extremely unlikely)
-		return generateTunnelID()
+		id := TunnelID(uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3]))
+		if id != 0 {
+			return id, nil
+		}
 	}
-
-	return id, nil
+	return 0, fmt.Errorf("failed to generate non-zero tunnel ID after %d attempts", maxAttempts)
 }
 
 // generateSessionKey creates a cryptographically random 32-byte session key.

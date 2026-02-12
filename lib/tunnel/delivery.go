@@ -793,6 +793,11 @@ func readFirstFragmentInstructions(data []byte, flag byte) (*DeliveryInstruction
 	di := &DeliveryInstructions{}
 	parseFirstFragmentFlags(di, flag)
 
+	// Reject reserved/unused delivery type 0x03 (DT_UNUSED)
+	if di.deliveryType == DT_UNUSED {
+		return nil, nil, oops.Errorf("invalid delivery type 0x03 (reserved/unused)")
+	}
+
 	offset, err := parseFirstFragmentFields(data, di)
 	if err != nil {
 		return nil, nil, err

@@ -469,10 +469,22 @@ func (g *Gateway) writeRandomPadding(msg []byte, paddingSize int) error {
 		return err
 	}
 
-	// Ensure non-zero padding bytes (I2P spec requires non-zero)
+	// Ensure non-zero padding bytes (I2P spec requires non-zero).
+	// Replace any zero bytes with a random value in [1,255] to avoid
+	// biasing the byte distribution toward 0x01.
 	for i := range paddingBytes {
 		if paddingBytes[i] == 0 {
-			paddingBytes[i] = 1
+			var b [1]byte
+			for {
+				if _, err := rand.Read(b[:]); err != nil {
+					paddingBytes[i] = 1 // fallback
+					break
+				}
+				if b[0] != 0 {
+					paddingBytes[i] = b[0]
+					break
+				}
+			}
 		}
 	}
 

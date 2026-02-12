@@ -607,26 +607,35 @@ func (r Reseed) processReseedZipWithLimit(content []byte, limit int) ([]router_i
 
 // writeZipFile writes the zip content to a temporary file on disk.
 func (r Reseed) writeZipFile(content []byte) (string, error) {
-	// Create temporary file in system temp directory
+	// Create temporary file in system temp directory with restrictive
+	// permissions. Write content directly to avoid TOCTOU races — do
+	// not close and reopen the file.
 	tempFile, err := os.CreateTemp("", "reseed-*.zip")
 	if err != nil {
 		log.WithError(err).Error("Failed to create temporary file for reseed zip")
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
 	zipPath := tempFile.Name()
-	tempFile.Close()
+
+	// Restrict permissions to owner-only (0600) before writing content.
+	if err := tempFile.Chmod(0o600); err != nil {
+		tempFile.Close()
+		os.Remove(zipPath)
+		return "", fmt.Errorf("failed to set temp file permissions: %w", err)
+	}
 
 	log.WithFields(logger.Fields{
 		"path":       zipPath,
 		"size_bytes": len(content),
 	}).Debug("Writing reseed zip file to temporary location")
 
-	err = os.WriteFile(zipPath, content, 0o644)
-	if err != nil {
+	if _, err := tempFile.Write(content); err != nil {
+		tempFile.Close()
+		os.Remove(zipPath)
 		log.WithError(err).WithField("path", zipPath).Error("Failed to write reseed zip file")
-		os.Remove(zipPath) // Clean up on error
 		return "", err
 	}
+	tempFile.Close()
 	log.WithField("path", zipPath).Info("Successfully wrote reseed zip file to temporary location")
 	return zipPath, nil
 }

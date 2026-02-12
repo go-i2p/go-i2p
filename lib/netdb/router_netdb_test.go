@@ -58,7 +58,10 @@ func TestRouterNetDB_RouterInfoOperations(t *testing.T) {
 	copy(testHash[:], "test-routerinfo-hash-00000000000")
 
 	chnl := routerDB.GetRouterInfo(testHash)
-	assert.Nil(t, chnl, "Non-existent RouterInfo should return nil channel")
+	assert.NotNil(t, chnl, "Non-existent RouterInfo should return a closed (non-nil) channel")
+	// The channel should be closed with no value, so receiving yields zero value immediately
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed for non-existent RouterInfo")
 
 	// Test GetRouterInfoBytes for non-existent entry
 	_, err := routerDB.GetRouterInfoBytes(testHash)

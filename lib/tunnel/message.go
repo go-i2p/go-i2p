@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/go-i2p/logger"
 
@@ -173,9 +174,12 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData()
 
 // Returns a slice of DeliveryInstructionWithFragment structures, which all of the Delivery Instructions
 // in the tunnel message and their corresponding MessageFragment structures.
-func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() []DeliveryInstructionsWithFragment {
+// Also returns an error if any delivery instructions could not be fully parsed;
+// in that case the returned slice contains any successfully parsed entries.
+func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error) {
 	set := make([]DeliveryInstructionsWithFragment, 0)
 	data := decrypted_tunnel_message.deliveryInstructionData()
+	var parseErr error
 	for {
 		instructions, remainder, err := readDeliveryInstructions(data)
 		if err != nil {
@@ -183,6 +187,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error reading delivery instructions")
+			parseErr = err
 			break
 		}
 
@@ -192,6 +197,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 				"at":  "(DecryptedTunnelMessage) DeliveryInstructionsWithFragments",
 				"err": err.Error(),
 			}).Error("error getting delivery instructions fragment size")
+			parseErr = err
 			break
 		}
 
@@ -202,6 +208,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 				"fragment_size": fragment_size,
 				"remainder_len": len(remainder),
 			}).Error("fragment size exceeds remaining data")
+			parseErr = fmt.Errorf("fragment size %d exceeds remaining data %d", fragment_size, len(remainder))
 			break
 		}
 
@@ -214,5 +221,5 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithF
 		data = remainder[fragment_size:]
 		set = append(set, pair)
 	}
-	return set
+	return set, parseErr
 }

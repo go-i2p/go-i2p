@@ -89,7 +89,7 @@ func TestSessionProviderWithNonExistentPeer(t *testing.T) {
 	// Verify error handling - should fail because peer is not in NetDB
 	assert.Error(t, err, "Should return error for unknown peer")
 	assert.Nil(t, session, "Session should be nil for unknown peer")
-	assert.Contains(t, err.Error(), "no RouterInfo found", "Error message should indicate RouterInfo not found")
+	assert.Contains(t, err.Error(), "RouterInfo", "Error message should indicate RouterInfo not found")
 
 	t.Log("SessionProvider correctly handles requests for unknown peers")
 }

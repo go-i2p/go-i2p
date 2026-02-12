@@ -258,6 +258,15 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 		return fmt.Errorf("rate limited")
 	}
 
+	// Reject lookups with a zero-hash From field.
+	// A zero From would bypass the per-peer rate limiter and could also
+	// cause issues when used as a reply destination.
+	var zeroHash common.Hash
+	if lookup.From == zeroHash {
+		log.Warn("Rejecting DatabaseLookup with zero-hash From field")
+		return fmt.Errorf("invalid From field: zero hash")
+	}
+
 	key := lookup.Key
 	from := lookup.From
 

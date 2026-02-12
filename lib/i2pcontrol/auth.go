@@ -205,9 +205,10 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 	return revokedCount
 }
 
-// generateToken creates a cryptographic token from a timestamp.
+// generateToken creates a cryptographic token from a timestamp and random nonce.
 // Uses HMAC-SHA256 with the server's secret key to ensure tokens
-// cannot be forged without knowing the secret.
+// cannot be forged without knowing the secret. The random nonce
+// prevents token prediction even if the timestamp is known.
 //
 // Parameters:
 //   - timestamp: Unix nanosecond timestamp for uniqueness
@@ -215,9 +216,17 @@ func (am *AuthManager) ChangePassword(newPassword string) int {
 // Returns:
 //   - string: Base64-encoded HMAC signature
 func (am *AuthManager) generateToken(timestamp int64) string {
-	// Create HMAC hash of timestamp
+	// Include a random nonce alongside the timestamp so that tokens
+	// are not predictable even if an attacker knows the timestamp.
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		// Fallback: still include timestamp; security is reduced but functional
+		nonce = []byte("fallback")
+	}
+
 	h := hmac.New(sha256.New, am.secret)
 	h.Write([]byte(fmt.Sprintf("%d", timestamp)))
+	h.Write(nonce)
 	signature := h.Sum(nil)
 
 	// Encode as base64 for JSON transport

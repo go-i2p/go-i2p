@@ -367,9 +367,8 @@ func (e *Explorer) calculateExplorationInterval() time.Duration {
 		return e.interval
 	}
 
-	// Get NetDB size
-	routers := e.db.GetAllRouterInfos()
-	netdbSize := len(routers)
+	// Get NetDB size using Size() to avoid copying all RouterInfos
+	netdbSize := e.db.Size()
 
 	// Check if exploration is urgently needed
 	if e.strategy.ShouldExplore(netdbSize) {

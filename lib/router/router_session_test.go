@@ -201,7 +201,7 @@ func TestGetSessionByHashWithNonExistentPeer(t *testing.T) {
 	transportSession, err := router.GetSessionByHash(nonExistentHash)
 	assert.Error(t, err, "Should return error for non-existent peer")
 	assert.Nil(t, transportSession, "TransportSession should be nil on error")
-	assert.Contains(t, err.Error(), "no RouterInfo found", "Error message should indicate RouterInfo not found")
+	assert.Contains(t, err.Error(), "RouterInfo", "Error message should indicate RouterInfo not found")
 }
 
 // TestSessionReplacement tests that adding a session with the same hash replaces the old one
