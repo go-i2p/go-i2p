@@ -40,7 +40,7 @@ func TestEmbeddedRouter_ConcurrentStartStop(t *testing.T) {
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
 
-	// Constructor auto-configures, so all subsequent Configure calls should fail
+	// Constructor auto-configures, so all subsequent Configure calls are no-ops (return nil)
 	var wg sync.WaitGroup
 	configCount := 0
 	var mu sync.Mutex
@@ -59,8 +59,8 @@ func TestEmbeddedRouter_ConcurrentStartStop(t *testing.T) {
 	}
 	wg.Wait()
 
-	// No Configure should succeed since constructor auto-configured
-	assert.Equal(t, 0, configCount, "No subsequent Configure should succeed after auto-configure")
+	// All Configure calls should succeed (idempotent no-op after auto-configure)
+	assert.Equal(t, 10, configCount, "All Configure calls should succeed as no-ops")
 }
 
 // -----------------------------------------------------------------------------
@@ -78,10 +78,9 @@ func TestEmbeddedRouter_StateTransitions(t *testing.T) {
 	assert.False(t, router.IsRunning(), "Should not be running initially")
 	assert.True(t, router.IsConfigured(), "Should be configured after constructor auto-configure")
 
-	// Cannot reconfigure (already auto-configured by constructor)
+	// Reconfigure is idempotent (no-op after auto-configure by constructor)
 	err = router.Configure(cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already configured")
+	assert.NoError(t, err, "Configure should return nil (idempotent) when already configured")
 }
 
 // TestEmbeddedRouter_CloseRequiresStop tests that Close requires Stop first.
@@ -155,10 +154,10 @@ func TestEmbeddedRouter_ErrorMessages(t *testing.T) {
 		{
 			name: "NilConfig_Configure",
 			action: func(r *StandardEmbeddedRouter) error {
-				// Router is already configured by constructor, so Configure returns "already configured"
+				// Router is already configured by constructor, so Configure returns nil (no-op)
 				return r.Configure(nil)
 			},
-			expectError:      true,
+			expectError:      false,
 			shouldNotContain: []string{"password", "key", "secret"},
 		},
 	}

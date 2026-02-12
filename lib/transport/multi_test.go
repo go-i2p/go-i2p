@@ -139,24 +139,26 @@ func TestAcceptWithTimeoutExpires(t *testing.T) {
 		"Timeout should occur at approximately the specified duration")
 }
 
-// TestAcceptWithTimeoutTransportError tests error propagation from underlying transport
+// TestAcceptWithTimeoutTransportError tests error propagation from underlying transport.
+// With the persistent accept loop, transport errors cause retries with backoff.
+// If the transport keeps failing, the timeout fires and DeadlineExceeded is returned.
 func TestAcceptWithTimeoutTransportError(t *testing.T) {
 	// Create mock transport that returns error
-	expectedError := ErrNoTransportAvailable
 	transport := &mockTransport{
 		acceptDelay: 0,
-		acceptError: expectedError,
+		acceptError: ErrNoTransportAvailable,
 	}
 
 	// Create muxer with mock transport
 	muxer := Mux(transport)
 
-	// Accept with timeout
-	conn, err := muxer.AcceptWithTimeout(1 * time.Second)
+	// Accept with timeout — the persistent loop retries on errors, so
+	// DeadlineExceeded is returned when the timeout fires before a success.
+	conn, err := muxer.AcceptWithTimeout(200 * time.Millisecond)
 
-	// Verify error is propagated
-	require.Error(t, err, "AcceptWithTimeout should propagate transport errors")
-	assert.Equal(t, expectedError, err, "Should return exact error from transport")
+	// Verify error is returned
+	require.Error(t, err, "AcceptWithTimeout should return error")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "Should return DeadlineExceeded when transport keeps failing")
 	assert.Nil(t, conn, "Should return nil connection on error")
 }
 
@@ -374,7 +376,9 @@ func TestAcceptMultipleTransportsFirstWins(t *testing.T) {
 	assert.Equal(t, fastConn, conn.(*trackedConn).Conn, "Should return the fast transport's connection")
 }
 
-// TestAcceptWithTimeoutClosesLeakedConnections tests that connections accepted after timeout are closed
+// TestAcceptWithTimeoutClosesLeakedConnections tests that connections accepted after timeout
+// are not lost. With the persistent accept loop, late-arriving connections remain in the
+// accept channel and are delivered to the next Accept/AcceptWithTimeout call.
 func TestAcceptWithTimeoutClosesLeakedConnections(t *testing.T) {
 	// Create a tracking connection that notifies when closed
 	trackedConn := newTrackingMockConn()
@@ -391,14 +395,11 @@ func TestAcceptWithTimeoutClosesLeakedConnections(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "Error should be deadline exceeded")
 	assert.Nil(t, conn, "Should return nil connection on timeout")
 
-	// Wait for the slow transport to complete and verify the connection was closed
-	select {
-	case <-trackedConn.closeChan:
-		// Success: connection was closed after timeout
-		assert.True(t, trackedConn.closed, "Leaked connection should be closed")
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Timed out waiting for leaked connection to be closed")
-	}
+	// With the persistent accept loop, the slow connection should become
+	// available for the next Accept call rather than being closed.
+	conn2, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+	require.NoError(t, err, "Second accept should pick up the slow connection")
+	require.NotNil(t, conn2, "Should return the previously late connection")
 }
 
 // TestAcceptSecondTransportWinsWhenFirstFails tests fallback to second transport when first fails
@@ -425,7 +426,9 @@ func TestAcceptSecondTransportWinsWhenFirstFails(t *testing.T) {
 	assert.Equal(t, expectedConn, conn.(*trackedConn).Conn, "Should return the second transport's connection")
 }
 
-// TestAcceptAllTransportsFail tests that proper error is returned when all transports fail
+// TestAcceptAllTransportsFail tests that proper error is returned when all transports fail.
+// With the persistent accept loop, transport errors cause retries with backoff.
+// The timeout fires and DeadlineExceeded is returned.
 func TestAcceptAllTransportsFail(t *testing.T) {
 	failTransport1 := &mockTransport{
 		acceptDelay: 10 * time.Millisecond,
@@ -438,14 +441,15 @@ func TestAcceptAllTransportsFail(t *testing.T) {
 
 	muxer := Mux(failTransport1, failTransport2)
 
-	conn, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+	conn, err := muxer.AcceptWithTimeout(200 * time.Millisecond)
 
 	require.Error(t, err, "Should return error when all transports fail")
-	assert.Equal(t, ErrNoTransportAvailable, err, "Should return the last error")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "Should return DeadlineExceeded when all transports keep failing")
 	assert.Nil(t, conn, "Should return nil connection")
 }
 
-// TestAcceptClosesLateConnectionsAfterSuccess tests that connections arriving after success are closed
+// TestAcceptClosesLateConnectionsAfterSuccess tests that connections arriving
+// after a successful accept are preserved for future callers (persistent loop).
 func TestAcceptClosesLateConnectionsAfterSuccess(t *testing.T) {
 	// First transport returns quickly
 	fastConn := &mockConn{}
@@ -466,14 +470,11 @@ func TestAcceptClosesLateConnectionsAfterSuccess(t *testing.T) {
 	require.NotNil(t, conn, "Should return a connection")
 	assert.Equal(t, fastConn, conn.(*trackedConn).Conn, "Should return fast transport's connection")
 
-	// Wait for slow transport to complete and verify its connection was closed
-	select {
-	case <-slowConn.closeChan:
-		// Success: late connection was closed
-		assert.True(t, slowConn.closed, "Late connection should be closed")
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Timed out waiting for late connection to be closed")
-	}
+	// With the persistent accept loop, the slow connection should become
+	// available for the next Accept call rather than being closed immediately.
+	conn2, err := muxer.AcceptWithTimeout(500 * time.Millisecond)
+	require.NoError(t, err, "Second accept should pick up the slow connection")
+	require.NotNil(t, conn2, "Should return a connection")
 }
 
 // TestAcceptBasicMultiTransport tests basic Accept() with multiple transports
