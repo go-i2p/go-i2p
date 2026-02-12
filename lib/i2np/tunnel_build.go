@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -192,6 +193,100 @@ func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 		"at":           "UnmarshalBinary",
 		"record_count": 8,
 	}).Debug("TunnelBuild message unmarshaled successfully")
+
+	return nil
+}
+
+// NewEncryptedTunnelBuildMessage creates a new TunnelBuild I2NP message with encrypted records.
+//
+// Each BuildRequestRecord is encrypted using ECIES-X25519-AEAD encryption against
+// the corresponding hop's RouterInfo. This produces specification-compliant 528-byte
+// encrypted records suitable for network transmission.
+//
+// Parameters:
+//   - records: The 8 cleartext BuildRequestRecords
+//   - recipientRouterInfos: The RouterInfo for each hop (one per record)
+//
+// Returns the encrypted TunnelBuildMessage or an error if encryption fails.
+func NewEncryptedTunnelBuildMessage(records [8]BuildRequestRecord, recipientRouterInfos [8]router_info.RouterInfo) (*TunnelBuildMessage, error) {
+	log.WithFields(logger.Fields{
+		"at":           "NewEncryptedTunnelBuildMessage",
+		"record_count": 8,
+	}).Debug("Creating encrypted TunnelBuild message")
+
+	msg := &TunnelBuildMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		Records:         TunnelBuild(records),
+	}
+
+	data := make([]byte, 8*528)
+	for i := 0; i < 8; i++ {
+		encrypted, err := EncryptBuildRequestRecord(records[i], recipientRouterInfos[i])
+		if err != nil {
+			return nil, oops.Wrapf(err, "failed to encrypt build request record %d", i)
+		}
+		copy(data[i*528:(i+1)*528], encrypted[:])
+	}
+	msg.SetData(data)
+
+	log.WithFields(logger.Fields{
+		"at":        "NewEncryptedTunnelBuildMessage",
+		"data_size": len(data),
+	}).Debug("Encrypted TunnelBuild message created successfully")
+
+	return msg, nil
+}
+
+// UnmarshalEncryptedBinary deserializes and decrypts a TunnelBuild message.
+//
+// Each 528-byte record is decrypted using ECIES-X25519-AEAD decryption with
+// the local router's private key. Only the record addressed to us (identified
+// by matching identity hash prefix) will decrypt successfully; other records
+// will fail decryption and are left as zero-value records.
+//
+// Parameters:
+//   - data: The raw I2NP message bytes
+//   - privateKey: Our router's 32-byte X25519 private encryption key
+//
+// Returns an error if the base message or the targeted record cannot be parsed.
+func (msg *TunnelBuildMessage) UnmarshalEncryptedBinary(data, privateKey []byte) error {
+	log.WithFields(logger.Fields{
+		"at":        "UnmarshalEncryptedBinary",
+		"data_size": len(data),
+	}).Debug("Unmarshaling encrypted TunnelBuild message")
+
+	if err := msg.BaseI2NPMessage.UnmarshalBinary(data); err != nil {
+		return oops.Wrapf(err, "failed to unmarshal base I2NP message")
+	}
+
+	recordData := msg.GetData()
+	if len(recordData) != 8*528 {
+		return oops.Errorf("invalid TunnelBuild data size: expected %d bytes, got %d", 8*528, len(recordData))
+	}
+
+	decryptedCount := 0
+	for i := 0; i < 8; i++ {
+		var encryptedRecord [528]byte
+		copy(encryptedRecord[:], recordData[i*528:(i+1)*528])
+
+		record, err := DecryptBuildRequestRecord(encryptedRecord, privateKey)
+		if err != nil {
+			// This record is not addressed to us or failed decryption — skip it
+			log.WithFields(logger.Fields{
+				"at":           "UnmarshalEncryptedBinary",
+				"record_index": i,
+			}).Debug("Record decryption failed (not addressed to us or invalid)")
+			continue
+		}
+		msg.Records[i] = record
+		decryptedCount++
+	}
+
+	log.WithFields(logger.Fields{
+		"at":              "UnmarshalEncryptedBinary",
+		"decrypted_count": decryptedCount,
+		"total_records":   8,
+	}).Debug("Encrypted TunnelBuild message unmarshaled")
 
 	return nil
 }
