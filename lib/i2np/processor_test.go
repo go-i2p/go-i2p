@@ -371,3 +371,86 @@ func TestSetDeliveryStatusHandler(t *testing.T) {
 	processor.SetDeliveryStatusHandler(handler)
 	assert.NotNil(t, processor.deliveryStatusHandler)
 }
+
+// mockBuildReplyProcessor implements TunnelBuildReplyProcessor for testing
+type mockBuildReplyProcessor struct {
+	called    bool
+	messageID int
+	handler   TunnelReplyHandler
+	err       error
+}
+
+func (m *mockBuildReplyProcessor) ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error {
+	m.called = true
+	m.messageID = messageID
+	m.handler = handler
+	return m.err
+}
+
+// TestSetBuildReplyProcessor tests setter
+func TestSetBuildReplyProcessor(t *testing.T) {
+	processor := NewMessageProcessor()
+	assert.Nil(t, processor.buildReplyProcessor)
+
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+	assert.NotNil(t, processor.buildReplyProcessor)
+}
+
+// TestProcessBuildReplyCommon_NoProcessor tests that replies are discarded when no processor is set
+func TestProcessBuildReplyCommon_NoProcessor(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	err := processor.processBuildReplyCommon(msg, false)
+	assert.NoError(t, err) // Should succeed silently (logged + discarded)
+}
+
+// TestProcessBuildReplyCommon_EmptyData tests handling of empty reply data
+func TestProcessBuildReplyCommon_EmptyData(t *testing.T) {
+	processor := NewMessageProcessor()
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	// No data set on message
+	err := processor.processBuildReplyCommon(msg, false)
+	assert.Error(t, err)
+	assert.False(t, proc.called)
+}
+
+// TestProcessBuildReplyCommon_InvalidRecordCount tests handling of invalid record count
+func TestProcessBuildReplyCommon_InvalidRecordCount(t *testing.T) {
+	processor := NewMessageProcessor()
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	msg.SetData([]byte{0}) // record count 0 is invalid
+	err := processor.processBuildReplyCommon(msg, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid record count")
+	assert.False(t, proc.called)
+}
+
+// TestProcessMessageDispatch_TunnelBuildReply tests dispatch routing for reply types
+func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
+	processor := NewMessageProcessor()
+	proc := &mockBuildReplyProcessor{}
+	processor.SetBuildReplyProcessor(proc)
+
+	// Test that reply types no longer return "unknown message type"
+	for _, msgType := range []int{
+		I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY,
+		I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY,
+		I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY,
+	} {
+		msg := NewBaseI2NPMessage(msgType)
+		// Even with no data, it should not return "unknown message type"
+		err := processor.processMessageDispatch(msg)
+		if err != nil {
+			assert.NotContains(t, err.Error(), "unknown message type",
+				"message type %d should not be unknown", msgType)
+		}
+	}
+}

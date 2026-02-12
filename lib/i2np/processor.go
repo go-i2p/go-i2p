@@ -134,23 +134,33 @@ type DeliveryStatusHandler interface {
 	HandleDeliveryStatus(msgID int, timestamp time.Time) error
 }
 
+// TunnelBuildReplyProcessor defines the interface for processing tunnel build reply messages.
+// When a tunnel build reply (types 22, 24, 26) arrives, the processor correlates it with
+// the original build request and updates tunnel state accordingly.
+type TunnelBuildReplyProcessor interface {
+	// ProcessTunnelBuildReply handles a parsed tunnel build reply.
+	// handler provides the reply records, messageID correlates with the original request.
+	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	mu                    sync.RWMutex
 	factory               *I2NPMessageFactory
 	garlicSessions        *GarlicSessionManager
-	cloveForwarder        GarlicCloveForwarder  // Optional delegate for non-LOCAL garlic clove delivery
-	dbManager             *DatabaseManager      // Optional database manager for DatabaseLookup messages
-	expirationValidator   *ExpirationValidator  // Validator for checking message expiration
-	participantManager    ParticipantManager    // Optional participant manager for tunnel build requests
-	buildReplyForwarder   BuildReplyForwarder   // Optional forwarder for tunnel build replies
-	buildRecordCrypto     *BuildRecordCrypto    // Crypto handler for encrypting build response records
-	tunnelGatewayHandler  TunnelGatewayHandler  // Optional handler for tunnel gateway messages
-	tunnelDataHandler     TunnelDataHandler     // Optional handler for inbound tunnel data messages
-	searchReplyHandler    SearchReplyHandler    // Optional handler for DatabaseSearchReply suggestions
-	dataMessageHandler    DataMessageHandler    // Optional handler for Data message payloads
-	deliveryStatusHandler DeliveryStatusHandler // Optional handler for delivery status confirmations
-	ourRouterHash         common.Hash           // Our router identity hash for filtering build records
+	cloveForwarder        GarlicCloveForwarder      // Optional delegate for non-LOCAL garlic clove delivery
+	dbManager             *DatabaseManager          // Optional database manager for DatabaseLookup messages
+	expirationValidator   *ExpirationValidator      // Validator for checking message expiration
+	participantManager    ParticipantManager        // Optional participant manager for tunnel build requests
+	buildReplyForwarder   BuildReplyForwarder       // Optional forwarder for tunnel build replies
+	buildRecordCrypto     *BuildRecordCrypto        // Crypto handler for encrypting build response records
+	tunnelGatewayHandler  TunnelGatewayHandler      // Optional handler for tunnel gateway messages
+	tunnelDataHandler     TunnelDataHandler         // Optional handler for inbound tunnel data messages
+	searchReplyHandler    SearchReplyHandler        // Optional handler for DatabaseSearchReply suggestions
+	dataMessageHandler    DataMessageHandler        // Optional handler for Data message payloads
+	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
+	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
+	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
 }
 
 // NewMessageProcessor creates a new message processor
@@ -263,6 +273,17 @@ func (p *MessageProcessor) SetDeliveryStatusHandler(handler DeliveryStatusHandle
 	p.deliveryStatusHandler = handler
 }
 
+// SetBuildReplyProcessor sets the processor for handling incoming tunnel build reply messages.
+// When set, tunnel build reply message types (22, 24, 26) are dispatched to this processor
+// which correlates them with pending build requests and updates tunnel state.
+// If not set, tunnel build replies are logged and discarded.
+func (p *MessageProcessor) SetBuildReplyProcessor(processor TunnelBuildReplyProcessor) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetBuildReplyProcessor").Debug("Setting tunnel build reply processor")
+	p.buildReplyProcessor = processor
+}
+
 // SetOurRouterHash sets our router's identity hash so that processAllBuildRecords
 // can skip records not destined for this router.
 func (p *MessageProcessor) SetOurRouterHash(hash common.Hash) {
@@ -359,6 +380,12 @@ func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 		return p.processVariableTunnelBuildMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
 		return p.processVariableTunnelBuildMessage(msg) // Legacy format, same processing
+	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
+		return p.processTunnelBuildReplyMessage(msg)
+	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
+		return p.processVariableTunnelBuildReplyMessage(msg)
+	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY:
+		return p.processShortTunnelBuildReplyMessage(msg)
 	default:
 		log.WithFields(logger.Fields{
 			"at":           "processMessageDispatch",
@@ -1163,6 +1190,110 @@ func (p *MessageProcessor) processShortTunnelBuildMessage(msg I2NPMessage) error
 // This handles incoming requests using the older VTB format for backward compatibility.
 func (p *MessageProcessor) processVariableTunnelBuildMessage(msg I2NPMessage) error {
 	return p.processTunnelBuildRequest(msg, false)
+}
+
+// processTunnelBuildReplyMessage processes TunnelBuildReply (type 22) messages.
+// The reply contains 8 fixed BuildResponseRecords in the legacy tunnel build format.
+func (p *MessageProcessor) processTunnelBuildReplyMessage(msg I2NPMessage) error {
+	return p.processBuildReplyCommon(msg, false)
+}
+
+// processVariableTunnelBuildReplyMessage processes VariableTunnelBuildReply (type 24) messages.
+// The reply contains a variable number of BuildResponseRecords.
+func (p *MessageProcessor) processVariableTunnelBuildReplyMessage(msg I2NPMessage) error {
+	return p.processBuildReplyCommon(msg, false)
+}
+
+// processShortTunnelBuildReplyMessage processes ShortTunnelBuildReply (type 26) messages.
+// Uses the newer short tunnel build format (v0.9.51+).
+func (p *MessageProcessor) processShortTunnelBuildReplyMessage(msg I2NPMessage) error {
+	return p.processBuildReplyCommon(msg, true)
+}
+
+// processBuildReplyCommon is the common handler for all tunnel build reply message types.
+// It extracts the response records from the raw message data, wraps them in the
+// appropriate TunnelReplyHandler, and delegates to the configured TunnelBuildReplyProcessor.
+func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild bool) error {
+	if p.buildReplyProcessor == nil {
+		log.WithFields(logger.Fields{
+			"at":           "processBuildReplyCommon",
+			"message_type": msg.Type(),
+			"message_id":   msg.MessageID(),
+			"reason":       "no build reply processor configured",
+		}).Warn("Tunnel build reply discarded - no TunnelBuildReplyProcessor set")
+		return nil
+	}
+
+	baseMsg, ok := msg.(*BaseI2NPMessage)
+	if !ok {
+		return fmt.Errorf("tunnel build reply does not extend BaseI2NPMessage")
+	}
+
+	data := baseMsg.GetData()
+	if len(data) == 0 {
+		return fmt.Errorf("tunnel build reply contains no data")
+	}
+
+	records, err := p.parseBuildResponseRecords(data, isShortBuild)
+	if err != nil {
+		return fmt.Errorf("failed to parse build reply records: %w", err)
+	}
+
+	// Wrap parsed records in a TunnelReplyHandler
+	var handler TunnelReplyHandler
+	if isShortBuild {
+		handler = &ShortTunnelBuildReply{
+			Count:                len(records),
+			BuildResponseRecords: records,
+		}
+	} else {
+		handler = &VariableTunnelBuildReply{
+			Count:                len(records),
+			BuildResponseRecords: records,
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"at":             "processBuildReplyCommon",
+		"message_id":     msg.MessageID(),
+		"record_count":   len(records),
+		"is_short_build": isShortBuild,
+	}).Debug("Dispatching tunnel build reply to processor")
+
+	return p.buildReplyProcessor.ProcessTunnelBuildReply(handler, msg.MessageID())
+}
+
+// parseBuildResponseRecords parses build response records from raw message data.
+// The format is: 1 byte record count followed by N response records.
+func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild bool) ([]BuildResponseRecord, error) {
+	if len(data) < 1 {
+		return nil, fmt.Errorf("insufficient data for record count")
+	}
+
+	recordCount := int(data[0])
+	if recordCount < 1 || recordCount > 8 {
+		return nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+	}
+
+	recordSize := p.getRecordSize(isShortBuild)
+	expectedLen := 1 + recordCount*recordSize
+	if len(data) < expectedLen {
+		return nil, fmt.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
+	}
+
+	records := make([]BuildResponseRecord, recordCount)
+	offset := 1
+	for i := 0; i < recordCount; i++ {
+		recordData := data[offset : offset+recordSize]
+		record, err := ReadBuildResponseRecord(recordData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
+		}
+		records[i] = record
+		offset += recordSize
+	}
+
+	return records, nil
 }
 
 // processTunnelBuildRequest is the common handler for both STBM and VTB messages.

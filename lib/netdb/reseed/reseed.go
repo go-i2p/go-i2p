@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -24,6 +25,9 @@ import (
 
 const (
 	I2pUserAgent = "Wget/1.11.4"
+	// ReseedSU3Path is the standard I2P reseed path for SU3 files.
+	// Reseed servers expect clients to request the SU3 file at this path.
+	ReseedSU3Path = "i2pseeds.su3"
 )
 
 type Reseed struct {
@@ -177,6 +181,7 @@ func (r Reseed) ProcessLocalZipFileWithLimit(filePath string, limit int) ([]rout
 }
 
 // performReseedRequest creates and executes an HTTP request to the reseed server.
+// If the URL does not already include the standard SU3 path, it is appended automatically.
 func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 	log.WithField("uri", uri).Info("Initiating reseed HTTP request")
 
@@ -186,6 +191,9 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 		log.WithError(err).WithField("uri", uri).Error("Failed to parse reseed URI")
 		return nil, err
 	}
+
+	// Append standard reseed path if not already present
+	URL = ensureReseedPath(URL)
 
 	request := buildReseedHTTPRequest(URL)
 	response, err := client.Do(&request)
@@ -202,18 +210,41 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 }
 
 // createReseedHTTPClient creates an HTTP client configured for reseed operations.
+// The TLS configuration uses the system certificate pool merged with embedded
+// reseed certificates, so connections to reseed servers with non-standard CAs succeed.
 func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
-	// Configure TLS with secure defaults
-	// Note: While I2P reseed servers may use self-signed certificates,
-	// completely disabling verification enables MITM attacks.
-	// This configuration uses system certificate pool by default,
-	// which validates against standard CA certificates.
+	// Start with system certificate pool
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.WithError(err).Warn("Failed to load system cert pool, using empty pool")
+		rootCAs = x509.NewCertPool()
+	}
+
+	// Add embedded reseed certificates to the TLS root CA pool.
+	// This ensures connections to reseed servers whose TLS certificates
+	// are signed by CAs not in the system store will still succeed.
+	certPool, err := GetDefaultCertificatePool()
+	if err != nil {
+		log.WithError(err).Warn("Failed to load embedded reseed certificates for TLS")
+	} else if certPool != nil {
+		// Merge the embedded certificates into the system pool.
+		// CertificatePool.Pool() returns an *x509.CertPool with all embedded certs.
+		// We add each embedded cert's raw DER to the system pool.
+		embeddedPool := certPool.Pool()
+		if embeddedPool != nil {
+			for _, signerID := range certPool.ListSignerIDs() {
+				cert, ok := certPool.GetCertificate(signerID)
+				if ok && cert != nil {
+					rootCAs.AddCert(cert)
+				}
+			}
+			log.Debug("Added embedded reseed certificates to TLS root CA pool")
+		}
+	}
+
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12, // Require TLS 1.2 minimum
-		// InsecureSkipVerify is intentionally NOT set to true
-		// If reseed servers use self-signed certificates, they should be
-		// added to the system certificate store or certificate pinning
-		// should be implemented for known reseed servers.
+		RootCAs:    rootCAs,
 	}
 
 	transport := http.Transport{
@@ -248,6 +279,33 @@ func buildReseedHTTPRequest(URL *url.URL) http.Request {
 		ProtoMinor: 1,
 		Host:       URL.Host,
 	}
+}
+
+// ensureReseedPath appends the standard I2P reseed SU3 path to the URL if it is not
+// already present. This ensures compatibility with reseed servers that expect the
+// standard path "/i2pseeds.su3" rather than serving the SU3 file at the root URL.
+func ensureReseedPath(u *url.URL) *url.URL {
+	// If the path already ends with .su3, assume it's correct
+	if strings.HasSuffix(u.Path, ".su3") {
+		return u
+	}
+
+	// Clone the URL to avoid modifying the original
+	result := *u
+
+	// Append the standard reseed path
+	if strings.HasSuffix(result.Path, "/") {
+		result.Path += ReseedSU3Path
+	} else {
+		result.Path += "/" + ReseedSU3Path
+	}
+
+	log.WithFields(logger.Fields{
+		"original_path": u.Path,
+		"resolved_path": result.Path,
+	}).Debug("Appended standard reseed SU3 path")
+
+	return &result
 }
 
 // validateReseedResponse validates the HTTP response from reseed server.

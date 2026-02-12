@@ -488,3 +488,80 @@ func TestFindPEMBoundaries(t *testing.T) {
 		})
 	}
 }
+
+// TestEnsureReseedPath tests the standard path appending logic
+func TestEnsureReseedPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "root URL with trailing slash",
+			input:    "https://reseed.i2pgit.org/",
+			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+		},
+		{
+			name:     "root URL without trailing slash",
+			input:    "https://reseed.i2pgit.org",
+			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+		},
+		{
+			name:     "URL already has SU3 path",
+			input:    "https://reseed.i2pgit.org/i2pseeds.su3",
+			expected: "https://reseed.i2pgit.org/i2pseeds.su3",
+		},
+		{
+			name:     "URL with custom SU3 path",
+			input:    "https://example.com/custom/reseed.su3",
+			expected: "https://example.com/custom/reseed.su3",
+		},
+		{
+			name:     "URL with subpath but no SU3",
+			input:    "https://example.com/reseed/",
+			expected: "https://example.com/reseed/i2pseeds.su3",
+		},
+		{
+			name:     "URL with port",
+			input:    "https://i2pseed.creativecowpat.net:8443/",
+			expected: "https://i2pseed.creativecowpat.net:8443/i2pseeds.su3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u, err := url.Parse(tt.input)
+			require.NoError(t, err)
+
+			result := ensureReseedPath(u)
+			assert.Equal(t, tt.expected, result.String())
+		})
+	}
+}
+
+// TestEnsureReseedPath_DoesNotModifyOriginal verifies the original URL is not mutated
+func TestEnsureReseedPath_DoesNotModifyOriginal(t *testing.T) {
+	u, err := url.Parse("https://reseed.i2pgit.org/")
+	require.NoError(t, err)
+
+	original := u.String()
+	result := ensureReseedPath(u)
+
+	// Original should be unchanged
+	assert.Equal(t, original, u.String())
+	// Result should have path appended
+	assert.Equal(t, "https://reseed.i2pgit.org/i2pseeds.su3", result.String())
+}
+
+// TestCreateReseedHTTPClient_HasRootCAs verifies the TLS config has a custom RootCAs pool
+func TestCreateReseedHTTPClient_HasRootCAs(t *testing.T) {
+	client := createReseedHTTPClient(nil)
+	require.NotNil(t, client)
+
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, transport.TLSClientConfig)
+
+	// The RootCAs pool should be set (system pool, possibly with embedded certs)
+	assert.NotNil(t, transport.TLSClientConfig.RootCAs)
+}
