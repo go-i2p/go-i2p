@@ -117,18 +117,20 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 func (u *I2NPUnframer) readFull(buf []byte) error {
 	// Read from the connection until the buffer is full
 	totalLen := len(buf)
+	readThisCall := 0
 	for len(buf) > 0 {
 		n, err := u.conn.Read(buf)
 		if err != nil {
 			return err
 		}
+		readThisCall += n
 		u.bytesRead += n
 		u.totalBytesRead += n
 		buf = buf[n:]
 	}
-	// Ensure we read the full buffer
-	if u.bytesRead < totalLen {
-		return fmt.Errorf("incomplete read: got %d bytes, expected %d", u.bytesRead, totalLen)
+	// Ensure we read the full buffer (using per-call counter, not cumulative)
+	if readThisCall < totalLen {
+		return fmt.Errorf("incomplete read: got %d bytes, expected %d", readThisCall, totalLen)
 	}
 	return nil
 }

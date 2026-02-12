@@ -50,7 +50,20 @@ type NTCP2Session struct {
 	logger *logger.Entry
 }
 
+// NewNTCP2Session creates a new NTCP2 session and immediately starts background
+// send/receive workers. Use NewNTCP2SessionDeferred + StartWorkers for cases
+// where worker startup should be delayed (e.g., dedup via LoadOrStore).
 func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
+	session := NewNTCP2SessionDeferred(conn, ctx, logger)
+	session.StartWorkers()
+	return session
+}
+
+// NewNTCP2SessionDeferred creates a new NTCP2 session without starting background
+// workers. Call StartWorkers() after confirming the session will be used (e.g.,
+// after winning a LoadOrStore race). This prevents spawning goroutines for sessions
+// that will be immediately discarded.
+func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.Entry) *NTCP2Session {
 	sessionCtx, cancel := context.WithCancel(ctx)
 
 	sessionLogger := logger.WithFields(map[string]interface{}{
@@ -74,14 +87,18 @@ func NewNTCP2Session(conn net.Conn, ctx context.Context, logger *logger.Entry) *
 		wg:            sync.WaitGroup{},
 	}
 
-	// Start background workers for send and receive
-	sessionLogger.Debug("Starting send and receive workers")
-	session.wg.Add(2)
-	go session.sendWorker()
-	go session.receiveWorker()
-
-	sessionLogger.Info("NTCP2 session created successfully")
+	sessionLogger.Info("NTCP2 session created (deferred workers)")
 	return session
+}
+
+// StartWorkers launches the background send and receive goroutines.
+// Must be called exactly once after the session is confirmed as the active session.
+func (s *NTCP2Session) StartWorkers() {
+	s.logger.Debug("Starting send and receive workers")
+	s.wg.Add(2)
+	go s.sendWorker()
+	go s.receiveWorker()
+	s.logger.Info("NTCP2 session workers started")
 }
 
 // QueueSendI2NP queues an I2NP message to be sent over the session.

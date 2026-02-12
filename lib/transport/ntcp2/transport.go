@@ -732,22 +732,23 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 }
 
 func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash) *NTCP2Session {
-	session := NewNTCP2Session(conn, t.ctx, t.logger)
+	// Create session WITHOUT starting workers to avoid spawning goroutines
+	// that may be immediately discarded if an existing session wins the race.
+	session := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
 
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
 		// A session already exists for this peer. Close the newly created
-		// session (and its goroutines) to avoid leaking resources, then
-		// return the existing one. Do NOT set a cleanup callback on the
-		// new session — closing it must not remove the existing entry.
-		// Release the reserved session slot since we didn't add a new session.
+		// session (no workers running, just closes conn and channels) and
+		// return the existing one. Release the reserved session slot.
 		session.Close()
 		t.unreserveSessionSlot()
 		return existing.(*NTCP2Session)
 	}
 
-	// We won the store — wire up the cleanup callback.
-	// The session slot was already reserved by checkSessionLimit, so no additional increment.
+	// We won the store — start workers and wire up the cleanup callback.
+	// The session slot was already reserved by checkSessionLimit.
+	session.StartWorkers()
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
