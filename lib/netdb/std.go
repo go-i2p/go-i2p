@@ -62,7 +62,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		"db_path": db,
 	}).Debug("creating new StdNetDB")
 	ctx, cancel := context.WithCancel(context.Background())
-	return &StdNetDB{
+	ndb := &StdNetDB{
 		DB:               db,
 		RouterInfos:      make(map[common.Hash]Entry),
 		riMutex:          sync.RWMutex{},
@@ -75,6 +75,8 @@ func NewStdNetDB(db string) *StdNetDB {
 		ctx:              ctx,
 		cancel:           cancel,
 	}
+	ndb.StartExpirationCleaner()
+	return ndb
 }
 
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {

@@ -1589,11 +1589,19 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 // For now, attempt to read the record as cleartext (for testing).
 // In production, this would be the decrypted cleartext.
 func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
-	// Try to parse as cleartext (222 bytes for STBM cleartext)
 	if isShortBuild && len(recordData) >= 222 {
+		// STBM: 218-byte encrypted records, parse as cleartext (222 bytes)
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
-			log.WithError(err).WithField("record_index", index).Debug("failed to parse build request record")
+			log.WithError(err).WithField("record_index", index).Debug("failed to parse STBM build request record")
+		} else {
+			*records = append(*records, record)
+		}
+	} else if !isShortBuild && len(recordData) >= 222 {
+		// VTB: 528-byte encrypted records, parse as cleartext (222 bytes from the record)
+		record, err := ReadBuildRequestRecord(recordData)
+		if err != nil {
+			log.WithError(err).WithField("record_index", index).Debug("failed to parse VTB build request record")
 		} else {
 			*records = append(*records, record)
 		}
