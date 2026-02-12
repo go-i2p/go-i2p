@@ -149,22 +149,42 @@ func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 }
 
 // parseAndCacheRouterInfo parses RouterInfo data and adds it to the memory cache.
+// If a cached entry already exists, the new entry replaces it only if it has a
+// newer published timestamp, matching the behavior of addRouterInfoToCache.
 func (db *StdNetDB) parseAndCacheRouterInfo(hash common.Hash, data []byte) (router_info.RouterInfo, error) {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
-	// Add to cache if not already present
+	// Add to cache, or replace if newer
 	db.riMutex.Lock()
-	if _, ok := db.RouterInfos[hash]; !ok {
+	if existing, ok := db.RouterInfos[hash]; ok {
+		// Compare timestamps: only replace if the new entry is strictly newer
+		if existing.RouterInfo != nil {
+			existPub := existing.RouterInfo.Published()
+			newPub := ri.Published()
+			if existPub != nil && newPub != nil && !newPub.Time().After(existPub.Time()) {
+				db.riMutex.Unlock()
+				log.WithFields(logger.Fields{
+					"at":     "StdNetDB.parseAndCacheRouterInfo",
+					"reason": "existing_entry_same_or_newer",
+				}).Debug("skipping RouterInfo update — cached version is same or newer")
+				return ri, nil
+			}
+		}
+		log.WithFields(logger.Fields{
+			"at":     "StdNetDB.parseAndCacheRouterInfo",
+			"reason": "replacing_stale_entry",
+		}).Debug("replacing stale RouterInfo in memory cache")
+	} else {
 		log.WithFields(logger.Fields{
 			"at":     "StdNetDB.parseAndCacheRouterInfo",
 			"reason": "new_entry",
 		}).Debug("adding RouterInfo to memory cache")
-		db.RouterInfos[hash] = Entry{
-			RouterInfo: &ri,
-		}
+	}
+	db.RouterInfos[hash] = Entry{
+		RouterInfo: &ri,
 	}
 	db.riMutex.Unlock()
 
