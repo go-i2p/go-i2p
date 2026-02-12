@@ -26,15 +26,10 @@ func Test_Example(t *testing.T) {
 	cfg := config.DefaultRouterConfig()
 	cfg.I2CP.Address = net.JoinHostPort("localhost", "19876")
 
-	// Create the embedded router
+	// Create the embedded router (auto-configures with the provided config)
 	router, err := embedded.NewStandardEmbeddedRouter(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create router: %v", err)
-	}
-
-	// Configure the router
-	if err := router.Configure(cfg); err != nil {
-		log.Fatalf("Failed to configure router: %v", err)
 	}
 
 	// Start the router
@@ -76,13 +71,10 @@ func Test_Example(t *testing.T) {
 func Example_withSignalHandling() {
 	cfg := config.DefaultRouterConfig()
 
+	// Create the embedded router (auto-configures with the provided config)
 	router, err := embedded.NewStandardEmbeddedRouter(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create router: %v", err)
-	}
-
-	if err := router.Configure(cfg); err != nil {
-		log.Fatalf("Failed to configure router: %v", err)
 	}
 
 	// Set up signal handling for graceful shutdown

@@ -40,7 +40,7 @@ func TestEmbeddedRouter_ConcurrentStartStop(t *testing.T) {
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
 
-	// Multiple goroutines trying to configure (only first should succeed)
+	// Constructor auto-configures, so all subsequent Configure calls should fail
 	var wg sync.WaitGroup
 	configCount := 0
 	var mu sync.Mutex
@@ -59,8 +59,8 @@ func TestEmbeddedRouter_ConcurrentStartStop(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Only one Configure should succeed
-	assert.Equal(t, 1, configCount, "Only first Configure should succeed")
+	// No Configure should succeed since constructor auto-configured
+	assert.Equal(t, 0, configCount, "No subsequent Configure should succeed after auto-configure")
 }
 
 // -----------------------------------------------------------------------------
@@ -74,22 +74,11 @@ func TestEmbeddedRouter_StateTransitions(t *testing.T) {
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
 
-	// Initial state
+	// After constructor: auto-configured but not running
 	assert.False(t, router.IsRunning(), "Should not be running initially")
-	assert.False(t, router.IsConfigured(), "Should not be configured initially")
+	assert.True(t, router.IsConfigured(), "Should be configured after constructor auto-configure")
 
-	// Cannot start before configure
-	err = router.Start()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must be configured")
-
-	// Configure succeeds
-	err = router.Configure(cfg)
-	assert.NoError(t, err)
-	assert.True(t, router.IsConfigured())
-	assert.False(t, router.IsRunning())
-
-	// Cannot reconfigure
+	// Cannot reconfigure (already auto-configured by constructor)
 	err = router.Configure(cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already configured")
@@ -101,7 +90,7 @@ func TestEmbeddedRouter_CloseRequiresStop(t *testing.T) {
 	router, err := NewStandardEmbeddedRouter(cfg)
 	require.NoError(t, err)
 
-	// Close on unconfigured router should be okay
+	// Close on configured (but not running) router should be okay
 	err = router.Close()
 	assert.NoError(t, err)
 }
@@ -164,17 +153,10 @@ func TestEmbeddedRouter_ErrorMessages(t *testing.T) {
 		shouldNotContain []string
 	}{
 		{
-			name: "NilConfig",
+			name: "NilConfig_Configure",
 			action: func(r *StandardEmbeddedRouter) error {
+				// Router is already configured by constructor, so Configure returns "already configured"
 				return r.Configure(nil)
-			},
-			expectError:      true,
-			shouldNotContain: []string{"password", "key", "secret"},
-		},
-		{
-			name: "StartWithoutConfigure",
-			action: func(r *StandardEmbeddedRouter) error {
-				return r.Start()
 			},
 			expectError:      true,
 			shouldNotContain: []string{"password", "key", "secret"},
