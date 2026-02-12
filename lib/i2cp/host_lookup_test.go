@@ -3,7 +3,11 @@ package i2cp
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHostLookupPayloadParse(t *testing.T) {
@@ -557,4 +561,116 @@ func TestHostLookupTypeNames(t *testing.T) {
 	if MessageTypeDestReply != 35 {
 		t.Errorf("MessageTypeDestReply = %d, want 35", MessageTypeDestReply)
 	}
+}
+
+// mockHostnameResolver implements HostnameResolver for testing
+type mockHostnameResolver struct {
+	destinations map[string][]byte
+	err          error
+}
+
+func (m *mockHostnameResolver) ResolveHostname(hostname string) ([]byte, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	dest, ok := m.destinations[hostname]
+	if !ok {
+		return nil, errors.New("hostname not found")
+	}
+	return dest, nil
+}
+
+func TestHandleHostnameLookup_NoResolver(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+	// No hostname resolver set
+
+	lookupMsg := &HostLookupPayload{
+		RequestID:  42,
+		LookupType: HostLookupTypeHostname,
+		Query:      "forum.i2p",
+	}
+
+	reply := server.handleHostnameLookup(lookupMsg)
+	assert.Equal(t, uint32(42), reply.RequestID)
+	assert.Equal(t, byte(HostReplyError), reply.ResultCode)
+	assert.Nil(t, reply.Destination)
+}
+
+func TestHandleHostnameLookup_WithResolver_Found(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+
+	fakeDest := make([]byte, 387) // Typical destination size
+	fakeDest[0] = 0x05            // some marker
+	resolver := &mockHostnameResolver{
+		destinations: map[string][]byte{
+			"forum.i2p": fakeDest,
+		},
+	}
+	server.SetHostnameResolver(resolver)
+
+	lookupMsg := &HostLookupPayload{
+		RequestID:  43,
+		LookupType: HostLookupTypeHostname,
+		Query:      "forum.i2p",
+	}
+
+	reply := server.handleHostnameLookup(lookupMsg)
+	assert.Equal(t, uint32(43), reply.RequestID)
+	assert.Equal(t, byte(HostReplySuccess), reply.ResultCode)
+	require.NotNil(t, reply.Destination)
+	assert.Equal(t, fakeDest, reply.Destination)
+}
+
+func TestHandleHostnameLookup_WithResolver_NotFound(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+
+	resolver := &mockHostnameResolver{
+		destinations: map[string][]byte{}, // empty
+	}
+	server.SetHostnameResolver(resolver)
+
+	lookupMsg := &HostLookupPayload{
+		RequestID:  44,
+		LookupType: HostLookupTypeHostname,
+		Query:      "unknown.i2p",
+	}
+
+	reply := server.handleHostnameLookup(lookupMsg)
+	assert.Equal(t, uint32(44), reply.RequestID)
+	assert.Equal(t, byte(HostReplyNotFound), reply.ResultCode)
+	assert.Nil(t, reply.Destination)
+}
+
+func TestHandleHostnameLookup_WithResolver_Error(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+
+	resolver := &mockHostnameResolver{
+		err: errors.New("resolver internal error"),
+	}
+	server.SetHostnameResolver(resolver)
+
+	lookupMsg := &HostLookupPayload{
+		RequestID:  45,
+		LookupType: HostLookupTypeHostname,
+		Query:      "forum.i2p",
+	}
+
+	reply := server.handleHostnameLookup(lookupMsg)
+	assert.Equal(t, uint32(45), reply.RequestID)
+	assert.Equal(t, byte(HostReplyNotFound), reply.ResultCode)
+	assert.Nil(t, reply.Destination)
+}
+
+func TestSetHostnameResolver(t *testing.T) {
+	server, err := NewServer(DefaultServerConfig())
+	require.NoError(t, err)
+	assert.Nil(t, server.hostnameResolver)
+
+	resolver := &mockHostnameResolver{}
+	server.SetHostnameResolver(resolver)
+	assert.NotNil(t, server.hostnameResolver)
 }

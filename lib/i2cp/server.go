@@ -23,6 +23,15 @@ import (
 // should terminate without logging a spurious read-error.
 var errClientDisconnected = errors.New("client disconnected")
 
+// HostnameResolver resolves .i2p hostnames to their binary Destination representation.
+// Implementations may use an address book file, naming service, or subscription list.
+type HostnameResolver interface {
+	// ResolveHostname resolves an I2P hostname (e.g., "forum.i2p") to the raw
+	// Destination bytes. Returns the destination bytes and nil on success,
+	// or nil and an error if the hostname cannot be resolved.
+	ResolveHostname(hostname string) ([]byte, error)
+}
+
 // ServerConfig holds configuration for the I2CP server
 type ServerConfig struct {
 	// Address to listen on (e.g., "localhost:7654" or "/tmp/i2cp.sock" for Unix socket)
@@ -92,6 +101,11 @@ type Server struct {
 	netdb interface {
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	}
+
+	// HostnameResolver resolves .i2p hostnames to Destination bytes.
+	// If nil, hostname lookups return HostReplyError (not implemented).
+	// Implementations may use an address book, naming service, or subscription list.
+	hostnameResolver HostnameResolver
 
 	// BandwidthLimitsProvider supplies configured bandwidth limits (bytes/sec).
 	// If nil, the server falls back to a conservative default.
@@ -1031,6 +1045,18 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	return nil
 }
 
+// rebuildSessionTunnelPools stops existing tunnel pools and creates new ones
+// using the session's current (reconfigured) settings.
+// This is called after Reconfigure to apply tunnel parameter changes.
+func (s *Server) rebuildSessionTunnelPools(session *Session) error {
+	// Stop existing pools gracefully
+	session.StopTunnelPools()
+
+	// Rebuild with current config
+	config := session.Config()
+	return s.initializeSessionTunnelPools(session, config)
+}
+
 // buildSessionStatusResponse creates a successful SessionStatus message.
 // Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte)
 func buildSessionStatusResponse(sessionID uint16) *Message {
@@ -1362,6 +1388,17 @@ func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*
 
 	if err := (*sessionPtr).Reconfigure(newConfig); err != nil {
 		return nil, fmt.Errorf("failed to reconfigure session: %w", err)
+	}
+
+	// Rebuild tunnel pools to apply the new tunnel configuration.
+	// This stops old pools and creates new ones with the updated parameters.
+	if err := s.rebuildSessionTunnelPools(*sessionPtr); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleReconfigureSession",
+			"sessionID": (*sessionPtr).ID(),
+			"error":     err.Error(),
+		}).Warn("failed_to_rebuild_tunnel_pools_after_reconfigure")
+		// Non-fatal: config was updated, pools may rebuild on next maintenance cycle
 	}
 
 	log.WithFields(logger.Fields{
@@ -1722,17 +1759,48 @@ func logHostLookupRequest(sessionID uint16, lookupMsg *HostLookupPayload) {
 	}).Info("host_lookup_requested")
 }
 
-// handleHostnameLookup handles hostname lookup type (not yet implemented).
-func handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPayload {
+// handleHostnameLookup handles hostname lookup type.
+// If a HostnameResolver is configured, the hostname is resolved via the resolver.
+// Otherwise, returns HostReplyError indicating the feature is not available.
+func (s *Server) handleHostnameLookup(lookupMsg *HostLookupPayload) *HostReplyPayload {
+	if s.hostnameResolver == nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": lookupMsg.RequestID,
+			"query":     lookupMsg.Query,
+		}).Debug("hostname_lookup_not_implemented")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyError,
+			Destination: nil,
+		}
+	}
+
+	destBytes, err := s.hostnameResolver.ResolveHostname(lookupMsg.Query)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleHostLookup",
+			"requestID": lookupMsg.RequestID,
+			"hostname":  lookupMsg.Query,
+			"error":     err.Error(),
+		}).Debug("hostname_lookup_failed")
+		return &HostReplyPayload{
+			RequestID:   lookupMsg.RequestID,
+			ResultCode:  HostReplyNotFound,
+			Destination: nil,
+		}
+	}
+
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.handleHostLookup",
 		"requestID": lookupMsg.RequestID,
-		"query":     lookupMsg.Query,
-	}).Debug("hostname_lookup_not_implemented")
+		"hostname":  lookupMsg.Query,
+		"destLen":   len(destBytes),
+	}).Debug("hostname_lookup_resolved")
 	return &HostReplyPayload{
 		RequestID:   lookupMsg.RequestID,
-		ResultCode:  HostReplyError,
-		Destination: nil,
+		ResultCode:  HostReplySuccess,
+		Destination: destBytes,
 	}
 }
 
@@ -1797,7 +1865,7 @@ func (s *Server) handleHostLookup(msg *Message) (*Message, error) {
 	case HostLookupTypeHash:
 		replyPayload = s.lookupDestinationByHash(lookupMsg)
 	case HostLookupTypeHostname:
-		replyPayload = handleHostnameLookup(lookupMsg)
+		replyPayload = s.handleHostnameLookup(lookupMsg)
 	default:
 		replyPayload = handleUnknownLookupType(lookupMsg)
 	}
@@ -2570,6 +2638,15 @@ func (s *Server) SetNetDB(netdb interface {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.netdb = netdb
+}
+
+// SetHostnameResolver sets the resolver used for hostname-based HostLookup queries.
+// When set, hostname lookups (type 1) will delegate to this resolver instead of
+// returning an error. If nil, hostname lookups return HostReplyError.
+func (s *Server) SetHostnameResolver(resolver HostnameResolver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hostnameResolver = resolver
 }
 
 // SetBandwidthProvider sets the provider used by handleGetBandwidthLimits

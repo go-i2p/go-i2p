@@ -325,44 +325,56 @@ func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string
 		}
 	}
 
-	// Note: backup quantities not currently implemented in SessionConfig
-	// They would be used for tunnel pool redundancy
+	// Note: backup quantities not currently implemented in SessionConfig.
+	// They would be used for tunnel pool redundancy.
+	// Log explicitly as unsupported so clients are aware.
+	for _, key := range []string{"inbound.backupQuantity", "outbound.backupQuantity"} {
+		if val, exists := options[key]; exists {
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": key,
+				"value":  val,
+				"status": "unsupported",
+			}).Warn("backup tunnel quantity option not implemented - value ignored")
+		}
+	}
 }
 
 // applyTunnelLifetimeOptions applies tunnel lifetime configuration options.
 // Keys: inbound.lengthVariance, outbound.lengthVariance (affects lifetime calculation)
 //
-// Note: Java I2P doesn't have a direct "tunnel.lifetime" option.
-// Lifetime is calculated based on tunnel properties and network conditions.
-// We keep the default and may adjust in future based on variance settings.
+// NOTE: These options are parsed and acknowledged but NOT implemented:
+//   - inbound.lengthVariance / outbound.lengthVariance: Variance is ignored, fixed 10-minute lifetime used
 func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string) {
-	// Currently no direct lifetime option in I2CP
-	// Java I2P uses fixed 10-minute lifetime with some variance
-	// Keep default for now
 	for key, val := range options {
 		if key == "inbound.lengthVariance" || key == "outbound.lengthVariance" {
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyTunnelLifetimeOptions",
 				"option": key,
 				"value":  val,
-			}).Warn("tunnel lifetime option acknowledged but not yet implemented")
+				"status": "unsupported",
+			}).Warn("tunnel lifetime variance option not implemented - fixed 10-minute lifetime used")
 		}
 	}
 }
 
 // applyMessageOptions applies message-related configuration options.
-// Keys: i2cp.messageReliability, i2cp.gzip
+// Keys: i2cp.messageReliability, i2cp.gzip, i2cp.encryptLeaseSet
+//
+// NOTE: These options are parsed and acknowledged but NOT implemented:
+//   - i2cp.messageReliability: All messages use best-effort delivery regardless of setting
+//   - i2cp.gzip: Payload compression is not performed
+//   - i2cp.encryptLeaseSet: LeaseSet encryption is not supported
 func applyMessageOptions(config *SessionConfig, options map[string]string) {
-	// Message reliability and compression not yet implemented in SessionConfig
-	// These would affect message delivery guarantees and payload compression
-	// Currently all messages use best-effort delivery
-	for key, val := range options {
-		if key == "i2cp.messageReliability" || key == "i2cp.gzip" {
+	unsupportedKeys := []string{"i2cp.messageReliability", "i2cp.gzip", "i2cp.encryptLeaseSet"}
+	for _, key := range unsupportedKeys {
+		if val, exists := options[key]; exists {
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyMessageOptions",
 				"option": key,
 				"value":  val,
-			}).Warn("message option acknowledged but not yet implemented")
+				"status": "unsupported",
+			}).Warn("message option not implemented - value ignored; all messages use best-effort, no compression")
 		}
 	}
 }

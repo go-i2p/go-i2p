@@ -799,3 +799,58 @@ func TestLeaseSetRegenerationThreshold(t *testing.T) {
 		t.Error("Second LeaseSet should exist")
 	}
 }
+
+func TestStopTunnelPools(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Create dummy pools using the mock peer selector
+	selector := &mockPeerSelector{}
+	inboundConfig := tunnel.PoolConfig{
+		MinTunnels: 2,
+		MaxTunnels: 3,
+		HopCount:   3,
+		IsInbound:  true,
+	}
+	outboundConfig := tunnel.PoolConfig{
+		MinTunnels: 2,
+		MaxTunnels: 3,
+		HopCount:   3,
+		IsInbound:  false,
+	}
+	session.SetInboundPool(tunnel.NewTunnelPoolWithConfig(selector, inboundConfig))
+	session.SetOutboundPool(tunnel.NewTunnelPoolWithConfig(selector, outboundConfig))
+
+	// Verify pools are set
+	if session.inboundPool == nil {
+		t.Fatal("inboundPool should be set")
+	}
+	if session.outboundPool == nil {
+		t.Fatal("outboundPool should be set")
+	}
+
+	// Stop pools
+	session.StopTunnelPools()
+
+	// Verify pools are nil
+	if session.inboundPool != nil {
+		t.Error("inboundPool should be nil after StopTunnelPools")
+	}
+	if session.outboundPool != nil {
+		t.Error("outboundPool should be nil after StopTunnelPools")
+	}
+}
+
+func TestStopTunnelPools_NilPools(t *testing.T) {
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	defer session.Stop()
+
+	// Should not panic with nil pools
+	session.StopTunnelPools()
+}

@@ -376,6 +376,31 @@ func (s *Session) SetOutboundPool(pool *tunnel.Pool) {
 	}).Debug("outbound_tunnel_pool_set")
 }
 
+// StopTunnelPools stops both inbound and outbound tunnel pools gracefully.
+// This is called before rebuilding pools during reconfiguration.
+func (s *Session) StopTunnelPools() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.inboundPool != nil {
+		s.inboundPool.Stop()
+		s.inboundPool = nil
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.StopTunnelPools",
+			"sessionID": s.id,
+		}).Debug("inbound_tunnel_pool_stopped")
+	}
+
+	if s.outboundPool != nil {
+		s.outboundPool.Stop()
+		s.outboundPool = nil
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.StopTunnelPools",
+			"sessionID": s.id,
+		}).Debug("outbound_tunnel_pool_stopped")
+	}
+}
+
 // SetLeaseSetPublisher configures the publisher for distributing LeaseSets to the network.
 // This should be called during session initialization before starting LeaseSet maintenance.
 // The publisher is responsible for storing LeaseSets in the local NetDB and distributing
