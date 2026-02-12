@@ -813,6 +813,23 @@ func validateTransport(transport TransportDefaults) error {
 		log.WithField("ntcp2_max_connections", transport.NTCP2MaxConnections).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2MaxConnections must be at least 1")
 	}
+	// Port 0 means random (OS-assigned), valid ports are 0 or 1-65535
+	if transport.NTCP2Port < 0 || transport.NTCP2Port > 65535 {
+		log.WithField("ntcp2_port", transport.NTCP2Port).Error("Invalid transport configuration")
+		return newValidationError("Transport.NTCP2Port must be between 0 and 65535")
+	}
+	if transport.SSU2Port < 0 || transport.SSU2Port > 65535 {
+		log.WithField("ssu2_port", transport.SSU2Port).Error("Invalid transport configuration")
+		return newValidationError("Transport.SSU2Port must be between 0 and 65535")
+	}
+	if transport.ConnectionTimeout < 1*time.Second {
+		log.WithField("connection_timeout", transport.ConnectionTimeout).Error("Invalid transport configuration")
+		return newValidationError("Transport.ConnectionTimeout must be at least 1 second")
+	}
+	if transport.IdleTimeout < 1*time.Second {
+		log.WithField("idle_timeout", transport.IdleTimeout).Error("Invalid transport configuration")
+		return newValidationError("Transport.IdleTimeout must be at least 1 second")
+	}
 	log.Debug("Transport configuration validated successfully")
 	return nil
 }

@@ -117,3 +117,13 @@ func (ks *KeyStoreImpl) StoreKeys() error {
 	log.WithField("path", fullPath).Info("Successfully stored private key")
 	return nil
 }
+
+// Close zeroes private key material from memory. After calling Close,
+// the key store must not be used. This implements defense-in-depth key
+// hygiene per cryptographic best practices.
+func (ks *KeyStoreImpl) Close() {
+	log.WithField("at", "Close").Debug("Zeroing private key material from memory")
+	if ks.privateKey != nil {
+		ks.privateKey.Zero()
+	}
+}

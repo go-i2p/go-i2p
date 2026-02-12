@@ -45,6 +45,19 @@ type RouterInfoKeystore struct {
 // Ensure RouterInfoKeystore implements KeyStore interface at compile time
 var _ KeyStore = (*RouterInfoKeystore)(nil)
 
+// Close zeroes all private key material from memory. After calling Close,
+// the keystore must not be used for signing or encryption operations.
+// This implements defense-in-depth key hygiene per cryptographic best practices.
+func (ks *RouterInfoKeystore) Close() {
+	log.WithField("at", "Close").Debug("Zeroing private key material from memory")
+	if ks.privateKey != nil {
+		ks.privateKey.Zero()
+	}
+	if ks.encryptionPrivKey != nil {
+		ks.encryptionPrivKey.Zero()
+	}
+}
+
 // NewRouterInfoKeystore creates a new RouterInfoKeystore with fresh and new private keys
 // it accepts a directory to store the keys in and a name for the keys
 // then it generates new private keys for the routerInfo if none exist

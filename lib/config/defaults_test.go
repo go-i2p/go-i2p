@@ -382,6 +382,50 @@ func TestValidate_TransportInvalidMaxConnections(t *testing.T) {
 	}
 }
 
+// TestValidate_TransportInvalidNTCP2Port verifies validation catches out-of-range ports
+func TestValidate_TransportInvalidNTCP2Port(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.NTCP2Port = 70000
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when NTCP2Port > 65535")
+	}
+}
+
+// TestValidate_TransportInvalidSSU2Port verifies validation catches out-of-range SSU2 ports
+func TestValidate_TransportInvalidSSU2Port(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.SSU2Port = -1
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when SSU2Port < 0")
+	}
+}
+
+// TestValidate_TransportInvalidConnectionTimeout verifies validation catches too-short timeouts
+func TestValidate_TransportInvalidConnectionTimeout(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.ConnectionTimeout = 0
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when ConnectionTimeout < 1 second")
+	}
+}
+
+// TestValidate_TransportInvalidIdleTimeout verifies validation catches too-short idle timeouts
+func TestValidate_TransportInvalidIdleTimeout(t *testing.T) {
+	cfg := Defaults()
+	cfg.Transport.IdleTimeout = 0
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when IdleTimeout < 1 second")
+	}
+}
+
 // TestValidate_PerformanceInvalidWorkerPoolSize verifies validation catches invalid worker pool size
 func TestValidate_PerformanceInvalidWorkerPoolSize(t *testing.T) {
 	cfg := Defaults()

@@ -369,6 +369,168 @@ func TestRandomSourceAvailability(t *testing.T) {
 	}
 }
 
+// TestRouterInfoKeystore_Close_ZeroesKeyMaterial verifies that Close() zeroes
+// private key bytes from memory. This is a defense-in-depth measure to reduce
+// the window during which key material is recoverable from process memory.
+func TestRouterInfoKeystore_Close_ZeroesKeyMaterial(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "keys_close_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ks, err := NewRouterInfoKeystore(tmpDir, "close-test")
+	if err != nil {
+		t.Fatalf("Failed to create keystore: %v", err)
+	}
+
+	// Capture key bytes before Close
+	sigKeyBytes := ks.privateKey.Bytes()
+	encKeyBytes := ks.encryptionPrivKey.Bytes()
+
+	// Verify keys are not all zeros before close
+	allZeroSig := true
+	for _, b := range sigKeyBytes {
+		if b != 0 {
+			allZeroSig = false
+			break
+		}
+	}
+	if allZeroSig {
+		t.Fatal("Signing key should not be all zeros before Close")
+	}
+
+	allZeroEnc := true
+	for _, b := range encKeyBytes {
+		if b != 0 {
+			allZeroEnc = false
+			break
+		}
+	}
+	if allZeroEnc {
+		t.Fatal("Encryption key should not be all zeros before Close")
+	}
+
+	// Close should zero the key material
+	ks.Close()
+
+	// After Close, the underlying byte slices should be zeroed
+	// Note: Bytes() may return a copy, so we check the original slice
+	// by re-reading after zero
+	postCloseBytes := ks.privateKey.Bytes()
+	allZeroPost := true
+	for _, b := range postCloseBytes {
+		if b != 0 {
+			allZeroPost = false
+			break
+		}
+	}
+	if !allZeroPost {
+		t.Error("Signing key should be all zeros after Close()")
+	}
+
+	postCloseEncBytes := ks.encryptionPrivKey.Bytes()
+	allZeroEncPost := true
+	for _, b := range postCloseEncBytes {
+		if b != 0 {
+			allZeroEncPost = false
+			break
+		}
+	}
+	if !allZeroEncPost {
+		t.Error("Encryption key should be all zeros after Close()")
+	}
+}
+
+// TestRouterInfoKeystore_Close_NilKeysNoPanic verifies that Close() does not
+// panic when called on a keystore with nil keys.
+func TestRouterInfoKeystore_Close_NilKeysNoPanic(t *testing.T) {
+	ks := &RouterInfoKeystore{
+		privateKey:        nil,
+		encryptionPrivKey: nil,
+	}
+
+	// Should not panic
+	ks.Close()
+}
+
+// TestDestinationKeyStore_Close_ZeroesKeyMaterial verifies that Close() zeroes
+// private key bytes from the destination key store.
+func TestDestinationKeyStore_Close_ZeroesKeyMaterial(t *testing.T) {
+	dks, err := NewDestinationKeyStore()
+	if err != nil {
+		t.Fatalf("Failed to create destination key store: %v", err)
+	}
+
+	// Verify keys are not all zeros before close
+	encKeyBytes := dks.EncryptionPrivateKey().Bytes()
+	allZeroEnc := true
+	for _, b := range encKeyBytes {
+		if b != 0 {
+			allZeroEnc = false
+			break
+		}
+	}
+	if allZeroEnc {
+		t.Fatal("Encryption key should not be all zeros before Close")
+	}
+
+	// Close should zero the key material
+	dks.Close()
+
+	// After Close, encryption key should be zeroed
+	postCloseEncBytes := dks.EncryptionPrivateKey().Bytes()
+	allZeroEncPost := true
+	for _, b := range postCloseEncBytes {
+		if b != 0 {
+			allZeroEncPost = false
+			break
+		}
+	}
+	if !allZeroEncPost {
+		t.Error("Encryption key should be all zeros after Close()")
+	}
+}
+
+// TestKeyStoreImpl_Close_ZeroesKeyMaterial verifies that Close() zeroes
+// private key bytes from the base KeyStoreImpl.
+func TestKeyStoreImpl_Close_ZeroesKeyMaterial(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate key: %v", err)
+	}
+
+	ks := NewKeyStoreImpl(t.TempDir(), "close-test", privateKey)
+
+	// Verify key is not all zeros before close
+	keyBytes := privateKey.Bytes()
+	allZero := true
+	for _, b := range keyBytes {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		t.Fatal("Private key should not be all zeros before Close")
+	}
+
+	ks.Close()
+
+	// After Close, key should be zeroed
+	postCloseBytes := privateKey.Bytes()
+	allZeroPost := true
+	for _, b := range postCloseBytes {
+		if b != 0 {
+			allZeroPost = false
+			break
+		}
+	}
+	if !allZeroPost {
+		t.Error("Private key should be all zeros after Close()")
+	}
+}
+
 // BenchmarkKeyGeneration measures key generation performance.
 func BenchmarkKeyGeneration(b *testing.B) {
 	for i := 0; i < b.N; i++ {

@@ -169,3 +169,18 @@ func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey,
 	}
 	return key, nil
 }
+
+// Close zeroes all private key material from memory. After calling Close,
+// the key store must not be used for signing or encryption operations.
+// This implements defense-in-depth key hygiene per cryptographic best practices.
+func (dks *DestinationKeyStore) Close() {
+	log.WithField("at", "Close").Debug("Zeroing destination private key material from memory")
+	if dks.encryptionPrivKey != nil {
+		dks.encryptionPrivKey.Zero()
+	}
+	// SigningPrivateKey interface doesn't require Zero(), but concrete Ed25519
+	// types implement it. Use type assertion to zero if possible.
+	if z, ok := dks.signingPrivKey.(interface{ Zero() }); ok {
+		z.Zero()
+	}
+}
