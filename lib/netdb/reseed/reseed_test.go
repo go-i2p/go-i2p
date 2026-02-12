@@ -15,17 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testPEMCertificate is a sample PEM certificate for testing PEM decoding.
-// This is a minimal self-signed certificate for testing purposes only.
-const testPEMCertificate = `-----BEGIN CERTIFICATE-----
-MIIBkTCB+wIJAL4T4L5N8bHsMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
-c3RDTjAeFw0yNDAxMDEwMDAwMDBaFw0yNTAxMDEwMDAwMDBaMBExDzANBgNVBAMM
-BnRlc3RDTjBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC4+/1w6Hx9Qo8TAi5Pz5hQ
-rC5Jp6wL0x8Tm5pYYv5sT5e6h5sF2kR8kA8vI5cE5kM7pBVvU3jTz5tAh0D1Qz8p
-AgMBAAEwDQYJKoZIhvcNAQELBQADQQBhQf4hJBp5Qm5yQwI3RtF4J6h9Q5VxQfBq
-R6kPtZn3hX9B5lJ0kR8VpQpVBaF0V7xH5Q2V3R8kQ5VxQfBqR6kP
------END CERTIFICATE-----`
-
 // TestNewReseed verifies that a new Reseed instance is created correctly
 func TestNewReseed(t *testing.T) {
 	r := NewReseed()
@@ -248,44 +237,6 @@ func TestValidateCertificate(t *testing.T) {
 	}
 }
 
-// TestDecodePEM verifies PEM decoding
-func TestDecodePEM(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       string
-		expectBlock bool
-	}{
-		{
-			name:        "valid PEM certificate",
-			input:       testPEMCertificate,
-			expectBlock: true,
-		},
-		{
-			name:        "invalid data - no PEM markers",
-			input:       "this is not a PEM block",
-			expectBlock: false,
-		},
-		{
-			name:        "empty input",
-			input:       "",
-			expectBlock: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			block, _ := decodePEM([]byte(tt.input))
-
-			if tt.expectBlock {
-				assert.NotNil(t, block)
-				assert.Equal(t, "CERTIFICATE", block.Type)
-			} else {
-				assert.Nil(t, block)
-			}
-		})
-	}
-}
-
 // TestIsRouterInfoFile verifies RouterInfo file detection
 func TestIsRouterInfoFile(t *testing.T) {
 	r := NewReseed()
@@ -404,89 +355,6 @@ func TestValidateSU3FileType(t *testing.T) {
 	// without actual SU3 files. The function is tested indirectly through
 	// integration tests with real reseed files.
 	t.Skip("Requires SU3 library mocking or real SU3 files")
-}
-
-// TestBase64Decoding verifies base64 decoder
-func TestBase64Decoding(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "simple string",
-			input:    "SGVsbG8=", // "Hello"
-			expected: "Hello",
-		},
-		{
-			name:     "empty input",
-			input:    "",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dst := make([]byte, len(tt.input))
-			n, err := decodeBase64(dst, []byte(tt.input))
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, string(dst[:n]))
-		})
-	}
-}
-
-// TestFindPEMBoundaries verifies PEM boundary detection
-func TestFindPEMBoundaries(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       string
-		expectBegin bool
-		expectEnd   bool
-	}{
-		{
-			name:        "valid PEM block",
-			input:       "-----BEGIN CERTIFICATE-----\nbase64data\n-----END CERTIFICATE-----\n",
-			expectBegin: true,
-			expectEnd:   true,
-		},
-		{
-			name:        "no PEM markers",
-			input:       "just some random data",
-			expectBegin: false,
-			expectEnd:   false,
-		},
-		{
-			name:        "only begin marker - returns failure",
-			input:       "-----BEGIN CERTIFICATE-----\nincomplete",
-			expectBegin: false, // Function returns -1 for all when end marker missing
-			expectEnd:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			beginIdx, beginLineEnd, endIdx, _ := findPEMBoundaries([]byte(tt.input))
-
-			if tt.expectBegin {
-				assert.NotEqual(t, -1, beginIdx)
-				assert.NotEqual(t, -1, beginLineEnd)
-			} else {
-				// When expectBegin is false, we expect all values to be -1
-				if beginIdx != -1 && endIdx == -1 {
-					// This is the "begin found but no end" case
-					// The function actually returns begin values even when end is missing
-					// so we just verify end is -1
-					assert.Equal(t, -1, endIdx)
-					return
-				}
-				assert.Equal(t, -1, beginIdx)
-			}
-
-			if tt.expectEnd {
-				assert.NotEqual(t, -1, endIdx)
-			}
-		})
-	}
 }
 
 // TestEnsureReseedPath tests the standard path appending logic

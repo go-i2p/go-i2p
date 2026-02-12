@@ -209,6 +209,10 @@ func (mr *MessageRouter) buildEncryptedGarlicMessage(
 	destinationPubKey [32]byte,
 	payload []byte,
 ) (i2np.I2NPMessage, error) {
+	if mr.garlicSessions == nil {
+		return nil, fmt.Errorf("garlic session manager not initialized for session %d", session.ID())
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.buildEncryptedGarlicMessage",
 		"sessionID":   session.ID(),
@@ -331,6 +335,10 @@ func (mr *MessageRouter) sendThroughGateway(
 	destinationHash common.Hash,
 	garlicMsg i2np.I2NPMessage,
 ) error {
+	if mr.transportSend == nil {
+		return fmt.Errorf("transport send function not initialized for session %d", session.ID())
+	}
+
 	gatewayHash := selectedTunnel.Hops[0]
 
 	if err := mr.transportSend(gatewayHash, garlicMsg); err != nil {

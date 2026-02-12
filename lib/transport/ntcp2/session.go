@@ -334,18 +334,37 @@ func (s *NTCP2Session) handleReceiveError(err error) {
 
 // queueReceivedMessage attempts to queue a received message to the receive channel.
 // Returns false if the session context is done, true if message was queued successfully.
+// Uses a non-blocking attempt first to avoid stalling the receive worker when the
+// channel is full, falling back to a short timeout before dropping the message.
 func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 	s.logger.WithField("message_type", msg.Type()).Debug("Received message, queueing to receive channel")
+
+	// Try non-blocking first
 	select {
 	case s.recvChan <- msg:
 		s.logger.Debug("Message queued to receive channel successfully")
-
-		// Track message count for rekeying
 		s.checkRekey(s.rekeyState.recordReceived())
-
 		return true
 	case <-s.ctx.Done():
 		s.logger.Warn("Cannot queue received message - session is closed")
+		return false
+	default:
+	}
+
+	// Channel full — wait briefly before dropping to avoid stalling the receive worker
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+
+	select {
+	case s.recvChan <- msg:
+		s.logger.Debug("Message queued to receive channel successfully (after backpressure)")
+		s.checkRekey(s.rekeyState.recordReceived())
+		return true
+	case <-s.ctx.Done():
+		s.logger.Warn("Cannot queue received message - session is closed")
+		return false
+	case <-timer.C:
+		s.logger.Warn("Dropping received message - receive channel full (backpressure)")
 		return false
 	}
 }

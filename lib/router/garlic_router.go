@@ -210,7 +210,10 @@ func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (
 		// Drain the channel in a background goroutine to prevent the
 		// NetDB sender from blocking forever on an abandoned channel.
 		go func() {
-			<-leaseSetChan
+			select {
+			case <-leaseSetChan:
+			case <-gr.ctx.Done():
+			}
 		}()
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
@@ -445,7 +448,10 @@ func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info
 	case <-timer.C:
 		// Drain the channel in a background goroutine to prevent the producer from leaking
 		go func() {
-			<-routerInfoChan
+			select {
+			case <-routerInfoChan:
+			case <-gr.ctx.Done():
+			}
 		}()
 		log.WithFields(logger.Fields{
 			"at":          "lookupRouterInfo",

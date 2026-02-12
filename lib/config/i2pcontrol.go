@@ -50,19 +50,22 @@ type I2PControlConfig struct {
 	TokenExpiration time.Duration
 }
 
-// DefaultI2PControlConfig provides sensible defaults for I2PControl server.
+// DefaultI2PControlConfig returns sensible defaults for I2PControl server.
+// Returns a fresh copy each time to prevent mutation of shared state.
 // These defaults prioritize development convenience:
 // - Enabled by default for development and monitoring
 // - Localhost-only binding (not exposed to network)
 // - HTTP only (HTTPS requires explicit cert configuration)
 // - Standard I2PControl port (7650)
 // - Standard default password (should be changed in production)
-var DefaultI2PControlConfig = I2PControlConfig{
-	Enabled:         true,
-	Address:         "localhost:7650",
-	Password:        "itoopie",
-	UseHTTPS:        false,
-	CertFile:        "",
-	KeyFile:         "",
-	TokenExpiration: 10 * time.Minute,
+func DefaultI2PControlConfig() I2PControlConfig {
+	return I2PControlConfig{
+		Enabled:         true,
+		Address:         "localhost:7650",
+		Password:        "itoopie",
+		UseHTTPS:        false,
+		CertFile:        "",
+		KeyFile:         "",
+		TokenExpiration: 10 * time.Minute,
+	}
 }

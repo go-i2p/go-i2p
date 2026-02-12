@@ -1597,13 +1597,13 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 	defer sm.mu.Unlock()
 
 	// Allocate session ID
-	sessionID := sm.allocateSessionID()
-	if sessionID == SessionIDReservedControl || sessionID == SessionIDReservedBroadcast {
+	sessionID, err := sm.allocateSessionID()
+	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":             "i2cp.SessionManager.CreateSession",
 			"activeSessions": len(sm.sessions),
 		}).Error("no_available_session_ids")
-		return nil, fmt.Errorf("no available session IDs")
+		return nil, err
 	}
 
 	// Create session with its own isolated in-memory NetDB
@@ -1696,7 +1696,7 @@ func (sm *SessionManager) RemoveSession(sessionID uint16) {
 
 // allocateSessionID finds the next available session ID using cryptographic randomness
 // to prevent session ID prediction attacks. Must be called with sm.mu locked.
-func (sm *SessionManager) allocateSessionID() uint16 {
+func (sm *SessionManager) allocateSessionID() (uint16, error) {
 	// Try up to 100 times to find an unused ID
 	// With 16-bit space (65536 IDs) and typical session counts (<100),
 	// collision probability is extremely low
@@ -1721,7 +1721,7 @@ func (sm *SessionManager) allocateSessionID() uint16 {
 
 		// Check if ID is available
 		if _, exists := sm.sessions[id]; !exists {
-			return id
+			return id, nil
 		}
 	}
 
@@ -1731,7 +1731,7 @@ func (sm *SessionManager) allocateSessionID() uint16 {
 		"activeSessions": len(sm.sessions),
 		"maxAttempts":    maxAttempts,
 	}).Error("failed to allocate session ID after maximum attempts")
-	return SessionIDReservedControl // Signal error
+	return 0, fmt.Errorf("failed to allocate session ID after %d attempts (%d active sessions)", maxAttempts, len(sm.sessions))
 }
 
 // generateSecureSessionID generates a cryptographically random 16-bit session ID

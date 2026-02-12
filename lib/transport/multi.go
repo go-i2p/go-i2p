@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -183,14 +184,24 @@ func (tmux *TransportMuxer) Name() string {
 		"at":     "(TransportMuxer) Name",
 		"reason": "generating_composite_name",
 	}).Debug("generating muxed transport name")
-	name := "Muxed Transport: "
-	for _, t := range tmux.trans {
-		name += t.Name() + ", "
+
+	if len(tmux.trans) == 0 {
+		return "Muxed Transport: (none)"
 	}
-	// Trim trailing ", " if present
-	if len(name) >= 2 && name[len(name)-2:] == ", " {
-		name = name[:len(name)-2]
+
+	var sb strings.Builder
+	sb.WriteString("Muxed Transport: ")
+	for i, t := range tmux.trans {
+		if t == nil {
+			continue
+		}
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(t.Name())
 	}
+	name := sb.String()
+
 	log.WithFields(logger.Fields{
 		"at":     "(TransportMuxer) Name",
 		"reason": "name_generated",

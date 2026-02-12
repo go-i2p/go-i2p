@@ -78,12 +78,17 @@ var defaultRouterConfig = &RouterConfig{
 	NetDb:          &DefaultNetDbConfig,
 	Bootstrap:      &DefaultBootstrapConfig,
 	I2CP:           &DefaultI2CPConfig,
-	I2PControl:     &DefaultI2PControlConfig,
+	I2PControl:     defaultI2PControlConfigPtr(),
 	BaseDir:        defaultBase(),
 	WorkingDir:     defaultConfig(),
 	MaxBandwidth:   1024 * 1024, // 1 MB/s
 	MaxConnections: 200,
 	AcceptTunnels:  true,
+}
+
+func defaultI2PControlConfigPtr() *I2PControlConfig {
+	cfg := DefaultI2PControlConfig()
+	return &cfg
 }
 
 func DefaultRouterConfig() *RouterConfig {

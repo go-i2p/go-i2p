@@ -765,7 +765,20 @@ func parseCloveMetadata(data []byte, offset int) (int, time.Time, certificate.Ce
 	expirationMs := binary.BigEndian.Uint64(data[offset+4 : offset+12])
 	expiration := time.UnixMilli(int64(expirationMs))
 
-	// Read certificate (3 bytes)
+	// Read certificate (3 bytes minimum: type + 2-byte length)
+	certType := data[offset+12]
+	certLen := binary.BigEndian.Uint16(data[offset+13 : offset+15])
+	if certType != 0 || certLen != 0 {
+		// Non-NULL certificate — validate we have enough data for the payload
+		if len(data) < offset+15+int(certLen) {
+			return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
+				"insufficient data for certificate payload: need %d bytes, have %d",
+				offset+15+int(certLen), len(data))
+		}
+		return 0, time.Time{}, certificate.Certificate{}, oops.Errorf(
+			"unsupported non-NULL certificate in garlic clove (type=%d, len=%d)", certType, certLen)
+	}
+
 	cert := *certificate.NewCertificate()
 
 	return cloveID, expiration, cert, nil

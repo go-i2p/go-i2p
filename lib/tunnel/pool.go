@@ -369,8 +369,15 @@ func (p *Pool) maintainPool() {
 		// p.buildFailures and p.lastBuildTime
 		p.mutex.Lock()
 
-		// Build tunnels with exponential backoff on failures
-		p.buildTunnelsWithBackoff(needed)
+		// Re-check needed count since pool state may have changed
+		// while mutex was released (e.g., new tunnels became ready)
+		activeCount, nearExpiry = p.countTunnelsLocked()
+		needed = p.calculateNeededTunnels(activeCount, nearExpiry)
+
+		if needed > 0 {
+			// Build tunnels with exponential backoff on failures
+			p.buildTunnelsWithBackoff(needed)
+		}
 
 		p.mutex.Unlock()
 
