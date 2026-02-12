@@ -1,6 +1,8 @@
 package i2np
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/sha256"
 	"fmt"
 
@@ -230,6 +232,42 @@ func (c *BuildRecordCrypto) decryptChaCha20Poly1305(
 	if len(plaintext) != 528 {
 		return nil, fmt.Errorf("unexpected plaintext length: %d", len(plaintext))
 	}
+
+	return plaintext, nil
+}
+
+// decryptAES256CBC decrypts data using AES-256-CBC.
+// This is the legacy decryption mode for tunnel build response records.
+//
+// Parameters:
+//   - ciphertext: 528 bytes of encrypted data
+//   - key: 32-byte session key (used as AES-256 key)
+//   - iv: 16-byte initialization vector for CBC mode
+//
+// Returns:
+//   - 528 bytes of decrypted plaintext (no PKCS padding in I2P; records are fixed-size)
+func (c *BuildRecordCrypto) decryptAES256CBC(
+	ciphertext []byte,
+	key session_key.SessionKey,
+	iv [16]byte,
+) ([]byte, error) {
+	if len(ciphertext) != 528 {
+		return nil, fmt.Errorf("ciphertext must be 528 bytes, got %d", len(ciphertext))
+	}
+
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("ciphertext length %d is not a multiple of AES block size %d", len(ciphertext), aes.BlockSize)
+	}
+
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	mode := cipher.NewCBCDecrypter(block, iv[:aes.BlockSize])
+
+	plaintext := make([]byte, len(ciphertext))
+	mode.CryptBlocks(plaintext, ciphertext)
 
 	return plaintext, nil
 }

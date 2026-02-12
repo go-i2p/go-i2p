@@ -3,6 +3,7 @@ package tunnel
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -46,6 +47,7 @@ type DefaultCongestionAwarePeerSelector struct {
 	cfg              config.CongestionDefaults
 	maxRetries       int           // Max retries when G-flagged peers need replacing
 	retryDelay       time.Duration // Delay between retries (for testing)
+	metricsMu        sync.Mutex    // Protects selectionMetrics
 	selectionMetrics *SelectionMetrics
 }
 
@@ -132,7 +134,9 @@ func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
 		return nil, fmt.Errorf("count must be > 0")
 	}
 
+	s.metricsMu.Lock()
 	s.selectionMetrics.TotalSelections++
+	s.metricsMu.Unlock()
 	allExcluded := s.initExclusionSet(exclude)
 
 	selectedPeers, retries, err := s.selectWithRetries(count, allExcluded)
@@ -167,7 +171,9 @@ func (s *DefaultCongestionAwarePeerSelector) selectWithRetries(
 	for len(selectedPeers) < count && retries <= s.maxRetries {
 		candidates, err := s.fetchCandidates(count-len(selectedPeers), allExcluded)
 		if err != nil {
+			s.metricsMu.Lock()
 			s.selectionMetrics.SelectionFailures++
+			s.metricsMu.Unlock()
 			return nil, retries, fmt.Errorf("underlying selector error: %w", err)
 		}
 		if len(candidates) == 0 {
@@ -212,7 +218,9 @@ func (s *DefaultCongestionAwarePeerSelector) filterAndCollectPeers(
 		allExcluded[hash] = struct{}{}
 
 		if s.ShouldExcludePeer(ri) {
+			s.metricsMu.Lock()
 			s.selectionMetrics.GFlagExclusions++
+			s.metricsMu.Unlock()
 			s.logPeerExclusion(hash, "G flag - rejecting all tunnels")
 			continue
 		}
@@ -233,17 +241,21 @@ func (s *DefaultCongestionAwarePeerSelector) applyRetryDelay(retries int) {
 // updateRetryMetrics updates the retry-related metrics.
 func (s *DefaultCongestionAwarePeerSelector) updateRetryMetrics(retries int) {
 	if retries > 1 {
+		s.metricsMu.Lock()
 		s.selectionMetrics.selectionWithRetry++
 		s.selectionMetrics.totalRetryCount += int64(retries - 1)
 		s.selectionMetrics.AverageRetries = float64(s.selectionMetrics.totalRetryCount) /
 			float64(s.selectionMetrics.selectionWithRetry)
+		s.metricsMu.Unlock()
 	}
 }
 
 // checkInsufficientPeers logs a warning if not enough peers were found.
 func (s *DefaultCongestionAwarePeerSelector) checkInsufficientPeers(requested, selected, retries int) {
 	if selected < requested {
+		s.metricsMu.Lock()
 		s.selectionMetrics.InsufficientPeers++
+		s.metricsMu.Unlock()
 		log.WithFields(logger.Fields{
 			"at":        "SelectPeersWithCongestionAwareness",
 			"requested": requested,
@@ -294,11 +306,15 @@ func (s *DefaultCongestionAwarePeerSelector) GetCapacityMultiplier(ri router_inf
 
 // GetSelectionMetrics returns current selection metrics for monitoring.
 func (s *DefaultCongestionAwarePeerSelector) GetSelectionMetrics() SelectionMetrics {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
 	return *s.selectionMetrics
 }
 
 // ResetSelectionMetrics resets all selection metrics to zero.
 func (s *DefaultCongestionAwarePeerSelector) ResetSelectionMetrics() {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
 	s.selectionMetrics = &SelectionMetrics{}
 }
 
@@ -306,12 +322,14 @@ func (s *DefaultCongestionAwarePeerSelector) ResetSelectionMetrics() {
 func (s *DefaultCongestionAwarePeerSelector) recordDeratingMetrics(hash common.Hash) {
 	flag := s.congestionInfo.GetEffectiveCongestionFlag(hash)
 
+	s.metricsMu.Lock()
 	switch flag {
 	case config.CongestionFlagD:
 		s.selectionMetrics.DFlagDeratings++
 	case config.CongestionFlagE:
 		s.selectionMetrics.EFlagDeratings++
 	}
+	s.metricsMu.Unlock()
 }
 
 // logPeerExclusion logs a peer exclusion event with details.

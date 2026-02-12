@@ -159,6 +159,13 @@ func (p *Pool) SetTunnelBuilder(builder BuilderInterface) {
 	p.tunnelBuilder = builder
 }
 
+// getTunnelBuilder returns the tunnel builder, safely read under the lock.
+func (p *Pool) getTunnelBuilder() BuilderInterface {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.tunnelBuilder
+}
+
 // GetTunnel retrieves a tunnel by ID
 func (p *Pool) GetTunnel(id TunnelID) (*TunnelState, bool) {
 	p.mutex.RLock()
@@ -591,7 +598,10 @@ func (p *Pool) logBuildInitiated(step int, tunnelID TunnelID, req BuildTunnelReq
 // validateTunnelBuilder checks if the tunnel builder is configured.
 // Returns true if builder is set, false otherwise with error logging.
 func (p *Pool) validateTunnelBuilder() bool {
-	if p.tunnelBuilder == nil {
+	p.mutex.RLock()
+	builder := p.tunnelBuilder
+	p.mutex.RUnlock()
+	if builder == nil {
 		log.WithFields(logger.Fields{
 			"at":     "(Pool) attemptBuildTunnels",
 			"phase":  "tunnel_build",
@@ -646,7 +656,11 @@ func (p *Pool) executeBuildWithRetry(req *BuildTunnelRequest) (TunnelID, error) 
 
 		p.excludePreviouslyFailedPeers(req, retry, lastBuildPeers)
 
-		result, err := p.tunnelBuilder.BuildTunnel(*req)
+		builder := p.getTunnelBuilder()
+		if builder == nil {
+			return 0, fmt.Errorf("tunnel builder not set")
+		}
+		result, err := builder.BuildTunnel(*req)
 		if err != nil {
 			p.logBuildFailure(err, retry, maxRetries, req)
 			lastBuildPeers = p.extractAndMarkFailedPeers(result)
@@ -841,7 +855,8 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"reason":     "tunnel build timeout detected, attempting retry",
 	}).Info("retrying tunnel build after timeout")
 
-	if p.tunnelBuilder == nil {
+	builder := p.getTunnelBuilder()
+	if builder == nil {
 		return fmt.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
 	}
 
@@ -857,7 +872,7 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 	}
 
 	// Attempt to build the tunnel
-	result, err := p.tunnelBuilder.BuildTunnel(req)
+	result, err := builder.BuildTunnel(req)
 	if err != nil {
 		// Mark peers from the failed attempt to avoid retrying them
 		p.extractAndMarkFailedPeers(result)

@@ -36,6 +36,7 @@ type RouterTimestamper struct {
 	mutex             sync.Mutex
 	zones             *Zones
 	stopChan          chan struct{}
+	stopOnce          sync.Once
 	waitGroup         sync.WaitGroup
 	ntpClient         NTPClient
 	timeOffset        time.Duration // Store the current time offset from system time
@@ -69,6 +70,8 @@ func NewRouterTimestamper(client NTPClient) *RouterTimestamper {
 }
 
 func (rt *RouterTimestamper) Start() {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
 	if rt.disabled || rt.initialized {
 		return
 	}
@@ -78,11 +81,17 @@ func (rt *RouterTimestamper) Start() {
 }
 
 func (rt *RouterTimestamper) Stop() {
-	if rt.isRunning {
-		rt.isRunning = false
-		close(rt.stopChan)
-		rt.waitGroup.Wait()
+	rt.mutex.Lock()
+	if !rt.isRunning {
+		rt.mutex.Unlock()
+		return
 	}
+	rt.isRunning = false
+	rt.mutex.Unlock()
+	rt.stopOnce.Do(func() {
+		close(rt.stopChan)
+	})
+	rt.waitGroup.Wait()
 }
 
 func (rt *RouterTimestamper) AddListener(listener UpdateListener) {

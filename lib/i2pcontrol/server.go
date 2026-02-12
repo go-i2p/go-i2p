@@ -291,6 +291,12 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := s.registry.HandleParsedRequest(r.Context(), req)
+	// JSON-RPC 2.0 notifications (requests with no "id") require no response.
+	// HandleParsedRequest returns nil for notifications.
+	if resp == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	s.writeResponse(w, resp)
 }
 

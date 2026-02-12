@@ -190,14 +190,20 @@ func (p *Participant) TunnelID() TunnelID {
 // - now: the current time to check against
 //
 // This is used by the tunnel manager to clean up expired participants.
+// Thread-safe: protected by mutex.
 func (p *Participant) IsExpired(now time.Time) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	expirationTime := p.createdAt.Add(p.lifetime)
 	return now.After(expirationTime)
 }
 
 // SetLifetime updates the lifetime for this participant tunnel.
 // This allows customization beyond the default 10 minutes if needed.
+// Thread-safe: protected by mutex.
 func (p *Participant) SetLifetime(lifetime time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.lifetime = lifetime
 }
 
@@ -232,6 +238,9 @@ func (p *Participant) IsIdle(now time.Time) bool {
 
 // SetIdleTimeout updates the idle timeout for this participant tunnel.
 // This allows customization beyond the default 2 minutes if needed.
+// Thread-safe: protected by mutex.
 func (p *Participant) SetIdleTimeout(timeout time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.idleTimeout = timeout
 }

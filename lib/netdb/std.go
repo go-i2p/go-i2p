@@ -110,7 +110,12 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 			"reason": "file load failed",
 			"hash":   fmt.Sprintf("%x...", hash[:8]),
 		}).Error("failed to load RouterInfo from file")
-		return nil
+		// Return a closed empty channel instead of nil so that callers
+		// doing <-chnl receive the zero value immediately rather than
+		// blocking forever on a nil channel.
+		chnl = make(chan router_info.RouterInfo)
+		close(chnl)
+		return chnl
 	}
 
 	chnl = make(chan router_info.RouterInfo, 1)
@@ -963,17 +968,20 @@ func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_
 
 // addNewRouterInfos processes and adds new RouterInfos from peers to the database.
 func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
-	count := 0
-	db.riMutex.Lock()
+	// Phase 1: Verify signatures without holding the write lock.
+	// Signature verification is CPU-intensive, so we do it upfront
+	// to avoid blocking readers.
+	type verifiedEntry struct {
+		hash common.Hash
+		ri   router_info.RouterInfo
+	}
+	verified := make([]verifiedEntry, 0, len(peers))
 	for _, ri := range peers {
 		hash, err := ri.IdentHash()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get router hash during reseed, skipping")
 			continue
 		}
-		// Verify cryptographic signature before trusting RouterInfo from reseed.
-		// The SU3 container signature only authenticates the reseed server,
-		// not the individual RouterInfos within it.
 		if err := verifyRouterInfoSignature(ri); err != nil {
 			log.WithFields(logger.Fields{
 				"hash":  hash,
@@ -981,9 +989,17 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 			}).Warn("Rejecting RouterInfo from reseed: invalid signature")
 			continue
 		}
-		if _, exists := db.RouterInfos[hash]; !exists {
-			log.WithField("hash", hash).Debug("Adding new RouterInfo from reseed")
-			db.RouterInfos[hash] = Entry{
+		verified = append(verified, verifiedEntry{hash: hash, ri: ri})
+	}
+
+	// Phase 2: Hold write lock only for the map insertion.
+	count := 0
+	db.riMutex.Lock()
+	for _, entry := range verified {
+		if _, exists := db.RouterInfos[entry.hash]; !exists {
+			log.WithField("hash", entry.hash).Debug("Adding new RouterInfo from reseed")
+			ri := entry.ri
+			db.RouterInfos[entry.hash] = Entry{
 				RouterInfo: &ri,
 			}
 			count++

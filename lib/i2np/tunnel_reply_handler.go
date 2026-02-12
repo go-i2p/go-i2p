@@ -248,33 +248,66 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 }
 
 // decryptRecord decrypts a single encrypted build response record.
-// Currently uses AES-256-CBC (legacy mode). Will be upgraded to ECIES-X25519-AEAD
-// when github.com/go-i2p/crypto adds support for tunnel build record encryption.
+// Uses ChaCha20-Poly1305 AEAD (modern mode, I2P 0.9.44+).
 //
 // Build response records are encrypted with the reply key from the build request.
 // This ensures that only the tunnel creator can read the responses from participants.
+//
+// The record struct was parsed from encrypted wire data, so we re-serialize it
+// to recover the encrypted bytes, then perform actual ChaCha20-Poly1305 decryption
+// using the reply key and IV from the original build request.
 func (rp *ReplyProcessor) decryptRecord(
 	record BuildResponseRecord,
 	replyKey session_key.SessionKey,
 	replyIV [16]byte,
 ) ([]byte, error) {
-	// For now, we use the BuildRecordCrypto which implements AES-256-CBC
-	// This will be upgraded to ECIES-X25519-AEAD in the future
 	crypto := NewBuildRecordCrypto()
 
-	// Serialize the record to get encrypted bytes
-	// In actual network transmission, this would come from the wire
+	// Re-serialize the record to recover the encrypted bytes as they were on the wire.
+	// For VTB records this produces 528 bytes of ciphertext.
 	encrypted, err := crypto.serializeResponseRecord(record)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize record: %w", err)
+		return nil, fmt.Errorf("failed to serialize record for decryption: %w", err)
+	}
+
+	// Perform actual ChaCha20-Poly1305 AEAD decryption.
+	// DecryptReplyRecord expects 544 bytes (528 ciphertext + 16 auth tag).
+	// If the record data is only 528 bytes (legacy AES-256-CBC format where
+	// no auth tag is appended), we cannot use ChaCha20-Poly1305 and must
+	// fall back to treating the data as AES-encrypted.
+	if len(encrypted) == 544 {
+		// Modern path: ChaCha20-Poly1305 AEAD with 16-byte auth tag
+		decryptedRecord, err := crypto.DecryptReplyRecord(encrypted, replyKey, replyIV)
+		if err != nil {
+			return nil, fmt.Errorf("ChaCha20-Poly1305 decryption failed: %w", err)
+		}
+
+		cleartext, err := crypto.serializeResponseRecord(decryptedRecord)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize decrypted record: %w", err)
+		}
+
+		log.WithFields(logger.Fields{
+			"encryption": "ChaCha20-Poly1305",
+			"size":       len(cleartext),
+		}).Debug("Decrypted tunnel build reply record")
+
+		return cleartext, nil
+	}
+
+	// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
+	// Create ChaCha20-Poly1305 cipher for AES-CBC fallback using the reply key/IV.
+	cleartext, err := crypto.decryptAES256CBC(encrypted, replyKey, replyIV)
+	if err != nil {
+		return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
 	}
 
 	log.WithFields(logger.Fields{
 		"encryption": "AES-256-CBC",
-		"size":       len(encrypted),
-	}).Debug("Decrypting tunnel build reply record")
+		"size":       len(cleartext),
+	}).Debug("Decrypted tunnel build reply record (legacy)")
 
-	return encrypted, nil
+	return cleartext, nil
 }
 
 // handleBuildSuccess handles successful tunnel build completion.

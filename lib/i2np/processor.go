@@ -1589,8 +1589,10 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 // For now, attempt to read the record as cleartext (for testing).
 // In production, this would be the decrypted cleartext.
 func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
-	if isShortBuild && len(recordData) >= 222 {
-		// STBM: 218-byte encrypted records, parse as cleartext (222 bytes)
+	if isShortBuild && len(recordData) >= 218 {
+		// STBM: 218-byte encrypted records (ECIES). The encrypted payload
+		// contains a 222-byte cleartext after decryption, but on the wire
+		// the record is 218 bytes. For testing, attempt to parse as cleartext.
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
 			log.WithError(err).WithField("record_index", index).Debug("failed to parse STBM build request record")
