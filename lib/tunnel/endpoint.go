@@ -213,7 +213,10 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 
 	// Calculate checksum: first 4 bytes of SHA256(data after checksum + IV)
 	dataAfterChecksum := decrypted[24:]
-	checksumData := append(dataAfterChecksum, iv...)
+	// Allocate a new buffer to avoid mutating the decrypted slice's backing array
+	checksumData := make([]byte, len(dataAfterChecksum)+len(iv))
+	copy(checksumData, dataAfterChecksum)
+	copy(checksumData[len(dataAfterChecksum):], iv)
 	hash := sha256.Sum256(checksumData)
 	actualChecksum := hash[:4]
 

@@ -74,9 +74,14 @@ func NewManager() *Manager {
 // The manager will start a background cleanup goroutine automatically.
 // If per-source rate limiting is enabled, a SourceLimiter will also be created.
 func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
+	maxParticipants := cfg.MaxParticipatingTunnels
+	if maxParticipants <= 0 {
+		maxParticipants = 2000 // Sensible default if unset or zero
+		log.WithField("default_max", maxParticipants).Info("MaxParticipatingTunnels was zero, using default")
+	}
 	m := &Manager{
 		participants:         make(map[TunnelID]*Participant),
-		maxParticipants:      cfg.MaxParticipatingTunnels,
+		maxParticipants:      maxParticipants,
 		limitsEnabled:        cfg.ParticipatingLimitsEnabled,
 		sourceLimiterEnabled: cfg.PerSourceRateLimitEnabled,
 		stopChan:             make(chan struct{}),

@@ -213,7 +213,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	// Enforce session limit before accepting
+	// Enforce session limit before accepting (reserves a session slot atomically)
 	if err := t.checkSessionLimit(); err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"session_count": t.GetSessionCount(),
@@ -225,6 +225,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	t.logger.Debug("Accepting incoming NTCP2 connection")
 	conn, err := t.listener.Accept()
 	if err != nil {
+		t.unreserveSessionSlot() // Release the reserved slot on accept failure
 		t.logger.WithError(err).Warn("Failed to accept incoming connection")
 		return nil, err
 	}
@@ -237,8 +238,9 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	// session from the returned conn (in createSessionFromConn), and having two
 	// sessions with send/receive workers on the same conn would corrupt the stream.
 	peerHash := t.extractPeerHash(conn)
-	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); !loaded {
-		atomic.AddInt32(&t.sessionCount, 1)
+	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
+		// Session already existed for this peer — release the reserved slot
+		t.unreserveSessionSlot()
 	}
 
 	// Wrap the connection so that closing it also removes it from the session map,
@@ -474,7 +476,7 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
 	routerHashBytes := routerHash.Bytes()
 
-	// Enforce connection pool limit before dialing
+	// Enforce connection pool limit before dialing (reserves a session slot atomically)
 	if err := t.checkSessionLimit(); err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash":   fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -488,6 +490,7 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 
 	conn, err := t.dialNTCP2Connection(routerInfo)
 	if err != nil {
+		t.unreserveSessionSlot() // Release the reserved slot on dial failure
 		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("Failed to dial NTCP2 connection")
 		return nil, err
 	}
@@ -737,15 +740,17 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		// session (and its goroutines) to avoid leaking resources, then
 		// return the existing one. Do NOT set a cleanup callback on the
 		// new session — closing it must not remove the existing entry.
+		// Release the reserved session slot since we didn't add a new session.
 		session.Close()
+		t.unreserveSessionSlot()
 		return existing.(*NTCP2Session)
 	}
 
-	// We won the store — wire up the cleanup callback and bump the count.
+	// We won the store — wire up the cleanup callback.
+	// The session slot was already reserved by checkSessionLimit, so no additional increment.
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
-	atomic.AddInt32(&t.sessionCount, 1)
 	return session
 }
 

@@ -841,6 +841,10 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		"reason":     "tunnel build timeout detected, attempting retry",
 	}).Info("retrying tunnel build after timeout")
 
+	if p.tunnelBuilder == nil {
+		return fmt.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
+	}
+
 	// BUG FIX: Exclude failed peers from retry attempts
 	excludePeers := p.GetFailedPeers()
 
