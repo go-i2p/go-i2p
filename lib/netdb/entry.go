@@ -12,6 +12,28 @@ import (
 	"github.com/go-i2p/common/router_info"
 )
 
+// File format type codes for local skiplist storage (Entry.WriteTo / Entry.ReadFrom).
+//
+// IMPORTANT: These differ from the DatabaseStore wire message type codes used in
+// StdNetDB.Store and I2NP DatabaseStore messages:
+//
+//	Wire format (I2NP DatabaseStore):  File format (local skiplist):
+//	  0 = RouterInfo                     1 = RouterInfo
+//	  1 = LeaseSet                       2 = LeaseSet
+//	  3 = LeaseSet2                      3 = LeaseSet2  (same)
+//	  5 = EncryptedLeaseSet              5 = EncryptedLeaseSet  (same)
+//	  7 = MetaLeaseSet                   7 = MetaLeaseSet  (same)
+//
+// The file format offsets RouterInfo and LeaseSet by +1 to avoid a zero type byte,
+// which simplifies distinguishing valid entries from uninitialized data on disk.
+const (
+	FileTypeRouterInfo        = 1
+	FileTypeLeaseSet          = 2
+	FileTypeLeaseSet2         = 3
+	FileTypeEncryptedLeaseSet = 5
+	FileTypeMetaLeaseSet      = 7
+)
+
 // netdb entry
 // wraps a router info, lease set, lease set2, encrypted lease set, or meta lease set
 // and provides serialization
@@ -63,7 +85,7 @@ func (e *Entry) writeRouterInfo(w io.Writer) error {
 		return err
 	}
 
-	return e.writeEntryData(w, 1, data)
+	return e.writeEntryData(w, FileTypeRouterInfo, data)
 }
 
 // writeLeaseSet writes a LeaseSet entry to the writer.
@@ -73,7 +95,7 @@ func (e *Entry) writeLeaseSet(w io.Writer) error {
 		return err
 	}
 
-	return e.writeEntryData(w, 2, data)
+	return e.writeEntryData(w, FileTypeLeaseSet, data)
 }
 
 // writeLeaseSet2 writes a LeaseSet2 entry to the writer.
@@ -83,7 +105,7 @@ func (e *Entry) writeLeaseSet2(w io.Writer) error {
 		return err
 	}
 
-	return e.writeEntryData(w, 3, data)
+	return e.writeEntryData(w, FileTypeLeaseSet2, data)
 }
 
 // writeEncryptedLeaseSet writes an EncryptedLeaseSet entry to the writer.
@@ -93,7 +115,7 @@ func (e *Entry) writeEncryptedLeaseSet(w io.Writer) error {
 		return err
 	}
 
-	return e.writeEntryData(w, 5, data)
+	return e.writeEntryData(w, FileTypeEncryptedLeaseSet, data)
 }
 
 // writeMetaLeaseSet writes a MetaLeaseSet entry to the writer.
@@ -103,7 +125,7 @@ func (e *Entry) writeMetaLeaseSet(w io.Writer) error {
 		return err
 	}
 
-	return e.writeEntryData(w, 7, data)
+	return e.writeEntryData(w, FileTypeMetaLeaseSet, data)
 }
 
 // serializeRouterInfo serializes the RouterInfo and validates the result.
@@ -254,15 +276,15 @@ func (e *Entry) readDataLength(r io.Reader) (uint16, error) {
 // processEntryData processes the entry data based on the entry type.
 func (e *Entry) processEntryData(entryType byte, data []byte) error {
 	switch entryType {
-	case 1: // RouterInfo
+	case FileTypeRouterInfo:
 		return e.processRouterInfoData(data)
-	case 2: // LeaseSet
+	case FileTypeLeaseSet:
 		return e.processLeaseSetData(data)
-	case 3: // LeaseSet2
+	case FileTypeLeaseSet2:
 		return e.processLeaseSet2Data(data)
-	case 5: // EncryptedLeaseSet
+	case FileTypeEncryptedLeaseSet:
 		return e.processEncryptedLeaseSetData(data)
-	case 7: // MetaLeaseSet
+	case FileTypeMetaLeaseSet:
 		return e.processMetaLeaseSetData(data)
 	default:
 		return fmt.Errorf("unknown entry type: %d", entryType)

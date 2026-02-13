@@ -102,7 +102,10 @@ func TestGetEncryptedLeaseSetNotFound(t *testing.T) {
 	nonExistentHash := common.Hash{0xaa, 0xbb, 0xcc}
 
 	chnl := db.GetEncryptedLeaseSet(nonExistentHash)
-	assert.Nil(t, chnl, "GetEncryptedLeaseSet should return nil for non-existent EncryptedLeaseSet")
+	assert.NotNil(t, chnl, "GetEncryptedLeaseSet should return a closed channel for non-existent EncryptedLeaseSet")
+	// The channel should be closed and immediately yield a zero value
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed for non-existent EncryptedLeaseSet")
 }
 
 // TestGetEncryptedLeaseSetBytesNotFound tests byte retrieval of non-existent EncryptedLeaseSet

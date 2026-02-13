@@ -102,7 +102,10 @@ func TestGetMetaLeaseSetNotFound(t *testing.T) {
 	nonExistentHash := common.Hash{0xaa, 0xbb, 0xcc}
 
 	chnl := db.GetMetaLeaseSet(nonExistentHash)
-	assert.Nil(t, chnl, "GetMetaLeaseSet should return nil for non-existent MetaLeaseSet")
+	assert.NotNil(t, chnl, "GetMetaLeaseSet should return a closed channel for non-existent MetaLeaseSet")
+	// The channel should be closed and immediately yield a zero value
+	_, ok := <-chnl
+	assert.False(t, ok, "Channel should be closed for non-existent MetaLeaseSet")
 }
 
 // TestGetMetaLeaseSetBytesNotFound tests byte retrieval of non-existent MetaLeaseSet

@@ -16,7 +16,6 @@ import (
 
 	"github.com/go-i2p/logger"
 
-	"github.com/go-i2p/common/base32"
 	"github.com/go-i2p/common/base64"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/encrypted_leaseset"
@@ -714,122 +713,6 @@ func (db *StdNetDB) validatePathSecurity(cleanPath string) bool {
 // Since Size() now operates directly on in-memory data, this is a no-op.
 func (db *StdNetDB) RecalculateSize() error {
 	log.Debug("RecalculateSize called - Size() now uses in-memory data")
-	return nil
-}
-
-// countValidRouterInfos walks through the database directory and counts valid RouterInfo files.
-func (db *StdNetDB) countValidRouterInfos() (int, error) {
-	count := 0
-	err := filepath.Walk(db.Path(), func(fname string, info os.FileInfo, err error) error {
-		return db.processWalkEntry(fname, info, err, &count)
-	})
-
-	if err == nil {
-		log.WithField("count", count).Debug("Finished counting RouterInfos")
-	}
-
-	return count, err
-}
-
-// processWalkEntry handles each entry encountered during the directory walk.
-func (db *StdNetDB) processWalkEntry(fname string, info os.FileInfo, err error, count *int) error {
-	// If err is set, info may be nil (e.g., permission denied).
-	// Log and skip this entry rather than aborting the entire walk.
-	if err != nil {
-		log.WithError(err).WithField("file", fname).Warn("Skipping entry due to walk error")
-		return nil
-	}
-
-	if info.IsDir() {
-		return db.handleDirectoryWalk(fname, nil)
-	}
-
-	// Only process files with .dat extension (RouterInfo files)
-	if db.CheckFilePathValid(fname) {
-		if err := db.processRouterInfoFile(fname, count); err != nil {
-			// Log and continue rather than aborting the walk for a single bad file
-			log.WithError(err).WithField("file", fname).Warn("Skipping invalid RouterInfo file")
-			return nil
-		}
-	}
-	// Silently skip non-.dat files (no warning needed)
-	return nil
-}
-
-// handleDirectoryWalk processes directory entries during the walk.
-func (db *StdNetDB) handleDirectoryWalk(fname string, err error) error {
-	if !strings.HasPrefix(fname, db.Path()) {
-		if db.Path() == fname {
-			log.Debug("Reached end of NetDB directory")
-			log.Debug("path==name time to exit")
-			return nil
-		}
-		log.Debug("Outside of netDb dir time to exit", db.Path(), " ", fname)
-		return err
-	}
-	return err
-}
-
-// processRouterInfoFile reads and validates a single RouterInfo file.
-func (db *StdNetDB) processRouterInfoFile(fname string, count *int) error {
-	log.WithField("file_name", fname).Debug("Reading RouterInfo file")
-	log.Println("Reading in file:", fname)
-
-	b, err := os.ReadFile(fname)
-	if err != nil {
-		log.WithError(err).Error("Failed to read RouterInfo file")
-		return err
-	}
-
-	ri, _, err := router_info.ReadRouterInfo(b)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse RouterInfo")
-		return err
-	}
-
-	// Process the RouterInfo
-	db.logRouterInfoDetails(ri)
-	if err := db.cacheRouterInfo(ri, fname); err != nil {
-		return fmt.Errorf("failed to cache router info: %w", err)
-	}
-	(*count)++
-
-	return nil
-}
-
-// logRouterInfoDetails logs details about the RouterInfo for debugging.
-func (db *StdNetDB) logRouterInfoDetails(ri router_info.RouterInfo) {
-	ih, err := ri.IdentHash()
-	if err != nil {
-		log.WithError(err).Warn("Failed to get router hash for logging")
-		return
-	}
-	ihBytes := ih.Bytes()
-	log.Printf("Read in IdentHash: %s", base32.EncodeToString(ihBytes[:]))
-
-	for _, addr := range ri.RouterAddresses() {
-		log.Println(string(addr.Bytes()))
-		log.WithField("address", string(addr.Bytes())).Debug("RouterInfo address")
-	}
-}
-
-// cacheRouterInfo adds the RouterInfo to the in-memory cache if not already present.
-func (db *StdNetDB) cacheRouterInfo(ri router_info.RouterInfo, fname string) error {
-	ih, err := ri.IdentHash()
-	if err != nil {
-		return fmt.Errorf("failed to get router hash for caching: %w", err)
-	}
-	db.riMutex.Lock()
-	if ent, ok := db.RouterInfos[ih]; !ok {
-		log.Debug("Adding new RouterInfo to memory cache")
-		db.RouterInfos[ih] = Entry{
-			RouterInfo: &ri,
-		}
-	} else {
-		log.Debug("RouterInfo already in memory cache")
-		log.Println("entry previously found in table", ent, fname)
-	}
-	db.riMutex.Unlock()
 	return nil
 }
 
