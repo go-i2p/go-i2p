@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-i2p/crypto/rand"
@@ -28,6 +29,7 @@ type Gateway struct {
 	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
 	msgIDSeq   uint32 // monotonic message ID counter for fragmentation
+	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
 }
 
 var (
@@ -562,6 +564,12 @@ func (g *Gateway) encryptTunnelMessage(msg []byte) ([]byte, error) {
 	// Use the crypto/tunnel package to encrypt
 	// Modern ECIES-X25519 uses ChaCha20/Poly1305 AEAD
 	// Legacy AES uses AES-256-CBC with dual-layer encryption
+
+	// Serialize concurrent encryption calls to protect stateful TunnelEncryptor
+	// implementations. Current implementations (AES, ECIES) are stateless,
+	// but the interface contract does not guarantee this.
+	g.encMu.Lock()
+	defer g.encMu.Unlock()
 
 	// The TunnelEncryptor interface now returns errors for better error handling
 	encrypted, err := g.encryption.Encrypt(msg)

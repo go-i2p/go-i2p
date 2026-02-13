@@ -438,10 +438,12 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	}
 	pool.SetTunnelBuilder(builder)
 
-	// Test 1: Successful build
+	// Test 1: Successful build — checkAndUpdateBackoff under lock, launch outside lock
 	pool.mutex.Lock()
-	pool.buildTunnelsWithBackoff(2)
+	shouldBuild := pool.checkAndUpdateBackoff()
 	pool.mutex.Unlock()
+	assert.True(t, shouldBuild, "First build should not be blocked by backoff")
+	pool.launchAsyncBuild(2)
 
 	// Wait for both tunnels to complete
 	<-completionChan
@@ -457,9 +459,11 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	builder.shouldFail = true
 	pool.mutex.Lock()
 	pool.buildFailures = 0 // Reset for test
-	pool.buildTunnelsWithBackoff(1)
-	initialTime := pool.lastBuildTime // Read the time AFTER calling buildTunnelsWithBackoff
+	shouldBuild = pool.checkAndUpdateBackoff()
+	initialTime := pool.lastBuildTime // Read the time AFTER calling checkAndUpdateBackoff
 	pool.mutex.Unlock()
+	assert.True(t, shouldBuild, "Build should proceed after backoff expired")
+	pool.launchAsyncBuild(1)
 
 	// Wait for the tunnel build to complete (with retries)
 	// Failed builds retry up to 3 times, so wait for all attempts
@@ -479,9 +483,12 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Total ~60ms since initialTime
 
 	pool.mutex.Lock()
-	pool.buildTunnelsWithBackoff(1)
+	shouldBuild = pool.checkAndUpdateBackoff()
 	timeAfterSkip := pool.lastBuildTime
 	pool.mutex.Unlock()
+
+	// checkAndUpdateBackoff should return false (build was skipped due to backoff)
+	assert.False(t, shouldBuild, "Build should be skipped due to backoff")
 
 	// lastBuildTime should not have changed (build was skipped)
 	assert.Equal(t, initialTime, timeAfterSkip, "Build should be skipped due to backoff")
@@ -494,9 +501,11 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	time.Sleep(200 * time.Millisecond) // Total > 260ms, well past 200ms backoff
 
 	pool.mutex.Lock()
-	pool.buildTunnelsWithBackoff(1)
+	shouldBuild = pool.checkAndUpdateBackoff()
 	timeAfterBackoff := pool.lastBuildTime
 	pool.mutex.Unlock()
+	assert.True(t, shouldBuild, "Build should proceed after backoff period")
+	pool.launchAsyncBuild(1)
 
 	// Wait for the tunnel build to complete (with retries)
 	// Failed builds retry up to 3 times, so wait for all attempts

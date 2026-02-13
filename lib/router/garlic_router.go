@@ -447,29 +447,44 @@ func (gr *GarlicMessageRouter) waitForRouterInfo(routerInfoChan chan router_info
 	select {
 	case ri, ok := <-routerInfoChan:
 		if !ok {
-			log.WithFields(logger.Fields{
-				"at":          "lookupRouterInfo",
-				"router_hash": fmt.Sprintf("%x", routerHash[:8]),
-				"reason":      "channel closed",
-			}).Error("RouterInfo channel closed")
-			return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
+			return gr.handleRouterInfoChannelClosed(routerHash)
 		}
 		return ri, nil
 	case <-timer.C:
-		// Drain the channel in a background goroutine to prevent the producer from leaking
-		go func() {
-			select {
-			case <-routerInfoChan:
-			case <-gr.ctx.Done():
-			}
-		}()
-		log.WithFields(logger.Fields{
-			"at":          "lookupRouterInfo",
-			"router_hash": fmt.Sprintf("%x", routerHash[:8]),
-			"reason":      "timeout",
-		}).Error("RouterInfo lookup timed out")
-		return router_info.RouterInfo{}, fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
+		gr.drainRouterInfoChannel(routerInfoChan)
+		return gr.handleRouterInfoTimeout(routerHash)
 	}
+}
+
+// handleRouterInfoChannelClosed returns an error when the RouterInfo channel closes unexpectedly.
+func (gr *GarlicMessageRouter) handleRouterInfoChannelClosed(routerHash common.Hash) (router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"at":          "lookupRouterInfo",
+		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+		"reason":      "channel closed",
+	}).Error("RouterInfo channel closed")
+	return router_info.RouterInfo{}, fmt.Errorf("router %x RouterInfo channel closed", routerHash[:8])
+}
+
+// drainRouterInfoChannel consumes from a RouterInfo channel in the background to prevent
+// the NetDB sender goroutine from blocking on an abandoned channel.
+func (gr *GarlicMessageRouter) drainRouterInfoChannel(ch chan router_info.RouterInfo) {
+	go func() {
+		select {
+		case <-ch:
+		case <-gr.ctx.Done():
+		}
+	}()
+}
+
+// handleRouterInfoTimeout returns an error when a RouterInfo lookup exceeds the deadline.
+func (gr *GarlicMessageRouter) handleRouterInfoTimeout(routerHash common.Hash) (router_info.RouterInfo, error) {
+	log.WithFields(logger.Fields{
+		"at":          "lookupRouterInfo",
+		"router_hash": fmt.Sprintf("%x", routerHash[:8]),
+		"reason":      "timeout",
+	}).Error("RouterInfo lookup timed out")
+	return router_info.RouterInfo{}, fmt.Errorf("timeout waiting for router %x RouterInfo", routerHash[:8])
 }
 
 // validateRouterInfo checks if the retrieved RouterInfo is valid.
@@ -693,27 +708,39 @@ func (gr *GarlicMessageRouter) tryResolvePendingDest(destHash common.Hash, messa
 		return nil
 	}
 
+	return gr.resolveLeaseSetFromChannel(destHash, messages, now, leaseSetChan)
+}
+
+// resolveLeaseSetFromChannel attempts a non-blocking read of a LeaseSet from the channel.
+// Returns forwardWork on success, or nil after cleaning up expired messages.
+func (gr *GarlicMessageRouter) resolveLeaseSetFromChannel(destHash common.Hash, messages []pendingMessage, now time.Time, leaseSetChan chan lease_set.LeaseSet) *forwardWork {
 	select {
 	case ls, ok := <-leaseSetChan:
 		if !ok {
 			gr.cleanupExpiredMessages(destHash, messages, now)
 			return nil
 		}
-		gatewayHash, tunnelID, err := gr.extractValidLease(destHash, ls)
-		if err != nil {
-			delete(gr.pendingMsgs, destHash)
-			return nil
-		}
-		delete(gr.pendingMsgs, destHash)
-		return &forwardWork{
-			destHash:    destHash,
-			gatewayHash: gatewayHash,
-			tunnelID:    tunnelID,
-			messages:    messages,
-		}
+		return gr.buildForwardWork(destHash, ls, messages)
 	default:
 		gr.cleanupExpiredMessages(destHash, messages, now)
 		return nil
+	}
+}
+
+// buildForwardWork constructs a forwardWork entry from a resolved LeaseSet.
+// Returns nil if the LeaseSet has no valid leases.
+func (gr *GarlicMessageRouter) buildForwardWork(destHash common.Hash, ls lease_set.LeaseSet, messages []pendingMessage) *forwardWork {
+	gatewayHash, tunnelID, err := gr.extractValidLease(destHash, ls)
+	if err != nil {
+		delete(gr.pendingMsgs, destHash)
+		return nil
+	}
+	delete(gr.pendingMsgs, destHash)
+	return &forwardWork{
+		destHash:    destHash,
+		gatewayHash: gatewayHash,
+		tunnelID:    tunnelID,
+		messages:    messages,
 	}
 }
 

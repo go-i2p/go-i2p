@@ -365,7 +365,7 @@ func (p *Pool) maintainPool() {
 			"is_inbound":  p.config.IsInbound,
 		}).Warn("tunnel pool below minimum, building replacement tunnels")
 
-		// Re-acquire mutex for buildTunnelsWithBackoff which accesses
+		// Re-acquire mutex for backoff bookkeeping which accesses
 		// p.buildFailures and p.lastBuildTime
 		p.mutex.Lock()
 
@@ -374,12 +374,23 @@ func (p *Pool) maintainPool() {
 		activeCount, nearExpiry = p.countTunnelsLocked()
 		needed = p.calculateNeededTunnels(activeCount, nearExpiry)
 
+		var shouldBuild bool
 		if needed > 0 {
-			// Build tunnels with exponential backoff on failures
-			p.buildTunnelsWithBackoff(needed)
+			// Perform backoff bookkeeping under the lock, but do NOT
+			// launch the async goroutine yet — releasing the write lock
+			// first prevents a deadlock where the child goroutine's
+			// RLock (in validateTunnelBuilder) blocks on the parent's
+			// still-held write lock.
+			shouldBuild = p.checkAndUpdateBackoff()
 		}
 
 		p.mutex.Unlock()
+
+		// Launch the async build AFTER releasing the write lock so the
+		// goroutine can safely acquire RLock in validateTunnelBuilder.
+		if shouldBuild {
+			p.launchAsyncBuild(needed)
+		}
 
 		// Log completion of build attempt
 		log.WithFields(logger.Fields{
@@ -475,8 +486,10 @@ func (p *Pool) calculateNeededTunnels(activeCount, nearExpiry int) int {
 	return needed
 }
 
-// buildTunnelsWithBackoff builds tunnels with exponential backoff on failures
-func (p *Pool) buildTunnelsWithBackoff(count int) {
+// checkAndUpdateBackoff checks if a build should proceed based on exponential backoff,
+// and updates the lastBuildTime if so. Must be called with p.mutex held (write lock).
+// Returns true if building should proceed, false if still in backoff.
+func (p *Pool) checkAndUpdateBackoff() bool {
 	now := time.Now()
 
 	// Calculate backoff delay based on consecutive failures
@@ -489,7 +502,7 @@ func (p *Pool) buildTunnelsWithBackoff(count int) {
 	if !p.lastBuildTime.IsZero() && now.Sub(p.lastBuildTime) < backoffDelay {
 		remaining := backoffDelay - now.Sub(p.lastBuildTime)
 		log.WithFields(logger.Fields{
-			"at":              "(Pool) buildTunnelsWithBackoff",
+			"at":              "(Pool) checkAndUpdateBackoff",
 			"phase":           "tunnel_build",
 			"reason":          "skipping build due to backoff delay",
 			"backoff_delay":   backoffDelay,
@@ -498,13 +511,17 @@ func (p *Pool) buildTunnelsWithBackoff(count int) {
 			"time_remaining":  remaining,
 			"next_attempt_in": remaining.Round(time.Second),
 		}).Warn("delaying tunnel build due to previous failures (exponential backoff)")
-		return
+		return false
 	}
 
 	p.lastBuildTime = now
+	return true
+}
 
-	// Attempt to build tunnels in separate goroutine to avoid blocking with lock held
-	// Track this goroutine in the WaitGroup so Stop() can wait for it
+// launchAsyncBuild starts a goroutine to build tunnels.
+// MUST be called WITHOUT holding p.mutex to prevent deadlock:
+// the goroutine calls validateTunnelBuilder which acquires RLock.
+func (p *Pool) launchAsyncBuild(count int) {
 	p.maintWg.Add(1)
 	go func() {
 		defer p.maintWg.Done()
