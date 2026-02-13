@@ -23,7 +23,7 @@ func TestLoadOrCreateDestinationKeyStore_CorruptFileReturnsError(t *testing.T) {
 	// LoadOrCreateDestinationKeyStore should fail rather than silently replace
 	_, err = LoadOrCreateDestinationKeyStore(dir, name)
 	assert.Error(t, err, "should return error for corrupt key file, not silently generate new keys")
-	assert.Contains(t, err.Error(), "could not be loaded")
+	assert.Contains(t, err.Error(), "identity loss")
 }
 
 // TestLoadOrCreateDestinationKeyStore_UnreadableFileReturnsError verifies that
