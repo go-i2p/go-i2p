@@ -1845,7 +1845,10 @@ func (tm *TunnelManager) createBuildRequestAndID(req tunnel.BuildTunnelRequest) 
 		return nil, 0, fmt.Errorf("failed to create build request: %w", err)
 	}
 
-	messageID := tm.generateMessageID()
+	messageID, err := tm.generateMessageID()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to generate message ID: %w", err)
+	}
 	return result, messageID, nil
 }
 
@@ -2120,15 +2123,13 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 
 // generateMessageID generates a unique message ID for tracking build requests.
 // Uses cryptographically secure random to avoid collisions and predictability.
-func (tm *TunnelManager) generateMessageID() int {
+func (tm *TunnelManager) generateMessageID() (int, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		// crypto/rand failure indicates a critical system-level problem.
-		// A time-based fallback is predictable and creates collision risk.
-		panic("go-i2p: failed to read from crypto/rand for message ID: " + err.Error())
+		return 0, fmt.Errorf("failed to generate random message ID: %w", err)
 	}
 	// Use only 31 bits to ensure positive int on all platforms
-	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF)
+	return int(binary.BigEndian.Uint32(buf[:]) & 0x7FFFFFFF), nil
 }
 
 // BuildTunnelWithBuilder builds a tunnel using the i2np.TunnelBuilder message interface.
@@ -2146,7 +2147,10 @@ func (tm *TunnelManager) BuildTunnelWithBuilder(builder TunnelBuilder) error {
 		return err
 	}
 
-	tunnelID := tm.generateTunnelID()
+	tunnelID, err := tm.generateTunnelID()
+	if err != nil {
+		return fmt.Errorf("failed to generate tunnel ID: %w", err)
+	}
 	tunnelState := tm.createTunnelState(tunnelID, count, peers)
 	// BuildTunnelWithBuilder is legacy interface, defaults to outbound tunnels
 	tm.outboundPool.AddTunnel(tunnelState)
@@ -2209,14 +2213,12 @@ func populateTunnelHops(tunnelState *tunnel.TunnelState, peers []router_info.Rou
 }
 
 // generateTunnelID generates a unique tunnel ID using cryptographically secure random.
-func (tm *TunnelManager) generateTunnelID() tunnel.TunnelID {
+func (tm *TunnelManager) generateTunnelID() (tunnel.TunnelID, error) {
 	var buf [4]byte
 	if _, err := rand.Read(buf[:]); err != nil {
-		// crypto/rand failure indicates a critical system-level problem.
-		// A time-based fallback is predictable and creates collision risk on coarse clocks.
-		panic("go-i2p: failed to read from crypto/rand for tunnel ID: " + err.Error())
+		return 0, fmt.Errorf("failed to generate random tunnel ID: %w", err)
 	}
-	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:]))
+	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:])), nil
 }
 
 // sendTunnelBuildRequests sends tunnel build requests to each selected peer

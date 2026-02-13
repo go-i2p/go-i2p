@@ -122,7 +122,8 @@ func TestTunnelManager_BuildTunnel_Core(t *testing.T) {
 	tm := NewTunnelManager(nil)
 
 	// Test tunnel ID generation
-	tunnelID := tm.generateTunnelID()
+	tunnelID, err := tm.generateTunnelID()
+	assert.NoError(t, err)
 	assert.NotEqual(t, tunnel.TunnelID(0), tunnelID)
 
 	// Test that TunnelManager can be created and configured
@@ -179,7 +180,8 @@ func TestTunnelManager_GenerateTunnelID(t *testing.T) {
 	// Generate multiple tunnel IDs
 	ids := make(map[tunnel.TunnelID]bool)
 	for i := 0; i < 100; i++ {
-		id := tm.generateTunnelID()
+		id, err := tm.generateTunnelID()
+		assert.NoError(t, err)
 
 		// Verify ID is non-zero
 		assert.NotEqual(t, tunnel.TunnelID(0), id)

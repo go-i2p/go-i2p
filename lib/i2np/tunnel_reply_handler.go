@@ -403,7 +403,9 @@ func (rp *ReplyProcessor) handleBuildTimeout(tunnelID tunnel.TunnelID) {
 
 	// Attempt retry if within limit
 	if pending.Retries < rp.config.MaxRetries {
-		_ = rp.retryBuild(tunnelID, pending)
+		if err := rp.retryBuild(tunnelID, pending); err != nil {
+			log.WithError(err).WithField("tunnel_id", tunnelID).Error("Failed to schedule tunnel build retry after timeout")
+		}
 	} else {
 		log.WithField("tunnel_id", tunnelID).Error("Tunnel build timed out after all retries")
 	}

@@ -332,7 +332,10 @@ func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo ro
 	}
 
 	// Step 3: Calculate first 16 bytes of SHA-256 hash of RouterIdentity (toPeer field)
-	identityHash := calculateIdentityHash(recipientRouterInfo)
+	identityHash, err := calculateIdentityHash(recipientRouterInfo)
+	if err != nil {
+		return encrypted, oops.Wrapf(err, "failed to calculate identity hash")
+	}
 	copy(encrypted[0:16], identityHash[:16])
 
 	// Step 4: Encrypt the 222-byte cleartext using ECIES-X25519
@@ -466,11 +469,20 @@ func extractEncryptionPublicKey(routerInfo router_info.RouterInfo) ([]byte, erro
 //
 // Returns:
 //   - [32]byte: SHA-256 hash of the RouterIdentity bytes
-func calculateIdentityHash(routerInfo router_info.RouterInfo) [32]byte {
+//   - error: if the RouterIdentity cannot be serialized
+func calculateIdentityHash(routerInfo router_info.RouterInfo) ([32]byte, error) {
 	identity := routerInfo.RouterIdentity()
-	// Get bytes from KeysAndCert (which is what RouterIdentity wraps)
-	identityBytes, _ := identity.KeysAndCert.Bytes()
-	return sha256.Sum256(identityBytes)
+	if identity == nil {
+		return [32]byte{}, fmt.Errorf("RouterInfo has nil RouterIdentity")
+	}
+	if identity.KeysAndCert == nil {
+		return [32]byte{}, fmt.Errorf("RouterIdentity has nil KeysAndCert")
+	}
+	identityBytes, err := identity.KeysAndCert.Bytes()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to serialize RouterIdentity: %w", err)
+	}
+	return sha256.Sum256(identityBytes), nil
 }
 
 // VerifyIdentityHash checks if an encrypted BuildRequestRecord is intended for us.
@@ -486,7 +498,11 @@ func calculateIdentityHash(routerInfo router_info.RouterInfo) [32]byte {
 //   - bool: true if the record is likely intended for us, false otherwise
 func VerifyIdentityHash(encrypted [528]byte, ourRouterInfo router_info.RouterInfo) bool {
 	// Calculate our identity hash
-	ourHash := calculateIdentityHash(ourRouterInfo)
+	ourHash, err := calculateIdentityHash(ourRouterInfo)
+	if err != nil {
+		log.WithError(err).Warn("Failed to calculate identity hash for verification")
+		return false
+	}
 
 	// Compare first 16 bytes
 	for i := 0; i < 16; i++ {
