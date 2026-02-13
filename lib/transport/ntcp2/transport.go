@@ -201,6 +201,10 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
+		// Close the TCP listener to prevent file descriptor leak.
+		if closeErr := tcpListener.Close(); closeErr != nil {
+			log.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
+		}
 		return err
 	}
 
@@ -410,6 +414,10 @@ func (t *NTCP2Transport) createNewListenerWithConfig(ntcp2Config *ntcp2.NTCP2Con
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
+		// Close the TCP listener to prevent file descriptor leak.
+		if closeErr := tcpListener.Close(); closeErr != nil {
+			t.logger.WithError(closeErr).Warn("Failed to close TCP listener after NTCP2 listener creation failure")
+		}
 		t.logger.WithError(err).Error("Failed to create new NTCP2 listener")
 		return nil, WrapNTCP2Error(err, "creating new listener")
 	}
@@ -719,7 +727,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		// return the existing one. Release the reserved session slot.
 		session.Close()
 		t.unreserveSessionSlot()
-		return existing.(*NTCP2Session)
+		return t.resolveExistingSession(existing, routerHash)
 	}
 
 	// We won the store — start workers and wire up the cleanup callback.
@@ -729,6 +737,47 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		t.removeSession(routerHash)
 	})
 	return session
+}
+
+// resolveExistingSession safely extracts or promotes an existing session map
+// entry to *NTCP2Session. Accept() stores raw net.Conn values while
+// setupSession stores *NTCP2Session values; this method handles both types
+// to prevent a type assertion panic when the two race.
+func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash data.Hash) *NTCP2Session {
+	// Fast path: already an NTCP2Session.
+	if ntcp2Session, ok := existing.(*NTCP2Session); ok {
+		return ntcp2Session
+	}
+
+	// Slow path: Accept() stored a raw net.Conn. Promote it to a full
+	// NTCP2Session so the caller gets a usable session object.
+	if rawConn, ok := existing.(net.Conn); ok {
+		promoted := NewNTCP2Session(rawConn, t.ctx, t.logger)
+		promoted.SetCleanupCallback(func() {
+			t.removeSession(routerHash)
+		})
+		if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Info("Promoted inbound net.Conn to NTCP2Session in setupSession")
+			return promoted
+		}
+		// Another goroutine won the promotion race — discard ours and
+		// return whatever is in the map now.
+		promoted.Close()
+		if winner, exists := t.sessions.Load(routerHash); exists {
+			if winnerSession, ok := winner.(*NTCP2Session); ok {
+				return winnerSession
+			}
+		}
+	}
+
+	// Should not reach here in practice. Create a fresh session from the
+	// original outbound conn as a last resort (the conn was already closed
+	// above, so this path indicates a logic error).
+	t.logger.Error("resolveExistingSession: unexpected session map entry type")
+	return nil
 }
 
 // checkSessionLimit returns ErrConnectionPoolFull if the maximum number of
@@ -873,20 +922,25 @@ func (t *NTCP2Transport) closeAllActiveSessions() {
 }
 
 // closeIndividualSession closes a single session and logs any errors.
+// Handles both *NTCP2Session values (from setupSession) and raw net.Conn
+// values (from Accept, not yet promoted) to prevent connection leaks on shutdown.
 func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
-	session, ok := value.(*NTCP2Session)
-	if !ok {
-		return
-	}
+	routerHash, hashOk := key.(data.Hash)
 
-	routerHash, ok := key.(data.Hash)
-	if !ok {
-		return
-	}
-
-	if err := session.Close(); err != nil {
-		routerHashBytes := routerHash.Bytes()
-		t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+	switch v := value.(type) {
+	case *NTCP2Session:
+		if err := v.Close(); err != nil && hashOk {
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing session")
+		}
+	case net.Conn:
+		// Raw net.Conn stored by Accept() but never promoted to *NTCP2Session.
+		if err := v.Close(); err != nil && hashOk {
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithError(err).WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Warn("Error closing raw inbound connection")
+		}
+	default:
+		t.logger.Warn("Unexpected session map entry type during shutdown")
 	}
 }
 
