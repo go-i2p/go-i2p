@@ -59,7 +59,7 @@ func (pt *PeerTracker) RecordAttempt(hash common.Hash) {
 	stats.TotalAttempts++
 
 	log.WithFields(logger.Fields{
-		"peer_hash":      hash.String()[:16],
+		"peer_hash":      shortHash(hash.String(), 16),
 		"total_attempts": stats.TotalAttempts,
 	}).Debug("Recorded connection attempt")
 }
@@ -93,7 +93,7 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64) {
 	}
 
 	log.WithFields(logger.Fields{
-		"peer_hash":        hash.String()[:16],
+		"peer_hash":        shortHash(hash.String(), 16),
 		"success_count":    stats.SuccessCount,
 		"response_time_ms": responseTimeMs,
 	}).Debug("Recorded successful connection")
@@ -117,7 +117,7 @@ func (pt *PeerTracker) RecordFailure(hash common.Hash, reason string) {
 	stats.ConsecutiveFails++
 
 	log.WithFields(logger.Fields{
-		"peer_hash":         hash.String()[:16],
+		"peer_hash":         shortHash(hash.String(), 16),
 		"failure_count":     stats.FailureCount,
 		"consecutive_fails": stats.ConsecutiveFails,
 		"reason":            reason,
@@ -185,7 +185,7 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 func (pt *PeerTracker) hasExcessiveConsecutiveFailures(stats *PeerStats, hash common.Hash) bool {
 	if stats.ConsecutiveFails >= 3 {
 		log.WithFields(logger.Fields{
-			"peer_hash":         hash.String()[:16],
+			"peer_hash":         shortHash(hash.String(), 16),
 			"consecutive_fails": stats.ConsecutiveFails,
 			"reason":            "high_consecutive_failures",
 		}).Debug("Peer marked as likely stale")
@@ -201,7 +201,7 @@ func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) boo
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
 		if successRate < 0.25 {
 			log.WithFields(logger.Fields{
-				"peer_hash":    hash.String()[:16],
+				"peer_hash":    shortHash(hash.String(), 16),
 				"success_rate": successRate,
 				"reason":       "low_success_rate",
 			}).Debug("Peer marked as likely stale")
@@ -218,7 +218,7 @@ func (pt *PeerTracker) hasRecentFailuresWithoutSuccess(stats *PeerStats, hash co
 	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			log.WithFields(logger.Fields{
-				"peer_hash":    hash.String()[:16],
+				"peer_hash":    shortHash(hash.String(), 16),
 				"last_success": stats.LastSuccess,
 				"last_failure": stats.LastFailure,
 				"reason":       "no_recent_success_with_failures",

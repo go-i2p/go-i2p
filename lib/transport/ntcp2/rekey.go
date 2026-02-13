@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"sync"
 	"sync/atomic"
 )
 
@@ -30,6 +31,9 @@ type rekeyState struct {
 	messagesReceived uint64 // atomic
 	// rekeyCount is the total number of rekeys performed on this session
 	rekeyCount uint64 // atomic
+	// rekeyMu serializes rekey attempts so that concurrent send/receive workers
+	// cannot trigger two overlapping Rekey() calls on the Noise connection.
+	rekeyMu sync.Mutex
 }
 
 // newRekeyState creates a new rekeying state tracker.
@@ -77,10 +81,17 @@ func (rs *rekeyState) needsRekey() bool {
 
 // attemptRekey tries to rekey the connection if it implements the Rekeyer interface.
 // Returns true if rekeying was performed, false if the connection does not support it.
-// With go-noise v0.1.4+, NTCP2Conn implements Rekeyer, so this will succeed for
-// all real NTCP2 sessions. The type assertion allows graceful fallback for mock
-// connections in tests or non-NTCP2 transports.
+// Serialized by rekeyMu so concurrent send/receive workers cannot trigger
+// overlapping Rekey() calls on the same Noise connection.
 func attemptRekey(conn interface{}, rs *rekeyState) bool {
+	rs.rekeyMu.Lock()
+	defer rs.rekeyMu.Unlock()
+
+	// Re-check threshold under lock — the other goroutine may have already rekeyed.
+	if rs.totalMessages() < RekeyThreshold {
+		return false
+	}
+
 	rekeyer, ok := conn.(Rekeyer)
 	if !ok {
 		// Connection does not support rekeying (e.g., mock conn in tests).

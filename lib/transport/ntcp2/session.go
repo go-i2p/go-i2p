@@ -402,13 +402,13 @@ func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 }
 
 // setError sets the last error (once) and cancels the session context.
+// Cleanup callback is NOT called here — it is deferred to Close() which
+// waits for workers to finish first, preventing the transport from
+// creating a new session to the same peer while old workers still run.
 func (s *NTCP2Session) setError(err error) {
 	s.errorOnce.Do(func() {
 		s.lastError = err
 		s.logger.WithError(err).Error("Session error")
 		s.cancel()
-
-		// Call cleanup callback to remove session from transport map
-		s.callCleanupCallback()
 	})
 }

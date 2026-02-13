@@ -124,7 +124,10 @@ func (p *Publisher) Start() error {
 	if p.pool == nil {
 		return fmt.Errorf("tunnel pool required for publishing")
 	}
-	if p.transport == nil {
+	p.fieldMu.RLock()
+	transport := p.transport
+	p.fieldMu.RUnlock()
+	if transport == nil {
 		return fmt.Errorf("transport manager required for publishing")
 	}
 

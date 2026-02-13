@@ -660,12 +660,12 @@ func (p *MessageProcessor) validateGarlicSession() error {
 
 // extractGarlicData extracts encrypted data from the garlic message.
 func (p *MessageProcessor) extractGarlicData(msg I2NPMessage) ([]byte, error) {
-	baseMsg, ok := msg.(*BaseI2NPMessage)
+	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("garlic message does not extend BaseI2NPMessage")
+		return nil, fmt.Errorf("garlic message does not implement DataCarrier")
 	}
 
-	encryptedData := baseMsg.GetData()
+	encryptedData := carrier.GetData()
 	if len(encryptedData) == 0 {
 		return nil, fmt.Errorf("garlic message contains no data")
 	}
@@ -1231,12 +1231,12 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 		return nil
 	}
 
-	baseMsg, ok := msg.(*BaseI2NPMessage)
+	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return fmt.Errorf("tunnel build reply does not extend BaseI2NPMessage")
+		return fmt.Errorf("tunnel build reply does not implement DataCarrier")
 	}
 
-	data := baseMsg.GetData()
+	data := carrier.GetData()
 	if len(data) == 0 {
 		return fmt.Errorf("tunnel build reply contains no data")
 	}
@@ -1345,12 +1345,12 @@ func (p *MessageProcessor) validateParticipantManager(isShortBuild bool, msgType
 
 // extractBuildMessageData extracts raw data from the tunnel build message.
 func (p *MessageProcessor) extractBuildMessageData(msg I2NPMessage) ([]byte, error) {
-	baseMsg, ok := msg.(*BaseI2NPMessage)
+	carrier, ok := msg.(DataCarrier)
 	if !ok {
-		return nil, fmt.Errorf("tunnel build message does not extend BaseI2NPMessage")
+		return nil, fmt.Errorf("tunnel build message does not implement DataCarrier")
 	}
 
-	data := baseMsg.GetData()
+	data := carrier.GetData()
 	if len(data) == 0 {
 		return nil, fmt.Errorf("tunnel build message contains no data")
 	}
@@ -1642,6 +1642,7 @@ type TunnelManager struct {
 	cleanupTicker   *time.Ticker          // Periodic cleanup of expired requests
 	cleanupStop     chan struct{}         // Signal to stop cleanup goroutine
 	cleanupOnce     sync.Once             // Ensures cleanup goroutine starts at most once
+	stopOnce        sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor  *ReplyProcessor       // Handles reply decryption and processing
 }
 
@@ -1702,21 +1703,24 @@ func (tm *TunnelManager) ensureCleanupStarted() {
 }
 
 // Stop gracefully stops the tunnel manager and cleans up resources.
+// Safe to call multiple times — subsequent calls are no-ops.
 // Should be called when shutting down the router.
 func (tm *TunnelManager) Stop() {
-	if tm.cleanupTicker != nil {
-		tm.cleanupTicker.Stop()
-	}
-	close(tm.cleanupStop)
+	tm.stopOnce.Do(func() {
+		if tm.cleanupTicker != nil {
+			tm.cleanupTicker.Stop()
+		}
+		close(tm.cleanupStop)
 
-	if tm.inboundPool != nil {
-		tm.inboundPool.Stop()
-	}
-	if tm.outboundPool != nil {
-		tm.outboundPool.Stop()
-	}
+		if tm.inboundPool != nil {
+			tm.inboundPool.Stop()
+		}
+		if tm.outboundPool != nil {
+			tm.outboundPool.Stop()
+		}
 
-	log.Debug("Tunnel manager stopped")
+		log.Debug("Tunnel manager stopped")
+	})
 }
 
 // SetSessionProvider sets the session provider for sending tunnel build messages
@@ -2101,10 +2105,19 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 		encryptedData[i] = encrypted
 	}
 
-	// Serialize all 8 encrypted records (empty slots are zero-filled 528-byte records)
+	// Serialize all 8 encrypted records. Unused slots are filled with random
+	// data to prevent observers from distinguishing tunnel length by counting
+	// zero-filled records.
 	data := make([]byte, 8*528)
 	for i := 0; i < 8; i++ {
-		copy(data[i*528:(i+1)*528], encryptedData[i][:])
+		if i < len(result.Records) {
+			copy(data[i*528:(i+1)*528], encryptedData[i][:])
+		} else {
+			// Fill unused slot with random padding
+			if _, err := rand.Read(data[i*528 : (i+1)*528]); err != nil {
+				return nil, fmt.Errorf("failed to generate random padding for slot %d: %w", i, err)
+			}
+		}
 	}
 
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD)

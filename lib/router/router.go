@@ -823,13 +823,14 @@ func (r *Router) clearRoutingComponents() {
 	r.tunnelManager = nil
 	r.inboundHandler = nil
 	r.publisher = nil
+	r.StdNetDB = nil
 	r.runMux.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Close",
 		"phase":  "finalization",
 		"step":   5,
 		"reason": "message routing components cleared",
-	}).Debug("message router, garlic router, tunnel manager, and publisher references cleared")
+	}).Debug("message router, garlic router, tunnel manager, publisher, and NetDB references cleared")
 
 	r.keystoreMux.Lock()
 	r.RouterInfoKeystore = nil
@@ -840,14 +841,6 @@ func (r *Router) clearRoutingComponents() {
 		"step":   6,
 		"reason": "keystore reference cleared",
 	}).Debug("keystore reference cleared (keys preserved on disk)")
-
-	r.StdNetDB = nil
-	log.WithFields(logger.Fields{
-		"at":     "(Router) Close",
-		"phase":  "finalization",
-		"step":   7,
-		"reason": "netdb reference cleared",
-	}).Debug("NetDB reference cleared")
 }
 
 // finalizeCloseChannel closes the router's close channel to signal complete finalization.

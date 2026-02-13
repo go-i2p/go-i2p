@@ -58,6 +58,14 @@ type MessageExpiration interface {
 	SetExpiration(exp time.Time)
 }
 
+// DataCarrier represents messages that expose raw message data via GetData().
+// All typed I2NP messages embed BaseI2NPMessage and satisfy this interface.
+// Use this for type-safe data extraction instead of asserting *BaseI2NPMessage
+// directly, which fails for typed message structs.
+type DataCarrier interface {
+	GetData() []byte
+}
+
 // PayloadCarrier represents messages that carry payload data
 type PayloadCarrier interface {
 	GetPayload() []byte

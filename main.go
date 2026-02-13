@@ -247,15 +247,15 @@ var configCmd = &cobra.Command{
 
 func debugPrintConfig() {
 	currentConfig := struct {
-		BaseDir    string                 `yaml:"base_dir"`
-		WorkingDir string                 `yaml:"working_dir"`
-		NetDB      config.NetDbConfig     `yaml:"netdb"`
-		Bootstrap  config.BootstrapConfig `yaml:"bootstrap"`
+		BaseDir    string                  `yaml:"base_dir"`
+		WorkingDir string                  `yaml:"working_dir"`
+		NetDB      *config.NetDbConfig     `yaml:"netdb,omitempty"`
+		Bootstrap  *config.BootstrapConfig `yaml:"bootstrap,omitempty"`
 	}{
 		BaseDir:    config.RouterConfigProperties.BaseDir,
 		WorkingDir: config.RouterConfigProperties.WorkingDir,
-		NetDB:      *config.RouterConfigProperties.NetDb,
-		Bootstrap:  *config.RouterConfigProperties.Bootstrap,
+		NetDB:      config.RouterConfigProperties.NetDb,
+		Bootstrap:  config.RouterConfigProperties.Bootstrap,
 	}
 
 	yamlData, err := yaml.Marshal(currentConfig)

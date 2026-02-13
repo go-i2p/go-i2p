@@ -291,9 +291,10 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 
 	ep.fragmentsMutex.Lock()
 	ep.fragments[99] = assembler
+	result := ep.reassembleFragments(99, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.reassembleAndDeliver(99, assembler)
+	err = ep.deliverReassembled(result)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -332,9 +333,10 @@ func TestReassembleAndDeliverRouter(t *testing.T) {
 
 	ep.fragmentsMutex.Lock()
 	ep.fragments[100] = assembler
+	result := ep.reassembleFragments(100, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.reassembleAndDeliver(100, assembler)
+	err = ep.deliverReassembled(result)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -365,9 +367,10 @@ func TestReassembleAndDeliverNoForwarder(t *testing.T) {
 
 	ep.fragmentsMutex.Lock()
 	ep.fragments[101] = assembler
+	result := ep.reassembleFragments(101, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.reassembleAndDeliver(101, assembler)
+	err = ep.deliverReassembled(result)
 	assert.NoError(t, err, "Should not error without forwarder")
 }
 
@@ -396,9 +399,10 @@ func TestReassembleAndDeliverLocal(t *testing.T) {
 
 	ep.fragmentsMutex.Lock()
 	ep.fragments[102] = assembler
+	result := ep.reassembleFragments(102, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.reassembleAndDeliver(102, assembler)
+	err = ep.deliverReassembled(result)
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("local_msg"), received)
 }

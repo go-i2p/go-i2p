@@ -422,7 +422,6 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 // storeFirstFragmentWithDI stores the first fragment with routing info from delivery instructions.
 func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di *DeliveryInstructions, fragmentData []byte) error {
 	e.fragmentsMutex.Lock()
-	defer e.fragmentsMutex.Unlock()
 
 	assembler := e.ensureAssemblerExists(msgID, deliveryType)
 	// Store routing info from DI for later delivery
@@ -433,18 +432,25 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 		assembler.hash = di.hash
 	}
 	e.recordFirstFragmentData(assembler, fragmentData, msgID)
-	return e.checkFragmentCompletion(msgID, assembler)
+	result := e.checkFragmentCompletion(msgID, assembler)
+
+	e.fragmentsMutex.Unlock()
+
+	return e.deliverReassembled(result)
 }
 
 // storeFirstFragment stores the first fragment of a multi-fragment message.
 // Creates or updates the fragment assembler and checks for completion.
 func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentData []byte) error {
 	e.fragmentsMutex.Lock()
-	defer e.fragmentsMutex.Unlock()
 
 	assembler := e.ensureAssemblerExists(msgID, deliveryType)
 	e.recordFirstFragmentData(assembler, fragmentData, msgID)
-	return e.checkFragmentCompletion(msgID, assembler)
+	result := e.checkFragmentCompletion(msgID, assembler)
+
+	e.fragmentsMutex.Unlock()
+
+	return e.deliverReassembled(result)
 }
 
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
@@ -479,13 +485,26 @@ func (e *Endpoint) recordFirstFragmentData(assembler *fragmentAssembler, fragmen
 	}).Debug("Stored first fragment")
 }
 
+// reassembledResult holds the output of a successful fragment reassembly,
+// allowing delivery to occur outside the fragmentsMutex lock.
+type reassembledResult struct {
+	deliveryType byte
+	tunnelID     uint32
+	hash         [32]byte
+	data         []byte
+	msgID        uint32
+	err          error
+}
+
 // checkFragmentCompletion determines if all fragments have been received.
-// Triggers reassembly and delivery if the message is complete.
-func (e *Endpoint) checkFragmentCompletion(msgID uint32, assembler *fragmentAssembler) error {
+// Triggers reassembly if the message is complete. Returns a reassembled
+// result (may be nil if not yet complete or on error).
+// Note: Caller must hold fragmentsMutex.
+func (e *Endpoint) checkFragmentCompletion(msgID uint32, assembler *fragmentAssembler) *reassembledResult {
 	if assembler.totalCount > 0 {
 		expectedMask := (uint64(1) << assembler.totalCount) - 1
 		if assembler.receivedMask == expectedMask {
-			return e.reassembleAndDeliver(msgID, assembler)
+			return e.reassembleFragments(msgID, assembler)
 		}
 	}
 	return nil
@@ -500,11 +519,11 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 	}
 
 	e.fragmentsMutex.Lock()
-	defer e.fragmentsMutex.Unlock()
 
 	assembler := e.getOrCreateAssembler(msgID)
 
 	if err := e.storeFragmentData(msgID, fragmentNum, fragmentData, assembler); err != nil {
+		e.fragmentsMutex.Unlock()
 		return err
 	}
 
@@ -512,7 +531,11 @@ func (e *Endpoint) processFollowOnFragment(di *DeliveryInstructions, fragmentDat
 		e.markLastFragment(msgID, fragmentNum, assembler)
 	}
 
-	return e.attemptReassembly(msgID, fragmentNum, isLast, assembler)
+	result := e.attemptReassembly(msgID, fragmentNum, isLast, assembler)
+
+	e.fragmentsMutex.Unlock()
+
+	return e.deliverReassembled(result)
 }
 
 // extractFollowOnFragmentInfo extracts message ID, fragment number, and last-fragment flag from delivery instructions.
@@ -586,11 +609,13 @@ func (e *Endpoint) markLastFragment(msgID uint32, fragmentNum int, assembler *fr
 }
 
 // attemptReassembly checks if all fragments are received and triggers reassembly if complete.
-func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool, assembler *fragmentAssembler) error {
+// Returns a reassembled result (may be nil if not yet complete).
+// Note: Caller must hold fragmentsMutex.
+func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool, assembler *fragmentAssembler) *reassembledResult {
 	if assembler.totalCount > 0 {
 		expectedMask := (uint64(1) << assembler.totalCount) - 1
 		if assembler.receivedMask == expectedMask {
-			return e.reassembleAndDeliver(msgID, assembler)
+			return e.reassembleFragments(msgID, assembler)
 		}
 	}
 
@@ -603,12 +628,11 @@ func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool,
 	return nil
 }
 
-// reassembleAndDeliver combines all fragments and delivers the complete message.
-//
-// IMPORTANT: This function is called with fragmentsMutex held. The message handler
-// callback (e.handler or forwarder) executes under the lock. Handlers must be
-// non-blocking and must not call back into the Endpoint to avoid deadlock.
-func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembler) error {
+// reassembleFragments combines all fragments into a complete message and removes
+// the assembler from the fragment map. Returns a reassembledResult for delivery
+// outside the lock, or a result with err set on failure.
+// Note: Caller must hold fragmentsMutex.
+func (e *Endpoint) reassembleFragments(msgID uint32, assembler *fragmentAssembler) *reassembledResult {
 	// Calculate total size
 	totalSize := 0
 	for i := 0; i < assembler.totalCount; i++ {
@@ -618,7 +642,7 @@ func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembl
 				"message_id":   msgID,
 				"fragment_num": i,
 			}).Error("Missing fragment during reassembly")
-			return errors.New("missing fragment")
+			return &reassembledResult{err: errors.New("missing fragment")}
 		}
 		totalSize += len(frag)
 	}
@@ -635,29 +659,49 @@ func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembl
 		"fragment_cnt": assembler.totalCount,
 	}).Debug("Reassembled fragmented message")
 
+	result := &reassembledResult{
+		deliveryType: assembler.deliveryType,
+		tunnelID:     assembler.tunnelID,
+		hash:         assembler.hash,
+		data:         completeMsg,
+		msgID:        msgID,
+	}
+
 	// Clean up
 	delete(e.fragments, msgID)
 
-	// Route based on delivery type
-	switch assembler.deliveryType {
+	return result
+}
+
+// deliverReassembled delivers a reassembled message to the appropriate handler.
+// Must be called WITHOUT fragmentsMutex held to avoid deadlock from handler callbacks.
+func (e *Endpoint) deliverReassembled(result *reassembledResult) error {
+	if result == nil {
+		return nil
+	}
+	if result.err != nil {
+		return result.err
+	}
+
+	switch result.deliveryType {
 	case DT_LOCAL:
-		return e.handler(completeMsg)
+		return e.handler(result.data)
 	case DT_TUNNEL, DT_ROUTER:
 		e.forwarderMu.RLock()
 		fwd := e.forwarder
 		e.forwarderMu.RUnlock()
 		if fwd == nil {
-			log.WithField("delivery_type", assembler.deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
+			log.WithField("delivery_type", result.deliveryType).Debug("Non-local delivery but no forwarder set, skipping")
 			return nil
 		}
 		log.WithFields(map[string]interface{}{
-			"delivery_type": assembler.deliveryType,
-			"message_id":    msgID,
-			"total_size":    totalSize,
+			"delivery_type": result.deliveryType,
+			"message_id":    result.msgID,
+			"total_size":    len(result.data),
 		}).Debug("Routing reassembled non-local message to forwarder")
-		return e.deliverViaForwarder(assembler.deliveryType, assembler.tunnelID, assembler.hash, completeMsg)
+		return e.deliverViaForwarder(result.deliveryType, result.tunnelID, result.hash, result.data)
 	default:
-		log.WithField("delivery_type", assembler.deliveryType).Debug("Unknown delivery type, skipping")
+		log.WithField("delivery_type", result.deliveryType).Debug("Unknown delivery type, skipping")
 		return nil
 	}
 }
