@@ -1338,8 +1338,13 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 	var leaseSetBytes []byte
 	var err error
 
+	// Read config under lock to avoid data race with Reconfigure
+	s.mu.RLock()
+	useEncrypted := s.config.UseEncryptedLeaseSet
+	s.mu.RUnlock()
+
 	// Choose LeaseSet type based on configuration
-	if s.config.UseEncryptedLeaseSet {
+	if useEncrypted {
 		leaseSetBytes, err = s.CreateEncryptedLeaseSet()
 		if err != nil {
 			return fmt.Errorf("failed to create EncryptedLeaseSet: %w", err)

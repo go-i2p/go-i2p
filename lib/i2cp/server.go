@@ -2501,52 +2501,6 @@ func (s *Server) sendStatusToClient(session *Session, statusMsg *Message) {
 	}
 }
 
-// routeMessageToDestination routes the message through the I2P network.
-// Deprecated: Use routeMessageWithStatus for new code that supports delivery tracking.
-func (s *Server) routeMessageToDestination(session *Session, sendMsg *SendMessagePayload) {
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.routeMessageToDestination",
-		"sessionID":   session.ID(),
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-		"payloadSize": len(sendMsg.Payload),
-	}).Debug("routing_outbound_message")
-
-	// Look up destination's encryption public key from NetDB
-	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeMessageToDestination",
-			"sessionID":   session.ID(),
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"error":       err.Error(),
-		}).Error("failed_to_resolve_destination_key")
-		return
-	}
-
-	if s.messageRouter != nil {
-		// Call with messageID=0 and no callback for backward compatibility
-		err := s.messageRouter.RouteOutboundMessage(
-			session,
-			0, // messageID
-			sendMsg.Destination,
-			destPubKey,
-			sendMsg.Payload,
-			0,   // no expiration
-			nil, // no status callback
-		)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":          "i2cp.Server.routeMessageToDestination",
-				"sessionID":   session.ID(),
-				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-				"error":       err.Error(),
-			}).Error("failed_to_route_message")
-		}
-	} else {
-		s.logMessageQueuedWithoutRouter(session, sendMsg)
-	}
-}
-
 // ErrNoDestinationResolver is returned when a message cannot be routed because
 // no destination resolver has been configured on the I2CP server. Without a
 // resolver, the server cannot look up the recipient's public key, so encryption
@@ -2571,47 +2525,6 @@ func (s *Server) resolveDestinationKey(destHash common.Hash) ([32]byte, error) {
 	log.WithField("destination", fmt.Sprintf("%x", destHash[:8])).
 		Debug("resolved_destination_public_key")
 	return pubKey, nil
-}
-
-// routeWithMessageRouter attempts to route the message using the message router.
-// Deprecated: Use routeMessageWithStatus for new code with delivery tracking.
-func (s *Server) routeWithMessageRouter(session *Session, messageID uint32, sendMsg *SendMessagePayload, destPubKey [32]byte, statusCallback MessageStatusCallback) {
-	err := s.messageRouter.RouteOutboundMessage(
-		session,
-		messageID,
-		sendMsg.Destination,
-		destPubKey,
-		sendMsg.Payload,
-		0, // no expiration
-		statusCallback,
-	)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeWithMessageRouter",
-			"sessionID":   session.ID(),
-			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"error":       err,
-		}).Error("failed_to_route_message")
-	} else {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeWithMessageRouter",
-			"sessionID":   session.ID(),
-			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"payloadSize": len(sendMsg.Payload),
-		}).Info("message_routed_successfully")
-	}
-}
-
-// logMessageQueuedWithoutRouter logs that a message was queued without a router.
-func (s *Server) logMessageQueuedWithoutRouter(session *Session, sendMsg *SendMessagePayload) {
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.logMessageQueuedWithoutRouter",
-		"sessionID":   session.ID(),
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-		"payloadSize": len(sendMsg.Payload),
-	}).Info("message_queued_for_sending_no_router")
 }
 
 // SessionManager returns the server's session manager
@@ -2864,12 +2777,4 @@ func (s *Server) logMessageDelivered(sessionID uint16, messageID uint32, size in
 		"messageID":   messageID,
 		"payloadSize": size,
 	}).Info("delivered_message_to_client")
-}
-
-// min returns the minimum of two integers (helper for i2psnark compatibility logging)
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

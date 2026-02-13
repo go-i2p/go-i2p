@@ -9,33 +9,51 @@ import (
 
 // TestPasswordAuthenticator_ValidCredentials tests that correct credentials are accepted.
 func TestPasswordAuthenticator_ValidCredentials(t *testing.T) {
-	auth := NewPasswordAuthenticator("admin", "secret123")
+	auth, err := NewPasswordAuthenticator("admin", "secret123")
+	require.NoError(t, err)
 	assert.True(t, auth.Authenticate("admin", "secret123"))
 }
 
 // TestPasswordAuthenticator_InvalidPassword tests that wrong password is rejected.
 func TestPasswordAuthenticator_InvalidPassword(t *testing.T) {
-	auth := NewPasswordAuthenticator("admin", "secret123")
+	auth, err := NewPasswordAuthenticator("admin", "secret123")
+	require.NoError(t, err)
 	assert.False(t, auth.Authenticate("admin", "wrongpass"))
 }
 
 // TestPasswordAuthenticator_InvalidUsername tests that wrong username is rejected.
 func TestPasswordAuthenticator_InvalidUsername(t *testing.T) {
-	auth := NewPasswordAuthenticator("admin", "secret123")
+	auth, err := NewPasswordAuthenticator("admin", "secret123")
+	require.NoError(t, err)
 	assert.False(t, auth.Authenticate("wronguser", "secret123"))
 }
 
 // TestPasswordAuthenticator_EmptyCredentials tests that empty credentials are rejected
 // when the authenticator expects non-empty ones.
 func TestPasswordAuthenticator_EmptyCredentials(t *testing.T) {
-	auth := NewPasswordAuthenticator("admin", "secret123")
+	auth, err := NewPasswordAuthenticator("admin", "secret123")
+	require.NoError(t, err)
 	assert.False(t, auth.Authenticate("", ""))
+}
+
+// TestPasswordAuthenticator_EmptyInputRejected tests that NewPasswordAuthenticator
+// returns an error when username or password is empty.
+func TestPasswordAuthenticator_EmptyInputRejected(t *testing.T) {
+	_, err := NewPasswordAuthenticator("", "pass")
+	assert.Error(t, err, "empty username should be rejected")
+
+	_, err = NewPasswordAuthenticator("user", "")
+	assert.Error(t, err, "empty password should be rejected")
+
+	_, err = NewPasswordAuthenticator("", "")
+	assert.Error(t, err, "both empty should be rejected")
 }
 
 // TestPasswordAuthenticator_TimingResistance tests that the authenticator uses
 // constant-time comparison by verifying it works with various lengths.
 func TestPasswordAuthenticator_TimingResistance(t *testing.T) {
-	auth := NewPasswordAuthenticator("user", "pass")
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
 	// Different lengths should still work correctly
 	assert.False(t, auth.Authenticate("u", "p"))
 	assert.False(t, auth.Authenticate("useruser", "passpass"))
@@ -60,7 +78,9 @@ func TestServer_AuthenticationRequired(t *testing.T) {
 	server, err := NewServer(nil)
 	require.NoError(t, err)
 
-	server.SetAuthenticator(NewPasswordAuthenticator("user", "pass"))
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
 	assert.True(t, server.isAuthenticationRequired())
 
 	state := &connectionState{}
@@ -74,7 +94,9 @@ func TestServer_AuthenticateConnection_Success(t *testing.T) {
 	server, err := NewServer(nil)
 	require.NoError(t, err)
 
-	server.SetAuthenticator(NewPasswordAuthenticator("user", "pass"))
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
 
 	state := &connectionState{}
 	assert.True(t, server.authenticateConnection(state, "user", "pass"))
@@ -88,7 +110,9 @@ func TestServer_AuthenticateConnection_Failure(t *testing.T) {
 	server, err := NewServer(nil)
 	require.NoError(t, err)
 
-	server.SetAuthenticator(NewPasswordAuthenticator("user", "pass"))
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
 
 	state := &connectionState{}
 	assert.False(t, server.authenticateConnection(state, "user", "wrong"))
@@ -102,7 +126,9 @@ func TestServer_SetAuthenticator_Nil(t *testing.T) {
 	server, err := NewServer(nil)
 	require.NoError(t, err)
 
-	server.SetAuthenticator(NewPasswordAuthenticator("user", "pass"))
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
 	assert.True(t, server.isAuthenticationRequired())
 
 	server.SetAuthenticator(nil)
@@ -127,7 +153,9 @@ func TestServer_RequiresAuthentication_WithAuthenticator(t *testing.T) {
 	server, err := NewServer(nil)
 	require.NoError(t, err)
 
-	server.SetAuthenticator(NewPasswordAuthenticator("user", "pass"))
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
 
 	// Should NOT require auth (handshake / read-only)
 	assert.False(t, server.requiresAuthentication(MessageTypeGetDate),

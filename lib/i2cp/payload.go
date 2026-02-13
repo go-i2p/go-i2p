@@ -3,6 +3,7 @@ package i2cp
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
@@ -404,6 +405,9 @@ func ParseDisconnectPayload(data []byte) (*DisconnectPayload, error) {
 func (dp *DisconnectPayload) MarshalBinary() ([]byte, error) {
 	// Calculate total size: 2 (length) + len(reason)
 	reasonBytes := []byte(dp.Reason)
+	if len(reasonBytes) > math.MaxUint16 {
+		return nil, fmt.Errorf("disconnect reason too long: %d bytes (max %d)", len(reasonBytes), math.MaxUint16)
+	}
 	totalSize := 2 + len(reasonBytes)
 	result := make([]byte, totalSize)
 
@@ -515,6 +519,9 @@ func ParseHostLookupPayload(data []byte) (*HostLookupPayload, error) {
 // Returns the serialized bytes ready to be sent as an I2CP message payload.
 func (hlp *HostLookupPayload) MarshalBinary() ([]byte, error) {
 	queryBytes := []byte(hlp.Query)
+	if len(queryBytes) > math.MaxUint16 {
+		return nil, fmt.Errorf("host lookup query too long: %d bytes (max %d)", len(queryBytes), math.MaxUint16)
+	}
 	totalSize := 4 + 2 + 2 + len(queryBytes) // requestID + type + length + query
 	result := make([]byte, totalSize)
 

@@ -3,7 +3,9 @@ package i2cp
 import (
 	"crypto/subtle"
 	"encoding/binary"
+	"fmt"
 	"net"
+	"strings"
 
 	"github.com/go-i2p/logger"
 )
@@ -25,15 +27,15 @@ type PasswordAuthenticator struct {
 
 // NewPasswordAuthenticator creates an authenticator that accepts a single
 // username/password pair. Both fields are required and must be non-empty.
-// Panics if username or password is empty.
-func NewPasswordAuthenticator(username, password string) *PasswordAuthenticator {
+// Returns an error if username or password is empty.
+func NewPasswordAuthenticator(username, password string) (*PasswordAuthenticator, error) {
 	if username == "" || password == "" {
-		panic("i2cp: NewPasswordAuthenticator requires non-empty username and password")
+		return nil, fmt.Errorf("i2cp: NewPasswordAuthenticator requires non-empty username and password")
 	}
 	return &PasswordAuthenticator{
 		username: username,
 		password: password,
-	}
+	}, nil
 }
 
 // Authenticate checks if the provided credentials match the configured pair.
@@ -208,24 +210,14 @@ func parseGetDateOptions(data []byte) map[string]string {
 
 	options := make(map[string]string)
 
-	// Parse key=value;key=value;... format
-	// Each entry is: key=value followed by ;
-	current := ""
-	for i := 0; i < len(data); i++ {
-		if data[i] == ';' {
-			// Split on first '=' to get key=value
-			key, value := splitKeyValue(current)
-			if key != "" {
-				options[key] = value
-			}
-			current = ""
-		} else {
-			current += string(data[i])
+	// Parse key=value;key=value;... format using strings.Split
+	// instead of byte-by-byte concatenation (avoids O(n²) allocations)
+	entries := strings.Split(string(data), ";")
+	for _, entry := range entries {
+		if entry == "" {
+			continue
 		}
-	}
-	// Handle last entry (may not end with ;)
-	if current != "" {
-		key, value := splitKeyValue(current)
+		key, value := splitKeyValue(entry)
 		if key != "" {
 			options[key] = value
 		}
