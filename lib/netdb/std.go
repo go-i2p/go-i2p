@@ -985,6 +985,7 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 		ri   router_info.RouterInfo
 	}
 	verified := make([]verifiedEntry, 0, len(peers))
+	now := time.Now()
 	for _, ri := range peers {
 		hash, err := ri.IdentHash()
 		if err != nil {
@@ -996,6 +997,28 @@ func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
 				"hash":  hash,
 				"error": err.Error(),
 			}).Warn("Rejecting RouterInfo from reseed: invalid signature")
+			continue
+		}
+		// Reject RouterInfos with missing, stale, or future-dated published timestamps.
+		// A malicious reseed server could provide technically-valid but ancient RouterInfos
+		// (Sybil attack vector) or future-dated entries that persist indefinitely.
+		published := ri.Published()
+		if published == nil || published.Time().IsZero() {
+			log.WithField("hash", hash).Warn("Rejecting RouterInfo from reseed: missing published date")
+			continue
+		}
+		if now.Sub(published.Time()) > RouterInfoMaxAge {
+			log.WithFields(logger.Fields{
+				"hash": hash,
+				"age":  now.Sub(published.Time()).Round(time.Second),
+			}).Warn("Rejecting RouterInfo from reseed: stale published date")
+			continue
+		}
+		if published.Time().After(now.Add(1 * time.Hour)) {
+			log.WithFields(logger.Fields{
+				"hash":      hash,
+				"published": published.Time(),
+			}).Warn("Rejecting RouterInfo from reseed: future-dated published time")
 			continue
 		}
 		verified = append(verified, verifiedEntry{hash: hash, ri: ri})
@@ -2079,7 +2102,12 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to load LeaseSet2 from file")
-		return nil
+		// Return a closed empty channel so callers doing <-chnl
+		// receive the zero value immediately rather than blocking
+		// forever on a nil channel.
+		emptyChnl := make(chan lease_set2.LeaseSet2)
+		close(emptyChnl)
+		return emptyChnl
 	}
 
 	chnl = make(chan lease_set2.LeaseSet2, 1)
@@ -2323,7 +2351,12 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to load EncryptedLeaseSet from file")
-		return nil
+		// Return a closed empty channel so callers doing <-chnl
+		// receive the zero value immediately rather than blocking
+		// forever on a nil channel.
+		emptyChnl := make(chan encrypted_leaseset.EncryptedLeaseSet)
+		close(emptyChnl)
+		return emptyChnl
 	}
 
 	chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
@@ -2555,7 +2588,12 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to load MetaLeaseSet from file")
-		return nil
+		// Return a closed empty channel so callers doing <-chnl
+		// receive the zero value immediately rather than blocking
+		// forever on a nil channel.
+		emptyChnl := make(chan meta_leaseset.MetaLeaseSet)
+		close(emptyChnl)
+		return emptyChnl
 	}
 
 	chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
@@ -2795,18 +2833,21 @@ func (db *StdNetDB) cleanExpiredLeaseSets() {
 }
 
 // removeExpiredLeaseSet removes a single expired LeaseSet from cache and filesystem.
+// The removal order is: data map first (so readers stop finding it), then expiry
+// tracking, then disk. This ordering prevents a TOCTOU race where a reader could
+// find the entry in the data map but find it missing from the expiry map.
 func (db *StdNetDB) removeExpiredLeaseSet(hash common.Hash) {
+	// Remove from memory cache first so readers stop finding it
+	db.lsMutex.Lock()
+	delete(db.LeaseSets, hash)
+	db.lsMutex.Unlock()
+
 	// Remove from expiry tracking
 	db.expiryMutex.Lock()
 	delete(db.leaseSetExpiry, hash)
 	db.expiryMutex.Unlock()
 
-	// Remove from memory cache
-	db.lsMutex.Lock()
-	delete(db.LeaseSets, hash)
-	db.lsMutex.Unlock()
-
-	// Remove from filesystem
+	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeLeaseSetFromDisk(hash)
 
 	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removed expired LeaseSet")

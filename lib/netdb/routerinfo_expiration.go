@@ -105,19 +105,21 @@ func (db *StdNetDB) cleanExpiredRouterInfos() {
 }
 
 // removeExpiredRouterInfo removes a single expired RouterInfo from cache, filesystem,
-// and expiry tracking.
+// and expiry tracking. The removal order is: data map first (so readers stop finding it),
+// then expiry tracking, then disk. This ordering prevents a TOCTOU race where a reader
+// could find the entry in the data map but find it missing from the expiry map.
 func (db *StdNetDB) removeExpiredRouterInfo(hash common.Hash) {
+	// Remove from memory cache first so readers stop finding it
+	db.riMutex.Lock()
+	delete(db.RouterInfos, hash)
+	db.riMutex.Unlock()
+
 	// Remove from expiry tracking
 	db.expiryMutex.Lock()
 	delete(db.routerInfoExpiry, hash)
 	db.expiryMutex.Unlock()
 
-	// Remove from memory cache
-	db.riMutex.Lock()
-	delete(db.RouterInfos, hash)
-	db.riMutex.Unlock()
-
-	// Remove from filesystem
+	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeRouterInfoFromDisk(hash)
 
 	log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removed expired RouterInfo")
