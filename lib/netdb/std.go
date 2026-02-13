@@ -1,7 +1,6 @@
 package netdb
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -136,9 +135,11 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 }
 
 // loadRouterInfoFromFile loads RouterInfo data from the skiplist file.
+// loadRouterInfoFromFile loads a RouterInfo from the skiplist file,
+// stripping the entry framing (1-byte type code + 2-byte length prefix)
+// that was written by Entry.WriteTo. Returns the unframed payload data.
 func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 	fname := db.SkiplistFile(hash)
-	buff := new(bytes.Buffer)
 
 	f, err := os.Open(fname)
 	if err != nil {
@@ -146,11 +147,12 @@ func (db *StdNetDB) loadRouterInfoFromFile(hash common.Hash) ([]byte, error) {
 	}
 	defer f.Close()
 
-	if _, err := io.Copy(buff, f); err != nil {
-		return nil, fmt.Errorf("failed to read RouterInfo file: %w", err)
+	entry := &Entry{}
+	if err := entry.ReadFrom(f); err != nil {
+		return nil, fmt.Errorf("failed to read RouterInfo entry: %w", err)
 	}
 
-	return buff.Bytes(), nil
+	return db.serializeEntry(entry)
 }
 
 // parseAndCacheRouterInfo parses RouterInfo data and adds it to the memory cache.
@@ -1240,18 +1242,25 @@ func (db *StdNetDB) isRouterInfoAlreadyLoaded(hash common.Hash) bool {
 }
 
 // loadAndParseRouterInfo reads a RouterInfo file from disk and parses it.
+// loadAndParseRouterInfo loads and parses a RouterInfo from a skiplist file,
+// properly stripping entry framing (1-byte type code + 2-byte length prefix).
 func (db *StdNetDB) loadAndParseRouterInfo(filePath string) (*router_info.RouterInfo, error) {
-	data, err := os.ReadFile(filePath)
+	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
-	ri, _, err := router_info.ReadRouterInfo(data)
-	if err != nil {
-		return nil, err
+	entry := &Entry{}
+	if err := entry.ReadFrom(f); err != nil {
+		return nil, fmt.Errorf("failed to read RouterInfo entry: %w", err)
 	}
 
-	return &ri, nil
+	if entry.RouterInfo == nil {
+		return nil, fmt.Errorf("file does not contain a RouterInfo entry")
+	}
+
+	return entry.RouterInfo, nil
 }
 
 // computeRouterInfoHash computes the identity hash from a RouterInfo's content.
@@ -1745,22 +1754,59 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 	return chnl
 }
 
-// loadLeaseSetFromFile loads LeaseSet data from the skiplist file.
+// loadLeaseSetFromFile loads a LeaseSet entry from the skiplist file,
+// stripping the entry framing (1-byte type code + 2-byte length prefix)
+// that was written by Entry.WriteTo. Returns the unframed payload data.
 func (db *StdNetDB) loadLeaseSetFromFile(hash common.Hash) ([]byte, error) {
 	fname := db.SkiplistFileForLeaseSet(hash)
-	buff := new(bytes.Buffer)
 
-	f, err := os.Open(fname)
+	entry, err := db.loadLeaseSetEntryFromFile(fname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open LeaseSet file: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(buff, f); err != nil {
-		return nil, fmt.Errorf("failed to read LeaseSet file: %w", err)
+		return nil, fmt.Errorf("failed to load LeaseSet entry: %w", err)
 	}
 
-	return buff.Bytes(), nil
+	return db.serializeEntry(entry)
+}
+
+// serializeEntry serializes the first non-nil data type in an Entry
+// back to raw bytes suitable for parsing by the type-specific parsers.
+func (db *StdNetDB) serializeEntry(entry *Entry) ([]byte, error) {
+	if entry.LeaseSet != nil {
+		data, err := entry.LeaseSet.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize LeaseSet from entry: %w", err)
+		}
+		return data, nil
+	}
+	if entry.LeaseSet2 != nil {
+		data, err := entry.LeaseSet2.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize LeaseSet2 from entry: %w", err)
+		}
+		return data, nil
+	}
+	if entry.EncryptedLeaseSet != nil {
+		data, err := entry.EncryptedLeaseSet.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet from entry: %w", err)
+		}
+		return data, nil
+	}
+	if entry.MetaLeaseSet != nil {
+		data, err := entry.MetaLeaseSet.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize MetaLeaseSet from entry: %w", err)
+		}
+		return data, nil
+	}
+	if entry.RouterInfo != nil {
+		data, err := entry.RouterInfo.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize RouterInfo from entry: %w", err)
+		}
+		return data, nil
+	}
+	return nil, fmt.Errorf("entry contains no valid data")
 }
 
 // parseAndCacheLeaseSet parses LeaseSet data and adds it to the memory cache.
