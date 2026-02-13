@@ -55,6 +55,7 @@ type Endpoint struct {
 	fragments       map[uint32]*fragmentAssembler
 	fragmentTimeout time.Duration
 	stopChan        chan struct{}
+	stopOnce        sync.Once      // ensures Stop() is safe to call multiple times
 	wg              sync.WaitGroup // tracks cleanupFragments goroutine
 }
 
@@ -753,9 +754,12 @@ func (e *Endpoint) ClearFragments() {
 }
 
 // Stop gracefully shuts down the endpoint and stops the cleanup goroutine.
+// Safe to call multiple times — subsequent calls are no-ops.
 // Should be called when the endpoint is no longer needed to prevent resource leaks.
 func (e *Endpoint) Stop() {
-	close(e.stopChan)
+	e.stopOnce.Do(func() {
+		close(e.stopChan)
+	})
 	e.wg.Wait()
 	log.WithField("tunnel_id", e.tunnelID).Debug("Stopped tunnel endpoint")
 }

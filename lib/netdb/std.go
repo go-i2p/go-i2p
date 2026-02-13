@@ -1241,9 +1241,9 @@ func (db *StdNetDB) isRouterInfoAlreadyLoaded(hash common.Hash) bool {
 	return exists
 }
 
-// loadAndParseRouterInfo reads a RouterInfo file from disk and parses it.
 // loadAndParseRouterInfo loads and parses a RouterInfo from a skiplist file,
 // properly stripping entry framing (1-byte type code + 2-byte length prefix).
+// The loaded RouterInfo is signature-verified to prevent loading tampered data.
 func (db *StdNetDB) loadAndParseRouterInfo(filePath string) (*router_info.RouterInfo, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -1258,6 +1258,13 @@ func (db *StdNetDB) loadAndParseRouterInfo(filePath string) (*router_info.Router
 
 	if entry.RouterInfo == nil {
 		return nil, fmt.Errorf("file does not contain a RouterInfo entry")
+	}
+
+	// Verify cryptographic signature to prevent loading tampered RouterInfos.
+	// Network-received and reseeded RouterInfos are already verified; disk-loaded
+	// ones must be verified too in case the netdb directory was tampered with.
+	if err := verifyRouterInfoSignature(*entry.RouterInfo); err != nil {
+		return nil, fmt.Errorf("RouterInfo signature verification failed: %w", err)
 	}
 
 	return entry.RouterInfo, nil

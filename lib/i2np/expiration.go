@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"sync"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -133,27 +134,40 @@ func (v *ExpirationValidator) ValidateMessage(msg I2NPMessage) error {
 // CheckMessageExpiration is a convenience function that validates message expiration
 // using the default validator settings (5 minute tolerance).
 func CheckMessageExpiration(msg I2NPMessage) error {
-	return defaultExpirationValidator.ValidateMessage(msg)
+	defaultValidatorMu.RLock()
+	v := defaultExpirationValidator
+	defaultValidatorMu.RUnlock()
+	return v.ValidateMessage(msg)
 }
 
 // IsMessageExpired is a convenience function that checks if a message is expired
 // using the default validator settings (5 minute tolerance).
 func IsMessageExpired(msg I2NPMessage) bool {
-	return defaultExpirationValidator.IsExpired(msg.Expiration())
+	defaultValidatorMu.RLock()
+	v := defaultExpirationValidator
+	defaultValidatorMu.RUnlock()
+	return v.IsExpired(msg.Expiration())
 }
 
 // defaultExpirationValidator is a package-level validator with default settings.
 var defaultExpirationValidator = NewExpirationValidator()
 
+// defaultValidatorMu protects concurrent access to defaultExpirationValidator.
+var defaultValidatorMu sync.RWMutex
+
 // SetDefaultExpirationValidator replaces the default validator.
 // This is primarily useful for testing.
 func SetDefaultExpirationValidator(v *ExpirationValidator) {
 	if v != nil {
+		defaultValidatorMu.Lock()
 		defaultExpirationValidator = v
+		defaultValidatorMu.Unlock()
 	}
 }
 
 // ResetDefaultExpirationValidator resets to a fresh default validator.
 func ResetDefaultExpirationValidator() {
+	defaultValidatorMu.Lock()
 	defaultExpirationValidator = NewExpirationValidator()
+	defaultValidatorMu.Unlock()
 }

@@ -784,10 +784,14 @@ func (r *Router) closeTransports() error {
 }
 
 // clearActiveSessions closes and removes all active NTCP2 sessions from the router.
+// The map is replaced with an empty map (not nil) so that async cleanup callbacks
+// calling delete() on the map after shutdown do not panic.
 func (r *Router) clearActiveSessions() {
 	r.sessionMutex.Lock()
 	sessions := r.activeSessions
-	r.activeSessions = nil
+	// Replace with empty map instead of nil to prevent panics from
+	// async session cleanup callbacks that may call delete() after shutdown.
+	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
 	r.sessionMutex.Unlock()
 
 	sessionCount := len(sessions)
@@ -865,18 +869,20 @@ func (r *Router) finalizeCloseChannel() {
 // the keystore and transport are properly initialized before Start is called.
 func (r *Router) Start() error {
 	r.runMux.Lock()
-	defer r.runMux.Unlock()
 
 	// Guard: verify required subsystems were initialized by CreateRouter.
 	// FromConfig alone only sets cfg and closeChnl, leaving these nil.
 	if r.RouterInfoKeystore == nil {
+		r.runMux.Unlock()
 		return fmt.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
 	}
 	if r.TransportMuxer == nil {
+		r.runMux.Unlock()
 		return fmt.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
 	}
 
 	if r.running {
+		r.runMux.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "(Router) Start",
 			"phase":  "startup",
@@ -944,6 +950,11 @@ func (r *Router) Start() error {
 		defer r.wg.Done()
 		r.mainloop()
 	}()
+
+	// Release runMux BEFORE blocking on startupErr to prevent deadlocking
+	// Stop() which also needs runMux. The running flag is already set, so
+	// Stop() can proceed if called while we wait.
+	r.runMux.Unlock()
 
 	// Block until startup-critical initialization completes in mainloop
 	if err := <-r.startupErr; err != nil {

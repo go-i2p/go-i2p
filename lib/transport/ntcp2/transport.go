@@ -704,7 +704,10 @@ func getSyscallError(err error) string {
 }
 
 func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*ntcp2.NTCP2Config, error) {
+	// Acquire read lock on identity to prevent data race with SetIdentity
+	t.identityMu.RLock()
 	identHash, err := t.identity.IdentHash()
+	t.identityMu.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
 	}
@@ -734,7 +737,20 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		// return the existing one. Release the reserved session slot.
 		session.Close()
 		t.unreserveSessionSlot()
-		return t.resolveExistingSession(existing, routerHash)
+		resolved := t.resolveExistingSession(existing, routerHash)
+		if resolved == nil {
+			// resolveExistingSession encountered an unexpected map entry type.
+			// Delete the corrupt entry and store our session instead.
+			t.sessions.Delete(routerHash)
+			t.sessions.Store(routerHash, session)
+			session = NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
+			session.StartWorkers()
+			session.SetCleanupCallback(func() {
+				t.removeSession(routerHash)
+			})
+			return session
+		}
+		return resolved
 	}
 
 	// We won the store — start workers and wire up the cleanup callback.
@@ -788,10 +804,9 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 		}
 	}
 
-	// Should not reach here in practice. Create a fresh session from the
-	// original outbound conn as a last resort (the conn was already closed
-	// above, so this path indicates a logic error).
-	t.logger.Error("resolveExistingSession: unexpected session map entry type")
+	// Should not reach here in practice. Log an error and return a
+	// descriptive error via a nil session — callers must check for nil.
+	t.logger.Error("resolveExistingSession: unexpected session map entry type — returning nil")
 	return nil
 }
 
