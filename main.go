@@ -196,6 +196,8 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Show current configuration",
 	Run: func(cmd *cobra.Command, args []string) {
+		cfg := config.GetRouterConfig()
+
 		log.WithFields(logger.Fields{
 			"at":          "configCmd",
 			"phase":       "startup",
@@ -207,32 +209,32 @@ var configCmd = &cobra.Command{
 			"at":          "configCmd",
 			"phase":       "startup",
 			"reason":      "router configuration loaded",
-			"base_dir":    config.RouterConfigProperties.BaseDir,
-			"working_dir": config.RouterConfigProperties.WorkingDir,
+			"base_dir":    cfg.BaseDir,
+			"working_dir": cfg.WorkingDir,
 		}).Info("router configuration")
 
 		log.WithFields(logger.Fields{
 			"at":         "configCmd",
 			"phase":      "startup",
 			"reason":     "netdb configuration loaded",
-			"netdb_path": config.RouterConfigProperties.NetDb.Path,
+			"netdb_path": cfg.NetDb.Path,
 		}).Info("netDb configuration")
 
 		log.WithFields(logger.Fields{
 			"at":                 "configCmd",
 			"phase":              "startup",
 			"reason":             "bootstrap configuration loaded",
-			"low_peer_threshold": config.RouterConfigProperties.Bootstrap.LowPeerThreshold,
-			"bootstrap_type":     config.RouterConfigProperties.Bootstrap.BootstrapType,
+			"low_peer_threshold": cfg.Bootstrap.LowPeerThreshold,
+			"bootstrap_type":     cfg.Bootstrap.BootstrapType,
 		}).Info("bootstrap configuration")
 
 		log.WithFields(logger.Fields{
 			"at":     "configCmd",
 			"phase":  "startup",
 			"reason": "displaying reseed servers",
-			"count":  len(config.RouterConfigProperties.Bootstrap.ReseedServers),
+			"count":  len(cfg.Bootstrap.ReseedServers),
 		}).Info("reseed servers:")
-		for i, server := range config.RouterConfigProperties.Bootstrap.ReseedServers {
+		for i, server := range cfg.Bootstrap.ReseedServers {
 			log.WithFields(logger.Fields{
 				"at":              "configCmd",
 				"phase":           "startup",
@@ -246,16 +248,17 @@ var configCmd = &cobra.Command{
 }
 
 func debugPrintConfig() {
+	cfg := config.GetRouterConfig()
 	currentConfig := struct {
 		BaseDir    string                  `yaml:"base_dir"`
 		WorkingDir string                  `yaml:"working_dir"`
 		NetDB      *config.NetDbConfig     `yaml:"netdb,omitempty"`
 		Bootstrap  *config.BootstrapConfig `yaml:"bootstrap,omitempty"`
 	}{
-		BaseDir:    config.RouterConfigProperties.BaseDir,
-		WorkingDir: config.RouterConfigProperties.WorkingDir,
-		NetDB:      config.RouterConfigProperties.NetDb,
-		Bootstrap:  config.RouterConfigProperties.Bootstrap,
+		BaseDir:    cfg.BaseDir,
+		WorkingDir: cfg.WorkingDir,
+		NetDB:      cfg.NetDb,
+		Bootstrap:  cfg.Bootstrap,
 	}
 
 	yamlData, err := yaml.Marshal(currentConfig)
@@ -392,8 +395,10 @@ func createAndConfigureRouter() error {
 	embeddedRouterMu.Lock()
 	defer embeddedRouterMu.Unlock()
 
+	routerCfg := config.GetRouterConfig()
+
 	var err error
-	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(config.RouterConfigProperties)
+	embeddedRouter, err = embedded.NewStandardEmbeddedRouter(routerCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create embedded router: %w", err)
 	}
@@ -405,7 +410,7 @@ func createAndConfigureRouter() error {
 		"reason": "embedded router created successfully",
 	}).Info("embedded router instance created")
 
-	if err := embeddedRouter.Configure(config.RouterConfigProperties); err != nil {
+	if err := embeddedRouter.Configure(routerCfg); err != nil {
 		return fmt.Errorf("failed to configure router: %w", err)
 	}
 	return nil
@@ -493,14 +498,15 @@ func runRouter() {
 
 	logConfigurationSource()
 
+	routerCfg := config.GetRouterConfig()
 	log.WithFields(logger.Fields{
 		"at":         "runRouter",
 		"phase":      "startup",
 		"step":       2,
 		"reason":     "netdb path configured",
-		"netdb_path": config.RouterConfigProperties.NetDb.Path,
+		"netdb_path": routerCfg.NetDb.Path,
 		"source":     "configuration",
-	}).Info("using netDb path: " + config.RouterConfigProperties.NetDb.Path)
+	}).Info("using netDb path: " + routerCfg.NetDb.Path)
 
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
@@ -532,7 +538,7 @@ func runRouter() {
 			"phase":      "startup",
 			"reason":     "router creation failed",
 			"error_type": fmt.Sprintf("%T", err),
-			"config":     config.RouterConfigProperties != nil,
+			"config":     routerCfg != nil,
 			"suggestion": "check configuration values and system resources",
 		}).Errorf("failed to create i2p router: %s", err)
 		os.Exit(1)

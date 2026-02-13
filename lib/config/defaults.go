@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-i2p/logger"
@@ -403,10 +404,12 @@ func buildI2CPDefaults() I2CPDefaults {
 }
 
 // buildI2PControlDefaults creates default I2PControl RPC server configuration values.
-// I2PControl is enabled by default for development and monitoring convenience.
+// I2PControl is disabled by default for security — the default password "itoopie" over
+// plaintext HTTP allows any local process to control the router. Users must explicitly
+// enable I2PControl in their configuration.
 func buildI2PControlDefaults() I2PControlDefaults {
 	return I2PControlDefaults{
-		Enabled:         true,
+		Enabled:         false,
 		Address:         "localhost:7650",
 		Password:        "itoopie",
 		UseHTTPS:        false,
@@ -633,6 +636,24 @@ func validateI2PControl(i2pcontrol I2PControlDefaults) error {
 		"reason": "validating_i2pcontrol_settings",
 		"phase":  "startup",
 	}).Debug("validating I2PControl configuration")
+
+	// Security: reject non-localhost binding with default password over HTTP
+	if i2pcontrol.Enabled && i2pcontrol.Password == "itoopie" && !i2pcontrol.UseHTTPS {
+		isLocalhost := strings.HasPrefix(i2pcontrol.Address, "localhost:") ||
+			strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
+			strings.HasPrefix(i2pcontrol.Address, "[::1]:")
+		if !isLocalhost {
+			log.WithFields(logger.Fields{
+				"at":     "validateI2PControlConfig",
+				"reason": "insecure_remote_access",
+			}).Error("I2PControl refuses to start with default password over HTTP on non-localhost")
+			return newValidationError("I2PControl cannot use default password 'itoopie' over HTTP on non-localhost address " + i2pcontrol.Address + "; change the password or enable HTTPS")
+		}
+		log.WithFields(logger.Fields{
+			"at":     "validateI2PControlConfig",
+			"reason": "default_password_over_http",
+		}).Warn("I2PControl is enabled with default password over HTTP — change password for production use")
+	}
 
 	// If HTTPS is enabled, cert and key files must be provided
 	if i2pcontrol.UseHTTPS {

@@ -53,10 +53,11 @@ func (rl *simpleRateLimiter) allow() bool {
 	elapsed := now.Sub(rl.lastCheck)
 
 	// Limit token accumulation to prevent excessive burst after long idle periods.
-	// Cap elapsed time at 60 seconds to avoid accumulating tokens beyond reasonable burst.
-	// This allows normal traffic patterns and brief idle periods while preventing
-	// unbounded accumulation after hours of inactivity.
-	const maxAccumulationWindow = 60 * time.Second
+	// Cap elapsed time at 5 seconds to limit burst to rate*5 messages.
+	// For a 100 msg/s rate, this allows up to 500 messages in a burst,
+	// which is sufficient for normal traffic patterns without overwhelming
+	// downstream processing after long idle periods.
+	const maxAccumulationWindow = 5 * time.Second
 	if elapsed > maxAccumulationWindow {
 		elapsed = maxAccumulationWindow
 	}
@@ -108,6 +109,11 @@ type SessionConfig struct {
 
 	// Session metadata
 	Nickname string // Optional nickname for debugging
+
+	// UnsupportedOptions lists I2CP options that the client set but this
+	// implementation does not support. Each entry maps option name → value.
+	// Clients can inspect this after session creation to detect unsupported features.
+	UnsupportedOptions map[string]string
 }
 
 // DefaultSessionConfig returns a SessionConfig with sensible defaults
@@ -1744,16 +1750,37 @@ func (sm *SessionManager) RemoveSession(sessionID uint16) {
 
 // allocateSessionID finds the next available session ID using cryptographic randomness
 // to prevent session ID prediction attacks. Must be called with sm.mu locked.
+//
+// For low occupancy (<90%), uses random probing (up to 100 attempts).
+// For high occupancy (≥90%), falls back to sequential scan from a random offset
+// to guarantee finding an available ID if one exists.
 func (sm *SessionManager) allocateSessionID() (uint16, error) {
-	// Try up to 100 times to find an unused ID
-	// With 16-bit space (65536 IDs) and typical session counts (<100),
-	// collision probability is extremely low
-	maxAttempts := 100
+	activeCount := len(sm.sessions)
+	usableIDs := uint32(65536 - 2) // exclude the two reserved IDs
 
+	// High occupancy: sequential scan from random offset
+	if uint32(activeCount) >= usableIDs*9/10 {
+		startID, err := generateSecureSessionID()
+		if err != nil {
+			startID = uint16(activeCount) // fallback to deterministic offset
+		}
+		for offset := uint32(0); offset < 65536; offset++ {
+			id := uint16((uint32(startID) + offset) % 65536)
+			if id == SessionIDReservedControl || id == SessionIDReservedBroadcast {
+				continue
+			}
+			if _, exists := sm.sessions[id]; !exists {
+				return id, nil
+			}
+		}
+		return 0, fmt.Errorf("session ID space exhausted (%d active sessions)", activeCount)
+	}
+
+	// Normal case: random probing
+	maxAttempts := 100
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		id, err := generateSecureSessionID()
 		if err != nil {
-			// Log error but continue trying - fall back to next attempt
 			log.WithFields(logger.Fields{
 				"at":      "allocateSessionID",
 				"attempt": attempt,
@@ -1773,13 +1800,12 @@ func (sm *SessionManager) allocateSessionID() (uint16, error) {
 		}
 	}
 
-	// Exhausted all attempts - no available IDs (should never happen in practice)
 	log.WithFields(logger.Fields{
 		"at":             "allocateSessionID",
-		"activeSessions": len(sm.sessions),
+		"activeSessions": activeCount,
 		"maxAttempts":    maxAttempts,
 	}).Error("failed to allocate session ID after maximum attempts")
-	return 0, fmt.Errorf("failed to allocate session ID after %d attempts (%d active sessions)", maxAttempts, len(sm.sessions))
+	return 0, fmt.Errorf("failed to allocate session ID after %d attempts (%d active sessions)", maxAttempts, activeCount)
 }
 
 // generateSecureSessionID generates a cryptographically random 16-bit session ID

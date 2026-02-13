@@ -135,9 +135,10 @@ i2cp:
 # I2PControl provides a JSON-RPC 2.0 API for monitoring router status
 # Useful for development, debugging, and integration with monitoring tools
 i2pcontrol:
-  # Enable I2PControl server (enabled by default for monitoring)
-  # Uncomment to explicitly disable: enabled: false
-  enabled: true
+  # Enable I2PControl server (disabled by default for security)
+  # The default password 'itoopie' over HTTP allows local privilege escalation.
+  # Change the password before enabling, or enable HTTPS.
+  enabled: false
   
   # Listen address for I2PControl server
   # Default: localhost:7650 (I2PControl standard port)

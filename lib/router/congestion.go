@@ -166,6 +166,14 @@ func (m *CongestionMonitor) takeSample() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// When the flag is manually forced, skip sample collection entirely.
+	// Samples collected during the forced period would be stale by the time
+	// ClearForceFlag() re-enables automatic updates, producing incorrect
+	// congestion assessments.
+	if m.forcedFlag {
+		return
+	}
+
 	// Add sample to rolling window
 	m.samples = append(m.samples, sample)
 	if len(m.samples) > m.maxSamples {

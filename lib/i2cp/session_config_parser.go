@@ -337,6 +337,7 @@ func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string
 				"value":  val,
 				"status": "unsupported",
 			}).Warn("backup tunnel quantity option not implemented - value ignored")
+			recordUnsupportedOption(config, key, val)
 		}
 	}
 }
@@ -355,6 +356,7 @@ func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string
 				"value":  val,
 				"status": "unsupported",
 			}).Warn("tunnel lifetime variance option not implemented - fixed 10-minute lifetime used")
+			recordUnsupportedOption(config, key, val)
 		}
 	}
 }
@@ -376,8 +378,19 @@ func applyMessageOptions(config *SessionConfig, options map[string]string) {
 				"value":  val,
 				"status": "unsupported",
 			}).Warn("message option not implemented - value ignored; all messages use best-effort, no compression")
+			recordUnsupportedOption(config, key, val)
 		}
 	}
+}
+
+// recordUnsupportedOption records an I2CP option that the client set but is
+// not implemented. This allows clients to inspect SessionConfig.UnsupportedOptions
+// after session creation to detect features that were silently ignored.
+func recordUnsupportedOption(config *SessionConfig, key, value string) {
+	if config.UnsupportedOptions == nil {
+		config.UnsupportedOptions = make(map[string]string)
+	}
+	config.UnsupportedOptions[key] = value
 }
 
 // applyMetadataOptions applies metadata configuration options.

@@ -98,27 +98,32 @@ func DefaultRouterConfig() *RouterConfig {
 	return cfg
 }
 
-// RouterConfigProperties is a global mutable configuration object
-// DEPRECATED: This global variable is mutated by UpdateRouterConfig() creating
-// hidden dependencies and making testing difficult. Use NewRouterConfigFromViper()
-// instead to get a fresh config object without global state issues.
-// NOTE: Access to this variable is protected by routerConfigMutex to prevent
-// data races during SIGHUP config reloads.
-var RouterConfigProperties = DefaultRouterConfig()
+// routerConfigProperties is the internal global configuration object.
+// All access must go through GetRouterConfig() (reads) or UpdateRouterConfig() (writes)
+// which hold routerConfigMutex. Direct field access is a data race.
+var routerConfigProperties = DefaultRouterConfig()
+
+// RouterConfigProperties is a deprecated exported alias.
+// DEPRECATED: Use GetRouterConfig() for thread-safe read access.
+// Direct reads of this variable race with UpdateRouterConfig(). This alias
+// exists only for backward compatibility and will be removed in a future release.
+//
+//nolint:revive // deprecated but kept for API compatibility
+var RouterConfigProperties = routerConfigProperties
 
 // routerConfigMutex protects RouterConfigProperties from concurrent access
 // during configuration updates (e.g., SIGHUP reload).
 var routerConfigMutex sync.RWMutex
 
 // GetRouterConfig returns a copy of the current router configuration.
-// This is the thread-safe way to access RouterConfigProperties.
+// This is the thread-safe way to access routerConfigProperties.
 // The returned copy is safe to use without holding locks.
 func GetRouterConfig() *RouterConfig {
 	routerConfigMutex.RLock()
 	defer routerConfigMutex.RUnlock()
 
-	configCopy := copyBaseFields(RouterConfigProperties)
-	copyNestedConfigs(configCopy, RouterConfigProperties)
+	configCopy := copyBaseFields(routerConfigProperties)
+	copyNestedConfigs(configCopy, routerConfigProperties)
 
 	return configCopy
 }

@@ -255,8 +255,8 @@ func NewRouterConfigFromViper() *RouterConfig {
 	}
 }
 
-// UpdateRouterConfig updates the global RouterConfigProperties from viper settings
-// DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state mutation
+// UpdateRouterConfig updates the global routerConfigProperties from viper settings.
+// DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state mutation.
 // This function is thread-safe and can be called during SIGHUP reloads.
 func UpdateRouterConfig() {
 	// Acquire write lock to prevent data races during config reload
@@ -264,11 +264,11 @@ func UpdateRouterConfig() {
 	defer UnlockRouterConfigWrite()
 
 	// Update Router configuration
-	RouterConfigProperties.BaseDir = viper.GetString("base_dir")
-	RouterConfigProperties.WorkingDir = viper.GetString("working_dir")
+	routerConfigProperties.BaseDir = viper.GetString("base_dir")
+	routerConfigProperties.WorkingDir = viper.GetString("working_dir")
 
 	// Update NetDb configuration
-	RouterConfigProperties.NetDb = &NetDbConfig{
+	routerConfigProperties.NetDb = &NetDbConfig{
 		Path:                     viper.GetString("netdb.path"),
 		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
 		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
@@ -300,7 +300,7 @@ func UpdateRouterConfig() {
 		localNetDbPaths = []string{}
 	}
 
-	RouterConfigProperties.Bootstrap = &BootstrapConfig{
+	routerConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
 		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
@@ -311,7 +311,7 @@ func UpdateRouterConfig() {
 	}
 
 	// Update I2CP configuration
-	RouterConfigProperties.I2CP = &I2CPConfig{
+	routerConfigProperties.I2CP = &I2CPConfig{
 		Enabled:     viper.GetBool("i2cp.enabled"),
 		Address:     viper.GetString("i2cp.address"),
 		Network:     viper.GetString("i2cp.network"),
@@ -319,7 +319,7 @@ func UpdateRouterConfig() {
 	}
 
 	// Update I2PControl configuration
-	RouterConfigProperties.I2PControl = &I2PControlConfig{
+	routerConfigProperties.I2PControl = &I2PControlConfig{
 		Enabled:         viper.GetBool("i2pcontrol.enabled"),
 		Address:         viper.GetString("i2pcontrol.address"),
 		Password:        viper.GetString("i2pcontrol.password"),

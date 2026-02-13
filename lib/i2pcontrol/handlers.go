@@ -291,6 +291,8 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 }
 
 // handleShutdown initiates a graceful router shutdown if requested.
+// The shutdown runs asynchronously — the response confirms the request was accepted,
+// not that shutdown completed. The client connection may be closed before Stop() finishes.
 func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
 	if _, ok := req["Shutdown"]; ok {
 		if h.RouterControl == nil {
@@ -301,12 +303,14 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 		go func() {
 			log.Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
+			log.Info("Router shutdown completed via I2PControl")
 		}()
-		result["Shutdown"] = nil
+		result["Shutdown"] = "initiated"
 	}
 }
 
 // handleRestart performs a graceful shutdown for supervisor-managed restart if requested.
+// Like handleShutdown, the response confirms the request was accepted, not completion.
 func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
 	if _, ok := req["Restart"]; ok {
 		if h.RouterControl == nil {
@@ -317,8 +321,9 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 		go func() {
 			log.Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
 			h.RouterControl.Stop()
+			log.Info("Router restart/stop completed via I2PControl")
 		}()
-		result["Restart"] = nil
+		result["Restart"] = "initiated"
 	}
 }
 

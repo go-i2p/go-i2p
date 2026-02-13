@@ -28,6 +28,9 @@ type NTCP2Session struct {
 	bytesSent     uint64 // atomic: total bytes sent over this session
 	bytesReceived uint64 // atomic: total bytes received over this session
 
+	// Backpressure tracking — counts messages dropped due to full receive channel
+	droppedMessages uint64 // atomic: total messages dropped due to backpressure
+
 	// Rekeying state — tracks message counts for periodic rekeying
 	rekeyState *rekeyState
 
@@ -76,8 +79,8 @@ func NewNTCP2SessionDeferred(conn net.Conn, ctx context.Context, logger *logger.
 
 	session := &NTCP2Session{
 		conn:          conn,
-		sendQueue:     make(chan i2np.I2NPMessage, 100), // Buffered channel for send queue
-		recvChan:      make(chan i2np.I2NPMessage, 100), // Buffered channel for receive messages
+		sendQueue:     make(chan i2np.I2NPMessage, 256), // Buffered channel for send queue
+		recvChan:      make(chan i2np.I2NPMessage, 256), // Buffered channel for receive messages
 		ctx:           sessionCtx,
 		cancel:        cancel,
 		logger:        sessionLogger,
@@ -373,7 +376,12 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 		s.logger.Warn("Cannot queue received message - session is closed")
 		return false
 	case <-timer.C:
-		s.logger.Warn("Dropping received message - receive channel full (backpressure)")
+		dropped := atomic.AddUint64(&s.droppedMessages, 1)
+		s.logger.WithFields(map[string]interface{}{
+			"message_type":  msg.Type(),
+			"total_dropped": dropped,
+			"recv_chan_cap": cap(s.recvChan),
+		}).Warn("Dropping received message - receive channel full (backpressure)")
 		return true // Continue receiving — don't kill the worker for backpressure
 	}
 }
@@ -399,6 +407,13 @@ func (s *NTCP2Session) checkRekey(totalMessages uint64) {
 // rekeyCount is the total number of successful rekeys performed.
 func (s *NTCP2Session) GetRekeyStats() (messagesSinceRekey, rekeyCount uint64) {
 	return s.rekeyState.totalMessages(), s.rekeyState.getRekeyCount()
+}
+
+// DroppedMessages returns the number of received messages that were dropped
+// due to the receive channel being full (backpressure). A non-zero value
+// indicates the consumer is not keeping up with inbound message rate.
+func (s *NTCP2Session) DroppedMessages() uint64 {
+	return atomic.LoadUint64(&s.droppedMessages)
 }
 
 // setError sets the last error (once) and cancels the session context.

@@ -87,7 +87,10 @@ func NewAuthManager(password string) (*AuthManager, error) {
 //   - token: Base64-encoded authentication token
 //   - error: If password is invalid, token generation fails, or rate limited
 func (am *AuthManager) Authenticate(password string, expiration time.Duration) (string, error) {
-	// Check rate limiting before validating password
+	// Hold rateLimitMu across the lockout check AND password validation to
+	// prevent a TOCTOU race where a concurrent goroutine could reset the
+	// lockout between the check and the password comparison, allowing a
+	// brute-force attempt to slip through.
 	am.rateLimitMu.Lock()
 	if !am.lockoutUntil.IsZero() && time.Now().Before(am.lockoutUntil) {
 		remaining := time.Until(am.lockoutUntil).Round(time.Second)
@@ -98,17 +101,17 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 		}).Warn("authentication rate limited")
 		return "", fmt.Errorf("too many failed attempts, locked out for %s", remaining)
 	}
-	am.rateLimitMu.Unlock()
 
-	// Read password with lock to prevent race with ChangePassword
+	// Read password with lock to prevent race with ChangePassword.
+	// rateLimitMu is still held, ensuring the lockout state cannot change
+	// between the check above and the password validation below.
 	am.mu.RLock()
 	currentPassword := am.password
 	am.mu.RUnlock()
 
 	// Validate password using constant-time comparison to prevent timing attacks
 	if !hmac.Equal([]byte(password), []byte(currentPassword)) {
-		// Track failed attempt for rate limiting
-		am.rateLimitMu.Lock()
+		// Track failed attempt for rate limiting (rateLimitMu already held)
 		am.failedAttempts++
 		am.lastFailedAttempt = time.Now()
 		if am.failedAttempts >= maxFailedAttempts {
@@ -123,8 +126,7 @@ func (am *AuthManager) Authenticate(password string, expiration time.Duration) (
 		return "", fmt.Errorf("invalid password")
 	}
 
-	// Successful authentication — reset failure counter
-	am.rateLimitMu.Lock()
+	// Successful authentication — reset failure counter (rateLimitMu already held)
 	am.failedAttempts = 0
 	am.lockoutUntil = time.Time{}
 	am.rateLimitMu.Unlock()

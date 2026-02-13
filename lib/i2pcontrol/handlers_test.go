@@ -397,8 +397,8 @@ func TestRouterManagerHandler_Shutdown(t *testing.T) {
 
 	resultMap := result.(map[string]interface{})
 
-	if resultMap["Shutdown"] != nil {
-		t.Errorf("Shutdown result = %v, want nil", resultMap["Shutdown"])
+	if resultMap["Shutdown"] != "initiated" {
+		t.Errorf("Shutdown result = %v, want \"initiated\"", resultMap["Shutdown"])
 	}
 
 	// Give the goroutine time to execute

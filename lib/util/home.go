@@ -6,8 +6,8 @@ import (
 
 // UserHome returns the current user's home directory.
 // Falls back to $HOME environment variable if os.UserHomeDir fails.
-// Panics only if both methods fail, as this is called during package
-// initialization where the config directory path is required.
+// Panics if no home directory can be determined, as storing I2P key material
+// in a world-readable temp directory would be a critical security vulnerability.
 func UserHome() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -21,9 +21,11 @@ func UserHome() string {
 			log.WithError(err).Warn("os.UserHomeDir failed, falling back to USERPROFILE")
 			return home
 		}
-		log.WithError(err).Error("Unable to determine home directory; defaulting to temp dir — " +
-			"I2P data will be stored in a world-readable location. Set $HOME to fix this.")
-		return os.TempDir()
+		// SECURITY: Do NOT fall back to os.TempDir() — it is world-readable on most
+		// Linux systems, and I2P stores cryptographic key material under the home directory.
+		// Storing keys in /tmp would allow any local process to steal the router's identity.
+		panic("go-i2p: unable to determine home directory; set $HOME environment variable. " +
+			"Refusing to fall back to temp directory for security reasons.")
 	}
 
 	return homeDir
