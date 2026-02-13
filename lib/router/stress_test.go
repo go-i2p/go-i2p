@@ -162,7 +162,7 @@ func TestStress_100ConcurrentSessions(t *testing.T) {
 	var afterMem runtime.MemStats
 	runtime.ReadMemStats(&afterMem)
 
-	memGrowthMB := float64(afterMem.Alloc-initialMem.Alloc) / 1024 / 1024
+	memGrowthMB := (float64(afterMem.Alloc) - float64(initialMem.Alloc)) / 1024 / 1024
 	t.Logf("Memory growth: %.2f MB (initial: %.2f MB, current: %.2f MB)",
 		memGrowthMB,
 		float64(initialMem.Alloc)/1024/1024,
@@ -292,7 +292,8 @@ func TestStress_1000RouterInfoNetDB(t *testing.T) {
 	var afterMem runtime.MemStats
 	runtime.ReadMemStats(&afterMem)
 
-	memGrowthMB := float64(afterMem.Alloc-initialMem.Alloc) / 1024 / 1024
+	// Use signed arithmetic to handle cases where GC frees more than was allocated
+	memGrowthMB := (float64(afterMem.Alloc) - float64(initialMem.Alloc)) / 1024 / 1024
 	t.Logf("Memory growth: %.2f MB (initial: %.2f MB, current: %.2f MB)",
 		memGrowthMB,
 		float64(initialMem.Alloc)/1024/1024,
