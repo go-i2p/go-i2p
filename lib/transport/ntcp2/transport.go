@@ -324,10 +324,13 @@ func (tc *trackedConn) Close() error {
 
 // Addr returns the network address the transport is bound to.
 func (t *NTCP2Transport) Addr() net.Addr {
-	if t.listener == nil {
+	t.identityMu.RLock()
+	l := t.listener
+	t.identityMu.RUnlock()
+	if l == nil {
 		return nil
 	}
-	return t.listener.Addr()
+	return l.Addr()
 }
 
 // SetIdentity sets the router identity for this transport.
@@ -386,26 +389,33 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 }
 
 // recreateListenerIfNeeded recreates the network listener with new identity if one exists.
+// Holds identityMu to protect concurrent access to t.listener.
 func (t *NTCP2Transport) recreateListenerIfNeeded(ntcp2Config *ntcp2.NTCP2Config) error {
+	t.identityMu.Lock()
 	if t.listener == nil {
+		t.identityMu.Unlock()
 		return nil
 	}
 
 	t.logger.Info("Recreating listener with new identity")
-	t.closeExistingListener()
+	t.closeExistingListenerLocked()
+	t.identityMu.Unlock()
 
 	listener, err := t.createNewListenerWithConfig(ntcp2Config)
 	if err != nil {
 		return err
 	}
 
+	t.identityMu.Lock()
 	t.listener = listener
 	t.logger.WithField("address", t.listener.Addr().String()).Info("Listener recreated successfully")
+	t.identityMu.Unlock()
 	return nil
 }
 
-// closeExistingListener closes the current listener and logs any errors.
-func (t *NTCP2Transport) closeExistingListener() {
+// closeExistingListenerLocked closes the current listener and logs any errors.
+// Must be called with identityMu held.
+func (t *NTCP2Transport) closeExistingListenerLocked() {
 	if err := t.listener.Close(); err != nil {
 		t.logger.WithError(err).Warn("Error closing existing listener during identity update")
 	}

@@ -1145,8 +1145,12 @@ func (r *Router) GetCongestionMonitor() CongestionStateProvider {
 	return r.congestionMonitor
 }
 
-// ensureNetDBReady validates NetDB state and performs reseed if needed
+// ensureNetDBReady validates NetDB state and performs reseed if needed.
+// Returns an error if the router's StdNetDB is nil (e.g. during shutdown).
 func (r *Router) ensureNetDBReady() error {
+	if r.StdNetDB == nil {
+		return fmt.Errorf("StdNetDB is nil (router may be shutting down)")
+	}
 	if err := r.StdNetDB.Ensure(); err != nil {
 		log.WithError(err).Error("Failed to ensure NetDB")
 		return err

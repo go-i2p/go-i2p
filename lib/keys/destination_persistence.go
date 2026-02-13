@@ -89,6 +89,8 @@ func LoadDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 
 // LoadOrCreateDestinationKeyStore attempts to load an existing key store from disk.
 // If no file exists, it creates a new key store with fresh keys and persists it.
+// If the file exists but is corrupted or unreadable, an error is returned
+// instead of silently generating a new identity (which would cause identity loss).
 // This is the primary entry point for services that need a stable destination identity.
 func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, error) {
 	log.WithFields(map[string]interface{}{
@@ -103,7 +105,21 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 		return dks, nil
 	}
 
-	// File doesn't exist or is corrupted — create fresh keys
+	// Only create new keys if the file does not exist.
+	// Any other error (corrupt file, permission denied) should be returned
+	// to prevent silent identity loss.
+	filename := filepath.Join(dir, name+".dest.key")
+	if _, statErr := os.Stat(filename); statErr == nil || !os.IsNotExist(statErr) {
+		// File exists but couldn't be loaded (corrupt/unreadable), or stat itself
+		// failed (permission denied). Do NOT silently replace the identity.
+		if statErr == nil {
+			return nil, fmt.Errorf("destination key file exists but could not be loaded (refusing to overwrite — would cause identity loss): %w", err)
+		}
+		// statErr is non-nil but also not "not exist" — e.g. permission denied
+		return nil, fmt.Errorf("cannot verify destination key file status: %w", statErr)
+	}
+
+	// File truly does not exist — safe to create fresh keys
 	log.WithField("reason", err.Error()).Debug("Creating new destination key store")
 	dks, err = NewDestinationKeyStore()
 	if err != nil {

@@ -939,7 +939,10 @@ func (s *Server) handleMessage(msg *Message, sessionPtr **Session) (*Message, er
 // handleCreateSession creates a new session
 func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Message, error) {
 	// Parse and validate session configuration
-	dest, config := parseSessionConfiguration(msg.Payload)
+	dest, config, err := parseSessionConfiguration(msg.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("session configuration error: %w", err)
+	}
 
 	// Create session with parsed or default configuration
 	// If dest is nil, NewSession will generate a new destination
@@ -982,8 +985,10 @@ func (s *Server) handleCreateSession(msg *Message, sessionPtr **Session) (*Messa
 }
 
 // parseSessionConfiguration extracts and validates session configuration from payload.
-// Returns destination and configuration, using defaults when payload is empty or invalid.
-func parseSessionConfiguration(payload []byte) (*destination.Destination, *SessionConfig) {
+// Returns destination, configuration, and any error encountered during parsing or validation.
+// Empty payloads return defaults with no error (backward compatibility with tests).
+// Parse or validation failures return an error instead of silently falling back to defaults.
+func parseSessionConfiguration(payload []byte) (*destination.Destination, *SessionConfig, error) {
 	// Empty payload - use defaults (backward compatibility with tests)
 	if len(payload) == 0 {
 		log.WithFields(logger.Fields{
@@ -991,7 +996,7 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 			"reason":       "empty_payload_backward_compat",
 			"payload_size": 0,
 		}).Debug("using default session config")
-		return nil, DefaultSessionConfig()
+		return nil, DefaultSessionConfig(), nil
 	}
 
 	// Parse destination and session configuration from payload
@@ -1002,8 +1007,8 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 			"reason":       "parse_failure",
 			"payload_size": len(payload),
 			"error":        err.Error(),
-		}).Warn("failed to parse create session payload, using defaults")
-		return nil, DefaultSessionConfig()
+		}).Warn("failed to parse create session payload")
+		return nil, nil, fmt.Errorf("failed to parse session configuration: %w", err)
 	}
 
 	// Validate the parsed configuration
@@ -1013,11 +1018,11 @@ func parseSessionConfiguration(payload []byte) (*destination.Destination, *Sessi
 			"reason":       "validation_failure",
 			"payload_size": len(payload),
 			"error":        err.Error(),
-		}).Warn("invalid session config, using defaults")
-		return dest, DefaultSessionConfig()
+		}).Warn("invalid session config")
+		return dest, nil, fmt.Errorf("invalid session configuration: %w", err)
 	}
 
-	return dest, config
+	return dest, config, nil
 }
 
 // initializeSessionTunnelPools creates and configures tunnel pools for a session.

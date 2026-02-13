@@ -452,7 +452,15 @@ func startAndRunRouter() error {
 		"reason": "starting router subsystems",
 	}).Info("starting embedded router")
 
-	if err := embeddedRouter.Start(); err != nil {
+	embeddedRouterMu.Lock()
+	r := embeddedRouter
+	embeddedRouterMu.Unlock()
+
+	if r == nil {
+		return fmt.Errorf("router not initialized")
+	}
+
+	if err := r.Start(); err != nil {
 		return fmt.Errorf("failed to start router: %w", err)
 	}
 
@@ -462,7 +470,7 @@ func startAndRunRouter() error {
 		"reason": "router running, waiting for shutdown",
 	}).Info("embedded router started, entering main loop")
 
-	embeddedRouter.Wait()
+	r.Wait()
 	return nil
 }
 
@@ -474,7 +482,15 @@ func closeRouter() error {
 		"reason": "router shutdown complete, cleaning up",
 	}).Info("closing embedded router")
 
-	if err := embeddedRouter.Close(); err != nil {
+	embeddedRouterMu.Lock()
+	r := embeddedRouter
+	embeddedRouterMu.Unlock()
+
+	if r == nil {
+		return nil
+	}
+
+	if err := r.Close(); err != nil {
 		return fmt.Errorf("failed to close router: %w", err)
 	}
 

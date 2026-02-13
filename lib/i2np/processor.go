@@ -3142,38 +3142,27 @@ func NewSessionManager() *SessionManager {
 	return &SessionManager{}
 }
 
-// ProcessKeys processes session keys using SessionKeyProvider interface
+// ProcessKeys processes session keys using SessionKeyProvider interface.
+// Note: This is a stub for ECIES-only routers. Key material is intentionally
+// NOT logged to avoid leaking sensitive cryptographic data.
 func (sm *SessionManager) ProcessKeys(provider SessionKeyProvider) error {
-	replyKey := provider.GetReplyKey()
-	layerKey := provider.GetLayerKey()
-	ivKey := provider.GetIVKey()
+	// Access the keys to validate the interface, but do not log key material
+	_ = provider.GetReplyKey()
+	_ = provider.GetLayerKey()
+	_ = provider.GetIVKey()
 
-	log.WithFields(logger.Fields{
-		"reply_key": fmt.Sprintf("%x", replyKey[:8]),
-		"layer_key": fmt.Sprintf("%x", layerKey[:8]),
-		"iv_key":    fmt.Sprintf("%x", ivKey[:8]),
-	}).Debug("Processing session keys")
+	log.Debug("Processing session keys (stub — ECIES-only router)")
 
 	return nil
 }
 
-// ProcessTags processes session tags using SessionTagProvider interface
+// ProcessTags processes session tags using SessionTagProvider interface.
+// Note: This is a stub for ECIES-only routers. Tag data is intentionally
+// NOT logged to avoid leaking sensitive cryptographic data.
 func (sm *SessionManager) ProcessTags(provider SessionTagProvider) error {
-	tags := provider.GetReplyTags()
 	count := provider.GetTagCount()
 
-	log.WithField("tag_count", count).Debug("Processing session tags")
-	for i, tag := range tags {
-		if i >= count {
-			break
-		}
-		// Convert session tag to bytes for display
-		tagBytes := tag.Bytes()
-		log.WithFields(logger.Fields{
-			"tag_index": i,
-			"tag":       fmt.Sprintf("%x", tagBytes[:8]),
-		}).Debug("Processing session tag")
-	}
+	log.WithField("tag_count", count).Debug("Processing session tags (stub — ECIES-only router)")
 
 	return nil
 }

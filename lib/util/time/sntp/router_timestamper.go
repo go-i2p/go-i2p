@@ -128,7 +128,10 @@ func (rt *RouterTimestamper) WaitForInitialization() {
 }
 
 func (rt *RouterTimestamper) TimestampNow() {
-	if rt.initialized && rt.isRunning && !rt.disabled {
+	rt.mutex.Lock()
+	canRun := rt.initialized && rt.isRunning && !rt.disabled
+	rt.mutex.Unlock()
+	if canRun {
 		go rt.runOnce()
 	}
 }
@@ -239,7 +242,13 @@ func (rt *RouterTimestamper) markInitialized() {
 */
 func (rt *RouterTimestamper) run() {
 	defer rt.waitGroup.Done()
-	for rt.isRunning {
+	for {
+		rt.mutex.Lock()
+		running := rt.isRunning
+		rt.mutex.Unlock()
+		if !running {
+			return
+		}
 		lastFailed := rt.performTimeQuery()
 		sleepTime := rt.calculateSleepDuration(lastFailed)
 
@@ -359,6 +368,9 @@ func (rt *RouterTimestamper) resetSyncStatus() {
 // performSingleNTPQuery executes a single NTP query against a randomly selected server.
 func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout time.Duration, preferIPv6 bool) (time.Duration, error) {
 	server := rt.selectRandomServer(servers, preferIPv6)
+	if server == "" {
+		return 0, fmt.Errorf("no NTP servers available")
+	}
 	options := ntp.QueryOptions{
 		Timeout: timeout,
 		// TTL:     5,
@@ -386,6 +398,9 @@ func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout tim
 // of IPv6-specific server selection logic. The beevik/ntp library handles DNS resolution
 // and will use IPv6 or IPv4 based on system configuration.
 func (rt *RouterTimestamper) selectRandomServer(servers []string, preferIPv6 bool) string {
+	if len(servers) == 0 {
+		return ""
+	}
 	server := servers[rand.Intn(len(servers))]
 	return server
 }

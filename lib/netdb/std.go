@@ -1823,13 +1823,11 @@ func (db *StdNetDB) parseAndCacheLeaseSet(hash common.Hash, data []byte) (lease_
 		return lease_set.LeaseSet{}, fmt.Errorf("failed to parse LeaseSet: %w", err)
 	}
 
-	// Add to cache if not already present
+	// Always store/replace the cached entry so stale data is updated
 	db.lsMutex.Lock()
-	if _, ok := db.LeaseSets[hash]; !ok {
-		log.Debug("Adding LeaseSet to memory cache")
-		db.LeaseSets[hash] = Entry{
-			LeaseSet: &ls,
-		}
+	log.Debug("Storing LeaseSet in memory cache")
+	db.LeaseSets[hash] = Entry{
+		LeaseSet: &ls,
 	}
 	db.lsMutex.Unlock()
 
@@ -2317,13 +2315,11 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 		return encrypted_leaseset.EncryptedLeaseSet{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 
-	// Add to cache if not already present
+	// Always store/replace the cached entry so stale data is updated
 	db.lsMutex.Lock()
-	if _, ok := db.LeaseSets[hash]; !ok {
-		log.Debug("Adding EncryptedLeaseSet to memory cache")
-		db.LeaseSets[hash] = Entry{
-			EncryptedLeaseSet: &els,
-		}
+	log.Debug("Storing EncryptedLeaseSet in memory cache")
+	db.LeaseSets[hash] = Entry{
+		EncryptedLeaseSet: &els,
 	}
 	db.lsMutex.Unlock()
 
@@ -2554,13 +2550,11 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 
-	// Add to cache if not already present
+	// Always store/replace the cached entry so stale data is updated
 	db.lsMutex.Lock()
-	if _, ok := db.LeaseSets[hash]; !ok {
-		log.Debug("Adding MetaLeaseSet to memory cache")
-		db.LeaseSets[hash] = Entry{
-			MetaLeaseSet: &mls,
-		}
+	log.Debug("Storing MetaLeaseSet in memory cache")
+	db.LeaseSets[hash] = Entry{
+		MetaLeaseSet: &mls,
 	}
 	db.lsMutex.Unlock()
 
@@ -2771,19 +2765,19 @@ func (db *StdNetDB) cleanExpiredLeaseSets() {
 }
 
 // removeExpiredLeaseSet removes a single expired LeaseSet from cache and filesystem.
-// The removal order is: data map first (so readers stop finding it), then expiry
-// tracking, then disk. This ordering prevents a TOCTOU race where a reader could
-// find the entry in the data map but find it missing from the expiry map.
+// Both the data map and expiry map are updated atomically (holding both locks)
+// to prevent a TOCTOU race where a concurrent store could re-add the entry
+// between the two deletions, creating an orphaned entry.
+// Lock ordering: lsMutex before expiryMutex to prevent deadlocks.
 func (db *StdNetDB) removeExpiredLeaseSet(hash common.Hash) {
-	// Remove from memory cache first so readers stop finding it
+	// Acquire both locks atomically to prevent orphaned entries.
+	// Lock ordering: lsMutex → expiryMutex (must be consistent everywhere).
 	db.lsMutex.Lock()
-	delete(db.LeaseSets, hash)
-	db.lsMutex.Unlock()
-
-	// Remove from expiry tracking
 	db.expiryMutex.Lock()
+	delete(db.LeaseSets, hash)
 	delete(db.leaseSetExpiry, hash)
 	db.expiryMutex.Unlock()
+	db.lsMutex.Unlock()
 
 	// Remove from filesystem (orphaned files self-heal on restart)
 	db.removeLeaseSetFromDisk(hash)
