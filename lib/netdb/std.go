@@ -1777,43 +1777,46 @@ func (db *StdNetDB) loadLeaseSetFromFile(hash common.Hash) ([]byte, error) {
 
 // serializeEntry serializes the first non-nil data type in an Entry
 // back to raw bytes suitable for parsing by the type-specific parsers.
+// entrySerializer pairs an entry type name with a function to serialize it.
+type entrySerializer struct {
+	name      string
+	serialize func() ([]byte, error)
+}
+
+// serializeEntry converts a NetDB entry to its byte representation.
+// It checks each possible entry type (LeaseSet, LeaseSet2, EncryptedLeaseSet,
+// MetaLeaseSet, RouterInfo) and serializes the first one found.
 func (db *StdNetDB) serializeEntry(entry *Entry) ([]byte, error) {
-	if entry.LeaseSet != nil {
-		data, err := entry.LeaseSet.Bytes()
+	serializers := db.collectSerializers(entry)
+	for _, s := range serializers {
+		data, err := s.serialize()
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize LeaseSet from entry: %w", err)
-		}
-		return data, nil
-	}
-	if entry.LeaseSet2 != nil {
-		data, err := entry.LeaseSet2.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize LeaseSet2 from entry: %w", err)
-		}
-		return data, nil
-	}
-	if entry.EncryptedLeaseSet != nil {
-		data, err := entry.EncryptedLeaseSet.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet from entry: %w", err)
-		}
-		return data, nil
-	}
-	if entry.MetaLeaseSet != nil {
-		data, err := entry.MetaLeaseSet.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize MetaLeaseSet from entry: %w", err)
-		}
-		return data, nil
-	}
-	if entry.RouterInfo != nil {
-		data, err := entry.RouterInfo.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize RouterInfo from entry: %w", err)
+			return nil, fmt.Errorf("failed to serialize %s from entry: %w", s.name, err)
 		}
 		return data, nil
 	}
 	return nil, fmt.Errorf("entry contains no valid data")
+}
+
+// collectSerializers returns the serializers for all non-nil entry types.
+func (db *StdNetDB) collectSerializers(entry *Entry) []entrySerializer {
+	var serializers []entrySerializer
+	if entry.LeaseSet != nil {
+		serializers = append(serializers, entrySerializer{"LeaseSet", entry.LeaseSet.Bytes})
+	}
+	if entry.LeaseSet2 != nil {
+		serializers = append(serializers, entrySerializer{"LeaseSet2", entry.LeaseSet2.Bytes})
+	}
+	if entry.EncryptedLeaseSet != nil {
+		serializers = append(serializers, entrySerializer{"EncryptedLeaseSet", entry.EncryptedLeaseSet.Bytes})
+	}
+	if entry.MetaLeaseSet != nil {
+		serializers = append(serializers, entrySerializer{"MetaLeaseSet", entry.MetaLeaseSet.Bytes})
+	}
+	if entry.RouterInfo != nil {
+		serializers = append(serializers, entrySerializer{"RouterInfo", entry.RouterInfo.Bytes})
+	}
+	return serializers
 }
 
 // parseAndCacheLeaseSet parses LeaseSet data and adds it to the memory cache.

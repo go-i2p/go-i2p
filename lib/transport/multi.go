@@ -490,46 +490,75 @@ func (tmux *TransportMuxer) ensureAcceptLoop() {
 		tmux.acceptChan = make(chan acceptResult, len(tmux.trans)*4)
 		for i, t := range tmux.trans {
 			tmux.acceptWg.Add(1)
-			go func(transport Transport, index int) {
-				defer tmux.acceptWg.Done()
-				for {
-					conn, err := transport.Accept()
-					select {
-					case <-tmux.acceptDone:
-						// Muxer is shutting down — close any just-accepted connection
-						if conn != nil {
-							conn.Close()
-						}
-						return
-					default:
-					}
-					if err != nil {
-						log.WithFields(logger.Fields{
-							"at":              "(TransportMuxer) acceptLoop",
-							"transport_index": index,
-							"error":           err.Error(),
-						}).Debug("accept error from transport")
-						// If the transport was closed, stop looping
-						// Check acceptDone again to avoid re-sending after shutdown
-						select {
-						case <-tmux.acceptDone:
-							return
-						default:
-						}
-						// Temporary error — brief back-off then retry
-						time.Sleep(50 * time.Millisecond)
-						continue
-					}
-					select {
-					case tmux.acceptChan <- acceptResult{conn: conn, err: nil, transportIndex: index}:
-					case <-tmux.acceptDone:
-						conn.Close()
-						return
-					}
-				}
-			}(t, i)
+			go tmux.runAcceptWorker(t, i)
 		}
 	})
+}
+
+// runAcceptWorker runs a persistent accept loop for a single transport.
+// It continuously calls Accept() on the transport and forwards results
+// to the shared acceptChan. The worker exits when acceptDone is closed.
+func (tmux *TransportMuxer) runAcceptWorker(t Transport, index int) {
+	defer tmux.acceptWg.Done()
+	for {
+		conn, err := t.Accept()
+		if tmux.isShuttingDown(conn) {
+			return
+		}
+		if err != nil {
+			log.WithFields(logger.Fields{
+				"at":              "(TransportMuxer) acceptLoop",
+				"transport_index": index,
+				"error":           err.Error(),
+			}).Debug("accept error from transport")
+			if tmux.shouldStopAfterError() {
+				return
+			}
+			// Temporary error — brief back-off then retry
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if !tmux.deliverAcceptResult(conn, index) {
+			return
+		}
+	}
+}
+
+// isShuttingDown checks whether the muxer is shutting down and closes
+// any just-accepted connection if so.
+func (tmux *TransportMuxer) isShuttingDown(conn net.Conn) bool {
+	select {
+	case <-tmux.acceptDone:
+		if conn != nil {
+			conn.Close()
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldStopAfterError checks whether the muxer is shutting down after
+// an accept error. Returns true if the accept loop should exit.
+func (tmux *TransportMuxer) shouldStopAfterError() bool {
+	select {
+	case <-tmux.acceptDone:
+		return true
+	default:
+		return false
+	}
+}
+
+// deliverAcceptResult sends a successfully accepted connection to the
+// shared acceptChan. Returns false if the muxer is shutting down.
+func (tmux *TransportMuxer) deliverAcceptResult(conn net.Conn, index int) bool {
+	select {
+	case tmux.acceptChan <- acceptResult{conn: conn, err: nil, transportIndex: index}:
+		return true
+	case <-tmux.acceptDone:
+		conn.Close()
+		return false
+	}
 }
 
 type acceptResult struct {

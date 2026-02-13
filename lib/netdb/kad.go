@@ -249,7 +249,6 @@ func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.H
 	queried := make(map[common.Hash]bool)
 	unqueried := make(map[common.Hash]bool)
 
-	// Seed with the closest peers we know
 	closestPeers := kr.findClosestPeers(target)
 	if len(closestPeers) == 0 {
 		return nil, fmt.Errorf("insufficient peers available for lookup")
@@ -263,49 +262,60 @@ func (kr *KademliaResolver) iterativeLookup(ctx context.Context, target common.H
 			return nil, ctx.Err()
 		}
 
-		// Pick the closest unqueried peers for this round
-		batch := kr.selectClosestUnqueried(target, unqueried, MaxConcurrentQueries)
-		if len(batch) == 0 {
-			log.WithFields(logger.Fields{
-				"at":   "iterativeLookup",
-				"hop":  hop,
-				"hash": fmt.Sprintf("%x", target[:8]),
-			}).Debug("No more unqueried peers, lookup exhausted")
+		ri, exhausted := kr.processLookupRound(ctx, target, queried, unqueried, hop)
+		if ri != nil {
+			return ri, nil
+		}
+		if exhausted {
 			break
-		}
-
-		log.WithFields(logger.Fields{
-			"at":         "iterativeLookup",
-			"hop":        hop,
-			"batch_size": len(batch),
-			"unqueried":  len(unqueried),
-			"queried":    len(queried),
-		}).Debug("Starting iterative lookup round")
-
-		// Query the batch in parallel
-		results := kr.queryBatchParallel(ctx, batch, target)
-
-		// Mark batch peers as queried
-		for _, p := range batch {
-			queried[p] = true
-			delete(unqueried, p)
-		}
-
-		// Process results
-		for _, result := range results {
-			if result.ri != nil {
-				return result.ri, nil
-			}
-			// Add new suggestions to unqueried set
-			for _, suggestion := range result.suggestions {
-				if !queried[suggestion] && !unqueried[suggestion] {
-					unqueried[suggestion] = true
-				}
-			}
 		}
 	}
 
 	return nil, fmt.Errorf("router info not found after %d iterative hops", MaxIterativeLookupHops)
+}
+
+// processLookupRound executes a single round of the iterative Kademlia lookup.
+// It selects the closest unqueried peers, queries them in parallel, and merges
+// suggestions into the unqueried set. Returns a non-nil RouterInfo if found,
+// or true for exhausted if no unqueried peers remain.
+func (kr *KademliaResolver) processLookupRound(ctx context.Context, target common.Hash, queried, unqueried map[common.Hash]bool, hop int) (ri *router_info.RouterInfo, exhausted bool) {
+	batch := kr.selectClosestUnqueried(target, unqueried, MaxConcurrentQueries)
+	if len(batch) == 0 {
+		log.WithFields(logger.Fields{
+			"at":   "iterativeLookup",
+			"hop":  hop,
+			"hash": fmt.Sprintf("%x", target[:8]),
+		}).Debug("No more unqueried peers, lookup exhausted")
+		return nil, true
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "iterativeLookup",
+		"hop":        hop,
+		"batch_size": len(batch),
+		"unqueried":  len(unqueried),
+		"queried":    len(queried),
+	}).Debug("Starting iterative lookup round")
+
+	results := kr.queryBatchParallel(ctx, batch, target)
+
+	for _, p := range batch {
+		queried[p] = true
+		delete(unqueried, p)
+	}
+
+	for _, result := range results {
+		if result.ri != nil {
+			return result.ri, false
+		}
+		for _, suggestion := range result.suggestions {
+			if !queried[suggestion] && !unqueried[suggestion] {
+				unqueried[suggestion] = true
+			}
+		}
+	}
+
+	return nil, false
 }
 
 // selectClosestUnqueried picks the closest unqueried peers by XOR distance to the target.

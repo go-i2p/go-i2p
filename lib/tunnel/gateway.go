@@ -232,41 +232,82 @@ func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte
 func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
 	msgID := atomic.AddUint32(&g.msgIDSeq, 1)
 
-	// First fragment: uses full delivery instructions with fragmented flag + message ID
+	firstPayloadMax, followPayloadMax, err := g.calculateFragmentSizes(dc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if it actually fits in the first fragment after all
+	if len(msgBytes) <= firstPayloadMax {
+		return g.sendSingleFragment(msgBytes, dc)
+	}
+
+	followOnCount, err := g.validateFragmentCount(len(msgBytes), firstPayloadMax, followPayloadMax)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := g.buildFirstFragment(msgBytes[:firstPayloadMax], dc, msgID)
+	if err != nil {
+		return nil, err
+	}
+
+	followOnResults, err := g.buildFollowOnFragments(msgBytes, firstPayloadMax, followPayloadMax, msgID, followOnCount)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, followOnResults...)
+
+	log.WithFields(logger.Fields{
+		"at":             "sendFragmented",
+		"tunnel_id":      g.tunnelID,
+		"total_size":     len(msgBytes),
+		"fragment_count": len(results),
+		"msg_id":         msgID,
+	}).Debug("Fragmented message across tunnel messages")
+
+	return results, nil
+}
+
+// calculateFragmentSizes computes the maximum payload sizes for first and
+// follow-on fragments based on the delivery configuration.
+func (g *Gateway) calculateFragmentSizes(dc DeliveryConfig) (firstPayloadMax, followPayloadMax int, err error) {
 	firstDISize := deliveryInstructionsSize(dc, true)
-	firstPayloadMax := maxTunnelPayload - firstDISize
+	firstPayloadMax = maxTunnelPayload - firstDISize
 	if firstPayloadMax <= 0 {
-		return nil, ErrMessageTooLarge
+		return 0, 0, ErrMessageTooLarge
 	}
-
-	// Follow-on fragments: 7-byte header (flag + msgID + size)
 	const followOnHeaderSize = 7
-	followPayloadMax := maxTunnelPayload - followOnHeaderSize
+	followPayloadMax = maxTunnelPayload - followOnHeaderSize
+	return firstPayloadMax, followPayloadMax, nil
+}
 
-	// Calculate total fragments needed
-	remaining := len(msgBytes) - firstPayloadMax
-	if remaining <= 0 {
-		// Fits in first fragment after all
-		di, err := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
-		if err != nil {
-			return nil, err
-		}
-		encrypted, err := g.buildAndEncrypt(di, msgBytes)
-		if err != nil {
-			return nil, err
-		}
-		return [][]byte{encrypted}, nil
+// sendSingleFragment builds and encrypts a single unfragmented tunnel message.
+func (g *Gateway) sendSingleFragment(msgBytes []byte, dc DeliveryConfig) ([][]byte, error) {
+	di, err := g.createDeliveryInstructionsForConfig(dc, msgBytes, false, 0)
+	if err != nil {
+		return nil, err
 	}
+	encrypted, err := g.buildAndEncrypt(di, msgBytes)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{encrypted}, nil
+}
 
+// validateFragmentCount calculates the number of follow-on fragments needed
+// and returns an error if the message is too large.
+func (g *Gateway) validateFragmentCount(msgLen, firstPayloadMax, followPayloadMax int) (int, error) {
+	remaining := msgLen - firstPayloadMax
 	followOnCount := (remaining + followPayloadMax - 1) / followPayloadMax
 	if followOnCount > 63 {
-		return nil, ErrMessageTooLarge
+		return 0, ErrMessageTooLarge
 	}
+	return followOnCount, nil
+}
 
-	results := make([][]byte, 0, 1+followOnCount)
-
-	// Build first fragment
-	firstData := msgBytes[:firstPayloadMax]
+// buildFirstFragment creates the first fragment with full delivery instructions.
+func (g *Gateway) buildFirstFragment(firstData []byte, dc DeliveryConfig, msgID uint32) ([][]byte, error) {
 	di, err := g.createDeliveryInstructionsForConfig(dc, firstData, true, msgID)
 	if err != nil {
 		return nil, err
@@ -275,10 +316,12 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, encrypted)
+	return [][]byte{encrypted}, nil
+}
 
-	// Build follow-on fragments
-	offset := firstPayloadMax
+// buildFollowOnFragments creates all follow-on fragment tunnel messages.
+func (g *Gateway) buildFollowOnFragments(msgBytes []byte, offset, followPayloadMax int, msgID uint32, count int) ([][]byte, error) {
+	results := make([][]byte, 0, count)
 	for fragNum := 1; offset < len(msgBytes); fragNum++ {
 		end := offset + followPayloadMax
 		if end > len(msgBytes) {
@@ -299,15 +342,6 @@ func (g *Gateway) sendFragmented(msgBytes []byte, dc DeliveryConfig) ([][]byte, 
 		results = append(results, encrypted)
 		offset = end
 	}
-
-	log.WithFields(logger.Fields{
-		"at":             "sendFragmented",
-		"tunnel_id":      g.tunnelID,
-		"total_size":     len(msgBytes),
-		"fragment_count": len(results),
-		"msg_id":         msgID,
-	}).Debug("Fragmented message across tunnel messages")
-
 	return results, nil
 }
 

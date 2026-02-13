@@ -812,60 +812,73 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 // sendResponse writes a response message to the connection if present.
 // Uses per-connection write mutex to prevent concurrent write corruption.
 func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Session) error {
-	if response != nil {
-		// Set write deadline if timeout is configured
-		if s.config.WriteTimeout > 0 {
-			if err := conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout)); err != nil {
-				log.WithFields(logger.Fields{
-					"at":    "i2cp.Server.sendResponse",
-					"error": err.Error(),
-				}).Warn("failed_to_set_write_deadline")
-			}
-		}
+	if response == nil {
+		return nil
+	}
 
+	s.applyWriteDeadline(conn)
+
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.sendResponse",
+		"type":        MessageTypeName(response.Type),
+		"sessionID":   response.SessionID,
+		"payloadSize": len(response.Payload),
+	}).Debug("sending_response")
+
+	writeMu, holdingRLock := s.acquireWriteMutex(sessionPtr)
+
+	err := WriteMessage(conn, response)
+
+	s.releaseWriteMutex(writeMu, holdingRLock)
+
+	if err != nil {
 		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.sendResponse",
-			"type":        MessageTypeName(response.Type),
-			"sessionID":   response.SessionID,
-			"payloadSize": len(response.Payload),
-		}).Debug("sending_response")
-
-		// Acquire per-connection write mutex if session exists.
-		// Hold s.mu.RLock through the entire write operation to prevent the
-		// session (and its writeMu) from being deleted between lookup and use.
-		var writeMu *sync.Mutex
-		var holdingRLock bool
-		if *sessionPtr != nil {
-			s.mu.RLock()
-			writeMu = s.connWriteMu[(*sessionPtr).ID()]
-			if writeMu != nil {
-				writeMu.Lock()
-				holdingRLock = true
-			} else {
-				// No write mutex found — session may already be cleaned up.
-				// Release RLock since we have nothing to protect.
-				s.mu.RUnlock()
-			}
-		}
-
-		err := WriteMessage(conn, response)
-		if writeMu != nil {
-			writeMu.Unlock()
-		}
-		if holdingRLock {
-			s.mu.RUnlock()
-		}
-
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":    "i2cp.Server.sendResponse",
-				"type":  MessageTypeName(response.Type),
-				"error": err.Error(),
-			}).Error("failed_to_write_response")
-			return err
-		}
+			"at":    "i2cp.Server.sendResponse",
+			"type":  MessageTypeName(response.Type),
+			"error": err.Error(),
+		}).Error("failed_to_write_response")
+		return err
 	}
 	return nil
+}
+
+// applyWriteDeadline sets the connection write deadline if a timeout is configured.
+func (s *Server) applyWriteDeadline(conn net.Conn) {
+	if s.config.WriteTimeout > 0 {
+		if err := conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout)); err != nil {
+			log.WithFields(logger.Fields{
+				"at":    "i2cp.Server.sendResponse",
+				"error": err.Error(),
+			}).Warn("failed_to_set_write_deadline")
+		}
+	}
+}
+
+// acquireWriteMutex acquires the per-connection write mutex for the session
+// if available. Returns the mutex and whether s.mu.RLock is held.
+// Callers must call releaseWriteMutex when done.
+func (s *Server) acquireWriteMutex(sessionPtr **Session) (*sync.Mutex, bool) {
+	if *sessionPtr == nil {
+		return nil, false
+	}
+	s.mu.RLock()
+	writeMu := s.connWriteMu[(*sessionPtr).ID()]
+	if writeMu == nil {
+		s.mu.RUnlock()
+		return nil, false
+	}
+	writeMu.Lock()
+	return writeMu, true
+}
+
+// releaseWriteMutex releases the write mutex and the server RLock if held.
+func (s *Server) releaseWriteMutex(writeMu *sync.Mutex, holdingRLock bool) {
+	if writeMu != nil {
+		writeMu.Unlock()
+	}
+	if holdingRLock {
+		s.mu.RUnlock()
+	}
 }
 
 // handleMessage processes a single I2CP message and returns an optional response

@@ -462,57 +462,74 @@ func (t *NTCP2Transport) GetSession(routerInfo router_info.RouterInfo) (transpor
 }
 
 func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
-	if session, exists := t.sessions.Load(routerHash); exists {
-		if ntcp2Session, ok := session.(*NTCP2Session); ok {
-			// Check if the session is still alive (context not cancelled, connection not closed)
-			if ntcp2Session.ctx.Err() != nil {
-				routerHashBytes := routerHash.Bytes()
-				t.logger.WithFields(map[string]interface{}{
-					"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-					"reason":      ntcp2Session.ctx.Err().Error(),
-				}).Info("Evicting stale NTCP2 session")
-				if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
-					atomic.AddInt32(&t.sessionCount, -1)
-				}
-				return nil, false
-			}
-			routerHashBytes := routerHash.Bytes()
-			t.logger.WithFields(map[string]interface{}{
-				"router_hash":     fmt.Sprintf("%x", routerHashBytes[:8]),
-				"send_queue_size": ntcp2Session.SendQueueSize(),
-			}).Info("Reusing existing NTCP2 session")
-			return ntcp2Session, true
+	session, exists := t.sessions.Load(routerHash)
+	if !exists {
+		t.logNoSessionFound(routerHash)
+		return nil, false
+	}
+
+	if ntcp2Session, ok := session.(*NTCP2Session); ok {
+		return t.validateExistingSession(ntcp2Session, routerHash)
+	}
+
+	if conn, ok := session.(net.Conn); ok {
+		return t.promoteInboundConnection(conn, session, routerHash)
+	}
+
+	t.logNoSessionFound(routerHash)
+	return nil, false
+}
+
+// validateExistingSession checks whether an existing NTCP2 session is still
+// alive. If stale, it evicts the session and returns false.
+func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash data.Hash) (transport.TransportSession, bool) {
+	if s.ctx.Err() != nil {
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			"reason":      s.ctx.Err().Error(),
+		}).Info("Evicting stale NTCP2 session")
+		if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
+			atomic.AddInt32(&t.sessionCount, -1)
 		}
-		// Inbound connections are stored as net.Conn by Accept().
-		// Promote the raw conn to a full NTCP2Session so that GetSession
-		// can return it and we avoid creating a redundant outbound connection.
-		// Use CompareAndSwap to prevent double-promotion if two goroutines
-		// call GetSession concurrently for the same inbound peer.
-		if conn, ok := session.(net.Conn); ok {
-			promoted := NewNTCP2Session(conn, t.ctx, t.logger)
-			promoted.SetCleanupCallback(func() {
-				t.removeSession(routerHash)
-			})
-			if t.sessions.CompareAndSwap(routerHash, session, promoted) {
-				routerHashBytes := routerHash.Bytes()
-				t.logger.WithFields(map[string]interface{}{
-					"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-				}).Info("Promoted inbound net.Conn to NTCP2Session")
-				return promoted, true
-			}
-			// Another goroutine won the promotion race — close our duplicate
-			// and return the winner's session.
-			promoted.Close()
-			if winner, exists := t.sessions.Load(routerHash); exists {
-				if winnerSession, ok := winner.(*NTCP2Session); ok {
-					return winnerSession, true
-				}
-			}
-		}
+		return nil, false
 	}
 	routerHashBytes := routerHash.Bytes()
-	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("No existing session found")
+	t.logger.WithFields(map[string]interface{}{
+		"router_hash":     fmt.Sprintf("%x", routerHashBytes[:8]),
+		"send_queue_size": s.SendQueueSize(),
+	}).Info("Reusing existing NTCP2 session")
+	return s, true
+}
+
+// promoteInboundConnection promotes a raw inbound net.Conn to a full
+// NTCP2Session using CompareAndSwap to prevent double-promotion races.
+func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
+	promoted := NewNTCP2Session(conn, t.ctx, t.logger)
+	promoted.SetCleanupCallback(func() {
+		t.removeSession(routerHash)
+	})
+	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		routerHashBytes := routerHash.Bytes()
+		t.logger.WithFields(map[string]interface{}{
+			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+		}).Info("Promoted inbound net.Conn to NTCP2Session")
+		return promoted, true
+	}
+	// Another goroutine won the promotion race — close our duplicate
+	promoted.Close()
+	if winner, exists := t.sessions.Load(routerHash); exists {
+		if winnerSession, ok := winner.(*NTCP2Session); ok {
+			return winnerSession, true
+		}
+	}
 	return nil, false
+}
+
+// logNoSessionFound logs that no existing session was found for the given hash.
+func (t *NTCP2Transport) logNoSessionFound(routerHash data.Hash) {
+	routerHashBytes := routerHash.Bytes()
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", routerHashBytes[:8])).Debug("No existing session found")
 }
 
 func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {

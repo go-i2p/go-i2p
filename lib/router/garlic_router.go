@@ -650,44 +650,9 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 	now := time.Now()
 
 	for destHash, messages := range gr.pendingMsgs {
-		if len(messages) == 0 {
-			delete(gr.pendingMsgs, destHash)
-			continue
-		}
-
-		// Try to get LeaseSet (non-blocking)
-		leaseSetChan := gr.netdb.GetLeaseSet(destHash)
-		if leaseSetChan == nil {
-			gr.cleanupExpiredMessages(destHash, messages, now)
-			continue
-		}
-
-		select {
-		case ls, ok := <-leaseSetChan:
-			if !ok {
-				gr.cleanupExpiredMessages(destHash, messages, now)
-				continue
-			}
-
-			// LeaseSet found — extract valid lease under the lock
-			gatewayHash, tunnelID, err := gr.extractValidLease(destHash, ls)
-			if err != nil {
-				delete(gr.pendingMsgs, destHash)
-				continue
-			}
-
-			// Collect the work; remove from pending map
-			work = append(work, forwardWork{
-				destHash:    destHash,
-				gatewayHash: gatewayHash,
-				tunnelID:    tunnelID,
-				messages:    messages,
-			})
-			delete(gr.pendingMsgs, destHash)
-
-		default:
-			// LeaseSet not immediately available, clean up expired
-			gr.cleanupExpiredMessages(destHash, messages, now)
+		fw := gr.tryResolvePendingDest(destHash, messages, now)
+		if fw != nil {
+			work = append(work, *fw)
 		}
 	}
 	gr.pendingMutex.Unlock()
@@ -699,6 +664,46 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 			"message_count": len(fw.messages),
 		}).Info("LeaseSet found, processing pending messages")
 		gr.forwardPendingMessages(fw.destHash, fw.gatewayHash, fw.tunnelID, fw.messages)
+	}
+}
+
+// tryResolvePendingDest attempts to resolve a pending destination's LeaseSet.
+// Returns forwardWork if resolution succeeded, nil otherwise. Cleans up
+// empty or expired entries as a side effect. Must be called with
+// pendingMutex held.
+func (gr *GarlicMessageRouter) tryResolvePendingDest(destHash common.Hash, messages []pendingMessage, now time.Time) *forwardWork {
+	if len(messages) == 0 {
+		delete(gr.pendingMsgs, destHash)
+		return nil
+	}
+
+	leaseSetChan := gr.netdb.GetLeaseSet(destHash)
+	if leaseSetChan == nil {
+		gr.cleanupExpiredMessages(destHash, messages, now)
+		return nil
+	}
+
+	select {
+	case ls, ok := <-leaseSetChan:
+		if !ok {
+			gr.cleanupExpiredMessages(destHash, messages, now)
+			return nil
+		}
+		gatewayHash, tunnelID, err := gr.extractValidLease(destHash, ls)
+		if err != nil {
+			delete(gr.pendingMsgs, destHash)
+			return nil
+		}
+		delete(gr.pendingMsgs, destHash)
+		return &forwardWork{
+			destHash:    destHash,
+			gatewayHash: gatewayHash,
+			tunnelID:    tunnelID,
+			messages:    messages,
+		}
+	default:
+		gr.cleanupExpiredMessages(destHash, messages, now)
+		return nil
 	}
 }
 

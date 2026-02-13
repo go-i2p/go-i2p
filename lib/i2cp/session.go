@@ -1754,29 +1754,42 @@ func (sm *SessionManager) RemoveSession(sessionID uint16) {
 // For low occupancy (<90%), uses random probing (up to 100 attempts).
 // For high occupancy (≥90%), falls back to sequential scan from a random offset
 // to guarantee finding an available ID if one exists.
+// allocateSessionID picks an unused session ID from the available space.
+// Uses random probing under normal load, and sequential scanning
+// when occupancy exceeds 90%.
 func (sm *SessionManager) allocateSessionID() (uint16, error) {
 	activeCount := len(sm.sessions)
 	usableIDs := uint32(65536 - 2) // exclude the two reserved IDs
 
-	// High occupancy: sequential scan from random offset
 	if uint32(activeCount) >= usableIDs*9/10 {
-		startID, err := generateSecureSessionID()
-		if err != nil {
-			startID = uint16(activeCount) // fallback to deterministic offset
-		}
-		for offset := uint32(0); offset < 65536; offset++ {
-			id := uint16((uint32(startID) + offset) % 65536)
-			if id == SessionIDReservedControl || id == SessionIDReservedBroadcast {
-				continue
-			}
-			if _, exists := sm.sessions[id]; !exists {
-				return id, nil
-			}
-		}
-		return 0, fmt.Errorf("session ID space exhausted (%d active sessions)", activeCount)
+		return sm.allocateSequentialScan(activeCount)
 	}
+	return sm.allocateRandomProbe(activeCount)
+}
 
-	// Normal case: random probing
+// allocateSequentialScan performs a linear scan from a random offset to find
+// a free session ID. Used when occupancy is above 90% and random probing
+// would be inefficient.
+func (sm *SessionManager) allocateSequentialScan(activeCount int) (uint16, error) {
+	startID, err := generateSecureSessionID()
+	if err != nil {
+		startID = uint16(activeCount) // fallback to deterministic offset
+	}
+	for offset := uint32(0); offset < 65536; offset++ {
+		id := uint16((uint32(startID) + offset) % 65536)
+		if id == SessionIDReservedControl || id == SessionIDReservedBroadcast {
+			continue
+		}
+		if _, exists := sm.sessions[id]; !exists {
+			return id, nil
+		}
+	}
+	return 0, fmt.Errorf("session ID space exhausted (%d active sessions)", activeCount)
+}
+
+// allocateRandomProbe picks a free session ID by generating random candidates.
+// Used under normal load when collisions are unlikely.
+func (sm *SessionManager) allocateRandomProbe(activeCount int) (uint16, error) {
 	maxAttempts := 100
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		id, err := generateSecureSessionID()
@@ -1788,13 +1801,9 @@ func (sm *SessionManager) allocateSessionID() (uint16, error) {
 			}).Warn("failed to generate random session ID")
 			continue
 		}
-
-		// Skip reserved IDs
 		if id == SessionIDReservedControl || id == SessionIDReservedBroadcast {
 			continue
 		}
-
-		// Check if ID is available
 		if _, exists := sm.sessions[id]; !exists {
 			return id, nil
 		}

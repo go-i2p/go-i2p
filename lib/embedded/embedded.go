@@ -242,6 +242,23 @@ func (e *StandardEmbeddedRouter) Stop() error {
 // It calls Stop() with a short timeout, then marks the router stopped.
 // Use this only when Stop() fails or when immediate termination is required.
 func (e *StandardEmbeddedRouter) HardStop() {
+	router := e.prepareHardStop()
+	if router == nil {
+		return
+	}
+
+	done := make(chan struct{})
+	go func() {
+		router.Stop()
+		close(done)
+	}()
+
+	e.awaitGracefulStopOrForce(router, done)
+}
+
+// prepareHardStop validates the router state and marks it as not running
+// under the mutex. Returns the router instance, or nil if stop is not needed.
+func (e *StandardEmbeddedRouter) prepareHardStop() *router.Router {
 	e.mu.Lock()
 
 	if !e.running {
@@ -251,7 +268,7 @@ func (e *StandardEmbeddedRouter) HardStop() {
 			"phase":  "shutdown",
 			"reason": "router is not running",
 		}).Debug("hard stop called on non-running router")
-		return
+		return nil
 	}
 
 	if e.router == nil {
@@ -261,7 +278,7 @@ func (e *StandardEmbeddedRouter) HardStop() {
 			"phase":  "shutdown",
 			"reason": "router instance is nil",
 		}).Warn("hard stop called but router instance is nil")
-		return
+		return nil
 	}
 
 	log.WithFields(logger.Fields{
@@ -270,21 +287,16 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		"reason": "forcing immediate termination",
 	}).Warn("performing hard stop of embedded router")
 
-	// Mark as not running BEFORE releasing the mutex so concurrent
-	// Stop()/IsRunning() calls see the correct state immediately.
-	// This prevents the double-stop race where Stop() also tries
-	// to stop the router while HardStop's goroutine is doing so.
-	router := e.router
+	r := e.router
 	e.running = false
 	e.mu.Unlock()
+	return r
+}
 
-	// Attempt graceful stop with a 5-second timeout (mutex NOT held)
-	done := make(chan struct{})
-	go func() {
-		router.Stop()
-		close(done)
-	}()
-
+// awaitGracefulStopOrForce waits for the graceful stop goroutine to finish
+// within a 5-second timeout. If the timeout expires, it force-closes the
+// router and waits briefly for the orphaned goroutine to exit.
+func (e *StandardEmbeddedRouter) awaitGracefulStopOrForce(r *router.Router, done chan struct{}) {
 	select {
 	case <-done:
 		log.WithFields(logger.Fields{
@@ -298,35 +310,34 @@ func (e *StandardEmbeddedRouter) HardStop() {
 			"phase":  "shutdown",
 			"reason": "graceful stop timed out, forcing resource release",
 		}).Error("embedded router hard stop: graceful shutdown timed out")
-		// Force-close the router to release resources even though the
-		// graceful Stop() goroutine is still running in the background.
-		// Close() calls ensureStopped() internally and releases transports,
-		// sessions, and routing components. After Close() completes, the
-		// orphaned Stop() goroutine should unblock and exit because the
-		// router's context and channels are torn down.
-		if err := router.Close(); err != nil {
-			log.WithFields(logger.Fields{
-				"at":    "StandardEmbeddedRouter.HardStop",
-				"phase": "shutdown",
-				"error": err.Error(),
-			}).Error("force close after timeout failed")
-		}
-		// Wait briefly for the orphaned Stop() goroutine to exit now that
-		// Close() has torn down the router.
-		select {
-		case <-done:
-			log.WithFields(logger.Fields{
-				"at":     "StandardEmbeddedRouter.HardStop",
-				"phase":  "shutdown",
-				"reason": "orphaned Stop() goroutine exited after Close()",
-			}).Debug("orphaned Stop goroutine completed")
-		case <-time.After(2 * time.Second):
-			log.WithFields(logger.Fields{
-				"at":     "StandardEmbeddedRouter.HardStop",
-				"phase":  "shutdown",
-				"reason": "orphaned Stop() goroutine still running after Close()",
-			}).Warn("orphaned Stop goroutine did not exit after Close; goroutine leak")
-		}
+		e.forceCloseAndWait(r, done)
+	}
+}
+
+// forceCloseAndWait calls Close() on the router to release resources and
+// waits briefly for the orphaned Stop() goroutine to exit.
+func (e *StandardEmbeddedRouter) forceCloseAndWait(r *router.Router, done chan struct{}) {
+	if err := r.Close(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":    "StandardEmbeddedRouter.HardStop",
+			"phase": "shutdown",
+			"error": err.Error(),
+		}).Error("force close after timeout failed")
+	}
+
+	select {
+	case <-done:
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "orphaned Stop() goroutine exited after Close()",
+		}).Debug("orphaned Stop goroutine completed")
+	case <-time.After(2 * time.Second):
+		log.WithFields(logger.Fields{
+			"at":     "StandardEmbeddedRouter.HardStop",
+			"phase":  "shutdown",
+			"reason": "orphaned Stop() goroutine still running after Close()",
+		}).Warn("orphaned Stop goroutine did not exit after Close; goroutine leak")
 	}
 }
 

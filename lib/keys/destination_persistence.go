@@ -172,42 +172,77 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 // unmarshalDestinationKeyStore deserializes private keys and reconstructs
 // the full DestinationKeyStore including the destination (public keys + KeysAndCert).
 func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
-	if len(data) < len(destinationKeyStoreMagic) {
-		return nil, fmt.Errorf("data too short for magic header")
+	offset, err := validateMagicHeader(data)
+	if err != nil {
+		return nil, err
 	}
 
-	// Verify magic
+	sigPrivBytes, encPrivBytes, err := readPrivateKeyFields(data, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	sigPrivKey, encPrivKey, err := reconstructPrivateKeys(sigPrivBytes, encPrivBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	dest, err := reconstructDestination(sigPrivKey, encPrivKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DestinationKeyStore{
+		destination:       dest,
+		signingPrivKey:    sigPrivKey,
+		encryptionPrivKey: encPrivKey,
+	}, nil
+}
+
+// validateMagicHeader checks the magic bytes at the start of the data
+// and returns the offset past the header.
+func validateMagicHeader(data []byte) (int, error) {
+	if len(data) < len(destinationKeyStoreMagic) {
+		return 0, fmt.Errorf("data too short for magic header")
+	}
 	for i, b := range destinationKeyStoreMagic {
 		if data[i] != b {
-			return nil, fmt.Errorf("invalid magic header: not a destination key file")
+			return 0, fmt.Errorf("invalid magic header: not a destination key file")
 		}
 	}
-	offset := len(destinationKeyStoreMagic)
+	return len(destinationKeyStoreMagic), nil
+}
 
-	// Read signing private key
+// readPrivateKeyFields reads the signing and encryption private key fields
+// from the serialized data starting at the given offset.
+func readPrivateKeyFields(data []byte, offset int) (sigPrivBytes, encPrivBytes []byte, err error) {
 	sigPrivBytes, newOffset, err := readLengthPrefixedField(data, offset, "signing private key")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	offset = newOffset
-
-	// Read encryption private key
-	encPrivBytes, _, err := readLengthPrefixedField(data, offset, "encryption private key")
+	encPrivBytes, _, err = readLengthPrefixedField(data, newOffset, "encryption private key")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	return sigPrivBytes, encPrivBytes, nil
+}
 
-	// Reconstruct private keys from raw bytes
+// reconstructPrivateKeys rebuilds the private key objects from raw byte slices.
+func reconstructPrivateKeys(sigPrivBytes, encPrivBytes []byte) (ed25519.Ed25519PrivateKey, *curve25519.Curve25519PrivateKey, error) {
 	sigPrivKey, err := ed25519.NewEd25519PrivateKey(sigPrivBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to reconstruct signing private key: %w", err)
+		return nil, nil, fmt.Errorf("failed to reconstruct signing private key: %w", err)
 	}
 	encPrivKey, err := curve25519.NewCurve25519PrivateKey(encPrivBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to reconstruct encryption private key: %w", err)
+		return nil, nil, fmt.Errorf("failed to reconstruct encryption private key: %w", err)
 	}
+	return sigPrivKey, encPrivKey, nil
+}
 
-	// Derive public keys from private keys
+// reconstructDestination rebuilds the full Destination from private keys by
+// deriving public keys and assembling the KeysAndCert structure.
+func reconstructDestination(sigPrivKey ed25519.Ed25519PrivateKey, encPrivKey *curve25519.Curve25519PrivateKey) (*destination.Destination, error) {
 	sigPubKey, err := sigPrivKey.Public()
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive signing public key: %w", err)
@@ -217,13 +252,11 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 		return nil, fmt.Errorf("failed to derive encryption public key: %w", err)
 	}
 
-	// Convert to the types expected by assembleKeysAndCert
 	receivingPubKey, ok := encPubKey.(types.ReceivingPublicKey)
 	if !ok {
 		return nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
 	}
 
-	// Reconstruct the destination using the same assembly path as NewDestinationKeyStore
 	keyCert, err := createKeyCertificate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key certificate: %w", err)
@@ -239,14 +272,8 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
 	}
 
-	dest := &destination.Destination{
+	return &destination.Destination{
 		KeysAndCert: keysAndCert,
-	}
-
-	return &DestinationKeyStore{
-		destination:       dest,
-		signingPrivKey:    sigPrivKey,
-		encryptionPrivKey: encPrivKey,
 	}, nil
 }
 
