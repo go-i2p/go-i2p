@@ -505,7 +505,9 @@ func (rsp *routerStatsProvider) parsePort(portStr string) int {
 		}
 	}
 	return port
-} // IsRunning returns whether the router is currently running.
+}
+
+// IsRunning returns whether the router is currently running.
 func (rsp *routerStatsProvider) IsRunning() bool {
 	return rsp.router.IsRunning()
 }

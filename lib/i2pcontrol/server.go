@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -301,28 +300,15 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 }
 
 // setCORSHeaders configures Cross-Origin Resource Sharing headers for JSON-RPC requests.
-// For localhost/loopback addresses, Access-Control-Allow-Origin is restricted to
-// the common localhost origins (http/https on 127.0.0.1, ::1, localhost) rather
-// than a wildcard, to limit cross-site request exposure.
-// For non-localhost addresses, the origin is restricted to the server's own address.
+// Access-Control-Allow-Origin is restricted to the server's own address and scheme,
+// preventing cross-site request exposure from arbitrary origins.
 func (s *Server) setCORSHeaders(w http.ResponseWriter) {
-	host, _, _ := net.SplitHostPort(s.config.Address)
-	if host == "" {
-		host = s.config.Address
-	}
-
 	scheme := "http"
 	if s.config.UseHTTPS {
 		scheme = "https"
 	}
 
-	var origin string
-	if host == "127.0.0.1" || host == "::1" || host == "localhost" {
-		// Restrict to the specific localhost address and scheme rather than "*"
-		origin = fmt.Sprintf("%s://%s", scheme, s.config.Address)
-	} else {
-		origin = fmt.Sprintf("%s://%s", scheme, s.config.Address)
-	}
+	origin := fmt.Sprintf("%s://%s", scheme, s.config.Address)
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
