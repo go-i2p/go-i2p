@@ -17,7 +17,7 @@ func TestLoadOrCreateDestinationKeyStore_CorruptFileReturnsError(t *testing.T) {
 	filename := filepath.Join(dir, name+".dest.key")
 
 	// Write corrupt data to the key file
-	err := os.WriteFile(filename, []byte("this is corrupt data"), 0644)
+	err := os.WriteFile(filename, []byte("this is corrupt data"), 0o644)
 	require.NoError(t, err)
 
 	// LoadOrCreateDestinationKeyStore should fail rather than silently replace
@@ -44,8 +44,8 @@ func TestLoadOrCreateDestinationKeyStore_UnreadableFileReturnsError(t *testing.T
 	require.NoError(t, dks.StoreKeys(dir, name))
 
 	// Make it unreadable
-	require.NoError(t, os.Chmod(filename, 0000))
-	defer os.Chmod(filename, 0644) // cleanup
+	require.NoError(t, os.Chmod(filename, 0o000))
+	defer os.Chmod(filename, 0o644) // cleanup
 
 	// Should error rather than silently generate new identity
 	_, err = LoadOrCreateDestinationKeyStore(dir, name)
