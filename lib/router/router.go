@@ -1554,6 +1554,15 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
 	}).Debug("Routing I2NP message")
 
+	// Grab a local reference under lock to prevent race with clearRoutingComponents()
+	r.runMux.RLock()
+	mr := r.messageRouter
+	r.runMux.RUnlock()
+
+	if mr == nil {
+		return fmt.Errorf("message router not available (router may be shutting down)")
+	}
+
 	// Route based on message type to appropriate handler
 	switch msg.Type() {
 	case i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE:
@@ -1562,45 +1571,45 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		if err != nil {
 			return fmt.Errorf("failed to parse DatabaseStore message: %w", err)
 		}
-		return r.messageRouter.RouteDatabaseMessage(dbStore)
+		return mr.RouteDatabaseMessage(dbStore)
 
 	case i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
-		return r.messageRouter.RouteDatabaseMessage(msg)
+		return mr.RouteDatabaseMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY:
-		return r.messageRouter.RouteDatabaseMessage(msg)
+		return mr.RouteDatabaseMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_DATA:
-		return r.messageRouter.RouteMessage(msg)
+		return mr.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
-		return r.messageRouter.RouteMessage(msg)
+		return mr.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_GARLIC:
 		// Route garlic messages to the MessageProcessor for decryption and clove processing.
 		// The processor handles ECIES-X25519-AEAD-Ratchet decryption and clove routing.
-		return r.messageRouter.RouteMessage(msg)
+		return mr.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA:
-		return r.messageRouter.RouteMessage(msg)
+		return mr.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY:
 		// Route TunnelGateway messages to the MessageProcessor for tunnel injection.
 		// The processor delegates to the configured tunnelGatewayHandler for
 		// layered encryption and forwarding to the next hop.
-		return r.messageRouter.RouteMessage(msg)
+		return mr.RouteMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
-		return r.messageRouter.RouteTunnelMessage(msg)
+		return mr.RouteTunnelMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
-		return r.messageRouter.RouteTunnelMessage(msg)
+		return mr.RouteTunnelMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
-		return r.messageRouter.RouteTunnelMessage(msg)
+		return mr.RouteTunnelMessage(msg)
 
 	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
-		return r.messageRouter.RouteTunnelMessage(msg)
+		return mr.RouteTunnelMessage(msg)
 
 	default:
 		return fmt.Errorf("unsupported message type: %d", msg.Type())

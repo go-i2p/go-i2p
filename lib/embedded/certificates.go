@@ -2,9 +2,11 @@ package embedded
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CertificatesFS embeds all certificates at compile time.
@@ -33,13 +35,26 @@ func GetSSLCertificates() (fs.FS, error) {
 
 // GetCertificateByPath returns the PEM content for a certificate at the given path.
 // The path should be relative to the certificates directory (e.g., "reseed/admin_at_stormycloud.org.crt").
+// Returns an error if the path contains directory traversal components.
 func GetCertificateByPath(certPath string) ([]byte, error) {
-	return CertificatesFS.ReadFile("certificates/" + certPath)
+	// Defense-in-depth: reject path traversal attempts.
+	// embed.FS already rejects ".." via fs.ValidPath, but we validate
+	// explicitly so callers get a clear error rather than a generic one.
+	cleaned := filepath.ToSlash(filepath.Clean(certPath))
+	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, "/../") {
+		return nil, fmt.Errorf("invalid certificate path: %q contains path traversal", certPath)
+	}
+	return CertificatesFS.ReadFile("certificates/" + cleaned)
 }
 
 // GetReseedCertificateByName returns the PEM content for a specific reseed certificate.
 // The certFileName should be just the filename (e.g., "admin_at_stormycloud.org.crt").
+// Returns an error if the filename contains path separators or traversal components.
 func GetReseedCertificateByName(certFileName string) ([]byte, error) {
+	// Defense-in-depth: reject any path separators in the filename
+	if strings.ContainsAny(certFileName, "/\\") || strings.Contains(certFileName, "..") {
+		return nil, fmt.Errorf("invalid certificate filename: %q must not contain path separators", certFileName)
+	}
 	return CertificatesFS.ReadFile("certificates/reseed/" + certFileName)
 }
 
