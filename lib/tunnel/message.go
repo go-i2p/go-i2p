@@ -136,7 +136,7 @@ func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return tm[4:20]
 }
 
-func (tm EncryptedTunnelMessage) Data() tunnel.TunnelIV {
+func (tm EncryptedTunnelMessage) Data() []byte {
 	return tm[24:]
 }
 
@@ -152,7 +152,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV {
 	return decrypted_tunnel_message[4 : 4+16]
 }
 
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() tunnel.TunnelIV {
+func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte {
 	return decrypted_tunnel_message[4+16 : 4+4+16]
 }
 

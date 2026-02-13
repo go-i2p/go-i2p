@@ -604,6 +604,10 @@ func (e *Endpoint) attemptReassembly(msgID uint32, fragmentNum int, isLast bool,
 }
 
 // reassembleAndDeliver combines all fragments and delivers the complete message.
+//
+// IMPORTANT: This function is called with fragmentsMutex held. The message handler
+// callback (e.handler or forwarder) executes under the lock. Handlers must be
+// non-blocking and must not call back into the Endpoint to avoid deadlock.
 func (e *Endpoint) reassembleAndDeliver(msgID uint32, assembler *fragmentAssembler) error {
 	// Calculate total size
 	totalSize := 0
