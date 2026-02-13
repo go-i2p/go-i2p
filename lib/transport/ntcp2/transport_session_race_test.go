@@ -107,28 +107,50 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 	rawConn := newAcceptMockConn("192.168.1.4:5004")
 	transport.sessions.Store(peerHash, rawConn)
 
+	// Simulate the realistic race: multiple goroutines each call
+	// resolveExistingSession, but only with the value they see from
+	// the map at that point.  The first CAS winner promotes the
+	// net.Conn; subsequent callers will see *NTCP2Session via the
+	// fast path or via Load after CAS failure.
 	const goroutines = 10
+	results := make([]*NTCP2Session, goroutines)
 	var wg sync.WaitGroup
 
-	// The critical property: no goroutine should panic.
-	// resolveExistingSession must be safe to call concurrently.
 	require.NotPanics(t, func() {
 		wg.Add(goroutines)
 		for i := 0; i < goroutines; i++ {
+			i := i
 			go func() {
 				defer wg.Done()
-				_ = transport.resolveExistingSession(rawConn, peerHash)
+				val, _ := transport.sessions.Load(peerHash)
+				if val == nil {
+					return
+				}
+				results[i] = transport.resolveExistingSession(val, peerHash)
 			}()
 		}
 		wg.Wait()
 	})
 
-	// The map should contain *NTCP2Session (promoted by the winner).
-	entry, exists := transport.sessions.Load(peerHash)
-	require.True(t, exists, "session map entry should exist")
-	if session, ok := entry.(*NTCP2Session); ok {
-		_ = session.Close()
+	// All goroutines should have received the same promoted session.
+	var winner *NTCP2Session
+	for _, s := range results {
+		if s != nil {
+			if winner == nil {
+				winner = s
+			} else {
+				assert.Same(t, winner, s, "all goroutines should return the same session")
+			}
+		}
 	}
+	require.NotNil(t, winner, "at least one goroutine should return an NTCP2Session")
+
+	// The map entry should still exist (workers are deferred until CAS
+	// wins, so no background goroutine can close the winning session).
+	entry, exists := transport.sessions.Load(peerHash)
+	require.True(t, exists, "session map entry should exist after concurrent promotion")
+	_, isSession := entry.(*NTCP2Session)
+	assert.True(t, isSession, "map entry should be *NTCP2Session after promotion")
 }
 
 // TestCloseAllActiveSessions_ClosesNetConnEntries verifies that

@@ -752,11 +752,18 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 	// Slow path: Accept() stored a raw net.Conn. Promote it to a full
 	// NTCP2Session so the caller gets a usable session object.
 	if rawConn, ok := existing.(net.Conn); ok {
-		promoted := NewNTCP2Session(rawConn, t.ctx, t.logger)
-		promoted.SetCleanupCallback(func() {
-			t.removeSession(routerHash)
-		})
+		// Use deferred session creation to avoid starting workers before
+		// we've confirmed this goroutine wins the CAS race. Workers on
+		// a losing session would share the same conn, causing errors.
+		promoted := NewNTCP2SessionDeferred(rawConn, t.ctx, t.logger)
+		// NOTE: Do NOT set the cleanup callback before CAS. If this
+		// goroutine loses the race, calling promoted.Close() would
+		// trigger removeSession and delete the *winner's* map entry.
 		if t.sessions.CompareAndSwap(routerHash, existing, promoted) {
+			promoted.SetCleanupCallback(func() {
+				t.removeSession(routerHash)
+			})
+			promoted.StartWorkers()
 			routerHashBytes := routerHash.Bytes()
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -764,7 +771,8 @@ func (t *NTCP2Transport) resolveExistingSession(existing interface{}, routerHash
 			return promoted
 		}
 		// Another goroutine won the promotion race — discard ours and
-		// return whatever is in the map now.
+		// return whatever is in the map now. No cleanup callback was
+		// set and no workers were started, so Close() is lightweight.
 		promoted.Close()
 		if winner, exists := t.sessions.Load(routerHash); exists {
 			if winnerSession, ok := winner.(*NTCP2Session); ok {
