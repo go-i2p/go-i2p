@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/router_address"
+	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/logger"
 )
@@ -462,16 +463,55 @@ func GetRouterHashString(ri router_info.RouterInfo) string {
 // This prevents accepting RouterInfos with forged identity hashes from compromised
 // reseed servers, which is critical for bootstrap trust.
 func VerifyRouterInfoSignature(ri router_info.RouterInfo) error {
-	// Get the full serialized bytes (data + signature)
 	fullBytes, err := ri.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to serialize RouterInfo: %w", err)
 	}
 
-	// Get the signing public key from the RouterIdentity
 	identity := ri.RouterIdentity()
 	if identity == nil {
 		return errors.New("RouterInfo has nil RouterIdentity")
+	}
+
+	if err := validateSignaturePresent(ri); err != nil {
+		return err
+	}
+
+	expectedSigSize, err := resolveExpectedSigSize(identity)
+	if err != nil {
+		return err
+	}
+
+	return verifySignatureBytes(fullBytes, expectedSigSize, identity)
+}
+
+// validateSignaturePresent checks that the RouterInfo has a non-empty signature.
+func validateSignaturePresent(ri router_info.RouterInfo) error {
+	sig := ri.Signature()
+	sigBytes := sig.Bytes()
+	if len(sigBytes) == 0 {
+		return errors.New("RouterInfo has empty signature")
+	}
+	return nil
+}
+
+// resolveExpectedSigSize determines the expected signature size based on the key certificate's
+// signing key type.
+func resolveExpectedSigSize(identity *router_identity.RouterIdentity) (int, error) {
+	sigType := identity.KeyCertificate.SigningPublicKeyType()
+	expectedSigSize, err := key_certificate.GetSignatureSize(sigType)
+	if err != nil {
+		return 0, fmt.Errorf("unknown signature type %d: %w", sigType, err)
+	}
+	return expectedSigSize, nil
+}
+
+// verifySignatureBytes splits the serialized RouterInfo into data and signature portions,
+// then verifies the signature cryptographically.
+func verifySignatureBytes(fullBytes []byte, expectedSigSize int, identity *router_identity.RouterIdentity) error {
+	if len(fullBytes) <= expectedSigSize {
+		return fmt.Errorf("RouterInfo too short (%d bytes) for signature size %d",
+			len(fullBytes), expectedSigSize)
 	}
 
 	signingPubKey, err := identity.SigningPublicKey()
@@ -479,37 +519,14 @@ func VerifyRouterInfoSignature(ri router_info.RouterInfo) error {
 		return fmt.Errorf("failed to get signing public key: %w", err)
 	}
 
-	// Get the signature from the RouterInfo
-	sig := ri.Signature()
-	sigBytes := sig.Bytes()
-	if len(sigBytes) == 0 {
-		return errors.New("RouterInfo has empty signature")
-	}
-
-	// Determine the expected signature size from the key certificate
-	sigType := identity.KeyCertificate.SigningPublicKeyType()
-	expectedSigSize, err := key_certificate.GetSignatureSize(sigType)
-	if err != nil {
-		return fmt.Errorf("unknown signature type %d: %w", sigType, err)
-	}
-
-	// Validate that we have enough bytes for data + signature
-	if len(fullBytes) <= expectedSigSize {
-		return fmt.Errorf("RouterInfo too short (%d bytes) for signature size %d",
-			len(fullBytes), expectedSigSize)
-	}
-
-	// Split into data and signature: the signature is the last N bytes
 	dataBytes := fullBytes[:len(fullBytes)-expectedSigSize]
 	sigFromBytes := fullBytes[len(fullBytes)-expectedSigSize:]
 
-	// Create a verifier from the signing public key
 	verifier, err := signingPubKey.NewVerifier()
 	if err != nil {
 		return fmt.Errorf("failed to create signature verifier: %w", err)
 	}
 
-	// Verify the signature
 	if err := verifier.Verify(dataBytes, sigFromBytes); err != nil {
 		return fmt.Errorf("RouterInfo signature verification failed: %w", err)
 	}

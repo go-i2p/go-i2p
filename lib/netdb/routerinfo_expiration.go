@@ -47,9 +47,33 @@ func (db *StdNetDB) trackRouterInfoExpiration(key common.Hash, publishedTime tim
 // It preserves at least MinRouterInfoCount entries to prevent the NetDB from becoming
 // empty, which would prevent the router from functioning.
 func (db *StdNetDB) cleanExpiredRouterInfos() {
-	now := time.Now()
+	expired := db.findExpiredRouterInfoHashes()
+	if len(expired) == 0 {
+		return
+	}
 
-	// Find all expired RouterInfos
+	removeCount := db.calculateRemovableCount(len(expired))
+	if removeCount <= 0 {
+		return
+	}
+
+	removed := db.removeRouterInfoBatch(expired, removeCount)
+
+	if removed > 0 {
+		db.riMutex.RLock()
+		remaining := len(db.RouterInfos)
+		db.riMutex.RUnlock()
+		log.WithFields(logger.Fields{
+			"removed":        removed,
+			"total_expired":  len(expired),
+			"remaining_size": remaining,
+		}).Info("Cleaned expired RouterInfos from NetDB")
+	}
+}
+
+// findExpiredRouterInfoHashes returns the hashes of all RouterInfos whose expiry time has passed.
+func (db *StdNetDB) findExpiredRouterInfoHashes() []common.Hash {
+	now := time.Now()
 	db.expiryMutex.RLock()
 	expired := make([]common.Hash, 0)
 	for hash, expiryTime := range db.routerInfoExpiry {
@@ -58,50 +82,45 @@ func (db *StdNetDB) cleanExpiredRouterInfos() {
 		}
 	}
 	db.expiryMutex.RUnlock()
+	return expired
+}
 
-	if len(expired) == 0 {
-		return
-	}
-
-	// Check if removing all expired entries would bring us below the minimum count
+// calculateRemovableCount determines how many expired entries can be removed
+// while keeping at least MinRouterInfoCount entries in the database.
+// Returns 0 if no entries should be removed.
+func (db *StdNetDB) calculateRemovableCount(expiredCount int) int {
 	db.riMutex.RLock()
 	currentCount := len(db.RouterInfos)
 	db.riMutex.RUnlock()
 
-	// Only remove entries that keep us above the minimum threshold
 	maxRemovable := currentCount - MinRouterInfoCount
 	if maxRemovable <= 0 {
 		log.WithFields(logger.Fields{
-			"expired_count": len(expired),
+			"expired_count": expiredCount,
 			"current_count": currentCount,
 			"min_count":     MinRouterInfoCount,
 		}).Debug("Skipping RouterInfo expiration: at or below minimum count")
-		return
+		return 0
 	}
 
-	// If we can't remove all expired entries, limit the removal count
-	removeCount := len(expired)
-	if removeCount > maxRemovable {
-		removeCount = maxRemovable
+	if expiredCount > maxRemovable {
+		return maxRemovable
 	}
+	return expiredCount
+}
 
-	// Remove the expired entries (up to the allowed limit)
+// removeRouterInfoBatch removes up to limit expired RouterInfos from the database.
+// Returns the number of entries actually removed.
+func (db *StdNetDB) removeRouterInfoBatch(expired []common.Hash, limit int) int {
 	removed := 0
 	for _, hash := range expired {
-		if removed >= removeCount {
+		if removed >= limit {
 			break
 		}
 		db.removeExpiredRouterInfo(hash)
 		removed++
 	}
-
-	if removed > 0 {
-		log.WithFields(logger.Fields{
-			"removed":        removed,
-			"total_expired":  len(expired),
-			"remaining_size": currentCount - removed,
-		}).Info("Cleaned expired RouterInfos from NetDB")
-	}
+	return removed
 }
 
 // removeExpiredRouterInfo removes a single expired RouterInfo from cache, filesystem,

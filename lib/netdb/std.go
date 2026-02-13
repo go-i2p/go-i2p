@@ -770,7 +770,15 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 func (db *StdNetDB) Save() error {
 	log.Debug("Saving all NetDB entries")
 
-	// Copy RouterInfo entries under read lock to avoid holding the lock during disk I/O
+	riErrs := db.saveAllRouterInfos()
+	lsErrs := db.saveAllLeaseSets()
+
+	return errors.Join(append(riErrs, lsErrs...)...)
+}
+
+// saveAllRouterInfos copies RouterInfo entries under a read lock, then persists each to disk.
+// Returns a slice of errors from any failed saves.
+func (db *StdNetDB) saveAllRouterInfos() []error {
 	db.riMutex.RLock()
 	entriesToSave := make([]Entry, 0, len(db.RouterInfos))
 	for _, entry := range db.RouterInfos {
@@ -780,7 +788,6 @@ func (db *StdNetDB) Save() error {
 	}
 	db.riMutex.RUnlock()
 
-	// Perform disk I/O outside the lock
 	var errs []error
 	for _, entry := range entriesToSave {
 		if e := db.SaveEntry(&entry); e != nil {
@@ -788,35 +795,47 @@ func (db *StdNetDB) Save() error {
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
+	return errs
+}
 
-	// Save LeaseSet entries (all variants)
-	db.lsMutex.RLock()
+// saveAllLeaseSets copies LeaseSet entries under a read lock, then persists each to disk.
+// Returns a slice of errors from any failed saves.
+func (db *StdNetDB) saveAllLeaseSets() []error {
 	type lsEntry struct {
 		hash  common.Hash
 		entry Entry
 	}
+
+	db.lsMutex.RLock()
 	lsEntries := make([]lsEntry, 0, len(db.LeaseSets))
 	for h, entry := range db.LeaseSets {
 		lsEntries = append(lsEntries, lsEntry{hash: h, entry: entry})
 	}
 	db.lsMutex.RUnlock()
 
+	var errs []error
 	for _, ls := range lsEntries {
-		fpath := db.SkiplistFileForLeaseSet(ls.hash)
-		f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-		if ferr != nil {
-			errs = append(errs, ferr)
-			log.WithError(ferr).WithField("hash", ls.hash).Error("Failed to open file for saving LeaseSet entry")
-			continue
+		if err := db.saveLeaseSetEntry(ls.hash, ls.entry); err != nil {
+			errs = append(errs, err)
 		}
-		if werr := ls.entry.WriteTo(f); werr != nil {
-			errs = append(errs, werr)
-			log.WithError(werr).WithField("hash", ls.hash).Error("Failed to write LeaseSet entry")
-		}
-		f.Close()
 	}
+	return errs
+}
 
-	return errors.Join(errs...)
+// saveLeaseSetEntry persists a single LeaseSet entry to the filesystem.
+func (db *StdNetDB) saveLeaseSetEntry(hash common.Hash, entry Entry) error {
+	fpath := db.SkiplistFileForLeaseSet(hash)
+	f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if ferr != nil {
+		log.WithError(ferr).WithField("hash", hash).Error("Failed to open file for saving LeaseSet entry")
+		return ferr
+	}
+	defer f.Close()
+	if werr := entry.WriteTo(f); werr != nil {
+		log.WithError(werr).WithField("hash", hash).Error("Failed to write LeaseSet entry")
+		return werr
+	}
+	return nil
 }
 
 // reseed if we have less than minRouters known routers
@@ -862,56 +881,82 @@ func (db *StdNetDB) retrievePeersFromBootstrap(b bootstrap.Bootstrap) ([]router_
 	return peersChan, nil
 }
 
+// verifiedRouterEntry holds a RouterInfo that has passed signature and timestamp validation.
+type verifiedRouterEntry struct {
+	hash common.Hash
+	ri   router_info.RouterInfo
+}
+
 // addNewRouterInfos processes and adds new RouterInfos from peers to the database.
 func (db *StdNetDB) addNewRouterInfos(peers []router_info.RouterInfo) int {
-	// Phase 1: Verify signatures without holding the write lock.
-	// Signature verification is CPU-intensive, so we do it upfront
-	// to avoid blocking readers.
-	type verifiedEntry struct {
-		hash common.Hash
-		ri   router_info.RouterInfo
-	}
-	verified := make([]verifiedEntry, 0, len(peers))
+	verified := db.verifyRouterInfoBatch(peers)
+
+	count := db.insertVerifiedRouterInfos(verified)
+	return count
+}
+
+// verifyRouterInfoBatch validates signatures and timestamps for a batch of RouterInfos.
+// Returns only the entries that pass all checks.
+func (db *StdNetDB) verifyRouterInfoBatch(peers []router_info.RouterInfo) []verifiedRouterEntry {
+	verified := make([]verifiedRouterEntry, 0, len(peers))
 	now := time.Now()
 	for _, ri := range peers {
-		hash, err := ri.IdentHash()
-		if err != nil {
-			log.WithError(err).Warn("Failed to get router hash during reseed, skipping")
-			continue
+		entry, ok := db.validateSingleRouterInfo(ri, now)
+		if ok {
+			verified = append(verified, entry)
 		}
-		if err := verifyRouterInfoSignature(ri); err != nil {
-			log.WithFields(logger.Fields{
-				"hash":  hash,
-				"error": err.Error(),
-			}).Warn("Rejecting RouterInfo from reseed: invalid signature")
-			continue
-		}
-		// Reject RouterInfos with missing, stale, or future-dated published timestamps.
-		// A malicious reseed server could provide technically-valid but ancient RouterInfos
-		// (Sybil attack vector) or future-dated entries that persist indefinitely.
-		published := ri.Published()
-		if published == nil || published.Time().IsZero() {
-			log.WithField("hash", hash).Warn("Rejecting RouterInfo from reseed: missing published date")
-			continue
-		}
-		if now.Sub(published.Time()) > RouterInfoMaxAge {
-			log.WithFields(logger.Fields{
-				"hash": hash,
-				"age":  now.Sub(published.Time()).Round(time.Second),
-			}).Warn("Rejecting RouterInfo from reseed: stale published date")
-			continue
-		}
-		if published.Time().After(now.Add(1 * time.Hour)) {
-			log.WithFields(logger.Fields{
-				"hash":      hash,
-				"published": published.Time(),
-			}).Warn("Rejecting RouterInfo from reseed: future-dated published time")
-			continue
-		}
-		verified = append(verified, verifiedEntry{hash: hash, ri: ri})
 	}
+	return verified
+}
 
-	// Phase 2: Hold write lock only for the map insertion.
+// validateSingleRouterInfo checks a RouterInfo's hash, signature, and published timestamp.
+// Returns the verified entry and true if valid, or a zero entry and false otherwise.
+func (db *StdNetDB) validateSingleRouterInfo(ri router_info.RouterInfo, now time.Time) (verifiedRouterEntry, bool) {
+	hash, err := ri.IdentHash()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get router hash during reseed, skipping")
+		return verifiedRouterEntry{}, false
+	}
+	if err := verifyRouterInfoSignature(ri); err != nil {
+		log.WithFields(logger.Fields{
+			"hash":  hash,
+			"error": err.Error(),
+		}).Warn("Rejecting RouterInfo from reseed: invalid signature")
+		return verifiedRouterEntry{}, false
+	}
+	if err := db.validatePublishedTimestamp(ri, hash, now); err != nil {
+		return verifiedRouterEntry{}, false
+	}
+	return verifiedRouterEntry{hash: hash, ri: ri}, true
+}
+
+// validatePublishedTimestamp rejects RouterInfos with missing, stale, or future-dated timestamps.
+func (db *StdNetDB) validatePublishedTimestamp(ri router_info.RouterInfo, hash common.Hash, now time.Time) error {
+	published := ri.Published()
+	if published == nil || published.Time().IsZero() {
+		log.WithField("hash", hash).Warn("Rejecting RouterInfo from reseed: missing published date")
+		return fmt.Errorf("missing published date")
+	}
+	if now.Sub(published.Time()) > RouterInfoMaxAge {
+		log.WithFields(logger.Fields{
+			"hash": hash,
+			"age":  now.Sub(published.Time()).Round(time.Second),
+		}).Warn("Rejecting RouterInfo from reseed: stale published date")
+		return fmt.Errorf("stale published date")
+	}
+	if published.Time().After(now.Add(1 * time.Hour)) {
+		log.WithFields(logger.Fields{
+			"hash":      hash,
+			"published": published.Time(),
+		}).Warn("Rejecting RouterInfo from reseed: future-dated published time")
+		return fmt.Errorf("future-dated published time")
+	}
+	return nil
+}
+
+// insertVerifiedRouterInfos adds verified RouterInfos to the map under the write lock.
+// Only inserts entries not already present. Returns the count of newly added entries.
+func (db *StdNetDB) insertVerifiedRouterInfos(verified []verifiedRouterEntry) int {
 	count := 0
 	db.riMutex.Lock()
 	for _, entry := range verified {
@@ -1294,75 +1339,93 @@ func (db *StdNetDB) storeRouterInfo(hash common.Hash, ri *router_info.RouterInfo
 	db.riMutex.Unlock()
 }
 
+// leaseSetLoadCounts tracks the running totals during LeaseSet loading.
+type leaseSetLoadCounts struct {
+	loaded  int
+	expired int
+	errors  int
+}
+
 // loadExistingLeaseSets scans the NetDB directory and loads all unexpired LeaseSet files into memory.
 // Expired LeaseSets are removed from disk during the scan.
 func (db *StdNetDB) loadExistingLeaseSets() error {
 	basePath := db.Path()
-	loaded := 0
-	expired := 0
-	errors := 0
+	counts := &leaseSetLoadCounts{}
 
 	log.WithField("path", basePath).Info("Loading existing LeaseSets from NetDB")
 
-	// Walk through all l* subdirectories in the skiplist
 	for _, c := range base64.I2PEncodeAlphabet {
 		dirPath := filepath.Join(basePath, fmt.Sprintf("l%c", c))
-		entries, err := os.ReadDir(dirPath)
-		if err != nil {
-			// Skip if directory doesn't exist or can't be read
-			continue
-		}
-
-		for _, dirEntry := range entries {
-			if dirEntry.IsDir() || !strings.HasSuffix(dirEntry.Name(), ".dat") || !strings.HasPrefix(dirEntry.Name(), "leaseSet-") {
-				continue
-			}
-
-			filePath := filepath.Join(dirPath, dirEntry.Name())
-			hash, err := db.extractHashFromLeaseSetFilename(dirEntry.Name())
-			if err != nil {
-				log.WithError(err).WithField("filename", dirEntry.Name()).Debug("Failed to decode hash from LeaseSet filename")
-				errors++
-				continue
-			}
-
-			// Skip if already loaded
-			db.lsMutex.RLock()
-			_, exists := db.LeaseSets[hash]
-			db.lsMutex.RUnlock()
-			if exists {
-				continue
-			}
-
-			entry, err := db.loadLeaseSetEntryFromFile(filePath)
-			if err != nil {
-				log.WithError(err).WithField("file", dirEntry.Name()).Debug("Failed to load LeaseSet from file")
-				errors++
-				continue
-			}
-
-			// Check expiration and discard if already expired
-			if db.isLeaseSetEntryExpired(entry) {
-				log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removing expired LeaseSet file")
-				os.Remove(filePath)
-				expired++
-				continue
-			}
-
-			// Store in memory and track expiration
-			db.cacheLeaseSetEntry(hash, entry)
-			loaded++
-		}
+		db.loadLeaseSetDirectory(dirPath, counts)
 	}
 
 	log.WithFields(logger.Fields{
-		"loaded":  loaded,
-		"expired": expired,
-		"errors":  errors,
-		"total":   loaded + expired + errors,
+		"loaded":  counts.loaded,
+		"expired": counts.expired,
+		"errors":  counts.errors,
+		"total":   counts.loaded + counts.expired + counts.errors,
 	}).Info("Completed loading LeaseSets from NetDB")
 
 	return nil
+}
+
+// loadLeaseSetDirectory scans a single skiplist subdirectory for LeaseSet files
+// and loads valid, unexpired entries into memory.
+func (db *StdNetDB) loadLeaseSetDirectory(dirPath string, counts *leaseSetLoadCounts) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return
+	}
+
+	for _, dirEntry := range entries {
+		if !db.isLeaseSetFile(dirEntry) {
+			continue
+		}
+		db.processLeaseSetFile(dirPath, dirEntry, counts)
+	}
+}
+
+// isLeaseSetFile checks whether a directory entry is a LeaseSet data file.
+func (db *StdNetDB) isLeaseSetFile(entry os.DirEntry) bool {
+	return !entry.IsDir() &&
+		strings.HasSuffix(entry.Name(), ".dat") &&
+		strings.HasPrefix(entry.Name(), "leaseSet-")
+}
+
+// processLeaseSetFile attempts to load a single LeaseSet file, removing it if expired
+// and caching it if valid.
+func (db *StdNetDB) processLeaseSetFile(dirPath string, dirEntry os.DirEntry, counts *leaseSetLoadCounts) {
+	filePath := filepath.Join(dirPath, dirEntry.Name())
+	hash, err := db.extractHashFromLeaseSetFilename(dirEntry.Name())
+	if err != nil {
+		log.WithError(err).WithField("filename", dirEntry.Name()).Debug("Failed to decode hash from LeaseSet filename")
+		counts.errors++
+		return
+	}
+
+	db.lsMutex.RLock()
+	_, exists := db.LeaseSets[hash]
+	db.lsMutex.RUnlock()
+	if exists {
+		return
+	}
+
+	entry, err := db.loadLeaseSetEntryFromFile(filePath)
+	if err != nil {
+		log.WithError(err).WithField("file", dirEntry.Name()).Debug("Failed to load LeaseSet from file")
+		counts.errors++
+		return
+	}
+
+	if db.isLeaseSetEntryExpired(entry) {
+		log.WithField("hash", fmt.Sprintf("%x", hash[:8])).Debug("Removing expired LeaseSet file")
+		os.Remove(filePath)
+		counts.expired++
+		return
+	}
+
+	db.cacheLeaseSetEntry(hash, entry)
+	counts.loaded++
 }
 
 // extractHashFromLeaseSetFilename extracts and decodes the hash from a LeaseSet filename.
@@ -2693,36 +2756,46 @@ func (db *StdNetDB) StartExpirationCleaner() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
-		// RouterInfo and peer pruning runs every 10 ticks (10 minutes)
 		tickCount := 0
 
 		for {
 			select {
 			case <-ticker.C:
 				db.cleanExpiredLeaseSets()
-
 				tickCount++
-				if tickCount%10 == 0 {
-					// Clean expired RouterInfos every 10 minutes
-					db.cleanExpiredRouterInfos()
-
-					// Prune stale peer tracking entries every 10 minutes
-					if db.PeerTracker != nil {
-						const peerMaxAge = 24 * time.Hour
-						pruned := db.PeerTracker.PruneOldEntries(peerMaxAge)
-						if pruned > 0 {
-							log.WithFields(logger.Fields{
-								"pruned": pruned,
-							}).Info("Pruned stale peer tracker entries")
-						}
-					}
-				}
+				db.runPeriodicMaintenance(tickCount)
 			case <-db.ctx.Done():
 				log.Info("Stopping expiration cleaner")
 				return
 			}
 		}
 	}()
+}
+
+// runPeriodicMaintenance performs less-frequent cleanup tasks every 10 ticks.
+// This includes RouterInfo expiration and peer tracker pruning.
+func (db *StdNetDB) runPeriodicMaintenance(tickCount int) {
+	if tickCount%10 != 0 {
+		return
+	}
+
+	db.cleanExpiredRouterInfos()
+	db.pruneStalePeerEntries()
+}
+
+// pruneStalePeerEntries removes peer tracking entries older than 24 hours.
+func (db *StdNetDB) pruneStalePeerEntries() {
+	if db.PeerTracker == nil {
+		return
+	}
+
+	const peerMaxAge = 24 * time.Hour
+	pruned := db.PeerTracker.PruneOldEntries(peerMaxAge)
+	if pruned > 0 {
+		log.WithFields(logger.Fields{
+			"pruned": pruned,
+		}).Info("Pruned stale peer tracker entries")
+	}
 }
 
 // Stop gracefully shuts down the expiration cleaner goroutine.

@@ -195,6 +195,12 @@ func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (
 		return lease_set.LeaseSet{}, true
 	}
 
+	return gr.awaitLeaseSetResult(destHash, leaseSetChan)
+}
+
+// awaitLeaseSetResult waits up to 1 second for a LeaseSet on the given channel.
+// On timeout, it spawns a background goroutine to drain the channel.
+func (gr *GarlicMessageRouter) awaitLeaseSetResult(destHash common.Hash, leaseSetChan chan lease_set.LeaseSet) (lease_set.LeaseSet, bool) {
 	timer := time.NewTimer(1 * time.Second)
 	defer timer.Stop()
 
@@ -207,18 +213,22 @@ func (gr *GarlicMessageRouter) lookupLeaseSetWithTimeout(destHash common.Hash) (
 		}
 		return ls, false
 	case <-timer.C:
-		// Drain the channel in a background goroutine to prevent the
-		// NetDB sender from blocking forever on an abandoned channel.
-		go func() {
-			select {
-			case <-leaseSetChan:
-			case <-gr.ctx.Done():
-			}
-		}()
+		gr.drainLeaseSetChannel(leaseSetChan)
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
 			Debug("Timeout waiting for LeaseSet, queueing message for async lookup")
 		return lease_set.LeaseSet{}, true
 	}
+}
+
+// drainLeaseSetChannel consumes from a LeaseSet channel in the background to prevent
+// the NetDB sender goroutine from blocking on an abandoned channel.
+func (gr *GarlicMessageRouter) drainLeaseSetChannel(ch chan lease_set.LeaseSet) {
+	go func() {
+		select {
+		case <-ch:
+		case <-gr.ctx.Done():
+		}
+	}()
 }
 
 // validateAndExtractLeases validates a LeaseSet and extracts its leases.

@@ -503,26 +503,32 @@ func (g *Gateway) writeRandomPadding(msg []byte, paddingSize int) error {
 		return err
 	}
 
-	// Ensure non-zero padding bytes (I2P spec requires non-zero).
-	// Replace any zero bytes with a random value in [1,255] to avoid
-	// biasing the byte distribution toward 0x01.
+	replaceZeroPaddingBytes(paddingBytes)
+	return nil
+}
+
+// replaceZeroPaddingBytes replaces any zero bytes in the padding with random non-zero values.
+// I2P spec requires all padding bytes to be non-zero.
+func replaceZeroPaddingBytes(paddingBytes []byte) {
 	for i := range paddingBytes {
 		if paddingBytes[i] == 0 {
-			var b [1]byte
-			for {
-				if _, err := rand.Read(b[:]); err != nil {
-					paddingBytes[i] = 1 // fallback
-					break
-				}
-				if b[0] != 0 {
-					paddingBytes[i] = b[0]
-					break
-				}
-			}
+			paddingBytes[i] = generateNonZeroByte()
 		}
 	}
+}
 
-	return nil
+// generateNonZeroByte returns a cryptographically random byte in the range [1, 255].
+// Falls back to 0x01 if random generation fails.
+func generateNonZeroByte() byte {
+	var b [1]byte
+	for {
+		if _, err := rand.Read(b[:]); err != nil {
+			return 1
+		}
+		if b[0] != 0 {
+			return b[0]
+		}
+	}
 }
 
 // writePayload writes the zero separator, delivery instructions, and message to the buffer.
