@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
@@ -183,15 +184,20 @@ type IncomingMessage struct {
 
 // NewSession creates a new I2CP session with its own isolated in-memory NetDB.
 // The destination parameter can be nil, in which case a new destination will be generated.
+// The signingPrivKey and encryptionPrivKey parameters allow clients to provide their own
+// key material for persistent identity across sessions. When both private keys are provided,
+// the destination is reconstructed from them (honoring the client's identity per I2CP spec).
+// When nil, fresh keys are generated.
 // Each session gets a completely separate in-memory StdNetDB instance to prevent client linkability.
 // Client NetDBs are ephemeral and not persisted to disk.
-func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error) {
+func NewSession(id uint16, dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
 	config = ensureValidConfig(config)
 
 	log.WithFields(logger.Fields{
 		"at":                   "i2cp.NewSession",
 		"sessionID":            id,
 		"hasDestination":       dest != nil,
+		"hasPrivateKeys":       len(privKeys) >= 2,
 		"inboundTunnelLength":  config.InboundTunnelLength,
 		"outboundTunnelLength": config.OutboundTunnelLength,
 		"inboundTunnelCount":   config.InboundTunnelCount,
@@ -201,7 +207,19 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig)
 		"useEncryptedLeaseSet": config.UseEncryptedLeaseSet,
 	}).Info("creating_i2cp_session")
 
-	keyStore, dest, err := prepareDestinationAndKeys(dest)
+	// Extract private keys from variadic args if provided
+	var sigPriv types.SigningPrivateKey
+	var encPriv types.PrivateEncryptionKey
+	if len(privKeys) >= 2 {
+		if sp, ok := privKeys[0].(types.SigningPrivateKey); ok {
+			sigPriv = sp
+		}
+		if ep, ok := privKeys[1].(types.PrivateEncryptionKey); ok {
+			encPriv = ep
+		}
+	}
+
+	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.NewSession",
@@ -244,24 +262,43 @@ func ensureValidConfig(config *SessionConfig) *SessionConfig {
 	return config
 }
 
-// prepareDestinationAndKeys generates a DestinationKeyStore for the session.
-// If no destination is provided, a fresh destination and keys are generated.
-// If a destination is provided, fresh keys are still generated because the
-// session needs private keys for LeaseSet signing and message decryption.
-// The client-provided destination is replaced with one that has matching keys.
-func prepareDestinationAndKeys(dest *destination.Destination) (*keys.DestinationKeyStore, *destination.Destination, error) {
+// prepareDestinationAndKeys generates or reconstructs a DestinationKeyStore for the session.
+//
+// When signingPrivKey and encryptionPrivKey are both non-nil, the keystore is built
+// from the provided private keys, preserving the client's persistent identity.
+// This is the correct I2CP behavior: clients can maintain a stable .b32.i2p address
+// across sessions by providing their own key material.
+//
+// When private keys are nil, a fresh DestinationKeyStore with new keys and a new
+// destination is generated. The dest parameter is ignored in this case because
+// we cannot use a destination without its corresponding private keys.
+func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey) (*keys.DestinationKeyStore, *destination.Destination, error) {
+	// Case 1: Client provided private keys — reconstruct their identity
+	if sigPriv != nil && encPriv != nil {
+		log.WithFields(logger.Fields{
+			"at":     "prepareDestinationAndKeys",
+			"reason": "client_provided_private_keys",
+		}).Info("Using client-provided private keys to preserve persistent identity")
+
+		keyStore, err := keys.NewDestinationKeyStoreFromKeys(sigPriv, encPriv)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create keystore from client keys: %w", err)
+		}
+		return keyStore, keyStore.Destination(), nil
+	}
+
+	// Case 2: Client provided only a destination (no private keys)
+	// We cannot honor the destination without private keys for LeaseSet signing
+	// and message decryption. Log a warning and generate fresh keys.
 	if dest != nil {
 		log.WithFields(logger.Fields{
 			"at":     "prepareDestinationAndKeys",
-			"reason": "external_destination_provided",
-		}).Info("Client provided external destination; generating fresh keys " +
-			"(external destination replaced with key-compatible destination)")
+			"reason": "destination_without_private_keys",
+		}).Warn("Client provided destination without private keys; " +
+			"generating fresh identity (provide private keys to preserve identity)")
 	}
 
-	// Always generate a full keystore with matching keys and destination.
-	// When dest != nil, we still need private keys for LeaseSet signing.
-	// Since we can't derive private keys from the external destination's
-	// public keys, we generate a fresh identity.
+	// Case 3: No destination and no keys — generate everything fresh
 	keyStore, err := keys.NewDestinationKeyStore()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate keys: %w", err)
@@ -1601,7 +1638,9 @@ func NewSessionManager() *SessionManager {
 }
 
 // CreateSession creates a new session with the given destination and config.
-func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig) (*Session, error) {
+// Optional private keys (signingPrivKey, encryptionPrivKey) can be provided
+// to preserve the client's persistent identity across sessions.
+func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -1616,7 +1655,7 @@ func (sm *SessionManager) CreateSession(dest *destination.Destination, config *S
 	}
 
 	// Create session with its own isolated in-memory NetDB
-	session, err := NewSession(sessionID, dest, config)
+	session, err := NewSession(sessionID, dest, config, privKeys...)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.SessionManager.CreateSession",

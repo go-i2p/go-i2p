@@ -170,6 +170,67 @@ func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey,
 	return key, nil
 }
 
+// NewDestinationKeyStoreFromKeys creates a DestinationKeyStore from pre-existing
+// private keys. The destination (public keys + KeysAndCert) is reconstructed
+// deterministically from the provided private keys, producing the same .b32.i2p
+// address as the original identity.
+//
+// This enables I2CP clients to maintain persistent identities across sessions
+// by providing their own key material rather than having the router generate
+// fresh keys each time.
+func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (*DestinationKeyStore, error) {
+	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Creating destination keystore from existing keys")
+
+	if signingPrivKey == nil {
+		return nil, fmt.Errorf("signing private key must not be nil")
+	}
+	if encryptionPrivKey == nil {
+		return nil, fmt.Errorf("encryption private key must not be nil")
+	}
+
+	// Derive public keys from private keys
+	sigPubKey, err := signingPrivKey.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive signing public key: %w", err)
+	}
+	encPubKey, err := encryptionPrivKey.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive encryption public key: %w", err)
+	}
+
+	receivingPubKey, ok := encPubKey.(types.ReceivingPublicKey)
+	if !ok {
+		return nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
+	}
+
+	keyCert, err := createKeyCertificate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key certificate: %w", err)
+	}
+
+	padding, err := calculateKeyPadding()
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate key padding: %w", err)
+	}
+
+	keysAndCert, err := assembleKeysAndCert(keyCert, receivingPubKey, padding, sigPubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
+	}
+
+	dest := &destination.Destination{
+		KeysAndCert: keysAndCert,
+	}
+
+	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Successfully created destination keystore from existing keys")
+
+	return &DestinationKeyStore{
+		destination:       dest,
+		encryptionPrivKey: encryptionPrivKey,
+		signingPrivKey:    signingPrivKey,
+	}, nil
+}
+
 // Close zeroes all private key material from memory. After calling Close,
 // the key store must not be used for signing or encryption operations.
 // This implements defense-in-depth key hygiene per cryptographic best practices.

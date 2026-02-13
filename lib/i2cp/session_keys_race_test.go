@@ -52,22 +52,22 @@ func TestNewSession_WithNilDestination_HasKeys(t *testing.T) {
 }
 
 // TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore tests the
-// prepareDestinationAndKeys helper directly to confirm it always returns a
-// non-nil DestinationKeyStore regardless of the dest argument.
+// prepareDestinationAndKeys helper directly to confirm it returns a
+// non-nil DestinationKeyStore when only a destination is provided (no private keys).
 func TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore(t *testing.T) {
 	// Create an external destination
 	ks, err := keys.NewDestinationKeyStore()
 	require.NoError(t, err)
 	externalDest := ks.Destination()
 
-	// Call with non-nil dest
-	keyStore, dest, err := prepareDestinationAndKeys(externalDest)
+	// Call with non-nil dest but no private keys — should generate fresh keys
+	keyStore, dest, err := prepareDestinationAndKeys(externalDest, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, keyStore, "keyStore must not be nil when dest is provided")
 	assert.NotNil(t, dest, "returned dest must not be nil")
 
 	// The returned destination should come from the new keystore
-	// (not the client-provided one) since we generated fresh keys
+	// (not the client-provided one) since no private keys were provided
 	assert.NotNil(t, keyStore.SigningPrivateKey(),
 		"keyStore should have a signing private key")
 	encPub, encErr := keyStore.EncryptionPublicKey()
@@ -79,7 +79,7 @@ func TestPrepareDestinationAndKeys_ExternalDest_ReturnsValidKeyStore(t *testing.
 // TestPrepareDestinationAndKeys_NilDest_ReturnsValidKeyStore is the baseline
 // test for nil destination input.
 func TestPrepareDestinationAndKeys_NilDest_ReturnsValidKeyStore(t *testing.T) {
-	keyStore, dest, err := prepareDestinationAndKeys(nil)
+	keyStore, dest, err := prepareDestinationAndKeys(nil, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, keyStore, "keyStore must not be nil for nil dest")
 	assert.NotNil(t, dest, "dest must not be nil for nil dest input")
