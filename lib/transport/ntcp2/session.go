@@ -358,7 +358,9 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 	default:
 	}
 
-	// Channel full — wait briefly before dropping to avoid stalling the receive worker
+	// Channel full — wait briefly before dropping to avoid stalling the receive worker.
+	// NOTE: We return true even on drop so the receiveWorker continues processing
+	// subsequent messages. Returning false would permanently kill the receive path.
 	timer := time.NewTimer(500 * time.Millisecond)
 	defer timer.Stop()
 
@@ -372,7 +374,7 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 		return false
 	case <-timer.C:
 		s.logger.Warn("Dropping received message - receive channel full (backpressure)")
-		return false
+		return true // Continue receiving — don't kill the worker for backpressure
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	ntcp2noise "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
+	"golang.org/x/crypto/curve25519"
 )
 
 // logConversionStart logs the start of transport to RouterAddress conversion.
@@ -166,8 +167,15 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 	return host, port, nil
 }
 
-// validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded static key.
-// Returns the base64-encoded static key string and any validation error encountered.
+// validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded
+// static PUBLIC key for publication in RouterAddress.
+//
+// IMPORTANT: The NTCP2Config.StaticKey contains the X25519 PRIVATE key (used internally
+// by the Noise handshake). The NTCP2 spec requires publishing the corresponding PUBLIC
+// key as the 's=' parameter. This function derives the public key via X25519 scalar
+// base multiplication before encoding.
+//
+// Returns the base64-encoded static public key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	if transport.config == nil || transport.config.NTCP2Config == nil {
 		log.Error("Transport NTCP2 configuration is not initialized")
@@ -181,8 +189,16 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 		return "", fmt.Errorf("invalid static key length: expected 32 bytes, got %d", len(ntcp2Config.StaticKey))
 	}
 
-	staticKey := base64.StdEncoding.EncodeToString(ntcp2Config.StaticKey)
-	return staticKey, nil
+	// Derive the X25519 public key from the private key.
+	// StaticKey is the private key; the published 's=' must be the public key.
+	publicKey, err := curve25519.X25519(ntcp2Config.StaticKey, curve25519.Basepoint)
+	if err != nil {
+		log.WithError(err).Error("Failed to derive public key from static private key")
+		return "", fmt.Errorf("failed to derive public key: %w", err)
+	}
+
+	staticKeyB64 := base64.StdEncoding.EncodeToString(publicKey)
+	return staticKeyB64, nil
 }
 
 // buildRouterAddressOptions constructs the options map for the RouterAddress with all required

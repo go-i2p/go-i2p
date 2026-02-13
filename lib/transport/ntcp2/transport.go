@@ -461,17 +461,28 @@ func (t *NTCP2Transport) findExistingSession(routerHash data.Hash) (transport.Tr
 		// Inbound connections are stored as net.Conn by Accept().
 		// Promote the raw conn to a full NTCP2Session so that GetSession
 		// can return it and we avoid creating a redundant outbound connection.
+		// Use CompareAndSwap to prevent double-promotion if two goroutines
+		// call GetSession concurrently for the same inbound peer.
 		if conn, ok := session.(net.Conn); ok {
 			promoted := NewNTCP2Session(conn, t.ctx, t.logger)
 			promoted.SetCleanupCallback(func() {
 				t.removeSession(routerHash)
 			})
-			t.sessions.Store(routerHash, promoted)
-			routerHashBytes := routerHash.Bytes()
-			t.logger.WithFields(map[string]interface{}{
-				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
-			}).Info("Promoted inbound net.Conn to NTCP2Session")
-			return promoted, true
+			if t.sessions.CompareAndSwap(routerHash, session, promoted) {
+				routerHashBytes := routerHash.Bytes()
+				t.logger.WithFields(map[string]interface{}{
+					"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+				}).Info("Promoted inbound net.Conn to NTCP2Session")
+				return promoted, true
+			}
+			// Another goroutine won the promotion race — close our duplicate
+			// and return the winner's session.
+			promoted.Close()
+			if winner, exists := t.sessions.Load(routerHash); exists {
+				if winnerSession, ok := winner.(*NTCP2Session); ok {
+					return winnerSession, true
+				}
+			}
 		}
 	}
 	routerHashBytes := routerHash.Bytes()
@@ -572,47 +583,6 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
 	}).Debug("Attempting raw TCP connection before noise handshake")
 	t.logger.Infof("Attempting TCP connection to peer at %s (hash: %x...)", tcpAddrString, peerHashBytes[:8])
-}
-
-// testTCPConnection tests raw TCP connectivity before attempting NTCP2 handshake.
-func (t *NTCP2Transport) testTCPConnection(tcpAddrString string, peerHashBytes []byte, tcpDialStart time.Time) error {
-	tcpConn, tcpErr := net.DialTimeout("tcp", tcpAddrString, 30*time.Second)
-	tcpDialDuration := time.Since(tcpDialStart)
-
-	if tcpErr != nil {
-		t.logTCPConnectionFailure(tcpAddrString, peerHashBytes, tcpErr, tcpDialDuration)
-		return fmt.Errorf("TCP dial failed to %s: %w", tcpAddrString, tcpErr)
-	}
-	tcpConn.Close() // Close test connection
-
-	t.logger.WithFields(map[string]interface{}{
-		"remote_addr": tcpAddrString,
-		"peer_hash":   fmt.Sprintf("%x", peerHashBytes[:8]),
-		"duration_ms": tcpDialDuration.Milliseconds(),
-	}).Info("TCP connection successful, attempting noise handshake")
-
-	return nil
-}
-
-// logTCPConnectionFailure logs detailed diagnostics for a TCP connection failure.
-func (t *NTCP2Transport) logTCPConnectionFailure(tcpAddrString string, peerHashBytes []byte, tcpErr error, tcpDialDuration time.Duration) {
-	// BUG FIX #6: IPv6 connectivity diagnostics
-	// TCP connection failed - log detailed diagnostics including protocol version
-	isIPv6 := strings.Contains(tcpAddrString, "[")
-	t.logger.WithFields(map[string]interface{}{
-		"remote_addr":    tcpAddrString,
-		"peer_hash":      fmt.Sprintf("%x", peerHashBytes[:8]),
-		"peer_hash_full": fmt.Sprintf("%x", peerHashBytes),
-		"error":          tcpErr.Error(),
-		"error_type":     classifyDialError(tcpErr),
-		"duration_ms":    tcpDialDuration.Milliseconds(),
-		"syscall_error":  getSyscallError(tcpErr),
-		"is_ipv6":        isIPv6,
-		"phase":          "tcp_dial",
-		"impact":         "network unreachable - check firewall/routing",
-	}).Error("TCP connection failed before noise handshake")
-	t.logger.Errorf("TCP connection FAILED to %s after %dms: %v (type: %s)",
-		tcpAddrString, tcpDialDuration.Milliseconds(), tcpErr, classifyDialError(tcpErr))
 }
 
 // performNTCP2Handshake performs the NTCP2 handshake after successful TCP connection.

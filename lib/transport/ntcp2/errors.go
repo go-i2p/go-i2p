@@ -15,7 +15,8 @@ var (
 	ErrInvalidConfig          = oops.New("invalid NTCP2 configuration")
 )
 
-// Wrap go-noise errors with context
+// WrapNTCP2Error wraps an error with NTCP2 operation context.
+// Uses oops.Wrapf which preserves the original error in the chain.
 func WrapNTCP2Error(err error, operation string) error {
-	return oops.Wrapf(err, "NTCP2 %s failed: %s", operation, err.Error())
+	return oops.Wrapf(err, "NTCP2 %s failed", operation)
 }
