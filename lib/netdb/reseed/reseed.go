@@ -226,50 +226,61 @@ func (r Reseed) performReseedRequest(uri string) (*http.Response, error) {
 // The TLS configuration uses the system certificate pool merged with embedded
 // reseed certificates, so connections to reseed servers with non-standard CAs succeed.
 func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
-	// Start with system certificate pool
-	rootCAs, err := x509.SystemCertPool()
-	if err != nil {
-		log.WithError(err).Warn("Failed to load system cert pool, using empty pool")
-		rootCAs = x509.NewCertPool()
-	}
-
-	// Add embedded reseed certificates to the TLS root CA pool.
-	// This ensures connections to reseed servers whose TLS certificates
-	// are signed by CAs not in the system store will still succeed.
-	certPool, err := GetDefaultCertificatePool()
-	if err != nil {
-		log.WithError(err).Warn("Failed to load embedded reseed certificates for TLS")
-	} else if certPool != nil {
-		// Merge the embedded certificates into the system pool.
-		// CertificatePool.Pool() returns an *x509.CertPool with all embedded certs.
-		// We add each embedded cert's raw DER to the system pool.
-		embeddedPool := certPool.Pool()
-		if embeddedPool != nil {
-			for _, signerID := range certPool.ListSignerIDs() {
-				cert, ok := certPool.GetCertificate(signerID)
-				if ok && cert != nil {
-					rootCAs.AddCert(cert)
-				}
-			}
-			log.Debug("Added embedded reseed certificates to TLS root CA pool")
-		}
-	}
-
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12, // Require TLS 1.2 minimum
-		RootCAs:    rootCAs,
-	}
+	rootCAs := buildReseedCertPool()
 
 	transport := http.Transport{
-		DialContext:         dialContext,
-		TLSClientConfig:     tlsConfig,
-		TLSHandshakeTimeout: 10 * time.Second, // Prevent a hung TLS handshake from consuming the full request timeout
+		DialContext: dialContext,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    rootCAs,
+		},
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
 	return &http.Client{
 		Transport: &transport,
 		Timeout:   30 * time.Second,
 	}
+}
+
+// buildReseedCertPool creates a certificate pool containing both system certificates
+// and embedded reseed certificates for TLS verification.
+func buildReseedCertPool() *x509.CertPool {
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.WithError(err).Warn("Failed to load system cert pool, using empty pool")
+		rootCAs = x509.NewCertPool()
+	}
+
+	mergeEmbeddedCerts(rootCAs)
+	return rootCAs
+}
+
+// mergeEmbeddedCerts adds embedded reseed certificates to the provided certificate pool.
+// This ensures connections to reseed servers whose TLS certificates are signed by CAs
+// not in the system store will still succeed.
+func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
+	certPool, err := GetDefaultCertificatePool()
+	if err != nil {
+		log.WithError(err).Warn("Failed to load embedded reseed certificates for TLS")
+		return
+	}
+	if certPool == nil {
+		return
+	}
+
+	embeddedPool := certPool.Pool()
+	if embeddedPool == nil {
+		return
+	}
+
+	for _, signerID := range certPool.ListSignerIDs() {
+		cert, ok := certPool.GetCertificate(signerID)
+		if ok && cert != nil {
+			rootCAs.AddCert(cert)
+		}
+	}
+	log.Debug("Added embedded reseed certificates to TLS root CA pool")
 }
 
 // buildReseedHTTPRequest constructs the HTTP request for reseed operations.

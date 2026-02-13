@@ -181,28 +181,62 @@ func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey,
 func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (*DestinationKeyStore, error) {
 	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Creating destination keystore from existing keys")
 
-	if signingPrivKey == nil {
-		return nil, fmt.Errorf("signing private key must not be nil")
-	}
-	if encryptionPrivKey == nil {
-		return nil, fmt.Errorf("encryption private key must not be nil")
+	if err := validatePrivateKeys(signingPrivKey, encryptionPrivKey); err != nil {
+		return nil, err
 	}
 
-	// Derive public keys from private keys
+	sigPubKey, receivingPubKey, err := derivePublicKeys(signingPrivKey, encryptionPrivKey)
+	if err != nil {
+		return nil, err
+	}
+
+	dest, err := buildDestinationFromPublicKeys(receivingPubKey, sigPubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Successfully created destination keystore from existing keys")
+
+	return &DestinationKeyStore{
+		destination:       dest,
+		encryptionPrivKey: encryptionPrivKey,
+		signingPrivKey:    signingPrivKey,
+	}, nil
+}
+
+// validatePrivateKeys checks that both signing and encryption private keys are non-nil.
+func validatePrivateKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) error {
+	if signingPrivKey == nil {
+		return fmt.Errorf("signing private key must not be nil")
+	}
+	if encryptionPrivKey == nil {
+		return fmt.Errorf("encryption private key must not be nil")
+	}
+	return nil
+}
+
+// derivePublicKeys derives signing and encryption public keys from the provided private keys.
+// Returns the signing public key and the encryption public key as a ReceivingPublicKey.
+func derivePublicKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (types.SigningPublicKey, types.ReceivingPublicKey, error) {
 	sigPubKey, err := signingPrivKey.Public()
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive signing public key: %w", err)
+		return nil, nil, fmt.Errorf("failed to derive signing public key: %w", err)
 	}
 	encPubKey, err := encryptionPrivKey.Public()
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive encryption public key: %w", err)
+		return nil, nil, fmt.Errorf("failed to derive encryption public key: %w", err)
 	}
 
 	receivingPubKey, ok := encPubKey.(types.ReceivingPublicKey)
 	if !ok {
-		return nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
+		return nil, nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
 	}
+	return sigPubKey, receivingPubKey, nil
+}
 
+// buildDestinationFromPublicKeys constructs a Destination from public keys by creating
+// the key certificate, computing padding, and assembling the KeysAndCert structure.
+func buildDestinationFromPublicKeys(encryptionPubKey types.ReceivingPublicKey, signingPubKey types.SigningPublicKey) (*destination.Destination, error) {
 	keyCert, err := createKeyCertificate()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key certificate: %w", err)
@@ -213,21 +247,13 @@ func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encr
 		return nil, fmt.Errorf("failed to calculate key padding: %w", err)
 	}
 
-	keysAndCert, err := assembleKeysAndCert(keyCert, receivingPubKey, padding, sigPubKey)
+	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
 	}
 
-	dest := &destination.Destination{
+	return &destination.Destination{
 		KeysAndCert: keysAndCert,
-	}
-
-	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Successfully created destination keystore from existing keys")
-
-	return &DestinationKeyStore{
-		destination:       dest,
-		encryptionPrivKey: encryptionPrivKey,
-		signingPrivKey:    signingPrivKey,
 	}, nil
 }
 

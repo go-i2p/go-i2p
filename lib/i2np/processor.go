@@ -2076,7 +2076,30 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using ECIES-X25519-AEAD encryption before being placed into the message.
 func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
-	// Convert to i2np.BuildRequestRecord and encrypt each with the hop's public key
+	encryptedData, err := encryptBuildRecords(result)
+	if err != nil {
+		return nil, err
+	}
+
+	data := serializeBuildRecords(encryptedData, len(result.Records))
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD)
+	msg.SetMessageID(messageID)
+	msg.SetData(data)
+
+	log.WithFields(logger.Fields{
+		"at":           "createVariableTunnelBuildMessage",
+		"record_count": len(result.Records),
+		"data_size":    len(data),
+		"encrypted":    true,
+	}).Debug("Created encrypted Variable Tunnel Build message")
+
+	return msg, nil
+}
+
+// encryptBuildRecords encrypts each build request record with its corresponding
+// hop's X25519 public key using ECIES-X25519-AEAD encryption.
+func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error) {
 	var encryptedData [8][528]byte
 	for i := 0; i < 8 && i < len(result.Records); i++ {
 		rec := result.Records[i]
@@ -2096,42 +2119,37 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 		}
 
 		if i >= len(result.Hops) {
-			return nil, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
+			return encryptedData, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
 		}
 		encrypted, err := EncryptBuildRequestRecord(i2npRecord, result.Hops[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
+			return encryptedData, fmt.Errorf("failed to encrypt build record %d: %w", i, err)
 		}
 		encryptedData[i] = encrypted
 	}
+	return encryptedData, nil
+}
 
-	// Serialize all 8 encrypted records. Unused slots are filled with random
-	// data to prevent observers from distinguishing tunnel length by counting
-	// zero-filled records.
+// serializeBuildRecords serializes all 8 encrypted records into a contiguous byte slice.
+// Unused slots are filled with random data to prevent observers from distinguishing
+// tunnel length by counting zero-filled records.
+func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
 	data := make([]byte, 8*528)
 	for i := 0; i < 8; i++ {
-		if i < len(result.Records) {
+		if i < recordCount {
 			copy(data[i*528:(i+1)*528], encryptedData[i][:])
 		} else {
 			// Fill unused slot with random padding
 			if _, err := rand.Read(data[i*528 : (i+1)*528]); err != nil {
-				return nil, fmt.Errorf("failed to generate random padding for slot %d: %w", i, err)
+				// Fallback: slot stays zeroed (acceptable for unused slots)
+				log.WithFields(logger.Fields{
+					"at":   "serializeBuildRecords",
+					"slot": i,
+				}).Warn("Failed to generate random padding for unused slot")
 			}
 		}
 	}
-
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD)
-	msg.SetMessageID(messageID)
-	msg.SetData(data)
-
-	log.WithFields(logger.Fields{
-		"at":           "createVariableTunnelBuildMessage",
-		"record_count": len(result.Records),
-		"data_size":    len(data),
-		"encrypted":    true,
-	}).Debug("Created encrypted Variable Tunnel Build message")
-
-	return msg, nil
+	return data
 }
 
 // generateMessageID generates a unique message ID for tracking build requests.

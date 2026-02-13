@@ -637,51 +637,16 @@ func validateI2PControl(i2pcontrol I2PControlDefaults) error {
 		"phase":  "startup",
 	}).Debug("validating I2PControl configuration")
 
-	// Security: reject non-localhost binding with default password over HTTP
-	if i2pcontrol.Enabled && i2pcontrol.Password == "itoopie" && !i2pcontrol.UseHTTPS {
-		isLocalhost := strings.HasPrefix(i2pcontrol.Address, "localhost:") ||
-			strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
-			strings.HasPrefix(i2pcontrol.Address, "[::1]:")
-		if !isLocalhost {
-			log.WithFields(logger.Fields{
-				"at":     "validateI2PControlConfig",
-				"reason": "insecure_remote_access",
-			}).Error("I2PControl refuses to start with default password over HTTP on non-localhost")
-			return newValidationError("I2PControl cannot use default password 'itoopie' over HTTP on non-localhost address " + i2pcontrol.Address + "; change the password or enable HTTPS")
-		}
-		log.WithFields(logger.Fields{
-			"at":     "validateI2PControlConfig",
-			"reason": "default_password_over_http",
-		}).Warn("I2PControl is enabled with default password over HTTP — change password for production use")
+	if err := validateI2PControlSecurity(i2pcontrol); err != nil {
+		return err
 	}
 
-	// If HTTPS is enabled, cert and key files must be provided
-	if i2pcontrol.UseHTTPS {
-		if i2pcontrol.CertFile == "" {
-			log.WithFields(logger.Fields{
-				"at":     "validateI2PControlConfig",
-				"reason": "missing_cert_file",
-			}).Error("invalid I2PControl configuration")
-			return newValidationError("I2PControl.CertFile must be set when UseHTTPS is enabled")
-		}
-		if i2pcontrol.KeyFile == "" {
-			log.WithFields(logger.Fields{
-				"at":     "validateI2PControlConfig",
-				"reason": "missing_key_file",
-			}).Error("invalid I2PControl configuration")
-			return newValidationError("I2PControl.KeyFile must be set when UseHTTPS is enabled")
-		}
+	if err := validateI2PControlHTTPS(i2pcontrol); err != nil {
+		return err
 	}
 
-	// Token expiration must be at least 1 minute
-	if i2pcontrol.TokenExpiration < 1*time.Minute {
-		log.WithFields(logger.Fields{
-			"at":               "validateI2PControlConfig",
-			"reason":           "token_expiration_too_low",
-			"token_expiration": i2pcontrol.TokenExpiration,
-			"minimum_required": "1m",
-		}).Error("invalid I2PControl configuration")
-		return newValidationError("I2PControl.TokenExpiration must be at least 1 minute")
+	if err := validateI2PControlTokenExpiration(i2pcontrol); err != nil {
+		return err
 	}
 
 	log.WithFields(logger.Fields{
@@ -690,6 +655,66 @@ func validateI2PControl(i2pcontrol I2PControlDefaults) error {
 		"phase":  "startup",
 	}).Debug("I2PControl configuration validated successfully")
 	return nil
+}
+
+// validateI2PControlSecurity rejects non-localhost binding with default password over HTTP
+// to prevent accidental exposure of the I2PControl interface.
+func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
+	if !i2pcontrol.Enabled || i2pcontrol.Password != "itoopie" || i2pcontrol.UseHTTPS {
+		return nil
+	}
+
+	isLocalhost := strings.HasPrefix(i2pcontrol.Address, "localhost:") ||
+		strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
+		strings.HasPrefix(i2pcontrol.Address, "[::1]:")
+	if !isLocalhost {
+		log.WithFields(logger.Fields{
+			"at":     "validateI2PControlConfig",
+			"reason": "insecure_remote_access",
+		}).Error("I2PControl refuses to start with default password over HTTP on non-localhost")
+		return newValidationError("I2PControl cannot use default password 'itoopie' over HTTP on non-localhost address " + i2pcontrol.Address + "; change the password or enable HTTPS")
+	}
+	log.WithFields(logger.Fields{
+		"at":     "validateI2PControlConfig",
+		"reason": "default_password_over_http",
+	}).Warn("I2PControl is enabled with default password over HTTP — change password for production use")
+	return nil
+}
+
+// validateI2PControlHTTPS checks that cert and key files are provided when HTTPS is enabled.
+func validateI2PControlHTTPS(i2pcontrol I2PControlDefaults) error {
+	if !i2pcontrol.UseHTTPS {
+		return nil
+	}
+	if i2pcontrol.CertFile == "" {
+		log.WithFields(logger.Fields{
+			"at":     "validateI2PControlConfig",
+			"reason": "missing_cert_file",
+		}).Error("invalid I2PControl configuration")
+		return newValidationError("I2PControl.CertFile must be set when UseHTTPS is enabled")
+	}
+	if i2pcontrol.KeyFile == "" {
+		log.WithFields(logger.Fields{
+			"at":     "validateI2PControlConfig",
+			"reason": "missing_key_file",
+		}).Error("invalid I2PControl configuration")
+		return newValidationError("I2PControl.KeyFile must be set when UseHTTPS is enabled")
+	}
+	return nil
+}
+
+// validateI2PControlTokenExpiration checks that the token expiration is at least 1 minute.
+func validateI2PControlTokenExpiration(i2pcontrol I2PControlDefaults) error {
+	if i2pcontrol.TokenExpiration >= 1*time.Minute {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":               "validateI2PControlConfig",
+		"reason":           "token_expiration_too_low",
+		"token_expiration": i2pcontrol.TokenExpiration,
+		"minimum_required": "1m",
+	}).Error("invalid I2PControl configuration")
+	return newValidationError("I2PControl.TokenExpiration must be at least 1 minute")
 }
 
 // validateTunnel validates tunnel configuration settings.

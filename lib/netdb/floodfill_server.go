@@ -471,17 +471,35 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 		return
 	}
 
-	// Select closest floodfills to flood to (excluding ourselves)
-	floodfills, err := fs.db.SelectFloodfillRouters(key, fs.floodCount+1)
+	floodfills, err := fs.selectFloodPeers(key)
 	if err != nil {
 		log.WithError(err).Warn("Failed to select floodfill routers for flooding")
 		return
 	}
 
 	store := i2np.NewDatabaseStore(key, data, dataType)
-	flooded := 0
+	flooded := fs.floodToSelectedPeers(floodfills, store)
 
+	log.WithFields(logger.Fields{
+		"at":      "FloodDatabaseStore",
+		"key":     fmt.Sprintf("%x", key[:8]),
+		"flooded": flooded,
+	}).Debug("Flooded DatabaseStore to peers")
+}
+
+// selectFloodPeers selects the closest floodfill routers for flooding, excluding ourselves.
+func (fs *FloodfillServer) selectFloodPeers(key common.Hash) ([]router_info.RouterInfo, error) {
+	return fs.db.SelectFloodfillRouters(key, fs.floodCount+1)
+}
+
+// floodToSelectedPeers sends the DatabaseStore message to eligible floodfill peers,
+// skipping our own hash and stopping after floodCount successful sends.
+func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterInfo, store i2np.I2NPMessage) int {
+	flooded := 0
 	for _, ri := range floodfills {
+		if flooded >= fs.floodCount {
+			break
+		}
 		hash, err := ri.IdentHash()
 		if err != nil {
 			continue
@@ -489,11 +507,7 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 		if hash == fs.ourHash {
 			continue
 		}
-		if flooded >= fs.floodCount {
-			break
-		}
-
-		if err := transport.SendI2NPMessage(fs.ctx, hash, store); err != nil {
+		if err := fs.transport.SendI2NPMessage(fs.ctx, hash, store); err != nil {
 			log.WithFields(logger.Fields{
 				"at":   "FloodDatabaseStore",
 				"peer": fmt.Sprintf("%x", hash[:8]),
@@ -502,12 +516,7 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 		}
 		flooded++
 	}
-
-	log.WithFields(logger.Fields{
-		"at":      "FloodDatabaseStore",
-		"key":     fmt.Sprintf("%x", key[:8]),
-		"flooded": flooded,
-	}).Debug("Flooded DatabaseStore to peers")
+	return flooded
 }
 
 // GetFloodfillRouterInfo returns our router's RouterInfo if we are configured as floodfill.

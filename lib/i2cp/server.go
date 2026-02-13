@@ -589,34 +589,45 @@ func (s *Server) processOneMessage(conn net.Conn, sessionPtr **Session) bool {
 
 	s.logReceivedMessage(msg)
 
-	// Attempt authentication from GetDate messages (I2CP clients send credentials
-	// via i2cp.username/i2cp.password options in the GetDate payload).
 	if msg.Type == MessageTypeGetDate {
 		s.attemptAuthFromGetDate(conn, msg)
 	}
 
-	// Check authentication for session-mutating operations.
-	// GetDate, GetBandwidthLimits, HostLookup, and Disconnect are allowed
-	// without authentication (needed for handshake and graceful disconnect).
-	if s.requiresAuthentication(msg.Type) {
-		state := s.getOrCreateConnectionState(conn)
-		if !s.isConnectionAuthenticated(state) {
-			log.WithFields(logger.Fields{
-				"at":         "i2cp.Server.processOneMessage",
-				"msgType":    MessageTypeName(msg.Type),
-				"remoteAddr": conn.RemoteAddr().String(),
-			}).Warn("unauthenticated_client_rejected")
-			// Send disconnect and close connection
-			return false
-		}
+	if !s.checkMessageAuthentication(conn, msg) {
+		return false
 	}
 
+	return s.processAndRespond(conn, msg, sessionPtr)
+}
+
+// checkMessageAuthentication verifies the client is authenticated for session-mutating
+// operations. GetDate, GetBandwidthLimits, HostLookup, and Disconnect are allowed
+// without authentication (needed for handshake and graceful disconnect).
+func (s *Server) checkMessageAuthentication(conn net.Conn, msg *Message) bool {
+	if !s.requiresAuthentication(msg.Type) {
+		return true
+	}
+	state := s.getOrCreateConnectionState(conn)
+	if s.isConnectionAuthenticated(state) {
+		return true
+	}
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.Server.processOneMessage",
+		"msgType":    MessageTypeName(msg.Type),
+		"remoteAddr": conn.RemoteAddr().String(),
+	}).Warn("unauthenticated_client_rejected")
+	return false
+}
+
+// processAndRespond processes the client message and sends the response.
+// Returns false if the connection should be closed, true to continue.
+func (s *Server) processAndRespond(conn net.Conn, msg *Message, sessionPtr **Session) bool {
 	response, err := s.processClientMessage(msg, sessionPtr)
 	if err != nil {
 		if errors.Is(err, errClientDisconnected) {
-			return false // Client disconnected gracefully — stop the loop
+			return false
 		}
-		return true // Continue despite processing error
+		return true
 	}
 
 	s.handleNewSessionTracking(msg, sessionPtr, conn)

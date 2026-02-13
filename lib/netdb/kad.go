@@ -597,12 +597,39 @@ func (kr *KademliaResolver) processLookupResponse(data []byte, msgType int, targ
 
 // processDatabaseStoreResponse extracts a RouterInfo from a DatabaseStore message.
 func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash common.Hash) (*router_info.RouterInfo, error) {
+	dbStore, err := parseDatabaseStore(data, targetHash)
+	if err != nil {
+		return nil, err
+	}
+
+	decompressed, err := decompressRouterInfoPayload(dbStore.GetStoreData())
+	if err != nil {
+		return nil, err
+	}
+
+	ri, _, err := router_info.ReadRouterInfo(decompressed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
+	}
+
+	kr.NetworkDatabase.StoreRouterInfo(ri)
+
+	log.WithFields(logger.Fields{
+		"at":     "processDatabaseStoreResponse",
+		"target": fmt.Sprintf("%x", targetHash[:8]),
+	}).Debug("Successfully received RouterInfo from peer")
+
+	return &ri, nil
+}
+
+// parseDatabaseStore unmarshals and validates a DatabaseStore message against
+// the expected target hash and ensures it contains a RouterInfo.
+func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStore, error) {
 	var dbStore i2np.DatabaseStore
 	if err := dbStore.UnmarshalBinary(data); err != nil {
 		return nil, fmt.Errorf("failed to parse DatabaseStore: %w", err)
 	}
 
-	// Verify the key matches our target
 	if dbStore.Key != targetHash {
 		log.WithFields(logger.Fields{
 			"at":       "processDatabaseStoreResponse",
@@ -612,29 +639,28 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 		return nil, fmt.Errorf("key mismatch in response")
 	}
 
-	// Check if this is a RouterInfo
 	if !dbStore.IsRouterInfo() {
 		return nil, fmt.Errorf("response is not a RouterInfo (type=%d)", dbStore.StoreType)
 	}
 
-	// Parse the RouterInfo from the data
-	// Per I2P spec, RouterInfo in DatabaseStore is:
-	//   2-byte big-endian compressed length, followed by gzip-compressed RouterInfo
-	storeData := dbStore.GetStoreData()
+	return &dbStore, nil
+}
+
+// decompressRouterInfoPayload extracts and decompresses the gzip-compressed
+// RouterInfo from a DatabaseStore payload. The payload format is a 2-byte
+// big-endian compressed length followed by the compressed data.
+func decompressRouterInfoPayload(storeData []byte) ([]byte, error) {
 	if len(storeData) < 2 {
 		return nil, fmt.Errorf("RouterInfo data too short")
 	}
 
-	// First 2 bytes are the compressed length
 	compressedLen := int(binary.BigEndian.Uint16(storeData[:2]))
 	if len(storeData) < 2+compressedLen {
 		return nil, fmt.Errorf("RouterInfo data truncated: need %d bytes, have %d", 2+compressedLen, len(storeData))
 	}
 
-	// Extract the gzip-compressed RouterInfo bytes (skip the 2-byte length prefix)
 	compressedData := storeData[2 : 2+compressedLen]
 
-	// Decompress the gzip data
 	decompressed, err := gzipDecompress(compressedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress RouterInfo: %w", err)
@@ -646,21 +672,7 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 		"decompressed_len": len(decompressed),
 	}).Debug("Decompressed RouterInfo from DatabaseStore")
 
-	// Parse the RouterInfo from the decompressed data
-	ri, _, err := router_info.ReadRouterInfo(decompressed)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse RouterInfo: %w", err)
-	}
-
-	// Store in our database
-	kr.NetworkDatabase.StoreRouterInfo(ri)
-
-	log.WithFields(logger.Fields{
-		"at":     "processDatabaseStoreResponse",
-		"target": fmt.Sprintf("%x", targetHash[:8]),
-	}).Debug("Successfully received RouterInfo from peer")
-
-	return &ri, nil
+	return decompressed, nil
 }
 
 // SearchReplyError is returned when a peer responds with a DatabaseSearchReply

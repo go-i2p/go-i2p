@@ -150,33 +150,42 @@ func loadOrGenerateEncryptionKey(dir, name string) (types.ReceivingPublicKey, ty
 
 	// Try to load existing encryption key
 	if keyData, err := os.ReadFile(fullPath); err == nil {
-		log.WithField("path", fullPath).Debug("Loading existing X25519 encryption key")
-		privKey, err := curve25519.NewCurve25519PrivateKey(keyData)
-		if err != nil {
-			log.WithError(err).Error("Failed to reconstruct X25519 private key from disk")
-			return nil, nil, err
-		}
-		pubKey, err := privKey.Public()
-		if err != nil {
-			log.WithError(err).Error("Failed to derive X25519 public key")
-			return nil, nil, err
-		}
-		receivingPubKey, ok := pubKey.(types.ReceivingPublicKey)
-		if !ok {
-			return nil, nil, oops.Errorf("X25519 public key does not implement ReceivingPublicKey")
-		}
-		log.WithField("path", fullPath).Debug("Successfully loaded X25519 encryption key from disk")
-		return receivingPubKey, privKey, nil
+		return loadExistingEncryptionKey(fullPath, keyData)
 	}
 
-	// Generate new encryption key pair
+	return generateAndPersistEncryptionKey(fullPath)
+}
+
+// loadExistingEncryptionKey reconstructs an X25519 key pair from persisted private key data.
+func loadExistingEncryptionKey(path string, keyData []byte) (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
+	log.WithField("path", path).Debug("Loading existing X25519 encryption key")
+	privKey, err := curve25519.NewCurve25519PrivateKey(keyData)
+	if err != nil {
+		log.WithError(err).Error("Failed to reconstruct X25519 private key from disk")
+		return nil, nil, err
+	}
+	pubKey, err := privKey.Public()
+	if err != nil {
+		log.WithError(err).Error("Failed to derive X25519 public key")
+		return nil, nil, err
+	}
+	receivingPubKey, ok := pubKey.(types.ReceivingPublicKey)
+	if !ok {
+		return nil, nil, oops.Errorf("X25519 public key does not implement ReceivingPublicKey")
+	}
+	log.WithField("path", path).Debug("Successfully loaded X25519 encryption key from disk")
+	return receivingPubKey, privKey, nil
+}
+
+// generateAndPersistEncryptionKey creates a new X25519 key pair and writes
+// the private key to disk for persistence across restarts.
+func generateAndPersistEncryptionKey(fullPath string) (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
 	log.WithField("path", fullPath).Debug("Generating new X25519 encryption key")
 	encryptionPubKey, encryptionPrivKey, err := curve25519.GenerateKeyPair()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Persist the private key to disk immediately
 	if err := os.WriteFile(fullPath, encryptionPrivKey.Bytes(), 0o600); err != nil {
 		log.WithError(err).Error("Failed to write X25519 encryption key to disk")
 		return nil, nil, err

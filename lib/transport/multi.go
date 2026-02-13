@@ -390,28 +390,38 @@ func (tmux *TransportMuxer) Accept() (net.Conn, error) {
 
 	tmux.ensureAcceptLoop()
 
+	return tmux.waitForAcceptedConnection()
+}
+
+// waitForAcceptedConnection blocks until a connection is available from the accept loop
+// or the muxer shuts down. Returns the accepted connection wrapped in a trackedConn.
+func (tmux *TransportMuxer) waitForAcceptedConnection() (net.Conn, error) {
 	select {
 	case res, ok := <-tmux.acceptChan:
-		if !ok {
-			// Channel closed — muxer is shutting down
-			atomic.AddInt32(&tmux.activeSessionCount, -1)
-			return nil, errors.New("transport muxer closed")
-		}
-		if res.err != nil {
-			atomic.AddInt32(&tmux.activeSessionCount, -1)
-			return nil, res.err
-		}
-		log.WithFields(logger.Fields{
-			"at":              "(TransportMuxer) Accept",
-			"reason":          "connection_accepted",
-			"transport_index": res.transportIndex,
-			"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
-		}).Debug("accept succeeded")
-		return &trackedConn{Conn: res.conn, mux: tmux}, nil
+		return tmux.handleAcceptChannelResult(res, ok)
 	case <-tmux.acceptDone:
 		atomic.AddInt32(&tmux.activeSessionCount, -1)
 		return nil, errors.New("transport muxer closed")
 	}
+}
+
+// handleAcceptChannelResult processes a result received from the accept channel.
+func (tmux *TransportMuxer) handleAcceptChannelResult(res acceptResult, ok bool) (net.Conn, error) {
+	if !ok {
+		atomic.AddInt32(&tmux.activeSessionCount, -1)
+		return nil, errors.New("transport muxer closed")
+	}
+	if res.err != nil {
+		atomic.AddInt32(&tmux.activeSessionCount, -1)
+		return nil, res.err
+	}
+	log.WithFields(logger.Fields{
+		"at":              "(TransportMuxer) Accept",
+		"reason":          "connection_accepted",
+		"transport_index": res.transportIndex,
+		"active_sessions": atomic.LoadInt32(&tmux.activeSessionCount),
+	}).Debug("accept succeeded")
+	return &trackedConn{Conn: res.conn, mux: tmux}, nil
 }
 
 // Addr returns the address of the first transport's listener.

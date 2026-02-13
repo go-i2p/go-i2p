@@ -361,9 +361,13 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 	default:
 	}
 
-	// Channel full — wait briefly before dropping to avoid stalling the receive worker.
-	// NOTE: We return true even on drop so the receiveWorker continues processing
-	// subsequent messages. Returning false would permanently kill the receive path.
+	return s.queueWithBackpressure(msg)
+}
+
+// queueWithBackpressure waits briefly for space in the receive channel before dropping
+// the message to avoid stalling the receive worker. Returns true even on drop so
+// the receiveWorker continues processing subsequent messages.
+func (s *NTCP2Session) queueWithBackpressure(msg i2np.I2NPMessage) bool {
 	timer := time.NewTimer(500 * time.Millisecond)
 	defer timer.Stop()
 
@@ -376,14 +380,19 @@ func (s *NTCP2Session) queueReceivedMessage(msg i2np.I2NPMessage) bool {
 		s.logger.Warn("Cannot queue received message - session is closed")
 		return false
 	case <-timer.C:
-		dropped := atomic.AddUint64(&s.droppedMessages, 1)
-		s.logger.WithFields(map[string]interface{}{
-			"message_type":  msg.Type(),
-			"total_dropped": dropped,
-			"recv_chan_cap": cap(s.recvChan),
-		}).Warn("Dropping received message - receive channel full (backpressure)")
+		s.recordDroppedMessage(msg)
 		return true // Continue receiving — don't kill the worker for backpressure
 	}
+}
+
+// recordDroppedMessage increments the dropped message counter and logs the event.
+func (s *NTCP2Session) recordDroppedMessage(msg i2np.I2NPMessage) {
+	dropped := atomic.AddUint64(&s.droppedMessages, 1)
+	s.logger.WithFields(map[string]interface{}{
+		"message_type":  msg.Type(),
+		"total_dropped": dropped,
+		"recv_chan_cap": cap(s.recvChan),
+	}).Warn("Dropping received message - receive channel full (backpressure)")
 }
 
 // checkRekey checks if the session needs rekeying based on message count.
