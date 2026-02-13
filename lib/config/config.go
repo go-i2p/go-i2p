@@ -39,6 +39,11 @@ func InitConfig() error {
 	// Update RouterConfigProperties
 	UpdateRouterConfig()
 
+	// Validate configuration defaults to catch invalid values early
+	if err := Validate(Defaults()); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	// Security warning: Check for default password
 	CheckDefaultPasswordWarning(viper.GetString("i2pcontrol.password"))
 

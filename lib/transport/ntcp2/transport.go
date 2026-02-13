@@ -34,6 +34,10 @@ type NTCP2Transport struct {
 	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount int32    // atomic O(1) session counter
 
+	// Protects identity, config.NTCP2Config, and listener from concurrent
+	// access by SetIdentity vs GetSession/Accept/Compatible.
+	identityMu sync.RWMutex
+
 	// Lifecycle management
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -327,11 +331,11 @@ func (t *NTCP2Transport) Addr() net.Addr {
 }
 
 // SetIdentity sets the router identity for this transport.
+// Protected by identityMu to prevent races with GetSession/Accept/Compatible.
 func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 	if err := t.logIdentityUpdate(ident); err != nil {
 		return err
 	}
-	t.identity = ident
 
 	ntcp2Config, err := t.createNTCP2ConfigFromIdentity(ident)
 	if err != nil {
@@ -342,7 +346,10 @@ func (t *NTCP2Transport) SetIdentity(ident router_info.RouterInfo) error {
 		return fmt.Errorf("failed to reinitialize crypto keys after identity update: %w", err)
 	}
 
+	t.identityMu.Lock()
+	t.identity = ident
 	t.config.NTCP2Config = ntcp2Config
+	t.identityMu.Unlock()
 
 	if err := t.recreateListenerIfNeeded(ntcp2Config); err != nil {
 		return err

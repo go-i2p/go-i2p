@@ -119,6 +119,12 @@ func (g *GarlicElGamal) Bytes() ([]byte, error) {
 		return nil, oops.Errorf("cannot serialize nil GarlicElGamal")
 	}
 
+	// Validate that Length matches actual data length to prevent
+	// panics from copy or silent data truncation.
+	if int(g.Length) != len(g.Data) {
+		return nil, oops.Errorf("GarlicElGamal length mismatch: Length=%d, len(Data)=%d", g.Length, len(g.Data))
+	}
+
 	result := make([]byte, 4+len(g.Data))
 	binary.BigEndian.PutUint32(result[0:4], g.Length)
 	copy(result[4:], g.Data)

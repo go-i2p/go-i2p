@@ -130,7 +130,7 @@ func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
 	if len(data) < 65 {
-		return ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA
 	}
 
 	offset := 0
@@ -143,10 +143,10 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	d.Count = int(data[offset])
 	offset++
 
-	// Validate total length: key(32) + count(1) + peerHashes(count*32) + from(32)
+	// Validate total length
 	expectedLen := 32 + 1 + (d.Count * 32) + 32
 	if len(data) < expectedLen {
-		return ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA
 	}
 
 	// Peer hashes (count * 32 bytes)

@@ -58,9 +58,13 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 		public, err := ks.privateKey.Public()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get public key, generating fallback ID")
-			// Generate a deterministic fallback ID using PID
-			// This is cached via sync.Once so it remains consistent
-			fallbackID := fmt.Sprintf("unknown-%d", os.Getpid())
+			// Generate a deterministic fallback ID using the private key bytes
+			// to ensure the same key always maps to the same file, even across restarts.
+			pkBytes := ks.privateKey.Bytes()
+			if len(pkBytes) > 10 {
+				pkBytes = pkBytes[:10]
+			}
+			fallbackID := "unknown-" + hex.EncodeToString(pkBytes)
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID
 		}

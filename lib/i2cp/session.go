@@ -1183,8 +1183,12 @@ func (s *Session) StartLeaseSetMaintenance() error {
 	}
 
 	// Calculate maintenance interval: check every 1/4 of tunnel lifetime
-	// For default 10-minute tunnels, this means checking every 2.5 minutes
+	// For default 10-minute tunnels, this means checking every 2.5 minutes.
+	// Enforce a minimum of 1ms to prevent ticker panic on zero duration.
 	maintenanceInterval := s.config.TunnelLifetime / 4
+	if maintenanceInterval <= 0 {
+		maintenanceInterval = 15 * time.Second
+	}
 
 	s.maintTicker = time.NewTicker(maintenanceInterval)
 

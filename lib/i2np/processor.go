@@ -2242,18 +2242,28 @@ func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, p
 
 	tm.logSendingBuildRequests(tunnelID, len(peers))
 
+	var firstErr error
 	for i := range records {
 		if i >= len(peers) {
 			break
 		}
 
 		if err := tm.sendBuildRequestToHop(i, records[i], peers[i], tunnelID); err != nil {
+			log.WithFields(logger.Fields{
+				"at":       "TunnelManager.sendTunnelBuildRequests",
+				"hop":      i,
+				"tunnelID": tunnelID,
+				"error":    err.Error(),
+			}).Error("failed_to_send_build_request_to_hop")
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 	}
 
 	tm.logBuildRequestsCompleted(tunnelID)
-	return nil
+	return firstErr
 }
 
 // logSendingBuildRequests logs the start of tunnel build request sending.
@@ -3001,11 +3011,12 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 // createDatabaseStoreMessage creates an I2NP message from DatabaseStore
 func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NPMessage {
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)
-	if data, err := store.MarshalBinary(); err == nil {
-		msg.SetData(data)
-	} else {
+	data, err := store.MarshalBinary()
+	if err != nil {
 		log.WithField("error", err).Error("Failed to marshal DatabaseStore")
+		return nil
 	}
+	msg.SetData(data)
 	return msg
 }
 

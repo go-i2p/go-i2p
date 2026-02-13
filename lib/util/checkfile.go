@@ -10,10 +10,18 @@ import (
 func CheckFileExists(fpath string) bool {
 	_, e := os.Stat(fpath)
 	if e != nil {
-		log.WithFields(map[string]interface{}{
-			"at":   "CheckFileExists",
-			"path": fpath,
-		}).Debug("File does not exist")
+		if os.IsNotExist(e) {
+			log.WithFields(map[string]interface{}{
+				"at":   "CheckFileExists",
+				"path": fpath,
+			}).Debug("File does not exist")
+		} else {
+			log.WithFields(map[string]interface{}{
+				"at":    "CheckFileExists",
+				"path":  fpath,
+				"error": e.Error(),
+			}).Warn("Failed to stat file (permission denied or I/O error)")
+		}
 	}
 	return e == nil
 }

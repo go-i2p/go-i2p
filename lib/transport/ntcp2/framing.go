@@ -2,6 +2,7 @@ package ntcp2
 
 import (
 	"fmt"
+	"io"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -115,24 +116,10 @@ func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 }
 
 func (u *I2NPUnframer) readFull(buf []byte) error {
-	// Read from the connection until the buffer is full
-	totalLen := len(buf)
-	readThisCall := 0
-	for len(buf) > 0 {
-		n, err := u.conn.Read(buf)
-		if err != nil {
-			return err
-		}
-		readThisCall += n
-		u.bytesRead += n
-		u.totalBytesRead += n
-		buf = buf[n:]
-	}
-	// Ensure we read the full buffer (using per-call counter, not cumulative)
-	if readThisCall < totalLen {
-		return fmt.Errorf("incomplete read: got %d bytes, expected %d", readThisCall, totalLen)
-	}
-	return nil
+	n, err := io.ReadFull(u.conn, buf)
+	u.bytesRead += n
+	u.totalBytesRead += n
+	return err
 }
 
 // Log the successful creation of the session

@@ -456,9 +456,23 @@ func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentD
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
 // Updates delivery type on existing assemblers to ensure correct routing.
 // Note: Caller must hold fragmentsMutex.
+// maxConcurrentAssemblies limits the number of in-progress fragment
+// assemblies to prevent memory exhaustion from fragment-flood attacks.
+const maxConcurrentAssemblies = 5000
+
 func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragmentAssembler {
 	assembler, exists := e.fragments[msgID]
 	if !exists {
+		// Enforce cap on concurrent assemblies to prevent memory exhaustion
+		if len(e.fragments) >= maxConcurrentAssemblies {
+			log.WithFields(map[string]interface{}{
+				"at":    "Endpoint.ensureAssemblerExists",
+				"msgID": msgID,
+				"count": len(e.fragments),
+				"max":   maxConcurrentAssemblies,
+			}).Warn("fragment assembly limit reached, evicting oldest")
+			e.evictOldestFragment()
+		}
 		assembler = &fragmentAssembler{
 			fragments:    make(map[int][]byte),
 			deliveryType: deliveryType,
@@ -471,6 +485,24 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) *fragm
 		assembler.deliveryType = deliveryType
 	}
 	return assembler
+}
+
+// evictOldestFragment removes the oldest incomplete fragment assembly
+// to make room for a new one when the cap is reached.
+func (e *Endpoint) evictOldestFragment() {
+	var oldestID uint32
+	var oldestTime time.Time
+	first := true
+	for id, asm := range e.fragments {
+		if first || asm.createdAt.Before(oldestTime) {
+			oldestID = id
+			oldestTime = asm.createdAt
+			first = false
+		}
+	}
+	if !first {
+		delete(e.fragments, oldestID)
+	}
 }
 
 // recordFirstFragmentData stores the first fragment (index 0) in the assembler.

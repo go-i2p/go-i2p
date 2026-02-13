@@ -301,13 +301,31 @@ func (e *StandardEmbeddedRouter) HardStop() {
 		// Force-close the router to release resources even though the
 		// graceful Stop() goroutine is still running in the background.
 		// Close() calls ensureStopped() internally and releases transports,
-		// sessions, and routing components.
+		// sessions, and routing components. After Close() completes, the
+		// orphaned Stop() goroutine should unblock and exit because the
+		// router's context and channels are torn down.
 		if err := router.Close(); err != nil {
 			log.WithFields(logger.Fields{
 				"at":    "StandardEmbeddedRouter.HardStop",
 				"phase": "shutdown",
 				"error": err.Error(),
 			}).Error("force close after timeout failed")
+		}
+		// Wait briefly for the orphaned Stop() goroutine to exit now that
+		// Close() has torn down the router.
+		select {
+		case <-done:
+			log.WithFields(logger.Fields{
+				"at":     "StandardEmbeddedRouter.HardStop",
+				"phase":  "shutdown",
+				"reason": "orphaned Stop() goroutine exited after Close()",
+			}).Debug("orphaned Stop goroutine completed")
+		case <-time.After(2 * time.Second):
+			log.WithFields(logger.Fields{
+				"at":     "StandardEmbeddedRouter.HardStop",
+				"phase":  "shutdown",
+				"reason": "orphaned Stop() goroutine still running after Close()",
+			}).Warn("orphaned Stop goroutine did not exit after Close; goroutine leak")
 		}
 	}
 }

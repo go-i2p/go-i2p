@@ -27,7 +27,7 @@ func NewReseedBootstrap(config *config.BootstrapConfig) *ReseedBootstrap {
 			"phase":  "bootstrap",
 			"reason": "nil config provided",
 		}).Warn("cannot create reseed bootstrap: nil config")
-		return &ReseedBootstrap{}
+		return nil
 	}
 	log.WithFields(logger.Fields{
 		"at":                  "(ReseedBootstrap) NewReseedBootstrap",

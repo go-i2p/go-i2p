@@ -45,6 +45,10 @@ type TransportMuxer struct {
 
 	// acceptDone is closed when Close() is called to signal accept goroutines to exit.
 	acceptDone chan struct{}
+
+	// acceptWg tracks the persistent accept goroutines so Close() can wait
+	// for them to actually exit rather than hoping they will.
+	acceptWg sync.WaitGroup
 }
 
 // mux a bunch of transports together
@@ -171,6 +175,28 @@ func (tmux *TransportMuxer) Close() (err error) {
 			}).Debug("transport closed successfully")
 		}
 	}
+
+	// Wait for accept goroutines to exit (transport.Close should unblock Accept).
+	// Use a timeout to avoid blocking forever if a transport's Accept doesn't
+	// return after Close.
+	acceptExited := make(chan struct{})
+	go func() {
+		tmux.acceptWg.Wait()
+		close(acceptExited)
+	}()
+	select {
+	case <-acceptExited:
+		log.WithFields(logger.Fields{
+			"at":     "(TransportMuxer) Close",
+			"reason": "accept_goroutines_exited",
+		}).Debug("all accept goroutines exited cleanly")
+	case <-time.After(3 * time.Second):
+		log.WithFields(logger.Fields{
+			"at":     "(TransportMuxer) Close",
+			"reason": "accept_goroutines_timeout",
+		}).Warn("timed out waiting for accept goroutines to exit")
+	}
+
 	log.WithFields(logger.Fields{
 		"at":     "(TransportMuxer) Close",
 		"reason": "all_transports_closed",
@@ -463,7 +489,9 @@ func (tmux *TransportMuxer) ensureAcceptLoop() {
 		// Buffer large enough so goroutines can always send without blocking
 		tmux.acceptChan = make(chan acceptResult, len(tmux.trans)*4)
 		for i, t := range tmux.trans {
+			tmux.acceptWg.Add(1)
 			go func(transport Transport, index int) {
+				defer tmux.acceptWg.Done()
 				for {
 					conn, err := transport.Accept()
 					select {

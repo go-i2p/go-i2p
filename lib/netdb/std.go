@@ -3,6 +3,7 @@ package netdb
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -764,7 +765,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 	return err
 }
 
-func (db *StdNetDB) Save() (err error) {
+func (db *StdNetDB) Save() error {
 	log.Debug("Saving all NetDB entries")
 
 	// Copy RouterInfo entries under read lock to avoid holding the lock during disk I/O
@@ -778,9 +779,10 @@ func (db *StdNetDB) Save() (err error) {
 	db.riMutex.RUnlock()
 
 	// Perform disk I/O outside the lock
+	var errs []error
 	for _, entry := range entriesToSave {
 		if e := db.SaveEntry(&entry); e != nil {
-			err = e
+			errs = append(errs, e)
 			log.WithError(e).Error("Failed to save NetDB entry")
 		}
 	}
@@ -801,18 +803,18 @@ func (db *StdNetDB) Save() (err error) {
 		fpath := db.SkiplistFileForLeaseSet(ls.hash)
 		f, ferr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if ferr != nil {
-			err = ferr
+			errs = append(errs, ferr)
 			log.WithError(ferr).WithField("hash", ls.hash).Error("Failed to open file for saving LeaseSet entry")
 			continue
 		}
 		if werr := ls.entry.WriteTo(f); werr != nil {
-			err = werr
+			errs = append(errs, werr)
 			log.WithError(werr).WithField("hash", ls.hash).Error("Failed to write LeaseSet entry")
 		}
 		f.Close()
 	}
 
-	return err
+	return errors.Join(errs...)
 }
 
 // reseed if we have less than minRouters known routers

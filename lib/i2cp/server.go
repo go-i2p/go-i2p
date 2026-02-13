@@ -684,7 +684,22 @@ func (s *Server) checkConnectionRateLimit(conn net.Conn) bool {
 		minMessageInterval   = 10 * time.Millisecond // Minimum 10ms between messages (prevents rapid-fire attacks)
 	)
 
-	state := s.getOrCreateConnectionState(conn)
+	// Hold connMutex for the entire check-reset-verify sequence to prevent
+	// a race between resetCountersIfNeeded (which writes) and
+	// updateConnectionState (which also writes under the same lock).
+	s.connMutex.Lock()
+	defer s.connMutex.Unlock()
+
+	state, exists := s.connStates[conn]
+	if !exists {
+		state = &connectionState{
+			lastMessageTime: time.Time{}, // Zero value allows first message immediately
+			messageCount:    0,
+			bytesRead:       0,
+		}
+		s.connStates[conn] = state
+	}
+
 	now := time.Now()
 	elapsed := now.Sub(state.lastMessageTime)
 
@@ -816,21 +831,29 @@ func (s *Server) sendResponse(conn net.Conn, response *Message, sessionPtr **Ses
 		}).Debug("sending_response")
 
 		// Acquire per-connection write mutex if session exists.
-		// Hold s.mu.RLock through the write operation to prevent the session
-		// (and its writeMu) from being deleted between lookup and use.
+		// Hold s.mu.RLock through the entire write operation to prevent the
+		// session (and its writeMu) from being deleted between lookup and use.
 		var writeMu *sync.Mutex
+		var holdingRLock bool
 		if *sessionPtr != nil {
 			s.mu.RLock()
 			writeMu = s.connWriteMu[(*sessionPtr).ID()]
 			if writeMu != nil {
 				writeMu.Lock()
+				holdingRLock = true
+			} else {
+				// No write mutex found — session may already be cleaned up.
+				// Release RLock since we have nothing to protect.
+				s.mu.RUnlock()
 			}
-			s.mu.RUnlock()
 		}
 
 		err := WriteMessage(conn, response)
 		if writeMu != nil {
 			writeMu.Unlock()
+		}
+		if holdingRLock {
+			s.mu.RUnlock()
 		}
 
 		if err != nil {

@@ -167,6 +167,21 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 		return nil
 	}
 	if identHash != emptyHash {
+		// Check if the RouterInfo is stale (published date older than max age).
+		// Returning expired RouterInfo can cause connections to peers that
+		// have rotated their keys or changed addresses.
+		if published := ri.Published(); published != nil && !published.Time().IsZero() {
+			age := time.Since(published.Time())
+			if age > RouterInfoMaxAge {
+				log.WithFields(logger.Fields{
+					"at":     "(KademliaResolver) attemptLocalLookup",
+					"reason": "stale RouterInfo",
+					"hash":   fmt.Sprintf("%x...", h[:8]),
+					"age":    age.Round(time.Second),
+				}).Debug("local RouterInfo is stale, will attempt remote lookup")
+				return nil
+			}
+		}
 		log.WithFields(logger.Fields{
 			"at":     "(KademliaResolver) attemptLocalLookup",
 			"reason": "local cache hit",
@@ -508,13 +523,7 @@ func (kr *KademliaResolver) queryPeer(ctx context.Context, peer, target common.H
 	fromHash := ourHash
 	var emptyHash common.Hash
 	if fromHash == emptyHash {
-		// If ourHash is not set, use the peer hash as a fallback
-		// This is not ideal but allows basic functionality
-		log.WithFields(logger.Fields{
-			"at":     "queryPeer",
-			"reason": "our_hash_not_set",
-		}).Warn("Our router hash not set, using fallback")
-		fromHash = peer
+		return nil, fmt.Errorf("cannot query peer: our router hash is not set")
 	}
 
 	// Create the DatabaseLookup message for RouterInfo lookup

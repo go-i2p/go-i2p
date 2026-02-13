@@ -31,6 +31,7 @@ var (
 	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = errors.New("not enough i2np build request record data")
 	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build response record data")
 	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
+	ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA = errors.New("not enough i2np database search reply data")
 	ERR_DATABASE_LOOKUP_INVALID_SIZE          = errors.New("database lookup excluded peers size exceeds protocol limit")
 	ERR_I2NP_MESSAGE_EXPIRED                  = errors.New("i2np message has expired")
 )

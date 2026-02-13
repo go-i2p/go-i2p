@@ -965,7 +965,7 @@ func (r *Router) Start() error {
 
 // initializeNetDB creates and configures the network database
 func (r *Router) initializeNetDB() error {
-	log.Debug("Entering router mainloop")
+	log.Debug("Initializing network database")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
 	return nil
@@ -1297,25 +1297,13 @@ func (r *Router) runMainLoop() {
 		"at": "(Router) mainloop",
 	}).Debug("Router ready with database message processing enabled")
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		r.runMux.RLock()
-		shouldRun := r.running
-		r.runMux.RUnlock()
-
-		if !shouldRun {
-			break
-		}
-
-		select {
-		case <-r.closeChnl:
-			log.Debug("Router received close signal in mainloop")
-			return
-		case <-ticker.C:
-			// Continue loop after 1 second tick
-		}
+	// Block until shutdown signal — no need for a 1-second ticker poll.
+	// Both closeChnl and ctx.Done() are signaled during Stop().
+	select {
+	case <-r.closeChnl:
+		log.Debug("Router received close signal in mainloop")
+	case <-r.ctx.Done():
+		log.Debug("Router context cancelled in mainloop")
 	}
 }
 
