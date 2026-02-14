@@ -2417,56 +2417,16 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 		"nonce":       sendMsg.Nonce,
 	}).Info("routing_message_expires")
 
-	// Create status callback
-	statusCallback := func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
-		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, sendMsg.Nonce)
-		s.sendStatusToClient(session, statusMsg)
-	}
+	statusCallback := s.buildStatusCallback(session, sendMsg.Nonce)
 
-	// Resolve destination public key
 	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeMessageExpiresWithStatus",
-			"sessionID":   session.ID(),
-			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"error":       err.Error(),
-		}).Error("failed_to_resolve_destination_key")
-		// Send failure status
+		logDestinationResolutionFailure("routeMessageExpiresWithStatus", session.ID(), messageID, sendMsg.Destination, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), sendMsg.Nonce)
 		return
 	}
 
-	// Route through message router with expiration
-	if s.messageRouter != nil {
-		err := s.messageRouter.RouteOutboundMessage(
-			session,
-			messageID,
-			sendMsg.Destination,
-			destPubKey,
-			sendMsg.Payload,
-			sendMsg.Expiration, // Pass expiration time
-			statusCallback,
-		)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":          "i2cp.Server.routeMessageExpiresWithStatus",
-				"sessionID":   session.ID(),
-				"messageID":   messageID,
-				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-				"error":       err.Error(),
-			}).Error("failed_to_route_message_expires")
-			// Status callback already invoked by RouteOutboundMessage
-		}
-	} else {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeMessageExpiresWithStatus",
-			"sessionID":   session.ID(),
-			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-		}).Warn("no_message_router_configured")
-	}
+	s.dispatchToMessageRouter("routeMessageExpiresWithStatus", session, messageID, sendMsg.Destination, destPubKey, sendMsg.Payload, sendMsg.Expiration, statusCallback)
 }
 
 // routeMessageWithStatus routes a message asynchronously with delivery status tracking.
@@ -2481,57 +2441,84 @@ func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, send
 		"payloadSize": len(sendMsg.Payload),
 	}).Debug("routing_message_async")
 
-	// Create status callback to send MessageStatus to client
-	statusCallback := func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
-		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, nonce)
-		s.sendStatusToClient(session, statusMsg)
-	}
+	statusCallback := s.buildStatusCallback(session, 0)
 
-	// Look up destination's encryption public key from NetDB
 	destPubKey, err := s.resolveDestinationKey(sendMsg.Destination)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.routeMessageWithStatus",
-			"sessionID":   session.ID(),
-			"messageID":   messageID,
-			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-			"error":       err.Error(),
-		}).Error("failed_to_resolve_destination_key")
-		// Send failure status
+		logDestinationResolutionFailure("routeMessageWithStatus", session.ID(), messageID, sendMsg.Destination, err)
 		statusCallback(messageID, MessageStatusNoLeaseSet, uint32(len(sendMsg.Payload)), 0)
 		return
 	}
 
-	// Route through message router
-	if s.messageRouter != nil {
-		err := s.messageRouter.RouteOutboundMessage(
-			session,
-			messageID,
-			sendMsg.Destination,
-			destPubKey,
-			sendMsg.Payload,
-			0, // no expiration for SendMessage (type 7)
-			statusCallback,
-		)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":          "i2cp.Server.routeMessageWithStatus",
-				"sessionID":   session.ID(),
-				"messageID":   messageID,
-				"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-				"error":       err.Error(),
-			}).Error("failed_to_route_message")
-			// Status callback already invoked by RouteOutboundMessage
-		}
-	} else {
+	if s.messageRouter == nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server.routeMessageWithStatus",
 			"sessionID":   session.ID(),
 			"messageID":   messageID,
 			"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
 		}).Warn("no_message_router_message_queued")
-		// Send failure status when no router available
 		statusCallback(messageID, MessageStatusFailure, uint32(len(sendMsg.Payload)), 0)
+		return
+	}
+
+	s.dispatchToMessageRouter("routeMessageWithStatus", session, messageID, sendMsg.Destination, destPubKey, sendMsg.Payload, 0, statusCallback)
+}
+
+// buildStatusCallback creates a status callback that sends a MessageStatus response
+// to the client. The fixedNonce is used for SendMessageExpires; pass 0 for SendMessage.
+func (s *Server) buildStatusCallback(session *Session, fixedNonce uint32) func(uint32, uint8, uint32, uint32) {
+	return func(msgID uint32, statusCode uint8, messageSize, nonce uint32) {
+		effectiveNonce := nonce
+		if fixedNonce != 0 {
+			effectiveNonce = fixedNonce
+		}
+		statusMsg := buildMessageStatusResponse(session.ID(), msgID, statusCode, messageSize, effectiveNonce)
+		s.sendStatusToClient(session, statusMsg)
+	}
+}
+
+// logDestinationResolutionFailure logs an error when a destination key cannot be resolved.
+func logDestinationResolutionFailure(caller string, sessionID uint16, messageID uint32, destination common.Hash, err error) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server." + caller,
+		"sessionID":   sessionID,
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", destination[:8]),
+		"error":       err.Error(),
+	}).Error("failed_to_resolve_destination_key")
+}
+
+// dispatchToMessageRouter routes a message through the message router if available.
+// Logs routing failures but does not return errors since the status callback
+// is already invoked by RouteOutboundMessage.
+func (s *Server) dispatchToMessageRouter(caller string, session *Session, messageID uint32, destination common.Hash, destPubKey [32]byte, payload []byte, expiration uint64, statusCallback func(uint32, uint8, uint32, uint32)) {
+	if s.messageRouter == nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server." + caller,
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", destination[:8]),
+		}).Warn("no_message_router_configured")
+		return
+	}
+
+	err := s.messageRouter.RouteOutboundMessage(
+		session,
+		messageID,
+		destination,
+		destPubKey,
+		payload,
+		expiration,
+		statusCallback,
+	)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server." + caller,
+			"sessionID":   session.ID(),
+			"messageID":   messageID,
+			"destination": fmt.Sprintf("%x", destination[:8]),
+			"error":       err.Error(),
+		}).Error("failed_to_route_message")
 	}
 }
 

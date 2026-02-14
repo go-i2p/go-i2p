@@ -238,67 +238,19 @@ func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]route
 		"limit":     limit,
 	}).Info("processing SU3 reseed file")
 
-	// Check context before processing
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
-	// Use the reseed package to process the SU3 file with limit
-	// Request more than limit to account for invalid RouterInfos
-	var requestLimit int
-	if limit <= 0 {
-		requestLimit = 0 // No limit
-	} else {
-		requestLimit = limit * 2
-	}
-
+	requestLimit := calculateRequestLimit(limit)
 	reseeder := reseed.NewReseed()
 	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, requestLimit)
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":        "(FileBootstrap) processSU3File",
-			"phase":     "bootstrap",
-			"reason":    "SU3 file processing failed",
-			"file_path": fb.filePath,
-		}).Error("failed to process SU3 file")
+		logReseedProcessingFailure("processSU3File", "SU3", fb.filePath, err)
 		return nil, fmt.Errorf("SU3 file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
-	// Validate RouterInfos and filter out invalid ones
-	validRouterInfos := fb.validateAndFilterRouterInfos(routerInfos, "SU3")
-
-	// Defensive check: ensure we got valid RouterInfos
-	if len(validRouterInfos) == 0 {
-		log.WithFields(logger.Fields{
-			"at":        "(FileBootstrap) processSU3File",
-			"phase":     "bootstrap",
-			"reason":    "no valid RouterInfos extracted after validation",
-			"file_path": fb.filePath,
-		}).Error("no valid RouterInfos extracted from SU3 file")
-		return nil, fmt.Errorf("SU3 file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fb.filePath)
-	}
-
-	// Limit to requested amount if specified
-	if limit > 0 && len(validRouterInfos) > limit {
-		validRouterInfos = validRouterInfos[:limit]
-		log.WithFields(logger.Fields{
-			"at":       "(FileBootstrap) processSU3File",
-			"phase":    "bootstrap",
-			"reason":   "limiting valid RouterInfos to requested count",
-			"limit":    limit,
-			"returned": len(validRouterInfos),
-		}).Debug("limited validated RouterInfos to requested count")
-	}
-
-	log.WithFields(logger.Fields{
-		"at":           "(FileBootstrap) processSU3File",
-		"phase":        "bootstrap",
-		"reason":       "SU3 processing completed successfully",
-		"file_path":    fb.filePath,
-		"router_count": len(validRouterInfos),
-	}).Info("successfully processed SU3 file")
-
-	return validRouterInfos, nil
+	return fb.finalizeRouterInfos(routerInfos, limit, "SU3")
 }
 
 // processZipFile reads and processes a zip reseed file with a limit on parsed RouterInfos.
@@ -312,51 +264,59 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 		"limit":     limit,
 	}).Info("processing zip reseed file")
 
-	// Check context before processing
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
-	// Use the reseed package to process the zip file with limit
-	// Request more than limit to account for invalid RouterInfos
-	var requestLimit int
-	if limit <= 0 {
-		requestLimit = 0 // No limit
-	} else {
-		requestLimit = limit * 2
-	}
-
+	requestLimit := calculateRequestLimit(limit)
 	reseeder := reseed.NewReseed()
 	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, requestLimit)
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":        "(FileBootstrap) processZipFile",
-			"phase":     "bootstrap",
-			"reason":    "zip file processing failed",
-			"file_path": fb.filePath,
-		}).Error("failed to process zip file")
+		logReseedProcessingFailure("processZipFile", "ZIP", fb.filePath, err)
 		return nil, fmt.Errorf("zip file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
 	}
 
-	// Validate RouterInfos and filter out invalid ones
-	validRouterInfos := fb.validateAndFilterRouterInfos(routerInfos, "ZIP")
+	return fb.finalizeRouterInfos(routerInfos, limit, "ZIP")
+}
 
-	// Defensive check: ensure we got valid RouterInfos
+// calculateRequestLimit doubles the limit to account for invalid RouterInfos during filtering.
+// A limit of zero or less means no limit.
+func calculateRequestLimit(limit int) int {
+	if limit <= 0 {
+		return 0
+	}
+	return limit * 2
+}
+
+// logReseedProcessingFailure logs an error when reseed file processing fails.
+func logReseedProcessingFailure(funcName, fileType, filePath string, err error) {
+	log.WithError(err).WithFields(logger.Fields{
+		"at":        "(FileBootstrap) " + funcName,
+		"phase":     "bootstrap",
+		"reason":    fileType + " file processing failed",
+		"file_path": filePath,
+	}).Error("failed to process " + fileType + " file")
+}
+
+// finalizeRouterInfos validates, filters, and limits parsed RouterInfos.
+// Returns an error if no valid RouterInfos remain after validation.
+func (fb *FileBootstrap) finalizeRouterInfos(routerInfos []router_info.RouterInfo, limit int, fileType string) ([]router_info.RouterInfo, error) {
+	validRouterInfos := fb.validateAndFilterRouterInfos(routerInfos, fileType)
+
 	if len(validRouterInfos) == 0 {
 		log.WithFields(logger.Fields{
-			"at":        "(FileBootstrap) processZipFile",
+			"at":        "(FileBootstrap) finalizeRouterInfos",
 			"phase":     "bootstrap",
 			"reason":    "no valid RouterInfos extracted after validation",
 			"file_path": fb.filePath,
-		}).Error("no valid RouterInfos extracted from zip file")
-		return nil, fmt.Errorf("zip file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fb.filePath)
+		}).Error("no valid RouterInfos extracted from " + fileType + " file")
+		return nil, fmt.Errorf("%s file processing failed: no valid RouterInfos found in %s (file may be corrupted or contain invalid data)", fileType, fb.filePath)
 	}
 
-	// Limit to requested amount if specified
 	if limit > 0 && len(validRouterInfos) > limit {
 		validRouterInfos = validRouterInfos[:limit]
 		log.WithFields(logger.Fields{
-			"at":       "(FileBootstrap) processZipFile",
+			"at":       "(FileBootstrap) finalizeRouterInfos",
 			"phase":    "bootstrap",
 			"reason":   "limiting valid RouterInfos to requested count",
 			"limit":    limit,
@@ -365,12 +325,12 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 	}
 
 	log.WithFields(logger.Fields{
-		"at":           "(FileBootstrap) processZipFile",
+		"at":           "(FileBootstrap) finalizeRouterInfos",
 		"phase":        "bootstrap",
-		"reason":       "zip processing completed successfully",
+		"reason":       fileType + " processing completed successfully",
 		"file_path":    fb.filePath,
 		"router_count": len(validRouterInfos),
-	}).Info("successfully processed zip file")
+	}).Info("successfully processed " + fileType + " file")
 
 	return validRouterInfos, nil
 }

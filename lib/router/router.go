@@ -876,18 +876,15 @@ func (r *Router) finalizeCloseChannel() {
 // subsystems (NetDB, I2CP, I2PControl) fail to initialize.
 // The router must be created via CreateRouter (not bare FromConfig) so that
 // the keystore and transport are properly initialized before Start is called.
+// Start initializes all subsystems and starts the router's main loop.
+// It acquires runMux for the duration of pre-launch setup, then releases it
+// before blocking on the mainloop's startup-error channel.
 func (r *Router) Start() error {
 	r.runMux.Lock()
 
-	// Guard: verify required subsystems were initialized by CreateRouter.
-	// FromConfig alone only sets cfg and closeChnl, leaving these nil.
-	if r.RouterInfoKeystore == nil {
+	if err := r.validateSubsystems(); err != nil {
 		r.runMux.Unlock()
-		return fmt.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
-	}
-	if r.TransportMuxer == nil {
-		r.runMux.Unlock()
-		return fmt.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
+		return err
 	}
 
 	if r.running {
@@ -900,6 +897,37 @@ func (r *Router) Start() error {
 		}).Warn("attempted to start already running router")
 		return nil
 	}
+
+	r.markRunning()
+	r.initializeLifecycleContext()
+	r.initializeBandwidthTracker()
+	r.initializeCongestionMonitoring()
+	r.initializeRouterInfoProvider()
+	r.launchMainloop()
+
+	// Release runMux BEFORE blocking on startupErr to prevent deadlocking
+	// Stop() which also needs runMux. The running flag is already set, so
+	// Stop() can proceed if called while we wait.
+	r.runMux.Unlock()
+
+	return r.awaitStartupResult()
+}
+
+// validateSubsystems checks that CreateRouter has fully initialized the router.
+// Must be called while runMux is held.
+func (r *Router) validateSubsystems() error {
+	if r.RouterInfoKeystore == nil {
+		return fmt.Errorf("router not fully initialized: keystore is nil (use CreateRouter, not FromConfig directly)")
+	}
+	if r.TransportMuxer == nil {
+		return fmt.Errorf("router not fully initialized: transport muxer is nil (use CreateRouter, not FromConfig directly)")
+	}
+	return nil
+}
+
+// markRunning sets the running flag and logs the startup initiation.
+// Must be called while runMux is held.
+func (r *Router) markRunning() {
 	log.WithFields(logger.Fields{
 		"at":           "(Router) Start",
 		"phase":        "startup",
@@ -908,9 +936,10 @@ func (r *Router) Start() error {
 		"i2cp_enabled": r.cfg.I2CP != nil && r.cfg.I2CP.Enabled,
 	}).Info("starting router")
 	r.running = true
+}
 
-	// Create router-level context for lifecycle management
-	// This context is cancelled in Stop() for coordinated shutdown
+// initializeLifecycleContext creates the router-level context for coordinated shutdown.
+func (r *Router) initializeLifecycleContext() {
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Start",
@@ -918,8 +947,10 @@ func (r *Router) Start() error {
 		"step":   2,
 		"reason": "lifecycle context initialized",
 	}).Debug("router context initialized")
+}
 
-	// Initialize and start bandwidth tracking
+// initializeBandwidthTracker creates and starts the bandwidth sampling tracker.
+func (r *Router) initializeBandwidthTracker() {
 	r.bandwidthTracker = NewBandwidthTracker()
 	r.bandwidthTracker.Start(r.getTotalBandwidth)
 	log.WithFields(logger.Fields{
@@ -928,8 +959,10 @@ func (r *Router) Start() error {
 		"step":   3,
 		"reason": "bandwidth tracker initialized",
 	}).Debug("bandwidth tracker started")
+}
 
-	// Initialize and start congestion monitoring (PROP_162)
+// initializeCongestionMonitoring starts congestion monitoring per PROP_162.
+func (r *Router) initializeCongestionMonitoring() {
 	r.startCongestionMonitor()
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Start",
@@ -937,8 +970,11 @@ func (r *Router) Start() error {
 		"step":   4,
 		"reason": "congestion monitor initialized",
 	}).Debug("congestion monitor started")
+}
 
-	// Wire routerInfoProvider so the NetDB publisher can access the local RouterInfo
+// initializeRouterInfoProvider wires the routerInfoProvider so the NetDB publisher
+// can access the local RouterInfo, optionally attaching the congestion monitor.
+func (r *Router) initializeRouterInfoProvider() {
 	r.routerInfoProv = newRouterInfoProvider(r)
 	if r.congestionMonitor != nil {
 		r.routerInfoProv.SetCongestionMonitor(r.congestionMonitor)
@@ -949,23 +985,20 @@ func (r *Router) Start() error {
 		"step":   5,
 		"reason": "routerInfoProvider wired",
 	}).Debug("router info provider initialized")
+}
 
-	// Buffered channel: mainloop sends exactly one error (nil on success)
+// launchMainloop starts the main event loop in a tracked goroutine.
+func (r *Router) launchMainloop() {
 	r.startupErr = make(chan error, 1)
-
-	// Track mainloop goroutine for clean shutdown
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
 		r.mainloop()
 	}()
+}
 
-	// Release runMux BEFORE blocking on startupErr to prevent deadlocking
-	// Stop() which also needs runMux. The running flag is already set, so
-	// Stop() can proceed if called while we wait.
-	r.runMux.Unlock()
-
-	// Block until startup-critical initialization completes in mainloop
+// awaitStartupResult blocks until the mainloop reports startup success or failure.
+func (r *Router) awaitStartupResult() error {
 	if err := <-r.startupErr; err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"at":     "(Router) Start",
@@ -974,7 +1007,6 @@ func (r *Router) Start() error {
 		}).Error("router startup failed")
 		return err
 	}
-
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Start",
 		"phase":  "running",

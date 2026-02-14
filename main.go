@@ -503,6 +503,15 @@ func closeRouter() error {
 func runRouter() {
 	go signals.Handle()
 
+	logStartupConfiguration()
+	logConfigurationSource()
+	logNetDbPath()
+	runNetworkPreChecks()
+	launchRouterLifecycle()
+}
+
+// logStartupConfiguration logs that the router configuration is being parsed.
+func logStartupConfiguration() {
 	log.WithFields(logger.Fields{
 		"at":          "runRouter",
 		"phase":       "startup",
@@ -511,9 +520,10 @@ func runRouter() {
 		"config_file": viper.ConfigFileUsed(),
 		"config_used": viper.ConfigFileUsed() != "",
 	}).Info("parsing i2p router configuration")
+}
 
-	logConfigurationSource()
-
+// logNetDbPath logs the configured NetDB path.
+func logNetDbPath() {
 	routerCfg := config.GetRouterConfig()
 	log.WithFields(logger.Fields{
 		"at":         "runRouter",
@@ -523,7 +533,10 @@ func runRouter() {
 		"netdb_path": routerCfg.NetDb.Path,
 		"source":     "configuration",
 	}).Info("using netDb path: " + routerCfg.NetDb.Path)
+}
 
+// runNetworkPreChecks tests network connectivity and logs a warning on failure.
+func runNetworkPreChecks() {
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "startup",
@@ -540,7 +553,10 @@ func runRouter() {
 			"reason": "network connectivity check failed",
 		}).Warn("Network connectivity test failed - router may not be able to connect to peers")
 	}
+}
 
+// launchRouterLifecycle starts the router lifecycle, exiting the process on failure.
+func launchRouterLifecycle() {
 	log.WithFields(logger.Fields{
 		"at":     "runRouter",
 		"phase":  "startup",
@@ -549,6 +565,7 @@ func runRouter() {
 	}).Debug("starting up i2p router")
 
 	if err := manageRouterLifecycle(); err != nil {
+		routerCfg := config.GetRouterConfig()
 		log.WithError(err).WithFields(logger.Fields{
 			"at":         "runRouter",
 			"phase":      "startup",

@@ -180,75 +180,16 @@ func setCongestionDefaults(defaults ConfigDefaults) {
 	viper.SetDefault("router.congestion.stale_e_flag_capacity_multiplier", defaults.Congestion.StaleEFlagCapacityMultiplier)
 }
 
-// NewRouterConfigFromViper creates a new RouterConfig from current viper settings
-// This is the preferred way to get config instead of using the global RouterConfigProperties
+// NewRouterConfigFromViper creates a new RouterConfig from current viper settings.
+// This is the preferred way to get config instead of using the global RouterConfigProperties.
 func NewRouterConfigFromViper() *RouterConfig {
-	// Create NetDb configuration
-	netDbConfig := &NetDbConfig{
-		Path:                     viper.GetString("netdb.path"),
-		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
-		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
-		ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
-		LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
-		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
-		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
-	}
-
-	// Create Bootstrap configuration
-	var reseedServers []*ReseedConfig
-	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "NewRouterConfigFromViper",
-			"reason": "reseed_servers_parse_error",
-			"phase":  "startup",
-			"error":  err.Error(),
-		}).Warn("error parsing reseed servers, falling back to known servers")
-		reseedServers = KnownReseedServers
-	}
-
-	var localNetDbPaths []string
-	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
-		log.Debugf("No local netDb paths configured, will use defaults")
-		localNetDbPaths = []string{}
-	}
-
-	bootstrapConfig := &BootstrapConfig{
-		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
-		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
-		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
-		ReseedServers:    reseedServers,
-		LocalNetDbPaths:  localNetDbPaths,
-		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
-		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
-	}
-
-	// Create I2CP configuration
-	i2cpConfig := &I2CPConfig{
-		Enabled:     viper.GetBool("i2cp.enabled"),
-		Address:     viper.GetString("i2cp.address"),
-		Network:     viper.GetString("i2cp.network"),
-		MaxSessions: viper.GetInt("i2cp.max_sessions"),
-	}
-
-	// Create I2PControl configuration
-	i2pControlConfig := &I2PControlConfig{
-		Enabled:         viper.GetBool("i2pcontrol.enabled"),
-		Address:         viper.GetString("i2pcontrol.address"),
-		Password:        viper.GetString("i2pcontrol.password"),
-		UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
-		CertFile:        viper.GetString("i2pcontrol.cert_file"),
-		KeyFile:         viper.GetString("i2pcontrol.key_file"),
-		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
-	}
-
-	// Create and return new RouterConfig
 	return &RouterConfig{
 		BaseDir:        viper.GetString("base_dir"),
 		WorkingDir:     viper.GetString("working_dir"),
-		NetDb:          netDbConfig,
-		Bootstrap:      bootstrapConfig,
-		I2CP:           i2cpConfig,
-		I2PControl:     i2pControlConfig,
+		NetDb:          buildNetDbConfig(),
+		Bootstrap:      buildBootstrapConfig("NewRouterConfigFromViper"),
+		I2CP:           buildI2CPConfig(),
+		I2PControl:     buildI2PControlConfig(),
 		MaxBandwidth:   viper.GetUint64("router.max_bandwidth"),
 		MaxConnections: viper.GetInt("router.max_connections"),
 		AcceptTunnels:  viper.GetBool("router.accept_tunnels"),
@@ -263,12 +204,17 @@ func UpdateRouterConfig() {
 	LockRouterConfigForWrite()
 	defer UnlockRouterConfigWrite()
 
-	// Update Router configuration
 	routerConfigProperties.BaseDir = viper.GetString("base_dir")
 	routerConfigProperties.WorkingDir = viper.GetString("working_dir")
+	routerConfigProperties.NetDb = buildNetDbConfig()
+	routerConfigProperties.Bootstrap = buildBootstrapConfig("UpdateRouterConfig")
+	routerConfigProperties.I2CP = buildI2CPConfig()
+	routerConfigProperties.I2PControl = buildI2PControlConfig()
+}
 
-	// Update NetDb configuration
-	routerConfigProperties.NetDb = &NetDbConfig{
+// buildNetDbConfig creates a NetDbConfig from current viper settings.
+func buildNetDbConfig() *NetDbConfig {
+	return &NetDbConfig{
 		Path:                     viper.GetString("netdb.path"),
 		MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
 		MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
@@ -277,30 +223,15 @@ func UpdateRouterConfig() {
 		ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
 		FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
 	}
+}
 
-	// Update Bootstrap configuration
-	var reseedServers []*ReseedConfig
-	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "UpdateRouterConfig",
-			"reason": "reseed_servers_parse_error",
-			"phase":  "startup",
-			"error":  err.Error(),
-		}).Warn("error parsing reseed servers, falling back to known servers")
-		reseedServers = KnownReseedServers
-	}
+// buildBootstrapConfig creates a BootstrapConfig from current viper settings.
+// The caller parameter identifies the calling function for log context.
+func buildBootstrapConfig(caller string) *BootstrapConfig {
+	reseedServers := parseReseedServers(caller)
+	localNetDbPaths := parseLocalNetDbPaths(caller)
 
-	var localNetDbPaths []string
-	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "UpdateRouterConfig",
-			"reason": "no_local_netdb_paths_configured",
-			"phase":  "startup",
-		}).Debug("using default netDb paths")
-		localNetDbPaths = []string{}
-	}
-
-	routerConfigProperties.Bootstrap = &BootstrapConfig{
+	return &BootstrapConfig{
 		LowPeerThreshold: viper.GetInt("bootstrap.low_peer_threshold"),
 		BootstrapType:    viper.GetString("bootstrap.bootstrap_type"),
 		ReseedFilePath:   viper.GetString("bootstrap.reseed_file_path"),
@@ -309,17 +240,21 @@ func UpdateRouterConfig() {
 		MinReseedServers: viper.GetInt("bootstrap.min_reseed_servers"),
 		ReseedStrategy:   viper.GetString("bootstrap.reseed_strategy"),
 	}
+}
 
-	// Update I2CP configuration
-	routerConfigProperties.I2CP = &I2CPConfig{
+// buildI2CPConfig creates an I2CPConfig from current viper settings.
+func buildI2CPConfig() *I2CPConfig {
+	return &I2CPConfig{
 		Enabled:     viper.GetBool("i2cp.enabled"),
 		Address:     viper.GetString("i2cp.address"),
 		Network:     viper.GetString("i2cp.network"),
 		MaxSessions: viper.GetInt("i2cp.max_sessions"),
 	}
+}
 
-	// Update I2PControl configuration
-	routerConfigProperties.I2PControl = &I2PControlConfig{
+// buildI2PControlConfig creates an I2PControlConfig from current viper settings.
+func buildI2PControlConfig() *I2PControlConfig {
+	return &I2PControlConfig{
 		Enabled:         viper.GetBool("i2pcontrol.enabled"),
 		Address:         viper.GetString("i2pcontrol.address"),
 		Password:        viper.GetString("i2pcontrol.password"),
@@ -328,6 +263,37 @@ func UpdateRouterConfig() {
 		KeyFile:         viper.GetString("i2pcontrol.key_file"),
 		TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
 	}
+}
+
+// parseReseedServers reads reseed server configuration from viper, falling back
+// to known servers on parse error.
+func parseReseedServers(caller string) []*ReseedConfig {
+	var reseedServers []*ReseedConfig
+	if err := viper.UnmarshalKey("bootstrap.reseed_servers", &reseedServers); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     caller,
+			"reason": "reseed_servers_parse_error",
+			"phase":  "startup",
+			"error":  err.Error(),
+		}).Warn("error parsing reseed servers, falling back to known servers")
+		reseedServers = KnownReseedServers
+	}
+	return reseedServers
+}
+
+// parseLocalNetDbPaths reads local netdb paths from viper, returning an empty
+// slice when none are configured.
+func parseLocalNetDbPaths(caller string) []string {
+	var localNetDbPaths []string
+	if err := viper.UnmarshalKey("bootstrap.local_netdb_paths", &localNetDbPaths); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     caller,
+			"reason": "no_local_netdb_paths_configured",
+			"phase":  "startup",
+		}).Debug("using default netDb paths")
+		localNetDbPaths = []string{}
+	}
+	return localNetDbPaths
 }
 
 func createDefaultConfig(defaultConfigDir string) error {

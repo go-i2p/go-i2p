@@ -162,8 +162,32 @@ func (h *InboundMessageHandler) UnregisterTunnel(tunnelID tunnel.TunnelID) {
 // The wire format for TunnelData is 1028 bytes:
 //
 //	[Tunnel ID (4 bytes)] + [Encrypted Data (1024 bytes)]
+//
+// HandleTunnelData processes an inbound TunnelData I2NP message by validating,
+// looking up the owning session, decrypting, and delivering to the I2CP client.
 func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
-	// Extract tunnel data using interface
+	data, tunnelID, err := extractTunnelPayload(msg)
+	if err != nil {
+		return err
+	}
+
+	log.WithFields(logger.Fields{
+		"at":        "HandleTunnelData",
+		"tunnel_id": tunnelID,
+		"data_size": len(data),
+	}).Debug("Processing tunnel data message")
+
+	entry, ok := h.lookupTunnelEntry(tunnelID)
+	if !ok {
+		return nil
+	}
+
+	return h.decryptAndDeliver(tunnelID, data, entry)
+}
+
+// extractTunnelPayload validates the message type and data size, returning
+// the 1024-byte tunnel payload and the tunnel ID.
+func extractTunnelPayload(msg i2np.I2NPMessage) ([]byte, tunnel.TunnelID, error) {
 	tunnelCarrier, ok := msg.(i2np.TunnelCarrier)
 	if !ok {
 		log.WithFields(logger.Fields{
@@ -171,7 +195,7 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 			"message_type": msg.Type(),
 			"reason":       "message does not implement TunnelCarrier",
 		}).Error("Invalid message type")
-		return fmt.Errorf("message does not implement TunnelCarrier interface")
+		return nil, 0, fmt.Errorf("message does not implement TunnelCarrier interface")
 	}
 
 	data := tunnelCarrier.GetTunnelData()
@@ -182,36 +206,34 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.I2NPMessage) error {
 			"actual":   len(data),
 			"reason":   "wrong tunnel data size",
 		}).Error("Invalid tunnel data")
-		return fmt.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
+		return nil, 0, fmt.Errorf("tunnel data wrong size: expected 1024 bytes, got %d", len(data))
 	}
 
-	// Extract the tunnel ID from the TunnelCarrier interface
-	tunnelID := tunnelCarrier.GetTunnelID()
+	return data, tunnelCarrier.GetTunnelID(), nil
+}
 
-	log.WithFields(logger.Fields{
-		"at":        "HandleTunnelData",
-		"tunnel_id": tunnelID,
-		"data_size": len(data),
-	}).Debug("Processing tunnel data message")
-
-	// Find the session and endpoint for this tunnel
+// lookupTunnelEntry finds the session and endpoint registered for a tunnel ID.
+// Returns nil and false if the tunnel is not registered (e.g. transit or exploratory).
+func (h *InboundMessageHandler) lookupTunnelEntry(tunnelID tunnel.TunnelID) (*inboundTunnelEntry, bool) {
 	h.mu.RLock()
 	entry, exists := h.tunnelSessions[tunnelID]
 	h.mu.RUnlock()
 
 	if !exists {
-		// This is not necessarily an error - the tunnel might be for a different
-		// purpose (transit, exploratory, etc.). Just log and ignore.
 		log.WithFields(logger.Fields{
 			"at":        "(InboundMessageHandler) HandleTunnelData",
 			"reason":    "unregistered_tunnel",
 			"tunnel_id": tunnelID,
 		}).Debug("received TunnelData for unregistered tunnel")
-		return nil
+		return nil, false
 	}
+	return entry, true
+}
 
+// decryptAndDeliver reconstructs the wire-format message and passes it to the
+// tunnel endpoint for decryption and delivery.
+func (h *InboundMessageHandler) decryptAndDeliver(tunnelID tunnel.TunnelID, data []byte, entry *inboundTunnelEntry) error {
 	// The endpoint.Receive() expects exactly 1028 bytes: 4-byte tunnel ID + 1024-byte data.
-	// Reconstruct the full wire-format message since GetTunnelData() strips the tunnel ID.
 	fullMsg := make([]byte, 1028)
 	binary.BigEndian.PutUint32(fullMsg[0:4], uint32(tunnelID))
 	copy(fullMsg[4:], data)

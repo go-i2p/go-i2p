@@ -208,44 +208,21 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// ReadMessage reads a complete I2CP message from a reader
+// ReadMessage reads a complete I2CP message from a reader.
 func ReadMessage(r io.Reader) (*Message, error) {
-	connInfo := "unknown"
-	if conn, ok := r.(net.Conn); ok {
-		connInfo = conn.RemoteAddr().String()
-	}
-
+	connInfo := identifyConnection(r)
 	setReaderDeadline(r)
 
 	header, err := readMessageHeader(r)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":         "i2cp.ReadMessage",
-			"remoteAddr": connInfo,
-			"error":      err.Error(),
-		}).Debug("failed_to_read_header")
+		logHeaderReadFailure(connInfo, err)
 		return nil, err
 	}
 
 	msgType, sessionID, payloadLen := parseMessageHeader(header)
 
 	if err := validatePayloadSize(payloadLen); err != nil {
-		// Enhanced logging for Issue #5: I2CP Payload Size Exceeded
-		// i2psnark compatibility: Log full header details for debugging oversized payloads
-		log.WithFields(logger.Fields{
-			"at":         "i2cp.ReadMessage",
-			"phase":      "i2cp_message_parsing",
-			"remoteAddr": connInfo,
-			"msgType":    MessageTypeName(msgType),
-			"msgTypeID":  msgType,
-			"sessionID":  sessionID,
-			"payloadLen": payloadLen,
-			"maxAllowed": MaxPayloadSize,
-			"exceeded":   payloadLen - MaxPayloadSize,
-			"headerHex":  fmt.Sprintf("%x", header),
-			"reason":     "client sent message exceeding I2CP spec limit (256KB)",
-			"impact":     "connection will be terminated to prevent DoS",
-		}).Error("payload_size_exceeded_max - client may need reconfiguration")
+		logPayloadSizeExceeded(connInfo, msgType, sessionID, payloadLen, header)
 		return nil, err
 	}
 
@@ -253,19 +230,10 @@ func ReadMessage(r io.Reader) (*Message, error) {
 
 	payload, err := readMessagePayload(r, payloadLen)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":         "i2cp.ReadMessage",
-			"remoteAddr": connInfo,
-			"msgType":    MessageTypeName(msgType),
-			"sessionID":  sessionID,
-			"payloadLen": payloadLen,
-			"error":      err.Error(),
-		}).Debug("failed_to_read_payload")
+		logPayloadReadFailure(connInfo, msgType, sessionID, payloadLen, err)
 		return nil, err
 	}
 
-	// Extract SessionID from payload for message types that include it
-	// Per I2CP spec: Some messages have SessionID as first 2 bytes of payload
 	sessionID = extractSessionIDFromPayload(msgType, payload)
 
 	log.WithFields(logger.Fields{
@@ -281,6 +249,53 @@ func ReadMessage(r io.Reader) (*Message, error) {
 		SessionID: sessionID,
 		Payload:   payload,
 	}, nil
+}
+
+// identifyConnection returns a human-readable identifier for the reader's remote address.
+func identifyConnection(r io.Reader) string {
+	if conn, ok := r.(net.Conn); ok {
+		return conn.RemoteAddr().String()
+	}
+	return "unknown"
+}
+
+// logHeaderReadFailure logs a debug message when the I2CP header cannot be read.
+func logHeaderReadFailure(connInfo string, err error) {
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ReadMessage",
+		"remoteAddr": connInfo,
+		"error":      err.Error(),
+	}).Debug("failed_to_read_header")
+}
+
+// logPayloadSizeExceeded logs an error when the payload size exceeds the I2CP spec limit.
+func logPayloadSizeExceeded(connInfo string, msgType uint8, sessionID uint16, payloadLen uint32, header []byte) {
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ReadMessage",
+		"phase":      "i2cp_message_parsing",
+		"remoteAddr": connInfo,
+		"msgType":    MessageTypeName(msgType),
+		"msgTypeID":  msgType,
+		"sessionID":  sessionID,
+		"payloadLen": payloadLen,
+		"maxAllowed": MaxPayloadSize,
+		"exceeded":   payloadLen - MaxPayloadSize,
+		"headerHex":  fmt.Sprintf("%x", header),
+		"reason":     "client sent message exceeding I2CP spec limit (256KB)",
+		"impact":     "connection will be terminated to prevent DoS",
+	}).Error("payload_size_exceeded_max - client may need reconfiguration")
+}
+
+// logPayloadReadFailure logs a debug message when the payload bytes cannot be read.
+func logPayloadReadFailure(connInfo string, msgType uint8, sessionID uint16, payloadLen uint32, err error) {
+	log.WithFields(logger.Fields{
+		"at":         "i2cp.ReadMessage",
+		"remoteAddr": connInfo,
+		"msgType":    MessageTypeName(msgType),
+		"sessionID":  sessionID,
+		"payloadLen": payloadLen,
+		"error":      err.Error(),
+	}).Debug("failed_to_read_payload")
 }
 
 // extractSessionIDFromPayload extracts SessionID from message payload for message types that include it.
