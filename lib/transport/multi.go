@@ -228,13 +228,15 @@ func (tmux *TransportMuxer) Name() string {
 
 	var sb strings.Builder
 	sb.WriteString("Muxed Transport: ")
-	for i, t := range tmux.trans {
+	first := true
+	for _, t := range tmux.trans {
 		if t == nil {
 			continue
 		}
-		if i > 0 {
+		if !first {
 			sb.WriteString(", ")
 		}
+		first = false
 		sb.WriteString(t.Name())
 	}
 	name := sb.String()

@@ -111,14 +111,14 @@ func TestAddDuplicateParticipant(t *testing.T) {
 		t.Fatalf("Failed to add first participant: %v", err)
 	}
 
-	// Add second participant with same ID (should replace)
+	// Add second participant with same ID (should return error)
 	p2, _ := NewParticipant(tunnelID, &mockTunnelEncryptor{})
 	err = m.AddParticipant(p2)
-	if err != nil {
-		t.Errorf("Failed to add duplicate participant: %v", err)
+	if err == nil {
+		t.Errorf("Expected error when adding duplicate participant, got nil")
 	}
 
-	// Should still have only 1 participant
+	// Should still have only 1 participant (the original)
 	if m.ParticipantCount() != 1 {
 		t.Errorf("Expected 1 participant after duplicate add, got %d", m.ParticipantCount())
 	}

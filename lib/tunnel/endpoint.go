@@ -3,6 +3,7 @@ package tunnel
 import (
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -628,6 +629,14 @@ func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 
 // storeFragmentData validates and stores fragment data in the assembler.
 func (e *Endpoint) storeFragmentData(msgID uint32, fragmentNum int, fragmentData []byte, assembler *fragmentAssembler) error {
+	if fragmentNum < 0 || fragmentNum >= 64 {
+		log.WithFields(map[string]interface{}{
+			"message_id":   msgID,
+			"fragment_num": fragmentNum,
+		}).Error("Fragment number out of range (must be 0-63)")
+		return fmt.Errorf("fragment number %d out of range (must be 0-63)", fragmentNum)
+	}
+
 	mask := uint64(1) << fragmentNum
 	if (assembler.receivedMask & mask) != 0 {
 		log.WithFields(map[string]interface{}{

@@ -114,15 +114,20 @@ func (s *NTCP2Session) QueueSendI2NP(msg i2np.I2NPMessage) error {
 		"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),
 	}).Debug("Queueing I2NP message for send")
 
+	// Increment queue size before channel send so SendQueueSize() always
+	// reflects messages that are in-flight or queued. Decrement on failure.
+	atomic.AddInt32(&s.sendQueueSize, 1)
+
 	select {
 	case s.sendQueue <- msg:
-		newSize := atomic.AddInt32(&s.sendQueueSize, 1)
-		s.logger.WithField("queue_size", newSize).Debug("Message queued successfully")
+		s.logger.WithField("queue_size", atomic.LoadInt32(&s.sendQueueSize)).Debug("Message queued successfully")
 		return nil
 	case <-s.ctx.Done():
+		atomic.AddInt32(&s.sendQueueSize, -1)
 		s.logger.WithField("message_type", msg.Type()).Warn("Cannot queue message - session is closed")
 		return fmt.Errorf("session closed, message dropped (type=%d)", msg.Type())
 	case <-time.After(500 * time.Millisecond):
+		atomic.AddInt32(&s.sendQueueSize, -1)
 		s.logger.WithFields(map[string]interface{}{
 			"message_type":       msg.Type(),
 			"current_queue_size": atomic.LoadInt32(&s.sendQueueSize),

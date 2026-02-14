@@ -484,7 +484,7 @@ func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, data
 	}
 
 	store := i2np.NewDatabaseStore(key, data, dataType)
-	flooded := fs.floodToSelectedPeers(floodfills, store)
+	flooded := fs.floodToSelectedPeers(floodfills, store, transport)
 
 	log.WithFields(logger.Fields{
 		"at":      "FloodDatabaseStore",
@@ -500,7 +500,9 @@ func (fs *FloodfillServer) selectFloodPeers(key common.Hash) ([]router_info.Rout
 
 // floodToSelectedPeers sends the DatabaseStore message to eligible floodfill peers,
 // skipping our own hash and stopping after floodCount successful sends.
-func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterInfo, store i2np.I2NPMessage) int {
+// The transport parameter is captured under lock by the caller to avoid a data race
+// with SetTransport or concurrent writes to fs.transport.
+func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterInfo, store i2np.I2NPMessage, transport FloodfillTransport) int {
 	flooded := 0
 	for _, ri := range floodfills {
 		if flooded >= fs.floodCount {
@@ -513,7 +515,7 @@ func (fs *FloodfillServer) floodToSelectedPeers(floodfills []router_info.RouterI
 		if hash == fs.ourHash {
 			continue
 		}
-		if err := fs.transport.SendI2NPMessage(fs.ctx, hash, store); err != nil {
+		if err := transport.SendI2NPMessage(fs.ctx, hash, store); err != nil {
 			log.WithFields(logger.Fields{
 				"at":   "FloodDatabaseStore",
 				"peer": fmt.Sprintf("%x", hash[:8]),

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	common "github.com/go-i2p/common/data"
@@ -161,6 +162,7 @@ type MessageProcessor struct {
 	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
+	garlicRecursionDepth  int32                     // Atomic counter for garlic nesting depth
 }
 
 // NewMessageProcessor creates a new message processor
@@ -695,8 +697,10 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 }
 
 // parseAndLogGarlic parses the decrypted garlic structure and logs the result.
+// Uses DeserializeGarlic from garlic_builder.go as the single canonical parser
+// to avoid duplicate parsing logic and ensure consistent validation.
 func (p *MessageProcessor) parseAndLogGarlic(msgID int, decryptedData []byte, sessionTag [8]byte) (*Garlic, error) {
-	garlic, err := p.parseGarlicStructure(decryptedData)
+	garlic, err := DeserializeGarlic(decryptedData, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse decrypted garlic structure: %w", err)
 	}
@@ -750,7 +754,21 @@ func (p *MessageProcessor) routeCloveByType(index int, deliveryType byte, clove 
 }
 
 // handleLocalDelivery processes a LOCAL delivery clove.
+// Guards against infinite recursion from nested garlic messages by tracking depth.
 func (p *MessageProcessor) handleLocalDelivery(index int, clove GarlicClove) {
+	const maxGarlicNestingDepth = 4
+	depth := atomic.AddInt32(&p.garlicRecursionDepth, 1)
+	defer atomic.AddInt32(&p.garlicRecursionDepth, -1)
+
+	if depth > maxGarlicNestingDepth {
+		log.WithFields(logger.Fields{
+			"clove_index":   index,
+			"nesting_depth": depth,
+			"max_depth":     maxGarlicNestingDepth,
+		}).Error("Garlic nesting depth exceeded, dropping clove to prevent recursion bomb")
+		return
+	}
+
 	if err := p.ProcessMessage(clove.I2NPMessage); err != nil {
 		log.WithFields(logger.Fields{
 			"clove_index": index,
@@ -850,309 +868,6 @@ func (p *MessageProcessor) handleTunnelDelivery(index int, clove GarlicClove) {
 		"gateway_hash": fmt.Sprintf("%x", clove.DeliveryInstructions.Hash[:8]),
 		"tunnel_id":    clove.DeliveryInstructions.TunnelID,
 	}).Debug("Successfully forwarded clove through tunnel")
-}
-
-// parseGarlicStructure parses decrypted garlic data into a Garlic structure.
-// The decrypted format is:
-//
-//	[count:1] [clove1] [clove2] ... [certificate:3] [messageID:4] [expiration:8]
-//
-// This is a simplified parser - full implementation would use the existing
-// garlic parsing code from garlic_builder.go
-func (p *MessageProcessor) parseGarlicStructure(data []byte) (*Garlic, error) {
-	if len(data) < 1 {
-		return nil, fmt.Errorf("garlic data too short: need at least 1 byte for count")
-	}
-
-	count := int(data[0])
-	offset := 1
-
-	// Enforce the same clove count limit as DeserializeGarlic (garlic_builder.go)
-	// to prevent resource exhaustion from oversized garlic messages.
-	const maxGarlicCloves = 64
-	if count > maxGarlicCloves {
-		return nil, fmt.Errorf("garlic clove count %d exceeds maximum %d", count, maxGarlicCloves)
-	}
-
-	log.WithFields(logger.Fields{
-		"count":     count,
-		"data_size": len(data),
-	}).Debug("Parsing garlic structure")
-
-	garlic := &Garlic{
-		Count:  count,
-		Cloves: make([]GarlicClove, 0, count),
-	}
-
-	// Parse each clove
-	offset, err := p.parseGarlicCloves(garlic, data, offset, count)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse trailing fields (certificate, message ID, expiration)
-	if err := p.validateGarlicTrailingFields(data, offset); err != nil {
-		return nil, err
-	}
-
-	return garlic, nil
-}
-
-// parseGarlicCloves parses all garlic cloves from the data and appends them to the garlic structure.
-// Returns the updated offset after parsing all cloves.
-func (p *MessageProcessor) parseGarlicCloves(garlic *Garlic, data []byte, offset, count int) (int, error) {
-	for i := 0; i < count; i++ {
-		clove, bytesRead, err := p.parseGarlicClove(data[offset:])
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse clove %d: %w", i, err)
-		}
-		garlic.Cloves = append(garlic.Cloves, *clove)
-		offset += bytesRead
-	}
-	return offset, nil
-}
-
-// validateGarlicTrailingFields validates that the garlic data contains the required trailing fields.
-// These fields are: certificate (3 bytes), message ID (4 bytes), and expiration (8 bytes).
-func (p *MessageProcessor) validateGarlicTrailingFields(data []byte, offset int) error {
-	if err := p.validateGarlicCertificate(data, offset); err != nil {
-		return err
-	}
-	offset += 3
-
-	if err := p.validateGarlicMessageID(data, offset); err != nil {
-		return err
-	}
-	offset += 4
-
-	return p.validateGarlicExpiration(data, offset)
-}
-
-// validateGarlicCertificate validates that sufficient data exists for the certificate field.
-// The certificate is always 3 bytes and currently always null in the implementation.
-func (p *MessageProcessor) validateGarlicCertificate(data []byte, offset int) error {
-	if len(data)-offset < 3 {
-		return fmt.Errorf("insufficient data for certificate at offset %d", offset)
-	}
-	return nil
-}
-
-// validateGarlicMessageID validates that sufficient data exists for the message ID field.
-// The message ID is 4 bytes.
-func (p *MessageProcessor) validateGarlicMessageID(data []byte, offset int) error {
-	if len(data)-offset < 4 {
-		return fmt.Errorf("insufficient data for message ID at offset %d", offset)
-	}
-	return nil
-}
-
-// validateGarlicExpiration validates that sufficient data exists for the expiration field.
-// The expiration is 8 bytes.
-func (p *MessageProcessor) validateGarlicExpiration(data []byte, offset int) error {
-	if len(data)-offset < 8 {
-		return fmt.Errorf("insufficient data for expiration at offset %d", offset)
-	}
-	return nil
-}
-
-// parseGarlicClove parses a single garlic clove from the data.
-// Returns the clove, number of bytes consumed, and any error.
-//
-// Clove format:
-//
-//	[delivery_instructions] [i2np_message] [clove_id:4] [expiration:8] [certificate:3]
-func (p *MessageProcessor) parseGarlicClove(data []byte) (*GarlicClove, int, error) {
-	if len(data) < 1 {
-		return nil, 0, fmt.Errorf("clove data too short for delivery instructions")
-	}
-
-	offset := 0
-
-	// Parse delivery instructions
-	deliveryInstr, bytesRead, err := p.parseDeliveryInstructions(data[offset:])
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to parse delivery instructions: %w", err)
-	}
-	offset += bytesRead
-
-	// Parse the wrapped I2NP message
-	i2npMsg, bytesRead, err := p.parseI2NPMessage(data[offset:])
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to parse wrapped I2NP message: %w", err)
-	}
-	offset += bytesRead
-
-	// Parse clove metadata
-	cloveID, bytesRead, err := parseGarlicCloveTrailer(data[offset:])
-	if err != nil {
-		return nil, 0, err
-	}
-	offset += bytesRead
-
-	clove := &GarlicClove{
-		DeliveryInstructions: *deliveryInstr,
-		I2NPMessage:          i2npMsg,
-		CloveID:              cloveID,
-	}
-
-	return clove, offset, nil
-}
-
-// parseGarlicCloveTrailer extracts clove ID, expiration, and certificate from clove trailer.
-// Returns clove ID and total bytes consumed (15 bytes: 4 for ID + 8 for expiration + 3 for certificate).
-func parseGarlicCloveTrailer(data []byte) (int, int, error) {
-	// Validate sufficient data for full trailer
-	if len(data) < 15 {
-		return 0, 0, fmt.Errorf("insufficient data for clove trailer (need 15 bytes, have %d)", len(data))
-	}
-
-	// Parse clove ID (4 bytes, big-endian)
-	cloveID := parseCloveID(data[0:4])
-
-	// Skip expiration (8 bytes) and certificate (3 bytes)
-	// Total bytes consumed: 4 + 8 + 3 = 15
-	return cloveID, 15, nil
-}
-
-// parseCloveID extracts a 4-byte big-endian integer clove ID.
-func parseCloveID(data []byte) int {
-	return int(data[0])<<24 | int(data[1])<<16 | int(data[2])<<8 | int(data[3])
-}
-
-// parseDeliveryInstructions parses garlic clove delivery instructions.
-// Returns the instructions, number of bytes consumed, and any error.
-//
-// Format:
-//
-//	[flag:1] [session_key:32]? [hash:32]? [tunnel_id:4]? [delay:4]?
-func (p *MessageProcessor) parseDeliveryInstructions(data []byte) (*GarlicCloveDeliveryInstructions, int, error) {
-	if len(data) < 1 {
-		return nil, 0, fmt.Errorf("no data for delivery instructions flag")
-	}
-
-	deliveryInstr := &GarlicCloveDeliveryInstructions{
-		Flag: data[0],
-	}
-
-	// Parse all instruction fields sequentially
-	offset, err := p.parseInstructionFields(data, deliveryInstr)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return deliveryInstr, offset, nil
-}
-
-// parseInstructionFields parses all delivery instruction fields.
-func (p *MessageProcessor) parseInstructionFields(data []byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
-	offset := 1
-	flag := deliveryInstr.Flag
-
-	// Parse optional session key (bit 7)
-	var err error
-	offset, err = parseSessionKey(data, offset, flag, deliveryInstr)
-	if err != nil {
-		return 0, err
-	}
-
-	// Extract delivery type for subsequent parsing
-	deliveryType := extractDeliveryType(flag)
-
-	// Parse optional hash field
-	offset, err = parseDeliveryHash(data, offset, deliveryType, deliveryInstr)
-	if err != nil {
-		return 0, err
-	}
-
-	// Parse optional tunnel ID
-	offset, err = parseTunnelID(data, offset, deliveryType, deliveryInstr)
-	if err != nil {
-		return 0, err
-	}
-
-	// Parse optional delay field
-	offset, err = parseDelay(data, offset, flag, deliveryInstr)
-	if err != nil {
-		return 0, err
-	}
-
-	return offset, nil
-}
-
-// parseSessionKey extracts the optional session key from delivery instructions.
-// Returns the updated offset and any parsing error.
-func parseSessionKey(data []byte, offset int, flag byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
-	if (flag>>7)&0x01 == 1 {
-		if len(data)-offset < 32 {
-			return 0, fmt.Errorf("insufficient data for session key")
-		}
-		copy(deliveryInstr.SessionKey[:], data[offset:offset+32])
-		return offset + 32, nil
-	}
-	return offset, nil
-}
-
-// parseDeliveryHash extracts the optional hash field for DESTINATION, ROUTER, or TUNNEL delivery.
-// Returns the updated offset and any parsing error.
-func parseDeliveryHash(data []byte, offset int, deliveryType byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
-	if deliveryType >= 1 && deliveryType <= 3 {
-		if len(data)-offset < 32 {
-			return 0, fmt.Errorf("insufficient data for hash")
-		}
-		copy(deliveryInstr.Hash[:], data[offset:offset+32])
-		return offset + 32, nil
-	}
-	return offset, nil
-}
-
-// parseTunnelID extracts the optional tunnel ID field for TUNNEL delivery type.
-// Returns the updated offset and any parsing error.
-func parseTunnelID(data []byte, offset int, deliveryType byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
-	if deliveryType == 3 {
-		if len(data)-offset < 4 {
-			return 0, fmt.Errorf("insufficient data for tunnel ID")
-		}
-		tunnelID := uint32(data[offset])<<24 | uint32(data[offset+1])<<16 | uint32(data[offset+2])<<8 | uint32(data[offset+3])
-		deliveryInstr.TunnelID = tunnel.TunnelID(tunnelID)
-		return offset + 4, nil
-	}
-	return offset, nil
-}
-
-// parseDelay extracts the optional delay field from delivery instructions.
-// Returns the updated offset and any parsing error.
-func parseDelay(data []byte, offset int, flag byte, deliveryInstr *GarlicCloveDeliveryInstructions) (int, error) {
-	if (flag>>4)&0x01 == 1 {
-		if len(data)-offset < 4 {
-			return 0, fmt.Errorf("insufficient data for delay")
-		}
-		delay := int(data[offset])<<24 | int(data[offset+1])<<16 | int(data[offset+2])<<8 | int(data[offset+3])
-		deliveryInstr.Delay = delay
-		return offset + 4, nil
-	}
-	return offset, nil
-}
-
-// parseI2NPMessage parses a wrapped I2NP message from garlic clove data.
-// Returns the message, number of bytes consumed, and any error.
-func (p *MessageProcessor) parseI2NPMessage(data []byte) (I2NPMessage, int, error) {
-	// I2NP message format: [header] [payload]
-	// Header is at least 16 bytes (type, ID, expiration, size, checksum)
-	if len(data) < 16 {
-		return nil, 0, fmt.Errorf("insufficient data for I2NP message header")
-	}
-
-	// Create a base message and unmarshal
-	msg := NewBaseI2NPMessage(0)
-	if err := msg.UnmarshalBinary(data); err != nil {
-		return nil, 0, fmt.Errorf("failed to unmarshal I2NP message: %w", err)
-	}
-
-	// Calculate bytes consumed: header (16) + data size
-	dataSize := len(msg.GetData())
-	bytesRead := 16 + dataSize
-
-	return msg, bytesRead, nil
 }
 
 // processTunnelDataMessage processes tunnel data messages using TunnelCarrier interface.

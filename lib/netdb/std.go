@@ -2387,15 +2387,28 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 }
 
 // parseAndCacheEncryptedLeaseSet parses EncryptedLeaseSet data and adds it to the memory cache.
+// If a cached entry already exists, the new entry replaces it only if it has a
+// newer published timestamp, preventing stale data from persisting.
 func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte) (encrypted_leaseset.EncryptedLeaseSet, error) {
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(data)
 	if err != nil {
 		return encrypted_leaseset.EncryptedLeaseSet{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 
-	// Always store/replace the cached entry so stale data is updated
+	// Add to cache, or replace if newer
 	db.lsMutex.Lock()
-	log.Debug("Storing EncryptedLeaseSet in memory cache")
+	if existing, ok := db.LeaseSets[hash]; ok {
+		if existing.EncryptedLeaseSet != nil {
+			if !els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime()) {
+				db.lsMutex.Unlock()
+				log.Debug("Skipping EncryptedLeaseSet update — cached version is same or newer")
+				return els, nil
+			}
+		}
+		log.Debug("Replacing stale EncryptedLeaseSet in memory cache")
+	} else {
+		log.Debug("Adding EncryptedLeaseSet to memory cache")
+	}
 	db.LeaseSets[hash] = Entry{
 		EncryptedLeaseSet: &els,
 	}
@@ -2622,15 +2635,28 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 }
 
 // parseAndCacheMetaLeaseSet parses MetaLeaseSet data and adds it to the memory cache.
+// If a cached entry already exists, the new entry replaces it only if it has a
+// newer published timestamp, preventing stale data from persisting.
 func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (meta_leaseset.MetaLeaseSet, error) {
 	mls, _, err := meta_leaseset.ReadMetaLeaseSet(data)
 	if err != nil {
 		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 
-	// Always store/replace the cached entry so stale data is updated
+	// Add to cache, or replace if newer
 	db.lsMutex.Lock()
-	log.Debug("Storing MetaLeaseSet in memory cache")
+	if existing, ok := db.LeaseSets[hash]; ok {
+		if existing.MetaLeaseSet != nil {
+			if !mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime()) {
+				db.lsMutex.Unlock()
+				log.Debug("Skipping MetaLeaseSet update — cached version is same or newer")
+				return mls, nil
+			}
+		}
+		log.Debug("Replacing stale MetaLeaseSet in memory cache")
+	} else {
+		log.Debug("Adding MetaLeaseSet to memory cache")
+	}
 	db.LeaseSets[hash] = Entry{
 		MetaLeaseSet: &mls,
 	}

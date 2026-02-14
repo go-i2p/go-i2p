@@ -658,26 +658,43 @@ func validateI2PControl(i2pcontrol I2PControlDefaults) error {
 }
 
 // validateI2PControlSecurity rejects non-localhost binding with default password over HTTP
-// to prevent accidental exposure of the I2PControl interface.
+// and warns about any HTTP on non-localhost to prevent accidental exposure of the
+// I2PControl interface and credential sniffing.
 func validateI2PControlSecurity(i2pcontrol I2PControlDefaults) error {
-	if !i2pcontrol.Enabled || i2pcontrol.Password != "itoopie" || i2pcontrol.UseHTTPS {
+	if !i2pcontrol.Enabled {
 		return nil
 	}
 
 	isLocalhost := strings.HasPrefix(i2pcontrol.Address, "localhost:") ||
 		strings.HasPrefix(i2pcontrol.Address, "127.0.0.1:") ||
 		strings.HasPrefix(i2pcontrol.Address, "[::1]:")
-	if !isLocalhost {
+
+	// Hard reject: non-localhost + default password + HTTP
+	if !isLocalhost && !i2pcontrol.UseHTTPS && i2pcontrol.Password == "itoopie" {
 		log.WithFields(logger.Fields{
 			"at":     "validateI2PControlConfig",
 			"reason": "insecure_remote_access",
 		}).Error("I2PControl refuses to start with default password over HTTP on non-localhost")
 		return newValidationError("I2PControl cannot use default password 'itoopie' over HTTP on non-localhost address " + i2pcontrol.Address + "; change the password or enable HTTPS")
 	}
-	log.WithFields(logger.Fields{
-		"at":     "validateI2PControlConfig",
-		"reason": "default_password_over_http",
-	}).Warn("I2PControl is enabled with default password over HTTP — change password for production use")
+
+	// Warn: non-localhost + HTTP (even with custom password, tokens travel in cleartext)
+	if !isLocalhost && !i2pcontrol.UseHTTPS {
+		log.WithFields(logger.Fields{
+			"at":      "validateI2PControlConfig",
+			"reason":  "http_on_non_localhost",
+			"address": i2pcontrol.Address,
+		}).Warn("I2PControl is bound to a non-localhost address over HTTP — auth tokens will be sent in cleartext; enable HTTPS for production use")
+	}
+
+	// Warn: default password on localhost
+	if i2pcontrol.Password == "itoopie" {
+		log.WithFields(logger.Fields{
+			"at":     "validateI2PControlConfig",
+			"reason": "default_password",
+		}).Warn("I2PControl is enabled with default password — change password for production use")
+	}
+
 	return nil
 }
 

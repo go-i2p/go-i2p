@@ -137,8 +137,8 @@ func (m *Manager) AddParticipant(p *Participant) error {
 			"phase":     "tunnel_build",
 			"reason":    "duplicate_tunnel_id",
 			"tunnel_id": tunnelID,
-			"action":    "replacing",
-		}).Warn("participant already exists, replacing")
+		}).Warn("participant already exists, rejecting duplicate")
+		return fmt.Errorf("participant with tunnel ID %d already exists", tunnelID)
 	}
 
 	m.participants[tunnelID] = p
