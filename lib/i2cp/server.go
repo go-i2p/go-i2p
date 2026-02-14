@@ -1440,7 +1440,7 @@ func encodeLeaseEntry(payload []byte, offset int, tun *tunnel.TunnelState, now t
 // calculateLeaseEndDate computes the lease expiration time. Standard leases
 // expire 10 minutes after tunnel creation; stale tunnels receive a 5-minute
 // extension from the current time.
-func calculateLeaseEndDate(createdAt time.Time, now time.Time) time.Time {
+func calculateLeaseEndDate(createdAt, now time.Time) time.Time {
 	endDate := createdAt.Add(10 * time.Minute)
 	if endDate.Before(now) {
 		return now.Add(5 * time.Minute)

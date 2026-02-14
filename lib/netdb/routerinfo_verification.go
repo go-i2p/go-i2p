@@ -57,7 +57,7 @@ func createRouterInfoVerifier(ri router_info.RouterInfo) (interface{ Verify([]by
 // extractSignatureComponents separates a serialized RouterInfo into the data-to-verify
 // and the trailing signature bytes. Returns an error if the signature is empty or
 // longer than the total serialized data.
-func extractSignatureComponents(ri router_info.RouterInfo) (dataToVerify []byte, sigBytes []byte, err error) {
+func extractSignatureComponents(ri router_info.RouterInfo) (dataToVerify, sigBytes []byte, err error) {
 	fullBytes, err := ri.Bytes()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to serialize RouterInfo for verification: %w", err)
