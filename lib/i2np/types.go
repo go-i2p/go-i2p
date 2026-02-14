@@ -111,6 +111,10 @@ type TunnelBuilder interface {
 // TunnelReplyHandler represents types that handle tunnel build replies
 type TunnelReplyHandler interface {
 	GetReplyRecords() []BuildResponseRecord
+	// GetRawReplyRecords returns the raw encrypted record bytes before parsing.
+	// This is needed for decryption: re-serializing parsed records corrupts
+	// the original ciphertext. Returns nil if raw records were not preserved.
+	GetRawReplyRecords() [][]byte
 	ProcessReply() error
 }
 

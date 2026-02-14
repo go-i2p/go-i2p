@@ -201,11 +201,13 @@ func (e *StandardEmbeddedRouter) Start() error {
 
 // Stop performs graceful shutdown of the router.
 // This method stops all router subsystems and waits for them to shut down cleanly.
+// The mutex is released before calling router.Stop() to prevent deadlock with
+// goroutines that call IsRunning() during shutdown.
 func (e *StandardEmbeddedRouter) Stop() error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if !e.running {
+		e.mu.Unlock()
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.Stop",
 			"phase":  "shutdown",
@@ -215,6 +217,7 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	}
 
 	if e.router == nil {
+		e.mu.Unlock()
 		return fmt.Errorf("router instance is nil")
 	}
 
@@ -224,9 +227,15 @@ func (e *StandardEmbeddedRouter) Stop() error {
 		"reason": "initiating graceful shutdown",
 	}).Info("stopping embedded router")
 
-	// Stop the router subsystems
-	e.router.Stop()
+	// Capture the router and mark as not running before releasing the lock.
+	// This prevents new operations from starting while we shut down, and
+	// prevents deadlock with goroutines calling IsRunning() during router.Stop().
+	r := e.router
 	e.running = false
+	e.mu.Unlock()
+
+	// Stop the router subsystems (potentially blocking) without holding the lock
+	r.Stop()
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Stop",

@@ -25,11 +25,19 @@ const (
 	TUNNEL_BUILD_REPLY_EXPIRED   = 0x05 // Request has expired
 )
 
-type TunnelBuildReply [8]BuildResponseRecord
+type TunnelBuildReply struct {
+	Records       [8]BuildResponseRecord
+	RawRecordData [][]byte // Original encrypted bytes before parsing
+}
 
 // GetReplyRecords returns the build response records
 func (t *TunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
-	return t[:]
+	return t.Records[:]
+}
+
+// GetRawReplyRecords returns the original encrypted record bytes.
+func (t *TunnelBuildReply) GetRawReplyRecords() [][]byte {
+	return t.RawRecordData
 }
 
 // ProcessReply processes the tunnel build reply by analyzing each response record.
@@ -47,7 +55,7 @@ func (t *TunnelBuildReply) ProcessReply() error {
 
 // logProcessingStart logs the start of tunnel build reply processing.
 func (t *TunnelBuildReply) logProcessingStart() {
-	log.WithField("record_count", len(t)).Debug("Processing TunnelBuildReply")
+	log.WithField("record_count", len(t.Records)).Debug("Processing TunnelBuildReply")
 }
 
 // processAllHopResponses processes each hop's response record.
@@ -56,7 +64,7 @@ func (t *TunnelBuildReply) processAllHopResponses() (int, error) {
 	successCount := 0
 	var firstError error
 
-	for i, record := range t {
+	for i, record := range t.Records {
 		success, err := t.processHopResponse(i, record)
 		if err != nil {
 			log.WithFields(logger.Fields{
@@ -82,15 +90,15 @@ func (t *TunnelBuildReply) processAllHopResponses() (int, error) {
 func (t *TunnelBuildReply) logProcessingComplete(successCount int) {
 	log.WithFields(logger.Fields{
 		"success_count": successCount,
-		"total_hops":    len(t),
-		"success_rate":  float64(successCount) / float64(len(t)),
+		"total_hops":    len(t.Records),
+		"success_rate":  float64(successCount) / float64(len(t.Records)),
 	}).Info("TunnelBuildReply processing completed")
 }
 
 // determineTunnelBuildResult determines the final result based on success count.
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
 func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstError error) error {
-	if successCount == len(t) {
+	if successCount == len(t.Records) {
 		log.Debug("Tunnel build successful - all hops accepted")
 		return nil
 	}
@@ -99,7 +107,7 @@ func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstErr
 		return fmt.Errorf("tunnel build failed: %w", firstError)
 	}
 
-	return fmt.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, len(t))
+	return fmt.Errorf("tunnel build failed: only %d of %d hops accepted", successCount, len(t.Records))
 }
 
 // processHopResponse processes a single hop's response record.

@@ -535,12 +535,13 @@ func (r *Router) getMaxBandwidth() uint64 {
 
 // getConnectionCount returns the current number of active transport connections.
 func (r *Router) getConnectionCount() int {
-	if r.TransportMuxer == nil {
+	muxer := r.TransportMuxer
+	if muxer == nil {
 		return 0
 	}
 	// Count active sessions from all transports
 	count := 0
-	for _, t := range r.TransportMuxer.GetTransports() {
+	for _, t := range muxer.GetTransports() {
 		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
 			count += ntcp2Transport.GetSessionCount()
 		}
@@ -1466,9 +1467,13 @@ func (r *Router) shouldContinueMonitoring() bool {
 }
 
 // acceptInboundConnection attempts to accept a new connection with timeout.
-// Returns nil if timeout occurs or connection fails.
+// Returns nil if timeout occurs, connection fails, or TransportMuxer is nil (during shutdown).
 func (r *Router) acceptInboundConnection() net.Conn {
-	conn, err := r.TransportMuxer.AcceptWithTimeout(5 * time.Second)
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return nil
+	}
+	conn, err := muxer.AcceptWithTimeout(5 * time.Second)
 	if err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			log.WithError(err).Warn("Failed to accept inbound connection")

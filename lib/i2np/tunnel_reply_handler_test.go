@@ -210,7 +210,7 @@ func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
 func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+		reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 	}
 	return &reply
 }
@@ -219,7 +219,7 @@ func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 func createRejectedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_REJECT)
+		reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_REJECT)
 	}
 	return &reply
 }
@@ -239,7 +239,7 @@ func createMixedTunnelBuildReply() *TunnelBuildReply {
 	}
 
 	for i, replyCode := range replyCodes {
-		reply[i] = createValidResponseRecordWithReply(replyCode)
+		reply.Records[i] = createValidResponseRecordWithReply(replyCode)
 	}
 	return &reply
 }
@@ -249,9 +249,9 @@ func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
 		if i == 3 {
-			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_OVERLOAD) // One failure
+			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_OVERLOAD) // One failure
 		} else {
-			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 		}
 	}
 	return &reply
@@ -262,9 +262,9 @@ func createUnknownReplyCodeTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
 		if i == 0 {
-			reply[i] = createValidResponseRecordWithReply(0xFF) // Unknown reply code
+			reply.Records[i] = createValidResponseRecordWithReply(0xFF) // Unknown reply code
 		} else {
-			reply[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
 		}
 	}
 	return &reply
@@ -275,14 +275,14 @@ func createEmptyHashTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
 		if i == 0 {
-			reply[i] = BuildResponseRecord{
+			reply.Records[i] = BuildResponseRecord{
 				Hash:       common.Hash{}, // Empty hash
 				RandomData: [495]byte{},
 				Reply:      TUNNEL_BUILD_REPLY_SUCCESS,
 			}
 		} else {
-			reply[i] = createValidResponseRecord()
-			reply[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+			reply.Records[i] = createValidResponseRecord()
+			reply.Records[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
 		}
 	}
 	return &reply

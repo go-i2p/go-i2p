@@ -218,17 +218,26 @@ func (rp *ReplyProcessor) processReplyWithHandler(handler TunnelReplyHandler, tu
 // decryptReplyRecords decrypts encrypted build reply records using the stored reply keys.
 // Each hop's reply is encrypted with ECIES-X25519-AEAD (ChaCha20/Poly1305) using the reply key
 // from the build request. This is the modern I2P standard, replacing legacy AES-256-CBC.
+//
+// Uses raw encrypted bytes from GetRawReplyRecords() instead of re-serializing parsed records,
+// because round-tripping through parse/serialize corrupts the original ciphertext.
 func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pending *PendingBuildRequest) error {
 	records := handler.GetReplyRecords()
+	rawRecords := handler.GetRawReplyRecords()
 
 	if len(records) != len(pending.ReplyKeys) {
 		return fmt.Errorf("record count mismatch: got %d records, expected %d",
 			len(records), len(pending.ReplyKeys))
 	}
 
-	for i, record := range records {
-		// Decrypt this hop's reply record using modern ChaCha20/Poly1305 AEAD
-		decrypted, err := rp.decryptRecord(record, pending.ReplyKeys[i], pending.ReplyIVs[i])
+	if len(rawRecords) != len(records) {
+		return fmt.Errorf("raw record count mismatch: got %d raw records, expected %d",
+			len(rawRecords), len(records))
+	}
+
+	for i := range records {
+		// Decrypt this hop's reply record using the raw encrypted bytes
+		decrypted, err := rp.decryptRecord(rawRecords[i], pending.ReplyKeys[i], pending.ReplyIVs[i])
 		if err != nil {
 			return fmt.Errorf("failed to decrypt record %d: %w", i, err)
 		}
@@ -247,28 +256,17 @@ func (rp *ReplyProcessor) decryptReplyRecords(handler TunnelReplyHandler, pendin
 	return nil
 }
 
-// decryptRecord decrypts a single encrypted build response record.
-// Uses ChaCha20-Poly1305 AEAD (modern mode, I2P 0.9.44+).
+// decryptRecord decrypts a single encrypted build response record from raw bytes.
+// Uses ChaCha20-Poly1305 AEAD (modern mode, I2P 0.9.44+) or AES-256-CBC (legacy).
 //
-// Build response records are encrypted with the reply key from the build request.
-// This ensures that only the tunnel creator can read the responses from participants.
-//
-// The record struct was parsed from encrypted wire data, so we re-serialize it
-// to recover the encrypted bytes, then perform actual ChaCha20-Poly1305 decryption
-// using the reply key and IV from the original build request.
+// The encrypted parameter must be the original wire bytes, NOT re-serialized from
+// a parsed record, as round-tripping through parse/serialize would corrupt the ciphertext.
 func (rp *ReplyProcessor) decryptRecord(
-	record BuildResponseRecord,
+	encrypted []byte,
 	replyKey session_key.SessionKey,
 	replyIV [16]byte,
 ) ([]byte, error) {
 	crypto := NewBuildRecordCrypto()
-
-	// Re-serialize the record to recover the encrypted bytes as they were on the wire.
-	// For VTB records this produces 528 bytes of ciphertext.
-	encrypted, err := crypto.serializeResponseRecord(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize record for decryption: %w", err)
-	}
 
 	// Perform actual ChaCha20-Poly1305 AEAD decryption.
 	// DecryptReplyRecord expects 544 bytes (528 ciphertext + 16 auth tag).
@@ -295,19 +293,22 @@ func (rp *ReplyProcessor) decryptRecord(
 		return cleartext, nil
 	}
 
-	// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
-	// Create ChaCha20-Poly1305 cipher for AES-CBC fallback using the reply key/IV.
-	cleartext, err := crypto.decryptAES256CBC(encrypted, replyKey, replyIV)
-	if err != nil {
-		return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
+	if len(encrypted) == 528 {
+		// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
+		cleartext, err := crypto.decryptAES256CBC(encrypted, replyKey, replyIV)
+		if err != nil {
+			return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
+		}
+
+		log.WithFields(logger.Fields{
+			"encryption": "AES-256-CBC",
+			"size":       len(cleartext),
+		}).Debug("Decrypted tunnel build reply record (legacy)")
+
+		return cleartext, nil
 	}
 
-	log.WithFields(logger.Fields{
-		"encryption": "AES-256-CBC",
-		"size":       len(cleartext),
-	}).Debug("Decrypted tunnel build reply record (legacy)")
-
-	return cleartext, nil
+	return nil, fmt.Errorf("unexpected encrypted record size: %d (expected 528 or 544)", len(encrypted))
 }
 
 // handleBuildSuccess handles successful tunnel build completion.

@@ -555,6 +555,9 @@ func (t *NTCP2Transport) createOutboundSession(routerInfo router_info.RouterInfo
 	}
 
 	session := t.setupSession(conn, routerHash)
+	if session == nil {
+		return nil, fmt.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
+	}
 	t.logger.WithFields(map[string]interface{}{
 		"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
 		"remote_addr": conn.RemoteAddr().String(),
@@ -767,15 +770,14 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Has
 		resolved := t.resolveExistingSession(existing, routerHash)
 		if resolved == nil {
 			// resolveExistingSession encountered an unexpected map entry type.
-			// Delete the corrupt entry and store our session instead.
+			// Delete the corrupt entry. We cannot reuse 'conn' because
+			// session.Close() already closed it — return nil to signal failure.
 			t.sessions.Delete(routerHash)
-			t.sessions.Store(routerHash, session)
-			session = NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
-			session.StartWorkers()
-			session.SetCleanupCallback(func() {
-				t.removeSession(routerHash)
-			})
-			return session
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
+			}).Error("setupSession: corrupt session map entry deleted, connection already closed — caller must re-dial")
+			return nil
 		}
 		return resolved
 	}

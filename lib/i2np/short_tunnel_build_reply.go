@@ -28,6 +28,7 @@ total size: 1+$num*218 (for ElGamal/AES records)
 type ShortTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
+	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 
 // GetResponseRecords returns the build response records (legacy method name)
@@ -38,6 +39,11 @@ func (s *ShortTunnelBuildReply) GetResponseRecords() []BuildResponseRecord {
 // GetReplyRecords returns the build response records (TunnelReplyHandler interface)
 func (s *ShortTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return s.BuildResponseRecords
+}
+
+// GetRawReplyRecords returns the original encrypted record bytes.
+func (s *ShortTunnelBuildReply) GetRawReplyRecords() [][]byte {
+	return s.RawRecordData
 }
 
 // GetRecordCount returns the number of response records

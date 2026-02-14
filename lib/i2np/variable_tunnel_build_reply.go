@@ -22,11 +22,17 @@ Same format as VariableTunnelBuildMessage, with BuildResponseRecords.
 type VariableTunnelBuildReply struct {
 	Count                int
 	BuildResponseRecords []BuildResponseRecord
+	RawRecordData        [][]byte // Original encrypted bytes before parsing
 }
 
 // GetReplyRecords returns the build response records
 func (v *VariableTunnelBuildReply) GetReplyRecords() []BuildResponseRecord {
 	return v.BuildResponseRecords
+}
+
+// GetRawReplyRecords returns the original encrypted record bytes.
+func (v *VariableTunnelBuildReply) GetRawReplyRecords() [][]byte {
+	return v.RawRecordData
 }
 
 // ProcessReply processes the variable tunnel build reply by analyzing each response record.

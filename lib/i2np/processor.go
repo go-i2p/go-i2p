@@ -379,7 +379,7 @@ func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
 		return p.processVariableTunnelBuildMessage(msg)
 	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
-		return p.processVariableTunnelBuildMessage(msg) // Legacy format, same processing
+		return p.processTunnelBuildMessage(msg) // Legacy fixed 8-record format (no count prefix)
 	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
 		return p.processTunnelBuildReplyMessage(msg)
 	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
@@ -1199,10 +1199,125 @@ func (p *MessageProcessor) processVariableTunnelBuildMessage(msg I2NPMessage) er
 	return p.processTunnelBuildRequest(msg, false)
 }
 
+// processTunnelBuildMessage processes TunnelBuild (type 21) messages.
+// TunnelBuild has a fixed format: exactly 8 records × 528 bytes = 4224 bytes,
+// with NO count prefix byte (unlike VariableTunnelBuild type 23).
+func (p *MessageProcessor) processTunnelBuildMessage(msg I2NPMessage) error {
+	return p.processFixedTunnelBuildRequest(msg)
+}
+
+// processFixedTunnelBuildRequest handles TunnelBuild (type 21) messages with
+// fixed 8-record format. Unlike VTB/STBM, type 21 has no count prefix byte.
+func (p *MessageProcessor) processFixedTunnelBuildRequest(msg I2NPMessage) error {
+	if err := p.validateParticipantManager(false, msg.Type()); err != nil {
+		return err
+	}
+
+	data, err := p.extractBuildMessageData(msg)
+	if err != nil {
+		return err
+	}
+
+	records, err := p.parseFixedTunnelBuildRecords(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse fixed tunnel build records: %w", err)
+	}
+
+	p.logParsedBuildRequest(msg.MessageID(), len(records), false)
+	p.processAllBuildRecords(msg.MessageID(), records, false)
+
+	return nil
+}
+
+// parseFixedTunnelBuildRecords parses TunnelBuild (type 21) records.
+// Type 21 has exactly 8 records at 528 bytes each with no count prefix byte.
+func (p *MessageProcessor) parseFixedTunnelBuildRecords(data []byte) ([]BuildRequestRecord, error) {
+	const fixedRecordCount = 8
+	const recordSize = 528                             // VTB record size
+	const expectedSize = fixedRecordCount * recordSize // 4224 bytes
+
+	if len(data) < expectedSize {
+		return nil, fmt.Errorf("insufficient data for TunnelBuild: have %d, need %d", len(data), expectedSize)
+	}
+
+	records := make([]BuildRequestRecord, 0, fixedRecordCount)
+	offset := 0 // No count prefix byte for type 21
+
+	for i := 0; i < fixedRecordCount; i++ {
+		recordData := data[offset : offset+recordSize]
+		p.tryParseAndAppendRecord(&records, recordData, i, false)
+		offset += recordSize
+	}
+
+	return records, nil
+}
+
 // processTunnelBuildReplyMessage processes TunnelBuildReply (type 22) messages.
-// The reply contains 8 fixed BuildResponseRecords in the legacy tunnel build format.
+// The reply contains 8 fixed BuildResponseRecords with NO count prefix byte.
 func (p *MessageProcessor) processTunnelBuildReplyMessage(msg I2NPMessage) error {
-	return p.processBuildReplyCommon(msg, false)
+	return p.processFixedBuildReply(msg)
+}
+
+// processFixedBuildReply handles TunnelBuildReply (type 22) with fixed 8-record format.
+func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
+	if p.buildReplyProcessor == nil {
+		log.WithFields(logger.Fields{
+			"at":           "processFixedBuildReply",
+			"message_type": msg.Type(),
+			"message_id":   msg.MessageID(),
+			"reason":       "no build reply processor configured",
+		}).Warn("Tunnel build reply discarded - no TunnelBuildReplyProcessor set")
+		return nil
+	}
+
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		return fmt.Errorf("tunnel build reply does not implement DataCarrier")
+	}
+
+	data := carrier.GetData()
+	if len(data) == 0 {
+		return fmt.Errorf("tunnel build reply contains no data")
+	}
+
+	const fixedRecordCount = 8
+	const recordSize = 528
+	const expectedSize = fixedRecordCount * recordSize
+
+	if len(data) < expectedSize {
+		return fmt.Errorf("insufficient data for TunnelBuildReply: have %d, need %d", len(data), expectedSize)
+	}
+
+	var records [8]BuildResponseRecord
+	rawRecords := make([][]byte, fixedRecordCount)
+	offset := 0 // No count prefix byte for type 22
+
+	for i := 0; i < fixedRecordCount; i++ {
+		recordData := data[offset : offset+recordSize]
+		rawCopy := make([]byte, recordSize)
+		copy(rawCopy, recordData)
+		rawRecords[i] = rawCopy
+
+		record, err := ReadBuildResponseRecord(recordData)
+		if err != nil {
+			return fmt.Errorf("failed to parse response record %d: %w", i, err)
+		}
+		records[i] = record
+		offset += recordSize
+	}
+
+	handler := &TunnelBuildReply{
+		Records:       records,
+		RawRecordData: rawRecords,
+	}
+
+	log.WithFields(logger.Fields{
+		"at":           "processFixedBuildReply",
+		"message_id":   msg.MessageID(),
+		"record_count": fixedRecordCount,
+	}).Debug("Dispatching fixed tunnel build reply to processor")
+
+	return p.buildReplyProcessor.ProcessTunnelBuildReply(handler, msg.MessageID())
 }
 
 // processVariableTunnelBuildReplyMessage processes VariableTunnelBuildReply (type 24) messages.
@@ -1241,7 +1356,7 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 		return fmt.Errorf("tunnel build reply contains no data")
 	}
 
-	records, err := p.parseBuildResponseRecords(data, isShortBuild)
+	records, rawRecords, err := p.parseBuildResponseRecords(data, isShortBuild)
 	if err != nil {
 		return fmt.Errorf("failed to parse build reply records: %w", err)
 	}
@@ -1252,11 +1367,13 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 		handler = &ShortTunnelBuildReply{
 			Count:                len(records),
 			BuildResponseRecords: records,
+			RawRecordData:        rawRecords,
 		}
 	} else {
 		handler = &VariableTunnelBuildReply{
 			Count:                len(records),
 			BuildResponseRecords: records,
+			RawRecordData:        rawRecords,
 		}
 	}
 
@@ -1272,35 +1389,43 @@ func (p *MessageProcessor) processBuildReplyCommon(msg I2NPMessage, isShortBuild
 
 // parseBuildResponseRecords parses build response records from raw message data.
 // The format is: 1 byte record count followed by N response records.
-func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild bool) ([]BuildResponseRecord, error) {
+// Returns both parsed records and the raw encrypted bytes for each record,
+// since re-serializing parsed records corrupts the original ciphertext needed for decryption.
+func (p *MessageProcessor) parseBuildResponseRecords(data []byte, isShortBuild bool) ([]BuildResponseRecord, [][]byte, error) {
 	if len(data) < 1 {
-		return nil, fmt.Errorf("insufficient data for record count")
+		return nil, nil, fmt.Errorf("insufficient data for record count")
 	}
 
 	recordCount := int(data[0])
 	if recordCount < 1 || recordCount > 8 {
-		return nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
+		return nil, nil, fmt.Errorf("invalid record count: %d (must be 1-8)", recordCount)
 	}
 
 	recordSize := p.getRecordSize(isShortBuild)
 	expectedLen := 1 + recordCount*recordSize
 	if len(data) < expectedLen {
-		return nil, fmt.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
+		return nil, nil, fmt.Errorf("insufficient data for %d records: have %d, need %d", recordCount, len(data), expectedLen)
 	}
 
 	records := make([]BuildResponseRecord, recordCount)
+	rawRecords := make([][]byte, recordCount)
 	offset := 1
 	for i := 0; i < recordCount; i++ {
 		recordData := data[offset : offset+recordSize]
+		// Preserve original encrypted bytes before parsing
+		rawCopy := make([]byte, recordSize)
+		copy(rawCopy, recordData)
+		rawRecords[i] = rawCopy
+
 		record, err := ReadBuildResponseRecord(recordData)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
+			return nil, nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
 		}
 		records[i] = record
 		offset += recordSize
 	}
 
-	return records, nil
+	return records, rawRecords, nil
 }
 
 // processTunnelBuildRequest is the common handler for both STBM and VTB messages.
@@ -1996,8 +2121,8 @@ func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, me
 		// Use Short Tunnel Build Message (modern)
 		return tm.createShortTunnelBuildMessage(result, messageID)
 	}
-	// Use Variable Tunnel Build Message (legacy)
-	return tm.createVariableTunnelBuildMessage(result, messageID)
+	// Use TunnelBuild (type 21): fixed 8 records, no count prefix
+	return tm.createTunnelBuildMessage(result, messageID)
 }
 
 // queueBuildMessageToGateway queues the build message for sending to the gateway.
@@ -2072,10 +2197,11 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	return msg, nil
 }
 
-// createVariableTunnelBuildMessage creates a Variable Tunnel Build Message (legacy).
+// createTunnelBuildMessage creates a TunnelBuild (type 21) message.
+// Type 21 has exactly 8 records at 528 bytes each with NO count prefix byte.
 // Each build record is encrypted with the corresponding hop's X25519 public key
 // using ECIES-X25519-AEAD encryption before being placed into the message.
-func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
 	encryptedData, err := encryptBuildRecords(result)
 	if err != nil {
 		return nil, err
@@ -2088,11 +2214,36 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 	msg.SetData(data)
 
 	log.WithFields(logger.Fields{
+		"at":           "createTunnelBuildMessage",
+		"record_count": len(result.Records),
+		"data_size":    len(data),
+		"encrypted":    true,
+	}).Debug("Created encrypted TunnelBuild (type 21) message")
+
+	return msg, nil
+}
+
+// createVariableTunnelBuildMessage creates a VariableTunnelBuild (type 23) message.
+// Type 23 has a 1-byte count prefix followed by N records at 528 bytes each.
+// This is the variable-length format that allows 1-8 records.
+func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelBuildResult, messageID int) (I2NPMessage, error) {
+	encryptedData, err := encryptBuildRecords(result)
+	if err != nil {
+		return nil, err
+	}
+
+	data := serializeVariableBuildRecords(encryptedData, len(result.Records))
+
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD)
+	msg.SetMessageID(messageID)
+	msg.SetData(data)
+
+	log.WithFields(logger.Fields{
 		"at":           "createVariableTunnelBuildMessage",
 		"record_count": len(result.Records),
 		"data_size":    len(data),
 		"encrypted":    true,
-	}).Debug("Created encrypted Variable Tunnel Build message")
+	}).Debug("Created encrypted VariableTunnelBuild (type 23) message")
 
 	return msg, nil
 }
@@ -2131,6 +2282,7 @@ func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error)
 }
 
 // serializeBuildRecords serializes all 8 encrypted records into a contiguous byte slice.
+// Used for TunnelBuild (type 21) which has NO count prefix and always 8 records.
 // Unused slots are filled with random data to prevent observers from distinguishing
 // tunnel length by counting zero-filled records.
 func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
@@ -2148,6 +2300,18 @@ func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
 				}).Warn("Failed to generate random padding for unused slot")
 			}
 		}
+	}
+	return data
+}
+
+// serializeVariableBuildRecords serializes encrypted records with a count prefix byte.
+// Used for VariableTunnelBuild (type 23) which has a 1-byte count followed by N records.
+// Only the actual number of records is included (no padding to 8).
+func serializeVariableBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
+	data := make([]byte, 1+recordCount*528)
+	data[0] = byte(recordCount)
+	for i := 0; i < recordCount; i++ {
+		copy(data[1+i*528:1+(i+1)*528], encryptedData[i][:])
 	}
 	return data
 }
