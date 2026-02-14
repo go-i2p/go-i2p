@@ -281,6 +281,42 @@ func deriveSessionKeysFromSecret(sharedSecret []byte) (*sessionKeys, error) {
 	}, nil
 }
 
+// Info strings for directional key derivation. The initiator and responder
+// each use different HKDF info strings to derive their send/receive chain
+// keys, ensuring that the two directions produce distinct key streams.
+const (
+	hkdfInfoInitiator = "ECIES-Ratchet-Initiator"
+	hkdfInfoResponder = "ECIES-Ratchet-Responder"
+)
+
+// deriveDirectionalKeys derives distinct send and receive keys from a base key
+// using HKDF with role-specific info strings. The initiator's send key equals
+// the responder's receive key and vice versa, maintaining cryptographic
+// symmetry across the session.
+func deriveDirectionalKeys(baseKey [32]byte, isInitiator bool) (sendKey, recvKey [32]byte) {
+	kd := kdf.NewKeyDerivation(baseKey)
+
+	initiatorKey, err := kd.DeriveWithInfo(hkdfInfoInitiator)
+	if err != nil {
+		// DeriveWithInfo only fails on invalid secret size; baseKey is always
+		// 32 bytes from a prior HKDF derivation, so this should never happen.
+		// Fall back to the base key to avoid panicking.
+		log.WithError(err).Error("Failed to derive initiator directional key, using base key")
+		initiatorKey = baseKey
+	}
+
+	responderKey, err := kd.DeriveWithInfo(hkdfInfoResponder)
+	if err != nil {
+		log.WithError(err).Error("Failed to derive responder directional key, using base key")
+		responderKey = baseKey
+	}
+
+	if isInitiator {
+		return initiatorKey, responderKey
+	}
+	return responderKey, initiatorKey
+}
+
 // encryptedPayload contains the encrypted message components.
 type encryptedPayload struct {
 	nonce      []byte
@@ -330,7 +366,7 @@ func (sm *GarlicSessionManager) storeNewSessionState(
 	destinationPubKey [32]byte,
 	keys *sessionKeys,
 ) error {
-	session := createGarlicSession(destinationPubKey, keys, sm.ourPrivateKey)
+	session := createGarlicSession(destinationPubKey, keys, sm.ourPrivateKey, true)
 
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -355,18 +391,27 @@ func (sm *GarlicSessionManager) storeNewSessionState(
 }
 
 // createGarlicSession initializes a new GarlicSession with ratchet state.
-// Both send and receive ratchets are initialized from the same root key;
-// they diverge once the first DH ratchet step occurs.
-func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPrivateKey [32]byte) *GarlicSession {
+// The isInitiator flag determines key direction: the initiator's send ratchets
+// use "initiator" direction keys and its receive ratchets use "responder" direction
+// keys (and vice versa for the responder). This ensures that send and receive
+// ratchets are initialized with distinct key material per the ECIES-X25519-AEAD-Ratchet
+// specification, preventing session tag collisions between directions.
+func createGarlicSession(destinationPubKey [32]byte, keys *sessionKeys, ourPrivateKey [32]byte, isInitiator bool) *GarlicSession {
 	var ourPriv, theirPub [32]byte
 	copy(ourPriv[:], ourPrivateKey[:])
 	copy(theirPub[:], destinationPubKey[:])
 
+	// Derive direction-specific root and tag keys using HKDF with distinct
+	// info strings. The initiator and responder swap send/receive assignments
+	// so that the initiator's send keys match the responder's receive keys.
+	sendRootKey, recvRootKey := deriveDirectionalKeys(keys.rootKey, isInitiator)
+	sendTagKey, recvTagKey := deriveDirectionalKeys(keys.tagKey, isInitiator)
+
 	dhRatchet := ratchet.NewDHRatchet(keys.rootKey, ourPriv, theirPub)
-	symRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
-	tagRatchet := ratchet.NewTagRatchet(keys.tagKey)
-	recvSymRatchet := ratchet.NewSymmetricRatchet(keys.rootKey)
-	recvTagRatchet := ratchet.NewTagRatchet(keys.tagKey)
+	symRatchet := ratchet.NewSymmetricRatchet(sendRootKey)
+	tagRatchet := ratchet.NewTagRatchet(sendTagKey)
+	recvSymRatchet := ratchet.NewSymmetricRatchet(recvRootKey)
+	recvTagRatchet := ratchet.NewTagRatchet(recvTagKey)
 
 	return &GarlicSession{
 		RemotePublicKey:      destinationPubKey,
@@ -808,7 +853,7 @@ func decryptWithSessionKeys(parsedMsg *newSessionMessageComponents, symKey [32]b
 // is also indexed by its pre-generated tags for O(1) lookup on subsequent messages.
 // Acquires the session manager write lock to modify the sessions and tagIndex maps.
 func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [32]byte, keys *sessionKeys) error {
-	session := createGarlicSession(ephemeralPubKey, keys, sm.ourPrivateKey)
+	session := createGarlicSession(ephemeralPubKey, keys, sm.ourPrivateKey, false)
 
 	// Key the session by the hash of the ephemeral public key, since we do not yet
 	// know the sender's destination hash (it is inside the encrypted garlic payload).

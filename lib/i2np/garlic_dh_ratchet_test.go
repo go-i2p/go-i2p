@@ -35,7 +35,7 @@ func createTestSession(t *testing.T) *GarlicSession {
 		rootKey: rootKey,
 		symKey:  [32]byte{},
 		tagKey:  tagKey,
-	}, alicePriv)
+	}, alicePriv, true)
 
 	return session
 }
@@ -331,7 +331,7 @@ func TestCreateGarlicSessionInitializesRatchets(t *testing.T) {
 	session := createGarlicSession(bobPub, &sessionKeys{
 		rootKey: rootKey,
 		tagKey:  tagKey,
-	}, alicePriv)
+	}, alicePriv, true)
 
 	assert.NotNil(t, session.DHRatchet, "DHRatchet should be initialized")
 	assert.NotNil(t, session.SymmetricRatchet, "SymmetricRatchet should be initialized")
