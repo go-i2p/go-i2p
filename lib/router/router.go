@@ -596,37 +596,46 @@ func (r *Router) stopPublisher() {
 // publishing to floodfill routers. The publisher requires NetDB, transport, and a tunnel pool.
 // If prerequisites are not met, a warning is logged and publishing is skipped.
 func (r *Router) startPublisher() {
-	// Verify prerequisites
-	if r.StdNetDB == nil {
-		log.Warn("Cannot start publisher: NetDB not initialized")
-		return
-	}
-	if r.TransportMuxer == nil {
-		log.Warn("Cannot start publisher: TransportMuxer not initialized")
+	tunnelPool, err := r.resolvePublisherDependencies()
+	if err != nil {
+		log.Warn(err.Error())
 		return
 	}
 
-	// Get tunnel pool from tunnel manager
+	r.launchPublisher(tunnelPool)
+}
+
+// resolvePublisherDependencies verifies that NetDB, TransportMuxer, and a
+// tunnel pool are available. Returns the tunnel pool or an error describing
+// the missing prerequisite.
+func (r *Router) resolvePublisherDependencies() (*tunnel.Pool, error) {
+	if r.StdNetDB == nil {
+		return nil, fmt.Errorf("Cannot start publisher: NetDB not initialized")
+	}
+	if r.TransportMuxer == nil {
+		return nil, fmt.Errorf("Cannot start publisher: TransportMuxer not initialized")
+	}
 	var tunnelPool *tunnel.Pool
 	if r.tunnelManager != nil {
 		tunnelPool = r.tunnelManager.GetPool()
 	}
 	if tunnelPool == nil {
-		log.Warn("Cannot start publisher: tunnel pool not available")
-		return
+		return nil, fmt.Errorf("Cannot start publisher: tunnel pool not available")
 	}
+	return tunnelPool, nil
+}
 
-	// Create adapters to bridge interface differences
+// launchPublisher constructs the publisher from adapters and starts it.
+// On failure the publisher field is left nil and a warning is logged.
+func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 	dbAdapter := &publisherNetDBAdapter{db: r.StdNetDB}
 	transportAdapter := &publisherTransportAdapter{muxer: r.TransportMuxer}
 
-	// Use the routerInfoProvider that was wired in Start()
 	var riProvider netdb.RouterInfoProvider
 	if r.routerInfoProv != nil {
 		riProvider = r.routerInfoProv
 	}
 
-	// Create and start the publisher
 	publisherConfig := netdb.DefaultPublisherConfig()
 	r.publisher = netdb.NewPublisher(dbAdapter, tunnelPool, transportAdapter, riProvider, publisherConfig)
 

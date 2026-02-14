@@ -431,48 +431,73 @@ func (sm *GarlicSessionManager) encryptExistingSession(
 // advanceRatchets advances the symmetric and tag ratchets to generate message key and session tag.
 // Periodically performs a DH ratchet step for forward secrecy.
 func advanceRatchets(session *GarlicSession) (messageKey [32]byte, sessionTag [8]byte, err error) {
-	// Check if DH ratchet rotation is needed for forward secrecy
-	session.dhRatchetCounter++
-	if session.dhRatchetCounter >= DHRatchetInterval {
-		if err := performDHRatchetStep(session); err != nil {
-			session.consecutiveDHFailures++
-			if session.consecutiveDHFailures >= MaxConsecutiveDHFailures {
-				log.WithFields(logger.Fields{
-					"at":                   "advanceRatchets",
-					"consecutive_failures": session.consecutiveDHFailures,
-					"max_failures":         MaxConsecutiveDHFailures,
-					"reason":               "forward secrecy degraded, session should be reset",
-				}).Error("DH ratchet failed too many times, session forward secrecy compromised")
-				return [32]byte{}, [8]byte{}, oops.Wrapf(err,
-					"DH ratchet failed %d consecutive times (max %d), forward secrecy compromised",
-					session.consecutiveDHFailures, MaxConsecutiveDHFailures)
-			}
-			log.WithError(err).WithField("consecutive_failures", session.consecutiveDHFailures).
-				Warn("DH ratchet rotation failed, continuing with symmetric ratchet")
-			// Non-fatal for now: continue with existing symmetric ratchet keys
-		} else {
-			session.dhRatchetCounter = 0
-			session.consecutiveDHFailures = 0
-		}
+	if err := attemptDHRatchetRotation(session); err != nil {
+		return [32]byte{}, [8]byte{}, err
 	}
 
-	// Step 1: Advance symmetric ratchet to get message key
-	messageKey, _, err = session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	messageKey, err = deriveMessageKey(session)
 	if err != nil {
-		return [32]byte{}, [8]byte{}, oops.Wrapf(err, "failed to advance symmetric ratchet")
+		return [32]byte{}, [8]byte{}, err
 	}
 
-	// Step 2: Generate session tag for recipient to identify this message
-	sessionTag, err = session.TagRatchet.GenerateNextTag()
+	sessionTag, err = generateAndTrackSessionTag(session)
 	if err != nil {
-		return [32]byte{}, [8]byte{}, oops.Wrapf(err, "failed to generate session tag")
+		return [32]byte{}, [8]byte{}, err
 	}
-
-	// Add tag to pending tags for the remote peer's session (they will use it to find our session)
-	// Note: In a real implementation, we would track separate inbound/outbound tag windows
-	session.pendingTags = append(session.pendingTags, sessionTag)
 
 	return messageKey, sessionTag, nil
+}
+
+// attemptDHRatchetRotation checks whether a DH ratchet step is due and
+// performs it if needed. Returns a fatal error only when consecutive DH
+// failures exceed MaxConsecutiveDHFailures.
+func attemptDHRatchetRotation(session *GarlicSession) error {
+	session.dhRatchetCounter++
+	if session.dhRatchetCounter < DHRatchetInterval {
+		return nil
+	}
+
+	if err := performDHRatchetStep(session); err != nil {
+		session.consecutiveDHFailures++
+		if session.consecutiveDHFailures >= MaxConsecutiveDHFailures {
+			log.WithFields(logger.Fields{
+				"at":                   "advanceRatchets",
+				"consecutive_failures": session.consecutiveDHFailures,
+				"max_failures":         MaxConsecutiveDHFailures,
+				"reason":               "forward secrecy degraded, session should be reset",
+			}).Error("DH ratchet failed too many times, session forward secrecy compromised")
+			return oops.Wrapf(err,
+				"DH ratchet failed %d consecutive times (max %d), forward secrecy compromised",
+				session.consecutiveDHFailures, MaxConsecutiveDHFailures)
+		}
+		log.WithError(err).WithField("consecutive_failures", session.consecutiveDHFailures).
+			Warn("DH ratchet rotation failed, continuing with symmetric ratchet")
+	} else {
+		session.dhRatchetCounter = 0
+		session.consecutiveDHFailures = 0
+	}
+	return nil
+}
+
+// deriveMessageKey advances the symmetric ratchet to produce the next
+// message encryption key.
+func deriveMessageKey(session *GarlicSession) ([32]byte, error) {
+	messageKey, _, err := session.SymmetricRatchet.DeriveMessageKeyAndAdvance(session.MessageCounter)
+	if err != nil {
+		return [32]byte{}, oops.Wrapf(err, "failed to advance symmetric ratchet")
+	}
+	return messageKey, nil
+}
+
+// generateAndTrackSessionTag generates the next session tag from the tag
+// ratchet and appends it to the pending tags list for the remote peer.
+func generateAndTrackSessionTag(session *GarlicSession) ([8]byte, error) {
+	sessionTag, err := session.TagRatchet.GenerateNextTag()
+	if err != nil {
+		return [8]byte{}, oops.Wrapf(err, "failed to generate session tag")
+	}
+	session.pendingTags = append(session.pendingTags, sessionTag)
+	return sessionTag, nil
 }
 
 // performDHRatchetStep performs a Diffie-Hellman ratchet step for forward secrecy.

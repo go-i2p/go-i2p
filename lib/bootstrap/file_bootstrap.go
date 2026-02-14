@@ -375,64 +375,21 @@ func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]route
 	return validRouterInfos, nil
 }
 
-// validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones
-// It also collects and logs statistics about the validation process
+// validateAndFilterRouterInfos validates all RouterInfos and returns only valid ones.
+// It also collects and logs statistics about the validation process.
 func (fb *FileBootstrap) validateAndFilterRouterInfos(routerInfos []router_info.RouterInfo, fileType string) []router_info.RouterInfo {
+	const caller = "(FileBootstrap) validateAndFilterRouterInfos"
 	stats := NewValidationStats()
 	validRouterInfos := make([]router_info.RouterInfo, 0, len(routerInfos))
 
 	for _, ri := range routerInfos {
-		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE validation
-		// This prevents ERROR logs from common package when checking introducer-only addresses
-		if !HasDirectConnectivity(ri) {
-			stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
-			log.WithFields(logger.Fields{
-				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
-				"phase":       "pre-filter",
-				"reason":      "no direct NTCP2 connectivity",
-				"router_hash": GetRouterHashString(ri),
-			}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
-			continue
-		}
-
-		if err := ValidateRouterInfo(ri); err != nil {
-			stats.RecordInvalid(err.Error())
-			log.WithFields(logger.Fields{
-				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
-				"phase":       "validation",
-				"reason":      "invalid RouterInfo from reseed",
-				"error":       err.Error(),
-				"router_hash": GetRouterHashString(ri),
-			}).Debug("skipping invalid RouterInfo from reseed")
-		} else if err := VerifyRouterInfoSignature(ri); err != nil {
-			stats.RecordInvalid("signature verification failed")
-			log.WithFields(logger.Fields{
-				"at":          "(FileBootstrap) validateAndFilterRouterInfos",
-				"phase":       "validation",
-				"reason":      "RouterInfo signature verification failed",
-				"error":       err.Error(),
-				"router_hash": GetRouterHashString(ri),
-			}).Warn("rejecting RouterInfo with invalid signature")
-		} else {
-			stats.RecordValid()
+		if classifyRouterInfo(ri, stats, caller, fileType) {
 			validRouterInfos = append(validRouterInfos, ri)
 		}
 	}
 
-	// Log validation statistics
 	stats.LogSummary(fmt.Sprintf("file_bootstrap_%s", fileType))
-
-	if stats.InvalidRouterInfos > 0 {
-		log.WithFields(logger.Fields{
-			"at":              "(FileBootstrap) validateAndFilterRouterInfos",
-			"phase":           "validation",
-			"file_type":       fileType,
-			"invalid_count":   stats.InvalidRouterInfos,
-			"valid_count":     stats.ValidRouterInfos,
-			"validity_rate":   fmt.Sprintf("%.1f%%", stats.ValidityRate()),
-			"invalid_reasons": stats.InvalidReasons,
-		}).Warn("some RouterInfos from reseed file failed validation")
-	}
+	logInvalidRouterInfos(stats, caller, fileType)
 
 	return validRouterInfos
 }

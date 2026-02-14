@@ -9,7 +9,6 @@ import (
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ed25519"
-	"github.com/go-i2p/crypto/types"
 )
 
 // Persisted key file format (all fields are fixed-size):
@@ -243,38 +242,12 @@ func reconstructPrivateKeys(sigPrivBytes, encPrivBytes []byte) (ed25519.Ed25519P
 // reconstructDestination rebuilds the full Destination from private keys by
 // deriving public keys and assembling the KeysAndCert structure.
 func reconstructDestination(sigPrivKey ed25519.Ed25519PrivateKey, encPrivKey *curve25519.Curve25519PrivateKey) (*destination.Destination, error) {
-	sigPubKey, err := sigPrivKey.Public()
+	sigPubKey, receivingPubKey, err := derivePublicKeys(sigPrivKey, encPrivKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive signing public key: %w", err)
-	}
-	encPubKey, err := encPrivKey.Public()
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive encryption public key: %w", err)
+		return nil, err
 	}
 
-	receivingPubKey, ok := encPubKey.(types.ReceivingPublicKey)
-	if !ok {
-		return nil, fmt.Errorf("encryption public key does not implement ReceivingPublicKey")
-	}
-
-	keyCert, err := createKeyCertificate()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create key certificate: %w", err)
-	}
-
-	padding, err := calculateKeyPadding()
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate key padding: %w", err)
-	}
-
-	keysAndCert, err := assembleKeysAndCert(keyCert, receivingPubKey, padding, sigPubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
-	}
-
-	return &destination.Destination{
-		KeysAndCert: keysAndCert,
-	}, nil
+	return buildDestinationFromPublicKeys(receivingPubKey, sigPubKey)
 }
 
 // readLengthPrefixedField reads a 4-byte big-endian length followed by that many bytes.

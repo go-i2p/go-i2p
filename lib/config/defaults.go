@@ -851,6 +851,21 @@ func validateRateLimitSettings(tunnel TunnelDefaults) error {
 // validateTransport validates transport layer configuration settings.
 func validateTransport(transport TransportDefaults) error {
 	log.Debug("Validating transport configuration")
+	if err := validateTransportSizes(transport); err != nil {
+		return err
+	}
+	if err := validateTransportPorts(transport); err != nil {
+		return err
+	}
+	if err := validateTransportTimeouts(transport); err != nil {
+		return err
+	}
+	log.Debug("Transport configuration validated successfully")
+	return nil
+}
+
+// validateTransportSizes checks message size and connection count limits.
+func validateTransportSizes(transport TransportDefaults) error {
 	if transport.MaxMessageSize < 1024 {
 		log.WithField("max_message_size", transport.MaxMessageSize).Error("Invalid transport configuration")
 		return newValidationError("Transport.MaxMessageSize must be at least 1024 bytes")
@@ -859,7 +874,12 @@ func validateTransport(transport TransportDefaults) error {
 		log.WithField("ntcp2_max_connections", transport.NTCP2MaxConnections).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2MaxConnections must be at least 1")
 	}
-	// Port 0 means random (OS-assigned), valid ports are 0 or 1-65535
+	return nil
+}
+
+// validateTransportPorts checks that NTCP2 and SSU2 ports are within the
+// valid range (0–65535, where 0 means OS-assigned).
+func validateTransportPorts(transport TransportDefaults) error {
 	if transport.NTCP2Port < 0 || transport.NTCP2Port > 65535 {
 		log.WithField("ntcp2_port", transport.NTCP2Port).Error("Invalid transport configuration")
 		return newValidationError("Transport.NTCP2Port must be between 0 and 65535")
@@ -868,6 +888,12 @@ func validateTransport(transport TransportDefaults) error {
 		log.WithField("ssu2_port", transport.SSU2Port).Error("Invalid transport configuration")
 		return newValidationError("Transport.SSU2Port must be between 0 and 65535")
 	}
+	return nil
+}
+
+// validateTransportTimeouts checks that connection and idle timeouts are at
+// least 1 second.
+func validateTransportTimeouts(transport TransportDefaults) error {
 	if transport.ConnectionTimeout < 1*time.Second {
 		log.WithField("connection_timeout", transport.ConnectionTimeout).Error("Invalid transport configuration")
 		return newValidationError("Transport.ConnectionTimeout must be at least 1 second")
@@ -876,7 +902,6 @@ func validateTransport(transport TransportDefaults) error {
 		log.WithField("idle_timeout", transport.IdleTimeout).Error("Invalid transport configuration")
 		return newValidationError("Transport.IdleTimeout must be at least 1 second")
 	}
-	log.Debug("Transport configuration validated successfully")
 	return nil
 }
 

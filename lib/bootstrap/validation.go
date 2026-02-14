@@ -69,6 +69,69 @@ func (vs *ValidationStats) LogSummary(phase string) {
 	}
 }
 
+// classifyRouterInfo checks connectivity, structural validity, and signature
+// for a single RouterInfo. It records the result in stats and returns true if
+// the RouterInfo is valid, false otherwise. The caller and source parameters
+// are used only for log context.
+func classifyRouterInfo(ri router_info.RouterInfo, stats *ValidationStats, caller, source string) bool {
+	if !HasDirectConnectivity(ri) {
+		stats.RecordInvalid("no direct NTCP2 connectivity (introducer-only or missing host/port)")
+		log.WithFields(logger.Fields{
+			"at":          caller,
+			"phase":       "pre-filter",
+			"reason":      "no direct NTCP2 connectivity",
+			"router_hash": GetRouterHashString(ri),
+			"source":      source,
+		}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
+		return false
+	}
+
+	if err := ValidateRouterInfo(ri); err != nil {
+		stats.RecordInvalid(err.Error())
+		log.WithFields(logger.Fields{
+			"at":          caller,
+			"phase":       "validation",
+			"reason":      "invalid RouterInfo",
+			"error":       err.Error(),
+			"router_hash": GetRouterHashString(ri),
+			"source":      source,
+		}).Debug("skipping invalid RouterInfo")
+		return false
+	}
+
+	if err := VerifyRouterInfoSignature(ri); err != nil {
+		stats.RecordInvalid("signature verification failed")
+		log.WithFields(logger.Fields{
+			"at":          caller,
+			"phase":       "validation",
+			"reason":      "signature verification failed",
+			"error":       err.Error(),
+			"router_hash": GetRouterHashString(ri),
+			"source":      source,
+		}).Warn("rejecting RouterInfo with invalid signature")
+		return false
+	}
+
+	stats.RecordValid()
+	return true
+}
+
+// logInvalidRouterInfos emits a warning if any RouterInfos failed validation,
+// including counts, validity rate, and reason breakdown.
+func logInvalidRouterInfos(stats *ValidationStats, caller, source string) {
+	if stats.InvalidRouterInfos > 0 {
+		log.WithFields(logger.Fields{
+			"at":              caller,
+			"phase":           "validation",
+			"source":          source,
+			"invalid_count":   stats.InvalidRouterInfos,
+			"valid_count":     stats.ValidRouterInfos,
+			"validity_rate":   fmt.Sprintf("%.1f%%", stats.ValidityRate()),
+			"invalid_reasons": stats.InvalidReasons,
+		}).Warn("some RouterInfos failed validation")
+	}
+}
+
 // extractNTCP2Transport extracts and validates the transport style from a RouterAddress.
 // Returns true if the address uses NTCP2 transport, false otherwise.
 func extractNTCP2Transport(addr *router_address.RouterAddress) bool {

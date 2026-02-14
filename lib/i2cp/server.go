@@ -1380,53 +1380,72 @@ func startLeaseSetMaintenance(session *Session, sessionID uint16) {
 //	  4 bytes:  tunnel ID (big endian uint32)
 //	  8 bytes:  end date (milliseconds since epoch, big endian uint64)
 func (s *Server) buildRequestVariableLeaseSetPayload(tunnels []*tunnel.TunnelState) ([]byte, error) {
-	// Filter out nil and zero-hop tunnels first so the lease count byte
-	// in the payload matches the number of leases actually written.
+	validTunnels, err := filterValidTunnels(tunnels)
+	if err != nil {
+		return nil, err
+	}
+
+	return encodeLeaseSetPayload(validTunnels), nil
+}
+
+// filterValidTunnels removes nil and zero-hop tunnels and enforces a maximum
+// of 16 leases to keep LeaseSet size reasonable. Returns an error if no valid
+// tunnels remain after filtering.
+func filterValidTunnels(tunnels []*tunnel.TunnelState) ([]*tunnel.TunnelState, error) {
 	validTunnels := make([]*tunnel.TunnelState, 0, len(tunnels))
 	for _, tun := range tunnels {
 		if tun != nil && len(tun.Hops) > 0 {
 			validTunnels = append(validTunnels, tun)
 		}
 	}
-
 	if len(validTunnels) == 0 {
 		return nil, fmt.Errorf("no valid tunnels provided")
 	}
-
 	if len(validTunnels) > 16 {
-		// Limit to 16 leases to keep LeaseSet size reasonable
 		validTunnels = validTunnels[:16]
 	}
+	return validTunnels, nil
+}
 
-	// Calculate payload size: 1 byte count + N * (32 + 4 + 8) bytes
-	payloadSize := 1 + len(validTunnels)*44
-	payload := make([]byte, payloadSize)
-
-	payload[0] = byte(len(validTunnels))
+// encodeLeaseSetPayload serializes validated tunnels into the I2CP
+// RequestVariableLeaseSet payload format: 1 byte count followed by
+// N lease entries of 44 bytes each (32-byte hash + 4-byte ID + 8-byte end date).
+func encodeLeaseSetPayload(tunnels []*tunnel.TunnelState) []byte {
+	payload := make([]byte, 1+len(tunnels)*44)
+	payload[0] = byte(len(tunnels))
 
 	offset := 1
 	now := time.Now()
-
-	for _, tun := range validTunnels {
-		// Gateway router hash (32 bytes)
-		copy(payload[offset:offset+32], tun.Hops[0][:])
-		offset += 32
-
-		// Tunnel ID (4 bytes, big endian)
-		binary.BigEndian.PutUint32(payload[offset:offset+4], uint32(tun.ID))
-		offset += 4
-
-		// End date (8 bytes, big endian, milliseconds since epoch)
-		endDate := tun.CreatedAt.Add(10 * time.Minute) // Standard 10-minute lease
-		if endDate.Before(now) {
-			endDate = now.Add(5 * time.Minute) // Use 5 minutes if tunnel is old
-		}
-		endDateMillis := uint64(endDate.UnixMilli())
-		binary.BigEndian.PutUint64(payload[offset:offset+8], endDateMillis)
-		offset += 8
+	for _, tun := range tunnels {
+		offset = encodeLeaseEntry(payload, offset, tun, now)
 	}
+	return payload
+}
 
-	return payload, nil
+// encodeLeaseEntry writes a single lease entry (gateway hash, tunnel ID, end date)
+// into the payload at the given offset and returns the new offset.
+func encodeLeaseEntry(payload []byte, offset int, tun *tunnel.TunnelState, now time.Time) int {
+	copy(payload[offset:offset+32], tun.Hops[0][:])
+	offset += 32
+
+	binary.BigEndian.PutUint32(payload[offset:offset+4], uint32(tun.ID))
+	offset += 4
+
+	endDate := calculateLeaseEndDate(tun.CreatedAt, now)
+	binary.BigEndian.PutUint64(payload[offset:offset+8], uint64(endDate.UnixMilli()))
+	offset += 8
+	return offset
+}
+
+// calculateLeaseEndDate computes the lease expiration time. Standard leases
+// expire 10 minutes after tunnel creation; stale tunnels receive a 5-minute
+// extension from the current time.
+func calculateLeaseEndDate(createdAt time.Time, now time.Time) time.Time {
+	endDate := createdAt.Add(10 * time.Minute)
+	if endDate.Before(now) {
+		return now.Add(5 * time.Minute)
+	}
+	return endDate
 }
 
 // handleReconfigureSession updates session configuration

@@ -1626,12 +1626,16 @@ func (db *StdNetDB) SkiplistFileForLeaseSet(hash common.Hash) string {
 func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
 	log.WithField("hash", key).Debug("Storing LeaseSet from DatabaseStore message")
 
-	// Validate data type covers all LeaseSet variants (1, 3, 5, 7)
 	if err := validateLeaseSetDataType(dataType); err != nil {
 		return err
 	}
 
-	// Dispatch to the appropriate typed store method
+	return db.dispatchLeaseSetStore(key, data, dataType)
+}
+
+// dispatchLeaseSetStore routes to the typed store method for non-standard
+// LeaseSet variants, or handles standard LeaseSet (type 1) inline.
+func (db *StdNetDB) dispatchLeaseSetStore(key common.Hash, data []byte, dataType byte) error {
 	switch dataType {
 	case leaseSet2Type:
 		return db.StoreLeaseSet2(key, data, dataType)
@@ -1640,26 +1644,26 @@ func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) e
 	case metaLeaseSetType:
 		return db.StoreMetaLeaseSet(key, data, dataType)
 	default:
-		// Type 1: standard LeaseSet - handle inline
+		return db.storeStandardLeaseSet(key, data)
 	}
+}
 
-	// Parse standard LeaseSet from raw bytes
+// storeStandardLeaseSet parses, verifies, caches, and persists a standard
+// type-1 LeaseSet.
+func (db *StdNetDB) storeStandardLeaseSet(key common.Hash, data []byte) error {
 	ls, err := parseLeaseSetData(data)
 	if err != nil {
 		return err
 	}
 
-	// Verify hash matches the LeaseSet destination hash
 	if err := verifyLeaseSetHash(key, ls); err != nil {
 		return err
 	}
 
-	// Add to memory cache if not already present
 	if !db.addLeaseSetToCache(key, ls) {
 		return nil
 	}
 
-	// Persist to filesystem
 	if err := db.persistLeaseSetToFilesystem(key, ls); err != nil {
 		return err
 	}

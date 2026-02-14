@@ -145,6 +145,27 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 
 // attemptLocalLookup tries to find the RouterInfo locally first.
 func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.RouterInfo {
+	ri, ok := kr.receiveRouterInfo(h)
+	if !ok {
+		return nil
+	}
+
+	if !kr.isRouterInfoUsable(ri, h) {
+		return nil
+	}
+
+	log.WithFields(logger.Fields{
+		"at":     "(KademliaResolver) attemptLocalLookup",
+		"reason": "local cache hit",
+		"hash":   fmt.Sprintf("%x...", h[:8]),
+	}).Debug("routerInfo found locally")
+	return &ri
+}
+
+// receiveRouterInfo fetches a RouterInfo from the network database channel.
+// Returns the RouterInfo and true on success, or a zero-value and false if
+// the channel closed without delivering a result.
+func (kr *KademliaResolver) receiveRouterInfo(h common.Hash) (router_info.RouterInfo, bool) {
 	riChan := kr.NetworkDatabase.GetRouterInfo(h)
 	ri, ok := <-riChan
 	if !ok {
@@ -153,9 +174,13 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 			"reason": "channel closed without result",
 			"hash":   fmt.Sprintf("%x...", h[:8]),
 		}).Debug("channel closed, no RouterInfo available")
-		return nil
 	}
-	// Check if the RouterInfo is valid by comparing with an empty hash
+	return ri, ok
+}
+
+// isRouterInfoUsable checks that a locally cached RouterInfo has a valid
+// identity hash and is not stale (older than RouterInfoMaxAge).
+func (kr *KademliaResolver) isRouterInfoUsable(ri router_info.RouterInfo, h common.Hash) bool {
 	var emptyHash common.Hash
 	identHash, err := ri.IdentHash()
 	if err != nil {
@@ -164,32 +189,32 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 			"reason": "failed to extract router hash",
 			"hash":   fmt.Sprintf("%x...", h[:8]),
 		}).Debug("failed to get router hash from local lookup")
-		return nil
+		return false
 	}
-	if identHash != emptyHash {
-		// Check if the RouterInfo is stale (published date older than max age).
-		// Returning expired RouterInfo can cause connections to peers that
-		// have rotated their keys or changed addresses.
-		if published := ri.Published(); published != nil && !published.Time().IsZero() {
-			age := time.Since(published.Time())
-			if age > RouterInfoMaxAge {
-				log.WithFields(logger.Fields{
-					"at":     "(KademliaResolver) attemptLocalLookup",
-					"reason": "stale RouterInfo",
-					"hash":   fmt.Sprintf("%x...", h[:8]),
-					"age":    age.Round(time.Second),
-				}).Debug("local RouterInfo is stale, will attempt remote lookup")
-				return nil
-			}
+	if identHash == emptyHash {
+		return false
+	}
+
+	return !kr.isRouterInfoStale(ri, h)
+}
+
+// isRouterInfoStale returns true if the RouterInfo was published longer ago
+// than RouterInfoMaxAge, indicating the entry may reference rotated keys or
+// changed addresses.
+func (kr *KademliaResolver) isRouterInfoStale(ri router_info.RouterInfo, h common.Hash) bool {
+	if published := ri.Published(); published != nil && !published.Time().IsZero() {
+		age := time.Since(published.Time())
+		if age > RouterInfoMaxAge {
+			log.WithFields(logger.Fields{
+				"at":     "(KademliaResolver) attemptLocalLookup",
+				"reason": "stale RouterInfo",
+				"hash":   fmt.Sprintf("%x...", h[:8]),
+				"age":    age.Round(time.Second),
+			}).Debug("local RouterInfo is stale, will attempt remote lookup")
+			return true
 		}
-		log.WithFields(logger.Fields{
-			"at":     "(KademliaResolver) attemptLocalLookup",
-			"reason": "local cache hit",
-			"hash":   fmt.Sprintf("%x...", h[:8]),
-		}).Debug("routerInfo found locally")
-		return &ri
 	}
-	return nil
+	return false
 }
 
 // validateRemoteLookupCapability checks if remote lookups are possible.

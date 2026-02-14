@@ -222,50 +222,11 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 
 		ri, err := lb.readRouterInfoFromFile(filePath)
 		if err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":         "(LocalNetDbBootstrap) createWalkFunction",
-				"phase":      "bootstrap",
-				"reason":     "failed to read RouterInfo file",
-				"file":       filePath,
-				"error_type": fmt.Sprintf("%T", err),
-				"action":     "skipping",
-			}).Debug("failed to read RouterInfo file, skipping")
+			lb.logReadFailure(filePath, err)
 			return nil
 		}
 
-		// CRITICAL FIX #1: Pre-filter for direct NTCP2 connectivity BEFORE adding to bootstrap peers
-		// This prevents ERROR logs from common package when checking introducer-only addresses
-		if !HasDirectConnectivity(ri) {
-			log.WithFields(logger.Fields{
-				"at":     "(LocalNetDbBootstrap) createWalkFunction",
-				"phase":  "pre-filter",
-				"reason": "no direct NTCP2 connectivity",
-				"file":   filePath,
-			}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
-			return nil
-		}
-
-		// Validate structural integrity
-		if err := ValidateRouterInfo(ri); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "(LocalNetDbBootstrap) createWalkFunction",
-				"phase":  "validation",
-				"reason": "invalid RouterInfo",
-				"file":   filePath,
-				"error":  err.Error(),
-			}).Debug("skipping invalid RouterInfo from local netDb")
-			return nil
-		}
-
-		// Verify cryptographic signature
-		if err := VerifyRouterInfoSignature(ri); err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "(LocalNetDbBootstrap) createWalkFunction",
-				"phase":  "validation",
-				"reason": "signature verification failed",
-				"file":   filePath,
-				"error":  err.Error(),
-			}).Warn("rejecting RouterInfo with invalid signature from local netDb")
+		if err := validateRouterInfoForBootstrap(ri, filePath); err != nil {
 			return nil
 		}
 
@@ -274,6 +235,57 @@ func (lb *LocalNetDbBootstrap) createWalkFunction(ctx context.Context, routerInf
 
 		return nil
 	}
+}
+
+// logReadFailure logs a failed RouterInfo file read during bootstrap walking.
+func (lb *LocalNetDbBootstrap) logReadFailure(filePath string, err error) {
+	log.WithError(err).WithFields(logger.Fields{
+		"at":         "(LocalNetDbBootstrap) createWalkFunction",
+		"phase":      "bootstrap",
+		"reason":     "failed to read RouterInfo file",
+		"file":       filePath,
+		"error_type": fmt.Sprintf("%T", err),
+		"action":     "skipping",
+	}).Debug("failed to read RouterInfo file, skipping")
+}
+
+// validateRouterInfoForBootstrap checks connectivity, structural integrity, and
+// cryptographic signature of a RouterInfo before it is added to the bootstrap set.
+// Returns nil on success or an error describing the first failed check.
+func validateRouterInfoForBootstrap(ri router_info.RouterInfo, filePath string) error {
+	if !HasDirectConnectivity(ri) {
+		log.WithFields(logger.Fields{
+			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"phase":  "pre-filter",
+			"reason": "no direct NTCP2 connectivity",
+			"file":   filePath,
+		}).Debug("skipping RouterInfo without direct NTCP2 connectivity")
+		return fmt.Errorf("no direct connectivity")
+	}
+
+	if err := ValidateRouterInfo(ri); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"phase":  "validation",
+			"reason": "invalid RouterInfo",
+			"file":   filePath,
+			"error":  err.Error(),
+		}).Debug("skipping invalid RouterInfo from local netDb")
+		return err
+	}
+
+	if err := VerifyRouterInfoSignature(ri); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(LocalNetDbBootstrap) createWalkFunction",
+			"phase":  "validation",
+			"reason": "signature verification failed",
+			"file":   filePath,
+			"error":  err.Error(),
+		}).Warn("rejecting RouterInfo with invalid signature from local netDb")
+		return err
+	}
+
+	return nil
 }
 
 // shouldStopWalk determines if the walk should be terminated based on context or count
