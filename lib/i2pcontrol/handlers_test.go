@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // Test Echo Handler
@@ -875,7 +877,8 @@ func (m *mockAuthManager) ChangePassword(newPassword string) int {
 
 func TestI2PControlHandler_PasswordChange(t *testing.T) {
 	authMgr := &mockAuthManager{password: "oldpass"}
-	handler := NewI2PControlHandler(authMgr)
+	cfg := &config.I2PControlConfig{Password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr, cfg)
 	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
 
 	result, err := handler.Handle(context.Background(), params)
@@ -888,9 +891,14 @@ func TestI2PControlHandler_PasswordChange(t *testing.T) {
 		t.Fatalf("result is not map[string]interface{}: %T", result)
 	}
 
-	// Check password was changed
+	// Check password was changed in auth manager
 	if authMgr.password != "newpass123" {
-		t.Errorf("password = %v, want newpass123", authMgr.password)
+		t.Errorf("authManager password = %v, want newpass123", authMgr.password)
+	}
+
+	// Check password was persisted to config struct
+	if cfg.Password != "newpass123" {
+		t.Errorf("config.Password = %v, want newpass123", cfg.Password)
 	}
 
 	// Check SettingsSaved flag
@@ -904,9 +912,35 @@ func TestI2PControlHandler_PasswordChange(t *testing.T) {
 	}
 }
 
+func TestI2PControlHandler_PasswordChange_NilConfig(t *testing.T) {
+	authMgr := &mockAuthManager{password: "oldpass"}
+	// Passing nil config should not panic — password change still works in auth manager
+	handler := NewI2PControlHandler(authMgr, nil)
+	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
+
+	result, err := handler.Handle(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("result is not map[string]interface{}: %T", result)
+	}
+
+	if authMgr.password != "newpass123" {
+		t.Errorf("authManager password = %v, want newpass123", authMgr.password)
+	}
+
+	if settingsSaved, ok := resultMap["SettingsSaved"].(bool); !ok || !settingsSaved {
+		t.Errorf("SettingsSaved = %v, want true", resultMap["SettingsSaved"])
+	}
+}
+
 func TestI2PControlHandler_EmptyPassword(t *testing.T) {
 	authMgr := &mockAuthManager{password: "oldpass"}
-	handler := NewI2PControlHandler(authMgr)
+	cfg := &config.I2PControlConfig{Password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr, cfg)
 	params := json.RawMessage(`{"i2pcontrol.password": ""}`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -923,15 +957,19 @@ func TestI2PControlHandler_EmptyPassword(t *testing.T) {
 		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
 	}
 
-	// Password should not have changed
+	// Password should not have changed in either auth manager or config
 	if authMgr.password != "oldpass" {
 		t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
+	}
+	if cfg.Password != "oldpass" {
+		t.Errorf("config.Password changed to %v, should remain oldpass", cfg.Password)
 	}
 }
 
 func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
 	authMgr := &mockAuthManager{password: "oldpass"}
-	handler := NewI2PControlHandler(authMgr)
+	cfg := &config.I2PControlConfig{Password: "oldpass"}
+	handler := NewI2PControlHandler(authMgr, cfg)
 	params := json.RawMessage(`{"i2pcontrol.password": 12345}`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -956,7 +994,7 @@ func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
 
 func TestI2PControlHandler_PortChangeNotImplemented(t *testing.T) {
 	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr)
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
 	params := json.RawMessage(`{"i2pcontrol.port": 7657}`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -976,7 +1014,7 @@ func TestI2PControlHandler_PortChangeNotImplemented(t *testing.T) {
 
 func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
 	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr)
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
 	params := json.RawMessage(`{"i2pcontrol.address": "127.0.0.1"}`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -996,7 +1034,7 @@ func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
 
 func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
 	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr)
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
 	params := json.RawMessage(`{}`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -1016,7 +1054,7 @@ func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
 
 func TestI2PControlHandler_InvalidJSON(t *testing.T) {
 	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr)
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
 	params := json.RawMessage(`{"invalid json`)
 
 	_, err := handler.Handle(context.Background(), params)
@@ -1036,7 +1074,8 @@ func TestI2PControlHandler_InvalidJSON(t *testing.T) {
 
 func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
 	authMgr := &mockAuthManager{password: "pass1"}
-	handler := NewI2PControlHandler(authMgr)
+	cfg := &config.I2PControlConfig{Password: "pass1"}
+	handler := NewI2PControlHandler(authMgr, cfg)
 
 	// First change
 	params1 := json.RawMessage(`{"i2pcontrol.password": "pass2"}`)
@@ -1047,6 +1086,9 @@ func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
 
 	if authMgr.password != "pass2" {
 		t.Errorf("after first change, password = %v, want pass2", authMgr.password)
+	}
+	if cfg.Password != "pass2" {
+		t.Errorf("after first change, config.Password = %v, want pass2", cfg.Password)
 	}
 
 	// Second change
@@ -1059,6 +1101,9 @@ func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
 	if authMgr.password != "pass3" {
 		t.Errorf("after second change, password = %v, want pass3", authMgr.password)
 	}
+	if cfg.Password != "pass3" {
+		t.Errorf("after second change, config.Password = %v, want pass3", cfg.Password)
+	}
 
 	if authMgr.changeCount != 2 {
 		t.Errorf("changeCount = %v, want 2", authMgr.changeCount)
@@ -1067,7 +1112,7 @@ func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
 
 func BenchmarkI2PControlHandler(b *testing.B) {
 	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr)
+	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
 	params := json.RawMessage(`{"i2pcontrol.password": "newpass"}`)
 	ctx := context.Background()
 

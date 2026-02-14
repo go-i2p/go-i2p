@@ -295,7 +295,12 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 	// Fallback: generate a unique key from the remote address.
 	// This handles the case where the noise handshake doesn't yet populate
 	// the router hash (currently returns zeros for inbound connections).
+	// Strip the ephemeral port so reconnections from the same host produce
+	// the same hash, avoiding duplicate session tracking entries.
 	addrStr := conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(addrStr); err == nil {
+		addrStr = host
+	}
 	addrBytes := []byte(addrStr)
 	copy(peerHash[:], addrBytes)
 	// Set a marker byte to distinguish address-derived hashes
@@ -316,9 +321,13 @@ type trackedConn struct {
 }
 
 // Close closes the underlying connection and runs the cleanup callback exactly once.
+// The cleanup callback only runs if the underlying connection closes successfully,
+// preventing premature session map removal while the connection is still partially open.
 func (tc *trackedConn) Close() error {
 	err := tc.Conn.Close()
-	tc.closeOnce.Do(tc.onClose)
+	if err == nil {
+		tc.closeOnce.Do(tc.onClose)
+	}
 	return err
 }
 

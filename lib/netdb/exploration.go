@@ -32,8 +32,13 @@ type Explorer struct {
 	// our router hash for bucket calculations
 	ourHash common.Hash
 
-	// fieldMu protects transport and ourHash from concurrent read/write access
+	// fieldMu protects transport, ourHash, and cachedResolver from concurrent read/write access
 	fieldMu sync.RWMutex
+
+	// cachedResolver reuses a single KademliaResolver across exploration lookups
+	// instead of creating a new one per lookup. Invalidated when transport or
+	// ourHash changes via SetTransport/SetOurHash.
+	cachedResolver *KademliaResolver
 
 	// exploration control
 	ctx    context.Context
@@ -172,6 +177,7 @@ func (e *Explorer) Stop() {
 func (e *Explorer) SetTransport(transport LookupTransport) {
 	e.fieldMu.Lock()
 	e.transport = transport
+	e.cachedResolver = nil // invalidate: transport changed
 	e.fieldMu.Unlock()
 	log.WithFields(logger.Fields{
 		"at":     "(Explorer) SetTransport",
@@ -183,6 +189,7 @@ func (e *Explorer) SetTransport(transport LookupTransport) {
 func (e *Explorer) SetOurHash(hash common.Hash) {
 	e.fieldMu.Lock()
 	e.ourHash = hash
+	e.cachedResolver = nil // invalidate: ourHash changed
 	e.fieldMu.Unlock()
 }
 
@@ -287,21 +294,19 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 		"hash":  fmt.Sprintf("%x", lookupHash[:8]),
 	}).Debug("Performing exploratory lookup")
 
-	// Create a transport-capable resolver so lookups can reach the network.
-	// Without a transport, the resolver can only check local storage.
-	var resolver Resolver
-	e.fieldMu.RLock()
-	transport := e.transport
-	ourHash := e.ourHash
-	e.fieldMu.RUnlock()
-	if transport != nil {
-		resolver = NewKademliaResolverWithTransport(e.db, e.pool, transport, ourHash)
-	} else {
+	// Reuse a cached transport-capable resolver so lookups can reach the network.
+	// The resolver is invalidated when transport or ourHash changes.
+	e.fieldMu.Lock()
+	resolver := e.cachedResolver
+	if resolver == nil && e.transport != nil {
+		resolver = NewKademliaResolverWithTransport(e.db, e.pool, e.transport, e.ourHash)
+		e.cachedResolver = resolver
+	}
+	e.fieldMu.Unlock()
+
+	if resolver == nil {
 		log.Warn("Exploratory lookup skipped: no transport available, cannot reach network peers")
 		return fmt.Errorf("no transport available for exploratory lookup")
-	}
-	if resolver == nil {
-		return fmt.Errorf("failed to create resolver")
 	}
 
 	// Perform lookup with timeout.

@@ -39,7 +39,7 @@ func NewServer(cfg *config.I2PControlConfig, stats RouterStatsProvider) (*Server
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	registry := registerRPCHandlers(stats, authManager, cfg.TokenExpiration)
+	registry := registerRPCHandlers(stats, authManager, cfg)
 
 	server := &Server{
 		config:      cfg,
@@ -81,7 +81,7 @@ func initializeAuthManager(password string) (*AuthManager, error) {
 
 // registerRPCHandlers creates a method registry and registers all RPC handlers.
 // Returns the configured registry with Echo, GetRate, RouterInfo, Authenticate, RouterManager, NetworkSetting, and I2PControl handlers.
-func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, tokenExpiration time.Duration) *MethodRegistry {
+func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, cfg *config.I2PControlConfig) *MethodRegistry {
 	registry := NewMethodRegistry()
 
 	registry.Register("Echo", NewEchoHandler())
@@ -102,7 +102,7 @@ func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, to
 			return nil, NewRPCError(ErrCodeInvalidParams, "unsupported API version")
 		}
 
-		token, err := authManager.Authenticate(req.Password, tokenExpiration)
+		token, err := authManager.Authenticate(req.Password, cfg.TokenExpiration)
 		if err != nil {
 			return nil, NewRPCError(ErrCodeAuthFailed, err.Error())
 		}
@@ -115,7 +115,7 @@ func registerRPCHandlers(stats RouterStatsProvider, authManager *AuthManager, to
 
 	registry.Register("RouterManager", NewRouterManagerHandler(stats.GetRouterControl()))
 	registry.Register("NetworkSetting", NewNetworkSettingHandler(stats))
-	registry.Register("I2PControl", NewI2PControlHandler(authManager))
+	registry.Register("I2PControl", NewI2PControlHandler(authManager, cfg))
 
 	return registry
 }

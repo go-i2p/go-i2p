@@ -103,9 +103,10 @@ func attemptRekey(conn interface{}, rs *rekeyState) bool {
 	err := rekeyer.Rekey()
 	if err != nil {
 		// Log the error but don't fail the session — rekeying is best-effort.
-		// The session remains usable with the current keys.
-		log.WithField("error", err.Error()).Warn("NTCP2 session rekeying failed, continuing with current keys")
-		rs.resetCounters()
+		// Do NOT reset counters on failure: leaving them above the threshold
+		// ensures the next message triggers another rekey attempt rather than
+		// silently deferring for another RekeyThreshold messages.
+		log.WithField("error", err.Error()).Warn("NTCP2 session rekeying failed, will retry on next message")
 		return false
 	}
 

@@ -148,8 +148,9 @@ func TestAttemptRekey_ConnImplementsRekeyer_Failure(t *testing.T) {
 
 	assert.False(t, result, "should return false when rekey fails")
 	assert.Equal(t, 0, conn.rekeys, "should not have incremented rekey count on conn")
-	assert.Equal(t, uint64(0), rs.totalMessages(), "counters should be reset")
-	assert.Equal(t, uint64(1), rs.getRekeyCount(), "state rekey count increments even on failure")
+	// Counters must NOT be reset on failure so the next message triggers another attempt
+	assert.Equal(t, RekeyThreshold, rs.totalMessages(), "counters should remain above threshold after failure")
+	assert.Equal(t, uint64(0), rs.getRekeyCount(), "state rekey count should not increment on failure")
 }
 
 func TestAttemptRekey_MultipleRekeys(t *testing.T) {

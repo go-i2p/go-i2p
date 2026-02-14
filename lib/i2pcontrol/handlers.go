@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/go-i2p/go-i2p/lib/config"
 )
 
 // EchoHandler implements the Echo RPC method.
@@ -464,15 +466,20 @@ type I2PControlHandler struct {
 		// ChangePassword updates password and revokes all tokens
 		ChangePassword(newPassword string) int
 	}
+	// config holds a reference to the I2PControl configuration so that
+	// password changes are persisted to the config struct (not just in-memory auth state).
+	config *config.I2PControlConfig
 }
 
 // NewI2PControlHandler creates a new I2PControl handler.
 //
 // Parameters:
 //   - authManager: Authentication manager for password changes
-func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }) *I2PControlHandler {
+//   - cfg: I2PControl config for persisting password changes
+func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }, cfg *config.I2PControlConfig) *I2PControlHandler {
 	return &I2PControlHandler{
 		authManager: authManager,
+		config:      cfg,
 	}
 }
 
@@ -487,7 +494,7 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 	result := make(map[string]interface{})
 	settingsSaved := false
 
-	if err := handlePasswordChange(h.authManager, req, result, &settingsSaved); err != nil {
+	if err := handlePasswordChange(h.authManager, h.config, req, result, &settingsSaved); err != nil {
 		return nil, err
 	}
 
@@ -499,8 +506,9 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 }
 
 // handlePasswordChange processes password change requests from the I2PControl API.
-// Updates the result map and settingsSaved flag if password is successfully changed.
-func handlePasswordChange(authManager interface{ ChangePassword(string) int }, req, result map[string]interface{}, settingsSaved *bool) error {
+// Updates the auth manager, persists the new password to the config struct,
+// and sets the settingsSaved flag on success.
+func handlePasswordChange(authManager interface{ ChangePassword(string) int }, cfg *config.I2PControlConfig, req, result map[string]interface{}, settingsSaved *bool) error {
 	newPassword, ok := req["i2pcontrol.password"]
 	if !ok || newPassword == nil {
 		return nil
@@ -516,6 +524,12 @@ func handlePasswordChange(authManager interface{ ChangePassword(string) int }, r
 	}
 
 	revokedCount := authManager.ChangePassword(passwordStr)
+
+	// Persist password change to config struct so subsequent Authenticate
+	// calls and any config serialization reflect the new password.
+	if cfg != nil {
+		cfg.Password = passwordStr
+	}
 
 	log.WithFields(map[string]interface{}{
 		"at":      "handlePasswordChange",

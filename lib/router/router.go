@@ -273,12 +273,16 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 // getTotalBandwidth returns the total bytes sent and received from all transports.
 // This method is used by the bandwidth tracker to sample bandwidth usage.
 func (r *Router) getTotalBandwidth() (sent, received uint64) {
-	if r.TransportMuxer == nil {
+	// Capture TransportMuxer locally to avoid TOCTOU race:
+	// the field could be set to nil by concurrent shutdown between
+	// the nil check and the method call.
+	muxer := r.TransportMuxer
+	if muxer == nil {
 		return 0, 0
 	}
 
 	// Get all transports from the muxer
-	for _, t := range r.TransportMuxer.GetTransports() {
+	for _, t := range muxer.GetTransports() {
 		// Check if this is an NTCP2 transport
 		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
 			s, rcv := ntcp2Transport.GetTotalBandwidth()
@@ -302,11 +306,13 @@ func (r *Router) GetBandwidthRates() (inbound, outbound uint64) {
 // This is used by I2PControl to expose NTCP2 port and address information.
 // Returns nil if no transports are available.
 func (r *Router) GetTransportAddr() interface{} {
-	if r.TransportMuxer == nil {
+	// Capture locally to avoid TOCTOU race with concurrent shutdown.
+	muxer := r.TransportMuxer
+	if muxer == nil {
 		return nil
 	}
 
-	transports := r.TransportMuxer.GetTransports()
+	transports := muxer.GetTransports()
 	if len(transports) == 0 {
 		return nil
 	}

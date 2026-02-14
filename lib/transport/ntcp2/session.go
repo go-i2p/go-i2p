@@ -142,7 +142,10 @@ func (s *NTCP2Session) SendQueueSize() int {
 }
 
 // GetBandwidthStats returns the total bytes sent and received by this session.
-// The values are read atomically and represent cumulative totals since session start.
+// Each counter is read atomically, but the pair is not a consistent snapshot:
+// a concurrent send/receive between the two loads may cause slight skew.
+// This is acceptable for monitoring and rate estimation; use a mutex-guarded
+// snapshot if exact point-in-time consistency is ever required.
 func (s *NTCP2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
 	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
 }
@@ -162,11 +165,25 @@ func (s *NTCP2Session) ReadNextI2NP() (i2np.I2NPMessage, error) {
 	}
 }
 
+// sendQueueDrainTimeout is the maximum time to wait for queued messages to be
+// sent before forcefully closing the session. This prevents message loss during
+// graceful shutdown while avoiding indefinite hangs.
+const sendQueueDrainTimeout = 2 * time.Second
+
 // Close closes the session cleanly.
+// It first waits briefly for the send queue to drain (up to sendQueueDrainTimeout)
+// before canceling the context and closing the connection. This gives queued
+// messages a chance to be transmitted rather than being silently dropped.
 func (s *NTCP2Session) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
 		s.logger.Info("Closing NTCP2 session")
+
+		// Wait for send queue to drain before canceling context.
+		// The sendWorker is still running at this point, so queued messages
+		// can still be transmitted.
+		s.drainSendQueue()
+
 		s.cancel()
 		if s.conn != nil {
 			err = s.conn.Close()
@@ -182,6 +199,40 @@ func (s *NTCP2Session) Close() error {
 		s.logger.Info("NTCP2 session closed successfully")
 	})
 	return err
+}
+
+// drainSendQueue waits for the send queue to empty or the drain timeout to expire.
+// This is called before canceling the session context so the sendWorker can
+// still process queued messages.
+func (s *NTCP2Session) drainSendQueue() {
+	queueSize := atomic.LoadInt32(&s.sendQueueSize)
+	if queueSize == 0 {
+		return
+	}
+
+	s.logger.WithField("queue_size", queueSize).Debug("Draining send queue before close")
+
+	deadline := time.NewTimer(sendQueueDrainTimeout)
+	defer deadline.Stop()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline.C:
+			remaining := atomic.LoadInt32(&s.sendQueueSize)
+			if remaining > 0 {
+				s.logger.WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
+			}
+			return
+		case <-ticker.C:
+			if atomic.LoadInt32(&s.sendQueueSize) == 0 {
+				s.logger.Debug("Send queue drained successfully")
+				return
+			}
+		}
+	}
 }
 
 // SetCleanupCallback sets a callback function that will be called when the session closes.
