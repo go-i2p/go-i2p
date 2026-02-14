@@ -269,17 +269,7 @@ func (e *Endpoint) findDataStart(decrypted []byte) (int, error) {
 // Returns an error if message processing fails.
 func (e *Endpoint) processInstructionLoop(data []byte) error {
 	for len(data) >= 3 {
-		di, remainder, err := readDeliveryInstructions(data)
-		if err != nil {
-			log.WithFields(logger.Fields{
-				"at":     "(Endpoint) extractFragments",
-				"reason": "read_delivery_instructions_failed",
-				"error":  err.Error(),
-			}).Error("failed to read delivery instructions")
-			return err
-		}
-
-		fragSize, fragmentData, remainder, err := e.extractFragmentData(di, remainder)
+		di, remainder, fragmentData, fragSize, err := e.readAndExtractFragment(data)
 		if err != nil {
 			return err
 		}
@@ -287,24 +277,45 @@ func (e *Endpoint) processInstructionLoop(data []byte) error {
 			break // Insufficient data
 		}
 
-		// Reject zero-length fragments to prevent an infinite loop.
-		// A fragment with size 0 would cause data = remainder[0:] which
-		// never advances the slice, spinning the loop forever.
-		if fragSize == 0 {
-			log.WithFields(logger.Fields{
-				"at":     "(Endpoint) processInstructionLoop",
-				"reason": "zero_length_fragment",
-			}).Error("delivery instruction has zero-length fragment, aborting to prevent infinite loop")
-			return ErrInvalidTunnelData
-		}
-
-		if err := e.processFragmentByType(di, fragmentData); err != nil {
+		if err := e.validateAndProcessFragment(di, fragmentData, fragSize); err != nil {
 			return err
 		}
 
 		data = remainder[fragSize:]
 	}
 	return nil
+}
+
+// readAndExtractFragment reads delivery instructions and extracts fragment data from the current position.
+// Returns nil fragmentData if there is insufficient data remaining (not an error).
+func (e *Endpoint) readAndExtractFragment(data []byte) (*DeliveryInstructions, []byte, []byte, uint16, error) {
+	di, remainder, err := readDeliveryInstructions(data)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Endpoint) extractFragments",
+			"reason": "read_delivery_instructions_failed",
+			"error":  err.Error(),
+		}).Error("failed to read delivery instructions")
+		return nil, nil, nil, 0, err
+	}
+
+	fragSize, fragmentData, remainder, err := e.extractFragmentData(di, remainder)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return di, remainder, fragmentData, fragSize, nil
+}
+
+// validateAndProcessFragment rejects zero-length fragments and delegates processing by type.
+func (e *Endpoint) validateAndProcessFragment(di *DeliveryInstructions, fragmentData []byte, fragSize uint16) error {
+	if fragSize == 0 {
+		log.WithFields(logger.Fields{
+			"at":     "(Endpoint) processInstructionLoop",
+			"reason": "zero_length_fragment",
+		}).Error("delivery instruction has zero-length fragment, aborting to prevent infinite loop")
+		return ErrInvalidTunnelData
+	}
+	return e.processFragmentByType(di, fragmentData)
 }
 
 // extractFragmentData extracts fragment data from the remainder based on delivery instructions.

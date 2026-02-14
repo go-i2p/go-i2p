@@ -283,30 +283,38 @@ func (s *NTCP2Session) receiveWorker() {
 			return
 		}
 
-		// Set a read deadline so we periodically check shouldStopReceiving()
-		// even if the peer goes silent. Without this, readNextMessage blocks
-		// forever on a silent peer, leaking the goroutine.
-		if err := s.conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
-			s.logger.WithError(err).Error("Failed to set read deadline")
-			s.setError(WrapNTCP2Error(err, "setting read deadline"))
-			return
-		}
-
-		msg, err := s.readNextMessage(unframer)
-		if err != nil {
-			// If this is a timeout, loop back to check shouldStopReceiving
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				s.logger.Debug("Read deadline expired, checking session state")
-				continue
-			}
-			s.handleReceiveError(err)
-			return
-		}
-
-		if !s.queueReceivedMessage(msg) {
+		if !s.processNextInboundMessage(unframer) {
 			return
 		}
 	}
+}
+
+// processNextInboundMessage sets a read deadline, reads the next message, and queues it.
+// Returns false if the receive loop should exit due to a fatal error or queuing failure.
+func (s *NTCP2Session) processNextInboundMessage(unframer *I2NPUnframer) bool {
+	if err := s.conn.SetReadDeadline(time.Now().Add(ntcp2ReadDeadline)); err != nil {
+		s.logger.WithError(err).Error("Failed to set read deadline")
+		s.setError(WrapNTCP2Error(err, "setting read deadline"))
+		return false
+	}
+
+	msg, err := s.readNextMessage(unframer)
+	if err != nil {
+		return s.handleReadResult(err)
+	}
+
+	return s.queueReceivedMessage(msg)
+}
+
+// handleReadResult evaluates a read error and returns true if the loop should continue
+// (e.g. on a read-deadline timeout) or false if the error is fatal.
+func (s *NTCP2Session) handleReadResult(err error) bool {
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		s.logger.Debug("Read deadline expired, checking session state")
+		return true
+	}
+	s.handleReceiveError(err)
+	return false
 }
 
 // createMessageUnframer creates and returns a new I2NP unframer for this session's connection.

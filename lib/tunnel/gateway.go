@@ -28,7 +28,7 @@ type Gateway struct {
 	tunnelID   TunnelID
 	encryption tunnel.TunnelEncryptor
 	nextHopID  TunnelID
-	msgIDSeq   uint32 // monotonic message ID counter for fragmentation
+	msgIDSeq   uint32     // monotonic message ID counter for fragmentation
 	encMu      sync.Mutex // protects concurrent calls to encryption.Encrypt
 }
 

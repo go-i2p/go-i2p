@@ -306,48 +306,60 @@ func shouldProcessFile(filePath string, info os.FileInfo, err error) bool {
 
 // readRouterInfoFromFile reads and parses a single RouterInfo file
 func (lb *LocalNetDbBootstrap) readRouterInfoFromFile(filePath string) (router_info.RouterInfo, error) {
-	file, err := os.Open(filePath)
+	data, err := readRouterInfoBytes(filePath)
 	if err != nil {
-		return router_info.RouterInfo{}, fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	// Limit read size to prevent OOM from maliciously large files.
-	// RouterInfo files are typically < 10 KB; 64 KB is a generous upper bound.
-	const maxRouterInfoSize = 64 * 1024
-	data, err := io.ReadAll(io.LimitReader(file, maxRouterInfoSize))
-	if err != nil {
-		return router_info.RouterInfo{}, fmt.Errorf("failed to read file: %w", err)
+		return router_info.RouterInfo{}, err
 	}
 
-	// Parse RouterInfo
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		return router_info.RouterInfo{}, fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
-	// Validate expiration: RouterInfos use the same max age as the netdb package
-	// (48 hours) to ensure consistency. Using a shorter threshold here would
-	// reject RouterInfos that the netdb itself considers valid, causing
-	// unnecessary reseed operations.
-	const routerInfoMaxAge = 48 * time.Hour
-	// Allow a small clock skew tolerance for future-dated RouterInfos
-	const maxClockSkew = 10 * time.Minute
-	publishedDate := ri.Published()
-	if publishedDate != nil {
-		publishedTime := publishedDate.Time()
-		age := time.Since(publishedTime)
-		if age < -maxClockSkew {
-			// RouterInfo is dated in the future beyond clock skew tolerance.
-			// This may indicate a forged timestamp to bypass expiration checks.
-			return router_info.RouterInfo{}, fmt.Errorf("RouterInfo has future timestamp (published %v in the future, max clock skew %v)", -age.Round(time.Second), maxClockSkew)
-		}
-		if age > routerInfoMaxAge {
-			return router_info.RouterInfo{}, fmt.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
-		}
+	if err := validateRouterInfoFreshness(ri); err != nil {
+		return router_info.RouterInfo{}, err
 	}
 
 	return ri, nil
+}
+
+// readRouterInfoBytes opens and reads a RouterInfo file, limiting the read size
+// to 64 KB to prevent OOM from maliciously large files.
+func readRouterInfoBytes(filePath string) ([]byte, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	const maxRouterInfoSize = 64 * 1024
+	data, err := io.ReadAll(io.LimitReader(file, maxRouterInfoSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	return data, nil
+}
+
+// validateRouterInfoFreshness checks that a RouterInfo's published date is within
+// the acceptable age range (not expired, not future-dated beyond clock skew tolerance).
+func validateRouterInfoFreshness(ri router_info.RouterInfo) error {
+	const routerInfoMaxAge = 48 * time.Hour
+	const maxClockSkew = 10 * time.Minute
+
+	publishedDate := ri.Published()
+	if publishedDate == nil {
+		return nil
+	}
+
+	publishedTime := publishedDate.Time()
+	age := time.Since(publishedTime)
+	if age < -maxClockSkew {
+		return fmt.Errorf("RouterInfo has future timestamp (published %v in the future, max clock skew %v)", -age.Round(time.Second), maxClockSkew)
+	}
+	if age > routerInfoMaxAge {
+		return fmt.Errorf("RouterInfo expired (published %v ago, max age %v)", age.Round(time.Minute), routerInfoMaxAge)
+	}
+	return nil
 }
 
 // getDefaultNetDbSearchPaths returns default search paths for netDb directories

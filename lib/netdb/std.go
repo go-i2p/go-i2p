@@ -1104,7 +1104,6 @@ func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dat
 		return err
 	}
 
-	// Verify cryptographic signature to prevent forged RouterInfo entries
 	if err := verifyRouterInfoSignature(ri); err != nil {
 		return err
 	}
@@ -1113,10 +1112,12 @@ func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dat
 		return nil
 	}
 
-	// Track expiration based on published date
-	if published := ri.Published(); published != nil && !published.Time().IsZero() {
-		db.trackRouterInfoExpiration(key, published.Time())
-	}
+	return db.finalizeRouterInfoStorage(key, ri)
+}
+
+// finalizeRouterInfoStorage tracks expiration and persists a cached RouterInfo to disk.
+func (db *StdNetDB) finalizeRouterInfoStorage(key common.Hash, ri router_info.RouterInfo) error {
+	db.trackRouterInfoPublishedDate(key, ri)
 
 	if err := db.persistRouterInfoToFilesystem(key, ri); err != nil {
 		return err
@@ -1124,6 +1125,13 @@ func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dat
 
 	log.WithField("hash", key).Debug("Successfully stored RouterInfo")
 	return nil
+}
+
+// trackRouterInfoPublishedDate records the published date for expiration tracking.
+func (db *StdNetDB) trackRouterInfoPublishedDate(key common.Hash, ri router_info.RouterInfo) {
+	if published := ri.Published(); published != nil && !published.Time().IsZero() {
+		db.trackRouterInfoExpiration(key, published.Time())
+	}
 }
 
 // StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.

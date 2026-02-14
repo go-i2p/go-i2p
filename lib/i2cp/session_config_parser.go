@@ -290,45 +290,39 @@ func markExplicitlySet(config *SessionConfig, field string) {
 // applyTunnelQuantityOptions applies tunnel quantity configuration options.
 // Keys: inbound.quantity, outbound.quantity, inbound.backupQuantity, outbound.backupQuantity
 func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string) {
-	if val, exists := options["inbound.quantity"]; exists {
-		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 1 && quantity <= 16 {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "inbound.quantity",
-				"value":  quantity,
-			}).Debug("applied_tunnel_quantity_option")
-			config.InboundTunnelCount = quantity
-		} else {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "inbound.quantity",
-				"value":  val,
-				"error":  err,
-			}).Warn("invalid_inbound_quantity_option_using_default")
-		}
-	}
+	applyQuantityOption(config, options, "inbound.quantity", &config.InboundTunnelCount)
+	applyQuantityOption(config, options, "outbound.quantity", &config.OutboundTunnelCount)
+	logUnsupportedBackupQuantities(config, options)
+}
 
-	if val, exists := options["outbound.quantity"]; exists {
-		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 1 && quantity <= 16 {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "outbound.quantity",
-				"value":  quantity,
-			}).Debug("applied_tunnel_quantity_option")
-			config.OutboundTunnelCount = quantity
-		} else {
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": "outbound.quantity",
-				"value":  val,
-				"error":  err,
-			}).Warn("invalid_outbound_quantity_option_using_default")
-		}
+// applyQuantityOption parses and applies a single tunnel quantity option if present.
+// The value must be a valid integer in the range [1, 16].
+func applyQuantityOption(config *SessionConfig, options map[string]string, key string, target *int) {
+	val, exists := options[key]
+	if !exists {
+		return
 	}
+	quantity, err := strconv.Atoi(val)
+	if err == nil && quantity >= 1 && quantity <= 16 {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyTunnelQuantityOptions",
+			"option": key,
+			"value":  quantity,
+		}).Debug("applied_tunnel_quantity_option")
+		*target = quantity
+	} else {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyTunnelQuantityOptions",
+			"option": key,
+			"value":  val,
+			"error":  err,
+		}).Warn("invalid_tunnel_quantity_option_using_default")
+	}
+}
 
-	// Note: backup quantities not currently implemented in SessionConfig.
-	// They would be used for tunnel pool redundancy.
-	// Log explicitly as unsupported so clients are aware.
+// logUnsupportedBackupQuantities logs and records backup quantity options that are
+// not yet implemented in the SessionConfig.
+func logUnsupportedBackupQuantities(config *SessionConfig, options map[string]string) {
 	for _, key := range []string{"inbound.backupQuantity", "outbound.backupQuantity"} {
 		if val, exists := options[key]; exists {
 			log.WithFields(logger.Fields{

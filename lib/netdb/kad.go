@@ -298,12 +298,22 @@ func (kr *KademliaResolver) processLookupRound(ctx context.Context, target commo
 	}).Debug("Starting iterative lookup round")
 
 	results := kr.queryBatchParallel(ctx, batch, target)
+	kr.markBatchQueried(batch, queried, unqueried)
 
+	return kr.mergeQueryResults(results, queried, unqueried)
+}
+
+// markBatchQueried moves all peers in the batch from the unqueried set to the queried set.
+func (kr *KademliaResolver) markBatchQueried(batch []common.Hash, queried, unqueried map[common.Hash]bool) {
 	for _, p := range batch {
 		queried[p] = true
 		delete(unqueried, p)
 	}
+}
 
+// mergeQueryResults processes query results, returning a RouterInfo if found or merging
+// new peer suggestions into the unqueried set for subsequent rounds.
+func (kr *KademliaResolver) mergeQueryResults(results []iterativeQueryResult, queried, unqueried map[common.Hash]bool) (*router_info.RouterInfo, bool) {
 	for _, result := range results {
 		if result.ri != nil {
 			return result.ri, false
@@ -314,7 +324,6 @@ func (kr *KademliaResolver) processLookupRound(ctx context.Context, target commo
 			}
 		}
 	}
-
 	return nil, false
 }
 

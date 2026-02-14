@@ -1328,56 +1328,14 @@ func (r *Router) mainloop() {
 	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
 	log.Debug("Initialized active sessions map")
 
-	if err := r.initializeNetDB(); err != nil {
-		log.WithError(err).Error("Failed to initialize NetDB")
-		r.startupErr <- fmt.Errorf("NetDB initialization failed: %w", err)
+	if err := r.initializeCoreComponents(); err != nil {
+		r.startupErr <- err
 		r.Stop()
 		return
 	}
 
-	// Ensure NetDB is ready before initializing components that depend on it
-	if err := r.ensureNetDBReady(); err != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Router) mainloop",
-			"reason": err.Error(),
-		}).Error("NetDB startup failed")
-		r.startupErr <- fmt.Errorf("NetDB readiness check failed: %w", err)
-		r.Stop()
-		return
-	}
-
-	// Start I2CP server AFTER NetDB is initialized so that
-	// server.SetNetDB receives a valid (non-nil) StdNetDB reference.
-	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
-		if err := r.startI2CPServer(); err != nil {
-			r.startupErr <- fmt.Errorf("I2CP server startup failed: %w", err)
-			r.Stop()
-			return
-		}
-	}
-
-	// Start I2PControl server if enabled
-	if err := r.startI2PControlServer(); err != nil {
-		r.startupErr <- fmt.Errorf("I2PControl server startup failed: %w", err)
-		r.Stop()
-		return
-	}
-
-	// Wire InboundMessageHandler for tunnel-to-I2CP message delivery
-	// (requires I2CP server to be started)
-	if r.i2cpServer != nil {
-		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
-		log.WithFields(logger.Fields{
-			"at":     "(Router) mainloop",
-			"reason": "InboundMessageHandler wired to I2CP session manager",
-		}).Debug("inbound message handler initialized")
-	}
-
+	r.wireInboundHandler()
 	r.initializeMessageRouter()
-
-	// Start the NetDB publisher to periodically publish our RouterInfo and LeaseSets
-	// to floodfill routers. This requires NetDB, tunnel pool, transport, and routerInfoProvider
-	// to all be initialized first.
 	r.startPublisher()
 
 	// Signal Start() that all startup-critical initialization succeeded
@@ -1388,6 +1346,47 @@ func (r *Router) mainloop() {
 
 	r.runMainLoop()
 	log.Debug("Exiting router mainloop")
+}
+
+// initializeCoreComponents initializes NetDB, I2CP, and I2PControl servers in order.
+// Returns an error if any critical component fails to start.
+func (r *Router) initializeCoreComponents() error {
+	if err := r.initializeNetDB(); err != nil {
+		log.WithError(err).Error("Failed to initialize NetDB")
+		return fmt.Errorf("NetDB initialization failed: %w", err)
+	}
+
+	if err := r.ensureNetDBReady(); err != nil {
+		log.WithFields(logger.Fields{
+			"at":     "(Router) mainloop",
+			"reason": err.Error(),
+		}).Error("NetDB startup failed")
+		return fmt.Errorf("NetDB readiness check failed: %w", err)
+	}
+
+	if r.cfg.I2CP != nil && r.cfg.I2CP.Enabled {
+		if err := r.startI2CPServer(); err != nil {
+			return fmt.Errorf("I2CP server startup failed: %w", err)
+		}
+	}
+
+	if err := r.startI2PControlServer(); err != nil {
+		return fmt.Errorf("I2PControl server startup failed: %w", err)
+	}
+
+	return nil
+}
+
+// wireInboundHandler sets up the InboundMessageHandler for tunnel-to-I2CP delivery
+// if an I2CP server is running.
+func (r *Router) wireInboundHandler() {
+	if r.i2cpServer != nil {
+		r.inboundHandler = NewInboundMessageHandler(r.i2cpServer.GetSessionManager())
+		log.WithFields(logger.Fields{
+			"at":     "(Router) mainloop",
+			"reason": "InboundMessageHandler wired to I2CP session manager",
+		}).Debug("inbound message handler initialized")
+	}
 }
 
 // Session Monitoring and Message Processing

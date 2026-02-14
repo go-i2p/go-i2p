@@ -282,11 +282,7 @@ func parseVariableFields(databaseLookup *DatabaseLookup, data []byte) error {
 
 // parseEncryptionFields extracts the encryption-related fields from the database lookup data.
 func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte) error {
-	// Calculate length offset after basic and variable fields
-	length := 32 + 32 + 1 + 2 + (databaseLookup.Size * 32) // Key + From + Flags + Size + ExcludedPeers
-	if databaseLookup.Flags&1 == 1 {
-		length += 4 // ReplyTunnelID
-	}
+	length := computeEncryptionFieldOffset(databaseLookup)
 
 	lengthAfter, replyKey, err := readDatabaseLookupReplyKey(length, data)
 	if err != nil {
@@ -302,23 +298,37 @@ func parseEncryptionFields(databaseLookup *DatabaseLookup, data []byte) error {
 	}
 	databaseLookup.Tags = tags
 
+	return readReplyTagsByType(databaseLookup, lengthAfter, data, tags)
+}
+
+// computeEncryptionFieldOffset calculates the byte offset where encryption fields begin,
+// accounting for the fixed header, excluded peers, and optional reply tunnel ID.
+func computeEncryptionFieldOffset(databaseLookup *DatabaseLookup) int {
+	length := 32 + 32 + 1 + 2 + (databaseLookup.Size * 32) // Key + From + Flags + Size + ExcludedPeers
+	if databaseLookup.Flags&1 == 1 {
+		length += 4 // ReplyTunnelID
+	}
+	return length
+}
+
+// readReplyTagsByType reads either ECIES or legacy reply tags based on the encryption flag.
+func readReplyTagsByType(databaseLookup *DatabaseLookup, offset int, data []byte, tags int) error {
 	ecies := (databaseLookup.Flags & 0x10) != 0
 	if ecies {
-		_, eciesTags, err := readDatabaseLookupECIESReplyTags(lengthAfter, data, tags)
+		_, eciesTags, err := readDatabaseLookupECIESReplyTags(offset, data, tags)
 		if err != nil {
 			log.WithError(err).Error("Failed to read ECIESReplyTags")
 			return err
 		}
 		databaseLookup.ECIESReplyTags = eciesTags
 	} else {
-		_, replyTags, err := readDatabaseLookupReplyTags(lengthAfter, data, tags)
+		_, replyTags, err := readDatabaseLookupReplyTags(offset, data, tags)
 		if err != nil {
 			log.WithError(err).Error("Failed to read ReplyTags")
 			return err
 		}
 		databaseLookup.ReplyTags = replyTags
 	}
-
 	return nil
 }
 

@@ -120,17 +120,23 @@ func (rl *FloodfillRateLimiter) cleanupLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			rl.mu.Lock()
-			now := time.Now()
-			for peer, pl := range rl.peers {
-				// Remove entries idle for > 10 minutes
-				if now.Sub(pl.lastUpdate) > 10*time.Minute {
-					delete(rl.peers, peer)
-				}
-			}
-			rl.mu.Unlock()
+			rl.removeStalePeers()
 		case <-rl.stopChan:
 			return
+		}
+	}
+}
+
+// removeStalePeers purges rate-limiter entries for peers that have been idle
+// longer than the stale threshold (10 minutes). Must not be called concurrently
+// with Allow; it acquires rl.mu internally.
+func (rl *FloodfillRateLimiter) removeStalePeers() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	for peer, pl := range rl.peers {
+		if now.Sub(pl.lastUpdate) > 10*time.Minute {
+			delete(rl.peers, peer)
 		}
 	}
 }
