@@ -347,44 +347,97 @@ func logUnsupportedBackupQuantities(config *SessionConfig, options map[string]st
 	}
 }
 
-// applyTunnelLifetimeOptions applies tunnel lifetime configuration options.
-// Keys: inbound.lengthVariance, outbound.lengthVariance (affects lifetime calculation)
-//
-// NOTE: These options are parsed and acknowledged but NOT implemented:
-//   - inbound.lengthVariance / outbound.lengthVariance: Variance is ignored, fixed 10-minute lifetime used
+// applyTunnelLifetimeOptions applies tunnel length variance configuration options.
+// Keys: inbound.lengthVariance, outbound.lengthVariance
+// Valid range: -7 to +7 (0 = no variance, negative = decrease only, positive = +/- range)
 func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string) {
-	for key, val := range options {
-		if key == "inbound.lengthVariance" || key == "outbound.lengthVariance" {
+	if val, exists := options["inbound.lengthVariance"]; exists {
+		if variance, err := strconv.Atoi(val); err == nil && variance >= -7 && variance <= 7 {
+			config.InboundLengthVariance = variance
+			markExplicitlySet(config, "InboundLengthVariance")
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyTunnelLifetimeOptions",
-				"option": key,
-				"value":  val,
-				"status": "unsupported",
-			}).Warn("tunnel lifetime variance option not implemented - fixed 10-minute lifetime used")
-			recordUnsupportedOption(config, key, val)
+				"option": "inbound.lengthVariance",
+				"value":  variance,
+			}).Debug("applied_inbound_length_variance")
+		}
+	}
+	if val, exists := options["outbound.lengthVariance"]; exists {
+		if variance, err := strconv.Atoi(val); err == nil && variance >= -7 && variance <= 7 {
+			config.OutboundLengthVariance = variance
+			markExplicitlySet(config, "OutboundLengthVariance")
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelLifetimeOptions",
+				"option": "outbound.lengthVariance",
+				"value":  variance,
+			}).Debug("applied_outbound_length_variance")
 		}
 	}
 }
 
 // applyMessageOptions applies message-related configuration options.
-// Keys: i2cp.messageReliability, i2cp.gzip, i2cp.encryptLeaseSet
+// Keys: i2cp.messageReliability, i2cp.gzip, i2cp.encryptLeaseSet, i2cp.dontPublishLeaseSet
 //
-// NOTE: These options are parsed and acknowledged but NOT implemented:
-//   - i2cp.messageReliability: All messages use best-effort delivery regardless of setting
-//   - i2cp.gzip: Payload compression is not performed
-//   - i2cp.encryptLeaseSet: LeaseSet encryption is not supported
+// Implemented options:
+//   - i2cp.messageReliability: Stored for relay decision logic ("BestEffort", "Guaranteed", "None")
+//   - i2cp.encryptLeaseSet: Enables LeaseSet encryption via UseEncryptedLeaseSet
+//   - i2cp.dontPublishLeaseSet: Prevents LeaseSet publication to NetDB
+//
+// NOTE: i2cp.gzip is parsed and acknowledged but NOT implemented (payload compression not performed)
 func applyMessageOptions(config *SessionConfig, options map[string]string) {
-	unsupportedKeys := []string{"i2cp.messageReliability", "i2cp.gzip", "i2cp.encryptLeaseSet"}
-	for _, key := range unsupportedKeys {
-		if val, exists := options[key]; exists {
+	// i2cp.messageReliability: "BestEffort", "Guaranteed", or "None"
+	if val, exists := options["i2cp.messageReliability"]; exists {
+		switch val {
+		case "BestEffort", "Guaranteed", "None":
+			config.MessageReliability = val
+			markExplicitlySet(config, "MessageReliability")
+			log.WithFields(logger.Fields{
+				"at":          "i2cp.applyMessageOptions",
+				"option":      "i2cp.messageReliability",
+				"reliability": val,
+			}).Debug("applied_message_reliability")
+		default:
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyMessageOptions",
-				"option": key,
+				"option": "i2cp.messageReliability",
 				"value":  val,
-				"status": "unsupported",
-			}).Warn("message option not implemented - value ignored; all messages use best-effort, no compression")
-			recordUnsupportedOption(config, key, val)
+			}).Warn("unrecognized message reliability value - using default BestEffort")
 		}
+	}
+
+	// i2cp.encryptLeaseSet: "true" enables encrypted LeaseSet
+	if val, exists := options["i2cp.encryptLeaseSet"]; exists {
+		if val == "true" {
+			config.UseEncryptedLeaseSet = true
+			markExplicitlySet(config, "UseEncryptedLeaseSet")
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyMessageOptions",
+				"option": "i2cp.encryptLeaseSet",
+			}).Debug("enabled_encrypted_leaseset")
+		}
+	}
+
+	// i2cp.dontPublishLeaseSet: "true" prevents publication to NetDB
+	if val, exists := options["i2cp.dontPublishLeaseSet"]; exists {
+		if val == "true" {
+			config.DontPublishLeaseSet = true
+			markExplicitlySet(config, "DontPublishLeaseSet")
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyMessageOptions",
+				"option": "i2cp.dontPublishLeaseSet",
+			}).Debug("disabled_leaseset_publication")
+		}
+	}
+
+	// i2cp.gzip remains unsupported
+	if val, exists := options["i2cp.gzip"]; exists {
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyMessageOptions",
+			"option": "i2cp.gzip",
+			"value":  val,
+			"status": "unsupported",
+		}).Warn("gzip compression option not implemented - value ignored")
+		recordUnsupportedOption(config, "i2cp.gzip", val)
 	}
 }
 

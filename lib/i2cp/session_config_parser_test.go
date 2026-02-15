@@ -474,3 +474,216 @@ func createTestDestination() (*destination.Destination, error) {
 	}
 	return keyStore.Destination(), nil
 }
+
+// TestApplyMessageOptions_Reliability tests that i2cp.messageReliability is wired into SessionConfig.
+func TestApplyMessageOptions_Reliability(t *testing.T) {
+	for _, rel := range []string{"BestEffort", "Guaranteed", "None"} {
+		t.Run(rel, func(t *testing.T) {
+			config := DefaultSessionConfig()
+			options := map[string]string{"i2cp.messageReliability": rel}
+			applyMessageOptions(config, options)
+			if config.MessageReliability != rel {
+				t.Errorf("MessageReliability = %q, want %q", config.MessageReliability, rel)
+			}
+			if !config.ExplicitlySetFields["MessageReliability"] {
+				t.Error("MessageReliability not marked as explicitly set")
+			}
+		})
+	}
+	// Unknown value should keep default
+	t.Run("unknown_value", func(t *testing.T) {
+		config := DefaultSessionConfig()
+		options := map[string]string{"i2cp.messageReliability": "Invalid"}
+		applyMessageOptions(config, options)
+		if config.MessageReliability != "BestEffort" {
+			t.Errorf("MessageReliability = %q, want default BestEffort", config.MessageReliability)
+		}
+	})
+}
+
+// TestApplyMessageOptions_EncryptLeaseSet tests that i2cp.encryptLeaseSet enables UseEncryptedLeaseSet.
+func TestApplyMessageOptions_EncryptLeaseSet(t *testing.T) {
+	config := DefaultSessionConfig()
+	if config.UseEncryptedLeaseSet {
+		t.Fatal("UseEncryptedLeaseSet should default to false")
+	}
+	options := map[string]string{"i2cp.encryptLeaseSet": "true"}
+	applyMessageOptions(config, options)
+	if !config.UseEncryptedLeaseSet {
+		t.Error("UseEncryptedLeaseSet should be true after setting i2cp.encryptLeaseSet=true")
+	}
+	if !config.ExplicitlySetFields["UseEncryptedLeaseSet"] {
+		t.Error("UseEncryptedLeaseSet not marked as explicitly set")
+	}
+}
+
+// TestApplyMessageOptions_DontPublishLeaseSet tests that i2cp.dontPublishLeaseSet is wired correctly.
+func TestApplyMessageOptions_DontPublishLeaseSet(t *testing.T) {
+	config := DefaultSessionConfig()
+	if config.DontPublishLeaseSet {
+		t.Fatal("DontPublishLeaseSet should default to false")
+	}
+	options := map[string]string{"i2cp.dontPublishLeaseSet": "true"}
+	applyMessageOptions(config, options)
+	if !config.DontPublishLeaseSet {
+		t.Error("DontPublishLeaseSet should be true after setting i2cp.dontPublishLeaseSet=true")
+	}
+	if !config.ExplicitlySetFields["DontPublishLeaseSet"] {
+		t.Error("DontPublishLeaseSet not marked as explicitly set")
+	}
+}
+
+// TestApplyMessageOptions_GzipStillUnsupported verifies i2cp.gzip is tracked as unsupported.
+func TestApplyMessageOptions_GzipStillUnsupported(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{"i2cp.gzip": "true"}
+	applyMessageOptions(config, options)
+	if val, ok := config.UnsupportedOptions["i2cp.gzip"]; !ok || val != "true" {
+		t.Errorf("i2cp.gzip should be recorded in UnsupportedOptions, got %v", config.UnsupportedOptions)
+	}
+}
+
+// TestLogUnsupportedBackupQuantities_AppliesValues tests that backup quantities are stored.
+func TestLogUnsupportedBackupQuantities_AppliesValues(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{
+		"inbound.backupQuantity":  "2",
+		"outbound.backupQuantity": "3",
+	}
+	logUnsupportedBackupQuantities(config, options)
+	if config.InboundBackupQuantity != 2 {
+		t.Errorf("InboundBackupQuantity = %d, want 2", config.InboundBackupQuantity)
+	}
+	if config.OutboundBackupQuantity != 3 {
+		t.Errorf("OutboundBackupQuantity = %d, want 3", config.OutboundBackupQuantity)
+	}
+	if !config.ExplicitlySetFields["InboundBackupQuantity"] {
+		t.Error("InboundBackupQuantity not marked as explicitly set")
+	}
+	if !config.ExplicitlySetFields["OutboundBackupQuantity"] {
+		t.Error("OutboundBackupQuantity not marked as explicitly set")
+	}
+}
+
+// TestLogUnsupportedBackupQuantities_OutOfRange tests that out-of-range values are ignored.
+func TestLogUnsupportedBackupQuantities_OutOfRange(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{
+		"inbound.backupQuantity":  "-1",
+		"outbound.backupQuantity": "17",
+	}
+	logUnsupportedBackupQuantities(config, options)
+	if config.InboundBackupQuantity != 0 {
+		t.Errorf("InboundBackupQuantity = %d, want 0 (default for out-of-range)", config.InboundBackupQuantity)
+	}
+	if config.OutboundBackupQuantity != 0 {
+		t.Errorf("OutboundBackupQuantity = %d, want 0 (default for out-of-range)", config.OutboundBackupQuantity)
+	}
+}
+
+// TestApplyTunnelLifetimeOptions_AppliesVariance tests that length variance is stored.
+func TestApplyTunnelLifetimeOptions_AppliesVariance(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{
+		"inbound.lengthVariance":  "-1",
+		"outbound.lengthVariance": "2",
+	}
+	applyTunnelLifetimeOptions(config, options)
+	if config.InboundLengthVariance != -1 {
+		t.Errorf("InboundLengthVariance = %d, want -1", config.InboundLengthVariance)
+	}
+	if config.OutboundLengthVariance != 2 {
+		t.Errorf("OutboundLengthVariance = %d, want 2", config.OutboundLengthVariance)
+	}
+	if !config.ExplicitlySetFields["InboundLengthVariance"] {
+		t.Error("InboundLengthVariance not marked as explicitly set")
+	}
+	if !config.ExplicitlySetFields["OutboundLengthVariance"] {
+		t.Error("OutboundLengthVariance not marked as explicitly set")
+	}
+}
+
+// TestApplyTunnelLifetimeOptions_OutOfRange tests that out-of-range variance values are ignored.
+func TestApplyTunnelLifetimeOptions_OutOfRange(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{
+		"inbound.lengthVariance":  "-8",
+		"outbound.lengthVariance": "8",
+	}
+	applyTunnelLifetimeOptions(config, options)
+	if config.InboundLengthVariance != 0 {
+		t.Errorf("InboundLengthVariance = %d, want 0 (default for out-of-range)", config.InboundLengthVariance)
+	}
+	if config.OutboundLengthVariance != 0 {
+		t.Errorf("OutboundLengthVariance = %d, want 0 (default for out-of-range)", config.OutboundLengthVariance)
+	}
+}
+
+// TestFullParsePipeline_NewOptions tests end-to-end parsing of the newly implemented options
+// through the full CreateSession payload parsing pipeline.
+func TestFullParsePipeline_NewOptions(t *testing.T) {
+	dest, err := createTestDestination()
+	if err != nil {
+		t.Fatalf("Failed to create test destination: %v", err)
+	}
+	destBytes, err := dest.Bytes()
+	if err != nil {
+		t.Fatalf("Failed to serialize destination: %v", err)
+	}
+
+	options := map[string]string{
+		"inbound.length":           "3",
+		"outbound.length":          "3",
+		"inbound.quantity":         "5",
+		"outbound.quantity":        "5",
+		"inbound.backupQuantity":   "1",
+		"outbound.backupQuantity":  "2",
+		"inbound.lengthVariance":   "-1",
+		"outbound.lengthVariance":  "3",
+		"i2cp.messageReliability":  "Guaranteed",
+		"i2cp.encryptLeaseSet":     "true",
+		"i2cp.dontPublishLeaseSet": "true",
+	}
+
+	mapping, err := data.GoMapToMapping(options)
+	if err != nil {
+		t.Fatalf("Failed to create mapping: %v", err)
+	}
+
+	payload := append(destBytes, mapping.Data()...)
+	_, config, err := ParseCreateSessionPayload(payload)
+	if err != nil {
+		t.Fatalf("Failed to parse payload: %v", err)
+	}
+
+	// Verify all newly-wired options
+	if config.InboundBackupQuantity != 1 {
+		t.Errorf("InboundBackupQuantity = %d, want 1", config.InboundBackupQuantity)
+	}
+	if config.OutboundBackupQuantity != 2 {
+		t.Errorf("OutboundBackupQuantity = %d, want 2", config.OutboundBackupQuantity)
+	}
+	if config.InboundLengthVariance != -1 {
+		t.Errorf("InboundLengthVariance = %d, want -1", config.InboundLengthVariance)
+	}
+	if config.OutboundLengthVariance != 3 {
+		t.Errorf("OutboundLengthVariance = %d, want 3", config.OutboundLengthVariance)
+	}
+	if config.MessageReliability != "Guaranteed" {
+		t.Errorf("MessageReliability = %q, want Guaranteed", config.MessageReliability)
+	}
+	if !config.UseEncryptedLeaseSet {
+		t.Error("UseEncryptedLeaseSet should be true")
+	}
+	if !config.DontPublishLeaseSet {
+		t.Error("DontPublishLeaseSet should be true")
+	}
+
+	// i2cp.encryptLeaseSet should NOT appear in UnsupportedOptions anymore
+	if _, exists := config.UnsupportedOptions["i2cp.encryptLeaseSet"]; exists {
+		t.Error("i2cp.encryptLeaseSet should not be in UnsupportedOptions after being wired")
+	}
+	if _, exists := config.UnsupportedOptions["i2cp.messageReliability"]; exists {
+		t.Error("i2cp.messageReliability should not be in UnsupportedOptions after being wired")
+	}
+}
