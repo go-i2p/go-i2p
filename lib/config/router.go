@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // DefaultI2CPPort is the standard I2CP port
@@ -30,6 +31,22 @@ type I2CPConfig struct {
 	// Password for optional I2CP authentication.
 	// See Username for details.
 	Password string
+
+	// MessageQueueSize is the buffer size for outbound messages per session.
+	// Default: 64 messages.
+	MessageQueueSize int
+
+	// SessionTimeout is how long idle sessions stay alive.
+	// Default: 30 minutes. Set to 0 to disable timeout enforcement.
+	SessionTimeout time.Duration
+
+	// ReadTimeout is the maximum time to wait for client reads.
+	// Default: 60 seconds.
+	ReadTimeout time.Duration
+
+	// WriteTimeout is the maximum time to wait for client writes.
+	// Default: 30 seconds.
+	WriteTimeout time.Duration
 }
 
 // router.config options
@@ -67,10 +84,14 @@ func defaultConfig() string {
 
 // DefaultI2CPConfig provides default I2CP server configuration
 var DefaultI2CPConfig = I2CPConfig{
-	Enabled:     true,
-	Address:     fmt.Sprintf("localhost:%d", DefaultI2CPPort),
-	Network:     "tcp",
-	MaxSessions: 100,
+	Enabled:          true,
+	Address:          fmt.Sprintf("localhost:%d", DefaultI2CPPort),
+	Network:          "tcp",
+	MaxSessions:      100,
+	MessageQueueSize: 64,
+	SessionTimeout:   30 * time.Minute,
+	ReadTimeout:      60 * time.Second,
+	WriteTimeout:     30 * time.Second,
 }
 
 // defaults for router

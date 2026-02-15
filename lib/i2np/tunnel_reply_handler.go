@@ -62,6 +62,15 @@ type ReplyProcessor struct {
 	pendingBuilds map[tunnel.TunnelID]*PendingBuildRequest
 	mutex         sync.RWMutex
 
+	// stopped indicates the processor has been shut down.
+	// Retry timer callbacks check this flag before executing to prevent
+	// operations on torn-down resources after Stop() is called.
+	stopped bool
+
+	// pendingTimers tracks all active retry timers so they can be
+	// cancelled during shutdown, preventing goroutine leaks.
+	pendingTimers []*time.Timer
+
 	// tunnelManager handles tunnel state management and coordination.
 	tunnelManager *TunnelManager
 
@@ -371,8 +380,17 @@ func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingB
 		"backoff_delay": backoffDelay.Seconds(),
 	}).Info("Scheduling tunnel build retry")
 
-	// Schedule retry after backoff delay
-	time.AfterFunc(backoffDelay, func() {
+	// Schedule retry after backoff delay.
+	// The callback checks rp.stopped to avoid operating on torn-down resources
+	// if Stop() was called while this timer was pending.
+	timer := time.AfterFunc(backoffDelay, func() {
+		rp.mutex.RLock()
+		stopped := rp.stopped
+		rp.mutex.RUnlock()
+		if stopped {
+			log.WithField("tunnel_id", tunnelID).Debug("Skipping retry callback: processor stopped")
+			return
+		}
 		if err := rp.retryCallback(tunnelID, pending.IsInbound, pending.HopCount); err != nil {
 			log.WithFields(logger.Fields{
 				"tunnel_id": tunnelID,
@@ -380,6 +398,11 @@ func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingB
 			}).Error("Tunnel build retry failed")
 		}
 	})
+
+	// Track the timer so it can be cancelled during shutdown
+	rp.mutex.Lock()
+	rp.pendingTimers = append(rp.pendingTimers, timer)
+	rp.mutex.Unlock()
 
 	return fmt.Errorf("tunnel build failed, retry scheduled")
 }
@@ -455,4 +478,31 @@ func (rp *ReplyProcessor) GetPendingBuildInfo(tunnelID tunnel.TunnelID) *Pending
 	rp.mutex.RLock()
 	defer rp.mutex.RUnlock()
 	return rp.pendingBuilds[tunnelID]
+}
+
+// Stop shuts down the reply processor, cancelling all pending timers and
+// setting the stopped flag to prevent retry callbacks from executing.
+// This prevents goroutine leaks from fire-and-forget time.AfterFunc timers
+// that would otherwise continue running after the processor is torn down.
+func (rp *ReplyProcessor) Stop() {
+	rp.mutex.Lock()
+	defer rp.mutex.Unlock()
+
+	rp.stopped = true
+
+	// Cancel all pending retry timers
+	for _, timer := range rp.pendingTimers {
+		timer.Stop()
+	}
+	rp.pendingTimers = nil
+
+	// Cancel all pending build timeout timers
+	for id, pending := range rp.pendingBuilds {
+		if pending.TimeoutTimer != nil {
+			pending.TimeoutTimer.Stop()
+		}
+		delete(rp.pendingBuilds, id)
+	}
+
+	log.Debug("ReplyProcessor stopped, all pending timers cancelled")
 }

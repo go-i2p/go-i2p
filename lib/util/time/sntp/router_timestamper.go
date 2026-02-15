@@ -40,6 +40,9 @@ type RouterTimestamper struct {
 	waitGroup         sync.WaitGroup
 	ntpClient         NTPClient
 	timeOffset        time.Duration // Store the current time offset from system time
+	// initChan is closed exactly once when initialization completes.
+	// WaitForInitialization blocks on this channel instead of busy-polling.
+	initChan chan struct{}
 }
 
 const (
@@ -64,6 +67,7 @@ func NewRouterTimestamper(client NTPClient) *RouterTimestamper {
 		zones:             NewZones(),
 		stopChan:          make(chan struct{}),
 		ntpClient:         client,
+		initChan:          make(chan struct{}),
 	}
 	rt.updateConfig()
 	return rt
@@ -112,18 +116,11 @@ func (rt *RouterTimestamper) RemoveListener(listener UpdateListener) {
 }
 
 func (rt *RouterTimestamper) WaitForInitialization() {
-	start := time.Now()
-	for {
-		rt.mutex.Lock()
-		initialized := rt.initialized
-		rt.mutex.Unlock()
-		if initialized {
-			return
-		}
-		if time.Since(start) > maxWaitInitialization {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+	select {
+	case <-rt.initChan:
+		// Initialization completed
+	case <-time.After(maxWaitInitialization):
+		// Timeout expired
 	}
 }
 
@@ -184,6 +181,9 @@ func (rt *RouterTimestamper) markInitialized() {
 	defer rt.mutex.Unlock()
 	if !rt.initialized {
 		rt.initialized = true
+		// Close initChan to unblock all goroutines waiting in WaitForInitialization.
+		// Safe to close exactly once since we check !rt.initialized under the mutex.
+		close(rt.initChan)
 	}
 }
 

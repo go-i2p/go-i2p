@@ -321,13 +321,14 @@ type trackedConn struct {
 }
 
 // Close closes the underlying connection and runs the cleanup callback exactly once.
-// The cleanup callback only runs if the underlying connection closes successfully,
-// preventing premature session map removal while the connection is still partially open.
+// The cleanup callback always runs regardless of whether the underlying connection
+// closes successfully, because a failed close still renders the connection unusable
+// and we must not leak session map entries. Without this, failed closes (e.g., "use
+// of closed network connection") would permanently leak entries in the session tracking
+// map, eventually preventing new connections.
 func (tc *trackedConn) Close() error {
 	err := tc.Conn.Close()
-	if err == nil {
-		tc.closeOnce.Do(tc.onClose)
-	}
+	tc.closeOnce.Do(tc.onClose)
 	return err
 }
 
@@ -708,10 +709,15 @@ func classifyDialError(err error) string {
 		return "timeout"
 	case strings.Contains(errStr, "refused"):
 		return "connection_refused"
-	case strings.Contains(errStr, "unreachable"):
-		return "host_unreachable"
+	case strings.Contains(errStr, "network is unreachable"):
+		return "network_unreachable"
 	case strings.Contains(errStr, "no route"):
 		return "no_route"
+	case strings.Contains(errStr, "unreachable"):
+		// Catch-all for other unreachable errors (e.g., "host unreachable",
+		// "no route to host"). Must come after the more specific "network is
+		// unreachable" check above.
+		return "host_unreachable"
 	case strings.Contains(errStr, "handshake"):
 		return "handshake_failed"
 	case strings.Contains(errStr, "context canceled"):

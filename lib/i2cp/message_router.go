@@ -111,10 +111,13 @@ func (mr *MessageRouter) RouteOutboundMessage(
 	}
 
 	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
-	// Report MessageStatusAccepted (not MessageStatusSuccess) because gateway
-	// acceptance does not confirm end-to-end delivery. Per I2CP semantics,
-	// guaranteed success should only be reported after delivery confirmation.
-	notifyStatusCallback(statusCallback, messageID, MessageStatusAccepted, payload)
+	// Report MessageStatusSuccess (best-effort success) once the message has been
+	// encrypted and handed off to the tunnel gateway. Per I2CP specification,
+	// SEND_BEST_EFFORT_SUCCESS (status 4) indicates the message was sent through
+	// the tunnel subsystem. This does not guarantee end-to-end delivery, but
+	// I2CP clients (e.g., i2psnark-standalone) expect this status to track
+	// message progress rather than just ACCEPTED (status 1).
+	notifyStatusCallback(statusCallback, messageID, MessageStatusSuccess, payload)
 
 	return nil
 }
@@ -189,10 +192,14 @@ func (mr *MessageRouter) validateAndSelectTunnel(session *Session, destinationHa
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
-		}).Debug("zero_hop_tunnel_selected")
-		// Zero-hop tunnels are valid in I2P (used for testing and
-		// low-latency configurations). The message will be delivered
-		// directly to the destination without intermediate hops.
+		}).Error("zero_hop_tunnel_rejected")
+		// Zero-hop tunnels are rejected for I2CP client traffic because:
+		// 1. Sending directly to a destination hash bypasses I2P's anonymity model,
+		//    exposing the sender's real IP to the destination.
+		// 2. The destination hash is not a router hash, so transport-level delivery
+		//    would fail anyway since transportSend expects routable router hashes.
+		// This is consistent with lib/netdb/publisher.go which also rejects zero-hop tunnels.
+		return nil, fmt.Errorf("zero-hop tunnels are not supported for I2CP client traffic (session %d): anonymity requires at least one hop", session.ID())
 	}
 
 	log.WithFields(logger.Fields{
@@ -333,8 +340,9 @@ func (mr *MessageRouter) wrapInGarlicMessage(
 	return garlicMsg, nil
 }
 
-// sendThroughGateway sends the garlic message to the tunnel gateway.
-// For zero-hop tunnels, sends directly to the destination.
+// sendThroughGateway sends the garlic message to the tunnel gateway (first hop).
+// Zero-hop tunnels are rejected earlier in validateAndSelectTunnel, so the
+// tunnel is guaranteed to have at least one hop at this point.
 func (mr *MessageRouter) sendThroughGateway(
 	session *Session,
 	selectedTunnel *tunnel.TunnelState,
@@ -345,20 +353,17 @@ func (mr *MessageRouter) sendThroughGateway(
 		return fmt.Errorf("transport send function not initialized for session %d", session.ID())
 	}
 
-	// Zero-hop tunnel: send directly to the destination
-	targetHash := destinationHash
-	if len(selectedTunnel.Hops) > 0 {
-		targetHash = selectedTunnel.Hops[0]
-	}
+	// Always send to the first hop (gateway) of the tunnel.
+	// Zero-hop tunnels are rejected in validateAndSelectTunnel.
+	gatewayHash := selectedTunnel.Hops[0]
 
-	if err := mr.transportSend(targetHash, garlicMsg); err != nil {
+	if err := mr.transportSend(gatewayHash, garlicMsg); err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.MessageRouter.sendThroughGateway",
 			"sessionID":   session.ID(),
 			"tunnelID":    selectedTunnel.ID,
-			"target":      fmt.Sprintf("%x", targetHash[:8]),
+			"gateway":     fmt.Sprintf("%x", gatewayHash[:8]),
 			"destination": fmt.Sprintf("%x", destinationHash[:8]),
-			"zeroHop":     len(selectedTunnel.Hops) == 0,
 			"error":       err,
 		}).Error("failed_to_send_to_gateway")
 		return fmt.Errorf("failed to send message to gateway: %w", err)
@@ -367,16 +372,14 @@ func (mr *MessageRouter) sendThroughGateway(
 }
 
 // logSuccessfulRouting logs successful message routing.
+// The tunnel is guaranteed to have at least one hop (zero-hop tunnels are rejected earlier).
 func (mr *MessageRouter) logSuccessfulRouting(
 	session *Session,
 	selectedTunnel *tunnel.TunnelState,
 	destinationHash common.Hash,
 	payloadSize int,
 ) {
-	gatewayStr := "direct"
-	if len(selectedTunnel.Hops) > 0 {
-		gatewayStr = fmt.Sprintf("%x", selectedTunnel.Hops[0][:8])
-	}
+	gatewayStr := fmt.Sprintf("%x", selectedTunnel.Hops[0][:8])
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.MessageRouter.RouteOutboundMessage",
 		"sessionID":   session.ID(),

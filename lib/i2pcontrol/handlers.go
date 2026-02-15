@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/spf13/viper"
 )
 
 // EchoHandler implements the Echo RPC method.
@@ -525,10 +526,19 @@ func handlePasswordChange(authManager interface{ ChangePassword(string) int }, c
 
 	revokedCount := authManager.ChangePassword(passwordStr)
 
-	// Persist password change to config struct so subsequent Authenticate
-	// calls and any config serialization reflect the new password.
+	// Persist password change to both the in-memory config struct and to disk
+	// via viper so the new password survives router restarts.
 	if cfg != nil {
 		cfg.Password = passwordStr
+	}
+	viper.Set("i2pcontrol.password", passwordStr)
+	if err := viper.WriteConfig(); err != nil {
+		// Non-fatal: the in-memory password is already updated for this session.
+		// Log a warning so the operator knows the change won't survive a restart.
+		log.WithFields(map[string]interface{}{
+			"at":    "handlePasswordChange",
+			"error": err.Error(),
+		}).Warn("password changed in memory but failed to persist to config file")
 	}
 
 	log.WithFields(map[string]interface{}{

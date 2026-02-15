@@ -54,6 +54,13 @@ func (ks *KeyStoreImpl) KeyID() string {
 // computeKeyID generates a deterministic, filesystem-safe key identifier
 func (ks *KeyStoreImpl) computeKeyID() string {
 	if ks.name == "" {
+		// Guard against nil privateKey to prevent panic.
+		// This can happen if a KeyStoreImpl is created without a private key
+		// (e.g., placeholder or partially initialized keystore).
+		if ks.privateKey == nil {
+			log.WithField("at", "computeKeyID").Warn("Both name and privateKey are nil, using safe fallback ID")
+			return "unknown-nil-key"
+		}
 		log.WithField("at", "computeKeyID").Debug("Generating KeyID from public key")
 		public, err := ks.privateKey.Public()
 		if err != nil {

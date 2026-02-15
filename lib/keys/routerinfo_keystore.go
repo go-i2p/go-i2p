@@ -266,8 +266,18 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 		}
 	}
 
+	// Use ks.name for filename derivation (not KeyID()) to stay consistent with
+	// loadOrGenerateKey which also uses ks.name. This prevents a path mismatch
+	// where StoreKeys writes to a KeyID()-derived path but load looks at the
+	// name-derived path.
+	keyName := ks.name
+	if keyName == "" {
+		// Fallback to KeyID() when name is empty (unusual but possible).
+		keyName = ks.KeyID()
+	}
+
 	// Store Ed25519 signing private key
-	sigFilename := filepath.Join(ks.dir, ks.KeyID()+".key")
+	sigFilename := filepath.Join(ks.dir, keyName+".key")
 	log.WithFields(map[string]interface{}{
 		"at":   "StoreKeys",
 		"file": sigFilename,
@@ -281,7 +291,7 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 	// Without this, the router would get a new NTCP2 static key on every
 	// restart, invalidating all peers' cached session data.
 	if ks.encryptionPrivKey != nil {
-		encFilename := filepath.Join(ks.dir, ks.KeyID()+".enc.key")
+		encFilename := filepath.Join(ks.dir, keyName+".enc.key")
 		log.WithFields(map[string]interface{}{
 			"at":   "StoreKeys",
 			"file": encFilename,

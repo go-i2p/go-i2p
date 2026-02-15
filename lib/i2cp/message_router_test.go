@@ -177,6 +177,104 @@ func TestSendThroughTunnelNoHops(t *testing.T) {
 	assert.Contains(t, err.Error(), "tunnel hops required")
 }
 
+// TestRouteOutboundMessageZeroHopTunnelRejected verifies that zero-hop tunnels
+// are rejected for I2CP client traffic to prevent anonymity compromise.
+// This is the fix for the critical bug where zero-hop tunnels sent messages
+// directly to the destination hash, bypassing I2P's anonymity model.
+func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
+	// Create a session with only zero-hop tunnels (no hops)
+	session := createTestSessionWithZeroHopTunnels(t)
+
+	// Create garlic manager and router
+	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
+	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
+	require.NoError(t, err)
+
+	sentMessages := make(map[string]i2np.I2NPMessage)
+	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+		sentMessages[string(peerHash[:])] = msg
+		return nil
+	}
+
+	router := NewMessageRouter(garlicMgr, transportSend)
+
+	// Track status callback invocations
+	var receivedStatus uint8
+	statusCallback := func(messageID uint32, statusCode uint8, messageSize, nonce uint32) {
+		receivedStatus = statusCode
+	}
+
+	// Attempt to route message through zero-hop tunnel
+	destHash := createTestHash()
+	var destPubKey [32]byte
+	copy(destPubKey[:], "dest-public-key-32-bytes-pads")
+	payload := []byte("test message payload")
+
+	err = router.RouteOutboundMessage(session, 42, destHash, destPubKey, payload, 0, statusCallback)
+
+	// Verify the message was rejected
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "zero-hop tunnels are not supported")
+	assert.Contains(t, err.Error(), "anonymity requires at least one hop")
+
+	// Verify no messages were sent through transport (critical: no IP leak)
+	assert.Empty(t, sentMessages, "no messages should be sent through transport for zero-hop tunnels")
+
+	// Verify status callback reported no tunnels
+	assert.Equal(t, uint8(MessageStatusNoTunnels), receivedStatus,
+		"status callback should report MessageStatusNoTunnels for zero-hop tunnel rejection")
+}
+
+// TestValidateAndSelectTunnelZeroHopRejection tests the validateAndSelectTunnel
+// method directly to ensure zero-hop tunnels are consistently rejected.
+func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
+	var privKey [32]byte
+	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
+	require.NoError(t, err)
+
+	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+		return nil
+	}
+
+	router := NewMessageRouter(garlicMgr, transportSend)
+
+	// Create session with zero-hop tunnel
+	session := createTestSessionWithZeroHopTunnels(t)
+	destHash := createTestHash()
+
+	// validateAndSelectTunnel should reject the zero-hop tunnel
+	selectedTunnel, err := router.validateAndSelectTunnel(session, destHash)
+	assert.Error(t, err)
+	assert.Nil(t, selectedTunnel)
+	assert.Contains(t, err.Error(), "zero-hop tunnels are not supported")
+}
+
+func createTestSessionWithZeroHopTunnels(t *testing.T) *Session {
+	config := DefaultSessionConfig()
+	session := &Session{
+		id:        1,
+		config:    config,
+		active:    true,
+		createdAt: time.Now(),
+	}
+
+	selector := &mockPeerSelector{}
+	session.outboundPool = tunnel.NewTunnelPool(selector)
+	session.inboundPool = tunnel.NewTunnelPool(selector)
+
+	// Add a zero-hop tunnel (no hops — this is the dangerous case)
+	zeroHopTunnel := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(9999),
+		Hops:      []common.Hash{}, // Zero hops
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	session.outboundPool.AddTunnel(zeroHopTunnel)
+
+	return session
+}
+
 // Helper functions
 
 func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager, TransportSendFunc, map[string]i2np.I2NPMessage) {

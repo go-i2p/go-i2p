@@ -1759,7 +1759,8 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 }
 
 // persistLeaseSetToFilesystem saves a LeaseSet entry to the filesystem.
-// If the save fails, it removes the entry from the in-memory cache to maintain consistency.
+// If the save fails, the in-memory cache entry is preserved — filesystem persistence
+// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.LeaseSet) error {
 	entry := &Entry{
 		LeaseSet: &ls,
@@ -1768,19 +1769,13 @@ func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.Le
 	fpath := db.SkiplistFileForLeaseSet(key)
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.WithError(err).Error("Failed to open file for saving LeaseSet")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to open file for saving LeaseSet (in-memory entry preserved)")
 		return fmt.Errorf("failed to open LeaseSet file: %w", err)
 	}
 	defer f.Close()
 
 	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Error("Failed to write LeaseSet to filesystem")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to write LeaseSet to filesystem (in-memory entry preserved)")
 		return fmt.Errorf("failed to save LeaseSet to filesystem: %w", err)
 	}
 
@@ -1807,31 +1802,45 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 			close(chnl)
 			return chnl
 		}
-		// Entry exists but is a different type — fall through to file load
-		// which may contain a classic LeaseSet serialization.
-		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet, trying filesystem")
+		// Entry exists but is a different type — the hash is known but it's not
+		// a classic LeaseSet. Return empty to indicate "not found as this type"
+		// rather than falling through to disk where the same non-classic entry
+		// would be incorrectly parsed as a classic LeaseSet.
+		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet")
+		emptyChnl := make(chan lease_set.LeaseSet)
+		close(emptyChnl)
+		return emptyChnl
 	} else {
 		db.lsMutex.RUnlock()
 	}
 
-	// Load from file
-	data, err := db.loadLeaseSetFromFile(hash)
+	// Load from file — check if the on-disk entry is actually a classic LeaseSet
+	// before attempting to parse it, to avoid type confusion with LS2/Encrypted entries.
+	entry, err := db.loadLeaseSetEntryFromFile(db.SkiplistFileForLeaseSet(hash))
 	if err != nil {
-		log.WithError(err).Error("Failed to load LeaseSet from file")
+		log.WithError(err).Debug("Failed to load LeaseSet entry from file")
 		emptyChnl := make(chan lease_set.LeaseSet)
 		close(emptyChnl)
 		return emptyChnl
 	}
 
-	chnl = make(chan lease_set.LeaseSet, 1)
-	ls, err := db.parseAndCacheLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse LeaseSet")
-		close(chnl)
-		return chnl
+	// Only proceed if the on-disk entry is actually a classic LeaseSet.
+	// Other entry types (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet) should
+	// be looked up via their own Get*() methods.
+	if entry.LeaseSet == nil {
+		log.WithField("hash", hash).Debug("On-disk entry is not a classic LeaseSet")
+		emptyChnl := make(chan lease_set.LeaseSet)
+		close(emptyChnl)
+		return emptyChnl
 	}
 
-	chnl <- ls
+	// Cache the classic LeaseSet entry in memory
+	db.lsMutex.Lock()
+	db.LeaseSets[hash] = Entry{LeaseSet: entry.LeaseSet}
+	db.lsMutex.Unlock()
+
+	chnl = make(chan lease_set.LeaseSet, 1)
+	chnl <- *entry.LeaseSet
 	close(chnl)
 	return chnl
 }
@@ -2066,7 +2075,8 @@ func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet
 }
 
 // persistLeaseSet2ToFilesystem saves a LeaseSet2 entry to the filesystem.
-// If the save fails, it removes the entry from the in-memory cache to maintain consistency.
+// If the save fails, the in-memory cache entry is preserved — filesystem persistence
+// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	entry := &Entry{
 		LeaseSet2: &ls2,
@@ -2075,19 +2085,13 @@ func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2
 	fpath := db.SkiplistFileForLeaseSet(key)
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.WithError(err).Error("Failed to open file for saving LeaseSet2")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to open file for saving LeaseSet2 (in-memory entry preserved)")
 		return fmt.Errorf("failed to open LeaseSet2 file: %w", err)
 	}
 	defer f.Close()
 
 	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Error("Failed to write LeaseSet2 to filesystem")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to write LeaseSet2 to filesystem (in-memory entry preserved)")
 		return fmt.Errorf("failed to save LeaseSet2 to filesystem: %w", err)
 	}
 
@@ -2315,7 +2319,8 @@ func (db *StdNetDB) addEncryptedLeaseSetToCache(key common.Hash, els encrypted_l
 }
 
 // persistEncryptedLeaseSetToFilesystem saves an EncryptedLeaseSet entry to the filesystem.
-// If the save fails, it removes the entry from the in-memory cache to maintain consistency.
+// If the save fails, the in-memory cache entry is preserved — filesystem persistence
+// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistEncryptedLeaseSetToFilesystem(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) error {
 	entry := &Entry{
 		EncryptedLeaseSet: &els,
@@ -2324,19 +2329,13 @@ func (db *StdNetDB) persistEncryptedLeaseSetToFilesystem(key common.Hash, els en
 	fpath := db.SkiplistFileForLeaseSet(key)
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.WithError(err).Error("Failed to open file for saving EncryptedLeaseSet")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to open file for saving EncryptedLeaseSet (in-memory entry preserved)")
 		return fmt.Errorf("failed to open EncryptedLeaseSet file: %w", err)
 	}
 	defer f.Close()
 
 	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Error("Failed to write EncryptedLeaseSet to filesystem")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to write EncryptedLeaseSet to filesystem (in-memory entry preserved)")
 		return fmt.Errorf("failed to save EncryptedLeaseSet to filesystem: %w", err)
 	}
 
@@ -2563,7 +2562,8 @@ func (db *StdNetDB) addMetaLeaseSetToCache(key common.Hash, mls meta_leaseset.Me
 }
 
 // persistMetaLeaseSetToFilesystem saves a MetaLeaseSet entry to the filesystem.
-// If the save fails, it removes the entry from the in-memory cache to maintain consistency.
+// If the save fails, the in-memory cache entry is preserved — filesystem persistence
+// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistMetaLeaseSetToFilesystem(key common.Hash, mls meta_leaseset.MetaLeaseSet) error {
 	entry := &Entry{
 		MetaLeaseSet: &mls,
@@ -2572,19 +2572,13 @@ func (db *StdNetDB) persistMetaLeaseSetToFilesystem(key common.Hash, mls meta_le
 	fpath := db.SkiplistFileForLeaseSet(key)
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.WithError(err).Error("Failed to open file for saving MetaLeaseSet")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to open file for saving MetaLeaseSet (in-memory entry preserved)")
 		return fmt.Errorf("failed to open MetaLeaseSet file: %w", err)
 	}
 	defer f.Close()
 
 	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Error("Failed to write MetaLeaseSet to filesystem")
-		db.lsMutex.Lock()
-		delete(db.LeaseSets, key)
-		db.lsMutex.Unlock()
+		log.WithError(err).Warn("Failed to write MetaLeaseSet to filesystem (in-memory entry preserved)")
 		return fmt.Errorf("failed to save MetaLeaseSet to filesystem: %w", err)
 	}
 
