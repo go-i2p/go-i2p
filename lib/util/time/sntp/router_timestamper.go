@@ -559,8 +559,28 @@ func absDuration(d time.Duration) time.Duration {
 	return d
 }
 
+// getLocalCountryCode detects the router's country using the system timezone.
+// This is privacy-safe: it uses only local system configuration (timezone files,
+// environment variables) and makes no network calls. Returns a lowercase ISO
+// 3166-1 alpha-2 country code (e.g. "us", "de") or "" if detection fails.
 func getLocalCountryCode() string {
-	return ""
+	tzName := detectIANATimezone()
+	if tzName == "" {
+		log.Debug("Could not detect IANA timezone for NTP geo-selection")
+		return ""
+	}
+
+	cc := lookupCountryByTimezone(tzName)
+	if cc == "" {
+		log.WithField("timezone", tzName).Debug("No country code mapping for timezone")
+		return ""
+	}
+
+	log.WithFields(map[string]interface{}{
+		"timezone": tzName,
+		"country":  cc,
+	}).Debug("Detected country code for NTP geo-selection")
+	return cc
 }
 
 // GetCurrentTime returns the current time adjusted by the stored NTP offset.
