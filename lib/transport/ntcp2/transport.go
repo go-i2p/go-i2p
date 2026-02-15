@@ -516,10 +516,14 @@ func (t *NTCP2Transport) validateExistingSession(s *NTCP2Session, routerHash dat
 // NTCP2Session using CompareAndSwap to prevent double-promotion races.
 func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
 	promoted := NewNTCP2Session(conn, t.ctx, t.logger)
-	promoted.SetCleanupCallback(func() {
-		t.removeSession(routerHash)
-	})
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		// Set cleanup callback AFTER the CAS succeeds, so only the winning
+		// session's cleanup can affect the session map. If set before CAS,
+		// the losing session's Close() would invoke removeSession() and
+		// delete the winner's entry.
+		promoted.SetCleanupCallback(func() {
+			t.removeSession(routerHash)
+		})
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": fmt.Sprintf("%x", routerHashBytes[:8]),
@@ -527,6 +531,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 		return promoted, true
 	}
 	// Another goroutine won the promotion race — close our duplicate
+	// No cleanup callback is set, so Close() won't affect the session map
 	promoted.Close()
 	if winner, exists := t.sessions.Load(routerHash); exists {
 		if winnerSession, ok := winner.(*NTCP2Session); ok {

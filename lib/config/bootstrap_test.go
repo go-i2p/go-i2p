@@ -100,7 +100,7 @@ func TestBootstrapConfigUpdateRoundTrip(t *testing.T) {
 	}
 	UpdateRouterConfig()
 
-	bootstrap := RouterConfigProperties.Bootstrap
+	bootstrap := routerConfigProperties.Bootstrap
 	if bootstrap == nil {
 		t.Fatal("Bootstrap config should not be nil after UpdateRouterConfig")
 	}

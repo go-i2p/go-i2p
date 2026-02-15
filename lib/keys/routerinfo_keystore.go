@@ -40,6 +40,11 @@ type RouterInfoKeystore struct {
 	keyIDOnce sync.Once
 	// keyIDMutex protects concurrent access to cachedKeyID
 	keyIDMutex sync.RWMutex
+	// cachedPadding stores the identity padding bytes to ensure the router's
+	// identity hash remains stable across ConstructRouterInfo() calls.
+	// Without caching, random padding would be regenerated on every call,
+	// producing a different identity hash each time.
+	cachedPadding []byte
 }
 
 // Ensure RouterInfoKeystore implements KeyStore interface at compile time
@@ -511,19 +516,44 @@ func (ks *RouterInfoKeystore) buildRouterIdentity(publicKey types.PublicKey, cer
 	return routerIdentity, nil
 }
 
-// generateIdentityPaddingFromSizes creates random padding bytes for RouterIdentity structure
+// generateIdentityPaddingFromSizes returns stable padding bytes for RouterIdentity structure.
+// The padding is generated once and cached for the lifetime of the keystore to ensure
+// the router's identity hash remains stable across ConstructRouterInfo() calls.
+// The padding is also persisted to disk so it survives restarts.
 func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKeySize int) ([]byte, error) {
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - (pubKeySize + sigKeySize)
 	if paddingSize < 0 {
 		return nil, oops.Errorf("key sizes exceed KEYS_AND_CERT_DATA_SIZE: pubKeySize=%d + sigKeySize=%d = %d > %d",
 			pubKeySize, sigKeySize, pubKeySize+sigKeySize, keys_and_cert.KEYS_AND_CERT_DATA_SIZE)
 	}
+
+	// Return cached padding if available and correct size
+	if len(ks.cachedPadding) == paddingSize {
+		return ks.cachedPadding, nil
+	}
+
+	// Try to load persisted padding from disk
+	paddingPath := filepath.Join(ks.dir, ks.name+".padding")
+	if paddingData, err := os.ReadFile(paddingPath); err == nil && len(paddingData) == paddingSize {
+		log.WithField("at", "generateIdentityPaddingFromSizes").Debug("Loaded identity padding from disk")
+		ks.cachedPadding = paddingData
+		return ks.cachedPadding, nil
+	}
+
+	// Generate new random padding
 	padding := make([]byte, paddingSize)
 	_, err := rand.Read(padding)
 	if err != nil {
 		return nil, oops.Errorf("failed to generate padding: %w", err)
 	}
-	return padding, nil
+
+	// Persist to disk so the identity hash survives restarts
+	if err := os.WriteFile(paddingPath, padding, 0o600); err != nil {
+		log.WithError(err).Warn("Failed to persist identity padding to disk; identity hash may change on restart")
+	}
+
+	ks.cachedPadding = padding
+	return ks.cachedPadding, nil
 }
 
 // assembleRouterInfo creates the final RouterInfo with all components and standard options

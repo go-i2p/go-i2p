@@ -271,9 +271,11 @@ func TestDatabaseSearchReplyUnmarshalBinary(t *testing.T) {
 		peers := []common.Hash{{9, 10}, {11, 12}}
 
 		original := NewDatabaseSearchReply(key, from, peers)
-		data, err := original.MarshalBinary()
+		// Use MarshalPayload for round-trip with UnmarshalBinary
+		// (MarshalBinary now includes the I2NP header)
+		data, err := original.MarshalPayload()
 		if err != nil {
-			t.Fatalf("MarshalBinary failed: %v", err)
+			t.Fatalf("MarshalPayload failed: %v", err)
 		}
 
 		parsed := &DatabaseSearchReply{}
@@ -325,7 +327,8 @@ func TestReadDatabaseSearchReply(t *testing.T) {
 	peers := []common.Hash{{9, 10}}
 
 	original := NewDatabaseSearchReply(key, from, peers)
-	data, _ := original.MarshalBinary()
+	// ReadDatabaseSearchReply expects payload-only data
+	data, _ := original.MarshalPayload()
 
 	result, err := ReadDatabaseSearchReply(data)
 	if err != nil {

@@ -39,8 +39,10 @@ func InitConfig() error {
 	// Update RouterConfigProperties
 	UpdateRouterConfig()
 
-	// Validate configuration defaults to catch invalid values early
-	if err := Validate(Defaults()); err != nil {
+	// Validate the actual merged configuration (defaults + config file + flags),
+	// not just the hardcoded defaults. This catches invalid user-provided values
+	// at startup rather than allowing them to cause runtime failures.
+	if err := Validate(CurrentConfig()); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
@@ -193,6 +195,107 @@ func NewRouterConfigFromViper() *RouterConfig {
 		MaxBandwidth:   viper.GetUint64("router.max_bandwidth"),
 		MaxConnections: viper.GetInt("router.max_connections"),
 		AcceptTunnels:  viper.GetBool("router.accept_tunnels"),
+	}
+}
+
+// CurrentConfig builds a ConfigDefaults from the current viper settings (which
+// reflect defaults + config file + flags). This is used for validation to catch
+// invalid user-provided values at startup, unlike Defaults() which only returns
+// the hardcoded defaults.
+func CurrentConfig() ConfigDefaults {
+	baseDir := viper.GetString("base_dir")
+	workingDir := viper.GetString("working_dir")
+	return ConfigDefaults{
+		Router: RouterDefaults{
+			BaseDir:                   baseDir,
+			WorkingDir:                workingDir,
+			RouterInfoRefreshInterval: viper.GetDuration("router.routerinfo_refresh_interval"),
+			MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
+			MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
+		},
+		NetDB: NetDBDefaults{
+			Path:                     viper.GetString("netdb.path"),
+			MaxRouterInfos:           viper.GetInt("netdb.max_router_infos"),
+			MaxLeaseSets:             viper.GetInt("netdb.max_lease_sets"),
+			ExpirationCheckInterval:  viper.GetDuration("netdb.expiration_check_interval"),
+			LeaseSetRefreshThreshold: viper.GetDuration("netdb.lease_set_refresh_threshold"),
+			ExplorationInterval:      viper.GetDuration("netdb.exploration_interval"),
+			FloodfillEnabled:         viper.GetBool("netdb.floodfill_enabled"),
+		},
+		Bootstrap: BootstrapDefaults{
+			LowPeerThreshold:    viper.GetInt("bootstrap.low_peer_threshold"),
+			BootstrapType:       viper.GetString("bootstrap.bootstrap_type"),
+			ReseedTimeout:       viper.GetDuration("bootstrap.reseed_timeout"),
+			MinimumReseedPeers:  viper.GetInt("bootstrap.minimum_reseed_peers"),
+			ReseedRetryInterval: viper.GetDuration("bootstrap.reseed_retry_interval"),
+		},
+		I2CP: I2CPDefaults{
+			Enabled:          viper.GetBool("i2cp.enabled"),
+			Address:          viper.GetString("i2cp.address"),
+			Network:          viper.GetString("i2cp.network"),
+			MaxSessions:      viper.GetInt("i2cp.max_sessions"),
+			MessageQueueSize: viper.GetInt("i2cp.message_queue_size"),
+			SessionTimeout:   viper.GetDuration("i2cp.session_timeout"),
+			ReadTimeout:      viper.GetDuration("i2cp.read_timeout"),
+			WriteTimeout:     viper.GetDuration("i2cp.write_timeout"),
+		},
+		I2PControl: I2PControlDefaults{
+			Enabled:         viper.GetBool("i2pcontrol.enabled"),
+			Address:         viper.GetString("i2pcontrol.address"),
+			Password:        viper.GetString("i2pcontrol.password"),
+			UseHTTPS:        viper.GetBool("i2pcontrol.use_https"),
+			CertFile:        viper.GetString("i2pcontrol.cert_file"),
+			KeyFile:         viper.GetString("i2pcontrol.key_file"),
+			TokenExpiration: viper.GetDuration("i2pcontrol.token_expiration"),
+		},
+		Tunnel: TunnelDefaults{
+			MinPoolSize:                viper.GetInt("tunnel.min_pool_size"),
+			MaxPoolSize:                viper.GetInt("tunnel.max_pool_size"),
+			TunnelLength:               viper.GetInt("tunnel.length"),
+			TunnelLifetime:             viper.GetDuration("tunnel.lifetime"),
+			TunnelTestInterval:         viper.GetDuration("tunnel.test_interval"),
+			TunnelTestTimeout:          viper.GetDuration("tunnel.test_timeout"),
+			BuildTimeout:               viper.GetDuration("tunnel.build_timeout"),
+			BuildRetries:               viper.GetInt("tunnel.build_retries"),
+			ReplaceBeforeExpiration:    viper.GetDuration("tunnel.replace_before_expiration"),
+			MaintenanceInterval:        viper.GetDuration("tunnel.maintenance_interval"),
+			MaxParticipatingTunnels:    viper.GetInt("tunnel.max_participating_tunnels"),
+			ParticipatingLimitsEnabled: viper.GetBool("tunnel.participating_limits_enabled"),
+			PerSourceRateLimitEnabled:  viper.GetBool("tunnel.per_source_rate_limit_enabled"),
+			MaxBuildRequestsPerMinute:  viper.GetInt("tunnel.max_build_requests_per_minute"),
+			BuildRequestBurstSize:      viper.GetInt("tunnel.build_request_burst_size"),
+			SourceBanDuration:          viper.GetDuration("tunnel.source_ban_duration"),
+		},
+		Transport: TransportDefaults{
+			NTCP2Enabled:        viper.GetBool("transport.ntcp2_enabled"),
+			NTCP2Port:           viper.GetInt("transport.ntcp2_port"),
+			NTCP2MaxConnections: viper.GetInt("transport.ntcp2_max_connections"),
+			SSU2Enabled:         viper.GetBool("transport.ssu2_enabled"),
+			SSU2Port:            viper.GetInt("transport.ssu2_port"),
+			ConnectionTimeout:   viper.GetDuration("transport.connection_timeout"),
+			IdleTimeout:         viper.GetDuration("transport.idle_timeout"),
+			MaxMessageSize:      viper.GetInt("transport.max_message_size"),
+		},
+		Performance: PerformanceDefaults{
+			MessageQueueSize:          viper.GetInt("performance.message_queue_size"),
+			WorkerPoolSize:            viper.GetInt("performance.worker_pool_size"),
+			GarlicEncryptionCacheSize: viper.GetInt("performance.garlic_encryption_cache_size"),
+			FragmentCacheSize:         viper.GetInt("performance.fragment_cache_size"),
+			CleanupInterval:           viper.GetDuration("performance.cleanup_interval"),
+		},
+		Congestion: CongestionDefaults{
+			DFlagThreshold:               viper.GetFloat64("router.congestion.d_flag_threshold"),
+			EFlagThreshold:               viper.GetFloat64("router.congestion.e_flag_threshold"),
+			GFlagThreshold:               viper.GetFloat64("router.congestion.g_flag_threshold"),
+			ClearDFlagThreshold:          viper.GetFloat64("router.congestion.clear_d_flag_threshold"),
+			ClearEFlagThreshold:          viper.GetFloat64("router.congestion.clear_e_flag_threshold"),
+			ClearGFlagThreshold:          viper.GetFloat64("router.congestion.clear_g_flag_threshold"),
+			AveragingWindow:              viper.GetDuration("router.congestion.averaging_window"),
+			EFlagAgeThreshold:            viper.GetDuration("router.congestion.e_flag_age_threshold"),
+			DFlagCapacityMultiplier:      viper.GetFloat64("router.congestion.d_flag_capacity_multiplier"),
+			EFlagCapacityMultiplier:      viper.GetFloat64("router.congestion.e_flag_capacity_multiplier"),
+			StaleEFlagCapacityMultiplier: viper.GetFloat64("router.congestion.stale_e_flag_capacity_multiplier"),
+		},
 	}
 }
 

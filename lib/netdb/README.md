@@ -51,7 +51,7 @@ StdNetDB is safe for concurrent access:
 
     // Retrieve RouterInfo
     riChan := db.GetRouterInfo(hash)
-    if ri := <-riChan; ri != nil {
+    if ri, ok := <-riChan; ok {
         // Use router info
     }
 

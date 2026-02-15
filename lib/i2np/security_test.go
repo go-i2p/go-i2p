@@ -619,11 +619,18 @@ func TestI2NPMessage_RoundTrip(t *testing.T) {
 
 		original := NewDatabaseStore(key, storeData, DATABASE_STORE_TYPE_ROUTER_INFO)
 
-		data, err := original.MarshalBinary()
+		// MarshalBinary now produces header + payload; verify it includes the header
+		fullData, err := original.MarshalBinary()
+		require.NoError(t, err)
+		assert.True(t, len(fullData) >= 16, "MarshalBinary should include 16-byte I2NP header")
+
+		// UnmarshalBinary expects payload only (header is stripped by I2NP framing layer)
+		// Use MarshalPayload for the round-trip test
+		payloadData, err := original.MarshalPayload()
 		require.NoError(t, err)
 
 		restored := &DatabaseStore{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)}
-		err = restored.UnmarshalBinary(data)
+		err = restored.UnmarshalBinary(payloadData)
 		require.NoError(t, err)
 
 		assert.Equal(t, original.Key, restored.Key)

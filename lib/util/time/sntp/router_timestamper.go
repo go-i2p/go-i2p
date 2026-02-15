@@ -261,15 +261,20 @@ func (rt *RouterTimestamper) run() {
 // calculateSleepDuration determines the appropriate sleep duration based on query results.
 // It adjusts the sleep time based on consecutive failures and synchronization status.
 func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Duration {
+	rt.mutex.Lock()
 	if lastFailed {
 		rt.consecutiveFails++
 		if rt.consecutiveFails >= maxConsecutiveFails {
+			rt.mutex.Unlock()
 			return 30 * time.Minute
 		}
+		rt.mutex.Unlock()
 		return 30 * time.Second
 	}
 
 	rt.consecutiveFails = 0
+	rt.mutex.Unlock()
+
 	randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
 	sleepTime := rt.queryFrequency + randomDelay
 
@@ -335,16 +340,32 @@ func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, 
 	for i := 0; i < rt.concurringServers; i++ {
 		delta, err := rt.performSingleNTPQuery(servers, timeout, preferIPv6)
 		if err != nil {
-			return false
+			// Try another random server instead of aborting the entire query.
+			// A single server failure should not prevent time synchronization
+			// when other servers may be available.
+			retried := false
+			for attempt := 0; attempt < len(servers)-1; attempt++ {
+				delta, err = rt.performSingleNTPQuery(servers, timeout, preferIPv6)
+				if err == nil {
+					retried = true
+					found[i] = delta
+					break
+				}
+			}
+			if !retried {
+				return false
+			}
+		} else {
+			found[i] = delta
 		}
 
-		found[i] = delta
-
 		if i == 0 {
-			// Validate first sample and set sync status, but continue collecting
-			// all concurrent samples for multi-server consensus
-			rt.validateFirstSample(delta)
-			expectedDelta = delta
+			// Validate first sample — if it fails validation (delta too large),
+			// treat it as an unreliable baseline and abort this query cycle.
+			if !rt.validateFirstSample(found[0]) {
+				return false
+			}
+			expectedDelta = found[0]
 		} else {
 			if !rt.validateAdditionalSample(delta, expectedDelta) {
 				return false

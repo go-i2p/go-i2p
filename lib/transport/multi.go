@@ -325,6 +325,16 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 		return nil, err
 	}
 
+	// Ensure the reserved slot is released if we don't return a session.
+	// This prevents permanent counter drift if a transport panics or all
+	// transports fail to produce a session.
+	slotUsed := false
+	defer func() {
+		if !slotUsed {
+			atomic.AddInt32(&tmux.activeSessionCount, -1)
+		}
+	}()
+
 	for i, t := range tmux.trans {
 		if t.Compatible(routerInfo) {
 			s, err = tmux.tryGetSessionFromTransport(t, routerInfo, i)
@@ -332,13 +342,12 @@ func (tmux *TransportMuxer) GetSession(routerInfo router_info.RouterInfo) (s Tra
 				continue
 			}
 			// Slot was already reserved by checkConnectionLimit
+			slotUsed = true
 			return &trackedSession{TransportSession: s, mux: tmux}, err
 		}
 	}
 
-	// No session established — release the reserved slot
-	atomic.AddInt32(&tmux.activeSessionCount, -1)
-
+	// No session established — slot will be released by defer
 	tmux.logNoTransportError(routerInfo)
 	err = ErrNoTransportAvailable
 	return s, err

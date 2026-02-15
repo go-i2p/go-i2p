@@ -93,14 +93,9 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 	}
 }
 
-// MarshalBinary serializes the DatabaseSearchReply message
-func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
-	log.WithFields(logger.Fields{
-		"at":         "DatabaseSearchReply.MarshalBinary",
-		"peer_count": d.Count,
-		"size":       32 + 1 + (d.Count * 32) + 32,
-	}).Debug("Serializing DatabaseSearchReply")
-
+// MarshalPayload serializes only the DatabaseSearchReply-specific payload fields
+// (without the I2NP header). Use MarshalBinary() for a complete I2NP message.
+func (d *DatabaseSearchReply) MarshalPayload() ([]byte, error) {
 	// Calculate size: key(32) + count(1) + peerHashes(count*32) + from(32)
 	size := 32 + 1 + (d.Count * 32) + 32
 	result := make([]byte, size)
@@ -124,6 +119,27 @@ func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
 	copy(result[offset:offset+32], d.From[:])
 
 	return result, nil
+}
+
+// MarshalBinary serializes the DatabaseSearchReply as a complete I2NP message
+// including the 16-byte I2NP header (type, messageID, expiration, size, checksum).
+func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":         "DatabaseSearchReply.MarshalBinary",
+		"peer_count": d.Count,
+	}).Debug("Serializing DatabaseSearchReply")
+
+	// Serialize the type-specific payload
+	payload, err := d.MarshalPayload()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the payload on the base message and delegate to produce the
+	// complete I2NP message with header
+	d.SetData(payload)
+
+	return d.BaseI2NPMessage.MarshalBinary()
 }
 
 // UnmarshalBinary deserializes the DatabaseSearchReply message from binary data.

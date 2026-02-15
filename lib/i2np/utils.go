@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"encoding/binary"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	datalib "github.com/go-i2p/common/data"
@@ -139,8 +140,11 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	messageID := datalib.Integer(dat[1:5])
 	header.MessageID = messageID.Int()
 
-	expiration := datalib.Date(dat[5:9])
-	header.Expiration = expiration.Time()
+	// NTCP2/SSU2 uses a 4-byte expiration in seconds since epoch (not the
+	// 8-byte millisecond Date used in standard I2NP headers). Read as uint32
+	// and convert to time.Time directly.
+	expirationSeconds := binary.BigEndian.Uint32(dat[5:9])
+	header.Expiration = time.Unix(int64(expirationSeconds), 0)
 
 	log.WithFields(logger.Fields{
 		"at":         "i2np.ReadI2NPSecondGenTransportHeader",

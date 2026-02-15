@@ -70,7 +70,7 @@ func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
 	}
 	UpdateRouterConfig()
 
-	netdb := RouterConfigProperties.NetDb
+	netdb := routerConfigProperties.NetDb
 	if netdb == nil {
 		t.Fatal("NetDb config should not be nil after UpdateRouterConfig")
 	}

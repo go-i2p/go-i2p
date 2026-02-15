@@ -866,20 +866,21 @@ func (s *Server) applyWriteDeadline(conn net.Conn) {
 }
 
 // acquireWriteMutex acquires the per-connection write mutex for the session
-// if available. Returns the mutex and whether s.mu.RLock is held.
-// Callers must call releaseWriteMutex when done.
+// if available. Returns the mutex. The RLock is held only briefly to look up
+// the mutex, then released before acquiring the write mutex, so it does not
+// block session management operations during slow network I/O.
 func (s *Server) acquireWriteMutex(sessionPtr **Session) (*sync.Mutex, bool) {
 	if *sessionPtr == nil {
 		return nil, false
 	}
 	s.mu.RLock()
 	writeMu := s.connWriteMu[(*sessionPtr).ID()]
+	s.mu.RUnlock() // Release RLock immediately after map lookup
 	if writeMu == nil {
-		s.mu.RUnlock()
 		return nil, false
 	}
 	writeMu.Lock()
-	return writeMu, true
+	return writeMu, false // RLock is no longer held
 }
 
 // releaseWriteMutex releases the write mutex and the server RLock if held.

@@ -11,10 +11,10 @@ import (
 func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 	// Set up initial config values
 	LockRouterConfigForWrite()
-	RouterConfigProperties.BaseDir = "/test/base"
-	RouterConfigProperties.WorkingDir = "/test/working"
-	RouterConfigProperties.NetDb = &NetDbConfig{Path: "/test/netdb"}
-	RouterConfigProperties.Bootstrap = &BootstrapConfig{
+	routerConfigProperties.BaseDir = "/test/base"
+	routerConfigProperties.WorkingDir = "/test/working"
+	routerConfigProperties.NetDb = &NetDbConfig{Path: "/test/netdb"}
+	routerConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: 10,
 		BootstrapType:    "reseed",
 		ReseedServers: []*ReseedConfig{
@@ -22,11 +22,11 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 		},
 		LocalNetDbPaths: []string{"/path1", "/path2"},
 	}
-	RouterConfigProperties.I2CP = &I2CPConfig{
+	routerConfigProperties.I2CP = &I2CPConfig{
 		Enabled: true,
 		Address: "localhost:7654",
 	}
-	RouterConfigProperties.I2PControl = &I2PControlConfig{
+	routerConfigProperties.I2PControl = &I2PControlConfig{
 		Enabled: true,
 		Address: "localhost:7650",
 	}
@@ -77,13 +77,13 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				LockRouterConfigForWrite()
-				RouterConfigProperties.BaseDir = "/updated/base"
-				RouterConfigProperties.WorkingDir = "/updated/working"
-				if RouterConfigProperties.NetDb != nil {
-					RouterConfigProperties.NetDb.Path = "/updated/netdb"
+				routerConfigProperties.BaseDir = "/updated/base"
+				routerConfigProperties.WorkingDir = "/updated/working"
+				if routerConfigProperties.NetDb != nil {
+					routerConfigProperties.NetDb.Path = "/updated/netdb"
 				}
-				if RouterConfigProperties.Bootstrap != nil {
-					RouterConfigProperties.Bootstrap.LowPeerThreshold = id*100 + j
+				if routerConfigProperties.Bootstrap != nil {
+					routerConfigProperties.Bootstrap.LowPeerThreshold = id*100 + j
 				}
 				UnlockRouterConfigWrite()
 			}
@@ -98,8 +98,8 @@ func TestGetRouterConfigConcurrentAccess(t *testing.T) {
 func TestGetRouterConfigReturnsDeepCopy(t *testing.T) {
 	// Set up initial config
 	LockRouterConfigForWrite()
-	RouterConfigProperties.BaseDir = "/original/base"
-	RouterConfigProperties.Bootstrap = &BootstrapConfig{
+	routerConfigProperties.BaseDir = "/original/base"
+	routerConfigProperties.Bootstrap = &BootstrapConfig{
 		LowPeerThreshold: 5,
 		ReseedServers: []*ReseedConfig{
 			{Url: "https://original.example.com"},
@@ -137,8 +137,8 @@ func TestGetRouterConfigReturnsDeepCopy(t *testing.T) {
 func TestLockRouterConfigForWrite(t *testing.T) {
 	LockRouterConfigForWrite()
 	// Just verify we can modify while holding the lock
-	originalValue := RouterConfigProperties.BaseDir
-	RouterConfigProperties.BaseDir = "/locked/update"
-	RouterConfigProperties.BaseDir = originalValue
+	originalValue := routerConfigProperties.BaseDir
+	routerConfigProperties.BaseDir = "/locked/update"
+	routerConfigProperties.BaseDir = originalValue
 	UnlockRouterConfigWrite()
 }

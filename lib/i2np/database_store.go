@@ -193,22 +193,16 @@ func (d *DatabaseStore) IsLeaseSet2() bool {
 	return d.GetLeaseSetType() == DATABASE_STORE_TYPE_LEASESET2
 }
 
-// MarshalBinary serializes the DatabaseStore message
-func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
-	log.WithFields(logger.Fields{
-		"at":        "MarshalBinary",
-		"data_type": d.StoreType,
-		"data_size": len(d.Data),
-		"key":       d.Key.String(),
-	}).Debug("Marshaling DatabaseStore message")
-
+// MarshalPayload serializes only the DatabaseStore-specific payload fields
+// (without the I2NP header). Use MarshalBinary() for a complete I2NP message.
+func (d *DatabaseStore) MarshalPayload() ([]byte, error) {
 	// Calculate the size: key(32) + type(1) + replyToken(4) + data
 	// If replyToken > 0, add replyTunnelID(4) + replyGateway(32)
 	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
 	baseSize := 32 + 1 + 4 + len(d.Data) // key + type + replyToken + data
 	if hasReply {
 		log.WithFields(logger.Fields{
-			"at": "MarshalBinary",
+			"at": "MarshalPayload",
 		}).Debug("DatabaseStore includes reply token and gateway")
 		baseSize += 4 + 32 // replyTunnelID + replyGateway
 	}
@@ -239,10 +233,37 @@ func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
 	// Data
 	copy(result[offset:], d.Data)
 
+	return result, nil
+}
+
+// MarshalBinary serializes the DatabaseStore as a complete I2NP message including
+// the 16-byte I2NP header (type, messageID, expiration, size, checksum).
+func (d *DatabaseStore) MarshalBinary() ([]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":        "MarshalBinary",
+		"data_type": d.StoreType,
+		"data_size": len(d.Data),
+		"key":       d.Key.String(),
+	}).Debug("Marshaling DatabaseStore message")
+
+	// Serialize the type-specific payload
+	payload, err := d.MarshalPayload()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the payload on the base message and delegate to produce the
+	// complete I2NP message with header
+	d.SetData(payload)
+
+	result, err := d.BaseI2NPMessage.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
 	log.WithFields(logger.Fields{
 		"at":          "MarshalBinary",
 		"result_size": len(result),
-		"has_reply":   hasReply,
 	}).Debug("DatabaseStore marshaled successfully")
 
 	return result, nil

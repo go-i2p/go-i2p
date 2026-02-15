@@ -124,13 +124,17 @@ func DefaultRouterConfig() *RouterConfig {
 // which hold routerConfigMutex. Direct field access is a data race.
 var routerConfigProperties = DefaultRouterConfig()
 
-// RouterConfigProperties is a deprecated exported alias.
-// DEPRECATED: Use GetRouterConfig() for thread-safe read access.
-// Direct reads of this variable race with UpdateRouterConfig(). This alias
-// exists only for backward compatibility and will be removed in a future release.
+// RouterConfigProperties returns the internal router config pointer for backward
+// compatibility. DEPRECATED: Use GetRouterConfig() for thread-safe read access,
+// or UpdateRouterConfig() for writes. Direct mutation of the returned pointer
+// without holding routerConfigMutex is a data race.
 //
-//nolint:revive // deprecated but kept for API compatibility
-var RouterConfigProperties = routerConfigProperties
+//nolint:revive // deprecated but kept for API compatibility; converted from var to func
+func RouterConfigProperties() *RouterConfig {
+	routerConfigMutex.RLock()
+	defer routerConfigMutex.RUnlock()
+	return routerConfigProperties
+}
 
 // routerConfigMutex protects RouterConfigProperties from concurrent access
 // during configuration updates (e.g., SIGHUP reload).

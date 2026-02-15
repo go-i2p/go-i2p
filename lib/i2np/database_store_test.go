@@ -215,9 +215,11 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.store.MarshalBinary()
+			// Use MarshalPayload to get just the type-specific payload
+			// (MarshalBinary now includes the I2NP header)
+			data, err := tt.store.MarshalPayload()
 			if err != nil {
-				t.Fatalf("%s: MarshalBinary() error = %v", tt.description, err)
+				t.Fatalf("%s: MarshalPayload() error = %v", tt.description, err)
 			}
 			if len(data) < tt.expectedMinLen {
 				t.Errorf("%s: serialized length = %d, want >= %d",
