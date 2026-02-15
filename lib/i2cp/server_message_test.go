@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 	"testing"
 	"time"
@@ -39,11 +40,18 @@ func TestHandleSendMessage(t *testing.T) {
 		t.Fatalf("Failed to marshal payload: %v", err)
 	}
 
+	// Prepend 2-byte SessionID prefix to match real wire format.
+	// On the wire, ReadMessage sets msg.Payload to the full payload including
+	// the SessionID prefix. parseSendMessagePayload strips it before parsing.
+	wirePayload := make([]byte, 2+len(payloadBytes))
+	binary.BigEndian.PutUint16(wirePayload[0:2], session.ID())
+	copy(wirePayload[2:], payloadBytes)
+
 	// Create I2CP message
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
 		SessionID: session.ID(),
-		Payload:   payloadBytes,
+		Payload:   wirePayload,
 	}
 
 	// Test without outbound pool (should fail)
@@ -118,11 +126,12 @@ func TestHandleSendMessageInvalidPayload(t *testing.T) {
 	pool := &tunnel.Pool{}
 	session.SetOutboundPool(pool)
 
-	// Create invalid payload (too short)
+	// Create invalid payload (too short — after stripping 2-byte SessionID prefix,
+	// only 8 bytes remain, but ParseSendMessagePayload needs at least 36)
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
 		SessionID: session.ID(),
-		Payload:   make([]byte, 10), // Too short, needs at least 32 bytes
+		Payload:   make([]byte, 10),
 	}
 
 	sessionPtr := session

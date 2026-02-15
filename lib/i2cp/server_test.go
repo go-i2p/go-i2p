@@ -141,9 +141,9 @@ func TestServerCreateSession(t *testing.T) {
 		t.Errorf("SessionID in payload = %d, want %d", payloadSessionID, response.SessionID)
 	}
 
-	// Verify status byte is 0x00 (success)
-	if response.Payload[2] != 0x00 {
-		t.Errorf("SessionStatus status byte = 0x%02x, want 0x00", response.Payload[2])
+	// Verify status byte is 0x01 (Created) per I2CP spec
+	if response.Payload[2] != SessionStatusCreated {
+		t.Errorf("SessionStatus status byte = 0x%02x, want 0x%02x (Created)", response.Payload[2], SessionStatusCreated)
 	}
 
 	// Verify session was created

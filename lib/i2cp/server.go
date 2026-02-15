@@ -1121,10 +1121,11 @@ func (s *Server) rebuildSessionTunnelPools(session *Session) error {
 
 // buildSessionStatusResponse creates a successful SessionStatus message.
 // Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte)
+// Status 1 = Created (session was successfully created)
 func buildSessionStatusResponse(sessionID uint16) *Message {
 	payload := make([]byte, 3)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID) // SessionID
-	payload[2] = 0x00                                   // Success status byte
+	payload[2] = SessionStatusCreated                   // Status: Created (was incorrectly 0x00/Destroyed)
 
 	return &Message{
 		Type:      MessageTypeSessionStatus,
@@ -1179,7 +1180,7 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 	// Status code 0 = Destroyed.
 	payload := make([]byte, 3)
 	binary.BigEndian.PutUint16(payload[0:2], sessionID)
-	payload[2] = 0x00 // Destroyed
+	payload[2] = SessionStatusDestroyed
 	return &Message{
 		Type:      MessageTypeSessionStatus,
 		SessionID: sessionID,
@@ -2253,6 +2254,9 @@ func (s *Server) validateSessionForSending(sessionPtr **Session) (*Session, erro
 }
 
 // parseSendMessagePayload parses the SendMessage payload from the message.
+// Note: msg.Payload includes the 2-byte SessionID prefix (already extracted by
+// ReadMessage into msg.SessionID), so we strip it before parsing the actual
+// SendMessage payload which starts with Destination(32 bytes) + Payload.
 func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendMessagePayload, error) {
 	// i2psnark compatibility: Log SendMessage details before parsing
 	log.WithFields(logger.Fields{
@@ -2261,7 +2265,15 @@ func (s *Server) parseSendMessagePayload(msg *Message, session *Session) (*SendM
 		"payloadSize": len(msg.Payload),
 	}).Debug("parsing_send_message_payload")
 
-	sendMsg, err := ParseSendMessagePayload(msg.Payload)
+	// Strip the 2-byte SessionID prefix from the wire payload.
+	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
+	// from msg.Payload. ParseSendMessagePayload expects: Destination(32) + Payload.
+	if len(msg.Payload) < 2 {
+		return nil, fmt.Errorf("SendMessage payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+	}
+	payloadData := msg.Payload[2:]
+
+	sendMsg, err := ParseSendMessagePayload(payloadData)
 	if err != nil {
 		// i2psnark compatibility: Show payload excerpt on parse failure
 		excerptLen := min(64, len(msg.Payload))
@@ -2366,6 +2378,9 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 }
 
 // parseSendMessageExpiresPayload parses the SendMessageExpires payload from the message.
+// Note: msg.Payload includes the 2-byte SessionID prefix (already extracted by
+// ReadMessage into msg.SessionID), so we strip it before parsing the actual
+// SendMessageExpires payload which starts with Destination(32 bytes) + Payload + Nonce + Expiration.
 func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) (*SendMessageExpiresPayload, error) {
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.Server.parseSendMessageExpiresPayload",
@@ -2373,7 +2388,16 @@ func (s *Server) parseSendMessageExpiresPayload(msg *Message, session *Session) 
 		"payloadSize": len(msg.Payload),
 	}).Debug("parsing_send_message_expires_payload")
 
-	sendMsg, err := ParseSendMessageExpiresPayload(msg.Payload)
+	// Strip the 2-byte SessionID prefix from the wire payload.
+	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
+	// from msg.Payload. ParseSendMessageExpiresPayload expects:
+	// Destination(32) + PayloadLen(4) + Payload + Nonce(4) + Expiration(8).
+	if len(msg.Payload) < 2 {
+		return nil, fmt.Errorf("SendMessageExpires payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+	}
+	payloadData := msg.Payload[2:]
+
+	sendMsg, err := ParseSendMessageExpiresPayload(payloadData)
 	if err != nil {
 		excerptLen := min(64, len(msg.Payload))
 		log.WithFields(logger.Fields{

@@ -69,6 +69,15 @@ const (
 	SessionIDReservedBroadcast = 0xFFFF // Broadcast to all sessions
 )
 
+// SessionStatus status codes per I2CP spec v0.9.67
+const (
+	SessionStatusDestroyed = 0 // Session has been destroyed
+	SessionStatusCreated   = 1 // Session has been created successfully
+	SessionStatusUpdated   = 2 // Session has been updated/reconfigured
+	SessionStatusInvalid   = 3 // Session request was invalid
+	SessionStatusRefused   = 4 // Session request was refused
+)
+
 // Protocol version constants
 const (
 	ProtocolVersionMajor = 0
