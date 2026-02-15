@@ -1660,6 +1660,12 @@ func (db *StdNetDB) storeStandardLeaseSet(key common.Hash, data []byte) error {
 		return err
 	}
 
+	// Verify cryptographic signature before accepting into cache
+	if err := ls.Verify(); err != nil {
+		log.WithError(err).WithField("hash", key).Warn("LeaseSet signature verification failed")
+		return fmt.Errorf("LeaseSet signature verification failed: %w", err)
+	}
+
 	if !db.addLeaseSetToCache(key, ls) {
 		return nil
 	}
@@ -1999,6 +2005,12 @@ func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) 
 		return err
 	}
 
+	// Verify cryptographic signature before accepting into cache
+	if err := ls2.Verify(); err != nil {
+		log.WithError(err).WithField("hash", key).Warn("LeaseSet2 signature verification failed")
+		return fmt.Errorf("LeaseSet2 signature verification failed: %w", err)
+	}
+
 	// Add to memory cache if not already present
 	if !db.addLeaseSet2ToCache(key, ls2) {
 		return nil
@@ -2250,6 +2262,12 @@ func (db *StdNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataTyp
 		return err
 	}
 
+	// Verify cryptographic signature before accepting into cache
+	if err := els.Verify(); err != nil {
+		log.WithError(err).WithField("hash", key).Warn("EncryptedLeaseSet signature verification failed")
+		return fmt.Errorf("EncryptedLeaseSet signature verification failed: %w", err)
+	}
+
 	// Add to memory cache if not already present
 	if !db.addEncryptedLeaseSetToCache(key, els) {
 		return nil
@@ -2497,6 +2515,12 @@ func (db *StdNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byt
 	// Verify hash matches the MetaLeaseSet destination hash
 	if err := verifyMetaLeaseSetHash(key, mls); err != nil {
 		return err
+	}
+
+	// Verify cryptographic signature before accepting into cache
+	if err := mls.Verify(); err != nil {
+		log.WithError(err).WithField("hash", key).Warn("MetaLeaseSet signature verification failed")
+		return fmt.Errorf("MetaLeaseSet signature verification failed: %w", err)
 	}
 
 	// Add to memory cache if not already present
