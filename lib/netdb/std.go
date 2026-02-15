@@ -1796,6 +1796,12 @@ func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet)
 		// (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet). Only return
 		// if this entry actually contains a classic LeaseSet.
 		if ls.LeaseSet != nil {
+			if db.isLeaseSetExpired(hash) {
+				log.WithField("hash", hash).Debug("LeaseSet expired, not serving from cache")
+				emptyChnl := make(chan lease_set.LeaseSet)
+				close(emptyChnl)
+				return emptyChnl
+			}
 			log.Debug("LeaseSet found in memory cache")
 			chnl = make(chan lease_set.LeaseSet, 1)
 			chnl <- *ls.LeaseSet
@@ -2108,6 +2114,12 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
 		db.lsMutex.RUnlock()
+		if db.isLeaseSetExpired(hash) {
+			log.WithField("hash", hash).Debug("LeaseSet2 expired, not serving from cache")
+			emptyChnl := make(chan lease_set2.LeaseSet2)
+			close(emptyChnl)
+			return emptyChnl
+		}
 		log.Debug("LeaseSet2 found in memory cache")
 		chnl = make(chan lease_set2.LeaseSet2, 1)
 		chnl <- *ls.LeaseSet2
@@ -2352,6 +2364,12 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.EncryptedLeaseSet != nil {
 		db.lsMutex.RUnlock()
+		if db.isLeaseSetExpired(hash) {
+			log.WithField("hash", hash).Debug("EncryptedLeaseSet expired, not serving from cache")
+			emptyChnl := make(chan encrypted_leaseset.EncryptedLeaseSet)
+			close(emptyChnl)
+			return emptyChnl
+		}
 		log.Debug("EncryptedLeaseSet found in memory cache")
 		chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
 		chnl <- *ls.EncryptedLeaseSet
@@ -2595,6 +2613,12 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 	db.lsMutex.RLock()
 	if ls, ok := db.LeaseSets[hash]; ok && ls.MetaLeaseSet != nil {
 		db.lsMutex.RUnlock()
+		if db.isLeaseSetExpired(hash) {
+			log.WithField("hash", hash).Debug("MetaLeaseSet expired, not serving from cache")
+			emptyChnl := make(chan meta_leaseset.MetaLeaseSet)
+			close(emptyChnl)
+			return emptyChnl
+		}
 		log.Debug("MetaLeaseSet found in memory cache")
 		chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
 		chnl <- *ls.MetaLeaseSet
@@ -2701,6 +2725,19 @@ func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
 // ======================================================================
 // LeaseSet Expiration Tracking and Cleanup
 // ======================================================================
+
+// isLeaseSetExpired checks if the LeaseSet identified by hash has expired
+// according to the tracked expiration time. Returns true if expired, false
+// if not expired or no expiration is tracked.
+func (db *StdNetDB) isLeaseSetExpired(hash common.Hash) bool {
+	db.expiryMutex.RLock()
+	expiry, ok := db.leaseSetExpiry[hash]
+	db.expiryMutex.RUnlock()
+	if !ok {
+		return false // no expiry tracked, assume valid
+	}
+	return time.Now().After(expiry)
+}
 
 // trackLeaseSetExpiration extracts the expiration time from a LeaseSet and records it.
 // Uses the NewestExpiration() method to find the latest expiration time among all leases.

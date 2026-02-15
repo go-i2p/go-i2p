@@ -466,19 +466,40 @@ func (p *Publisher) sendDatabaseStoreToFloodfill(hash common.Hash, data []byte, 
 }
 
 // selectAndValidateTunnel selects an active outbound tunnel and validates it has hops.
+// Retries up to 3 times with a short delay to handle transient tunnel unavailability
+// during startup when tunnels are still being built.
 // Returns the selected tunnel, gateway hash, and any error encountered.
 func (p *Publisher) selectAndValidateTunnel() (*tunnel.TunnelState, common.Hash, error) {
-	selectedTunnel := p.pool.SelectTunnel()
-	if selectedTunnel == nil {
-		return nil, common.Hash{}, fmt.Errorf("no active outbound tunnels available")
-	}
+	const maxRetries = 3
+	const retryDelay = 2 * time.Second
 
-	if len(selectedTunnel.Hops) == 0 {
-		return nil, common.Hash{}, fmt.Errorf("tunnel has no hops")
-	}
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		selectedTunnel := p.pool.SelectTunnel()
+		if selectedTunnel == nil {
+			lastErr = fmt.Errorf("no active outbound tunnels available")
+			if attempt < maxRetries-1 {
+				log.WithField("attempt", attempt+1).Debug("No outbound tunnels available, retrying after delay")
+				time.Sleep(retryDelay)
+				continue
+			}
+			break
+		}
 
-	gatewayHash := selectedTunnel.Hops[0]
-	return selectedTunnel, gatewayHash, nil
+		if len(selectedTunnel.Hops) == 0 {
+			lastErr = fmt.Errorf("tunnel has no hops")
+			if attempt < maxRetries-1 {
+				log.WithField("attempt", attempt+1).Debug("Selected tunnel has no hops, retrying")
+				time.Sleep(retryDelay)
+				continue
+			}
+			break
+		}
+
+		gatewayHash := selectedTunnel.Hops[0]
+		return selectedTunnel, gatewayHash, nil
+	}
+	return nil, common.Hash{}, lastErr
 }
 
 // createTunnelGatewayMessage creates a TunnelGateway message containing a DatabaseStore

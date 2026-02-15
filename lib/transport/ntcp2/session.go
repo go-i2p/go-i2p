@@ -266,9 +266,25 @@ func (s *NTCP2Session) sendWorker() {
 		select {
 		case msg := <-s.sendQueue:
 			if !s.processSendQueueMessage(msg) {
+				s.discardRemainingMessages()
 				return
 			}
 		case <-s.ctx.Done():
+			s.discardRemainingMessages()
+			return
+		}
+	}
+}
+
+// discardRemainingMessages drains and discards any messages left in the send queue
+// after the worker decides to stop. This ensures sendQueueSize reaches zero so
+// drainSendQueue does not spin waiting for a defunct worker.
+func (s *NTCP2Session) discardRemainingMessages() {
+	for {
+		select {
+		case <-s.sendQueue:
+			atomic.AddInt32(&s.sendQueueSize, -1)
+		default:
 			return
 		}
 	}

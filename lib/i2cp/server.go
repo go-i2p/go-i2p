@@ -373,14 +373,19 @@ func (s *Server) cleanupIdleSessions() {
 				"timeout":   s.config.SessionTimeout,
 			}).Info("closing_idle_session")
 
-			// Remove from server's session tracking first
+			// Attempt to claim ownership of cleanup by removing from map.
+			// If the key is already gone, cleanupSessionConnection already handled it.
 			s.mu.Lock()
+			_, owned := s.sessionConns[sessionID]
 			delete(s.sessionConns, sessionID)
 			delete(s.connWriteMu, sessionID)
 			s.mu.Unlock()
 
-			// Destroy via manager (Stop + remove from map).
-			// Tolerate "not found" if cleanupSessionConnection already ran.
+			if !owned {
+				continue
+			}
+
+			// We own the cleanup — destroy via manager.
 			if err := s.manager.DestroySession(sessionID); err != nil {
 				log.WithFields(logger.Fields{
 					"at":        "i2cp.Server.cleanupIdleSessions",
@@ -476,27 +481,36 @@ func (s *Server) logClientConnected(conn net.Conn) {
 
 // cleanupSessionConnection removes the session connection mapping on disconnect
 // and properly destroys the session to release all associated resources.
-// Tolerates the case where the session was already destroyed by cleanupIdleSessions.
+// Uses delete-from-map as a coordination mechanism with cleanupIdleSessions:
+// only the path that successfully removes the session from the map proceeds
+// with DestroySession, preventing double-cleanup races.
 func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	if *sessionPtr != nil {
 		session := *sessionPtr
 		sessionID := session.ID()
 
-		// Remove connection mappings first
+		// Attempt to claim ownership of cleanup by removing from map.
+		// If the key is already gone, cleanupIdleSessions already handled it.
 		s.mu.Lock()
+		_, owned := s.sessionConns[sessionID]
 		delete(s.sessionConns, sessionID)
 		delete(s.connWriteMu, sessionID)
 		s.mu.Unlock()
 
-		// Destroy the session via the manager, which calls session.Stop()
-		// to release tunnel pools, goroutines, channels, and other resources.
-		// If the session was already destroyed by cleanupIdleSessions, this
-		// is a no-op that returns an error we can safely ignore.
+		if !owned {
+			log.WithFields(logger.Fields{
+				"at":        "i2cp.Server.cleanupSessionConnection",
+				"sessionID": sessionID,
+			}).Debug("session already cleaned up by idle cleanup, skipping")
+			return
+		}
+
+		// We own the cleanup — destroy the session.
 		if err := s.manager.DestroySession(sessionID); err != nil {
 			log.WithFields(logger.Fields{
 				"at":        "i2cp.Server.cleanupSessionConnection",
 				"sessionID": sessionID,
-			}).Debug("session already destroyed (likely by idle cleanup)")
+			}).Debug("session already destroyed")
 		}
 
 		log.WithFields(logger.Fields{

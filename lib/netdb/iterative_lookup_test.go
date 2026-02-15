@@ -404,9 +404,9 @@ func TestProcessDatabaseSearchReplyResponse_ReturnsSuggestions(t *testing.T) {
 	peerHashes := []common.Hash{{9, 10, 11}, {12, 13, 14}}
 
 	searchReply := i2np.NewDatabaseSearchReply(targetHash, fromHash, peerHashes)
-	data, err := searchReply.MarshalBinary()
+	data, err := searchReply.MarshalPayload()
 	if err != nil {
-		t.Fatalf("Failed to marshal search reply: %v", err)
+		t.Fatalf("Failed to marshal search reply payload: %v", err)
 	}
 
 	ri, err := resolver.processDatabaseSearchReplyResponse(data, targetHash)
