@@ -89,6 +89,17 @@ type SessionConfig struct {
 	OutboundTunnelCount  int           // Number of outbound tunnels (default: 5)
 	TunnelLifetime       time.Duration // Tunnel lifetime before rotation (default: 10 minutes)
 
+	// Backup tunnel parameters (per I2CP spec)
+	InboundBackupQuantity  int // Extra standby inbound tunnels (default: 0)
+	OutboundBackupQuantity int // Extra standby outbound tunnels (default: 0)
+
+	// Tunnel length variance (per I2CP spec)
+	// When non-zero, the actual tunnel length is randomized within
+	// [length - |variance|, length + |variance|] (clamped to [0, 7]).
+	// A negative variance means "subtract only" (shorter tunnels only).
+	InboundLengthVariance  int // Variance for inbound tunnel length (default: 0)
+	OutboundLengthVariance int // Variance for outbound tunnel length (default: 0)
+
 	// Network parameters
 	MessageTimeout time.Duration // Message delivery timeout (default: 60 seconds)
 
@@ -96,6 +107,13 @@ type SessionConfig struct {
 	MessageQueueSize     int // Incoming message queue buffer size (default: 100)
 	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
 	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
+
+	// Message delivery semantics (per I2CP spec)
+	// Supported values: "BestEffort" (default), "Guaranteed", "None"
+	MessageReliability string // Message reliability mode (default: "BestEffort")
+
+	// LeaseSet configuration
+	DontPublishLeaseSet bool // If true, the LeaseSet is created but not published to the NetDB (default: false)
 
 	// EncryptedLeaseSet configuration (requires Ed25519 destination)
 	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
@@ -119,19 +137,25 @@ type SessionConfig struct {
 // DefaultSessionConfig returns a SessionConfig with sensible defaults
 func DefaultSessionConfig() *SessionConfig {
 	return &SessionConfig{
-		InboundTunnelLength:  3,
-		OutboundTunnelLength: 3,
-		InboundTunnelCount:   5,
-		OutboundTunnelCount:  5,
-		TunnelLifetime:       10 * time.Minute,
-		MessageTimeout:       60 * time.Second,
-		MessageQueueSize:     100,
-		MessageRateLimit:     100, // 100 messages/second
-		MessageRateBurstSize: 200, // Allow bursts up to 200 messages
-		UseEncryptedLeaseSet: false,
-		BlindingSecret:       nil,
-		LeaseSetExpiration:   600, // 10 minutes
-		Nickname:             "",
+		InboundTunnelLength:    3,
+		OutboundTunnelLength:   3,
+		InboundTunnelCount:     5,
+		OutboundTunnelCount:    5,
+		InboundBackupQuantity:  0,
+		OutboundBackupQuantity: 0,
+		InboundLengthVariance:  0,
+		OutboundLengthVariance: 0,
+		TunnelLifetime:         10 * time.Minute,
+		MessageTimeout:         60 * time.Second,
+		MessageQueueSize:       100,
+		MessageRateLimit:       100, // 100 messages/second
+		MessageRateBurstSize:   200, // Allow bursts up to 200 messages
+		MessageReliability:     "BestEffort",
+		DontPublishLeaseSet:    false,
+		UseEncryptedLeaseSet:   false,
+		BlindingSecret:         nil,
+		LeaseSetExpiration:     600, // 10 minutes
+		Nickname:               "",
 	}
 }
 
@@ -1388,6 +1412,7 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 	// Read config under lock to avoid data race with Reconfigure
 	s.mu.RLock()
 	useEncrypted := s.config.UseEncryptedLeaseSet
+	dontPublish := s.config.DontPublishLeaseSet
 	s.mu.RUnlock()
 
 	// Choose LeaseSet type based on configuration
@@ -1404,6 +1429,18 @@ func (s *Session) regenerateAndPublishLeaseSet() error {
 	}
 
 	s.logLeaseSetRegenerated(leaseSetBytes)
+
+	// Honor i2cp.dontPublishLeaseSet: create the LeaseSet but skip
+	// network publication. This is used for services that want to
+	// receive connections only from peers they've given the LeaseSet
+	// directly (out-of-band), or for testing.
+	if dontPublish {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Session.regenerateAndPublishLeaseSet",
+			"sessionID": s.ID(),
+		}).Debug("skipping_leaseset_publication_dontPublishLeaseSet_is_set")
+		return nil
+	}
 
 	// Publish to network database if publisher is configured
 	if err := s.publishLeaseSetToNetwork(leaseSetBytes); err != nil {

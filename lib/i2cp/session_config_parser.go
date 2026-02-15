@@ -321,17 +321,28 @@ func applyQuantityOption(config *SessionConfig, options map[string]string, key s
 }
 
 // logUnsupportedBackupQuantities logs and records backup quantity options that are
-// not yet implemented in the SessionConfig.
+// parsed into SessionConfig fields but not yet consumed by the tunnel pool manager.
 func logUnsupportedBackupQuantities(config *SessionConfig, options map[string]string) {
-	for _, key := range []string{"inbound.backupQuantity", "outbound.backupQuantity"} {
-		if val, exists := options[key]; exists {
+	if val, exists := options["inbound.backupQuantity"]; exists {
+		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 0 && quantity <= 16 {
+			config.InboundBackupQuantity = quantity
+			markExplicitlySet(config, "InboundBackupQuantity")
 			log.WithFields(logger.Fields{
 				"at":     "i2cp.applyTunnelQuantityOptions",
-				"option": key,
-				"value":  val,
-				"status": "unsupported",
-			}).Warn("backup tunnel quantity option not implemented - value ignored")
-			recordUnsupportedOption(config, key, val)
+				"option": "inbound.backupQuantity",
+				"value":  quantity,
+			}).Debug("applied_inbound_backup_quantity")
+		}
+	}
+	if val, exists := options["outbound.backupQuantity"]; exists {
+		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 0 && quantity <= 16 {
+			config.OutboundBackupQuantity = quantity
+			markExplicitlySet(config, "OutboundBackupQuantity")
+			log.WithFields(logger.Fields{
+				"at":     "i2cp.applyTunnelQuantityOptions",
+				"option": "outbound.backupQuantity",
+				"value":  quantity,
+			}).Debug("applied_outbound_backup_quantity")
 		}
 	}
 }
