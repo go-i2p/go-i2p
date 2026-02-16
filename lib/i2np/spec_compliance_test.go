@@ -1803,11 +1803,10 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	innerData, err := innerMsg.MarshalBinary()
 	require.NoError(t, err)
 
-	// Certificate NULL = certificate.NewCertificate().Bytes() length
-	cert := certificate.NewCertificate()
-	certLen := len(cert.Bytes())
+	// Certificate NULL per I2P spec = type(1) + length(2) = 3 bytes
+	const certLen = 3
 
-	// Expected: DI(1) + I2NP(len) + CloveID(4) + Exp(8) + Cert(certLen)
+	// Expected: DI(1) + I2NP(len) + CloveID(4) + Exp(8) + Cert(3)
 	expectedLen := 1 + len(innerData) + 4 + 8 + certLen
 	assert.Equal(t, expectedLen, len(data),
 		"clove size must be DI(1) + I2NP(%d) + CloveID(4) + Exp(8) + Cert(%d) = %d",
@@ -1824,12 +1823,11 @@ func TestGarlic_CloveFormat_SerializationLayout(t *testing.T) {
 	assert.Equal(t, uint64(1704067200000), expMs,
 		"Expiration must be milliseconds since epoch at correct offset")
 
-	// Certificate at end (certLen bytes, NULL = all zeros)
+	// Certificate at end (3 bytes, NULL = all zeros per I2P spec)
 	certStart := offset + 12
-	for i := 0; i < certLen; i++ {
-		assert.Equal(t, byte(0), data[certStart+i],
-			"certificate byte %d must be 0 (NULL)", i)
-	}
+	assert.Equal(t, byte(0), data[certStart], "certificate type must be 0 (NULL)")
+	assert.Equal(t, byte(0), data[certStart+1], "certificate length high byte must be 0")
+	assert.Equal(t, byte(0), data[certStart+2], "certificate length low byte must be 0")
 }
 
 // TestGarlic_CloveFormat_DeliveryInstructionSizes verifies the typical
@@ -1858,17 +1856,17 @@ func TestGarlic_CloveFormat_DeliveryInstructionSizes(t *testing.T) {
 }
 
 // TestGarlic_CloveFormat_CertificateAlwaysNULL verifies that garlic clove
-// certificates are always NULL in the current implementation (3 bytes, all zeros).
+// certificates are always NULL in the current implementation.
+// Per I2P spec: NULL certificate = type(1 byte, 0x00) + length(2 bytes, 0x0000) = 3 bytes.
+// Note: certificate.NewCertificate().Bytes() returns only 2 bytes, so garlic
+// serializers write an explicit 3-byte {0x00, 0x00, 0x00} to match the spec.
 func TestGarlic_CloveFormat_CertificateAlwaysNULL(t *testing.T) {
-	cert := certificate.NewCertificate()
-	certBytes := cert.Bytes()
-
-	// NULL certificate: type(1 byte) + length (1+ bytes), all zeros
-	assert.True(t, len(certBytes) >= 2,
-		"NULL certificate must be at least 2 bytes (type + length)")
-	for i, b := range certBytes {
-		assert.Equal(t, byte(0), b, "certificate byte %d must be 0 (NULL)", i)
-	}
+	// The spec-correct NULL certificate is 3 bytes: type(0) + length(0,0)
+	nullCert := []byte{0x00, 0x00, 0x00}
+	assert.Equal(t, 3, len(nullCert), "NULL certificate must be exactly 3 bytes per I2P spec")
+	assert.Equal(t, byte(0), nullCert[0], "certificate type must be 0")
+	assert.Equal(t, byte(0), nullCert[1], "certificate length high byte must be 0")
+	assert.Equal(t, byte(0), nullCert[2], "certificate length low byte must be 0")
 }
 
 // TestGarlic_CloveFormat_GarlicWireFormat verifies the complete garlic message
@@ -1889,36 +1887,26 @@ func TestGarlic_CloveFormat_GarlicWireFormat(t *testing.T) {
 	// First byte: clove count
 	assert.Equal(t, byte(1), payload[0], "first byte must be clove count")
 
-	// Determine certificate size
-	cert := certificate.NewCertificate()
-	certLen := len(cert.Bytes())
-
-	// Last (certLen+12) bytes: certificate(certLen) + messageID(4) + expiration(8)
-	trailerSize := certLen + 4 + 8
-	trailerStart := len(payload) - trailerSize
+	// Last 15 bytes: certificate(3) + messageID(4) + expiration(8)
+	trailerStart := len(payload) - 15
 	require.True(t, trailerStart > 1, "payload must have room for trailer")
 
-	// Certificate (certLen bytes NULL)
-	for i := 0; i < certLen; i++ {
-		assert.Equal(t, byte(0), payload[trailerStart+i],
-			"garlic certificate byte %d must be 0", i)
-	}
+	// Certificate (3 bytes NULL per I2P spec)
+	assert.Equal(t, byte(0), payload[trailerStart], "garlic certificate type = 0")
+	assert.Equal(t, byte(0), payload[trailerStart+1], "garlic certificate len high = 0")
+	assert.Equal(t, byte(0), payload[trailerStart+2], "garlic certificate len low = 0")
 
 	// Message ID (4 bytes)
-	msgID := binary.BigEndian.Uint32(payload[trailerStart+certLen : trailerStart+certLen+4])
+	msgID := binary.BigEndian.Uint32(payload[trailerStart+3 : trailerStart+7])
 	assert.Equal(t, uint32(0x12345678), msgID, "garlic message ID must match")
 
 	// Expiration (8 bytes)
-	expMs := binary.BigEndian.Uint64(payload[trailerStart+certLen+4 : trailerStart+certLen+12])
+	expMs := binary.BigEndian.Uint64(payload[trailerStart+7 : trailerStart+15])
 	assert.Equal(t, uint64(1704067200000), expMs, "garlic expiration must match")
 }
 
-// TestGarlic_CloveFormat_Roundtrip documents that garlic serialize→deserialize
-// currently fails even for a single clove. The root cause is a certificate size
-// mismatch: serializeGarlic/serializeGarlicClove write certificate.Bytes() (2 bytes
-// for NULL cert), but parseGarlicMetadata and parseCloveMetadata both hardcode 3 bytes.
-// BUG: This 1-byte offset drift causes "insufficient data for garlic trailer" errors.
-// See also: TestGarlic_CloveFormat_MultiCloveOffsetBug for multi-clove failure.
+// TestGarlic_CloveFormat_Roundtrip verifies that a garlic message with
+// a single clove survives a serialize→deserialize cycle.
 func TestGarlic_CloveFormat_Roundtrip(t *testing.T) {
 	fixedExp := time.UnixMilli(1704067200000)
 	builder := NewGarlicBuilder(42, fixedExp)
@@ -1933,23 +1921,19 @@ func TestGarlic_CloveFormat_Roundtrip(t *testing.T) {
 	payload, err := builder.BuildAndSerialize()
 	require.NoError(t, err)
 
-	// Verify the serialized format is internally consistent
 	assert.Equal(t, byte(1), payload[0], "first byte must be clove count")
 
-	// Deserialization currently fails due to certificate size mismatch:
-	// serializer writes cert.Bytes() = 2 bytes (type + empty length),
-	// but the deserializer (parseGarlicMetadata, parseCloveMetadata) hardcodes
-	// 3 bytes for certificate, causing a 1-byte offset drift per clove + garlic trailer.
-	_, err = DeserializeGarlic(payload, 0)
-	assert.Error(t, err,
-		"BUG: garlic deserialization fails due to cert size mismatch (serialized=2, deserialized=3)")
+	garlic, err := DeserializeGarlic(payload, 0)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, garlic.Count, "clove count must be preserved")
+	assert.Equal(t, 1, len(garlic.Cloves), "must have 1 clove")
+	assert.Equal(t, 42, garlic.MessageID, "garlic messageID must be preserved")
 }
 
-// TestGarlic_CloveFormat_MultiCloveOffsetBug documents a serialization/deserialization
-// asymmetry: serializeGarlicClove writes certificate.Bytes() (2 bytes for NULL cert),
-// but deserializeGarlicClove at line 696 advances offset by `4+8+3` (hardcoded 3 for cert).
-// This 1-byte drift per clove causes checksum failures when deserializing multi-clove garlic.
-func TestGarlic_CloveFormat_MultiCloveOffsetBug(t *testing.T) {
+// TestGarlic_CloveFormat_MultiCloveRoundtrip verifies that a garlic message with
+// multiple cloves survives a serialize→deserialize cycle.
+func TestGarlic_CloveFormat_MultiCloveRoundtrip(t *testing.T) {
 	fixedExp := time.UnixMilli(1704067200000)
 	builder := NewGarlicBuilder(42, fixedExp)
 
@@ -1969,13 +1953,12 @@ func TestGarlic_CloveFormat_MultiCloveOffsetBug(t *testing.T) {
 	payload, err := builder.BuildAndSerialize()
 	require.NoError(t, err)
 
-	// Deserialization of a 2-clove garlic currently fails due to the certificate
-	// size mismatch between serialization (2 bytes) and deserialization (3 bytes).
-	// The clove certificate is written as certificate.Bytes() = 2 bytes (type + empty length),
-	// but parseCloveMetadata and the offset increment both assume 3 bytes.
-	_, err = DeserializeGarlic(payload, 0)
-	assert.Error(t, err,
-		"BUG: multi-clove garlic deserialization fails due to cert size mismatch (ser=2, deser=3)")
+	garlic, err := DeserializeGarlic(payload, 0)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, garlic.Count, "clove count must be preserved")
+	assert.Equal(t, 2, len(garlic.Cloves), "must have 2 cloves")
+	assert.Equal(t, 42, garlic.MessageID, "garlic messageID must be preserved")
 }
 
 // TestGarlic_CloveFormat_MaxCloves255 verifies the clove count is a single

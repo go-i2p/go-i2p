@@ -312,8 +312,11 @@ func serializeGarlic(garlic *Garlic) ([]byte, error) {
 	}
 
 	// Write certificate (3 bytes - always NULL)
-	certBytes := garlic.Certificate.Bytes()
-	buf = append(buf, certBytes...)
+	// I2P spec: certificate = type(1 byte) + length(2 bytes big-endian)
+	// NULL cert: type=0x00, length=0x0000 → 3 bytes total
+	// Note: certificate.Bytes() returns only 2 bytes (type + 1-byte length),
+	// but the spec and our deserializer (parseGarlicMetadata) expect 3 bytes.
+	buf = append(buf, 0x00, 0x00, 0x00)
 
 	// Write message ID (4 bytes, big-endian)
 	msgIDBytes := make([]byte, 4)
@@ -381,8 +384,9 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	buf = append(buf, expirationBytes...)
 
 	// Write certificate (3 bytes - always NULL)
-	certBytes := clove.Certificate.Bytes()
-	buf = append(buf, certBytes...)
+	// I2P spec: certificate = type(1 byte) + length(2 bytes big-endian)
+	// NULL cert: type=0x00, length=0x0000 → 3 bytes total
+	buf = append(buf, 0x00, 0x00, 0x00)
 
 	return buf, nil
 }
