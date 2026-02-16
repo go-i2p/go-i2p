@@ -9,6 +9,7 @@ package i2np
 // Spec reference: https://geti2p.net/spec/i2np (version 0.9.66+)
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/common/session_tag"
 	"github.com/go-i2p/crypto/ratchet"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1976,4 +1978,467 @@ func TestGarlic_CloveFormat_MaxCloves255(t *testing.T) {
 
 	_, err := builder.Build()
 	assert.Error(t, err, "more than 255 cloves must be rejected")
+}
+
+// =============================================================================
+// Audit Item: Delivery instruction types
+// Local (0), Destination (1), Router (2), Tunnel (3)
+//
+// Spec reference: https://geti2p.net/spec/i2np (Garlic Clove Delivery Instructions)
+//
+// flag byte bit layout: 76543210
+//   bit 7:   encrypted (always 0)
+//   bits 6-5: delivery type  0=LOCAL, 1=DESTINATION, 2=ROUTER, 3=TUNNEL
+//   bit 4:   delay included (always 0)
+//   bits 3-0: reserved (0)
+// =============================================================================
+
+// TestGarlic_DeliveryInstructions_FlagBitEncoding verifies that the delivery
+// type is encoded in bits 6-5 of the flag byte, matching the I2P spec:
+//
+//	LOCAL=0x00, DESTINATION=0x20, ROUTER=0x40, TUNNEL=0x60
+func TestGarlic_DeliveryInstructions_FlagBitEncoding(t *testing.T) {
+	tests := []struct {
+		name         string
+		di           GarlicCloveDeliveryInstructions
+		expectedFlag byte
+		expectedType byte // bits 6-5 >> 5
+	}{
+		{"LOCAL", NewLocalDeliveryInstructions(), 0x00, 0x00},
+		{"DESTINATION", NewDestinationDeliveryInstructions(common.Hash{}), 0x20, 0x01},
+		{"ROUTER", NewRouterDeliveryInstructions(common.Hash{}), 0x40, 0x02},
+		{"TUNNEL", NewTunnelDeliveryInstructions(common.Hash{}, 0), 0x60, 0x03},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Verify the raw flag value
+			assert.Equal(t, tc.expectedFlag, tc.di.Flag,
+				"flag byte must be 0x%02x for %s delivery", tc.expectedFlag, tc.name)
+
+			// Verify delivery type extracted from bits 6-5
+			deliveryType := extractDeliveryType(tc.di.Flag)
+			assert.Equal(t, tc.expectedType, deliveryType,
+				"bits 6-5 must encode delivery type %d for %s", tc.expectedType, tc.name)
+
+			// Verify reserved bits 3-0 are zero
+			assert.Equal(t, byte(0), tc.di.Flag&0x0F,
+				"reserved bits 3-0 must be zero for %s", tc.name)
+
+			// Verify encryption bit 7 is zero
+			assert.Equal(t, byte(0), tc.di.Flag&0x80,
+				"encryption bit 7 must be zero for %s", tc.name)
+
+			// Verify delay bit 4 is zero
+			assert.Equal(t, byte(0), tc.di.Flag&0x10,
+				"delay bit 4 must be zero for %s", tc.name)
+		})
+	}
+}
+
+// TestGarlic_DeliveryInstructions_LocalWireFormat verifies LOCAL delivery
+// instructions serialize to exactly 1 byte (flag only, no hash, no tunnel ID).
+func TestGarlic_DeliveryInstructions_LocalWireFormat(t *testing.T) {
+	di := NewLocalDeliveryInstructions()
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, len(data), "LOCAL delivery must be exactly 1 byte")
+	assert.Equal(t, byte(0x00), data[0], "LOCAL flag must be 0x00")
+}
+
+// TestGarlic_DeliveryInstructions_DestinationWireFormat verifies DESTINATION
+// delivery instructions: flag(1) + hash(32) = 33 bytes.
+func TestGarlic_DeliveryInstructions_DestinationWireFormat(t *testing.T) {
+	var destHash common.Hash
+	for i := 0; i < 32; i++ {
+		destHash[i] = byte(0xAA + i)
+	}
+	di := NewDestinationDeliveryInstructions(destHash)
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 33, len(data), "DESTINATION delivery must be 33 bytes")
+	assert.Equal(t, byte(0x20), data[0], "DESTINATION flag must be 0x20")
+
+	// Verify the 32-byte destination hash follows immediately after the flag
+	assert.True(t, bytes.Equal(destHash[:], data[1:33]),
+		"destination hash must follow flag byte")
+}
+
+// TestGarlic_DeliveryInstructions_RouterWireFormat verifies ROUTER delivery
+// instructions: flag(1) + hash(32) = 33 bytes.
+func TestGarlic_DeliveryInstructions_RouterWireFormat(t *testing.T) {
+	var routerHash common.Hash
+	for i := 0; i < 32; i++ {
+		routerHash[i] = byte(0xBB + i)
+	}
+	di := NewRouterDeliveryInstructions(routerHash)
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 33, len(data), "ROUTER delivery must be 33 bytes")
+	assert.Equal(t, byte(0x40), data[0], "ROUTER flag must be 0x40")
+
+	// Verify the 32-byte router hash follows immediately after the flag
+	assert.True(t, bytes.Equal(routerHash[:], data[1:33]),
+		"router hash must follow flag byte")
+}
+
+// TestGarlic_DeliveryInstructions_TunnelWireFormat verifies TUNNEL delivery
+// instructions: flag(1) + hash(32) + tunnelID(4) = 37 bytes.
+func TestGarlic_DeliveryInstructions_TunnelWireFormat(t *testing.T) {
+	var gatewayHash common.Hash
+	for i := 0; i < 32; i++ {
+		gatewayHash[i] = byte(0xCC + i)
+	}
+	tid := tunnel.TunnelID(0xDEADBEEF)
+	di := NewTunnelDeliveryInstructions(gatewayHash, tid)
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 37, len(data), "TUNNEL delivery must be 37 bytes")
+	assert.Equal(t, byte(0x60), data[0], "TUNNEL flag must be 0x60")
+
+	// Gateway hash at offset 1..32
+	assert.True(t, bytes.Equal(gatewayHash[:], data[1:33]),
+		"gateway hash must follow flag byte")
+
+	// Tunnel ID at offset 33..36, 4 bytes big-endian
+	parsedTID := binary.BigEndian.Uint32(data[33:37])
+	assert.Equal(t, uint32(0xDEADBEEF), parsedTID,
+		"tunnel ID must be 4-byte big-endian at offset 33")
+}
+
+// TestGarlic_DeliveryInstructions_SerializeDeserializeRoundtrip verifies that
+// each delivery type survives a serialize→deserialize cycle with all fields
+// preserved (flag, hash, tunnel ID).
+func TestGarlic_DeliveryInstructions_SerializeDeserializeRoundtrip(t *testing.T) {
+	var testHash common.Hash
+	for i := 0; i < 32; i++ {
+		testHash[i] = byte(i + 1)
+	}
+	tid := tunnel.TunnelID(42424242)
+
+	tests := []struct {
+		name string
+		di   GarlicCloveDeliveryInstructions
+	}{
+		{"LOCAL", NewLocalDeliveryInstructions()},
+		{"DESTINATION", NewDestinationDeliveryInstructions(testHash)},
+		{"ROUTER", NewRouterDeliveryInstructions(testHash)},
+		{"TUNNEL", NewTunnelDeliveryInstructions(testHash, tid)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := serializeDeliveryInstructions(&tc.di)
+			require.NoError(t, err)
+
+			parsed, bytesRead, err := deserializeDeliveryInstructions(data)
+			require.NoError(t, err)
+			assert.Equal(t, len(data), bytesRead,
+				"deserializer must consume all serialized bytes")
+
+			assert.Equal(t, tc.di.Flag, parsed.Flag,
+				"flag must survive roundtrip")
+
+			deliveryType := extractDeliveryType(tc.di.Flag)
+			if deliveryType == 0x01 || deliveryType == 0x02 || deliveryType == 0x03 {
+				assert.Equal(t, tc.di.Hash, parsed.Hash,
+					"hash must survive roundtrip for %s", tc.name)
+			}
+			if deliveryType == 0x03 {
+				assert.Equal(t, tc.di.TunnelID, parsed.TunnelID,
+					"tunnel ID must survive roundtrip for TUNNEL")
+			}
+		})
+	}
+}
+
+// TestGarlic_DeliveryInstructions_GarlicRoundtripAllTypes verifies that each
+// delivery type survives a full garlic serialize→deserialize cycle. This is the
+// end-to-end test: build garlic with a specific delivery type, serialize, then
+// deserialize and verify the clove's delivery instructions are preserved.
+func TestGarlic_DeliveryInstructions_GarlicRoundtripAllTypes(t *testing.T) {
+	fixedExp := time.UnixMilli(1704067200000) // 2024-01-01 00:00:00 UTC
+
+	var testHash common.Hash
+	for i := 0; i < 32; i++ {
+		testHash[i] = byte(0x10 + i)
+	}
+	tid := tunnel.TunnelID(99999)
+
+	tests := []struct {
+		name         string
+		addClove     func(b *GarlicBuilder, msg I2NPMessage) error
+		expectedFlag byte
+		checkHash    bool
+		checkTunnel  bool
+	}{
+		{
+			"LOCAL",
+			func(b *GarlicBuilder, msg I2NPMessage) error {
+				return b.AddLocalDeliveryClove(msg, 1)
+			},
+			0x00, false, false,
+		},
+		{
+			"DESTINATION",
+			func(b *GarlicBuilder, msg I2NPMessage) error {
+				return b.AddDestinationDeliveryClove(msg, 2, testHash)
+			},
+			0x20, true, false,
+		},
+		{
+			"ROUTER",
+			func(b *GarlicBuilder, msg I2NPMessage) error {
+				return b.AddRouterDeliveryClove(msg, 3, testHash)
+			},
+			0x40, true, false,
+		},
+		{
+			"TUNNEL",
+			func(b *GarlicBuilder, msg I2NPMessage) error {
+				return b.AddTunnelDeliveryClove(msg, 4, testHash, tid)
+			},
+			0x60, true, true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := NewGarlicBuilder(100, fixedExp)
+
+			msg := NewDataMessage([]byte("delivery-test"))
+			msg.SetMessageID(7)
+			msg.SetExpiration(fixedExp)
+
+			err := tc.addClove(builder, msg)
+			require.NoError(t, err)
+
+			payload, err := builder.BuildAndSerialize()
+			require.NoError(t, err)
+
+			garlic, err := DeserializeGarlic(payload, 0)
+			require.NoError(t, err, "garlic deserialization must succeed for %s", tc.name)
+
+			require.Equal(t, 1, len(garlic.Cloves), "must have 1 clove")
+			clove := garlic.Cloves[0]
+
+			assert.Equal(t, tc.expectedFlag, clove.DeliveryInstructions.Flag,
+				"delivery flag must be preserved for %s", tc.name)
+
+			if tc.checkHash {
+				assert.Equal(t, testHash, clove.DeliveryInstructions.Hash,
+					"hash must be preserved for %s", tc.name)
+			}
+			if tc.checkTunnel {
+				assert.Equal(t, tid, clove.DeliveryInstructions.TunnelID,
+					"tunnel ID must be preserved for TUNNEL")
+			}
+		})
+	}
+}
+
+// TestGarlic_DeliveryInstructions_MixedTypesRoundtrip verifies that a garlic
+// message containing cloves with all 4 delivery types survives serialization
+// and each clove's delivery instructions are preserved in order.
+func TestGarlic_DeliveryInstructions_MixedTypesRoundtrip(t *testing.T) {
+	fixedExp := time.UnixMilli(1704067200000)
+	builder := NewGarlicBuilder(200, fixedExp)
+
+	var destHash common.Hash
+	for i := range destHash {
+		destHash[i] = byte(0xD0 + i)
+	}
+	var routerHash common.Hash
+	for i := range routerHash {
+		routerHash[i] = byte(0xE0 + i)
+	}
+	var gatewayHash common.Hash
+	for i := range gatewayHash {
+		gatewayHash[i] = byte(0xF0 + i)
+	}
+	tid := tunnel.TunnelID(77777)
+
+	// Add one of each type in order: LOCAL, DESTINATION, ROUTER, TUNNEL
+	msg0 := NewDataMessage([]byte("local"))
+	msg0.SetMessageID(10)
+	msg0.SetExpiration(fixedExp)
+	require.NoError(t, builder.AddLocalDeliveryClove(msg0, 10))
+
+	msg1 := NewDataMessage([]byte("dest"))
+	msg1.SetMessageID(11)
+	msg1.SetExpiration(fixedExp)
+	require.NoError(t, builder.AddDestinationDeliveryClove(msg1, 11, destHash))
+
+	msg2 := NewDataMessage([]byte("router"))
+	msg2.SetMessageID(12)
+	msg2.SetExpiration(fixedExp)
+	require.NoError(t, builder.AddRouterDeliveryClove(msg2, 12, routerHash))
+
+	msg3 := NewDataMessage([]byte("tunnel"))
+	msg3.SetMessageID(13)
+	msg3.SetExpiration(fixedExp)
+	require.NoError(t, builder.AddTunnelDeliveryClove(msg3, 13, gatewayHash, tid))
+
+	payload, err := builder.BuildAndSerialize()
+	require.NoError(t, err)
+
+	garlic, err := DeserializeGarlic(payload, 0)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, garlic.Count, "must have 4 cloves")
+	require.Equal(t, 4, len(garlic.Cloves))
+
+	// Clove 0: LOCAL
+	assert.Equal(t, byte(0x00), garlic.Cloves[0].DeliveryInstructions.Flag, "clove 0 = LOCAL")
+
+	// Clove 1: DESTINATION with destHash
+	assert.Equal(t, byte(0x20), garlic.Cloves[1].DeliveryInstructions.Flag, "clove 1 = DESTINATION")
+	assert.Equal(t, destHash, garlic.Cloves[1].DeliveryInstructions.Hash, "clove 1 destHash preserved")
+
+	// Clove 2: ROUTER with routerHash
+	assert.Equal(t, byte(0x40), garlic.Cloves[2].DeliveryInstructions.Flag, "clove 2 = ROUTER")
+	assert.Equal(t, routerHash, garlic.Cloves[2].DeliveryInstructions.Hash, "clove 2 routerHash preserved")
+
+	// Clove 3: TUNNEL with gatewayHash + tunnelID
+	assert.Equal(t, byte(0x60), garlic.Cloves[3].DeliveryInstructions.Flag, "clove 3 = TUNNEL")
+	assert.Equal(t, gatewayHash, garlic.Cloves[3].DeliveryInstructions.Hash, "clove 3 gatewayHash preserved")
+	assert.Equal(t, tid, garlic.Cloves[3].DeliveryInstructions.TunnelID, "clove 3 tunnelID preserved")
+}
+
+// TestGarlic_DeliveryInstructions_TruncatedData verifies that the deserializer
+// correctly rejects truncated delivery instruction data for each type.
+func TestGarlic_DeliveryInstructions_TruncatedData(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		// Empty data
+		{"empty", []byte{}},
+		// DESTINATION flag but no hash (need 33, have 1)
+		{"DESTINATION_no_hash", []byte{0x20}},
+		// DESTINATION flag with partial hash (need 33, have 17)
+		{"DESTINATION_partial_hash", append([]byte{0x20}, make([]byte, 15)...)},
+		// ROUTER flag but no hash
+		{"ROUTER_no_hash", []byte{0x40}},
+		// TUNNEL flag but no hash
+		{"TUNNEL_no_hash", []byte{0x60}},
+		// TUNNEL flag with hash but no tunnel ID (need 37, have 33)
+		{"TUNNEL_no_tunnelID", append([]byte{0x60}, make([]byte, 32)...)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := deserializeDeliveryInstructions(tc.data)
+			assert.Error(t, err,
+				"truncated %s data must be rejected", tc.name)
+		})
+	}
+}
+
+// TestGarlic_DeliveryInstructions_EncryptedFlagBit verifies that bit 7
+// (encrypted flag) triggers inclusion of a 32-byte session key in the
+// serialized wire format.
+func TestGarlic_DeliveryInstructions_EncryptedFlagBit(t *testing.T) {
+	var sk session_key.SessionKey
+	for i := range sk {
+		sk[i] = byte(0xFF - i)
+	}
+
+	// LOCAL delivery with encryption flag set: flag(1) + sessionKey(32) = 33
+	di := GarlicCloveDeliveryInstructions{
+		Flag:       0x80, // bit 7 set = encrypted, delivery type = LOCAL (bits 6-5 = 0)
+		SessionKey: sk,
+	}
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 33, len(data),
+		"LOCAL+encrypted must be flag(1) + sessionKey(32) = 33 bytes")
+	assert.Equal(t, byte(0x80), data[0], "flag byte must be 0x80")
+	assert.True(t, bytes.Equal(sk[:], data[1:33]),
+		"session key must follow flag byte when encrypted")
+}
+
+// TestGarlic_DeliveryInstructions_DelayFlagBit verifies that bit 4 (delay
+// included flag) triggers inclusion of a 4-byte delay field.
+func TestGarlic_DeliveryInstructions_DelayFlagBit(t *testing.T) {
+	// LOCAL delivery with delay flag set: flag(1) + delay(4) = 5
+	di := GarlicCloveDeliveryInstructions{
+		Flag:  0x10, // bit 4 set = delay included, delivery type = LOCAL
+		Delay: 300,  // 300 seconds
+	}
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	assert.Equal(t, 5, len(data),
+		"LOCAL+delay must be flag(1) + delay(4) = 5 bytes")
+	assert.Equal(t, byte(0x10), data[0], "flag byte must be 0x10")
+
+	parsedDelay := binary.BigEndian.Uint32(data[1:5])
+	assert.Equal(t, uint32(300), parsedDelay,
+		"delay field must be 4-byte big-endian at offset 1")
+}
+
+// TestGarlic_DeliveryInstructions_DeserializeDelayRoundtrip verifies that
+// the delay field survives a serialize→deserialize roundtrip.
+func TestGarlic_DeliveryInstructions_DeserializeDelayRoundtrip(t *testing.T) {
+	di := GarlicCloveDeliveryInstructions{
+		Flag:  0x10, // delay flag set, LOCAL delivery
+		Delay: 600,
+	}
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	parsed, bytesRead, err := deserializeDeliveryInstructions(data)
+	require.NoError(t, err)
+	assert.Equal(t, len(data), bytesRead)
+	assert.Equal(t, byte(0x10), parsed.Flag)
+	assert.Equal(t, 600, parsed.Delay, "delay must survive roundtrip")
+}
+
+// TestGarlic_DeliveryInstructions_TunnelWithEncryptionAndDelay tests the
+// maximum-length delivery instruction: TUNNEL + encrypted + delay.
+// flag(1) + sessionKey(32) + hash(32) + tunnelID(4) + delay(4) = 73 bytes.
+//
+// NOTE: The encryption flag (bit 7) is "Unimplemented, always 0" per spec.
+// The serializer writes the session key when bit 7 is set, but the
+// deserializer does not read it (it doesn't check bit 7). So we only
+// verify the serialization layout here, not the roundtrip.
+func TestGarlic_DeliveryInstructions_TunnelWithEncryptionAndDelay(t *testing.T) {
+	var sk session_key.SessionKey
+	for i := range sk {
+		sk[i] = byte(i)
+	}
+	var hash common.Hash
+	for i := range hash {
+		hash[i] = byte(0x50 + i)
+	}
+	tid := tunnel.TunnelID(12345)
+
+	di := GarlicCloveDeliveryInstructions{
+		Flag:       0x60 | 0x80 | 0x10, // TUNNEL + encrypted + delay
+		SessionKey: sk,
+		Hash:       hash,
+		TunnelID:   tid,
+		Delay:      999,
+	}
+	data, err := serializeDeliveryInstructions(&di)
+	require.NoError(t, err)
+
+	// flag(1) + sessionKey(32) + hash(32) + tunnelID(4) + delay(4) = 73
+	assert.Equal(t, 73, len(data),
+		"TUNNEL+encrypted+delay must be 73 bytes")
+
+	// Verify layout: flag | sessionKey(32) | hash(32) | tunnelID(4) | delay(4)
+	assert.Equal(t, byte(0xF0), data[0], "flag = 0x60|0x80|0x10 = 0xF0")
+	assert.True(t, bytes.Equal(sk[:], data[1:33]), "session key at offset 1-32")
+	assert.True(t, bytes.Equal(hash[:], data[33:65]), "hash at offset 33-64")
+	assert.Equal(t, uint32(12345), binary.BigEndian.Uint32(data[65:69]),
+		"tunnel ID at offset 65-68")
+	assert.Equal(t, uint32(999), binary.BigEndian.Uint32(data[69:73]),
+		"delay at offset 69-72")
 }
