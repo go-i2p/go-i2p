@@ -2172,6 +2172,7 @@ func (tm *TunnelManager) logSendingBuildRequests(tunnelID tunnel.TunnelID, peerC
 }
 
 // sendBuildRequestToHop sends a build request to a specific hop in the tunnel.
+// The build record is encrypted with the hop's public key before transmission.
 func (tm *TunnelManager) sendBuildRequestToHop(hopIndex int, record BuildRequestRecord, peer router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
 	peerHash, err := peer.IdentHash()
 	if err != nil {
@@ -2183,7 +2184,10 @@ func (tm *TunnelManager) sendBuildRequestToHop(hopIndex int, record BuildRequest
 		return err
 	}
 
-	buildMessage := tm.createBuildMessage(hopIndex, record, tunnelID)
+	buildMessage, err := tm.createBuildMessage(hopIndex, record, peer, tunnelID)
+	if err != nil {
+		return fmt.Errorf("failed to create encrypted build message for hop %d: %w", hopIndex, err)
+	}
 	session.QueueSendI2NP(buildMessage)
 
 	tm.logHopRequestSent(hopIndex, peerHash, buildMessage.MessageID())
@@ -2204,15 +2208,44 @@ func (tm *TunnelManager) getSessionForPeer(peerHash common.Hash) (TransportSessi
 }
 
 // createBuildMessage constructs a TunnelBuild I2NP message with the given record.
-func (tm *TunnelManager) createBuildMessage(hopIndex int, record BuildRequestRecord, tunnelID tunnel.TunnelID) *TunnelBuildMessage {
-	var buildRecords [8]BuildRequestRecord
-	if hopIndex < 8 {
-		buildRecords[hopIndex] = record
+// The record is encrypted with the hop's ECIES-X25519 public key before inclusion.
+// Unused record slots are filled with random data per I2P specification to prevent
+// observers from determining the tunnel's true hop count.
+func (tm *TunnelManager) createBuildMessage(hopIndex int, record BuildRequestRecord, peer router_info.RouterInfo, tunnelID tunnel.TunnelID) (*TunnelBuildMessage, error) {
+	// Encrypt the real record with the hop's public key (ECIES-X25519-AEAD)
+	encrypted, err := EncryptBuildRequestRecord(record, peer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt build record for hop %d: %w", hopIndex, err)
 	}
 
-	buildMessage := NewTunnelBuildMessage(buildRecords)
-	buildMessage.SetMessageID(int(tunnelID))
-	return buildMessage
+	// Build the 8-record serialized data:
+	// - Real record at hopIndex (encrypted, 528 bytes)
+	// - All other slots filled with random data (528 bytes each)
+	// Per I2P spec, unused slots must be indistinguishable from real encrypted records
+	data := make([]byte, 8*StandardBuildRecordSize)
+	for i := 0; i < 8; i++ {
+		slotStart := i * StandardBuildRecordSize
+		slotEnd := (i + 1) * StandardBuildRecordSize
+		if i == hopIndex {
+			copy(data[slotStart:slotEnd], encrypted[:])
+		} else {
+			// Fill unused slot with random data to hide tunnel structure
+			if _, err := rand.Read(data[slotStart:slotEnd]); err != nil {
+				log.WithFields(logger.Fields{
+					"at":   "createBuildMessage",
+					"slot": i,
+				}).Warn("Failed to generate random padding for unused slot")
+			}
+		}
+	}
+
+	msg := &TunnelBuildMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+	}
+	msg.SetData(data)
+	msg.SetMessageID(int(tunnelID))
+
+	return msg, nil
 }
 
 // logHopRequestSent logs successful transmission of a build request to a hop.
