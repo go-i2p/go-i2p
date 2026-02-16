@@ -565,7 +565,9 @@ func (p *Publisher) sendMessageThroughGateway(gatewayHash common.Hash, msg i2np.
 	}
 
 	// Queue message for transmission
-	session.QueueSendI2NP(msg)
+	if err := session.QueueSendI2NP(msg); err != nil {
+		return fmt.Errorf("failed to queue message for transmission: %w", err)
+	}
 	return nil
 }
 

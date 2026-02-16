@@ -209,7 +209,7 @@ func CurrentConfig() ConfigDefaults {
 		Router: RouterDefaults{
 			BaseDir:                   baseDir,
 			WorkingDir:                workingDir,
-			RouterInfoRefreshInterval: viper.GetDuration("router.routerinfo_refresh_interval"),
+			RouterInfoRefreshInterval: viper.GetDuration("router.info_refresh_interval"),
 			MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
 			MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
 		},

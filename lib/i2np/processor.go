@@ -2896,8 +2896,15 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 		return fmt.Errorf("unsupported response type: %T", response)
 	}
 
+	// Check if message creation failed
+	if msg == nil {
+		return fmt.Errorf("failed to create response message for %x", to[:8])
+	}
+
 	// Send the response
-	session.QueueSendI2NP(msg)
+	if err := session.QueueSendI2NP(msg); err != nil {
+		return fmt.Errorf("failed to queue response message for %x: %w", to[:8], err)
+	}
 	log.WithFields(logger.Fields{
 		"message_type": msg.Type(),
 		"destination":  fmt.Sprintf("%x", to[:8]),
@@ -2905,26 +2912,33 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 	return nil
 }
 
-// createDatabaseStoreMessage creates an I2NP message from DatabaseStore
+// createDatabaseStoreMessage creates an I2NP message from DatabaseStore.
+// Uses MarshalPayload (payload-only serialization) rather than MarshalBinary
+// (full I2NP message) because this function creates its own BaseI2NPMessage
+// wrapper. This also avoids a panic when the store's embedded BaseI2NPMessage
+// is nil (e.g., from deserialized/corrupted data).
 func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NPMessage {
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)
-	data, err := store.MarshalBinary()
+	data, err := store.MarshalPayload()
 	if err != nil {
-		log.WithField("error", err).Error("Failed to marshal DatabaseStore")
+		log.WithField("error", err).Error("Failed to marshal DatabaseStore payload")
 		return nil
 	}
 	msg.SetData(data)
 	return msg
 }
 
-// createDatabaseSearchReplyMessage creates an I2NP message from DatabaseSearchReply
+// createDatabaseSearchReplyMessage creates an I2NP message from DatabaseSearchReply.
+// Uses MarshalPayload (payload-only serialization) rather than MarshalBinary
+// to avoid a panic when the reply's embedded BaseI2NPMessage is nil.
 func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearchReply) I2NPMessage {
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY)
-	if data, err := reply.MarshalBinary(); err == nil {
-		msg.SetData(data)
-	} else {
-		log.WithField("error", err).Error("Failed to marshal DatabaseSearchReply")
+	data, err := reply.MarshalPayload()
+	if err != nil {
+		log.WithField("error", err).Error("Failed to marshal DatabaseSearchReply payload")
+		return nil
 	}
+	msg.SetData(data)
 	return msg
 }
 
