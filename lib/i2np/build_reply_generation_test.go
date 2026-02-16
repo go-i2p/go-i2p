@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -354,10 +355,16 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	processor.SetBuildReplyForwarder(mockForwarder)
 	processor.SetParticipantManager(mockParticipant)
 
-	// Create multiple records
+	// Set our router hash so records are processed.
+	var ourHash common.Hash
+	copy(ourHash[:], []byte("test-router-hash-32-bytes-long!"))
+	processor.SetOurRouterHash(ourHash)
+
+	// Create multiple records — all destined for us.
 	records := make([]BuildRequestRecord, 5)
 	for i := 0; i < 5; i++ {
 		records[i] = createTestBuildRequestRecord(t)
+		records[i].OurIdent = ourHash
 		if i%2 == 0 {
 			records[i].NextTunnel = 0 // Router forwarding
 		} else {
@@ -395,4 +402,54 @@ func TestSetBuildReplyForwarder(t *testing.T) {
 func TestBuildRecordCrypto_InitializedInProcessor(t *testing.T) {
 	processor := NewMessageProcessor()
 	assert.NotNil(t, processor.buildRecordCrypto, "BuildRecordCrypto should be initialized by default")
+}
+
+// TestProcessSingleBuildRecord_RegisterParticipantFailure verifies that when
+// ProcessBuildRequest accepts a record but RegisterParticipant fails, a rejection
+// reply is sent instead of a false success reply. Previously, the code sent
+// TUNNEL_BUILD_REPLY_SUCCESS even when registration failed, creating phantom tunnels.
+func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
+	processor := NewMessageProcessor()
+	mockForwarder := newMockBuildReplyForwarder()
+	mockParticipant := newMockParticipantManager(true) // Accept all requests
+	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")
+
+	processor.SetBuildReplyForwarder(mockForwarder)
+	processor.SetParticipantManager(mockParticipant)
+
+	record := createTestBuildRequestRecord(t)
+	record.NextTunnel = 0
+	messageID := 3001
+
+	// Execute
+	processor.processSingleBuildRecord(messageID, 0, record, false)
+
+	// Registration was attempted but failed.
+	assert.Equal(t, 1, mockParticipant.getRegisteredCount(),
+		"RegisterParticipant should have been called")
+
+	// A reply should still be forwarded (the rejection reply).
+	routerCalls := mockForwarder.getRouterCalls()
+	assert.Len(t, routerCalls, 1, "Should still forward a reply even on registration failure")
+}
+
+// TestHandleAcceptedBuildRecord_ReturnsError verifies that handleAcceptedBuildRecord
+// returns an error when RegisterParticipant fails, allowing the caller to send
+// a rejection reply.
+func TestHandleAcceptedBuildRecord_ReturnsError(t *testing.T) {
+	processor := NewMessageProcessor()
+	mockParticipant := newMockParticipantManager(true)
+	processor.SetParticipantManager(mockParticipant)
+
+	record := createTestBuildRequestRecord(t)
+
+	// Success case: no registration error.
+	err := processor.handleAcceptedBuildRecord(1, 0, record)
+	assert.NoError(t, err, "Should succeed when RegisterParticipant succeeds")
+
+	// Failure case: registration error.
+	mockParticipant.registerErr = fmt.Errorf("slots full")
+	err = processor.handleAcceptedBuildRecord(2, 0, record)
+	assert.Error(t, err, "Should return error when RegisterParticipant fails")
+	assert.Contains(t, err.Error(), "RegisterParticipant failed")
 }

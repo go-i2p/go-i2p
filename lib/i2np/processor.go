@@ -1211,17 +1211,23 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 // processAllBuildRecords processes each build record to find ones destined for us.
 // Only the record matching our router identity (OurIdent) is processed locally;
 // the others belong to different hops and are skipped.
-// In a full implementation with encrypted records, we would:
-// 1. Try to decrypt each record with our identity key
-// 2. If decryption succeeds, this record is for us
-// 3. Validate the request using ProcessBuildRequest
-// 4. Create response record and forward the message
+//
+// IMPORTANT: If our router hash has not been set (is zero), NO records are processed.
+// This prevents the router from incorrectly participating in all hops of a tunnel
+// when its identity is unknown. Callers must call SetOurRouterHash before processing
+// any tunnel build messages.
 func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, isShortBuild bool) {
 	var zeroHash common.Hash
-	hasOurHash := p.ourRouterHash != zeroHash
+	if p.ourRouterHash == zeroHash {
+		log.WithFields(logger.Fields{
+			"at":         "processAllBuildRecords",
+			"message_id": messageID,
+		}).Warn("Router hash not set (zero) — skipping all build records. Call SetOurRouterHash first.")
+		return
+	}
 
 	for i, record := range records {
-		if hasOurHash && record.OurIdent != p.ourRouterHash {
+		if record.OurIdent != p.ourRouterHash {
 			log.WithFields(logger.Fields{
 				"at":           "processAllBuildRecords",
 				"message_id":   messageID,
@@ -1241,8 +1247,15 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	if accepted {
-		p.handleAcceptedBuildRecord(messageID, index, record)
-		rejectCode = TUNNEL_BUILD_REPLY_SUCCESS // Explicitly set success code
+		if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
+			// Registration failed — send a rejection reply so the tunnel builder
+			// knows this hop is non-functional instead of a phantom success.
+			rejectCode = TUNNEL_BUILD_REPLY_REJECT
+			p.handleRejectedBuildRecord(messageID, index, record, rejectCode,
+				fmt.Sprintf("participant registration failed: %v", err))
+		} else {
+			rejectCode = TUNNEL_BUILD_REPLY_SUCCESS
+		}
 	} else {
 		p.handleRejectedBuildRecord(messageID, index, record, rejectCode, reason)
 	}
@@ -1344,7 +1357,9 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 }
 
 // handleAcceptedBuildRecord logs acceptance and registers the tunnel participation.
-func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, record BuildRequestRecord) {
+// Returns an error if participant registration fails, so the caller can send a
+// rejection reply instead of falsely reporting success.
+func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, record BuildRequestRecord) error {
 	log.WithFields(logger.Fields{
 		"at":             "processTunnelBuildRequest",
 		"message_id":     messageID,
@@ -1359,8 +1374,9 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 			"at":             "processTunnelBuildRequest",
 			"receive_tunnel": record.ReceiveTunnel,
 		}).Error("failed to register participant after acceptance")
-		// Continue anyway - the tunnel may still work
+		return fmt.Errorf("RegisterParticipant failed for tunnel %d: %w", record.ReceiveTunnel, err)
 	}
+	return nil
 }
 
 // handleRejectedBuildRecord logs the rejection of a build request.

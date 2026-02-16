@@ -44,9 +44,11 @@ func TestProcessAllBuildRecords_FiltersRecordsNotForUs(t *testing.T) {
 	assert.Len(t, routerCalls, 1, "Should forward reply for exactly one record")
 }
 
-// TestProcessAllBuildRecords_NoFilterWhenHashUnset verifies backward compatibility:
-// when our router hash is not set (zero), all records are still processed.
-func TestProcessAllBuildRecords_NoFilterWhenHashUnset(t *testing.T) {
+// TestProcessAllBuildRecords_NoProcessingWhenHashUnset verifies that when
+// our router hash is not set (zero), NO records are processed. This prevents
+// the router from incorrectly participating in all hops of a tunnel build
+// when its identity is unknown.
+func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 	processor := NewMessageProcessor()
 	mockForwarder := newMockBuildReplyForwarder()
 	mockParticipant := newMockParticipantManager(true)
@@ -63,9 +65,12 @@ func TestProcessAllBuildRecords_NoFilterWhenHashUnset(t *testing.T) {
 
 	processor.processAllBuildRecords(43, records, false)
 
-	// Without a hash filter, all records should be processed (backward compat).
-	assert.Equal(t, 3, mockParticipant.getRegisteredCount(),
-		"All records should be processed when our hash is not set")
+	// With zero hash, NO records should be processed (safety guard).
+	assert.Equal(t, 0, mockParticipant.getRegisteredCount(),
+		"No records should be processed when our router hash is not set (zero)")
+
+	routerCalls := mockForwarder.getRouterCalls()
+	assert.Len(t, routerCalls, 0, "No replies should be forwarded when hash is zero")
 }
 
 // TestForwardBuildReply_UsesIsShortBuild verifies that the isShortBuild
