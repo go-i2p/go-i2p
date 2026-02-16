@@ -85,7 +85,7 @@ func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 
 func readBuildResponseRecordHash(data []byte) (common.Hash, error) {
 	if len(data) < 32 {
-		return common.Hash{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return common.Hash{}, ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA
 	}
 
 	hash := common.Hash(data[0:32])
@@ -99,7 +99,7 @@ func readBuildResponseRecordHash(data []byte) (common.Hash, error) {
 
 func readBuildResponseRecordRandomData(data []byte) ([495]byte, error) {
 	if len(data) < 527 {
-		return [495]byte{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return [495]byte{}, ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA
 	}
 
 	random_data := [495]byte{}
@@ -114,7 +114,7 @@ func readBuildResponseRecordRandomData(data []byte) ([495]byte, error) {
 
 func readBuildResponseRecordReply(data []byte) (byte, error) {
 	if len(data) < 528 {
-		return byte(0), ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return byte(0), ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA
 	}
 
 	reply := data[527]

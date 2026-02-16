@@ -32,6 +32,10 @@ import (
 // Performance:
 // - O(1) tag lookup using hash-based index
 // - Tag window tracking for out-of-order message handling
+//
+// Memory safety:
+// - Maximum session count is capped at MaxGarlicSessions to prevent unbounded growth.
+// - When the cap is reached, the least-recently-used session is evicted.
 type GarlicSessionManager struct {
 	mu             sync.RWMutex
 	sessions       map[common.Hash]*GarlicSession
@@ -40,6 +44,12 @@ type GarlicSessionManager struct {
 	ourPublicKey   [32]byte
 	sessionTimeout time.Duration
 }
+
+const (
+	// MaxGarlicSessions is the upper bound on active garlic sessions.
+	// When reached, the least-recently-used session is evicted to cap memory usage.
+	MaxGarlicSessions = 5000
+)
 
 // GarlicSession represents an active encrypted session with a remote destination.
 type GarlicSession struct {
@@ -361,6 +371,8 @@ func constructNewSessionMessage(ephemeralPub []byte, payload *encryptedPayload) 
 
 // storeNewSessionState initializes and stores ratchet state for future messages.
 // Acquires the session manager write lock to modify the sessions and tagIndex maps.
+// If the session count exceeds MaxGarlicSessions, the least-recently-used session
+// is evicted to prevent unbounded memory growth.
 func (sm *GarlicSessionManager) storeNewSessionState(
 	destinationHash common.Hash,
 	destinationPubKey [32]byte,
@@ -370,6 +382,11 @@ func (sm *GarlicSessionManager) storeNewSessionState(
 
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+
+	// Evict least-recently-used session if at capacity
+	if len(sm.sessions) >= MaxGarlicSessions {
+		sm.evictLRUSessionLocked()
+	}
 
 	sm.sessions[destinationHash] = session
 
@@ -1100,6 +1117,37 @@ func (sm *GarlicSessionManager) generateTagWindow(session *GarlicSession) error 
 	}).Debug("Tag window generated successfully")
 
 	return nil
+}
+
+// evictLRUSessionLocked removes the least-recently-used session from the map.
+// Must be called with sm.mu held for writing.
+func (sm *GarlicSessionManager) evictLRUSessionLocked() {
+	var oldestHash common.Hash
+	var oldestTime time.Time
+	first := true
+
+	for hash, session := range sm.sessions {
+		if first || session.LastUsed.Before(oldestTime) {
+			oldestHash = hash
+			oldestTime = session.LastUsed
+			first = false
+		}
+	}
+
+	if !first {
+		if evicted, ok := sm.sessions[oldestHash]; ok {
+			for _, tag := range evicted.pendingTags {
+				delete(sm.tagIndex, tag)
+			}
+			delete(sm.sessions, oldestHash)
+			log.WithFields(logger.Fields{
+				"at":              "evictLRUSessionLocked",
+				"evicted_hash":    oldestHash.String(),
+				"last_used":       oldestTime,
+				"remaining_count": len(sm.sessions),
+			}).Warn("Evicted least-recently-used garlic session (max sessions reached)")
+		}
+	}
 }
 
 // CleanupExpiredSessions removes sessions that haven't been used recently.

@@ -32,11 +32,13 @@ type CertificateFSProvider func() (fs.FS, error)
 // This is set by the embedded package when it initializes.
 var defaultCertProvider CertificateFSProvider
 
-// defaultPool is the lazily-initialized global certificate pool
+// defaultPool is the lazily-initialized global certificate pool.
+// Uses a mutex with an initialized flag instead of sync.Once so that
+// transient initialization failures can be retried on subsequent calls.
 var (
-	defaultPool     *CertificatePool
-	defaultPoolOnce sync.Once
-	defaultPoolErr  error
+	defaultPool         *CertificatePool
+	defaultPoolMu       sync.Mutex
+	defaultPoolInitDone bool
 )
 
 // SetCertificateProvider sets the function that provides the reseed certificate filesystem.
@@ -47,17 +49,30 @@ func SetCertificateProvider(provider CertificateFSProvider) {
 }
 
 // GetDefaultCertificatePool returns the default certificate pool loaded from embedded certificates.
-// The pool is initialized once on first call (lazy initialization).
-// Returns the cached pool on subsequent calls.
+// The pool is initialized on first successful call (lazy initialization).
+// Returns the cached pool on subsequent calls. If initialization fails, subsequent
+// calls will re-attempt initialization, allowing recovery from transient errors
+// or late SetCertificateProvider calls.
 func GetDefaultCertificatePool() (*CertificatePool, error) {
-	defaultPoolOnce.Do(func() {
-		if defaultCertProvider == nil {
-			defaultPoolErr = fmt.Errorf("certificate provider not initialized - call SetCertificateProvider first")
-			return
-		}
-		defaultPool, defaultPoolErr = NewCertificatePoolFromProvider(defaultCertProvider)
-	})
-	return defaultPool, defaultPoolErr
+	defaultPoolMu.Lock()
+	defer defaultPoolMu.Unlock()
+
+	if defaultPoolInitDone && defaultPool != nil {
+		return defaultPool, nil
+	}
+
+	if defaultCertProvider == nil {
+		return nil, fmt.Errorf("certificate provider not initialized - call SetCertificateProvider first")
+	}
+
+	pool, err := NewCertificatePoolFromProvider(defaultCertProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	defaultPool = pool
+	defaultPoolInitDone = true
+	return defaultPool, nil
 }
 
 // NewCertificatePoolFromProvider creates a new certificate pool using the provided filesystem provider.

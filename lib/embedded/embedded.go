@@ -66,6 +66,11 @@ type StandardEmbeddedRouter struct {
 
 	// running tracks whether the router is currently running
 	running bool
+
+	// done is closed when the router stops. Wait() selects on this channel
+	// instead of capturing and using the router pointer, avoiding TOCTOU races
+	// where Stop()+Close() could nil the pointer between RUnlock and router.Wait().
+	done chan struct{}
 }
 
 // NewStandardEmbeddedRouter creates a new embedded router instance.
@@ -189,6 +194,7 @@ func (e *StandardEmbeddedRouter) Start() error {
 		return fmt.Errorf("router startup failed: %w", err)
 	}
 	e.running = true
+	e.done = make(chan struct{})
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Start",
@@ -232,10 +238,16 @@ func (e *StandardEmbeddedRouter) Stop() error {
 	// prevents deadlock with goroutines calling IsRunning() during router.Stop().
 	r := e.router
 	e.running = false
+	doneCh := e.done
 	e.mu.Unlock()
 
 	// Stop the router subsystems (potentially blocking) without holding the lock
 	r.Stop()
+
+	// Signal Wait() callers that the router has stopped.
+	if doneCh != nil {
+		close(doneCh)
+	}
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Stop",
@@ -298,7 +310,14 @@ func (e *StandardEmbeddedRouter) prepareHardStop() *router.Router {
 
 	r := e.router
 	e.running = false
+	doneCh := e.done
 	e.mu.Unlock()
+
+	// Signal Wait() callers that the router is stopping.
+	if doneCh != nil {
+		close(doneCh)
+	}
+
 	return r
 }
 
@@ -352,13 +371,15 @@ func (e *StandardEmbeddedRouter) forceCloseAndWait(r *router.Router, done chan s
 
 // Wait blocks until the router shuts down.
 // This method can be called after Start() to keep the router running until Stop() is called.
+// It uses a done channel to avoid TOCTOU races where Stop()+Close() could nil the
+// router pointer between releasing the read lock and calling router.Wait().
 func (e *StandardEmbeddedRouter) Wait() {
 	e.mu.RLock()
-	router := e.router
 	running := e.running
+	doneCh := e.done
 	e.mu.RUnlock()
 
-	if !running || router == nil {
+	if !running || doneCh == nil {
 		log.WithFields(logger.Fields{
 			"at":     "StandardEmbeddedRouter.Wait",
 			"phase":  "waiting",
@@ -373,7 +394,7 @@ func (e *StandardEmbeddedRouter) Wait() {
 		"reason": "waiting for router shutdown",
 	}).Debug("waiting for embedded router to stop")
 
-	router.Wait()
+	<-doneCh
 
 	log.WithFields(logger.Fields{
 		"at":     "StandardEmbeddedRouter.Wait",

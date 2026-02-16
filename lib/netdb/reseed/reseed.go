@@ -245,6 +245,9 @@ func createReseedHTTPClient(dialContext func(ctx context.Context, network, addr 
 
 // buildReseedCertPool creates a certificate pool containing both system certificates
 // and embedded reseed certificates for TLS verification.
+// Reseed operators commonly use the same certificate for both SU3 content signing
+// and as their TLS server certificate (self-signed). Without merging the embedded
+// certs into the TLS pool, connections to these self-signed reseed servers would fail.
 func buildReseedCertPool() *x509.CertPool {
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
@@ -257,8 +260,8 @@ func buildReseedCertPool() *x509.CertPool {
 }
 
 // mergeEmbeddedCerts adds embedded reseed certificates to the provided certificate pool.
-// This ensures connections to reseed servers whose TLS certificates are signed by CAs
-// not in the system store will still succeed.
+// This ensures connections to reseed servers whose TLS certificates are self-signed
+// (using the same key as their SU3 signing certificate) will still succeed.
 func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
 	certPool, err := GetDefaultCertificatePool()
 	if err != nil {
@@ -266,11 +269,6 @@ func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
 		return
 	}
 	if certPool == nil {
-		return
-	}
-
-	embeddedPool := certPool.Pool()
-	if embeddedPool == nil {
 		return
 	}
 
@@ -550,7 +548,13 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 
 // extractZipFile extracts the zip file to a temporary directory and returns the temp directory path and list of extracted file paths.
 // The caller is responsible for cleaning up the temporary directory after use.
+// Validates that total decompressed size does not exceed maxDecompressedSize to prevent zip bombs.
 func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
+	// Maximum total decompressed output size (200 MB).
+	// The SU3 file is limited to 50 MB compressed; legitimate reseed data
+	// (a few thousand ~1 KB RouterInfos) should be well under this limit.
+	const maxDecompressedSize int64 = 200 * 1024 * 1024
+
 	// Create temporary directory for extraction
 	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
 	if err != nil {
@@ -576,6 +580,21 @@ func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
 		log.WithField("zip_path", zipPath).Error("Reseed zip file appears to have no content")
 		os.RemoveAll(tempDir) // Clean up on error
 		return "", nil, oops.Errorf("error: reseed appears to have no content")
+	}
+
+	// Validate total decompressed size to prevent zip bombs
+	var totalSize int64
+	for _, filename := range files {
+		fullPath := filepath.Join(tempDir, filename)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+		totalSize += info.Size()
+		if totalSize > maxDecompressedSize {
+			os.RemoveAll(tempDir)
+			return "", nil, fmt.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
+		}
 	}
 
 	// The unzip library returns just the filenames, not full paths
@@ -607,6 +626,14 @@ func (r Reseed) parseRouterInfoFilesWithLimit(files []string, limit int) ([]rout
 	routerInfos := r.parseFilesUntilLimit(files, limit, stats)
 
 	r.logParseComplete(len(files), stats, len(routerInfos))
+
+	// If we had files to parse but produced zero RouterInfos, report an error
+	// so callers can distinguish total parse failure from an empty file list.
+	if len(files) > 0 && len(routerInfos) == 0 {
+		return routerInfos, fmt.Errorf("failed to parse any RouterInfo from %d files (%d parse errors, %d read errors, %d skipped)",
+			len(files), stats.parseErrors, stats.readErrors, stats.skippedFiles)
+	}
+
 	return routerInfos, nil
 }
 
