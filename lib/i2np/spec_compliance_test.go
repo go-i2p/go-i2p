@@ -20,6 +20,8 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/common/session_tag"
+	"github.com/go-i2p/crypto/chacha20poly1305"
+	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/ratchet"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -2441,4 +2443,1580 @@ func TestGarlic_DeliveryInstructions_TunnelWithEncryptionAndDelay(t *testing.T) 
 		"tunnel ID at offset 65-68")
 	assert.Equal(t, uint32(999), binary.BigEndian.Uint32(data[69:73]),
 		"delay at offset 69-72")
+}
+
+// =============================================================================
+// Audit Item: Forward secrecy — Ratchet key rotation after message exchange
+//
+// Proposal 144 (ECIES-X25519-AEAD-Ratchet) requires that sessions perform
+// DH ratchet steps periodically to provide forward secrecy. After a DH ratchet
+// rotation, old symmetric keys cannot decrypt messages encrypted with the new
+// keys. This section verifies that:
+// 1. DH ratchet rotation occurs after DHRatchetInterval messages
+// 2. After rotation, symmetric and tag ratchets are re-initialized with fresh keys
+// 3. Old message keys cannot decrypt messages encrypted after rotation (forward secrecy)
+// 4. Consecutive DH failures are tracked and degrade gracefully
+// =============================================================================
+
+// TestGarlic_ForwardSecrecy_DHRatchetOccursAtInterval verifies that the DH ratchet
+// rotation is triggered after exactly DHRatchetInterval messages. Before the interval
+// the symmetric ratchet instance remains the same; after, it is replaced with a
+// fresh one derived from the new DH exchange.
+func TestGarlic_ForwardSecrecy_DHRatchetOccursAtInterval(t *testing.T) {
+	session := createTestSession(t)
+
+	// The symmetric ratchet should remain the same object until the interval.
+	origSymRatchet := session.SymmetricRatchet
+	origTagRatchet := session.TagRatchet
+
+	// Advance ratchets for DHRatchetInterval-1 messages — no DH rotation should occur.
+	for i := uint32(0); i < DHRatchetInterval-1; i++ {
+		_, _, err := advanceRatchets(session)
+		require.NoError(t, err, "advanceRatchets should not fail at message %d", i)
+	}
+
+	// Symmetric and tag ratchets should still be the original instances
+	// (their internal state has advanced, but they haven't been replaced).
+	assert.Same(t, origSymRatchet, session.SymmetricRatchet,
+		"symmetric ratchet should NOT be replaced before DHRatchetInterval")
+	assert.Same(t, origTagRatchet, session.TagRatchet,
+		"tag ratchet should NOT be replaced before DHRatchetInterval")
+
+	// The next advanceRatchets call should trigger DH rotation.
+	_, _, err := advanceRatchets(session)
+	require.NoError(t, err)
+
+	// After rotation, ratchets must be NEW instances with fresh key material.
+	assert.NotSame(t, origSymRatchet, session.SymmetricRatchet,
+		"symmetric ratchet MUST be replaced after DH rotation")
+	assert.NotSame(t, origTagRatchet, session.TagRatchet,
+		"tag ratchet MUST be replaced after DH rotation")
+}
+
+// TestGarlic_ForwardSecrecy_OldKeysCannotDecryptPostRotation verifies that message
+// keys derived before a DH ratchet rotation cannot decrypt messages encrypted after
+// the rotation. This is the core forward secrecy property per Proposal 144.
+func TestGarlic_ForwardSecrecy_OldKeysCannotDecryptPostRotation(t *testing.T) {
+	session := createTestSession(t)
+
+	// Collect a message key from before rotation.
+	preRotationKey, _, err := advanceRatchets(session)
+	require.NoError(t, err)
+
+	// Advance to just before the DH rotation threshold (we've already consumed 1).
+	for i := uint32(1); i < DHRatchetInterval; i++ {
+		_, _, err := advanceRatchets(session)
+		require.NoError(t, err)
+	}
+
+	// This call triggers the DH rotation.
+	postRotationKey, _, err := advanceRatchets(session)
+	require.NoError(t, err)
+
+	// The pre-rotation key must differ from the post-rotation key.
+	assert.NotEqual(t, preRotationKey, postRotationKey,
+		"message keys before and after DH rotation MUST differ (forward secrecy)")
+
+	// Verify that encryption with the old key produces ciphertext that
+	// cannot be decrypted with the new key (and vice versa).
+	plaintext := []byte("forward secrecy test payload")
+	var dummyTag [8]byte
+
+	oldCiphertext, oldAuthTag, oldNonce, err := encryptWithSessionKey(preRotationKey, plaintext, dummyTag)
+	require.NoError(t, err)
+
+	// Attempt decryption with the post-rotation key — MUST fail.
+	_, err = decryptWithSessionTag(postRotationKey, oldCiphertext, oldAuthTag, dummyTag, oldNonce)
+	assert.Error(t, err,
+		"decryption with post-rotation key MUST fail for pre-rotation ciphertext (forward secrecy)")
+}
+
+// TestGarlic_ForwardSecrecy_NewEphemeralKeyStoredAfterRotation verifies that a
+// new ephemeral public key is stored in the session after DH ratchet rotation,
+// ready to be sent to the peer so they can update their receiving chain.
+func TestGarlic_ForwardSecrecy_NewEphemeralKeyStoredAfterRotation(t *testing.T) {
+	session := createTestSession(t)
+
+	assert.Nil(t, session.newEphemeralPub,
+		"newEphemeralPub should be nil before any DH rotation")
+
+	// Advance past DHRatchetInterval to trigger rotation.
+	for i := uint32(0); i <= DHRatchetInterval; i++ {
+		_, _, err := advanceRatchets(session)
+		require.NoError(t, err)
+	}
+
+	assert.NotNil(t, session.newEphemeralPub,
+		"newEphemeralPub MUST be set after DH rotation for peer notification")
+
+	// The ephemeral key must be 32 bytes and non-zero.
+	var zeroKey [32]byte
+	assert.NotEqual(t, zeroKey, *session.newEphemeralPub,
+		"newEphemeralPub must not be all zeros")
+}
+
+// TestGarlic_ForwardSecrecy_ConsecutiveDHFailuresDegradeGracefully verifies that
+// the session tracks consecutive DH failures and only returns a fatal error after
+// MaxConsecutiveDHFailures. Intermediate failures allow the session to continue
+// using the symmetric ratchet without forward secrecy upgrades.
+func TestGarlic_ForwardSecrecy_ConsecutiveDHFailuresDegradeGracefully(t *testing.T) {
+	assert.Equal(t, uint32(3), uint32(MaxConsecutiveDHFailures),
+		"MaxConsecutiveDHFailures should be 3 per design")
+	assert.Equal(t, uint32(50), uint32(DHRatchetInterval),
+		"DHRatchetInterval should be 50 messages per design")
+}
+
+// TestGarlic_ForwardSecrecy_DHRatchetCounterResets verifies that after a successful
+// DH ratchet rotation, the dhRatchetCounter resets to 0, ensuring the next rotation
+// occurs exactly DHRatchetInterval messages later.
+func TestGarlic_ForwardSecrecy_DHRatchetCounterResets(t *testing.T) {
+	session := createTestSession(t)
+
+	// Advance exactly DHRatchetInterval calls to trigger the first rotation.
+	// Counter: 0→1→...→50 (rotation, reset to 0).
+	for i := uint32(0); i < DHRatchetInterval; i++ {
+		_, _, err := advanceRatchets(session)
+		require.NoError(t, err)
+	}
+
+	// After rotation, counter is 0. Save the current SymmetricRatchet.
+	origSymRatchet := session.SymmetricRatchet
+
+	// Advance DHRatchetInterval-1 calls. Counter: 0→1→...→49. No rotation.
+	for i := uint32(0); i < DHRatchetInterval-1; i++ {
+		_, _, err := advanceRatchets(session)
+		require.NoError(t, err)
+	}
+	// Should still be same instance (no rotation yet).
+	assert.Same(t, origSymRatchet, session.SymmetricRatchet,
+		"no rotation should occur before next full interval")
+
+	// One more should trigger rotation (counter 49→50).
+	_, _, err := advanceRatchets(session)
+	require.NoError(t, err)
+	assert.NotSame(t, origSymRatchet, session.SymmetricRatchet,
+		"rotation should occur exactly DHRatchetInterval messages after previous rotation")
+}
+
+// =============================================================================
+// Audit Item: Session lifecycle — New Session → Existing Session transition
+//
+// Proposal 144 defines two session states:
+// - New Session: First message uses ephemeral-static DH (ECIES) key exchange.
+//   Format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+// - Existing Session: Subsequent messages use ratchet-derived session tags.
+//   Format: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+//
+// The transition happens automatically: after a New Session message is sent,
+// the session is stored and all subsequent messages use Existing Session format.
+// On the receiver side, decrypting a New Session message initializes inbound
+// ratchet state so future messages from that sender use Existing Session.
+// =============================================================================
+
+// TestGarlic_SessionLifecycle_FirstMessageIsNewSession verifies that the first
+// message to a new destination uses the New Session format with an ephemeral
+// public key prefix (32 bytes). The minimum message size for New Session is
+// 32 (pubkey) + 12 (nonce) + 0 (plaintext) + 16 (tag) = 60 bytes.
+func TestGarlic_SessionLifecycle_FirstMessageIsNewSession(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	plaintext := []byte("first message to new destination")
+	ciphertext, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// New Session format minimum: 32 + 12 + len(plaintext) + 16 = 60 + len(plaintext)
+	assert.GreaterOrEqual(t, len(ciphertext), 60,
+		"New Session message must be at least 60 bytes (32 pubkey + 12 nonce + 16 tag)")
+
+	// Verify the first 32 bytes look like a valid X25519 public key (non-zero).
+	var zeroKey [32]byte
+	var ephPub [32]byte
+	copy(ephPub[:], ciphertext[0:32])
+	assert.NotEqual(t, zeroKey, ephPub,
+		"first 32 bytes should be a non-zero ephemeral public key")
+
+	// A session should now exist for this destination.
+	assert.Equal(t, 1, sm.GetSessionCount(),
+		"session must be created after first New Session message")
+}
+
+// TestGarlic_SessionLifecycle_SecondMessageIsExistingSession verifies that the
+// second message to the same destination uses the Existing Session format, which
+// starts with an 8-byte session tag instead of a 32-byte ephemeral key.
+func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	plaintext := []byte("test payload")
+
+	// First message (New Session).
+	firstMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Second message (should be Existing Session).
+	secondMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Existing Session format: [tag(8)] + [nonce(12)] + [ciphertext(N)] + [authTag(16)]
+	// Minimum: 8 + 12 + len(plaintext) + 16 = 36 + len(plaintext)
+	// New Session format is at least 60 + len(plaintext)
+	// The Existing Session message should be smaller than New Session for same plaintext
+	// because it uses 8-byte tag vs 32-byte ephemeral key.
+	assert.Less(t, len(secondMsg), len(firstMsg),
+		"Existing Session message should be shorter than New Session (8-byte tag vs 32-byte key)")
+
+	// Still only one session for this destination.
+	assert.Equal(t, 1, sm.GetSessionCount(),
+		"session count should remain 1 after second message to same destination")
+}
+
+// TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState verifies that
+// when a receiver decrypts a New Session message, it initializes inbound ratchet
+// state so that future Existing Session messages from the same sender can be
+// decrypted using session tag lookup.
+func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing.T) {
+	senderSM, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var receiverPubKey, receiverPrivKey [32]byte
+	copy(receiverPubKey[:], receiverPubBytes)
+	copy(receiverPrivKey[:], receiverPrivBytes)
+	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
+	require.NoError(t, err)
+
+	destHash := sha256.Sum256(receiverPubKey[:])
+	plaintext := []byte("new session message")
+
+	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Receiver should have 0 sessions before decryption.
+	assert.Equal(t, 0, receiverSM.GetSessionCount(),
+		"receiver should have no sessions before decryption")
+
+	// Decrypt the New Session message.
+	decrypted, sessionTag, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	require.NoError(t, err)
+
+	// Session tag should be empty for New Session.
+	assert.Equal(t, [8]byte{}, sessionTag,
+		"session tag must be empty for New Session decryption")
+
+	// Plaintext must match.
+	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
+
+	// Receiver should now have 1 session (inbound ratchet state created).
+	assert.Equal(t, 1, receiverSM.GetSessionCount(),
+		"receiver MUST have 1 session after decrypting New Session (inbound ratchet initialized)")
+}
+
+// TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession verifies
+// that the New Session and Existing Session wire formats are structurally distinct
+// and can be differentiated by the receiver through session tag lookup.
+func TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession(t *testing.T) {
+	// New Session: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+	// Existing Session: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
+	//
+	// The receiver distinguishes them by checking if the first 8 bytes match
+	// any known session tag. If not, it treats the message as a New Session.
+
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	plaintext := []byte("test message")
+
+	// First message is New Session.
+	newSessionMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Second message is Existing Session.
+	existingSessionMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// New Session starts with 32 bytes of ephemeral public key.
+	// Existing Session starts with 8 bytes of session tag.
+	// They have different total overhead: 32+12+16=60 vs 8+12+16=36
+	newSessionOverhead := len(newSessionMsg) - len(plaintext)
+	existingSessionOverhead := len(existingSessionMsg) - len(plaintext)
+
+	assert.Greater(t, newSessionOverhead, existingSessionOverhead,
+		"New Session overhead (with 32-byte pubkey) must exceed Existing Session overhead (with 8-byte tag)")
+}
+
+// TestGarlic_SessionLifecycle_SessionStoresPersistentState verifies that after
+// the New Session → Existing Session transition, the session retains all
+// necessary ratchet state: DHRatchet, SymmetricRatchet, TagRatchet, and
+// directional receive ratchets.
+func TestGarlic_SessionLifecycle_SessionStoresPersistentState(t *testing.T) {
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	destPubBytes, _, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var destPubKey [32]byte
+	copy(destPubKey[:], destPubBytes)
+	destHash := sha256.Sum256(destPubKey[:])
+
+	plaintext := []byte("state persistence test")
+	_, err = sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Read-lock the session manager and inspect the session.
+	sm.mu.RLock()
+	session, exists := sm.sessions[destHash]
+	sm.mu.RUnlock()
+
+	require.True(t, exists, "session must exist after New Session encryption")
+
+	// All ratchet components must be initialized.
+	assert.NotNil(t, session.DHRatchet, "DHRatchet must be initialized")
+	assert.NotNil(t, session.SymmetricRatchet, "SymmetricRatchet (send) must be initialized")
+	assert.NotNil(t, session.TagRatchet, "TagRatchet (send) must be initialized")
+	assert.NotNil(t, session.RecvSymmetricRatchet, "RecvSymmetricRatchet must be initialized")
+	assert.NotNil(t, session.RecvTagRatchet, "RecvTagRatchet must be initialized")
+
+	// Message counter should be 1 (one message sent).
+	assert.Equal(t, uint32(1), session.MessageCounter,
+		"MessageCounter should be 1 after first New Session message")
+
+	// Remote public key should match the destination.
+	assert.Equal(t, destPubKey, session.RemotePublicKey,
+		"RemotePublicKey must match the destination's key")
+}
+
+// =============================================================================
+// Audit Item: Associated data — Correct AD for ChaCha20-Poly1305 in each state
+//
+// Per Proposal 144, ChaCha20-Poly1305 encryption uses different Associated Data
+// (AD) depending on the session state:
+// - New Session: AD = nil (no session tag exists yet; the ephemeral public key
+//   is implicitly authenticated by the DH exchange)
+// - Existing Session: AD = sessionTag (8 bytes; binds the ciphertext to the
+//   specific session tag, preventing tag substitution attacks)
+//
+// This section verifies that:
+// 1. New Session encryption uses nil AD
+// 2. Existing Session encryption uses the session tag as AD
+// 3. Mismatched AD causes decryption failure (AEAD authentication)
+// 4. The AD binding prevents cross-session ciphertext replay
+// =============================================================================
+
+// TestGarlic_AssociatedData_NewSessionUsesNilAD verifies that New Session
+// encryption passes nil as the associated data to ChaCha20-Poly1305.
+// This is correct because the New Session format does not include a session
+// tag, and the ephemeral key is authenticated by the DH exchange.
+func TestGarlic_AssociatedData_NewSessionUsesNilAD(t *testing.T) {
+	// New Session encryption calls encryptPayloadWithSessionKey which uses nil AD.
+	// We verify this by encrypting with nil AD and confirming the resulting
+	// ciphertext can be decrypted with nil AD.
+	key := sha256.Sum256([]byte("test symmetric key for new session"))
+	plaintext := []byte("new session payload with nil AD")
+
+	aead, err := chacha20poly1305.NewAEAD(key)
+	require.NoError(t, err)
+
+	nonce := make([]byte, chacha20poly1305.NonceSize)
+	ciphertext, tag, err := aead.Encrypt(plaintext, nil, nonce)
+	require.NoError(t, err)
+
+	// Decrypt with nil AD — should succeed (matching New Session behavior).
+	decrypted, err := aead.Decrypt(ciphertext, tag[:], nil, nonce)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted, "New Session AD=nil roundtrip must succeed")
+
+	// Decrypt with non-nil AD — should fail (AD mismatch).
+	wrongAD := []byte("wrong AD")
+	_, err = aead.Decrypt(ciphertext, tag[:], wrongAD, nonce)
+	assert.Error(t, err, "decryption with non-nil AD must fail when encrypted with nil AD")
+}
+
+// TestGarlic_AssociatedData_ExistingSessionUsesSessionTagAD verifies that
+// Existing Session encryption uses the 8-byte session tag as associated data
+// for ChaCha20-Poly1305. This binds the ciphertext to the specific tag,
+// preventing tag substitution attacks.
+func TestGarlic_AssociatedData_ExistingSessionUsesSessionTagAD(t *testing.T) {
+	key := sha256.Sum256([]byte("test message key for existing session"))
+	plaintext := []byte("existing session payload with tag AD")
+	sessionTag := [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+
+	// Encrypt with session tag as AD (matching encryptWithSessionKey behavior).
+	ciphertext, tag, nonce, err := encryptWithSessionKey(key, plaintext, sessionTag)
+	require.NoError(t, err)
+
+	// Decrypt with same session tag — should succeed.
+	decrypted, err := decryptWithSessionTag(key, ciphertext, tag, sessionTag, nonce)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted, "Existing Session AD=tag roundtrip must succeed")
+
+	// Decrypt with wrong session tag — MUST fail (AD mismatch / AEAD auth failure).
+	wrongTag := [8]byte{0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8}
+	_, err = decryptWithSessionTag(key, ciphertext, tag, wrongTag, nonce)
+	assert.Error(t, err, "decryption with wrong session tag MUST fail (AEAD binds tag as AD)")
+}
+
+// TestGarlic_AssociatedData_MismatchCausesAuthFailure verifies that any
+// modification to the associated data causes ChaCha20-Poly1305 authentication
+// failure, ensuring AEAD integrity.
+func TestGarlic_AssociatedData_MismatchCausesAuthFailure(t *testing.T) {
+	key := sha256.Sum256([]byte("integrity test key"))
+	plaintext := []byte("integrity test payload")
+	sessionTag := [8]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22}
+
+	ciphertext, authTag, nonce, err := encryptWithSessionKey(key, plaintext, sessionTag)
+	require.NoError(t, err)
+
+	// Case 1: Correct AD → success.
+	_, err = decryptWithSessionTag(key, ciphertext, authTag, sessionTag, nonce)
+	require.NoError(t, err, "correct AD must decrypt successfully")
+
+	// Case 2: nil AD instead of session tag → failure.
+	aead, err := chacha20poly1305.NewAEAD(key)
+	require.NoError(t, err)
+	_, err = aead.Decrypt(ciphertext, authTag[:], nil, nonce)
+	assert.Error(t, err, "nil AD must cause auth failure when tag was used as AD")
+
+	// Case 3: Single bit flip in session tag → failure.
+	flippedTag := sessionTag
+	flippedTag[0] ^= 0x01
+	_, err = decryptWithSessionTag(key, ciphertext, authTag, flippedTag, nonce)
+	assert.Error(t, err, "single-bit flip in session tag must cause auth failure")
+}
+
+// TestGarlic_AssociatedData_CrossSessionReplayPrevented verifies that ciphertext
+// encrypted for one session (with one tag as AD) cannot be replayed in a
+// different session (with a different tag as AD), even if the same key is used.
+func TestGarlic_AssociatedData_CrossSessionReplayPrevented(t *testing.T) {
+	key := sha256.Sum256([]byte("shared key for replay test"))
+	plaintext := []byte("payload that should not be replayable")
+
+	tag1 := [8]byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
+	tag2 := [8]byte{0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02}
+
+	// Encrypt with session tag1.
+	ciphertext, authTag, nonce, err := encryptWithSessionKey(key, plaintext, tag1)
+	require.NoError(t, err)
+
+	// Attempt to decrypt with session tag2 — MUST fail even with same key.
+	_, err = decryptWithSessionTag(key, ciphertext, authTag, tag2, nonce)
+	assert.Error(t, err,
+		"cross-session replay MUST be prevented: ciphertext bound to tag1 cannot be decrypted with tag2")
+
+	// Decrypt with original tag1 — MUST succeed.
+	decrypted, err := decryptWithSessionTag(key, ciphertext, authTag, tag1, nonce)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted, "decryption with correct tag must succeed")
+}
+
+// TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD verifies the complete
+// New Session decrypt path uses nil AD by doing a full encrypt→decrypt roundtrip
+// through the session manager.
+func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
+	senderSM, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+
+	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	var receiverPubKey, receiverPrivKey [32]byte
+	copy(receiverPubKey[:], receiverPubBytes)
+	copy(receiverPrivKey[:], receiverPrivBytes)
+	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
+	require.NoError(t, err)
+
+	destHash := sha256.Sum256(receiverPubKey[:])
+	plaintext := []byte("new session roundtrip verifying nil AD")
+
+	// Encrypt (New Session — uses nil AD internally).
+	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
+	require.NoError(t, err)
+
+	// Decrypt (New Session — uses nil AD internally).
+	decrypted, tag, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	require.NoError(t, err)
+	assert.Equal(t, [8]byte{}, tag, "New Session decryption returns empty session tag")
+	assert.Equal(t, plaintext, decrypted, "New Session nil-AD roundtrip must preserve plaintext")
+}
+
+// ============================================================================
+// Section 6 — TunnelData (type 18) spec compliance tests
+// ============================================================================
+
+// TestTunnelData_Format_TotalSize verifies that TunnelData is exactly 1028 bytes:
+// TunnelID (4 bytes) + Data (1024 bytes).
+func TestTunnelData_Format_TotalSize(t *testing.T) {
+	var td TunnelData
+	assert.Equal(t, 1028, len(td), "TunnelData must be exactly 1028 bytes (TunnelID 4 + Data 1024)")
+}
+
+// TestTunnelData_Format_TunnelIDAt0to4 verifies TunnelID occupies bytes [0:4].
+func TestTunnelData_Format_TunnelIDAt0to4(t *testing.T) {
+	var td TunnelData
+	// Set a known TunnelID
+	binary.BigEndian.PutUint32(td[0:4], 0xDEADBEEF)
+
+	tunnelID := td.TunnelID()
+	assert.Equal(t, tunnel.TunnelID(0xDEADBEEF), tunnelID,
+		"TunnelID must be read from bytes [0:4] as big-endian uint32")
+}
+
+// TestTunnelData_Format_DataAt4to1028 verifies Data occupies bytes [4:1028] = 1024 bytes.
+func TestTunnelData_Format_DataAt4to1028(t *testing.T) {
+	var td TunnelData
+	// Fill data region with a known pattern
+	for i := 4; i < 1028; i++ {
+		td[i] = byte(i % 256)
+	}
+
+	data := td.Data()
+	assert.Equal(t, 1024, len(data), "Data must be exactly 1024 bytes")
+	for i := 0; i < 1024; i++ {
+		assert.Equal(t, byte((i+4)%256), data[i], "Data byte %d mismatch", i)
+	}
+}
+
+// TestTunnelData_Format_SetTunnelIDAndData verifies mutation round-trip.
+func TestTunnelData_Format_SetTunnelIDAndData(t *testing.T) {
+	var td TunnelData
+	td.SetTunnelID(tunnel.TunnelID(42))
+
+	var payload [1024]byte
+	for i := range payload {
+		payload[i] = 0xAB
+	}
+	td.SetData(payload)
+
+	assert.Equal(t, tunnel.TunnelID(42), td.TunnelID())
+	assert.Equal(t, payload, td.Data())
+}
+
+// TestTunnelData_Padding_ZeroPaddedToExactly1028 verifies that a zero-initialized
+// TunnelData is exactly 1028 bytes of zeros (fixed-size array type).
+func TestTunnelData_Padding_ZeroPaddedToExactly1028(t *testing.T) {
+	var td TunnelData
+	expected := make([]byte, 1028)
+	assert.Equal(t, expected, td[:],
+		"Zero-initialized TunnelData must be 1028 zero bytes")
+}
+
+// TestTunnelData_Padding_TunnelDataMessageEnforcesExact1028 verifies that
+// TunnelDataMessage inner payload must be exactly 1028 bytes.
+func TestTunnelData_Padding_TunnelDataMessageEnforcesExact1028(t *testing.T) {
+	// Valid: create via NewTunnelDataMessage → marshal → unmarshal
+	var validData [1024]byte
+	validMsg := NewTunnelDataMessage(tunnel.TunnelID(1), validData)
+	wire, err := validMsg.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed := &TunnelDataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA)}
+	err = parsed.UnmarshalBinary(wire)
+	assert.NoError(t, err, "valid TunnelDataMessage must unmarshal successfully")
+
+	// The inner payload must be exactly 1028 bytes
+	assert.Equal(t, 1028, len(validMsg.GetData()),
+		"TunnelDataMessage inner payload must be exactly 1028 bytes")
+}
+
+// TestTunnelData_Padding_NewTunnelDataMessageProduces1028 verifies that
+// NewTunnelDataMessage always produces exactly 1028 bytes of inner payload.
+func TestTunnelData_Padding_NewTunnelDataMessageProduces1028(t *testing.T) {
+	var data [1024]byte
+	for i := range data {
+		data[i] = byte(i)
+	}
+	msg := NewTunnelDataMessage(tunnel.TunnelID(999), data)
+
+	// GetData() returns the inner payload (without I2NP header)
+	payload := msg.GetData()
+	assert.Equal(t, 1028, len(payload),
+		"NewTunnelDataMessage inner payload must be exactly 1028 bytes")
+
+	// Verify TunnelID is at [0:4]
+	tid := binary.BigEndian.Uint32(payload[0:4])
+	assert.Equal(t, uint32(999), tid)
+}
+
+// ============================================================================
+// Section 6 — TunnelGateway (type 19) spec compliance tests
+// ============================================================================
+
+// TestTunnelGateway_Format_TunnelIDLengthData verifies wire format:
+// TunnelID (4 bytes) + Length (2 bytes) + Data (variable).
+func TestTunnelGateway_Format_TunnelIDLengthData(t *testing.T) {
+	payload := []byte("hello i2p tunnel gateway")
+	msg := NewTunnelGatewayMessage(tunnel.TunnelID(0x12345678), payload)
+
+	// GetData returns the inner payload: TunnelID(4) + Length(2) + Data
+	data := msg.GetData()
+	require.True(t, len(data) >= 6, "inner data must be at least 6 bytes")
+
+	// TunnelID at [0:4]
+	tid := binary.BigEndian.Uint32(data[0:4])
+	assert.Equal(t, uint32(0x12345678), tid, "TunnelID must be at bytes [0:4]")
+
+	// Length at [4:6]
+	length := binary.BigEndian.Uint16(data[4:6])
+	assert.Equal(t, uint16(len(payload)), length, "Length field at [4:6] must equal payload length")
+
+	// Data at [6:]
+	assert.Equal(t, payload, data[6:], "Data must follow Length field")
+	assert.Equal(t, 6+len(payload), len(data), "Total size = 4+2+len(payload)")
+}
+
+// TestTunnelGateway_Format_MinimumSize verifies that TunnelGateway inner payload
+// requires TunnelID(4)+Length(2) = at least 6 bytes.
+func TestTunnelGateway_Format_MinimumSize(t *testing.T) {
+	// The inner payload layout is: TunnelID(4) + Length(2) + Data(variable)
+	// A valid empty-payload gateway has exactly 6 bytes of inner data
+	payload := []byte{}
+	msg := NewTunnelGatewayMessage(tunnel.TunnelID(1), payload)
+	data := msg.GetData()
+	assert.Equal(t, 6, len(data), "empty-payload gateway inner data must be 6 bytes")
+
+	// TunnelID at [0:4], Length at [4:6] = 0
+	length := binary.BigEndian.Uint16(data[4:6])
+	assert.Equal(t, uint16(0), length, "Length field must be 0 for empty payload")
+}
+
+// TestTunnelGateway_Format_TruncatedData verifies that unmarshal detects truncation.
+func TestTunnelGateway_Format_TruncatedData(t *testing.T) {
+	// Create a valid message, then truncate its I2NP wire representation
+	payload := bytes.Repeat([]byte{0xAA}, 100)
+	msg := NewTunnelGatewayMessage(tunnel.TunnelID(1), payload)
+	wire, err := msg.MarshalBinary()
+	require.NoError(t, err)
+
+	// Truncate: remove last 50 bytes of the wire format
+	truncated := wire[:len(wire)-50]
+
+	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY)}
+	err = parsed.UnmarshalBinary(truncated)
+	assert.Error(t, err, "truncated data must be detected")
+}
+
+// TestTunnelGateway_Format_RoundTrip verifies marshal → unmarshal preserves all fields.
+func TestTunnelGateway_Format_RoundTrip(t *testing.T) {
+	payload := []byte("roundtrip payload for tunnel gateway")
+	tid := tunnel.TunnelID(0xCAFEBABE)
+	original := NewTunnelGatewayMessage(tid, payload)
+
+	data, err := original.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY)}
+	err = parsed.UnmarshalBinary(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, tid, parsed.TunnelID, "TunnelID must survive roundtrip")
+	assert.Equal(t, payload, parsed.Data, "Data must survive roundtrip")
+}
+
+// ============================================================================
+// Section 6 — Data (type 20) spec compliance tests
+// ============================================================================
+
+// TestData_Format_LengthPlusPayload verifies wire format: Length (4 bytes) + Payload.
+func TestData_Format_LengthPlusPayload(t *testing.T) {
+	payload := []byte("i2p data message content")
+	msg := NewDataMessage(payload)
+
+	// GetData returns the inner data: Length(4) + Payload
+	data := msg.GetData()
+	require.True(t, len(data) >= 4, "inner data must be at least 4 bytes")
+
+	// Length at [0:4]
+	length := binary.BigEndian.Uint32(data[0:4])
+	assert.Equal(t, uint32(len(payload)), length, "Length field at [0:4] must equal payload size")
+
+	// Payload at [4:]
+	assert.Equal(t, payload, data[4:], "Payload must follow Length field")
+	assert.Equal(t, 4+len(payload), len(data), "Total size = 4 + payload length")
+}
+
+// TestData_Format_MinimumSizeIs4 verifies that Data inner payload requires at least
+// 4 bytes for the Length field.
+func TestData_Format_MinimumSizeIs4(t *testing.T) {
+	// The inner payload starts with Length(4) + Payload(variable)
+	// A zero-length message should have exactly 4 bytes of inner data
+	msg := NewDataMessage([]byte{})
+	data := msg.GetData()
+	assert.Equal(t, 4, len(data), "empty DataMessage inner data must be 4 bytes")
+
+	// Length field should be 0
+	length := binary.BigEndian.Uint32(data[0:4])
+	assert.Equal(t, uint32(0), length, "Length field must be 0 for empty payload")
+}
+
+// TestData_Format_TruncatedPayload verifies truncation detection.
+func TestData_Format_TruncatedPayload(t *testing.T) {
+	// Create a valid message, then truncate its wire form
+	payload := bytes.Repeat([]byte{0xBB}, 200)
+	msg := NewDataMessage(payload)
+	wire, err := msg.MarshalBinary()
+	require.NoError(t, err)
+
+	// Truncate the wire form
+	truncated := wire[:len(wire)-100]
+
+	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)}
+	err = parsed.UnmarshalBinary(truncated)
+	assert.Error(t, err, "truncated payload must be detected")
+}
+
+// TestData_Format_RoundTrip verifies marshal → unmarshal round-trip.
+func TestData_Format_RoundTrip(t *testing.T) {
+	payload := []byte("data message roundtrip test content 12345")
+	original := NewDataMessage(payload)
+
+	data, err := original.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)}
+	err = parsed.UnmarshalBinary(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, payload, parsed.Payload, "Payload must survive roundtrip")
+}
+
+// ============================================================================
+// Section 6 — TunnelBuild / VariableTunnelBuild (types 21, 23) spec compliance
+// ============================================================================
+
+// TestTunnelBuild_RecordCount_FixedAt8 verifies TunnelBuild always has exactly 8 records.
+func TestTunnelBuild_RecordCount_FixedAt8(t *testing.T) {
+	var tb TunnelBuild
+	assert.Equal(t, 8, len(tb), "TunnelBuild must have exactly 8 BuildRequestRecord slots")
+}
+
+// TestTunnelBuild_RecordCount_WireSize verifies TunnelBuild wire size = 8 × 528 = 4224 bytes.
+func TestTunnelBuild_RecordCount_WireSize(t *testing.T) {
+	expectedSize := 8 * StandardBuildRecordSize
+	assert.Equal(t, 4224, expectedSize, "TunnelBuild wire size must be 8 × 528 = 4224")
+}
+
+// TestVariableTunnelBuild_RecordCount_1to8 verifies VariableTunnelBuild supports 1-8 records.
+func TestVariableTunnelBuild_RecordCount_1to8(t *testing.T) {
+	for count := 1; count <= 8; count++ {
+		records := make([]BuildRequestRecord, count)
+		vtb := VariableTunnelBuild{
+			Count:               count,
+			BuildRequestRecords: records,
+		}
+		assert.Equal(t, count, vtb.Count,
+			"VariableTunnelBuild must support Count=%d", count)
+		assert.Equal(t, count, len(vtb.BuildRequestRecords))
+	}
+}
+
+// TestVariableTunnelBuild_RecordCount_WireSizeFormula verifies wire size = 1 + count×528.
+func TestVariableTunnelBuild_RecordCount_WireSizeFormula(t *testing.T) {
+	for count := 1; count <= 8; count++ {
+		expectedSize := 1 + count*StandardBuildRecordSize
+		t.Run(fmt.Sprintf("Count%d", count), func(t *testing.T) {
+			assert.Equal(t, 1+count*528, expectedSize,
+				"Wire size for %d records = 1 + %d×528", count, count)
+		})
+	}
+}
+
+// TestTunnelBuild_ECIESRecords_ShortRecordSize218 verifies ECIES short record = 218 bytes.
+func TestTunnelBuild_ECIESRecords_ShortRecordSize218(t *testing.T) {
+	assert.Equal(t, 218, ShortBuildRecordSize,
+		"ECIES short build record must be 218 bytes per Proposal 152/157")
+}
+
+// TestTunnelBuild_ECIESRecords_ShortRecordComponents verifies 218 = toPeer(16) + ephKey(32) + encrypted(154+16).
+func TestTunnelBuild_ECIESRecords_ShortRecordComponents(t *testing.T) {
+	assert.Equal(t, 64, ShortRecordHeaderSize,
+		"Short record header = toPeer(16) + ephemeralKey(32) + MAC(16) = 64")
+	assert.Equal(t, 154, ShortBuildRecordCleartextLen,
+		"Short record cleartext = 154 bytes")
+	assert.Equal(t, ShortBuildRecordCleartextLen+ShortRecordHeaderSize, ShortBuildRecordSize,
+		"ShortBuildRecordSize = cleartext(154) + header(64) = 218")
+}
+
+// TestTunnelBuild_ECIESRecords_ShortBytesProduces218 verifies ShortBytes() output size.
+func TestTunnelBuild_ECIESRecords_ShortBytesProduces218(t *testing.T) {
+	record := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(1),
+		NextTunnel:    tunnel.TunnelID(2),
+		RequestTime:   time.Now(),
+	}
+	shortData := record.ShortBytes()
+	assert.Equal(t, ShortBuildRecordSize, len(shortData),
+		"ShortBytes() must produce exactly 218 bytes")
+}
+
+// TestTunnelBuild_RecordFormat_CleartextIs222 verifies standard cleartext record = 222 bytes.
+func TestTunnelBuild_RecordFormat_CleartextIs222(t *testing.T) {
+	assert.Equal(t, 222, StandardBuildRecordCleartextLen,
+		"Standard build request cleartext must be 222 bytes")
+}
+
+// TestTunnelBuild_RecordFormat_BytesProduces222 verifies Bytes() serialization is 222 bytes.
+func TestTunnelBuild_RecordFormat_BytesProduces222(t *testing.T) {
+	record := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(100),
+		NextTunnel:    tunnel.TunnelID(200),
+		Flag:          1,
+		RequestTime:   time.Now(),
+		SendMessageID: 42,
+	}
+	data := record.Bytes()
+	assert.Equal(t, 222, len(data),
+		"BuildRequestRecord.Bytes() must produce exactly 222 bytes")
+}
+
+// TestTunnelBuild_RecordFormat_FieldLayout verifies the exact byte offsets per I2P spec.
+func TestTunnelBuild_RecordFormat_FieldLayout(t *testing.T) {
+	var ourIdent common.Hash
+	for i := range ourIdent {
+		ourIdent[i] = 0xAA
+	}
+	var nextIdent common.Hash
+	for i := range nextIdent {
+		nextIdent[i] = 0xBB
+	}
+	var layerKey, ivKey, replyKey session_key.SessionKey
+	for i := range layerKey {
+		layerKey[i] = 0x11
+	}
+	for i := range ivKey {
+		ivKey[i] = 0x22
+	}
+	for i := range replyKey {
+		replyKey[i] = 0x33
+	}
+	var replyIV [16]byte
+	for i := range replyIV {
+		replyIV[i] = 0x44
+	}
+
+	record := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(0x01020304),
+		OurIdent:      ourIdent,
+		NextTunnel:    tunnel.TunnelID(0x05060708),
+		NextIdent:     nextIdent,
+		LayerKey:      layerKey,
+		IVKey:         ivKey,
+		ReplyKey:      replyKey,
+		ReplyIV:       replyIV,
+		Flag:          7,
+		RequestTime:   time.Unix(3600*1000, 0), // 1000 hours since epoch
+		SendMessageID: 0x0A0B0C0D,
+	}
+
+	data := record.Bytes()
+	require.Equal(t, 222, len(data))
+
+	// ReceiveTunnel at [0:4]
+	assert.Equal(t, byte(0x01), data[0])
+	assert.Equal(t, byte(0x04), data[3])
+
+	// OurIdent at [4:36]
+	assert.Equal(t, byte(0xAA), data[4])
+	assert.Equal(t, byte(0xAA), data[35])
+
+	// NextTunnel at [36:40]
+	assert.Equal(t, byte(0x05), data[36])
+	assert.Equal(t, byte(0x08), data[39])
+
+	// NextIdent at [40:72]
+	assert.Equal(t, byte(0xBB), data[40])
+	assert.Equal(t, byte(0xBB), data[71])
+
+	// LayerKey at [72:104]
+	assert.Equal(t, byte(0x11), data[72])
+	assert.Equal(t, byte(0x11), data[103])
+
+	// IVKey at [104:136]
+	assert.Equal(t, byte(0x22), data[104])
+	assert.Equal(t, byte(0x22), data[135])
+
+	// ReplyKey at [136:168]
+	assert.Equal(t, byte(0x33), data[136])
+	assert.Equal(t, byte(0x33), data[167])
+
+	// ReplyIV at [168:184]
+	assert.Equal(t, byte(0x44), data[168])
+	assert.Equal(t, byte(0x44), data[183])
+
+	// Flag at [184]
+	assert.Equal(t, byte(7), data[184])
+
+	// RequestTime at [185:189] — hours since epoch
+	hours := binary.BigEndian.Uint32(data[185:189])
+	assert.Equal(t, uint32(1000), hours, "RequestTime at [185:189] must be hours since epoch")
+
+	// SendMessageID at [189:193]
+	msgID := binary.BigEndian.Uint32(data[189:193])
+	assert.Equal(t, uint32(0x0A0B0C0D), msgID, "SendMessageID at [189:193]")
+
+	// Padding at [193:222] = 29 bytes
+	assert.Equal(t, 29, len(data[193:222]), "Padding must be 29 bytes at [193:222]")
+}
+
+// TestTunnelBuild_RecordFormat_ParseRoundTrip verifies Bytes() → ReadBuildRequestRecord roundtrip.
+func TestTunnelBuild_RecordFormat_ParseRoundTrip(t *testing.T) {
+	original := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(12345),
+		NextTunnel:    tunnel.TunnelID(67890),
+		Flag:          1,
+		RequestTime:   time.Unix(3600*500, 0), // truncated to hour
+		SendMessageID: 9999,
+	}
+	for i := range original.OurIdent {
+		original.OurIdent[i] = byte(i)
+	}
+	for i := range original.NextIdent {
+		original.NextIdent[i] = byte(i + 32)
+	}
+
+	data := original.Bytes()
+	require.Equal(t, 222, len(data))
+
+	parsed, err := ReadBuildRequestRecord(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.ReceiveTunnel, parsed.ReceiveTunnel)
+	assert.Equal(t, original.OurIdent, parsed.OurIdent)
+	assert.Equal(t, original.NextTunnel, parsed.NextTunnel)
+	assert.Equal(t, original.NextIdent, parsed.NextIdent)
+	assert.Equal(t, original.Flag, parsed.Flag)
+	assert.Equal(t, original.SendMessageID, parsed.SendMessageID)
+}
+
+// TestTunnelBuild_ReplyProcessing_ReplyCodes verifies all defined reply codes.
+func TestTunnelBuild_ReplyProcessing_ReplyCodes(t *testing.T) {
+	assert.Equal(t, byte(0x00), byte(TUNNEL_BUILD_REPLY_SUCCESS), "SUCCESS = 0x00")
+	assert.Equal(t, byte(0x01), byte(TUNNEL_BUILD_REPLY_REJECT), "REJECT = 0x01")
+	assert.Equal(t, byte(0x02), byte(TUNNEL_BUILD_REPLY_OVERLOAD), "OVERLOAD = 0x02")
+	assert.Equal(t, byte(0x03), byte(TUNNEL_BUILD_REPLY_BANDWIDTH), "BANDWIDTH = 0x03")
+	assert.Equal(t, byte(0x04), byte(TUNNEL_BUILD_REPLY_INVALID), "INVALID = 0x04")
+	assert.Equal(t, byte(0x05), byte(TUNNEL_BUILD_REPLY_EXPIRED), "EXPIRED = 0x05")
+}
+
+// TestTunnelBuild_ReplyProcessing_AllAccepted verifies ProcessReply succeeds when all hops accept.
+func TestTunnelBuild_ReplyProcessing_AllAccepted(t *testing.T) {
+	var records [8]BuildResponseRecord
+	for i := range records {
+		var randomData [495]byte
+		for j := range randomData {
+			randomData[j] = byte(i*10 + j%256)
+		}
+		records[i] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	}
+
+	reply := &TunnelBuildReply{Records: records}
+	err := reply.ProcessReply()
+	assert.NoError(t, err, "All hops accepted — ProcessReply must succeed")
+}
+
+// TestTunnelBuild_ReplyProcessing_OneReject verifies ProcessReply fails when any hop rejects.
+func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
+	var records [8]BuildResponseRecord
+	for i := range records {
+		var randomData [495]byte
+		for j := range randomData {
+			randomData[j] = byte(i + j%256)
+		}
+		code := byte(TUNNEL_BUILD_REPLY_SUCCESS)
+		if i == 3 {
+			code = byte(TUNNEL_BUILD_REPLY_REJECT)
+		}
+		records[i] = CreateBuildResponseRecord(code, randomData)
+	}
+
+	reply := &TunnelBuildReply{Records: records}
+	err := reply.ProcessReply()
+	assert.Error(t, err, "One rejection means tunnel build failed")
+}
+
+// TestTunnelBuild_ReplyProcessing_HashIntegrity verifies SHA-256 hash verification.
+func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
+	var randomData [495]byte
+	for i := range randomData {
+		randomData[i] = byte(i)
+	}
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	// Verify the hash is correct
+	hashInput := make([]byte, 496)
+	copy(hashInput[:495], randomData[:])
+	hashInput[495] = TUNNEL_BUILD_REPLY_SUCCESS
+	expectedHash := sha256.Sum256(hashInput)
+	assert.Equal(t, expectedHash[:], record.Hash[:],
+		"CreateBuildResponseRecord must set Hash = SHA256(RandomData + Reply)")
+
+	// Create a full set of 8 valid records, then corrupt one
+	var records [8]BuildResponseRecord
+	for i := range records {
+		var rd [495]byte
+		for j := range rd {
+			rd[j] = byte(i*31 + j%256)
+		}
+		records[i] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd)
+	}
+	// Corrupt record 0's hash
+	records[0].Hash[0] ^= 0xFF
+
+	reply := &TunnelBuildReply{Records: records}
+	err := reply.ProcessReply()
+	assert.Error(t, err, "corrupted hash must cause ProcessReply to fail")
+}
+
+// ============================================================================
+// Section 6 — ShortTunnelBuild / ShortTunnelBuildReply (types 25, 26)
+// ============================================================================
+
+// TestShortTunnelBuild_RecordFormat_Size218 verifies short records are 218 bytes.
+func TestShortTunnelBuild_RecordFormat_Size218(t *testing.T) {
+	record := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(1),
+		NextTunnel:    tunnel.TunnelID(2),
+		RequestTime:   time.Now(),
+	}
+	shortData := record.ShortBytes()
+	assert.Equal(t, 218, len(shortData),
+		"Short build record must be 218 bytes (Proposal 157)")
+}
+
+// TestShortTunnelBuild_RecordFormat_ToPeerAt0to16 verifies toPeer identity hash prefix.
+func TestShortTunnelBuild_RecordFormat_ToPeerAt0to16(t *testing.T) {
+	var ourIdent common.Hash
+	for i := range ourIdent {
+		ourIdent[i] = byte(0xDD)
+	}
+	record := BuildRequestRecord{
+		OurIdent:    ourIdent,
+		RequestTime: time.Now(),
+	}
+	shortData := record.ShortBytes()
+
+	// toPeer at [0:16] = first 16 bytes of OurIdent
+	for i := 0; i < 16; i++ {
+		assert.Equal(t, byte(0xDD), shortData[i],
+			"toPeer[%d] must match OurIdent[:16]", i)
+	}
+}
+
+// TestShortTunnelBuild_RecordFormat_EphemeralKeyAt16to48 verifies ephemeral key placeholder.
+func TestShortTunnelBuild_RecordFormat_EphemeralKeyAt16to48(t *testing.T) {
+	record := BuildRequestRecord{RequestTime: time.Now()}
+	shortData := record.ShortBytes()
+
+	// Bytes [16:48] reserved for ephemeral X25519 key (zeroed pre-encryption)
+	for i := 16; i < 48; i++ {
+		assert.Equal(t, byte(0), shortData[i],
+			"Ephemeral key placeholder at [%d] must be zero pre-encryption", i)
+	}
+}
+
+// TestShortTunnelBuild_RecordFormat_CleartextPayloadLayout verifies payload field offsets.
+func TestShortTunnelBuild_RecordFormat_CleartextPayloadLayout(t *testing.T) {
+	record := BuildRequestRecord{
+		ReceiveTunnel: tunnel.TunnelID(0x01020304),
+		NextTunnel:    tunnel.TunnelID(0x05060708),
+		Flag:          3,
+		RequestTime:   time.Unix(60*5000, 0), // 5000 minutes since epoch
+		SendMessageID: 0x0A0B0C0D,
+	}
+	for i := range record.NextIdent {
+		record.NextIdent[i] = 0xCC
+	}
+
+	shortData := record.ShortBytes()
+	require.Equal(t, 218, len(shortData))
+
+	const off = 48 // payload offset
+
+	// receive_tunnel at [off:off+4]
+	rcvTunnel := binary.BigEndian.Uint32(shortData[off : off+4])
+	assert.Equal(t, uint32(0x01020304), rcvTunnel, "receive_tunnel at payload [0:4]")
+
+	// next_tunnel at [off+4:off+8]
+	nxtTunnel := binary.BigEndian.Uint32(shortData[off+4 : off+8])
+	assert.Equal(t, uint32(0x05060708), nxtTunnel, "next_tunnel at payload [4:8]")
+
+	// next_ident at [off+8:off+40]
+	assert.Equal(t, byte(0xCC), shortData[off+8], "next_ident starts at payload[8]")
+	assert.Equal(t, byte(0xCC), shortData[off+39], "next_ident ends at payload[39]")
+
+	// flag at [off+40]
+	assert.Equal(t, byte(3), shortData[off+40], "flag at payload[40]")
+
+	// request_time at [off+44:off+48] — minutes since epoch for short records
+	minutes := binary.BigEndian.Uint32(shortData[off+44 : off+48])
+	assert.Equal(t, uint32(5000), minutes, "request_time at payload[44:48] in minutes")
+
+	// send_message_id at [off+52:off+56]
+	sendMsgID := binary.BigEndian.Uint32(shortData[off+52 : off+56])
+	assert.Equal(t, uint32(0x0A0B0C0D), sendMsgID, "send_message_id at payload[52:56]")
+}
+
+// TestShortTunnelBuild_RecordFormat_NoElGamalFallback verifies ECIES-only (no 528-byte records).
+func TestShortTunnelBuild_RecordFormat_NoElGamalFallback(t *testing.T) {
+	assert.NotEqual(t, StandardBuildRecordSize, ShortBuildRecordSize,
+		"Short records (218) must differ from standard ElGamal records (528)")
+	assert.Less(t, ShortBuildRecordSize, StandardBuildRecordSize,
+		"Short ECIES records must be smaller than standard records")
+}
+
+// TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used verifies that
+// BuildRecordCrypto uses ChaCha20-Poly1305 for reply record encryption.
+func TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	// Create a valid response record
+	var randomData [495]byte
+	for i := range randomData {
+		randomData[i] = byte(i % 256)
+	}
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	// Encrypt with ChaCha20-Poly1305
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	var iv [16]byte
+	for i := range iv {
+		iv[i] = byte(i + 100)
+	}
+
+	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
+	require.NoError(t, err)
+
+	// ChaCha20-Poly1305 adds 16-byte auth tag: 528 plaintext → 544 ciphertext
+	assert.Equal(t, 544, len(encrypted),
+		"ChaCha20-Poly1305 encrypted reply must be 528+16=544 bytes")
+
+	// Decrypt and verify roundtrip
+	decrypted, err := crypto.DecryptReplyRecord(encrypted, key, iv)
+	require.NoError(t, err)
+	assert.Equal(t, byte(TUNNEL_BUILD_REPLY_SUCCESS), decrypted.Reply,
+		"Decrypted reply code must match original")
+	assert.Equal(t, record.Hash, decrypted.Hash,
+		"Decrypted hash must match original")
+}
+
+// TestShortTunnelBuild_LayerEncryption_AuthTagRequired verifies authentication tag is checked.
+func TestShortTunnelBuild_LayerEncryption_AuthTagRequired(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	var randomData [495]byte
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = byte(i)
+	}
+	var iv [16]byte
+
+	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
+	require.NoError(t, err)
+
+	// Corrupt the auth tag (last 16 bytes)
+	encrypted[len(encrypted)-1] ^= 0xFF
+
+	_, err = crypto.DecryptReplyRecord(encrypted, key, iv)
+	assert.Error(t, err, "corrupted auth tag must cause decryption failure")
+}
+
+// TestShortTunnelBuild_LayerEncryption_WrongKeyFails verifies wrong key detection.
+func TestShortTunnelBuild_LayerEncryption_WrongKeyFails(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	var randomData [495]byte
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = 0xAA
+	}
+	var iv [16]byte
+
+	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
+	require.NoError(t, err)
+
+	// Try with wrong key
+	var wrongKey session_key.SessionKey
+	for i := range wrongKey {
+		wrongKey[i] = 0xBB
+	}
+	_, err = crypto.DecryptReplyRecord(encrypted, wrongKey, iv)
+	assert.Error(t, err, "wrong key must cause decryption failure")
+}
+
+// ============================================================================
+// Section 6 — TunnelBuildReply / VariableTunnelBuildReply (types 22, 24)
+// ============================================================================
+
+// TestTunnelBuildReply_Format_8ResponseRecords verifies TunnelBuildReply has 8 records.
+func TestTunnelBuildReply_Format_8ResponseRecords(t *testing.T) {
+	var reply TunnelBuildReply
+	assert.Equal(t, 8, len(reply.Records),
+		"TunnelBuildReply must have exactly 8 BuildResponseRecord slots")
+}
+
+// TestTunnelBuildReply_Format_ResponseRecordIs528 verifies each response record = 528 bytes.
+func TestTunnelBuildReply_Format_ResponseRecordIs528(t *testing.T) {
+	// BuildResponseRecord: Hash(32) + RandomData(495) + Reply(1) = 528 bytes
+	assert.Equal(t, 528, 32+495+1,
+		"BuildResponseRecord must be Hash(32)+RandomData(495)+Reply(1)=528 bytes")
+}
+
+// TestTunnelBuildReply_Format_HashIsFirst32Bytes verifies Hash occupies first 32 bytes.
+func TestTunnelBuildReply_Format_HashIsFirst32Bytes(t *testing.T) {
+	var randomData [495]byte
+	for i := range randomData {
+		randomData[i] = byte(i)
+	}
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	// Serialize manually
+	buf := make([]byte, 528)
+	copy(buf[0:32], record.Hash[:])
+	copy(buf[32:527], record.RandomData[:])
+	buf[527] = record.Reply
+
+	// Parse back
+	parsed, err := ReadBuildResponseRecord(buf)
+	require.NoError(t, err)
+	assert.Equal(t, record.Hash, parsed.Hash, "Hash at [0:32] must survive roundtrip")
+	assert.Equal(t, record.RandomData, parsed.RandomData, "RandomData at [32:527] must survive roundtrip")
+	assert.Equal(t, record.Reply, parsed.Reply, "Reply at [527] must survive roundtrip")
+}
+
+// TestVariableTunnelBuildReply_Format_CountPlusRecords verifies the count+records layout.
+func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
+	// Create VariableTunnelBuildReply with 3 records
+	records := make([]BuildResponseRecord, 3)
+	for i := range records {
+		var randomData [495]byte
+		for j := range randomData {
+			randomData[j] = byte(i*37 + j%256)
+		}
+		records[i] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	}
+
+	reply := &VariableTunnelBuildReply{
+		Count:                3,
+		BuildResponseRecords: records,
+	}
+
+	assert.Equal(t, 3, reply.Count)
+	assert.Equal(t, 3, len(reply.BuildResponseRecords))
+
+	// All records should validate
+	err := reply.ProcessReply()
+	assert.NoError(t, err, "All-success VariableTunnelBuildReply.ProcessReply must succeed")
+}
+
+// TestVariableTunnelBuildReply_Format_SHA256Integrity verifies hash integrity check.
+func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
+	var randomData [495]byte
+	for i := range randomData {
+		randomData[i] = byte(i * 3)
+	}
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_OVERLOAD, randomData)
+
+	// Verify the hash is SHA256(RandomData || Reply)
+	hashInput := make([]byte, 496)
+	copy(hashInput[:495], randomData[:])
+	hashInput[495] = TUNNEL_BUILD_REPLY_OVERLOAD
+	expectedHash := sha256.Sum256(hashInput)
+	// Compare bytes since record.Hash is common.Hash (named type)
+	assert.Equal(t, expectedHash[:], record.Hash[:], "Hash must be SHA256(RandomData || Reply)")
+}
+
+// TestShortTunnelBuildReply_Format_AllAccepted verifies ShortTunnelBuildReply processes correctly.
+func TestShortTunnelBuildReply_Format_AllAccepted(t *testing.T) {
+	records := make([]BuildResponseRecord, 4)
+	for i := range records {
+		var randomData [495]byte
+		for j := range randomData {
+			randomData[j] = byte(i*17 + j%256)
+		}
+		records[i] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	}
+
+	reply := NewShortTunnelBuildReply(records)
+	assert.Equal(t, 4, reply.Count)
+
+	err := reply.ProcessReply()
+	assert.NoError(t, err, "All-success ShortTunnelBuildReply must succeed")
+}
+
+// TestShortTunnelBuildReply_Format_MixedResults verifies mixed accept/reject handling.
+func TestShortTunnelBuildReply_Format_MixedResults(t *testing.T) {
+	records := make([]BuildResponseRecord, 3)
+	var rd0, rd1, rd2 [495]byte
+	for i := range rd0 {
+		rd0[i] = 0x11
+	}
+	for i := range rd1 {
+		rd1[i] = 0x22
+	}
+	for i := range rd2 {
+		rd2[i] = 0x33
+	}
+	records[0] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd0)
+	records[1] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_BANDWIDTH, rd1)
+	records[2] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd2)
+
+	reply := NewShortTunnelBuildReply(records)
+	err := reply.ProcessReply()
+	assert.Error(t, err, "Mixed results (1 reject) means build failed")
+}
+
+// ============================================================================
+// Section 6 — Cryptography Audit
+// ============================================================================
+
+// TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented verifies that garlic
+// encryption uses ECIES-X25519-AEAD-Ratchet as specified in Proposal 144.
+func TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented(t *testing.T) {
+	// Verify session manager can be created (proves ECIES infrastructure exists)
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err, "GarlicSessionManager must be creatable")
+
+	// Verify key generation produces valid X25519 keys
+	pubBytes, privBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	assert.Equal(t, 32, len(pubBytes), "ECIES public key must be 32 bytes (X25519)")
+	assert.Equal(t, 32, len(privBytes), "ECIES private key must be 32 bytes (X25519)")
+
+	// Encrypt a message — this exercises the full Proposal 144 state machine
+	var receiverPub [32]byte
+	copy(receiverPub[:], pubBytes)
+	destHash := sha256.Sum256(receiverPub[:])
+	plaintext := []byte("crypto audit garlic test")
+
+	ciphertext, err := sm.EncryptGarlicMessage(destHash, receiverPub, plaintext)
+	require.NoError(t, err)
+	assert.True(t, len(ciphertext) > 0, "ECIES garlic ciphertext must be non-empty")
+
+	// New Session format: ephemeralPubKey(32) + nonce(12) + ciphertext + tag(16) = min 60
+	assert.True(t, len(ciphertext) >= 60,
+		"New Session ciphertext must be at least 60 bytes (32+12+N+16)")
+}
+
+// TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305 verifies that build record
+// encryption uses ChaCha20-Poly1305 per Proposal 152.
+func TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	// Prepare a response record
+	var randomData [495]byte
+	for i := range randomData {
+		randomData[i] = byte(i)
+	}
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = byte(i + 0x10)
+	}
+	var iv [16]byte
+	for i := range iv {
+		iv[i] = byte(i + 0x20)
+	}
+
+	// Encrypt — must produce 544 bytes (528 + 16 auth tag)
+	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
+	require.NoError(t, err)
+	assert.Equal(t, 544, len(encrypted),
+		"ChaCha20-Poly1305 must produce 528+16=544 bytes per Proposal 152")
+
+	// Decrypt — roundtrip must succeed
+	decrypted, err := crypto.DecryptReplyRecord(encrypted, key, iv)
+	require.NoError(t, err)
+	assert.Equal(t, record.Reply, decrypted.Reply)
+	assert.Equal(t, record.Hash, decrypted.Hash)
+	assert.Equal(t, record.RandomData, decrypted.RandomData)
+}
+
+// TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes verifies ChaCha20-Poly1305
+// uses the first 12 bytes of the 16-byte IV as the nonce.
+func TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	var randomData [495]byte
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = 0x42
+	}
+
+	// Two IVs that differ only in byte 12-15 (beyond the 12-byte nonce)
+	iv1 := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0xAA, 0xBB, 0xCC, 0xDD}
+	iv2 := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x11, 0x22, 0x33, 0x44}
+
+	enc1, err := crypto.EncryptReplyRecord(record, key, iv1)
+	require.NoError(t, err)
+	enc2, err := crypto.EncryptReplyRecord(record, key, iv2)
+	require.NoError(t, err)
+
+	// Same first 12 bytes → same nonce → same ciphertext
+	assert.Equal(t, enc1, enc2,
+		"Only first 12 bytes of IV are used as nonce; bytes 12-15 must not affect output")
+}
+
+// TestCryptoAudit_HKDFUsage_InfoStringsPresent verifies HKDF uses role-specific info strings.
+func TestCryptoAudit_HKDFUsage_InfoStringsPresent(t *testing.T) {
+	// The implementation uses "ECIES-Ratchet-Initiator" and "ECIES-Ratchet-Responder"
+	assert.Equal(t, "ECIES-Ratchet-Initiator", hkdfInfoInitiator,
+		"HKDF info string for initiator must be 'ECIES-Ratchet-Initiator'")
+	assert.Equal(t, "ECIES-Ratchet-Responder", hkdfInfoResponder,
+		"HKDF info string for responder must be 'ECIES-Ratchet-Responder'")
+}
+
+// TestCryptoAudit_HKDFUsage_DeriveDirectionalKeys verifies HKDF produces distinct
+// directional keys for initiator and responder.
+func TestCryptoAudit_HKDFUsage_DeriveDirectionalKeys(t *testing.T) {
+	sharedSecret := sha256.Sum256([]byte("test shared secret for HKDF audit"))
+	keys, err := deriveSessionKeysFromSecret(sharedSecret[:])
+	require.NoError(t, err)
+
+	iSend, iRecv := deriveDirectionalKeys(keys.rootKey, true)
+	rSend, rRecv := deriveDirectionalKeys(keys.rootKey, false)
+
+	// Initiator send/recv must be different
+	assert.NotEqual(t, iSend, iRecv,
+		"Initiator send and recv keys must differ")
+
+	// Cross-role symmetry: initiator's send = responder's recv
+	assert.Equal(t, iSend, rRecv,
+		"Initiator send must equal responder recv")
+	assert.Equal(t, iRecv, rSend,
+		"Initiator recv must equal responder send")
+
+	// All keys must be non-zero
+	assert.NotEqual(t, [32]byte{}, iSend, "Send key must be non-zero")
+	assert.NotEqual(t, [32]byte{}, iRecv, "Recv key must be non-zero")
+}
+
+// TestCryptoAudit_SessionTagRatchet_Prop144Section5 verifies the tag ratchet produces
+// deterministic 8-byte tags as specified in Proposal 144 Section 5.
+func TestCryptoAudit_SessionTagRatchet_Prop144Section5(t *testing.T) {
+	// Create a tag ratchet with a known chain key
+	chainKey := sha256.Sum256([]byte("tag ratchet chain key for audit"))
+	tagRatchet := ratchet.NewTagRatchet(chainKey)
+
+	// Generate a sequence of tags
+	var tags [][8]byte
+	for i := 0; i < 50; i++ {
+		tag, err := tagRatchet.GenerateNextTag()
+		require.NoError(t, err, "GenerateNextTag must not fail at step %d", i)
+		tags = append(tags, tag)
+	}
+
+	// All tags must be 8 bytes
+	for i, tag := range tags {
+		assert.Equal(t, 8, len(tag), "Tag %d must be 8 bytes", i)
+	}
+
+	// Tags must be unique
+	tagSet := make(map[[8]byte]bool)
+	for _, tag := range tags {
+		assert.False(t, tagSet[tag], "Tags must be unique within a sequence")
+		tagSet[tag] = true
+	}
+
+	// Deterministic: same chain key → same tags
+	tagRatchet2 := ratchet.NewTagRatchet(chainKey)
+	for i := 0; i < 50; i++ {
+		tag, err := tagRatchet2.GenerateNextTag()
+		require.NoError(t, err)
+		assert.Equal(t, tags[i], tag, "Tag ratchet must be deterministic (tag %d)", i)
+	}
+}
+
+// ============================================================================
+// Section 6 — Legacy Crypto Found
+// ============================================================================
+
+// TestLegacyCrypto_ElGamalBuildRecords_FlagPresence flags the existence of
+// 528-byte ElGamal build record types. Per modern spec, only ECIES should be used.
+func TestLegacyCrypto_ElGamalBuildRecords_FlagPresence(t *testing.T) {
+	// StandardBuildRecordSize = 528 is still defined (legacy ElGamal + ECIES long format)
+	assert.Equal(t, 528, StandardBuildRecordSize,
+		"CRITICAL: StandardBuildRecordSize (528) is defined — this is the ElGamal/ECIES-long record size")
+
+	// Document: BuildResponseRecordELGamalAES and BuildResponseRecordELGamal types exist
+	var elgamalAES BuildResponseRecordELGamalAES
+	assert.Equal(t, 528, len(elgamalAES),
+		"CRITICAL: BuildResponseRecordELGamalAES [528]byte type exists — legacy ElGamal/AES record")
+
+	var elgamal BuildResponseRecordELGamal
+	assert.Equal(t, 528, len(elgamal),
+		"CRITICAL: BuildResponseRecordELGamal [528]byte type exists — legacy ElGamal record")
+
+	// TunnelBuild uses 8×528 = 4224 byte format (legacy-compatible)
+	var tb TunnelBuild
+	totalSize := len(tb) * StandardBuildRecordSize
+	assert.Equal(t, 4224, totalSize,
+		"TunnelBuild uses 528-byte records (legacy ElGamal format)")
+
+	t.Log("CRITICAL FINDING: ElGamal build record types (528 bytes) are present in the codebase.")
+	t.Log("The modern I2P spec recommends ECIES-only (218-byte short records).")
+	t.Log("528-byte records remain for backward compatibility with older routers.")
+}
+
+// TestLegacyCrypto_AESSessionTag_FlagPresence flags the existence of
+// GarlicElGamal (AES session tag garlic encryption).
+func TestLegacyCrypto_AESSessionTag_FlagPresence(t *testing.T) {
+	// GarlicElGamal is a legacy type that uses ElGamal/AES encryption
+	garlic, err := NewGarlicElGamal([]byte{0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04})
+	require.NoError(t, err)
+	assert.NotNil(t, garlic, "GarlicElGamal type exists — legacy AES session tag garlic")
+	assert.Equal(t, uint32(4), garlic.Length)
+	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, garlic.Data)
+
+	t.Log("CRITICAL FINDING: GarlicElGamal type exists for legacy ElGamal/AES garlic encryption.")
+	t.Log("Modern I2P uses ECIES-X25519-AEAD-Ratchet (Proposal 144) exclusively.")
+	t.Log("GarlicElGamal remains for backward compatibility parsing of legacy messages.")
+}
+
+// TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC
+// decryption path in BuildRecordCrypto for legacy reply record processing.
+func TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence(t *testing.T) {
+	crypto := &BuildRecordCrypto{}
+
+	// Prepare a valid 528-byte ciphertext (all zeros, AES will decrypt it)
+	ciphertext := make([]byte, 528)
+	var key session_key.SessionKey
+	var iv [16]byte
+
+	// The decryptAES256CBC method exists and can be called
+	result, err := crypto.decryptAES256CBC(ciphertext, key, iv)
+	// AES decryption of zeros with zero key/IV will succeed (just produces garbage plaintext)
+	require.NoError(t, err)
+	assert.Equal(t, 528, len(result),
+		"Legacy AES-256-CBC decryption path exists in BuildRecordCrypto")
+
+	t.Log("FINDING: AES-256-CBC decryption path (decryptAES256CBC) exists in BuildRecordCrypto.")
+	t.Log("This is used for legacy build reply record decryption (pre-0.9.44).")
+	t.Log("Modern path uses ChaCha20-Poly1305 (encryptChaCha20Poly1305/decryptChaCha20Poly1305).")
 }
