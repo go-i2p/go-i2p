@@ -27,6 +27,7 @@ func Handle() {
 			return
 		}
 		if sig == os.Interrupt {
+			handlePreShutdown()
 			handleInterrupted()
 		}
 		// Note: other signals intentionally ignored on Windows

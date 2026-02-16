@@ -29,6 +29,7 @@ func Handle() {
 		if sig == syscall.SIGHUP {
 			handleReload()
 		} else if sig == syscall.SIGINT || sig == syscall.SIGTERM {
+			handlePreShutdown()
 			handleInterrupted()
 		}
 		// Note: other signals intentionally ignored
