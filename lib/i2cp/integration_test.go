@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"context"
+	"encoding/binary"
 	"net"
 	"sync"
 	"testing"
@@ -321,20 +322,28 @@ func TestE2E_ClientProtocolFlow(t *testing.T) {
 	require.Equal(t, uint8(MessageTypeSetDate), uint8(setDateMsg.Type))
 
 	// Step 3: Reconfigure session
+	// Per I2CP wire format, the payload must start with a 2-byte session ID,
+	// followed by the options Mapping. An empty Mapping is 2 bytes (\x00\x00).
+	reconfigPayload := make([]byte, 4)
+	binary.BigEndian.PutUint16(reconfigPayload[0:2], sessionID)
+	// reconfigPayload[2:4] = 0x0000 (empty Mapping, size=0)
 	reconfigMsg := &Message{
 		Type:      MessageTypeReconfigureSession,
 		SessionID: sessionID,
-		Payload:   []byte{}, // Empty config for now
+		Payload:   reconfigPayload,
 	}
 
 	err = WriteMessage(conn, reconfigMsg)
 	require.NoError(t, err)
 
 	// Step 4: Destroy session
+	// Per I2CP wire format, DestroySession payload contains the 2-byte session ID.
+	destroyPayload := make([]byte, 2)
+	binary.BigEndian.PutUint16(destroyPayload, sessionID)
 	destroyMsg := &Message{
 		Type:      MessageTypeDestroySession,
 		SessionID: sessionID,
-		Payload:   []byte{},
+		Payload:   destroyPayload,
 	}
 
 	err = WriteMessage(conn, destroyMsg)

@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -10,6 +11,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// prependSessionID builds a wire-format payload by prepending a 2-byte
+// big-endian session ID to the given data, matching the I2CP wire format
+// where SessionID is embedded at the start of the payload.
+func prependSessionID(sessionID uint16, payload []byte) []byte {
+	result := make([]byte, 2+len(payload))
+	binary.BigEndian.PutUint16(result[0:2], sessionID)
+	copy(result[2:], payload)
+	return result
+}
 
 // createTestSessionWithLeaseSet creates a session with a valid LeaseSet2 for testing.
 // Returns the session and the serialized LeaseSet2 bytes.
@@ -187,10 +198,13 @@ func TestHandleCreateLeaseSet2_WithValidation(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
+	// Build wire-format payload: SessionID(2 bytes) + LeaseSet2 data
+	wirePayload := prependSessionID(session.ID(), leaseSetBytes)
+
 	msg := &Message{
 		Type:      MessageTypeCreateLeaseSet2,
 		SessionID: session.ID(),
-		Payload:   leaseSetBytes,
+		Payload:   wirePayload,
 	}
 
 	sessionPtr := session
@@ -199,7 +213,7 @@ func TestHandleCreateLeaseSet2_WithValidation(t *testing.T) {
 	assert.NoError(t, err, "handleCreateLeaseSet2 should succeed with valid data")
 	assert.Nil(t, response, "CreateLeaseSet2 should not return a response")
 
-	// Verify session cached the LeaseSet
+	// Verify session cached the LeaseSet (should be the stripped payload, not wire format)
 	cached := session.CurrentLeaseSet()
 	assert.Equal(t, leaseSetBytes, cached, "Session should cache the validated LeaseSet2")
 }
@@ -217,16 +231,19 @@ func TestHandleCreateLeaseSet2_RejectsGarbage(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
-	// Send garbage bytes as payload (>400 bytes to pass the length check)
+	// Send garbage bytes as payload (>400 bytes after session ID to pass the length check)
 	garbage := make([]byte, 500)
 	for i := range garbage {
 		garbage[i] = byte(i % 256)
 	}
 
+	// Build wire-format payload: SessionID(2 bytes) + garbage data
+	wirePayload := prependSessionID(session.ID(), garbage)
+
 	msg := &Message{
 		Type:      MessageTypeCreateLeaseSet2,
 		SessionID: session.ID(),
-		Payload:   garbage,
+		Payload:   wirePayload,
 	}
 
 	sessionPtr := session
@@ -256,10 +273,13 @@ func TestHandleCreateLeaseSet2_RejectsWrongDestination(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to publish session2's LeaseSet through session1
+	// Build wire-format payload: SessionID(2 bytes) + LeaseSet2 data
+	wirePayload := prependSessionID(session1.ID(), leaseSet2Bytes)
+
 	msg := &Message{
 		Type:      MessageTypeCreateLeaseSet2,
 		SessionID: session1.ID(),
-		Payload:   leaseSet2Bytes,
+		Payload:   wirePayload,
 	}
 
 	sessionPtr := session1
@@ -281,10 +301,13 @@ func TestHandleCreateLeaseSet2_RejectsTooShort(t *testing.T) {
 	server, err := NewServer(config)
 	require.NoError(t, err)
 
+	// Build wire-format payload: SessionID(2 bytes) + very short LeaseSet2 data
+	// The handler will strip the 2-byte session ID, leaving only 1 byte,
+	// which is too short for a valid LeaseSet2.
 	msg := &Message{
 		Type:      MessageTypeCreateLeaseSet2,
 		SessionID: session.ID(),
-		Payload:   []byte{0x01, 0x02, 0x03},
+		Payload:   []byte{0x00, 0x01, 0x03},
 	}
 
 	sessionPtr := session

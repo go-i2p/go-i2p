@@ -105,7 +105,9 @@ func ParseCreateSessionPayload(payload []byte) (*destination.Destination, *Sessi
 // Wire format:
 //   - Options Mapping (2-byte size + key=value; pairs)
 //
-// Note: SessionID is in the message header, not the payload.
+// Note: The caller must strip the 2-byte SessionID prefix from the raw wire
+// payload before calling this function. The SessionID is included in the wire
+// payload but is extracted into msg.SessionID by ReadMessage.
 func ParseReconfigureSessionPayload(payload []byte) (*SessionConfig, error) {
 	if len(payload) < 2 {
 		return nil, fmt.Errorf("reconfigure session payload too short: %d bytes", len(payload))
