@@ -118,6 +118,18 @@ func readHeaderData(data []byte, header *I2NPNTCPHeader) error {
 	return nil
 }
 
+// MarshalSecondGenTransportHeader serializes an I2NP NTCP2/SSU2 header into
+// a 9-byte buffer: type (1 byte) + msg_id (4 bytes, big-endian) +
+// short_expiration (4 bytes, seconds since epoch, big-endian).
+// This is the inverse of ReadI2NPSecondGenTransportHeader.
+func MarshalSecondGenTransportHeader(header I2NPSecondGenTransportHeader) ([]byte, error) {
+	data := make([]byte, 9)
+	data[0] = byte(header.Type)
+	binary.BigEndian.PutUint32(data[1:5], uint32(header.MessageID))
+	binary.BigEndian.PutUint32(data[5:9], uint32(header.Expiration.Unix()))
+	return data, nil
+}
+
 // ReadI2NPSecondGenTransportHeader reads an I2NP NTCP2 or SSU2 header
 // When transmitted over [NTCP2] or [SSU2], the 16-byte standard header is not used.
 // Only a 1-byte type, 4-byte message id, and a 4-byte expiration in seconds are included.
