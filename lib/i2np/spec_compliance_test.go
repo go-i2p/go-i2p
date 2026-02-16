@@ -11,9 +11,13 @@ package i2np
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"testing"
 	"time"
 
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/common/session_tag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -578,4 +582,834 @@ func TestExpiration_SSUShortExpiration_IsSeconds(t *testing.T) {
 func TestExpiration_DefaultToleranceIs5Minutes(t *testing.T) {
 	assert.Equal(t, int64(300), int64(DefaultExpirationTolerance),
 		"default expiration tolerance must be 300 seconds (5 minutes)")
+}
+
+// =============================================================================
+// Audit Item: DatabaseStore — Store types
+// Type byte bits 3-0: RouterInfo (0), LeaseSet (1), LeaseSet2 (3),
+// EncryptedLeaseSet (5), MetaLeaseSet (7)
+// =============================================================================
+
+// TestDatabaseStore_StoreTypes_MatchSpec verifies that all store type constants
+// match the I2NP specification values from i2np.rst.
+func TestDatabaseStore_StoreTypes_MatchSpec(t *testing.T) {
+	specTypes := map[string]int{
+		"RouterInfo":        0,
+		"LeaseSet":          1,
+		"LeaseSet2":         3,
+		"EncryptedLeaseSet": 5,
+		"MetaLeaseSet":      7,
+	}
+
+	codeTypes := map[string]int{
+		"RouterInfo":        DATABASE_STORE_TYPE_ROUTER_INFO,
+		"LeaseSet":          DATABASE_STORE_TYPE_LEASESET,
+		"LeaseSet2":         DATABASE_STORE_TYPE_LEASESET2,
+		"EncryptedLeaseSet": DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+		"MetaLeaseSet":      DATABASE_STORE_TYPE_META_LEASESET,
+	}
+
+	for name, specVal := range specTypes {
+		codeVal, ok := codeTypes[name]
+		require.True(t, ok, "missing constant for store type %s", name)
+		assert.Equal(t, specVal, codeVal,
+			"store type %s: spec=%d, code=%d", name, specVal, codeVal)
+	}
+}
+
+// TestDatabaseStore_StoreTypes_Bits3to0 verifies that GetLeaseSetType extracts
+// bits 3-0 of the type field, per spec: "bits 3-0: LeaseSet type variant".
+func TestDatabaseStore_StoreTypes_Bits3to0(t *testing.T) {
+	tests := []struct {
+		name     string
+		rawType  byte
+		expected int
+	}{
+		{"RouterInfo_0x00", 0x00, DATABASE_STORE_TYPE_ROUTER_INFO},
+		{"LeaseSet_0x01", 0x01, DATABASE_STORE_TYPE_LEASESET},
+		{"LeaseSet2_0x03", 0x03, DATABASE_STORE_TYPE_LEASESET2},
+		{"EncryptedLeaseSet_0x05", 0x05, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET},
+		{"MetaLeaseSet_0x07", 0x07, DATABASE_STORE_TYPE_META_LEASESET},
+		// Bits 7-4 set (reserved, should be masked out)
+		{"RouterInfo_HighBitsSet", 0xF0, DATABASE_STORE_TYPE_ROUTER_INFO},
+		{"LeaseSet2_HighBitsSet", 0xF3, DATABASE_STORE_TYPE_LEASESET2},
+		{"EncryptedLeaseSet_HighBitsSet", 0xA5, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ds := &DatabaseStore{StoreType: tc.rawType}
+			assert.Equal(t, tc.expected, ds.GetLeaseSetType(),
+				"GetLeaseSetType must extract bits 3-0 only")
+		})
+	}
+}
+
+// TestDatabaseStore_StoreTypes_IsRouterInfo verifies the IsRouterInfo helper.
+func TestDatabaseStore_StoreTypes_IsRouterInfo(t *testing.T) {
+	ri := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_ROUTER_INFO}
+	assert.True(t, ri.IsRouterInfo(), "type 0 must be RouterInfo")
+
+	ls := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_LEASESET}
+	assert.False(t, ls.IsRouterInfo(), "type 1 must NOT be RouterInfo")
+
+	ls2 := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_LEASESET2}
+	assert.False(t, ls2.IsRouterInfo(), "type 3 must NOT be RouterInfo")
+}
+
+// TestDatabaseStore_StoreTypes_IsLeaseSet verifies the IsLeaseSet helper
+// recognizes all LeaseSet variants (1, 3, 5, 7) but NOT RouterInfo (0).
+func TestDatabaseStore_StoreTypes_IsLeaseSet(t *testing.T) {
+	ri := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_ROUTER_INFO}
+	assert.False(t, ri.IsLeaseSet(), "RouterInfo (0) must NOT be a LeaseSet")
+
+	for _, lsType := range []byte{
+		DATABASE_STORE_TYPE_LEASESET,
+		DATABASE_STORE_TYPE_LEASESET2,
+		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+		DATABASE_STORE_TYPE_META_LEASESET,
+	} {
+		ds := &DatabaseStore{StoreType: lsType}
+		assert.True(t, ds.IsLeaseSet(),
+			"store type %d must be recognized as LeaseSet", lsType)
+	}
+}
+
+// TestDatabaseStore_StoreTypes_MarshalRoundtrip verifies each store type
+// survives a marshal→unmarshal cycle.
+func TestDatabaseStore_StoreTypes_MarshalRoundtrip(t *testing.T) {
+	storeTypes := []byte{
+		DATABASE_STORE_TYPE_ROUTER_INFO,
+		DATABASE_STORE_TYPE_LEASESET,
+		DATABASE_STORE_TYPE_LEASESET2,
+		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+		DATABASE_STORE_TYPE_META_LEASESET,
+	}
+
+	for _, st := range storeTypes {
+		t.Run(fmt.Sprintf("type_%d", st), func(t *testing.T) {
+			key := common.Hash{}
+			key[0] = st // Make each key distinct
+			original := NewDatabaseStore(key, []byte("test data"), st)
+
+			payload, err := original.MarshalPayload()
+			require.NoError(t, err)
+
+			parsed := &DatabaseStore{}
+			err = parsed.UnmarshalBinary(payload)
+			require.NoError(t, err)
+
+			assert.Equal(t, st, parsed.StoreType,
+				"store type must survive roundtrip")
+			assert.Equal(t, key, parsed.Key,
+				"key must survive roundtrip")
+		})
+	}
+}
+
+// =============================================================================
+// Audit Item: DatabaseStore — Reply token
+// "If greater than zero, a DeliveryStatusMessage is requested with the Message
+// ID set to the value of the Reply Token."
+// When reply token > 0: replyTunnelID (4 bytes) + replyGateway (32 bytes) follow.
+// When reply token == 0: data follows immediately.
+// =============================================================================
+
+// TestDatabaseStore_ReplyToken_ZeroMeansNoReplyFields verifies that when the
+// reply token is zero, the replyTunnelID and replyGateway fields are NOT present
+// in the wire format.
+func TestDatabaseStore_ReplyToken_ZeroMeansNoReplyFields(t *testing.T) {
+	key := common.Hash{}
+	key[0] = 0xAA
+	data := []byte("test payload")
+
+	ds := NewDatabaseStore(key, data, DATABASE_STORE_TYPE_LEASESET2)
+	// Default reply token is zero
+
+	payload, err := ds.MarshalPayload()
+	require.NoError(t, err)
+
+	// Expected: key(32) + type(1) + replyToken(4) + data(12) = 49 bytes
+	// NOT key(32) + type(1) + replyToken(4) + tunnelID(4) + gateway(32) + data(12) = 85
+	expectedLen := 32 + 1 + 4 + len(data)
+	assert.Equal(t, expectedLen, len(payload),
+		"zero reply token must NOT include tunnelID/gateway fields")
+}
+
+// TestDatabaseStore_ReplyToken_NonzeroIncludesReplyFields verifies that when
+// the reply token is nonzero, the wire format includes replyTunnelID (4 bytes)
+// and replyGateway (32 bytes).
+func TestDatabaseStore_ReplyToken_NonzeroIncludesReplyFields(t *testing.T) {
+	key := common.Hash{}
+	key[0] = 0xBB
+	gateway := common.Hash{}
+	gateway[0] = 0xCC
+	data := []byte("payload")
+
+	ds := NewDatabaseStore(key, data, DATABASE_STORE_TYPE_ROUTER_INFO)
+	ds.ReplyToken = [4]byte{0x00, 0x00, 0x00, 0x01} // nonzero
+	ds.ReplyTunnelID = [4]byte{0x00, 0x00, 0x10, 0x00}
+	ds.ReplyGateway = gateway
+
+	payload, err := ds.MarshalPayload()
+	require.NoError(t, err)
+
+	// Expected: key(32) + type(1) + replyToken(4) + tunnelID(4) + gateway(32) + data(7) = 80
+	expectedLen := 32 + 1 + 4 + 4 + 32 + len(data)
+	assert.Equal(t, expectedLen, len(payload),
+		"nonzero reply token MUST include tunnelID + gateway fields")
+}
+
+// TestDatabaseStore_ReplyToken_RoundtripWithReply verifies reply token, tunnel
+// ID, and gateway survive a marshal→unmarshal cycle.
+func TestDatabaseStore_ReplyToken_RoundtripWithReply(t *testing.T) {
+	key := common.Hash{}
+	key[31] = 0x42
+	gateway := common.Hash{}
+	gateway[0] = 0xDE
+	gateway[31] = 0xAD
+
+	original := NewDatabaseStore(key, []byte("reply test"), DATABASE_STORE_TYPE_LEASESET)
+	original.ReplyToken = [4]byte{0x00, 0x01, 0x02, 0x03}
+	original.ReplyTunnelID = [4]byte{0x00, 0x00, 0xFF, 0xFE}
+	original.ReplyGateway = gateway
+
+	payload, err := original.MarshalPayload()
+	require.NoError(t, err)
+
+	parsed := &DatabaseStore{}
+	err = parsed.UnmarshalBinary(payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.ReplyToken, parsed.ReplyToken, "reply token must survive roundtrip")
+	assert.Equal(t, original.ReplyTunnelID, parsed.ReplyTunnelID, "reply tunnel ID must survive roundtrip")
+	assert.Equal(t, original.ReplyGateway, parsed.ReplyGateway, "reply gateway must survive roundtrip")
+	assert.Equal(t, original.Data, parsed.Data, "data must survive roundtrip")
+}
+
+// TestDatabaseStore_ReplyToken_UnmarshalTruncatedWithReply verifies rejection
+// when the message claims a nonzero reply token but is too short to contain
+// the replyTunnelID + replyGateway fields.
+func TestDatabaseStore_ReplyToken_UnmarshalTruncatedWithReply(t *testing.T) {
+	// Build payload: key(32) + type(1) + replyToken(4 nonzero) = 37 bytes
+	// Missing: replyTunnelID(4) + replyGateway(32)
+	payload := make([]byte, 37)
+	payload[33] = 0x01 // replyToken byte 0 nonzero
+
+	parsed := &DatabaseStore{}
+	err := parsed.UnmarshalBinary(payload)
+	assert.Error(t, err, "truncated message with nonzero reply token must be rejected")
+}
+
+// =============================================================================
+// Audit Item: DatabaseStore — Compression
+// "If type == 0, data is a 2-byte Integer specifying the number of bytes that
+// follow, followed by a gzip-compressed RouterInfo."
+// All other types are uncompressed.
+// =============================================================================
+
+// TestDatabaseStore_Compression_RouterInfoHas2ByteLengthPrefix documents that
+// the spec requires RouterInfo data to be prefixed with a 2-byte length field
+// followed by gzip-compressed data. This test verifies the wire format structure.
+func TestDatabaseStore_Compression_RouterInfoHas2ByteLengthPrefix(t *testing.T) {
+	// Simulate a RouterInfo payload: 2-byte length prefix + compressed data
+	compressedRI := []byte{0xAA, 0xBB, 0xCC, 0xDD} // fake compressed data
+	riPayload := make([]byte, 2+len(compressedRI))
+	binary.BigEndian.PutUint16(riPayload[0:2], uint16(len(compressedRI)))
+	copy(riPayload[2:], compressedRI)
+
+	key := common.Hash{}
+	ds := NewDatabaseStore(key, riPayload, DATABASE_STORE_TYPE_ROUTER_INFO)
+
+	payload, err := ds.MarshalPayload()
+	require.NoError(t, err)
+
+	// Parse back and extract the data portion
+	parsed := &DatabaseStore{}
+	err = parsed.UnmarshalBinary(payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, byte(DATABASE_STORE_TYPE_ROUTER_INFO), parsed.StoreType)
+
+	// Verify the data starts with a 2-byte length prefix
+	require.True(t, len(parsed.Data) >= 2, "RouterInfo data must have 2-byte length prefix")
+	prefixLen := binary.BigEndian.Uint16(parsed.Data[0:2])
+	assert.Equal(t, uint16(len(compressedRI)), prefixLen,
+		"2-byte prefix must specify the number of gzip-compressed bytes")
+	assert.Equal(t, compressedRI, parsed.Data[2:2+prefixLen],
+		"compressed data must follow the 2-byte length prefix")
+}
+
+// TestDatabaseStore_Compression_LeaseSetTypesUncompressed verifies that non-RouterInfo
+// store types carry uncompressed data (no 2-byte length prefix required by spec).
+func TestDatabaseStore_Compression_LeaseSetTypesUncompressed(t *testing.T) {
+	leaseSetTypes := []byte{
+		DATABASE_STORE_TYPE_LEASESET,
+		DATABASE_STORE_TYPE_LEASESET2,
+		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+		DATABASE_STORE_TYPE_META_LEASESET,
+	}
+
+	rawData := []byte("uncompressed leaseset data for test")
+
+	for _, lsType := range leaseSetTypes {
+		t.Run(fmt.Sprintf("type_%d", lsType), func(t *testing.T) {
+			key := common.Hash{}
+			ds := NewDatabaseStore(key, rawData, lsType)
+
+			payload, err := ds.MarshalPayload()
+			require.NoError(t, err)
+
+			parsed := &DatabaseStore{}
+			err = parsed.UnmarshalBinary(payload)
+			require.NoError(t, err)
+
+			assert.Equal(t, rawData, parsed.Data,
+				"LeaseSet type %d data must be stored uncompressed (verbatim)", lsType)
+		})
+	}
+}
+
+// TestDatabaseStore_Compression_SizeLimits verifies the max size enforcement
+// for both RouterInfo and LeaseSet types.
+func TestDatabaseStore_Compression_SizeLimits(t *testing.T) {
+	// RouterInfo: max 65536 bytes
+	err := validateDatabaseStoreSize(DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize)
+	assert.NoError(t, err, "RouterInfo at exactly MaxRouterInfoSize must be accepted")
+
+	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize+1)
+	assert.Error(t, err, "RouterInfo exceeding MaxRouterInfoSize must be rejected")
+
+	// LeaseSet: max 32768 bytes
+	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_LEASESET2, MaxLeaseSetSize)
+	assert.NoError(t, err, "LeaseSet2 at exactly MaxLeaseSetSize must be accepted")
+
+	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_LEASESET2, MaxLeaseSetSize+1)
+	assert.Error(t, err, "LeaseSet2 exceeding MaxLeaseSetSize must be rejected")
+}
+
+// =============================================================================
+// Audit Item: DatabaseLookup — Lookup types
+// Flag byte bits 3-2: Normal (00), LeaseSet (01), RouterInfo (10),
+// Exploration (11)
+// =============================================================================
+
+// TestDatabaseLookup_LookupTypes_FlagConstants verifies the flag constants for
+// lookup types match the spec's bit 3-2 encoding.
+func TestDatabaseLookup_LookupTypes_FlagConstants(t *testing.T) {
+	// Spec: bits 3-2 determine lookup type
+	// 00 = normal (0x00), 01 = LS (0x04), 10 = RI (0x08), 11 = exploration (0x0C)
+	assert.Equal(t, byte(0x00), DatabaseLookupFlagTypeNormal,
+		"Normal lookup: bits 3-2 = 00 → 0x00")
+	assert.Equal(t, byte(0x04), DatabaseLookupFlagTypeLS,
+		"LeaseSet lookup: bits 3-2 = 01 → 0x04")
+	assert.Equal(t, byte(0x08), DatabaseLookupFlagTypeRI,
+		"RouterInfo lookup: bits 3-2 = 10 → 0x08")
+	assert.Equal(t, byte(0x0C), DatabaseLookupFlagTypeExploration,
+		"Exploration lookup: bits 3-2 = 11 → 0x0C")
+}
+
+// TestDatabaseLookup_LookupTypes_BitPositions verifies the lookup type occupies
+// exactly bits 3-2 with no overlap on other flag bits.
+func TestDatabaseLookup_LookupTypes_BitPositions(t *testing.T) {
+	typeMask := byte(0x0C) // bits 3-2
+
+	tests := []struct {
+		name     string
+		flag     byte
+		expected byte
+	}{
+		{"Normal", DatabaseLookupFlagTypeNormal, 0x00},
+		{"LeaseSet", DatabaseLookupFlagTypeLS, 0x04},
+		{"RouterInfo", DatabaseLookupFlagTypeRI, 0x08},
+		{"Exploration", DatabaseLookupFlagTypeExploration, 0x0C},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// The flag should only set bits within the type mask
+			assert.Equal(t, tc.expected, tc.flag&typeMask,
+				"lookup type must occupy only bits 3-2")
+			assert.Equal(t, byte(0), tc.flag & ^typeMask,
+				"lookup type flag must NOT set bits outside 3-2")
+		})
+	}
+}
+
+// TestDatabaseLookup_LookupTypes_OtherFlagBits verifies the other flag bits:
+// bit 0 = delivery (direct/tunnel), bit 1 = encryption, bit 4 = ECIES.
+func TestDatabaseLookup_LookupTypes_OtherFlagBits(t *testing.T) {
+	// bit 0: delivery flag
+	assert.Equal(t, byte(0x00), DatabaseLookupFlagDirect, "direct reply: bit 0 = 0")
+	assert.Equal(t, byte(0x01), DatabaseLookupFlagTunnel, "tunnel reply: bit 0 = 1")
+
+	// bit 1: encryption flag
+	assert.Equal(t, byte(0x02), DatabaseLookupFlagEncryption, "encryption: bit 1 = 1")
+
+	// bit 4: ECIES flag
+	assert.Equal(t, byte(0x10), DatabaseLookupFlagECIES, "ECIES: bit 4 = 1")
+}
+
+// TestDatabaseLookup_LookupTypes_ParseFromFlags verifies the lookup type can be
+// extracted from a flags byte that also has other bits set.
+func TestDatabaseLookup_LookupTypes_ParseFromFlags(t *testing.T) {
+	// Combine tunnel reply + encryption + RI lookup + ECIES
+	flags := DatabaseLookupFlagTunnel | DatabaseLookupFlagEncryption |
+		DatabaseLookupFlagTypeRI | DatabaseLookupFlagECIES
+	// flags = 0x01 | 0x02 | 0x08 | 0x10 = 0x1B
+
+	// Extract lookup type via bits 3-2 mask
+	lookupType := flags & 0x0C
+	assert.Equal(t, DatabaseLookupFlagTypeRI, lookupType,
+		"lookup type must be extractable from combined flags byte")
+
+	// Verify ECIES detection via IsECIES
+	dl := &DatabaseLookup{Flags: flags}
+	assert.True(t, dl.IsECIES(), "bit 4 set must be detected as ECIES")
+}
+
+// TestDatabaseLookup_LookupTypes_MarshalRoundtrip verifies each lookup type
+// survives a marshal→unmarshal cycle.
+func TestDatabaseLookup_LookupTypes_MarshalRoundtrip(t *testing.T) {
+	lookupTypes := []struct {
+		name     string
+		flagType byte
+	}{
+		{"Normal", DatabaseLookupFlagTypeNormal},
+		{"LeaseSet", DatabaseLookupFlagTypeLS},
+		{"RouterInfo", DatabaseLookupFlagTypeRI},
+		{"Exploration", DatabaseLookupFlagTypeExploration},
+	}
+
+	for _, lt := range lookupTypes {
+		t.Run(lt.name, func(t *testing.T) {
+			key := common.Hash{}
+			key[0] = lt.flagType
+			from := common.Hash{}
+			from[0] = 0xFF
+
+			original := NewDatabaseLookup(key, from, lt.flagType, nil)
+
+			data, err := original.MarshalBinary()
+			require.NoError(t, err)
+
+			parsed, err := ReadDatabaseLookup(data)
+			require.NoError(t, err)
+
+			// Extract lookup type from parsed flags
+			parsedLookupType := parsed.Flags & 0x0C
+			assert.Equal(t, lt.flagType, parsedLookupType,
+				"lookup type must survive marshal→unmarshal roundtrip")
+		})
+	}
+}
+
+// =============================================================================
+// Audit Item: DatabaseLookup — Reply encryption
+// When encryption flag (bit 1) or ECIES flag (bit 4) is set:
+// reply_key (32 bytes) + tags count (1 byte) + reply_tags (count * 32 or 8)
+// =============================================================================
+
+// TestDatabaseLookup_ReplyEncryption_ElGamalFields verifies the legacy (ElGamal)
+// encryption fields: reply_key (32 bytes) + tags (1 byte) + reply_tags (n*32).
+func TestDatabaseLookup_ReplyEncryption_ElGamalFields(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+	from[0] = 0x01
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeLS, nil)
+	// Enable encryption (bit 1)
+	dl.Flags |= DatabaseLookupFlagEncryption
+
+	// Set reply key
+	replyKey := session_key.SessionKey{}
+	replyKey[0] = 0xAA
+	replyKey[31] = 0xBB
+	dl.ReplyKey = replyKey
+
+	// Set 2 legacy 32-byte session tags
+	tag1, _ := session_tag.NewSessionTagFromBytes(make([]byte, 32))
+	tag2, _ := session_tag.NewSessionTagFromBytes(make([]byte, 32))
+	dl.Tags = 2
+	dl.ReplyTags = []session_tag.SessionTag{tag1, tag2}
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.True(t, parsed.hasEncryption(), "encryption flag must be set")
+	assert.False(t, parsed.IsECIES(), "ECIES flag must NOT be set")
+	assert.Equal(t, replyKey, parsed.ReplyKey, "reply key must survive roundtrip")
+	assert.Equal(t, 2, parsed.Tags, "tag count must survive roundtrip")
+	assert.Equal(t, 2, len(parsed.ReplyTags), "legacy reply tags must survive roundtrip")
+}
+
+// TestDatabaseLookup_ReplyEncryption_ECIESFields verifies ECIES encryption
+// fields: reply_key (32 bytes) + tags (1 byte) + reply_tags (n*8).
+func TestDatabaseLookup_ReplyEncryption_ECIESFields(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+	from[0] = 0x02
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeLS, nil)
+	// Enable ECIES flag (bit 4)
+	dl.Flags |= DatabaseLookupFlagECIES
+
+	// Set reply key
+	replyKey := session_key.SessionKey{}
+	replyKey[0] = 0xCC
+	dl.ReplyKey = replyKey
+
+	// Set 3 ECIES 8-byte session tags
+	eciesTag1, _ := session_tag.NewECIESSessionTagFromBytes(make([]byte, 8))
+	eciesTag2, _ := session_tag.NewECIESSessionTagFromBytes(make([]byte, 8))
+	eciesTag3, _ := session_tag.NewECIESSessionTagFromBytes(make([]byte, 8))
+	dl.Tags = 3
+	dl.ECIESReplyTags = []session_tag.ECIESSessionTag{eciesTag1, eciesTag2, eciesTag3}
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.True(t, parsed.IsECIES(), "ECIES flag must be set")
+	assert.Equal(t, replyKey, parsed.ReplyKey, "reply key must survive roundtrip")
+	assert.Equal(t, 3, parsed.Tags, "ECIES tag count must survive roundtrip")
+	assert.Equal(t, 3, len(parsed.ECIESReplyTags), "ECIES reply tags must survive roundtrip")
+}
+
+// TestDatabaseLookup_ReplyEncryption_NoEncryptionOmitsFields verifies that
+// when neither encryption nor ECIES flag is set, no reply_key/tags fields
+// are present in the wire format.
+func TestDatabaseLookup_ReplyEncryption_NoEncryptionOmitsFields(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeRI, nil)
+	// No encryption flags set
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	// Expected size: key(32) + from(32) + flags(1) + size(2) = 67 bytes
+	// (no tunnel ID since direct, no encryption fields, no excluded peers)
+	assert.Equal(t, 67, len(data),
+		"no-encryption lookup must be exactly 67 bytes (no reply_key/tags)")
+}
+
+// =============================================================================
+// Audit Item: DatabaseLookup — Exclude list
+// Size (2 bytes, big-endian) + ExcludedPeers (size * 32 bytes)
+// Max 512 excluded peers
+// =============================================================================
+
+// TestDatabaseLookup_ExcludeList_EmptyList verifies a lookup with zero
+// excluded peers has size=0 and no peer hash data.
+func TestDatabaseLookup_ExcludeList_EmptyList(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeNormal, nil)
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, parsed.Size, "empty exclude list must have size 0")
+	assert.Empty(t, parsed.ExcludedPeers, "empty exclude list must have no peer hashes")
+}
+
+// TestDatabaseLookup_ExcludeList_MultiplePeers verifies correct serialization
+// and parsing of multiple excluded peer hashes.
+func TestDatabaseLookup_ExcludeList_MultiplePeers(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+
+	// Create 3 distinct excluded peers
+	peer1 := common.Hash{}
+	peer1[0] = 0x01
+	peer2 := common.Hash{}
+	peer2[0] = 0x02
+	peer3 := common.Hash{}
+	peer3[0] = 0x03
+	excludedPeers := []common.Hash{peer1, peer2, peer3}
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeExploration, excludedPeers)
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, parsed.Size, "exclude list must report 3 peers")
+	require.Equal(t, 3, len(parsed.ExcludedPeers))
+	assert.Equal(t, peer1, parsed.ExcludedPeers[0])
+	assert.Equal(t, peer2, parsed.ExcludedPeers[1])
+	assert.Equal(t, peer3, parsed.ExcludedPeers[2])
+}
+
+// TestDatabaseLookup_ExcludeList_MaxPeers512 verifies the maximum of 512
+// excluded peers is enforced.
+func TestDatabaseLookup_ExcludeList_MaxPeers512(t *testing.T) {
+	// Build a raw lookup with size = 513 (exceeds max)
+	// Format: key(32) + from(32) + flags(1) + size(2) = 67 bytes min
+	raw := make([]byte, 67)
+	raw[64] = 0x00 // flags: direct, normal lookup
+	// Size field at offset 65-66 (big-endian): 513
+	binary.BigEndian.PutUint16(raw[65:67], 513)
+
+	_, err := ReadDatabaseLookup(raw)
+	assert.Error(t, err, "excluded peers count > 512 must be rejected")
+	assert.Equal(t, ERR_DATABASE_LOOKUP_INVALID_SIZE, err)
+}
+
+// TestDatabaseLookup_ExcludeList_Size2BytesBigEndian verifies the exclude list
+// size is encoded as a 2-byte big-endian integer.
+func TestDatabaseLookup_ExcludeList_Size2BytesBigEndian(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+
+	// Create 256 excluded peers (needs 2 bytes to represent: 0x0100)
+	peers := make([]common.Hash, 256)
+	for i := range peers {
+		peers[i] = common.Hash{}
+		peers[i][0] = byte(i)
+		peers[i][1] = byte(i >> 8)
+	}
+
+	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeNormal, peers)
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 256, parsed.Size,
+		"size field must correctly encode 256 in 2-byte big-endian")
+	assert.Equal(t, 256, len(parsed.ExcludedPeers))
+}
+
+// TestDatabaseLookup_ExcludeList_WithTunnelReply verifies the exclude list
+// works correctly when combined with tunnel reply (bit 0 = 1), which shifts
+// field offsets by 4 bytes.
+func TestDatabaseLookup_ExcludeList_WithTunnelReply(t *testing.T) {
+	key := common.Hash{}
+	gateway := common.Hash{}
+	gateway[0] = 0xAA
+	tunnelID := [4]byte{0x00, 0x00, 0x00, 0x42}
+	peer := common.Hash{}
+	peer[0] = 0xBB
+
+	dl := NewDatabaseLookupWithTunnel(key, gateway, tunnelID, DatabaseLookupFlagTypeLS, []common.Hash{peer})
+
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, parsed.Size)
+	require.Equal(t, 1, len(parsed.ExcludedPeers))
+	assert.Equal(t, peer, parsed.ExcludedPeers[0])
+	assert.Equal(t, gateway, parsed.From, "from must be the tunnel gateway")
+}
+
+// =============================================================================
+// Audit Item: DatabaseSearchReply — Format
+// Key hash (32) + count (1) + peer hashes (count*32) + from hash (32)
+// =============================================================================
+
+// TestDatabaseSearchReply_Format_WireLayout verifies the exact wire layout:
+// key(32) + count(1) + peers(count*32) + from(32).
+func TestDatabaseSearchReply_Format_WireLayout(t *testing.T) {
+	key := common.Hash{}
+	key[0] = 0x11
+	from := common.Hash{}
+	from[0] = 0x22
+
+	peer1 := common.Hash{}
+	peer1[0] = 0xAA
+	peer2 := common.Hash{}
+	peer2[0] = 0xBB
+
+	dsr := NewDatabaseSearchReply(key, from, []common.Hash{peer1, peer2})
+
+	payload, err := dsr.MarshalPayload()
+	require.NoError(t, err)
+
+	// Expected: key(32) + count(1) + 2*peer(64) + from(32) = 129 bytes
+	assert.Equal(t, 129, len(payload), "payload must be 32+1+64+32=129 bytes")
+
+	// Verify field positions
+	assert.Equal(t, byte(0x11), payload[0], "key starts at offset 0")
+	assert.Equal(t, byte(2), payload[32], "count at offset 32")
+	assert.Equal(t, byte(0xAA), payload[33], "peer1 starts at offset 33")
+	assert.Equal(t, byte(0xBB), payload[65], "peer2 starts at offset 65")
+	assert.Equal(t, byte(0x22), payload[97], "from starts at offset 97")
+}
+
+// TestDatabaseSearchReply_Format_CountIs1Byte verifies count is a single byte
+// (range 0-255).
+func TestDatabaseSearchReply_Format_CountIs1Byte(t *testing.T) {
+	key := common.Hash{}
+	from := common.Hash{}
+
+	// Zero peers
+	dsr0 := NewDatabaseSearchReply(key, from, nil)
+	payload0, err := dsr0.MarshalPayload()
+	require.NoError(t, err)
+	assert.Equal(t, byte(0), payload0[32], "count of 0 peers must be 0x00")
+
+	// 255 peers (max for 1-byte count)
+	peers := make([]common.Hash, 255)
+	dsr255 := NewDatabaseSearchReply(key, from, peers)
+	payload255, err := dsr255.MarshalPayload()
+	require.NoError(t, err)
+	assert.Equal(t, byte(255), payload255[32], "count of 255 peers must be 0xFF")
+}
+
+// TestDatabaseSearchReply_Format_Roundtrip verifies the marshal→unmarshal cycle
+// preserves all fields.
+func TestDatabaseSearchReply_Format_Roundtrip(t *testing.T) {
+	key := common.Hash{}
+	key[0] = 0x42
+	key[31] = 0x43
+	from := common.Hash{}
+	from[15] = 0x99
+
+	peer1 := common.Hash{}
+	peer1[0] = 0x01
+	peer2 := common.Hash{}
+	peer2[0] = 0x02
+	peer3 := common.Hash{}
+	peer3[0] = 0x03
+
+	original := NewDatabaseSearchReply(key, from, []common.Hash{peer1, peer2, peer3})
+
+	payload, err := original.MarshalPayload()
+	require.NoError(t, err)
+
+	parsed := &DatabaseSearchReply{}
+	err = parsed.UnmarshalBinary(payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, key, parsed.Key, "key must survive roundtrip")
+	assert.Equal(t, 3, parsed.Count, "count must survive roundtrip")
+	require.Equal(t, 3, len(parsed.PeerHashes))
+	assert.Equal(t, peer1, parsed.PeerHashes[0])
+	assert.Equal(t, peer2, parsed.PeerHashes[1])
+	assert.Equal(t, peer3, parsed.PeerHashes[2])
+	assert.Equal(t, from, parsed.From, "from must survive roundtrip")
+}
+
+// TestDatabaseSearchReply_Format_MinimumSize verifies the minimum payload size
+// is 65 bytes: key(32) + count(1) + from(32) with zero peers.
+func TestDatabaseSearchReply_Format_MinimumSize(t *testing.T) {
+	// Exactly 65 bytes: key(32) + count=0(1) + from(32) should succeed
+	data := make([]byte, 65)
+	parsed := &DatabaseSearchReply{}
+	err := parsed.UnmarshalBinary(data)
+	assert.NoError(t, err, "65 bytes must be accepted (zero peers)")
+	assert.Equal(t, 0, parsed.Count)
+
+	// 64 bytes: too short
+	shortData := make([]byte, 64)
+	err = (&DatabaseSearchReply{}).UnmarshalBinary(shortData)
+	assert.Error(t, err, "64 bytes must be rejected")
+	assert.Equal(t, ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA, err)
+}
+
+// =============================================================================
+// Audit Item: DeliveryStatus — Format
+// MsgID (4 bytes, uint32) + Timestamp (8 bytes, I2P Date) = 12 bytes total
+// =============================================================================
+
+// TestDeliveryStatus_Format_PayloadIs12Bytes verifies the DeliveryStatus
+// payload is exactly 12 bytes: MsgID(4) + Timestamp(8).
+func TestDeliveryStatus_Format_PayloadIs12Bytes(t *testing.T) {
+	now := time.Now().Truncate(time.Millisecond)
+	ds := NewDeliveryStatusMessage(12345, now)
+
+	// GetData returns the 12-byte payload set by the constructor
+	data := ds.GetData()
+	assert.Equal(t, 12, len(data),
+		"DeliveryStatus payload must be exactly 12 bytes (MsgID 4 + Timestamp 8)")
+}
+
+// TestDeliveryStatus_Format_MsgID4BytesBigEndian verifies the message ID is
+// stored as a 4-byte big-endian uint32 at payload offset 0-3.
+func TestDeliveryStatus_Format_MsgID4BytesBigEndian(t *testing.T) {
+	msgID := 0x01020304
+	ds := NewDeliveryStatusMessage(msgID, time.Now())
+
+	data := ds.GetData()
+	require.Equal(t, 12, len(data))
+
+	parsedID := binary.BigEndian.Uint32(data[0:4])
+	assert.Equal(t, uint32(0x01020304), parsedID,
+		"MsgID must be 4-byte big-endian uint32 at offset 0")
+}
+
+// TestDeliveryStatus_Format_Timestamp8BytesI2PDate verifies the timestamp is
+// stored as an 8-byte I2P Date (milliseconds since epoch) at payload offset 4-11.
+func TestDeliveryStatus_Format_Timestamp8BytesI2PDate(t *testing.T) {
+	// Use a known time: 2024-01-01 00:00:00 UTC = 1704067200 seconds
+	knownTime := time.Unix(1704067200, 0)
+	ds := NewDeliveryStatusMessage(1, knownTime)
+
+	data := ds.GetData()
+	require.Equal(t, 12, len(data))
+
+	// I2P Date is milliseconds since epoch, big-endian 8 bytes
+	tsMs := binary.BigEndian.Uint64(data[4:12])
+	expectedMs := uint64(1704067200) * 1000
+	assert.Equal(t, expectedMs, tsMs,
+		"Timestamp must be I2P Date (milliseconds since epoch) at offset 4-11")
+}
+
+// TestDeliveryStatus_Format_Roundtrip verifies the DeliveryStatus survives
+// a full I2NP message marshal→unmarshal cycle, preserving MsgID and Timestamp.
+func TestDeliveryStatus_Format_Roundtrip(t *testing.T) {
+	msgID := 0xDEADBEEF
+	ts := time.Unix(1704067200, 0) // 2024-01-01 00:00:00 UTC
+
+	original := NewDeliveryStatusMessage(msgID, ts)
+
+	wireData, err := original.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed := &DeliveryStatusMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS),
+	}
+	err = parsed.UnmarshalBinary(wireData)
+	require.NoError(t, err)
+
+	assert.Equal(t, msgID, parsed.StatusMessageID,
+		"MsgID must survive roundtrip")
+	assert.Equal(t, ts.Unix(), parsed.Timestamp.Unix(),
+		"Timestamp must survive roundtrip (seconds precision)")
+}
+
+// TestDeliveryStatus_Format_TooShortPayload verifies that a DeliveryStatus
+// with a payload shorter than 12 bytes is rejected on unmarshal.
+func TestDeliveryStatus_Format_TooShortPayload(t *testing.T) {
+	// Build a valid I2NP message with only 11 bytes of payload
+	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS)
+	msg.SetMessageID(1)
+	msg.SetData(make([]byte, 11)) // Too short for DeliveryStatus
+
+	wireData, err := msg.MarshalBinary()
+	require.NoError(t, err)
+
+	parsed := &DeliveryStatusMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS),
+	}
+	err = parsed.UnmarshalBinary(wireData)
+	assert.Error(t, err, "payload < 12 bytes must be rejected")
 }
