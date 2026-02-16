@@ -58,27 +58,28 @@ func NewShortTunnelBuilder(records []BuildRequestRecord) TunnelBuilder {
 
 // Bytes serializes the ShortTunnelBuild message to wire format.
 // Format: [count:1][records...]
-// Note: This returns the cleartext records. Encryption must be applied by the caller.
+// Each record is 218 bytes per the I2P specification (ECIES short records).
+// The caller is responsible for applying ECIES encryption to each record.
 func (s *ShortTunnelBuild) Bytes() []byte {
 	log.WithFields(logger.Fields{
 		"at":           "ShortTunnelBuild.Bytes",
 		"record_count": s.Count,
-		"output_size":  1 + (s.Count * 222),
+		"output_size":  1 + (s.Count * ShortBuildRecordSize),
 	}).Debug("Serializing ShortTunnelBuild")
 
-	// 1 byte for count + 222 bytes per record (cleartext)
-	size := 1 + (s.Count * 222)
+	// 1 byte for count + 218 bytes per record (ECIES short format)
+	size := 1 + (s.Count * ShortBuildRecordSize)
 	data := make([]byte, size)
 
 	// Write count
 	data[0] = byte(s.Count)
 
-	// Write each record
+	// Write each record in short ECIES format
 	offset := 1
 	for _, record := range s.BuildRequestRecords {
-		recordBytes := record.Bytes()
-		copy(data[offset:offset+222], recordBytes)
-		offset += 222
+		recordBytes := record.ShortBytes()
+		copy(data[offset:offset+ShortBuildRecordSize], recordBytes)
+		offset += ShortBuildRecordSize
 	}
 
 	return data

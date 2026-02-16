@@ -549,6 +549,86 @@ func (b *BuildRequestRecord) Bytes() []byte {
 	return data
 }
 
+// ShortBytes serializes the BuildRequestRecord to the 218-byte ECIES short record
+// wire format as defined in the I2P specification (proposal 157, since 0.9.49).
+//
+// Short build records use a more compact layout than the standard 222-byte
+// ElGamal cleartext. Keys (LayerKey, IVKey, ReplyKey) are derived via HKDF
+// rather than transmitted explicitly, saving significant space.
+//
+// On-wire format (218 bytes total):
+//
+//	toPeer:         16 bytes - truncated SHA-256 of peer's RouterIdentity
+//	ephemeral key:  32 bytes - X25519 public key (placeholder pre-encryption)
+//	encrypted data: 170 bytes - AEAD(cleartext 154 bytes) + 16-byte MAC
+//
+// Cleartext payload layout (154 bytes):
+//
+//	receive_tunnel:  4 bytes [0:4]
+//	next_tunnel:     4 bytes [4:8]
+//	next_ident:     32 bytes [8:40]
+//	flag:            1 byte  [40] + 2 unused bytes [41:43]
+//	layer_enc_type:  1 byte  [43]
+//	request_time:    4 bytes [44:48] (minutes since epoch)
+//	expiration:      4 bytes [48:52] (seconds)
+//	send_message_id: 4 bytes [52:56]
+//	options/padding: 98 bytes [56:154]
+//
+// The caller is responsible for applying ECIES encryption.
+func (b *BuildRequestRecord) ShortBytes() []byte {
+	data := make([]byte, ShortBuildRecordSize)
+
+	// toPeer: first 16 bytes of peer's identity hash
+	copy(data[0:16], b.OurIdent[:16])
+
+	// Ephemeral X25519 key placeholder (32 bytes at offset 16)
+	// Filled in during ECIES encryption; zeroed for now.
+
+	// Cleartext payload starts at offset 48 (after toPeer + ephemeral key)
+	const payloadOff = 48
+
+	// receive_tunnel (4 bytes)
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.ReceiveTunnel), 4); err == nil {
+		copy(data[payloadOff:payloadOff+4], tunnelInt.Bytes())
+	}
+
+	// next_tunnel (4 bytes)
+	if tunnelInt, err := common.NewIntegerFromInt(int(b.NextTunnel), 4); err == nil {
+		copy(data[payloadOff+4:payloadOff+8], tunnelInt.Bytes())
+	}
+
+	// next_ident (32 bytes)
+	copy(data[payloadOff+8:payloadOff+40], b.NextIdent[:])
+
+	// flag (1 byte) + 2 unused bytes
+	data[payloadOff+40] = byte(b.Flag)
+
+	// layer_enc_type (1 byte) - 0 = default (AES256/CBC+HMAC)
+	data[payloadOff+43] = 0
+
+	// request_time (4 bytes) - minutes since epoch (not hours like standard)
+	minutes := int(b.RequestTime.Unix() / 60)
+	if timeInt, err := common.NewIntegerFromInt(minutes, 4); err == nil {
+		copy(data[payloadOff+44:payloadOff+48], timeInt.Bytes())
+	}
+
+	// expiration (4 bytes) - default 480 seconds (8 minutes)
+	if expInt, err := common.NewIntegerFromInt(DefaultExpirationSeconds, 4); err == nil {
+		copy(data[payloadOff+48:payloadOff+52], expInt.Bytes())
+	}
+
+	// send_message_id (4 bytes)
+	if msgInt, err := common.NewIntegerFromInt(b.SendMessageID, 4); err == nil {
+		copy(data[payloadOff+52:payloadOff+56], msgInt.Bytes())
+	}
+
+	// options/padding: remaining bytes [56:154] already zeroed
+	// MAC space: [154:170] already zeroed (filled by AEAD encryption)
+
+	log.Debug("BuildRequestRecord serialized to 218-byte short ECIES format")
+	return data
+}
+
 // Compile-time interface satisfaction checks
 var (
 	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)

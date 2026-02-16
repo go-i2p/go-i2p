@@ -36,6 +36,20 @@ var (
 	ERR_I2NP_MESSAGE_EXPIRED                  = errors.New("i2np message has expired")
 )
 
+// Build record size constants per the I2P specification.
+// Standard (ElGamal/ECIES long) records are 528 bytes on the wire.
+// Short (ECIES) records are 218 bytes on the wire (added in 0.9.49).
+// Standard cleartext (before encryption) is 222 bytes.
+// Short cleartext (ECIES short) is 154 bytes (218 - 16 toPeer - 32 ephKey - 16 MAC).
+const (
+	StandardBuildRecordSize         = 528 // Encrypted on-wire size for standard/variable tunnel build records
+	ShortBuildRecordSize            = 218 // Encrypted on-wire size for short tunnel build records (ECIES)
+	StandardBuildRecordCleartextLen = 222 // Cleartext length for standard ElGamal build request records
+	ShortBuildRecordCleartextLen    = 154 // Cleartext length for short ECIES build request records (218 - 64)
+	ShortRecordHeaderSize           = 64  // toPeer(16) + ephemeralKey(32) + MAC(16)
+	DefaultExpirationSeconds        = 480 // Default tunnel expiration: 8 minutes
+)
+
 // Default expiration tolerance for clock skew (5 minutes into the past)
 // This allows for reasonable clock differences between I2P routers while
 // still rejecting clearly expired messages.

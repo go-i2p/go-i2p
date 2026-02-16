@@ -1714,6 +1714,9 @@ func (r *Router) startI2CPServer() error {
 		ListenAddr:        r.cfg.I2CP.Address,
 		Network:           r.cfg.I2CP.Network,
 		MaxSessions:       r.cfg.I2CP.MaxSessions,
+		ReadTimeout:       r.cfg.I2CP.ReadTimeout,
+		WriteTimeout:      r.cfg.I2CP.WriteTimeout,
+		SessionTimeout:    r.cfg.I2CP.SessionTimeout,
 		LeaseSetPublisher: r.leaseSetPublisher,
 	}
 
@@ -1724,6 +1727,16 @@ func (r *Router) startI2CPServer() error {
 
 	// Set NetDB for HostLookup functionality
 	server.SetNetDB(r.StdNetDB)
+
+	// Configure optional I2CP authentication from config
+	if r.cfg.I2CP.Username != "" && r.cfg.I2CP.Password != "" {
+		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
+		if authErr != nil {
+			return fmt.Errorf("failed to create I2CP authenticator: %w", authErr)
+		}
+		server.SetAuthenticator(auth)
+		log.Info("I2CP server: authentication enabled")
+	}
 
 	// Provide real bandwidth limits from router config
 	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})

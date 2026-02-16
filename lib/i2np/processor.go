@@ -1402,12 +1402,12 @@ func (p *MessageProcessor) validateAndGetRecordCount(data []byte) (int, error) {
 }
 
 // getRecordSize returns the record size based on the build type.
-// Record sizes differ between STBM (218 bytes encrypted, 222 cleartext) and VTB (528 bytes).
+// Record sizes differ between STBM (218 bytes encrypted, 154 bytes cleartext) and VTB (528 bytes).
 func (p *MessageProcessor) getRecordSize(isShortBuild bool) int {
 	if isShortBuild {
-		return 218 // STBM encrypted record size (ECIES)
+		return ShortBuildRecordSize // STBM encrypted record size (ECIES)
 	}
-	return 528 // VTB encrypted record size
+	return StandardBuildRecordSize // VTB encrypted record size
 }
 
 // parseRecordsFromData iterates through the data and parses each record.
@@ -1436,17 +1436,17 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 // For now, attempt to read the record as cleartext (for testing).
 // In production, this would be the decrypted cleartext.
 func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
-	if isShortBuild && len(recordData) >= 218 {
+	if isShortBuild && len(recordData) >= ShortBuildRecordSize {
 		// STBM: 218-byte encrypted records (ECIES). The encrypted payload
-		// contains a 222-byte cleartext after decryption, but on the wire
-		// the record is 218 bytes. For testing, attempt to parse as cleartext.
+		// contains a 154-byte cleartext after decryption (keys are derived
+		// via HKDF, not transmitted). For testing, attempt to parse as cleartext.
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
 			log.WithError(err).WithField("record_index", index).Debug("failed to parse STBM build request record")
 		} else {
 			*records = append(*records, record)
 		}
-	} else if !isShortBuild && len(recordData) >= 222 {
+	} else if !isShortBuild && len(recordData) >= StandardBuildRecordCleartextLen {
 		// VTB: 528-byte encrypted records, parse as cleartext (222 bytes from the record)
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
