@@ -1819,12 +1819,47 @@ func (m *specMockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]
 	return peers, nil
 }
 
-// specMakeRouterInfo creates a minimal RouterInfo for testing.
-// This returns a zero-value RouterInfo which is sufficient for builder tests
-// because the builder only calls IdentHash() on it, and zero RouterInfo
-// returns a deterministic hash.
+// specMakeRouterInfo creates a minimal RouterInfo for testing by constructing
+// raw bytes and parsing them via ReadRouterInfo. Each unique id byte produces a
+// RouterInfo with a distinct IdentHash, which is required by the builder when
+// calling IdentHash() on hop peers.
 func specMakeRouterInfo(id byte) router_info.RouterInfo {
-	return router_info.RouterInfo{}
+	buf := make([]byte, 467)
+	// Bytes 0-255: ElGamal public key (unique per id)
+	for i := 0; i < 256; i++ {
+		buf[i] = id
+	}
+	// Bytes 256-383: signing key area (96 padding + 32 Ed25519 key)
+	for i := 256; i < 384; i++ {
+		buf[i] = id
+	}
+	// Certificate: type=5 (KEY), length=4, sigType=7 (Ed25519), cryptoType=0 (ElGamal)
+	buf[384] = 0x05
+	buf[385] = 0x00
+	buf[386] = 0x04
+	buf[387] = 0x00
+	buf[388] = 0x07
+	buf[389] = 0x00
+	buf[390] = 0x00
+	// Published date (8 bytes) — use a fixed timestamp to be deterministic
+	binary.BigEndian.PutUint64(buf[391:399], uint64(1700000000000))
+	// Address count: 0
+	buf[399] = 0x00
+	// Peer size: 0
+	buf[400] = 0x00
+	// Mapping (empty): 2-byte length = 0
+	buf[401] = 0x00
+	buf[402] = 0x00
+	// Signature: 64 bytes for Ed25519
+	for i := 403; i < 467; i++ {
+		buf[i] = id
+	}
+	ri, _, err := router_info.ReadRouterInfo(buf)
+	if err != nil {
+		// Fallback: should never happen with the hardcoded layout above
+		return router_info.RouterInfo{}
+	}
+	return ri
 }
 
 // specMockNetDBSelector implements NetDBSelector for peer selector tests.

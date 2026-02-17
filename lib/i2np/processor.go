@@ -389,6 +389,16 @@ func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY:
 		return p.processShortTunnelBuildReplyMessage(msg)
 	default:
+		// Per I2P spec, message types 224-254 are reserved for experimental use.
+		// A production router should silently drop unknown types to support
+		// protocol extensibility. Return an error only for truly invalid types.
+		if msg.Type() >= 224 && msg.Type() <= 254 {
+			log.WithFields(logger.Fields{
+				"at":           "processMessageDispatch",
+				"message_type": msg.Type(),
+			}).Debug("Dropping experimental message type (224-254 range)")
+			return nil
+		}
 		log.WithFields(logger.Fields{
 			"at":           "processMessageDispatch",
 			"message_type": msg.Type(),
@@ -939,9 +949,7 @@ func (p *MessageProcessor) processFixedTunnelBuildRequest(msg I2NPMessage) error
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), false)
-	p.processAllBuildRecords(msg.MessageID(), records, false)
-
-	return nil
+	return p.processAllBuildRecords(msg.MessageID(), records, false)
 }
 
 // parseFixedTunnelBuildRecords parses TunnelBuild (type 21) records.
@@ -1165,9 +1173,7 @@ func (p *MessageProcessor) processTunnelBuildRequest(msg I2NPMessage, isShortBui
 	}
 
 	p.logParsedBuildRequest(msg.MessageID(), len(records), isShortBuild)
-	p.processAllBuildRecords(msg.MessageID(), records, isShortBuild)
-
-	return nil
+	return p.processAllBuildRecords(msg.MessageID(), records, isShortBuild)
 }
 
 // validateParticipantManager checks if the participant manager is configured.
@@ -1216,14 +1222,14 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int, isS
 // This prevents the router from incorrectly participating in all hops of a tunnel
 // when its identity is unknown. Callers must call SetOurRouterHash before processing
 // any tunnel build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, isShortBuild bool) {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, isShortBuild bool) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
 			"at":         "processAllBuildRecords",
 			"message_id": messageID,
 		}).Warn("Router hash not set (zero) — skipping all build records. Call SetOurRouterHash first.")
-		return
+		return fmt.Errorf("router hash not set: call SetOurRouterHash before processing tunnel build messages")
 	}
 
 	for i, record := range records {
@@ -1238,6 +1244,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 		}
 		p.processSingleBuildRecord(messageID, i, record, isShortBuild)
 	}
+	return nil
 }
 
 // processSingleBuildRecord validates and processes a single build request record.
@@ -1458,7 +1465,7 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 		// via HKDF, not transmitted). For testing, attempt to parse as cleartext.
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
-			log.WithError(err).WithField("record_index", index).Debug("failed to parse STBM build request record")
+			log.WithError(err).WithField("record_index", index).Warn("failed to parse STBM build request record (possible corruption)")
 		} else {
 			*records = append(*records, record)
 		}
@@ -1466,7 +1473,7 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 		// VTB: 528-byte encrypted records, parse as cleartext (222 bytes from the record)
 		record, err := ReadBuildRequestRecord(recordData)
 		if err != nil {
-			log.WithError(err).WithField("record_index", index).Debug("failed to parse VTB build request record")
+			log.WithError(err).WithField("record_index", index).Warn("failed to parse VTB build request record (possible corruption)")
 		} else {
 			*records = append(*records, record)
 		}
@@ -1875,20 +1882,7 @@ func (tm *TunnelManager) createShortTunnelBuildMessage(result *tunnel.TunnelBuil
 	// Convert tunnel.BuildRequestRecord to i2np.BuildRequestRecord
 	i2npRecords := make([]BuildRequestRecord, len(result.Records))
 	for i, rec := range result.Records {
-		i2npRecords[i] = BuildRequestRecord{
-			ReceiveTunnel: rec.ReceiveTunnel,
-			OurIdent:      rec.OurIdent,
-			NextTunnel:    rec.NextTunnel,
-			NextIdent:     rec.NextIdent,
-			LayerKey:      rec.LayerKey,
-			IVKey:         rec.IVKey,
-			ReplyKey:      rec.ReplyKey,
-			ReplyIV:       rec.ReplyIV,
-			Flag:          rec.Flag,
-			RequestTime:   rec.RequestTime,
-			SendMessageID: rec.SendMessageID,
-			Padding:       rec.Padding,
-		}
+		i2npRecords[i] = convertTunnelBuildRecord(rec)
 	}
 
 	// Encrypt each record with the corresponding hop's public key.
@@ -1938,7 +1932,10 @@ func (tm *TunnelManager) createTunnelBuildMessage(result *tunnel.TunnelBuildResu
 		return nil, err
 	}
 
-	data := serializeBuildRecords(encryptedData, len(result.Records))
+	data, err := serializeBuildRecords(encryptedData, len(result.Records))
+	if err != nil {
+		return nil, err
+	}
 
 	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD)
 	msg.SetMessageID(messageID)
@@ -1979,26 +1976,31 @@ func (tm *TunnelManager) createVariableTunnelBuildMessage(result *tunnel.TunnelB
 	return msg, nil
 }
 
+// convertTunnelBuildRecord converts a tunnel.BuildRequestRecord to an i2np.BuildRequestRecord.
+// This avoids duplicating the field-by-field copy in multiple functions.
+func convertTunnelBuildRecord(rec tunnel.BuildRequestRecord) BuildRequestRecord {
+	return BuildRequestRecord{
+		ReceiveTunnel: rec.ReceiveTunnel,
+		OurIdent:      rec.OurIdent,
+		NextTunnel:    rec.NextTunnel,
+		NextIdent:     rec.NextIdent,
+		LayerKey:      rec.LayerKey,
+		IVKey:         rec.IVKey,
+		ReplyKey:      rec.ReplyKey,
+		ReplyIV:       rec.ReplyIV,
+		Flag:          rec.Flag,
+		RequestTime:   rec.RequestTime,
+		SendMessageID: rec.SendMessageID,
+		Padding:       rec.Padding,
+	}
+}
+
 // encryptBuildRecords encrypts each build request record with its corresponding
 // hop's X25519 public key using ECIES-X25519-AEAD encryption.
 func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error) {
 	var encryptedData [8][528]byte
 	for i := 0; i < 8 && i < len(result.Records); i++ {
-		rec := result.Records[i]
-		i2npRecord := BuildRequestRecord{
-			ReceiveTunnel: rec.ReceiveTunnel,
-			OurIdent:      rec.OurIdent,
-			NextTunnel:    rec.NextTunnel,
-			NextIdent:     rec.NextIdent,
-			LayerKey:      rec.LayerKey,
-			IVKey:         rec.IVKey,
-			ReplyKey:      rec.ReplyKey,
-			ReplyIV:       rec.ReplyIV,
-			Flag:          rec.Flag,
-			RequestTime:   rec.RequestTime,
-			SendMessageID: rec.SendMessageID,
-			Padding:       rec.Padding,
-		}
+		i2npRecord := convertTunnelBuildRecord(result.Records[i])
 
 		if i >= len(result.Hops) {
 			return encryptedData, fmt.Errorf("record %d has no corresponding hop RouterInfo", i)
@@ -2015,8 +2017,9 @@ func encryptBuildRecords(result *tunnel.TunnelBuildResult) ([8][528]byte, error)
 // serializeBuildRecords serializes all 8 encrypted records into a contiguous byte slice.
 // Used for TunnelBuild (type 21) which has NO count prefix and always 8 records.
 // Unused slots are filled with random data to prevent observers from distinguishing
-// tunnel length by counting zero-filled records.
-func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
+// tunnel length by counting zero-filled records. Returns an error if random padding
+// cannot be generated (all-zero slots would reveal the true hop count).
+func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) ([]byte, error) {
 	data := make([]byte, 8*528)
 	for i := 0; i < 8; i++ {
 		if i < recordCount {
@@ -2024,15 +2027,11 @@ func serializeBuildRecords(encryptedData [8][528]byte, recordCount int) []byte {
 		} else {
 			// Fill unused slot with random padding
 			if _, err := rand.Read(data[i*528 : (i+1)*528]); err != nil {
-				// Fallback: slot stays zeroed (acceptable for unused slots)
-				log.WithFields(logger.Fields{
-					"at":   "serializeBuildRecords",
-					"slot": i,
-				}).Warn("Failed to generate random padding for unused slot")
+				return nil, fmt.Errorf("failed to generate random padding for unused slot %d: %w", i, err)
 			}
 		}
 	}
-	return data
+	return data, nil
 }
 
 // serializeVariableBuildRecords serializes encrypted records with a count prefix byte.
@@ -2147,36 +2146,71 @@ func (tm *TunnelManager) generateTunnelID() (tunnel.TunnelID, error) {
 	return tunnel.TunnelID(binary.BigEndian.Uint32(buf[:])), nil
 }
 
-// sendTunnelBuildRequests sends tunnel build requests to each selected peer
+// sendTunnelBuildRequests builds a single TunnelBuild message containing all
+// encrypted hop records and sends it to the first hop (gateway) only.
+// Per the I2P tunnel creation specification, the gateway forwards the message
+// through the partially-built tunnel; each hop peels its layer and forwards
+// to the next. Sending directly to each hop would break tunnel anonymity.
 func (tm *TunnelManager) sendTunnelBuildRequests(records []BuildRequestRecord, peers []router_info.RouterInfo, tunnelID tunnel.TunnelID) error {
 	if tm.sessionProvider == nil {
 		return fmt.Errorf("no session provider available for sending tunnel build requests")
 	}
+	if len(peers) == 0 {
+		return fmt.Errorf("no peers provided for tunnel build")
+	}
 
 	tm.logSendingBuildRequests(tunnelID, len(peers))
 
-	var firstErr error
-	for i := range records {
-		if i >= len(peers) {
-			break
-		}
+	// Encrypt each record with the corresponding hop's public key and
+	// assemble all records into a single 8-slot TunnelBuild message.
+	msg, err := tm.createCombinedBuildMessage(records, peers, tunnelID)
+	if err != nil {
+		return fmt.Errorf("failed to create combined tunnel build message: %w", err)
+	}
 
-		if err := tm.sendBuildRequestToHop(i, records[i], peers[i], tunnelID); err != nil {
-			log.WithFields(logger.Fields{
-				"at":       "TunnelManager.sendTunnelBuildRequests",
-				"hop":      i,
-				"tunnelID": tunnelID,
-				"error":    err.Error(),
-			}).Error("failed_to_send_build_request_to_hop")
-			if firstErr == nil {
-				firstErr = err
+	// Send only to the first hop (gateway) — it will forward onion-style.
+	firstPeerHash, err := peers[0].IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get first hop hash: %w", err)
+	}
+	session, err := tm.getSessionForPeer(firstPeerHash)
+	if err != nil {
+		return fmt.Errorf("failed to get session for gateway: %w", err)
+	}
+	session.QueueSendI2NP(msg)
+
+	tm.logBuildRequestsCompleted(tunnelID)
+	return nil
+}
+
+// createCombinedBuildMessage encrypts each hop's record with its public key and
+// packs all records into a single TunnelBuild message. Unused slots (up to 8)
+// are filled with random data so observers cannot determine the tunnel length.
+func (tm *TunnelManager) createCombinedBuildMessage(records []BuildRequestRecord, peers []router_info.RouterInfo, tunnelID tunnel.TunnelID) (*TunnelBuildMessage, error) {
+	data := make([]byte, 8*StandardBuildRecordSize)
+
+	for i := 0; i < 8; i++ {
+		slotStart := i * StandardBuildRecordSize
+		slotEnd := (i + 1) * StandardBuildRecordSize
+		if i < len(records) && i < len(peers) {
+			encrypted, err := EncryptBuildRequestRecord(records[i], peers[i])
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt record for hop %d: %w", i, err)
 			}
-			continue
+			copy(data[slotStart:slotEnd], encrypted[:])
+		} else {
+			if _, err := rand.Read(data[slotStart:slotEnd]); err != nil {
+				return nil, fmt.Errorf("failed to generate random padding for slot %d: %w", i, err)
+			}
 		}
 	}
 
-	tm.logBuildRequestsCompleted(tunnelID)
-	return firstErr
+	msg := &TunnelBuildMessage{
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+	}
+	msg.SetData(data)
+	msg.SetMessageID(int(tunnelID))
+	return msg, nil
 }
 
 // logSendingBuildRequests logs the start of tunnel build request sending.
@@ -2433,7 +2467,7 @@ func (tm *TunnelManager) handleFailedBuild(matchingTunnel *tunnel.TunnelState, m
 		"error":      replyErr,
 	}).Warn("Tunnel build failed")
 
-	go tm.cleanupFailedTunnel(matchingTunnel.ID, matchingTunnel.IsInbound)
+	tm.cleanupFailedTunnel(matchingTunnel.ID, matchingTunnel.IsInbound)
 }
 
 // findMatchingBuildingTunnel finds a tunnel that's currently building based on the message ID.
@@ -2465,16 +2499,16 @@ func (tm *TunnelManager) findMatchingBuildingTunnel(messageID int) *tunnel.Tunne
 	return tunnelState
 }
 
-// cleanupFailedTunnel removes a failed tunnel from the pool after a delay
+// cleanupFailedTunnel schedules removal of a failed tunnel from the pool after a delay.
+// Uses time.AfterFunc instead of time.Sleep to avoid blocking a goroutine.
 func (tm *TunnelManager) cleanupFailedTunnel(tunnelID tunnel.TunnelID, isInbound bool) {
-	// Small delay before cleanup to allow for logging/debugging
-	time.Sleep(1 * time.Second)
-
-	pool := tm.getPoolForTunnel(isInbound)
-	if pool != nil {
-		pool.RemoveTunnel(tunnelID)
-		log.WithField("tunnel_id", tunnelID).Debug("Cleaned up failed tunnel")
-	}
+	time.AfterFunc(1*time.Second, func() {
+		pool := tm.getPoolForTunnel(isInbound)
+		if pool != nil {
+			pool.RemoveTunnel(tunnelID)
+			log.WithField("tunnel_id", tunnelID).Debug("Cleaned up failed tunnel")
+		}
+	})
 }
 
 // cleanupExpiredBuilds periodically removes expired build requests.
@@ -2537,7 +2571,7 @@ func (tm *TunnelManager) handleExpiredRequest(req *buildRequest, msgID int, now 
 		"age":        now.Sub(req.createdAt),
 	}).Warn("Tunnel build timed out")
 
-	go tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
+	tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 }
 
 // removeExpiredFromMap deletes expired build requests from the pending map.
@@ -2576,7 +2610,7 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		pool := tm.getPoolForTunnel(req.isInbound)
 		if tunnelState, exists := pool.GetTunnel(req.tunnelID); exists {
 			tunnelState.State = tunnel.TunnelFailed
-			go tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
+			tm.cleanupFailedTunnel(req.tunnelID, req.isInbound)
 		}
 
 		log.WithFields(logger.Fields{

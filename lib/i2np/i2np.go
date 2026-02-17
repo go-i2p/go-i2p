@@ -3,12 +3,12 @@ package i2np
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"time"
 
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -71,15 +71,20 @@ func generateRandomMessageID() (int, error) {
 }
 
 // NewBaseI2NPMessage creates a new base I2NP message.
-// Panics if crypto/rand fails to generate a message ID, since predictable
-// message IDs would enable correlation attacks by network observers.
+// If crypto/rand fails to generate a message ID, falls back to a
+// time-based ID and logs a critical warning. This avoids panicking
+// in library code while still providing a usable (if less random) ID.
 func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	msgID, err := generateRandomMessageID()
 	if err != nil {
-		// A failed CSPRNG indicates a critical system problem.
-		// Panicking is preferable to silently producing predictable
-		// message IDs that could be exploited for traffic analysis.
-		panic(fmt.Sprintf("i2np: cannot generate random message ID: %v", err))
+		// Fallback: use lower 31 bits of UnixNano timestamp.
+		// Less random than CSPRNG but avoids crashing the process.
+		msgID = int(time.Now().UnixNano() & 0x7FFFFFFF)
+		log.WithFields(logger.Fields{
+			"at":          "NewBaseI2NPMessage",
+			"error":       err.Error(),
+			"fallback_id": msgID,
+		}).Error("CSPRNG failed, using time-based message ID fallback — system entropy may be exhausted")
 	}
 	return &BaseI2NPMessage{
 		type_:      msgType,

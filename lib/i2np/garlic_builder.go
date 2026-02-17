@@ -650,6 +650,13 @@ func parseGarlicMetadata(data []byte, offset int) (certificate.Certificate, int,
 		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf("insufficient data for garlic trailer: need %d bytes, have %d", metadataSize, len(data)-offset)
 	}
 
+	// Validate garlic-level certificate: spec says "always NULL in the current implementation"
+	certType := data[offset]
+	certLen := binary.BigEndian.Uint16(data[offset+1 : offset+3])
+	if certType != 0 || certLen != 0 {
+		return certificate.Certificate{}, 0, time.Time{}, oops.Errorf(
+			"unsupported non-NULL garlic certificate (type=%d, len=%d)", certType, certLen)
+	}
 	cert := *certificate.NewCertificate()
 	offset += 3
 

@@ -71,10 +71,16 @@ func TestTunnelBuildMessage_RecordSerialization(t *testing.T) {
 
 		assert.Equal(t, expectedCleartext, actualCleartext, "Record %d cleartext mismatch", i)
 
-		// Verify padding is zeros (no encryption applied)
+		// Verify padding is random (non-zero) per spec requirement
 		padding := data[i*528+222 : (i+1)*528]
-		expectedPadding := make([]byte, 306)
-		assert.Equal(t, expectedPadding, padding, "Record %d padding should be zeros", i)
+		allZero := true
+		for _, b := range padding {
+			if b != 0 {
+				allZero = false
+				break
+			}
+		}
+		assert.False(t, allZero, "Record %d padding should be random, not all zeros", i)
 	}
 }
 
@@ -193,15 +199,27 @@ func TestTunnelBuildMessage_DataConsistency(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
 	msg := NewTunnelBuildMessage(records)
 
-	// Manually serialize records and compare with msg data
-	expectedData := make([]byte, 8*528)
+	actualData := msg.GetData()
+	require.Len(t, actualData, 8*528, "Total data length must be 8*528 bytes")
+
+	// Verify each record's 222-byte cleartext matches, and that the
+	// remaining 306-byte padding region is not all zeros (random fill).
 	for i := 0; i < 8; i++ {
 		cleartext := records[i].Bytes()
-		copy(expectedData[i*528:i*528+222], cleartext)
-	}
+		slotStart := i * 528
+		assert.Equal(t, cleartext, actualData[slotStart:slotStart+222],
+			"Record %d cleartext should match", i)
 
-	actualData := msg.GetData()
-	assert.Equal(t, expectedData, actualData, "Data field should match manual serialization")
+		padding := actualData[slotStart+222 : slotStart+528]
+		allZero := true
+		for _, b := range padding {
+			if b != 0 {
+				allZero = false
+				break
+			}
+		}
+		assert.False(t, allZero, "Record %d padding should be random, not all zeros", i)
+	}
 }
 
 // Helper functions

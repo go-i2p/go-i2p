@@ -2,6 +2,7 @@ package i2np
 
 import (
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -97,12 +98,19 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 	}
 
 	// Serialize cleartext records (NOT specification-compliant for network transmission)
-	// Each record: 222 bytes cleartext + 306 bytes padding = 528 bytes total
+	// Each record: 222 bytes cleartext + 306 bytes random padding = 528 bytes total
 	data := make([]byte, 8*528)
 	for i := 0; i < 8; i++ {
 		cleartext := records[i].Bytes() // 222 bytes cleartext per I2P spec
 		copy(data[i*528:i*528+222], cleartext)
-		// Remaining 306 bytes: zero padding (spec requires random padding for encrypted records)
+		// Fill remaining 306 bytes with random padding so unused bytes are
+		// indistinguishable from encrypted data (spec requirement).
+		if _, err := rand.Read(data[i*528+222 : (i+1)*528]); err != nil {
+			log.WithFields(logger.Fields{
+				"at":     "NewTunnelBuildMessage",
+				"record": i,
+			}).Warn("Failed to generate random padding for record")
+		}
 	}
 	msg.SetData(data)
 
