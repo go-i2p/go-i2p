@@ -62,7 +62,7 @@ require (
 
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
-//replace github.com/go-i2p/go-noise => ../go-noise
+replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3
 //replace github.com/go-i2p/logger => ../logger

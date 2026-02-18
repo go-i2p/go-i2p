@@ -172,17 +172,45 @@ const sendQueueDrainTimeout = 2 * time.Second
 
 // Close closes the session cleanly.
 // It first waits briefly for the send queue to drain (up to sendQueueDrainTimeout)
-// before canceling the context and closing the connection. This gives queued
-// messages a chance to be transmitted rather than being silently dropped.
+// before sending an encrypted termination block (reason 0 = normal close) and
+// closing the connection. This gives queued messages a chance to be transmitted
+// rather than being silently dropped.
 func (s *NTCP2Session) Close() error {
+	return s.CloseWithReason(TerminationNormalClose)
+}
+
+// CloseWithReason closes the session with the specified termination reason code.
+// If the reason is an AEAD failure (reason 4), the termination block is NOT sent
+// because the cipher state may be corrupted — instead, only probing-resistance
+// junk-read is performed on the underlying connection.
+//
+// For all other reasons, an encrypted termination block is sent through the
+// NTCP2 connection's Noise cipher state (via conn.Write), which ensures it is
+// encrypted and has a SipHash-obfuscated length prefix like any other data-phase
+// frame. No plaintext termination blocks are ever sent.
+//
+// Spec reference: https://geti2p.net/spec/ntcp2#termination
+func (s *NTCP2Session) CloseWithReason(reason byte) error {
 	var err error
 	s.closeOnce.Do(func() {
-		s.logger.Info("Closing NTCP2 session")
+		s.logger.WithField("reason", TerminationReasonString(reason)).Info("Closing NTCP2 session")
 
 		// Wait for send queue to drain before canceling context.
 		// The sendWorker is still running at this point, so queued messages
 		// can still be transmitted.
 		s.drainSendQueue()
+
+		// Send encrypted termination block before closing, unless the
+		// reason is an AEAD failure (cipher state may be corrupted).
+		if IsAEADFailureReason(reason) {
+			s.logger.Debug("AEAD failure reason — skipping termination block, applying probing resistance")
+			if s.conn != nil {
+				raw := extractRawConn(s.conn)
+				applyProbingResistance(raw)
+			}
+		} else {
+			s.sendEncryptedTermination(reason)
+		}
 
 		s.cancel()
 		if s.conn != nil {
@@ -199,6 +227,31 @@ func (s *NTCP2Session) Close() error {
 		s.logger.Info("NTCP2 session closed successfully")
 	})
 	return err
+}
+
+// sendEncryptedTermination sends an encrypted termination block through the
+// NTCP2 connection's Noise cipher state. The block is encrypted and framed
+// by conn.Write, which applies AEAD encryption and SipHash length obfuscation,
+// ensuring no plaintext termination block ever appears on the wire.
+//
+// This is a best-effort operation: errors are logged but do not prevent the
+// session from closing.
+func (s *NTCP2Session) sendEncryptedTermination(reason byte) {
+	if s.conn == nil {
+		return
+	}
+
+	block := BuildTerminationBlock(reason)
+	s.logger.WithFields(map[string]interface{}{
+		"reason":     TerminationReasonString(reason),
+		"block_size": len(block),
+	}).Debug("Sending encrypted termination block")
+
+	if _, writeErr := s.conn.Write(block); writeErr != nil {
+		s.logger.WithError(writeErr).Debug("Failed to send encrypted termination block (best-effort)")
+	} else {
+		s.logger.Debug("Encrypted termination block sent successfully")
+	}
 }
 
 // drainSendQueue waits for the send queue to empty or the drain timeout to expire.

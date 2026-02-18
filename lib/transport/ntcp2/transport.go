@@ -221,6 +221,14 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 // GetSessionCount() and checkSessionLimit() accurately reflect both inbound
 // and outbound sessions. A cleanup callback is registered to remove the
 // tracking entry when the connection is closed.
+//
+// Unlike using AcceptWithHandshake directly, this method performs the Noise XK
+// handshake manually so that handshake-phase AEAD failures trigger probing
+// resistance (random delay + junk read) before closing the connection. This
+// prevents active probers from distinguishing an NTCP2 listener from a random
+// TCP service by timing how quickly the connection closes.
+//
+// Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	if t.listener == nil {
 		t.logger.Error("Accept called but listener is nil")
@@ -237,11 +245,35 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 	}
 
 	t.logger.Debug("Accepting incoming NTCP2 connection")
+
+	// Use the listener's bare Accept() (no handshake) so we can intercept
+	// handshake failures and apply probing resistance.
 	conn, err := t.listener.Accept()
 	if err != nil {
 		t.unreserveSessionSlot() // Release the reserved slot on accept failure
 		t.logger.WithError(err).Warn("Failed to accept incoming connection")
 		return nil, err
+	}
+
+	// Perform the Noise XK handshake manually.
+	ntcp2Conn, ok := conn.(*ntcp2.NTCP2Conn)
+	if !ok {
+		// Unexpected type — fall through without handshake (shouldn't happen)
+		t.logger.Warn("Accepted connection is not *ntcp2.NTCP2Conn, skipping manual handshake")
+	} else {
+		ctx := t.ctx
+		if err := ntcp2Conn.UnderlyingConn().Handshake(ctx); err != nil {
+			// Handshake failed — apply probing resistance before closing.
+			// Extract the raw TCP connection for the junk-read since the
+			// Noise layer may be in an unusable state.
+			raw := extractRawConn(ntcp2Conn.UnderlyingConn())
+			t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
+			applyProbingResistance(raw)
+			ntcp2Conn.Close()
+			t.unreserveSessionSlot()
+			return nil, WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
+		}
+		t.logger.Debug("Inbound Noise XK handshake completed successfully")
 	}
 
 	// Track the inbound connection for accurate session counting.
@@ -646,15 +678,37 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 }
 
 // performNTCP2Handshake performs the NTCP2 handshake after successful TCP connection.
+// The handshake is split into two phases: DialNTCP2 (TCP dial + Noise wrapping, no
+// handshake) followed by a manual Handshake() call. This allows us to apply probing
+// resistance (random delay + junk read) on handshake failure, so that both sides are
+// indistinguishable from a random TCP service to an active prober.
+//
+// Spec reference: https://geti2p.net/spec/ntcp2#probing-resistance
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.NTCP2Config, tcpDialStart time.Time) (*ntcp2.NTCP2Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Info("Dialing NTCP2 connection")
-	handshakeStart := time.Now()
-	conn, err := ntcp2.DialNTCP2WithHandshake("tcp", tcpAddrString, config)
-	handshakeDuration := time.Since(handshakeStart)
 
+	// Phase 1: Establish TCP connection and wrap in NTCP2Conn (no handshake)
+	conn, err := ntcp2.DialNTCP2("tcp", tcpAddrString, config)
 	if err != nil {
+		handshakeDuration := time.Since(tcpDialStart)
 		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
 		return nil, WrapNTCP2Error(err, "dialing NTCP2 connection")
+	}
+
+	// Phase 2: Perform the Noise XK handshake manually
+	handshakeStart := time.Now()
+	ctx := t.ctx
+	if err := conn.UnderlyingConn().Handshake(ctx); err != nil {
+		handshakeDuration := time.Since(handshakeStart)
+		t.logHandshakeFailure(tcpAddrString, peerHashBytes, err, handshakeDuration)
+
+		// Apply probing resistance: random delay + junk read before closing.
+		// Both initiator and responder must behave identically on failure.
+		raw := extractRawConn(conn.UnderlyingConn())
+		t.logger.WithError(err).Debug("Outbound handshake failed, applying probing resistance")
+		applyProbingResistance(raw)
+		conn.Close()
+		return nil, WrapNTCP2Error(err, "NTCP2 handshake (probing resistance applied)")
 	}
 
 	t.logger.WithFields(map[string]interface{}{
