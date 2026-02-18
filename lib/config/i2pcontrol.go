@@ -14,7 +14,7 @@ const DefaultI2PControlPort = 7650
 // supporting basic statistics queries without write operations to router configuration.
 type I2PControlConfig struct {
 	// Enabled determines if the I2PControl server should start
-	// Default: true (enabled for development and monitoring)
+	// Default: false (disabled for security — must be explicitly enabled)
 	Enabled bool
 
 	// Address is the listen address for the I2PControl server

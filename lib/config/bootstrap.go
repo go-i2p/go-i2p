@@ -33,7 +33,8 @@ type BootstrapConfig struct {
 	LocalNetDbPaths []string
 	// MinReseedServers is the minimum number of successful reseed servers required.
 	// If fewer servers respond successfully, the reseed operation fails.
-	// Set to 1 for backward compatibility; Java I2P uses 2 for enhanced security.
+	// Default: DefaultMinReseedServers (2), matching Java I2P MIN_RESEED_SERVERS
+	// for enhanced security through multi-server confirmation.
 	MinReseedServers int
 	// ReseedStrategy determines how RouterInfos from multiple servers are combined:
 	// - "union": Use all unique RouterInfos from any successful server (default)
@@ -44,7 +45,7 @@ type BootstrapConfig struct {
 
 // default configuration for network bootstrap
 // Uses all known reseed servers from KnownReseedServers for maximum availability.
-// MinReseedServers defaults to 1 for backward compatibility.
+// MinReseedServers defaults to DefaultMinReseedServers (2) matching Java I2P.
 var DefaultBootstrapConfig = BootstrapConfig{
 	LowPeerThreshold: 10,
 	BootstrapType:    "auto", // Default to composite (tries all methods)

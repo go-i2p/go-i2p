@@ -126,6 +126,11 @@ type BootstrapDefaults struct {
 	// Only reseed.i2pgit.org is included by default (maintained by go-i2p dev team)
 	// Additional reseed servers should be configured via config file
 	ReseedServers []*ReseedConfig
+
+	// ReseedStrategy determines how RouterInfos from multiple servers are combined.
+	// Valid values: "union", "intersection", "random"
+	// Default: "union"
+	ReseedStrategy string
 }
 
 // I2CPDefaults contains default values for I2CP server
@@ -167,7 +172,8 @@ type I2CPDefaults struct {
 // I2PControlDefaults contains default values for I2PControl JSON-RPC server
 type I2PControlDefaults struct {
 	// Enabled determines if I2PControl server starts automatically
-	// Default: true (enabled for development and monitoring)
+	// Default: false (disabled for security — default password over HTTP allows
+	// any local process to control the router; must be explicitly enabled)
 	Enabled bool
 
 	// Address is the listen address for I2PControl server
@@ -386,6 +392,7 @@ func buildBootstrapDefaults() BootstrapDefaults {
 		MinimumReseedPeers:  50,
 		ReseedRetryInterval: 5 * time.Minute,
 		ReseedServers:       KnownReseedServers,
+		ReseedStrategy:      ReseedStrategyUnion,
 	}
 }
 
@@ -537,6 +544,13 @@ func validateNetDB(netdb NetDBDefaults) error {
 		"reason": "validating_netdb_settings",
 		"phase":  "startup",
 	}).Debug("validating NetDB configuration")
+	if netdb.Path == "" {
+		log.WithFields(logger.Fields{
+			"at":     "validateNetDBConfig",
+			"reason": "empty_path",
+		}).Error("invalid NetDB configuration")
+		return newValidationError("NetDB.Path must not be empty")
+	}
 	if netdb.MaxRouterInfos < 10 {
 		log.WithFields(logger.Fields{
 			"at":               "validateNetDBConfig",
@@ -588,6 +602,27 @@ func validateBootstrap(bootstrap BootstrapDefaults) error {
 		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
 	}
+	// Validate BootstrapType is a known value
+	validBootstrapTypes := map[string]bool{
+		"auto": true, "file": true, "reseed": true, "local": true,
+	}
+	if !validBootstrapTypes[bootstrap.BootstrapType] {
+		log.WithFields(logger.Fields{
+			"at":             "validateBootstrapConfig",
+			"reason":         "invalid_bootstrap_type",
+			"bootstrap_type": bootstrap.BootstrapType,
+		}).Error("invalid bootstrap configuration")
+		return newValidationError("Bootstrap.BootstrapType must be one of: auto, file, reseed, local")
+	}
+	// Validate ReseedStrategy if set (may be empty in BootstrapDefaults)
+	if bootstrap.ReseedStrategy != "" && !IsValidReseedStrategy(bootstrap.ReseedStrategy) {
+		log.WithFields(logger.Fields{
+			"at":              "validateBootstrapConfig",
+			"reason":          "invalid_reseed_strategy",
+			"reseed_strategy": bootstrap.ReseedStrategy,
+		}).Error("invalid bootstrap configuration")
+		return newValidationError("Bootstrap.ReseedStrategy must be one of: union, intersection, random")
+	}
 	log.WithFields(logger.Fields{
 		"at":     "validateBootstrapConfig",
 		"reason": "validation_passed",
@@ -620,6 +655,16 @@ func validateI2CP(i2cp I2CPDefaults) error {
 			"minimum_required":   1,
 		}).Error("invalid I2CP configuration")
 		return newValidationError("I2CP.MessageQueueSize must be at least 1")
+	}
+	// Validate network type
+	validNetworkTypes := map[string]bool{"tcp": true, "unix": true}
+	if !validNetworkTypes[i2cp.Network] {
+		log.WithFields(logger.Fields{
+			"at":      "validateI2CPConfig",
+			"reason":  "invalid_network_type",
+			"network": i2cp.Network,
+		}).Error("invalid I2CP configuration")
+		return newValidationError("I2CP.Network must be one of: tcp, unix")
 	}
 	log.WithFields(logger.Fields{
 		"at":     "validateI2CPConfig",

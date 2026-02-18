@@ -249,6 +249,11 @@ func TestValidateCapsString_Valid(t *testing.T) {
 		"LUH",        // hidden
 		"XRfHD",      // all flags
 		"KRf", "MUG", // misc valid
+		// Multi-bandwidth for backward compat (spec: "a router may publish
+		// multiple bandwidth letters, for example 'PO'")
+		"POR", "KLR",
+		// No reachability (spec: "unless the reachability state is currently unknown")
+		"P", "PD", "Pf",
 	}
 
 	for _, caps := range validCaps {
@@ -270,13 +275,11 @@ func TestValidateCapsString_Invalid(t *testing.T) {
 		{"unrecognized flag", "PRA", "unrecognized caps flag: A"},
 		{"numeric character", "PR1", "unrecognized caps flag: 1"},
 		{"lowercase bandwidth", "pR", "unrecognized caps flag: p"},
-		{"two bandwidth classes", "PKR", "exactly one bandwidth class letter"},
-		{"two reachability", "PRU", "exactly one reachability flag"},
+		{"two reachability", "PRU", "at most one reachability flag"},
 		{"two congestion", "PRDE", "at most one congestion flag"},
-		{"no bandwidth", "RD", "exactly one bandwidth class letter"},
-		{"no reachability", "PD", "exactly one reachability flag"},
+		{"no bandwidth", "RD", "at least one bandwidth class letter"},
 		{"duplicate flag f", "PRff", "duplicate caps flag: f"},
-		{"only congestion", "D", "exactly one bandwidth class letter"},
+		{"only congestion", "D", "at least one bandwidth class letter"},
 		{"space in caps", "P R", "unrecognized caps flag:  "},
 	}
 
@@ -352,13 +355,40 @@ func TestValidateRouterInfoOptionKeys_AllSpecKeys(t *testing.T) {
 		"router.version":       "0.9.64",
 		"caps":                 "PRf",
 		"netId":                "2",
-		"coreVersion":          "0.9.64",
-		"stat_uptime":          "3600",
 		"netdb.knownRouters":   "5000",
 		"netdb.knownLeaseSets": "1000",
+		"family":               "myfamily",
+		"family.key":           "base64key==",
+		"family.sig":           "base64sig==",
 	}
 	if err := ValidateRouterInfoOptionKeys(options); err != nil {
 		t.Errorf("ValidateRouterInfoOptionKeys(all spec keys) = %v, want nil", err)
+	}
+}
+
+func TestValidateRouterInfoOptionKeys_DeprecatedKeysAccepted(t *testing.T) {
+	// Deprecated keys should be accepted (with warning) but not rejected
+	options := map[string]string{
+		"router.version": "0.9.64",
+		"coreVersion":    "0.9.64",
+		"stat_uptime":    "3600",
+	}
+	if err := ValidateRouterInfoOptionKeys(options); err != nil {
+		t.Errorf("ValidateRouterInfoOptionKeys(deprecated keys) = %v, want nil", err)
+	}
+}
+
+func TestValidateRouterInfoOptionKeys_StatPrefixAccepted(t *testing.T) {
+	// stat_ prefixed keys should be accepted per spec (various statistics)
+	options := map[string]string{
+		"router.version":                          "0.9.64",
+		"stat_tunnel.buildExploratoryExpire.60m":  "100",
+		"stat_tunnel.buildExploratoryReject.60m":  "50",
+		"stat_tunnel.buildExploratorySuccess.60m": "200",
+		"stat_tunnel.participatingTunnels.60m":    "500",
+	}
+	if err := ValidateRouterInfoOptionKeys(options); err != nil {
+		t.Errorf("ValidateRouterInfoOptionKeys(stat_ prefix) = %v, want nil", err)
 	}
 }
 

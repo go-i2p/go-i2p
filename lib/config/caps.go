@@ -56,6 +56,8 @@ func BandwidthClassFromRate(bytesPerSec uint64) BandwidthClass {
 	kbps := bytesPerSec / 1024
 	switch {
 	case kbps >= 2000:
+		// Note: the I2P spec allows either 2000 or 2048 KBps as the P/X boundary
+		// (implementor's choice). We use 2000 KBps.
 		return BandwidthClassX
 	case kbps >= 256:
 		return BandwidthClassP
@@ -126,8 +128,11 @@ var reachabilityFlags = map[rune]bool{
 // ValidateCapsString checks that a caps string contains only valid single-letter
 // capability flags per the I2P spec. It verifies:
 //   - All characters are recognized capability flags
-//   - Exactly one bandwidth class letter (K/L/M/N/O/P/X)
-//   - Exactly one reachability flag (R or U)
+//   - At least one bandwidth class letter (K/L/M/N/O/P/X); multiple allowed for
+//     backward compatibility (spec: "a router may publish multiple bandwidth letters,
+//     for example 'PO'")
+//   - At most one reachability flag (R or U); zero allowed when reachability is
+//     unknown (spec: "unless the reachability state is currently unknown")
 //   - At most one congestion flag (D/E/G per Proposal 162)
 //   - No duplicate flags
 func ValidateCapsString(caps string) error {
@@ -164,13 +169,17 @@ func ValidateCapsString(caps string) error {
 		}
 	}
 
-	if bwCount != 1 {
-		return newValidationError(fmt.Sprintf(
-			"caps string must contain exactly one bandwidth class letter (K/L/M/N/O/P/X), found %d", bwCount))
+	// At least one bandwidth class required; multiple allowed for backward compat
+	// (spec: "For compatibility with older routers, a router may publish multiple
+	// bandwidth letters, for example 'PO'")
+	if bwCount < 1 {
+		return newValidationError("caps string must contain at least one bandwidth class letter (K/L/M/N/O/P/X)")
 	}
-	if reachCount != 1 {
+	// Reachability is optional when state is unknown (spec: "unless the
+	// reachability state is currently unknown"), but at most one allowed
+	if reachCount > 1 {
 		return newValidationError(fmt.Sprintf(
-			"caps string must contain exactly one reachability flag (R/U), found %d", reachCount))
+			"caps string must contain at most one reachability flag (R/U), found %d", reachCount))
 	}
 	if congCount > 1 {
 		return newValidationError(fmt.Sprintf(
@@ -233,23 +242,54 @@ var SpecRouterInfoOptionKeys = map[string]string{
 	"router.version":       "Router software version (e.g. 0.9.64)",
 	"caps":                 "Capability flags string",
 	"netId":                "Network ID (2 = production I2P network)",
-	"coreVersion":          "Core library version",
-	"stat_uptime":          "Router uptime statistics",
 	"netdb.knownRouters":   "Number of known routers in local NetDB",
 	"netdb.knownLeaseSets": "Number of known LeaseSets in local NetDB",
+	// Family options per spec "Family Options" section
+	"family":     "Router family name",
+	"family.key": "Router family signing public key (base64)",
+	"family.sig": "Router family signature (base64)",
 }
+
+// DeprecatedRouterInfoOptionKeys contains keys that were once valid but have
+// been removed from the I2P spec. They are accepted without error but should
+// not be emitted by new routers.
+//
+// coreVersion: Never used, removed in release 0.9.24
+// stat_uptime: Unused since 0.7.9, removed in 0.9.24
+var DeprecatedRouterInfoOptionKeys = map[string]string{
+	"coreVersion": "Core library version (DEPRECATED: removed in 0.9.24, never used)",
+	"stat_uptime": "Router uptime statistics (DEPRECATED: removed in 0.9.24, unused since 0.7.9)",
+}
+
+// statOptionPrefix is the prefix for spec-allowed statistics option keys.
+// The spec allows various stat_ keys (e.g., stat_tunnel.buildExploratoryExpire.60m).
+const statOptionPrefix = "stat_"
 
 // ValidateRouterInfoOptionKeys checks that the given option keys map contains
 // only spec-recognized keys. Returns an error listing any unrecognized keys.
+//
+// Keys matching the "stat_" prefix are allowed per spec (various statistics).
+// Deprecated keys (coreVersion, stat_uptime) are accepted with a warning.
 //
 // This helps prevent accidental inclusion of proprietary or debug keys that
 // could cause the RouterInfo to be rejected by other routers on the network.
 func ValidateRouterInfoOptionKeys(options map[string]string) error {
 	var unknownKeys []string
 	for key := range options {
-		if _, ok := SpecRouterInfoOptionKeys[key]; !ok {
-			unknownKeys = append(unknownKeys, key)
+		if _, ok := SpecRouterInfoOptionKeys[key]; ok {
+			continue
 		}
+		if _, ok := DeprecatedRouterInfoOptionKeys[key]; ok {
+			log.WithFields(logger.Fields{
+				"at":  "ValidateRouterInfoOptionKeys",
+				"key": key,
+			}).Warn("RouterInfo option key is deprecated per I2P spec")
+			continue
+		}
+		if strings.HasPrefix(key, statOptionPrefix) {
+			continue
+		}
+		unknownKeys = append(unknownKeys, key)
 	}
 
 	if len(unknownKeys) > 0 {

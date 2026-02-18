@@ -230,6 +230,7 @@ func CurrentConfig() ConfigDefaults {
 			ReseedTimeout:       viper.GetDuration("bootstrap.reseed_timeout"),
 			MinimumReseedPeers:  viper.GetInt("bootstrap.minimum_reseed_peers"),
 			ReseedRetryInterval: viper.GetDuration("bootstrap.reseed_retry_interval"),
+			ReseedStrategy:      viper.GetString("bootstrap.reseed_strategy"),
 		},
 		I2CP: I2CPDefaults{
 			Enabled:          viper.GetBool("i2cp.enabled"),
@@ -315,6 +316,9 @@ func UpdateRouterConfig() {
 	routerConfigProperties.Bootstrap = buildBootstrapConfig("UpdateRouterConfig")
 	routerConfigProperties.I2CP = buildI2CPConfig()
 	routerConfigProperties.I2PControl = buildI2PControlConfig()
+	routerConfigProperties.MaxBandwidth = viper.GetUint64("router.max_bandwidth")
+	routerConfigProperties.MaxConnections = viper.GetInt("router.max_connections")
+	routerConfigProperties.AcceptTunnels = viper.GetBool("router.accept_tunnels")
 }
 
 // buildNetDbConfig creates a NetDbConfig from current viper settings.

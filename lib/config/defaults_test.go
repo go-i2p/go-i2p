@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 // TestDefaults verifies that Defaults() returns a complete configuration
@@ -548,5 +550,145 @@ func BenchmarkValidate(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = Validate(cfg)
+	}
+}
+
+// TestValidate_BootstrapInvalidType verifies validation catches invalid bootstrap type
+func TestValidate_BootstrapInvalidType(t *testing.T) {
+	cfg := Defaults()
+	cfg.Bootstrap.BootstrapType = "foobar"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when BootstrapType is invalid")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_BootstrapValidTypes verifies all valid bootstrap types pass
+func TestValidate_BootstrapValidTypes(t *testing.T) {
+	for _, bt := range []string{"auto", "file", "reseed", "local"} {
+		t.Run(bt, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Bootstrap.BootstrapType = bt
+			if err := Validate(cfg); err != nil {
+				t.Errorf("Validate() should pass for BootstrapType %q: %v", bt, err)
+			}
+		})
+	}
+}
+
+// TestValidate_BootstrapInvalidReseedStrategy verifies validation catches invalid reseed strategy
+func TestValidate_BootstrapInvalidReseedStrategy(t *testing.T) {
+	cfg := Defaults()
+	cfg.Bootstrap.ReseedStrategy = "invalid_strategy"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when ReseedStrategy is invalid")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_BootstrapValidReseedStrategies verifies all valid strategies pass
+func TestValidate_BootstrapValidReseedStrategies(t *testing.T) {
+	for _, strategy := range ValidReseedStrategies() {
+		t.Run(strategy, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.Bootstrap.ReseedStrategy = strategy
+			if err := Validate(cfg); err != nil {
+				t.Errorf("Validate() should pass for ReseedStrategy %q: %v", strategy, err)
+			}
+		})
+	}
+}
+
+// TestValidate_BootstrapEmptyReseedStrategy verifies empty strategy passes
+// (empty is valid in BootstrapDefaults when not explicitly configured)
+func TestValidate_BootstrapEmptyReseedStrategy(t *testing.T) {
+	cfg := Defaults()
+	cfg.Bootstrap.ReseedStrategy = ""
+	if err := Validate(cfg); err != nil {
+		t.Errorf("Validate() should pass for empty ReseedStrategy: %v", err)
+	}
+}
+
+// TestValidate_I2CPInvalidNetworkType verifies validation catches invalid network type
+func TestValidate_I2CPInvalidNetworkType(t *testing.T) {
+	cfg := Defaults()
+	cfg.I2CP.Network = "udp"
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when I2CP.Network is 'udp'")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestValidate_I2CPValidNetworkTypes verifies all valid network types pass
+func TestValidate_I2CPValidNetworkTypes(t *testing.T) {
+	for _, net := range []string{"tcp", "unix"} {
+		t.Run(net, func(t *testing.T) {
+			cfg := Defaults()
+			cfg.I2CP.Network = net
+			if err := Validate(cfg); err != nil {
+				t.Errorf("Validate() should pass for I2CP.Network %q: %v", net, err)
+			}
+		})
+	}
+}
+
+// TestValidate_NetDBEmptyPath verifies validation catches empty NetDB path
+func TestValidate_NetDBEmptyPath(t *testing.T) {
+	cfg := Defaults()
+	cfg.NetDB.Path = ""
+
+	err := Validate(cfg)
+	if err == nil {
+		t.Error("Validate() should fail when NetDB.Path is empty")
+	}
+	if _, ok := err.(*validationError); !ok {
+		t.Errorf("Validate() should return validationError, got %T", err)
+	}
+}
+
+// TestUpdateRouterConfig_IncludesAllFields verifies UpdateRouterConfig propagates all fields
+func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
+	viper.Reset()
+	setDefaults()
+
+	viper.Set("router.max_bandwidth", uint64(2048000))
+	viper.Set("router.max_connections", 500)
+	viper.Set("router.accept_tunnels", false)
+
+	UpdateRouterConfig()
+
+	cfg := GetRouterConfig()
+	if cfg.MaxBandwidth != 2048000 {
+		t.Errorf("MaxBandwidth = %d, want 2048000", cfg.MaxBandwidth)
+	}
+	if cfg.MaxConnections != 500 {
+		t.Errorf("MaxConnections = %d, want 500", cfg.MaxConnections)
+	}
+	if cfg.AcceptTunnels != false {
+		t.Errorf("AcceptTunnels = %v, want false", cfg.AcceptTunnels)
+	}
+}
+
+// TestRouterConfigProperties_ReturnsCopy verifies RouterConfigProperties returns a deep copy
+func TestRouterConfigProperties_ReturnsCopy(t *testing.T) {
+	cfg1 := RouterConfigProperties()
+	cfg2 := RouterConfigProperties()
+
+	// Modifying cfg1 should not affect cfg2
+	cfg1.MaxBandwidth = 999999
+	if cfg2.MaxBandwidth == 999999 {
+		t.Error("RouterConfigProperties() should return independent copies")
 	}
 }

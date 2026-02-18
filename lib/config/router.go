@@ -124,16 +124,16 @@ func DefaultRouterConfig() *RouterConfig {
 // which hold routerConfigMutex. Direct field access is a data race.
 var routerConfigProperties = DefaultRouterConfig()
 
-// RouterConfigProperties returns the internal router config pointer for backward
-// compatibility. DEPRECATED: Use GetRouterConfig() for thread-safe read access,
-// or UpdateRouterConfig() for writes. Direct mutation of the returned pointer
-// without holding routerConfigMutex is a data race.
+// RouterConfigProperties returns a deep copy of the current router configuration
+// for backward compatibility. DEPRECATED: Use GetRouterConfig() instead.
+//
+// Prior to this fix, this function returned the internal pointer under RLock,
+// which was released on return — callers could then race with UpdateRouterConfig().
+// Now returns a deep copy (identical behavior to GetRouterConfig()).
 //
 //nolint:revive // deprecated but kept for API compatibility; converted from var to func
 func RouterConfigProperties() *RouterConfig {
-	routerConfigMutex.RLock()
-	defer routerConfigMutex.RUnlock()
-	return routerConfigProperties
+	return GetRouterConfig()
 }
 
 // routerConfigMutex protects RouterConfigProperties from concurrent access
