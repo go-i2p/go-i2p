@@ -227,3 +227,124 @@ func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
 			cfg.I2CP.WriteTimeout, defaults.I2CP.WriteTimeout)
 	}
 }
+
+// TestNewRouterConfigFromViperSubsystemFields verifies that NewRouterConfigFromViper
+// populates Tunnel, Transport, Performance, and Congestion config fields.
+// This covers CRITICAL-002: RouterConfig missing subsystem config fields.
+func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
+	viper.Reset()
+	setDefaults()
+
+	cfg := NewRouterConfigFromViper()
+	defaults := Defaults()
+
+	// Tunnel config
+	if cfg.Tunnel == nil {
+		t.Fatal("NewRouterConfigFromViper Tunnel config is nil")
+	}
+	if cfg.Tunnel.TunnelLength != defaults.Tunnel.TunnelLength {
+		t.Errorf("Tunnel.TunnelLength = %d, want %d",
+			cfg.Tunnel.TunnelLength, defaults.Tunnel.TunnelLength)
+	}
+	if cfg.Tunnel.TunnelLifetime != defaults.Tunnel.TunnelLifetime {
+		t.Errorf("Tunnel.TunnelLifetime = %v, want %v",
+			cfg.Tunnel.TunnelLifetime, defaults.Tunnel.TunnelLifetime)
+	}
+
+	// Transport config
+	if cfg.Transport == nil {
+		t.Fatal("NewRouterConfigFromViper Transport config is nil")
+	}
+	if cfg.Transport.NTCP2Enabled != defaults.Transport.NTCP2Enabled {
+		t.Errorf("Transport.NTCP2Enabled = %v, want %v",
+			cfg.Transport.NTCP2Enabled, defaults.Transport.NTCP2Enabled)
+	}
+	if cfg.Transport.MaxMessageSize != defaults.Transport.MaxMessageSize {
+		t.Errorf("Transport.MaxMessageSize = %d, want %d",
+			cfg.Transport.MaxMessageSize, defaults.Transport.MaxMessageSize)
+	}
+
+	// Performance config
+	if cfg.Performance == nil {
+		t.Fatal("NewRouterConfigFromViper Performance config is nil")
+	}
+	if cfg.Performance.WorkerPoolSize != defaults.Performance.WorkerPoolSize {
+		t.Errorf("Performance.WorkerPoolSize = %d, want %d",
+			cfg.Performance.WorkerPoolSize, defaults.Performance.WorkerPoolSize)
+	}
+
+	// Congestion config
+	if cfg.Congestion == nil {
+		t.Fatal("NewRouterConfigFromViper Congestion config is nil")
+	}
+	if cfg.Congestion.DFlagThreshold != defaults.Congestion.DFlagThreshold {
+		t.Errorf("Congestion.DFlagThreshold = %f, want %f",
+			cfg.Congestion.DFlagThreshold, defaults.Congestion.DFlagThreshold)
+	}
+}
+
+// TestUpdateRouterConfigSubsystemFields verifies that UpdateRouterConfig
+// propagates Tunnel, Transport, Performance, and Congestion config.
+func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
+	viper.Reset()
+	setDefaults()
+
+	// Override a subsystem value
+	viper.Set("tunnel.length", 2)
+	viper.Set("transport.ntcp2_max_connections", 300)
+	viper.Set("performance.worker_pool_size", 16)
+	viper.Set("router.congestion.d_flag_threshold", 0.80)
+
+	UpdateRouterConfig()
+
+	cfg := GetRouterConfig()
+	if cfg.Tunnel == nil {
+		t.Fatal("Tunnel config is nil after UpdateRouterConfig")
+	}
+	if cfg.Tunnel.TunnelLength != 2 {
+		t.Errorf("Tunnel.TunnelLength = %d, want 2", cfg.Tunnel.TunnelLength)
+	}
+	if cfg.Transport == nil {
+		t.Fatal("Transport config is nil after UpdateRouterConfig")
+	}
+	if cfg.Transport.NTCP2MaxConnections != 300 {
+		t.Errorf("Transport.NTCP2MaxConnections = %d, want 300", cfg.Transport.NTCP2MaxConnections)
+	}
+	if cfg.Performance == nil {
+		t.Fatal("Performance config is nil after UpdateRouterConfig")
+	}
+	if cfg.Performance.WorkerPoolSize != 16 {
+		t.Errorf("Performance.WorkerPoolSize = %d, want 16", cfg.Performance.WorkerPoolSize)
+	}
+	if cfg.Congestion == nil {
+		t.Fatal("Congestion config is nil after UpdateRouterConfig")
+	}
+	if cfg.Congestion.DFlagThreshold != 0.80 {
+		t.Errorf("Congestion.DFlagThreshold = %f, want 0.80", cfg.Congestion.DFlagThreshold)
+	}
+}
+
+// TestGetRouterConfigDeepCopySubsystems verifies deep copy includes subsystem configs.
+func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
+	viper.Reset()
+	setDefaults()
+	UpdateRouterConfig()
+
+	cfg := GetRouterConfig()
+	if cfg.Tunnel == nil {
+		t.Fatal("Tunnel config is nil")
+	}
+
+	// Modify the copy
+	cfg.Tunnel.TunnelLength = 99
+	cfg.Transport.NTCP2MaxConnections = 99
+
+	// Verify original is unchanged
+	original := GetRouterConfig()
+	if original.Tunnel.TunnelLength == 99 {
+		t.Error("Tunnel deep copy failed: original was modified")
+	}
+	if original.Transport.NTCP2MaxConnections == 99 {
+		t.Error("Transport deep copy failed: original was modified")
+	}
+}

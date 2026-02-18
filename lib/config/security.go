@@ -24,6 +24,12 @@ const StandardDirPermissions = 0o755
 // SanitizePath cleans and validates a path to prevent directory traversal attacks.
 // It ensures the path does not escape the specified base directory.
 // Returns the sanitized absolute path or an error if the path is invalid.
+//
+// Platform support: This function uses filepath.Clean, filepath.Abs, and
+// filepath.EvalSymlinks which handle platform-specific path separators
+// (both '/' and '\\' on Windows). However, go-i2p is primarily developed
+// and tested on Linux. Windows-specific edge cases (UNC paths, drive letter
+// traversal) have not been tested. Use on Windows at your own risk.
 func SanitizePath(basePath, userPath string) (string, error) {
 	cleanBase, err := validateAndCleanBasePath(basePath)
 	if err != nil {

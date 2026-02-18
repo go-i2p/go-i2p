@@ -5,6 +5,11 @@ package config
 // Each server has a corresponding certificate in the embedded certificates/reseed/ directory.
 //
 // Note: Some servers share certificates (e.g., r4sas operates multiple mirrors).
+//
+// This list is compiled into the binary and serves as the baseline set of reseed
+// servers. Additional servers can be configured at runtime via the config file's
+// bootstrap.reseed_servers key, which supplements (rather than replaces) this list
+// when using the default "auto" bootstrap type.
 var KnownReseedServers = []*ReseedConfig{
 	// go-i2p dev team server (primary)
 	{Url: "https://reseed.i2pgit.org/", SU3Fingerprint: "hankhill19580_at_gmail.com.crt"},

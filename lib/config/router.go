@@ -72,6 +72,14 @@ type RouterConfig struct {
 	// AcceptTunnels controls whether the router participates in transit tunnels.
 	// Default: true.
 	AcceptTunnels bool
+	// Tunnel configuration for tunnel pool management and building.
+	Tunnel *TunnelDefaults
+	// Transport configuration for NTCP2/SSU2 transports.
+	Transport *TransportDefaults
+	// Performance tuning configuration.
+	Performance *PerformanceDefaults
+	// Congestion advertisement configuration per Proposal 162.
+	Congestion *CongestionDefaults
 }
 
 func defaultBase() string {
@@ -105,10 +113,34 @@ var defaultRouterConfig = &RouterConfig{
 	MaxBandwidth:   1024 * 1024, // 1 MB/s
 	MaxConnections: 200,
 	AcceptTunnels:  true,
+	Tunnel:         defaultTunnelConfigPtr(),
+	Transport:      defaultTransportConfigPtr(),
+	Performance:    defaultPerformanceConfigPtr(),
+	Congestion:     defaultCongestionConfigPtr(),
 }
 
 func defaultI2PControlConfigPtr() *I2PControlConfig {
 	cfg := DefaultI2PControlConfig()
+	return &cfg
+}
+
+func defaultTunnelConfigPtr() *TunnelDefaults {
+	cfg := buildTunnelDefaults()
+	return &cfg
+}
+
+func defaultTransportConfigPtr() *TransportDefaults {
+	cfg := buildTransportDefaults()
+	return &cfg
+}
+
+func defaultPerformanceConfigPtr() *PerformanceDefaults {
+	cfg := buildPerformanceDefaults()
+	return &cfg
+}
+
+func defaultCongestionConfigPtr() *CongestionDefaults {
+	cfg := buildCongestionDefaults()
 	return &cfg
 }
 
@@ -183,6 +215,26 @@ func copyNestedConfigs(dst, src *RouterConfig) {
 	if src.I2PControl != nil {
 		i2pControlCopy := *src.I2PControl
 		dst.I2PControl = &i2pControlCopy
+	}
+
+	if src.Tunnel != nil {
+		tunnelCopy := *src.Tunnel
+		dst.Tunnel = &tunnelCopy
+	}
+
+	if src.Transport != nil {
+		transportCopy := *src.Transport
+		dst.Transport = &transportCopy
+	}
+
+	if src.Performance != nil {
+		performanceCopy := *src.Performance
+		dst.Performance = &performanceCopy
+	}
+
+	if src.Congestion != nil {
+		congestionCopy := *src.Congestion
+		dst.Congestion = &congestionCopy
 	}
 }
 
