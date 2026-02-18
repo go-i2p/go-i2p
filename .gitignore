@@ -13,3 +13,4 @@ log
 diff
 err
 *.test
+.padding
