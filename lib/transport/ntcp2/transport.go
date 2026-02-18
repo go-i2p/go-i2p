@@ -30,6 +30,10 @@ type NTCP2Transport struct {
 	// Keystore for crypto key initialization (needed by SetIdentity)
 	keystore KeystoreProvider
 
+	// Handler for spec-compliance callbacks (probing resistance, replay cache,
+	// timestamp validation, encrypted termination).
+	handler *DefaultHandler
+
 	// Session management
 	sessions     sync.Map // map[string]*NTCP2Session (keyed by router hash)
 	sessionCount int32    // atomic O(1) session counter
@@ -170,6 +174,7 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 		config:   config,
 		identity: identity,
 		keystore: keystore,
+		handler:  NewDefaultHandler(),
 		ctx:      ctx,
 		cancel:   cancel,
 		logger:   logger,
@@ -830,6 +835,15 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	if err != nil {
 		return nil, fmt.Errorf("invalid remote router hash: %w", err)
 	}
+
+	// Extract and set the peer's static key and IV from their RouterInfo.
+	// Required by the Noise XK pattern: the initiator must know the
+	// responder's static key before the handshake begins.
+	if err := ConfigureDialConfig(config, routerInfo); err != nil {
+		t.logger.WithError(err).Debug("Could not configure peer static key (XK handshake may fail)")
+		// Non-fatal: proceed and let the handshake fail with a clear error
+	}
+
 	return config, nil
 }
 
@@ -1089,6 +1103,11 @@ func (t *NTCP2Transport) waitForBackgroundOperations() {
 
 // handleCloseCompletion processes the final close status and returns appropriate error.
 func (t *NTCP2Transport) handleCloseCompletion(listenerErr error) error {
+	// Close the handler to stop replay cache cleanup goroutine.
+	if t.handler != nil {
+		t.handler.Close()
+	}
+
 	if listenerErr != nil {
 		t.logger.WithError(listenerErr).Error("Transport closed with listener error")
 		return WrapNTCP2Error(listenerErr, "closing listener")
