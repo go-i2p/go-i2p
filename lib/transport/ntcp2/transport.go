@@ -772,7 +772,11 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
 	remoteHashBytes := remoteHash.Bytes()
-	return config.WithRemoteRouterHash(remoteHashBytes[:]), nil
+	config, err = config.WithRemoteRouterHash(remoteHashBytes[:])
+	if err != nil {
+		return nil, fmt.Errorf("invalid remote router hash: %w", err)
+	}
+	return config, nil
 }
 
 func (t *NTCP2Transport) setupSession(conn *ntcp2.NTCP2Conn, routerHash data.Hash) *NTCP2Session {

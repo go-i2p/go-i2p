@@ -131,7 +131,8 @@ func TestNoiseXKHandshake_Message3_StaticKeyAndRouterInfo(t *testing.T) {
 	for i := range testStaticKey {
 		testStaticKey[i] = byte(i + 0xAA)
 	}
-	config = config.WithStaticKey(testStaticKey)
+	config, err = config.WithStaticKey(testStaticKey)
+	require.NoError(t, err, "WithStaticKey must succeed with valid 32-byte key")
 	assert.Len(t, config.StaticKey, 32,
 		"Static key for Message 3 must be exactly 32 bytes (X25519)")
 }
@@ -816,7 +817,8 @@ func TestLegacyCrypto_NoDHKeyExchangeNotX25519(t *testing.T) {
 	require.NoError(t, err)
 
 	testKey := make([]byte, 32)
-	config = config.WithStaticKey(testKey)
+	config, err = config.WithStaticKey(testKey)
+	require.NoError(t, err, "WithStaticKey must succeed with valid 32-byte key")
 	assert.Len(t, config.StaticKey, 32,
 		"Static key must be 32 bytes (X25519/Curve25519)")
 }
