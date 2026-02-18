@@ -3,6 +3,7 @@ package keys
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -153,9 +154,17 @@ func loadOrGenerateKey(dir, name string) (types.PrivateKey, error) {
 func loadOrGenerateEncryptionKey(dir, name string) (types.ReceivingPublicKey, types.PrivateEncryptionKey, error) {
 	fullPath := filepath.Join(dir, name+".enc.key")
 
-	// Try to load existing encryption key
-	if keyData, err := os.ReadFile(fullPath); err == nil {
+	keyData, err := os.ReadFile(fullPath)
+	if err == nil {
 		return loadExistingEncryptionKey(fullPath, keyData)
+	}
+
+	// Only generate a new key if the file truly doesn't exist.
+	// Any other error (permissions, I/O) could mean the key exists
+	// but is inaccessible — generating a new one would silently
+	// change the router's NTCP2 static key and identity.
+	if !os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("failed to read encryption key file %s (refusing to regenerate): %w", fullPath, err)
 	}
 
 	return generateAndPersistEncryptionKey(fullPath)
@@ -233,10 +242,13 @@ func generateNewKey() (types.PrivateKey, error) {
 }
 
 func loadExistingKey(keyData []byte) (types.PrivateKey, error) {
-	// Convert raw bytes to Ed25519PrivateKey type
+	// Ed25519 private keys are 32 bytes (seed) or 64 bytes (seed+public).
+	// Reject anything else to prevent malformed keys from causing
+	// panics or incorrect signatures downstream.
+	if len(keyData) != 32 && len(keyData) != 64 {
+		return nil, fmt.Errorf("invalid Ed25519 key length: got %d bytes, want 32 or 64", len(keyData))
+	}
 	key := ed25519.Ed25519PrivateKey(keyData)
-	// Return pointer to ensure it implements all interface methods
-	// (NewVerifier has a pointer receiver)
 	return &key, nil
 }
 
@@ -402,6 +414,13 @@ type RouterInfoOptions struct {
 	// address and can accept inbound connections. When true, the caps string
 	// uses "R" (Reachable); when false, "U" (Unreachable).
 	Reachable bool
+	// Floodfill indicates whether the router should advertise the "f" (floodfill)
+	// capability. When true, "f" replaces "N" (not floodfill) in the caps string.
+	// Floodfills store and distribute netDB entries.
+	Floodfill bool
+	// NetId is the network identifier. Defaults to "2" (production I2P network).
+	// Set to "3" for testnet or other values for experimental networks.
+	NetId string
 }
 
 // ConstructRouterInfo creates a complete RouterInfo structure with signing keys and certificate.
@@ -458,6 +477,12 @@ func (ks *RouterInfoKeystore) mergeOptions(opts []RouterInfoOptions) RouterInfoO
 		}
 		if opt.Reachable {
 			options.Reachable = true
+		}
+		if opt.Floodfill {
+			options.Floodfill = true
+		}
+		if opt.NetId != "" {
+			options.NetId = opt.NetId
 		}
 	}
 	return options
@@ -534,10 +559,19 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 
 	// Try to load persisted padding from disk
 	paddingPath := filepath.Join(ks.dir, ks.name+".padding")
-	if paddingData, err := os.ReadFile(paddingPath); err == nil && len(paddingData) == paddingSize {
-		log.WithField("at", "generateIdentityPaddingFromSizes").Debug("Loaded identity padding from disk")
-		ks.cachedPadding = paddingData
-		return ks.cachedPadding, nil
+	paddingData, readErr := os.ReadFile(paddingPath)
+	if readErr == nil {
+		if len(paddingData) == paddingSize {
+			log.WithField("at", "generateIdentityPaddingFromSizes").Debug("Loaded identity padding from disk")
+			ks.cachedPadding = paddingData
+			return ks.cachedPadding, nil
+		}
+		// Size mismatch — key type may have changed; regenerate.
+		log.WithField("at", "generateIdentityPaddingFromSizes").Warn("Padding file size mismatch, regenerating")
+	} else if !os.IsNotExist(readErr) {
+		// File exists but unreadable (permissions, I/O error).
+		// Refuse to silently regenerate — would change identity hash.
+		return nil, oops.Errorf("failed to read padding file %s (refusing to regenerate — would change identity): %w", paddingPath, readErr)
 	}
 
 	// Generate new random padding
@@ -573,11 +607,16 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 	publishedTime := rawTime.Round(time.Second)
 
 	// Build caps string - base caps then congestion flag per PROP_162
-	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable)
+	caps := ks.buildCapsString(opts.CongestionFlag, opts.Reachable, opts.Floodfill)
+
+	netId := opts.NetId
+	if netId == "" {
+		netId = "2" // Default: production I2P network
+	}
 
 	options := map[string]string{
 		"caps":  caps,
-		"netId": "2", // Production network
+		"netId": netId,
 	}
 
 	log.WithFields(map[string]interface{}{
@@ -606,15 +645,20 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 
 // buildCapsString constructs the capabilities string for RouterInfo.
 // Per PROP_162, congestion flags (D/E/G) are appended after R/U.
-// Capabilities: N = Not floodfill, R = Reachable, U = Unreachable
-func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable bool) string {
+// Capabilities: f = Floodfill, N = Not floodfill, R = Reachable, U = Unreachable
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable bool, floodfill bool) string {
 	reachabilityFlag := "U"
 	if reachable {
 		reachabilityFlag = "R"
 	}
-	baseCaps := "N" + reachabilityFlag
 
-	// Per PROP_162: congestion flag is appended after R/U in caps
+	floodfillFlag := "N"
+	if floodfill {
+		floodfillFlag = "f"
+	}
+
+	baseCaps := floodfillFlag + reachabilityFlag
+
 	if congestionFlag == "" {
 		return baseCaps
 	}

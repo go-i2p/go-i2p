@@ -258,21 +258,30 @@ func TestPaddingLayout_CryptoPubKeyAtStartSigningAtEnd(t *testing.T) {
 		t.Errorf("padding size = %d, want 320", len(kac.Padding))
 	}
 
-	// Verify the serialized layout: [crypto(32)][padding(320)][signing(32)] + certificate
+	// Verify the serialized layout per I2P spec:
+	// Keys are RIGHT-JUSTIFIED in their standard-size fields.
+	// [256-byte crypto field: padding(224) | X25519 pubkey(32)]
+	// [128-byte signing field: padding(96) | Ed25519 pubkey(32)]
+	// Then certificate bytes follow.
 	rawBytes, err := kac.Bytes()
 	if err != nil {
 		t.Fatalf("KeysAndCert.Bytes() failed: %v", err)
 	}
 
-	// First 32 bytes should be the X25519 public key
+	// X25519 public key (32 bytes) is right-justified in the 256-byte field
+	// So it occupies bytes 224-255
+	cryptoFieldSize := 256 // KEYS_AND_CERT_PUBKEY_SIZE
+	cryptoStart := cryptoFieldSize - 32
 	for i := 0; i < 32; i++ {
-		if rawBytes[i] != cryptoPubKeyBytes[i] {
-			t.Errorf("byte[%d]: crypto pubkey mismatch at start of data area", i)
+		if rawBytes[cryptoStart+i] != cryptoPubKeyBytes[i] {
+			t.Errorf("byte[%d]: crypto pubkey mismatch (right-justified at offset %d)",
+				cryptoStart+i, cryptoStart+i)
 			break
 		}
 	}
 
-	// Bytes 352-383 (last 32 of 384-byte data area) should be the Ed25519 public key
+	// Ed25519 signing public key (32 bytes) is right-justified in the 128-byte field
+	// So it occupies bytes 352-383 (last 32 of the 384-byte data area)
 	dataEnd := keys_and_cert.KEYS_AND_CERT_DATA_SIZE // 384
 	sigStart := dataEnd - 32                         // 352
 	for i := 0; i < 32; i++ {
@@ -375,7 +384,7 @@ func TestKeyPersistenceFormat_NotJavaCompatible(t *testing.T) {
 }
 
 // TestDestinationKeyPersistenceFormat_DKSMagic verifies the destination key
-// persistence uses the DKS\x01 magic header format.
+// persistence uses the DKS\x02 magic header format (v2 includes padding).
 func TestDestinationKeyPersistenceFormat_DKSMagic(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -395,10 +404,10 @@ func TestDestinationKeyPersistenceFormat_DKSMagic(t *testing.T) {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
 
-	// Verify DKS magic header
-	magic := "DKS\x01"
+	// Verify DKS v2 magic header (v2 includes padding for identity stability)
+	magic := "DKS\x02"
 	if len(data) < 4 || string(data[:4]) != magic {
-		t.Errorf("destination key file does not start with DKS\\x01 magic; got %q", data[:min(4, len(data))])
+		t.Errorf("destination key file does not start with DKS\\x02 magic; got %q", data[:min(4, len(data))])
 	}
 }
 

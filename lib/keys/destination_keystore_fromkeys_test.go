@@ -25,10 +25,12 @@ func TestNewDestinationKeyStoreFromKeys_PreservesIdentity(t *testing.T) {
 	originalDestBytes, err := original.Destination().Bytes()
 	require.NoError(t, err)
 
-	// Reconstruct from the original's private keys
+	// Reconstruct from the original's private keys, passing padding
+	// to preserve identity (random padding means different identity without it)
 	reconstructed, err := NewDestinationKeyStoreFromKeys(
 		original.SigningPrivateKey(),
 		original.EncryptionPrivateKey(),
+		original.IdentityPadding(),
 	)
 	require.NoError(t, err)
 
@@ -123,10 +125,11 @@ func TestNewDestinationKeyStoreFromKeys_StableAcrossMultipleCalls(t *testing.T) 
 
 	sigPriv := original.SigningPrivateKey()
 	encPriv := original.EncryptionPrivateKey()
+	pad := original.IdentityPadding()
 
 	var destinations [][]byte
 	for i := 0; i < 5; i++ {
-		ks, err := NewDestinationKeyStoreFromKeys(sigPriv, encPriv)
+		ks, err := NewDestinationKeyStoreFromKeys(sigPriv, encPriv, pad)
 		require.NoError(t, err)
 		db, err := ks.Destination().Bytes()
 		require.NoError(t, err)

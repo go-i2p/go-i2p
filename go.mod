@@ -54,7 +54,7 @@ require (
 // publish intermediate versions.
 
 // Group 1: common, crypto, elgamal
-//replace github.com/go-i2p/common => ../common
+replace github.com/go-i2p/common => ../common
 
 //replace github.com/go-i2p/crypto => ../crypto
 

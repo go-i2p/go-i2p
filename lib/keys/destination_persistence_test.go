@@ -124,7 +124,7 @@ func TestLoadDestinationKeyStore_TruncatedFile(t *testing.T) {
 
 	// Write just the magic header
 	filename := filepath.Join(dir, name+".dest.key")
-	err := os.WriteFile(filename, destinationKeyStoreMagic, 0o600)
+	err := os.WriteFile(filename, destinationKeyStoreMagicV2, 0o600)
 	require.NoError(t, err)
 
 	_, err = LoadDestinationKeyStore(dir, name)
@@ -221,8 +221,8 @@ func TestMarshalUnmarshal_MagicHeader(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check magic header
-	assert.Equal(t, destinationKeyStoreMagic, data[:4],
-		"marshaled data should start with magic header")
+	assert.Equal(t, destinationKeyStoreMagicV2, data[:4],
+		"marshaled data should start with v2 magic header")
 }
 
 func TestUnmarshal_EmptyData(t *testing.T) {

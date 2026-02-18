@@ -11,20 +11,27 @@ import (
 	"github.com/go-i2p/crypto/ed25519"
 )
 
-// Persisted key file format (all fields are fixed-size):
+// Persisted key file format v2 (all fields are fixed-size):
 //
-//   [4 bytes]  magic: "DKS\x01" (DestinationKeyStore v1)
+//   [4 bytes]  magic: "DKS\x02" (DestinationKeyStore v2)
 //   [4 bytes]  signing private key length (big-endian uint32)
 //   [N bytes]  signing private key (Ed25519, typically 64 bytes)
 //   [4 bytes]  encryption private key length (big-endian uint32)
 //   [M bytes]  encryption private key (X25519, typically 32 bytes)
+//   [4 bytes]  padding length (big-endian uint32)
+//   [P bytes]  identity padding bytes
+//
+// v1 format ("DKS\x01") is still readable for backward compatibility
+// but v2 is always written to preserve identity stability.
 //
 // On load, the destination (public keys + KeysAndCert) is reconstructed
-// deterministically from the private keys, ensuring a stable .b32.i2p address.
+// deterministically from the private keys and persisted padding,
+// ensuring a stable .b32.i2p address.
 //
 // All files are written with 0600 permissions. Directories use 0700.
 
-var destinationKeyStoreMagic = []byte("DKS\x01")
+var destinationKeyStoreMagicV1 = []byte("DKS\x01")
+var destinationKeyStoreMagicV2 = []byte("DKS\x02")
 
 // StoreKeys persists the destination key store to disk at the given path.
 // The file contains the signing private key, encryption private key, and
@@ -132,8 +139,9 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 	return dks, nil
 }
 
-// marshal serializes the DestinationKeyStore's private keys into a byte slice.
-// Only private keys are stored; the destination is reconstructed from them on load.
+// marshal serializes the DestinationKeyStore's private keys and padding into
+// a byte slice using the DKS v2 format. Padding is included to ensure the
+// destination identity hash remains stable across store/load cycles.
 func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 	// Get raw bytes from the signing private key via type assertion
 	sigPrivConcrete, ok := dks.signingPrivKey.(interface{ Bytes() []byte })
@@ -144,15 +152,21 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 
 	encPrivBytes := dks.encryptionPrivKey.Bytes()
 
-	// Calculate total size: magic + 2 x (4-byte length + key data)
-	totalSize := len(destinationKeyStoreMagic) +
+	paddingBytes := dks.padding
+	if paddingBytes == nil {
+		paddingBytes = []byte{}
+	}
+
+	// Calculate total size: magic + 3 x (4-byte length + field data)
+	totalSize := len(destinationKeyStoreMagicV2) +
 		4 + len(sigPrivBytes) +
-		4 + len(encPrivBytes)
+		4 + len(encPrivBytes) +
+		4 + len(paddingBytes)
 
 	buf := make([]byte, 0, totalSize)
 
-	// Magic
-	buf = append(buf, destinationKeyStoreMagic...)
+	// Magic (v2)
+	buf = append(buf, destinationKeyStoreMagicV2...)
 
 	// Signing private key
 	lenBuf := make([]byte, 4)
@@ -165,13 +179,18 @@ func (dks *DestinationKeyStore) marshal() ([]byte, error) {
 	buf = append(buf, lenBuf...)
 	buf = append(buf, encPrivBytes...)
 
+	// Padding
+	binary.BigEndian.PutUint32(lenBuf, uint32(len(paddingBytes)))
+	buf = append(buf, lenBuf...)
+	buf = append(buf, paddingBytes...)
+
 	return buf, nil
 }
 
-// unmarshalDestinationKeyStore deserializes private keys and reconstructs
-// the full DestinationKeyStore including the destination (public keys + KeysAndCert).
+// unmarshalDestinationKeyStore deserializes private keys (and padding if v2)
+// and reconstructs the full DestinationKeyStore including the destination.
 func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
-	offset, err := validateMagicHeader(data)
+	version, offset, err := detectFormatVersion(data)
 	if err != nil {
 		return nil, err
 	}
@@ -181,12 +200,25 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 		return nil, err
 	}
 
+	var padding []byte
+	if version == 2 {
+		// Read past private key fields to find padding offset
+		_, afterKeys, err := readPrivateKeyFieldsWithOffset(data, offset)
+		if err != nil {
+			return nil, err
+		}
+		padding, _, err = readLengthPrefixedField(data, afterKeys, "padding")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	sigPrivKey, encPrivKey, err := reconstructPrivateKeys(sigPrivBytes, encPrivBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	dest, err := reconstructDestination(sigPrivKey, encPrivKey)
+	dest, err := reconstructDestinationWithPadding(sigPrivKey, encPrivKey, padding)
 	if err != nil {
 		return nil, err
 	}
@@ -195,21 +227,36 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 		destination:       dest,
 		signingPrivKey:    sigPrivKey,
 		encryptionPrivKey: encPrivKey,
+		padding:           padding,
 	}, nil
 }
 
-// validateMagicHeader checks the magic bytes at the start of the data
-// and returns the offset past the header.
-func validateMagicHeader(data []byte) (int, error) {
-	if len(data) < len(destinationKeyStoreMagic) {
-		return 0, fmt.Errorf("data too short for magic header")
+// detectFormatVersion checks the magic header and returns the version (1 or 2)
+// and the offset past the header.
+func detectFormatVersion(data []byte) (version int, offset int, err error) {
+	if len(data) < 4 {
+		return 0, 0, fmt.Errorf("data too short for magic header")
 	}
-	for i, b := range destinationKeyStoreMagic {
+	if matchesMagic(data, destinationKeyStoreMagicV2) {
+		return 2, len(destinationKeyStoreMagicV2), nil
+	}
+	if matchesMagic(data, destinationKeyStoreMagicV1) {
+		return 1, len(destinationKeyStoreMagicV1), nil
+	}
+	return 0, 0, fmt.Errorf("invalid magic header: not a destination key file")
+}
+
+// matchesMagic checks if data starts with the given magic bytes.
+func matchesMagic(data, magic []byte) bool {
+	if len(data) < len(magic) {
+		return false
+	}
+	for i, b := range magic {
 		if data[i] != b {
-			return 0, fmt.Errorf("invalid magic header: not a destination key file")
+			return false
 		}
 	}
-	return len(destinationKeyStoreMagic), nil
+	return true
 }
 
 // readPrivateKeyFields reads the signing and encryption private key fields
@@ -226,6 +273,20 @@ func readPrivateKeyFields(data []byte, offset int) (sigPrivBytes, encPrivBytes [
 	return sigPrivBytes, encPrivBytes, nil
 }
 
+// readPrivateKeyFieldsWithOffset is like readPrivateKeyFields but also returns
+// the offset past both key fields, allowing callers to read additional fields.
+func readPrivateKeyFieldsWithOffset(data []byte, offset int) (sigPrivBytes []byte, endOffset int, err error) {
+	_, newOffset, err := readLengthPrefixedField(data, offset, "signing private key")
+	if err != nil {
+		return nil, 0, err
+	}
+	_, finalOffset, err := readLengthPrefixedField(data, newOffset, "encryption private key")
+	if err != nil {
+		return nil, 0, err
+	}
+	return nil, finalOffset, nil
+}
+
 // reconstructPrivateKeys rebuilds the private key objects from raw byte slices.
 func reconstructPrivateKeys(sigPrivBytes, encPrivBytes []byte) (ed25519.Ed25519PrivateKey, *curve25519.Curve25519PrivateKey, error) {
 	sigPrivKey, err := ed25519.NewEd25519PrivateKey(sigPrivBytes)
@@ -239,16 +300,25 @@ func reconstructPrivateKeys(sigPrivBytes, encPrivBytes []byte) (ed25519.Ed25519P
 	return sigPrivKey, encPrivKey, nil
 }
 
-// reconstructDestination rebuilds the full Destination from private keys by
-// deriving public keys and assembling the KeysAndCert structure.
-func reconstructDestination(sigPrivKey ed25519.Ed25519PrivateKey, encPrivKey *curve25519.Curve25519PrivateKey) (*destination.Destination, error) {
+// reconstructDestinationWithPadding rebuilds the full Destination from private keys
+// using the provided padding bytes. If padding is nil (v1 format), fresh padding
+// is generated per Proposal 161.
+func reconstructDestinationWithPadding(sigPrivKey ed25519.Ed25519PrivateKey, encPrivKey *curve25519.Curve25519PrivateKey, padding []byte) (*destination.Destination, error) {
 	sigPubKey, receivingPubKey, err := derivePublicKeys(sigPrivKey, encPrivKey)
 	if err != nil {
 		return nil, err
 	}
 
+	if padding != nil {
+		return buildDestinationFromPublicKeysWithPadding(receivingPubKey, sigPubKey, padding)
+	}
 	return buildDestinationFromPublicKeys(receivingPubKey, sigPubKey)
 }
+
+// maxPrivateKeyFieldLength is the maximum allowed length for a private key field
+// in the DKS format. Private keys should never exceed a few hundred bytes.
+// This prevents OOM from crafted DKS files with large length fields.
+const maxPrivateKeyFieldLength = 1024
 
 // readLengthPrefixedField reads a 4-byte big-endian length followed by that many bytes.
 func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte, int, error) {
@@ -257,6 +327,10 @@ func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte,
 	}
 	length := int(binary.BigEndian.Uint32(data[offset : offset+4]))
 	offset += 4
+
+	if length > maxPrivateKeyFieldLength {
+		return nil, 0, fmt.Errorf("%s length %d exceeds maximum allowed %d", fieldName, length, maxPrivateKeyFieldLength)
+	}
 
 	if offset+length > len(data) {
 		return nil, 0, fmt.Errorf("data too short for %s data (need %d, have %d)", fieldName, length, len(data)-offset)

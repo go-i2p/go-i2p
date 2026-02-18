@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -65,13 +66,11 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 		public, err := ks.privateKey.Public()
 		if err != nil {
 			log.WithError(err).Warn("Failed to get public key, generating fallback ID")
-			// Generate a deterministic fallback ID using the private key bytes
-			// to ensure the same key always maps to the same file, even across restarts.
-			pkBytes := ks.privateKey.Bytes()
-			if len(pkBytes) > 10 {
-				pkBytes = pkBytes[:10]
-			}
-			fallbackID := "unknown-" + hex.EncodeToString(pkBytes)
+			// Generate a deterministic fallback ID by hashing private key bytes.
+			// Using SHA-256 prevents leaking raw private key material into
+			// log messages or filenames on disk.
+			pkHash := sha256.Sum256(ks.privateKey.Bytes())
+			fallbackID := "unknown-" + hex.EncodeToString(pkHash[:10])
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID
 		}
@@ -91,6 +90,9 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 
 func (ks *KeyStoreImpl) GetKeys() (types.PublicKey, types.PrivateKey, error) {
 	log.WithField("at", "GetKeys").Debug("Retrieving key pair")
+	if ks.privateKey == nil {
+		return nil, nil, fmt.Errorf("private key not initialized")
+	}
 	public, err := ks.privateKey.Public()
 	if err != nil {
 		log.WithError(err).Error("Failed to derive public key from private key")

@@ -202,9 +202,9 @@ func TestRouterInfoKeystore_BuildCapsString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ks.buildCapsString(tt.congestionFlag, tt.reachable)
+			result := ks.buildCapsString(tt.congestionFlag, tt.reachable, false)
 			if result != tt.expected {
-				t.Errorf("buildCapsString(%q, %v) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
+				t.Errorf("buildCapsString(%q, %v, false) = %q, want %q", tt.congestionFlag, tt.reachable, result, tt.expected)
 			}
 		})
 	}

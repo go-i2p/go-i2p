@@ -1,6 +1,7 @@
 package keys
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 
 	"github.com/go-i2p/common/destination"
@@ -18,6 +19,7 @@ type DestinationKeyStore struct {
 	destination       *destination.Destination
 	encryptionPrivKey types.PrivateEncryptionKey // X25519 private key (32 bytes)
 	signingPrivKey    types.SigningPrivateKey    // Ed25519 private key (32 bytes)
+	padding           []byte                     // Identity padding bytes (persisted for identity stability)
 }
 
 // NewDestinationKeyStore creates a new key store with generated Ed25519/X25519 keys.
@@ -66,6 +68,7 @@ func NewDestinationKeyStore() (*DestinationKeyStore, error) {
 		destination:       dest,
 		encryptionPrivKey: encryptionPrivKey,
 		signingPrivKey:    signingPrivKey,
+		padding:           padding,
 	}, nil
 }
 
@@ -99,6 +102,9 @@ func createKeyCertificate() (*key_certificate.KeyCertificate, error) {
 }
 
 // calculateKeyPadding computes padding needed to reach KEYS_AND_CERT_DATA_SIZE.
+// Per Proposal 161, generates 32 bytes of random data and tiles (repeats) them
+// across the padding area for compressibility while avoiding suspicious all-zero
+// Base64 representations (long runs of AAAA characters).
 func calculateKeyPadding() ([]byte, error) {
 	sizes, err := key_certificate.GetKeySizes(
 		key_certificate.KEYCERT_SIGN_ED25519,
@@ -113,7 +119,27 @@ func calculateKeyPadding() ([]byte, error) {
 		return nil, fmt.Errorf("invalid key sizes: padding would be negative")
 	}
 
-	return make([]byte, paddingSize), nil
+	return generateTiledPadding(paddingSize)
+}
+
+// generateTiledPadding creates Proposal 161 compliant padding by generating
+// 32 random bytes and repeating them to fill the requested size.
+func generateTiledPadding(size int) ([]byte, error) {
+	if size == 0 {
+		return []byte{}, nil
+	}
+
+	const tileSize = 32
+	tile := make([]byte, tileSize)
+	if _, err := cryptorand.Read(tile); err != nil {
+		return nil, fmt.Errorf("failed to generate random padding tile: %w", err)
+	}
+
+	padding := make([]byte, size)
+	for i := 0; i < size; i += tileSize {
+		copy(padding[i:], tile)
+	}
+	return padding, nil
 }
 
 // assembleKeysAndCert constructs the KeysAndCert structure for the destination.
@@ -148,6 +174,13 @@ func (dks *DestinationKeyStore) EncryptionPrivateKey() types.PrivateEncryptionKe
 	return dks.encryptionPrivKey
 }
 
+// IdentityPadding returns the identity padding bytes used in the KeysAndCert.
+// This must be preserved across store/load cycles (and passed to
+// NewDestinationKeyStoreFromKeys) to maintain a stable .b32.i2p address.
+func (dks *DestinationKeyStore) IdentityPadding() []byte {
+	return dks.padding
+}
+
 // SigningPublicKey returns the signing public key
 func (dks *DestinationKeyStore) SigningPublicKey() (types.SigningPublicKey, error) {
 	log.WithField("at", "SigningPublicKey").Debug("Retrieving signing public key")
@@ -175,10 +208,14 @@ func (dks *DestinationKeyStore) EncryptionPublicKey() (types.ReceivingPublicKey,
 // deterministically from the provided private keys, producing the same .b32.i2p
 // address as the original identity.
 //
+// An optional padding parameter can be provided to restore the exact identity
+// padding from a previous session. If nil, new padding is generated per
+// Proposal 161, which will produce a different destination hash.
+//
 // This enables I2CP clients to maintain persistent identities across sessions
 // by providing their own key material rather than having the router generate
 // fresh keys each time.
-func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey) (*DestinationKeyStore, error) {
+func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encryptionPrivKey types.PrivateEncryptionKey, existingPadding ...[]byte) (*DestinationKeyStore, error) {
 	log.WithField("at", "NewDestinationKeyStoreFromKeys").Debug("Creating destination keystore from existing keys")
 
 	if err := validatePrivateKeys(signingPrivKey, encryptionPrivKey); err != nil {
@@ -190,7 +227,22 @@ func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encr
 		return nil, err
 	}
 
-	dest, err := buildDestinationFromPublicKeys(receivingPubKey, sigPubKey)
+	var dest *destination.Destination
+	var padding []byte
+
+	if len(existingPadding) > 0 && existingPadding[0] != nil {
+		padding = existingPadding[0]
+		dest, err = buildDestinationFromPublicKeysWithPadding(receivingPubKey, sigPubKey, padding)
+	} else {
+		// Generate fresh padding — NOTE: this produces a new identity hash
+		var calcPadding []byte
+		calcPadding, err = calculateKeyPadding()
+		if err != nil {
+			return nil, err
+		}
+		padding = calcPadding
+		dest, err = buildDestinationFromPublicKeysWithPadding(receivingPubKey, sigPubKey, padding)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +253,7 @@ func NewDestinationKeyStoreFromKeys(signingPrivKey types.SigningPrivateKey, encr
 		destination:       dest,
 		encryptionPrivKey: encryptionPrivKey,
 		signingPrivKey:    signingPrivKey,
+		padding:           padding,
 	}, nil
 }
 
@@ -245,6 +298,25 @@ func buildDestinationFromPublicKeys(encryptionPubKey types.ReceivingPublicKey, s
 	padding, err := calculateKeyPadding()
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate key padding: %w", err)
+	}
+
+	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assemble keys and cert: %w", err)
+	}
+
+	return &destination.Destination{
+		KeysAndCert: keysAndCert,
+	}, nil
+}
+
+// buildDestinationFromPublicKeysWithPadding constructs a Destination using the
+// provided padding bytes instead of generating new ones. This preserves the
+// destination's identity hash across store/load cycles.
+func buildDestinationFromPublicKeysWithPadding(encryptionPubKey types.ReceivingPublicKey, signingPubKey types.SigningPublicKey, padding []byte) (*destination.Destination, error) {
+	keyCert, err := createKeyCertificate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key certificate: %w", err)
 	}
 
 	keysAndCert, err := assembleKeysAndCert(keyCert, encryptionPubKey, padding, signingPubKey)
