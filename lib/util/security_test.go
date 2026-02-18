@@ -85,9 +85,9 @@ func TestCheckFileAge(t *testing.T) {
 		t.Errorf("Newly created file should not be older than 1 minute")
 	}
 
-	// A file should be older than -1 minutes (future time)
-	if !CheckFileAge(tmpFile.Name(), -1) {
-		t.Errorf("File should be older than a time in the future")
+	// Negative maxAge should return false (invalid parameter)
+	if CheckFileAge(tmpFile.Name(), -1) {
+		t.Errorf("Negative maxAge should return false (invalid parameter)")
 	}
 }
 

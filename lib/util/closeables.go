@@ -23,6 +23,25 @@ func RegisterCloser(c io.Closer) {
 	log.WithField("count", len(closeOnExit)).Debug("Registered closer")
 }
 
+// UnregisterCloser removes a previously registered io.Closer, preventing
+// double-close when a resource is explicitly closed before shutdown.
+// Uses interface pointer equality for matching. Nil closers are silently ignored.
+// This function is thread-safe.
+func UnregisterCloser(c io.Closer) {
+	if c == nil {
+		return
+	}
+	closeMutex.Lock()
+	defer closeMutex.Unlock()
+	for i, closer := range closeOnExit {
+		if closer == c {
+			closeOnExit = append(closeOnExit[:i], closeOnExit[i+1:]...)
+			log.WithField("count", len(closeOnExit)).Debug("Unregistered closer")
+			return
+		}
+	}
+}
+
 // CloseAll closes all registered io.Closer instances in reverse (LIFO) order
 // and clears the list. LIFO ordering ensures resources are released in the
 // opposite order of their registration, which is important when later resources

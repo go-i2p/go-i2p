@@ -3,6 +3,7 @@ package sntp
 import (
 	"bufio"
 	"embed"
+	"errors"
 	"io"
 	"strings"
 )
@@ -74,11 +75,11 @@ func (z *Zones) parseContinentMappings(file io.Reader) {
 	reader := bufio.NewReader(file)
 	for {
 		line, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			log.WithError(err).Warn("Failed to read line from continents.txt")
 			break
 		}
-		if err == io.EOF && line == "" {
+		if errors.Is(err, io.EOF) && line == "" {
 			break
 		}
 

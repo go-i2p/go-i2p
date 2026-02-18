@@ -167,14 +167,87 @@ func TestPreShutdownHandlers_Timeout(t *testing.T) {
 	preShutdownHandlers = nil
 	preShutdownMu.Unlock()
 
-	SetGracefulTimeout(100 * time.Millisecond)
+	SetGracefulTimeout(2 * time.Second)
 
 	RegisterPreShutdownHandler(func() {
-		time.Sleep(1 * time.Second) // Exceeds timeout
+		time.Sleep(10 * time.Second) // Exceeds per-handler timeout
 	})
 
 	if handlePreShutdown() {
 		t.Error("expected false when handlers exceed timeout")
+	}
+}
+
+// TestPreShutdownHandlers_HungHandlerDoesNotBlockChain verifies that a hung
+// handler does not prevent subsequent handlers from running (BUG #4 fix).
+func TestPreShutdownHandlers_HungHandlerDoesNotBlockChain(t *testing.T) {
+	originalHandlers := preShutdownHandlers
+	originalTimeout := gracefulTimeout
+	defer func() {
+		preShutdownMu.Lock()
+		preShutdownHandlers = originalHandlers
+		gracefulTimeout = originalTimeout
+		preShutdownMu.Unlock()
+	}()
+
+	preShutdownMu.Lock()
+	preShutdownHandlers = nil
+	preShutdownMu.Unlock()
+
+	// 4 seconds total / 2 handlers = 2 seconds per handler
+	SetGracefulTimeout(4 * time.Second)
+
+	secondCalled := false
+
+	// First handler hangs forever
+	RegisterPreShutdownHandler(func() {
+		select {} // block indefinitely
+	})
+	// Second handler (e.g., zero-address DatabaseStore) must still execute
+	RegisterPreShutdownHandler(func() {
+		secondCalled = true
+	})
+
+	result := handlePreShutdown()
+
+	if result {
+		t.Error("expected false when first handler hangs")
+	}
+	if !secondCalled {
+		t.Error("second handler should have been called despite first handler hanging")
+	}
+}
+
+// TestDeregisterPreShutdownHandler verifies pre-shutdown handler deregistration.
+func TestDeregisterPreShutdownHandler(t *testing.T) {
+	originalHandlers := preShutdownHandlers
+	defer func() {
+		preShutdownMu.Lock()
+		preShutdownHandlers = originalHandlers
+		preShutdownMu.Unlock()
+	}()
+
+	preShutdownMu.Lock()
+	preShutdownHandlers = nil
+	preShutdownMu.Unlock()
+
+	called := false
+	id := RegisterPreShutdownHandler(func() { called = true })
+
+	DeregisterPreShutdownHandler(id)
+
+	preShutdownMu.RLock()
+	count := len(preShutdownHandlers)
+	preShutdownMu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("Expected 0 handlers after deregistration, got %d", count)
+	}
+
+	handlePreShutdown()
+
+	if called {
+		t.Error("Deregistered handler should not have been called")
 	}
 }
 

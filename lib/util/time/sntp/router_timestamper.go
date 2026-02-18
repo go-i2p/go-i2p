@@ -22,6 +22,13 @@ func (c *DefaultNTPClient) QueryWithOptions(host string, options ntp.QueryOption
 	return ntp.QueryWithOptions(host, options)
 }
 
+// ntpSample holds the result of a single NTP query, including both the
+// clock offset (delta) and the server's stratum level for quality assessment.
+type ntpSample struct {
+	delta   time.Duration
+	stratum uint8
+}
+
 type RouterTimestamper struct {
 	servers           []string
 	priorityServers   [][]string
@@ -55,7 +62,7 @@ const (
 	defaultTimeout        = 10 * time.Second
 	shortTimeout          = 5 * time.Second
 	maxWaitInitialization = 45 * time.Second
-	maxVariance           = 10 * time.Second
+	maxVariance           = 10 * time.Second // Max inter-sample variance for NTP consistency checks
 )
 
 func NewRouterTimestamper(client NTPClient) *RouterTimestamper {
@@ -108,11 +115,22 @@ func (rt *RouterTimestamper) RemoveListener(listener UpdateListener) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 	for i, l := range rt.listeners {
-		if l == listener {
+		if listenersMatch(l, listener) {
 			rt.listeners = append(rt.listeners[:i], rt.listeners[i+1:]...)
 			break
 		}
 	}
+}
+
+// listenersMatch compares two listeners for identity. If both implement
+// ListenerIdentifier, their IDs are compared. Otherwise, pointer equality is used.
+func listenersMatch(a, b UpdateListener) bool {
+	aidObj, aOk := a.(ListenerIdentifier)
+	bidObj, bOk := b.(ListenerIdentifier)
+	if aOk && bOk {
+		return aidObj.ListenerID() == bidObj.ListenerID()
+	}
+	return a == b
 }
 
 func (rt *RouterTimestamper) WaitForInitialization() {
@@ -187,59 +205,6 @@ func (rt *RouterTimestamper) markInitialized() {
 	}
 }
 
-/*
-	func (rt *RouterTimestamper) run() {
-		defer rt.waitGroup.Done()
-		lastFailed := false
-		for rt.isRunning {
-			rt.updateConfig()
-			preferIPv6 := checkIPv6Connectivity()
-			if !rt.disabled {
-				if rt.priorityServers != nil {
-					for _, servers := range rt.priorityServers {
-						lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
-						if !lastFailed {
-							break
-						}
-					}
-				}
-				if rt.priorityServers == nil || lastFailed {
-					prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
-					lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
-				}
-			}
-
-			rt.mutex.Lock()
-			if !rt.initialized {
-				rt.initialized = true
-			}
-			rt.mutex.Unlock()
-
-			var sleepTime time.Duration
-			if lastFailed {
-				rt.consecutiveFails++
-				if rt.consecutiveFails >= maxConsecutiveFails {
-					sleepTime = 30 * time.Minute
-				} else {
-					sleepTime = 30 * time.Second
-				}
-			} else {
-				rt.consecutiveFails = 0
-				randomDelay := time.Duration(rand.Int63n(int64(rt.queryFrequency / 2)))
-				sleepTime = rt.queryFrequency + randomDelay
-				if rt.wellSynced {
-					sleepTime *= 3
-				}
-			}
-
-			select {
-			case <-time.After(sleepTime):
-			case <-rt.stopChan:
-				return
-			}
-		}
-	}
-*/
 func (rt *RouterTimestamper) run() {
 	defer rt.waitGroup.Done()
 	for {
@@ -264,11 +229,14 @@ func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Durati
 	rt.mutex.Lock()
 	if lastFailed {
 		rt.consecutiveFails++
-		if rt.consecutiveFails >= maxConsecutiveFails {
+		fails := rt.consecutiveFails
+		if fails >= maxConsecutiveFails {
 			rt.mutex.Unlock()
+			rt.notifySyncLost()
 			return 30 * time.Minute
 		}
 		rt.mutex.Unlock()
+		rt.notifySyncFailure(fails)
 		return 30 * time.Second
 	}
 
@@ -289,6 +257,28 @@ func (rt *RouterTimestamper) calculateSleepDuration(lastFailed bool) time.Durati
 	return sleepTime
 }
 
+// notifySyncFailure notifies ExtendedUpdateListener implementations of a sync failure.
+func (rt *RouterTimestamper) notifySyncFailure(consecutiveFails int) {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+	for _, listener := range rt.listeners {
+		if ext, ok := listener.(ExtendedUpdateListener); ok {
+			ext.OnSyncFailure(consecutiveFails)
+		}
+	}
+}
+
+// notifySyncLost notifies ExtendedUpdateListener implementations that sync was lost.
+func (rt *RouterTimestamper) notifySyncLost() {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+	for _, listener := range rt.listeners {
+		if ext, ok := listener.(ExtendedUpdateListener); ok {
+			ext.OnSyncLost()
+		}
+	}
+}
+
 // waitWithCancellation waits for the specified duration or until cancellation is requested.
 // Returns true if the wait completed normally, false if cancelled.
 func (rt *RouterTimestamper) waitWithCancellation(duration time.Duration) bool {
@@ -300,82 +290,31 @@ func (rt *RouterTimestamper) waitWithCancellation(duration time.Duration) bool {
 	}
 }
 
-/*
-	func (rt *RouterTimestamper) runOnce() {
-		lastFailed := false
-		rt.updateConfig()
-		preferIPv6 := checkIPv6Connectivity()
-		if !rt.disabled {
-			if rt.priorityServers != nil {
-				for _, servers := range rt.priorityServers {
-					lastFailed = !rt.queryTime(servers, shortTimeout, preferIPv6)
-					if !lastFailed {
-						break
-					}
-				}
-			}
-			if rt.priorityServers == nil || lastFailed {
-				prefIPv6 := preferIPv6 && !lastFailed && rand.Intn(4) != 0
-				lastFailed = !rt.queryTime(rt.servers, defaultTimeout, prefIPv6)
-			}
-		}
-
-		rt.mutex.Lock()
-		if !rt.initialized {
-			rt.initialized = true
-		}
-		rt.mutex.Unlock()
-	}
-*/
 func (rt *RouterTimestamper) runOnce() {
 	rt.performTimeQuery()
 }
 
 func (rt *RouterTimestamper) queryTime(servers []string, timeout time.Duration, preferIPv6 bool) bool {
-	found := make([]time.Duration, rt.concurringServers)
-	var expectedDelta time.Duration
-
+	samples := make([]ntpSample, 0, rt.concurringServers)
 	rt.resetSyncStatus()
 
 	for i := 0; i < rt.concurringServers; i++ {
-		delta, err := rt.performSingleNTPQuery(servers, timeout, preferIPv6)
-		if err != nil {
-			// Try another random server instead of aborting the entire query.
-			// A single server failure should not prevent time synchronization
-			// when other servers may be available.
-			retried := false
-			for attempt := 0; attempt < len(servers)-1; attempt++ {
-				delta, err = rt.performSingleNTPQuery(servers, timeout, preferIPv6)
-				if err == nil {
-					retried = true
-					found[i] = delta
-					break
-				}
-			}
-			if !retried {
-				return false
-			}
-		} else {
-			found[i] = delta
+		sample, ok := rt.queryWithRetry(servers, timeout, preferIPv6)
+		if !ok {
+			return false
 		}
 
 		if i == 0 {
-			// Validate first sample — if it fails validation (delta too large),
-			// treat it as an unreliable baseline and abort this query cycle.
-			if !rt.validateFirstSample(found[0]) {
-				return false
-			}
-			expectedDelta = found[0]
-		} else {
-			if !rt.validateAdditionalSample(delta, expectedDelta) {
-				return false
-			}
+			rt.checkSyncStatus(sample.delta)
+		} else if !rt.validateAdditionalSample(sample.delta, samples[0].delta) {
+			return false
 		}
+		samples = append(samples, sample)
 	}
 
-	// Use median of all samples for robustness against outliers
-	medianDelta := rt.calculateMedian(found)
-	rt.stampTime(time.Now().Add(medianDelta))
+	median := rt.selectMedianSample(samples)
+	rt.stampTime(time.Now().Add(median.delta), median.stratum)
+	rt.notifyListenersOnSuccess()
 	return true
 }
 
@@ -386,55 +325,109 @@ func (rt *RouterTimestamper) resetSyncStatus() {
 	rt.mutex.Unlock()
 }
 
-// performSingleNTPQuery executes a single NTP query against a randomly selected server.
-func (rt *RouterTimestamper) performSingleNTPQuery(servers []string, timeout time.Duration, preferIPv6 bool) (time.Duration, error) {
-	server := rt.selectRandomServer(servers, preferIPv6)
+// queryWithRetry attempts to query NTP servers, excluding previously failed
+// servers from retries to avoid wasting timeout cycles on known-bad servers.
+func (rt *RouterTimestamper) queryWithRetry(servers []string, timeout time.Duration, preferIPv6 bool) (ntpSample, bool) {
+	tried := make(map[string]bool)
+	for attempt := 0; attempt < len(servers); attempt++ {
+		server := rt.selectRandomServerExcluding(servers, preferIPv6, tried)
+		if server == "" {
+			return ntpSample{}, false
+		}
+		tried[server] = true
+		sample, err := rt.querySingleServer(server, timeout)
+		if err == nil {
+			return sample, true
+		}
+	}
+	return ntpSample{}, false
+}
+
+// querySingleServer executes a single NTP query against a specific server
+// and returns the clock offset and stratum directly from the NTP response.
+func (rt *RouterTimestamper) querySingleServer(server string, timeout time.Duration) (ntpSample, error) {
 	if server == "" {
-		return 0, fmt.Errorf("no NTP servers available")
+		return ntpSample{}, fmt.Errorf("no NTP server specified")
 	}
 	options := ntp.QueryOptions{
 		Timeout: timeout,
-		// TTL:     5,
 	}
 
 	response, err := rt.ntpClient.QueryWithOptions(server, options)
 	if err != nil {
 		log.WithError(err).WithField("server", server).Debug("NTP query failed")
-		return 0, err
+		return ntpSample{}, err
 	}
 
-	// Validate NTP response before using it to prevent accepting invalid/malicious time sources
 	if !rt.validateResponse(response) {
 		log.WithField("server", server).Debug("NTP response failed validation")
-		return 0, fmt.Errorf("NTP response validation failed for server %s", server)
+		return ntpSample{}, fmt.Errorf("NTP response validation failed for server %s", server)
 	}
 
-	now := time.Now().Add(response.ClockOffset)
-	delta := time.Until(now)
-	return delta, nil
+	// Use response.ClockOffset directly as the delta — this is already the
+	// computed clock offset from the NTP exchange. Avoids jitter from
+	// double time.Now() calls.
+	return ntpSample{delta: response.ClockOffset, stratum: response.Stratum}, nil
 }
 
 // selectRandomServer chooses a random server from the list.
-// The preferIPv6 parameter is currently unused but retained for future implementation
-// of IPv6-specific server selection logic. The beevik/ntp library handles DNS resolution
-// and will use IPv6 or IPv4 based on system configuration.
+// Wraps selectRandomServerExcluding with no exclusions.
 func (rt *RouterTimestamper) selectRandomServer(servers []string, preferIPv6 bool) string {
-	if len(servers) == 0 {
-		return ""
-	}
-	server := servers[rand.Intn(len(servers))]
-	return server
+	return rt.selectRandomServerExcluding(servers, preferIPv6, nil)
 }
 
-// validateFirstSample checks if the first time sample is within acceptable variance.
-func (rt *RouterTimestamper) validateFirstSample(delta time.Duration) bool {
-	if absDuration(delta) < maxVariance {
-		if absDuration(delta) < 500*time.Millisecond {
-			rt.setSyncedStatus(true)
+// selectRandomServerExcluding chooses a random server, excluding already-tried
+// servers and preferring IPv6-reachable servers when requested.
+func (rt *RouterTimestamper) selectRandomServerExcluding(servers []string, preferIPv6 bool, exclude map[string]bool) string {
+	candidates := make([]string, 0, len(servers))
+	for _, s := range servers {
+		if !exclude[s] {
+			candidates = append(candidates, s)
 		}
-		return true
 	}
-	return false
+	if len(candidates) == 0 {
+		return ""
+	}
+	if preferIPv6 {
+		ipv6 := filterByAddressFamily(candidates, true)
+		if len(ipv6) > 0 {
+			candidates = ipv6
+		}
+	}
+	return candidates[rand.Intn(len(candidates))]
+}
+
+// filterByAddressFamily filters servers by whether they resolve to IPv6 or IPv4
+// addresses via DNS lookup. Returns servers matching the requested address family.
+func filterByAddressFamily(servers []string, wantIPv6 bool) []string {
+	var result []string
+	for _, server := range servers {
+		addrs, err := net.LookupHost(server)
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ip := net.ParseIP(addr)
+			if ip == nil {
+				continue
+			}
+			isIPv6 := ip.To4() == nil
+			if isIPv6 == wantIPv6 {
+				result = append(result, server)
+				break
+			}
+		}
+	}
+	return result
+}
+
+// checkSyncStatus marks the timestamper as well-synced if the offset is small.
+// Unlike the previous validateFirstSample, this never rejects the sample —
+// the purpose of SNTP is to correct arbitrary clock drift.
+func (rt *RouterTimestamper) checkSyncStatus(delta time.Duration) {
+	if absDuration(delta) < 500*time.Millisecond {
+		rt.setSyncedStatus(true)
+	}
 }
 
 // validateAdditionalSample checks if subsequent samples are consistent with the expected delta.
@@ -442,37 +435,32 @@ func (rt *RouterTimestamper) validateAdditionalSample(delta, expectedDelta time.
 	return absDuration(delta-expectedDelta) <= maxVariance
 }
 
-// calculateMedian computes the median of a slice of time.Duration values.
-// For robustness, the median is preferred over the mean as it's less affected by outliers.
-func (rt *RouterTimestamper) calculateMedian(deltas []time.Duration) time.Duration {
-	if len(deltas) == 0 {
-		return 0
+// selectMedianSample returns the median sample from a slice of NTP samples,
+// sorted by delta. The median is preferred over the mean for robustness
+// against outliers. Returns the full sample (including stratum) of the median.
+func (rt *RouterTimestamper) selectMedianSample(samples []ntpSample) ntpSample {
+	if len(samples) == 0 {
+		return ntpSample{}
 	}
-	if len(deltas) == 1 {
-		return deltas[0]
+	if len(samples) == 1 {
+		return samples[0]
 	}
 
-	// Create a copy to avoid modifying the original slice
-	sorted := make([]time.Duration, len(deltas))
-	copy(sorted, deltas)
+	sorted := make([]ntpSample, len(samples))
+	copy(sorted, samples)
 
 	// Simple insertion sort for small arrays (typically 3 servers)
 	for i := 1; i < len(sorted); i++ {
 		key := sorted[i]
 		j := i - 1
-		for j >= 0 && sorted[j] > key {
+		for j >= 0 && sorted[j].delta > key.delta {
 			sorted[j+1] = sorted[j]
 			j--
 		}
 		sorted[j+1] = key
 	}
 
-	// Return the middle value (or average of two middle values for even length)
-	mid := len(sorted) / 2
-	if len(sorted)%2 == 0 {
-		return (sorted[mid-1] + sorted[mid]) / 2
-	}
-	return sorted[mid]
+	return sorted[len(sorted)/2]
 }
 
 // setSyncedStatus safely sets wellSynced status with mutex protection.
@@ -482,10 +470,11 @@ func (rt *RouterTimestamper) setSyncedStatus(synced bool) {
 	rt.mutex.Unlock()
 }
 
-// stampTime stores the time offset and notifies listeners.
+// stampTime stores the time offset and notifies listeners with the actual
+// NTP stratum value from the server response.
 // Per NTCP2 specification, timestamps are rounded to the nearest second
 // to prevent clock bias accumulation in the I2P network.
-func (rt *RouterTimestamper) stampTime(now time.Time) {
+func (rt *RouterTimestamper) stampTime(now time.Time, stratum uint8) {
 	rt.mutex.Lock()
 	defer rt.mutex.Unlock()
 
@@ -496,7 +485,22 @@ func (rt *RouterTimestamper) stampTime(now time.Time) {
 	rt.timeOffset = time.Until(roundedNow)
 
 	for _, listener := range rt.listeners {
-		listener.SetNow(roundedNow, 0)
+		listener.SetNow(roundedNow, stratum)
+	}
+}
+
+// notifyListenersOnSuccess notifies ExtendedUpdateListener implementations
+// that synchronization succeeded.
+func (rt *RouterTimestamper) notifyListenersOnSuccess() {
+	rt.mutex.Lock()
+	defer rt.mutex.Unlock()
+	if !rt.initialized {
+		return
+	}
+	for _, listener := range rt.listeners {
+		if ext, ok := listener.(ExtendedUpdateListener); ok {
+			ext.OnInitialized()
+		}
 	}
 }
 

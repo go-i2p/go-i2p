@@ -50,9 +50,12 @@ func (c *Clock) Offset() time.Duration {
 // reading) and checks expiration using time.Since(), ensuring that NTP clock
 // jumps cannot cause premature or delayed expiration.
 //
+// Deadline is safe for concurrent use by multiple goroutines.
+//
 // This is the recommended way to track tunnel lifetime, lease expiration,
 // and any other time-bounded operation in the I2P router.
 type Deadline struct {
+	mu        sync.RWMutex
 	createdAt time.Time
 	lifetime  time.Duration
 }
@@ -93,14 +96,20 @@ func NewDeadlineAt(startTime time.Time, lifetime time.Duration) *Deadline {
 // IsExpired returns true if the deadline has passed. It uses time.Since()
 // which relies on the monotonic clock reading, making it safe from NTP jumps.
 func (d *Deadline) IsExpired() bool {
-	return time.Since(d.createdAt) >= d.lifetime
+	d.mu.RLock()
+	lifetime := d.lifetime
+	d.mu.RUnlock()
+	return time.Since(d.createdAt) >= lifetime
 }
 
 // Remaining returns the time remaining until the deadline expires.
 // Returns zero if already expired. Uses time.Since() for monotonic safety.
 func (d *Deadline) Remaining() time.Duration {
+	d.mu.RLock()
+	lifetime := d.lifetime
+	d.mu.RUnlock()
 	elapsed := time.Since(d.createdAt)
-	remaining := d.lifetime - elapsed
+	remaining := lifetime - elapsed
 	if remaining < 0 {
 		return 0
 	}
@@ -115,6 +124,8 @@ func (d *Deadline) Elapsed() time.Duration {
 
 // Lifetime returns the total lifetime configured for this deadline.
 func (d *Deadline) Lifetime() time.Duration {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.lifetime
 }
 
@@ -128,12 +139,14 @@ func (d *Deadline) CreatedAt() time.Time {
 
 // Extend adds additional time to the deadline's lifetime. This is useful
 // for lease renewal or tunnel lifetime extension. The extension must be
-// non-negative.
+// non-negative. This method is safe for concurrent use.
 func (d *Deadline) Extend(additional time.Duration) {
 	if additional < 0 {
 		panic("monotonic: negative extension")
 	}
+	d.mu.Lock()
 	d.lifetime += additional
+	d.mu.Unlock()
 }
 
 // TimeSinceCreation is a standalone helper that computes the elapsed duration

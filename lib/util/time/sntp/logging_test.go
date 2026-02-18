@@ -110,9 +110,9 @@ func TestStructuredFieldsInValidation(t *testing.T) {
 		t.Error("Expected validation to fail for excessive RTT")
 	}
 
-	// Test with excessive clock offset
+	// Test with excessive clock offset (exceeds maxClockOffset = 60 minutes)
 	response.RTT = 500 * time.Millisecond
-	response.ClockOffset = 15 * time.Second // Exceeds maxClockOffset
+	response.ClockOffset = 61 * time.Minute // Exceeds maxClockOffset
 	result = validateTimingMetrics(response)
 	if result {
 		t.Error("Expected validation to fail for excessive clock offset")

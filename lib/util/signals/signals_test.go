@@ -326,11 +326,15 @@ func TestConcurrentRegistration(t *testing.T) {
 	originalReloaders := reloaders
 	originalInterrupters := interrupters
 	defer func() {
+		mu.Lock()
 		reloaders = originalReloaders
 		interrupters = originalInterrupters
+		mu.Unlock()
 	}()
+	mu.Lock()
 	reloaders = nil
 	interrupters = nil
+	mu.Unlock()
 
 	var wg sync.WaitGroup
 	numGoroutines := 50
@@ -359,5 +363,101 @@ func TestConcurrentRegistration(t *testing.T) {
 	}
 	if interruptCount != numGoroutines {
 		t.Errorf("Expected %d interrupt handlers, got %d", numGoroutines, interruptCount)
+	}
+}
+
+// =============================================================================
+// Deregistration Tests (GAP #8 fix)
+// =============================================================================
+
+// TestDeregisterReloadHandler verifies individual reload handler deregistration.
+func TestDeregisterReloadHandler(t *testing.T) {
+	originalReloaders := reloaders
+	defer func() {
+		mu.Lock()
+		reloaders = originalReloaders
+		mu.Unlock()
+	}()
+	mu.Lock()
+	reloaders = nil
+	mu.Unlock()
+
+	called1, called2 := false, false
+	id1 := RegisterReloadHandler(func() { called1 = true })
+	_ = RegisterReloadHandler(func() { called2 = true })
+
+	DeregisterReloadHandler(id1)
+
+	mu.RLock()
+	count := len(reloaders)
+	mu.RUnlock()
+
+	if count != 1 {
+		t.Errorf("Expected 1 handler after deregistration, got %d", count)
+	}
+
+	handleReload()
+
+	if called1 {
+		t.Error("Deregistered handler should not have been called")
+	}
+	if !called2 {
+		t.Error("Remaining handler should have been called")
+	}
+}
+
+// TestDeregisterInterruptHandler verifies individual interrupt handler deregistration.
+func TestDeregisterInterruptHandler(t *testing.T) {
+	originalInterrupters := interrupters
+	defer func() {
+		mu.Lock()
+		interrupters = originalInterrupters
+		mu.Unlock()
+	}()
+	mu.Lock()
+	interrupters = nil
+	mu.Unlock()
+
+	called := false
+	id := RegisterInterruptHandler(func() { called = true })
+
+	DeregisterInterruptHandler(id)
+
+	mu.RLock()
+	count := len(interrupters)
+	mu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("Expected 0 handlers after deregistration, got %d", count)
+	}
+
+	handleInterrupted()
+
+	if called {
+		t.Error("Deregistered handler should not have been called")
+	}
+}
+
+// TestDeregisterInvalidID verifies that deregistering an invalid ID is a no-op.
+func TestDeregisterInvalidID(t *testing.T) {
+	originalReloaders := reloaders
+	defer func() {
+		mu.Lock()
+		reloaders = originalReloaders
+		mu.Unlock()
+	}()
+	mu.Lock()
+	reloaders = nil
+	mu.Unlock()
+
+	RegisterReloadHandler(func() {})
+	DeregisterReloadHandler(999) // non-existent ID
+
+	mu.RLock()
+	count := len(reloaders)
+	mu.RUnlock()
+
+	if count != 1 {
+		t.Errorf("Expected 1 handler (invalid ID should be no-op), got %d", count)
 	}
 }

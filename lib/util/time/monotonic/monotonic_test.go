@@ -291,3 +291,44 @@ func TestClock_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// TestDeadline_ConcurrentExtendAndRead verifies Deadline is safe for concurrent
+// Extend and read operations (BUG #3 fix verification).
+func TestDeadline_ConcurrentExtendAndRead(t *testing.T) {
+	d := NewDeadline(1 * time.Hour)
+	done := make(chan struct{})
+
+	// Concurrent readers (IsExpired, Remaining, Lifetime)
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 200; j++ {
+				_ = d.IsExpired()
+				_ = d.Remaining()
+				_ = d.Lifetime()
+				_ = d.Elapsed()
+			}
+			done <- struct{}{}
+		}()
+	}
+
+	// Concurrent writers (Extend)
+	for i := 0; i < 5; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				d.Extend(1 * time.Millisecond)
+			}
+			done <- struct{}{}
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 15; i++ {
+		<-done
+	}
+
+	// Verify: lifetime should be 1h + (5*100*1ms) = 1h + 500ms
+	expected := 1*time.Hour + 500*time.Millisecond
+	if d.Lifetime() != expected {
+		t.Errorf("expected lifetime %s after concurrent extends, got %s", expected, d.Lifetime())
+	}
+}

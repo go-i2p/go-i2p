@@ -11,9 +11,13 @@ import (
 // to complete before proceeding with interrupt handlers.
 const defaultGracefulTimeout = 30 * time.Second
 
+// minPerHandlerTimeout is the minimum timeout allocated to each individual
+// pre-shutdown handler to prevent extremely short timeouts.
+const minPerHandlerTimeout = 1 * time.Second
+
 var (
 	preShutdownMu       sync.RWMutex
-	preShutdownHandlers []Handler
+	preShutdownHandlers []registeredHandler
 	gracefulTimeout     = defaultGracefulTimeout
 )
 
@@ -22,21 +26,39 @@ var (
 // network announcement callbacks, such as sending a DatabaseStore message with
 // zero addresses to inform peers that this router is going offline.
 //
-// Pre-shutdown handlers run in registration order (FIFO) and each handler is
-// protected against panics. All pre-shutdown handlers must complete (or the
-// graceful timeout must expire) before interrupt handlers are invoked.
+// Pre-shutdown handlers run in registration order (FIFO). Each handler is
+// given an individual timeout (total timeout / handler count) so that a single
+// stuck handler cannot block the entire shutdown chain.
 //
 // Per the I2P specification (common-structures RouterInfo notes), a router
 // MUST send a DatabaseStore with zero addresses before disconnecting.
 //
-// Nil handlers are silently ignored.
-func RegisterPreShutdownHandler(f Handler) {
+// Returns a HandlerID that can be passed to DeregisterPreShutdownHandler.
+// Nil handlers are silently ignored and return -1.
+func RegisterPreShutdownHandler(f Handler) HandlerID {
 	if f == nil {
-		return
+		return -1
 	}
 	preShutdownMu.Lock()
 	defer preShutdownMu.Unlock()
-	preShutdownHandlers = append(preShutdownHandlers, f)
+	mu.Lock()
+	id := nextID
+	nextID++
+	mu.Unlock()
+	preShutdownHandlers = append(preShutdownHandlers, registeredHandler{id: id, fn: f})
+	return id
+}
+
+// DeregisterPreShutdownHandler removes a previously registered pre-shutdown handler by ID.
+func DeregisterPreShutdownHandler(id HandlerID) {
+	preShutdownMu.Lock()
+	defer preShutdownMu.Unlock()
+	for i, h := range preShutdownHandlers {
+		if h.id == id {
+			preShutdownHandlers = append(preShutdownHandlers[:i], preShutdownHandlers[i+1:]...)
+			return
+		}
+	}
 }
 
 // SetGracefulTimeout configures the maximum time to wait for pre-shutdown
@@ -51,11 +73,14 @@ func SetGracefulTimeout(timeout time.Duration) {
 	}
 }
 
-// handlePreShutdown runs all registered pre-shutdown handlers with a timeout.
-// Returns true if all handlers completed within the timeout, false otherwise.
+// handlePreShutdown runs all registered pre-shutdown handlers with individual
+// timeouts. Each handler gets an equal share of the total graceful timeout,
+// with a minimum of 1 second per handler. If a handler exceeds its timeout,
+// execution moves to the next handler instead of blocking the entire chain.
+// Returns true if all handlers completed within their timeouts, false otherwise.
 func handlePreShutdown() bool {
 	preShutdownMu.RLock()
-	snapshot := make([]Handler, len(preShutdownHandlers))
+	snapshot := make([]registeredHandler, len(preShutdownHandlers))
 	copy(snapshot, preShutdownHandlers)
 	timeout := gracefulTimeout
 	preShutdownMu.RUnlock()
@@ -64,26 +89,39 @@ func handlePreShutdown() bool {
 		return true
 	}
 
+	perHandler := timeout / time.Duration(len(snapshot))
+	if perHandler < minPerHandlerTimeout {
+		perHandler = minPerHandlerTimeout
+	}
+
+	allCompleted := true
+	for _, h := range snapshot {
+		if !runHandlerWithTimeout(h.fn, perHandler) {
+			allCompleted = false
+		}
+	}
+	return allCompleted
+}
+
+// runHandlerWithTimeout executes a single handler in a goroutine with the
+// given timeout. Returns true if the handler completed, false if it timed out.
+func runHandlerWithTimeout(h Handler, timeout time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for _, h := range snapshot {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Fprintf(os.Stderr, "signals: panic in pre-shutdown handler: %v\n", r)
-					}
-				}()
-				h()
-			}()
-		}
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "signals: panic in pre-shutdown handler: %v\n", r)
+			}
+		}()
+		h()
 	}()
 
 	select {
 	case <-done:
 		return true
 	case <-time.After(timeout):
-		fmt.Fprintf(os.Stderr, "signals: pre-shutdown handlers timed out after %s\n", timeout)
+		fmt.Fprintf(os.Stderr, "signals: pre-shutdown handler timed out after %s\n", timeout)
 		return false
 	}
 }

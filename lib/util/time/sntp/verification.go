@@ -90,7 +90,7 @@ func validateRootMetrics(response *ntp.Response) bool {
 
 const (
 	maxRTT            = 2 * time.Second  // Max acceptable round-trip time
-	maxClockOffset    = 10 * time.Second // Max acceptable clock offset
+	maxClockOffset    = 60 * time.Minute // Max acceptable clock offset (matches I2P spec ±60min skew limit)
 	maxRootDispersion = 1 * time.Second  // Max acceptable root dispersion
 	maxRootDelay      = 1 * time.Second  // Max acceptable root delay
 )
