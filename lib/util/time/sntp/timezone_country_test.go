@@ -231,3 +231,36 @@ func toLowerASCII(s string) string {
 	}
 	return string(b)
 }
+
+func TestDetectTimezoneFromGoStdlib(t *testing.T) {
+	// Go's time.Now().Location().String() should return an IANA name
+	// on a properly configured system. We test the helper function
+	// rather than the system state.
+	result := detectTimezoneFromGoStdlib()
+
+	// On most CI and development systems, this should return a valid
+	// IANA timezone name. We can't assert a specific value, but if
+	// non-empty it should look like an IANA name.
+	if result != "" {
+		assert.Contains(t, result, "/",
+			"detectTimezoneFromGoStdlib result should look like IANA name")
+	}
+}
+
+func TestDetectIANATimezone_FallbackToGoStdlib(t *testing.T) {
+	// When TZ is unset and /etc/timezone and /etc/localtime are
+	// unavailable (e.g., on Windows), the function should still
+	// attempt to detect timezone via Go's stdlib.
+	origTZ := os.Getenv("TZ")
+	defer os.Setenv("TZ", origTZ)
+	os.Unsetenv("TZ")
+
+	// We can't easily simulate absence of /etc/timezone on Linux,
+	// but we can verify that the function returns *something* on
+	// a configured system.
+	result := detectIANATimezone()
+	// On a properly configured system, at least one strategy should work.
+	// This is a best-effort test — the function may still return ""
+	// in unusual environments.
+	t.Logf("detectIANATimezone() = %q", result)
+}

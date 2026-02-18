@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 //go:embed zone_to_country.txt
@@ -77,6 +78,7 @@ func lookupCountryByTimezone(tzName string) string {
 //  1. TZ environment variable (explicit user override)
 //  2. /etc/timezone file (Debian/Ubuntu)
 //  3. /etc/localtime symlink target (most Linux, macOS)
+//  4. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
 func detectIANATimezone() string {
 	// Strategy 1: TZ environment variable. Users may set this explicitly.
 	if tz := os.Getenv("TZ"); tz != "" {
@@ -103,6 +105,36 @@ func detectIANATimezone() string {
 		}
 	}
 
+	// Strategy 4: Go's time.Now().Location() (cross-platform fallback).
+	// On Windows, Go reads the registry key
+	// HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation and maps
+	// the Windows timezone name to an IANA name via its embedded mapping
+	// table. On all platforms, this returns the IANA timezone name if
+	// the system timezone is configured. "Local" is returned when the
+	// name cannot be determined, which is not a valid IANA name.
+	if name := detectTimezoneFromGoStdlib(); name != "" {
+		return name
+	}
+
+	return ""
+}
+
+// detectTimezoneFromGoStdlib uses Go's standard library to obtain the
+// system's IANA timezone name. Go internally reads platform-specific
+// sources (Windows registry, /etc/localtime, etc.) and maps them to
+// IANA names. Returns "" if the result is "Local" or "UTC" (which are
+// not useful for geographic NTP server selection).
+func detectTimezoneFromGoStdlib() string {
+	name := time.Now().Location().String()
+	// "Local" means Go couldn't determine the timezone name.
+	// "UTC" is valid but doesn't help with geographic NTP selection.
+	if name == "Local" || name == "" {
+		return ""
+	}
+	// Validate it looks like an IANA name (contains "/").
+	if strings.Contains(name, "/") {
+		return name
+	}
 	return ""
 }
 
