@@ -127,17 +127,30 @@ type DeliveryInstructionsWithFragment struct {
 	MessageFragment      []byte
 }
 
-func (tm EncryptedTunnelMessage) ID() (tid TunnelID) {
+func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error) {
+	if len(tm) < 4 {
+		return 0, fmt.Errorf("encrypted tunnel message too short for tunnel ID: %d bytes", len(tm))
+	}
 	tid = TunnelID(binary.BigEndian.Uint32(tm[:4]))
-	return tid
+	return tid, nil
 }
 
-func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV {
-	return tm[4:20]
+func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error) {
+	if len(tm) < 20 {
+		return nil, fmt.Errorf("encrypted tunnel message too short for IV: %d bytes", len(tm))
+	}
+	return tm[4:20], nil
 }
 
-func (tm EncryptedTunnelMessage) Data() []byte {
-	return tm[24:]
+// Data returns the encrypted data portion of the tunnel message (1008 bytes).
+// The encrypted message format is: [TunnelID (4)] [IV (16)] [EncryptedData (1008)].
+// There is no checksum field in the encrypted format; checksum exists only in
+// the decrypted format.
+func (tm EncryptedTunnelMessage) Data() ([]byte, error) {
+	if len(tm) < 20 {
+		return nil, fmt.Errorf("encrypted tunnel message too short for data: %d bytes", len(tm))
+	}
+	return tm[20:], nil
 }
 
 type DecryptedTunnelMessage [1028]byte

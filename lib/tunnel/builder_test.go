@@ -471,3 +471,93 @@ func BenchmarkGenerateSessionKey(b *testing.B) {
 		_, _ = generateSessionKey()
 	}
 }
+
+// TestDetermineBuildRecordFlag verifies IBGW/OBEP flag assignment per I2P spec.
+// Per §tunnel-creation: Bit 7 = IBGW (allow messages from anyone),
+// Bit 6 = OBEP (allow messages to anyone).
+func TestDetermineBuildRecordFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		hopIndex int
+		hopCount int
+		inbound  bool
+		expected int
+	}{
+		{"outbound gateway (first hop)", 0, 3, false, 0},
+		{"outbound participant (middle)", 1, 3, false, 0},
+		{"outbound endpoint (last hop)", 2, 3, false, FlagOBEP},
+		{"inbound gateway (first hop = IBGW)", 0, 3, true, FlagIBGW},
+		{"inbound participant (middle)", 1, 3, true, 0},
+		{"inbound endpoint (last hop)", 2, 3, true, 0},
+		{"single-hop outbound = OBEP", 0, 1, false, FlagOBEP},
+		{"single-hop inbound = IBGW", 0, 1, true, FlagIBGW},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := determineBuildRecordFlag(tt.hopIndex, tt.hopCount, tt.inbound)
+			if got != tt.expected {
+				t.Errorf("determineBuildRecordFlag(%d, %d, %v) = 0x%02x, want 0x%02x",
+					tt.hopIndex, tt.hopCount, tt.inbound, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCreateBuildRequest_IBGWOBEPFlags verifies that CreateBuildRequest sets
+// IBGW/OBEP flags correctly on the generated build records.
+func TestCreateBuildRequest_IBGWOBEPFlags(t *testing.T) {
+	peers := make([]router_info.RouterInfo, 3)
+	for i := range peers {
+		peers[i] = specMakeRouterInfo(byte(i + 10))
+	}
+	selector := &mockBuilderPeerSelector{peers: peers}
+	builder, err := NewTunnelBuilder(selector)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("outbound tunnel flags", func(t *testing.T) {
+		result, err := builder.CreateBuildRequest(BuildTunnelRequest{
+			HopCount:  3,
+			IsInbound: false,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// First hop (gateway): no special flags
+		if result.Records[0].Flag != 0 {
+			t.Errorf("outbound gateway flag = 0x%02x, want 0x00", result.Records[0].Flag)
+		}
+		// Middle hop: no special flags
+		if result.Records[1].Flag != 0 {
+			t.Errorf("outbound participant flag = 0x%02x, want 0x00", result.Records[1].Flag)
+		}
+		// Last hop (endpoint): OBEP flag
+		if result.Records[2].Flag != FlagOBEP {
+			t.Errorf("outbound endpoint flag = 0x%02x, want 0x%02x", result.Records[2].Flag, FlagOBEP)
+		}
+	})
+
+	t.Run("inbound tunnel flags", func(t *testing.T) {
+		result, err := builder.CreateBuildRequest(BuildTunnelRequest{
+			HopCount:  3,
+			IsInbound: true,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// First hop (IBGW): IBGW flag
+		if result.Records[0].Flag != FlagIBGW {
+			t.Errorf("inbound gateway flag = 0x%02x, want 0x%02x", result.Records[0].Flag, FlagIBGW)
+		}
+		// Middle hop: no special flags
+		if result.Records[1].Flag != 0 {
+			t.Errorf("inbound participant flag = 0x%02x, want 0x00", result.Records[1].Flag)
+		}
+		// Last hop: no special flags (delivers to us)
+		if result.Records[2].Flag != 0 {
+			t.Errorf("inbound endpoint flag = 0x%02x, want 0x00", result.Records[2].Flag)
+		}
+	})
+}

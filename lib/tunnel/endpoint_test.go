@@ -154,12 +154,19 @@ func TestValidateChecksum(t *testing.T) {
 				for i := 4; i < 20; i++ {
 					msg[i] = byte(i)
 				}
-				// Set up some data (bytes 24+)
+				// Non-zero padding (bytes 24-99)
 				for i := 24; i < 100; i++ {
+					msg[i] = byte(i%254 + 1) // non-zero padding
+				}
+				// Zero byte separator
+				msg[100] = 0x00
+				// Data after zero byte (delivery instructions + message)
+				for i := 101; i < 110; i++ {
 					msg[i] = byte(i % 256)
 				}
-				// Calculate correct checksum
-				checksumData := append(msg[24:], msg[4:20]...)
+				// Calculate correct checksum: SHA256(data_after_zero_byte + IV)
+				dataAfterZero := msg[101:]
+				checksumData := append(dataAfterZero, msg[4:20]...)
 				hash := sha256.Sum256(checksumData)
 				copy(msg[20:24], hash[:4])
 				return msg

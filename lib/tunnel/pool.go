@@ -955,8 +955,13 @@ func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Has
 func (p *Pool) MarkPeerFailed(peerHash common.Hash) {
 	p.failedPeersMu.Lock()
 	p.failedPeers[peerHash] = time.Now()
-	tracker := p.peerTracker // Get tracker reference while holding lock
 	p.failedPeersMu.Unlock()
+
+	// Read peerTracker under p.mutex (same lock used by SetPeerTracker)
+	// to prevent a data race between MarkPeerFailed and SetPeerTracker.
+	p.mutex.RLock()
+	tracker := p.peerTracker
+	p.mutex.RUnlock()
 
 	// Report to NetDB peer tracker if configured (outside lock to avoid deadlock)
 	if tracker != nil {

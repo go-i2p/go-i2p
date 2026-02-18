@@ -287,10 +287,20 @@ func TestGatewayChecksumIncludesIV(t *testing.T) {
 	tunnelMsg, err := gw.buildTunnelMessage(instructions, testMsg)
 	require.NoError(t, err)
 
-	// Verify checksum: first 4 bytes of SHA256(data_after_checksum + IV)
+	// Verify checksum: first 4 bytes of SHA256(data_after_zero_byte + IV)
+	// Per I2P spec: "The checksum does NOT cover the padding or the zero byte."
 	iv := tunnelMsg[4:20]
-	dataAfterChecksum := tunnelMsg[24:]
-	checksumData := append(dataAfterChecksum, iv...)
+	// Find zero byte separator
+	var zeroPos int
+	for i := 24; i < len(tunnelMsg); i++ {
+		if tunnelMsg[i] == 0x00 {
+			zeroPos = i
+			break
+		}
+	}
+	require.Greater(t, zeroPos, 23, "zero byte separator must exist")
+	dataAfterZero := tunnelMsg[zeroPos+1:]
+	checksumData := append(dataAfterZero, iv...)
 	hash := sha256.Sum256(checksumData)
 	expectedChecksum := hash[:4]
 

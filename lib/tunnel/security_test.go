@@ -1031,10 +1031,11 @@ func createValidTunnelMessage(t *testing.T) []byte {
 	msg[106] = 'S'
 	msg[107] = 'T'
 
-	// Calculate checksum: first 4 bytes of SHA256(data after checksum + IV)
+	// Calculate checksum: first 4 bytes of SHA256(data_after_zero_byte + IV)
+	// Per I2P spec: "The checksum does NOT cover the padding or the zero byte."
 	iv := msg[4:20]
-	dataAfterChecksum := msg[24:]
-	checksumData := append(dataAfterChecksum, iv...)
+	dataAfterZero := msg[101:] // data after the zero byte at position 100
+	checksumData := append(dataAfterZero, iv...)
 	hash := sha256.Sum256(checksumData)
 	copy(msg[20:24], hash[:4])
 

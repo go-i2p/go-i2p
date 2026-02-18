@@ -412,10 +412,11 @@ func (tb *TunnelBuilder) createHopRecord(
 		return BuildRequestRecord{}, session_key.SessionKey{}, [16]byte{}, fmt.Errorf("failed to generate message ID: %w", err)
 	}
 
+	flag := determineBuildRecordFlag(hopIndex, req.HopCount, req.IsInbound)
 	record := assembleBuildRecord(
 		receiveTunnel, nextTunnel, ourIdent, nextIdent,
 		layerKey, ivKey, replyKey, replyIV, padding,
-		sendMessageID,
+		sendMessageID, flag,
 	)
 
 	return record, replyKey, replyIV, nil
@@ -458,6 +459,37 @@ func generateRecordPadding() ([29]byte, error) {
 	return padding, nil
 }
 
+// Build record flag bits per I2P spec §tunnel-creation:
+// Bit 7 (0x80): IBGW — if set, allow messages from anyone (inbound gateway)
+// Bit 6 (0x40): OBEP — if set, allow messages to anyone (outbound endpoint)
+const (
+	FlagIBGW = 0x80 // Inbound Gateway: allow messages from anyone
+	FlagOBEP = 0x40 // Outbound Endpoint: allow messages to anyone
+)
+
+// determineBuildRecordFlag sets the IBGW/OBEP flag bits based on hop position.
+// Per I2P spec §tunnel-creation (Request Record Specification):
+// - Bit 7: if set, allow messages from anyone [IBGW]
+// - Bit 6: if set, allow messages to anyone [OBEP]
+func determineBuildRecordFlag(hopIndex, hopCount int, isInbound bool) int {
+	isFirst := hopIndex == 0
+	isLast := hopIndex == hopCount-1
+
+	if isInbound {
+		// Inbound tunnel: first hop is the gateway (receives from network),
+		// last hop delivers to us
+		if isFirst {
+			return FlagIBGW
+		}
+	} else {
+		// Outbound tunnel: last hop is the endpoint (sends to network)
+		if isLast {
+			return FlagOBEP
+		}
+	}
+	return 0 // Participant: no special flags
+}
+
 // assembleBuildRecord creates a BuildRequestRecord from its components.
 func assembleBuildRecord(
 	receiveTunnel, nextTunnel TunnelID,
@@ -466,6 +498,7 @@ func assembleBuildRecord(
 	replyIV [16]byte,
 	padding [29]byte,
 	sendMessageID int,
+	flag int,
 ) BuildRequestRecord {
 	return BuildRequestRecord{
 		ReceiveTunnel: receiveTunnel,
@@ -476,7 +509,7 @@ func assembleBuildRecord(
 		IVKey:         ivKey,
 		ReplyKey:      replyKey,
 		ReplyIV:       replyIV,
-		Flag:          0,
+		Flag:          flag,
 		RequestTime:   time.Now(),
 		SendMessageID: sendMessageID,
 		Padding:       padding,

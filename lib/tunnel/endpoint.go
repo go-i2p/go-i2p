@@ -211,17 +211,25 @@ func (e *Endpoint) decryptTunnelMessage(encryptedData []byte) ([]byte, error) {
 }
 
 // validateChecksum verifies the tunnel message checksum.
+// Per I2P spec §tunnel-message: "The checksum does NOT cover the padding or
+// the zero byte. Take the message starting at the first delivery instructions,
+// concatenate the IV, and take the Hash of that."
 func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	// Extract IV (bytes 4-20) and checksum (bytes 20-24)
 	iv := decrypted[4:20]
 	expectedChecksum := decrypted[20:24]
 
-	// Calculate checksum: first 4 bytes of SHA256(data after checksum + IV)
-	dataAfterChecksum := decrypted[24:]
-	// Allocate a new buffer to avoid mutating the decrypted slice's backing array
-	checksumData := make([]byte, len(dataAfterChecksum)+len(iv))
-	copy(checksumData, dataAfterChecksum)
-	copy(checksumData[len(dataAfterChecksum):], iv)
+	// Find the zero byte separator after the padding
+	dataStart, err := findZeroSeparator(decrypted)
+	if err != nil {
+		return err
+	}
+
+	// Calculate checksum: first 4 bytes of SHA256(data_after_zero_byte + IV)
+	deliveryData := decrypted[dataStart:]
+	checksumData := make([]byte, len(deliveryData)+len(iv))
+	copy(checksumData, deliveryData)
+	copy(checksumData[len(deliveryData):], iv)
 	hash := sha256.Sum256(checksumData)
 	actualChecksum := hash[:4]
 
@@ -237,6 +245,17 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	}
 
 	return nil
+}
+
+// findZeroSeparator locates the zero byte separator between padding and delivery
+// instructions. Returns the index of the first byte after the zero separator.
+func findZeroSeparator(decrypted []byte) (int, error) {
+	for i := 24; i < len(decrypted); i++ {
+		if decrypted[i] == 0x00 {
+			return i + 1, nil
+		}
+	}
+	return 0, fmt.Errorf("no zero byte separator found in tunnel message")
 }
 
 // processDeliveryInstructions parses delivery instructions and extracts messages.
@@ -401,8 +420,8 @@ func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstru
 	case DT_ROUTER:
 		return e.deliverViaForwarder(DT_ROUTER, 0, di.hash, msgBytes)
 	default:
-		log.WithField("delivery_type", deliveryType).Debug("Unknown delivery type, skipping")
-		return nil
+		log.WithField("delivery_type", deliveryType).Warn("Unknown delivery type, dropping fragment")
+		return fmt.Errorf("unknown delivery type 0x%02x", deliveryType)
 	}
 }
 

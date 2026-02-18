@@ -65,12 +65,13 @@ func TestTunnelMessages_FixedSize_LayoutChecksum4Bytes(t *testing.T) {
 	assert.Equal(t, []byte{0xAA, 0xBB, 0xCC, 0xDD}, checksum)
 }
 
-func TestTunnelMessages_FixedSize_EncryptedDataIs1004Bytes(t *testing.T) {
-	// EncryptedTunnelMessage.Data() returns bytes after tunnel ID (4) + IV (16) + checksum (4) = [24:]
-	// which is 1028 - 24 = 1004 bytes
+func TestTunnelMessages_FixedSize_EncryptedDataIs1008Bytes(t *testing.T) {
+	// EncryptedTunnelMessage.Data() returns bytes after tunnel ID (4) + IV (16) = [20:]
+	// which is 1028 - 20 = 1008 bytes (encrypted format has no checksum field)
 	var msg EncryptedTunnelMessage
-	data := msg.Data()
-	assert.Equal(t, 1004, len(data), "Encrypted data area must be 1028 - 24 = 1004 bytes")
+	data, err := msg.Data()
+	require.NoError(t, err)
+	assert.Equal(t, 1008, len(data), "Encrypted data area must be 1028 - 20 = 1008 bytes")
 }
 
 func TestTunnelMessages_FixedSize_GatewayProduces1028ByteOutput(t *testing.T) {
@@ -126,8 +127,8 @@ func TestTunnelMessages_FixedSize_MaxTunnelPayloadConstant(t *testing.T) {
 }
 
 func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
-	// Checksum = first 4 bytes of SHA256(data_after_checksum + IV)
-	// Build a tunnel message via Gateway and verify the checksum
+	// Per I2P spec: Checksum = first 4 bytes of SHA256(data_after_zero_byte + IV)
+	// "The checksum does NOT cover the padding or the zero byte."
 	enc := &specMockEncryptor{}
 	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
 	require.NoError(t, err)
@@ -141,17 +142,29 @@ func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 	// Extract components
 	iv := msg[4:20]
 	storedChecksum := msg[20:24]
-	dataAfterChecksum := msg[24:]
 
-	// Recompute checksum: SHA256(dataAfterChecksum + IV), take first 4 bytes
-	checksumInput := make([]byte, len(dataAfterChecksum)+len(iv))
-	copy(checksumInput, dataAfterChecksum)
-	copy(checksumInput[len(dataAfterChecksum):], iv)
+	// Find the zero byte separator
+	var zeroPos int
+	for i := 24; i < len(msg); i++ {
+		if msg[i] == 0x00 {
+			zeroPos = i
+			break
+		}
+	}
+	require.Greater(t, zeroPos, 23, "zero byte separator must exist")
+
+	// Data after zero byte = delivery instructions + message
+	dataAfterZero := msg[zeroPos+1:]
+
+	// Recompute checksum: SHA256(dataAfterZero + IV), take first 4 bytes
+	checksumInput := make([]byte, len(dataAfterZero)+len(iv))
+	copy(checksumInput, dataAfterZero)
+	copy(checksumInput[len(dataAfterZero):], iv)
 	hash := sha256.Sum256(checksumInput)
 	expectedChecksum := hash[:4]
 
 	assert.Equal(t, expectedChecksum, storedChecksum,
-		"Checksum must be first 4 bytes of SHA256(data_after_checksum + IV)")
+		"Checksum must be first 4 bytes of SHA256(data_after_zero_byte + IV)")
 }
 
 func TestTunnelMessages_FixedSize_NonZeroPadding(t *testing.T) {
@@ -876,12 +889,13 @@ func assembleTunnelMessage(t *testing.T, diBytes []byte, payload []byte) []byte 
 	copy(msg[offset:], diBytes)
 	copy(msg[offset+len(diBytes):], payload)
 
-	// Checksum at [20:24] = first 4 bytes of SHA256(data_after_checksum + IV)
-	dataAfterChecksum := msg[24:]
+	// Checksum at [20:24] = first 4 bytes of SHA256(data_after_zero_byte + IV)
+	// Per I2P spec: "The checksum does NOT cover the padding or the zero byte."
+	dataAfterZero := msg[24+paddingSize+1:] // data after the zero byte separator
 	iv := msg[4:20]
-	checksumInput := make([]byte, len(dataAfterChecksum)+len(iv))
-	copy(checksumInput, dataAfterChecksum)
-	copy(checksumInput[len(dataAfterChecksum):], iv)
+	checksumInput := make([]byte, len(dataAfterZero)+len(iv))
+	copy(checksumInput, dataAfterZero)
+	copy(checksumInput[len(dataAfterZero):], iv)
 	h := sha256.Sum256(checksumInput)
 	copy(msg[20:24], h[:4])
 

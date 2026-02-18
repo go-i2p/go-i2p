@@ -192,9 +192,12 @@ func (p *Participant) TunnelID() TunnelID {
 // This is used by the tunnel manager to clean up expired participants.
 // Thread-safe: protected by mutex.
 func (p *Participant) IsExpired(now time.Time) bool {
+	// createdAt is immutable after construction and does not need the lock.
+	// Only lifetime (mutable via SetLifetime) needs synchronization.
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	expirationTime := p.createdAt.Add(p.lifetime)
+	lifetime := p.lifetime
+	p.mu.Unlock()
+	expirationTime := p.createdAt.Add(lifetime)
 	return now.After(expirationTime)
 }
 

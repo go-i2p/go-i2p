@@ -448,7 +448,7 @@ func (g *Gateway) buildTunnelMessage(deliveryInstructions, msgBytes []byte) ([]b
 	}
 
 	g.writePayload(msg, paddingSize, deliveryInstructions, msgBytes)
-	g.writeChecksum(msg)
+	g.writeChecksum(msg, paddingSize)
 
 	return msg, nil
 }
@@ -520,10 +520,11 @@ func replaceZeroPaddingBytes(paddingBytes []byte) {
 }
 
 // generateNonZeroByte returns a cryptographically random byte in the range [1, 255].
-// Falls back to 0x01 if random generation fails.
+// Falls back to 0x01 if random generation fails or after maxAttempts iterations.
 func generateNonZeroByte() byte {
+	const maxAttempts = 256
 	var b [1]byte
-	for {
+	for i := 0; i < maxAttempts; i++ {
 		if _, err := rand.Read(b[:]); err != nil {
 			return 1
 		}
@@ -531,6 +532,7 @@ func generateNonZeroByte() byte {
 			return b[0]
 		}
 	}
+	return 1 // Fallback after exhausting attempts (statistically impossible)
 }
 
 // writePayload writes the zero separator, delivery instructions, and message to the buffer.
@@ -545,11 +547,14 @@ func (g *Gateway) writePayload(msg []byte, paddingSize int, deliveryInstructions
 }
 
 // writeChecksum calculates and writes the checksum.
-// Checksum is first 4 bytes of SHA256(data + IV).
-// Uses a separate buffer to avoid corrupting memory beyond the message
-// when the backing array of msg has excess capacity.
-func (g *Gateway) writeChecksum(msg []byte) {
-	data := msg[24:]
+// Per I2P spec §tunnel-message: "The checksum does NOT cover the padding or
+// the zero byte. Take the message starting at the first delivery instructions,
+// concatenate the IV, and take the Hash of that."
+// Checksum is the first 4 bytes of SHA256(delivery_instructions_and_fragments + IV).
+func (g *Gateway) writeChecksum(msg []byte, paddingSize int) {
+	// Data after the zero byte separator: delivery instructions + message fragments
+	dataStart := 24 + paddingSize + 1 // checksum(4) ends at 24, then padding, then 0x00
+	data := msg[dataStart:]
 	iv := msg[4:20]
 	buf := make([]byte, len(data)+len(iv))
 	copy(buf, data)
