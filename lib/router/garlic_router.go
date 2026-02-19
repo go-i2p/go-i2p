@@ -243,14 +243,7 @@ func (gr *GarlicMessageRouter) validateAndExtractLeases(destHash common.Hash, le
 		return nil, fmt.Errorf("destination %x has invalid LeaseSet", destHash[:8])
 	}
 
-	leases, err := leaseSet.Leases()
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "validateAndExtractLeases",
-			"dest_hash": fmt.Sprintf("%x", destHash[:8]),
-		}).WithError(err).Error("Failed to extract leases from LeaseSet")
-		return nil, fmt.Errorf("failed to extract leases from LeaseSet for %x: %w", destHash[:8], err)
-	}
+	leases := leaseSet.Leases()
 
 	if len(leases) == 0 {
 		log.WithFields(logger.Fields{
@@ -770,11 +763,7 @@ func (gr *GarlicMessageRouter) cleanupExpiredMessages(destHash common.Hash, mess
 // extractValidLease extracts and validates the best lease from a LeaseSet.
 func (gr *GarlicMessageRouter) extractValidLease(destHash common.Hash, leaseSet lease_set.LeaseSet) (common.Hash, tunnel.TunnelID, error) {
 	// Get leases from LeaseSet
-	leases, err := leaseSet.Leases()
-	if err != nil {
-		log.WithError(err).Error("Failed to extract leases from LeaseSet")
-		return common.Hash{}, 0, err
-	}
+	leases := leaseSet.Leases()
 
 	if len(leases) == 0 {
 		log.WithField("dest_hash", fmt.Sprintf("%x", destHash[:8])).
