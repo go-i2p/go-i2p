@@ -64,7 +64,7 @@ func createSignedTestRouterInfo(t *testing.T, options map[string]string) *router
 
 	// Create padding
 	pubKeySize := keyCert.CryptoSize()
-	sigKeySize := keyCert.SignatureSize()
+	sigKeySize := keyCert.SigningPublicKeySize()
 	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
 	padding := make([]byte, paddingSize)
 	_, err = rand.Read(padding)
@@ -296,7 +296,7 @@ func BenchmarkVerifyRouterInfoSignature(b *testing.B) {
 		keyCert, _ := key_certificate.KeyCertificateFromCertificate(cert)
 
 		pubKeySize := keyCert.CryptoSize()
-		sigKeySize := keyCert.SignatureSize()
+		sigKeySize := keyCert.SigningPublicKeySize()
 		paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
 		padding := make([]byte, paddingSize)
 		_, _ = rand.Read(padding)

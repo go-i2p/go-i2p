@@ -53,8 +53,8 @@ func TestNoiseXKHandshake_PatternString(t *testing.T) {
 		"NTCP2 must use Noise XK pattern per spec (ntcp2.rst)")
 
 	// Verify the config requires a 32-byte router hash (identity binding)
-	assert.Len(t, config.RouterHash, 32,
-		"RouterHash must be exactly 32 bytes (SHA-256 of RouterIdentity)")
+	assert.Len(t, config.BobRouterHash, 32,
+		"BobRouterHash must be exactly 32 bytes (SHA-256 of RouterIdentity)")
 }
 
 // TestNoiseXKHandshake_Prologue verifies that NTCP2Config includes the router hash
@@ -72,10 +72,10 @@ func TestNoiseXKHandshake_Prologue(t *testing.T) {
 	require.NoError(t, err)
 
 	// The RouterHash serves as prologue binding data in the Noise handshake
-	assert.Equal(t, routerHash, config.RouterHash,
-		"Config must store RouterHash for use as Noise prologue data")
-	assert.True(t, len(config.RouterHash) == 32,
-		"RouterHash (prologue) must be 32 bytes per ntcp2.rst")
+	assert.Equal(t, routerHash, config.BobRouterHash,
+		"Config must store BobRouterHash for use as Noise prologue data")
+	assert.True(t, len(config.BobRouterHash) == 32,
+		"BobRouterHash (prologue) must be 32 bytes per ntcp2.rst")
 }
 
 // TestNoiseXKHandshake_Message1_EphemeralKey verifies Message 1 structure.

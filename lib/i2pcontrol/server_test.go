@@ -45,10 +45,11 @@ func (mockStopControl) Reseed() error { return nil }
 // testConfig creates a test I2PControl configuration
 func testConfig(port int) *config.I2PControlConfig {
 	return &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  fmt.Sprintf("127.0.0.1:%d", port),
-		Password: "testpassword123",
-		UseHTTPS: false,
+		Enabled:         true,
+		Address:         fmt.Sprintf("127.0.0.1:%d", port),
+		Password:        "testpassword123",
+		UseHTTPS:        false,
+		TokenExpiration: 10 * time.Minute,
 	}
 }
 

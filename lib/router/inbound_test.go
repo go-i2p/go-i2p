@@ -169,9 +169,9 @@ func TestHandleTunnelDataSuccess(t *testing.T) {
 			// Add 10 bytes of message data
 			copy(decrypted[28:38], []byte("testmessage")[:10])
 
-			// Calculate checksum: first 4 bytes of SHA256(data_after_checksum + IV)
-			dataAfterChecksum := decrypted[24:]
-			checksumData := append(dataAfterChecksum, iv...)
+			// Calculate checksum: first 4 bytes of SHA256(delivery_instructions_after_zero_byte + IV)
+			deliveryInstructions := decrypted[25:]
+			checksumData := append(deliveryInstructions, iv...)
 			hash := sha256.Sum256(checksumData)
 			copy(decrypted[20:24], hash[:4])
 

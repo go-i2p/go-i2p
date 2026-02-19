@@ -259,8 +259,8 @@ func TestPaddingLayout_CryptoPubKeyAtStartSigningAtEnd(t *testing.T) {
 	}
 
 	// Verify the serialized layout per I2P spec:
-	// Keys are RIGHT-JUSTIFIED in their standard-size fields.
-	// [256-byte crypto field: padding(224) | X25519 pubkey(32)]
+	// Crypto key is START-ALIGNED in the 256-byte field, signing key is RIGHT-JUSTIFIED in the 128-byte field.
+	// [256-byte crypto field: X25519 pubkey(32) | padding(224)]
 	// [128-byte signing field: padding(96) | Ed25519 pubkey(32)]
 	// Then certificate bytes follow.
 	rawBytes, err := kac.Bytes()
@@ -268,14 +268,12 @@ func TestPaddingLayout_CryptoPubKeyAtStartSigningAtEnd(t *testing.T) {
 		t.Fatalf("KeysAndCert.Bytes() failed: %v", err)
 	}
 
-	// X25519 public key (32 bytes) is right-justified in the 256-byte field
-	// So it occupies bytes 224-255
-	cryptoFieldSize := 256 // KEYS_AND_CERT_PUBKEY_SIZE
-	cryptoStart := cryptoFieldSize - 32
+	// X25519 public key (32 bytes) is start-aligned in the 256-byte field
+	// So it occupies bytes 0-31
 	for i := 0; i < 32; i++ {
-		if rawBytes[cryptoStart+i] != cryptoPubKeyBytes[i] {
-			t.Errorf("byte[%d]: crypto pubkey mismatch (right-justified at offset %d)",
-				cryptoStart+i, cryptoStart+i)
+		if rawBytes[i] != cryptoPubKeyBytes[i] {
+			t.Errorf("byte[%d]: crypto pubkey mismatch (start-aligned at offset %d)",
+				i, i)
 			break
 		}
 	}

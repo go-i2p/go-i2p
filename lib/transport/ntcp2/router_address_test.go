@@ -226,25 +226,19 @@ func TestConvertToRouterAddress_IPv6(t *testing.T) {
 }
 
 // TestConvertToRouterAddress_ExpirationTime tests that expiration is set correctly
+// Per I2P spec, router address expiration is always zero.
 func TestConvertToRouterAddress_ExpirationTime(t *testing.T) {
-	beforeConversion := time.Now()
 	transport := createTestTransport(t, "127.0.0.1:0")
 
 	routerAddr, err := ConvertToRouterAddress(transport)
 	require.NoError(t, err)
-	afterConversion := time.Now()
 
 	expiration := routerAddr.Expiration()
 	expirationTime := expiration.Time()
 
-	// Expiration should be ~2 hours in the future
-	expectedMin := beforeConversion.Add(2*time.Hour - 10*time.Second)
-	expectedMax := afterConversion.Add(2*time.Hour + 10*time.Second)
-
-	assert.True(t, expirationTime.After(expectedMin),
-		"expiration %v should be after %v", expirationTime, expectedMin)
-	assert.True(t, expirationTime.Before(expectedMax),
-		"expiration %v should be before %v", expirationTime, expectedMax)
+	// Per I2P spec, expiration is always zero (epoch) regardless of input
+	assert.True(t, expirationTime.Equal(time.Unix(0, 0)) || expirationTime.IsZero(),
+		"expiration %v should be zero/epoch per I2P spec", expirationTime)
 }
 
 // TestConvertToRouterAddress_Integration tests end-to-end address publishing
