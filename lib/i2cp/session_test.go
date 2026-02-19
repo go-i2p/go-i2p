@@ -5,7 +5,6 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
@@ -394,13 +393,6 @@ func TestSessionCreateLeaseSetWithActiveTunnels(t *testing.T) {
 	if len(leaseSetBytes) == 0 {
 		t.Error("Expected non-empty LeaseSet bytes")
 	}
-}
-
-// mockPeerSelector is a simple peer selector for testing
-type mockPeerSelector struct{}
-
-func (m *mockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	return []router_info.RouterInfo{}, nil
 }
 
 // TestSessionCurrentLeaseSet tests CurrentLeaseSet getter

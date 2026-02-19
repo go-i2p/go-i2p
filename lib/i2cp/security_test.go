@@ -816,17 +816,6 @@ func TestBlindingInfo_PayloadParsing(t *testing.T) {
 // MESSAGE ROUTER TESTS
 // =============================================================================
 
-// mockTransportSender is a mock transport sender for testing.
-type mockTransportSender struct {
-	mu       sync.Mutex
-	messages []mockSentMessage
-}
-
-type mockSentMessage struct {
-	peerHash common.Hash
-	msg      interface{}
-}
-
 // TestMessageRouter_StatusCallbackInvoked verifies status callbacks are called.
 func TestMessageRouter_StatusCallbackInvoked(t *testing.T) {
 	router := NewMessageRouter(nil, nil)
@@ -932,20 +921,4 @@ func TestErrorMessages_NoSensitiveData(t *testing.T) {
 			}
 		}
 	}
-}
-
-// =============================================================================
-// HELPER TYPES AND FUNCTIONS
-// =============================================================================
-
-// IncomingMessages returns the incoming message channel for testing.
-func (s *Session) IncomingMessages() <-chan *IncomingMessage {
-	return s.incomingMessages
-}
-
-// ClientNetDB returns the session's client NetDB for testing isolation.
-func (s *Session) ClientNetDB() interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.clientNetDB
 }

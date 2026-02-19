@@ -406,23 +406,3 @@ func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, ls2)
 }
-
-// createMockTunnels creates mock tunnel data for testing
-func createMockTunnels(count int) []*tunnel.TunnelState {
-	tunnels := make([]*tunnel.TunnelState, count)
-	for i := 0; i < count; i++ {
-		// Create a mock gateway hash - fill entire 32 bytes to avoid zero hash validation errors
-		var gateway [32]byte
-		for j := 0; j < 32; j++ {
-			gateway[j] = byte((i*32 + j) % 256)
-		}
-
-		tunnels[i] = &tunnel.TunnelState{
-			ID:        tunnel.TunnelID(1000 + i),
-			State:     tunnel.TunnelReady,
-			Hops:      []data.Hash{gateway},
-			CreatedAt: time.Now(),
-		}
-	}
-	return tunnels
-}

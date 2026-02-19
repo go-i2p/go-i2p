@@ -9,29 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockNetDBStore implements NetDBStore for testing
-type mockNetDBStore struct {
-	stored    map[common.Hash][]byte
-	dataTypes map[common.Hash]byte
-	err       error
-}
-
-func newMockNetDBStore() *mockNetDBStore {
-	return &mockNetDBStore{
-		stored:    make(map[common.Hash][]byte),
-		dataTypes: make(map[common.Hash]byte),
-	}
-}
-
-func (m *mockNetDBStore) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	if m.err != nil {
-		return m.err
-	}
-	m.stored[key] = data
-	m.dataTypes[key] = dataType
-	return nil
-}
-
 func TestNetDBLeaseSetPublisher_PublishLeaseSet(t *testing.T) {
 	store := newMockNetDBStore()
 	publisher := NewNetDBLeaseSetPublisher(store)

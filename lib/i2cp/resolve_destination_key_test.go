@@ -7,16 +7,6 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
-// mockDestinationResolver is a test double for the destination resolver interface.
-type mockDestinationResolver struct {
-	key [32]byte
-	err error
-}
-
-func (m *mockDestinationResolver) ResolveDestination(destHash common.Hash) ([32]byte, error) {
-	return m.key, m.err
-}
-
 // TestResolveDestinationKey_NilResolver verifies that resolveDestinationKey returns
 // ErrNoDestinationResolver when no resolver is configured, instead of silently
 // returning a zero encryption key.

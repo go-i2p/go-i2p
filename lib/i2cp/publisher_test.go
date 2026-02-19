@@ -1,7 +1,6 @@
 package i2cp
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -10,39 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// mockLeaseSetPublisher implements LeaseSetPublisher for testing
-type mockLeaseSetPublisher struct {
-	mu            sync.Mutex
-	published     map[common.Hash][]byte
-	publishErr    error
-	publishCalled int
-}
-
-func newMockLeaseSetPublisher() *mockLeaseSetPublisher {
-	return &mockLeaseSetPublisher{
-		published: make(map[common.Hash][]byte),
-	}
-}
-
-func (m *mockLeaseSetPublisher) PublishLeaseSet(key common.Hash, data []byte) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.publishCalled++
-	if m.publishErr != nil {
-		return m.publishErr
-	}
-	m.published[key] = data
-	return nil
-}
-
-// GetPublishCount returns the number of times PublishLeaseSet was called.
-func (m *mockLeaseSetPublisher) GetPublishCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.publishCalled
-}
 
 // TestSessionSetLeaseSetPublisher tests setting the publisher on a session
 func TestSessionSetLeaseSetPublisher(t *testing.T) {

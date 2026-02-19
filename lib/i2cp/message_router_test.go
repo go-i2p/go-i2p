@@ -2,7 +2,6 @@ package i2cp
 
 import (
 	"testing"
-	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -248,111 +247,4 @@ func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, selectedTunnel)
 	assert.Contains(t, err.Error(), "zero-hop tunnels are not supported")
-}
-
-func createTestSessionWithZeroHopTunnels(t *testing.T) *Session {
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-	}
-
-	selector := &mockPeerSelector{}
-	session.outboundPool = tunnel.NewTunnelPool(selector)
-	session.inboundPool = tunnel.NewTunnelPool(selector)
-
-	// Add a zero-hop tunnel (no hops — this is the dangerous case)
-	zeroHopTunnel := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(9999),
-		Hops:      []common.Hash{}, // Zero hops
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	session.outboundPool.AddTunnel(zeroHopTunnel)
-
-	return session
-}
-
-// Helper functions
-
-func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager, TransportSendFunc, map[string]i2np.I2NPMessage) {
-	// Create session with active tunnels using existing test helper
-	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
-	t.Cleanup(cleanup)
-
-	// Ensure server is available (though we don't use it directly)
-	_ = server
-
-	// Add outbound tunnels to the pool (setupTestEnvironment only adds inbound tunnels)
-	for i := 0; i < 2; i++ {
-		tunnelID := tunnel.TunnelID(2000 + i)
-		var gateway common.Hash
-		copy(gateway[:], []byte("mock-outbound-gateway-hash-12345678901234567890"))
-		gateway[31] = byte(i) // Make each gateway unique
-
-		tunnelState := &tunnel.TunnelState{
-			ID:        tunnelID,
-			Hops:      []common.Hash{gateway},
-			State:     tunnel.TunnelReady,
-			CreatedAt: time.Now(),
-		}
-		outboundPool.AddTunnel(tunnelState)
-	}
-
-	// Create garlic session manager
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
-
-	// Create transport send function that records sent messages
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
-		key := string(peerHash[:])
-		sentMessages[key] = msg
-		return nil
-	}
-
-	return session, garlicMgr, transportSend, sentMessages
-}
-
-func createTestSessionWithoutPools(t *testing.T) *Session {
-	// Create a minimal session without pools
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-		// No pools set
-	}
-	return session
-}
-
-func createTestSessionWithEmptyPools(t *testing.T) *Session {
-	// Create minimal session with empty pools
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-	}
-
-	// Create empty pools (no tunnels)
-	selector := &mockPeerSelector{}
-	session.outboundPool = tunnel.NewTunnelPool(selector)
-	session.inboundPool = tunnel.NewTunnelPool(selector)
-
-	return session
-}
-
-func createTestHash() common.Hash {
-	var hash common.Hash
-	for i := range hash {
-		hash[i] = byte(i)
-	}
-	return hash
 }

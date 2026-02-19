@@ -1,58 +1,13 @@
 package i2cp
 
 import (
-	"encoding/binary"
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set2"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// prependSessionID builds a wire-format payload by prepending a 2-byte
-// big-endian session ID to the given data, matching the I2CP wire format
-// where SessionID is embedded at the start of the payload.
-func prependSessionID(sessionID uint16, payload []byte) []byte {
-	result := make([]byte, 2+len(payload))
-	binary.BigEndian.PutUint16(result[0:2], sessionID)
-	copy(result[2:], payload)
-	return result
-}
-
-// createTestSessionWithLeaseSet creates a session with a valid LeaseSet2 for testing.
-// Returns the session and the serialized LeaseSet2 bytes.
-func createTestSessionWithLeaseSet(t *testing.T) (*Session, []byte) {
-	t.Helper()
-
-	session, err := NewSession(1, nil, nil)
-	require.NoError(t, err, "Failed to create session")
-
-	// Setup inbound tunnel pool with active tunnel
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash data.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []data.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
-
-	// Create LeaseSet via session (properly signed and matching destination)
-	leaseSetBytes, err := session.CreateLeaseSet()
-	require.NoError(t, err, "Failed to create LeaseSet")
-	require.NotEmpty(t, leaseSetBytes, "LeaseSet should not be empty")
-
-	return session, leaseSetBytes
-}
 
 // TestValidateLeaseSet2Data_ValidLeaseSet verifies that a properly constructed
 // LeaseSet2 from the session passes validation.

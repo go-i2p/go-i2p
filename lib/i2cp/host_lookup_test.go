@@ -563,23 +563,6 @@ func TestHostLookupTypeNames(t *testing.T) {
 	}
 }
 
-// mockHostnameResolver implements HostnameResolver for testing
-type mockHostnameResolver struct {
-	destinations map[string][]byte
-	err          error
-}
-
-func (m *mockHostnameResolver) ResolveHostname(hostname string) ([]byte, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	dest, ok := m.destinations[hostname]
-	if !ok {
-		return nil, errors.New("hostname not found")
-	}
-	return dest, nil
-}
-
 func TestHandleHostnameLookup_NoResolver(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
 	require.NoError(t, err)

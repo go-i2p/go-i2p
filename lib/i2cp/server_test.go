@@ -7,22 +7,6 @@ import (
 	"time"
 )
 
-// dialI2CPClient connects to an I2CP server and sends the required protocol byte (0x2a)
-func dialI2CPClient(addr string) (net.Conn, error) {
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send protocol byte as required by I2CP spec
-	if _, err := conn.Write([]byte{0x2a}); err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	return conn, nil
-}
-
 func TestServerStartStop(t *testing.T) {
 	config := &ServerConfig{
 		ListenAddr:  "localhost:17654",

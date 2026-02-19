@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/destination"
-	"github.com/go-i2p/go-i2p/lib/keys"
 )
 
 // TestParseCreateSessionPayload_Empty tests parsing with empty/minimal payload
@@ -463,16 +461,6 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 			tt.validate(t, config)
 		})
 	}
-}
-
-// Helper function to create a test destination
-func createTestDestination() (*destination.Destination, error) {
-	// Use keys package to create a valid destination with proper key certificates
-	keyStore, err := keys.NewDestinationKeyStore()
-	if err != nil {
-		return nil, err
-	}
-	return keyStore.Destination(), nil
 }
 
 // TestApplyMessageOptions_Reliability tests that i2cp.messageReliability is wired into SessionConfig.

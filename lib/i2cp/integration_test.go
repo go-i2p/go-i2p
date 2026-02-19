@@ -15,98 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockTunnelBuilder implements tunnel.BuilderInterface for testing
-type mockTunnelBuilder struct {
-	nextID tunnel.TunnelID
-}
-
-func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
-	m.nextID++
-	return &tunnel.BuildTunnelResult{
-		TunnelID:   m.nextID,
-		PeerHashes: nil,
-	}, nil
-}
-
-// setupTestEnvironment creates a complete test environment with server, session, and tunnel pools
-func setupTestEnvironment(t *testing.T) (*Server, *Session, *tunnel.Pool, *tunnel.Pool, func()) {
-	// Create server
-	config := &ServerConfig{
-		ListenAddr:  "localhost:0", // Use random port
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	require.NoError(t, err)
-
-	err = server.Start()
-	require.NoError(t, err)
-
-	// Create session
-	sessionConfig := DefaultSessionConfig()
-	sessionConfig.TunnelLifetime = 1 * time.Minute // Shorter for testing
-	sessionConfig.Nickname = "test-session"
-
-	session, err := server.manager.CreateSession(nil, sessionConfig)
-	require.NoError(t, err)
-	require.NotNil(t, session)
-
-	// Create tunnel pools
-	selector := &mockPeerSelector{}
-	inboundConfig := tunnel.DefaultPoolConfig()
-	inboundConfig.IsInbound = true
-	inboundConfig.MinTunnels = 2
-	inboundConfig.MaxTunnels = 3
-	inboundConfig.TunnelLifetime = 1 * time.Minute
-
-	outboundConfig := tunnel.DefaultPoolConfig()
-	outboundConfig.IsInbound = false
-	outboundConfig.MinTunnels = 2
-	outboundConfig.MaxTunnels = 3
-	outboundConfig.TunnelLifetime = 1 * time.Minute
-
-	inboundPool := tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
-	outboundPool := tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
-
-	// Set tunnel builder
-	builder := &mockTunnelBuilder{}
-	inboundPool.SetTunnelBuilder(builder)
-	outboundPool.SetTunnelBuilder(builder)
-
-	// Attach pools to session
-	session.SetInboundPool(inboundPool)
-	session.SetOutboundPool(outboundPool)
-
-	// Add some mock tunnels to the inbound pool for LeaseSet generation
-	for i := 0; i < 2; i++ {
-		tunnelID := tunnel.TunnelID(1000 + i)
-		var gateway data.Hash
-		// Use a mock gateway hash
-		copy(gateway[:], []byte("mock-gateway-router-hash-12345678901234567890"))
-
-		tunnelState := &tunnel.TunnelState{
-			ID:        tunnelID,
-			Hops:      []data.Hash{gateway},
-			State:     tunnel.TunnelReady,
-			CreatedAt: time.Now(),
-		}
-		inboundPool.AddTunnel(tunnelState)
-	}
-
-	// Cleanup function
-	cleanup := func() {
-		session.Stop()
-		inboundPool.Stop()
-		outboundPool.Stop()
-		if err := server.Stop(); err != nil {
-			t.Logf("Error stopping server: %v", err)
-		}
-	}
-
-	return server, session, inboundPool, outboundPool, cleanup
-}
-
 // TestE2E_SessionCreation tests the complete session creation flow
 func TestE2E_SessionCreation(t *testing.T) {
 	server, session, _, _, cleanup := setupTestEnvironment(t)
@@ -205,30 +113,6 @@ func TestE2E_MessageQueueing(t *testing.T) {
 		require.NoError(t, err, "failed to receive message %d", i)
 		require.NotNil(t, received)
 		assert.Equal(t, expected, received.Payload)
-	}
-}
-
-// receiveMessageWithContext receives a message with context timeout
-func receiveMessageWithContext(ctx context.Context, session *Session) (*IncomingMessage, error) {
-	msgChan := make(chan *IncomingMessage, 1)
-	errChan := make(chan error, 1)
-
-	go func() {
-		msg, err := session.ReceiveMessage()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		msgChan <- msg
-	}()
-
-	select {
-	case msg := <-msgChan:
-		return msg, nil
-	case err := <-errChan:
-		return nil, err
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	}
 }
 
