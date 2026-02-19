@@ -876,12 +876,13 @@ func TestPrepareDestinationAndKeys_WithPrivateKeys_PreservesIdentity(t *testing.
 	originalDestBytes, err := originalDest.Bytes()
 	require.NoError(t, err)
 
-	// Extract the private keys
+	// Extract the private keys and identity padding
 	sigPriv := originalKS.SigningPrivateKey()
 	encPriv := originalKS.EncryptionPrivateKey()
+	padding := originalKS.IdentityPadding()
 
-	// Reconstruct via prepareDestinationAndKeys with the same private keys
-	resultKS, resultDest, err := prepareDestinationAndKeys(originalDest, sigPriv, encPriv)
+	// Reconstruct via prepareDestinationAndKeys with the same private keys + padding
+	resultKS, resultDest, err := prepareDestinationAndKeys(originalDest, sigPriv, encPriv, padding)
 	require.NoError(t, err)
 	require.NotNil(t, resultKS)
 	require.NotNil(t, resultDest)
@@ -906,9 +907,10 @@ func TestNewSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 	require.NoError(t, err)
 	sigPriv := originalKS.SigningPrivateKey()
 	encPriv := originalKS.EncryptionPrivateKey()
+	padding := originalKS.IdentityPadding()
 
-	// Create session with the original private keys
-	session, err := NewSession(1, originalDest, nil, sigPriv, encPriv)
+	// Create session with the original private keys + padding
+	session, err := NewSession(1, originalDest, nil, sigPriv, encPriv, padding)
 	require.NoError(t, err)
 	defer session.Stop()
 
@@ -938,9 +940,10 @@ func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 	require.NoError(t, err)
 	sigPriv := originalKS.SigningPrivateKey()
 	encPriv := originalKS.EncryptionPrivateKey()
+	padding := originalKS.IdentityPadding()
 
-	// Create session via manager with private keys
-	session, err := sm.CreateSession(originalDest, nil, sigPriv, encPriv)
+	// Create session via manager with private keys + padding
+	session, err := sm.CreateSession(originalDest, nil, sigPriv, encPriv, padding)
 	require.NoError(t, err)
 	defer sm.DestroySession(session.ID())
 
@@ -1025,11 +1028,12 @@ func TestPrepareDestinationAndKeys_IdentityStableAcrossReconstructions(t *testin
 
 	sigPriv := originalKS.SigningPrivateKey()
 	encPriv := originalKS.EncryptionPrivateKey()
+	padding := originalKS.IdentityPadding()
 
-	// Reconstruct multiple times
+	// Reconstruct multiple times with the same keys + padding
 	var destinations [][]byte
 	for i := 0; i < 3; i++ {
-		ks, dest, err := prepareDestinationAndKeys(nil, sigPriv, encPriv)
+		ks, dest, err := prepareDestinationAndKeys(nil, sigPriv, encPriv, padding)
 		require.NoError(t, err)
 		require.NotNil(t, ks)
 		db, err := dest.Bytes()

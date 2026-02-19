@@ -237,9 +237,11 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 		"useEncryptedLeaseSet": config.UseEncryptedLeaseSet,
 	}).Info("creating_i2cp_session")
 
-	// Extract private keys from variadic args if provided
+	// Extract private keys and optional identity padding from variadic args.
+	// Expected order: signingPrivKey, encryptionPrivKey, [identityPadding []byte]
 	var sigPriv types.SigningPrivateKey
 	var encPriv types.PrivateEncryptionKey
+	var identityPadding []byte
 	if len(privKeys) >= 2 {
 		if sp, ok := privKeys[0].(types.SigningPrivateKey); ok {
 			sigPriv = sp
@@ -248,8 +250,13 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 			encPriv = ep
 		}
 	}
+	if len(privKeys) >= 3 {
+		if pad, ok := privKeys[2].([]byte); ok {
+			identityPadding = pad
+		}
+	}
 
-	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv)
+	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv, identityPadding)
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.NewSession",
@@ -296,13 +303,13 @@ func ensureValidConfig(config *SessionConfig) *SessionConfig {
 //
 // When signingPrivKey and encryptionPrivKey are both non-nil, the keystore is built
 // from the provided private keys, preserving the client's persistent identity.
-// This is the correct I2CP behavior: clients can maintain a stable .b32.i2p address
-// across sessions by providing their own key material.
+// If identityPadding is also provided, the exact same destination hash is produced,
+// giving the client a stable .b32.i2p address across sessions.
 //
 // When private keys are nil, a fresh DestinationKeyStore with new keys and a new
 // destination is generated. The dest parameter is ignored in this case because
 // we cannot use a destination without its corresponding private keys.
-func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey) (*keys.DestinationKeyStore, *destination.Destination, error) {
+func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.SigningPrivateKey, encPriv types.PrivateEncryptionKey, identityPadding ...[]byte) (*keys.DestinationKeyStore, *destination.Destination, error) {
 	// Case 1: Client provided private keys — reconstruct their identity
 	if sigPriv != nil && encPriv != nil {
 		log.WithFields(logger.Fields{
@@ -310,7 +317,7 @@ func prepareDestinationAndKeys(dest *destination.Destination, sigPriv types.Sign
 			"reason": "client_provided_private_keys",
 		}).Info("Using client-provided private keys to preserve persistent identity")
 
-		keyStore, err := keys.NewDestinationKeyStoreFromKeys(sigPriv, encPriv)
+		keyStore, err := keys.NewDestinationKeyStoreFromKeys(sigPriv, encPriv, identityPadding...)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create keystore from client keys: %w", err)
 		}
