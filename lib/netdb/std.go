@@ -1711,10 +1711,7 @@ func parseLeaseSetData(data []byte) (lease_set.LeaseSet, error) {
 
 // verifyLeaseSetHash validates that the provided key matches the LeaseSet destination hash.
 func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
-	dest, err := ls.Destination()
-	if err != nil {
-		return fmt.Errorf("failed to get LeaseSet destination: %w", err)
-	}
+	dest := ls.Destination()
 
 	// Calculate hash from destination bytes
 	destBytes, err := dest.Bytes()
@@ -2303,12 +2300,9 @@ func parseEncryptedLeaseSetData(data []byte) (encrypted_leaseset.EncryptedLeaseS
 
 // verifyEncryptedLeaseSetHash validates that the provided key matches the EncryptedLeaseSet blinded destination hash.
 func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) error {
-	dest := els.BlindedDestination()
-
-	// Calculate hash from blinded destination bytes
-	destBytes, err := dest.Bytes()
-	if err != nil {
-		return fmt.Errorf("failed to get blinded destination bytes: %w", err)
+	destBytes := els.BlindedPublicKey()
+	if destBytes == nil {
+		return fmt.Errorf("failed to get blinded public key bytes")
 	}
 	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {

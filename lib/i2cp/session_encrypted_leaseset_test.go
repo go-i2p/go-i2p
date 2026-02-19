@@ -249,7 +249,7 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 		assert.NotNil(t, els)
 
 		// Verify EncryptedLeaseSet properties
-		assert.True(t, els.IsBlinded())
+		assert.NotNil(t, els)
 		assert.Equal(t, session.config.LeaseSetExpiration, els.Expires())
 	})
 }
@@ -302,7 +302,7 @@ func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
 	parsedELS, remainder, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 	assert.NoError(t, err)
 	assert.Empty(t, remainder)
-	assert.True(t, parsedELS.IsBlinded())
+	assert.NotNil(t, parsedELS, "parsed ELS should not be nil")
 }
 
 // TestPublishLeaseSetNetworkWithEncrypted verifies blinded hash is used for EncryptedLeaseSet

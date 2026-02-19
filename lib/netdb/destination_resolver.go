@@ -218,10 +218,7 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 // Note: In a full implementation, we would need to support ElGamal for backward compatibility,
 // but the current garlic encryption system only supports ECIES-X25519-AEAD.
 func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSet) ([32]byte, error) {
-	dest, err := ls.Destination()
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to get destination from LeaseSet: %w", err)
-	}
+	dest := ls.Destination()
 
 	// Check if destination uses X25519 via key certificate
 	if dest.KeyCertificate != nil {

@@ -1197,17 +1197,27 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 	signingPrivateKey := s.keys.SigningPrivateKey()
 
 	// Create EncryptedLeaseSet
-	// Flags: bit 2 = blinded (0x04)
-	const ENCRYPTED_LEASESET_FLAG_BLINDED = 0x04
+	// Note: Blinding is implicit from providing a blinded public key;
+	// the new API only allows bit 0 (offline) and bit 1 (unpublished).
+	var elsFlags uint16 = 0
+
+	// Extract blinded public key bytes from the blinded destination
+	blindedPubKey, err := s.blindedDestination.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blinded public key: %w", err)
+	}
+	blindedPubKeyBytes := blindedPubKey.Bytes()
+
+	// sigType for Ed25519 (KEYCERT_SIGN_ED25519 = 7)
+	sigType := uint16(s.blindedDestination.KeyCertificate.SigningPublicKeyType())
 
 	els, err := encrypted_leaseset.NewEncryptedLeaseSet(
-		*s.blindedDestination,
+		sigType,
+		blindedPubKeyBytes,
 		publishedTime,
 		s.config.LeaseSetExpiration,
-		ENCRYPTED_LEASESET_FLAG_BLINDED,
+		elsFlags,
 		nil, // no offline signature
-		data.Mapping{},
-		cookie,
 		encryptedInnerData,
 		signingPrivateKey,
 	)
