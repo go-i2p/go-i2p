@@ -248,3 +248,33 @@ func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
 	assert.Nil(t, selectedTunnel)
 	assert.Contains(t, err.Error(), "zero-hop tunnels are not supported")
 }
+
+// =============================================================================
+// MESSAGE ROUTER TESTS
+// =============================================================================
+
+// TestMessageRouter_StatusCallbackInvoked verifies status callbacks are called.
+func TestMessageRouter_StatusCallbackInvoked(t *testing.T) {
+	router := NewMessageRouter(nil, nil)
+
+	// Without tunnel pool, should fail with NoTunnels status
+	session, _ := NewSession(1, nil, nil)
+	defer session.Stop()
+
+	var receivedStatus uint8
+	callback := func(messageID uint32, statusCode uint8, messageSize, nonce uint32) {
+		receivedStatus = statusCode
+	}
+
+	var destHash common.Hash
+	var destKey [32]byte
+
+	err := router.RouteOutboundMessage(session, 1, destHash, destKey, []byte("test"), 0, callback)
+	if err == nil {
+		t.Error("Expected error without outbound pool")
+	}
+
+	if receivedStatus != MessageStatusNoTunnels {
+		t.Errorf("Status = %d, want %d (NoTunnels)", receivedStatus, MessageStatusNoTunnels)
+	}
+}

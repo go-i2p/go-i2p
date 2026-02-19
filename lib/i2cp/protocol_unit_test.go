@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 )
 
@@ -368,6 +369,87 @@ func TestMessageTypeNames(t *testing.T) {
 		got := MessageTypeName(tt.msgType)
 		if got != tt.want {
 			t.Errorf("MessageTypeName(%d) = %q, want %q", tt.msgType, got, tt.want)
+		}
+	}
+}
+
+// TestMessageStatusConstants verifies all message status codes are defined correctly.
+func TestMessageStatusConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     uint8
+		expected uint8
+	}{
+		{"Accepted", MessageStatusAccepted, 1},
+		{"Success", MessageStatusSuccess, 4},
+		{"Failure", MessageStatusFailure, 5},
+		{"NoTunnels", MessageStatusNoTunnels, 16},
+		{"NoLeaseSet", MessageStatusNoLeaseSet, 21},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.code != tt.expected {
+				t.Errorf("MessageStatus%s = %d, want %d", tt.name, tt.code, tt.expected)
+			}
+		})
+	}
+}
+
+// TestMessageTypeMessageStatus verifies the MessageStatus type constant.
+func TestMessageTypeMessageStatus(t *testing.T) {
+	if MessageTypeMessageStatus != 22 {
+		t.Errorf("MessageTypeMessageStatus = %d, want 22", MessageTypeMessageStatus)
+	}
+
+	// Verify MessageTypeName includes MessageStatus
+	name := MessageTypeName(MessageTypeMessageStatus)
+	if name != "MessageStatus" {
+		t.Errorf("MessageTypeName(22) = %q, want \"MessageStatus\"", name)
+	}
+}
+
+// TestMessageStatusUnmarshal verifies a MessageStatus message can be unmarshaled.
+func TestMessageStatusUnmarshal(t *testing.T) {
+	// Create a MessageStatus message
+	originalMsg := buildMessageStatusResponse(50, 99999, MessageStatusFailure, 1024, 5555)
+
+	// Marshal it
+	data, err := originalMsg.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary() error = %v", err)
+	}
+
+	// Unmarshal it
+	var parsedMsg Message
+	if err := parsedMsg.UnmarshalBinary(data); err != nil {
+		t.Fatalf("UnmarshalBinary() error = %v", err)
+	}
+
+	// Verify message fields match
+	if parsedMsg.Type != originalMsg.Type {
+		t.Errorf("Type = %d, want %d", parsedMsg.Type, originalMsg.Type)
+	}
+
+	// Per I2CP spec: SessionID is NOT in common header, it's in the payload
+	// UnmarshalBinary sets SessionID=0, we must extract it from payload
+	if len(parsedMsg.Payload) >= 2 {
+		payloadSessionID := binary.BigEndian.Uint16(parsedMsg.Payload[0:2])
+		if payloadSessionID != originalMsg.SessionID {
+			t.Errorf("Payload SessionID = %d, want %d", payloadSessionID, originalMsg.SessionID)
+		}
+	} else {
+		t.Fatalf("Payload too short to contain SessionID")
+	}
+
+	if len(parsedMsg.Payload) != len(originalMsg.Payload) {
+		t.Fatalf("Payload length = %d, want %d", len(parsedMsg.Payload), len(originalMsg.Payload))
+	}
+
+	// Verify payload bytes match
+	for i := range parsedMsg.Payload {
+		if parsedMsg.Payload[i] != originalMsg.Payload[i] {
+			t.Errorf("Payload[%d] = %d, want %d", i, parsedMsg.Payload[i], originalMsg.Payload[i])
 		}
 	}
 }
