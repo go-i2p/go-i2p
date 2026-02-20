@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-i2p/crypto/chacha20poly1305"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-noise/ratchet"
 
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
@@ -246,8 +247,7 @@ func TestBuildResponseRecord_HashTamper(t *testing.T) {
 	tamperedRecord.Hash[0] ^= 0xFF // Tamper with hash
 
 	// Serialize and encrypt (this should succeed - hash check is on decrypt)
-	cleartext, err := crypto.serializeResponseRecord(tamperedRecord)
-	require.NoError(t, err)
+	cleartext := ratchet.SerializeResponseRecord(tamperedRecord.Hash, tamperedRecord.RandomData, tamperedRecord.Reply)
 
 	// The cleartext will have bad hash - decryption should catch this
 	var keyArr [32]byte
@@ -266,7 +266,7 @@ func TestBuildResponseRecord_HashTamper(t *testing.T) {
 	decrypted, err := crypto.DecryptReplyRecord(ciphertext, replyKey, replyIV)
 	if err == nil {
 		// If AEAD passed, verify hash check would fail
-		verifyErr := crypto.verifyResponseRecordHash(decrypted)
+		verifyErr := ratchet.VerifyResponseRecordHash(decrypted.Hash, decrypted.RandomData, decrypted.Reply)
 		assert.Error(t, verifyErr, "Hash verification should fail for tampered record")
 	}
 }

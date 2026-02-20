@@ -4003,21 +4003,21 @@ func TestLegacyCrypto_AESSessionTag_FlagPresence(t *testing.T) {
 // TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC
 // decryption path in BuildRecordCrypto for legacy reply record processing.
 func TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	rc := ratchet.NewBuildRecordCrypto()
 
 	// Prepare a valid 528-byte ciphertext (all zeros, AES will decrypt it)
 	ciphertext := make([]byte, 528)
-	var key session_key.SessionKey
+	var key [32]byte
 	var iv [16]byte
 
-	// The decryptAES256CBC method exists and can be called
-	result, err := crypto.decryptAES256CBC(ciphertext, key, iv)
+	// The DecryptAES256CBC method exists and can be called via go-noise/ratchet
+	result, err := rc.DecryptAES256CBC(ciphertext, key, iv)
 	// AES decryption of zeros with zero key/IV will succeed (just produces garbage plaintext)
 	require.NoError(t, err)
 	assert.Equal(t, 528, len(result),
-		"Legacy AES-256-CBC decryption path exists in BuildRecordCrypto")
+		"Legacy AES-256-CBC decryption path exists in go-noise/ratchet.BuildRecordCrypto")
 
-	t.Log("FINDING: AES-256-CBC decryption path (decryptAES256CBC) exists in BuildRecordCrypto.")
+	t.Log("FINDING: AES-256-CBC decryption path (DecryptAES256CBC) exists in go-noise/ratchet.")
 	t.Log("This is used for legacy build reply record decryption (pre-0.9.44).")
-	t.Log("Modern path uses ChaCha20-Poly1305 (encryptChaCha20Poly1305/decryptChaCha20Poly1305).")
+	t.Log("Modern path uses ChaCha20-Poly1305 via go-noise/ratchet.")
 }

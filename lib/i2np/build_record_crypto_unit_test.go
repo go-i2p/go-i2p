@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-noise/ratchet"
 
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
@@ -182,8 +183,7 @@ func TestCreateBuildResponseRecord(t *testing.T) {
 			}
 
 			// Verify hash is computed correctly
-			crypto := NewBuildRecordCrypto()
-			if err := crypto.verifyResponseRecordHash(record); err != nil {
+			if err := ratchet.VerifyResponseRecordHash(record.Hash, record.RandomData, record.Reply); err != nil {
 				t.Errorf("Hash verification failed: %v", err)
 			}
 		})
@@ -235,8 +235,6 @@ func TestDecryptReplyRecordInvalidSize(t *testing.T) {
 
 // TestBuildResponseRecordHashVerification tests hash verification
 func TestBuildResponseRecordHashVerification(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
 	var randomData [495]byte
 	_, err := rand.Read(randomData[:])
 	if err != nil {
@@ -247,7 +245,7 @@ func TestBuildResponseRecordHashVerification(t *testing.T) {
 	validRecord := CreateBuildResponseRecord(0, randomData)
 
 	// Should pass verification
-	if err := crypto.verifyResponseRecordHash(validRecord); err != nil {
+	if err := ratchet.VerifyResponseRecordHash(validRecord.Hash, validRecord.RandomData, validRecord.Reply); err != nil {
 		t.Errorf("Valid record failed verification: %v", err)
 	}
 
@@ -256,7 +254,7 @@ func TestBuildResponseRecordHashVerification(t *testing.T) {
 	invalidRecord.Hash[0] ^= 0xFF // Flip some bits
 
 	// Should fail verification
-	if err := crypto.verifyResponseRecordHash(invalidRecord); err == nil {
+	if err := ratchet.VerifyResponseRecordHash(invalidRecord.Hash, invalidRecord.RandomData, invalidRecord.Reply); err == nil {
 		t.Error("Invalid record passed verification")
 	}
 }

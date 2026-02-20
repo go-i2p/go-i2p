@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
 )
 
@@ -289,10 +290,7 @@ func (rp *ReplyProcessor) decryptRecord(
 			return nil, fmt.Errorf("ChaCha20-Poly1305 decryption failed: %w", err)
 		}
 
-		cleartext, err := crypto.serializeResponseRecord(decryptedRecord)
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize decrypted record: %w", err)
-		}
+		cleartext := ratchet.SerializeResponseRecord(decryptedRecord.Hash, decryptedRecord.RandomData, decryptedRecord.Reply)
 
 		log.WithFields(logger.Fields{
 			"encryption": "ChaCha20-Poly1305",
@@ -304,7 +302,9 @@ func (rp *ReplyProcessor) decryptRecord(
 
 	if len(encrypted) == 528 {
 		// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
-		cleartext, err := crypto.decryptAES256CBC(encrypted, replyKey, replyIV)
+		var keyArr [32]byte
+		copy(keyArr[:], replyKey[:])
+		cleartext, err := ratchet.NewBuildRecordCrypto().DecryptAES256CBC(encrypted, keyArr, replyIV)
 		if err != nil {
 			return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
 		}
