@@ -2,9 +2,10 @@ package i2np
 
 import (
 	"bytes"
-	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/ecies"
 )

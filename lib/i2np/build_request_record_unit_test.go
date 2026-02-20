@@ -50,23 +50,3 @@ func TestReadBuildRequestRecordOurIdentValidData(t *testing.T) {
 	assert.Equal(hash, read_ident)
 	assert.Equal(nil, err)
 }
-
-func TestReadBuildRequestRecordNextTunnel(t *testing.T) {}
-
-func TestReadBuildRequestRecordNextIdent(t *testing.T) {}
-
-func TestReadBuildRequestRecordLayerKey(t *testing.T) {}
-
-func TestReadBuildRequestRecordIVKey(t *testing.T) {}
-
-func TestReadBuildRequestRecordReplyKey(t *testing.T) {}
-
-func TestReadBuildRequestRecordReplyIV(t *testing.T) {}
-
-func TestReadBuildRequestRecordFlag(t *testing.T) {}
-
-func TestReadBuildRequestRecordRequestTime(t *testing.T) {}
-
-func TestReadBuildRequestRecordSendMessageID(t *testing.T) {}
-
-func TestReadBuildRequestRecordPadding(t *testing.T) {}

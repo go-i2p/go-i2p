@@ -10,11 +10,12 @@ package i2np
 
 import (
 	"bytes"
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"

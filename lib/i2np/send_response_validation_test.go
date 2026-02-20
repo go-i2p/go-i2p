@@ -66,7 +66,6 @@ func TestSendResponseNilMessage(t *testing.T) {
 
 	dest := common.Hash{0x04, 0x05, 0x06}
 	err := dm.sendResponse(store, dest)
-
 	// Should succeed without panicking (the old code would panic here
 	// because DatabaseStore.MarshalBinary dereferences BaseI2NPMessage)
 	if err != nil {
