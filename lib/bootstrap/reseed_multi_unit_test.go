@@ -1,4 +1,5 @@
 package bootstrap
+package bootstrap
 
 import (
 	"context"
@@ -9,23 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 )
 
-// mockRouterInfo creates a mock RouterInfo for testing
-// In real tests, we'd use actual RouterInfo instances
-func createMockResults(serverURLs []string, routerCounts []int, errors []error) []ReseedResult {
-	results := make([]ReseedResult, len(serverURLs))
-	for i, url := range serverURLs {
-		results[i] = ReseedResult{
-			ServerURL:   url,
-			RouterInfos: make([]router_info.RouterInfo, routerCounts[i]),
-			Error:       errors[i],
-			Duration:    100 * time.Millisecond,
-		}
-	}
-	return results
-}
-
-// Integration tests for GetPeers routing logic
-
+// TestShouldUseMultiServerReseed tests the multi-server decision logic.
 func TestShouldUseMultiServerReseed(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -92,6 +77,7 @@ func TestShouldUseMultiServerReseed(t *testing.T) {
 	}
 }
 
+// TestDefaultConfigUsesMultiServer verifies DefaultBootstrapConfig enables multi-server mode.
 func TestDefaultConfigUsesMultiServer(t *testing.T) {
 	// Verify that DefaultBootstrapConfig enables multi-server mode
 	cfg := config.DefaultBootstrapConfig
@@ -114,6 +100,7 @@ func TestDefaultConfigUsesMultiServer(t *testing.T) {
 	}
 }
 
+// TestSingleServerModeBackwardCompatibility verifies MinReseedServers=1 disables multi-server.
 func TestSingleServerModeBackwardCompatibility(t *testing.T) {
 	// Verify that setting MinReseedServers=1 disables multi-server mode
 	cfg := &config.BootstrapConfig{
@@ -132,6 +119,7 @@ func TestSingleServerModeBackwardCompatibility(t *testing.T) {
 	}
 }
 
+// TestFilterSuccessful tests filtering of successful reseed results.
 func TestFilterSuccessful(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -188,6 +176,7 @@ func TestFilterSuccessful(t *testing.T) {
 	}
 }
 
+// TestShuffleServers tests server list randomization.
 func TestShuffleServers(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedServers: []*config.ReseedConfig{
@@ -232,6 +221,7 @@ func TestShuffleServers(t *testing.T) {
 	}
 }
 
+// TestReseedBootstrap_ShuffleServersSingleServer tests shuffle with one server.
 func TestReseedBootstrap_ShuffleServersSingleServer(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedServers: []*config.ReseedConfig{
@@ -250,6 +240,7 @@ func TestReseedBootstrap_ShuffleServersSingleServer(t *testing.T) {
 	}
 }
 
+// TestReseedBootstrap_ShuffleServersEmpty tests shuffle with no servers.
 func TestReseedBootstrap_ShuffleServersEmpty(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedServers: []*config.ReseedConfig{},
@@ -263,6 +254,7 @@ func TestReseedBootstrap_ShuffleServersEmpty(t *testing.T) {
 	}
 }
 
+// TestReseedResult_Fields verifies ReseedResult struct fields.
 func TestReseedResult_Fields(t *testing.T) {
 	result := ReseedResult{
 		ServerURL:   "https://test-server/",
@@ -285,6 +277,7 @@ func TestReseedResult_Fields(t *testing.T) {
 	}
 }
 
+// TestReseedResult_WithError verifies ReseedResult error handling.
 func TestReseedResult_WithError(t *testing.T) {
 	result := ReseedResult{
 		ServerURL: "https://failed-server/",
@@ -300,6 +293,7 @@ func TestReseedResult_WithError(t *testing.T) {
 	}
 }
 
+// TestApplyStrategy_DefaultsToUnion verifies empty strategy defaults to union.
 func TestApplyStrategy_DefaultsToUnion(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedStrategy: "", // Empty should default to union
@@ -318,6 +312,7 @@ func TestApplyStrategy_DefaultsToUnion(t *testing.T) {
 	}
 }
 
+// TestApplyStrategy_InvalidStrategy verifies invalid strategy defaults to union.
 func TestApplyStrategy_InvalidStrategy(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		ReseedStrategy: "invalid_strategy",
@@ -335,6 +330,7 @@ func TestApplyStrategy_InvalidStrategy(t *testing.T) {
 	}
 }
 
+// TestUnionStrategy_Empty tests union strategy with no results.
 func TestUnionStrategy_Empty(t *testing.T) {
 	rb := &ReseedBootstrap{config: &config.BootstrapConfig{}}
 
@@ -346,6 +342,7 @@ func TestUnionStrategy_Empty(t *testing.T) {
 	}
 }
 
+// TestIntersectionStrategy_Empty tests intersection strategy with no results.
 func TestIntersectionStrategy_Empty(t *testing.T) {
 	rb := &ReseedBootstrap{config: &config.BootstrapConfig{}}
 
@@ -357,6 +354,7 @@ func TestIntersectionStrategy_Empty(t *testing.T) {
 	}
 }
 
+// TestRandomWeightedStrategy_Empty tests random weighted strategy with no results.
 func TestRandomWeightedStrategy_Empty(t *testing.T) {
 	rb := &ReseedBootstrap{config: &config.BootstrapConfig{}}
 
@@ -368,6 +366,7 @@ func TestRandomWeightedStrategy_Empty(t *testing.T) {
 	}
 }
 
+// TestMinReseedServersDefault tests MinReseedServers default handling.
 func TestMinReseedServersDefault(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		MinReseedServers: 0, // Should default to 1
@@ -386,6 +385,7 @@ func TestMinReseedServersDefault(t *testing.T) {
 	}
 }
 
+// TestContextCancellation tests MultiServerReseed with cancelled context.
 func TestContextCancellation(t *testing.T) {
 	cfg := &config.BootstrapConfig{
 		MinReseedServers: 2,

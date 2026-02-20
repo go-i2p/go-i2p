@@ -1,106 +1,203 @@
 package bootstrap
+package bootstrap
 
 import (
-	"bytes"
 	"testing"
-	"time"
 
-	"github.com/go-i2p/crypto/rand"
-
-	"github.com/go-i2p/common/certificate"
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/key_certificate"
-	"github.com/go-i2p/common/keys_and_cert"
-	"github.com/go-i2p/common/router_address"
-	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/common/signature"
-	"github.com/go-i2p/crypto/ed25519"
-	elgamal "github.com/go-i2p/crypto/elg"
-	"github.com/go-i2p/crypto/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// createSignedTestRouterInfo creates a properly signed RouterInfo for testing.
-// Uses Ed25519 signing keys and ElGamal encryption keys, matching the I2P standard.
-func createSignedTestRouterInfo(t *testing.T, options map[string]string) *router_info.RouterInfo {
-	t.Helper()
+// --- RouterAddress validation tests ---
 
-	// Generate Ed25519 signing key pair
-	ed25519PrivKey, err := ed25519.GenerateEd25519Key()
-	require.NoError(t, err, "Failed to generate Ed25519 key")
-
-	ed25519PrivKeyTyped := ed25519PrivKey.(ed25519.Ed25519PrivateKey)
-	ed25519PubKeyRaw, err := ed25519PrivKeyTyped.Public()
-	require.NoError(t, err, "Failed to derive Ed25519 public key")
-
-	ed25519PubKey, ok := ed25519PubKeyRaw.(types.SigningPublicKey)
-	require.True(t, ok, "Failed to cast Ed25519 public key")
-
-	// Generate ElGamal encryption key pair
-	var elgPrivKey elgamal.PrivateKey
-	err = elgamal.ElgamalGenerate(&elgPrivKey.PrivateKey, rand.Reader)
-	require.NoError(t, err, "Failed to generate ElGamal key")
-
-	var elgPubKey elgamal.ElgPublicKey
-	yBytes := elgPrivKey.PublicKey.Y.Bytes()
-	require.LessOrEqual(t, len(yBytes), 256, "ElGamal public key Y too large")
-	copy(elgPubKey[256-len(yBytes):], yBytes)
-
-	// Create KEY certificate for Ed25519/ElGamal
-	var payload bytes.Buffer
-	signingType, err := common.NewIntegerFromInt(7, 2) // Ed25519
-	require.NoError(t, err)
-	cryptoType, err := common.NewIntegerFromInt(0, 2) // ElGamal
-	require.NoError(t, err)
-	payload.Write(*signingType)
-	payload.Write(*cryptoType)
-
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-	require.NoError(t, err, "Failed to create certificate")
-
-	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
-	require.NoError(t, err, "Failed to create key certificate")
-
-	// Create padding
-	pubKeySize := keyCert.CryptoSize()
-	sigKeySize := keyCert.SigningPublicKeySize()
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
-	padding := make([]byte, paddingSize)
-	_, err = rand.Read(padding)
-	require.NoError(t, err, "Failed to generate padding")
-
-	// Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, cert, padding)
-	require.NoError(t, err, "Failed to create router identity")
-
-	// Create router address with NTCP2 and direct connectivity
-	routerAddr, err := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", map[string]string{
-		"host": "192.168.1.1",
-		"port": "12345",
+func TestValidateRouterAddress_ValidNTCP2(t *testing.T) {
+	addr := createTestRouterAddress("ntcp2", map[string]string{
+		"host": testHost,
+		"port": testPort,
+		"s":    "test-static-key",
 	})
-	require.NoError(t, err, "Failed to create router address")
 
-	// Merge default options with provided options
-	mergedOptions := map[string]string{"router.version": "0.9.64"}
-	for k, v := range options {
-		mergedOptions[k] = v
-	}
-
-	// Create RouterInfo (this signs it with the private key)
-	ri, err := router_info.NewRouterInfo(
-		routerIdentity,
-		time.Now(),
-		[]*router_address.RouterAddress{routerAddr},
-		mergedOptions,
-		&ed25519PrivKeyTyped,
-		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
-	)
-	require.NoError(t, err, "Failed to create RouterInfo")
-
-	return ri
+	err := ValidateRouterAddress(addr)
+	assert.NoError(t, err)
 }
+
+func TestValidateRouterAddress_ValidNTCP2CaseInsensitive(t *testing.T) {
+	addr := createTestRouterAddress("NTCP2", map[string]string{
+		"host": testHost,
+		"port": testPort,
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.NoError(t, err)
+}
+
+func TestValidateRouterAddress_NTCP2MissingHost(t *testing.T) {
+	addr := createTestRouterAddress("ntcp2", map[string]string{
+		"port": testPort,
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve host")
+}
+
+func TestValidateRouterAddress_NTCP2EmptyHost(t *testing.T) {
+	addr := createTestRouterAddress("ntcp2", map[string]string{
+		"host": "",
+		"port": testPort,
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve host")
+}
+
+func TestValidateRouterAddress_NTCP2MissingPort(t *testing.T) {
+	addr := createTestRouterAddress("ntcp2", map[string]string{
+		"host": testHost,
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve port")
+}
+
+func TestValidateRouterAddress_NTCP2EmptyPort(t *testing.T) {
+	addr := createTestRouterAddress("ntcp2", map[string]string{
+		"host": testHost,
+		"port": "",
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve port")
+}
+
+func TestValidateRouterAddress_ValidSSU(t *testing.T) {
+	addr := createTestRouterAddress("ssu", map[string]string{
+		"host": "10.0.0.1",
+		"port": "30777",
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.NoError(t, err)
+}
+
+func TestValidateRouterAddress_SSUMissingHost(t *testing.T) {
+	addr := createTestRouterAddress("ssu", map[string]string{
+		"port": "30777",
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve host")
+}
+
+func TestValidateRouterAddress_ValidSSU2(t *testing.T) {
+	addr := createTestRouterAddress("ssu2", map[string]string{
+		"host": "172.16.0.1",
+		"port": "41234",
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.NoError(t, err)
+}
+
+func TestValidateRouterAddress_SSU2MissingPort(t *testing.T) {
+	addr := createTestRouterAddress("ssu2", map[string]string{
+		"host": "172.16.0.1",
+	})
+
+	err := ValidateRouterAddress(addr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot retrieve port")
+}
+
+func TestValidateRouterAddress_UnknownTransport(t *testing.T) {
+	addr := createTestRouterAddress("future-transport-v3", map[string]string{
+		"host": testHost,
+		"port": testPort,
+	})
+
+	// Unknown transports should not fail validation (forward compatibility)
+	err := ValidateRouterAddress(addr)
+	assert.NoError(t, err)
+}
+
+// --- ValidationStats tests ---
+
+func TestValidationStats_New(t *testing.T) {
+	stats := NewValidationStats()
+	assert.NotNil(t, stats)
+	assert.Equal(t, 0, stats.TotalProcessed)
+	assert.Equal(t, 0, stats.ValidRouterInfos)
+	assert.Equal(t, 0, stats.InvalidRouterInfos)
+	assert.NotNil(t, stats.InvalidReasons)
+	assert.Equal(t, 0, len(stats.InvalidReasons))
+}
+
+func TestValidationStats_RecordValid(t *testing.T) {
+	stats := NewValidationStats()
+	stats.RecordValid()
+	stats.RecordValid()
+
+	assert.Equal(t, 2, stats.TotalProcessed)
+	assert.Equal(t, 2, stats.ValidRouterInfos)
+	assert.Equal(t, 0, stats.InvalidRouterInfos)
+}
+
+func TestValidationStats_RecordInvalid(t *testing.T) {
+	stats := NewValidationStats()
+	stats.RecordInvalid("missing host key")
+	stats.RecordInvalid("empty port")
+	stats.RecordInvalid("missing host key") // Same reason again
+
+	assert.Equal(t, 3, stats.TotalProcessed)
+	assert.Equal(t, 0, stats.ValidRouterInfos)
+	assert.Equal(t, 3, stats.InvalidRouterInfos)
+	assert.Equal(t, 2, stats.InvalidReasons["missing host key"])
+	assert.Equal(t, 1, stats.InvalidReasons["empty port"])
+}
+
+func TestValidationStats_ValidityRate(t *testing.T) {
+	stats := NewValidationStats()
+
+	// Empty stats
+	assert.Equal(t, 0.0, stats.ValidityRate())
+
+	// All valid
+	stats.RecordValid()
+	stats.RecordValid()
+	assert.Equal(t, 100.0, stats.ValidityRate())
+
+	// Mixed
+	stats.RecordInvalid("test error")
+	stats.RecordInvalid("test error")
+	// Now: 2 valid, 2 invalid, 4 total
+	assert.InDelta(t, 50.0, stats.ValidityRate(), 0.1)
+}
+
+func TestValidationStats_Mixed(t *testing.T) {
+	stats := NewValidationStats()
+
+	stats.RecordValid()
+	stats.RecordInvalid("missing host")
+	stats.RecordValid()
+	stats.RecordInvalid("empty port")
+	stats.RecordValid()
+	stats.RecordInvalid("missing host")
+
+	assert.Equal(t, 6, stats.TotalProcessed)
+	assert.Equal(t, 3, stats.ValidRouterInfos)
+	assert.Equal(t, 3, stats.InvalidRouterInfos)
+	assert.InDelta(t, 50.0, stats.ValidityRate(), 0.1)
+	assert.Equal(t, 2, stats.InvalidReasons["missing host"])
+	assert.Equal(t, 1, stats.InvalidReasons["empty port"])
+}
+
+// --- Signature verification tests ---
 
 // TestVerifyRouterInfoSignature_ValidSignature verifies that a properly signed
 // RouterInfo passes signature verification.
@@ -266,64 +363,4 @@ func TestVerifyRouterInfoSignature_RoundTrip(t *testing.T) {
 	// Verify round-tripped
 	err = VerifyRouterInfoSignature(parsedRI)
 	assert.NoError(t, err, "Round-tripped RouterInfo should still verify")
-}
-
-// BenchmarkVerifyRouterInfoSignature benchmarks signature verification performance.
-func BenchmarkVerifyRouterInfoSignature(b *testing.B) {
-	// Create a signed RouterInfo outside the benchmark loop
-	ri := func() *router_info.RouterInfo {
-		// Generate Ed25519 signing key pair
-		ed25519PrivKey, err := ed25519.GenerateEd25519Key()
-		if err != nil {
-			b.Fatal(err)
-		}
-		ed25519PrivKeyTyped := ed25519PrivKey.(ed25519.Ed25519PrivateKey)
-		ed25519PubKeyRaw, _ := ed25519PrivKeyTyped.Public()
-		ed25519PubKey := ed25519PubKeyRaw.(types.SigningPublicKey)
-
-		var elgPrivKey elgamal.PrivateKey
-		_ = elgamal.ElgamalGenerate(&elgPrivKey.PrivateKey, rand.Reader)
-		var elgPubKey elgamal.ElgPublicKey
-		yBytes := elgPrivKey.PublicKey.Y.Bytes()
-		copy(elgPubKey[256-len(yBytes):], yBytes)
-
-		var payload bytes.Buffer
-		signingType, _ := common.NewIntegerFromInt(7, 2)
-		cryptoType, _ := common.NewIntegerFromInt(0, 2)
-		payload.Write(*signingType)
-		payload.Write(*cryptoType)
-
-		cert, _ := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-		keyCert, _ := key_certificate.KeyCertificateFromCertificate(cert)
-
-		pubKeySize := keyCert.CryptoSize()
-		sigKeySize := keyCert.SigningPublicKeySize()
-		paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
-		padding := make([]byte, paddingSize)
-		_, _ = rand.Read(padding)
-
-		routerIdentity, _ := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, cert, padding)
-		routerAddr, _ := router_address.NewRouterAddress(3, time.Now().Add(24*time.Hour), "NTCP2", map[string]string{
-			"host": "192.168.1.1",
-			"port": "12345",
-		})
-
-		ri, err := router_info.NewRouterInfo(
-			routerIdentity,
-			time.Now(),
-			[]*router_address.RouterAddress{routerAddr},
-			map[string]string{"router.version": "0.9.64"},
-			&ed25519PrivKeyTyped,
-			signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
-		)
-		if err != nil {
-			b.Fatal(err)
-		}
-		return ri
-	}()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = VerifyRouterInfoSignature(*ri)
-	}
 }

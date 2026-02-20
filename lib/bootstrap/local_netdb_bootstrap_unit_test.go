@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// TestLocalNetDbBootstrap_GetDefaultSearchPaths verifies default search paths are populated.
 func TestLocalNetDbBootstrap_GetDefaultSearchPaths(t *testing.T) {
 	paths := getDefaultNetDbSearchPaths()
 	assert.NotEmpty(t, paths, "Default search paths should not be empty")
@@ -23,6 +23,7 @@ func TestLocalNetDbBootstrap_GetDefaultSearchPaths(t *testing.T) {
 	}
 }
 
+// TestLocalNetDbBootstrap_ExpandPath verifies tilde and absolute path expansion.
 func TestLocalNetDbBootstrap_ExpandPath(t *testing.T) {
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
@@ -52,6 +53,7 @@ func TestLocalNetDbBootstrap_ExpandPath(t *testing.T) {
 	}
 }
 
+// TestLocalNetDbBootstrap_IsValidNetDbDirectory tests netDb directory validation.
 func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 	// Create a temporary test directory structure
 	tmpDir := t.TempDir()
@@ -111,9 +113,10 @@ func TestLocalNetDbBootstrap_IsValidNetDbDirectory(t *testing.T) {
 	}
 }
 
+// TestLocalNetDbBootstrap_GetPeers_NoNetDb verifies error when no netDb is found.
 func TestLocalNetDbBootstrap_GetPeers_NoNetDb(t *testing.T) {
 	// Create bootstrap with non-existent paths
-	lb := NewLocalNetDbBootstrapWithPaths([]string{"/tmp/non-existent-netdb-12345"})
+	lb := NewLocalNetDbBootstrapWithPaths([]string{testNonExistentNetDbPath})
 
 	ctx := context.Background()
 	peers, err := lb.GetPeers(ctx, 10)
@@ -123,39 +126,10 @@ func TestLocalNetDbBootstrap_GetPeers_NoNetDb(t *testing.T) {
 	assert.Contains(t, err.Error(), "no local netDb found")
 }
 
-func TestCompositeBootstrap_FallbackToLocalNetDb(t *testing.T) {
-	// Create a bootstrap config with no reseed servers (so reseed will fail)
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: 10,
-		ReseedServers:    []*config.ReseedConfig{},
-		LocalNetDbPaths:  []string{"/tmp/non-existent-for-test"},
-	}
-
-	cb := NewCompositeBootstrap(cfg)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// This should fail because both reseed and local netDb will fail
-	// (we explicitly set non-existent paths)
-	peers, err := cb.GetPeers(ctx, 10)
-
-	// Note: If user has an actual netDb on their system, the default paths
-	// might succeed. So we only check that error contains our expected message
-	// when we get an error.
-	if err != nil {
-		assert.Contains(t, err.Error(), "all bootstrap methods failed")
-		assert.Nil(t, peers)
-	} else {
-		// If it succeeded, it means it found a real netDb somewhere
-		t.Log("Local netDb was found on the system - test adapted to this case")
-		assert.NotNil(t, peers)
-	}
-}
-
+// TestNewLocalNetDbBootstrap_UsesDefaultPaths verifies default path population.
 func TestNewLocalNetDbBootstrap_UsesDefaultPaths(t *testing.T) {
 	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: 10,
+		LowPeerThreshold: testLowPeerThreshold,
 	}
 
 	lb := NewLocalNetDbBootstrap(cfg)
@@ -164,10 +138,11 @@ func TestNewLocalNetDbBootstrap_UsesDefaultPaths(t *testing.T) {
 	assert.NotEmpty(t, lb.searchPaths, "Search paths should be populated with defaults")
 }
 
+// TestNewLocalNetDbBootstrap_UsesCustomPaths verifies custom paths are prepended.
 func TestNewLocalNetDbBootstrap_UsesCustomPaths(t *testing.T) {
 	customPaths := []string{"/custom/path/1", "/custom/path/2"}
 	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: 10,
+		LowPeerThreshold: testLowPeerThreshold,
 		LocalNetDbPaths:  customPaths,
 	}
 
@@ -182,6 +157,7 @@ func TestNewLocalNetDbBootstrap_UsesCustomPaths(t *testing.T) {
 	assert.Equal(t, customPaths[1], lb.searchPaths[1])
 }
 
+// TestLocalNetDbBootstrap_ContextCancellation verifies context cancellation is respected.
 func TestLocalNetDbBootstrap_ContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 
