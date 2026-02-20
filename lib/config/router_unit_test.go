@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+// =============================================================================
+// Unit Tests for router.go — GetRouterConfig, RouterConfigProperties,
+// LockRouterConfigForWrite, deep copy, concurrency
+// =============================================================================
+
 // TestGetRouterConfigConcurrentAccess verifies that GetRouterConfig is thread-safe
 // and can be called concurrently without data races. This test should be run with
 // the -race flag to detect any race conditions.
@@ -141,4 +146,34 @@ func TestLockRouterConfigForWrite(t *testing.T) {
 	routerConfigProperties.BaseDir = "/locked/update"
 	routerConfigProperties.BaseDir = originalValue
 	UnlockRouterConfigWrite()
+}
+
+// TestRouterConfigProperties_ReturnsCopy verifies RouterConfigProperties returns a deep copy.
+// (Moved from defaults_test.go — tests router.go's RouterConfigProperties)
+func TestRouterConfigProperties_ReturnsCopy(t *testing.T) {
+	cfg1 := RouterConfigProperties()
+	cfg2 := RouterConfigProperties()
+
+	// Modifying cfg1 should not affect cfg2
+	cfg1.MaxBandwidth = 999999
+	if cfg2.MaxBandwidth == 999999 {
+		t.Error("RouterConfigProperties() should return independent copies")
+	}
+}
+
+// TestI2CPPortDefaultIs7654 verifies the I2CP port constant per spec.
+// (Moved from caps_test.go — tests DefaultI2CPPort from router.go)
+func TestI2CPPortDefaultIs7654(t *testing.T) {
+	if DefaultI2CPPort != 7654 {
+		t.Errorf("DefaultI2CPPort = %d, want 7654 per I2CP spec", DefaultI2CPPort)
+	}
+}
+
+// TestDefaultI2CPConfigAddressHasCorrectPort verifies DefaultI2CPConfig has correct port.
+// (Moved from caps_test.go — tests DefaultI2CPConfig from router.go)
+func TestDefaultI2CPConfigAddressHasCorrectPort(t *testing.T) {
+	if DefaultI2CPConfig.Address != "localhost:7654" {
+		t.Errorf("DefaultI2CPConfig.Address = %q, want %q",
+			DefaultI2CPConfig.Address, "localhost:7654")
+	}
 }

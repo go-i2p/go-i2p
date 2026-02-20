@@ -6,7 +6,7 @@ import (
 )
 
 // =============================================================================
-// BandwidthClass Tests
+// Unit Tests for caps.go — BandwidthClass
 // =============================================================================
 
 func TestBandwidthClassFromRate(t *testing.T) {
@@ -102,7 +102,7 @@ func TestDefaultBandwidthClassIsP(t *testing.T) {
 }
 
 // =============================================================================
-// Caps String Builder Tests
+// Unit Tests for caps.go — BuildCapsString
 // =============================================================================
 
 func TestBuildCapsString_Basic(t *testing.T) {
@@ -236,8 +236,25 @@ func TestBuildCapsStringCanonicalOrder(t *testing.T) {
 	}
 }
 
+func TestBuildCapsFromDefaults(t *testing.T) {
+	// Build a caps string using the default configuration values
+	bw := BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth)
+	floodfill := Defaults().NetDB.FloodfillEnabled
+
+	caps := BuildCapsString(bw, true, floodfill, false, CongestionFlagNone)
+
+	// Default should be: P class, reachable, no floodfill, no congestion → "PR"
+	if caps != "PR" {
+		t.Errorf("caps from defaults = %q, want %q", caps, "PR")
+	}
+
+	if err := ValidateCapsString(caps); err != nil {
+		t.Errorf("caps from defaults is invalid: %v", err)
+	}
+}
+
 // =============================================================================
-// Caps Validation Tests
+// Unit Tests for caps.go — ValidateCapsString
 // =============================================================================
 
 func TestValidateCapsString_Valid(t *testing.T) {
@@ -300,7 +317,7 @@ func TestValidateCapsString_Invalid(t *testing.T) {
 }
 
 // =============================================================================
-// Congestion Flag Validation Tests
+// Unit Tests for caps.go — ValidateCongestionFlag
 // =============================================================================
 
 func TestValidateCongestionFlag_Valid(t *testing.T) {
@@ -347,7 +364,7 @@ func TestCongestionFlagNoneProducesNoCapsCharacter(t *testing.T) {
 }
 
 // =============================================================================
-// RouterInfo Option Keys Tests
+// Unit Tests for caps.go — ValidateRouterInfoOptionKeys
 // =============================================================================
 
 func TestValidateRouterInfoOptionKeys_AllSpecKeys(t *testing.T) {
@@ -455,127 +472,5 @@ func TestSpecRouterInfoOptionKeysContainsRequiredKeys(t *testing.T) {
 		if _, ok := SpecRouterInfoOptionKeys[key]; !ok {
 			t.Errorf("SpecRouterInfoOptionKeys missing required key: %s", key)
 		}
-	}
-}
-
-// =============================================================================
-// I2CP Port Default Compliance Tests
-// =============================================================================
-
-func TestI2CPPortDefaultIs7654(t *testing.T) {
-	if DefaultI2CPPort != 7654 {
-		t.Errorf("DefaultI2CPPort = %d, want 7654 per I2CP spec", DefaultI2CPPort)
-	}
-}
-
-func TestI2CPDefaultsAddressHasCorrectPort(t *testing.T) {
-	defaults := buildI2CPDefaults()
-	if defaults.Address != "localhost:7654" {
-		t.Errorf("I2CP default address = %q, want %q", defaults.Address, "localhost:7654")
-	}
-}
-
-func TestDefaultI2CPConfigAddressHasCorrectPort(t *testing.T) {
-	if DefaultI2CPConfig.Address != "localhost:7654" {
-		t.Errorf("DefaultI2CPConfig.Address = %q, want %q",
-			DefaultI2CPConfig.Address, "localhost:7654")
-	}
-}
-
-// =============================================================================
-// Default Value Spec-Compliance Tests
-// =============================================================================
-
-func TestFloodfillDefaultIsFalse(t *testing.T) {
-	// Per I2P spec, routers should NOT be floodfill by default
-	defaults := Defaults()
-	if defaults.NetDB.FloodfillEnabled {
-		t.Error("NetDB.FloodfillEnabled default = true, want false (regular router mode per spec)")
-	}
-}
-
-func TestDefaultBandwidthMapsToPClass(t *testing.T) {
-	// The default MaxBandwidth (1 MB/s = 1024 KB/s) should map to class P (256-2000 KB/s)
-	bw := BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth)
-	if bw != BandwidthClassP {
-		t.Errorf("default MaxBandwidth %d maps to class %s, want P",
-			defaultRouterConfig.MaxBandwidth, bw)
-	}
-}
-
-func TestCongestionDefaultsProduceValidFlags(t *testing.T) {
-	// Verify that all CongestionFlag constants used in CongestionDefaults
-	// are valid per Proposal 162
-	defaults := buildCongestionDefaults()
-
-	// The defaults struct itself doesn't store a flag, but the flag constants
-	// it works with must all be valid
-	for _, f := range []CongestionFlag{
-		CongestionFlagNone, CongestionFlagD, CongestionFlagE, CongestionFlagG,
-	} {
-		if err := ValidateCongestionFlag(f); err != nil {
-			t.Errorf("CongestionFlag %q is invalid: %v", f, err)
-		}
-	}
-
-	// Verify threshold ordering is maintained in defaults
-	if defaults.DFlagThreshold >= defaults.EFlagThreshold {
-		t.Error("CongestionDefaults: DFlagThreshold must be < EFlagThreshold")
-	}
-	if defaults.EFlagThreshold >= defaults.GFlagThreshold {
-		t.Error("CongestionDefaults: EFlagThreshold must be < GFlagThreshold")
-	}
-}
-
-// =============================================================================
-// Legacy Crypto Check
-// =============================================================================
-
-func TestNoLegacyCryptoInDefaults(t *testing.T) {
-	// Verify that no config defaults reference DSA or ElGamal.
-	// This is a documented audit assertion: the config package deals with
-	// operational parameters, not cryptographic algorithm selection.
-	// If a SignatureType or EncryptionType field is ever added to
-	// ConfigDefaults, this test must verify it does not reference DSA/ElGamal.
-	defaults := Defaults()
-
-	// Confirm ConfigDefaults contains no signature/encryption type fields
-	// by exercising Defaults() without panic.
-	_ = defaults.Router
-	_ = defaults.NetDB
-	_ = defaults.Bootstrap
-	_ = defaults.I2CP
-	_ = defaults.I2PControl
-	_ = defaults.Tunnel
-	_ = defaults.Transport
-	_ = defaults.Performance
-	_ = defaults.Congestion
-}
-
-// =============================================================================
-// Integration: Full Config Validation with Caps
-// =============================================================================
-
-func TestDefaultsPassFullValidation(t *testing.T) {
-	defaults := Defaults()
-	if err := Validate(defaults); err != nil {
-		t.Errorf("Validate(Defaults()) = %v, want nil", err)
-	}
-}
-
-func TestBuildCapsFromDefaults(t *testing.T) {
-	// Build a caps string using the default configuration values
-	bw := BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth)
-	floodfill := Defaults().NetDB.FloodfillEnabled
-
-	caps := BuildCapsString(bw, true, floodfill, false, CongestionFlagNone)
-
-	// Default should be: P class, reachable, no floodfill, no congestion → "PR"
-	if caps != "PR" {
-		t.Errorf("caps from defaults = %q, want %q", caps, "PR")
-	}
-
-	if err := ValidateCapsString(caps); err != nil {
-		t.Errorf("caps from defaults is invalid: %v", err)
 	}
 }

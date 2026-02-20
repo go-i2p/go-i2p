@@ -9,6 +9,14 @@ import (
 // Shared Test Mocks and Helpers
 // =============================================================================
 
+// resetCloseables clears global closer state for test isolation.
+// Used by both closeables unit and integration tests.
+func resetCloseables() {
+	closeMutex.Lock()
+	closeOnExit = nil
+	closeMutex.Unlock()
+}
+
 // mockCloser is a test implementation of io.Closer that tracks whether
 // Close was called and can be configured to return an error.
 type mockCloser struct {

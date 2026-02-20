@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+// =============================================================================
+// Unit Tests for reseed_servers.go — KnownReseedServers, strategy constants
+// =============================================================================
+
 func TestKnownReseedServers_NotEmpty(t *testing.T) {
 	if len(KnownReseedServers) == 0 {
 		t.Fatal("KnownReseedServers should not be empty")

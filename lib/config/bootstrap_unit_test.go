@@ -4,6 +4,10 @@ import (
 	"testing"
 )
 
+// =============================================================================
+// Unit Tests for bootstrap.go — BootstrapConfig defaults
+// =============================================================================
+
 func TestDefaultBootstrapConfig_ReseedServers(t *testing.T) {
 	// Default should use all known reseed servers
 	if len(DefaultBootstrapConfig.ReseedServers) != len(KnownReseedServers) {

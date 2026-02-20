@@ -7,6 +7,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+// =============================================================================
+// Unit Tests for config.go — CurrentConfig, setDefaults, buildI2CPConfig,
+// NewRouterConfigFromViper, UpdateRouterConfig
+// =============================================================================
+
 // TestCurrentConfigRouterInfoRefreshInterval verifies that CurrentConfig()
 // correctly reads the RouterInfoRefreshInterval from the same viper key
 // used by setDefaults(). This covers CRITICAL BUG: Viper Key Mismatch
@@ -346,5 +351,29 @@ func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 	}
 	if original.Transport.NTCP2MaxConnections == 99 {
 		t.Error("Transport deep copy failed: original was modified")
+	}
+}
+
+// TestUpdateRouterConfig_IncludesAllFields verifies UpdateRouterConfig propagates all fields.
+// (Moved from defaults_test.go — tests config.go's UpdateRouterConfig)
+func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
+	viper.Reset()
+	setDefaults()
+
+	viper.Set("router.max_bandwidth", uint64(2048000))
+	viper.Set("router.max_connections", 500)
+	viper.Set("router.accept_tunnels", false)
+
+	UpdateRouterConfig()
+
+	cfg := GetRouterConfig()
+	if cfg.MaxBandwidth != 2048000 {
+		t.Errorf("MaxBandwidth = %d, want 2048000", cfg.MaxBandwidth)
+	}
+	if cfg.MaxConnections != 500 {
+		t.Errorf("MaxConnections = %d, want 500", cfg.MaxConnections)
+	}
+	if cfg.AcceptTunnels != false {
+		t.Errorf("AcceptTunnels = %v, want false", cfg.AcceptTunnels)
 	}
 }

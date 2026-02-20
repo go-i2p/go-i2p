@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// =============================================================================
+// Unit Tests for netdb.go — DefaultNetDbConfig, viper round-trips
+// =============================================================================
+
 // TestDefaultNetDbConfig verifies that DefaultNetDbConfig has sensible defaults
 // for all fields, including the previously missing max size and interval fields.
 func TestDefaultNetDbConfig(t *testing.T) {

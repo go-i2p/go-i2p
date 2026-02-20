@@ -4,8 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
+
+// =============================================================================
+// Unit Tests for security.go — SanitizePath, ValidateConfigPath,
+// CreateSecureDirectory, WriteSecureFile, IsPathSecure, SecureExistingPath
+// =============================================================================
 
 // TestSanitizePath_ValidPaths verifies that valid paths within the base directory are allowed
 func TestSanitizePath_ValidPaths(t *testing.T) {
@@ -367,63 +371,5 @@ func TestSecurityConstants(t *testing.T) {
 	// Standard directory permissions should be owner rwx, others rx
 	if StandardDirPermissions != 0o755 {
 		t.Errorf("StandardDirPermissions = %04o, want 0755", StandardDirPermissions)
-	}
-}
-
-// TestDefaults_SecuritySensitiveValues verifies security-related defaults
-func TestDefaults_SecuritySensitiveValues(t *testing.T) {
-	cfg := Defaults()
-
-	// I2CP should bind to localhost only by default
-	if cfg.I2CP.Address != "localhost:7654" {
-		t.Errorf("I2CP.Address should be localhost-only, got %s", cfg.I2CP.Address)
-	}
-
-	// I2PControl should bind to localhost only by default
-	if cfg.I2PControl.Address != "localhost:7650" {
-		t.Errorf("I2PControl.Address should be localhost-only, got %s", cfg.I2PControl.Address)
-	}
-
-	// NTCP2/SSU2 ports should be 0 (random) for privacy
-	if cfg.Transport.NTCP2Port != 0 {
-		t.Errorf("Transport.NTCP2Port should be 0 (random), got %d", cfg.Transport.NTCP2Port)
-	}
-	if cfg.Transport.SSU2Port != 0 {
-		t.Errorf("Transport.SSU2Port should be 0 (random), got %d", cfg.Transport.SSU2Port)
-	}
-
-	// Token expiration should be reasonable (not too long - 30 minutes max)
-	maxTokenExpiration := 30 * time.Minute
-	if cfg.I2PControl.TokenExpiration > maxTokenExpiration {
-		t.Errorf("I2PControl.TokenExpiration is too long: %v (max %v)", cfg.I2PControl.TokenExpiration, maxTokenExpiration)
-	}
-
-	// Session timeout should be reasonable (1 hour max)
-	maxSessionTimeout := 1 * time.Hour
-	if cfg.I2CP.SessionTimeout > maxSessionTimeout {
-		t.Errorf("I2CP.SessionTimeout is too long: %v (max %v)", cfg.I2CP.SessionTimeout, maxSessionTimeout)
-	}
-}
-
-// TestDefaults_TimeoutsAreSafe verifies timeout values are safe
-func TestDefaults_TimeoutsAreSafe(t *testing.T) {
-	cfg := Defaults()
-
-	// Connection timeout should be at least 10 seconds
-	minConnectionTimeout := 10 * time.Second
-	if cfg.Transport.ConnectionTimeout < minConnectionTimeout {
-		t.Errorf("Transport.ConnectionTimeout is too short: %v (min %v)", cfg.Transport.ConnectionTimeout, minConnectionTimeout)
-	}
-
-	// Connection timeout should not be too long (DoS risk)
-	maxConnectionTimeout := 2 * time.Minute
-	if cfg.Transport.ConnectionTimeout > maxConnectionTimeout {
-		t.Errorf("Transport.ConnectionTimeout is too long: %v (max %v)", cfg.Transport.ConnectionTimeout, maxConnectionTimeout)
-	}
-
-	// Idle timeout should allow for reasonable session duration
-	minIdleTimeout := 1 * time.Minute
-	if cfg.Transport.IdleTimeout < minIdleTimeout {
-		t.Errorf("Transport.IdleTimeout is too short: %v (min %v)", cfg.Transport.IdleTimeout, minIdleTimeout)
 	}
 }

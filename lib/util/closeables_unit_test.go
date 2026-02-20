@@ -10,13 +10,6 @@ import (
 // Unit Tests for closeables.go — RegisterCloser, CloseAll
 // =============================================================================
 
-// resetCloseables clears global closer state for test isolation.
-func resetCloseables() {
-	closeMutex.Lock()
-	closeOnExit = nil
-	closeMutex.Unlock()
-}
-
 // TestRegisterAndCloseAll verifies basic registration and cleanup.
 func TestRegisterAndCloseAll(t *testing.T) {
 	resetCloseables()

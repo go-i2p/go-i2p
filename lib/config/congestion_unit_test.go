@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// =============================================================================
+// Unit Tests for congestion.go — CongestionDefaults, CongestionFlag
+// =============================================================================
+
 // TestBuildCongestionDefaults verifies that buildCongestionDefaults returns
 // configuration with all expected default values set per PROP_162 specification.
 func TestBuildCongestionDefaults(t *testing.T) {
@@ -65,6 +69,10 @@ func TestCongestionDefaults_IntegratedWithConfigDefaults(t *testing.T) {
 		t.Errorf("Congestion.AveragingWindow = %v, want 5m", cfg.Congestion.AveragingWindow)
 	}
 }
+
+// =============================================================================
+// Validation Tests for congestion.go — validateCongestion
+// =============================================================================
 
 // TestValidateCongestion_ValidConfig verifies that valid config passes validation
 func TestValidateCongestion_ValidConfig(t *testing.T) {
@@ -299,6 +307,10 @@ func TestValidateCongestion_Timing(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Unit Tests for congestion.go — CongestionFlag methods
+// =============================================================================
+
 // TestCongestionFlag_CongestionLevel verifies the CongestionLevel method
 func TestCongestionFlag_CongestionLevel(t *testing.T) {
 	tests := []struct {
@@ -341,6 +353,10 @@ func TestCongestionFlag_String(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Unit Tests for congestion.go — ParseCongestionFlag
+// =============================================================================
 
 // TestParseCongestionFlag verifies parsing congestion flags from caps strings
 func TestParseCongestionFlag(t *testing.T) {
@@ -405,6 +421,10 @@ func TestParseCongestionFlag(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Integration Test — congestion validation in main Validate
+// =============================================================================
 
 // TestValidate_CongestionConfigIntegration verifies congestion validation
 // is integrated into the main Validate function
