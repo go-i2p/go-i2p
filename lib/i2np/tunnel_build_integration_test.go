@@ -248,23 +248,3 @@ func createTestBuildRequestRecords() [8]BuildRequestRecord {
 
 	return records
 }
-
-// Benchmark tests for performance validation
-func BenchmarkTunnelBuildMessage_Creation(b *testing.B) {
-	records := createTestBuildRequestRecords()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = NewTunnelBuildMessage(records)
-	}
-}
-
-func BenchmarkTunnelBuildMessage_Serialization(b *testing.B) {
-	records := createTestBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = msg.MarshalBinary()
-	}
-}

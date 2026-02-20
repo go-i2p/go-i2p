@@ -1,10 +1,11 @@
 package i2np
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -276,24 +277,4 @@ func buildI2NPHeader(messageSize int, checksum byte) []byte {
 	header[15] = checksum
 
 	return header
-}
-
-// BenchmarkDeserializeGarlicClove_SmallMessage benchmarks small message parsing
-func BenchmarkDeserializeGarlicClove_SmallMessage(b *testing.B) {
-	cloveData := buildTestGarlicCloveData(64)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, _ = deserializeGarlicClove(cloveData, 0)
-	}
-}
-
-// BenchmarkDeserializeGarlicClove_LargeMessage benchmarks large message parsing
-func BenchmarkDeserializeGarlicClove_LargeMessage(b *testing.B) {
-	cloveData := buildTestGarlicCloveData(8192)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, _ = deserializeGarlicClove(cloveData, 0)
-	}
 }

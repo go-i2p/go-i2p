@@ -202,32 +202,3 @@ func TestTunnelReplyHandler_InterfaceCompliance(t *testing.T) {
 	err = variableHandler.ProcessReply()
 	assert.Error(t, err, "Empty VariableTunnelBuildReply should fail processing")
 }
-
-// Benchmark tests for performance validation
-
-func BenchmarkTunnelBuildReply_ProcessReply_Success(b *testing.B) {
-	reply := createSuccessfulTunnelBuildReply()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = reply.ProcessReply()
-	}
-}
-
-func BenchmarkTunnelBuildReply_ProcessReply_Mixed(b *testing.B) {
-	reply := createMixedTunnelBuildReply()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = reply.ProcessReply()
-	}
-}
-
-func BenchmarkVariableTunnelBuildReply_ProcessReply_Success(b *testing.B) {
-	reply := createSuccessfulVariableTunnelBuildReply(5)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = reply.ProcessReply()
-	}
-}

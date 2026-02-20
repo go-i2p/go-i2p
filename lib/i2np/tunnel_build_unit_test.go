@@ -272,39 +272,3 @@ func ivFromString(s string) [16]byte {
 	copy(iv[:], []byte(s))
 	return iv
 }
-
-// Benchmark tests
-
-func BenchmarkTunnelBuildMessage_Create(b *testing.B) {
-	records := createKnownValueBuildRequestRecords()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = NewTunnelBuildMessage(records)
-	}
-}
-
-func BenchmarkTunnelBuildMessage_MarshalUnmarshal(b *testing.B) {
-	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		data, _ := msg.MarshalBinary()
-
-		newMsg := &TunnelBuildMessage{
-			BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
-		}
-		_ = newMsg.UnmarshalBinary(data)
-	}
-}
-
-func BenchmarkTunnelBuildMessage_Serialize(b *testing.B) {
-	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = msg.MarshalBinary()
-	}
-}
