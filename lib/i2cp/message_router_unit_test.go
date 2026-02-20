@@ -68,6 +68,7 @@ func TestRouteOutboundMessageNoPool(t *testing.T) {
 
 	// Create garlic manager and router
 	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
@@ -96,6 +97,7 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 
 	// Create garlic manager and router
 	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
@@ -121,6 +123,7 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 func TestSendThroughTunnel(t *testing.T) {
 	// Setup
 	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
@@ -153,6 +156,7 @@ func TestSendThroughTunnel(t *testing.T) {
 // TestSendThroughTunnelNoHops verifies error when tunnel has no hops
 func TestSendThroughTunnelNoHops(t *testing.T) {
 	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
@@ -229,6 +233,7 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 // method directly to ensure zero-hop tunnels are consistently rejected.
 func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
 	var privKey [32]byte
+	copy(privKey[:], "test-private-key-32-bytes-pad")
 	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 
