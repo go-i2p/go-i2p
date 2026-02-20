@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"fmt"
 	"testing"
 
@@ -336,7 +336,7 @@ func createValidResponseRecordWithReply(replyCode byte) BuildResponseRecord {
 	copy(data[0:495], randomData[:])
 	data[495] = replyCode
 
-	hash := sha256.Sum256(data)
+	hash := types.SHA256(data)
 
 	return BuildResponseRecord{
 		Hash:       hash,

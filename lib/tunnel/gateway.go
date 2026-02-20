@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -559,7 +559,7 @@ func (g *Gateway) writeChecksum(msg []byte, paddingSize int) {
 	buf := make([]byte, len(data)+len(iv))
 	copy(buf, data)
 	copy(buf[len(data):], iv)
-	hash := sha256.Sum256(buf)
+	hash := types.SHA256(buf)
 	copy(msg[20:24], hash[:4])
 }
 

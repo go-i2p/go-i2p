@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -69,7 +68,7 @@ func (ks *KeyStoreImpl) computeKeyID() string {
 			// Generate a deterministic fallback ID by hashing private key bytes.
 			// Using SHA-256 prevents leaking raw private key material into
 			// log messages or filenames on disk.
-			pkHash := sha256.Sum256(ks.privateKey.Bytes())
+			pkHash := types.SHA256(ks.privateKey.Bytes())
 			fallbackID := "unknown-" + hex.EncodeToString(pkHash[:10])
 			log.WithField("fallback_id", fallbackID).Debug("Generated fallback KeyID")
 			return fallbackID

@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -228,7 +228,7 @@ func buildTestGarlicCloveData(messageSize int) []byte {
 	}
 
 	// Compute correct checksum: first byte of SHA-256 over message data
-	hash := sha256.Sum256(messageData)
+	hash := types.SHA256(messageData)
 	checksum := hash[0]
 
 	// 2. I2NP Message Header (16 bytes) + Data

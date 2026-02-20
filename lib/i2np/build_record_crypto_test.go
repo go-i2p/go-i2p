@@ -2,7 +2,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
@@ -434,7 +434,7 @@ func TestEncryptBuildRequestRecordIdentityHash(t *testing.T) {
 	// Calculate expected identity hash
 	identity := routerInfo.RouterIdentity()
 	identityBytes, _ := identity.KeysAndCert.Bytes()
-	expectedHash := sha256.Sum256(identityBytes)
+	expectedHash := types.SHA256(identityBytes)
 
 	// Verify first 16 bytes match
 	for i := 0; i < 16; i++ {

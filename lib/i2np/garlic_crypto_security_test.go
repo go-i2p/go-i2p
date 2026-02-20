@@ -6,7 +6,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"sync"
 	"testing"
 	"time"
@@ -40,7 +40,7 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
 	require.NoError(t, err, "Failed to create receiver session manager")
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	// Build test garlic message
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -71,7 +71,7 @@ func TestECIESKeyExchange_NonceUniqueness(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Generate two ciphertexts for the same plaintext
 	ciphertexts := make([][]byte, 10)
@@ -115,7 +115,7 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
 	require.NoError(t, err)
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	// Build and encrypt
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -155,7 +155,7 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
 	require.NoError(t, err)
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	// Send first message (New Session)
 	builder1, err := NewGarlicBuilderWithDefaults()
@@ -190,7 +190,7 @@ func TestSessionTag_Uniqueness(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Create a session by encrypting first message
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -248,7 +248,7 @@ func TestGarlicSessionManager_ConcurrentAccess(t *testing.T) {
 
 				var destPubKey [32]byte
 				copy(destPubKey[:], destPubBytes)
-				destHash := sha256.Sum256(destPubKey[:])
+				destHash := types.SHA256(destPubKey[:])
 
 				builder, err := NewGarlicBuilderWithDefaults()
 				if err != nil {
@@ -289,7 +289,7 @@ func TestSessionExpiration(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Create a session
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -322,7 +322,7 @@ func TestNewSessionMessageFormat_Security(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	require.NoError(t, err)

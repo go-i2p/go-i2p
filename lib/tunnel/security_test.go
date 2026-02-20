@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"errors"
 	"sync"
@@ -1036,7 +1036,7 @@ func createValidTunnelMessage(t *testing.T) []byte {
 	iv := msg[4:20]
 	dataAfterZero := msg[101:] // data after the zero byte at position 100
 	checksumData := append(dataAfterZero, iv...)
-	hash := sha256.Sum256(checksumData)
+	hash := types.SHA256(checksumData)
 	copy(msg[20:24], hash[:4])
 
 	return msg

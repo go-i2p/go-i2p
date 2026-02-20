@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 
 	"github.com/go-i2p/crypto/ecies"
@@ -12,7 +12,7 @@ import (
 // TestDeriveDirectionalKeys_ProducesDistinctKeys verifies that the send and
 // receive keys derived from the same base key are different from each other.
 func TestDeriveDirectionalKeys_ProducesDistinctKeys(t *testing.T) {
-	baseKey := sha256.Sum256([]byte("test base key for direction isolation"))
+	baseKey := types.SHA256([]byte("test base key for direction isolation"))
 
 	sendKey, recvKey := deriveDirectionalKeys(baseKey, true)
 
@@ -28,7 +28,7 @@ func TestDeriveDirectionalKeys_ProducesDistinctKeys(t *testing.T) {
 // initiator's send key equals the responder's receive key, and vice versa.
 // This is required so that both sides of the session can decrypt each other's messages.
 func TestDeriveDirectionalKeys_InitiatorResponderSymmetry(t *testing.T) {
-	baseKey := sha256.Sum256([]byte("shared secret derived key"))
+	baseKey := types.SHA256([]byte("shared secret derived key"))
 
 	initSend, initRecv := deriveDirectionalKeys(baseKey, true)
 	respSend, respRecv := deriveDirectionalKeys(baseKey, false)
@@ -42,7 +42,7 @@ func TestDeriveDirectionalKeys_InitiatorResponderSymmetry(t *testing.T) {
 // TestDeriveDirectionalKeys_Deterministic verifies that repeated calls with
 // the same inputs produce the same outputs.
 func TestDeriveDirectionalKeys_Deterministic(t *testing.T) {
-	baseKey := sha256.Sum256([]byte("deterministic test"))
+	baseKey := types.SHA256([]byte("deterministic test"))
 
 	send1, recv1 := deriveDirectionalKeys(baseKey, true)
 	send2, recv2 := deriveDirectionalKeys(baseKey, true)
@@ -54,8 +54,8 @@ func TestDeriveDirectionalKeys_Deterministic(t *testing.T) {
 // TestDeriveDirectionalKeys_DifferentBaseKeys verifies that different base keys
 // produce entirely different directional keys.
 func TestDeriveDirectionalKeys_DifferentBaseKeys(t *testing.T) {
-	baseKey1 := sha256.Sum256([]byte("base key 1"))
-	baseKey2 := sha256.Sum256([]byte("base key 2"))
+	baseKey1 := types.SHA256([]byte("base key 1"))
+	baseKey2 := types.SHA256([]byte("base key 2"))
 
 	send1, recv1 := deriveDirectionalKeys(baseKey1, true)
 	send2, recv2 := deriveDirectionalKeys(baseKey2, true)
@@ -79,8 +79,8 @@ func TestCreateGarlicSession_DirectionalKeyIsolation(t *testing.T) {
 	copy(alicePriv[:], alicePrivBytes)
 	copy(bobPub[:], bobPubBytes)
 
-	rootKey := sha256.Sum256([]byte("test root key"))
-	tagKey := sha256.Sum256([]byte("test tag key"))
+	rootKey := types.SHA256([]byte("test root key"))
+	tagKey := types.SHA256([]byte("test tag key"))
 
 	session := createGarlicSession(bobPub, &sessionKeys{
 		rootKey: rootKey,
@@ -118,9 +118,9 @@ func TestCreateGarlicSession_InitiatorResponderTagIsolation(t *testing.T) {
 
 	// Both sides derive the same session keys from the shared secret
 	keys := &sessionKeys{
-		rootKey: sha256.Sum256([]byte("shared root")),
-		symKey:  sha256.Sum256([]byte("shared sym")),
-		tagKey:  sha256.Sum256([]byte("shared tag")),
+		rootKey: types.SHA256([]byte("shared root")),
+		symKey:  types.SHA256([]byte("shared sym")),
+		tagKey:  types.SHA256([]byte("shared tag")),
 	}
 
 	// Alice creates an outbound (initiator) session
@@ -169,8 +169,8 @@ func TestCreateGarlicSession_SymmetricRatchetIsolation(t *testing.T) {
 	copy(alicePriv[:], alicePrivBytes)
 	copy(bobPub[:], bobPubBytes)
 
-	rootKey := sha256.Sum256([]byte("sym ratchet test root"))
-	tagKey := sha256.Sum256([]byte("sym ratchet test tag"))
+	rootKey := types.SHA256([]byte("sym ratchet test root"))
+	tagKey := types.SHA256([]byte("sym ratchet test tag"))
 
 	session := createGarlicSession(bobPub, &sessionKeys{
 		rootKey: rootKey,

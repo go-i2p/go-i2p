@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -395,7 +394,7 @@ func (ks *RouterInfoKeystore) generateFallbackKeyID() string {
 	log.WithField("at", "generateFallbackKeyID").Warn("Generating deterministic fallback KeyID from directory path")
 	// Use a deterministic derivation from the directory path so the same
 	// keystore directory always produces the same fallback ID across restarts.
-	dirHash := sha256.Sum256([]byte(ks.dir))
+	dirHash := types.SHA256([]byte(ks.dir))
 	fallbackID := "fallback-" + hex.EncodeToString(dirHash[:4])
 	log.WithFields(map[string]interface{}{
 		"at":    "generateFallbackKeyID",

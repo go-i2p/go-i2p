@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"fmt"
 
 	"github.com/go-i2p/logger"
@@ -198,7 +198,7 @@ func (v *VariableTunnelBuildReply) validateResponseRecord(record BuildResponseRe
 	copy(data[0:495], record.RandomData[:])
 	data[495] = record.Reply
 
-	computedHash := sha256.Sum256(data)
+	computedHash := types.SHA256(data)
 	if computedHash != record.Hash {
 		log.WithFields(logger.Fields{
 			"expected": record.Hash,

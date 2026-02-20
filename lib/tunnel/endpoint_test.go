@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -167,7 +167,7 @@ func TestValidateChecksum(t *testing.T) {
 				// Calculate correct checksum: SHA256(data_after_zero_byte + IV)
 				dataAfterZero := msg[101:]
 				checksumData := append(dataAfterZero, msg[4:20]...)
-				hash := sha256.Sum256(checksumData)
+				hash := types.SHA256(checksumData)
 				copy(msg[20:24], hash[:4])
 				return msg
 			},

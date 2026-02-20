@@ -2,7 +2,6 @@ package i2np
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -12,13 +11,14 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/chacha20poly1305"
+	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/kdf"
 	"github.com/go-i2p/crypto/ratchet"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 	"go.step.sm/crypto/x25519"
-	"golang.org/x/crypto/curve25519"
 )
 
 // GarlicSessionManager manages ECIES-X25519-AEAD-Ratchet sessions for garlic encryption.
@@ -103,7 +103,15 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 	// Derive public key from private key using X25519 scalar multiplication
 	// publicKey = privateKey * basepoint (standard X25519 key derivation)
 	var publicKey [32]byte
-	curve25519.ScalarBaseMult(&publicKey, &privateKey)
+	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(privateKey[:])
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to create private key for public key derivation")
+	}
+	pubKeyIface, err := privKey.Public()
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to derive public key from private key")
+	}
+	copy(publicKey[:], pubKeyIface.Bytes())
 
 	log.WithFields(logger.Fields{
 		"at":              "NewGarlicSessionManager",
@@ -591,7 +599,7 @@ func performDHRatchetStep(session *GarlicSession) error {
 
 	// Step 4: Derive a new tag key from the sending chain key
 	// Use a simple derivation: SHA-256 of the chain key with a domain separator
-	tagKeyInput := sha256.Sum256(append(sendingChainKey[:], []byte("TagRatchetKey")...))
+	tagKeyInput := types.SHA256(append(sendingChainKey[:], []byte("TagRatchetKey")...))
 	session.TagRatchet = ratchet.NewTagRatchet(tagKeyInput)
 
 	// Step 5: Store new ephemeral public key to send to peer
@@ -628,7 +636,7 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(session *GarlicSession,
 	session.RecvSymmetricRatchet = ratchet.NewSymmetricRatchet(receivingChainKey)
 
 	// Re-initialize receiving tag ratchet (NOT the sending one)
-	tagKeyInput := sha256.Sum256(append(receivingChainKey[:], []byte("TagRatchetKey")...))
+	tagKeyInput := types.SHA256(append(receivingChainKey[:], []byte("TagRatchetKey")...))
 	session.RecvTagRatchet = ratchet.NewTagRatchet(tagKeyInput)
 
 	// Update remote public key
@@ -874,7 +882,7 @@ func (sm *GarlicSessionManager) initializeInboundRatchetState(ephemeralPubKey [3
 
 	// Key the session by the hash of the ephemeral public key, since we do not yet
 	// know the sender's destination hash (it is inside the encrypted garlic payload).
-	sessionHash := common.Hash(sha256.Sum256(ephemeralPubKey[:]))
+	sessionHash := common.Hash(types.SHA256(ephemeralPubKey[:]))
 
 	sm.mu.Lock()
 	defer sm.mu.Unlock()

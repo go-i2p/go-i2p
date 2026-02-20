@@ -2,7 +2,7 @@ package router
 
 import (
 	"context"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
@@ -126,7 +126,7 @@ func TestPublishLeaseSetHashMismatch(t *testing.T) {
 	invalidLeaseSetData := []byte("not a valid leaseset")
 
 	// Use wrong hash
-	wrongHash := sha256.Sum256([]byte("wrong destination"))
+	wrongHash := types.SHA256([]byte("wrong destination"))
 
 	// Attempt to publish with mismatched hash
 	err := publisher.PublishLeaseSet(wrongHash, invalidLeaseSetData)

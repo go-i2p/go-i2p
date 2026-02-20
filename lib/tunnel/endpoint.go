@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"errors"
 	"fmt"
 	"sync"
@@ -230,7 +230,7 @@ func (e *Endpoint) validateChecksum(decrypted []byte) error {
 	checksumData := make([]byte, len(deliveryData)+len(iv))
 	copy(checksumData, deliveryData)
 	copy(checksumData[len(deliveryData):], iv)
-	hash := sha256.Sum256(checksumData)
+	hash := types.SHA256(checksumData)
 	actualChecksum := hash[:4]
 
 	// Compare checksums

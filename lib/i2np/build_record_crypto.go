@@ -1,17 +1,16 @@
 package i2np
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/sha256"
 	"fmt"
 
-	"golang.org/x/crypto/chacha20poly1305"
+	"github.com/go-i2p/crypto/aes"
+	"github.com/go-i2p/crypto/chacha20poly1305"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/ecies"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
@@ -138,7 +137,7 @@ func (c *BuildRecordCrypto) verifyResponseRecordHash(record BuildResponseRecord)
 	copy(data[0:495], record.RandomData[:])
 	data[495] = record.Reply
 
-	expectedHash := sha256.Sum256(data)
+	expectedHash := types.SHA256(data)
 
 	// Compare with the hash in the record
 	if record.Hash != expectedHash {
@@ -172,7 +171,9 @@ func (c *BuildRecordCrypto) encryptChaCha20Poly1305(
 	}
 
 	// Create ChaCha20-Poly1305 AEAD cipher
-	aead, err := chacha20poly1305.New(key[:])
+	var keyArr [32]byte
+	copy(keyArr[:], key[:])
+	aead, err := chacha20poly1305.NewAEAD(keyArr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ChaCha20-Poly1305 cipher: %w", err)
 	}
@@ -181,15 +182,23 @@ func (c *BuildRecordCrypto) encryptChaCha20Poly1305(
 	nonce := iv[:12]
 
 	// Encrypt and authenticate
-	// Seal appends the ciphertext and auth tag to dst (nil means allocate new slice)
-	ciphertext := aead.Seal(nil, nonce, plaintext, nil)
-
-	// Result should be 528 bytes ciphertext + 16 bytes tag = 544 bytes
-	if len(ciphertext) != 544 {
-		return nil, fmt.Errorf("unexpected ciphertext length: %d", len(ciphertext))
+	// Encrypt returns separate ciphertext and 16-byte authentication tag
+	ct, tag, err := aead.Encrypt(plaintext, nil, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt: %w", err)
 	}
 
-	return ciphertext, nil
+	// Concatenate ciphertext + tag to match I2P wire format (528 + 16 = 544 bytes)
+	result := make([]byte, len(ct)+len(tag))
+	copy(result, ct)
+	copy(result[len(ct):], tag[:])
+
+	// Result should be 528 bytes ciphertext + 16 bytes tag = 544 bytes
+	if len(result) != 544 {
+		return nil, fmt.Errorf("unexpected ciphertext length: %d", len(result))
+	}
+
+	return result, nil
 }
 
 // decryptChaCha20Poly1305 decrypts data using ChaCha20-Poly1305 AEAD.
@@ -213,7 +222,9 @@ func (c *BuildRecordCrypto) decryptChaCha20Poly1305(
 	}
 
 	// Create ChaCha20-Poly1305 AEAD cipher
-	aead, err := chacha20poly1305.New(key[:])
+	var keyArr [32]byte
+	copy(keyArr[:], key[:])
+	aead, err := chacha20poly1305.NewAEAD(keyArr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ChaCha20-Poly1305 cipher: %w", err)
 	}
@@ -221,9 +232,12 @@ func (c *BuildRecordCrypto) decryptChaCha20Poly1305(
 	// Use first 12 bytes of IV as nonce
 	nonce := iv[:12]
 
+	// Split input into ciphertext (first 528 bytes) and tag (last 16 bytes)
+	ct := ciphertext[:528]
+	tag := ciphertext[528:]
+
 	// Decrypt and verify authentication tag
-	// Open verifies the tag and decrypts the message
-	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aead.Decrypt(ct, tag, nil, nonce)
 	if err != nil {
 		return nil, fmt.Errorf("decryption failed (authentication error): %w", err)
 	}
@@ -255,19 +269,19 @@ func (c *BuildRecordCrypto) decryptAES256CBC(
 		return nil, fmt.Errorf("ciphertext must be 528 bytes, got %d", len(ciphertext))
 	}
 
-	if len(ciphertext)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("ciphertext length %d is not a multiple of AES block size %d", len(ciphertext), aes.BlockSize)
+	if len(ciphertext)%16 != 0 {
+		return nil, fmt.Errorf("ciphertext length %d is not a multiple of AES block size %d", len(ciphertext), 16)
 	}
 
-	block, err := aes.NewCipher(key[:])
+	decrypter := &aes.AESSymmetricDecrypter{
+		Key: key[:],
+		IV:  iv[:16],
+	}
+
+	plaintext, err := decrypter.DecryptNoPadding(ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+		return nil, fmt.Errorf("failed to decrypt AES-256-CBC: %w", err)
 	}
-
-	mode := cipher.NewCBCDecrypter(block, iv[:aes.BlockSize])
-
-	plaintext := make([]byte, len(ciphertext))
-	mode.CryptBlocks(plaintext, ciphertext)
 
 	return plaintext, nil
 }
@@ -286,7 +300,7 @@ func CreateBuildResponseRecord(reply byte, randomData [495]byte) BuildResponseRe
 	copy(data[0:495], randomData[:])
 	data[495] = reply
 
-	hash := sha256.Sum256(data)
+	hash := types.SHA256(data)
 
 	return BuildResponseRecord{
 		Hash:       hash,
@@ -482,7 +496,7 @@ func calculateIdentityHash(routerInfo router_info.RouterInfo) ([32]byte, error) 
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("failed to serialize RouterIdentity: %w", err)
 	}
-	return sha256.Sum256(identityBytes), nil
+	return types.SHA256(identityBytes), nil
 }
 
 // VerifyIdentityHash checks if an encrypted BuildRequestRecord is intended for us.

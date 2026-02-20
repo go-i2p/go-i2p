@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"strings"
 	"testing"
@@ -160,7 +160,7 @@ func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 	checksumInput := make([]byte, len(dataAfterZero)+len(iv))
 	copy(checksumInput, dataAfterZero)
 	copy(checksumInput[len(dataAfterZero):], iv)
-	hash := sha256.Sum256(checksumInput)
+	hash := types.SHA256(checksumInput)
 	expectedChecksum := hash[:4]
 
 	assert.Equal(t, expectedChecksum, storedChecksum,
@@ -896,7 +896,7 @@ func assembleTunnelMessage(t *testing.T, diBytes []byte, payload []byte) []byte 
 	checksumInput := make([]byte, len(dataAfterZero)+len(iv))
 	copy(checksumInput, dataAfterZero)
 	copy(checksumInput[len(dataAfterZero):], iv)
-	h := sha256.Sum256(checksumInput)
+	h := types.SHA256(checksumInput)
 	copy(msg[20:24], h[:4])
 
 	return msg

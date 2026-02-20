@@ -2,7 +2,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
@@ -43,7 +43,7 @@ func TestNewSessionEncryption(t *testing.T) {
 	copy(destPubKey[:], destPubBytes)
 
 	// Create destination hash
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Create a simple garlic message
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -110,7 +110,7 @@ func TestNewSessionDecryption(t *testing.T) {
 	}
 
 	// Create destination hash
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	// Create garlic message
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -175,7 +175,7 @@ func TestSessionCleanup(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Create a session
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -267,7 +267,7 @@ func TestNewSessionMessageFormat(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -338,7 +338,7 @@ func TestExistingSessionMessageFormat(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -444,7 +444,7 @@ func TestChaChaEncryptionDecryption(t *testing.T) {
 			t.Fatalf("Test %d: Failed to create receiver session manager: %v", i, err)
 		}
 
-		destHash := sha256.Sum256(receiverPubKey[:])
+		destHash := types.SHA256(receiverPubKey[:])
 
 		builder, err := NewGarlicBuilderWithDefaults()
 		if err != nil {
@@ -508,7 +508,7 @@ func TestAuthenticationFailure(t *testing.T) {
 		t.Fatalf("Failed to create receiver session manager: %v", err)
 	}
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -556,7 +556,7 @@ func TestSessionTagLookup(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	// Create first session
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -607,7 +607,7 @@ func TestRatchetStateConsistency(t *testing.T) {
 			t.Fatalf("Message %d: Failed to create receiver session manager: %v", i, err)
 		}
 
-		destHash := sha256.Sum256(receiverPubKey[:])
+		destHash := types.SHA256(receiverPubKey[:])
 
 		builder, err := NewGarlicBuilderWithDefaults()
 		if err != nil {
@@ -661,7 +661,7 @@ func TestNonceUniqueness(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	nonces := make(map[string]bool)
 
@@ -728,7 +728,7 @@ func TestTagIndexPopulation(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -778,7 +778,7 @@ func TestTagLookupPerformance(t *testing.T) {
 
 		var destPubKey [32]byte
 		copy(destPubKey[:], destPubBytes)
-		destHash := sha256.Sum256(destPubKey[:])
+		destHash := types.SHA256(destPubKey[:])
 
 		builder, err := NewGarlicBuilderWithDefaults()
 		if err != nil {
@@ -839,7 +839,7 @@ func TestTagWindowReplenishment(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -906,7 +906,7 @@ func TestExpiredSessionTagCleanup(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -967,7 +967,7 @@ func TestTagSingleUse(t *testing.T) {
 
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {
@@ -1039,7 +1039,7 @@ func TestInboundRatchetStateStored(t *testing.T) {
 		t.Fatalf("Failed to create receiver session manager: %v", err)
 	}
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	// Receiver should start with zero sessions
 	if receiverSM.GetSessionCount() != 0 {
@@ -1105,7 +1105,7 @@ func TestInboundRatchetSessionHasValidRatchets(t *testing.T) {
 		t.Fatalf("Failed to create receiver session manager: %v", err)
 	}
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	if err != nil {

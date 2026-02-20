@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"fmt"
 
 	"github.com/go-i2p/logger"
@@ -157,7 +157,7 @@ func (s *ShortTunnelBuildReply) verifyRecordIntegrity(hopIndex int, record Build
 	copy(dataToHash[:495], record.RandomData[:])
 	dataToHash[495] = record.Reply
 
-	computedHash := sha256.Sum256(dataToHash)
+	computedHash := types.SHA256(dataToHash)
 
 	if record.Hash != computedHash {
 		log.WithFields(logger.Fields{

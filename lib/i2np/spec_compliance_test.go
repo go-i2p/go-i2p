@@ -10,7 +10,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"fmt"
 	"testing"
@@ -89,7 +89,7 @@ func TestStandardHeaderLayout_FieldOffsets(t *testing.T) {
 		"size field at offset 13-14")
 
 	// Checksum at offset 15 (first byte of SHA256)
-	hash := sha256.Sum256(payload)
+	hash := types.SHA256(payload)
 	assert.Equal(t, hash[0], data[15],
 		"checksum field at offset 15 (SHA256 first byte)")
 
@@ -141,7 +141,7 @@ func TestStandardHeader_ReadI2NPNTCPHeader(t *testing.T) {
 	assert.Equal(t, payload, header.Data)
 
 	// Verify checksum matches
-	hash := sha256.Sum256(payload)
+	hash := types.SHA256(payload)
 	assert.Equal(t, int(hash[0]), header.Checksum)
 }
 
@@ -414,7 +414,7 @@ func TestChecksum_IsSHA256FirstByte(t *testing.T) {
 		wireChecksum := data[15]
 
 		// Expected: first byte of SHA256(payload)
-		hash := sha256.Sum256(payload)
+		hash := types.SHA256(payload)
 		assert.Equal(t, hash[0], wireChecksum,
 			"checksum must be SHA256(payload)[0] for payload of length %d", len(payload))
 	}
@@ -2625,7 +2625,7 @@ func TestGarlic_SessionLifecycle_FirstMessageIsNewSession(t *testing.T) {
 	require.NoError(t, err)
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	plaintext := []byte("first message to new destination")
 	ciphertext, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
@@ -2658,7 +2658,7 @@ func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
 	require.NoError(t, err)
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	plaintext := []byte("test payload")
 
@@ -2699,7 +2699,7 @@ func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing
 	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
 	require.NoError(t, err)
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 	plaintext := []byte("new session message")
 
 	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
@@ -2742,7 +2742,7 @@ func TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession(t *
 	require.NoError(t, err)
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	plaintext := []byte("test message")
 
@@ -2776,7 +2776,7 @@ func TestGarlic_SessionLifecycle_SessionStoresPersistentState(t *testing.T) {
 	require.NoError(t, err)
 	var destPubKey [32]byte
 	copy(destPubKey[:], destPubBytes)
-	destHash := sha256.Sum256(destPubKey[:])
+	destHash := types.SHA256(destPubKey[:])
 
 	plaintext := []byte("state persistence test")
 	_, err = sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
@@ -2830,7 +2830,7 @@ func TestGarlic_AssociatedData_NewSessionUsesNilAD(t *testing.T) {
 	// New Session encryption calls encryptPayloadWithSessionKey which uses nil AD.
 	// We verify this by encrypting with nil AD and confirming the resulting
 	// ciphertext can be decrypted with nil AD.
-	key := sha256.Sum256([]byte("test symmetric key for new session"))
+	key := types.SHA256([]byte("test symmetric key for new session"))
 	plaintext := []byte("new session payload with nil AD")
 
 	aead, err := chacha20poly1305.NewAEAD(key)
@@ -2856,7 +2856,7 @@ func TestGarlic_AssociatedData_NewSessionUsesNilAD(t *testing.T) {
 // for ChaCha20-Poly1305. This binds the ciphertext to the specific tag,
 // preventing tag substitution attacks.
 func TestGarlic_AssociatedData_ExistingSessionUsesSessionTagAD(t *testing.T) {
-	key := sha256.Sum256([]byte("test message key for existing session"))
+	key := types.SHA256([]byte("test message key for existing session"))
 	plaintext := []byte("existing session payload with tag AD")
 	sessionTag := [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 
@@ -2879,7 +2879,7 @@ func TestGarlic_AssociatedData_ExistingSessionUsesSessionTagAD(t *testing.T) {
 // modification to the associated data causes ChaCha20-Poly1305 authentication
 // failure, ensuring AEAD integrity.
 func TestGarlic_AssociatedData_MismatchCausesAuthFailure(t *testing.T) {
-	key := sha256.Sum256([]byte("integrity test key"))
+	key := types.SHA256([]byte("integrity test key"))
 	plaintext := []byte("integrity test payload")
 	sessionTag := [8]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22}
 
@@ -2907,7 +2907,7 @@ func TestGarlic_AssociatedData_MismatchCausesAuthFailure(t *testing.T) {
 // encrypted for one session (with one tag as AD) cannot be replayed in a
 // different session (with a different tag as AD), even if the same key is used.
 func TestGarlic_AssociatedData_CrossSessionReplayPrevented(t *testing.T) {
-	key := sha256.Sum256([]byte("shared key for replay test"))
+	key := types.SHA256([]byte("shared key for replay test"))
 	plaintext := []byte("payload that should not be replayable")
 
 	tag1 := [8]byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
@@ -2943,7 +2943,7 @@ func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
 	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
 	require.NoError(t, err)
 
-	destHash := sha256.Sum256(receiverPubKey[:])
+	destHash := types.SHA256(receiverPubKey[:])
 	plaintext := []byte("new session roundtrip verifying nil AD")
 
 	// Encrypt (New Session — uses nil AD internally).
@@ -3463,7 +3463,7 @@ func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
 	hashInput := make([]byte, 496)
 	copy(hashInput[:495], randomData[:])
 	hashInput[495] = TUNNEL_BUILD_REPLY_SUCCESS
-	expectedHash := sha256.Sum256(hashInput)
+	expectedHash := types.SHA256(hashInput)
 	assert.Equal(t, expectedHash[:], record.Hash[:],
 		"CreateBuildResponseRecord must set Hash = SHA256(RandomData + Reply)")
 
@@ -3744,7 +3744,7 @@ func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
 	hashInput := make([]byte, 496)
 	copy(hashInput[:495], randomData[:])
 	hashInput[495] = TUNNEL_BUILD_REPLY_OVERLOAD
-	expectedHash := sha256.Sum256(hashInput)
+	expectedHash := types.SHA256(hashInput)
 	// Compare bytes since record.Hash is common.Hash (named type)
 	assert.Equal(t, expectedHash[:], record.Hash[:], "Hash must be SHA256(RandomData || Reply)")
 }
@@ -3809,7 +3809,7 @@ func TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented(t *testing.T) {
 	// Encrypt a message — this exercises the full Proposal 144 state machine
 	var receiverPub [32]byte
 	copy(receiverPub[:], pubBytes)
-	destHash := sha256.Sum256(receiverPub[:])
+	destHash := types.SHA256(receiverPub[:])
 	plaintext := []byte("crypto audit garlic test")
 
 	ciphertext, err := sm.EncryptGarlicMessage(destHash, receiverPub, plaintext)
@@ -3895,7 +3895,7 @@ func TestCryptoAudit_HKDFUsage_InfoStringsPresent(t *testing.T) {
 // TestCryptoAudit_HKDFUsage_DeriveDirectionalKeys verifies HKDF produces distinct
 // directional keys for initiator and responder.
 func TestCryptoAudit_HKDFUsage_DeriveDirectionalKeys(t *testing.T) {
-	sharedSecret := sha256.Sum256([]byte("test shared secret for HKDF audit"))
+	sharedSecret := types.SHA256([]byte("test shared secret for HKDF audit"))
 	keys, err := deriveSessionKeysFromSecret(sharedSecret[:])
 	require.NoError(t, err)
 
@@ -3921,7 +3921,7 @@ func TestCryptoAudit_HKDFUsage_DeriveDirectionalKeys(t *testing.T) {
 // deterministic 8-byte tags as specified in Proposal 144 Section 5.
 func TestCryptoAudit_SessionTagRatchet_Prop144Section5(t *testing.T) {
 	// Create a tag ratchet with a known chain key
-	chainKey := sha256.Sum256([]byte("tag ratchet chain key for audit"))
+	chainKey := types.SHA256([]byte("tag ratchet chain key for audit"))
 	tagRatchet := ratchet.NewTagRatchet(chainKey)
 
 	// Generate a sequence of tags

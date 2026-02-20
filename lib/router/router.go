@@ -2,7 +2,7 @@ package router
 
 import (
 	"context"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"errors"
 	"fmt"
 	"net"
@@ -208,7 +208,7 @@ func validateRouterKeys(r *Router) error {
 	}
 
 	// sha256 hash of public key
-	pubHash := sha256.Sum256(pub.Bytes())
+	pubHash := types.SHA256(pub.Bytes())
 	b32PubHash := base32.EncodeToString(pubHash[:])
 	log.Debug("Router public key hash:", b32PubHash)
 

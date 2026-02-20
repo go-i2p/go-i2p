@@ -1,7 +1,7 @@
 package router
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -172,7 +172,7 @@ func TestHandleTunnelDataSuccess(t *testing.T) {
 			// Calculate checksum: first 4 bytes of SHA256(delivery_instructions_after_zero_byte + IV)
 			deliveryInstructions := decrypted[25:]
 			checksumData := append(deliveryInstructions, iv...)
-			hash := sha256.Sum256(checksumData)
+			hash := types.SHA256(checksumData)
 			copy(decrypted[20:24], hash[:4])
 
 			return decrypted, nil

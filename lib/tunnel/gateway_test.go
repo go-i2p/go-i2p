@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 
 	"github.com/go-i2p/crypto/tunnel"
@@ -301,7 +301,7 @@ func TestGatewayChecksumIncludesIV(t *testing.T) {
 	require.Greater(t, zeroPos, 23, "zero byte separator must exist")
 	dataAfterZero := tunnelMsg[zeroPos+1:]
 	checksumData := append(dataAfterZero, iv...)
-	hash := sha256.Sum256(checksumData)
+	hash := types.SHA256(checksumData)
 	expectedChecksum := hash[:4]
 
 	actualChecksum := tunnelMsg[20:24]

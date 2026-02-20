@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
@@ -28,8 +28,8 @@ func createTestSession(t *testing.T) *GarlicSession {
 	copy(bobPub[:], bobPubBytes)
 
 	// Derive a test root key
-	rootKey := sha256.Sum256([]byte("test root key for DH ratchet"))
-	tagKey := sha256.Sum256([]byte("test tag key for DH ratchet"))
+	rootKey := types.SHA256([]byte("test root key for DH ratchet"))
+	tagKey := types.SHA256([]byte("test tag key for DH ratchet"))
 
 	session := createGarlicSession(bobPub, &sessionKeys{
 		rootKey: rootKey,
@@ -325,8 +325,8 @@ func TestCreateGarlicSessionInitializesRatchets(t *testing.T) {
 	copy(alicePriv[:], alicePrivBytes)
 	copy(bobPub[:], bobPubBytes)
 
-	rootKey := sha256.Sum256([]byte("root"))
-	tagKey := sha256.Sum256([]byte("tag"))
+	rootKey := types.SHA256([]byte("root"))
+	tagKey := types.SHA256([]byte("tag"))
 
 	session := createGarlicSession(bobPub, &sessionKeys{
 		rootKey: rootKey,
@@ -373,7 +373,7 @@ func TestNewTagRatchetAfterDHStep(t *testing.T) {
 // Ensure ratchet types are usable
 func TestRatchetTypeImports(t *testing.T) {
 	// Verify we can create ratchet types directly
-	rootKey := sha256.Sum256([]byte("test"))
+	rootKey := types.SHA256([]byte("test"))
 	var priv, pub [32]byte
 	copy(priv[:], rootKey[:])
 	curve25519.ScalarBaseMult(&pub, &priv)

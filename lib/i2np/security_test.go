@@ -2,7 +2,7 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
@@ -716,7 +716,7 @@ func createValidI2NPMessage(msgType int, payload []byte) []byte {
 	header[14] = byte(size)
 
 	// Checksum (1 byte)
-	hash := sha256.Sum256(payload)
+	hash := types.SHA256(payload)
 	header[15] = hash[0]
 
 	return append(header, payload...)
@@ -733,7 +733,7 @@ func createInvalidI2NPMessage(claimedSize, actualSize int) []byte {
 
 	// Actual payload
 	payload := make([]byte, actualSize)
-	hash := sha256.Sum256(payload)
+	hash := types.SHA256(payload)
 	header[15] = hash[0]
 
 	return append(header, payload...)

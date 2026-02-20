@@ -1,7 +1,7 @@
 package i2np
 
 import (
-	"crypto/sha256"
+	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"time"
 
@@ -151,7 +151,7 @@ func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
 	}
 
 	// Calculate checksum of data
-	hash := sha256.Sum256(m.data)
+	hash := types.SHA256(m.data)
 	checksum := hash[0]
 
 	// Build the complete message
@@ -222,7 +222,7 @@ func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
 	copy(m.data, data[16:16+size])
 
 	// Verify checksum
-	hash := sha256.Sum256(m.data)
+	hash := types.SHA256(m.data)
 	actualChecksum := hash[0]
 	if actualChecksum != expectedChecksum {
 		return oops.Errorf("i2np message checksum mismatch: expected 0x%02x, got 0x%02x", expectedChecksum, actualChecksum)
