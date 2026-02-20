@@ -48,7 +48,7 @@ type NTCP2Handler interface {
 // DefaultHandler implements NTCP2Handler using the existing functions in this
 // package. It is wired into the NTCP2Transport at construction time.
 type DefaultHandler struct {
-	replayCache *ReplayCache
+	replayCache *gonoise.ReplayCache
 }
 
 // NewDefaultHandler creates a new DefaultHandler with a fresh replay cache.
@@ -56,7 +56,7 @@ type DefaultHandler struct {
 // background cache cleanup goroutine.
 func NewDefaultHandler() *DefaultHandler {
 	return &DefaultHandler{
-		replayCache: NewReplayCache(),
+		replayCache: gonoise.NewReplayCache(),
 	}
 }
 

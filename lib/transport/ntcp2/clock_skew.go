@@ -4,21 +4,17 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	gonoise "github.com/go-i2p/go-noise/ntcp2"
 )
 
-// Clock skew constants per the NTCP2 specification.
+// ClockSkewTolerance is the maximum allowed difference between local and
+// peer timestamps. Per the NTCP2 spec, connections with a clock skew
+// exceeding this value should be terminated with reason code 6.
 //
-// Spec reference: https://geti2p.net/spec/ntcp2#timestamps
-//
-// Both peers exchange timestamps during the handshake (message 1 from Alice,
-// message 2 from Bob). Each side must validate that the peer's clock is within
-// an acceptable skew tolerance.
-const (
-	// ClockSkewTolerance is the maximum allowed difference between local and
-	// peer timestamps. Per the NTCP2 spec, connections with a clock skew
-	// exceeding this value should be terminated with reason code 6.
-	ClockSkewTolerance = 60 * time.Second
-)
+// This is defined in go-noise/ntcp2 as the single source of truth and
+// re-exported here for backward compatibility within go-i2p.
+const ClockSkewTolerance = gonoise.ClockSkewTolerance
 
 // ClockSkewError is returned when a peer's timestamp exceeds the allowed skew.
 type ClockSkewError struct {
