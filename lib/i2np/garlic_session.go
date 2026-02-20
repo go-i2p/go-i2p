@@ -162,9 +162,8 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 		if exists {
 			sm.mu.Unlock()
 			log.WithFields(logger.Fields{
-				"at":              "EncryptGarlicMessage",
-				"dest_hash":       destinationHash.String(),
-				"message_counter": session.MessageCounter,
+				"at":        "EncryptGarlicMessage",
+				"dest_hash": destinationHash.String(),
 			}).Debug("Session found after double-check, using existing session")
 			return sm.encryptExistingSession(session, plaintextGarlic)
 		}
@@ -180,9 +179,8 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 	}
 
 	log.WithFields(logger.Fields{
-		"at":              "EncryptGarlicMessage",
-		"dest_hash":       destinationHash.String(),
-		"message_counter": session.MessageCounter,
+		"at":        "EncryptGarlicMessage",
+		"dest_hash": destinationHash.String(),
 	}).Debug("Using existing session for encryption")
 	// Existing Session: Use ratchet-based encryption
 	// Crypto is performed without holding the session manager lock
