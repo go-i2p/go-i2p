@@ -1,15 +1,15 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-i2p/crypto/types"
+
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 )
@@ -811,22 +811,6 @@ func TestBuildTimeout_ConfiguredCorrectly(t *testing.T) {
 // =============================================================================
 // PEER SELECTION TESTS
 // =============================================================================
-
-// mockPeerSelector implements PeerSelector for testing
-type mockPeerSelector struct {
-	returnError bool
-	returnPeers []router_info.RouterInfo
-}
-
-func (m *mockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	if m.returnError {
-		return nil, ErrInvalidMessage
-	}
-	if m.returnPeers != nil {
-		return m.returnPeers, nil
-	}
-	return nil, nil
-}
 
 // TestPeerSelection_FailedPeerExclusion verifies failed peers are excluded on retry.
 func TestPeerSelection_FailedPeerExclusion(t *testing.T) {

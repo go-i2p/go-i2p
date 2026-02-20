@@ -431,47 +431,6 @@ func TestSingleHopTunnelIDs(t *testing.T) {
 	})
 }
 
-// BenchmarkGenerateHopTunnelIDs benchmarks per-hop tunnel ID generation
-func BenchmarkGenerateHopTunnelIDs(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_, _ = generateHopTunnelIDs(3)
-	}
-}
-
-// BenchmarkCreateBuildRequest benchmarks build request creation (minimal version)
-func BenchmarkCreateBuildRequest(b *testing.B) {
-	// Create minimal mock - won't actually work but tests the flow
-	selector := &mockBuilderPeerSelector{
-		peers: make([]router_info.RouterInfo, 3),
-		err:   nil,
-	}
-	builder, _ := NewTunnelBuilder(selector)
-
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = builder.CreateBuildRequest(req)
-	}
-}
-
-// BenchmarkGenerateTunnelID benchmarks tunnel ID generation
-func BenchmarkGenerateTunnelID(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_, _ = generateTunnelID()
-	}
-}
-
-// BenchmarkGenerateSessionKey benchmarks session key generation
-func BenchmarkGenerateSessionKey(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_, _ = generateSessionKey()
-	}
-}
-
 // TestDetermineBuildRecordFlag verifies IBGW/OBEP flag assignment per I2P spec.
 // Per §tunnel-creation: Bit 7 = IBGW (allow messages from anyone),
 // Bit 6 = OBEP (allow messages to anyone).

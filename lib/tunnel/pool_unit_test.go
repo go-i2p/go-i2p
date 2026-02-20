@@ -5,22 +5,9 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// MockPeerSelector for testing
-type MockPeerSelector struct {
-	peers []router_info.RouterInfo
-}
-
-func (m *MockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	if len(m.peers) < count {
-		return m.peers, nil
-	}
-	return m.peers[:count], nil
-}
 
 func TestTunnelPool(t *testing.T) {
 	selector := &MockPeerSelector{}

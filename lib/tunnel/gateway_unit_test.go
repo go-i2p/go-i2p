@@ -1,8 +1,9 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"testing"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -306,25 +307,6 @@ func TestGatewayChecksumIncludesIV(t *testing.T) {
 
 	actualChecksum := tunnelMsg[20:24]
 	assert.Equal(t, expectedChecksum, actualChecksum, "Checksum should be calculated from data + IV")
-}
-
-// mockPassthroughEncryptor implements TunnelEncryptor by returning data as-is.
-type mockPassthroughEncryptor struct{}
-
-func (m *mockPassthroughEncryptor) Encrypt(data []byte) ([]byte, error) {
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *mockPassthroughEncryptor) Decrypt(data []byte) ([]byte, error) {
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *mockPassthroughEncryptor) Type() tunnel.TunnelEncryptionType {
-	return tunnel.TunnelEncryptionAES
 }
 
 // TestEndpointAccepts1028Bytes verifies the Endpoint accepts 1028-byte messages,

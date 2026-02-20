@@ -51,11 +51,3 @@ func TestDeliveryInstructionDataWithOnlyPadding(t *testing.T) {
 	di := decrypted_tunnel_message.deliveryInstructionData()
 	assert.Equal(0, len(di))
 }
-
-func TestDeliveryInstructionsWithFragmentsWithAllPadding(t *testing.T) {
-}
-
-// Test invalid delivery instructions and message fragments
-
-func TestDeliveryInstructionsWithFragmentsWithValidData(t *testing.T) {
-}

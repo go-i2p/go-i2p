@@ -294,45 +294,6 @@ func TestParticipantTunnelID(t *testing.T) {
 	}
 }
 
-// BenchmarkParticipantProcess benchmarks the message processing
-func BenchmarkParticipantProcess(b *testing.B) {
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		b.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	p, err := NewParticipant(1000, aesEncryptor)
-	if err != nil {
-		b.Fatalf("failed to create participant: %v", err)
-	}
-
-	// Create test message (1008-byte payload)
-	payload := make([]byte, 1008)
-	binary.BigEndian.PutUint32(payload[:4], 2000)
-	for i := 4; i < len(payload); i++ {
-		payload[i] = byte(i % 256)
-	}
-
-	// Encrypt it (produces 1028-byte tunnel message)
-	encryptedData, err := aesEncryptor.Encrypt(payload)
-	if err != nil {
-		b.Fatalf("failed to encrypt: %v", err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// Make a copy for each iteration
-		data := make([]byte, len(encryptedData))
-		copy(data, encryptedData)
-		_, _, err := p.Process(data)
-		if err != nil {
-			b.Fatalf("process failed: %v", err)
-		}
-	}
-}
-
 // TestParticipantErrorConditions tests various error scenarios
 func TestParticipantErrorConditions(t *testing.T) {
 	layerKey := generateRandomKey()

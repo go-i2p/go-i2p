@@ -4,26 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/stretchr/testify/assert"
 )
-
-// fakeDB implements NetDBSelector for tests
-type fakeDB struct {
-	peers []router_info.RouterInfo
-	err   error
-}
-
-func (f *fakeDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	if len(f.peers) < count {
-		return f.peers, nil
-	}
-	return f.peers[:count], nil
-}
 
 func TestNewDefaultPeerSelector_NilDB(t *testing.T) {
 	s, err := NewDefaultPeerSelector(nil)

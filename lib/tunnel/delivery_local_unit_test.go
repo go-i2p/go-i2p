@@ -249,27 +249,3 @@ func TestDeliveryInstructionsVariousSizes(t *testing.T) {
 		})
 	}
 }
-
-// Benchmarks
-func BenchmarkNewLocalDeliveryInstructions(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_ = NewLocalDeliveryInstructions(1000)
-	}
-}
-
-func BenchmarkLocalDeliverySerialize(b *testing.B) {
-	di := NewLocalDeliveryInstructions(1000)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = di.Bytes()
-	}
-}
-
-func BenchmarkLocalDeliveryRoundTrip(b *testing.B) {
-	di := NewLocalDeliveryInstructions(1000)
-	bytes, _ := di.Bytes()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = NewDeliveryInstructions(bytes)
-	}
-}

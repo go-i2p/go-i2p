@@ -1,8 +1,9 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"testing"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/stretchr/testify/assert"

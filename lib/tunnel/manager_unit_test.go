@@ -4,32 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
 )
-
-// mockTunnelEncryptor is a simple mock for testing
-type mockTunnelEncryptor struct{}
-
-func (m *mockTunnelEncryptor) Encrypt(data []byte) ([]byte, error) {
-	// Return a copy of the data (no actual encryption)
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *mockTunnelEncryptor) Decrypt(data []byte) ([]byte, error) {
-	// Return a copy of the data (no actual decryption)
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
-}
-
-func (m *mockTunnelEncryptor) Type() tunnel.TunnelEncryptionType {
-	// Return ECIES-X25519-AEAD type
-	return tunnel.TunnelEncryptionECIES
-}
 
 // TestNewManager verifies manager creation and initialization
 func TestNewManager(t *testing.T) {
