@@ -1,15 +1,16 @@
 package i2np
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
 
+	"github.com/go-i2p/crypto/types"
+
+	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/ratchet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/curve25519"
 )
 
 // createTestSession builds a GarlicSession with valid ratchet state for testing.
@@ -376,7 +377,11 @@ func TestRatchetTypeImports(t *testing.T) {
 	rootKey := types.SHA256([]byte("test"))
 	var priv, pub [32]byte
 	copy(priv[:], rootKey[:])
-	curve25519.ScalarBaseMult(&pub, &priv)
+	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(priv[:])
+	assert.NoError(t, err)
+	pubKey, err := privKey.Public()
+	assert.NoError(t, err)
+	copy(pub[:], pubKey.Bytes())
 
 	dhr := ratchet.NewDHRatchet(rootKey, priv, pub)
 	assert.NotNil(t, dhr)

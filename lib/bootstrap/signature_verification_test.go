@@ -2,9 +2,10 @@ package bootstrap
 
 import (
 	"bytes"
-	"crypto/rand"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"

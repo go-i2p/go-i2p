@@ -1,13 +1,13 @@
 package i2pcontrol
 
 import (
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/go-i2p/crypto/hmac"
 	"github.com/go-i2p/crypto/rand"
 )
 

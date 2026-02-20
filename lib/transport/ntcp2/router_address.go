@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/router_address"
+	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 	ntcp2noise "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
-	"golang.org/x/crypto/curve25519"
 )
 
 // logConversionStart logs the start of transport to RouterAddress conversion.
@@ -191,11 +191,17 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 
 	// Derive the X25519 public key from the private key.
 	// StaticKey is the private key; the published 's=' must be the public key.
-	publicKey, err := curve25519.X25519(ntcp2Config.StaticKey, curve25519.Basepoint)
+	privKey, err := i2pcurve25519.NewCurve25519PrivateKey(ntcp2Config.StaticKey)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Curve25519 private key")
+		return "", fmt.Errorf("failed to create private key: %w", err)
+	}
+	pubKey, err := privKey.Public()
 	if err != nil {
 		log.WithError(err).Error("Failed to derive public key from static private key")
 		return "", fmt.Errorf("failed to derive public key: %w", err)
 	}
+	publicKey := pubKey.Bytes()
 
 	staticKeyB64 := base64.StdEncoding.EncodeToString(publicKey)
 	return staticKeyB64, nil

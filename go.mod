@@ -8,7 +8,7 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
 	github.com/go-i2p/common v0.1.4-0.20260215225000-6d1c66be67cb
-	github.com/go-i2p/crypto v0.1.4-0.20260218221204-a8834457f3f1
+	github.com/go-i2p/crypto v0.1.4-0.20260219234435-41c70b0435dd
 	github.com/go-i2p/go-noise v0.1.4-0.20260218020040-ff2a7bd974ed
 	github.com/go-i2p/logger v0.1.3
 	github.com/go-i2p/su3 v0.0.1
@@ -17,7 +17,6 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	go.step.sm/crypto v0.76.0
-	golang.org/x/crypto v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -44,6 +43,7 @@ require (
 	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect

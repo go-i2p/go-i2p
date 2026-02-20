@@ -1,8 +1,9 @@
 package keys
 
 import (
-	cryptorand "crypto/rand"
 	"fmt"
+
+	cryptorand "github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/key_certificate"

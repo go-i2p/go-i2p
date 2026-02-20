@@ -1,11 +1,12 @@
 package ntcp2
 
 import (
-	"crypto/rand"
 	"io"
 	"math/big"
 	"net"
 	"time"
+
+	"github.com/go-i2p/crypto/rand"
 )
 
 // Probing-resistance constants per the NTCP2 specification.
@@ -82,7 +83,7 @@ func randomInt(max int) int {
 	if max <= 0 {
 		return 0
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	n, err := rand.CryptoInt(rand.Reader, big.NewInt(int64(max)))
 	if err != nil {
 		// crypto/rand failure is fatal in practice, but we degrade gracefully
 		// here to avoid panicking in a network error handler.

@@ -6,11 +6,11 @@ package i2np
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"sync"
 	"testing"
 
-	"golang.org/x/crypto/chacha20poly1305"
+	"github.com/go-i2p/crypto/chacha20poly1305"
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
@@ -220,7 +220,7 @@ func TestBuildResponseRecord_HashVerification(t *testing.T) {
 	data := make([]byte, 496)
 	copy(data[0:495], randomData[:])
 	data[495] = 0 // reply code
-	expectedHash := sha256.Sum256(data)
+	expectedHash := types.SHA256(data)
 
 	// Compare hash bytes directly
 	assert.Equal(t, expectedHash[:], record.Hash[:], "Hash should match SHA-256 of data")
@@ -250,11 +250,17 @@ func TestBuildResponseRecord_HashTamper(t *testing.T) {
 	require.NoError(t, err)
 
 	// The cleartext will have bad hash - decryption should catch this
-	aead, err := chacha20poly1305.New(replyKey[:])
+	var keyArr [32]byte
+	copy(keyArr[:], replyKey[:])
+	aead, err := chacha20poly1305.NewAEAD(keyArr)
 	require.NoError(t, err)
 
 	nonce := replyIV[:12]
-	ciphertext := aead.Seal(nil, nonce, cleartext, nil)
+	ct, tag, err := aead.Encrypt(cleartext, nil, nonce)
+	require.NoError(t, err)
+	ciphertext := make([]byte, len(ct)+len(tag))
+	copy(ciphertext, ct)
+	copy(ciphertext[len(ct):], tag[:])
 
 	// Decrypt should succeed (AEAD), but hash verification should fail
 	decrypted, err := crypto.DecryptReplyRecord(ciphertext, replyKey, replyIV)

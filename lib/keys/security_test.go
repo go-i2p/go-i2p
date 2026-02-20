@@ -2,12 +2,13 @@ package keys
 
 import (
 	"bytes"
-	"crypto/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/go-i2p/crypto/rand"
 
 	"github.com/go-i2p/crypto/ed25519"
 )

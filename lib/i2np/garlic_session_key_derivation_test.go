@@ -3,7 +3,7 @@ package i2np
 import (
 	"testing"
 
-	"golang.org/x/crypto/curve25519"
+	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
 )
 
 // TestGarlicSessionManagerKeyDerivation verifies that the public key is correctly
@@ -23,7 +23,15 @@ func TestGarlicSessionManagerKeyDerivation(t *testing.T) {
 
 	// Manually derive the expected public key
 	var expectedPublicKey [32]byte
-	curve25519.ScalarBaseMult(&expectedPublicKey, &privateKey)
+	privKey, err2 := i2pcurve25519.NewCurve25519PrivateKey(privateKey[:])
+	if err2 != nil {
+		t.Fatalf("Failed to create Curve25519 private key: %v", err2)
+	}
+	pubKey, err2 := privKey.Public()
+	if err2 != nil {
+		t.Fatalf("Failed to derive public key: %v", err2)
+	}
+	copy(expectedPublicKey[:], pubKey.Bytes())
 
 	// Verify the manager's public key matches
 	if manager.ourPublicKey != expectedPublicKey {
