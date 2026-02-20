@@ -11,28 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockPeerSelector implements tunnel.PeerSelector for testing
-type MockPeerSelector struct {
-	peers []router_info.RouterInfo
-}
-
-func (m *MockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	if len(m.peers) < count {
-		return m.peers, nil // Return what we have
-	}
-	return m.peers[:count], nil
-}
-
-// SimpleMockPeerSelector implements tunnel.PeerSelector without requiring RouterInfo initialization
-type SimpleMockPeerSelector struct{}
-
-func (s *SimpleMockPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error) {
-	// Return empty slice to simulate sufficient peers without requiring RouterInfo initialization
-	// This allows testing the TunnelManager logic without complex RouterInfo setup
-	peers := make([]router_info.RouterInfo, count)
-	return peers, nil
-}
-
 // InsufficientPeerSelector simulates insufficient peers available
 type InsufficientPeerSelector struct{}
 

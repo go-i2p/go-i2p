@@ -2,15 +2,13 @@ package i2np
 
 import (
 	"bytes"
-	"github.com/go-i2p/crypto/types"
 	"testing"
-	"time"
 
-	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/types"
+
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/keys"
-	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -614,39 +612,5 @@ func BenchmarkDecryptBuildRequestRecord(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-	}
-}
-
-// Helper function to create a test BuildRequestRecord with randomized data
-func createTestBuildRequestRecord(t testing.TB) BuildRequestRecord {
-	t.Helper()
-
-	var layerKey, ivKey, replyKey session_key.SessionKey
-	var replyIV [16]byte
-	var padding [29]byte
-	var ourIdent, nextIdent common.Hash
-
-	// Fill with random data
-	rand.Read(layerKey[:])
-	rand.Read(ivKey[:])
-	rand.Read(replyKey[:])
-	rand.Read(replyIV[:])
-	rand.Read(padding[:])
-	rand.Read(ourIdent[:])
-	rand.Read(nextIdent[:])
-
-	return BuildRequestRecord{
-		ReceiveTunnel: tunnel.TunnelID(12345),
-		OurIdent:      ourIdent,
-		NextTunnel:    tunnel.TunnelID(67890),
-		NextIdent:     nextIdent,
-		LayerKey:      layerKey,
-		IVKey:         ivKey,
-		ReplyKey:      replyKey,
-		ReplyIV:       replyIV,
-		Flag:          0,
-		RequestTime:   time.Now(),
-		SendMessageID: 42,
-		Padding:       padding,
 	}
 }

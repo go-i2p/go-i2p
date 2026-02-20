@@ -1,80 +1,10 @@
 package i2np
 
 import (
-	"fmt"
 	"testing"
 
 	common "github.com/go-i2p/common/data"
 )
-
-// MockNetDBRetriever implements NetDBRetriever for testing
-type MockNetDBRetriever struct {
-	data map[common.Hash][]byte
-}
-
-func NewMockNetDBRetriever() *MockNetDBRetriever {
-	return &MockNetDBRetriever{
-		data: make(map[common.Hash][]byte),
-	}
-}
-
-func (m *MockNetDBRetriever) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
-	if data, exists := m.data[hash]; exists {
-		return data, nil
-	}
-	return nil, fmt.Errorf("RouterInfo not found")
-}
-
-func (m *MockNetDBRetriever) GetRouterInfoCount() int {
-	return len(m.data)
-}
-
-func (m *MockNetDBRetriever) AddRouterInfo(hash common.Hash, data []byte) {
-	m.data[hash] = data
-}
-
-// MockTransportSession implements TransportSession for testing
-type MockTransportSession struct {
-	sentMessages []I2NPMessage
-}
-
-func NewMockTransportSession() *MockTransportSession {
-	return &MockTransportSession{
-		sentMessages: make([]I2NPMessage, 0),
-	}
-}
-
-func (m *MockTransportSession) QueueSendI2NP(msg I2NPMessage) error {
-	m.sentMessages = append(m.sentMessages, msg)
-	return nil
-}
-
-func (m *MockTransportSession) SendQueueSize() int {
-	return len(m.sentMessages)
-}
-
-func (m *MockTransportSession) GetSentMessages() []I2NPMessage {
-	return m.sentMessages
-}
-
-// MockSessionProvider implements SessionProvider for testing
-type MockSessionProvider struct {
-	session *MockTransportSession
-}
-
-func NewMockSessionProvider() *MockSessionProvider {
-	return &MockSessionProvider{
-		session: NewMockTransportSession(),
-	}
-}
-
-func (m *MockSessionProvider) GetSessionByHash(hash common.Hash) (TransportSession, error) {
-	return m.session, nil
-}
-
-func (m *MockSessionProvider) GetMockSession() *MockTransportSession {
-	return m.session
-}
 
 // TestDatabaseLookupFound tests successful RouterInfo retrieval and DatabaseStore response
 func TestDatabaseLookupFound(t *testing.T) {

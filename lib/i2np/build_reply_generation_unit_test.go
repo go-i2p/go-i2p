@@ -3,128 +3,13 @@ package i2np
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
-	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// mockBuildReplyForwarder implements BuildReplyForwarder for testing
-type mockBuildReplyForwarder struct {
-	mu                 sync.Mutex
-	routerCalls        []routerForwardCall
-	tunnelCalls        []tunnelForwardCall
-	forwardToRouterErr error
-	forwardToTunnelErr error
-}
-
-type routerForwardCall struct {
-	routerHash       common.Hash
-	messageID        int
-	encryptedRecords []byte
-	isShortBuild     bool
-}
-
-type tunnelForwardCall struct {
-	gatewayHash      common.Hash
-	tunnelID         tunnel.TunnelID
-	messageID        int
-	encryptedRecords []byte
-	isShortBuild     bool
-}
-
-func newMockBuildReplyForwarder() *mockBuildReplyForwarder {
-	return &mockBuildReplyForwarder{
-		routerCalls: make([]routerForwardCall, 0),
-		tunnelCalls: make([]tunnelForwardCall, 0),
-	}
-}
-
-func (m *mockBuildReplyForwarder) ForwardBuildReplyToRouter(routerHash common.Hash, messageID int, encryptedRecords []byte, isShortBuild bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.routerCalls = append(m.routerCalls, routerForwardCall{
-		routerHash:       routerHash,
-		messageID:        messageID,
-		encryptedRecords: encryptedRecords,
-		isShortBuild:     isShortBuild,
-	})
-	return m.forwardToRouterErr
-}
-
-func (m *mockBuildReplyForwarder) ForwardBuildReplyThroughTunnel(gatewayHash common.Hash, tunnelID tunnel.TunnelID, messageID int, encryptedRecords []byte, isShortBuild bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.tunnelCalls = append(m.tunnelCalls, tunnelForwardCall{
-		gatewayHash:      gatewayHash,
-		tunnelID:         tunnelID,
-		messageID:        messageID,
-		encryptedRecords: encryptedRecords,
-		isShortBuild:     isShortBuild,
-	})
-	return m.forwardToTunnelErr
-}
-
-func (m *mockBuildReplyForwarder) getRouterCalls() []routerForwardCall {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	result := make([]routerForwardCall, len(m.routerCalls))
-	copy(result, m.routerCalls)
-	return result
-}
-
-func (m *mockBuildReplyForwarder) getTunnelCalls() []tunnelForwardCall {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	result := make([]tunnelForwardCall, len(m.tunnelCalls))
-	copy(result, m.tunnelCalls)
-	return result
-}
-
-// mockParticipantManager implements ParticipantManager for testing
-type mockParticipantManager struct {
-	mu              sync.Mutex
-	acceptAll       bool
-	rejectCode      byte
-	rejectReason    string
-	registeredCount int
-	registerErr     error
-}
-
-func newMockParticipantManager(acceptAll bool) *mockParticipantManager {
-	return &mockParticipantManager{
-		acceptAll:    acceptAll,
-		rejectCode:   TUNNEL_BUILD_REPLY_REJECT,
-		rejectReason: "mock rejection",
-	}
-}
-
-func (m *mockParticipantManager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.acceptAll {
-		return true, 0, ""
-	}
-	return false, m.rejectCode, m.rejectReason
-}
-
-func (m *mockParticipantManager) RegisterParticipant(tunnelID tunnel.TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.registeredCount++
-	return m.registerErr
-}
-
-func (m *mockParticipantManager) getRegisteredCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.registeredCount
-}
 
 func TestBuildReplyForwarderInterface(t *testing.T) {
 	t.Run("interface_compiles", func(t *testing.T) {
