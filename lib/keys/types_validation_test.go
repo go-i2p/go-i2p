@@ -54,7 +54,7 @@ func TestStoreKeys_SecurePermissions(t *testing.T) {
 
 	// Check that permissions are 0o600 (owner read/write only)
 	perm := fileInfo.Mode().Perm()
-	if perm != 0o600 {
-		t.Errorf("Expected file permissions 0o600, got %o", perm)
+	if perm != testKeyFilePerms {
+		t.Errorf("Expected file permissions %o, got %o", testKeyFilePerms, perm)
 	}
 }
