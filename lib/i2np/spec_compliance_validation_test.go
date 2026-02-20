@@ -25,6 +25,7 @@ import (
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/ratchet"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -4003,7 +4004,7 @@ func TestLegacyCrypto_AESSessionTag_FlagPresence(t *testing.T) {
 // TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC
 // decryption path in BuildRecordCrypto for legacy reply record processing.
 func TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence(t *testing.T) {
-	rc := ratchet.NewBuildRecordCrypto()
+	rc := noiseratchet.NewBuildRecordCrypto()
 
 	// Prepare a valid 528-byte ciphertext (all zeros, AES will decrypt it)
 	ciphertext := make([]byte, 528)
