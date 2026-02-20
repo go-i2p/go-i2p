@@ -1,5 +1,4 @@
 package bootstrap
-package bootstrap
 
 import (
 	"context"
