@@ -1441,7 +1441,7 @@ func TestGarlic_ECIES_NewSessionMessageFormat(t *testing.T) {
 	destHash[0] = 0x42
 
 	plaintext := []byte("test garlic payload")
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.ourPublicKey, plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
 	// New Session: [ephPub(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1484,11 +1484,11 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 	plaintext := []byte("existing session test")
 
 	// First message: creates New Session
-	_, err = sm.EncryptGarlicMessage(destHash, destSM.ourPublicKey, plaintext)
+	_, err = sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
 	// Second message: uses Existing Session
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.ourPublicKey, plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
 	// Existing Session: [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1527,7 +1527,7 @@ func TestGarlic_ECIES_NewSessionDecryptionRoundtrip(t *testing.T) {
 	destHash[0] = 0x44
 	plaintext := []byte("hello from new session")
 
-	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.ourPublicKey, plaintext)
+	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
 	decrypted, sessionTag, err := receiver.DecryptGarlicMessage(encrypted)
@@ -1552,7 +1552,7 @@ func TestGarlic_ECIES_ExistingSessionRoundtrip(t *testing.T) {
 
 	// Message 1: New Session
 	msg1 := []byte("first message")
-	enc1, err := sender.EncryptGarlicMessage(destHash, receiver.ourPublicKey, msg1)
+	enc1, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), msg1)
 	require.NoError(t, err)
 
 	dec1, tag1, err := receiver.DecryptGarlicMessage(enc1)
@@ -1591,7 +1591,7 @@ func TestGarlic_ECIES_NewSessionReplyNotSeparatelyImplemented(t *testing.T) {
 	destHash := common.Hash{}
 	destHash[0] = 0x46
 
-	enc, err := sender.EncryptGarlicMessage(destHash, receiver.ourPublicKey, []byte("NS"))
+	enc, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), []byte("NS"))
 	require.NoError(t, err)
 
 	_, _, err = receiver.DecryptGarlicMessage(enc)
@@ -1616,7 +1616,7 @@ func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
 
 	// Encrypt with known plaintext
 	plaintext := []byte("chacha20 poly1305 test")
-	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.ourPublicKey, plaintext)
+	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
 	// New Session format: [ephPub(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
@@ -1654,7 +1654,7 @@ func TestGarlic_SessionTagDerivation_TagsAre8Bytes(t *testing.T) {
 	destHash[0] = 0x50
 
 	// Create a session
-	_, err = sm.EncryptGarlicMessage(destHash, destSM.ourPublicKey, []byte("session init"))
+	_, err = sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), []byte("session init"))
 	require.NoError(t, err)
 
 	// The session should now have pending tags in the tag index

@@ -88,6 +88,11 @@ func (sm *GarlicSessionManager) ProcessIncomingDHRatchet(sessionTag [8]byte, new
 	return sm.inner.ProcessIncomingDHRatchet(sessionTag, newRemotePubKey)
 }
 
+// GetPublicKey returns this session manager's X25519 public key.
+func (sm *GarlicSessionManager) GetPublicKey() [32]byte {
+	return sm.inner.GetPublicKey()
+}
+
 // GetSessionCount returns the number of active sessions.
 func (sm *GarlicSessionManager) GetSessionCount() int {
 	return sm.inner.GetSessionCount()
