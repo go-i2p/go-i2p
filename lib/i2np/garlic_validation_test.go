@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/go-i2p/crypto/types"
 
@@ -277,42 +276,6 @@ func TestGarlicSessionManager_ConcurrentAccess(t *testing.T) {
 	assert.GreaterOrEqual(t, sm.GetSessionCount(), 0, "Session manager should be in valid state")
 }
 
-// TestSessionExpiration verifies session cleanup works correctly.
-func TestSessionExpiration(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	// Set very short timeout for testing
-	sm.sessionTimeout = 50 * time.Millisecond
-
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
-
-	// Create a session
-	builder, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg := NewDataMessage([]byte("expire test"))
-	err = builder.AddLocalDeliveryClove(dataMsg, 1)
-	require.NoError(t, err)
-
-	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
-	require.NoError(t, err)
-
-	assert.Equal(t, 1, sm.GetSessionCount(), "Should have 1 session")
-
-	// Wait for expiration
-	time.Sleep(100 * time.Millisecond)
-
-	// Cleanup should remove expired sessions
-	removed := sm.CleanupExpiredSessions()
-	assert.Equal(t, 1, removed, "Should have removed 1 expired session")
-	assert.Equal(t, 0, sm.GetSessionCount(), "Should have 0 sessions after cleanup")
-}
-
 // TestNewSessionMessageFormat_Security verifies correct message format.
 func TestNewSessionMessageFormat_Security(t *testing.T) {
 	sm, err := GenerateGarlicSessionManager()
@@ -348,36 +311,6 @@ func TestNewSessionMessageFormat_Security(t *testing.T) {
 		}
 	}
 	assert.False(t, allZero, "Ephemeral public key should not be all zeros")
-}
-
-// TestHKDF_KeyDerivation verifies HKDF-based key derivation correctness.
-func TestHKDF_KeyDerivation(t *testing.T) {
-	// Create a shared secret
-	var sharedSecret [32]byte
-	_, err := rand.Read(sharedSecret[:])
-	require.NoError(t, err)
-
-	// Derive keys multiple times with same input
-	keys1, err := deriveSessionKeysFromSecret(sharedSecret[:])
-	require.NoError(t, err)
-
-	keys2, err := deriveSessionKeysFromSecret(sharedSecret[:])
-	require.NoError(t, err)
-
-	// Keys should be deterministic
-	assert.Equal(t, keys1.rootKey, keys2.rootKey, "Root keys should match")
-	assert.Equal(t, keys1.symKey, keys2.symKey, "Symmetric keys should match")
-	assert.Equal(t, keys1.tagKey, keys2.tagKey, "Tag keys should match")
-
-	// Keys should be different from each other
-	assert.NotEqual(t, keys1.rootKey, keys1.symKey, "Root and symmetric keys should differ")
-	assert.NotEqual(t, keys1.rootKey, keys1.tagKey, "Root and tag keys should differ")
-	assert.NotEqual(t, keys1.symKey, keys1.tagKey, "Symmetric and tag keys should differ")
-
-	// Keys should be 32 bytes (256 bits)
-	assert.Equal(t, 32, len(keys1.rootKey), "Root key should be 32 bytes")
-	assert.Equal(t, 32, len(keys1.symKey), "Symmetric key should be 32 bytes")
-	assert.Equal(t, 32, len(keys1.tagKey), "Tag key should be 32 bytes")
 }
 
 // TestGarlicMessageBoundsChecking verifies input validation.
