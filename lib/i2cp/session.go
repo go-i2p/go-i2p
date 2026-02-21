@@ -1178,14 +1178,31 @@ func (s *Session) generateEncryptionCookie() ([32]byte, error) {
 
 // encryptInnerLeaseSet encrypts the inner LeaseSet2 data.
 func (s *Session) encryptInnerLeaseSet(ls2 *lease_set2.LeaseSet2, cookie [32]byte) ([]byte, error) {
-	// For EncryptedLeaseSet, we encrypt for the blinded destination's public key
-	blindedPubKey, err := s.blindedDestination.PublicKey()
+	// Get the unblinded destination's signing public key
+	destSigningPubKey, err := s.destination.SigningPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get blinded encryption public key: %w", err)
+		return nil, fmt.Errorf("failed to get destination signing public key: %w", err)
 	}
 
+	// Get the blinded destination's signing public key
+	blindedSigningPubKey, err := s.blindedDestination.SigningPublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blinded signing public key: %w", err)
+	}
+
+	// Derive subcredential per I2P spec:
+	//   credential    = SHA-256("credential" || destSigningPubKey)
+	//   subcredential = SHA-256("subcredential" || credential || blindedPubKey)
+	subcredential := encrypted_leaseset.DeriveSubcredential(
+		destSigningPubKey.Bytes(),
+		blindedSigningPubKey.Bytes(),
+	)
+
+	// Published timestamp (seconds since epoch)
+	published := uint32(time.Now().Unix())
+
 	// Encrypt inner LeaseSet2
-	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, cookie, blindedPubKey)
+	encryptedData, err := encrypted_leaseset.EncryptInnerLeaseSet2(ls2, subcredential, published)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt inner LeaseSet2: %w", err)
 	}
