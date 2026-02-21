@@ -52,9 +52,10 @@ The core router functionality is now operational. We have tested functionality u
   - [X] HKDF
   - [X] HMAC
   - [X] Noise subsystem
-- End-to-End Crypto
-  - [X] Garlic messages
-  - [X] ECIES-X25519-AEAD-Ratchet (primary)
+- End-to-End Crypto (crypto engine in [go-noise/ratchet](https://github.com/go-i2p/go-noise/tree/main/ratchet))
+  - [X] Garlic messages (thin adapter in `lib/i2np/garlic_session.go` → `go-noise/ratchet.SessionManager`)
+  - [X] ECIES-X25519-AEAD-Ratchet (primary, implemented in `go-noise/ratchet/`)
+  - [X] Tunnel build record crypto (adapter in `lib/i2np/build_record_crypto.go` → `go-noise/ratchet.BuildRecordCrypto`)
   - [ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)
 - I2NP
   - [X] Message parsing and serialization
@@ -92,6 +93,7 @@ The core router functionality is now operational. We have tested functionality u
   - [Noise Subsystem (see also https://github.com/go-i2p/go-noise)](https://github.com/go-i2p/go-noise)
     - [X] Noise Socket Framework
     - [X] NTCP2 Socket Framework
+    - [X] ECIES-X25519-AEAD-Ratchet engine (`ratchet/` package)
     - [ ] SSU2 Socket Framework
 - Tunnels
   - [X] Message structure parsing (delivery instructions)

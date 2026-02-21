@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -453,4 +454,92 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 				"message type %d should not be unknown", msgType)
 		}
 	}
+}
+
+// =============================================================================
+// MOCK-BASED GARLIC INTERFACE TESTS
+// =============================================================================
+
+// TestSetGarlicSessionManager_MockDecryptor tests that a mock decryptor
+// can be injected into the processor via the interface.
+func TestSetGarlicSessionManager_MockDecryptor(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	// Initially nil
+	assert.Nil(t, processor.garlicSessions)
+
+	// Inject mock decryptor
+	mock := newMockGarlicDecryptor()
+	processor.SetGarlicSessionManager(mock)
+
+	assert.NotNil(t, processor.garlicSessions)
+}
+
+// TestSetBuildRecordCrypto_MockEncryptor tests that a mock reply encryptor
+// can be injected into the processor via the interface.
+func TestSetBuildRecordCrypto_MockEncryptor(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	// Initially set to real BuildRecordCrypto from constructor
+	assert.NotNil(t, processor.buildRecordCrypto)
+
+	// Inject mock encryptor
+	mock := newMockReplyEncryptor()
+	processor.SetBuildRecordCrypto(mock)
+
+	assert.NotNil(t, processor.buildRecordCrypto)
+}
+
+// TestDecryptGarlicData_WithMock tests garlic decryption using a mock.
+func TestDecryptGarlicData_WithMock(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	// Set up mock to return specific plaintext
+	expectedPlaintext := []byte("decrypted garlic payload")
+	expectedTag := [8]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22}
+	mock := newMockGarlicDecryptorWithPlaintext(expectedPlaintext, expectedTag)
+	processor.SetGarlicSessionManager(mock)
+
+	// Call decryptGarlicData
+	plaintext, tag, err := processor.decryptGarlicData(42, []byte("encrypted-data"))
+	assert.NoError(t, err)
+	assert.Equal(t, expectedPlaintext, plaintext)
+	assert.Equal(t, expectedTag, tag)
+
+	// Verify mock was called
+	assert.Equal(t, 1, mock.callCount)
+	assert.Equal(t, []byte("encrypted-data"), mock.lastEncrypted)
+}
+
+// TestDecryptGarlicData_MockError tests garlic decryption error handling with a mock.
+func TestDecryptGarlicData_MockError(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	mock := newMockGarlicDecryptorWithError(fmt.Errorf("decryption failed: invalid session tag"))
+	processor.SetGarlicSessionManager(mock)
+
+	_, _, err := processor.decryptGarlicData(42, []byte("bad-data"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "decryption failed")
+}
+
+// TestValidateGarlicSession_NilDecryptor tests that nil decryptor returns error.
+func TestValidateGarlicSession_NilDecryptor(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	// Don't set garlic session manager
+	err := processor.validateGarlicSession()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "garlic session manager not configured")
+}
+
+// TestValidateGarlicSession_WithMock tests that a set mock passes validation.
+func TestValidateGarlicSession_WithMock(t *testing.T) {
+	processor := NewMessageProcessor()
+
+	mock := newMockGarlicDecryptor()
+	processor.SetGarlicSessionManager(mock)
+
+	err := processor.validateGarlicSession()
+	assert.NoError(t, err)
 }

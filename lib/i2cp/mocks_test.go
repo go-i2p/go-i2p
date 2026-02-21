@@ -388,8 +388,38 @@ func createTestSessionWithZeroHopTunnels(t *testing.T) *Session {
 	return session
 }
 
+// mockGarlicEncryptor implements GarlicMessageEncryptor for testing.
+// It encrypts by prefixing a tag to the plaintext (no real crypto).
+type mockGarlicEncryptor struct {
+	encryptFunc func(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error)
+	encryptErr  error
+	callCount   int
+}
+
+func newMockGarlicEncryptor() *mockGarlicEncryptor {
+	return &mockGarlicEncryptor{}
+}
+
+func (m *mockGarlicEncryptor) EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error) {
+	m.callCount++
+	if m.encryptFunc != nil {
+		return m.encryptFunc(destinationHash, destinationPubKey, plaintextGarlic)
+	}
+	if m.encryptErr != nil {
+		return nil, m.encryptErr
+	}
+	// Default: return plaintext prefixed with a mock tag (simulates encryption)
+	result := make([]byte, 8+len(plaintextGarlic))
+	copy(result[:8], []byte("MOCKENCR"))
+	copy(result[8:], plaintextGarlic)
+	return result, nil
+}
+
+// Compile-time interface check.
+var _ GarlicMessageEncryptor = (*mockGarlicEncryptor)(nil)
+
 // setupMessageRouterTest sets up a message router test environment.
-func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager, TransportSendFunc, map[string]i2np.I2NPMessage) {
+func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, TransportSendFunc, map[string]i2np.I2NPMessage) {
 	t.Helper()
 
 	server, session, _, outboundPool, cleanup := setupTestEnvironment(t)
@@ -411,10 +441,7 @@ func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager,
 		outboundPool.AddTunnel(tunnelState)
 	}
 
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	garlicMock := newMockGarlicEncryptor()
 
 	sentMessages := make(map[string]i2np.I2NPMessage)
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
@@ -423,7 +450,7 @@ func setupMessageRouterTest(t *testing.T) (*Session, *i2np.GarlicSessionManager,
 		return nil
 	}
 
-	return session, garlicMgr, transportSend, sentMessages
+	return session, garlicMock, transportSend, sentMessages
 }
 
 // createMockTunnels creates mock tunnel data for testing.

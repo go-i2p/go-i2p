@@ -144,17 +144,34 @@ type TunnelBuildReplyProcessor interface {
 	ProcessTunnelBuildReply(handler TunnelReplyHandler, messageID int) error
 }
 
+// GarlicMessageDecryptor provides garlic message decryption for the processor.
+// This interface is satisfied by both GarlicSessionManager (the concrete adapter)
+// and test mocks.
+type GarlicMessageDecryptor interface {
+	// DecryptGarlicMessage decrypts an encrypted garlic message.
+	// Returns plaintext, session tag, and error.
+	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, err error)
+}
+
+// ReplyRecordEncryptor encrypts tunnel build reply records.
+// This interface is satisfied by both BuildRecordCrypto (the concrete adapter)
+// and test mocks.
+type ReplyRecordEncryptor interface {
+	// EncryptReplyRecord encrypts a BuildResponseRecord with the given reply key and IV.
+	EncryptReplyRecord(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error)
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	mu                    sync.RWMutex
 	factory               *I2NPMessageFactory
-	garlicSessions        *GarlicSessionManager
+	garlicSessions        GarlicMessageDecryptor    // Interface for garlic message decryption
 	cloveForwarder        GarlicCloveForwarder      // Optional delegate for non-LOCAL garlic clove delivery
 	dbManager             *DatabaseManager          // Optional database manager for DatabaseLookup messages
 	expirationValidator   *ExpirationValidator      // Validator for checking message expiration
 	participantManager    ParticipantManager        // Optional participant manager for tunnel build requests
 	buildReplyForwarder   BuildReplyForwarder       // Optional forwarder for tunnel build replies
-	buildRecordCrypto     *BuildRecordCrypto        // Crypto handler for encrypting build response records
+	buildRecordCrypto     ReplyRecordEncryptor      // Interface for encrypting build response records
 	tunnelGatewayHandler  TunnelGatewayHandler      // Optional handler for tunnel gateway messages
 	tunnelDataHandler     TunnelDataHandler         // Optional handler for inbound tunnel data messages
 	searchReplyHandler    SearchReplyHandler        // Optional handler for DatabaseSearchReply suggestions
@@ -177,11 +194,21 @@ func NewMessageProcessor() *MessageProcessor {
 
 // SetGarlicSessionManager sets the garlic session manager for decrypting garlic messages.
 // This must be called before processing garlic messages, otherwise they will fail with an error.
-func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr *GarlicSessionManager) {
+// Accepts any implementation of GarlicMessageDecryptor, including *GarlicSessionManager and test mocks.
+func (p *MessageProcessor) SetGarlicSessionManager(garlicMgr GarlicMessageDecryptor) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	log.WithField("at", "SetGarlicSessionManager").Debug("Setting garlic session manager")
 	p.garlicSessions = garlicMgr
+}
+
+// SetBuildRecordCrypto sets the build record crypto handler for encrypting build response records.
+// Accepts any implementation of ReplyRecordEncryptor, including *BuildRecordCrypto and test mocks.
+func (p *MessageProcessor) SetBuildRecordCrypto(crypto ReplyRecordEncryptor) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetBuildRecordCrypto").Debug("Setting build record crypto")
+	p.buildRecordCrypto = crypto
 }
 
 // SetCloveForwarder sets the garlic clove forwarder for handling non-LOCAL delivery types.

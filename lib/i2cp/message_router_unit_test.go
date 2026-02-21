@@ -7,17 +7,12 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestNewMessageRouter verifies message router creation
 func TestNewMessageRouter(t *testing.T) {
-	// Create garlic session manager
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	// Create mock garlic encryptor
+	garlicMgr := newMockGarlicEncryptor()
 
 	// Create transport send function
 	sentMessages := make(map[string]i2np.I2NPMessage)
@@ -26,6 +21,7 @@ func TestNewMessageRouter(t *testing.T) {
 		sentMessages[key] = msg
 		return nil
 	}
+	_ = sentMessages
 
 	// Create message router
 	router := NewMessageRouter(garlicMgr, transportSend)
@@ -50,7 +46,7 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 
 	// Route message
 	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	// Verify message was sent to gateway
 	assert.Len(t, sentMessages, 1, "should send one message to gateway")
@@ -66,11 +62,8 @@ func TestRouteOutboundMessageNoPool(t *testing.T) {
 	// Setup session WITHOUT outbound pool
 	session := createTestSessionWithoutPools(t)
 
-	// Create garlic manager and router
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	// Create mock garlic encryptor and router
+	garlicMgr := newMockGarlicEncryptor()
 
 	sentMessages := make(map[string]i2np.I2NPMessage)
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
@@ -85,7 +78,7 @@ func TestRouteOutboundMessageNoPool(t *testing.T) {
 	var destPubKey [32]byte
 	payload := []byte("test")
 
-	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "outbound tunnel pool required")
 }
@@ -95,11 +88,8 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 	// Setup session with empty pool (no active tunnels)
 	session := createTestSessionWithEmptyPools(t)
 
-	// Create garlic manager and router
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	// Create mock garlic encryptor and router
+	garlicMgr := newMockGarlicEncryptor()
 
 	sentMessages := make(map[string]i2np.I2NPMessage)
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
@@ -114,18 +104,15 @@ func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
 	var destPubKey [32]byte
 	payload := []byte("test")
 
-	err = router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient active outbound tunnels")
 }
 
 // TestSendThroughTunnel verifies sending through a specific tunnel
 func TestSendThroughTunnel(t *testing.T) {
-	// Setup
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	// Setup with mock garlic encryptor
+	garlicMgr := newMockGarlicEncryptor()
 
 	sentMessages := make(map[string]i2np.I2NPMessage)
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
@@ -146,8 +133,8 @@ func TestSendThroughTunnel(t *testing.T) {
 	msg := i2np.NewDataMessage([]byte("test"))
 
 	// Send through tunnel
-	err = router.SendThroughTunnel(tunnel, msg)
-	require.NoError(t, err)
+	err := router.SendThroughTunnel(tunnel, msg)
+	assert.NoError(t, err)
 
 	// Verify message was sent
 	assert.Len(t, sentMessages, 1)
@@ -155,10 +142,7 @@ func TestSendThroughTunnel(t *testing.T) {
 
 // TestSendThroughTunnelNoHops verifies error when tunnel has no hops
 func TestSendThroughTunnelNoHops(t *testing.T) {
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	garlicMgr := newMockGarlicEncryptor()
 
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
 		return nil
@@ -175,7 +159,7 @@ func TestSendThroughTunnelNoHops(t *testing.T) {
 
 	msg := i2np.NewDataMessage([]byte("test"))
 
-	err = router.SendThroughTunnel(tunnel, msg)
+	err := router.SendThroughTunnel(tunnel, msg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tunnel hops required")
 }
@@ -188,11 +172,8 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 	// Create a session with only zero-hop tunnels (no hops)
 	session := createTestSessionWithZeroHopTunnels(t)
 
-	// Create garlic manager and router
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	// Create mock garlic encryptor and router
+	garlicMgr := newMockGarlicEncryptor()
 
 	sentMessages := make(map[string]i2np.I2NPMessage)
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
@@ -214,7 +195,7 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 	copy(destPubKey[:], "dest-public-key-32-bytes-pads")
 	payload := []byte("test message payload")
 
-	err = router.RouteOutboundMessage(session, 42, destHash, destPubKey, payload, 0, statusCallback)
+	err := router.RouteOutboundMessage(session, 42, destHash, destPubKey, payload, 0, statusCallback)
 
 	// Verify the message was rejected
 	assert.Error(t, err)
@@ -232,10 +213,7 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 // TestValidateAndSelectTunnelZeroHopRejection tests the validateAndSelectTunnel
 // method directly to ensure zero-hop tunnels are consistently rejected.
 func TestValidateAndSelectTunnelZeroHopRejection(t *testing.T) {
-	var privKey [32]byte
-	copy(privKey[:], "test-private-key-32-bytes-pad")
-	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	garlicMgr := newMockGarlicEncryptor()
 
 	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
 		return nil

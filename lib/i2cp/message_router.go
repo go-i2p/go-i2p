@@ -10,6 +10,18 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// GarlicMessageEncryptor provides garlic message encryption for the message router.
+// This interface is satisfied by both *i2np.GarlicSessionManager (the concrete adapter)
+// and test mocks. It uses I2P-specific types (common.Hash) at the boundary.
+type GarlicMessageEncryptor interface {
+	// EncryptGarlicMessage encrypts plaintext for a destination.
+	// destinationHash: I2P hash identifying the session.
+	// destinationPubKey: X25519 public key of the recipient.
+	// plaintextGarlic: serialized garlic message bytes.
+	// Returns encrypted bytes.
+	EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error)
+}
+
 // MessageRouter handles routing outbound I2CP messages through the I2P network.
 // It coordinates garlic encryption, tunnel selection, and message transmission.
 //
@@ -19,7 +31,7 @@ import (
 // - Integrates with tunnel pools for outbound routing
 // - Delegates actual transmission to transport layer
 type MessageRouter struct {
-	garlicSessions *i2np.GarlicSessionManager
+	garlicSessions GarlicMessageEncryptor
 	transportSend  TransportSendFunc
 }
 
@@ -46,7 +58,8 @@ type MessageStatusCallback func(messageID uint32, statusCode uint8, messageSize,
 
 // NewMessageRouter creates a new message router with the given garlic session manager.
 // The transportSend callback will be used to send encrypted messages to the network.
-func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend TransportSendFunc) *MessageRouter {
+// Accepts any implementation of GarlicMessageEncryptor, including *i2np.GarlicSessionManager and test mocks.
+func NewMessageRouter(garlicMgr GarlicMessageEncryptor, transportSend TransportSendFunc) *MessageRouter {
 	log.WithFields(logger.Fields{
 		"at":                 "i2cp.NewMessageRouter",
 		"hasGarlicManager":   garlicMgr != nil,
