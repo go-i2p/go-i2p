@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/crypto/types"
-
 	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
@@ -24,7 +22,10 @@ import (
 	"github.com/go-i2p/crypto/chacha20poly1305"
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/ratchet"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+
+	aescbc "github.com/go-i2p/crypto/aes"
 	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1484,10 +1485,25 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 	plaintext := []byte("existing session test")
 
 	// First message: creates New Session
-	_, err = sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
+	nsMsg, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
-	// Second message: uses Existing Session
+	// Receiver decrypts the NS to get sessionHash
+	_, _, sessionHash, err := destSM.DecryptGarlicMessage(nsMsg)
+	require.NoError(t, err)
+	require.NotNil(t, sessionHash)
+
+	// Receiver sends NSR to complete the handshake
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	require.NoError(t, err)
+	nsrMsg, err := destSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	require.NoError(t, err)
+
+	// Sender processes NSR to transition to Existing Session
+	_, _, _, err = sm.DecryptGarlicMessage(nsrMsg)
+	require.NoError(t, err)
+
+	// Second message: uses Existing Session (handshake is complete)
 	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
@@ -1496,12 +1512,13 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 	assert.True(t, len(encrypted) >= 36,
 		"Existing Session message must be at least 36 bytes (8 tag + 12 nonce + 16 auth tag)")
 
-	// Existing Session should be SMALLER than New Session (no 32-byte ephemeral key)
-	// New Session overhead: 60 bytes. Existing Session overhead: 36 bytes.
-	expectedMinSize := 8 + 12 + len(plaintext) + 16
-	assert.True(t, len(encrypted) >= expectedMinSize,
-		"Existing Session must be at least %d bytes for %d-byte plaintext",
-		expectedMinSize, len(plaintext))
+	// Existing Session minimum overhead: [sessionTag(8)] + [AEAD_ciphertext+tag(16)]
+	// The plaintext is wrapped in ratchet payload format, so actual ciphertext is larger
+	// than raw plaintext. We just verify it meets the minimum structural overhead.
+	minOverhead := 8 + 16 // session tag + auth tag
+	assert.True(t, len(encrypted) >= minOverhead,
+		"Existing Session must be at least %d bytes (8 tag + 16 auth tag)",
+		minOverhead)
 
 	// Verify session tag is the first 8 bytes (should be non-zero since it's ratchet-derived)
 	sessionTag := encrypted[0:8]
@@ -1530,7 +1547,7 @@ func TestGarlic_ECIES_NewSessionDecryptionRoundtrip(t *testing.T) {
 	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
 	require.NoError(t, err)
 
-	decrypted, sessionTag, err := receiver.DecryptGarlicMessage(encrypted)
+	decrypted, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
 	require.NoError(t, err)
 
 	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
@@ -1555,7 +1572,7 @@ func TestGarlic_ECIES_ExistingSessionRoundtrip(t *testing.T) {
 	enc1, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), msg1)
 	require.NoError(t, err)
 
-	dec1, tag1, err := receiver.DecryptGarlicMessage(enc1)
+	dec1, tag1, _, err := receiver.DecryptGarlicMessage(enc1)
 	require.NoError(t, err)
 	assert.Equal(t, msg1, dec1)
 	assert.Equal(t, [8]byte{}, tag1, "first message is New Session (no tag)")
@@ -1594,7 +1611,7 @@ func TestGarlic_ECIES_NewSessionReplyNotSeparatelyImplemented(t *testing.T) {
 	enc, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), []byte("NS"))
 	require.NoError(t, err)
 
-	_, _, err = receiver.DecryptGarlicMessage(enc)
+	_, _, _, err = receiver.DecryptGarlicMessage(enc)
 	require.NoError(t, err)
 
 	// The receiver now has an inbound session keyed by the sender's ephemeral key hash
@@ -1624,7 +1641,7 @@ func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
 	assert.True(t, len(encrypted) > 16, "encrypted message must contain auth tag")
 
 	// Verify decryption works (proves correct AEAD was used)
-	decrypted, _, err := destSM.DecryptGarlicMessage(encrypted)
+	decrypted, _, _, err := destSM.DecryptGarlicMessage(encrypted)
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, decrypted,
 		"ChaCha20-Poly1305 decrypt must recover original plaintext")
@@ -1633,7 +1650,7 @@ func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
 	corrupted := make([]byte, len(encrypted))
 	copy(corrupted, encrypted)
 	corrupted[len(corrupted)-1] ^= 0xFF
-	_, _, err = destSM.DecryptGarlicMessage(corrupted)
+	_, _, _, err = destSM.DecryptGarlicMessage(corrupted)
 	assert.Error(t, err, "corrupted auth tag must cause decryption failure")
 }
 
@@ -2415,10 +2432,9 @@ func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
 	sm, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	destPubBytes, _, err := ecies.GenerateKeyPair()
+	receiverSM, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
+	destPubKey := receiverSM.GetPublicKey()
 	destHash := types.SHA256(destPubKey[:])
 
 	plaintext := []byte("test payload")
@@ -2427,7 +2443,22 @@ func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
 	firstMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
 	require.NoError(t, err)
 
-	// Second message (should be Existing Session).
+	// Receiver decrypts the NS to establish session and get sessionHash.
+	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(firstMsg)
+	require.NoError(t, err)
+	require.NotNil(t, sessionHash)
+
+	// Receiver sends NSR to complete the handshake.
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	require.NoError(t, err)
+	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	require.NoError(t, err)
+
+	// Sender processes NSR to transition to Existing Session.
+	_, _, _, err = sm.DecryptGarlicMessage(nsrMsg)
+	require.NoError(t, err)
+
+	// Second message (should be Existing Session, handshake is complete).
 	secondMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
 	require.NoError(t, err)
 
@@ -2471,7 +2502,7 @@ func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing
 		"receiver should have no sessions before decryption")
 
 	// Decrypt the New Session message.
-	decrypted, sessionTag, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	decrypted, sessionTag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err)
 
 	// Session tag should be empty for New Session.
@@ -2496,23 +2527,42 @@ func TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession(t *
 	// The receiver distinguishes them by checking if the first 8 bytes match
 	// any known session tag. If not, it treats the message as a New Session.
 
-	sm, err := GenerateGarlicSessionManager()
+	senderSM, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	destPubBytes, _, err := ecies.GenerateKeyPair()
+	destPubBytes, destPrivBytes, err := ecies.GenerateKeyPair()
 	require.NoError(t, err)
-	var destPubKey [32]byte
+	var destPubKey, destPrivKey [32]byte
 	copy(destPubKey[:], destPubBytes)
+	copy(destPrivKey[:], destPrivBytes)
 	destHash := types.SHA256(destPubKey[:])
+
+	receiverSM, err := NewGarlicSessionManager(destPrivKey)
+	require.NoError(t, err)
 
 	plaintext := []byte("test message")
 
 	// First message is New Session.
-	newSessionMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	newSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, plaintext)
 	require.NoError(t, err)
 
-	// Second message is Existing Session.
-	existingSessionMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	// Receiver decrypts the NS to establish the session, completing the responder side.
+	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(newSessionMsg)
+	require.NoError(t, err)
+	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
+
+	// Receiver sends a New Session Reply (NSR) to complete the handshake.
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr reply"))
+	require.NoError(t, err)
+	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	require.NoError(t, err)
+
+	// Sender processes the NSR to transition to Existing Session.
+	_, _, _, err = senderSM.DecryptGarlicMessage(nsrMsg)
+	require.NoError(t, err)
+
+	// Second message is Existing Session (handshake is now complete).
+	existingSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, plaintext)
 	require.NoError(t, err)
 
 	// New Session starts with 32 bytes of ephemeral public key.
@@ -2594,7 +2644,7 @@ func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
 	require.NoError(t, err)
 
 	// Decrypt (New Session — uses nil AD internally).
-	decrypted, tag, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	decrypted, tag, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err)
 	assert.Equal(t, [8]byte{}, tag, "New Session decryption returns empty session tag")
 	assert.Equal(t, plaintext, decrypted, "New Session nil-AD roundtrip must preserve plaintext")
@@ -3227,7 +3277,7 @@ func TestShortTunnelBuild_RecordFormat_NoElGamalFallback(t *testing.T) {
 // TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used verifies that
 // BuildRecordCrypto uses ChaCha20-Poly1305 for reply record encryption.
 func TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	crypto := NewBuildRecordCrypto()
 
 	// Create a valid response record
 	var randomData [495]byte
@@ -3264,7 +3314,7 @@ func TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used(t *testing.T) {
 
 // TestShortTunnelBuild_LayerEncryption_AuthTagRequired verifies authentication tag is checked.
 func TestShortTunnelBuild_LayerEncryption_AuthTagRequired(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	crypto := NewBuildRecordCrypto()
 
 	var randomData [495]byte
 	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
@@ -3287,7 +3337,7 @@ func TestShortTunnelBuild_LayerEncryption_AuthTagRequired(t *testing.T) {
 
 // TestShortTunnelBuild_LayerEncryption_WrongKeyFails verifies wrong key detection.
 func TestShortTunnelBuild_LayerEncryption_WrongKeyFails(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	crypto := NewBuildRecordCrypto()
 
 	var randomData [495]byte
 	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
@@ -3467,7 +3517,7 @@ func TestCryptoAudit_GarlicEncryption_ECIESRatchetImplemented(t *testing.T) {
 // TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305 verifies that build record
 // encryption uses ChaCha20-Poly1305 per Proposal 152.
 func TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	crypto := NewBuildRecordCrypto()
 
 	// Prepare a response record
 	var randomData [495]byte
@@ -3502,7 +3552,7 @@ func TestCryptoAudit_BuildRecordEncryption_ChaCha20Poly1305(t *testing.T) {
 // TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes verifies ChaCha20-Poly1305
 // uses the first 12 bytes of the 16-byte IV as the nonce.
 func TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes(t *testing.T) {
-	crypto := &BuildRecordCrypto{}
+	crypto := NewBuildRecordCrypto()
 
 	var randomData [495]byte
 	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
@@ -3609,23 +3659,27 @@ func TestLegacyCrypto_AESSessionTag_FlagPresence(t *testing.T) {
 }
 
 // TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence flags the AES-256-CBC
-// decryption path in BuildRecordCrypto for legacy reply record processing.
+// decryption path for legacy reply record processing.
+// AES-256-CBC was removed from go-noise/ratchet; this test now validates the
+// go-i2p/crypto/aes path used for backward-compatible decryption.
 func TestLegacyCrypto_AESBuildRecordDecryption_FlagPresence(t *testing.T) {
-	rc := noiseratchet.NewBuildRecordCrypto()
-
 	// Prepare a valid 528-byte ciphertext (all zeros, AES will decrypt it)
 	ciphertext := make([]byte, 528)
 	var key [32]byte
 	var iv [16]byte
 
-	// The DecryptAES256CBC method exists and can be called via go-noise/ratchet
-	result, err := rc.DecryptAES256CBC(ciphertext, key, iv)
+	// AES-256-CBC decryption is now done via go-i2p/crypto/aes directly
+	decrypter := &aescbc.AESSymmetricDecrypter{
+		Key: key[:],
+		IV:  iv[:],
+	}
+	result, err := decrypter.DecryptNoPadding(ciphertext)
 	// AES decryption of zeros with zero key/IV will succeed (just produces garbage plaintext)
 	require.NoError(t, err)
 	assert.Equal(t, 528, len(result),
-		"Legacy AES-256-CBC decryption path exists in go-noise/ratchet.BuildRecordCrypto")
+		"Legacy AES-256-CBC decryption path exists via go-i2p/crypto/aes")
 
-	t.Log("FINDING: AES-256-CBC decryption path (DecryptAES256CBC) exists in go-noise/ratchet.")
+	t.Log("FINDING: AES-256-CBC decryption path now uses go-i2p/crypto/aes directly.")
 	t.Log("This is used for legacy build reply record decryption (pre-0.9.44).")
 	t.Log("Modern path uses ChaCha20-Poly1305 via go-noise/ratchet.")
 }

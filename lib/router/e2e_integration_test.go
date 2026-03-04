@@ -11,6 +11,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
+	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,11 +78,26 @@ func TestE2E_MultipleMessagesConcurrent(t *testing.T) {
 		messages[i] = []byte(string(rune('A'+i)) + " - Concurrent test message")
 	}
 
-	// Send all messages concurrently
-	var wg sync.WaitGroup
-	errChan := make(chan error, numMessages)
+	// Send first message (New Session) synchronously and complete the handshake
+	// before sending subsequent Existing Session messages concurrently.
+	err := env.SendMessageFromClient(env.senderSession, env.receiverDestHash, env.receiverPubKey, messages[0])
+	require.NoError(t, err, "First message (New Session) send failed")
 
-	for _, msg := range messages {
+	env.WaitForOutboundTransmission(t, 2*time.Second)
+	nsMsg := env.ExtractSentGarlicMessage(t)
+	require.NotNil(t, nsMsg, "Should have sent NS message")
+	env.CompleteGarlicHandshake(t, nsMsg)
+
+	// Clear sent messages so the remaining are all ES
+	env.sentMutex.Lock()
+	env.sentMessages = env.sentMessages[:0]
+	env.sentMutex.Unlock()
+
+	// Send remaining messages concurrently (Existing Session)
+	var wg sync.WaitGroup
+	errChan := make(chan error, numMessages-1)
+
+	for _, msg := range messages[1:] {
 		wg.Add(1)
 		go func(payload []byte) {
 			defer wg.Done()
@@ -103,13 +119,17 @@ func TestE2E_MultipleMessagesConcurrent(t *testing.T) {
 	// Wait for transmission
 	env.WaitForOutboundTransmission(t, 3*time.Second)
 
-	// Process all sent messages through inbound tunnels
+	// Process all sent messages (ES) + the initial NS through inbound tunnels
 	sentGarlicMessages := env.ExtractAllSentGarlicMessages(t)
-	assert.Equal(t, numMessages, len(sentGarlicMessages), "Should send all messages")
+	assert.Equal(t, numMessages-1, len(sentGarlicMessages), "Should send remaining messages")
+
+	// Process the first message (already extracted above)
+	err = env.ProcessInboundMessage(nsMsg, messages[0])
+	require.NoError(t, err, "Failed to process NS message")
 
 	for i, garlicMsg := range sentGarlicMessages {
-		err := env.ProcessInboundMessage(garlicMsg, messages[i])
-		require.NoError(t, err, "Failed to process message %d", i)
+		err := env.ProcessInboundMessage(garlicMsg, messages[i+1])
+		require.NoError(t, err, "Failed to process message %d", i+1)
 	}
 
 	// Receive all messages at client
@@ -177,6 +197,9 @@ func TestE2E_TunnelFailureAndRecovery(t *testing.T) {
 	env.WaitForOutboundTransmission(t, 2*time.Second)
 	garlicMsg1 := env.ExtractSentGarlicMessage(t)
 	require.NotNil(t, garlicMsg1)
+
+	// Complete NS→NSR handshake so subsequent messages can use Existing Session
+	env.CompleteGarlicHandshake(t, garlicMsg1)
 
 	err = env.ProcessInboundMessage(garlicMsg1, payload1)
 	require.NoError(t, err)
@@ -284,8 +307,9 @@ type e2eTestEnvironment struct {
 	receiverPubKey   [32]byte
 
 	// Message routing infrastructure
-	garlicManager *i2np.GarlicSessionManager
-	messageRouter *i2cp.MessageRouter
+	garlicManager         *i2np.GarlicSessionManager
+	receiverGarlicManager *i2np.GarlicSessionManager
+	messageRouter         *i2cp.MessageRouter
 
 	// Track sent messages for validation
 	sentMessages []i2np.I2NPMessage
@@ -331,14 +355,12 @@ func setupCompleteE2EEnvironment(t *testing.T) *e2eTestEnvironment {
 	env.receiverInboundPool = env.receiverSession.InboundPool()
 	env.receiverOutboundPool = env.receiverSession.OutboundPool()
 
-	// Setup receiver identity
+	// Setup receiver identity from a real garlic session manager
+	// so the receiver can decrypt and complete the handshake.
+	env.receiverGarlicManager, err = i2np.GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	env.receiverPubKey = env.receiverGarlicManager.GetPublicKey()
 	copy(env.receiverDestHash[:], "receiver-dest-hash-32-bytes-padded-to-fit")
-	copy(env.receiverPubKey[:], []byte{
-		0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	})
 
 	// Create garlic session manager for encryption
 	var privKey [32]byte
@@ -566,6 +588,34 @@ func (env *e2eTestEnvironment) Cleanup() {
 	for i := len(env.cleanupFuncs) - 1; i >= 0; i-- {
 		env.cleanupFuncs[i]()
 	}
+}
+
+// CompleteGarlicHandshake completes the NS→NSR handshake between sender and
+// receiver garlic session managers so that subsequent messages can use ES format.
+// Must be called after the first NS message has been sent and extracted.
+func (env *e2eTestEnvironment) CompleteGarlicHandshake(t *testing.T, nsMsg i2np.I2NPMessage) {
+	t.Helper()
+
+	// Extract the raw encrypted garlic data from the I2NP message wrapper
+	baseMsg, ok := nsMsg.(*i2np.BaseI2NPMessage)
+	require.True(t, ok, "expected *i2np.BaseI2NPMessage")
+	nsData := baseMsg.GetData()
+	require.NotEmpty(t, nsData, "garlic message data should not be empty")
+
+	// Receiver decrypts the NS garlic message to get sessionHash
+	_, _, sessionHash, err := env.receiverGarlicManager.DecryptGarlicMessage(nsData)
+	require.NoError(t, err, "Receiver failed to decrypt NS")
+	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
+
+	// Receiver sends NSR to complete the handshake
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	require.NoError(t, err, "Failed to build NSR payload")
+	nsrMsg, err := env.receiverGarlicManager.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	require.NoError(t, err, "Failed to encrypt NSR")
+
+	// Sender processes NSR to transition to Existing Session
+	_, _, _, err = env.garlicManager.DecryptGarlicMessage(nsrMsg)
+	require.NoError(t, err, "Sender failed to process NSR")
 }
 
 // mockPeerSelector implements tunnel.PeerSelector for testing

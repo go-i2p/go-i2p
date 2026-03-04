@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/session_key"
+	aescbc "github.com/go-i2p/crypto/aes"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/go-i2p/logger"
@@ -302,9 +303,12 @@ func (rp *ReplyProcessor) decryptRecord(
 
 	if len(encrypted) == 528 {
 		// Legacy path: AES-256-CBC decryption (528-byte records, no auth tag).
-		var keyArr [32]byte
-		copy(keyArr[:], replyKey[:])
-		cleartext, err := ratchet.NewBuildRecordCrypto().DecryptAES256CBC(encrypted, keyArr, replyIV)
+		// AES-256-CBC was removed from go-noise/ratchet; use go-i2p/crypto/aes directly.
+		decrypter := &aescbc.AESSymmetricDecrypter{
+			Key: replyKey[:],
+			IV:  replyIV[:],
+		}
+		cleartext, err := decrypter.DecryptNoPadding(encrypted)
 		if err != nil {
 			return nil, fmt.Errorf("AES-256-CBC decryption failed: %w", err)
 		}

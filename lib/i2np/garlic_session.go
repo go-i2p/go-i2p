@@ -60,6 +60,9 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 // This translates the common.Hash destinationHash to [32]byte and delegates to
 // the underlying ratchet.SessionManager.
 //
+// The raw garlic bytes are automatically wrapped in the ECIES-X25519-AEAD-Ratchet
+// payload format (DateTime + GarlicClove blocks) required by the go-noise library.
+//
 // Parameters:
 //   - destinationHash: Hash of the destination's public key (common.Hash)
 //   - destinationPubKey: The destination's X25519 public key (32 bytes)
@@ -73,13 +76,58 @@ func (sm *GarlicSessionManager) EncryptGarlicMessage(
 ) ([]byte, error) {
 	var hashArr [32]byte = [32]byte(destinationHash)
 
-	return sm.inner.EncryptGarlicMessage(hashArr, destinationPubKey, plaintextGarlic)
+	// Wrap raw garlic bytes in the ratchet payload format required by go-noise.
+	// BuildNSPayload prepends a DateTime block and wraps the data as a GarlicClove block.
+	// This format is required for New Session messages (ratchet.md §1b) and is also
+	// valid for Existing Session messages (which accept any payload).
+	payload, err := noiseratchet.BuildNSPayload(plaintextGarlic)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to build ratchet payload")
+	}
+
+	return sm.inner.EncryptGarlicMessage(hashArr, destinationPubKey, payload)
 }
 
 // DecryptGarlicMessage decrypts an encrypted garlic message.
 // Handles both New Session and Existing Session message types.
-func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, error) {
-	return sm.inner.DecryptGarlicMessage(encryptedGarlic)
+//
+// Returns:
+//   - plaintext: the decrypted garlic payload
+//   - sessionTag: the 8-byte tag used to identify the session (zero for NS and NSR)
+//   - sessionHash: SHA-256(initiatorStaticPub) for New Session messages; nil otherwise.
+//     Callers that need to send a New Session Reply must pass the dereferenced
+//     value to EncryptNewSessionReply.
+func (sm *GarlicSessionManager) DecryptGarlicMessage(encryptedGarlic []byte) ([]byte, [8]byte, *[32]byte, error) {
+	payload, sessionTag, sessionHash, err := sm.inner.DecryptGarlicMessage(encryptedGarlic)
+	if err != nil {
+		return nil, [8]byte{}, nil, err
+	}
+
+	// Extract raw garlic bytes from the ratchet payload format.
+	// Parse the payload blocks and return the first GarlicClove block's data.
+	garlicData, err := extractGarlicFromPayload(payload)
+	if err != nil {
+		return nil, [8]byte{}, nil, oops.Wrapf(err, "failed to extract garlic from ratchet payload")
+	}
+
+	return garlicData, sessionTag, sessionHash, nil
+}
+
+// extractGarlicFromPayload parses a ratchet payload and returns the data from
+// the first GarlicClove block. Returns an error if no GarlicClove block is found.
+func extractGarlicFromPayload(payload []byte) ([]byte, error) {
+	blocks, err := noiseratchet.ParsePayload(payload)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to parse ratchet payload")
+	}
+
+	for _, block := range blocks {
+		if block.Type == noiseratchet.BlockGarlicClove {
+			return block.Data, nil
+		}
+	}
+
+	return nil, oops.Errorf("ratchet payload contains no GarlicClove block")
 }
 
 // ProcessIncomingDHRatchet processes a DH ratchet key received from a peer.
@@ -106,6 +154,22 @@ func (sm *GarlicSessionManager) CleanupExpiredSessions() int {
 // StartCleanupLoop starts periodic cleanup of expired sessions.
 func (sm *GarlicSessionManager) StartCleanupLoop(ctx context.Context) {
 	sm.inner.StartCleanupLoop(ctx)
+}
+
+// EncryptNewSessionReply constructs a New Session Reply (NSR) for a session
+// established by a received New Session message. The responder calls this
+// to complete the Noise IK handshake and transition to Existing Session encryption.
+//
+// sessionHash is the [32]byte value returned by DecryptGarlicMessage (dereference
+// the *[32]byte). payload is the reply plaintext.
+func (sm *GarlicSessionManager) EncryptNewSessionReply(sessionHash [32]byte, payload []byte) ([]byte, error) {
+	return sm.inner.EncryptNewSessionReply(sessionHash, payload)
+}
+
+// Close stops the cleanup loop, removes all sessions, and zeroes key material.
+// It is safe to call Close multiple times.
+func (sm *GarlicSessionManager) Close() error {
+	return sm.inner.Close()
 }
 
 // EncryptGarlicWithBuilder is a convenience function that builds and encrypts a garlic message.

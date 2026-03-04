@@ -149,8 +149,8 @@ type TunnelBuildReplyProcessor interface {
 // and test mocks.
 type GarlicMessageDecryptor interface {
 	// DecryptGarlicMessage decrypts an encrypted garlic message.
-	// Returns plaintext, session tag, and error.
-	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, err error)
+	// Returns plaintext, session tag, session hash (non-nil for New Session), and error.
+	DecryptGarlicMessage(encrypted []byte) (plaintext []byte, sessionTag [8]byte, sessionHash *[32]byte, err error)
 }
 
 // ReplyRecordEncryptor encrypts tunnel build reply records.
@@ -719,7 +719,7 @@ func (p *MessageProcessor) decryptGarlicData(msgID int, encryptedData []byte) ([
 		"encrypted_size": len(encryptedData),
 	}).Debug("Decrypting garlic message")
 
-	decryptedData, sessionTag, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
+	decryptedData, sessionTag, _, err := p.garlicSessions.DecryptGarlicMessage(encryptedData)
 	if err != nil {
 		return nil, [8]byte{}, fmt.Errorf("failed to decrypt garlic message: %w", err)
 	}

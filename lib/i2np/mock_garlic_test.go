@@ -15,7 +15,7 @@ var _ ReplyRecordEncryptor = (*mockReplyEncryptor)(nil)
 type mockGarlicDecryptor struct {
 	// decryptFunc is called when DecryptGarlicMessage is invoked. If nil,
 	// the mock returns decryptPlaintext/decryptTag/decryptErr.
-	decryptFunc func(encrypted []byte) ([]byte, [8]byte, error)
+	decryptFunc func(encrypted []byte) ([]byte, [8]byte, *[32]byte, error)
 
 	// Default return values when decryptFunc is nil.
 	decryptPlaintext []byte
@@ -29,13 +29,13 @@ type mockGarlicDecryptor struct {
 }
 
 // DecryptGarlicMessage implements GarlicMessageDecryptor.
-func (m *mockGarlicDecryptor) DecryptGarlicMessage(encrypted []byte) ([]byte, [8]byte, error) {
+func (m *mockGarlicDecryptor) DecryptGarlicMessage(encrypted []byte) ([]byte, [8]byte, *[32]byte, error) {
 	m.callCount++
 	m.lastEncrypted = encrypted
 	if m.decryptFunc != nil {
 		return m.decryptFunc(encrypted)
 	}
-	return m.decryptPlaintext, m.decryptTag, m.decryptErr
+	return m.decryptPlaintext, m.decryptTag, nil, m.decryptErr
 }
 
 // newMockGarlicDecryptor creates a mock decryptor with default success behavior.
@@ -106,11 +106,11 @@ func newMockReplyEncryptorWithError(err error) *mockReplyEncryptor {
 // without exercising real crypto.
 func mockGarlicDecryptorRoundTrip() *mockGarlicDecryptor {
 	return &mockGarlicDecryptor{
-		decryptFunc: func(encrypted []byte) ([]byte, [8]byte, error) {
+		decryptFunc: func(encrypted []byte) ([]byte, [8]byte, *[32]byte, error) {
 			if len(encrypted) == 0 {
-				return nil, [8]byte{}, fmt.Errorf("empty encrypted data")
+				return nil, [8]byte{}, nil, fmt.Errorf("empty encrypted data")
 			}
-			return encrypted, [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, nil
+			return encrypted, [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, nil, nil
 		},
 	}
 }

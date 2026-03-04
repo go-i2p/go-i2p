@@ -54,7 +54,7 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	require.NoError(t, err, "Encryption should succeed")
 
 	// Decrypt
-	plaintext, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	plaintext, _, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err, "Decryption should succeed")
 
 	// Verify original plaintext can be recovered
@@ -135,7 +135,7 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	}
 
 	// Attempt to decrypt tampered ciphertext
-	_, _, err = receiverSM.DecryptGarlicMessage(tamperedCiphertext)
+	_, _, _, err = receiverSM.DecryptGarlicMessage(tamperedCiphertext)
 	assert.Error(t, err, "Decryption of tampered ciphertext should fail")
 }
 
@@ -168,7 +168,7 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Decrypt first message
-	plaintext1, tag1, err := receiverSM.DecryptGarlicMessage(ciphertext1)
+	plaintext1, tag1, _, err := receiverSM.DecryptGarlicMessage(ciphertext1)
 	require.NoError(t, err)
 	assert.Equal(t, [8]byte{}, tag1, "First message should have empty session tag (New Session)")
 
@@ -337,7 +337,7 @@ func TestGarlicMessageBoundsChecking(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := sm.DecryptGarlicMessage(tc.input)
+			_, _, _, err := sm.DecryptGarlicMessage(tc.input)
 			if tc.expectError {
 				assert.Error(t, err, "Should return error for %s", tc.name)
 			}
@@ -361,7 +361,7 @@ func TestErrorMessages_NoSensitiveDataLeak(t *testing.T) {
 	_, err = rand.Read(invalidData)
 	require.NoError(t, err)
 
-	_, _, decryptErr := sm.DecryptGarlicMessage(invalidData)
+	_, _, _, decryptErr := sm.DecryptGarlicMessage(invalidData)
 	if decryptErr != nil {
 		errMsg := decryptErr.Error()
 		// Verify error message doesn't contain hex dumps of key material

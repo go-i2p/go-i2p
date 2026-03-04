@@ -1,6 +1,7 @@
 package i2cp
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"sync"
 	"time"
@@ -930,11 +931,25 @@ func (s *Session) prepareEncryptionKey() (lease_set2.EncryptionKey, error) {
 	}, nil
 }
 
+// stdlibSigningKey converts the session's SigningPrivateKey (which may be a
+// go-i2p/crypto/ed25519.Ed25519PrivateKey) to a stdlib crypto/ed25519.PrivateKey.
+// This is needed because common's ExtractEd25519PrivateKey type-switches on the
+// stdlib type and doesn't recognise the crypto package's named wrapper type.
+func (s *Session) stdlibSigningKey() ed25519.PrivateKey {
+	key := s.keys.SigningPrivateKey()
+	// Try interface with Bytes() first (Ed25519PrivateKey implements this)
+	if kb, ok := key.(interface{ Bytes() []byte }); ok {
+		return ed25519.PrivateKey(kb.Bytes())
+	}
+	// Fallback: should not happen for Ed25519 keys
+	return nil
+}
+
 // assembleLeaseSet constructs and serializes the final LeaseSet2 structure.
 // Combines destination, leases, and encryption key into a signed LeaseSet2.
 func (s *Session) assembleLeaseSet(leases []lease.Lease2, encKey lease_set2.EncryptionKey) ([]byte, error) {
 	dest := *s.destination
-	signingPrivateKey := s.keys.SigningPrivateKey()
+	signingPrivateKey := s.stdlibSigningKey()
 
 	published := uint32(time.Now().Unix())
 	expiresOffset := uint16(s.config.TunnelLifetime.Seconds())
@@ -1142,8 +1157,9 @@ func (s *Session) createInnerLeaseSet2(leases []lease.Lease2) (*lease_set2.Lease
 		return nil, err
 	}
 
-	// Get signing private key from keystore (no error returned)
-	signingPrivateKey := s.keys.SigningPrivateKey()
+	// Get signing private key from keystore, converting to stdlib ed25519.PrivateKey
+	// for compatibility with common's ExtractEd25519PrivateKey type switch.
+	signingPrivateKey := s.stdlibSigningKey()
 
 	// Calculate published time and expiration
 	publishedTime := uint32(time.Now().Unix())
@@ -1215,10 +1231,11 @@ func (s *Session) assembleEncryptedLeaseSet(cookie [32]byte, encryptedInnerData 
 	// Calculate published time
 	publishedTime := uint32(time.Now().Unix())
 
-	// Get the blinded signing private key
+	// Get the blinded signing private key, converting to stdlib ed25519.PrivateKey
+	// for compatibility with common's ExtractEd25519PrivateKey type switch.
 	// Note: For EncryptedLeaseSet, we need to sign with the BLINDED key, not the original
 	// The encrypted_leaseset library's NewEncryptedLeaseSet expects the blinded private key
-	signingPrivateKey := s.keys.SigningPrivateKey()
+	signingPrivateKey := s.stdlibSigningKey()
 
 	// Create EncryptedLeaseSet
 	// Note: Blinding is implicit from providing a blinded public key;
