@@ -16,18 +16,18 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	go.step.sm/crypto v0.76.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
 	github.com/go-i2p/noise v1.1.1-0.20260218013035-4a9b0d93ea92 // indirect
+	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
@@ -42,6 +42,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.step.sm/crypto v0.76.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
@@ -56,12 +57,13 @@ require (
 // Group 1: common, crypto, elgamal
 replace github.com/go-i2p/common => ../common
 
-//replace github.com/go-i2p/crypto => ../crypto
+replace github.com/go-i2p/crypto => ../crypto
 
 // replace github.com/go-i2p/elgamal => ../elgamal
 
 // Group 2: noise, go-noise
-//replace github.com/go-i2p/noise => ../noise
+replace github.com/go-i2p/noise => ../noise
+
 replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3

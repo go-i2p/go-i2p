@@ -1,5 +1,5 @@
-filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
-filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
+filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
 github.com/beevik/ntp v1.5.0 h1:y+uj/JjNwlY2JahivxYvtmv4ehfi3h74fAuABB9ZSM4=
 github.com/beevik/ntp v1.5.0/go.mod h1:mJEhBrwT76w9D+IfOEGvuzyuudiW9E52U2BaTrMOYow=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -15,14 +15,12 @@ github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHk
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
-github.com/go-i2p/crypto v0.1.4-0.20260219234435-41c70b0435dd h1:sOS4nYXZpqWtl9zsNTfVFCfyoLDVfREot+9ypJQfWi0=
-github.com/go-i2p/crypto v0.1.4-0.20260219234435-41c70b0435dd/go.mod h1:e1RjAvxhWWK40UmzTlBvGiNrH4XDji0mBqZU8vQxvMs=
 github.com/go-i2p/elgamal v0.0.2 h1:3x2MwXWH5KjFZ06YThjLjB2/7eM3f6BsmhudKXn+dnk=
 github.com/go-i2p/elgamal v0.0.2/go.mod h1:5L85gta1c07w3f4ZCy4z//Caq1zaiHbEB8jocfQKWxM=
 github.com/go-i2p/logger v0.1.3 h1:2ejL/Jw0P2EpktX7GIxub4lbxg6mr2Gngn4fTgnAOao=
 github.com/go-i2p/logger v0.1.3/go.mod h1:fEh2nRZ6HwLJNaWJuE25mCzDa6VpCI4O37u5OfGNvus=
-github.com/go-i2p/noise v1.1.1-0.20260218013035-4a9b0d93ea92 h1:mrNBoaLq8iYQdQMTBuq7eMwE0yku27XG6elCjj34FKc=
-github.com/go-i2p/noise v1.1.1-0.20260218013035-4a9b0d93ea92/go.mod h1:/tnXnzZXdjSLxU5lKMCKDDFKi9WUcsd7llNBSvyynJo=
+github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d h1:a7DHsr9SOEjybZVtH3e0kJpXy40mZb1V+dGm9tptOl8=
+github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d/go.mod h1:6bX00E8eUkSstzG2c8L4MIuL6pX5VCYjcWjBVOMXk0M=
 github.com/go-i2p/su3 v0.0.1 h1:qiujRfdbXgJ5lCkuNG4P0q/LOl+miU50VpBNRsut8kA=
 github.com/go-i2p/su3 v0.0.1/go.mod h1:vyqEQFEbf5HvFeyD9VgT9Tro+E6R7etNavrsa+dMvzA=
 github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=

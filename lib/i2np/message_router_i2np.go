@@ -1,0 +1,162 @@
+package i2np
+
+import (
+	"fmt"
+	"time"
+
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/logger"
+)
+
+// MessageRouterConfig represents configuration for message routing
+type MessageRouterConfig struct {
+	MaxRetries     int
+	DefaultTimeout time.Duration
+	EnableLogging  bool
+}
+
+// MessageRouter demonstrates advanced interface-based routing
+type MessageRouter struct {
+	config     MessageRouterConfig
+	processor  *MessageProcessor
+	dbManager  *DatabaseManager
+	tunnelMgr  *TunnelManager
+	sessionMgr *SessionManager
+}
+
+// NewMessageRouter creates a new message router
+func NewMessageRouter(config MessageRouterConfig) *MessageRouter {
+	return &MessageRouter{
+		config:     config,
+		processor:  NewMessageProcessor(),
+		dbManager:  NewDatabaseManager(nil), // Will be set later via SetNetDB
+		tunnelMgr:  NewTunnelManager(nil),   // Will be set later via SetPeerSelector
+		sessionMgr: NewSessionManager(),
+	}
+}
+
+// SetNetDB sets the NetDB store for database operations.
+// If the netdb implements FloodfillSelector, it will also be configured for floodfill functionality.
+func (mr *MessageRouter) SetNetDB(netdb NetDBStore) {
+	mr.dbManager = NewDatabaseManager(netdb)
+
+	// If NetDB also implements FloodfillSelector, enable floodfill functionality
+	if selector, ok := netdb.(FloodfillSelector); ok {
+		mr.dbManager.SetFloodfillSelector(selector)
+		log.Debug("Floodfill selector configured for message router")
+	}
+
+	// If NetDB also implements NetDBRetriever, configure retriever
+	if retriever, ok := netdb.(NetDBRetriever); ok {
+		mr.dbManager.SetRetriever(retriever)
+		log.Debug("NetDB retriever configured for message router")
+	}
+
+	// Set database manager on processor for DatabaseLookup message handling
+	mr.processor.SetDatabaseManager(mr.dbManager)
+}
+
+// SetOurRouterHash sets our router's identity hash for use in DatabaseSearchReply messages.
+// This should be called during router initialization with the router's own identity hash.
+// The hash is used in DatabaseSearchReply "from" field to indicate which router sent the reply.
+func (mr *MessageRouter) SetOurRouterHash(hash common.Hash) {
+	mr.dbManager.SetOurRouterHash(hash)
+	log.WithField("router_hash", fmt.Sprintf("%x", hash[:8])).Debug("Configured router identity for floodfill responses")
+}
+
+// SetPeerSelector sets the peer selector for the TunnelManager
+func (mr *MessageRouter) SetPeerSelector(selector tunnel.PeerSelector) {
+	mr.tunnelMgr.peerSelector = selector
+	// Recreate pools with new selector if they exist
+	if mr.tunnelMgr.inboundPool != nil || mr.tunnelMgr.outboundPool != nil {
+		// Stop existing pools
+		if mr.tunnelMgr.inboundPool != nil {
+			mr.tunnelMgr.inboundPool.Stop()
+		}
+		if mr.tunnelMgr.outboundPool != nil {
+			mr.tunnelMgr.outboundPool.Stop()
+		}
+		// Create new pools
+		inboundConfig := tunnel.DefaultPoolConfig()
+		inboundConfig.IsInbound = true
+		mr.tunnelMgr.inboundPool = tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
+
+		outboundConfig := tunnel.DefaultPoolConfig()
+		outboundConfig.IsInbound = false
+		mr.tunnelMgr.outboundPool = tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
+	}
+}
+
+// SetSessionProvider configures the session provider for message routing responses.
+// This method propagates the SessionProvider to both DatabaseManager and TunnelManager,
+// enabling them to send I2NP response messages (DatabaseStore, DatabaseSearchReply, etc.)
+// back through the appropriate transport sessions.
+// The provider must implement SessionProvider interface with GetSessionByHash method.
+func (mr *MessageRouter) SetSessionProvider(provider SessionProvider) {
+	// Propagate to DatabaseManager for database operation responses
+	mr.dbManager.SetSessionProvider(provider)
+
+	// Propagate to TunnelManager for tunnel build responses
+	mr.tunnelMgr.SetSessionProvider(provider)
+
+	log.Debug("Session provider configured for message router")
+}
+
+// RouteMessage routes messages based on their interfaces
+func (mr *MessageRouter) RouteMessage(msg I2NPMessage) error {
+	// Log message if enabled
+	if mr.config.EnableLogging {
+		log.WithFields(logger.Fields{
+			"message_type": msg.Type(),
+			"message_id":   msg.MessageID(),
+		}).Debug("Routing message")
+	}
+
+	// Check for expiration
+	if time.Now().After(msg.Expiration()) {
+		return fmt.Errorf("message %d has expired", msg.MessageID())
+	}
+
+	// Process using the appropriate interface
+	return mr.processor.ProcessMessage(msg)
+}
+
+// RouteDatabaseMessage routes database-related messages
+func (mr *MessageRouter) RouteDatabaseMessage(msg interface{}) error {
+	if reader, ok := msg.(DatabaseReader); ok {
+		return mr.dbManager.PerformLookup(reader)
+	}
+
+	if writer, ok := msg.(DatabaseWriter); ok {
+		return mr.dbManager.StoreData(writer)
+	}
+
+	return fmt.Errorf("message does not implement database interfaces")
+}
+
+// RouteTunnelMessage routes tunnel-related messages
+func (mr *MessageRouter) RouteTunnelMessage(msg interface{}) error {
+	if builder, ok := msg.(TunnelBuilder); ok {
+		return mr.tunnelMgr.BuildTunnelWithBuilder(builder)
+	}
+
+	if handler, ok := msg.(TunnelReplyHandler); ok {
+		// Extract message ID from the message interface
+		var messageID int
+		if i2npMsg, ok := msg.(I2NPMessage); ok {
+			messageID = i2npMsg.MessageID()
+		}
+		return mr.tunnelMgr.ProcessTunnelReply(handler, messageID)
+	}
+
+	return fmt.Errorf("message does not implement tunnel interfaces")
+}
+
+// GetProcessor returns the underlying MessageProcessor for direct access.
+// This is used by the router to set up garlic clove forwarding.
+func (mr *MessageRouter) GetProcessor() *MessageProcessor {
+	return mr.processor
+}
+
+// Helper functions have been moved to utils.go
