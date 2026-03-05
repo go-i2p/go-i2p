@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1456 commits
+        📝 1479 commits
          • 📜 MIT License
       </div>
     </div>
@@ -54,12 +54,12 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>1456 commits</span>
+          <span>📝</span> <span>1479 commits</span>
         </div>
         
         
         <div class="repo-stat">
-          <span>📅</span> <span>Last updated: February 19, 2026</span>
+          <span>📅</span> <span>Last updated: March 5, 2026</span>
         </div>
         
         
@@ -146,11 +146,12 @@
 <li>[X] HMAC</li>
 <li>[X] Noise subsystem</li>
 </ul></li>
-<li>End-to-End Crypto
+<li>End-to-End Crypto (crypto engine in <a href="https://github.com/go-i2p/go-noise/tree/main/ratchet" target="_blank">go-noise/ratchet</a>)
 
 <ul>
-<li>[X] Garlic messages</li>
-<li>[X] ECIES-X25519-AEAD-Ratchet (primary)</li>
+<li>[X] Garlic messages (thin adapter in <code>lib/i2np/garlic_session.go</code> → <code>go-noise/ratchet.SessionManager</code>)</li>
+<li>[X] ECIES-X25519-AEAD-Ratchet (primary, implemented in <code>go-noise/ratchet/</code>)</li>
+<li>[X] Tunnel build record crypto (adapter in <code>lib/i2np/build_record_crypto.go</code> → <code>go-noise/ratchet.BuildRecordCrypto</code>)</li>
 <li>[ ] ElGamal/AES+SessionTag (not implemented - ECIES-only destinations supported)</li>
 </ul></li>
 <li>I2NP
@@ -205,6 +206,7 @@
 <ul>
 <li>[X] Noise Socket Framework</li>
 <li>[X] NTCP2 Socket Framework</li>
+<li>[X] ECIES-X25519-AEAD-Ratchet engine (<code>ratchet/</code> package)</li>
 <li>[ ] SSU2 Socket Framework</li>
 </ul></li>
 </ul></li>
@@ -340,7 +342,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                1100 commits
+                1123 commits
               </div>
             </div>
           </div>
@@ -412,7 +414,7 @@ go-i2p --i2cp.network=unix --i2cp.address=/tmp/i2cp.sock
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-03-05 22:34:35 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-03-05 23:15:31 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
