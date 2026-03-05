@@ -18,21 +18,19 @@ type MessageRouterConfig struct {
 
 // MessageRouter demonstrates advanced interface-based routing
 type MessageRouter struct {
-	config     MessageRouterConfig
-	processor  *MessageProcessor
-	dbManager  *DatabaseManager
-	tunnelMgr  *TunnelManager
-	sessionMgr *SessionManager
+	config    MessageRouterConfig
+	processor *MessageProcessor
+	dbManager *DatabaseManager
+	tunnelMgr *TunnelManager
 }
 
 // NewMessageRouter creates a new message router
 func NewMessageRouter(config MessageRouterConfig) *MessageRouter {
 	return &MessageRouter{
-		config:     config,
-		processor:  NewMessageProcessor(),
-		dbManager:  NewDatabaseManager(nil), // Will be set later via SetNetDB
-		tunnelMgr:  NewTunnelManager(nil),   // Will be set later via SetPeerSelector
-		sessionMgr: NewSessionManager(),
+		config:    config,
+		processor: NewMessageProcessor(),
+		dbManager: NewDatabaseManager(nil), // Will be set later via SetNetDB
+		tunnelMgr: NewTunnelManager(nil),   // Will be set later via SetPeerSelector
 	}
 }
 
