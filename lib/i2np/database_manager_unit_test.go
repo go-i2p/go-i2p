@@ -6,112 +6,72 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
-// TestDatabaseLookupFound tests successful RouterInfo retrieval and DatabaseStore response
-func TestDatabaseLookupFound(t *testing.T) {
-	// Setup
-	retriever := NewMockNetDBRetriever()
-	sessionProvider := NewMockSessionProvider()
-
-	dbManager := NewDatabaseManager(nil)
-	dbManager.SetRetriever(retriever)
-	dbManager.SetSessionProvider(sessionProvider)
-
-	// Add test data
-	testKey := common.Hash{0x01, 0x02, 0x03} // Simplified hash
-	testData := []byte("test RouterInfo data")
-	retriever.AddRouterInfo(testKey, testData)
-
-	// Create lookup request
-	lookup := CreateDatabaseQuery(testKey, common.Hash{0x04, 0x05, 0x06}, 0x00)
-
-	// Execute lookup
-	err := dbManager.PerformLookup(lookup)
-	// Verify results
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
+// TestDatabaseLookupScenarios tests RouterInfo retrieval, not-found, and no-retriever scenarios
+// using a table-driven approach to consolidate the shared setup/verify pattern.
+func TestDatabaseLookupScenarios(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupRetriever  bool // whether to set a retriever on the manager
+		addData         bool // whether to add test data to the retriever
+		lookupKey       common.Hash
+		expectedMsgType int
+	}{
+		{
+			name:            "Found_DatabaseStore",
+			setupRetriever:  true,
+			addData:         true,
+			lookupKey:       common.Hash{0x01, 0x02, 0x03},
+			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_STORE,
+		},
+		{
+			name:            "NotFound_DatabaseSearchReply",
+			setupRetriever:  true,
+			addData:         false,
+			lookupKey:       common.Hash{0x99, 0x99, 0x99},
+			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
+		},
+		{
+			name:            "NoRetriever_DatabaseSearchReply",
+			setupRetriever:  false,
+			addData:         false,
+			lookupKey:       common.Hash{0x01, 0x02, 0x03},
+			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
+		},
 	}
 
-	// Check that response was sent
-	session := sessionProvider.GetMockSession()
-	sentMessages := session.GetSentMessages()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			retriever := NewMockNetDBRetriever()
+			sessionProvider := NewMockSessionProvider()
 
-	if len(sentMessages) != 1 {
-		t.Fatalf("Expected 1 sent message, got %d", len(sentMessages))
-	}
+			dbManager := NewDatabaseManager(nil)
+			if tt.setupRetriever {
+				dbManager.SetRetriever(retriever)
+			}
+			dbManager.SetSessionProvider(sessionProvider)
 
-	// Verify message type is DatabaseStore
-	msg := sentMessages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_STORE {
-		t.Errorf("Expected DatabaseStore message type %d, got %d", I2NP_MESSAGE_TYPE_DATABASE_STORE, msg.Type())
-	}
-}
+			if tt.addData {
+				retriever.AddRouterInfo(tt.lookupKey, []byte("test RouterInfo data"))
+			}
 
-// TestDatabaseLookupNotFound tests RouterInfo not found scenario and DatabaseSearchReply response
-func TestDatabaseLookupNotFound(t *testing.T) {
-	// Setup
-	retriever := NewMockNetDBRetriever()
-	sessionProvider := NewMockSessionProvider()
+			lookup := CreateDatabaseQuery(tt.lookupKey, common.Hash{0x04, 0x05, 0x06}, 0x00)
 
-	dbManager := NewDatabaseManager(nil)
-	dbManager.SetRetriever(retriever)
-	dbManager.SetSessionProvider(sessionProvider)
+			err := dbManager.PerformLookup(lookup)
+			if err != nil {
+				t.Fatalf("Expected no error, got: %v", err)
+			}
 
-	// Create lookup request for non-existent RouterInfo
-	testKey := common.Hash{0x99, 0x99, 0x99}
-	lookup := CreateDatabaseQuery(testKey, common.Hash{0x04, 0x05, 0x06}, 0x00)
+			session := sessionProvider.GetMockSession()
+			sentMessages := session.GetSentMessages()
 
-	// Execute lookup
-	err := dbManager.PerformLookup(lookup)
-	// Verify results
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
+			if len(sentMessages) != 1 {
+				t.Fatalf("Expected 1 sent message, got %d", len(sentMessages))
+			}
 
-	// Check that response was sent
-	session := sessionProvider.GetMockSession()
-	sentMessages := session.GetSentMessages()
-
-	if len(sentMessages) != 1 {
-		t.Fatalf("Expected 1 sent message, got %d", len(sentMessages))
-	}
-
-	// Verify message type is DatabaseSearchReply
-	msg := sentMessages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY {
-		t.Errorf("Expected DatabaseSearchReply message type %d, got %d", I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY, msg.Type())
-	}
-}
-
-// TestDatabaseLookupWithoutRetriever tests error handling when no retriever is set
-func TestDatabaseLookupWithoutRetriever(t *testing.T) {
-	// Setup - no retriever set
-	sessionProvider := NewMockSessionProvider()
-
-	dbManager := NewDatabaseManager(nil)
-	dbManager.SetSessionProvider(sessionProvider)
-
-	// Create lookup request
-	testKey := common.Hash{0x01, 0x02, 0x03}
-	lookup := CreateDatabaseQuery(testKey, common.Hash{0x04, 0x05, 0x06}, 0x00)
-
-	// Execute lookup
-	err := dbManager.PerformLookup(lookup)
-	// Should still work - will send DatabaseSearchReply
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// Check that DatabaseSearchReply was sent
-	session := sessionProvider.GetMockSession()
-	sentMessages := session.GetSentMessages()
-
-	if len(sentMessages) != 1 {
-		t.Fatalf("Expected 1 sent message, got %d", len(sentMessages))
-	}
-
-	// Verify message type is DatabaseSearchReply
-	msg := sentMessages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY {
-		t.Errorf("Expected DatabaseSearchReply message type %d, got %d", I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY, msg.Type())
+			msg := sentMessages[0]
+			if msg.Type() != tt.expectedMsgType {
+				t.Errorf("Expected message type %d, got %d", tt.expectedMsgType, msg.Type())
+			}
+		})
 	}
 }

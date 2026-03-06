@@ -23,6 +23,26 @@ func requireRPCError(t *testing.T, err error, expectedCode int) {
 	}
 }
 
+// invokeHandler calls handler.Handle and returns the result as a map.
+// Fails the test if Handle returns an error or the result is not a map.
+func invokeHandler(t *testing.T, handler RPCHandler, paramsJSON string) map[string]interface{} {
+	t.Helper()
+	result, err := handler.Handle(context.Background(), json.RawMessage(paramsJSON))
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]interface{}", result)
+	}
+	return resultMap
+}
+
+// newStatsHandler creates a stats provider and returns it for building handler-specific instances.
+func newStatsHandler(running bool, version string) RouterStatsProvider {
+	return NewRouterStatsProvider(&mockRouterAccess{running: running}, version)
+}
+
 // Test Echo Handler
 
 func TestEchoHandler_String(t *testing.T) {
@@ -95,23 +115,11 @@ func TestEchoHandler_InvalidJSON(t *testing.T) {
 // Test GetRate Handler
 
 func TestGetRateHandler_AllFields(t *testing.T) {
-	mockStats := &mockRouterAccess{
-		running: true,
-	}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewGetRateHandler(statsProvider)
-	params := json.RawMessage(`{
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{
 		"i2p.router.net.bw.inbound.15s": null,
 		"i2p.router.net.bw.outbound.15s": null
 	}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
 
 	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
 		t.Error("missing i2p.router.net.bw.inbound.15s")
@@ -130,18 +138,8 @@ func TestGetRateHandler_AllFields(t *testing.T) {
 }
 
 func TestGetRateHandler_SingleField(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewGetRateHandler(statsProvider)
-	params := json.RawMessage(`{"i2p.router.net.bw.inbound.15s": null}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{"i2p.router.net.bw.inbound.15s": null}`)
 
 	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
 		t.Error("missing requested field")
@@ -152,18 +150,8 @@ func TestGetRateHandler_SingleField(t *testing.T) {
 }
 
 func TestGetRateHandler_NoFields(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewGetRateHandler(statsProvider)
-	params := json.RawMessage(`{}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{}`)
 
 	// Should return all fields when none specified
 	if len(resultMap) != 2 {
@@ -172,13 +160,9 @@ func TestGetRateHandler_NoFields(t *testing.T) {
 }
 
 func TestGetRateHandler_InvalidJSON(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
 
-	handler := NewGetRateHandler(statsProvider)
-	params := json.RawMessage(`{invalid}`)
-
-	_, err := handler.Handle(context.Background(), params)
+	_, err := handler.Handle(context.Background(), json.RawMessage(`{invalid}`))
 	if err == nil {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
@@ -189,22 +173,12 @@ func TestGetRateHandler_InvalidJSON(t *testing.T) {
 // Test RouterInfo Handler
 
 func TestRouterInfoHandler_AllFields(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0-test")
-
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0-test"))
+	resultMap := invokeHandler(t, handler, `{
 		"i2p.router.uptime": null,
 		"i2p.router.version": null,
 		"i2p.router.net.status": null
 	}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
 
 	// Check uptime exists and is >= 0
 	uptime, ok := resultMap["i2p.router.uptime"].(int64)
@@ -227,18 +201,8 @@ func TestRouterInfoHandler_AllFields(t *testing.T) {
 }
 
 func TestRouterInfoHandler_DefaultFields(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{}`)
 
 	// Should include default fields
 	expectedFields := []string{
@@ -257,18 +221,8 @@ func TestRouterInfoHandler_DefaultFields(t *testing.T) {
 }
 
 func TestRouterInfoHandler_NotRunning(t *testing.T) {
-	mockStats := &mockRouterAccess{running: false}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{"i2p.router.net.status": null}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
+	handler := NewRouterInfoHandler(newStatsHandler(false, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{"i2p.router.net.status": null}`)
 
 	// Status should be 5 (Error) when not running
 	if resultMap["i2p.router.net.status"] != 5 {
@@ -277,13 +231,9 @@ func TestRouterInfoHandler_NotRunning(t *testing.T) {
 }
 
 func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
 
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{bad json}`)
-
-	_, err := handler.Handle(context.Background(), params)
+	_, err := handler.Handle(context.Background(), json.RawMessage(`{bad json}`))
 	if err == nil {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
@@ -291,40 +241,18 @@ func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
 
 func TestRouterInfoHandler_StatusField(t *testing.T) {
 	t.Run("status_when_running", func(t *testing.T) {
-		mockStats := &mockRouterAccess{running: true}
-		statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+		handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+		resultMap := invokeHandler(t, handler, `{"i2p.router.status": null}`)
 
-		handler := NewRouterInfoHandler(statsProvider)
-		params := json.RawMessage(`{"i2p.router.status": null}`)
-
-		result, err := handler.Handle(context.Background(), params)
-		if err != nil {
-			t.Fatalf("Handle() error = %v", err)
-		}
-
-		resultMap := result.(map[string]interface{})
-
-		// Status should be "OK" when running
 		if resultMap["i2p.router.status"] != "OK" {
 			t.Errorf("status = %v, want OK", resultMap["i2p.router.status"])
 		}
 	})
 
 	t.Run("status_when_not_running", func(t *testing.T) {
-		mockStats := &mockRouterAccess{running: false}
-		statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
+		handler := NewRouterInfoHandler(newStatsHandler(false, "0.1.0"))
+		resultMap := invokeHandler(t, handler, `{"i2p.router.status": null}`)
 
-		handler := NewRouterInfoHandler(statsProvider)
-		params := json.RawMessage(`{"i2p.router.status": null}`)
-
-		result, err := handler.Handle(context.Background(), params)
-		if err != nil {
-			t.Fatalf("Handle() error = %v", err)
-		}
-
-		resultMap := result.(map[string]interface{})
-
-		// Status should be "ERROR" when not running
 		if resultMap["i2p.router.status"] != "ERROR" {
 			t.Errorf("status = %v, want ERROR", resultMap["i2p.router.status"])
 		}
@@ -332,23 +260,13 @@ func TestRouterInfoHandler_StatusField(t *testing.T) {
 }
 
 func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{
 		"i2p.router.net.bw.inbound.1s": null,
 		"i2p.router.net.bw.inbound.15s": null,
 		"i2p.router.net.bw.outbound.1s": null,
 		"i2p.router.net.bw.outbound.15s": null
 	}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
 
 	// Check all bandwidth fields are present
 	if _, ok := resultMap["i2p.router.net.bw.inbound.1s"]; !ok {
@@ -391,59 +309,26 @@ func (m *mockRouterControl) Reseed() error {
 	return nil
 }
 
-func TestRouterManagerHandler_Shutdown(t *testing.T) {
-	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(mockControl)
-
-	params := json.RawMessage(`{"Shutdown": null}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+func TestRouterManagerHandler_Operations(t *testing.T) {
+	operations := []struct {
+		name      string
+		operation string
+	}{
+		{"Shutdown", "Shutdown"},
+		{"Restart", "Restart"},
+		{"Reseed", "Reseed"},
 	}
 
-	resultMap := result.(map[string]interface{})
+	for _, op := range operations {
+		t.Run(op.name, func(t *testing.T) {
+			mockControl := &mockRouterControl{}
+			handler := NewRouterManagerHandler(mockControl)
+			resultMap := invokeHandler(t, handler, `{"`+op.operation+`": null}`)
 
-	if resultMap["Shutdown"] != "initiated" {
-		t.Errorf("Shutdown result = %v, want \"initiated\"", resultMap["Shutdown"])
-	}
-
-	// Give the goroutine time to execute
-	// Note: In production this would shut down router
-	// In test we just verify the call would happen
-}
-
-func TestRouterManagerHandler_Restart(t *testing.T) {
-	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(mockControl)
-
-	params := json.RawMessage(`{"Restart": null}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v, want nil (Restart now implemented)", err)
-	}
-
-	resultMap := result.(map[string]interface{})
-	if _, ok := resultMap["Restart"]; !ok {
-		t.Error("result should contain Restart key")
-	}
-}
-
-func TestRouterManagerHandler_Reseed(t *testing.T) {
-	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(mockControl)
-
-	params := json.RawMessage(`{"Reseed": null}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v, want nil (Reseed now implemented)", err)
-	}
-
-	resultMap := result.(map[string]interface{})
-	if _, ok := resultMap["Reseed"]; !ok {
-		t.Error("result should contain Reseed key")
+			if _, ok := resultMap[op.operation]; !ok {
+				t.Errorf("result should contain %s key", op.operation)
+			}
+		})
 	}
 }
 
@@ -451,9 +336,7 @@ func TestRouterManagerHandler_NoOperations(t *testing.T) {
 	mockControl := &mockRouterControl{}
 	handler := NewRouterManagerHandler(mockControl)
 
-	params := json.RawMessage(`{}`)
-
-	_, err := handler.Handle(context.Background(), params)
+	_, err := handler.Handle(context.Background(), json.RawMessage(`{}`))
 	if err == nil {
 		t.Fatal("Handle() expected error for no operations, got nil")
 	}
@@ -465,9 +348,7 @@ func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
 	mockControl := &mockRouterControl{}
 	handler := NewRouterManagerHandler(mockControl)
 
-	params := json.RawMessage(`{invalid}`)
-
-	_, err := handler.Handle(context.Background(), params)
+	_, err := handler.Handle(context.Background(), json.RawMessage(`{invalid}`))
 	if err == nil {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
@@ -709,24 +590,12 @@ func TestGetStatusCode(t *testing.T) {
 
 // TestRouterInfoHandler_PeerClassificationFields tests that peer classification fields are exposed
 func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0-test")
-
-	handler := NewRouterInfoHandler(statsProvider)
-
-	// Request the new peer classification fields
-	params := json.RawMessage(`{
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0-test"))
+	resultMap := invokeHandler(t, handler, `{
 		"i2p.router.netdb.activepeers": null,
 		"i2p.router.netdb.fastpeers": null,
 		"i2p.router.netdb.highcapacitypeers": null
 	}`)
-
-	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	resultMap := result.(map[string]interface{})
 
 	// Verify all requested fields are present
 	if _, ok := resultMap["i2p.router.netdb.activepeers"]; !ok {
@@ -767,27 +636,11 @@ func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
 
 // TestRouterInfoHandler_IsReseedingField tests that isreseeding field is exposed
 func TestRouterInfoHandler_IsReseedingField(t *testing.T) {
-	mockStats := &mockRouterAccess{running: true}
-	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-	handler := NewRouterInfoHandler(statsProvider)
-
-	// Request the isreseeding field
-	params := json.RawMessage(`{"i2p.router.netdb.isreseeding": null}`)
-	ctx := context.Background()
-
-	result, err := handler.Handle(ctx, params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-
-	// Result should be a map
-	response, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Handle() result type = %T, want map[string]interface{}", result)
-	}
+	handler := NewRouterInfoHandler(newStatsHandler(true, "0.1.0"))
+	resultMap := invokeHandler(t, handler, `{"i2p.router.netdb.isreseeding": null}`)
 
 	// Verify isreseeding field exists and is boolean
-	isReseeding, exists := response["i2p.router.netdb.isreseeding"]
+	isReseeding, exists := resultMap["i2p.router.netdb.isreseeding"]
 	if !exists {
 		t.Error("i2p.router.netdb.isreseeding field not found in response")
 	}

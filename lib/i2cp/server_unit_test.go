@@ -30,6 +30,46 @@ func newTestI2CPServer(t *testing.T, addr string) *Server {
 	return server
 }
 
+// startServerAndConnect starts the server, waits, and returns a connected client.
+// The connection and server are registered for cleanup via t.Cleanup.
+func startServerAndConnect(t *testing.T, server *Server, addr string) net.Conn {
+	t.Helper()
+	if err := server.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { server.Stop() })
+
+	time.Sleep(10 * time.Millisecond)
+
+	conn, err := dialI2CPClient(addr)
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+// createSessionOnConn sends a CreateSession message and returns the session ID.
+func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
+	t.Helper()
+	createMsg := &Message{
+		Type:      MessageTypeCreateSession,
+		SessionID: SessionIDReservedControl,
+		Payload:   []byte{},
+	}
+	if err := WriteMessage(conn, createMsg); err != nil {
+		t.Fatalf("WriteMessage() error = %v", err)
+	}
+	response, err := ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("ReadMessage() error = %v", err)
+	}
+	if response.Type != MessageTypeSessionStatus {
+		t.Fatalf("Response type = %d, want %d", response.Type, MessageTypeSessionStatus)
+	}
+	return response.SessionID
+}
+
 func TestServerStartStop(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17654")
 
@@ -134,38 +174,9 @@ func TestServerCreateSession(t *testing.T) {
 
 func TestServerDestroySession(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17659")
+	conn := startServerAndConnect(t, server, "localhost:17659")
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(10 * time.Millisecond)
-
-	// Connect to server
-	conn, err := dialI2CPClient("localhost:17659")
-	if err != nil {
-		t.Fatalf("Failed to connect to server: %v", err)
-	}
-	defer conn.Close()
-
-	// Create session
-	createMsg := &Message{
-		Type:      MessageTypeCreateSession,
-		SessionID: SessionIDReservedControl,
-		Payload:   []byte{},
-	}
-
-	if err := WriteMessage(conn, createMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
-
-	response, err := ReadMessage(conn)
-	if err != nil {
-		t.Fatalf("ReadMessage() error = %v", err)
-	}
-
-	sessionID := response.SessionID
+	sessionID := createSessionOnConn(t, conn)
 
 	// Destroy session
 	destroyMsg := &Message{
@@ -264,21 +275,8 @@ func TestServerMaxSessions(t *testing.T) {
 
 func TestServerGetDate(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17658")
+	conn := startServerAndConnect(t, server, "localhost:17658")
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(10 * time.Millisecond)
-
-	conn, err := dialI2CPClient("localhost:17658")
-	if err != nil {
-		t.Fatalf("Failed to connect to server: %v", err)
-	}
-	defer conn.Close()
-
-	// Send GetDate message
 	getDateMsg := &Message{
 		Type:      MessageTypeGetDate,
 		SessionID: SessionIDReservedControl,
@@ -289,7 +287,6 @@ func TestServerGetDate(t *testing.T) {
 		t.Fatalf("WriteMessage() error = %v", err)
 	}
 
-	// Read SetDate response
 	response, err := ReadMessage(conn)
 	if err != nil {
 		t.Fatalf("ReadMessage() error = %v", err)
@@ -301,44 +298,9 @@ func TestServerGetDate(t *testing.T) {
 }
 
 func TestServerHandleCreateLeaseSet(t *testing.T) {
-	// Setup: start server
 	server := newTestI2CPServer(t, "localhost:17659")
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(10 * time.Millisecond)
-
-	// Connect and create session
-	conn, err := dialI2CPClient("localhost:17659")
-	if err != nil {
-		t.Fatalf("Failed to connect: %v", err)
-	}
-	defer conn.Close()
-
-	// Create session first
-	createMsg := &Message{
-		Type:      MessageTypeCreateSession,
-		SessionID: SessionIDReservedControl,
-		Payload:   []byte{},
-	}
-
-	if err := WriteMessage(conn, createMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
-
-	response, err := ReadMessage(conn)
-	if err != nil {
-		t.Fatalf("ReadMessage() error = %v", err)
-	}
-
-	if response.Type != MessageTypeSessionStatus {
-		t.Fatalf("Response type = %d, want %d", response.Type, MessageTypeSessionStatus)
-	}
-
-	sessionID := response.SessionID
+	conn := startServerAndConnect(t, server, "localhost:17659")
+	sessionID := createSessionOnConn(t, conn)
 
 	// Send CreateLeaseSet - should fail because no inbound pool
 	leaseSetMsg := &Message{

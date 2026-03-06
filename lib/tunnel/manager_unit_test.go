@@ -8,6 +8,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// newManagerWithParticipants creates a Manager with the given limits and pre-adds
+// count participants. The manager is registered for cleanup via t.Cleanup.
+func newManagerWithParticipants(t *testing.T, maxTunnels, count int, limitsEnabled bool) *Manager {
+	t.Helper()
+	cfg := testTunnelConfig()
+	cfg.MaxParticipatingTunnels = maxTunnels
+	cfg.ParticipatingLimitsEnabled = limitsEnabled
+
+	m := NewManagerWithConfig(cfg)
+	t.Cleanup(m.Stop)
+
+	for i := 0; i < count; i++ {
+		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+		if err != nil {
+			t.Fatalf("Failed to create participant: %v", err)
+		}
+		if err := m.AddParticipant(p); err != nil {
+			t.Fatalf("Failed to add participant: %v", err)
+		}
+	}
+	return m
+}
+
 // TestNewManager verifies manager creation and initialization
 func TestNewManager(t *testing.T) {
 	m := NewManager()
@@ -462,23 +485,7 @@ func TestNewManagerWithConfig(t *testing.T) {
 // TestCanAcceptParticipant_LimitsDisabled verifies that when limits are disabled,
 // all requests are accepted
 func TestCanAcceptParticipant_LimitsDisabled(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 100
-	cfg.ParticipatingLimitsEnabled = false
-
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Add participants up to and beyond the "limit"
-	for i := 0; i < 150; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
-	}
+	m := newManagerWithParticipants(t, 100, 150, false)
 
 	// Should still accept (limits disabled)
 	canAccept, reason := m.CanAcceptParticipant()
@@ -489,23 +496,7 @@ func TestCanAcceptParticipant_LimitsDisabled(t *testing.T) {
 
 // TestCanAcceptParticipant_HardLimit verifies that requests are rejected at hard limit
 func TestCanAcceptParticipant_HardLimit(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 100
-	cfg.ParticipatingLimitsEnabled = true
-
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Add participants up to the hard limit
-	for i := 0; i < 100; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
-	}
+	m := newManagerWithParticipants(t, 100, 100, true)
 
 	// Should reject at hard limit
 	canAccept, reason := m.CanAcceptParticipant()
@@ -525,23 +516,7 @@ func TestCanAcceptParticipant_HardLimit(t *testing.T) {
 
 // TestCanAcceptParticipant_BelowSoftLimit verifies that requests are always accepted below soft limit
 func TestCanAcceptParticipant_BelowSoftLimit(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 1000
-	cfg.ParticipatingLimitsEnabled = true
-
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Add participants to 40% capacity (below 50% soft limit)
-	for i := 0; i < 400; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
-	}
+	m := newManagerWithParticipants(t, 1000, 400, true)
 
 	// Should always accept below soft limit
 	for i := 0; i < 100; i++ {
@@ -582,22 +557,7 @@ func TestCanAcceptParticipant_SoftLimitProbabilistic(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := testTunnelConfig()
-			cfg.MaxParticipatingTunnels = 1000
-			cfg.ParticipatingLimitsEnabled = true
-
-			m := NewManagerWithConfig(cfg)
-			defer m.Stop()
-
-			for i := 0; i < tc.participants; i++ {
-				p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-				if err != nil {
-					t.Fatalf("Failed to create participant: %v", err)
-				}
-				if err := m.AddParticipant(p); err != nil {
-					t.Fatalf("Failed to add participant: %v", err)
-				}
-			}
+			m := newManagerWithParticipants(t, 1000, tc.participants, true)
 
 			accepted := 0
 			rejected := 0
@@ -627,23 +587,7 @@ func TestCanAcceptParticipant_SoftLimitProbabilistic(t *testing.T) {
 
 // TestRejectStats verifies rejection statistics tracking
 func TestRejectStats(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 10
-	cfg.ParticipatingLimitsEnabled = true
-
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Fill to hard limit
-	for i := 0; i < 10; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
-	}
+	m := newManagerWithParticipants(t, 10, 10, true)
 
 	// Trigger several rejections
 	for i := 0; i < 5; i++ {
