@@ -250,36 +250,7 @@ func TestReloadHandlerPanicRecovery(t *testing.T) {
 	defer func() { reloaders = originalReloaders }()
 	reloaders = nil
 
-	calledAfterPanic := false
-
-	RegisterReloadHandler(func() {
-		panic("test panic in reload handler")
-	})
-	RegisterReloadHandler(func() {
-		calledAfterPanic = true
-	})
-
-	// Capture stderr to verify panic is logged
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	handleReload()
-
-	w.Close()
-	os.Stderr = oldStderr
-	var buf bytes.Buffer
-	b := make([]byte, 1024)
-	n, _ := r.Read(b)
-	buf.Write(b[:n])
-	stderrOutput := buf.String()
-
-	if !calledAfterPanic {
-		t.Error("Handler after panicking handler was not called")
-	}
-	if len(stderrOutput) == 0 {
-		t.Error("Expected panic to be logged to stderr")
-	}
+	assertPanicRecovery(t, RegisterReloadHandler, handleReload)
 }
 
 // TestInterruptHandlerPanicRecovery verifies that a panicking interrupt handler
@@ -289,21 +260,24 @@ func TestInterruptHandlerPanicRecovery(t *testing.T) {
 	defer func() { interrupters = originalInterrupters }()
 	interrupters = nil
 
+	assertPanicRecovery(t, RegisterInterruptHandler, handleInterrupted)
+}
+
+// assertPanicRecovery registers a panicking handler and a follow-up handler via
+// registerFn, invokes triggerFn, and verifies the follow-up ran and stderr output
+// was produced.
+func assertPanicRecovery(t *testing.T, registerFn func(Handler) HandlerID, triggerFn func()) {
+	t.Helper()
+
 	calledAfterPanic := false
+	registerFn(func() { panic("test panic in handler") })
+	registerFn(func() { calledAfterPanic = true })
 
-	RegisterInterruptHandler(func() {
-		panic("test panic in interrupt handler")
-	})
-	RegisterInterruptHandler(func() {
-		calledAfterPanic = true
-	})
-
-	// Capture stderr to verify panic is logged
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	handleInterrupted()
+	triggerFn()
 
 	w.Close()
 	os.Stderr = oldStderr
