@@ -261,73 +261,62 @@ func TestCongestionMonitor_GFlagThreshold(t *testing.T) {
 
 // TestCongestionMonitor_Hysteresis verifies hysteresis prevents flag flapping
 func TestCongestionMonitor_Hysteresis(t *testing.T) {
-	cfg := config.Defaults().Congestion
-	collector := newMockCollector()
-	monitor := NewCongestionMonitor(cfg, collector)
-	monitor.startupGraceSec = 0
-	monitor.maxSamples = 5 // Small window for faster test transitions
-
-	// Start with D flag (ratio = 0.72)
-	collector.SetRatio(0.72)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagD {
-		t.Fatalf("setup: flag = %v, want D", flag)
-	}
-
-	// Drop to 0.65 - still above ClearDFlagThreshold (0.60), should stay D
-	collector.SetRatio(0.65)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagD {
-		t.Errorf("hysteresis test: at 0.65 flag = %v, want D (hysteresis should keep D)", flag)
-	}
-
-	// Drop to 0.55 - below ClearDFlagThreshold, should clear to None
-	collector.SetRatio(0.55)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagNone {
-		t.Errorf("hysteresis test: at 0.55 flag = %v, want None", flag)
-	}
-}
-
-// TestCongestionMonitor_HysteresisGToE verifies G → E transition with hysteresis
-func TestCongestionMonitor_HysteresisGToE(t *testing.T) {
-	cfg := config.Defaults().Congestion
-	collector := newMockCollector()
-	monitor := NewCongestionMonitor(cfg, collector)
-	monitor.startupGraceSec = 0
-	monitor.maxSamples = 5 // Small window for faster test transitions
-
-	// Start with G flag (ratio = 1.0)
-	collector.SetRatio(1.0)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagG {
-		t.Fatalf("setup: flag = %v, want G", flag)
+	tests := []struct {
+		name  string
+		steps []struct {
+			ratio    float64
+			wantFlag config.CongestionFlag
+			fatal    bool
+		}
+	}{
+		{
+			name: "D_flag_hysteresis",
+			steps: []struct {
+				ratio    float64
+				wantFlag config.CongestionFlag
+				fatal    bool
+			}{
+				{0.72, config.CongestionFlagD, true},
+				{0.65, config.CongestionFlagD, false},
+				{0.55, config.CongestionFlagNone, false},
+			},
+		},
+		{
+			name: "G_to_E_hysteresis",
+			steps: []struct {
+				ratio    float64
+				wantFlag config.CongestionFlag
+				fatal    bool
+			}{
+				{1.0, config.CongestionFlagG, true},
+				{0.97, config.CongestionFlagG, false},
+				{0.90, config.CongestionFlagE, false},
+			},
+		},
 	}
 
-	// Drop to 0.97 - still above ClearGFlagThreshold (0.95), should stay G
-	collector.SetRatio(0.97)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagG {
-		t.Errorf("at 0.97 flag = %v, want G (hysteresis)", flag)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Defaults().Congestion
+			collector := newMockCollector()
+			monitor := NewCongestionMonitor(cfg, collector)
+			monitor.startupGraceSec = 0
+			monitor.maxSamples = 5
 
-	// Drop to 0.90 - below ClearGFlagThreshold, should drop to E
-	collector.SetRatio(0.90)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
-	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagE {
-		t.Errorf("at 0.90 flag = %v, want E", flag)
+			for _, step := range tt.steps {
+				collector.SetRatio(step.ratio)
+				for i := 0; i < 10; i++ {
+					monitor.takeSample()
+				}
+				flag := monitor.GetCongestionFlag()
+				if flag != step.wantFlag {
+					if step.fatal {
+						t.Fatalf("ratio=%.2f: flag = %v, want %v", step.ratio, flag, step.wantFlag)
+					}
+					t.Errorf("ratio=%.2f: flag = %v, want %v", step.ratio, flag, step.wantFlag)
+				}
+			}
+		})
 	}
 }
 

@@ -108,6 +108,44 @@ func doRequest(t *testing.T, url, method string, params interface{}) *Response {
 	return &resp
 }
 
+// startTestServer creates, starts and returns a running test server with its
+// config and a cleanup function. Callers must defer the cleanup.
+func startTestServer(t *testing.T) (*Server, *config.I2PControlConfig, string) {
+	t.Helper()
+	stats := &mockServerStatsProvider{}
+	port, err := getFreePort()
+	if err != nil {
+		t.Fatalf("Failed to get free port: %v", err)
+	}
+	cfg := testConfig(port)
+	server, err := NewServer(cfg, stats)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+	if err := server.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() { server.Stop() })
+	time.Sleep(100 * time.Millisecond)
+	url := fmt.Sprintf("http://%s", cfg.Address)
+	return server, cfg, url
+}
+
+// authenticateTestServer authenticates against a running test server and
+// returns the auth token.
+func authenticateTestServer(t *testing.T, url string, password string) string {
+	t.Helper()
+	authResp := doRequest(t, url, "Authenticate", map[string]interface{}{
+		"API":      1,
+		"Password": password,
+	})
+	if authResp.Error != nil {
+		t.Fatalf("Authenticate failed: %v", authResp.Error.Message)
+	}
+	result := authResp.Result.(map[string]interface{})
+	return result["Token"].(string)
+}
+
 // TestNewServer tests the NewServer constructor
 func TestNewServer(t *testing.T) {
 	stats := &mockServerStatsProvider{}
@@ -177,27 +215,9 @@ func TestNewServer(t *testing.T) {
 
 // TestServerLifecycle tests server start and stop
 func TestServerLifecycle(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get free port: %v", err)
-	}
-	cfg := testConfig(port)
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
+	_, cfg, url := startTestServer(t)
 
 	// Verify server is listening
-	url := fmt.Sprintf("http://%s", cfg.Address)
 	resp := doRequest(t, url, "Authenticate", map[string]interface{}{
 		"API":      1,
 		"Password": cfg.Password,
@@ -206,35 +226,11 @@ func TestServerLifecycle(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("Authenticate failed: %v", resp.Error.Message)
 	}
-
-	// Stop server
-	server.Stop()
-
-	// Verify server stopped
-	time.Sleep(100 * time.Millisecond)
 }
 
 // TestAuthentication tests the authentication flow
 func TestAuthentication(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get free port: %v", err)
-	}
-	cfg := testConfig(port)
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(100 * time.Millisecond)
-	url := fmt.Sprintf("http://%s", cfg.Address)
+	_, cfg, url := startTestServer(t)
 
 	t.Run("valid_password", func(t *testing.T) {
 		resp := doRequest(t, url, "Authenticate", map[string]interface{}{
@@ -274,38 +270,8 @@ func TestAuthentication(t *testing.T) {
 
 // TestEchoHandler tests the Echo RPC method via the server
 func TestEchoHandler(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get free port: %v", err)
-	}
-	cfg := testConfig(port)
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(100 * time.Millisecond)
-	url := fmt.Sprintf("http://%s", cfg.Address)
-
-	// Authenticate first
-	authResp := doRequest(t, url, "Authenticate", map[string]interface{}{
-		"API":      1,
-		"Password": cfg.Password,
-	})
-
-	if authResp.Error != nil {
-		t.Fatalf("Authenticate failed: %v", authResp.Error.Message)
-	}
-
-	result := authResp.Result.(map[string]interface{})
-	token := result["Token"].(string)
+	_, cfg, url := startTestServer(t)
+	token := authenticateTestServer(t, url, cfg.Password)
 
 	t.Run("echo_valid", func(t *testing.T) {
 		resp := doRequest(t, url, "Echo", map[string]interface{}{
@@ -358,25 +324,8 @@ func TestEchoHandler(t *testing.T) {
 
 // TestHTTPErrors tests HTTP-level error conditions
 func TestHTTPErrors(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get free port: %v", err)
-	}
-	cfg := testConfig(port)
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(100 * time.Millisecond)
-	url := fmt.Sprintf("http://%s/jsonrpc", cfg.Address)
+	_, cfg, baseURL := startTestServer(t)
+	url := baseURL + "/jsonrpc"
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	t.Run("wrong_method", func(t *testing.T) {
@@ -462,34 +411,8 @@ func TestHTTPErrors(t *testing.T) {
 
 // TestMethodNotFound tests non-existent method calls
 func TestMethodNotFound(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get free port: %v", err)
-	}
-	cfg := testConfig(port)
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer server.Stop()
-
-	time.Sleep(100 * time.Millisecond)
-	url := fmt.Sprintf("http://%s", cfg.Address)
-
-	// Authenticate first
-	authResp := doRequest(t, url, "Authenticate", map[string]interface{}{
-		"API":      1,
-		"Password": cfg.Password,
-	})
-
-	result := authResp.Result.(map[string]interface{})
-	token := result["Token"].(string)
+	_, cfg, url := startTestServer(t)
+	token := authenticateTestServer(t, url, cfg.Password)
 
 	resp := doRequest(t, url, "NonExistentMethod", map[string]interface{}{
 		"Token": token,

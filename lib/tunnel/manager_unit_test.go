@@ -552,95 +552,76 @@ func TestCanAcceptParticipant_BelowSoftLimit(t *testing.T) {
 	}
 }
 
-// TestCanAcceptParticipant_SoftLimitProbabilistic verifies probabilistic rejection at soft limit
+// TestCanAcceptParticipant_SoftLimitProbabilistic verifies probabilistic rejection at soft limit and in critical zone
 func TestCanAcceptParticipant_SoftLimitProbabilistic(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 1000
-	cfg.ParticipatingLimitsEnabled = true
-
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Add participants to 70% capacity (above soft limit but below hard limit)
-	for i := 0; i < 700; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
+	cases := []struct {
+		name           string
+		participants   int
+		trials         int
+		minRejectRate  float64
+		maxRejectRate  float64
+		expectSomePass bool
+	}{
+		{
+			name:           "SoftLimit_70pct",
+			participants:   700,
+			trials:         1000,
+			minRejectRate:  0.30,
+			maxRejectRate:  0.80,
+			expectSomePass: true,
+		},
+		{
+			name:           "CriticalZone_95pct",
+			participants:   950,
+			trials:         500,
+			minRejectRate:  0.85,
+			maxRejectRate:  1.0,
+			expectSomePass: false,
+		},
 	}
 
-	// At 70% capacity, some requests should be rejected probabilistically
-	// Run many trials to verify probabilistic behavior
-	accepted := 0
-	rejected := 0
-	trials := 1000
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := testTunnelConfig()
+			cfg.MaxParticipatingTunnels = 1000
+			cfg.ParticipatingLimitsEnabled = true
 
-	for i := 0; i < trials; i++ {
-		canAccept, _ := m.CanAcceptParticipant()
-		if canAccept {
-			accepted++
-		} else {
-			rejected++
-		}
-	}
+			m := NewManagerWithConfig(cfg)
+			defer m.Stop()
 
-	// At 70% capacity (20% into soft limit zone), reject probability should be ~58%
-	// Allow wide margin for randomness: expect some but not all to be rejected
-	if rejected == 0 {
-		t.Error("Expected some probabilistic rejections above soft limit, got none")
-	}
-	if accepted == 0 {
-		t.Error("Expected some acceptances above soft limit, got none")
-	}
+			for i := 0; i < tc.participants; i++ {
+				p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
+				if err != nil {
+					t.Fatalf("Failed to create participant: %v", err)
+				}
+				if err := m.AddParticipant(p); err != nil {
+					t.Fatalf("Failed to add participant: %v", err)
+				}
+			}
 
-	// Verify rejection rate is reasonable (between 30% and 80%)
-	rejectRate := float64(rejected) / float64(trials)
-	if rejectRate < 0.30 || rejectRate > 0.80 {
-		t.Errorf("Unexpected rejection rate: %.2f (expected 0.30-0.80)", rejectRate)
-	}
-}
+			accepted := 0
+			rejected := 0
+			for i := 0; i < tc.trials; i++ {
+				canAccept, _ := m.CanAcceptParticipant()
+				if canAccept {
+					accepted++
+				} else {
+					rejected++
+				}
+			}
 
-// TestCanAcceptParticipant_CriticalZone verifies high rejection rate near hard limit
-func TestCanAcceptParticipant_CriticalZone(t *testing.T) {
-	cfg := testTunnelConfig()
-	cfg.MaxParticipatingTunnels = 1000
-	cfg.ParticipatingLimitsEnabled = true
+			if rejected == 0 {
+				t.Error("Expected some probabilistic rejections, got none")
+			}
+			if tc.expectSomePass && accepted == 0 {
+				t.Error("Expected some acceptances above soft limit, got none")
+			}
 
-	m := NewManagerWithConfig(cfg)
-	defer m.Stop()
-
-	// Add participants to 95% capacity (in critical zone, last 100 before hard limit)
-	for i := 0; i < 950; i++ {
-		p, err := NewParticipant(TunnelID(i), &mockTunnelEncryptor{})
-		if err != nil {
-			t.Fatalf("Failed to create participant: %v", err)
-		}
-		if err := m.AddParticipant(p); err != nil {
-			t.Fatalf("Failed to add participant: %v", err)
-		}
-	}
-
-	// In critical zone, rejection rate should be very high (90%+)
-	accepted := 0
-	rejected := 0
-	trials := 500
-
-	for i := 0; i < trials; i++ {
-		canAccept, _ := m.CanAcceptParticipant()
-		if canAccept {
-			accepted++
-		} else {
-			rejected++
-		}
-	}
-
-	// Expect very high rejection rate in critical zone
-	rejectRate := float64(rejected) / float64(trials)
-	if rejectRate < 0.85 {
-		t.Errorf("Expected rejection rate >= 85%% in critical zone, got %.2f", rejectRate)
+			rejectRate := float64(rejected) / float64(tc.trials)
+			if rejectRate < tc.minRejectRate || rejectRate > tc.maxRejectRate {
+				t.Errorf("Unexpected rejection rate: %.2f (expected %.2f-%.2f)", rejectRate, tc.minRejectRate, tc.maxRejectRate)
+			}
+		})
 	}
 }
 

@@ -10,6 +10,45 @@ import (
 	noiseratchet "github.com/go-i2p/go-noise/ratchet"
 )
 
+// completeGarlicHandshake performs the NS + NSR handshake between sender and
+// receiver, leaving both session managers ready for existing-session messages.
+// Returns the receiver's public key and destination hash.
+func completeGarlicHandshake(t *testing.T, senderSM, receiverSM *GarlicSessionManager, destPubKey [32]byte) [32]byte {
+	t.Helper()
+
+	destHash := types.SHA256(destPubKey[:])
+
+	builder1, _ := NewGarlicBuilderWithDefaults()
+	dataMsg1 := NewDataMessage([]byte("handshake"))
+	builder1.AddLocalDeliveryClove(dataMsg1, 1)
+	ct1, err := EncryptGarlicWithBuilder(senderSM, builder1, destHash, destPubKey)
+	if err != nil {
+		t.Fatalf("NS encrypt failed: %v", err)
+	}
+	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(ct1)
+	if err != nil {
+		t.Fatalf("NS decrypt failed: %v", err)
+	}
+	if sessionHash == nil {
+		t.Fatal("sessionHash must be non-nil for New Session")
+	}
+
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	if err != nil {
+		t.Fatalf("Failed to build NSR payload: %v", err)
+	}
+	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	if err != nil {
+		t.Fatalf("Failed to encrypt NSR: %v", err)
+	}
+	_, _, _, err = senderSM.DecryptGarlicMessage(nsrMsg)
+	if err != nil {
+		t.Fatalf("Sender failed to process NSR: %v", err)
+	}
+
+	return destHash
+}
+
 // TestSessionManagerCreation tests creating a new session manager.
 func TestSessionManagerCreation(t *testing.T) {
 	sm, err := GenerateGarlicSessionManager()
@@ -178,37 +217,7 @@ func TestExistingSessionEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Failed to create receiver session manager: %v", err)
 	}
 
-	destHash := types.SHA256(receiverPubKey[:])
-
-	// First message (New Session)
-	builder1, _ := NewGarlicBuilderWithDefaults()
-	dataMsg1 := NewDataMessage([]byte("first message"))
-	builder1.AddLocalDeliveryClove(dataMsg1, 1)
-	ct1, err := EncryptGarlicWithBuilder(senderSM, builder1, destHash, receiverPubKey)
-	if err != nil {
-		t.Fatalf("First encrypt failed: %v", err)
-	}
-	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(ct1)
-	if err != nil {
-		t.Fatalf("First decrypt failed: %v", err)
-	}
-	if sessionHash == nil {
-		t.Fatal("sessionHash must be non-nil for New Session")
-	}
-
-	// Receiver sends NSR to complete the handshake
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
-	if err != nil {
-		t.Fatalf("Failed to build NSR payload: %v", err)
-	}
-	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
-	if err != nil {
-		t.Fatalf("Failed to encrypt NSR: %v", err)
-	}
-	_, _, _, err = senderSM.DecryptGarlicMessage(nsrMsg)
-	if err != nil {
-		t.Fatalf("Sender failed to process NSR: %v", err)
-	}
+	destHash := completeGarlicHandshake(t, senderSM, receiverSM, receiverPubKey)
 
 	// Second message (Existing Session)
 	builder2, _ := NewGarlicBuilderWithDefaults()
@@ -359,37 +368,7 @@ func TestExistingSessionMessageFormat(t *testing.T) {
 	}
 
 	destPubKey := receiverSM.GetPublicKey()
-	destHash := types.SHA256(destPubKey[:])
-
-	// First message creates session (New Session)
-	builder1, _ := NewGarlicBuilderWithDefaults()
-	dataMsg1 := NewDataMessage([]byte("first"))
-	builder1.AddLocalDeliveryClove(dataMsg1, 1)
-	ct1, err := EncryptGarlicWithBuilder(sm, builder1, destHash, destPubKey)
-	if err != nil {
-		t.Fatalf("Failed to encrypt first message: %v", err)
-	}
-
-	// Receiver decrypts NS and sends NSR to complete handshake
-	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(ct1)
-	if err != nil {
-		t.Fatalf("Receiver failed to decrypt NS: %v", err)
-	}
-	if sessionHash == nil {
-		t.Fatal("sessionHash must be non-nil for New Session")
-	}
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
-	if err != nil {
-		t.Fatalf("Failed to build NSR payload: %v", err)
-	}
-	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
-	if err != nil {
-		t.Fatalf("Failed to encrypt NSR: %v", err)
-	}
-	_, _, _, err = sm.DecryptGarlicMessage(nsrMsg)
-	if err != nil {
-		t.Fatalf("Sender failed to process NSR: %v", err)
-	}
+	destHash := completeGarlicHandshake(t, sm, receiverSM, destPubKey)
 
 	// Second message uses existing session (handshake complete)
 	builder2, _ := NewGarlicBuilderWithDefaults()
