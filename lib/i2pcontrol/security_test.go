@@ -208,8 +208,10 @@ type mockStopCtrl struct{}
 func (m *mockStopCtrl) Stop()         {}
 func (m *mockStopCtrl) Reseed() error { return nil }
 
-// TestAuthorizationRequiredForProtectedMethods verifies protected methods require authentication.
-func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
+// setupAuthTestServer creates a configured I2PControl server with an httptest server for testing.
+// Returns the server, the test HTTP server URL, and a cleanup function.
+func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
+	t.Helper()
 	stats := &mockStatsForAuth{running: true}
 	cfg := &config.I2PControlConfig{
 		Enabled:  true,
@@ -223,9 +225,14 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 		t.Fatalf("NewServer failed: %v", err)
 	}
 
-	// Create test HTTP server
 	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	t.Cleanup(func() { ts.Close() })
+	return server, ts
+}
+
+// TestAuthorizationRequiredForProtectedMethods verifies protected methods require authentication.
+func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
+	_, ts := setupAuthTestServer(t)
 
 	// List of protected methods (require authentication)
 	protectedMethods := []string{
@@ -269,21 +276,7 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 
 // TestAuthorizationAuthenticateMethodNoTokenRequired verifies Authenticate doesn't require a token.
 func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// Authenticate should work without existing token
 	reqBody, _ := json.Marshal(map[string]interface{}{
@@ -323,21 +316,7 @@ func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 
 // TestAuthorizationInvalidTokenRejected verifies invalid tokens are rejected.
 func TestAuthorizationInvalidTokenRejected(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// Request with invalid token
 	reqBody, _ := json.Marshal(map[string]interface{}{
@@ -450,21 +429,7 @@ func TestAuthorizationTokenRevokedAfterPasswordChange(t *testing.T) {
 
 // TestInputValidationMalformedJSON verifies malformed JSON is rejected.
 func TestInputValidationMalformedJSON(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	malformedInputs := []struct {
 		name  string
@@ -506,21 +471,7 @@ func TestInputValidationMalformedJSON(t *testing.T) {
 
 // TestInputValidationOversizedRequest verifies oversized requests are rejected.
 func TestInputValidationOversizedRequest(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// Create a request larger than 1MB (the server limit)
 	largeValue := strings.Repeat("a", 2*1024*1024) // 2MB
@@ -562,21 +513,7 @@ func TestInputValidationOversizedRequest(t *testing.T) {
 
 // TestInputValidationWrongHTTPMethod verifies non-POST requests are rejected.
 func TestInputValidationWrongHTTPMethod(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	methods := []string{"GET", "PUT", "DELETE", "PATCH"}
 
@@ -606,21 +543,7 @@ func TestInputValidationWrongHTTPMethod(t *testing.T) {
 
 // TestInputValidationWrongContentType verifies wrong Content-Type is rejected.
 func TestInputValidationWrongContentType(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	wrongContentTypes := []string{
 		"text/plain",
@@ -659,21 +582,7 @@ func TestInputValidationWrongContentType(t *testing.T) {
 
 // TestInputValidationUnknownMethod verifies unknown methods return proper error.
 func TestInputValidationUnknownMethod(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	unknownMethods := []string{
 		"UnknownMethod",
@@ -820,21 +729,7 @@ func TestInfoDisclosureNoPasswordInResponse(t *testing.T) {
 
 // TestInfoDisclosureNoInternalPaths verifies internal paths aren't exposed in errors.
 func TestInfoDisclosureNoInternalPaths(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// Send malformed requests to trigger errors
 	badRequests := []string{
@@ -876,21 +771,7 @@ func TestInfoDisclosureNoInternalPaths(t *testing.T) {
 
 // TestInfoDisclosureNoVersionLeakInErrors verifies version info isn't leaked in errors.
 func TestInfoDisclosureNoVersionLeakInErrors(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// Request that causes error
 	reqBody, _ := json.Marshal(map[string]interface{}{
@@ -1183,21 +1064,7 @@ func TestRPCErrorCodesCorrect(t *testing.T) {
 
 // TestCORSHeadersSet verifies CORS headers are properly configured.
 func TestCORSHeadersSet(t *testing.T) {
-	stats := &mockStatsForAuth{running: true}
-	cfg := &config.I2PControlConfig{
-		Enabled:  true,
-		Address:  "127.0.0.1:0",
-		Password: "testpassword",
-		UseHTTPS: false,
-	}
-
-	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
-	defer ts.Close()
+	_, ts := setupAuthTestServer(t)
 
 	// OPTIONS request (preflight)
 	req, _ := http.NewRequest("OPTIONS", ts.URL, nil)

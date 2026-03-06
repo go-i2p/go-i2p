@@ -8,6 +8,21 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 )
 
+// requireRPCError asserts that err is a non-nil *RPCError with the expected code.
+func requireRPCError(t *testing.T, err error, expectedCode int) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected RPC error, got nil")
+	}
+	rpcErr, ok := err.(*RPCError)
+	if !ok {
+		t.Fatalf("error is not *RPCError: %T", err)
+	}
+	if rpcErr.Code != expectedCode {
+		t.Errorf("error code = %v, want %v", rpcErr.Code, expectedCode)
+	}
+}
+
 // Test Echo Handler
 
 func TestEchoHandler_String(t *testing.T) {
@@ -74,14 +89,7 @@ func TestEchoHandler_InvalidJSON(t *testing.T) {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 // Test GetRate Handler
@@ -175,10 +183,7 @@ func TestGetRateHandler_InvalidJSON(t *testing.T) {
 		t.Fatal("Handle() expected error for invalid JSON, got nil")
 	}
 
-	rpcErr := err.(*RPCError)
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 // Test RouterInfo Handler
@@ -453,10 +458,7 @@ func TestRouterManagerHandler_NoOperations(t *testing.T) {
 		t.Fatal("Handle() expected error for no operations, got nil")
 	}
 
-	rpcErr := err.(*RPCError)
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
@@ -595,10 +597,7 @@ func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
 		t.Fatal("Handle() expected error for write operation, got nil")
 	}
 
-	rpcErr := err.(*RPCError)
-	if rpcErr.Code != ErrCodeNotImpl {
-		t.Errorf("error code = %d, want %d", rpcErr.Code, ErrCodeNotImpl)
-	}
+	requireRPCError(t, err, ErrCodeNotImpl)
 }
 
 func TestNetworkSettingHandler_InvalidJSON(t *testing.T) {
@@ -948,14 +947,7 @@ func TestI2PControlHandler_EmptyPassword(t *testing.T) {
 		t.Fatal("expected error for empty password, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 
 	// Password should not have changed in either auth manager or config
 	if authMgr.password != "oldpass" {
@@ -977,14 +969,7 @@ func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
 		t.Fatal("expected error for numeric password, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 
 	// Password should not have changed
 	if authMgr.password != "oldpass" {
@@ -1002,14 +987,7 @@ func TestI2PControlHandler_PortChangeNotImplemented(t *testing.T) {
 		t.Fatal("expected error for port change, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeNotImpl {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeNotImpl)
-	}
+	requireRPCError(t, err, ErrCodeNotImpl)
 }
 
 func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
@@ -1022,14 +1000,7 @@ func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
 		t.Fatal("expected error for address change, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeNotImpl {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeNotImpl)
-	}
+	requireRPCError(t, err, ErrCodeNotImpl)
 }
 
 func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
@@ -1042,14 +1013,7 @@ func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
 		t.Fatal("expected error for no settings, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 func TestI2PControlHandler_InvalidJSON(t *testing.T) {
@@ -1062,14 +1026,7 @@ func TestI2PControlHandler_InvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, ErrCodeInvalidParams)
-	}
+	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {

@@ -58,17 +58,13 @@ func TestReplyProcessor_ProcessBuildReply_Success(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	// Register pending build
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Create successful reply
 	reply := createSuccessfulVariableTunnelBuildReply(3)
 
 	// Process reply
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.NoError(t, err, "Should process successful reply")
 	assert.Equal(t, 0, rp.GetPendingBuildCount(), "Should remove pending build after success")
@@ -97,17 +93,13 @@ func TestReplyProcessor_ProcessBuildReply_Failure(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	// Register pending build
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Create failed reply (all hops reject)
 	reply := createMixedVariableTunnelBuildReply(3) // This has failures
 
 	// Process reply
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.Error(t, err, "Should fail for rejected tunnel build")
 	assert.Equal(t, 0, rp.GetPendingBuildCount(), "Should remove pending build after failure")
@@ -121,11 +113,7 @@ func TestReplyProcessor_Timeout(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	// Register pending build
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	_ = registerTestBuild(t, rp)
 
 	// Wait for timeout
 	time.Sleep(100 * time.Millisecond)
@@ -153,17 +141,13 @@ func TestReplyProcessor_Retry(t *testing.T) {
 	})
 
 	// Register pending build
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Create failed reply
 	reply := createMixedVariableTunnelBuildReply(3)
 
 	// Process reply (should trigger retry)
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.Error(t, err, "Should fail for rejected tunnel build")
 	assert.Contains(t, err.Error(), "retry scheduled")
@@ -197,11 +181,7 @@ func TestReplyProcessor_RetryExhausted(t *testing.T) {
 	})
 
 	// Register pending build with already exhausted retries
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Manually set retry count to max
 	info := rp.GetPendingBuildInfo(tunnelID)
@@ -212,7 +192,7 @@ func TestReplyProcessor_RetryExhausted(t *testing.T) {
 	reply := createMixedVariableTunnelBuildReply(3)
 
 	// Process reply (should NOT trigger retry)
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.Error(t, err, "Should fail permanently")
 	assert.Contains(t, err.Error(), "failed after")
@@ -337,14 +317,10 @@ func TestReplyProcessor_DecryptionDisabled(t *testing.T) {
 	config.EnableDecryption = false
 	rp := NewReplyProcessor(config, nil)
 
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	reply := createSuccessfulVariableTunnelBuildReply(3)
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.NoError(t, err, "Should process reply without decryption")
 }
@@ -357,16 +333,12 @@ func TestReplyProcessor_RecordCountMismatch(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	// Register build with 3 hops
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Create reply with different number of records
 	reply := createSuccessfulVariableTunnelBuildReply(5) // Mismatch!
 
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	// Should fail because record count doesn't match
 	assert.Error(t, err, "Should fail with record count mismatch")
@@ -379,15 +351,11 @@ func TestReplyProcessor_TimeoutCancellation(t *testing.T) {
 	config.EnableDecryption = false
 	rp := NewReplyProcessor(config, nil)
 
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	// Process reply quickly (before timeout)
 	reply := createSuccessfulVariableTunnelBuildReply(3)
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 	assert.NoError(t, err)
 
 	// Wait beyond timeout to ensure timeout handler doesn't fire
@@ -405,14 +373,10 @@ func TestReplyProcessor_NoRetryCallback(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 	// No retry callback set
 
-	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 3)
-	replyIVs := make([][16]byte, 3)
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
-	require.NoError(t, err)
+	tunnelID := registerTestBuild(t, rp)
 
 	reply := createMixedVariableTunnelBuildReply(3)
-	err = rp.ProcessBuildReply(reply, tunnelID)
+	err := rp.ProcessBuildReply(reply, tunnelID)
 
 	assert.Error(t, err, "Should fail without retry callback")
 	assert.Contains(t, err.Error(), "retry not available")
@@ -428,16 +392,23 @@ func TestReplyProcessor_IntegrationWithTunnelManager(t *testing.T) {
 	config.EnableDecryption = false
 	rp := NewReplyProcessor(config, tm)
 
+	tunnelID := registerTestBuild(t, rp)
+
+	reply := createSuccessfulVariableTunnelBuildReply(3)
+	err := rp.ProcessBuildReply(reply, tunnelID)
+
+	assert.NoError(t, err, "Should process reply with tunnel manager integration")
+}
+
+// registerTestBuild registers a pending build with standard test parameters (tunnelID=12345, 3 hops).
+func registerTestBuild(t *testing.T, rp *ReplyProcessor) tunnel.TunnelID {
+	t.Helper()
 	tunnelID := tunnel.TunnelID(12345)
 	replyKeys := make([]session_key.SessionKey, 3)
 	replyIVs := make([][16]byte, 3)
 	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, false, 3)
 	require.NoError(t, err)
-
-	reply := createSuccessfulVariableTunnelBuildReply(3)
-	err = rp.ProcessBuildReply(reply, tunnelID)
-
-	assert.NoError(t, err, "Should process reply with tunnel manager integration")
+	return tunnelID
 }
 
 // mockPeerSelector is a simple mock for testing

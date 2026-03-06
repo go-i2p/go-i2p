@@ -7,26 +7,13 @@ import (
 	"time"
 
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/go-i2p/lib/config"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRouterCloseReleasesResources verifies that Close() properly releases all router resources
 func TestRouterCloseReleasesResources(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Start the router
 	router.Start()
@@ -38,7 +25,7 @@ func TestRouterCloseReleasesResources(t *testing.T) {
 	router.runMux.RUnlock()
 
 	// Close the router (should call Stop() internally if still running)
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err)
 
 	// Verify all resources are released
@@ -58,17 +45,7 @@ func TestRouterCloseReleasesResources(t *testing.T) {
 
 // TestRouterCloseAfterStop verifies that Close() works correctly after Stop() has been called
 func TestRouterCloseAfterStop(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Start and then stop the router
 	router.Start()
@@ -85,7 +62,7 @@ func TestRouterCloseAfterStop(t *testing.T) {
 	router.runMux.RUnlock()
 
 	// Close should still work and release remaining resources
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err)
 
 	// Verify all resources are released
@@ -96,16 +73,10 @@ func TestRouterCloseAfterStop(t *testing.T) {
 
 // TestRouterCloseWithoutStart verifies that Close() handles a never-started router
 func TestRouterCloseWithoutStart(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := createTestRouter(t)
 
 	// Don't start the router - just close it
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err, "Close() should not error on a never-started router")
 
 	// Verify state is clean
@@ -116,23 +87,13 @@ func TestRouterCloseWithoutStart(t *testing.T) {
 
 // TestRouterCloseIdempotent verifies that calling Close() multiple times is safe
 func TestRouterCloseIdempotent(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Start and close the router
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
 
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err, "First Close() should succeed")
 
 	// Second Close() should also succeed (or at least not panic)
@@ -146,17 +107,7 @@ func TestRouterCloseIdempotent(t *testing.T) {
 
 // TestRouterCloseClearsActiveSessions verifies that Close() clears the active sessions map
 func TestRouterCloseClearsActiveSessions(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Manually add a mock session to the active sessions map
 	router.sessionMutex.Lock()
@@ -175,7 +126,7 @@ func TestRouterCloseClearsActiveSessions(t *testing.T) {
 	assert.Equal(t, 1, sessionCount, "Should have 1 active session before Close()")
 
 	// Close the router
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err)
 
 	// Verify sessions were cleared
@@ -186,23 +137,13 @@ func TestRouterCloseClearsActiveSessions(t *testing.T) {
 
 // TestRouterCannotRestartAfterClose verifies that a router cannot be restarted after Close()
 func TestRouterCannotRestartAfterClose(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Start, then close the router
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
 
-	err = router.Close()
+	err := router.Close()
 	assert.NoError(t, err)
 
 	// Note: After Close(), the router's resources are nilled out.

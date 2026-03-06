@@ -7,25 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TestRouterContextLifecycle tests that the router context is properly managed
 func TestRouterContextLifecycle(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Context should be nil before Start()
 	assert.Nil(t, router.ctx)
@@ -69,17 +57,7 @@ func TestRouterContextLifecycle(t *testing.T) {
 
 // TestRouterContextCancellation tests that stopping the router cancels the context
 func TestRouterContextCancellation(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// Start the router
 	router.Start()
@@ -113,17 +91,7 @@ func TestRouterContextCancellation(t *testing.T) {
 
 // TestRouterMultipleStartStop tests that Start/Stop can be called multiple times
 func TestRouterMultipleStartStop(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	// First Start/Stop cycle
 	router.Start()
@@ -174,13 +142,7 @@ func TestRouterMultipleStartStop(t *testing.T) {
 
 // TestRouterStopWithoutStart tests that Stop() is safe to call without Start()
 func TestRouterStopWithoutStart(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := createTestRouter(t)
 
 	// Should not panic when Stop() is called without Start()
 	require.NotPanics(t, func() {
@@ -194,17 +156,7 @@ func TestRouterStopWithoutStart(t *testing.T) {
 
 // TestRouterContextNotNilInGoroutines tests that goroutines can access router context
 func TestRouterContextNotNilInGoroutines(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
@@ -231,17 +183,7 @@ func TestRouterContextNotNilInGoroutines(t *testing.T) {
 
 // TestRouterContextInheritance tests that router context is properly passed to components
 func TestRouterContextInheritance(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
@@ -278,17 +220,7 @@ func TestRouterContextInheritance(t *testing.T) {
 
 // TestRouterDoubleStop tests that calling Stop() twice is safe
 func TestRouterDoubleStop(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Initialize keystore
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	router := createTestRouterWithKeystore(t)
 
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
