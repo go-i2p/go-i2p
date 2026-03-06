@@ -15,17 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServerStartStop(t *testing.T) {
+// newTestI2CPServer creates an I2CP server with standard test config.
+func newTestI2CPServer(t *testing.T, addr string) *Server {
+	t.Helper()
 	config := &ServerConfig{
-		ListenAddr:  "localhost:17654",
+		ListenAddr:  addr,
 		Network:     "tcp",
 		MaxSessions: 100,
 	}
-
 	server, err := NewServer(config)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
+	return server
+}
+
+func TestServerStartStop(t *testing.T) {
+	server := newTestI2CPServer(t, "localhost:17654")
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -48,16 +54,7 @@ func TestServerStartStop(t *testing.T) {
 }
 
 func TestServerDoubleStart(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17655",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17655")
 	defer server.Stop()
 
 	if err := server.Start(); err != nil {
@@ -71,16 +68,7 @@ func TestServerDoubleStart(t *testing.T) {
 }
 
 func TestServerCreateSession(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17656",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17656")
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -145,16 +133,7 @@ func TestServerCreateSession(t *testing.T) {
 }
 
 func TestServerDestroySession(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17659",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17659")
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -284,16 +263,7 @@ func TestServerMaxSessions(t *testing.T) {
 }
 
 func TestServerGetDate(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17658",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17658")
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -332,16 +302,7 @@ func TestServerGetDate(t *testing.T) {
 
 func TestServerHandleCreateLeaseSet(t *testing.T) {
 	// Setup: start server
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17659",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17659")
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -447,16 +408,7 @@ func BenchmarkServerCreateSession(b *testing.B) {
 // TestServerConnWriteMuInitialized verifies that the per-connection write mutex
 // map is properly initialized when creating a new server.
 func TestServerConnWriteMuInitialized(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:0",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:0")
 
 	if server.connWriteMu == nil {
 		t.Fatal("connWriteMu should be initialized, not nil")
@@ -471,16 +423,7 @@ func TestServerConnWriteMuInitialized(t *testing.T) {
 // a 3-byte SessionStatus payload (SessionID + Status) per the I2CP spec,
 // not a 1-byte payload.
 func TestDestroySessionPayloadFormat(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17680",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17680")
 
 	// Create a session directly via the manager
 	session, err := server.manager.CreateSession(nil, nil)
@@ -1772,16 +1715,7 @@ func TestSessionStatusCreatedCode(t *testing.T) {
 // TestSessionStatusDestroyedCode verifies that handleDestroySession returns
 // status byte 0x00 (Destroyed) per I2CP spec.
 func TestSessionStatusDestroyedCode(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:  "localhost:17690",
-		Network:     "tcp",
-		MaxSessions: 100,
-	}
-
-	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server := newTestI2CPServer(t, "localhost:17690")
 
 	session, err := server.manager.CreateSession(nil, nil)
 	if err != nil {

@@ -98,14 +98,7 @@ func TestTestTunnel_Success(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(54321)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	tester := NewTunnelTester(pool)
 	tester.SetTimeout(2 * time.Second)
@@ -329,14 +322,7 @@ func TestTestTunnel_Timeout(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(77777)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	// Configure sender that never responds
 	sender := newMockMessageSender()
@@ -365,6 +351,19 @@ func TestTestTunnel_Timeout(t *testing.T) {
 	if elapsed > 2*time.Second {
 		t.Errorf("Timeout took too long: %v", elapsed)
 	}
+}
+
+// addReadyTunnel adds a ready tunnel with standard hops to the pool.
+func addReadyTunnel(t *testing.T, pool *Pool, tunnelID TunnelID) {
+	t.Helper()
+	pool.mutex.Lock()
+	pool.tunnels[tunnelID] = &TunnelState{
+		ID:        tunnelID,
+		State:     TunnelReady,
+		CreatedAt: time.Now(),
+		Hops:      []common.Hash{{1}, {2}, {3}},
+	}
+	pool.mutex.Unlock()
 }
 
 // createTestPool creates a minimal pool for testing
@@ -442,14 +441,7 @@ func TestRealEchoTest_Success(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(12345)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	sender := newMockMessageSender()
 	tester := NewTunnelTester(pool)
@@ -498,14 +490,7 @@ func TestRealEchoTest_Timeout(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(54321)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	sender := newMockMessageSender()
 	tester := NewTunnelTester(pool)
@@ -530,14 +515,7 @@ func TestRealEchoTest_SendFailure(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(99999)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	sender := newMockMessageSender()
 	sender.shouldFail = true
@@ -598,14 +576,7 @@ func TestPendingTestsCleanup(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(11111)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	sender := newMockMessageSender()
 	tester := NewTunnelTester(pool)
@@ -632,14 +603,7 @@ func TestFallbackToAgeBasedTest(t *testing.T) {
 
 	// Add a ready tunnel
 	tunnelID := TunnelID(22222)
-	pool.mutex.Lock()
-	pool.tunnels[tunnelID] = &TunnelState{
-		ID:        tunnelID,
-		State:     TunnelReady,
-		CreatedAt: time.Now(),
-		Hops:      []common.Hash{{1}, {2}, {3}},
-	}
-	pool.mutex.Unlock()
+	addReadyTunnel(t, pool, tunnelID)
 
 	// Create tester WITHOUT setting message sender
 	tester := NewTunnelTester(pool)
