@@ -337,61 +337,65 @@ func setupSessionWithTunnelPool(tb testing.TB, config *SessionConfig) (*Session,
 	return session, pool
 }
 
-// TestSessionCreateLeaseSetNoInboundPool tests CreateLeaseSet with no inbound pool
-func TestSessionCreateLeaseSetNoInboundPool(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
+// TestSessionCreateLeaseSetErrors tests CreateLeaseSet error conditions
+func TestSessionCreateLeaseSetErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) *Session
+		wantErr string
+	}{
+		{
+			name: "NoInboundPool",
+			setup: func(t *testing.T) *Session {
+				s, err := NewSession(1, nil, nil)
+				if err != nil {
+					t.Fatalf("NewSession() error = %v", err)
+				}
+				t.Cleanup(s.Stop)
+				return s
+			},
+			wantErr: "session 1 has no inbound tunnel pool",
+		},
+		{
+			name: "InactiveSession",
+			setup: func(t *testing.T) *Session {
+				s, err := NewSession(1, nil, nil)
+				if err != nil {
+					t.Fatalf("NewSession() error = %v", err)
+				}
+				s.Stop()
+				return s
+			},
+			wantErr: "session 1 not active",
+		},
+		{
+			name: "NoActiveTunnels",
+			setup: func(t *testing.T) *Session {
+				s, err := NewSession(1, nil, nil)
+				if err != nil {
+					t.Fatalf("NewSession() error = %v", err)
+				}
+				t.Cleanup(s.Stop)
+				selector := &mockPeerSelector{}
+				pool := tunnel.NewTunnelPool(selector)
+				s.SetInboundPool(pool)
+				return s
+			},
+			wantErr: "", // any error
+		},
 	}
-	defer session.Stop()
 
-	// Should fail because there's no inbound pool
-	_, err = session.CreateLeaseSet()
-	if err == nil {
-		t.Error("Expected error when no inbound pool, got nil")
-	}
-	if err != nil && err.Error() != "session 1 has no inbound tunnel pool" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-// TestSessionCreateLeaseSetInactiveSession tests CreateLeaseSet on inactive session
-func TestSessionCreateLeaseSetInactiveSession(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
-	}
-
-	// Stop the session to make it inactive
-	session.Stop()
-
-	// Should fail because session is not active
-	_, err = session.CreateLeaseSet()
-	if err == nil {
-		t.Error("Expected error when session inactive, got nil")
-	}
-	if err != nil && err.Error() != "session 1 not active" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-// TestSessionCreateLeaseSetNoActiveTunnels tests CreateLeaseSet with empty pool
-func TestSessionCreateLeaseSetNoActiveTunnels(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
-	}
-	defer session.Stop()
-
-	// Create an empty tunnel pool using mock peer selector
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	// Should fail because there are no active tunnels
-	_, err = session.CreateLeaseSet()
-	if err == nil {
-		t.Error("Expected error when no active tunnels, got nil")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := tc.setup(t)
+			_, err := session.CreateLeaseSet()
+			if err == nil {
+				t.Error("Expected error, got nil")
+			}
+			if tc.wantErr != "" && err != nil && err.Error() != tc.wantErr {
+				t.Errorf("Unexpected error message: %v", err)
+			}
+		})
 	}
 }
 
@@ -463,35 +467,43 @@ func TestSessionLeaseSetAge(t *testing.T) {
 	}
 }
 
-// TestStartLeaseSetMaintenanceNoInboundPool tests maintenance start without pool
-func TestStartLeaseSetMaintenanceNoInboundPool(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
+// TestStartLeaseSetMaintenanceErrors tests maintenance start error conditions
+func TestStartLeaseSetMaintenanceErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) *Session
+	}{
+		{
+			name: "NoInboundPool",
+			setup: func(t *testing.T) *Session {
+				s, err := NewSession(1, nil, nil)
+				if err != nil {
+					t.Fatalf("NewSession() error = %v", err)
+				}
+				t.Cleanup(s.Stop)
+				return s
+			},
+		},
+		{
+			name: "InactiveSession",
+			setup: func(t *testing.T) *Session {
+				s, err := NewSession(1, nil, nil)
+				if err != nil {
+					t.Fatalf("NewSession() error = %v", err)
+				}
+				s.Stop()
+				return s
+			},
+		},
 	}
-	defer session.Stop()
 
-	// Should fail because there's no inbound pool
-	err = session.StartLeaseSetMaintenance()
-	if err == nil {
-		t.Error("Expected error when no inbound pool, got nil")
-	}
-}
-
-// TestStartLeaseSetMaintenanceInactiveSession tests maintenance on inactive session
-func TestStartLeaseSetMaintenanceInactiveSession(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
-	}
-
-	// Stop the session to make it inactive
-	session.Stop()
-
-	// Should fail because session is not active
-	err = session.StartLeaseSetMaintenance()
-	if err == nil {
-		t.Error("Expected error when session inactive, got nil")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := tc.setup(t)
+			if err := session.StartLeaseSetMaintenance(); err == nil {
+				t.Error("Expected error, got nil")
+			}
+		})
 	}
 }
 

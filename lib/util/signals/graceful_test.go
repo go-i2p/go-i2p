@@ -9,22 +9,35 @@ import (
 	"time"
 )
 
+// resetPreShutdownHandlers saves and clears preShutdownHandlers, restoring them
+// via t.Cleanup. If restoreTimeout is true, gracefulTimeout is also saved/restored.
+func resetPreShutdownHandlers(t *testing.T, restoreTimeout bool) {
+	t.Helper()
+	originalHandlers := preShutdownHandlers
+	var originalTimeout time.Duration
+	if restoreTimeout {
+		originalTimeout = gracefulTimeout
+	}
+	t.Cleanup(func() {
+		preShutdownMu.Lock()
+		preShutdownHandlers = originalHandlers
+		if restoreTimeout {
+			gracefulTimeout = originalTimeout
+		}
+		preShutdownMu.Unlock()
+	})
+	preShutdownMu.Lock()
+	preShutdownHandlers = nil
+	preShutdownMu.Unlock()
+}
+
 // =============================================================================
 // Pre-Shutdown Handler Registration Tests
 // =============================================================================
 
 // TestRegisterPreShutdownHandler verifies pre-shutdown handler registration.
 func TestRegisterPreShutdownHandler(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	called := false
 	RegisterPreShutdownHandler(func() {
@@ -48,16 +61,7 @@ func TestRegisterPreShutdownHandler(t *testing.T) {
 
 // TestRegisterPreShutdownHandler_Nil verifies nil handlers are ignored.
 func TestRegisterPreShutdownHandler_Nil(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	RegisterPreShutdownHandler(nil)
 
@@ -72,16 +76,7 @@ func TestRegisterPreShutdownHandler_Nil(t *testing.T) {
 
 // TestPreShutdownHandlers_CalledInOrder verifies FIFO order.
 func TestPreShutdownHandlers_CalledInOrder(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	var mu sync.Mutex
 	order := make([]int, 0, 3)
@@ -112,16 +107,7 @@ func TestPreShutdownHandlers_CalledInOrder(t *testing.T) {
 
 // TestPreShutdownHandlers_Empty verifies empty handler list returns true.
 func TestPreShutdownHandlers_Empty(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	if !handlePreShutdown() {
 		t.Error("expected true for empty handler list")
@@ -130,18 +116,7 @@ func TestPreShutdownHandlers_Empty(t *testing.T) {
 
 // TestPreShutdownHandlers_ReturnsTrue verifies success return when all handlers complete.
 func TestPreShutdownHandlers_ReturnsTrue(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, true)
 
 	RegisterPreShutdownHandler(func() {
 		// fast handler
@@ -154,18 +129,7 @@ func TestPreShutdownHandlers_ReturnsTrue(t *testing.T) {
 
 // TestPreShutdownHandlers_Timeout verifies timeout behavior.
 func TestPreShutdownHandlers_Timeout(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, true)
 
 	SetGracefulTimeout(2 * time.Second)
 
@@ -181,18 +145,7 @@ func TestPreShutdownHandlers_Timeout(t *testing.T) {
 // TestPreShutdownHandlers_HungHandlerDoesNotBlockChain verifies that a hung
 // handler does not prevent subsequent handlers from running (BUG #4 fix).
 func TestPreShutdownHandlers_HungHandlerDoesNotBlockChain(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, true)
 
 	// 4 seconds total / 2 handlers = 2 seconds per handler
 	SetGracefulTimeout(4 * time.Second)
@@ -220,16 +173,7 @@ func TestPreShutdownHandlers_HungHandlerDoesNotBlockChain(t *testing.T) {
 
 // TestDeregisterPreShutdownHandler verifies pre-shutdown handler deregistration.
 func TestDeregisterPreShutdownHandler(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	called := false
 	id := RegisterPreShutdownHandler(func() { called = true })
@@ -253,16 +197,7 @@ func TestDeregisterPreShutdownHandler(t *testing.T) {
 
 // TestPreShutdownHandlers_PanicRecovery verifies panic recovery in pre-shutdown handlers.
 func TestPreShutdownHandlers_PanicRecovery(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	calledAfterPanic := false
 
@@ -303,63 +238,37 @@ func TestPreShutdownHandlers_PanicRecovery(t *testing.T) {
 // SetGracefulTimeout Tests
 // =============================================================================
 
-// TestSetGracefulTimeout_Positive verifies setting a positive timeout.
-func TestSetGracefulTimeout_Positive(t *testing.T) {
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
-
-	SetGracefulTimeout(10 * time.Second)
-
-	preShutdownMu.RLock()
-	timeout := gracefulTimeout
-	preShutdownMu.RUnlock()
-
-	if timeout != 10*time.Second {
-		t.Errorf("expected 10s timeout, got %s", timeout)
+// TestSetGracefulTimeout verifies timeout configuration for various inputs.
+func TestSetGracefulTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Duration
+		expected time.Duration
+	}{
+		{"Positive", 10 * time.Second, 10 * time.Second},
+		{"Zero", 0, defaultGracefulTimeout},
+		{"Negative", -5 * time.Second, defaultGracefulTimeout},
 	}
-}
 
-// TestSetGracefulTimeout_Zero verifies zero defaults to 30 seconds.
-func TestSetGracefulTimeout_Zero(t *testing.T) {
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			originalTimeout := gracefulTimeout
+			t.Cleanup(func() {
+				preShutdownMu.Lock()
+				gracefulTimeout = originalTimeout
+				preShutdownMu.Unlock()
+			})
 
-	SetGracefulTimeout(0)
+			SetGracefulTimeout(tc.input)
 
-	preShutdownMu.RLock()
-	timeout := gracefulTimeout
-	preShutdownMu.RUnlock()
+			preShutdownMu.RLock()
+			timeout := gracefulTimeout
+			preShutdownMu.RUnlock()
 
-	if timeout != defaultGracefulTimeout {
-		t.Errorf("expected default timeout %s, got %s", defaultGracefulTimeout, timeout)
-	}
-}
-
-// TestSetGracefulTimeout_Negative verifies negative defaults to 30 seconds.
-func TestSetGracefulTimeout_Negative(t *testing.T) {
-	originalTimeout := gracefulTimeout
-	defer func() {
-		preShutdownMu.Lock()
-		gracefulTimeout = originalTimeout
-		preShutdownMu.Unlock()
-	}()
-
-	SetGracefulTimeout(-5 * time.Second)
-
-	preShutdownMu.RLock()
-	timeout := gracefulTimeout
-	preShutdownMu.RUnlock()
-
-	if timeout != defaultGracefulTimeout {
-		t.Errorf("expected default timeout %s, got %s", defaultGracefulTimeout, timeout)
+			if timeout != tc.expected {
+				t.Errorf("expected %s timeout, got %s", tc.expected, timeout)
+			}
+		})
 	}
 }
 
@@ -369,16 +278,7 @@ func TestSetGracefulTimeout_Negative(t *testing.T) {
 
 // TestPreShutdownConcurrentRegistration verifies thread-safe handler registration.
 func TestPreShutdownConcurrentRegistration(t *testing.T) {
-	originalHandlers := preShutdownHandlers
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	resetPreShutdownHandlers(t, false)
 
 	var wg sync.WaitGroup
 	numGoroutines := 50
@@ -417,20 +317,13 @@ func TestPreShutdownConcurrentRegistration(t *testing.T) {
 // TestPreShutdownRunsBeforeInterrupt verifies that in a simulated shutdown,
 // pre-shutdown handlers complete before interrupt handlers start.
 func TestPreShutdownRunsBeforeInterrupt(t *testing.T) {
-	originalHandlers := preShutdownHandlers
+	resetPreShutdownHandlers(t, false)
 	originalInterrupters := interrupters
-	defer func() {
-		preShutdownMu.Lock()
-		preShutdownHandlers = originalHandlers
-		preShutdownMu.Unlock()
+	t.Cleanup(func() {
 		mu.Lock()
 		interrupters = originalInterrupters
 		mu.Unlock()
-	}()
-
-	preShutdownMu.Lock()
-	preShutdownHandlers = nil
-	preShutdownMu.Unlock()
+	})
 	mu.Lock()
 	interrupters = nil
 	mu.Unlock()

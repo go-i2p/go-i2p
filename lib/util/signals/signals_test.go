@@ -7,18 +7,41 @@ import (
 	"testing"
 )
 
+// resetSignalHandlers saves and clears reloaders and/or interrupters,
+// restoring them via t.Cleanup. Pass true for whichever slice to reset.
+func resetSignalHandlers(t *testing.T, resetReloaders, resetInterrupters bool) {
+	t.Helper()
+	if resetReloaders {
+		orig := reloaders
+		t.Cleanup(func() {
+			mu.Lock()
+			reloaders = orig
+			mu.Unlock()
+		})
+		mu.Lock()
+		reloaders = nil
+		mu.Unlock()
+	}
+	if resetInterrupters {
+		orig := interrupters
+		t.Cleanup(func() {
+			mu.Lock()
+			interrupters = orig
+			mu.Unlock()
+		})
+		mu.Lock()
+		interrupters = nil
+		mu.Unlock()
+	}
+}
+
 // =============================================================================
 // Signal Handler Registration Tests
 // =============================================================================
 
 // TestRegisterReloadHandler verifies reload handler registration.
 func TestRegisterReloadHandler(t *testing.T) {
-	// Save original state
-	originalReloaders := reloaders
-	defer func() { reloaders = originalReloaders }()
-
-	// Reset state
-	reloaders = nil
+	resetSignalHandlers(t, true, false)
 
 	called := false
 	handler := func() {
@@ -41,12 +64,7 @@ func TestRegisterReloadHandler(t *testing.T) {
 
 // TestRegisterInterruptHandler verifies interrupt handler registration.
 func TestRegisterInterruptHandler(t *testing.T) {
-	// Save original state
-	originalInterrupters := interrupters
-	defer func() { interrupters = originalInterrupters }()
-
-	// Reset state
-	interrupters = nil
+	resetSignalHandlers(t, false, true)
 
 	called := false
 	handler := func() {
@@ -69,12 +87,7 @@ func TestRegisterInterruptHandler(t *testing.T) {
 
 // TestMultipleReloadHandlers verifies multiple reload handlers are all called.
 func TestMultipleReloadHandlers(t *testing.T) {
-	// Save original state
-	originalReloaders := reloaders
-	defer func() { reloaders = originalReloaders }()
-
-	// Reset state
-	reloaders = nil
+	resetSignalHandlers(t, true, false)
 
 	callCount := 0
 	var mu sync.Mutex
@@ -102,12 +115,7 @@ func TestMultipleReloadHandlers(t *testing.T) {
 
 // TestMultipleInterruptHandlers verifies multiple interrupt handlers are all called.
 func TestMultipleInterruptHandlers(t *testing.T) {
-	// Save original state
-	originalInterrupters := interrupters
-	defer func() { interrupters = originalInterrupters }()
-
-	// Reset state
-	interrupters = nil
+	resetSignalHandlers(t, false, true)
 
 	callCount := 0
 	var mu sync.Mutex
@@ -135,12 +143,7 @@ func TestMultipleInterruptHandlers(t *testing.T) {
 
 // TestHandlersCalledInOrder verifies handlers are called in registration order.
 func TestHandlersCalledInOrder(t *testing.T) {
-	// Save original state
-	originalReloaders := reloaders
-	defer func() { reloaders = originalReloaders }()
-
-	// Reset state
-	reloaders = nil
+	resetSignalHandlers(t, true, false)
 
 	order := make([]int, 0, 3)
 	var mu sync.Mutex
@@ -171,17 +174,7 @@ func TestHandlersCalledInOrder(t *testing.T) {
 
 // TestEmptyHandlerList verifies empty handler lists don't cause panic.
 func TestEmptyHandlerList(t *testing.T) {
-	// Save original state
-	originalReloaders := reloaders
-	originalInterrupters := interrupters
-	defer func() {
-		reloaders = originalReloaders
-		interrupters = originalInterrupters
-	}()
-
-	// Reset state
-	reloaders = nil
-	interrupters = nil
+	resetSignalHandlers(t, true, true)
 
 	// Should not panic
 	handleReload()
@@ -191,17 +184,7 @@ func TestEmptyHandlerList(t *testing.T) {
 // TestNilHandlerBehavior verifies that nil handlers are silently rejected
 // by RegisterReloadHandler and RegisterInterruptHandler.
 func TestNilHandlerBehavior(t *testing.T) {
-	// Save original state
-	originalReloaders := reloaders
-	originalInterrupters := interrupters
-	defer func() {
-		reloaders = originalReloaders
-		interrupters = originalInterrupters
-	}()
-
-	// Reset state
-	reloaders = nil
-	interrupters = nil
+	resetSignalHandlers(t, true, true)
 
 	// Registering nil handlers should be silently ignored
 	RegisterReloadHandler(nil)
@@ -246,9 +229,7 @@ func TestSigChanIsBuffered(t *testing.T) {
 // TestReloadHandlerPanicRecovery verifies that a panicking reload handler
 // is recovered and remaining handlers still execute.
 func TestReloadHandlerPanicRecovery(t *testing.T) {
-	originalReloaders := reloaders
-	defer func() { reloaders = originalReloaders }()
-	reloaders = nil
+	resetSignalHandlers(t, true, false)
 
 	assertPanicRecovery(t, RegisterReloadHandler, handleReload)
 }
@@ -256,9 +237,7 @@ func TestReloadHandlerPanicRecovery(t *testing.T) {
 // TestInterruptHandlerPanicRecovery verifies that a panicking interrupt handler
 // is recovered and remaining handlers still execute.
 func TestInterruptHandlerPanicRecovery(t *testing.T) {
-	originalInterrupters := interrupters
-	defer func() { interrupters = originalInterrupters }()
-	interrupters = nil
+	resetSignalHandlers(t, false, true)
 
 	assertPanicRecovery(t, RegisterInterruptHandler, handleInterrupted)
 }
@@ -297,18 +276,7 @@ func assertPanicRecovery(t *testing.T, registerFn func(Handler) HandlerID, trigg
 
 // TestConcurrentRegistration verifies thread-safe registration of handlers.
 func TestConcurrentRegistration(t *testing.T) {
-	originalReloaders := reloaders
-	originalInterrupters := interrupters
-	defer func() {
-		mu.Lock()
-		reloaders = originalReloaders
-		interrupters = originalInterrupters
-		mu.Unlock()
-	}()
-	mu.Lock()
-	reloaders = nil
-	interrupters = nil
-	mu.Unlock()
+	resetSignalHandlers(t, true, true)
 
 	var wg sync.WaitGroup
 	numGoroutines := 50
@@ -346,15 +314,7 @@ func TestConcurrentRegistration(t *testing.T) {
 
 // TestDeregisterReloadHandler verifies individual reload handler deregistration.
 func TestDeregisterReloadHandler(t *testing.T) {
-	originalReloaders := reloaders
-	defer func() {
-		mu.Lock()
-		reloaders = originalReloaders
-		mu.Unlock()
-	}()
-	mu.Lock()
-	reloaders = nil
-	mu.Unlock()
+	resetSignalHandlers(t, true, false)
 
 	called1, called2 := false, false
 	id1 := RegisterReloadHandler(func() { called1 = true })
@@ -382,15 +342,7 @@ func TestDeregisterReloadHandler(t *testing.T) {
 
 // TestDeregisterInterruptHandler verifies individual interrupt handler deregistration.
 func TestDeregisterInterruptHandler(t *testing.T) {
-	originalInterrupters := interrupters
-	defer func() {
-		mu.Lock()
-		interrupters = originalInterrupters
-		mu.Unlock()
-	}()
-	mu.Lock()
-	interrupters = nil
-	mu.Unlock()
+	resetSignalHandlers(t, false, true)
 
 	called := false
 	id := RegisterInterruptHandler(func() { called = true })
@@ -414,15 +366,7 @@ func TestDeregisterInterruptHandler(t *testing.T) {
 
 // TestDeregisterInvalidID verifies that deregistering an invalid ID is a no-op.
 func TestDeregisterInvalidID(t *testing.T) {
-	originalReloaders := reloaders
-	defer func() {
-		mu.Lock()
-		reloaders = originalReloaders
-		mu.Unlock()
-	}()
-	mu.Lock()
-	reloaders = nil
-	mu.Unlock()
+	resetSignalHandlers(t, true, false)
 
 	RegisterReloadHandler(func() {})
 	DeregisterReloadHandler(999) // non-existent ID
