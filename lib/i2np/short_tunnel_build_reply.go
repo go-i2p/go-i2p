@@ -1,8 +1,9 @@
 package i2np
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"fmt"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/logger"
 )
@@ -55,19 +56,7 @@ func (s *ShortTunnelBuildReply) GetRecordCount() int {
 // Similar to VariableTunnelBuildReply but specifically for short tunnel builds (v0.9.51+).
 // Validates response integrity and determines tunnel build success/failure.
 func (s *ShortTunnelBuildReply) ProcessReply() error {
-	recordCount := len(s.BuildResponseRecords)
-
-	s.logReplyStart(recordCount)
-
-	if err := s.validateRecordCount(recordCount); err != nil {
-		return err
-	}
-
-	successCount, firstError := s.processAllHops()
-
-	s.logReplyCompletion(successCount, recordCount)
-
-	return s.determineBuildResult(successCount, recordCount, firstError)
+	return processReplySteps(s, s.BuildResponseRecords)
 }
 
 // logReplyStart logs the initial processing information.

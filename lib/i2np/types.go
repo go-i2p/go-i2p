@@ -118,6 +118,30 @@ type TunnelReplyHandler interface {
 	ProcessReply() error
 }
 
+// replyStepProcessor defines the internal operations for processing tunnel
+// build replies. Used by processReplySteps to eliminate duplication across
+// ShortTunnelBuildReply and VariableTunnelBuildReply.
+type replyStepProcessor interface {
+	logReplyStart(recordCount int)
+	validateRecordCount(recordCount int) error
+	processAllHops() (int, error)
+	logReplyCompletion(successCount, recordCount int)
+	determineBuildResult(successCount, recordCount int, firstError error) error
+}
+
+// processReplySteps executes the common tunnel build reply pipeline:
+// log start → validate count → process hops → log completion → determine result.
+func processReplySteps(p replyStepProcessor, records []BuildResponseRecord) error {
+	recordCount := len(records)
+	p.logReplyStart(recordCount)
+	if err := p.validateRecordCount(recordCount); err != nil {
+		return err
+	}
+	successCount, firstError := p.processAllHops()
+	p.logReplyCompletion(successCount, recordCount)
+	return p.determineBuildResult(successCount, recordCount, firstError)
+}
+
 // SessionKeyProvider represents types that provide session keys
 type SessionKeyProvider interface {
 	GetReplyKey() session_key.SessionKey

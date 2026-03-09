@@ -38,19 +38,7 @@ func (v *VariableTunnelBuildReply) GetRawReplyRecords() [][]byte {
 // Similar to TunnelBuildReply but handles variable-length tunnels (1-8 hops).
 // Validates response integrity and determines tunnel build success/failure.
 func (v *VariableTunnelBuildReply) ProcessReply() error {
-	recordCount := len(v.BuildResponseRecords)
-
-	v.logReplyStart(recordCount)
-
-	if err := v.validateRecordCount(recordCount); err != nil {
-		return err
-	}
-
-	successCount, firstError := v.processAllHops()
-
-	v.logReplyCompletion(successCount, recordCount)
-
-	return v.determineBuildResult(successCount, recordCount, firstError)
+	return processReplySteps(v, v.BuildResponseRecords)
 }
 
 // logReplyStart logs the initial processing information.

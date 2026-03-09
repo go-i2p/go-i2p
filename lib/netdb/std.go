@@ -1996,6 +1996,49 @@ func (db *StdNetDB) GetLeaseSetCount() int {
 	return len(db.LeaseSets)
 }
 
+// verifiableLeaseSet is satisfied by any lease set variant that supports
+// cryptographic signature verification.
+type verifiableLeaseSet interface {
+	Verify() error
+}
+
+// storeLeaseSetVariant executes the common storage pipeline for all lease set
+// variants: validate data type → parse → verify hash → verify signature →
+// cache → persist → log success.
+func (db *StdNetDB) storeLeaseSetVariant(
+	key common.Hash, dataType, expectedType byte, typeName string,
+	parseAndVerifyHash func() (verifiableLeaseSet, error),
+	addToCache func() bool,
+	persistToFS func() error,
+) error {
+	log.WithField("hash", key).Debugf("Storing %s from DatabaseStore message", typeName)
+
+	if err := validateLeaseSetVariantDataType(dataType, expectedType, typeName); err != nil {
+		return err
+	}
+
+	ls, err := parseAndVerifyHash()
+	if err != nil {
+		return err
+	}
+
+	if err := ls.Verify(); err != nil {
+		log.WithError(err).WithField("hash", key).Warnf("%s signature verification failed", typeName)
+		return fmt.Errorf("%s signature verification failed: %w", typeName, err)
+	}
+
+	if !addToCache() {
+		return nil
+	}
+
+	if err := persistToFS(); err != nil {
+		return err
+	}
+
+	log.WithField("hash", key).Debugf("Successfully stored %s", typeName)
+	return nil
+}
+
 // ======================================================================
 // LeaseSet2 Storage and Retrieval Methods
 // ======================================================================
@@ -2004,49 +2047,29 @@ func (db *StdNetDB) GetLeaseSetCount() int {
 // This method validates, parses, caches, and persists LeaseSet2 data.
 // dataType should be 3 for LeaseSet2 (matching I2P protocol specification).
 func (db *StdNetDB) StoreLeaseSet2(key common.Hash, data []byte, dataType byte) error {
-	log.WithField("hash", key).Debug("Storing LeaseSet2 from DatabaseStore message")
-
-	// Validate data type (3 = LeaseSet2 in I2P protocol)
-	if err := validateLeaseSet2DataType(dataType); err != nil {
-		return err
-	}
-
-	// Parse LeaseSet2 from raw bytes
-	ls2, err := parseLeaseSet2Data(data)
-	if err != nil {
-		return err
-	}
-
-	// Verify hash matches the LeaseSet2 destination hash
-	if err := verifyLeaseSet2Hash(key, ls2); err != nil {
-		return err
-	}
-
-	// Verify cryptographic signature before accepting into cache
-	if err := ls2.Verify(); err != nil {
-		log.WithError(err).WithField("hash", key).Warn("LeaseSet2 signature verification failed")
-		return fmt.Errorf("LeaseSet2 signature verification failed: %w", err)
-	}
-
-	// Add to memory cache if not already present
-	if !db.addLeaseSet2ToCache(key, ls2) {
-		return nil
-	}
-
-	// Persist to filesystem
-	if err := db.persistLeaseSet2ToFilesystem(key, ls2); err != nil {
-		return err
-	}
-
-	log.WithField("hash", key).Debug("Successfully stored LeaseSet2")
-	return nil
+	var ls2 lease_set2.LeaseSet2
+	return db.storeLeaseSetVariant(key, dataType, leaseSet2Type, "LeaseSet2",
+		func() (verifiableLeaseSet, error) {
+			var err error
+			ls2, err = parseLeaseSet2Data(data)
+			if err != nil {
+				return nil, err
+			}
+			if err := verifyLeaseSet2Hash(key, ls2); err != nil {
+				return nil, err
+			}
+			return &ls2, nil
+		},
+		func() bool { return db.addLeaseSet2ToCache(key, ls2) },
+		func() error { return db.persistLeaseSet2ToFilesystem(key, ls2) },
+	)
 }
 
-// validateLeaseSet2DataType checks if the data type is valid for LeaseSet2 storage.
-func validateLeaseSet2DataType(dataType byte) error {
-	if dataType != 3 {
-		log.WithField("type", dataType).Warn("Invalid data type for LeaseSet2, expected 3")
-		return fmt.Errorf("invalid data type for LeaseSet2: expected 3, got %d", dataType)
+// validateLeaseSetVariantDataType checks if the data type matches the expected value for a lease set variant.
+func validateLeaseSetVariantDataType(dataType, expected byte, typeName string) error {
+	if dataType != expected {
+		log.WithField("type", dataType).Warnf("Invalid data type for %s, expected %d", typeName, expected)
+		return fmt.Errorf("invalid data type for %s: expected %d, got %d", typeName, expected, dataType)
 	}
 	return nil
 }
@@ -2219,51 +2242,22 @@ func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 // This method validates, parses, caches, and persists EncryptedLeaseSet data.
 // dataType should be 5 for EncryptedLeaseSet (matching I2P protocol specification).
 func (db *StdNetDB) StoreEncryptedLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	log.WithField("hash", key).Debug("Storing EncryptedLeaseSet from DatabaseStore message")
-
-	// Validate data type (5 = EncryptedLeaseSet in I2P protocol)
-	if err := validateEncryptedLeaseSetDataType(dataType); err != nil {
-		return err
-	}
-
-	// Parse EncryptedLeaseSet from raw bytes
-	els, err := parseEncryptedLeaseSetData(data)
-	if err != nil {
-		return err
-	}
-
-	// Verify hash matches the EncryptedLeaseSet blinded destination hash
-	if err := verifyEncryptedLeaseSetHash(key, els); err != nil {
-		return err
-	}
-
-	// Verify cryptographic signature before accepting into cache
-	if err := els.Verify(); err != nil {
-		log.WithError(err).WithField("hash", key).Warn("EncryptedLeaseSet signature verification failed")
-		return fmt.Errorf("EncryptedLeaseSet signature verification failed: %w", err)
-	}
-
-	// Add to memory cache if not already present
-	if !db.addEncryptedLeaseSetToCache(key, els) {
-		return nil
-	}
-
-	// Persist to filesystem
-	if err := db.persistEncryptedLeaseSetToFilesystem(key, els); err != nil {
-		return err
-	}
-
-	log.WithField("hash", key).Debug("Successfully stored EncryptedLeaseSet")
-	return nil
-}
-
-// validateEncryptedLeaseSetDataType checks if the data type is valid for EncryptedLeaseSet storage.
-func validateEncryptedLeaseSetDataType(dataType byte) error {
-	if dataType != 5 {
-		log.WithField("type", dataType).Warn("Invalid data type for EncryptedLeaseSet, expected 5")
-		return fmt.Errorf("invalid data type for EncryptedLeaseSet: expected 5, got %d", dataType)
-	}
-	return nil
+	var els encrypted_leaseset.EncryptedLeaseSet
+	return db.storeLeaseSetVariant(key, dataType, encryptedLeaseSetType, "EncryptedLeaseSet",
+		func() (verifiableLeaseSet, error) {
+			var err error
+			els, err = parseEncryptedLeaseSetData(data)
+			if err != nil {
+				return nil, err
+			}
+			if err := verifyEncryptedLeaseSetHash(key, els); err != nil {
+				return nil, err
+			}
+			return &els, nil
+		},
+		func() bool { return db.addEncryptedLeaseSetToCache(key, els) },
+		func() error { return db.persistEncryptedLeaseSetToFilesystem(key, els) },
+	)
 }
 
 // parseEncryptedLeaseSetData parses EncryptedLeaseSet from raw bytes using the common library.
@@ -2391,51 +2385,22 @@ func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) 
 // This method validates, parses, caches, and persists MetaLeaseSet data.
 // dataType should be 7 for MetaLeaseSet (matching I2P protocol specification).
 func (db *StdNetDB) StoreMetaLeaseSet(key common.Hash, data []byte, dataType byte) error {
-	log.WithField("hash", key).Debug("Storing MetaLeaseSet from DatabaseStore message")
-
-	// Validate data type (7 = MetaLeaseSet in I2P protocol)
-	if err := validateMetaLeaseSetDataType(dataType); err != nil {
-		return err
-	}
-
-	// Parse MetaLeaseSet from raw bytes
-	mls, err := parseMetaLeaseSetData(data)
-	if err != nil {
-		return err
-	}
-
-	// Verify hash matches the MetaLeaseSet destination hash
-	if err := verifyMetaLeaseSetHash(key, mls); err != nil {
-		return err
-	}
-
-	// Verify cryptographic signature before accepting into cache
-	if err := mls.Verify(); err != nil {
-		log.WithError(err).WithField("hash", key).Warn("MetaLeaseSet signature verification failed")
-		return fmt.Errorf("MetaLeaseSet signature verification failed: %w", err)
-	}
-
-	// Add to memory cache if not already present
-	if !db.addMetaLeaseSetToCache(key, mls) {
-		return nil
-	}
-
-	// Persist to filesystem
-	if err := db.persistMetaLeaseSetToFilesystem(key, mls); err != nil {
-		return err
-	}
-
-	log.WithField("hash", key).Debug("Successfully stored MetaLeaseSet")
-	return nil
-}
-
-// validateMetaLeaseSetDataType checks if the data type is valid for MetaLeaseSet storage.
-func validateMetaLeaseSetDataType(dataType byte) error {
-	if dataType != 7 {
-		log.WithField("type", dataType).Warn("Invalid data type for MetaLeaseSet, expected 7")
-		return fmt.Errorf("invalid data type for MetaLeaseSet: expected 7, got %d", dataType)
-	}
-	return nil
+	var mls meta_leaseset.MetaLeaseSet
+	return db.storeLeaseSetVariant(key, dataType, metaLeaseSetType, "MetaLeaseSet",
+		func() (verifiableLeaseSet, error) {
+			var err error
+			mls, err = parseMetaLeaseSetData(data)
+			if err != nil {
+				return nil, err
+			}
+			if err := verifyMetaLeaseSetHash(key, mls); err != nil {
+				return nil, err
+			}
+			return &mls, nil
+		},
+		func() bool { return db.addMetaLeaseSetToCache(key, mls) },
+		func() error { return db.persistMetaLeaseSetToFilesystem(key, mls) },
+	)
 }
 
 // parseMetaLeaseSetData parses MetaLeaseSet from raw bytes using the common library.

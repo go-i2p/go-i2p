@@ -31,10 +31,9 @@ var (
 	stopOnce     sync.Once
 )
 
-// RegisterReloadHandler registers a handler called on SIGHUP (config reload).
-// Returns a HandlerID that can be passed to DeregisterReloadHandler.
+// registerHandler appends a handler to the given slice and returns its unique ID.
 // Nil handlers are silently ignored and return -1.
-func RegisterReloadHandler(f Handler) HandlerID {
+func registerHandler(f Handler, handlers *[]registeredHandler) HandlerID {
 	if f == nil {
 		return -1
 	}
@@ -42,20 +41,32 @@ func RegisterReloadHandler(f Handler) HandlerID {
 	defer mu.Unlock()
 	id := nextID
 	nextID++
-	reloaders = append(reloaders, registeredHandler{id: id, fn: f})
+	*handlers = append(*handlers, registeredHandler{id: id, fn: f})
 	return id
+}
+
+// deregisterHandler removes a handler by ID from the given slice.
+func deregisterHandler(id HandlerID, handlers *[]registeredHandler) {
+	mu.Lock()
+	defer mu.Unlock()
+	for i, h := range *handlers {
+		if h.id == id {
+			*handlers = append((*handlers)[:i], (*handlers)[i+1:]...)
+			return
+		}
+	}
+}
+
+// RegisterReloadHandler registers a handler called on SIGHUP (config reload).
+// Returns a HandlerID that can be passed to DeregisterReloadHandler.
+// Nil handlers are silently ignored and return -1.
+func RegisterReloadHandler(f Handler) HandlerID {
+	return registerHandler(f, &reloaders)
 }
 
 // DeregisterReloadHandler removes a previously registered reload handler by ID.
 func DeregisterReloadHandler(id HandlerID) {
-	mu.Lock()
-	defer mu.Unlock()
-	for i, h := range reloaders {
-		if h.id == id {
-			reloaders = append(reloaders[:i], reloaders[i+1:]...)
-			return
-		}
-	}
+	deregisterHandler(id, &reloaders)
 }
 
 // runHandlers takes a snapshot of the given handler slice under the read lock
@@ -85,27 +96,12 @@ func handleReload() {
 // Returns a HandlerID that can be passed to DeregisterInterruptHandler.
 // Nil handlers are silently ignored and return -1.
 func RegisterInterruptHandler(f Handler) HandlerID {
-	if f == nil {
-		return -1
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	id := nextID
-	nextID++
-	interrupters = append(interrupters, registeredHandler{id: id, fn: f})
-	return id
+	return registerHandler(f, &interrupters)
 }
 
 // DeregisterInterruptHandler removes a previously registered interrupt handler by ID.
 func DeregisterInterruptHandler(id HandlerID) {
-	mu.Lock()
-	defer mu.Unlock()
-	for i, h := range interrupters {
-		if h.id == id {
-			interrupters = append(interrupters[:i], interrupters[i+1:]...)
-			return
-		}
-	}
+	deregisterHandler(id, &interrupters)
 }
 
 func handleInterrupted() {

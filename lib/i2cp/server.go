@@ -2241,34 +2241,10 @@ func (s *Server) handleSendMessage(msg *Message, sessionPtr **Session) (*Message
 		return nil, err
 	}
 
-	// Generate unique message ID for tracking
-	messageID := s.nextMessageID.Add(1)
-
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleSendMessage",
-		"sessionID":   session.ID(),
-		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", sendMsg.Destination[:8]),
-		"payloadSize": len(sendMsg.Payload),
-	}).Debug("sending_message_accepted")
-
-	// Send immediate acceptance status to client
-	acceptMsg := buildMessageStatusResponse(
-		session.ID(),
-		messageID,
-		MessageStatusAccepted,
-		uint32(len(sendMsg.Payload)),
-		0, // nonce
+	acceptMsg := s.acceptAndRouteMessage(session, sendMsg.Destination, len(sendMsg.Payload), 0,
+		logger.Fields{"at": "i2cp.Server.handleSendMessage"},
+		func(messageID uint32) { s.routeMessageWithStatus(session, messageID, sendMsg) },
 	)
-
-	// Route message asynchronously with status tracking
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.routeMessageWithStatus(session, messageID, sendMsg)
-	}()
-
-	// Return immediate acceptance response
 	return acceptMsg, nil
 }
 
@@ -2351,6 +2327,39 @@ func (s *Server) validateOutboundPool(session *Session) error {
 	return nil
 }
 
+// acceptAndRouteMessage handles the common accept-and-route flow for send
+// message handlers: generate message ID → log → build acceptance response →
+// launch async routing goroutine. Returns the acceptance response message.
+func (s *Server) acceptAndRouteMessage(
+	session *Session, destination [32]byte, payloadSize int, nonce uint32,
+	extraFields logger.Fields, routeAsync func(messageID uint32),
+) *Message {
+	messageID := s.nextMessageID.Add(1)
+
+	fields := logger.Fields{
+		"sessionID":   session.ID(),
+		"messageID":   messageID,
+		"destination": fmt.Sprintf("%x", destination[:8]),
+		"payloadSize": payloadSize,
+	}
+	for k, v := range extraFields {
+		fields[k] = v
+	}
+	log.WithFields(fields).Debug("message_accepted")
+
+	acceptMsg := buildMessageStatusResponse(
+		session.ID(), messageID, MessageStatusAccepted, uint32(payloadSize), nonce,
+	)
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		routeAsync(messageID)
+	}()
+
+	return acceptMsg
+}
+
 // handleSendMessageExpires handles SendMessageExpires (type 36) messages.
 // This is an enhanced version of SendMessage that includes expiration time and delivery flags.
 // The message will not be sent if it has already expired when processing begins.
@@ -2370,37 +2379,15 @@ func (s *Server) handleSendMessageExpires(msg *Message, sessionPtr **Session) (*
 		return nil, err
 	}
 
-	// Generate unique message ID for tracking
-	messageID := s.nextMessageID.Add(1)
-
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleSendMessageExpires",
-		"sessionID":   session.ID(),
-		"messageID":   messageID,
-		"destination": fmt.Sprintf("%x", sendMsgExpires.Destination[:8]),
-		"payloadSize": len(sendMsgExpires.Payload),
-		"nonce":       sendMsgExpires.Nonce,
-		"flags":       sendMsgExpires.Flags,
-		"expiration":  sendMsgExpires.Expiration,
-	}).Debug("sending_message_expires_accepted")
-
-	// Send immediate acceptance status to client
-	acceptMsg := buildMessageStatusResponse(
-		session.ID(),
-		messageID,
-		MessageStatusAccepted,
-		uint32(len(sendMsgExpires.Payload)),
-		sendMsgExpires.Nonce,
+	acceptMsg := s.acceptAndRouteMessage(session, sendMsgExpires.Destination, len(sendMsgExpires.Payload), sendMsgExpires.Nonce,
+		logger.Fields{
+			"at":         "i2cp.Server.handleSendMessageExpires",
+			"nonce":      sendMsgExpires.Nonce,
+			"flags":      sendMsgExpires.Flags,
+			"expiration": sendMsgExpires.Expiration,
+		},
+		func(messageID uint32) { s.routeMessageExpiresWithStatus(session, messageID, sendMsgExpires) },
 	)
-
-	// Route message asynchronously with status tracking and expiration
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.routeMessageExpiresWithStatus(session, messageID, sendMsgExpires)
-	}()
-
-	// Return immediate acceptance response
 	return acceptMsg, nil
 }
 

@@ -45,7 +45,7 @@ func TestValidateEncryptedLeaseSetDataType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateEncryptedLeaseSetDataType(tt.dataType)
+			err := validateLeaseSetVariantDataType(tt.dataType, 5, "EncryptedLeaseSet")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

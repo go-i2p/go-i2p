@@ -45,7 +45,7 @@ func TestValidateMetaLeaseSetDataType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateMetaLeaseSetDataType(tt.dataType)
+			err := validateLeaseSetVariantDataType(tt.dataType, 7, "MetaLeaseSet")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
