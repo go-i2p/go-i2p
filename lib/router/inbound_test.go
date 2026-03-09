@@ -1,10 +1,11 @@
 package router
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/rand"
 
@@ -27,23 +28,29 @@ func TestNewInboundMessageHandler(t *testing.T) {
 	assert.Equal(t, 0, handler.GetTunnelCount())
 }
 
-// TestRegisterTunnel tests tunnel registration
-func TestRegisterTunnel(t *testing.T) {
+// setupInboundHandler creates an InboundMessageHandler with a registered mock
+// endpoint. Returns the handler, endpoint, tunnelID and sessionID.
+func setupInboundHandler(t *testing.T) (*InboundMessageHandler, *tunnelpkg.Endpoint, tunnelpkg.TunnelID, uint16) {
+	t.Helper()
 	sessionManager := i2cp.NewSessionManager()
 	handler := NewInboundMessageHandler(sessionManager)
 
-	// Create a mock endpoint with a simple handler
 	mockDecryptor := &mockTunnelEncryptor{}
 	endpoint, err := tunnelpkg.NewEndpoint(123, mockDecryptor, func(msgBytes []byte) error {
 		return nil
 	})
 	require.NoError(t, err)
 
-	// Register tunnel
 	tunnelID := tunnelpkg.TunnelID(12345)
 	sessionID := uint16(1)
+	return handler, endpoint, tunnelID, sessionID
+}
 
-	err = handler.RegisterTunnel(tunnelID, sessionID, endpoint)
+// TestRegisterTunnel tests tunnel registration
+func TestRegisterTunnel(t *testing.T) {
+	handler, endpoint, tunnelID, sessionID := setupInboundHandler(t)
+
+	err := handler.RegisterTunnel(tunnelID, sessionID, endpoint)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, handler.GetTunnelCount())
 
@@ -55,20 +62,10 @@ func TestRegisterTunnel(t *testing.T) {
 
 // TestRegisterTunnelDuplicate tests duplicate tunnel registration
 func TestRegisterTunnelDuplicate(t *testing.T) {
-	sessionManager := i2cp.NewSessionManager()
-	handler := NewInboundMessageHandler(sessionManager)
-
-	mockDecryptor := &mockTunnelEncryptor{}
-	endpoint, err := tunnelpkg.NewEndpoint(123, mockDecryptor, func(msgBytes []byte) error {
-		return nil
-	})
-	require.NoError(t, err)
-
-	tunnelID := tunnelpkg.TunnelID(12345)
-	sessionID := uint16(1)
+	handler, endpoint, tunnelID, sessionID := setupInboundHandler(t)
 
 	// Register once
-	err = handler.RegisterTunnel(tunnelID, sessionID, endpoint)
+	err := handler.RegisterTunnel(tunnelID, sessionID, endpoint)
 	require.NoError(t, err)
 
 	// Try to register again
@@ -79,20 +76,10 @@ func TestRegisterTunnelDuplicate(t *testing.T) {
 
 // TestUnregisterTunnel tests tunnel unregistration
 func TestUnregisterTunnel(t *testing.T) {
-	sessionManager := i2cp.NewSessionManager()
-	handler := NewInboundMessageHandler(sessionManager)
-
-	mockDecryptor := &mockTunnelEncryptor{}
-	endpoint, err := tunnelpkg.NewEndpoint(123, mockDecryptor, func(msgBytes []byte) error {
-		return nil
-	})
-	require.NoError(t, err)
-
-	tunnelID := tunnelpkg.TunnelID(12345)
-	sessionID := uint16(1)
+	handler, endpoint, tunnelID, sessionID := setupInboundHandler(t)
 
 	// Register and then unregister
-	err = handler.RegisterTunnel(tunnelID, sessionID, endpoint)
+	err := handler.RegisterTunnel(tunnelID, sessionID, endpoint)
 	require.NoError(t, err)
 	assert.Equal(t, 1, handler.GetTunnelCount())
 

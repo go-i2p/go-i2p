@@ -20,6 +20,23 @@ func generateRandomKey() tunnel.TunnelKey {
 	return key
 }
 
+// createTestParticipant creates a Participant with a real AES encryptor for testing.
+// Returns both the participant and the encryptor so callers can encrypt test payloads.
+func createTestParticipant(tb testing.TB, tunnelID TunnelID) (*Participant, *tunnel.AESEncryptor) {
+	tb.Helper()
+	layerKey := generateRandomKey()
+	ivKey := generateRandomKey()
+	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
+	if err != nil {
+		tb.Fatalf("failed to create AES encryptor: %v", err)
+	}
+	p, err := NewParticipant(tunnelID, aesEncryptor)
+	if err != nil {
+		tb.Fatalf("failed to create participant: %v", err)
+	}
+	return p, aesEncryptor
+}
+
 // TestNewParticipant tests the creation of a new participant
 func TestNewParticipant(t *testing.T) {
 	// Create real AES encryptor for testing
@@ -211,19 +228,7 @@ func TestParticipantProcess(t *testing.T) {
 // TestParticipantProcessMultiLayer tests that participants can process messages sequentially
 // This test uses real AES encryption to verify the participant processing pipeline.
 func TestParticipantProcessMultiLayer(t *testing.T) {
-	// Create AES encryptor
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		t.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	// Create a participant
-	p, err := NewParticipant(1000, aesEncryptor)
-	if err != nil {
-		t.Fatalf("failed to create participant: %v", err)
-	}
+	p, aesEncryptor := createTestParticipant(t, 1000)
 
 	// Create a 1008-byte payload (what goes into AES encryption)
 	payload := make([]byte, 1008)
@@ -296,17 +301,7 @@ func TestParticipantTunnelID(t *testing.T) {
 
 // TestParticipantErrorConditions tests various error scenarios
 func TestParticipantErrorConditions(t *testing.T) {
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	aesEncryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		t.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	p, err := NewParticipant(1000, aesEncryptor)
-	if err != nil {
-		t.Fatalf("failed to create participant: %v", err)
-	}
+	p, _ := createTestParticipant(t, 1000)
 
 	tests := []struct {
 		name      string
@@ -350,18 +345,7 @@ func TestParticipantErrorConditions(t *testing.T) {
 
 // TestParticipantIdleDetection tests the idle tunnel detection functionality
 func TestParticipantIdleDetection(t *testing.T) {
-	// Create a valid participant
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	encryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		t.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	p, err := NewParticipant(12345, encryptor)
-	if err != nil {
-		t.Fatalf("failed to create participant: %v", err)
-	}
+	p, _ := createTestParticipant(t, 12345)
 
 	// Test that new participant is not idle
 	now := time.Now()
@@ -390,18 +374,7 @@ func TestParticipantIdleDetection(t *testing.T) {
 
 // TestParticipantProcessUpdatesActivity tests that Process updates last activity
 func TestParticipantProcessUpdatesActivity(t *testing.T) {
-	// Create a valid participant
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	encryptor, err := tunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		t.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	p, err := NewParticipant(12345, encryptor)
-	if err != nil {
-		t.Fatalf("failed to create participant: %v", err)
-	}
+	p, _ := createTestParticipant(t, 12345)
 
 	initialActivity := p.LastActivity()
 

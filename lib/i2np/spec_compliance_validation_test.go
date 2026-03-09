@@ -1428,18 +1428,24 @@ func TestDeliveryStatus_Format_TooShortPayload(t *testing.T) {
 // Proposal 144: New Session, Existing Session, New Session Reply
 // =============================================================================
 
+// setupGarlicPair creates a sender and receiver GarlicSessionManager with a
+// destination hash discriminated by hashByte.
+func setupGarlicPair(t *testing.T, hashByte byte) (sender, receiver *GarlicSessionManager, destHash common.Hash) {
+	t.Helper()
+	var err error
+	sender, err = GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	receiver, err = GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	destHash[0] = hashByte
+	return
+}
+
 // TestGarlic_ECIES_NewSessionMessageFormat verifies the New Session wire format:
 // [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 // Minimum size = 32 + 12 + 0 + 16 = 60 bytes (empty plaintext).
 func TestGarlic_ECIES_NewSessionMessageFormat(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	// Create a destination key pair
-	destSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-	destHash := common.Hash{}
-	destHash[0] = 0x42
+	sm, destSM, destHash := setupGarlicPair(t, 0x42)
 
 	plaintext := []byte("test garlic payload")
 	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
@@ -1474,13 +1480,7 @@ func TestGarlic_ECIES_NewSessionMessageFormat(t *testing.T) {
 // [sessionTag(8)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 // Minimum size = 8 + 12 + 0 + 16 = 36 bytes (empty plaintext).
 func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-	destHash := common.Hash{}
-	destHash[0] = 0x43
+	sm, destSM, destHash := setupGarlicPair(t, 0x43)
 
 	plaintext := []byte("existing session test")
 
@@ -1535,13 +1535,7 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 // TestGarlic_ECIES_NewSessionDecryptionRoundtrip verifies that a New Session
 // message can be decrypted by the recipient using their static private key.
 func TestGarlic_ECIES_NewSessionDecryptionRoundtrip(t *testing.T) {
-	sender, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-	receiver, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destHash := common.Hash{}
-	destHash[0] = 0x44
+	sender, receiver, destHash := setupGarlicPair(t, 0x44)
 	plaintext := []byte("hello from new session")
 
 	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
@@ -1559,13 +1553,7 @@ func TestGarlic_ECIES_NewSessionDecryptionRoundtrip(t *testing.T) {
 // first message uses New Session, subsequent messages use Existing Session with
 // ratchet-derived session tags.
 func TestGarlic_ECIES_ExistingSessionRoundtrip(t *testing.T) {
-	sender, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-	receiver, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destHash := common.Hash{}
-	destHash[0] = 0x45
+	sender, receiver, destHash := setupGarlicPair(t, 0x45)
 
 	// Message 1: New Session
 	msg1 := []byte("first message")
@@ -1597,16 +1585,7 @@ func TestGarlic_ECIES_NewSessionReplyNotSeparatelyImplemented(t *testing.T) {
 	// decryption (via initializeInboundRatchetState) and then uses ES format
 	// for all outbound messages. NSR is effectively folded into ES.
 
-	receiver, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	// After decrypting a New Session, the receiver should have stored
-	// inbound ratchet state (session count > 0)
-	sender, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destHash := common.Hash{}
-	destHash[0] = 0x46
+	receiver, sender, destHash := setupGarlicPair(t, 0x46)
 
 	enc, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), []byte("NS"))
 	require.NoError(t, err)
@@ -1623,13 +1602,7 @@ func TestGarlic_ECIES_NewSessionReplyNotSeparatelyImplemented(t *testing.T) {
 // ChaCha20-Poly1305 AEAD as required by the ECIES-X25519-AEAD-Ratchet spec.
 // The auth tag is exactly 16 bytes (Poly1305 tag size).
 func TestGarlic_ECIES_ChaCha20Poly1305Used(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-	destSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destHash := common.Hash{}
-	destHash[0] = 0x47
+	sm, destSM, destHash := setupGarlicPair(t, 0x47)
 
 	// Encrypt with known plaintext
 	plaintext := []byte("chacha20 poly1305 test")

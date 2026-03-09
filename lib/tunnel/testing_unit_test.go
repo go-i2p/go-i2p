@@ -317,21 +317,10 @@ func TestReplacementRecommendation(t *testing.T) {
 
 // TestTestTunnel_Timeout verifies timeout handling
 func TestTestTunnel_Timeout(t *testing.T) {
-	pool := createTestPool(t)
-	defer pool.Stop()
-
-	// Add a ready tunnel
-	tunnelID := TunnelID(77777)
-	addReadyTunnel(t, pool, tunnelID)
-
-	// Configure sender that never responds
-	sender := newMockMessageSender()
-	tester := NewTunnelTester(pool)
-	tester.SetMessageSender(sender)
-	tester.SetTimeout(500 * time.Millisecond) // Short timeout
+	env := setupTunnelTester(t, 77777, 500*time.Millisecond)
 
 	start := time.Now()
-	result := tester.TestTunnel(tunnelID)
+	result := env.tester.TestTunnel(77777)
 	elapsed := time.Since(start)
 
 	// Should fail due to timeout
@@ -364,6 +353,29 @@ func addReadyTunnel(t *testing.T, pool *Pool, tunnelID TunnelID) {
 		Hops:      []common.Hash{{1}, {2}, {3}},
 	}
 	pool.mutex.Unlock()
+}
+
+// tunnelTesterEnv holds common fixtures for tunnel tester tests.
+type tunnelTesterEnv struct {
+	pool   *Pool
+	tester *TunnelTester
+	sender *mockMessageSender
+}
+
+// setupTunnelTester creates a pool with a ready tunnel, a mock message sender,
+// and a TunnelTester configured with the given timeout.
+func setupTunnelTester(t *testing.T, tunnelID TunnelID, timeout time.Duration) *tunnelTesterEnv {
+	t.Helper()
+	pool := createTestPool(t)
+	t.Cleanup(pool.Stop)
+	addReadyTunnel(t, pool, tunnelID)
+
+	sender := newMockMessageSender()
+	tester := NewTunnelTester(pool)
+	tester.SetMessageSender(sender)
+	tester.SetTimeout(timeout)
+
+	return &tunnelTesterEnv{pool: pool, tester: tester, sender: sender}
 }
 
 // createTestPool creates a minimal pool for testing
@@ -436,35 +448,25 @@ func TestSetMessageSender(t *testing.T) {
 
 // TestRealEchoTest_Success verifies real echo test with response
 func TestRealEchoTest_Success(t *testing.T) {
-	pool := createTestPool(t)
-	defer pool.Stop()
-
-	// Add a ready tunnel
-	tunnelID := TunnelID(12345)
-	addReadyTunnel(t, pool, tunnelID)
-
-	sender := newMockMessageSender()
-	tester := NewTunnelTester(pool)
-	tester.SetMessageSender(sender)
-	tester.SetTimeout(2 * time.Second)
+	env := setupTunnelTester(t, 12345, 2*time.Second)
 
 	// Run test in goroutine since it will block
 	resultCh := make(chan TunnelTestResult, 1)
 	go func() {
-		resultCh <- tester.TestTunnel(tunnelID)
+		resultCh <- env.tester.TestTunnel(12345)
 	}()
 
 	// Wait a bit for the message to be sent
 	time.Sleep(50 * time.Millisecond)
 
 	// Get the message ID and simulate response
-	messageID, ok := sender.getLastMessageID(tunnelID)
+	messageID, ok := env.sender.getLastMessageID(12345)
 	if !ok {
 		t.Fatal("No message was sent")
 	}
 
 	// Simulate response
-	handled := tester.HandleTestResponse(messageID)
+	handled := env.tester.HandleTestResponse(messageID)
 	if !handled {
 		t.Error("Response was not handled")
 	}
@@ -485,19 +487,9 @@ func TestRealEchoTest_Success(t *testing.T) {
 
 // TestRealEchoTest_Timeout verifies timeout when no response
 func TestRealEchoTest_Timeout(t *testing.T) {
-	pool := createTestPool(t)
-	defer pool.Stop()
+	env := setupTunnelTester(t, 54321, 100*time.Millisecond)
 
-	// Add a ready tunnel
-	tunnelID := TunnelID(54321)
-	addReadyTunnel(t, pool, tunnelID)
-
-	sender := newMockMessageSender()
-	tester := NewTunnelTester(pool)
-	tester.SetMessageSender(sender)
-	tester.SetTimeout(100 * time.Millisecond) // Short timeout for test
-
-	result := tester.TestTunnel(tunnelID)
+	result := env.tester.TestTunnel(54321)
 
 	if result.Success {
 		t.Error("Expected test to fail due to timeout")
@@ -510,20 +502,10 @@ func TestRealEchoTest_Timeout(t *testing.T) {
 
 // TestRealEchoTest_SendFailure verifies handling of send failures
 func TestRealEchoTest_SendFailure(t *testing.T) {
-	pool := createTestPool(t)
-	defer pool.Stop()
+	env := setupTunnelTester(t, 99999, time.Second)
+	env.sender.shouldFail = true
 
-	// Add a ready tunnel
-	tunnelID := TunnelID(99999)
-	addReadyTunnel(t, pool, tunnelID)
-
-	sender := newMockMessageSender()
-	sender.shouldFail = true
-
-	tester := NewTunnelTester(pool)
-	tester.SetMessageSender(sender)
-
-	result := tester.TestTunnel(tunnelID)
+	result := env.tester.TestTunnel(99999)
 
 	if result.Success {
 		t.Error("Expected test to fail due to send failure")
@@ -571,25 +553,15 @@ func TestGenerateTestMessageID(t *testing.T) {
 
 // TestPendingTestsCleanup verifies pending tests are cleaned up after completion
 func TestPendingTestsCleanup(t *testing.T) {
-	pool := createTestPool(t)
-	defer pool.Stop()
-
-	// Add a ready tunnel
-	tunnelID := TunnelID(11111)
-	addReadyTunnel(t, pool, tunnelID)
-
-	sender := newMockMessageSender()
-	tester := NewTunnelTester(pool)
-	tester.SetMessageSender(sender)
-	tester.SetTimeout(1 * time.Second)
+	env := setupTunnelTester(t, 11111, 1*time.Second)
 
 	// Run test that will timeout
-	_ = tester.TestTunnel(tunnelID)
+	_ = env.tester.TestTunnel(11111)
 
 	// Check that pending test was cleaned up
-	tester.mu.Lock()
-	pendingCount := len(tester.pendingTests)
-	tester.mu.Unlock()
+	env.tester.mu.Lock()
+	pendingCount := len(env.tester.pendingTests)
+	env.tester.mu.Unlock()
 
 	if pendingCount != 0 {
 		t.Errorf("Expected 0 pending tests after completion, got %d", pendingCount)

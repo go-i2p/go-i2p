@@ -21,6 +21,20 @@ import (
 // Audit: Message ID Uniqueness and Correlation
 // ============================================================================
 
+// generateReplyKeys creates n random reply session keys and IVs for testing.
+func generateReplyKeys(t *testing.T, n int) ([]session_key.SessionKey, [][16]byte) {
+	t.Helper()
+	keys := make([]session_key.SessionKey, n)
+	ivs := make([][16]byte, n)
+	for j := 0; j < n; j++ {
+		_, err := rand.Read(keys[j][:])
+		require.NoError(t, err)
+		_, err = rand.Read(ivs[j][:])
+		require.NoError(t, err)
+	}
+	return keys, ivs
+}
+
 // TestReplyProcessor_MessageIDUniqueness verifies tunnel IDs are tracked uniquely.
 func TestReplyProcessor_MessageIDUniqueness(t *testing.T) {
 	config := DefaultReplyProcessorConfig()
@@ -63,15 +77,7 @@ func TestReplyProcessor_DuplicateRegistration(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	tunnelID := tunnel.TunnelID(12345)
-	replyKeys := make([]session_key.SessionKey, 2)
-	replyIVs := make([][16]byte, 2)
-
-	for j := 0; j < 2; j++ {
-		_, err := rand.Read(replyKeys[j][:])
-		require.NoError(t, err)
-		_, err = rand.Read(replyIVs[j][:])
-		require.NoError(t, err)
-	}
+	replyKeys, replyIVs := generateReplyKeys(t, 2)
 
 	// First registration
 	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 2)
@@ -97,15 +103,7 @@ func TestReplyProcessor_CorrelationRemoval(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	tunnelID := tunnel.TunnelID(999)
-	replyKeys := make([]session_key.SessionKey, 2)
-	replyIVs := make([][16]byte, 2)
-
-	for j := 0; j < 2; j++ {
-		_, err := rand.Read(replyKeys[j][:])
-		require.NoError(t, err)
-		_, err = rand.Read(replyIVs[j][:])
-		require.NoError(t, err)
-	}
+	replyKeys, replyIVs := generateReplyKeys(t, 2)
 
 	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 2)
 	require.NoError(t, err)
@@ -146,14 +144,9 @@ func TestReplyProcessor_TimeoutExpiration(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	tunnelID := tunnel.TunnelID(777)
-	replyKeys := make([]session_key.SessionKey, 1)
-	replyIVs := make([][16]byte, 1)
-	_, err := rand.Read(replyKeys[0][:])
-	require.NoError(t, err)
-	_, err = rand.Read(replyIVs[0][:])
-	require.NoError(t, err)
+	replyKeys, replyIVs := generateReplyKeys(t, 1)
 
-	err = rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 1)
+	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 1)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, rp.GetPendingBuildCount())
@@ -173,14 +166,7 @@ func TestReplyProcessor_TimeoutCancellationOnReply(t *testing.T) {
 	rp := NewReplyProcessor(config, nil)
 
 	tunnelID := tunnel.TunnelID(888)
-	replyKeys := make([]session_key.SessionKey, 2)
-	replyIVs := make([][16]byte, 2)
-	for j := 0; j < 2; j++ {
-		_, err := rand.Read(replyKeys[j][:])
-		require.NoError(t, err)
-		_, err = rand.Read(replyIVs[j][:])
-		require.NoError(t, err)
-	}
+	replyKeys, replyIVs := generateReplyKeys(t, 2)
 
 	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 2)
 	require.NoError(t, err)

@@ -6,6 +6,21 @@ import (
 	"time"
 )
 
+// createAuthManagerWithToken creates an AuthManager, authenticates with the
+// given password and token expiry, and returns both. Fails the test on error.
+func createAuthManagerWithToken(t *testing.T, password string, expiry time.Duration) (*AuthManager, string) {
+	t.Helper()
+	am, err := NewAuthManager(password)
+	if err != nil {
+		t.Fatalf("NewAuthManager failed: %v", err)
+	}
+	token, err := am.Authenticate(password, expiry)
+	if err != nil {
+		t.Fatalf("Authenticate failed: %v", err)
+	}
+	return am, token
+}
+
 // TestNewAuthManager verifies AuthManager initialization
 func TestNewAuthManager(t *testing.T) {
 	password := "testpass"
@@ -143,16 +158,7 @@ func TestValidateTokenInvalid(t *testing.T) {
 
 // TestValidateTokenExpired verifies token expiration
 func TestValidateTokenExpired(t *testing.T) {
-	am, err := NewAuthManager("password")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
-
-	// Create token with very short expiration
-	token, err := am.Authenticate("password", 50*time.Millisecond)
-	if err != nil {
-		t.Fatalf("Authenticate failed: %v", err)
-	}
+	am, token := createAuthManagerWithToken(t, "password", 50*time.Millisecond)
 
 	// Token should be valid immediately
 	if !am.ValidateToken(token) {

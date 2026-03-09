@@ -104,6 +104,50 @@ func (m *mockTransportSession) GetSentMessages() []i2np.I2NPMessage {
 	return append([]i2np.I2NPMessage{}, m.sentMessages...)
 }
 
+// publisherTestEnv holds the common test fixtures for publisher tunnel tests.
+type publisherTestEnv struct {
+	db          *mockNetDB
+	transport   *mockTransportManager
+	pool        *tunnel.Pool
+	publisher   *Publisher
+	gatewayHash common.Hash
+}
+
+// setupPublisherWithTunnel creates a publisher test environment with an active
+// tunnel whose gateway is stored in the mock NetDB. The caller specifies the
+// tunnel ID and any extra hops beyond the gateway.
+func setupPublisherWithTunnel(t *testing.T, tunnelID tunnel.TunnelID, extraHops []common.Hash) *publisherTestEnv {
+	t.Helper()
+	db := newMockNetDB()
+	transport := newMockTransportManager()
+
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+
+	gatewayRI := createValidRouterInfo(t)
+	gatewayHash, _ := gatewayRI.IdentHash()
+	db.StoreRouterInfo(gatewayRI)
+
+	hops := append([]common.Hash{gatewayHash}, extraHops...)
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnelID,
+		Hops:      hops,
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+
+	return &publisherTestEnv{
+		db:          db,
+		transport:   transport,
+		pool:        pool,
+		publisher:   publisher,
+		gatewayHash: gatewayHash,
+	}
+}
+
 // TestSendDatabaseStoreToFloodfill_NoActiveTunnels tests the error case when no tunnels are available
 func TestSendDatabaseStoreToFloodfill_NoActiveTunnels(t *testing.T) {
 	db := newMockNetDB()
@@ -125,35 +169,10 @@ func TestSendDatabaseStoreToFloodfill_NoActiveTunnels(t *testing.T) {
 
 // TestSendDatabaseStoreToFloodfill_WithActiveTunnel tests successful tunnel selection and message transmission
 func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
-	db := newMockNetDB()
-	transport := newMockTransportManager()
-
-	// Create pool
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-
-	// Add an active tunnel to the pool with valid gateway router
-	tunnelID := tunnel.TunnelID(12345)
-
-	// Add gateway router to NetDB first
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, _ := gatewayRI.IdentHash()
-	db.StoreRouterInfo(gatewayRI)
-
-	// Create hops with actual gateway hash
-	hop1 := gatewayHash // Use gateway hash directly
-	hop2 := common.Hash{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18}
-	hop3 := common.Hash{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28}
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnelID,
-		Hops:      []common.Hash{hop1, hop2, hop3},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
-
-	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+	env := setupPublisherWithTunnel(t, 12345, []common.Hash{
+		{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18},
+		{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28},
+	})
 
 	// Create test data
 	hash := common.Hash{9, 10, 11, 12, 13, 14, 15, 16}
@@ -161,11 +180,11 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should succeed with active tunnel and transport
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
+	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent through transport
-	sentMessages := transport.GetSentMessages(hop1)
+	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
 	require.NotNil(t, sentMessages, "Expected messages sent to gateway")
 	require.Len(t, sentMessages, 1, "Expected exactly one message sent")
 
@@ -293,30 +312,10 @@ func TestSendDatabaseStoreToFloodfill_MultipleTunnelsRoundRobin(t *testing.T) {
 
 // TestSendDatabaseStoreToFloodfill_LargeData tests handling of large DatabaseStore payloads
 func TestSendDatabaseStoreToFloodfill_LargeData(t *testing.T) {
-	db := newMockNetDB()
-	transport := newMockTransportManager()
-
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-
-	// Add tunnel with gateway in NetDB
-	tunnelID := tunnel.TunnelID(99999)
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, _ := gatewayRI.IdentHash()
-	db.StoreRouterInfo(gatewayRI)
-
-	hop2 := common.Hash{0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99}
-	hop3 := common.Hash{0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6, 0x07, 0x18}
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnelID,
-		Hops:      []common.Hash{gatewayHash, hop2, hop3},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
-
-	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+	env := setupPublisherWithTunnel(t, 99999, []common.Hash{
+		{0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99},
+		{0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6, 0x07, 0x18},
+	})
 
 	// Create large test data (simulating large RouterInfo with many router addresses)
 	hash := common.Hash{33, 34, 35, 36, 37, 38, 39, 40}
@@ -327,39 +326,19 @@ func TestSendDatabaseStoreToFloodfill_LargeData(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should handle large payloads without error
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
+	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent
-	sentMessages := transport.GetSentMessages(gatewayHash)
+	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
 	require.Len(t, sentMessages, 1, "Expected large message to be sent")
 }
 
 // TestSendDatabaseStoreToFloodfill_EmptyData tests handling of empty data payload
 func TestSendDatabaseStoreToFloodfill_EmptyData(t *testing.T) {
-	db := newMockNetDB()
-	transport := newMockTransportManager()
-
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-
-	// Add tunnel with gateway in NetDB
-	tunnelID := tunnel.TunnelID(555)
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, _ := gatewayRI.IdentHash()
-	db.StoreRouterInfo(gatewayRI)
-
-	hop2 := common.Hash{0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C}
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnelID,
-		Hops:      []common.Hash{gatewayHash, hop2},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
-
-	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+	env := setupPublisherWithTunnel(t, 555, []common.Hash{
+		{0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C},
+	})
 
 	// Create test with empty data
 	hash := common.Hash{41, 42, 43, 44, 45, 46, 47, 48}
@@ -367,37 +346,17 @@ func TestSendDatabaseStoreToFloodfill_EmptyData(t *testing.T) {
 	floodfill := createValidRouterInfo(t)
 
 	// Should handle empty data (may represent deletion or placeholder)
-	err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
+	err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
 	assert.NoError(t, err)
 
 	// Verify message was sent
-	sentMessages := transport.GetSentMessages(gatewayHash)
+	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
 	require.Len(t, sentMessages, 1, "Expected empty data message to be sent")
 }
 
 // TestSendDatabaseStoreToFloodfill_ConcurrentSends tests thread-safety of concurrent sends
 func TestSendDatabaseStoreToFloodfill_ConcurrentSends(t *testing.T) {
-	db := newMockNetDB()
-	transport := newMockTransportManager()
-
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-
-	// Add tunnel with gateway in NetDB
-	tunnelID := tunnel.TunnelID(777)
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, _ := gatewayRI.IdentHash()
-	db.StoreRouterInfo(gatewayRI)
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnelID,
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
-
-	publisher := NewPublisher(db, pool, transport, nil, DefaultPublisherConfig())
+	env := setupPublisherWithTunnel(t, 777, nil)
 
 	// Create test data
 	floodfill := createValidRouterInfo(t)
@@ -413,7 +372,7 @@ func TestSendDatabaseStoreToFloodfill_ConcurrentSends(t *testing.T) {
 			defer wg.Done()
 			hash := common.Hash{byte(index), byte(index + 1), byte(index + 2)}
 			data := []byte(fmt.Sprintf("concurrent send %d", index))
-			err := publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
+			err := env.publisher.sendDatabaseStoreToFloodfill(hash, data, i2np.DATABASE_STORE_TYPE_LEASESET2, floodfill)
 			if err != nil {
 				errors <- err
 			}
@@ -429,7 +388,7 @@ func TestSendDatabaseStoreToFloodfill_ConcurrentSends(t *testing.T) {
 	}
 
 	// Verify all messages were sent
-	sentMessages := transport.GetSentMessages(gatewayHash)
+	sentMessages := env.transport.GetSentMessages(env.gatewayHash)
 	assert.Equal(t, concurrency, len(sentMessages), "Expected all concurrent sends to complete")
 }
 

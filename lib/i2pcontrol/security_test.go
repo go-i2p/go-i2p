@@ -115,16 +115,7 @@ func TestAuthTokenUnpredictability(t *testing.T) {
 
 // TestAuthTokenExpirationBoundary verifies tokens expire correctly at the boundary.
 func TestAuthTokenExpirationBoundary(t *testing.T) {
-	am, err := NewAuthManager("password")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
-
-	// Create token expiring in 100ms
-	token, err := am.Authenticate("password", 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("Authenticate failed: %v", err)
-	}
+	am, token := createAuthManagerWithToken(t, "password", 100*time.Millisecond)
 
 	// Token should be valid immediately
 	if !am.ValidateToken(token) {
@@ -349,16 +340,7 @@ func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 
 // TestAuthorizationExpiredTokenRejected verifies expired tokens are rejected.
 func TestAuthorizationExpiredTokenRejected(t *testing.T) {
-	am, err := NewAuthManager("testpassword")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
-
-	// Create token with very short expiration
-	token, err := am.Authenticate("testpassword", 50*time.Millisecond)
-	if err != nil {
-		t.Fatalf("Authenticate failed: %v", err)
-	}
+	am, token := createAuthManagerWithToken(t, "testpassword", 50*time.Millisecond)
 
 	// Token should be valid initially
 	if !am.ValidateToken(token) {

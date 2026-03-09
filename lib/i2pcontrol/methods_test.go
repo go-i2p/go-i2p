@@ -174,86 +174,62 @@ func TestDispatchSuccess(t *testing.T) {
 	}
 }
 
-// TestDispatchMethodNotFound tests dispatch with non-existent method
-func TestDispatchMethodNotFound(t *testing.T) {
-	registry := NewMethodRegistry()
-
-	result, err := registry.Dispatch(context.Background(), "NonexistentMethod", nil)
-
-	if err == nil {
-		t.Fatal("Expected error for non-existent method")
+// TestDispatchErrors tests dispatch error scenarios using a table-driven approach.
+func TestDispatchErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		method   string
+		setup    func(r *MethodRegistry)
+		wantCode int
+	}{
+		{
+			name:     "MethodNotFound",
+			method:   "NonexistentMethod",
+			setup:    func(r *MethodRegistry) {},
+			wantCode: ErrCodeMethodNotFound,
+		},
+		{
+			name:   "HandlerError",
+			method: "TestMethod",
+			setup: func(r *MethodRegistry) {
+				r.Register("TestMethod", &mockHandler{err: &RPCError{
+					Code:    ErrCodeInvalidParams,
+					Message: "test error",
+				}})
+			},
+			wantCode: ErrCodeInvalidParams,
+		},
+		{
+			name:   "HandlerNonRPCError",
+			method: "TestMethod",
+			setup: func(r *MethodRegistry) {
+				r.Register("TestMethod", &mockHandler{err: errors.New("standard error")})
+			},
+			wantCode: ErrCodeInternalError,
+		},
 	}
 
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("Expected *RPCError, got %T: %v", err, err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewMethodRegistry()
+			tt.setup(registry)
 
-	if rpcErr.Code != ErrCodeMethodNotFound {
-		t.Errorf("error code: got %d, want %d", rpcErr.Code, ErrCodeMethodNotFound)
-	}
+			result, err := registry.Dispatch(context.Background(), tt.method, nil)
+			if err == nil {
+				t.Fatal("Expected error")
+			}
 
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
-	}
-}
-
-// TestDispatchHandlerError tests dispatch with handler returning error
-func TestDispatchHandlerError(t *testing.T) {
-	registry := NewMethodRegistry()
-	expectedErr := &RPCError{
-		Code:    ErrCodeInvalidParams,
-		Message: "test error",
-	}
-	handler := &mockHandler{err: expectedErr}
-
-	registry.Register("TestMethod", handler)
-
-	result, err := registry.Dispatch(context.Background(), "TestMethod", nil)
-
-	if err == nil {
-		t.Fatal("Expected error from handler")
-	}
-
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("Expected *RPCError, got %T: %v", err, err)
-	}
-
-	if rpcErr.Code != ErrCodeInvalidParams {
-		t.Errorf("error code: got %d, want %d", rpcErr.Code, ErrCodeInvalidParams)
-	}
-
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
-	}
-}
-
-// TestDispatchHandlerNonRPCError tests dispatch with handler returning non-RPC error
-func TestDispatchHandlerNonRPCError(t *testing.T) {
-	registry := NewMethodRegistry()
-	handler := &mockHandler{err: errors.New("standard error")}
-
-	registry.Register("TestMethod", handler)
-
-	result, err := registry.Dispatch(context.Background(), "TestMethod", nil)
-
-	if err == nil {
-		t.Fatal("Expected error from handler")
-	}
-
-	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("Expected *RPCError, got %T: %v", err, err)
-	}
-
-	// Non-RPC errors should be wrapped as internal errors
-	if rpcErr.Code != ErrCodeInternalError {
-		t.Errorf("error code: got %d, want %d", rpcErr.Code, ErrCodeInternalError)
-	}
-
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
+			rpcErr, ok := err.(*RPCError)
+			if !ok {
+				t.Fatalf("Expected *RPCError, got %T: %v", err, err)
+			}
+			if rpcErr.Code != tt.wantCode {
+				t.Errorf("error code: got %d, want %d", rpcErr.Code, tt.wantCode)
+			}
+			if result != nil {
+				t.Errorf("expected nil result, got %v", result)
+			}
+		})
 	}
 }
 

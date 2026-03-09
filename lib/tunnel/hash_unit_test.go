@@ -8,6 +8,31 @@ import (
 	common "github.com/go-i2p/common/data"
 )
 
+// createDTTunnelDeliveryInstructions builds a DT_TUNNEL delivery instruction
+// with a random hash, returning the DeliveryInstructions and the expected hash.
+func createDTTunnelDeliveryInstructions(tb testing.TB) (*DeliveryInstructions, common.Hash) {
+	tb.Helper()
+	expectedHash := common.Hash{}
+	if _, err := rand.Read(expectedHash[:]); err != nil {
+		tb.Fatalf("Failed to generate random hash: %v", err)
+	}
+	flag := byte(0x20) // DT_TUNNEL (1 << 5)
+	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
+	instructions[0] = flag
+	instructions[1] = 0x12
+	instructions[2] = 0x34
+	instructions[3] = 0x56
+	instructions[4] = 0x78
+	copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], expectedHash[:])
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
+	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
+	di, err := NewDeliveryInstructions(instructions)
+	if err != nil {
+		tb.Fatalf("Failed to create DeliveryInstructions: %v", err)
+	}
+	return di, expectedHash
+}
+
 // TestHashDTRouter verifies hash extraction for DT_ROUTER delivery type.
 // For DT_ROUTER, hash starts immediately after FLAG_SIZE.
 func TestHashDTRouter(t *testing.T) {
@@ -45,36 +70,8 @@ func TestHashDTRouter(t *testing.T) {
 // For DT_TUNNEL, hash starts after FLAG_SIZE + TUNNEL_ID_SIZE.
 // This test validates the variable shadowing fix.
 func TestHashDTTunnel(t *testing.T) {
-	// Create test hash
-	expectedHash := common.Hash{}
-	if _, err := rand.Read(expectedHash[:]); err != nil {
-		t.Fatalf("Failed to generate random hash: %v", err)
-	}
+	di, expectedHash := createDTTunnelDeliveryInstructions(t)
 
-	// Build DT_TUNNEL delivery instructions
-	// Flag byte: delivery type = 0x01 (DT_TUNNEL) in bits 6-5
-	// DT_TUNNEL is value 1, so (1 << 5) = 0x20
-	flag := byte(0x20)
-	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
-	instructions[0] = flag
-
-	// Add tunnel ID (4 bytes)
-	instructions[1] = 0x12
-	instructions[2] = 0x34
-	instructions[3] = 0x56
-	instructions[4] = 0x78
-
-	// Add hash after tunnel ID
-	copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], expectedHash[:])
-
-	// Add dummy size field
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
-
-	di, err := NewDeliveryInstructions(instructions)
-	if err != nil {
-		t.Fatalf("Failed to create DeliveryInstructions: %v", err)
-	}
 	hash, err := di.Hash()
 	if err != nil {
 		t.Fatalf("Hash() failed for DT_TUNNEL: %v", err)

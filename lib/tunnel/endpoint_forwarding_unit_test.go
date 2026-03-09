@@ -19,6 +19,20 @@ type mockForwarder struct {
 	routerErr   error
 }
 
+// createTestEndpointWithForwarder creates an Endpoint with a no-op handler and
+// an attached mockForwarder, ready for delivery-instruction tests.
+func createTestEndpointWithForwarder(t *testing.T) (*Endpoint, *mockForwarder) {
+	t.Helper()
+	mockEncryptor := &tunnel.AESEncryptor{}
+	handler := func(msgBytes []byte) error { return nil }
+	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
+	require.NoError(t, err)
+	t.Cleanup(func() { ep.Stop() })
+	fwd := &mockForwarder{}
+	ep.SetForwarder(fwd)
+	return ep, fwd
+}
+
 type forwardTunnelCall struct {
 	tunnelID    uint32
 	gatewayHash [32]byte
@@ -84,15 +98,7 @@ func TestDeliverWithInstructionsLocal(t *testing.T) {
 
 // TestDeliverWithInstructionsTunnel tests DT_TUNNEL delivery forwards via MessageForwarder.
 func TestDeliverWithInstructionsTunnel(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &mockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_hash_for_tunnel_fwd_test"))
@@ -102,7 +108,7 @@ func TestDeliverWithInstructionsTunnel(t *testing.T) {
 	}
 
 	msg := []byte("tunnel delivery message")
-	err = ep.deliverWithInstructions(DT_TUNNEL, di, msg)
+	err := ep.deliverWithInstructions(DT_TUNNEL, di, msg)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -115,15 +121,7 @@ func TestDeliverWithInstructionsTunnel(t *testing.T) {
 
 // TestDeliverWithInstructionsRouter tests DT_ROUTER delivery forwards via MessageForwarder.
 func TestDeliverWithInstructionsRouter(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &mockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("router_hash_for_router_fwd_test!"))
@@ -132,7 +130,7 @@ func TestDeliverWithInstructionsRouter(t *testing.T) {
 	}
 
 	msg := []byte("router delivery message")
-	err = ep.deliverWithInstructions(DT_ROUTER, di, msg)
+	err := ep.deliverWithInstructions(DT_ROUTER, di, msg)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -185,18 +183,10 @@ func TestDeliverViaForwarderError(t *testing.T) {
 
 // TestDeliverViaForwarderUnknownType tests unknown delivery type handling.
 func TestDeliverViaForwarderUnknownType(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &mockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
-	err = ep.deliverViaForwarder(DT_UNUSED, 0, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DT_UNUSED, 0, hash, []byte("test"))
 	assert.NoError(t, err, "Unknown delivery type should be silently skipped")
 
 	fwd.mu.Lock()
@@ -264,15 +254,7 @@ func TestStoreFirstFragmentWithDIRouter(t *testing.T) {
 
 // TestReassembleAndDeliverTunnel tests reassembly delivers to forwarder for DT_TUNNEL.
 func TestReassembleAndDeliverTunnel(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &mockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_for_reassemble_delivery!"))
@@ -294,7 +276,7 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 	result := ep.reassembleFragments(99, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.deliverReassembled(result)
+	err := ep.deliverReassembled(result)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -307,15 +289,7 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 
 // TestReassembleAndDeliverRouter tests reassembly delivers to forwarder for DT_ROUTER.
 func TestReassembleAndDeliverRouter(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &mockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("router_for_reassemble_delivery!!"))
@@ -336,7 +310,7 @@ func TestReassembleAndDeliverRouter(t *testing.T) {
 	result := ep.reassembleFragments(100, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.deliverReassembled(result)
+	err := ep.deliverReassembled(result)
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()

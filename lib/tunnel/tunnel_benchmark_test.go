@@ -7,7 +7,6 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/rand"
-	cryptotunnel "github.com/go-i2p/crypto/tunnel"
 )
 
 // =============================================================================
@@ -117,26 +116,7 @@ func BenchmarkHashDTRouter(b *testing.B) {
 
 // BenchmarkHashDTTunnel measures performance of hash extraction for DT_TUNNEL delivery type.
 func BenchmarkHashDTTunnel(b *testing.B) {
-	expectedHash := common.Hash{}
-	if _, err := rand.Read(expectedHash[:]); err != nil {
-		b.Fatalf("Failed to generate random hash: %v", err)
-	}
-
-	flag := byte(0x20) // DT_TUNNEL (1 << 5)
-	instructions := make([]byte, FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
-	instructions[0] = flag
-	instructions[1] = 0x12
-	instructions[2] = 0x34
-	instructions[3] = 0x56
-	instructions[4] = 0x78
-	copy(instructions[FLAG_SIZE+TUNNEL_ID_SIZE:FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE], expectedHash[:])
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE] = 0x00
-	instructions[FLAG_SIZE+TUNNEL_ID_SIZE+HASH_SIZE+1] = 0x10
-
-	di, err := NewDeliveryInstructions(instructions)
-	if err != nil {
-		b.Fatalf("Failed to create DeliveryInstructions: %v", err)
-	}
+	di, _ := createDTTunnelDeliveryInstructions(b)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -150,17 +130,7 @@ func BenchmarkHashDTTunnel(b *testing.B) {
 
 // BenchmarkParticipantProcess benchmarks the message processing
 func BenchmarkParticipantProcess(b *testing.B) {
-	layerKey := generateRandomKey()
-	ivKey := generateRandomKey()
-	aesEncryptor, err := cryptotunnel.NewAESEncryptor(layerKey, ivKey)
-	if err != nil {
-		b.Fatalf("failed to create AES encryptor: %v", err)
-	}
-
-	p, err := NewParticipant(1000, aesEncryptor)
-	if err != nil {
-		b.Fatalf("failed to create participant: %v", err)
-	}
+	p, aesEncryptor := createTestParticipant(b, 1000)
 
 	// Create test message (1008-byte payload)
 	payload := make([]byte, 1008)
