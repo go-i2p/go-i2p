@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,23 +38,7 @@ func TestClientNetDB_LeaseSetOperations(t *testing.T) {
 	defer stdDB.Stop()
 
 	clientDB := NewClientNetDB(stdDB)
-
-	// Test GetLeaseSetCount on empty database
-	count := clientDB.GetLeaseSetCount()
-	assert.Equal(t, 0, count)
-
-	// Test GetLeaseSet for non-existent entry
-	var testHash common.Hash
-	copy(testHash[:], "test-leaseset-hash-00000000000")
-
-	chnl := clientDB.GetLeaseSet(testHash)
-	assert.NotNil(t, chnl, "Non-existent LeaseSet should return a closed channel, not nil")
-	_, ok := <-chnl
-	assert.False(t, ok, "Channel should be closed for non-existent LeaseSet")
-
-	// Test GetLeaseSetBytes for non-existent entry
-	_, err := clientDB.GetLeaseSetBytes(testHash)
-	assert.Error(t, err, "Non-existent LeaseSet should return error")
+	assertEmptyLeaseSetOperations(t, clientDB)
 }
 
 // TestClientNetDB_Path tests filesystem path access.

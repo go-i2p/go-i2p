@@ -2,7 +2,6 @@ package i2cp
 
 import (
 	"bytes"
-	"encoding/binary"
 	"net"
 	"testing"
 	"time"
@@ -353,32 +352,8 @@ func TestMessageWireFormat(t *testing.T) {
 		Payload:   []byte{0xAA, 0xBB, 0xCC},
 	}
 
-	data, err := msg.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
-
-	// Expected format per I2CP specification:
-	// Bytes 0-3: PayloadLength (0x00000003, big endian)
-	// Byte 4: Type (0x20 for GetDate)
-	// Bytes 5-7: Payload (0xAA, 0xBB, 0xCC)
-	// NOTE: Session ID is NOT in the wire format - it's managed at the message layer
-
-	expectedLen := 4 + 1 + 3 // length + type + payload
-	if len(data) != expectedLen {
-		t.Errorf("Wire format length = %d, want %d", len(data), expectedLen)
-	}
-
-	// Verify payload length (big endian)
-	payloadLen := binary.BigEndian.Uint32(data[0:4])
-	if payloadLen != 3 {
-		t.Errorf("Payload length = %d, want 3", payloadLen)
-	}
-
-	// Verify type byte
-	if data[4] != MessageTypeGetDate {
-		t.Errorf("Type byte = 0x%02X, want 0x%02X", data[4], MessageTypeGetDate)
-	}
+	// Wire format: length(4) + type(1) + payload(3) = 8 bytes
+	data := marshalAndVerifyWireHeader(t, msg, 8, 3, MessageTypeGetDate)
 
 	// Verify payload bytes
 	if !bytes.Equal(data[5:], []byte{0xAA, 0xBB, 0xCC}) {

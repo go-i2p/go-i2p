@@ -149,32 +149,7 @@ func TestMultipleHandlers(t *testing.T) {
 // TestHandlersCalledInOrder verifies handlers are called in registration order.
 func TestHandlersCalledInOrder(t *testing.T) {
 	resetSignalHandlers(t, true, false)
-
-	order := make([]int, 0, 3)
-	var mu sync.Mutex
-
-	for i := 0; i < 3; i++ {
-		idx := i
-		RegisterReloadHandler(func() {
-			mu.Lock()
-			order = append(order, idx)
-			mu.Unlock()
-		})
-	}
-
-	handleReload()
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	if len(order) != 3 {
-		t.Fatalf("Expected 3 handlers called, got %d", len(order))
-	}
-	for i := 0; i < 3; i++ {
-		if order[i] != i {
-			t.Errorf("Expected handler %d at position %d, got %d", i, i, order[i])
-		}
-	}
+	assertHandlersCalledInOrder(t, func(f func()) { RegisterReloadHandler(f) }, handleReload)
 }
 
 // TestEmptyHandlerList verifies empty handler lists don't cause panic.

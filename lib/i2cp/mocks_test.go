@@ -471,3 +471,112 @@ func createMockTunnels(count int) []*tunnel.TunnelState {
 	}
 	return tunnels
 }
+
+// setupSessionInboundPool creates a tunnel pool with one ready tunnel and
+// attaches it as the session's inbound pool. Returns the pool for additional
+// assertions. This consolidates the repeated selector→pool→gateway→tunnelState
+// setup that appeared in multiple LeaseSet publishing tests.
+func setupSessionInboundPool(t *testing.T, session *Session) *tunnel.Pool {
+	t.Helper()
+
+	selector := &mockPeerSelector{}
+	pool := tunnel.NewTunnelPool(selector)
+	session.SetInboundPool(pool)
+
+	var gatewayHash common.Hash
+	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
+
+	tunnelState := &tunnel.TunnelState{
+		ID:        tunnel.TunnelID(12345),
+		Hops:      []common.Hash{gatewayHash},
+		State:     tunnel.TunnelReady,
+		CreatedAt: time.Now(),
+	}
+	pool.AddTunnel(tunnelState)
+
+	return pool
+}
+
+// buildSendMessageRequest creates a server, session, and wired SendMessage
+// for testing handleSendMessage. Returns the server, session, and ready-to-send
+// I2CP Message. Consolidates the repeated server→session→destHash→marshal→wire
+// setup that appeared in multiple send-message tests.
+func buildSendMessageRequest(t *testing.T, dest string, payload string) (*Server, *Session, *Message) {
+	t.Helper()
+
+	server, err := NewServer(nil)
+	require.NoError(t, err, "NewServer()")
+
+	session, err := server.manager.CreateSession(nil, nil)
+	require.NoError(t, err, "CreateSession()")
+
+	var destHash common.Hash
+	copy(destHash[:], []byte(dest))
+
+	sendPayload := &SendMessagePayload{
+		Destination: destHash,
+		Payload:     []byte(payload),
+	}
+
+	payloadBytes, err := sendPayload.MarshalBinary()
+	require.NoError(t, err, "MarshalBinary()")
+
+	wirePayload := prependSessionID(session.ID(), payloadBytes)
+
+	msg := &Message{
+		Type:      MessageTypeSendMessage,
+		SessionID: session.ID(),
+		Payload:   wirePayload,
+	}
+
+	return server, session, msg
+}
+
+// setupDeliveryTest creates a net.Pipe, server, session, and starts the
+// deliverMessagesToClient goroutine. Returns (server, session, clientConn).
+// Consolidates the repeated pipe→server→session→deliver setup.
+func setupDeliveryTest(t *testing.T) (*Server, *Session, net.Conn) {
+	t.Helper()
+
+	serverConn, clientConn := net.Pipe()
+
+	server, err := NewServer(nil)
+	require.NoError(t, err, "NewServer()")
+
+	session, err := server.manager.CreateSession(nil, nil)
+	require.NoError(t, err, "CreateSession()")
+
+	server.wg.Add(1)
+	go server.deliverMessagesToClient(session, serverConn)
+
+	t.Cleanup(func() {
+		session.Stop()
+		serverConn.Close()
+		clientConn.Close()
+		server.wg.Wait()
+	})
+
+	return server, session, clientConn
+}
+
+// marshalAndVerifyWireHeader marshals a Message and verifies the common I2CP
+// wire-format header (total length, payload-length field, type byte).
+// Returns the marshaled bytes for additional payload-level assertions.
+func marshalAndVerifyWireHeader(t *testing.T, msg *Message, expectedTotalLen int, expectedPayloadLen uint32, expectedType uint8) []byte {
+	t.Helper()
+	data, err := msg.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary() error = %v", err)
+	}
+	if len(data) != expectedTotalLen {
+		t.Errorf("Wire format length = %d, want %d", len(data), expectedTotalLen)
+	}
+	gotPayloadLen := binary.BigEndian.Uint32(data[0:4])
+	if gotPayloadLen != expectedPayloadLen {
+		t.Errorf("Payload length = %d, want %d", gotPayloadLen, expectedPayloadLen)
+	}
+	if data[4] != expectedType {
+		t.Errorf("Type byte = 0x%02X, want 0x%02X", data[4], expectedType)
+	}
+	return data
+}

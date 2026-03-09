@@ -57,56 +57,47 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 	}
 }
 
-// TestRouteOutboundMessageNoPool verifies error when no outbound pool exists
-func TestRouteOutboundMessageNoPool(t *testing.T) {
-	// Setup session WITHOUT outbound pool
-	session := createTestSessionWithoutPools(t)
-
-	// Create mock garlic encryptor and router
-	garlicMgr := newMockGarlicEncryptor()
-
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
-		sentMessages[string(peerHash[:])] = msg
-		return nil
+// TestRouteOutboundMessageErrors verifies error cases for message routing
+func TestRouteOutboundMessageErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		makeSession func(t *testing.T) *Session
+		wantErr     string
+	}{
+		{
+			name:        "NoPool",
+			makeSession: createTestSessionWithoutPools,
+			wantErr:     "outbound tunnel pool required",
+		},
+		{
+			name:        "NoActiveTunnels",
+			makeSession: createTestSessionWithEmptyPools,
+			wantErr:     "insufficient active outbound tunnels",
+		},
 	}
 
-	router := NewMessageRouter(garlicMgr, transportSend)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session := tt.makeSession(t)
+			garlicMgr := newMockGarlicEncryptor()
 
-	// Attempt to route message
-	destHash := createTestHash()
-	var destPubKey [32]byte
-	payload := []byte("test")
+			sentMessages := make(map[string]i2np.I2NPMessage)
+			transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+				sentMessages[string(peerHash[:])] = msg
+				return nil
+			}
 
-	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "outbound tunnel pool required")
-}
+			router := NewMessageRouter(garlicMgr, transportSend)
 
-// TestRouteOutboundMessageNoActiveTunnels verifies error when no active tunnels
-func TestRouteOutboundMessageNoActiveTunnels(t *testing.T) {
-	// Setup session with empty pool (no active tunnels)
-	session := createTestSessionWithEmptyPools(t)
+			destHash := createTestHash()
+			var destPubKey [32]byte
+			payload := []byte("test")
 
-	// Create mock garlic encryptor and router
-	garlicMgr := newMockGarlicEncryptor()
-
-	sentMessages := make(map[string]i2np.I2NPMessage)
-	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
-		sentMessages[string(peerHash[:])] = msg
-		return nil
+			err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
 	}
-
-	router := NewMessageRouter(garlicMgr, transportSend)
-
-	// Attempt to route message
-	destHash := createTestHash()
-	var destPubKey [32]byte
-	payload := []byte("test")
-
-	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "insufficient active outbound tunnels")
 }
 
 // TestSendThroughTunnel verifies sending through a specific tunnel

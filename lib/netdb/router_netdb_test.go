@@ -191,21 +191,5 @@ func TestRouterNetDB_LeaseSetOperations(t *testing.T) {
 	defer stdDB.Stop()
 
 	routerDB := NewRouterNetDB(stdDB)
-
-	// Test GetLeaseSetCount on empty database
-	count := routerDB.GetLeaseSetCount()
-	assert.Equal(t, 0, count)
-
-	// Test GetLeaseSet for non-existent entry
-	var testHash common.Hash
-	copy(testHash[:], "test-leaseset-hash-00000000000")
-
-	chnl := routerDB.GetLeaseSet(testHash)
-	assert.NotNil(t, chnl, "Non-existent LeaseSet should return a closed channel, not nil")
-	_, ok := <-chnl
-	assert.False(t, ok, "Channel should be closed for non-existent LeaseSet")
-
-	// Test GetLeaseSetBytes for non-existent entry
-	_, err := routerDB.GetLeaseSetBytes(testHash)
-	assert.Error(t, err, "Non-existent LeaseSet should return error")
+	assertEmptyLeaseSetOperations(t, routerDB)
 }

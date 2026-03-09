@@ -218,17 +218,11 @@ func TestCleanupExpiredParticipants(t *testing.T) {
 	defer m.Stop()
 
 	// Create a participant that's already expired
-	p, _ := NewParticipant(11111, &mockTunnelEncryptor{})
+	p := addParticipantToManager(t, m, 11111)
 	p.createdAt = time.Now().Add(-11 * time.Minute) // Expired (10min lifetime)
-	if err := m.AddParticipant(p); err != nil {
-		t.Fatalf("Failed to add expired participant: %v", err)
-	}
 
 	// Create a participant that's not expired
-	p2, _ := NewParticipant(22222, &mockTunnelEncryptor{})
-	if err := m.AddParticipant(p2); err != nil {
-		t.Fatalf("Failed to add participant: %v", err)
-	}
+	addParticipantToManager(t, m, 22222)
 
 	// Verify both were added
 	if m.ParticipantCount() != 2 {
@@ -361,25 +355,16 @@ func TestCleanupIdleParticipants(t *testing.T) {
 	defer m.Stop()
 
 	// Create a participant that has been idle too long (no activity for 3 minutes)
-	idleParticipant, _ := NewParticipant(11111, &mockTunnelEncryptor{})
+	idleParticipant := addParticipantToManager(t, m, 11111)
 	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle for 3 minutes
-	if err := m.AddParticipant(idleParticipant); err != nil {
-		t.Fatalf("Failed to add idle participant: %v", err)
-	}
 
 	// Create an active participant (recent activity)
-	activeParticipant, _ := NewParticipant(22222, &mockTunnelEncryptor{})
+	addParticipantToManager(t, m, 22222)
 	// lastActivity is already set to now by NewParticipant
-	if err := m.AddParticipant(activeParticipant); err != nil {
-		t.Fatalf("Failed to add active participant: %v", err)
-	}
 
 	// Create a participant that's idle but not yet past the threshold
-	almostIdleParticipant, _ := NewParticipant(33333, &mockTunnelEncryptor{})
+	almostIdleParticipant := addParticipantToManager(t, m, 33333)
 	almostIdleParticipant.lastActivity = time.Now().Add(-1 * time.Minute) // Only idle for 1 minute
-	if err := m.AddParticipant(almostIdleParticipant); err != nil {
-		t.Fatalf("Failed to add almost-idle participant: %v", err)
-	}
 
 	// Verify all three were added
 	if m.ParticipantCount() != 3 {
@@ -417,24 +402,15 @@ func TestIdleAndExpiredParticipantCleanup(t *testing.T) {
 	defer m.Stop()
 
 	// Create an expired participant
-	expiredParticipant, _ := NewParticipant(11111, &mockTunnelEncryptor{})
+	expiredParticipant := addParticipantToManager(t, m, 11111)
 	expiredParticipant.createdAt = time.Now().Add(-11 * time.Minute) // Expired (past 10min lifetime)
-	if err := m.AddParticipant(expiredParticipant); err != nil {
-		t.Fatalf("Failed to add expired participant: %v", err)
-	}
 
 	// Create an idle participant
-	idleParticipant, _ := NewParticipant(22222, &mockTunnelEncryptor{})
+	idleParticipant := addParticipantToManager(t, m, 22222)
 	idleParticipant.lastActivity = time.Now().Add(-3 * time.Minute) // Idle
-	if err := m.AddParticipant(idleParticipant); err != nil {
-		t.Fatalf("Failed to add idle participant: %v", err)
-	}
 
 	// Create a healthy participant
-	healthyParticipant, _ := NewParticipant(33333, &mockTunnelEncryptor{})
-	if err := m.AddParticipant(healthyParticipant); err != nil {
-		t.Fatalf("Failed to add healthy participant: %v", err)
-	}
+	addParticipantToManager(t, m, 33333)
 
 	// Verify all three were added
 	if m.ParticipantCount() != 3 {

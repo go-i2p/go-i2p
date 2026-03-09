@@ -1135,28 +1135,8 @@ func TestBuildMessageStatusResponse(t *testing.T) {
 func TestBuildMessageStatusResponseMarshal(t *testing.T) {
 	msg := buildMessageStatusResponse(100, 12345, MessageStatusSuccess, 2048, 999)
 
-	data, err := msg.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
-
-	// Expected format per I2CP spec: length(4) + type(1) + payload(15)
-	// MessageStatus payload: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4) = 15 bytes
-	expectedLen := 4 + 1 + 15
-	if len(data) != expectedLen {
-		t.Errorf("Marshaled length = %d, want %d", len(data), expectedLen)
-	}
-
-	// Verify payload length field (first 4 bytes)
-	gotPayloadLen := binary.BigEndian.Uint32(data[0:4])
-	if gotPayloadLen != 15 {
-		t.Errorf("Payload length field = %d, want 15", gotPayloadLen)
-	}
-
-	// Verify type byte (byte 4)
-	if data[4] != MessageTypeMessageStatus {
-		t.Errorf("Type byte = %d, want %d", data[4], MessageTypeMessageStatus)
-	}
+	// Wire format: length(4) + type(1) + payload(15) = 20 bytes
+	data := marshalAndVerifyWireHeader(t, msg, 20, 15, MessageTypeMessageStatus)
 
 	// Verify session ID in payload (bytes 5-6)
 	gotSessionID := binary.BigEndian.Uint16(data[5:7])
@@ -1250,46 +1230,7 @@ func TestMessageStatusPayloadFormat(t *testing.T) {
 
 // TestHandleSendMessage tests the SendMessage handler
 func TestHandleSendMessage(t *testing.T) {
-	// Create server
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-
-	// Create session
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	// Create test destination hash
-	var destHash data.Hash
-	copy(destHash[:], []byte("test_destination_hash_32_bytes!"))
-
-	// Create SendMessage payload
-	sendPayload := &SendMessagePayload{
-		Destination: destHash,
-		Payload:     []byte("Test message to send"),
-	}
-
-	payloadBytes, err := sendPayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("Failed to marshal payload: %v", err)
-	}
-
-	// Prepend 2-byte SessionID prefix to match real wire format.
-	// On the wire, ReadMessage sets msg.Payload to the full payload including
-	// the SessionID prefix. parseSendMessagePayload strips it before parsing.
-	wirePayload := make([]byte, 2+len(payloadBytes))
-	binary.BigEndian.PutUint16(wirePayload[0:2], session.ID())
-	copy(wirePayload[2:], payloadBytes)
-
-	// Create I2CP message
-	msg := &Message{
-		Type:      MessageTypeSendMessage,
-		SessionID: session.ID(),
-		Payload:   wirePayload,
-	}
+	server, session, msg := buildSendMessageRequest(t, "test_destination_hash_32_bytes!", "Test message to send")
 
 	// Test without outbound pool (should fail)
 	sessionPtr := session
@@ -1461,23 +1402,7 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 
 // TestDeliverMessagesToClientMultiple tests delivering multiple messages
 func TestDeliverMessagesToClientMultiple(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	// Start delivery goroutine
-	server.wg.Add(1)
-	go server.deliverMessagesToClient(session, serverConn)
+	_, session, clientConn := setupDeliveryTest(t)
 
 	// Queue multiple messages
 	numMessages := 5
@@ -1521,30 +1446,11 @@ func TestDeliverMessagesToClientMultiple(t *testing.T) {
 	if receivedCount != numMessages {
 		t.Errorf("Received %d messages, want %d", receivedCount, numMessages)
 	}
-
-	// Clean up
-	session.Stop()
-	server.wg.Wait()
 }
 
 // TestDeliverMessagesToClientMessageIDIncrement tests message ID increments
 func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	server.wg.Add(1)
-	go server.deliverMessagesToClient(session, serverConn)
+	_, session, clientConn := setupDeliveryTest(t)
 
 	// Queue messages and verify IDs increment
 	numMessages := 3
@@ -1593,9 +1499,6 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 			t.Errorf("Message %d: ID = %d, want %d", i, messageIDs[i], expectedID)
 		}
 	}
-
-	session.Stop()
-	server.wg.Wait()
 }
 
 // TestServerWithLeaseSetPublisher tests I2CP server with publisher
@@ -1855,44 +1758,11 @@ func TestParseSendMessageExpiresPayloadTooShort(t *testing.T) {
 // exercises handleSendMessage with a wire-format payload (SessionID prefix included)
 // and verifies the full handler path including message acceptance.
 func TestHandleSendMessageWithWireFormatPayload(t *testing.T) {
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
+	server, session, msg := buildSendMessageRequest(t, "wire_format_test_destination_32!", "wire format end-to-end test")
 
 	// Set up outbound pool (required for message sending)
 	pool := &tunnel.Pool{}
 	session.SetOutboundPool(pool)
-
-	// Create known destination
-	var destHash data.Hash
-	copy(destHash[:], []byte("wire_format_test_destination_32!"))
-
-	sendPayload := &SendMessagePayload{
-		Destination: destHash,
-		Payload:     []byte("wire format end-to-end test"),
-	}
-
-	innerBytes, err := sendPayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
-
-	// Build wire-format payload with SessionID prefix
-	wirePayload := make([]byte, 2+len(innerBytes))
-	binary.BigEndian.PutUint16(wirePayload[0:2], session.ID())
-	copy(wirePayload[2:], innerBytes)
-
-	msg := &Message{
-		Type:      MessageTypeSendMessage,
-		SessionID: session.ID(),
-		Payload:   wirePayload,
-	}
 
 	sessionPtr := session
 	response, err := server.handleSendMessage(msg, &sessionPtr)

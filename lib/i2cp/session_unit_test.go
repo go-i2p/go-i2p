@@ -1756,20 +1756,7 @@ func TestSessionPublishLeaseSetWithPublisher(t *testing.T) {
 	session.SetLeaseSetPublisher(publisher)
 
 	// Setup tunnel pool with active tunnel
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash common.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
+	setupSessionInboundPool(t, session)
 
 	// Create LeaseSet (this should trigger publishing)
 	leaseSetBytes, err := session.CreateLeaseSet()
@@ -1802,20 +1789,7 @@ func TestSessionPublishLeaseSetWithoutPublisher(t *testing.T) {
 	// Don't set a publisher
 
 	// Setup tunnel pool
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash common.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
+	setupSessionInboundPool(t, session)
 
 	// Create LeaseSet (should work even without publisher)
 	leaseSetBytes, err := session.CreateLeaseSet()
@@ -1838,20 +1812,7 @@ func TestSessionPublishLeaseSetPublisherError(t *testing.T) {
 	session.SetLeaseSetPublisher(publisher)
 
 	// Setup tunnel pool
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash common.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
+	setupSessionInboundPool(t, session)
 
 	// Regeneration should still succeed even if publisher fails
 	// (publisher errors are logged but not returned)
@@ -1879,20 +1840,7 @@ func TestSessionMaintenanceWithPublisher(t *testing.T) {
 	session.SetLeaseSetPublisher(publisher)
 
 	// Setup tunnel pool
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash common.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
+	setupSessionInboundPool(t, session)
 
 	// Start maintenance
 	err = session.StartLeaseSetMaintenance()
@@ -2414,21 +2362,8 @@ func TestLeaseSetPublishing_PublisherIntegration(t *testing.T) {
 
 	session.SetLeaseSetPublisher(publisher)
 
-	// Setup tunnel pool with mock tunnel (using mockPeerSelector from session_test.go)
-	selector := &mockPeerSelector{}
-	pool := tunnel.NewTunnelPool(selector)
-	session.SetInboundPool(pool)
-
-	var gatewayHash common.Hash
-	copy(gatewayHash[:], []byte("gateway-router-hash-12345678"))
-
-	tunnelState := &tunnel.TunnelState{
-		ID:        tunnel.TunnelID(12345),
-		Hops:      []common.Hash{gatewayHash},
-		State:     tunnel.TunnelReady,
-		CreatedAt: time.Now(),
-	}
-	pool.AddTunnel(tunnelState)
+	// Setup tunnel pool with mock tunnel
+	setupSessionInboundPool(t, session)
 
 	// Create LeaseSet
 	leaseSetBytes, err := session.CreateLeaseSet()

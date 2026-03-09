@@ -15,6 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// generateReplyTestData creates a random reply key, IV, and a BuildResponseRecord
+// for testing reply record encryption/decryption. Consolidates the repeated
+// key+IV+randomData generation that appeared in multiple tests.
+func generateReplyTestData(t *testing.T) (session_key.SessionKey, [16]byte, BuildResponseRecord) {
+	t.Helper()
+	var replyKey session_key.SessionKey
+	var replyIV [16]byte
+	var randomData [495]byte
+	_, err := rand.Read(replyKey[:])
+	require.NoError(t, err, "Failed to generate reply key")
+	_, err = rand.Read(replyIV[:])
+	require.NoError(t, err, "Failed to generate reply IV")
+	_, err = rand.Read(randomData[:])
+	require.NoError(t, err, "Failed to generate random data")
+	return replyKey, replyIV, CreateBuildResponseRecord(0, randomData)
+}
+
 // buildRequestTestFixture holds common setup for build request record encryption tests.
 type buildRequestTestFixture struct {
 	keystore   *keys.RouterInfoKeystore
@@ -101,25 +118,7 @@ func TestEncryptDecryptReplyRecord(t *testing.T) {
 // TestEncryptReplyRecordDeterminism tests that encryption with same key/IV produces same output
 func TestEncryptReplyRecordDeterminism(t *testing.T) {
 	crypto := NewBuildRecordCrypto()
-
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	_, err := rand.Read(replyKey[:])
-	if err != nil {
-		t.Fatalf("Failed to generate reply key: %v", err)
-	}
-	_, err = rand.Read(replyIV[:])
-	if err != nil {
-		t.Fatalf("Failed to generate reply IV: %v", err)
-	}
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	if err != nil {
-		t.Fatalf("Failed to generate random data: %v", err)
-	}
-
-	record := CreateBuildResponseRecord(0, randomData)
+	replyKey, replyIV, record := generateReplyTestData(t)
 
 	// Encrypt twice with same key/IV
 	encrypted1, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
@@ -141,31 +140,11 @@ func TestEncryptReplyRecordDeterminism(t *testing.T) {
 // TestDecryptReplyRecordWrongKey tests that decryption with wrong key fails
 func TestDecryptReplyRecordWrongKey(t *testing.T) {
 	crypto := NewBuildRecordCrypto()
+	replyKey, replyIV, record := generateReplyTestData(t)
 
-	var replyKey session_key.SessionKey
 	var wrongKey session_key.SessionKey
-	var replyIV [16]byte
-
-	_, err := rand.Read(replyKey[:])
-	if err != nil {
-		t.Fatalf("Failed to generate reply key: %v", err)
-	}
-	_, err = rand.Read(wrongKey[:])
-	if err != nil {
-		t.Fatalf("Failed to generate wrong key: %v", err)
-	}
-	_, err = rand.Read(replyIV[:])
-	if err != nil {
-		t.Fatalf("Failed to generate reply IV: %v", err)
-	}
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	if err != nil {
-		t.Fatalf("Failed to generate random data: %v", err)
-	}
-
-	record := CreateBuildResponseRecord(0, randomData)
+	_, err := rand.Read(wrongKey[:])
+	require.NoError(t, err, "Failed to generate wrong key")
 
 	// Encrypt with correct key
 	encrypted, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)

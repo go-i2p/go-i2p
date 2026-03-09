@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/binary"
+	"testing"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
@@ -113,6 +114,19 @@ func (f *fakeDB) SelectPeers(count int, exclude []common.Hash) ([]router_info.Ro
 // ---------------------------------------------------------------------------
 // Shared test helpers
 // ---------------------------------------------------------------------------
+
+// addParticipantToManager creates a Participant with the given tunnel ID and
+// adds it to the manager. Returns the participant for optional field tweaking
+// (e.g., setting createdAt or lastActivity). Consolidates the repeated
+// NewParticipant+AddParticipant+error-check boilerplate across cleanup tests.
+func addParticipantToManager(t *testing.T, m *Manager, id TunnelID) *Participant {
+	t.Helper()
+	p, _ := NewParticipant(id, &mockTunnelEncryptor{})
+	if err := m.AddParticipant(p); err != nil {
+		t.Fatalf("Failed to add participant %d: %v", id, err)
+	}
+	return p
+}
 
 // specMakeRouterInfo creates a minimal RouterInfo for testing by constructing
 // raw bytes and parsing them via ReadRouterInfo. Each unique id byte produces a

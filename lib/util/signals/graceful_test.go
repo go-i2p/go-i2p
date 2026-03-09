@@ -77,32 +77,7 @@ func TestRegisterPreShutdownHandler_Nil(t *testing.T) {
 // TestPreShutdownHandlers_CalledInOrder verifies FIFO order.
 func TestPreShutdownHandlers_CalledInOrder(t *testing.T) {
 	resetPreShutdownHandlers(t, false)
-
-	var mu sync.Mutex
-	order := make([]int, 0, 3)
-
-	for i := 0; i < 3; i++ {
-		idx := i
-		RegisterPreShutdownHandler(func() {
-			mu.Lock()
-			order = append(order, idx)
-			mu.Unlock()
-		})
-	}
-
-	handlePreShutdown()
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	if len(order) != 3 {
-		t.Fatalf("expected 3 handlers called, got %d", len(order))
-	}
-	for i := 0; i < 3; i++ {
-		if order[i] != i {
-			t.Errorf("expected handler %d at position %d, got %d", i, i, order[i])
-		}
-	}
+	assertHandlersCalledInOrder(t, func(f func()) { RegisterPreShutdownHandler(f) }, func() { handlePreShutdown() })
 }
 
 // TestPreShutdownHandlers_Empty verifies empty handler list returns true.
