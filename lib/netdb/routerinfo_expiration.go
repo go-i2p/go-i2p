@@ -154,17 +154,15 @@ func (db *StdNetDB) removeRouterInfoFromDisk(hash common.Hash) {
 	}
 }
 
-// GetRouterInfoExpirationStats returns statistics about RouterInfo expiration tracking.
-// Returns total tracked count, expired count, and time until next expiration.
-func (db *StdNetDB) GetRouterInfoExpirationStats() (total, expired int, nextExpiry time.Duration) {
+// computeExpirationStats calculates stats over a time-keyed expiry map.
+// Returns the total count, how many are expired, and the time until the next expiration.
+// The caller must hold the appropriate read lock.
+func computeExpirationStats(expiryMap map[common.Hash]time.Time) (total, expired int, nextExpiry time.Duration) {
 	now := time.Now()
 	var earliest time.Time
 
-	db.expiryMutex.RLock()
-	defer db.expiryMutex.RUnlock()
-
-	total = len(db.routerInfoExpiry)
-	for _, expiryTime := range db.routerInfoExpiry {
+	total = len(expiryMap)
+	for _, expiryTime := range expiryMap {
 		if now.After(expiryTime) {
 			expired++
 		} else if earliest.IsZero() || expiryTime.Before(earliest) {
@@ -177,4 +175,12 @@ func (db *StdNetDB) GetRouterInfoExpirationStats() (total, expired int, nextExpi
 	}
 
 	return total, expired, nextExpiry
+}
+
+// GetRouterInfoExpirationStats returns statistics about RouterInfo expiration tracking.
+// Returns total tracked count, expired count, and time until next expiration.
+func (db *StdNetDB) GetRouterInfoExpirationStats() (total, expired int, nextExpiry time.Duration) {
+	db.expiryMutex.RLock()
+	defer db.expiryMutex.RUnlock()
+	return computeExpirationStats(db.routerInfoExpiry)
 }

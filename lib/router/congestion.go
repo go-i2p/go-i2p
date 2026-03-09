@@ -520,20 +520,22 @@ func WithAcceptingTunnels(f func() bool) RouterMetricsOption {
 	}
 }
 
-// GetParticipatingTunnelRatio returns current/max participating tunnels ratio.
-func (c *RouterMetricsCollector) GetParticipatingTunnelRatio() float64 {
-	count := c.participantCountFunc()
-	max := c.maxParticipantsFunc()
-
+// computeClampedRatio returns current/max as a float64 clamped to [0, 1].
+// Returns 0 when max is zero or negative.
+func computeClampedRatio(current, max int) float64 {
 	if max <= 0 {
 		return 0
 	}
-
-	ratio := float64(count) / float64(max)
+	ratio := float64(current) / float64(max)
 	if ratio > 1.0 {
 		ratio = 1.0
 	}
 	return ratio
+}
+
+// GetParticipatingTunnelRatio returns current/max participating tunnels ratio.
+func (c *RouterMetricsCollector) GetParticipatingTunnelRatio() float64 {
+	return computeClampedRatio(c.participantCountFunc(), c.maxParticipantsFunc())
 }
 
 // GetBandwidthUtilization returns current bandwidth usage ratio.
@@ -560,18 +562,7 @@ func (c *RouterMetricsCollector) GetBandwidthUtilization() float64 {
 
 // GetConnectionUtilization returns connection count / max connections ratio.
 func (c *RouterMetricsCollector) GetConnectionUtilization() float64 {
-	count := c.connectionCountFunc()
-	max := c.maxConnectionsFunc()
-
-	if max <= 0 {
-		return 0
-	}
-
-	ratio := float64(count) / float64(max)
-	if ratio > 1.0 {
-		ratio = 1.0
-	}
-	return ratio
+	return computeClampedRatio(c.connectionCountFunc(), c.maxConnectionsFunc())
 }
 
 // IsAcceptingTunnels returns whether the router is accepting tunnel participation.

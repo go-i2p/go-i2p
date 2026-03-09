@@ -58,23 +58,27 @@ func DeregisterReloadHandler(id HandlerID) {
 	}
 }
 
-func handleReload() {
+// runHandlers takes a snapshot of the given handler slice under the read lock
+// and invokes each handler, recovering from panics. kind is used in panic messages.
+func runHandlers(handlers []registeredHandler, kind string) {
 	mu.RLock()
-	snapshot := make([]registeredHandler, len(reloaders))
-	copy(snapshot, reloaders)
+	snapshot := make([]registeredHandler, len(handlers))
+	copy(snapshot, handlers)
 	mu.RUnlock()
 	for _, h := range snapshot {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					// The signals package has no logger; write directly to stderr
-					// so panicking handlers are visible in logs/console.
-					fmt.Fprintf(os.Stderr, "signals: panic in reload handler: %v\n", r)
+					fmt.Fprintf(os.Stderr, "signals: panic in %s handler: %v\n", kind, r)
 				}
 			}()
 			h.fn()
 		}()
 	}
+}
+
+func handleReload() {
+	runHandlers(reloaders, "reload")
 }
 
 // RegisterInterruptHandler registers a handler called on SIGINT/SIGTERM (shutdown).
@@ -105,22 +109,7 @@ func DeregisterInterruptHandler(id HandlerID) {
 }
 
 func handleInterrupted() {
-	mu.RLock()
-	snapshot := make([]registeredHandler, len(interrupters))
-	copy(snapshot, interrupters)
-	mu.RUnlock()
-	for _, h := range snapshot {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					// The signals package has no logger; write directly to stderr
-					// so panicking handlers are visible in logs/console.
-					fmt.Fprintf(os.Stderr, "signals: panic in interrupt handler: %v\n", r)
-				}
-			}()
-			h.fn()
-		}()
-	}
+	runHandlers(interrupters, "interrupt")
 }
 
 // StopHandle closes the signal channel, causing Handle() to return.

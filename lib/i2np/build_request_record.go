@@ -190,103 +190,100 @@ func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	return record, nil
 }
 
+// fieldParser pairs a field name with a closure that reads and assigns a single
+// BuildRequestRecord field from raw data.
+type fieldParser struct {
+	name  string
+	parse func([]byte, *BuildRequestRecord) error
+}
+
+// applyFieldParsers runs each parser in order, logging and returning on the first error.
+func applyFieldParsers(data []byte, record *BuildRequestRecord, parsers []fieldParser) error {
+	for _, p := range parsers {
+		if err := p.parse(data, record); err != nil {
+			log.WithError(err).Error("Failed to read " + p.name)
+			return err
+		}
+	}
+	return nil
+}
+
 // parseTunnelIdentifiers extracts tunnel and identity information from the record data.
 func parseTunnelIdentifiers(data []byte, record *BuildRequestRecord) error {
-	receive_tunnel, err := readBuildRequestRecordReceiveTunnel(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read ReceiveTunnel")
-		return err
-	}
-	record.ReceiveTunnel = receive_tunnel
-
-	our_ident, err := readBuildRequestRecordOurIdent(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read OurIdent")
-		return err
-	}
-	record.OurIdent = our_ident
-
-	next_tunnel, err := readBuildRequestRecordNextTunnel(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read NextTunnel")
-		return err
-	}
-	record.NextTunnel = next_tunnel
-
-	next_ident, err := readBuildRequestRecordNextIdent(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read NextIdent")
-		return err
-	}
-	record.NextIdent = next_ident
-
-	return nil
+	return applyFieldParsers(data, record, []fieldParser{
+		{"ReceiveTunnel", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordReceiveTunnel(d)
+			r.ReceiveTunnel = v
+			return err
+		}},
+		{"OurIdent", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordOurIdent(d)
+			r.OurIdent = v
+			return err
+		}},
+		{"NextTunnel", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordNextTunnel(d)
+			r.NextTunnel = v
+			return err
+		}},
+		{"NextIdent", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordNextIdent(d)
+			r.NextIdent = v
+			return err
+		}},
+	})
 }
 
 // parseSessionKeys extracts all cryptographic keys from the record data.
 func parseSessionKeys(data []byte, record *BuildRequestRecord) error {
-	layer_key, err := readBuildRequestRecordLayerKey(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read LayerKey")
-		return err
-	}
-	record.LayerKey = layer_key
-
-	iv_key, err := readBuildRequestRecordIVKey(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read IVKey")
-		return err
-	}
-	record.IVKey = iv_key
-
-	reply_key, err := readBuildRequestRecordReplyKey(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read ReplyKey")
-		return err
-	}
-	record.ReplyKey = reply_key
-
-	reply_iv, err := readBuildRequestRecordReplyIV(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read ReplyIV")
-		return err
-	}
-	record.ReplyIV = reply_iv
-
-	return nil
+	return applyFieldParsers(data, record, []fieldParser{
+		{"LayerKey", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordLayerKey(d)
+			r.LayerKey = v
+			return err
+		}},
+		{"IVKey", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordIVKey(d)
+			r.IVKey = v
+			return err
+		}},
+		{"ReplyKey", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordReplyKey(d)
+			r.ReplyKey = v
+			return err
+		}},
+		{"ReplyIV", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordReplyIV(d)
+			r.ReplyIV = v
+			return err
+		}},
+	})
 }
 
 // parseMetadata extracts flags, timestamps, and padding from the record data.
 func parseMetadata(data []byte, record *BuildRequestRecord) error {
-	flag, err := readBuildRequestRecordFlag(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read Flag")
-		return err
-	}
-	record.Flag = flag
-
-	request_time, err := readBuildRequestRecordRequestTime(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read RequestTime")
-		return err
-	}
-	record.RequestTime = request_time
-
-	send_message_id, err := readBuildRequestRecordSendMessageID(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read SendMessageID")
-		return err
-	}
-	record.SendMessageID = send_message_id
-
-	padding, err := readBuildRequestRecordPadding(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read Padding")
-		return err
-	}
-	record.Padding = padding
-
-	return nil
+	return applyFieldParsers(data, record, []fieldParser{
+		{"Flag", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordFlag(d)
+			r.Flag = v
+			return err
+		}},
+		{"RequestTime", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordRequestTime(d)
+			r.RequestTime = v
+			return err
+		}},
+		{"SendMessageID", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordSendMessageID(d)
+			r.SendMessageID = v
+			return err
+		}},
+		{"Padding", func(d []byte, r *BuildRequestRecord) error {
+			v, err := readBuildRequestRecordPadding(d)
+			r.Padding = v
+			return err
+		}},
+	})
 }
 
 func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {

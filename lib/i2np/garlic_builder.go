@@ -318,17 +318,24 @@ func serializeGarlic(garlic *Garlic) ([]byte, error) {
 	// but the spec and our deserializer (parseGarlicMetadata) expect 3 bytes.
 	buf = append(buf, 0x00, 0x00, 0x00)
 
-	// Write message ID (4 bytes, big-endian)
-	msgIDBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(msgIDBytes, uint32(garlic.MessageID))
-	buf = append(buf, msgIDBytes...)
-
-	// Write expiration (8 bytes, milliseconds since epoch)
-	expirationBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(expirationBytes, uint64(garlic.Expiration.UnixMilli()))
-	buf = append(buf, expirationBytes...)
+	// Write message ID + expiration
+	buf = appendIDAndExpiration(buf, uint32(garlic.MessageID), garlic.Expiration)
 
 	return buf, nil
+}
+
+// appendIDAndExpiration appends a 4-byte big-endian ID and an 8-byte
+// big-endian millisecond-epoch expiration timestamp to buf.
+func appendIDAndExpiration(buf []byte, id uint32, expiration time.Time) []byte {
+	idBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(idBytes, id)
+	buf = append(buf, idBytes...)
+
+	expBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(expBytes, uint64(expiration.UnixMilli()))
+	buf = append(buf, expBytes...)
+
+	return buf
 }
 
 // serializeGarlicClove converts a GarlicClove to its wire format.
@@ -373,15 +380,8 @@ func serializeGarlicClove(clove *GarlicClove) ([]byte, error) {
 	}
 	buf = append(buf, messageBytes...)
 
-	// Write clove ID (4 bytes)
-	cloveIDBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(cloveIDBytes, uint32(clove.CloveID))
-	buf = append(buf, cloveIDBytes...)
-
-	// Write expiration (8 bytes, milliseconds since epoch)
-	expirationBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(expirationBytes, uint64(clove.Expiration.UnixMilli()))
-	buf = append(buf, expirationBytes...)
+	// Write clove ID + expiration
+	buf = appendIDAndExpiration(buf, uint32(clove.CloveID), clove.Expiration)
 
 	// Write certificate (3 bytes - always NULL)
 	// I2P spec: certificate = type(1 byte) + length(2 bytes big-endian)

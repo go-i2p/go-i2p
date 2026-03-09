@@ -1269,12 +1269,12 @@ func (db *StdNetDB) isValidRouterInfoFile(entry os.DirEntry) bool {
 	return strings.HasPrefix(entry.Name(), "routerInfo-")
 }
 
-// extractHashFromFilename extracts and decodes the hash from a RouterInfo filename.
-// Expected format: routerInfo-<base64hash>.dat
-func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error) {
+// extractHashFromPrefixedFilename extracts and decodes the hash from a filename
+// with the given prefix and ".dat" suffix. Format: <prefix><base64hash>.dat
+func extractHashFromPrefixedFilename(filename, prefix string) (common.Hash, error) {
 	var hash common.Hash
 
-	hashStr := strings.TrimPrefix(filename, "routerInfo-")
+	hashStr := strings.TrimPrefix(filename, prefix)
 	hashStr = strings.TrimSuffix(hashStr, ".dat")
 
 	hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
@@ -1284,6 +1284,12 @@ func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error
 
 	copy(hash[:], hashBytes)
 	return hash, nil
+}
+
+// extractHashFromFilename extracts and decodes the hash from a RouterInfo filename.
+// Expected format: routerInfo-<base64hash>.dat
+func (db *StdNetDB) extractHashFromFilename(filename string) (common.Hash, error) {
+	return extractHashFromPrefixedFilename(filename, "routerInfo-")
 }
 
 // isRouterInfoAlreadyLoaded checks if a RouterInfo with the given hash is already in memory.
@@ -1439,18 +1445,7 @@ func (db *StdNetDB) processLeaseSetFile(dirPath string, dirEntry os.DirEntry, co
 // extractHashFromLeaseSetFilename extracts and decodes the hash from a LeaseSet filename.
 // Expected format: leaseSet-<base64hash>.dat
 func (db *StdNetDB) extractHashFromLeaseSetFilename(filename string) (common.Hash, error) {
-	var hash common.Hash
-
-	hashStr := strings.TrimPrefix(filename, "leaseSet-")
-	hashStr = strings.TrimSuffix(hashStr, ".dat")
-
-	hashBytes, err := base64.I2PEncoding.DecodeString(hashStr)
-	if err != nil {
-		return hash, err
-	}
-
-	copy(hash[:], hashBytes)
-	return hash, nil
+	return extractHashFromPrefixedFilename(filename, "leaseSet-")
 }
 
 // loadLeaseSetEntryFromFile reads an Entry from a LeaseSet .dat file.
@@ -2076,32 +2071,38 @@ func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	return verifyHashMatch(key, destBytes, "LeaseSet2")
 }
 
+// addLeaseSetEntryToCache stores an entry in the LeaseSet cache, replacing an
+// existing entry only when isNewer returns true for the current occupant.
+// trackExpiry is called after a successful store. Returns true if stored.
+func (db *StdNetDB) addLeaseSetEntryToCache(key common.Hash, entry Entry, isNewer func(Entry) bool, trackExpiry func(), typeName string) bool {
+	db.lsMutex.Lock()
+	defer db.lsMutex.Unlock()
+
+	if existing, exists := db.LeaseSets[key]; exists {
+		if !isNewer(existing) {
+			log.WithField("hash", key).Debug(typeName + " already exists with same or newer timestamp, skipping")
+			return false
+		}
+		log.WithField("hash", key).Debug("Replacing stale " + typeName + " with newer version")
+	}
+
+	db.LeaseSets[key] = entry
+	trackExpiry()
+
+	return true
+}
+
 // addLeaseSet2ToCache adds a LeaseSet2 entry to the in-memory cache.
 // If an entry already exists, it is replaced only if the new LeaseSet2
 // has a more recent Published timestamp. Returns true if the entry was
 // added or updated.
 func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet2) bool {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
-
-	if existing, exists := db.LeaseSets[key]; exists {
-		if existing.LeaseSet2 != nil {
-			if !ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime()) {
-				log.WithField("hash", key).Debug("LeaseSet2 already exists with same or newer timestamp, skipping")
-				return false
-			}
+	return db.addLeaseSetEntryToCache(key, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
+		if existing.LeaseSet2 == nil {
+			return true
 		}
-		log.WithField("hash", key).Debug("Replacing stale LeaseSet2 with newer version")
-	}
-
-	db.LeaseSets[key] = Entry{
-		LeaseSet2: &ls2,
-	}
-
-	// Track expiration time for cleanup
-	db.trackLeaseSet2Expiration(key, ls2)
-
-	return true
+		return ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime())
+	}, func() { db.trackLeaseSet2Expiration(key, ls2) }, "LeaseSet2")
 }
 
 // persistLeaseSet2ToFilesystem saves a LeaseSet2 entry to the filesystem.
@@ -2158,6 +2159,26 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 	return chnl
 }
 
+// cacheLeaseSetEntryIfNewer conditionally stores entry under hash when isNewer
+// returns true for the current occupant. Returns true if the entry was stored.
+// Caller must NOT hold lsMutex.
+func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isNewer func(Entry) bool, typeName string) bool {
+	db.lsMutex.Lock()
+	if existing, ok := db.LeaseSets[hash]; ok {
+		if !isNewer(existing) {
+			db.lsMutex.Unlock()
+			log.Debug("Skipping " + typeName + " update — cached version is same or newer")
+			return false
+		}
+		log.Debug("Replacing stale " + typeName + " in memory cache")
+	} else {
+		log.Debug("Adding " + typeName + " to memory cache")
+	}
+	db.LeaseSets[hash] = entry
+	db.lsMutex.Unlock()
+	return true
+}
+
 // parseAndCacheLeaseSet2 parses LeaseSet2 data and adds it to the memory cache.
 // If a cached entry already exists, the new entry replaces it only if it has a
 // newer published timestamp, preventing stale data from persisting.
@@ -2167,25 +2188,9 @@ func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease
 		return lease_set2.LeaseSet2{}, fmt.Errorf("failed to parse LeaseSet2: %w", err)
 	}
 
-	// Add to cache, or replace if newer
-	db.lsMutex.Lock()
-	if existing, ok := db.LeaseSets[hash]; ok {
-		// Compare timestamps: only replace if the new entry is strictly newer
-		if existing.LeaseSet2 != nil {
-			if !ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime()) {
-				db.lsMutex.Unlock()
-				log.Debug("Skipping LeaseSet2 update — cached version is same or newer")
-				return ls2, nil
-			}
-		}
-		log.Debug("Replacing stale LeaseSet2 in memory cache")
-	} else {
-		log.Debug("Adding LeaseSet2 to memory cache")
-	}
-	db.LeaseSets[hash] = Entry{
-		LeaseSet2: &ls2,
-	}
-	db.lsMutex.Unlock()
+	db.cacheLeaseSetEntryIfNewer(hash, Entry{LeaseSet2: &ls2}, func(existing Entry) bool {
+		return existing.LeaseSet2 == nil || ls2.PublishedTime().After(existing.LeaseSet2.PublishedTime())
+	}, "LeaseSet2")
 
 	return ls2, nil
 }
@@ -2284,27 +2289,12 @@ func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.Encrypt
 // If an entry already exists, it is replaced only if the new EncryptedLeaseSet
 // has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addEncryptedLeaseSetToCache(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) bool {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
-
-	if existing, exists := db.LeaseSets[key]; exists {
-		if existing.EncryptedLeaseSet != nil {
-			if !els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime()) {
-				log.WithField("hash", key).Debug("EncryptedLeaseSet already exists with same or newer timestamp, skipping")
-				return false
-			}
+	return db.addLeaseSetEntryToCache(key, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
+		if existing.EncryptedLeaseSet == nil {
+			return true
 		}
-		log.WithField("hash", key).Debug("Replacing stale EncryptedLeaseSet with newer version")
-	}
-
-	db.LeaseSets[key] = Entry{
-		EncryptedLeaseSet: &els,
-	}
-
-	// Track expiration time for cleanup
-	db.trackEncryptedLeaseSetExpiration(key, els)
-
-	return true
+		return els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime())
+	}, func() { db.trackEncryptedLeaseSetExpiration(key, els) }, "EncryptedLeaseSet")
 }
 
 // persistEncryptedLeaseSetToFilesystem saves an EncryptedLeaseSet entry to the filesystem.
@@ -2370,24 +2360,9 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 		return encrypted_leaseset.EncryptedLeaseSet{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
 
-	// Add to cache, or replace if newer
-	db.lsMutex.Lock()
-	if existing, ok := db.LeaseSets[hash]; ok {
-		if existing.EncryptedLeaseSet != nil {
-			if !els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime()) {
-				db.lsMutex.Unlock()
-				log.Debug("Skipping EncryptedLeaseSet update — cached version is same or newer")
-				return els, nil
-			}
-		}
-		log.Debug("Replacing stale EncryptedLeaseSet in memory cache")
-	} else {
-		log.Debug("Adding EncryptedLeaseSet to memory cache")
-	}
-	db.LeaseSets[hash] = Entry{
-		EncryptedLeaseSet: &els,
-	}
-	db.lsMutex.Unlock()
+	db.cacheLeaseSetEntryIfNewer(hash, Entry{EncryptedLeaseSet: &els}, func(existing Entry) bool {
+		return existing.EncryptedLeaseSet == nil || els.PublishedTime().After(existing.EncryptedLeaseSet.PublishedTime())
+	}, "EncryptedLeaseSet")
 
 	return els, nil
 }
@@ -2487,27 +2462,12 @@ func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) err
 // If an entry already exists, it is replaced only if the new MetaLeaseSet
 // has a more recent Published timestamp. Returns true if the entry was added or updated.
 func (db *StdNetDB) addMetaLeaseSetToCache(key common.Hash, mls meta_leaseset.MetaLeaseSet) bool {
-	db.lsMutex.Lock()
-	defer db.lsMutex.Unlock()
-
-	if existing, exists := db.LeaseSets[key]; exists {
-		if existing.MetaLeaseSet != nil {
-			if !mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime()) {
-				log.WithField("hash", key).Debug("MetaLeaseSet already exists with same or newer timestamp, skipping")
-				return false
-			}
+	return db.addLeaseSetEntryToCache(key, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {
+		if existing.MetaLeaseSet == nil {
+			return true
 		}
-		log.WithField("hash", key).Debug("Replacing stale MetaLeaseSet with newer version")
-	}
-
-	db.LeaseSets[key] = Entry{
-		MetaLeaseSet: &mls,
-	}
-
-	// Track expiration time for cleanup
-	db.trackMetaLeaseSetExpiration(key, mls)
-
-	return true
+		return mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime())
+	}, func() { db.trackMetaLeaseSetExpiration(key, mls) }, "MetaLeaseSet")
 }
 
 // persistMetaLeaseSetToFilesystem saves a MetaLeaseSet entry to the filesystem.
@@ -2573,24 +2533,9 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
 
-	// Add to cache, or replace if newer
-	db.lsMutex.Lock()
-	if existing, ok := db.LeaseSets[hash]; ok {
-		if existing.MetaLeaseSet != nil {
-			if !mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime()) {
-				db.lsMutex.Unlock()
-				log.Debug("Skipping MetaLeaseSet update — cached version is same or newer")
-				return mls, nil
-			}
-		}
-		log.Debug("Replacing stale MetaLeaseSet in memory cache")
-	} else {
-		log.Debug("Adding MetaLeaseSet to memory cache")
-	}
-	db.LeaseSets[hash] = Entry{
-		MetaLeaseSet: &mls,
-	}
-	db.lsMutex.Unlock()
+	db.cacheLeaseSetEntryIfNewer(hash, Entry{MetaLeaseSet: &mls}, func(existing Entry) bool {
+		return existing.MetaLeaseSet == nil || mls.PublishedTime().After(existing.MetaLeaseSet.PublishedTime())
+	}, "MetaLeaseSet")
 
 	return mls, nil
 }
@@ -2832,26 +2777,9 @@ func (db *StdNetDB) removeLeaseSetFromDisk(hash common.Hash) {
 // GetLeaseSetExpirationStats returns statistics about LeaseSet expiration tracking.
 // Returns total count, expired count, and time until next expiration.
 func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry time.Duration) {
-	now := time.Now()
-	var earliest time.Time
-
 	db.expiryMutex.RLock()
 	defer db.expiryMutex.RUnlock()
-
-	total = len(db.leaseSetExpiry)
-	for _, expiryTime := range db.leaseSetExpiry {
-		if now.After(expiryTime) {
-			expired++
-		} else if earliest.IsZero() || expiryTime.Before(earliest) {
-			earliest = expiryTime
-		}
-	}
-
-	if !earliest.IsZero() {
-		nextExpiry = time.Until(earliest)
-	}
-
-	return total, expired, nextExpiry
+	return computeExpirationStats(db.leaseSetExpiry)
 }
 
 // GetAllLeaseSets returns all LeaseSets currently stored in the database.

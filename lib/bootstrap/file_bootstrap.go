@@ -227,56 +227,49 @@ func (fb *FileBootstrap) validateFile() error {
 	return nil
 }
 
-// processSU3File reads and processes an SU3 reseed file with a limit on parsed RouterInfos.
-// The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
-func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
+// reseedProcessor is a function that processes a reseed file at filePath
+// with the given limit and returns parsed RouterInfos.
+type reseedProcessor func(filePath string, limit int) ([]router_info.RouterInfo, error)
+
+// processReseedFileByType is the shared implementation for processSU3File and processZipFile.
+// It logs, checks cancellation, invokes the type-specific processor, and finalizes results.
+func (fb *FileBootstrap) processReseedFileByType(ctx context.Context, limit int, fileType string, process reseedProcessor) ([]router_info.RouterInfo, error) {
 	log.WithFields(logger.Fields{
-		"at":        "(FileBootstrap) processSU3File",
+		"at":        "(FileBootstrap) process" + fileType + "File",
 		"phase":     "bootstrap",
-		"reason":    "processing SU3 reseed file",
+		"reason":    "processing " + fileType + " reseed file",
 		"file_path": fb.filePath,
 		"limit":     limit,
-	}).Info("processing SU3 reseed file")
+	}).Info("processing " + fileType + " reseed file")
 
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
 	}
 
 	requestLimit := calculateRequestLimit(limit)
-	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalSU3FileWithLimit(fb.filePath, requestLimit)
+	routerInfos, err := process(fb.filePath, requestLimit)
 	if err != nil {
-		logReseedProcessingFailure("processSU3File", "SU3", fb.filePath, err)
-		return nil, fmt.Errorf("SU3 file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
+		logReseedProcessingFailure("process"+fileType+"File", fileType, fb.filePath, err)
+		return nil, fmt.Errorf("%s file processing failed for %s (requested %d peers): %w", fileType, fb.filePath, limit, err)
 	}
 
-	return fb.finalizeRouterInfos(routerInfos, limit, "SU3")
+	return fb.finalizeRouterInfos(routerInfos, limit, fileType)
+}
+
+// processSU3File reads and processes an SU3 reseed file with a limit on parsed RouterInfos.
+// The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
+func (fb *FileBootstrap) processSU3File(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
+	return fb.processReseedFileByType(ctx, limit, "SU3", func(filePath string, reqLimit int) ([]router_info.RouterInfo, error) {
+		return reseed.NewReseed().ProcessLocalSU3FileWithLimit(filePath, reqLimit)
+	})
 }
 
 // processZipFile reads and processes a zip reseed file with a limit on parsed RouterInfos.
 // The limit parameter controls memory usage by stopping parse early when enough RouterInfos are obtained.
 func (fb *FileBootstrap) processZipFile(ctx context.Context, limit int) ([]router_info.RouterInfo, error) {
-	log.WithFields(logger.Fields{
-		"at":        "(FileBootstrap) processZipFile",
-		"phase":     "bootstrap",
-		"reason":    "processing zip reseed file",
-		"file_path": fb.filePath,
-		"limit":     limit,
-	}).Info("processing zip reseed file")
-
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("file bootstrap canceled: %w", ctx.Err())
-	}
-
-	requestLimit := calculateRequestLimit(limit)
-	reseeder := reseed.NewReseed()
-	routerInfos, err := reseeder.ProcessLocalZipFileWithLimit(fb.filePath, requestLimit)
-	if err != nil {
-		logReseedProcessingFailure("processZipFile", "ZIP", fb.filePath, err)
-		return nil, fmt.Errorf("zip file processing failed for %s (requested %d peers): %w", fb.filePath, limit, err)
-	}
-
-	return fb.finalizeRouterInfos(routerInfos, limit, "ZIP")
+	return fb.processReseedFileByType(ctx, limit, "ZIP", func(filePath string, reqLimit int) ([]router_info.RouterInfo, error) {
+		return reseed.NewReseed().ProcessLocalZipFileWithLimit(filePath, reqLimit)
+	})
 }
 
 // calculateRequestLimit doubles the limit to account for invalid RouterInfos during filtering.
