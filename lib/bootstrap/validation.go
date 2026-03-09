@@ -439,64 +439,45 @@ func checkOptionalStaticKey(addr *router_address.RouterAddress) {
 	}
 }
 
-// validateSSUAddress validates SSU-specific requirements
-func validateSSUAddress(addr *router_address.RouterAddress) error {
+// validateTransportHostPort validates that a transport address has a valid host and port.
+// protocolName is used in error messages to identify the transport protocol (e.g. "SSU", "SSU2").
+func validateTransportHostPort(addr *router_address.RouterAddress, protocolName string) error {
 	// Use the same API as runtime transport - addr.Host() is the single source of truth
 	host, err := addr.Host()
 	if err != nil {
-		return fmt.Errorf("SSU address cannot retrieve host: %w", err)
+		return fmt.Errorf("%s address cannot retrieve host: %w", protocolName, err)
 	}
 
 	if host == nil {
-		return errors.New("SSU host is nil")
+		return fmt.Errorf("%s host is nil", protocolName)
 	}
 
 	hostData := host.String()
 	if hostData == "" {
-		return errors.New("SSU host is empty")
+		return fmt.Errorf("%s host is empty", protocolName)
 	}
 
 	// Use the same API as runtime transport - addr.Port() is the single source of truth
 	port, err := addr.Port()
 	if err != nil {
-		return fmt.Errorf("SSU address cannot retrieve port: %w", err)
+		return fmt.Errorf("%s address cannot retrieve port: %w", protocolName, err)
 	}
 
 	if port == "" {
-		return errors.New("SSU port is empty")
+		return fmt.Errorf("%s port is empty", protocolName)
 	}
 
 	return nil
 }
 
-// validateSSU2Address validates SSU2-specific requirements
+// validateSSUAddress validates SSU-specific requirements.
+func validateSSUAddress(addr *router_address.RouterAddress) error {
+	return validateTransportHostPort(addr, "SSU")
+}
+
+// validateSSU2Address validates SSU2-specific requirements.
 func validateSSU2Address(addr *router_address.RouterAddress) error {
-	// Use the same API as runtime transport - addr.Host() is the single source of truth
-	host, err := addr.Host()
-	if err != nil {
-		return fmt.Errorf("SSU2 address cannot retrieve host: %w", err)
-	}
-
-	if host == nil {
-		return errors.New("SSU2 host is nil")
-	}
-
-	hostData := host.String()
-	if hostData == "" {
-		return errors.New("SSU2 host is empty")
-	}
-
-	// Use the same API as runtime transport - addr.Port() is the single source of truth
-	port, err := addr.Port()
-	if err != nil {
-		return fmt.Errorf("SSU2 address cannot retrieve port: %w", err)
-	}
-
-	if port == "" {
-		return errors.New("SSU2 port is empty")
-	}
-
-	return nil
+	return validateTransportHostPort(addr, "SSU2")
 }
 
 // GetRouterHashString returns a hex string representation of the RouterInfo's IdentHash

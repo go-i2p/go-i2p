@@ -1709,24 +1709,28 @@ func parseLeaseSetData(data []byte) (lease_set.LeaseSet, error) {
 	return ls, nil
 }
 
-// verifyLeaseSetHash validates that the provided key matches the LeaseSet destination hash.
-func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
-	dest := ls.Destination()
-
-	// Calculate hash from destination bytes
-	destBytes, err := dest.Bytes()
-	if err != nil {
-		return fmt.Errorf("failed to get destination bytes: %w", err)
-	}
+// verifyHashMatch computes the hash of destBytes and returns an error if it does
+// not match the expected key. typeName is included in log and error messages.
+func verifyHashMatch(key common.Hash, destBytes []byte, typeName string) error {
 	expectedHash := common.HashData(destBytes)
 	if key != expectedHash {
 		log.WithFields(logger.Fields{
 			"expected_hash": expectedHash,
 			"provided_key":  key,
-		}).Error("LeaseSet hash mismatch")
-		return fmt.Errorf("LeaseSet hash mismatch: expected %x, got %x", expectedHash, key)
+		}).Error(typeName + " hash mismatch")
+		return fmt.Errorf("%s hash mismatch: expected %x, got %x", typeName, expectedHash, key)
 	}
 	return nil
+}
+
+// verifyLeaseSetHash validates that the provided key matches the LeaseSet destination hash.
+func verifyLeaseSetHash(key common.Hash, ls lease_set.LeaseSet) error {
+	dest := ls.Destination()
+	destBytes, err := dest.Bytes()
+	if err != nil {
+		return fmt.Errorf("failed to get destination bytes: %w", err)
+	}
+	return verifyHashMatch(key, destBytes, "LeaseSet")
 }
 
 // addLeaseSetToCache adds a LeaseSet entry to the in-memory cache if it doesn't exist.
@@ -1761,28 +1765,29 @@ func (db *StdNetDB) addLeaseSetToCache(key common.Hash, ls lease_set.LeaseSet) b
 	return true
 }
 
-// persistLeaseSetToFilesystem saves a LeaseSet entry to the filesystem.
-// If the save fails, the in-memory cache entry is preserved — filesystem persistence
-// is best-effort and a transient I/O error should not destroy valid cached data.
-func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.LeaseSet) error {
-	entry := &Entry{
-		LeaseSet: &ls,
-	}
-
+// persistLeaseSetEntryToFile writes an Entry to the lease set skiplist file for the given key.
+// typeName is used in log and error messages. Filesystem persistence is best-effort;
+// a transient I/O error does not remove valid cached data.
+func (db *StdNetDB) persistLeaseSetEntryToFile(key common.Hash, entry *Entry, typeName string) error {
 	fpath := db.SkiplistFileForLeaseSet(key)
 	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		log.WithError(err).Warn("Failed to open file for saving LeaseSet (in-memory entry preserved)")
-		return fmt.Errorf("failed to open LeaseSet file: %w", err)
+		log.WithError(err).Warn(fmt.Sprintf("Failed to open file for saving %s (in-memory entry preserved)", typeName))
+		return fmt.Errorf("failed to open %s file: %w", typeName, err)
 	}
 	defer f.Close()
 
 	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Warn("Failed to write LeaseSet to filesystem (in-memory entry preserved)")
-		return fmt.Errorf("failed to save LeaseSet to filesystem: %w", err)
+		log.WithError(err).Warn(fmt.Sprintf("Failed to write %s to filesystem (in-memory entry preserved)", typeName))
+		return fmt.Errorf("failed to save %s to filesystem: %w", typeName, err)
 	}
 
 	return nil
+}
+
+// persistLeaseSetToFilesystem saves a LeaseSet entry to the filesystem.
+func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.LeaseSet) error {
+	return db.persistLeaseSetEntryToFile(key, &Entry{LeaseSet: &ls}, "LeaseSet")
 }
 
 // GetLeaseSet retrieves a LeaseSet from the database by its hash.
@@ -1930,43 +1935,63 @@ func (db *StdNetDB) parseAndCacheLeaseSet(hash common.Hash, data []byte) (lease_
 	return ls, nil
 }
 
-// GetLeaseSetBytes retrieves LeaseSet data as bytes from the database.
-// Checks memory cache first, then loads from filesystem if necessary.
-// Returns serialized LeaseSet bytes suitable for network transmission.
-func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	log.WithField("hash", hash).Debug("Getting LeaseSet bytes")
+// fetchLeaseSetBytes is a generic helper for all GetXxxBytes lease set methods.
+// cacheCheck extracts bytes from a cached Entry (returns nil,nil if the entry
+// does not hold the desired type). parseAndCache parses raw file data and
+// populates the cache, returning any error.
+func (db *StdNetDB) fetchLeaseSetBytes(
+	hash common.Hash,
+	typeName string,
+	cacheCheck func(Entry) ([]byte, error),
+	parseAndCache func(common.Hash, []byte) error,
+) ([]byte, error) {
+	log.WithField("hash", hash).Debug("Getting " + typeName + " bytes")
 
 	// Check memory cache first
 	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet != nil {
-		db.lsMutex.RUnlock()
-		log.Debug("LeaseSet found in memory cache")
-
-		// Serialize the LeaseSet to bytes
-		data, err := ls.LeaseSet.Bytes()
-		if err != nil {
-			log.WithError(err).Error("Failed to serialize cached LeaseSet")
-			return nil, fmt.Errorf("failed to serialize LeaseSet: %w", err)
+	if entry, ok := db.LeaseSets[hash]; ok {
+		if data, err := cacheCheck(entry); data != nil || err != nil {
+			db.lsMutex.RUnlock()
+			if err != nil {
+				log.WithError(err).Error("Failed to serialize cached " + typeName)
+				return nil, fmt.Errorf("failed to serialize %s: %w", typeName, err)
+			}
+			log.Debug(typeName + " found in memory cache")
+			return data, nil
 		}
-		return data, nil
 	}
 	db.lsMutex.RUnlock()
 
 	// Load from file if not in memory
 	data, err := db.loadLeaseSetFromFile(hash)
 	if err != nil {
-		log.WithError(err).Debug("LeaseSet not found in filesystem")
-		return nil, fmt.Errorf("LeaseSet not found: %w", err)
+		log.WithError(err).Debug(typeName + " not found in filesystem")
+		return nil, fmt.Errorf("%s not found: %w", typeName, err)
 	}
 
 	// Parse and cache for future use
-	_, err = db.parseAndCacheLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse LeaseSet from file")
-		return nil, fmt.Errorf("failed to parse LeaseSet: %w", err)
+	if err := parseAndCache(hash, data); err != nil {
+		log.WithError(err).Error("Failed to parse " + typeName + " from file")
+		return nil, fmt.Errorf("failed to parse %s: %w", typeName, err)
 	}
 
 	return data, nil
+}
+
+// GetLeaseSetBytes retrieves LeaseSet data as bytes from the database.
+func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error) {
+	return db.fetchLeaseSetBytes(hash, "LeaseSet",
+		func(e Entry) ([]byte, error) {
+			if e.LeaseSet == nil {
+				return nil, nil
+			}
+			return e.LeaseSet.Bytes()
+		},
+		func(h common.Hash, d []byte) error {
+			_, err := db.parseAndCacheLeaseSet(h, d)
+			return err
+		},
+	)
 }
 
 // GetLeaseSetCount returns the total number of LeaseSet entries in memory cache.
@@ -2044,21 +2069,11 @@ func parseLeaseSet2Data(data []byte) (lease_set2.LeaseSet2, error) {
 // verifyLeaseSet2Hash validates that the provided key matches the LeaseSet2 destination hash.
 func verifyLeaseSet2Hash(key common.Hash, ls2 lease_set2.LeaseSet2) error {
 	dest := ls2.Destination()
-
-	// Calculate hash from destination bytes
 	destBytes, err := dest.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to get destination bytes: %w", err)
 	}
-	expectedHash := common.HashData(destBytes)
-	if key != expectedHash {
-		log.WithFields(logger.Fields{
-			"expected_hash": expectedHash,
-			"provided_key":  key,
-		}).Error("LeaseSet2 hash mismatch")
-		return fmt.Errorf("LeaseSet2 hash mismatch: expected %x, got %x", expectedHash, key)
-	}
-	return nil
+	return verifyHashMatch(key, destBytes, "LeaseSet2")
 }
 
 // addLeaseSet2ToCache adds a LeaseSet2 entry to the in-memory cache.
@@ -2090,27 +2105,8 @@ func (db *StdNetDB) addLeaseSet2ToCache(key common.Hash, ls2 lease_set2.LeaseSet
 }
 
 // persistLeaseSet2ToFilesystem saves a LeaseSet2 entry to the filesystem.
-// If the save fails, the in-memory cache entry is preserved — filesystem persistence
-// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistLeaseSet2ToFilesystem(key common.Hash, ls2 lease_set2.LeaseSet2) error {
-	entry := &Entry{
-		LeaseSet2: &ls2,
-	}
-
-	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		log.WithError(err).Warn("Failed to open file for saving LeaseSet2 (in-memory entry preserved)")
-		return fmt.Errorf("failed to open LeaseSet2 file: %w", err)
-	}
-	defer f.Close()
-
-	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Warn("Failed to write LeaseSet2 to filesystem (in-memory entry preserved)")
-		return fmt.Errorf("failed to save LeaseSet2 to filesystem: %w", err)
-	}
-
-	return nil
+	return db.persistLeaseSetEntryToFile(key, &Entry{LeaseSet2: &ls2}, "LeaseSet2")
 }
 
 // GetLeaseSet2 retrieves a LeaseSet2 from the database by its hash.
@@ -2195,42 +2191,19 @@ func (db *StdNetDB) parseAndCacheLeaseSet2(hash common.Hash, data []byte) (lease
 }
 
 // GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
-// Checks memory cache first, then loads from filesystem if necessary.
-// Returns serialized LeaseSet2 bytes suitable for network transmission.
 func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
-	log.WithField("hash", hash).Debug("Getting LeaseSet2 bytes")
-
-	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.LeaseSet2 != nil {
-		db.lsMutex.RUnlock()
-		log.Debug("LeaseSet2 found in memory cache")
-
-		// Serialize the LeaseSet2 to bytes
-		data, err := ls.LeaseSet2.Bytes()
-		if err != nil {
-			log.WithError(err).Error("Failed to serialize cached LeaseSet2")
-			return nil, fmt.Errorf("failed to serialize LeaseSet2: %w", err)
-		}
-		return data, nil
-	}
-	db.lsMutex.RUnlock()
-
-	// Load from file if not in memory
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Debug("LeaseSet2 not found in filesystem")
-		return nil, fmt.Errorf("LeaseSet2 not found: %w", err)
-	}
-
-	// Parse and cache for future use
-	_, err = db.parseAndCacheLeaseSet2(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse LeaseSet2 from file")
-		return nil, fmt.Errorf("failed to parse LeaseSet2: %w", err)
-	}
-
-	return data, nil
+	return db.fetchLeaseSetBytes(hash, "LeaseSet2",
+		func(e Entry) ([]byte, error) {
+			if e.LeaseSet2 == nil {
+				return nil, nil
+			}
+			return e.LeaseSet2.Bytes()
+		},
+		func(h common.Hash, d []byte) error {
+			_, err := db.parseAndCacheLeaseSet2(h, d)
+			return err
+		},
+	)
 }
 
 // ======================================================================
@@ -2304,15 +2277,7 @@ func verifyEncryptedLeaseSetHash(key common.Hash, els encrypted_leaseset.Encrypt
 	if destBytes == nil {
 		return fmt.Errorf("failed to get blinded public key bytes")
 	}
-	expectedHash := common.HashData(destBytes)
-	if key != expectedHash {
-		log.WithFields(logger.Fields{
-			"expected_hash": expectedHash,
-			"provided_key":  key,
-		}).Error("EncryptedLeaseSet hash mismatch")
-		return fmt.Errorf("EncryptedLeaseSet hash mismatch: expected %x, got %x", expectedHash, key)
-	}
-	return nil
+	return verifyHashMatch(key, destBytes, "EncryptedLeaseSet")
 }
 
 // addEncryptedLeaseSetToCache adds an EncryptedLeaseSet entry to the in-memory cache.
@@ -2343,27 +2308,8 @@ func (db *StdNetDB) addEncryptedLeaseSetToCache(key common.Hash, els encrypted_l
 }
 
 // persistEncryptedLeaseSetToFilesystem saves an EncryptedLeaseSet entry to the filesystem.
-// If the save fails, the in-memory cache entry is preserved — filesystem persistence
-// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistEncryptedLeaseSetToFilesystem(key common.Hash, els encrypted_leaseset.EncryptedLeaseSet) error {
-	entry := &Entry{
-		EncryptedLeaseSet: &els,
-	}
-
-	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		log.WithError(err).Warn("Failed to open file for saving EncryptedLeaseSet (in-memory entry preserved)")
-		return fmt.Errorf("failed to open EncryptedLeaseSet file: %w", err)
-	}
-	defer f.Close()
-
-	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Warn("Failed to write EncryptedLeaseSet to filesystem (in-memory entry preserved)")
-		return fmt.Errorf("failed to save EncryptedLeaseSet to filesystem: %w", err)
-	}
-
-	return nil
+	return db.persistLeaseSetEntryToFile(key, &Entry{EncryptedLeaseSet: &els}, "EncryptedLeaseSet")
 }
 
 // GetEncryptedLeaseSet retrieves an EncryptedLeaseSet from the database by its hash.
@@ -2447,42 +2393,19 @@ func (db *StdNetDB) parseAndCacheEncryptedLeaseSet(hash common.Hash, data []byte
 }
 
 // GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the database.
-// Checks memory cache first, then loads from filesystem if necessary.
-// Returns serialized EncryptedLeaseSet bytes suitable for network transmission.
 func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	log.WithField("hash", hash).Debug("Getting EncryptedLeaseSet bytes")
-
-	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.EncryptedLeaseSet != nil {
-		db.lsMutex.RUnlock()
-		log.Debug("EncryptedLeaseSet found in memory cache")
-
-		// Serialize the EncryptedLeaseSet to bytes
-		data, err := ls.EncryptedLeaseSet.Bytes()
-		if err != nil {
-			log.WithError(err).Error("Failed to serialize cached EncryptedLeaseSet")
-			return nil, fmt.Errorf("failed to serialize EncryptedLeaseSet: %w", err)
-		}
-		return data, nil
-	}
-	db.lsMutex.RUnlock()
-
-	// Load from file if not in memory
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Debug("EncryptedLeaseSet not found in filesystem")
-		return nil, fmt.Errorf("EncryptedLeaseSet not found: %w", err)
-	}
-
-	// Parse and cache for future use
-	_, err = db.parseAndCacheEncryptedLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse EncryptedLeaseSet from file")
-		return nil, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
-	}
-
-	return data, nil
+	return db.fetchLeaseSetBytes(hash, "EncryptedLeaseSet",
+		func(e Entry) ([]byte, error) {
+			if e.EncryptedLeaseSet == nil {
+				return nil, nil
+			}
+			return e.EncryptedLeaseSet.Bytes()
+		},
+		func(h common.Hash, d []byte) error {
+			_, err := db.parseAndCacheEncryptedLeaseSet(h, d)
+			return err
+		},
+	)
 }
 
 // ======================================================================
@@ -2553,21 +2476,11 @@ func parseMetaLeaseSetData(data []byte) (meta_leaseset.MetaLeaseSet, error) {
 // verifyMetaLeaseSetHash validates that the provided key matches the MetaLeaseSet destination hash.
 func verifyMetaLeaseSetHash(key common.Hash, mls meta_leaseset.MetaLeaseSet) error {
 	dest := mls.Destination()
-
-	// Calculate hash from destination bytes
 	destBytes, err := dest.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to get destination bytes: %w", err)
 	}
-	expectedHash := common.HashData(destBytes)
-	if key != expectedHash {
-		log.WithFields(logger.Fields{
-			"expected_hash": expectedHash,
-			"provided_key":  key,
-		}).Error("MetaLeaseSet hash mismatch")
-		return fmt.Errorf("MetaLeaseSet hash mismatch: expected %x, got %x", expectedHash, key)
-	}
-	return nil
+	return verifyHashMatch(key, destBytes, "MetaLeaseSet")
 }
 
 // addMetaLeaseSetToCache adds a MetaLeaseSet entry to the in-memory cache.
@@ -2598,27 +2511,8 @@ func (db *StdNetDB) addMetaLeaseSetToCache(key common.Hash, mls meta_leaseset.Me
 }
 
 // persistMetaLeaseSetToFilesystem saves a MetaLeaseSet entry to the filesystem.
-// If the save fails, the in-memory cache entry is preserved — filesystem persistence
-// is best-effort and a transient I/O error should not destroy valid cached data.
 func (db *StdNetDB) persistMetaLeaseSetToFilesystem(key common.Hash, mls meta_leaseset.MetaLeaseSet) error {
-	entry := &Entry{
-		MetaLeaseSet: &mls,
-	}
-
-	fpath := db.SkiplistFileForLeaseSet(key)
-	f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		log.WithError(err).Warn("Failed to open file for saving MetaLeaseSet (in-memory entry preserved)")
-		return fmt.Errorf("failed to open MetaLeaseSet file: %w", err)
-	}
-	defer f.Close()
-
-	if err := entry.WriteTo(f); err != nil {
-		log.WithError(err).Warn("Failed to write MetaLeaseSet to filesystem (in-memory entry preserved)")
-		return fmt.Errorf("failed to save MetaLeaseSet to filesystem: %w", err)
-	}
-
-	return nil
+	return db.persistLeaseSetEntryToFile(key, &Entry{MetaLeaseSet: &mls}, "MetaLeaseSet")
 }
 
 // GetMetaLeaseSet retrieves a MetaLeaseSet from the database by its hash.
@@ -2702,42 +2596,19 @@ func (db *StdNetDB) parseAndCacheMetaLeaseSet(hash common.Hash, data []byte) (me
 }
 
 // GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
-// Checks memory cache first, then loads from filesystem if necessary.
-// Returns serialized MetaLeaseSet bytes suitable for network transmission.
 func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
-	log.WithField("hash", hash).Debug("Getting MetaLeaseSet bytes")
-
-	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok && ls.MetaLeaseSet != nil {
-		db.lsMutex.RUnlock()
-		log.Debug("MetaLeaseSet found in memory cache")
-
-		// Serialize the MetaLeaseSet to bytes
-		data, err := ls.MetaLeaseSet.Bytes()
-		if err != nil {
-			log.WithError(err).Error("Failed to serialize cached MetaLeaseSet")
-			return nil, fmt.Errorf("failed to serialize MetaLeaseSet: %w", err)
-		}
-		return data, nil
-	}
-	db.lsMutex.RUnlock()
-
-	// Load from file if not in memory
-	data, err := db.loadLeaseSetFromFile(hash)
-	if err != nil {
-		log.WithError(err).Debug("MetaLeaseSet not found in filesystem")
-		return nil, fmt.Errorf("MetaLeaseSet not found: %w", err)
-	}
-
-	// Parse and cache for future use
-	_, err = db.parseAndCacheMetaLeaseSet(hash, data)
-	if err != nil {
-		log.WithError(err).Error("Failed to parse MetaLeaseSet from file")
-		return nil, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
-	}
-
-	return data, nil
+	return db.fetchLeaseSetBytes(hash, "MetaLeaseSet",
+		func(e Entry) ([]byte, error) {
+			if e.MetaLeaseSet == nil {
+				return nil, nil
+			}
+			return e.MetaLeaseSet.Bytes()
+		},
+		func(h common.Hash, d []byte) error {
+			_, err := db.parseAndCacheMetaLeaseSet(h, d)
+			return err
+		},
+	)
 }
 
 // ======================================================================

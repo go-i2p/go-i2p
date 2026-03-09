@@ -1,7 +1,6 @@
 package i2np
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"fmt"
 
 	"github.com/go-i2p/logger"
@@ -177,38 +176,9 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 	}
 }
 
-// validateResponseRecord performs basic validation of a variable tunnel build response record.
-// This checks that the record structure is valid but does not verify cryptographic integrity.
+// validateResponseRecord delegates to the shared validateBuildResponseRecord helper.
 func (v *VariableTunnelBuildReply) validateResponseRecord(record BuildResponseRecord) error {
-	// Check if hash is all zeros (likely indicates an empty/invalid record)
-	allZeros := true
-	for _, b := range record.Hash {
-		if b != 0 {
-			allZeros = false
-			break
-		}
-	}
-
-	if allZeros {
-		return fmt.Errorf("variable tunnel response record has empty hash")
-	}
-
-	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
-	data := make([]byte, 496)
-	copy(data[0:495], record.RandomData[:])
-	data[495] = record.Reply
-
-	computedHash := types.SHA256(data)
-	if computedHash != record.Hash {
-		log.WithFields(logger.Fields{
-			"expected": record.Hash,
-			"computed": computedHash,
-		}).Warn("Variable tunnel response record hash mismatch")
-		return fmt.Errorf("variable tunnel response record hash verification failed")
-	}
-
-	log.Debug("Variable tunnel response record validation passed")
-	return nil
+	return validateBuildResponseRecord(record)
 }
 
 // Compile-time interface satisfaction check

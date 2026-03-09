@@ -291,17 +291,23 @@ func (e *Entry) processEntryData(entryType byte, data []byte) error {
 	}
 }
 
+// clearFields resets all entry fields to nil so that only one type is active at a time.
+func (e *Entry) clearFields() {
+	e.RouterInfo = nil
+	e.LeaseSet = nil
+	e.LeaseSet2 = nil
+	e.EncryptedLeaseSet = nil
+	e.MetaLeaseSet = nil
+}
+
 // processRouterInfoData processes RouterInfo data and sets the entry.
 func (e *Entry) processRouterInfoData(data []byte) error {
 	ri, _, err := router_info.ReadRouterInfo(data)
 	if err != nil {
 		return fmt.Errorf("failed to parse RouterInfo: %w", err)
 	}
+	e.clearFields()
 	e.RouterInfo = &ri
-	e.LeaseSet = nil
-	e.LeaseSet2 = nil
-	e.EncryptedLeaseSet = nil
-	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -311,11 +317,8 @@ func (e *Entry) processLeaseSetData(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse LeaseSet: %w", err)
 	}
+	e.clearFields()
 	e.LeaseSet = &ls
-	e.RouterInfo = nil
-	e.LeaseSet2 = nil
-	e.EncryptedLeaseSet = nil
-	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -325,11 +328,8 @@ func (e *Entry) processLeaseSet2Data(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse LeaseSet2: %w", err)
 	}
+	e.clearFields()
 	e.LeaseSet2 = &ls2
-	e.RouterInfo = nil
-	e.LeaseSet = nil
-	e.EncryptedLeaseSet = nil
-	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -339,11 +339,8 @@ func (e *Entry) processEncryptedLeaseSetData(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
+	e.clearFields()
 	e.EncryptedLeaseSet = &els
-	e.RouterInfo = nil
-	e.LeaseSet = nil
-	e.LeaseSet2 = nil
-	e.MetaLeaseSet = nil
 	return nil
 }
 
@@ -353,10 +350,7 @@ func (e *Entry) processMetaLeaseSetData(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
 	}
+	e.clearFields()
 	e.MetaLeaseSet = &mls
-	e.RouterInfo = nil
-	e.LeaseSet = nil
-	e.LeaseSet2 = nil
-	e.EncryptedLeaseSet = nil
 	return nil
 }

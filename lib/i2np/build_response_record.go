@@ -1,7 +1,10 @@
 package i2np
 
 import (
+	"fmt"
+
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/logger"
 )
 
@@ -124,4 +127,39 @@ func readBuildResponseRecordReply(data []byte) (byte, error) {
 		"reply": reply,
 	}).Debug("parsed_build_response_record_reply")
 	return reply, nil
+}
+
+// validateBuildResponseRecord performs basic validation of a build response record.
+// It checks that the hash is non-zero and that SHA-256(random_data || reply_byte)
+// matches the embedded hash. This is a standalone helper shared by all tunnel
+// build reply types.
+func validateBuildResponseRecord(record BuildResponseRecord) error {
+	allZeros := true
+	for _, b := range record.Hash {
+		if b != 0 {
+			allZeros = false
+			break
+		}
+	}
+
+	if allZeros {
+		return fmt.Errorf("response record has empty hash")
+	}
+
+	// Verify SHA-256 hash: hash should be SHA256(random_data + reply_byte)
+	data := make([]byte, 496)
+	copy(data[0:495], record.RandomData[:])
+	data[495] = record.Reply
+
+	computedHash := types.SHA256(data)
+	if computedHash != record.Hash {
+		log.WithFields(logger.Fields{
+			"expected": record.Hash,
+			"computed": computedHash,
+		}).Warn("Response record hash mismatch")
+		return fmt.Errorf("response record hash verification failed")
+	}
+
+	log.Debug("Response record validation passed")
+	return nil
 }
