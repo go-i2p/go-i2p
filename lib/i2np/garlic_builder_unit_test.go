@@ -127,57 +127,55 @@ func TestAddTunnelDeliveryClove(t *testing.T) {
 	}
 }
 
-func TestAddDestinationDeliveryClove(t *testing.T) {
-	builder, err := NewGarlicBuilderWithDefaults()
-	if err != nil {
-		t.Fatalf("Failed to create builder: %v", err)
+func TestAddHashedDeliveryClove(t *testing.T) {
+	tests := []struct {
+		name         string
+		addClove     func(*GarlicBuilder, I2NPMessage, int, common.Hash) error
+		cloveID      int
+		expectedFlag byte
+		flagLabel    string
+	}{
+		{
+			name:         "destination",
+			addClove:     (*GarlicBuilder).AddDestinationDeliveryClove,
+			cloveID:      3,
+			expectedFlag: 0x20,
+			flagLabel:    "DESTINATION",
+		},
+		{
+			name:         "router",
+			addClove:     (*GarlicBuilder).AddRouterDeliveryClove,
+			cloveID:      4,
+			expectedFlag: 0x40,
+			flagLabel:    "ROUTER",
+		},
 	}
 
-	message := createTestDataMessage(t, []byte("test payload"))
-	cloveID := 3
-	destHash := createTestHash()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder, err := NewGarlicBuilderWithDefaults()
+			if err != nil {
+				t.Fatalf("Failed to create builder: %v", err)
+			}
 
-	err = builder.AddDestinationDeliveryClove(message, cloveID, destHash)
-	if err != nil {
-		t.Fatalf("AddDestinationDeliveryClove failed: %v", err)
-	}
+			message := createTestDataMessage(t, []byte("test payload"))
+			hash := createTestHash()
 
-	clove := builder.cloves[0]
+			err = tt.addClove(builder, message, tt.cloveID, hash)
+			if err != nil {
+				t.Fatalf("Add%sDeliveryClove failed: %v", tt.flagLabel, err)
+			}
 
-	// Check delivery instructions flag (DESTINATION = 0x20)
-	if clove.DeliveryInstructions.Flag != 0x20 {
-		t.Errorf("Expected DESTINATION delivery flag 0x20, got 0x%02x", clove.DeliveryInstructions.Flag)
-	}
+			clove := builder.cloves[0]
 
-	if clove.DeliveryInstructions.Hash != destHash {
-		t.Errorf("Destination hash mismatch")
-	}
-}
+			if clove.DeliveryInstructions.Flag != tt.expectedFlag {
+				t.Errorf("Expected %s delivery flag 0x%02x, got 0x%02x", tt.flagLabel, tt.expectedFlag, clove.DeliveryInstructions.Flag)
+			}
 
-func TestAddRouterDeliveryClove(t *testing.T) {
-	builder, err := NewGarlicBuilderWithDefaults()
-	if err != nil {
-		t.Fatalf("Failed to create builder: %v", err)
-	}
-
-	message := createTestDataMessage(t, []byte("test payload"))
-	cloveID := 4
-	routerHash := createTestHash()
-
-	err = builder.AddRouterDeliveryClove(message, cloveID, routerHash)
-	if err != nil {
-		t.Fatalf("AddRouterDeliveryClove failed: %v", err)
-	}
-
-	clove := builder.cloves[0]
-
-	// Check delivery instructions flag (ROUTER = 0x40)
-	if clove.DeliveryInstructions.Flag != 0x40 {
-		t.Errorf("Expected ROUTER delivery flag 0x40, got 0x%02x", clove.DeliveryInstructions.Flag)
-	}
-
-	if clove.DeliveryInstructions.Hash != routerHash {
-		t.Errorf("Router hash mismatch")
+			if clove.DeliveryInstructions.Hash != hash {
+				t.Errorf("%s hash mismatch", tt.flagLabel)
+			}
+		})
 	}
 }
 

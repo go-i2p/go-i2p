@@ -381,13 +381,12 @@ func TestServerConnWriteMuInitialized(t *testing.T) {
 	}
 }
 
-// TestDestroySessionPayloadFormat verifies that handleDestroySession returns
-// a 3-byte SessionStatus payload (SessionID + Status) per the I2CP spec,
-// not a 1-byte payload.
-func TestDestroySessionPayloadFormat(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17680")
+// TestSessionStatusDestroyedCode verifies that handleDestroySession returns
+// a 3-byte SessionStatus payload (SessionID + Status) with status byte 0x00
+// (Destroyed) per I2CP spec.
+func TestSessionStatusDestroyedCode(t *testing.T) {
+	server := newTestI2CPServer(t, "localhost:17690")
 
-	// Create a session directly via the manager
 	session, err := server.manager.CreateSession(nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -396,7 +395,6 @@ func TestDestroySessionPayloadFormat(t *testing.T) {
 	sessionID := session.ID()
 	sessionCopy := session
 
-	// Call handleDestroySession
 	destroyMsg := &Message{
 		Type:      MessageTypeDestroySession,
 		SessionID: sessionID,
@@ -413,7 +411,7 @@ func TestDestroySessionPayloadFormat(t *testing.T) {
 
 	// Verify payload is 3 bytes: SessionID(2) + Status(1)
 	if len(response.Payload) != 3 {
-		t.Fatalf("SessionStatus payload length = %d, want 3", len(response.Payload))
+		t.Fatalf("payload length = %d, want 3", len(response.Payload))
 	}
 
 	// Verify the session ID is correctly encoded in the payload
@@ -422,9 +420,9 @@ func TestDestroySessionPayloadFormat(t *testing.T) {
 		t.Errorf("Payload SessionID = %d, want %d", payloadSessionID, sessionID)
 	}
 
-	// Verify the status byte is 0 (Destroyed)
-	if response.Payload[2] != 0x00 {
-		t.Errorf("Payload status byte = %d, want 0 (Destroyed)", response.Payload[2])
+	// Destroyed status must be 0
+	if response.Payload[2] != SessionStatusDestroyed {
+		t.Errorf("status byte = 0x%02x, want 0x%02x (Destroyed)", response.Payload[2], SessionStatusDestroyed)
 	}
 }
 
@@ -1671,43 +1669,6 @@ func TestSessionStatusCreatedCode(t *testing.T) {
 	// Critical: status byte MUST be 1 (Created), not 0 (Destroyed)
 	if msg.Payload[2] != SessionStatusCreated {
 		t.Errorf("status byte = 0x%02x, want 0x%02x (Created)", msg.Payload[2], SessionStatusCreated)
-	}
-}
-
-// TestSessionStatusDestroyedCode verifies that handleDestroySession returns
-// status byte 0x00 (Destroyed) per I2CP spec.
-func TestSessionStatusDestroyedCode(t *testing.T) {
-	server := newTestI2CPServer(t, "localhost:17690")
-
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
-
-	sessionID := session.ID()
-	sessionCopy := session
-
-	destroyMsg := &Message{
-		Type:      MessageTypeDestroySession,
-		SessionID: sessionID,
-	}
-
-	response, err := server.handleDestroySession(destroyMsg, &sessionCopy)
-	if err != nil {
-		t.Fatalf("handleDestroySession() error = %v", err)
-	}
-
-	if response == nil {
-		t.Fatal("handleDestroySession() returned nil response")
-	}
-
-	if len(response.Payload) != 3 {
-		t.Fatalf("payload length = %d, want 3", len(response.Payload))
-	}
-
-	// Destroyed status must be 0
-	if response.Payload[2] != SessionStatusDestroyed {
-		t.Errorf("status byte = 0x%02x, want 0x%02x (Destroyed)", response.Payload[2], SessionStatusDestroyed)
 	}
 }
 

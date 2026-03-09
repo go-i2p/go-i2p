@@ -202,36 +202,40 @@ func TestEncryptedLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
 	// Test passes if no deadlock occurs
 }
 
-// TestClientNetDBStoreEncryptedLeaseSet tests ClientNetDB wrapper method
-func TestClientNetDBStoreEncryptedLeaseSet(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
+// TestNetDBStoreEncryptedLeaseSetWrappers tests ClientNetDB and RouterNetDB wrapper methods
+func TestNetDBStoreEncryptedLeaseSetWrappers(t *testing.T) {
+	tests := []struct {
+		name  string
+		newDB func(*StdNetDB) interface {
+			StoreEncryptedLeaseSet(common.Hash, []byte, byte) error
+		}
+	}{
+		{"ClientNetDB", func(s *StdNetDB) interface {
+			StoreEncryptedLeaseSet(common.Hash, []byte, byte) error
+		} {
+			return NewClientNetDB(s)
+		}},
+		{"RouterNetDB", func(s *StdNetDB) interface {
+			StoreEncryptedLeaseSet(common.Hash, []byte, byte) error
+		} {
+			return NewRouterNetDB(s)
+		}},
+	}
 
-	clientDB := NewClientNetDB(stdDB)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stdDB := NewStdNetDB(tmpDir)
+			require.NoError(t, stdDB.Create())
 
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03}
+			db := tt.newDB(stdDB)
 
-	// Should fail with invalid data but test the wrapper
-	err := clientDB.StoreEncryptedLeaseSet(testHash, testData, 5)
-	assert.Error(t, err, "Should fail with invalid data")
-	assert.Contains(t, err.Error(), "failed to parse")
-}
+			testHash := common.Hash{0x01, 0x02, 0x03}
+			testData := []byte{0x01, 0x02, 0x03}
 
-// TestRouterNetDBStoreEncryptedLeaseSet tests RouterNetDB wrapper method
-func TestRouterNetDBStoreEncryptedLeaseSet(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
-
-	routerDB := NewRouterNetDB(stdDB)
-
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03}
-
-	// Should fail with invalid data but test the wrapper
-	err := routerDB.StoreEncryptedLeaseSet(testHash, testData, 5)
-	assert.Error(t, err, "Should fail with invalid data")
-	assert.Contains(t, err.Error(), "failed to parse")
+			err := db.StoreEncryptedLeaseSet(testHash, testData, 5)
+			assert.Error(t, err, "Should fail with invalid data")
+			assert.Contains(t, err.Error(), "failed to parse")
+		})
+	}
 }

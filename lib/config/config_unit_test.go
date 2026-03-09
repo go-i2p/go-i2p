@@ -12,16 +12,21 @@ import (
 // NewRouterConfigFromViper, UpdateRouterConfig
 // =============================================================================
 
+// configTestSetup resets viper state, applies defaults, and returns the
+// default ConfigDefaults for comparison. Call at the start of each config test.
+func configTestSetup(t *testing.T) ConfigDefaults {
+	t.Helper()
+	viper.Reset()
+	setDefaults()
+	return Defaults()
+}
+
 // TestCurrentConfigRouterInfoRefreshInterval verifies that CurrentConfig()
 // correctly reads the RouterInfoRefreshInterval from the same viper key
 // used by setDefaults(). This covers CRITICAL BUG: Viper Key Mismatch
 // for RouterInfo Refresh Interval.
 func TestCurrentConfigRouterInfoRefreshInterval(t *testing.T) {
-	// Reset viper to clear any state from other tests
-	viper.Reset()
-
-	// Apply defaults (this uses "router.info_refresh_interval")
-	setDefaults()
+	configTestSetup(t)
 
 	cfg := CurrentConfig()
 
@@ -39,11 +44,9 @@ func TestCurrentConfigRouterInfoRefreshInterval(t *testing.T) {
 // setDefaults() are correctly read back by CurrentConfig(). This catches
 // any additional key mismatches between SetDefault and Get calls.
 func TestCurrentConfigDefaultsRoundTrip(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	defaults := configTestSetup(t)
 
 	cfg := CurrentConfig()
-	defaults := Defaults()
 
 	// Router section
 	if cfg.Router.RouterInfoRefreshInterval != defaults.Router.RouterInfoRefreshInterval {
@@ -89,8 +92,7 @@ func TestCurrentConfigDefaultsRoundTrip(t *testing.T) {
 // TestCurrentConfigViperOverride verifies that RouterInfoRefreshInterval
 // can be overridden through viper, confirming the key is correct.
 func TestCurrentConfigViperOverride(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	configTestSetup(t)
 
 	// Override the value using the key
 	override := 45 * time.Minute
@@ -107,11 +109,9 @@ func TestCurrentConfigViperOverride(t *testing.T) {
 // fields from viper, not just a subset. This covers CRITICAL BUG: buildI2CPConfig
 // Drops Session Timeout and Queue Size Fields.
 func TestBuildI2CPConfigAllFields(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	defaults := configTestSetup(t)
 
 	cfg := buildI2CPConfig()
-	defaults := Defaults()
 
 	// Fields that were previously populated (should still work)
 	if cfg.Enabled != defaults.I2CP.Enabled {
@@ -157,8 +157,7 @@ func TestBuildI2CPConfigAllFields(t *testing.T) {
 // TestBuildI2CPConfigViperOverrides verifies that all I2CPConfig fields
 // can be overridden through viper, confirming the viper keys are correct.
 func TestBuildI2CPConfigViperOverrides(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	configTestSetup(t)
 
 	// Override each field
 	viper.Set("i2cp.enabled", false)
@@ -209,11 +208,9 @@ func TestBuildI2CPConfigViperOverrides(t *testing.T) {
 // TestNewRouterConfigFromViperI2CPFields verifies that NewRouterConfigFromViper
 // produces an I2CPConfig with all fields populated from viper defaults.
 func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	defaults := configTestSetup(t)
 
 	cfg := NewRouterConfigFromViper()
-	defaults := Defaults()
 
 	if cfg.I2CP.SessionTimeout != defaults.I2CP.SessionTimeout {
 		t.Errorf("NewRouterConfigFromViper I2CP.SessionTimeout = %v, want %v",
@@ -237,11 +234,9 @@ func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
 // populates Tunnel, Transport, Performance, and Congestion config fields.
 // This covers CRITICAL-002: RouterConfig missing subsystem config fields.
 func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	defaults := configTestSetup(t)
 
 	cfg := NewRouterConfigFromViper()
-	defaults := Defaults()
 
 	// Tunnel config
 	if cfg.Tunnel == nil {
@@ -291,8 +286,7 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 // TestUpdateRouterConfigSubsystemFields verifies that UpdateRouterConfig
 // propagates Tunnel, Transport, Performance, and Congestion config.
 func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	configTestSetup(t)
 
 	// Override a subsystem value
 	viper.Set("tunnel.length", 2)
@@ -331,8 +325,7 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 
 // TestGetRouterConfigDeepCopySubsystems verifies deep copy includes subsystem configs.
 func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	configTestSetup(t)
 	UpdateRouterConfig()
 
 	cfg := GetRouterConfig()
@@ -357,8 +350,7 @@ func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 // TestUpdateRouterConfig_IncludesAllFields verifies UpdateRouterConfig propagates all fields.
 // (Moved from defaults_test.go — tests config.go's UpdateRouterConfig)
 func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
-	viper.Reset()
-	setDefaults()
+	configTestSetup(t)
 
 	viper.Set("router.max_bandwidth", uint64(2048000))
 	viper.Set("router.max_connections", 500)

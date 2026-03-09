@@ -7,12 +7,40 @@ import (
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-noise/ratchet"
 
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// buildRequestTestFixture holds common setup for build request record encryption tests.
+type buildRequestTestFixture struct {
+	keystore   *keys.RouterInfoKeystore
+	routerInfo *router_info.RouterInfo
+	record     BuildRequestRecord
+	encrypted  [528]byte
+}
+
+// newBuildRequestFixture creates a keystore, router info, test build request record,
+// and encrypts it, returning everything needed for assertions.
+func newBuildRequestFixture(t *testing.T, routerName string) *buildRequestTestFixture {
+	t.Helper()
+	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), routerName)
+	require.NoError(t, err)
+	routerInfo, err := keystore.ConstructRouterInfo(nil)
+	require.NoError(t, err)
+	record := createTestBuildRequestRecord(t)
+	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+	require.NoError(t, err)
+	return &buildRequestTestFixture{
+		keystore:   keystore,
+		routerInfo: routerInfo,
+		record:     record,
+		encrypted:  encrypted,
+	}
+}
 
 // TestEncryptDecryptReplyRecord tests the encryption and decryption of build response records
 func TestEncryptDecryptReplyRecord(t *testing.T) {
@@ -363,47 +391,25 @@ func TestEncryptDecryptBuildRequestRecord(t *testing.T) {
 
 // TestEncryptBuildRequestRecordIdentityHash verifies the identity hash prefix
 func TestEncryptBuildRequestRecordIdentityHash(t *testing.T) {
-	// Create router with keys
-	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
-	require.NoError(t, err)
-
-	routerInfo, err := keystore.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	// Create test record
-	record := createTestBuildRequestRecord(t)
-
-	// Encrypt
-	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
-	require.NoError(t, err)
+	f := newBuildRequestFixture(t, "test-router")
 
 	// Calculate expected identity hash
-	identity := routerInfo.RouterIdentity()
+	identity := f.routerInfo.RouterIdentity()
 	identityBytes, _ := identity.KeysAndCert.Bytes()
 	expectedHash := types.SHA256(identityBytes)
 
 	// Verify first 16 bytes match
 	for i := 0; i < 16; i++ {
-		assert.Equal(t, expectedHash[i], encrypted[i], "Identity hash prefix byte %d should match", i)
+		assert.Equal(t, expectedHash[i], f.encrypted[i], "Identity hash prefix byte %d should match", i)
 	}
 }
 
 // TestVerifyIdentityHash tests the identity hash verification function
 func TestVerifyIdentityHash(t *testing.T) {
-	// Create router with keys
-	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
-	require.NoError(t, err)
-
-	routerInfo, err := keystore.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	// Create and encrypt record
-	record := createTestBuildRequestRecord(t)
-	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
-	require.NoError(t, err)
+	f := newBuildRequestFixture(t, "test-router")
 
 	// Verify with correct RouterInfo
-	assert.True(t, VerifyIdentityHash(encrypted, *routerInfo), "Should verify successfully with correct RouterInfo")
+	assert.True(t, VerifyIdentityHash(f.encrypted, *f.routerInfo), "Should verify successfully with correct RouterInfo")
 
 	// Create different router
 	keystore2, err := keys.NewRouterInfoKeystore(t.TempDir(), "different-router")
@@ -413,7 +419,7 @@ func TestVerifyIdentityHash(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify with wrong RouterInfo
-	assert.False(t, VerifyIdentityHash(encrypted, *routerInfo2), "Should fail verification with different RouterInfo")
+	assert.False(t, VerifyIdentityHash(f.encrypted, *routerInfo2), "Should fail verification with different RouterInfo")
 }
 
 // TestDecryptWithWrongKey verifies decryption fails with wrong key
@@ -443,50 +449,29 @@ func TestDecryptWithWrongKey(t *testing.T) {
 
 // TestEncryptBuildRequestRecordNonDeterministic verifies encryption is non-deterministic
 func TestEncryptBuildRequestRecordNonDeterministic(t *testing.T) {
-	// Create router
-	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
-	require.NoError(t, err)
+	f := newBuildRequestFixture(t, "test-router")
 
-	routerInfo, err := keystore.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	// Create same record
-	record := createTestBuildRequestRecord(t)
-
-	// Encrypt twice
-	encrypted1, err := EncryptBuildRequestRecord(record, *routerInfo)
-	require.NoError(t, err)
-
-	encrypted2, err := EncryptBuildRequestRecord(record, *routerInfo)
+	// Encrypt again with the same record
+	encrypted2, err := EncryptBuildRequestRecord(f.record, *f.routerInfo)
 	require.NoError(t, err)
 
 	// Identity hash prefix should be the same (first 16 bytes)
-	assert.Equal(t, encrypted1[:16], encrypted2[:16], "Identity hash prefix should match")
+	assert.Equal(t, f.encrypted[:16], encrypted2[:16], "Identity hash prefix should match")
 
 	// Ciphertext should differ due to different ephemeral keys
-	assert.NotEqual(t, encrypted1[16:], encrypted2[16:], "Ciphertext should differ (ephemeral keys)")
+	assert.NotEqual(t, f.encrypted[16:], encrypted2[16:], "Ciphertext should differ (ephemeral keys)")
 }
 
 // TestExtractIdentityHashPrefix tests the helper function
 func TestExtractIdentityHashPrefix(t *testing.T) {
-	// Create router
-	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
-	require.NoError(t, err)
-
-	routerInfo, err := keystore.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	// Create and encrypt record
-	record := createTestBuildRequestRecord(t)
-	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
-	require.NoError(t, err)
+	f := newBuildRequestFixture(t, "test-router")
 
 	// Extract prefix
-	prefix := ExtractIdentityHashPrefix(encrypted)
+	prefix := ExtractIdentityHashPrefix(f.encrypted)
 
 	// Verify first 16 bytes match
 	for i := 0; i < 16; i++ {
-		assert.Equal(t, encrypted[i], prefix[i], "Prefix byte %d should match", i)
+		assert.Equal(t, f.encrypted[i], prefix[i], "Prefix byte %d should match", i)
 	}
 
 	// Verify remaining bytes are zero (Hash is 32 bytes)
@@ -497,21 +482,16 @@ func TestExtractIdentityHashPrefix(t *testing.T) {
 
 // TestMultipleEncryptDecryptCycles tests multiple encryption/decryption rounds
 func TestMultipleEncryptDecryptCycles(t *testing.T) {
-	// Create router
-	keystore, err := keys.NewRouterInfoKeystore(t.TempDir(), "test-router")
-	require.NoError(t, err)
+	f := newBuildRequestFixture(t, "test-router")
 
-	routerInfo, err := keystore.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	privKey := keystore.GetEncryptionPrivateKey()
+	privKey := f.keystore.GetEncryptionPrivateKey()
 
 	// Test 10 cycles with different records
 	for i := 0; i < 10; i++ {
 		record := createTestBuildRequestRecord(t)
 		record.SendMessageID = i // Make each record unique
 
-		encrypted, err := EncryptBuildRequestRecord(record, *routerInfo)
+		encrypted, err := EncryptBuildRequestRecord(record, *f.routerInfo)
 		require.NoError(t, err, "Encryption cycle %d should succeed", i)
 
 		decrypted, err := DecryptBuildRequestRecord(encrypted, privKey.Bytes())

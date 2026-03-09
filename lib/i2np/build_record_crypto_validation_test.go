@@ -19,28 +19,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// buildRecordCryptoTestFixture holds the common setup for build record crypto tests.
+type buildRecordCryptoTestFixture struct {
+	crypto     *BuildRecordCrypto
+	replyKey   session_key.SessionKey
+	replyIV    [16]byte
+	randomData [495]byte
+	record     BuildResponseRecord
+}
+
+// newBuildRecordCryptoFixture creates a BuildRecordCrypto instance along with
+// random key, IV, data, and an encrypted record for testing.
+func newBuildRecordCryptoFixture(t *testing.T) *buildRecordCryptoTestFixture {
+	t.Helper()
+	f := &buildRecordCryptoTestFixture{crypto: NewBuildRecordCrypto()}
+	_, err := rand.Read(f.replyKey[:])
+	require.NoError(t, err)
+	_, err = rand.Read(f.replyIV[:])
+	require.NoError(t, err)
+	_, err = rand.Read(f.randomData[:])
+	require.NoError(t, err)
+	f.record = CreateBuildResponseRecord(0, f.randomData)
+	return f
+}
+
 // ============================================================================
 // Audit: ChaCha20-Poly1305 AEAD Encryption Correctness
 // ============================================================================
 
 // TestChaCha20Poly1305_AuthenticationTag verifies AEAD produces valid auth tags.
 func TestChaCha20Poly1305_AuthenticationTag(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
+	f := newBuildRecordCryptoFixture(t)
 
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	_, err := rand.Read(replyKey[:])
-	require.NoError(t, err)
-	_, err = rand.Read(replyIV[:])
-	require.NoError(t, err)
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	require.NoError(t, err)
-
-	record := CreateBuildResponseRecord(0, randomData)
-
-	encrypted, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
+	encrypted, err := f.crypto.EncryptReplyRecord(f.record, f.replyKey, f.replyIV)
 	require.NoError(t, err)
 
 	// ChaCha20-Poly1305 output: 528 bytes plaintext + 16 bytes auth tag = 544 bytes
@@ -63,22 +74,9 @@ func TestChaCha20Poly1305_AuthenticationTag(t *testing.T) {
 
 // TestChaCha20Poly1305_TamperDetection verifies tampering is detected.
 func TestChaCha20Poly1305_TamperDetection(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
+	f := newBuildRecordCryptoFixture(t)
 
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	_, err := rand.Read(replyKey[:])
-	require.NoError(t, err)
-	_, err = rand.Read(replyIV[:])
-	require.NoError(t, err)
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	require.NoError(t, err)
-
-	record := CreateBuildResponseRecord(0, randomData)
-
-	encrypted, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
+	encrypted, err := f.crypto.EncryptReplyRecord(f.record, f.replyKey, f.replyIV)
 	require.NoError(t, err)
 
 	// Test various tamper scenarios
@@ -135,7 +133,7 @@ func TestChaCha20Poly1305_TamperDetection(t *testing.T) {
 	for _, tc := range tamperCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tampered := tc.tamperFn(encrypted)
-			_, err := crypto.DecryptReplyRecord(tampered, replyKey, replyIV)
+			_, err := f.crypto.DecryptReplyRecord(tampered, f.replyKey, f.replyIV)
 			if tc.expectErr {
 				assert.Error(t, err, "Should detect tampering: %s", tc.name)
 			} else {
@@ -148,25 +146,12 @@ func TestChaCha20Poly1305_TamperDetection(t *testing.T) {
 // TestBuildRecordCrypto_KeyDerivation verifies key derivation consistency.
 func TestBuildRecordCrypto_KeyDerivation(t *testing.T) {
 	// Test that same key/IV always produces same ciphertext (deterministic)
-	crypto := NewBuildRecordCrypto()
+	f := newBuildRecordCryptoFixture(t)
 
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	_, err := rand.Read(replyKey[:])
-	require.NoError(t, err)
-	_, err = rand.Read(replyIV[:])
+	encrypted1, err := f.crypto.EncryptReplyRecord(f.record, f.replyKey, f.replyIV)
 	require.NoError(t, err)
 
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	require.NoError(t, err)
-
-	record := CreateBuildResponseRecord(0, randomData)
-
-	encrypted1, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
-	require.NoError(t, err)
-
-	encrypted2, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
+	encrypted2, err := f.crypto.EncryptReplyRecord(f.record, f.replyKey, f.replyIV)
 	require.NoError(t, err)
 
 	assert.True(t, bytes.Equal(encrypted1, encrypted2),
@@ -175,17 +160,7 @@ func TestBuildRecordCrypto_KeyDerivation(t *testing.T) {
 
 // TestBuildRecordCrypto_NonceReuse verifies different IVs produce different ciphertexts.
 func TestBuildRecordCrypto_DifferentNonces(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
-	var replyKey session_key.SessionKey
-	_, err := rand.Read(replyKey[:])
-	require.NoError(t, err)
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	require.NoError(t, err)
-
-	record := CreateBuildResponseRecord(0, randomData)
+	f := newBuildRecordCryptoFixture(t)
 
 	// Encrypt with different IVs
 	ciphertexts := make([][]byte, 5)
@@ -194,7 +169,7 @@ func TestBuildRecordCrypto_DifferentNonces(t *testing.T) {
 		_, err := rand.Read(replyIV[:])
 		require.NoError(t, err)
 
-		encrypted, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
+		encrypted, err := f.crypto.EncryptReplyRecord(f.record, f.replyKey, replyIV)
 		require.NoError(t, err)
 		ciphertexts[i] = encrypted
 	}
@@ -229,21 +204,10 @@ func TestBuildResponseRecord_HashVerification(t *testing.T) {
 
 // TestBuildResponseRecord_HashTamper verifies hash tampering is detected.
 func TestBuildResponseRecord_HashTamper(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	_, err := rand.Read(replyKey[:])
-	require.NoError(t, err)
-	_, err = rand.Read(replyIV[:])
-	require.NoError(t, err)
-
-	var randomData [495]byte
-	_, err = rand.Read(randomData[:])
-	require.NoError(t, err)
+	f := newBuildRecordCryptoFixture(t)
 
 	// Create record with tampered hash
-	tamperedRecord := CreateBuildResponseRecord(0, randomData)
+	tamperedRecord := CreateBuildResponseRecord(0, f.randomData)
 	tamperedRecord.Hash[0] ^= 0xFF // Tamper with hash
 
 	// Serialize and encrypt (this should succeed - hash check is on decrypt)
@@ -251,11 +215,11 @@ func TestBuildResponseRecord_HashTamper(t *testing.T) {
 
 	// The cleartext will have bad hash - decryption should catch this
 	var keyArr [32]byte
-	copy(keyArr[:], replyKey[:])
+	copy(keyArr[:], f.replyKey[:])
 	aead, err := chacha20poly1305.NewAEAD(keyArr)
 	require.NoError(t, err)
 
-	nonce := replyIV[:12]
+	nonce := f.replyIV[:12]
 	ct, tag, err := aead.Encrypt(cleartext, nil, nonce)
 	require.NoError(t, err)
 	ciphertext := make([]byte, len(ct)+len(tag))
@@ -263,7 +227,7 @@ func TestBuildResponseRecord_HashTamper(t *testing.T) {
 	copy(ciphertext[len(ct):], tag[:])
 
 	// Decrypt should succeed (AEAD), but hash verification should fail
-	decrypted, err := crypto.DecryptReplyRecord(ciphertext, replyKey, replyIV)
+	decrypted, err := f.crypto.DecryptReplyRecord(ciphertext, f.replyKey, f.replyIV)
 	if err == nil {
 		// If AEAD passed, verify hash check would fail
 		verifyErr := ratchet.VerifyResponseRecordHash(decrypted.Hash, decrypted.RandomData, decrypted.Reply)

@@ -202,38 +202,42 @@ func TestMetaLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
 	// Test passes if no deadlock occurs
 }
 
-// TestClientNetDBStoreMetaLeaseSet tests ClientNetDB wrapper method
-func TestClientNetDBStoreMetaLeaseSet(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
+// TestNetDBStoreMetaLeaseSetWrappers tests ClientNetDB and RouterNetDB wrapper methods
+func TestNetDBStoreMetaLeaseSetWrappers(t *testing.T) {
+	tests := []struct {
+		name  string
+		newDB func(*StdNetDB) interface {
+			StoreMetaLeaseSet(common.Hash, []byte, byte) error
+		}
+	}{
+		{"ClientNetDB", func(s *StdNetDB) interface {
+			StoreMetaLeaseSet(common.Hash, []byte, byte) error
+		} {
+			return NewClientNetDB(s)
+		}},
+		{"RouterNetDB", func(s *StdNetDB) interface {
+			StoreMetaLeaseSet(common.Hash, []byte, byte) error
+		} {
+			return NewRouterNetDB(s)
+		}},
+	}
 
-	clientDB := NewClientNetDB(stdDB)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stdDB := NewStdNetDB(tmpDir)
+			require.NoError(t, stdDB.Create())
 
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03}
+			db := tt.newDB(stdDB)
 
-	// Should fail with invalid data but test the wrapper
-	err := clientDB.StoreMetaLeaseSet(testHash, testData, 7)
-	assert.Error(t, err, "Should fail with invalid data")
-	assert.Contains(t, err.Error(), "failed to parse")
-}
+			testHash := common.Hash{0x01, 0x02, 0x03}
+			testData := []byte{0x01, 0x02, 0x03}
 
-// TestRouterNetDBStoreMetaLeaseSet tests RouterNetDB wrapper method
-func TestRouterNetDBStoreMetaLeaseSet(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
-
-	routerDB := NewRouterNetDB(stdDB)
-
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03}
-
-	// Should fail with invalid data but test the wrapper
-	err := routerDB.StoreMetaLeaseSet(testHash, testData, 7)
-	assert.Error(t, err, "Should fail with invalid data")
-	assert.Contains(t, err.Error(), "failed to parse")
+			err := db.StoreMetaLeaseSet(testHash, testData, 7)
+			assert.Error(t, err, "Should fail with invalid data")
+			assert.Contains(t, err.Error(), "failed to parse")
+		})
+	}
 }
 
 // TestLeaseSetTypeDifferentiation tests that different LeaseSet types are handled correctly

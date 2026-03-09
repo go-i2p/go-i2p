@@ -17,6 +17,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// garlicCryptoFixture holds pre-generated ECIES key pair and session managers
+// for garlic encryption/decryption tests.
+type garlicCryptoFixture struct {
+	senderSM     *GarlicSessionManager
+	receiverSM   *GarlicSessionManager
+	receiverPub  [32]byte
+	receiverPriv [32]byte
+	destHash     [32]byte
+}
+
+// newGarlicCryptoFixture generates a receiver ECIES key pair and creates
+// sender + receiver session managers ready for encrypt/decrypt testing.
+func newGarlicCryptoFixture(t *testing.T) *garlicCryptoFixture {
+	t.Helper()
+	pubBytes, privBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+
+	var f garlicCryptoFixture
+	copy(f.receiverPub[:], pubBytes)
+	copy(f.receiverPriv[:], privBytes)
+
+	f.senderSM, err = GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	f.receiverSM, err = NewGarlicSessionManager(f.receiverPriv)
+	require.NoError(t, err)
+	f.destHash = types.SHA256(f.receiverPub[:])
+	return &f
+}
+
 // ============================================================================
 // Audit: ECIES-X25519 Key Exchange Correctness
 // ============================================================================
@@ -24,23 +53,7 @@ import (
 // TestECIESKeyExchange_Correctness verifies that ECIES key exchange produces
 // consistent shared secrets for both sender and receiver.
 func TestECIESKeyExchange_Correctness(t *testing.T) {
-	// Generate receiver's static key pair
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err, "Failed to generate receiver key pair")
-
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-
-	// Create session manager (sender)
-	senderSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err, "Failed to generate sender session manager")
-
-	// Create receiver session manager
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	require.NoError(t, err, "Failed to create receiver session manager")
-
-	destHash := types.SHA256(receiverPubKey[:])
+	f := newGarlicCryptoFixture(t)
 
 	// Build test garlic message
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -50,11 +63,11 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	require.NoError(t, err)
 
 	// Encrypt
-	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
+	ciphertext, err := EncryptGarlicWithBuilder(f.senderSM, builder, f.destHash, f.receiverPub)
 	require.NoError(t, err, "Encryption should succeed")
 
 	// Decrypt
-	plaintext, _, _, err := receiverSM.DecryptGarlicMessage(ciphertext)
+	plaintext, _, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext)
 	require.NoError(t, err, "Decryption should succeed")
 
 	// Verify original plaintext can be recovered
@@ -101,21 +114,7 @@ func TestECIESKeyExchange_NonceUniqueness(t *testing.T) {
 
 // TestChaCha20Poly1305_AEADIntegrity verifies AEAD authentication detects tampering.
 func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
-	// Generate keys
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-
-	senderSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	require.NoError(t, err)
-
-	destHash := types.SHA256(receiverPubKey[:])
+	f := newGarlicCryptoFixture(t)
 
 	// Build and encrypt
 	builder, err := NewGarlicBuilderWithDefaults()
@@ -124,7 +123,7 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	err = builder.AddLocalDeliveryClove(dataMsg, 1)
 	require.NoError(t, err)
 
-	ciphertext, err := EncryptGarlicWithBuilder(senderSM, builder, destHash, receiverPubKey)
+	ciphertext, err := EncryptGarlicWithBuilder(f.senderSM, builder, f.destHash, f.receiverPub)
 	require.NoError(t, err)
 
 	// Tamper with ciphertext (flip a bit in the middle)
@@ -135,27 +134,13 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	}
 
 	// Attempt to decrypt tampered ciphertext
-	_, _, _, err = receiverSM.DecryptGarlicMessage(tamperedCiphertext)
+	_, _, _, err = f.receiverSM.DecryptGarlicMessage(tamperedCiphertext)
 	assert.Error(t, err, "Decryption of tampered ciphertext should fail")
 }
 
 // TestRatchetState_ForwardSecrecy verifies that session keys advance properly.
 func TestRatchetState_ForwardSecrecy(t *testing.T) {
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-
-	// Create persistent sender session manager
-	senderSM, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	require.NoError(t, err)
-
-	destHash := types.SHA256(receiverPubKey[:])
+	f := newGarlicCryptoFixture(t)
 
 	// Send first message (New Session)
 	builder1, err := NewGarlicBuilderWithDefaults()
@@ -164,11 +149,11 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	err = builder1.AddLocalDeliveryClove(dataMsg1, 1)
 	require.NoError(t, err)
 
-	ciphertext1, err := EncryptGarlicWithBuilder(senderSM, builder1, destHash, receiverPubKey)
+	ciphertext1, err := EncryptGarlicWithBuilder(f.senderSM, builder1, f.destHash, f.receiverPub)
 	require.NoError(t, err)
 
 	// Decrypt first message
-	plaintext1, tag1, _, err := receiverSM.DecryptGarlicMessage(ciphertext1)
+	plaintext1, tag1, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext1)
 	require.NoError(t, err)
 	assert.Equal(t, [8]byte{}, tag1, "First message should have empty session tag (New Session)")
 
@@ -177,7 +162,7 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	assert.Equal(t, original1, plaintext1)
 
 	// Second message should use existing session
-	assert.Equal(t, 1, senderSM.GetSessionCount(), "Sender should have 1 session")
+	assert.Equal(t, 1, f.senderSM.GetSessionCount(), "Sender should have 1 session")
 }
 
 // TestSessionTag_Uniqueness verifies session tags are unique and single-use.

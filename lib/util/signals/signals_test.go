@@ -85,60 +85,65 @@ func TestRegisterInterruptHandler(t *testing.T) {
 	}
 }
 
-// TestMultipleReloadHandlers verifies multiple reload handlers are all called.
-func TestMultipleReloadHandlers(t *testing.T) {
-	resetSignalHandlers(t, true, false)
+// TestMultipleHandlers verifies multiple reload/interrupt handlers are all called.
+func TestMultipleHandlers(t *testing.T) {
+	tests := []struct {
+		name           string
+		resetReload    bool
+		resetInterrupt bool
+		register       func(func())
+		countSlice     func() int
+		handle         func()
+		sliceLabel     string
+	}{
+		{
+			name:           "reload",
+			resetReload:    true,
+			resetInterrupt: false,
+			register:       func(f func()) { RegisterReloadHandler(f) },
+			countSlice:     func() int { return len(reloaders) },
+			handle:         handleReload,
+			sliceLabel:     "reloaders",
+		},
+		{
+			name:           "interrupt",
+			resetReload:    false,
+			resetInterrupt: true,
+			register:       func(f func()) { RegisterInterruptHandler(f) },
+			countSlice:     func() int { return len(interrupters) },
+			handle:         func() { handleInterrupted() },
+			sliceLabel:     "interrupters",
+		},
+	}
 
-	callCount := 0
-	var mu sync.Mutex
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetSignalHandlers(t, tt.resetReload, tt.resetInterrupt)
 
-	for i := 0; i < 5; i++ {
-		RegisterReloadHandler(func() {
+			callCount := 0
+			var mu sync.Mutex
+
+			for i := 0; i < 5; i++ {
+				tt.register(func() {
+					mu.Lock()
+					callCount++
+					mu.Unlock()
+				})
+			}
+
+			if tt.countSlice() != 5 {
+				t.Errorf("Expected 5 %s registered, got %d", tt.sliceLabel, tt.countSlice())
+			}
+
+			tt.handle()
+
 			mu.Lock()
-			callCount++
+			if callCount != 5 {
+				t.Errorf("Expected all 5 handlers to be called, got %d", callCount)
+			}
 			mu.Unlock()
 		})
 	}
-
-	if len(reloaders) != 5 {
-		t.Errorf("Expected 5 reloaders registered, got %d", len(reloaders))
-	}
-
-	handleReload()
-
-	mu.Lock()
-	if callCount != 5 {
-		t.Errorf("Expected all 5 handlers to be called, got %d", callCount)
-	}
-	mu.Unlock()
-}
-
-// TestMultipleInterruptHandlers verifies multiple interrupt handlers are all called.
-func TestMultipleInterruptHandlers(t *testing.T) {
-	resetSignalHandlers(t, false, true)
-
-	callCount := 0
-	var mu sync.Mutex
-
-	for i := 0; i < 5; i++ {
-		RegisterInterruptHandler(func() {
-			mu.Lock()
-			callCount++
-			mu.Unlock()
-		})
-	}
-
-	if len(interrupters) != 5 {
-		t.Errorf("Expected 5 interrupters registered, got %d", len(interrupters))
-	}
-
-	handleInterrupted()
-
-	mu.Lock()
-	if callCount != 5 {
-		t.Errorf("Expected all 5 handlers to be called, got %d", callCount)
-	}
-	mu.Unlock()
 }
 
 // TestHandlersCalledInOrder verifies handlers are called in registration order.
