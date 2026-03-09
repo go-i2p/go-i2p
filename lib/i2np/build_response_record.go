@@ -57,33 +57,51 @@ type BuildResponseRecord struct {
 	Reply      byte
 }
 
+// responseFieldParser pairs a field name with a closure that reads and assigns
+// a single BuildResponseRecord field from raw data.
+type responseFieldParser struct {
+	name  string
+	parse func([]byte, *BuildResponseRecord) error
+}
+
+// applyResponseParsers runs each parser in order, logging and returning
+// on the first error. Mirrors applyFieldParsers for BuildRequestRecord.
+func applyResponseParsers(data []byte, record *BuildResponseRecord, parsers []responseFieldParser) error {
+	for _, p := range parsers {
+		if err := p.parse(data, record); err != nil {
+			log.WithError(err).Error("Failed to read " + p.name)
+			return err
+		}
+	}
+	return nil
+}
+
 func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 	log.Debug("Reading BuildResponseRecord")
-	build_response_record := BuildResponseRecord{}
+	record := BuildResponseRecord{}
 
-	hash, err := readBuildResponseRecordHash(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read Hash")
-		return build_response_record, err
+	if err := applyResponseParsers(data, &record, []responseFieldParser{
+		{"Hash", func(d []byte, r *BuildResponseRecord) error {
+			v, err := readBuildResponseRecordHash(d)
+			r.Hash = v
+			return err
+		}},
+		{"Random Data", func(d []byte, r *BuildResponseRecord) error {
+			v, err := readBuildResponseRecordRandomData(d)
+			r.RandomData = v
+			return err
+		}},
+		{"Reply", func(d []byte, r *BuildResponseRecord) error {
+			v, err := readBuildResponseRecordReply(d)
+			r.Reply = v
+			return err
+		}},
+	}); err != nil {
+		return record, err
 	}
-	build_response_record.Hash = hash
-
-	random_data, err := readBuildResponseRecordRandomData(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read Random Data")
-		return build_response_record, err
-	}
-	build_response_record.RandomData = random_data
-
-	reply, err := readBuildResponseRecordReply(data)
-	if err != nil {
-		log.WithError(err).Error("Failed to read Reply")
-		return build_response_record, err
-	}
-	build_response_record.Reply = reply
 
 	log.Debug("BuildResponseRecord read successfully")
-	return build_response_record, nil
+	return record, nil
 }
 
 func readBuildResponseRecordHash(data []byte) (common.Hash, error) {

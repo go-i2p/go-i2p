@@ -77,111 +77,143 @@ func setDefaults() {
 	setCongestionDefaults(defaults)
 }
 
+// viperDefault pairs a configuration key with its default value.
+type viperDefault struct {
+	key string
+	val any
+}
+
+// applyViperDefaults sets multiple viper configuration defaults from a table
+// of key-value pairs, consolidating repeated viper.SetDefault calls.
+func applyViperDefaults(defaults []viperDefault) {
+	for _, d := range defaults {
+		viper.SetDefault(d.key, d.val)
+	}
+}
+
 // setRouterDefaults configures router-level viper defaults.
 func setRouterDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("base_dir", defaults.Router.BaseDir)
-	viper.SetDefault("working_dir", defaults.Router.WorkingDir)
-	viper.SetDefault("router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval)
-	viper.SetDefault("router.message_expiration_time", defaults.Router.MessageExpirationTime)
-	viper.SetDefault("router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions)
+	applyViperDefaults([]viperDefault{
+		{"base_dir", defaults.Router.BaseDir},
+		{"working_dir", defaults.Router.WorkingDir},
+		{"router.info_refresh_interval", defaults.Router.RouterInfoRefreshInterval},
+		{"router.message_expiration_time", defaults.Router.MessageExpirationTime},
+		{"router.max_concurrent_sessions", defaults.Router.MaxConcurrentSessions},
+	})
 }
 
 // setNetDBDefaults configures network database viper defaults.
 func setNetDBDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("netdb.path", defaults.NetDB.Path)
-	viper.SetDefault("netdb.max_router_infos", defaults.NetDB.MaxRouterInfos)
-	viper.SetDefault("netdb.max_lease_sets", defaults.NetDB.MaxLeaseSets)
-	viper.SetDefault("netdb.expiration_check_interval", defaults.NetDB.ExpirationCheckInterval)
-	viper.SetDefault("netdb.lease_set_refresh_threshold", defaults.NetDB.LeaseSetRefreshThreshold)
-	viper.SetDefault("netdb.exploration_interval", defaults.NetDB.ExplorationInterval)
-	viper.SetDefault("netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled)
+	applyViperDefaults([]viperDefault{
+		{"netdb.path", defaults.NetDB.Path},
+		{"netdb.max_router_infos", defaults.NetDB.MaxRouterInfos},
+		{"netdb.max_lease_sets", defaults.NetDB.MaxLeaseSets},
+		{"netdb.expiration_check_interval", defaults.NetDB.ExpirationCheckInterval},
+		{"netdb.lease_set_refresh_threshold", defaults.NetDB.LeaseSetRefreshThreshold},
+		{"netdb.exploration_interval", defaults.NetDB.ExplorationInterval},
+		{"netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled},
+	})
 }
 
 // setBootstrapDefaults configures bootstrap/reseed viper defaults.
 func setBootstrapDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold)
-	viper.SetDefault("bootstrap.bootstrap_type", defaults.Bootstrap.BootstrapType)
-	viper.SetDefault("bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout)
-	viper.SetDefault("bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers)
-	viper.SetDefault("bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval)
-	viper.SetDefault("bootstrap.min_reseed_servers", DefaultMinReseedServers)
-	viper.SetDefault("bootstrap.reseed_strategy", ReseedStrategyUnion)
-	viper.SetDefault("bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers)
+	applyViperDefaults([]viperDefault{
+		{"bootstrap.low_peer_threshold", defaults.Bootstrap.LowPeerThreshold},
+		{"bootstrap.bootstrap_type", defaults.Bootstrap.BootstrapType},
+		{"bootstrap.reseed_timeout", defaults.Bootstrap.ReseedTimeout},
+		{"bootstrap.minimum_reseed_peers", defaults.Bootstrap.MinimumReseedPeers},
+		{"bootstrap.reseed_retry_interval", defaults.Bootstrap.ReseedRetryInterval},
+		{"bootstrap.min_reseed_servers", DefaultMinReseedServers},
+		{"bootstrap.reseed_strategy", ReseedStrategyUnion},
+		{"bootstrap.reseed_servers", defaults.Bootstrap.ReseedServers},
+	})
 }
 
 // setI2CPDefaults configures I2CP protocol viper defaults.
 func setI2CPDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("i2cp.enabled", defaults.I2CP.Enabled)
-	viper.SetDefault("i2cp.address", defaults.I2CP.Address)
-	viper.SetDefault("i2cp.network", defaults.I2CP.Network)
-	viper.SetDefault("i2cp.max_sessions", defaults.I2CP.MaxSessions)
-	viper.SetDefault("i2cp.message_queue_size", defaults.I2CP.MessageQueueSize)
-	viper.SetDefault("i2cp.session_timeout", defaults.I2CP.SessionTimeout)
-	viper.SetDefault("i2cp.read_timeout", defaults.I2CP.ReadTimeout)
-	viper.SetDefault("i2cp.write_timeout", defaults.I2CP.WriteTimeout)
-	viper.SetDefault("i2cp.username", "")
-	viper.SetDefault("i2cp.password", "")
+	applyViperDefaults([]viperDefault{
+		{"i2cp.enabled", defaults.I2CP.Enabled},
+		{"i2cp.address", defaults.I2CP.Address},
+		{"i2cp.network", defaults.I2CP.Network},
+		{"i2cp.max_sessions", defaults.I2CP.MaxSessions},
+		{"i2cp.message_queue_size", defaults.I2CP.MessageQueueSize},
+		{"i2cp.session_timeout", defaults.I2CP.SessionTimeout},
+		{"i2cp.read_timeout", defaults.I2CP.ReadTimeout},
+		{"i2cp.write_timeout", defaults.I2CP.WriteTimeout},
+		{"i2cp.username", ""},
+		{"i2cp.password", ""},
+	})
 }
 
 // setI2PControlDefaults configures I2PControl RPC interface viper defaults.
 func setI2PControlDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("i2pcontrol.enabled", defaults.I2PControl.Enabled)
-	viper.SetDefault("i2pcontrol.address", defaults.I2PControl.Address)
-	viper.SetDefault("i2pcontrol.password", defaults.I2PControl.Password)
-	viper.SetDefault("i2pcontrol.use_https", defaults.I2PControl.UseHTTPS)
-	viper.SetDefault("i2pcontrol.cert_file", defaults.I2PControl.CertFile)
-	viper.SetDefault("i2pcontrol.key_file", defaults.I2PControl.KeyFile)
-	viper.SetDefault("i2pcontrol.token_expiration", defaults.I2PControl.TokenExpiration)
+	applyViperDefaults([]viperDefault{
+		{"i2pcontrol.enabled", defaults.I2PControl.Enabled},
+		{"i2pcontrol.address", defaults.I2PControl.Address},
+		{"i2pcontrol.password", defaults.I2PControl.Password},
+		{"i2pcontrol.use_https", defaults.I2PControl.UseHTTPS},
+		{"i2pcontrol.cert_file", defaults.I2PControl.CertFile},
+		{"i2pcontrol.key_file", defaults.I2PControl.KeyFile},
+		{"i2pcontrol.token_expiration", defaults.I2PControl.TokenExpiration},
+	})
 }
 
 // setTunnelDefaults configures tunnel management viper defaults.
 func setTunnelDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("tunnel.min_pool_size", defaults.Tunnel.MinPoolSize)
-	viper.SetDefault("tunnel.max_pool_size", defaults.Tunnel.MaxPoolSize)
-	viper.SetDefault("tunnel.length", defaults.Tunnel.TunnelLength)
-	viper.SetDefault("tunnel.lifetime", defaults.Tunnel.TunnelLifetime)
-	viper.SetDefault("tunnel.test_interval", defaults.Tunnel.TunnelTestInterval)
-	viper.SetDefault("tunnel.test_timeout", defaults.Tunnel.TunnelTestTimeout)
-	viper.SetDefault("tunnel.build_timeout", defaults.Tunnel.BuildTimeout)
-	viper.SetDefault("tunnel.build_retries", defaults.Tunnel.BuildRetries)
-	viper.SetDefault("tunnel.replace_before_expiration", defaults.Tunnel.ReplaceBeforeExpiration)
-	viper.SetDefault("tunnel.maintenance_interval", defaults.Tunnel.MaintenanceInterval)
+	applyViperDefaults([]viperDefault{
+		{"tunnel.min_pool_size", defaults.Tunnel.MinPoolSize},
+		{"tunnel.max_pool_size", defaults.Tunnel.MaxPoolSize},
+		{"tunnel.length", defaults.Tunnel.TunnelLength},
+		{"tunnel.lifetime", defaults.Tunnel.TunnelLifetime},
+		{"tunnel.test_interval", defaults.Tunnel.TunnelTestInterval},
+		{"tunnel.test_timeout", defaults.Tunnel.TunnelTestTimeout},
+		{"tunnel.build_timeout", defaults.Tunnel.BuildTimeout},
+		{"tunnel.build_retries", defaults.Tunnel.BuildRetries},
+		{"tunnel.replace_before_expiration", defaults.Tunnel.ReplaceBeforeExpiration},
+		{"tunnel.maintenance_interval", defaults.Tunnel.MaintenanceInterval},
+	})
 }
 
 // setTransportDefaults configures transport layer viper defaults.
 func setTransportDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("transport.ntcp2_enabled", defaults.Transport.NTCP2Enabled)
-	viper.SetDefault("transport.ntcp2_port", defaults.Transport.NTCP2Port)
-	viper.SetDefault("transport.ntcp2_max_connections", defaults.Transport.NTCP2MaxConnections)
-	viper.SetDefault("transport.ssu2_enabled", defaults.Transport.SSU2Enabled)
-	viper.SetDefault("transport.ssu2_port", defaults.Transport.SSU2Port)
-	viper.SetDefault("transport.connection_timeout", defaults.Transport.ConnectionTimeout)
-	viper.SetDefault("transport.idle_timeout", defaults.Transport.IdleTimeout)
-	viper.SetDefault("transport.max_message_size", defaults.Transport.MaxMessageSize)
+	applyViperDefaults([]viperDefault{
+		{"transport.ntcp2_enabled", defaults.Transport.NTCP2Enabled},
+		{"transport.ntcp2_port", defaults.Transport.NTCP2Port},
+		{"transport.ntcp2_max_connections", defaults.Transport.NTCP2MaxConnections},
+		{"transport.ssu2_enabled", defaults.Transport.SSU2Enabled},
+		{"transport.ssu2_port", defaults.Transport.SSU2Port},
+		{"transport.connection_timeout", defaults.Transport.ConnectionTimeout},
+		{"transport.idle_timeout", defaults.Transport.IdleTimeout},
+		{"transport.max_message_size", defaults.Transport.MaxMessageSize},
+	})
 }
 
 // setPerformanceDefaults configures performance tuning viper defaults.
 func setPerformanceDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("performance.message_queue_size", defaults.Performance.MessageQueueSize)
-	viper.SetDefault("performance.worker_pool_size", defaults.Performance.WorkerPoolSize)
-	viper.SetDefault("performance.garlic_encryption_cache_size", defaults.Performance.GarlicEncryptionCacheSize)
-	viper.SetDefault("performance.fragment_cache_size", defaults.Performance.FragmentCacheSize)
-	viper.SetDefault("performance.cleanup_interval", defaults.Performance.CleanupInterval)
+	applyViperDefaults([]viperDefault{
+		{"performance.message_queue_size", defaults.Performance.MessageQueueSize},
+		{"performance.worker_pool_size", defaults.Performance.WorkerPoolSize},
+		{"performance.garlic_encryption_cache_size", defaults.Performance.GarlicEncryptionCacheSize},
+		{"performance.fragment_cache_size", defaults.Performance.FragmentCacheSize},
+		{"performance.cleanup_interval", defaults.Performance.CleanupInterval},
+	})
 }
 
 // setCongestionDefaults configures congestion control viper defaults per Prop 162.
 func setCongestionDefaults(defaults ConfigDefaults) {
-	viper.SetDefault("router.congestion.d_flag_threshold", defaults.Congestion.DFlagThreshold)
-	viper.SetDefault("router.congestion.e_flag_threshold", defaults.Congestion.EFlagThreshold)
-	viper.SetDefault("router.congestion.g_flag_threshold", defaults.Congestion.GFlagThreshold)
-	viper.SetDefault("router.congestion.clear_d_flag_threshold", defaults.Congestion.ClearDFlagThreshold)
-	viper.SetDefault("router.congestion.clear_e_flag_threshold", defaults.Congestion.ClearEFlagThreshold)
-	viper.SetDefault("router.congestion.clear_g_flag_threshold", defaults.Congestion.ClearGFlagThreshold)
-	viper.SetDefault("router.congestion.averaging_window", defaults.Congestion.AveragingWindow)
-	viper.SetDefault("router.congestion.e_flag_age_threshold", defaults.Congestion.EFlagAgeThreshold)
-	viper.SetDefault("router.congestion.d_flag_capacity_multiplier", defaults.Congestion.DFlagCapacityMultiplier)
-	viper.SetDefault("router.congestion.e_flag_capacity_multiplier", defaults.Congestion.EFlagCapacityMultiplier)
-	viper.SetDefault("router.congestion.stale_e_flag_capacity_multiplier", defaults.Congestion.StaleEFlagCapacityMultiplier)
+	applyViperDefaults([]viperDefault{
+		{"router.congestion.d_flag_threshold", defaults.Congestion.DFlagThreshold},
+		{"router.congestion.e_flag_threshold", defaults.Congestion.EFlagThreshold},
+		{"router.congestion.g_flag_threshold", defaults.Congestion.GFlagThreshold},
+		{"router.congestion.clear_d_flag_threshold", defaults.Congestion.ClearDFlagThreshold},
+		{"router.congestion.clear_e_flag_threshold", defaults.Congestion.ClearEFlagThreshold},
+		{"router.congestion.clear_g_flag_threshold", defaults.Congestion.ClearGFlagThreshold},
+		{"router.congestion.averaging_window", defaults.Congestion.AveragingWindow},
+		{"router.congestion.e_flag_age_threshold", defaults.Congestion.EFlagAgeThreshold},
+		{"router.congestion.d_flag_capacity_multiplier", defaults.Congestion.DFlagCapacityMultiplier},
+		{"router.congestion.e_flag_capacity_multiplier", defaults.Congestion.EFlagCapacityMultiplier},
+		{"router.congestion.stale_e_flag_capacity_multiplier", defaults.Congestion.StaleEFlagCapacityMultiplier},
+	})
 }
 
 // NewRouterConfigFromViper creates a new RouterConfig from current viper settings.
