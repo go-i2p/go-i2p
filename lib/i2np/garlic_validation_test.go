@@ -17,6 +17,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- shared test helpers ---
+
+// generateDestKey generates a destination ECIES public key and its SHA256 hash.
+func generateDestKey(t testing.TB) (destPubKey, destHash [32]byte) {
+	t.Helper()
+	pubBytes, _, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	copy(destPubKey[:], pubBytes)
+	destHash = types.SHA256(destPubKey[:])
+	return
+}
+
+// newSenderWithDest creates a fresh GarlicSessionManager and a random destination key + hash.
+func newSenderWithDest(t testing.TB) (sm *GarlicSessionManager, destPubKey, destHash [32]byte) {
+	t.Helper()
+	sm, err := GenerateGarlicSessionManager()
+	require.NoError(t, err)
+	destPubKey, destHash = generateDestKey(t)
+	return
+}
+
+// buildAndEncryptGarlic creates a single-clove garlic message and encrypts it.
+func buildAndEncryptGarlic(t testing.TB, sm *GarlicSessionManager,
+	payload string, cloveID int, destHash, destPubKey [32]byte,
+) (ciphertext []byte, builder *GarlicBuilder) {
+	t.Helper()
+	builder, err := NewGarlicBuilderWithDefaults()
+	require.NoError(t, err)
+	dataMsg := NewDataMessage([]byte(payload))
+	err = builder.AddLocalDeliveryClove(dataMsg, cloveID)
+	require.NoError(t, err)
+	ciphertext, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
+	require.NoError(t, err)
+	return
+}
+
+// newReceiverSessionManager creates a GarlicSessionManager from a freshly generated private key.
+func newReceiverSessionManager(t testing.TB) (sm *GarlicSessionManager, privKey [32]byte) {
+	t.Helper()
+	_, privBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	copy(privKey[:], privBytes)
+	sm, err = NewGarlicSessionManager(privKey)
+	require.NoError(t, err)
+	return
+}
+
 // garlicCryptoFixture holds pre-generated ECIES key pair and session managers
 // for garlic encryption/decryption tests.
 type garlicCryptoFixture struct {
@@ -56,15 +103,7 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 	f := newGarlicCryptoFixture(t)
 
 	// Build test garlic message
-	builder, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg := NewDataMessage([]byte("crypto test payload"))
-	err = builder.AddLocalDeliveryClove(dataMsg, 1)
-	require.NoError(t, err)
-
-	// Encrypt
-	ciphertext, err := EncryptGarlicWithBuilder(f.senderSM, builder, f.destHash, f.receiverPub)
-	require.NoError(t, err, "Encryption should succeed")
+	ciphertext, builder := buildAndEncryptGarlic(t, f.senderSM, "crypto test payload", 1, f.destHash, f.receiverPub)
 
 	// Decrypt
 	plaintext, _, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext)
@@ -79,27 +118,15 @@ func TestECIESKeyExchange_Correctness(t *testing.T) {
 // TestECIESKeyExchange_NonceUniqueness verifies that each encryption produces
 // unique nonces (even with the same key pair and message).
 func TestECIESKeyExchange_NonceUniqueness(t *testing.T) {
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
+	destPubKey, destHash := generateDestKey(t)
 
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
-
-	// Generate two ciphertexts for the same plaintext
+	// Generate ten ciphertexts for the same plaintext
 	ciphertexts := make([][]byte, 10)
 	for i := 0; i < 10; i++ {
 		sm, err := GenerateGarlicSessionManager()
 		require.NoError(t, err)
 
-		builder, err := NewGarlicBuilderWithDefaults()
-		require.NoError(t, err)
-		dataMsg := NewDataMessage([]byte("test payload"))
-		err = builder.AddLocalDeliveryClove(dataMsg, 1)
-		require.NoError(t, err)
-
-		ciphertext, err := EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
-		require.NoError(t, err)
+		ciphertext, _ := buildAndEncryptGarlic(t, sm, "test payload", 1, destHash, destPubKey)
 		ciphertexts[i] = ciphertext
 	}
 
@@ -117,14 +144,7 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	f := newGarlicCryptoFixture(t)
 
 	// Build and encrypt
-	builder, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg := NewDataMessage([]byte("secure payload"))
-	err = builder.AddLocalDeliveryClove(dataMsg, 1)
-	require.NoError(t, err)
-
-	ciphertext, err := EncryptGarlicWithBuilder(f.senderSM, builder, f.destHash, f.receiverPub)
-	require.NoError(t, err)
+	ciphertext, _ := buildAndEncryptGarlic(t, f.senderSM, "secure payload", 1, f.destHash, f.receiverPub)
 
 	// Tamper with ciphertext (flip a bit in the middle)
 	tamperedCiphertext := make([]byte, len(ciphertext))
@@ -134,7 +154,7 @@ func TestChaCha20Poly1305_AEADIntegrity(t *testing.T) {
 	}
 
 	// Attempt to decrypt tampered ciphertext
-	_, _, _, err = f.receiverSM.DecryptGarlicMessage(tamperedCiphertext)
+	_, _, _, err := f.receiverSM.DecryptGarlicMessage(tamperedCiphertext)
 	assert.Error(t, err, "Decryption of tampered ciphertext should fail")
 }
 
@@ -143,14 +163,7 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 	f := newGarlicCryptoFixture(t)
 
 	// Send first message (New Session)
-	builder1, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg1 := NewDataMessage([]byte("message 1"))
-	err = builder1.AddLocalDeliveryClove(dataMsg1, 1)
-	require.NoError(t, err)
-
-	ciphertext1, err := EncryptGarlicWithBuilder(f.senderSM, builder1, f.destHash, f.receiverPub)
-	require.NoError(t, err)
+	ciphertext1, builder1 := buildAndEncryptGarlic(t, f.senderSM, "message 1", 1, f.destHash, f.receiverPub)
 
 	// Decrypt first message
 	plaintext1, tag1, _, err := f.receiverSM.DecryptGarlicMessage(ciphertext1)
@@ -167,25 +180,10 @@ func TestRatchetState_ForwardSecrecy(t *testing.T) {
 
 // TestSessionTag_Uniqueness verifies session tags are unique and single-use.
 func TestSessionTag_Uniqueness(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
+	sm, destPubKey, destHash := newSenderWithDest(t)
 
 	// Create a session by encrypting first message
-	builder, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg := NewDataMessage([]byte("init"))
-	err = builder.AddLocalDeliveryClove(dataMsg, 1)
-	require.NoError(t, err)
-
-	_, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
-	require.NoError(t, err)
+	_, _ = buildAndEncryptGarlic(t, sm, "init", 1, destHash, destPubKey)
 
 	// Verify session was created
 	assert.Equal(t, 1, sm.GetSessionCount())
@@ -225,15 +223,7 @@ func TestGarlicSessionManager_ConcurrentAccess(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			for j := 0; j < numOpsPerGoroutine; j++ {
-				destPubBytes, _, err := ecies.GenerateKeyPair()
-				if err != nil {
-					t.Errorf("Goroutine %d, op %d: key generation failed: %v", idx, j, err)
-					continue
-				}
-
-				var destPubKey [32]byte
-				copy(destPubKey[:], destPubBytes)
-				destHash := types.SHA256(destPubKey[:])
+				destPubKey, destHash := generateDestKey(t)
 
 				builder, err := NewGarlicBuilderWithDefaults()
 				if err != nil {
@@ -263,24 +253,9 @@ func TestGarlicSessionManager_ConcurrentAccess(t *testing.T) {
 
 // TestNewSessionMessageFormat_Security verifies correct message format.
 func TestNewSessionMessageFormat_Security(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
+	sm, destPubKey, destHash := newSenderWithDest(t)
 
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
-
-	builder, err := NewGarlicBuilderWithDefaults()
-	require.NoError(t, err)
-	dataMsg := NewDataMessage([]byte("format test"))
-	err = builder.AddLocalDeliveryClove(dataMsg, 1)
-	require.NoError(t, err)
-
-	ciphertext, err := EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
-	require.NoError(t, err)
+	ciphertext, _ := buildAndEncryptGarlic(t, sm, "format test", 1, destHash, destPubKey)
 
 	// New Session format: [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 	// Minimum size: 32 + 12 + 1 + 16 = 61 bytes
@@ -300,14 +275,7 @@ func TestNewSessionMessageFormat_Security(t *testing.T) {
 
 // TestGarlicMessageBoundsChecking verifies input validation.
 func TestGarlicMessageBoundsChecking(t *testing.T) {
-	_, privBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var privKey [32]byte
-	copy(privKey[:], privBytes)
-
-	sm, err := NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	sm, _ := newReceiverSessionManager(t)
 
 	testCases := []struct {
 		name        string
@@ -332,18 +300,11 @@ func TestGarlicMessageBoundsChecking(t *testing.T) {
 
 // TestErrorMessages_NoSensitiveDataLeak verifies error messages don't leak keys.
 func TestErrorMessages_NoSensitiveDataLeak(t *testing.T) {
-	_, privBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var privKey [32]byte
-	copy(privKey[:], privBytes)
-
-	sm, err := NewGarlicSessionManager(privKey)
-	require.NoError(t, err)
+	sm, privKey := newReceiverSessionManager(t)
 
 	// Try to decrypt invalid data
 	invalidData := make([]byte, 100)
-	_, err = rand.Read(invalidData)
+	_, err := rand.Read(invalidData)
 	require.NoError(t, err)
 
 	_, _, _, decryptErr := sm.DecryptGarlicMessage(invalidData)

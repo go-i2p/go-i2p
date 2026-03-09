@@ -83,26 +83,40 @@ func testCongestionDefaults() config.CongestionDefaults {
 	}
 }
 
-// TestNewCongestionAwarePeerSelector_NilUnderlying tests nil underlying selector rejection.
-func TestNewCongestionAwarePeerSelector_NilUnderlying(t *testing.T) {
+// newTestSelector creates a CongestionAwarePeerSelector with default config and provided peers.
+func newTestSelector(t *testing.T, peers []router_info.RouterInfo, dbErr error) (*DefaultCongestionAwarePeerSelector, *mockCongestionInfoProvider) {
+	t.Helper()
+	db := &mockNetDBSelectorWithHashes{peers: peers, err: dbErr}
+	provider := newMockCongestionInfoProvider()
+	cfg := testCongestionDefaults()
+	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
+	require.NoError(t, err)
+	return selector, provider
+}
+
+// TestNewCongestionAwarePeerSelector_NilArgs tests nil argument rejection.
+func TestNewCongestionAwarePeerSelector_NilArgs(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
 	provider := newMockCongestionInfoProvider()
 	cfg := testCongestionDefaults()
 
-	selector, err := NewCongestionAwarePeerSelector(nil, provider, cfg)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "underlying peer selector cannot be nil")
-}
-
-// TestNewCongestionAwarePeerSelector_NilCongestionInfo tests nil congestion info rejection.
-func TestNewCongestionAwarePeerSelector_NilCongestionInfo(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, nil, cfg)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "congestion info provider cannot be nil")
+	tests := []struct {
+		name   string
+		db     PeerSelector
+		prov   CongestionInfoProvider
+		errMsg string
+	}{
+		{"NilUnderlying", nil, provider, "underlying peer selector cannot be nil"},
+		{"NilCongestionInfo", db, nil, "congestion info provider cannot be nil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := NewCongestionAwarePeerSelector(tt.db, tt.prov, cfg)
+			assert.Nil(t, selector)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
 }
 
 // TestNewCongestionAwarePeerSelector_Success tests successful creation.
@@ -132,12 +146,7 @@ func TestNewCongestionAwarePeerSelector_WithOptions(t *testing.T) {
 
 // TestSelectPeersWithCongestionAwareness_InvalidCount tests invalid count rejection.
 func TestSelectPeersWithCongestionAwareness_InvalidCount(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, nil, nil)
 
 	peers, err := selector.SelectPeersWithCongestionAwareness(0, nil)
 	assert.Error(t, err)
@@ -150,7 +159,6 @@ func TestSelectPeersWithCongestionAwareness_UnderlyingError(t *testing.T) {
 	db := &mockNetDBSelectorWithHashes{err: errors.New("db failure")}
 	provider := newMockCongestionInfoProvider()
 	cfg := testCongestionDefaults()
-
 	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
 	require.NoError(t, err)
 
@@ -162,14 +170,8 @@ func TestSelectPeersWithCongestionAwareness_UnderlyingError(t *testing.T) {
 
 // TestSelectPeersWithCongestionAwareness_NoGFlag tests selection with no congestion.
 func TestSelectPeersWithCongestionAwareness_NoGFlag(t *testing.T) {
-	// Create real RouterInfo instances (empty but valid)
 	peers := []router_info.RouterInfo{{}, {}, {}}
-	db := &mockNetDBSelectorWithHashes{peers: peers}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, peers, nil)
 
 	selected, err := selector.SelectPeersWithCongestionAwareness(2, nil)
 	assert.NoError(t, err)
@@ -181,12 +183,7 @@ func TestSelectPeersWithCongestionAwareness_NoGFlag(t *testing.T) {
 
 // TestShouldExcludePeer_GFlag tests G flag exclusion.
 func TestShouldExcludePeer_GFlag(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, provider := newTestSelector(t, nil, nil)
 
 	// Create a hash and set G flag
 	hash := common.Hash{}
@@ -203,12 +200,7 @@ func TestShouldExcludePeer_GFlag(t *testing.T) {
 
 // TestGetCapacityMultiplier_AllFlags tests capacity multipliers for all flags.
 func TestGetCapacityMultiplier_AllFlags(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, provider := newTestSelector(t, nil, nil)
 
 	testCases := []struct {
 		name     string
@@ -239,12 +231,7 @@ func TestGetCapacityMultiplier_AllFlags(t *testing.T) {
 // TestSelectionMetrics_Tracking tests that metrics are tracked correctly.
 func TestSelectionMetrics_Tracking(t *testing.T) {
 	peers := []router_info.RouterInfo{{}, {}, {}}
-	db := &mockNetDBSelectorWithHashes{peers: peers}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, peers, nil)
 
 	// Initial metrics should be zero
 	metrics := selector.GetSelectionMetrics()
@@ -288,12 +275,7 @@ func TestHashSetToSlice(t *testing.T) {
 
 // TestCongestionAwarePeerSelector_Interface verifies interface compliance.
 func TestCongestionAwarePeerSelector_Interface(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, nil, nil)
 
 	// Verify the selector implements the interface
 	var _ CongestionAwarePeerSelector = selector
@@ -301,12 +283,7 @@ func TestCongestionAwarePeerSelector_Interface(t *testing.T) {
 
 // TestSelectPeersWithCongestionAwareness_EmptyDB tests selection with empty database.
 func TestSelectPeersWithCongestionAwareness_EmptyDB(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{peers: nil}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, nil, nil)
 
 	selected, err := selector.SelectPeersWithCongestionAwareness(3, nil)
 	assert.NoError(t, err)
@@ -320,12 +297,7 @@ func TestSelectPeersWithCongestionAwareness_EmptyDB(t *testing.T) {
 // TestSelectPeersWithCongestionAwareness_WithExclusions tests peer exclusion list.
 func TestSelectPeersWithCongestionAwareness_WithExclusions(t *testing.T) {
 	peers := []router_info.RouterInfo{{}, {}, {}}
-	db := &mockNetDBSelectorWithHashes{peers: peers}
-	provider := newMockCongestionInfoProvider()
-	cfg := testCongestionDefaults()
-
-	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
-	require.NoError(t, err)
+	selector, _ := newTestSelector(t, peers, nil)
 
 	// Create some exclusion hashes
 	exclude := []common.Hash{{}, {}}
@@ -364,7 +336,6 @@ func TestSelectionMetrics_FailureTracking(t *testing.T) {
 	db := &mockNetDBSelectorWithHashes{err: errors.New("db error")}
 	provider := newMockCongestionInfoProvider()
 	cfg := testCongestionDefaults()
-
 	selector, err := NewCongestionAwarePeerSelector(db, provider, cfg)
 	require.NoError(t, err)
 
@@ -433,40 +404,27 @@ func TestCongestionFilter_Name(t *testing.T) {
 	assert.Equal(t, "CongestionFilter", filter.Name())
 }
 
-func TestCongestionFilter_AcceptsNonCongested(t *testing.T) {
+func TestCongestionFilter_AcceptWithFlags(t *testing.T) {
 	provider := newMockCongestionInfoProvider()
 	filter := NewCongestionFilter(provider)
-
-	// Empty RI can't get hash, so returns true (don't exclude on error)
 	ri := router_info.RouterInfo{}
-	assert.True(t, filter.Accept(ri))
-}
 
-func TestCongestionFilter_AcceptsDFlag(t *testing.T) {
-	provider := newMockCongestionInfoProvider()
-	filter := NewCongestionFilter(provider)
-
-	hash := common.Hash{}
-	copy(hash[:], []byte("d_flag_peer_hash_123456"))
-	provider.SetFlag(hash, config.CongestionFlagD)
-
-	// D flag should be accepted (not excluded)
-	// Empty RI returns true due to IdentHash error
-	ri := router_info.RouterInfo{}
-	assert.True(t, filter.Accept(ri))
-}
-
-func TestCongestionFilter_AcceptsEFlag(t *testing.T) {
-	provider := newMockCongestionInfoProvider()
-	filter := NewCongestionFilter(provider)
-
-	hash := common.Hash{}
-	copy(hash[:], []byte("e_flag_peer_hash_123456"))
-	provider.SetFlag(hash, config.CongestionFlagE)
-
-	// E flag should be accepted (not excluded)
-	ri := router_info.RouterInfo{}
-	assert.True(t, filter.Accept(ri))
+	for _, tc := range []struct {
+		name string
+		flag config.CongestionFlag
+	}{
+		{"NonCongested", config.CongestionFlagNone},
+		{"DFlag", config.CongestionFlagD},
+		{"EFlag", config.CongestionFlagE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hash := common.Hash{}
+			copy(hash[:], []byte(tc.name+"_flag_peer_hash_1234"))
+			provider.SetFlag(hash, tc.flag)
+			// Empty RI can't get hash, returns true (don't exclude on error)
+			assert.True(t, filter.Accept(ri))
+		})
+	}
 }
 
 // =============================================================================
@@ -508,20 +466,27 @@ func TestCongestionScorer_ConfigurableMultipliers(t *testing.T) {
 // Convenience Constructor Tests
 // =============================================================================
 
-func TestNewCongestionAwareStack_NilDB(t *testing.T) {
-	provider := newMockCongestionInfoProvider()
-	selector, err := NewCongestionAwareStack(nil, provider)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "db selector cannot be nil")
-}
-
-func TestNewCongestionAwareStack_NilProvider(t *testing.T) {
+func TestNewCongestionAwareStack_NilArgs(t *testing.T) {
 	db := &mockNetDBSelectorWithHashes{}
-	selector, err := NewCongestionAwareStack(db, nil)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "congestion info provider cannot be nil")
+	provider := newMockCongestionInfoProvider()
+
+	tests := []struct {
+		name string
+		db   PeerSelector
+		prov CongestionInfoProvider
+		msg  string
+	}{
+		{"NilDB", nil, provider, "db selector cannot be nil"},
+		{"NilProvider", db, nil, "congestion info provider cannot be nil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := NewCongestionAwareStack(tt.db, tt.prov)
+			assert.Nil(t, selector)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.msg)
+		})
+	}
 }
 
 func TestNewCongestionAwareStack_Success(t *testing.T) {
@@ -537,20 +502,26 @@ func TestNewCongestionAwareStack_Success(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestNewCongestionAwareScoringStack_NilDB(t *testing.T) {
+func TestNewCongestionAwareScoringStack_NilArgs(t *testing.T) {
+	db := &mockNetDBSelectorWithHashes{}
 	provider := newMockCongestionInfoProvider()
 	cfg := testCongestionDefaults()
-	selector, err := NewCongestionAwareScoringStack(nil, provider, cfg)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
-}
 
-func TestNewCongestionAwareScoringStack_NilProvider(t *testing.T) {
-	db := &mockNetDBSelectorWithHashes{}
-	cfg := testCongestionDefaults()
-	selector, err := NewCongestionAwareScoringStack(db, nil, cfg)
-	assert.Nil(t, selector)
-	assert.Error(t, err)
+	tests := []struct {
+		name string
+		db   PeerSelector
+		prov CongestionInfoProvider
+	}{
+		{"NilDB", nil, provider},
+		{"NilProvider", db, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := NewCongestionAwareScoringStack(tt.db, tt.prov, cfg)
+			assert.Nil(t, selector)
+			assert.Error(t, err)
+		})
+	}
 }
 
 func TestNewCongestionAwareScoringStack_Success(t *testing.T) {

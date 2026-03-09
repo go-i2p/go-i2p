@@ -269,17 +269,15 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 	}`)
 
 	// Check all bandwidth fields are present
-	if _, ok := resultMap["i2p.router.net.bw.inbound.1s"]; !ok {
-		t.Error("missing i2p.router.net.bw.inbound.1s")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
-		t.Error("missing i2p.router.net.bw.inbound.15s")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.outbound.1s"]; !ok {
-		t.Error("missing i2p.router.net.bw.outbound.1s")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; !ok {
-		t.Error("missing i2p.router.net.bw.outbound.15s")
+	for _, field := range []string{
+		"i2p.router.net.bw.inbound.1s",
+		"i2p.router.net.bw.inbound.15s",
+		"i2p.router.net.bw.outbound.1s",
+		"i2p.router.net.bw.outbound.15s",
+	} {
+		if _, ok := resultMap[field]; !ok {
+			t.Errorf("missing %s", field)
+		}
 	}
 
 	// Check that bandwidth values are from mock (1024 bytes/sec)
@@ -597,40 +595,18 @@ func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
 		"i2p.router.netdb.highcapacitypeers": null
 	}`)
 
-	// Verify all requested fields are present
-	if _, ok := resultMap["i2p.router.netdb.activepeers"]; !ok {
-		t.Error("missing field: i2p.router.netdb.activepeers")
-	}
-	if _, ok := resultMap["i2p.router.netdb.fastpeers"]; !ok {
-		t.Error("missing field: i2p.router.netdb.fastpeers")
-	}
-	if _, ok := resultMap["i2p.router.netdb.highcapacitypeers"]; !ok {
-		t.Error("missing field: i2p.router.netdb.highcapacitypeers")
-	}
-
-	// Verify fields are numeric (should be 0 for mock)
-	activePeers, ok := resultMap["i2p.router.netdb.activepeers"].(int)
-	if !ok {
-		t.Errorf("activepeers not int: %T", resultMap["i2p.router.netdb.activepeers"])
-	}
-	if activePeers < 0 {
-		t.Errorf("activepeers = %d, want >= 0", activePeers)
-	}
-
-	fastPeers, ok := resultMap["i2p.router.netdb.fastpeers"].(int)
-	if !ok {
-		t.Errorf("fastpeers not int: %T", resultMap["i2p.router.netdb.fastpeers"])
-	}
-	if fastPeers < 0 {
-		t.Errorf("fastpeers = %d, want >= 0", fastPeers)
-	}
-
-	highCapPeers, ok := resultMap["i2p.router.netdb.highcapacitypeers"].(int)
-	if !ok {
-		t.Errorf("highcapacitypeers not int: %T", resultMap["i2p.router.netdb.highcapacitypeers"])
-	}
-	if highCapPeers < 0 {
-		t.Errorf("highcapacitypeers = %d, want >= 0", highCapPeers)
+	// Verify all requested fields are present and non-negative integers
+	for _, field := range []string{
+		"i2p.router.netdb.activepeers",
+		"i2p.router.netdb.fastpeers",
+		"i2p.router.netdb.highcapacitypeers",
+	} {
+		val, ok := resultMap[field].(int)
+		if !ok {
+			t.Errorf("%s not int: %T", field, resultMap[field])
+		} else if val < 0 {
+			t.Errorf("%s = %d, want >= 0", field, val)
+		}
 	}
 }
 
@@ -830,56 +806,28 @@ func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
 	}
 }
 
-func TestI2PControlHandler_PortChangeNotImplemented(t *testing.T) {
-	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
-	params := json.RawMessage(`{"i2pcontrol.port": 7657}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for port change, got nil")
+func TestI2PControlHandler_NotImplementedOperations(t *testing.T) {
+	tests := []struct {
+		name   string
+		params string
+		code   int
+	}{
+		{"PortChange", `{"i2pcontrol.port": 7657}`, ErrCodeNotImpl},
+		{"AddressChange", `{"i2pcontrol.address": "127.0.0.1"}`, ErrCodeNotImpl},
+		{"NoSettings", `{}`, ErrCodeInvalidParams},
+		{"InvalidJSON", `{"invalid json`, ErrCodeInvalidParams},
 	}
-
-	requireRPCError(t, err, ErrCodeNotImpl)
-}
-
-func TestI2PControlHandler_AddressChangeNotImplemented(t *testing.T) {
-	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
-	params := json.RawMessage(`{"i2pcontrol.address": "127.0.0.1"}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for address change, got nil")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authMgr := &mockAuthManager{}
+			handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
+			_, err := handler.Handle(context.Background(), json.RawMessage(tt.params))
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", tt.name)
+			}
+			requireRPCError(t, err, tt.code)
+		})
 	}
-
-	requireRPCError(t, err, ErrCodeNotImpl)
-}
-
-func TestI2PControlHandler_NoSettingsSpecified(t *testing.T) {
-	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
-	params := json.RawMessage(`{}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for no settings, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
-}
-
-func TestI2PControlHandler_InvalidJSON(t *testing.T) {
-	authMgr := &mockAuthManager{}
-	handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
-	params := json.RawMessage(`{"invalid json`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
 }
 
 func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {

@@ -6,16 +6,110 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/key_certificate"
+	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- shared test helpers ---
+
+// createTwoSessions creates two fresh sessions with IDs 1 and 2, registers cleanup.
+func createTwoSessions(t *testing.T) (s1, s2 *Session) {
+	t.Helper()
+	var err error
+	s1, err = NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession(1) error: %v", err)
+	}
+	t.Cleanup(s1.Stop)
+	s2, err = NewSession(2, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession(2) error: %v", err)
+	}
+	t.Cleanup(s2.Stop)
+	return
+}
+
+// testIdentity holds keys extracted from a generated DestinationKeyStore.
+type testIdentity struct {
+	KS        *keys.DestinationKeyStore
+	Dest      *destination.Destination
+	DestBytes []byte
+	SigPriv   types.SigningPrivateKey
+	EncPriv   types.PrivateEncryptionKey
+	Padding   []byte
+}
+
+// generateTestIdentity generates a fresh identity and extracts all keys.
+func generateTestIdentity(t *testing.T) testIdentity {
+	t.Helper()
+	ks, err := keys.NewDestinationKeyStore()
+	require.NoError(t, err)
+	dest := ks.Destination()
+	destBytes, err := dest.Bytes()
+	require.NoError(t, err)
+	return testIdentity{
+		KS:        ks,
+		Dest:      dest,
+		DestBytes: destBytes,
+		SigPriv:   ks.SigningPrivateKey(),
+		EncPriv:   ks.EncryptionPrivateKey(),
+		Padding:   ks.IdentityPadding(),
+	}
+}
+
+// newSessionWithPublisher creates a session with an inbound pool and optionally a publisher.
+func newSessionWithPublisher(t *testing.T, publishErr error) (*Session, *mockLeaseSetPublisher) {
+	t.Helper()
+	session, err := NewSession(1, nil, nil)
+	require.NoError(t, err, "Failed to create session")
+	t.Cleanup(session.Stop)
+	setupSessionInboundPool(t, session)
+	publisher := newMockLeaseSetPublisher()
+	if publishErr != nil {
+		publisher.publishErr = publishErr
+	}
+	session.SetLeaseSetPublisher(publisher)
+	return session, publisher
+}
+
+// assertQueueRejectsAfterStop creates a session, stops it, and verifies queueing fails.
+func assertQueueRejectsAfterStop(t *testing.T) {
+	t.Helper()
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	session.Stop()
+	err = session.QueueIncomingMessage([]byte("test"))
+	if err == nil {
+		t.Error("Expected error when queuing to stopped session, got nil")
+	}
+}
+
+// assertReceiveNilAfterStop creates a session, stops it, and verifies ReceiveMessage returns nil.
+func assertReceiveNilAfterStop(t *testing.T) {
+	t.Helper()
+	session, err := NewSession(1, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSession error: %v", err)
+	}
+	session.Stop()
+	msg, err := session.ReceiveMessage()
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if msg != nil {
+		t.Error("Expected nil message after stop")
+	}
+}
 
 func TestDefaultSessionConfig(t *testing.T) {
 	config := DefaultSessionConfig()
@@ -776,26 +870,17 @@ func TestPrepareDestinationAndKeys_WithPrivateKeys_PreservesIdentity(t *testing.
 // created with client-provided private keys has the same destination identity
 // as the original keystore.
 func TestNewSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
-	// Generate an original identity
-	originalKS, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	originalDest := originalKS.Destination()
-	originalDestBytes, err := originalDest.Bytes()
-	require.NoError(t, err)
-	sigPriv := originalKS.SigningPrivateKey()
-	encPriv := originalKS.EncryptionPrivateKey()
-	padding := originalKS.IdentityPadding()
+	id := generateTestIdentity(t)
 
 	// Create session with the original private keys + padding
-	session, err := NewSession(1, originalDest, nil, sigPriv, encPriv, padding)
+	session, err := NewSession(1, id.Dest, nil, id.SigPriv, id.EncPriv, id.Padding)
 	require.NoError(t, err)
 	defer session.Stop()
 
 	// Session destination should match the original
 	sessionDestBytes, err := session.Destination().Bytes()
 	require.NoError(t, err)
-	assert.True(t, bytes.Equal(originalDestBytes, sessionDestBytes),
+	assert.True(t, bytes.Equal(id.DestBytes, sessionDestBytes),
 		"session destination should match original when private keys are provided")
 
 	// Session keys should produce the same signing and encryption behavior
@@ -808,27 +893,17 @@ func TestNewSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 // SessionManager.CreateSession method correctly passes through private keys.
 func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 	sm := NewSessionManager()
-
-	// Generate an original identity
-	originalKS, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	originalDest := originalKS.Destination()
-	originalDestBytes, err := originalDest.Bytes()
-	require.NoError(t, err)
-	sigPriv := originalKS.SigningPrivateKey()
-	encPriv := originalKS.EncryptionPrivateKey()
-	padding := originalKS.IdentityPadding()
+	id := generateTestIdentity(t)
 
 	// Create session via manager with private keys + padding
-	session, err := sm.CreateSession(originalDest, nil, sigPriv, encPriv, padding)
+	session, err := sm.CreateSession(id.Dest, nil, id.SigPriv, id.EncPriv, id.Padding)
 	require.NoError(t, err)
 	defer sm.DestroySession(session.ID())
 
 	// Session destination should match the original
 	sessionDestBytes, err := session.Destination().Bytes()
 	require.NoError(t, err)
-	assert.True(t, bytes.Equal(originalDestBytes, sessionDestBytes),
+	assert.True(t, bytes.Equal(id.DestBytes, sessionDestBytes),
 		"session destination should match original when private keys are provided via SessionManager")
 }
 
@@ -836,16 +911,10 @@ func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 // when no private keys are provided, a fresh identity is always generated
 // (backward compatibility with the previous behavior).
 func TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity(t *testing.T) {
-	// Generate a destination but DON'T provide its private keys
-	originalKS, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	originalDest := originalKS.Destination()
-	originalDestBytes, err := originalDest.Bytes()
-	require.NoError(t, err)
+	id := generateTestIdentity(t)
 
 	// Create session without private keys
-	session, err := NewSession(1, originalDest, nil)
+	session, err := NewSession(1, id.Dest, nil)
 	require.NoError(t, err)
 	defer session.Stop()
 
@@ -853,7 +922,7 @@ func TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity(t *testing.T) {
 	// (fresh keys generated, different identity)
 	sessionDestBytes, err := session.Destination().Bytes()
 	require.NoError(t, err)
-	assert.False(t, bytes.Equal(originalDestBytes, sessionDestBytes),
+	assert.False(t, bytes.Equal(id.DestBytes, sessionDestBytes),
 		"session destination should differ when no private keys are provided")
 
 	// But session should still have valid keys
@@ -900,18 +969,12 @@ func TestPrepareDestinationAndKeys_WithPartialKeys_GeneratesFresh(t *testing.T) 
 // TestPrepareDestinationAndKeys_IdentityStableAcrossReconstructions verifies
 // that the same private keys always produce the same destination identity.
 func TestPrepareDestinationAndKeys_IdentityStableAcrossReconstructions(t *testing.T) {
-	// Generate an original identity
-	originalKS, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	sigPriv := originalKS.SigningPrivateKey()
-	encPriv := originalKS.EncryptionPrivateKey()
-	padding := originalKS.IdentityPadding()
+	id := generateTestIdentity(t)
 
 	// Reconstruct multiple times with the same keys + padding
 	var destinations [][]byte
 	for i := 0; i < 3; i++ {
-		ks, dest, err := prepareDestinationAndKeys(nil, sigPriv, encPriv, padding)
+		ks, dest, err := prepareDestinationAndKeys(nil, id.SigPriv, id.EncPriv, id.Padding)
 		require.NoError(t, err)
 		require.NotNil(t, ks)
 		db, err := dest.Bytes()
@@ -1474,11 +1537,11 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 	// Calculate expected hashes
 	origBytes, err := session.destination.Bytes()
 	require.NoError(t, err)
-	origHash := data.HashData(origBytes)
+	origHash := common.HashData(origBytes)
 
 	blindedBytes, err := session.blindedDestination.Bytes()
 	require.NoError(t, err)
-	blindedHash := data.HashData(blindedBytes)
+	blindedHash := common.HashData(blindedBytes)
 
 	// Hashes should be different (blinded vs original)
 	assert.NotEqual(t, origHash, blindedHash)
@@ -1499,7 +1562,7 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 
 	// Test with EncryptedLeaseSet disabled
 	session.config.UseEncryptedLeaseSet = false
-	mockPublisher.published = make(map[data.Hash][]byte)
+	mockPublisher.published = make(map[common.Hash][]byte)
 
 	err = session.publishLeaseSetToNetwork(leaseSetBytes)
 	assert.NoError(t, err)
@@ -1676,39 +1739,12 @@ func TestSessionQueueIncomingMessage(t *testing.T) {
 
 // TestSessionQueueIncomingMessageAfterStop tests queuing after session stop
 func TestSessionQueueIncomingMessageAfterStop(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	// Stop session
-	session.Stop()
-
-	// Try to queue message
-	err = session.QueueIncomingMessage([]byte("test"))
-	if err == nil {
-		t.Error("Expected error when queuing to stopped session, got nil")
-	}
+	assertQueueRejectsAfterStop(t)
 }
 
 // TestSessionReceiveMessageAfterStop tests receiving after session stop
 func TestSessionReceiveMessageAfterStop(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	// Stop session
-	session.Stop()
-
-	// Try to receive message (should return nil without error)
-	msg, err := session.ReceiveMessage()
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-	if msg != nil {
-		t.Error("Expected nil message after stop")
-	}
+	assertReceiveNilAfterStop(t)
 }
 
 // TestSessionIncomingQueueFull tests queue overflow handling
@@ -1748,15 +1784,7 @@ func TestSessionSetLeaseSetPublisher(t *testing.T) {
 
 // TestSessionPublishLeaseSetWithPublisher tests LeaseSet publication via publisher
 func TestSessionPublishLeaseSetWithPublisher(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	require.NoError(t, err, "Failed to create session")
-	defer session.Stop()
-
-	publisher := newMockLeaseSetPublisher()
-	session.SetLeaseSetPublisher(publisher)
-
-	// Setup tunnel pool with active tunnel
-	setupSessionInboundPool(t, session)
+	session, publisher := newSessionWithPublisher(t, nil)
 
 	// Create LeaseSet (this should trigger publishing)
 	leaseSetBytes, err := session.CreateLeaseSet()
@@ -1803,20 +1831,11 @@ func TestSessionPublishLeaseSetWithoutPublisher(t *testing.T) {
 
 // TestSessionPublishLeaseSetPublisherError tests handling of publisher errors
 func TestSessionPublishLeaseSetPublisherError(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	require.NoError(t, err, "Failed to create session")
-	defer session.Stop()
-
-	publisher := newMockLeaseSetPublisher()
-	publisher.publishErr = assert.AnError // Make publisher return error
-	session.SetLeaseSetPublisher(publisher)
-
-	// Setup tunnel pool
-	setupSessionInboundPool(t, session)
+	session, publisher := newSessionWithPublisher(t, assert.AnError)
 
 	// Regeneration should still succeed even if publisher fails
 	// (publisher errors are logged but not returned)
-	err = session.regenerateAndPublishLeaseSet()
+	err := session.regenerateAndPublishLeaseSet()
 	assert.NoError(t, err, "Should not fail even if publisher errors")
 
 	// Verify publisher was called
@@ -1966,17 +1985,7 @@ func TestSessionLimits_RandomSessionIDGeneration(t *testing.T) {
 
 // TestSessionIsolation_SeparateNetDBPerSession verifies each session has isolated NetDB.
 func TestSessionIsolation_SeparateNetDBPerSession(t *testing.T) {
-	session1, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(1) error: %v", err)
-	}
-	defer session1.Stop()
-
-	session2, err := NewSession(2, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(2) error: %v", err)
-	}
-	defer session2.Stop()
+	session1, session2 := createTwoSessions(t)
 
 	// Each session should have its own ClientNetDB
 	netdb1 := session1.ClientNetDB()
@@ -1997,17 +2006,7 @@ func TestSessionIsolation_SeparateNetDBPerSession(t *testing.T) {
 
 // TestSessionIsolation_SeparateDestinations verifies each session has unique destination.
 func TestSessionIsolation_SeparateDestinations(t *testing.T) {
-	session1, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(1) error: %v", err)
-	}
-	defer session1.Stop()
-
-	session2, err := NewSession(2, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(2) error: %v", err)
-	}
-	defer session2.Stop()
+	session1, session2 := createTwoSessions(t)
 
 	dest1 := session1.Destination()
 	dest2 := session2.Destination()
@@ -2034,17 +2033,7 @@ func TestSessionIsolation_SeparateDestinations(t *testing.T) {
 
 // TestSessionIsolation_MessageQueueSeparation verifies message queues are separate.
 func TestSessionIsolation_MessageQueueSeparation(t *testing.T) {
-	session1, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(1) error: %v", err)
-	}
-	defer session1.Stop()
-
-	session2, err := NewSession(2, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession(2) error: %v", err)
-	}
-	defer session2.Stop()
+	session1, session2 := createTwoSessions(t)
 
 	// Queue message to session 1
 	msg1 := []byte("message for session 1")
@@ -2106,18 +2095,7 @@ func TestDisconnectHandling_MultipleStopSafe(t *testing.T) {
 
 // TestDisconnectHandling_QueueRejectedAfterStop verifies queue operations fail after stop.
 func TestDisconnectHandling_QueueRejectedAfterStop(t *testing.T) {
-	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSession() error: %v", err)
-	}
-
-	session.Stop()
-
-	// Queue should reject new messages
-	err = session.QueueIncomingMessage([]byte("test"))
-	if err == nil {
-		t.Error("Expected error queuing to stopped session")
-	}
+	assertQueueRejectsAfterStop(t)
 }
 
 // TestDisconnectHandling_ReceiveReturnsNilAfterStop verifies receive unblocks after stop.

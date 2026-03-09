@@ -1,7 +1,6 @@
 package netdb
 
 import (
-	"sync"
 	"testing"
 
 	common "github.com/go-i2p/common/data"
@@ -9,24 +8,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStoreMetaLeaseSetInvalidDataType tests validation of data type parameter
-func TestStoreMetaLeaseSetInvalidDataType(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03}
-
-	// Try to store with invalid data type (should be 7 for MetaLeaseSet)
-	err := db.StoreMetaLeaseSet(testHash, testData, 0)
-	assert.Error(t, err, "StoreMetaLeaseSet should fail with invalid data type")
-	assert.Contains(t, err.Error(), "invalid data type", "Error message should mention invalid data type")
-
-	// Try with another invalid data type
-	err = db.StoreMetaLeaseSet(testHash, testData, 5)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
+// metaLeaseSetConfig returns the shared test configuration for MetaLeaseSet.
+func metaLeaseSetConfig() leaseSetTestConfig {
+	return leaseSetTestConfig{
+		typeName:       "MetaLeaseSet",
+		validDataType:  7,
+		altInvalidType: 5,
+		parseErrMsg:    "failed to parse MetaLeaseSet",
+		store: func(db *StdNetDB, hash common.Hash, data []byte, dt byte) error {
+			return db.StoreMetaLeaseSet(hash, data, dt)
+		},
+		getChannel: func(db *StdNetDB, hash common.Hash) (bool, bool) {
+			chnl := db.GetMetaLeaseSet(hash)
+			if chnl == nil {
+				return false, false
+			}
+			_, ok := <-chnl
+			return true, ok
+		},
+		getBytes: func(db *StdNetDB, hash common.Hash) ([]byte, error) {
+			return db.GetMetaLeaseSetBytes(hash)
+		},
+		threadSafeOps: func(db *StdNetDB, hash common.Hash, data []byte) {
+			_ = db.StoreMetaLeaseSet(hash, data, 7)
+			chnl := db.GetMetaLeaseSet(hash)
+			if chnl != nil {
+				<-chnl
+			}
+			_, _ = db.GetMetaLeaseSetBytes(hash)
+		},
+		concurrentOps: func(db *StdNetDB, hash common.Hash, val byte) {
+			_ = db.StoreMetaLeaseSet(hash, []byte{val}, 7)
+			chnl := db.GetMetaLeaseSet(hash)
+			if chnl != nil {
+				<-chnl
+			}
+			_, _ = db.GetMetaLeaseSetBytes(hash)
+		},
+	}
 }
+
+// --- Shared tests delegated to helpers ---
+
+func TestStoreMetaLeaseSetInvalidDataType(t *testing.T) {
+	testStoreInvalidDataType(t, metaLeaseSetConfig())
+}
+func TestStoreMetaLeaseSetParseError(t *testing.T)  { testStoreParseError(t, metaLeaseSetConfig()) }
+func TestStoreMetaLeaseSetEmptyData(t *testing.T)   { testStoreEmptyData(t, metaLeaseSetConfig()) }
+func TestStoreMetaLeaseSetNilData(t *testing.T)     { testStoreNilData(t, metaLeaseSetConfig()) }
+func TestGetMetaLeaseSetNotFound(t *testing.T)      { testGetNotFound(t, metaLeaseSetConfig()) }
+func TestGetMetaLeaseSetBytesNotFound(t *testing.T) { testGetBytesNotFound(t, metaLeaseSetConfig()) }
+func TestMetaLeaseSetThreadSafety(t *testing.T)     { testLeaseSetThreadSafety(t, metaLeaseSetConfig()) }
+func TestMetaLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
+	testConcurrentStoreAndRetrieve(t, metaLeaseSetConfig())
+}
+
+// --- Tests unique to MetaLeaseSet ---
 
 // TestValidateMetaLeaseSetDataType tests the validation function
 func TestValidateMetaLeaseSetDataType(t *testing.T) {
@@ -53,153 +90,6 @@ func TestValidateMetaLeaseSetDataType(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestStoreMetaLeaseSetParseError tests handling of invalid MetaLeaseSet data
-func TestStoreMetaLeaseSetParseError(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
-
-	testHash := common.Hash{0x01, 0x02, 0x03}
-	testData := []byte{0x01, 0x02, 0x03} // Invalid MetaLeaseSet data
-
-	// Store should fail due to parse error
-	err := db.StoreMetaLeaseSet(testHash, testData, 7)
-	assert.Error(t, err, "StoreMetaLeaseSet should fail with invalid data")
-	assert.Contains(t, err.Error(), "failed to parse MetaLeaseSet")
-}
-
-// TestStoreMetaLeaseSetEmptyData tests handling of empty data
-func TestStoreMetaLeaseSetEmptyData(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-
-	testHash := common.Hash{}
-	emptyData := []byte{}
-
-	err := db.StoreMetaLeaseSet(testHash, emptyData, 7)
-	assert.Error(t, err, "StoreMetaLeaseSet should fail with empty data")
-	assert.Contains(t, err.Error(), "failed to parse MetaLeaseSet")
-}
-
-// TestStoreMetaLeaseSetNilData tests handling of nil data
-func TestStoreMetaLeaseSetNilData(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-
-	testHash := common.Hash{}
-
-	err := db.StoreMetaLeaseSet(testHash, nil, 7)
-	assert.Error(t, err, "StoreMetaLeaseSet should fail with nil data")
-}
-
-// TestGetMetaLeaseSetNotFound tests retrieval of non-existent MetaLeaseSet
-func TestGetMetaLeaseSetNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-
-	nonExistentHash := common.Hash{0xaa, 0xbb, 0xcc}
-
-	chnl := db.GetMetaLeaseSet(nonExistentHash)
-	assert.NotNil(t, chnl, "GetMetaLeaseSet should return a closed channel for non-existent MetaLeaseSet")
-	// The channel should be closed and immediately yield a zero value
-	_, ok := <-chnl
-	assert.False(t, ok, "Channel should be closed for non-existent MetaLeaseSet")
-}
-
-// TestGetMetaLeaseSetBytesNotFound tests byte retrieval of non-existent MetaLeaseSet
-func TestGetMetaLeaseSetBytesNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-
-	nonExistentHash := common.Hash{0x11, 0x22, 0x33}
-
-	_, err := db.GetMetaLeaseSetBytes(nonExistentHash)
-	assert.Error(t, err, "GetMetaLeaseSetBytes should fail for non-existent MetaLeaseSet")
-	assert.Contains(t, err.Error(), "not found", "Error message should indicate MetaLeaseSet not found")
-}
-
-// TestMetaLeaseSetThreadSafety tests concurrent access to MetaLeaseSet methods
-func TestMetaLeaseSetThreadSafety(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
-
-	const numGoroutines = 10
-	const numOperations = 20
-
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Run concurrent operations - expect failures with invalid data but test thread safety
-	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
-			defer wg.Done()
-
-			for j := 0; j < numOperations; j++ {
-				hash := common.Hash{}
-				hash[0] = byte(id)
-				hash[1] = byte(j)
-				testData := []byte{byte(id), byte(j)}
-
-				// Store (will fail but tests thread safety)
-				_ = db.StoreMetaLeaseSet(hash, testData, 7)
-
-				// Retrieve (will return nil but tests thread safety)
-				chnl := db.GetMetaLeaseSet(hash)
-				if chnl != nil {
-					<-chnl
-				}
-
-				// Get bytes (will fail but tests thread safety)
-				_, _ = db.GetMetaLeaseSetBytes(hash)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Test completed without deadlock or race conditions
-	t.Log("MetaLeaseSet thread safety test completed successfully")
-}
-
-// TestMetaLeaseSetConcurrentStoreAndRetrieve tests basic concurrent operations
-func TestMetaLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	hash1 := common.Hash{0x01}
-	hash2 := common.Hash{0x02}
-
-	// Goroutine 1: store and retrieve
-	go func() {
-		defer wg.Done()
-		_ = db.StoreMetaLeaseSet(hash1, []byte{0x01}, 7)
-		chnl := db.GetMetaLeaseSet(hash1)
-		if chnl != nil {
-			<-chnl
-		}
-		_, _ = db.GetMetaLeaseSetBytes(hash1)
-	}()
-
-	// Goroutine 2: store and retrieve different hash
-	go func() {
-		defer wg.Done()
-		_ = db.StoreMetaLeaseSet(hash2, []byte{0x02}, 7)
-		chnl := db.GetMetaLeaseSet(hash2)
-		if chnl != nil {
-			<-chnl
-		}
-		_, _ = db.GetMetaLeaseSetBytes(hash2)
-	}()
-
-	wg.Wait()
-	// Test passes if no deadlock occurs
 }
 
 // TestNetDBStoreMetaLeaseSetWrappers tests ClientNetDB and RouterNetDB wrapper methods
@@ -246,58 +136,38 @@ func TestLeaseSetTypeDifferentiation(t *testing.T) {
 	db := NewStdNetDB(tmpDir)
 	require.NoError(t, db.Create())
 
-	// Test that each type validates correctly
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	testData := []byte{0x01, 0x02, 0x03}
 
 	// StoreLeaseSet accepts all valid LeaseSet types (1, 3, 5, 7) and dispatches
-	// Type 1 dispatches to standard LeaseSet parsing
-	err := db.StoreLeaseSet(testHash, testData, 1)
-	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
-
-	// Type 3 dispatches to StoreLeaseSet2
-	err = db.StoreLeaseSet(testHash, testData, 3)
-	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
-
-	// Type 5 dispatches to StoreEncryptedLeaseSet
-	err = db.StoreLeaseSet(testHash, testData, 5)
-	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
-
-	// Type 7 dispatches to StoreMetaLeaseSet
-	err = db.StoreLeaseSet(testHash, testData, 7)
-	assert.Error(t, err) // Will fail due to invalid data, but type is accepted
+	for _, validType := range []byte{1, 3, 5, 7} {
+		err := db.StoreLeaseSet(testHash, testData, validType)
+		assert.Error(t, err) // Will fail due to invalid data, but type is accepted
+	}
 
 	// Invalid types should be rejected by StoreLeaseSet
-	err = db.StoreLeaseSet(testHash, testData, 0)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
+	for _, invalidType := range []byte{0, 2} {
+		err := db.StoreLeaseSet(testHash, testData, invalidType)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid data type")
+	}
 
-	err = db.StoreLeaseSet(testHash, testData, 2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
+	// Type-specific store methods enforce strict type matching
+	typeMethodPairs := []struct {
+		store     func(common.Hash, []byte, byte) error
+		validType byte
+		wrongType byte
+	}{
+		{db.StoreLeaseSet2, 3, 5},
+		{db.StoreEncryptedLeaseSet, 5, 7},
+		{db.StoreMetaLeaseSet, 7, 1},
+	}
+	for _, p := range typeMethodPairs {
+		err := p.store(testHash, testData, p.validType)
+		assert.Error(t, err) // parse error, but type is correct
 
-	// Type-specific store methods still enforce strict type matching
-	// Type 3 should only work with StoreLeaseSet2
-	err = db.StoreLeaseSet2(testHash, testData, 3)
-	assert.Error(t, err) // Will fail due to invalid data, but type is correct
-
-	err = db.StoreLeaseSet2(testHash, testData, 5)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
-
-	// Type 5 should only work with StoreEncryptedLeaseSet
-	err = db.StoreEncryptedLeaseSet(testHash, testData, 5)
-	assert.Error(t, err) // Will fail due to invalid data, but type is correct
-
-	err = db.StoreEncryptedLeaseSet(testHash, testData, 7)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
-
-	// Type 7 should only work with StoreMetaLeaseSet
-	err = db.StoreMetaLeaseSet(testHash, testData, 7)
-	assert.Error(t, err) // Will fail due to invalid data, but type is correct
-
-	err = db.StoreMetaLeaseSet(testHash, testData, 1)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid data type")
+		err = p.store(testHash, testData, p.wrongType)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid data type")
+	}
 }

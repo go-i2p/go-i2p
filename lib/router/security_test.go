@@ -22,6 +22,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- shared test helpers ---
+
+// newTestConfig returns a RouterConfig with common test defaults:
+// working dir = t.TempDir(), I2CP disabled, I2PControl disabled.
+func newTestConfig(t *testing.T) *config.RouterConfig {
+	t.Helper()
+	tempDir := t.TempDir()
+	cfg := config.DefaultRouterConfig()
+	cfg.WorkingDir = tempDir
+	cfg.I2CP.Enabled = false
+	cfg.I2PControl.Enabled = false
+	return cfg
+}
+
+// newTestRouter creates a Router via FromConfig + initializeRouterKeystore.
+func newTestRouter(t *testing.T, cfg *config.RouterConfig) *Router {
+	t.Helper()
+	router, err := FromConfig(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, router)
+	require.NoError(t, initializeRouterKeystore(router, cfg))
+	return router
+}
+
+// requireStopsWithin runs fn in a goroutine and fails if it doesn't complete within timeout.
+func requireStopsWithin(t *testing.T, fn func(), timeout time.Duration) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		fn()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatalf("operation did not complete within %v", timeout)
+	}
+}
+
+// newTestLeaseSetPublisher creates a Router with a StdNetDB and returns a publisher.
+func newTestLeaseSetPublisher(t *testing.T) *LeaseSetPublisher {
+	t.Helper()
+	tempDir := t.TempDir()
+	router := &Router{
+		StdNetDB: netdb.NewStdNetDB(tempDir),
+	}
+	require.NoError(t, router.StdNetDB.Ensure())
+	return NewLeaseSetPublisher(router)
+}
+
+// makeHash returns a Hash filled with the given byte.
+func makeHash(fill byte) common.Hash {
+	var h common.Hash
+	copy(h[:], bytes.Repeat([]byte{fill}, 32))
+	return h
+}
+
 // =============================================================================
 // Startup Sequence Tests
 // Verify correct initialization order during router startup
@@ -37,20 +94,9 @@ import (
 // 7. Garlic router
 // 8. Session monitors
 func TestStartupSequence_InitializationOrder(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.NetDb.Path = tempDir + "/netdb"
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-	require.NotNil(t, router)
-
-	// Initialize keystore for router identity
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	cfg := newTestConfig(t)
+	cfg.NetDb.Path = cfg.WorkingDir + "/netdb"
+	router := newTestRouter(t, cfg)
 
 	// Verify pre-start state
 	assert.Nil(t, router.ctx, "Context should be nil before Start()")
@@ -79,17 +125,8 @@ func TestStartupSequence_InitializationOrder(t *testing.T) {
 
 // TestStartupSequence_DoubleStart verifies that calling Start() twice is safe
 func TestStartupSequence_DoubleStart(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	cfg := newTestConfig(t)
+	router := newTestRouter(t, cfg)
 
 	// First Start()
 	router.Start()
@@ -119,13 +156,8 @@ func TestStartupSequence_DoubleStart(t *testing.T) {
 
 // TestShutdownSequence_GracefulCleanup verifies that all subsystems are properly stopped
 func TestShutdownSequence_GracefulCleanup(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.NetDb.Path = tempDir + "/netdb"
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg := newTestConfig(t)
+	cfg.NetDb.Path = cfg.WorkingDir + "/netdb"
 	cfg.Bootstrap.BootstrapType = "local"
 
 	router, err := CreateRouter(cfg)
@@ -140,20 +172,8 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 	router.runMux.RUnlock()
 	require.NotNil(t, ctx)
 
-	// Stop the router
-	done := make(chan struct{})
-	go func() {
-		router.Stop()
-		close(done)
-	}()
-
-	// Verify shutdown completes in reasonable time
-	select {
-	case <-done:
-		// Shutdown completed
-	case <-time.After(10 * time.Second):
-		t.Fatal("Router shutdown timed out after 10 seconds")
-	}
+	// Stop the router with timeout
+	requireStopsWithin(t, router.Stop, 10*time.Second)
 
 	// Context should be cancelled
 	select {
@@ -166,12 +186,7 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 
 // TestShutdownSequence_ContextCancellation verifies context-based shutdown signals
 func TestShutdownSequence_ContextCancellation(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg := newTestConfig(t)
 	cfg.Bootstrap.BootstrapType = "local"
 
 	router, err := CreateRouter(cfg)
@@ -204,12 +219,7 @@ func TestShutdownSequence_ContextCancellation(t *testing.T) {
 
 // TestShutdownSequence_WaitGroupCompletion verifies all goroutines complete
 func TestShutdownSequence_WaitGroupCompletion(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-	// Use local bootstrap to avoid network reseed operations that block shutdown
+	cfg := newTestConfig(t)
 	cfg.Bootstrap.BootstrapType = "local"
 
 	router, err := CreateRouter(cfg)
@@ -219,32 +229,10 @@ func TestShutdownSequence_WaitGroupCompletion(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Stop should block until all goroutines complete
-	stopDone := make(chan struct{})
-	go func() {
-		router.Stop()
-		close(stopDone)
-	}()
+	requireStopsWithin(t, router.Stop, 10*time.Second)
 
 	// Wait should return after Stop completes
-	waitDone := make(chan struct{})
-	go func() {
-		router.Wait()
-		close(waitDone)
-	}()
-
-	select {
-	case <-stopDone:
-		// Stop completed
-	case <-time.After(10 * time.Second):
-		t.Fatal("Stop() did not complete within timeout")
-	}
-
-	select {
-	case <-waitDone:
-		// Wait completed
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Wait() should return immediately after Stop()")
-	}
+	requireStopsWithin(t, router.Wait, 100*time.Millisecond)
 }
 
 // =============================================================================
@@ -346,9 +334,7 @@ func (m *mockTunnelCarrier) GetPayload() []byte             { return m.data }
 
 // TestGarlicRouter_ReflexiveDelivery verifies detection of self-routing
 func TestGarlicRouter_ReflexiveDelivery(t *testing.T) {
-	// Create router identity
-	var routerHash common.Hash
-	copy(routerHash[:], bytes.Repeat([]byte{0xAA}, 32))
+	routerHash := makeHash(0xAA)
 
 	mockNetDB := &mockGarlicNetDB{}
 	gr := NewGarlicMessageRouter(mockNetDB, nil, nil, routerHash)
@@ -371,8 +357,7 @@ func TestGarlicRouter_ReflexiveDelivery(t *testing.T) {
 
 // TestGarlicRouter_ReflexiveWithoutProcessor verifies error when processor not set
 func TestGarlicRouter_ReflexiveWithoutProcessor(t *testing.T) {
-	var routerHash common.Hash
-	copy(routerHash[:], bytes.Repeat([]byte{0xAA}, 32))
+	routerHash := makeHash(0xAA)
 
 	mockNetDB := &mockGarlicNetDB{}
 	gr := NewGarlicMessageRouter(mockNetDB, nil, nil, routerHash)
@@ -391,8 +376,7 @@ func TestGarlicRouter_PendingMessageQueue(t *testing.T) {
 	mockNetDB := &mockGarlicNetDB{}
 	gr := NewGarlicMessageRouter(mockNetDB, nil, nil, routerHash)
 
-	var destHash common.Hash
-	copy(destHash[:], bytes.Repeat([]byte{0xBB}, 32))
+	destHash := makeHash(0xBB)
 
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
 
@@ -416,8 +400,7 @@ func TestGarlicRouter_MaxPendingMessages(t *testing.T) {
 	mockNetDB := &mockGarlicNetDB{}
 	gr := NewGarlicMessageRouter(mockNetDB, nil, nil, routerHash)
 
-	var destHash common.Hash
-	copy(destHash[:], bytes.Repeat([]byte{0xCC}, 32))
+	destHash := makeHash(0xCC)
 
 	// Queue up to max limit
 	for i := 0; i < maxPendingMessages; i++ {
@@ -445,16 +428,7 @@ func TestGarlicRouter_MaxPendingMessages(t *testing.T) {
 // This test verifies the storage path exists and validates inputs, while the actual
 // integration with valid LeaseSets is covered in I2CP integration tests.
 func TestLeaseSetPublisher_LocalStorage(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create router with NetDB
-	router := &Router{
-		StdNetDB: netdb.NewStdNetDB(tempDir),
-	}
-	err := router.StdNetDB.Ensure()
-	require.NoError(t, err)
-
-	publisher := NewLeaseSetPublisher(router)
+	publisher := newTestLeaseSetPublisher(t)
 
 	// Verify publisher is properly initialized
 	assert.NotNil(t, publisher, "Publisher should not be nil")
@@ -466,28 +440,19 @@ func TestLeaseSetPublisher_LocalStorage(t *testing.T) {
 	invalidData := bytes.Repeat([]byte{0x22}, 128)
 
 	// Invalid LeaseSet data should be rejected during validation
-	err = publisher.PublishLeaseSet(key, invalidData)
+	err := publisher.PublishLeaseSet(key, invalidData)
 	assert.Error(t, err, "Invalid LeaseSet data should be rejected")
 	assert.Contains(t, err.Error(), "NetDB", "Error should come from NetDB validation")
 }
 
 // TestLeaseSetPublisher_InvalidData verifies handling of invalid LeaseSet data
 func TestLeaseSetPublisher_InvalidData(t *testing.T) {
-	tempDir := t.TempDir()
+	publisher := newTestLeaseSetPublisher(t)
 
-	router := &Router{
-		StdNetDB: netdb.NewStdNetDB(tempDir),
-	}
-	err := router.StdNetDB.Ensure()
-	require.NoError(t, err)
-
-	publisher := NewLeaseSetPublisher(router)
-
-	var key common.Hash
-	copy(key[:], bytes.Repeat([]byte{0x11}, 32))
+	key := makeHash(0x11)
 
 	// Empty data
-	err = publisher.PublishLeaseSet(key, []byte{})
+	err := publisher.PublishLeaseSet(key, []byte{})
 	assert.Error(t, err, "Should reject empty LeaseSet data")
 
 	// Nil data
@@ -502,16 +467,8 @@ func TestLeaseSetPublisher_InvalidData(t *testing.T) {
 
 // TestSecurity_RouterInfoProvider_InterfaceCompliance verifies interface implementation
 func TestSecurity_RouterInfoProvider_InterfaceCompliance(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Use initializeRouterKeystore for proper key management
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	cfg := newTestConfig(t)
+	router := newTestRouter(t, cfg)
 
 	provider := newRouterInfoProvider(router)
 
@@ -528,16 +485,8 @@ func TestSecurity_RouterInfoProvider_InterfaceCompliance(t *testing.T) {
 // Note: IdentHash() is NOT expected to be consistent because RouterInfo construction
 // includes random padding (per I2P spec). What matters is key consistency.
 func TestRouterInfoProvider_ConsistentKeys(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	// Use initializeRouterKeystore for proper key management
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	cfg := newTestConfig(t)
+	router := newTestRouter(t, cfg)
 
 	provider := newRouterInfoProvider(router)
 
@@ -624,19 +573,7 @@ func TestBandwidthTracker_GracefulStop(t *testing.T) {
 
 	tracker.Start(getBandwidth)
 
-	// Stop should complete without hanging
-	done := make(chan struct{})
-	go func() {
-		tracker.Stop()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Success
-	case <-time.After(2 * time.Second):
-		t.Fatal("BandwidthTracker.Stop() timed out")
-	}
+	requireStopsWithin(t, tracker.Stop, 2*time.Second)
 }
 
 // TestBandwidthTracker_ZeroRatesInitially verifies rates start at zero
@@ -655,10 +592,7 @@ func TestBandwidthTracker_ZeroRatesInitially(t *testing.T) {
 
 // TestI2PControlServer_DisabledByDefault verifies disabled state handling
 func TestI2PControlServer_DisabledByDefault(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2PControl.Enabled = false
+	cfg := newTestConfig(t)
 
 	router, err := FromConfig(cfg)
 	require.NoError(t, err)
@@ -683,13 +617,11 @@ func TestI2PControlServer_NilConfig(t *testing.T) {
 
 // TestRouterAccessInterface_GetMethods verifies router getter methods
 func TestRouterAccessInterface_GetMethods(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
+	cfg := newTestConfig(t)
 
 	router := &Router{
 		cfg:      cfg,
-		StdNetDB: netdb.NewStdNetDB(tempDir),
+		StdNetDB: netdb.NewStdNetDB(cfg.WorkingDir),
 	}
 
 	// GetNetDB
@@ -728,17 +660,8 @@ func TestErrorRecovery_NetDBFailure(t *testing.T) {
 
 // TestErrorRecovery_DoubleStop verifies idempotent shutdown
 func TestErrorRecovery_DoubleStop(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-	cfg.I2CP.Enabled = false
-	cfg.I2PControl.Enabled = false
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
-
-	err = initializeRouterKeystore(router, cfg)
-	require.NoError(t, err)
+	cfg := newTestConfig(t)
+	router := newTestRouter(t, cfg)
 
 	router.Start()
 	time.Sleep(100 * time.Millisecond)

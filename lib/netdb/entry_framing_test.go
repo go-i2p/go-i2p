@@ -10,6 +10,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- shared test helpers ---
+
+// newFramedTestDB creates a StdNetDB in a temp directory and writes a file
+// at the skiplist path for the given hashSeed. If framing is non-nil it is
+// written as raw bytes; otherwise the file is created empty.
+func newFramedTestDB(t *testing.T, hashSeed string, forLeaseSet bool, framing []byte) (*StdNetDB, common.Hash) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	db := NewStdNetDB(tmpDir)
+	require.NotNil(t, db)
+	require.NoError(t, db.Create())
+	var hash common.Hash
+	copy(hash[:], []byte(hashSeed))
+	var fpath string
+	if forLeaseSet {
+		fpath = db.SkiplistFileForLeaseSet(hash)
+	} else {
+		fpath = db.SkiplistFile(hash)
+	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(fpath), 0o700))
+	require.NoError(t, os.WriteFile(fpath, framing, 0o600))
+	return db, hash
+}
+
+// buildFramedBytes constructs a framed entry: [type] [2-byte big-endian length] [payload].
+func buildFramedBytes(fileType byte, payload []byte) []byte {
+	out := []byte{fileType, byte(len(payload) >> 8), byte(len(payload))}
+	return append(out, payload...)
+}
+
 // TestEntryWriteReadRoundTrip verifies that Entry.WriteTo produces framed data
 // (1-byte type + 2-byte length + payload) and Entry.ReadFrom correctly strips
 // the framing. This is the baseline test for the framing format.
@@ -61,73 +91,23 @@ func TestEntryWriteReadRoundTrip(t *testing.T) {
 // properly strips the entry framing before returning data. This was the
 // core bug: framed bytes were passed directly to the LeaseSet parser.
 func TestEntryFramingStrippedForLeaseSetFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
-	require.NoError(t, db.Create())
-
-	// Create a test hash and get the skiplist file path
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-for-framing-check-32b!"))
-	fpath := db.SkiplistFileForLeaseSet(hash)
-
-	// Ensure the directory exists
-	err := os.MkdirAll(filepath.Dir(fpath), 0o700)
-	require.NoError(t, err)
-
-	// Write a framed entry: type=2 (LeaseSet), length=5, payload="hello"
-	f, err := os.Create(fpath)
-	require.NoError(t, err)
-	_, err = f.Write([]byte{FileTypeLeaseSet}) // type byte
-	require.NoError(t, err)
-	_, err = f.Write([]byte{0x00, 0x05}) // length = 5
-	require.NoError(t, err)
-	payload := []byte("hello")
-	_, err = f.Write(payload)
-	require.NoError(t, err)
-	f.Close()
+	framed := buildFramedBytes(FileTypeLeaseSet, []byte("hello"))
+	db, hash := newFramedTestDB(t, "test-hash-for-framing-check-32b!", true, framed)
 
 	// loadLeaseSetFromFile should strip the framing and attempt to parse.
-	// Since "hello" isn't a valid LeaseSet, it will fail — but the important
-	// thing is it fails with a parse error, not by misinterpreting framing bytes.
-	_, err = db.loadLeaseSetFromFile(hash)
+	_, err := db.loadLeaseSetFromFile(hash)
 	require.Error(t, err, "Should fail to parse invalid LeaseSet data")
 	assert.Contains(t, err.Error(), "failed to parse", "Error should be a parse failure from properly unframed data")
-	// Crucially, the error should NOT mention "failed to read" which would
-	// indicate the framing bytes were not properly stripped
 }
 
 // TestEntryFramingStrippedForRouterInfoFile verifies that loadRouterInfoFromFile
 // properly strips entry framing before returning data.
 func TestEntryFramingStrippedForRouterInfoFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
-	require.NoError(t, db.Create())
-
-	// Create a test hash and get the skiplist file path
-	var hash common.Hash
-	copy(hash[:], []byte("test-ri-hash-for-framing-chk-32!"))
-	fpath := db.SkiplistFile(hash)
-
-	// Ensure the directory exists
-	err := os.MkdirAll(filepath.Dir(fpath), 0o700)
-	require.NoError(t, err)
-
-	// Write a framed entry: type=1 (RouterInfo), length=5, payload="hello"
-	f, err := os.Create(fpath)
-	require.NoError(t, err)
-	_, err = f.Write([]byte{FileTypeRouterInfo}) // type byte
-	require.NoError(t, err)
-	_, err = f.Write([]byte{0x00, 0x05}) // length = 5
-	require.NoError(t, err)
-	payload := []byte("hello")
-	_, err = f.Write(payload)
-	require.NoError(t, err)
-	f.Close()
+	framed := buildFramedBytes(FileTypeRouterInfo, []byte("hello"))
+	db, hash := newFramedTestDB(t, "test-ri-hash-for-framing-chk-32!", false, framed)
 
 	// loadRouterInfoFromFile should strip framing and attempt to parse
-	_, err = db.loadRouterInfoFromFile(hash)
+	_, err := db.loadRouterInfoFromFile(hash)
 	require.Error(t, err, "Should fail to parse invalid RouterInfo data")
 	assert.Contains(t, err.Error(), "failed to", "Error should be a parse/read failure from properly unframed data")
 }
@@ -163,73 +143,27 @@ func TestLoadAndParseRouterInfoStripsFraming(t *testing.T) {
 // TestRawBytesWithoutFramingFails verifies that files without entry framing
 // are properly rejected (they should fail in ReadFrom since there's no valid type byte).
 func TestRawBytesWithoutFramingFails(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
-	require.NoError(t, db.Create())
+	db, hash := newFramedTestDB(t, "test-hash-no-framing-check-32b!1", true, []byte("raw unframed data that is too short"))
 
-	// Create a test hash and get the skiplist file path
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-no-framing-check-32b!1"))
-	fpath := db.SkiplistFileForLeaseSet(hash)
-
-	// Ensure the directory exists
-	err := os.MkdirAll(filepath.Dir(fpath), 0o700)
-	require.NoError(t, err)
-
-	// Write raw unframed data (no type byte or length prefix)
-	err = os.WriteFile(fpath, []byte("raw unframed data that is too short"), 0o600)
-	require.NoError(t, err)
-
-	// loadLeaseSetFromFile should fail because Entry.ReadFrom can't parse
-	// unframed data
-	_, err = db.loadLeaseSetFromFile(hash)
+	_, err := db.loadLeaseSetFromFile(hash)
 	require.Error(t, err, "Should fail when file lacks entry framing")
 }
 
 // TestEmptyFileFailsGracefully verifies that an empty file is handled gracefully.
 func TestEmptyFileFailsGracefully(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
-	require.NoError(t, db.Create())
-
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-empty-file-check-32b!1"))
-	fpath := db.SkiplistFileForLeaseSet(hash)
-
-	err := os.MkdirAll(filepath.Dir(fpath), 0o700)
-	require.NoError(t, err)
-
-	// Create an empty file
-	err = os.WriteFile(fpath, []byte{}, 0o600)
-	require.NoError(t, err)
+	db, hash := newFramedTestDB(t, "test-hash-empty-file-check-32b!1", true, []byte{})
 
 	// Should fail with a read error, not panic
-	_, err = db.loadLeaseSetFromFile(hash)
+	_, err := db.loadLeaseSetFromFile(hash)
 	require.Error(t, err, "Empty file should return an error")
 }
 
 // TestTruncatedFramingFailsGracefully verifies that a file with partial
 // framing (e.g., type byte but no length) fails gracefully.
 func TestTruncatedFramingFailsGracefully(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
-	require.NoError(t, db.Create())
-
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-truncated-framing-32b!"))
-	fpath := db.SkiplistFileForLeaseSet(hash)
-
-	err := os.MkdirAll(filepath.Dir(fpath), 0o700)
-	require.NoError(t, err)
-
-	// Write only the type byte (no length or data)
-	err = os.WriteFile(fpath, []byte{FileTypeLeaseSet}, 0o600)
-	require.NoError(t, err)
+	db, hash := newFramedTestDB(t, "test-hash-truncated-framing-32b!", true, []byte{FileTypeLeaseSet})
 
 	// Should fail with a read error, not panic
-	_, err = db.loadLeaseSetFromFile(hash)
+	_, err := db.loadLeaseSetFromFile(hash)
 	require.Error(t, err, "Truncated framing should return an error")
 }
