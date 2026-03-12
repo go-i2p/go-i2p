@@ -487,40 +487,20 @@ func TestTunnelMessages_DeliveryInstructions_HashPresence(t *testing.T) {
 
 func TestTunnelMessages_FragmentReassembly_UnfragmentedMessageDelivered(t *testing.T) {
 	// A non-fragmented message should be delivered directly
-	var delivered []byte
-	handler := func(msgBytes []byte) error {
-		delivered = make([]byte, len(msgBytes))
-		copy(delivered, msgBytes)
-		return nil
-	}
-
-	enc := &mockPassthroughEncryptor{}
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep, getDelivered := newTestEndpoint(t)
 
 	// Build a valid tunnel message with unfragmented LOCAL delivery
 	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE}
 	tunnelMsg := buildTestTunnelMessage(t, DT_LOCAL, false, 0, 0, [32]byte{}, payload)
 
-	err = ep.Receive(tunnelMsg)
+	err := ep.Receive(tunnelMsg)
 	require.NoError(t, err)
-	assert.Equal(t, payload, delivered, "Unfragmented message must be delivered intact")
+	assert.Equal(t, payload, getDelivered(), "Unfragmented message must be delivered intact")
 }
 
 func TestTunnelMessages_FragmentReassembly_TwoFragmentsReassembled(t *testing.T) {
 	// Fragment a message into 2 parts, deliver via endpoint, verify reassembly
-	var delivered []byte
-	handler := func(msgBytes []byte) error {
-		delivered = make([]byte, len(msgBytes))
-		copy(delivered, msgBytes)
-		return nil
-	}
-
-	enc := &mockPassthroughEncryptor{}
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep, getDelivered := newTestEndpoint(t)
 
 	msgID := uint32(0x12345678)
 	part1 := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
@@ -528,32 +508,22 @@ func TestTunnelMessages_FragmentReassembly_TwoFragmentsReassembled(t *testing.T)
 
 	// First fragment
 	firstMsg := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
-	err = ep.Receive(firstMsg)
+	err := ep.Receive(firstMsg)
 	require.NoError(t, err)
-	assert.Nil(t, delivered, "Message should not be delivered after first fragment only")
+	assert.Nil(t, getDelivered(), "Message should not be delivered after first fragment only")
 
 	// Follow-on fragment (last)
 	followOnMsg := buildTestFollowOnTunnelMessage(t, msgID, 1, true, part2)
 	err = ep.Receive(followOnMsg)
 	require.NoError(t, err)
-	require.NotNil(t, delivered, "Message must be delivered after all fragments received")
+	require.NotNil(t, getDelivered(), "Message must be delivered after all fragments received")
 
 	expected := append(part1, part2...)
-	assert.Equal(t, expected, delivered, "Reassembled message must contain all fragments in order")
+	assert.Equal(t, expected, getDelivered(), "Reassembled message must contain all fragments in order")
 }
 
 func TestTunnelMessages_FragmentReassembly_ThreeFragmentsReassembled(t *testing.T) {
-	var delivered []byte
-	handler := func(msgBytes []byte) error {
-		delivered = make([]byte, len(msgBytes))
-		copy(delivered, msgBytes)
-		return nil
-	}
-
-	enc := &mockPassthroughEncryptor{}
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep, getDelivered := newTestEndpoint(t)
 
 	msgID := uint32(0xAABBCCDD)
 	part1 := []byte{0x10, 0x20, 0x30}
@@ -563,35 +533,25 @@ func TestTunnelMessages_FragmentReassembly_ThreeFragmentsReassembled(t *testing.
 	// Send first fragment
 	msg1 := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
 	require.NoError(t, ep.Receive(msg1))
-	assert.Nil(t, delivered)
+	assert.Nil(t, getDelivered())
 
 	// Send follow-on fragment 1 (not last)
 	msg2 := buildTestFollowOnTunnelMessage(t, msgID, 1, false, part2)
 	require.NoError(t, ep.Receive(msg2))
-	assert.Nil(t, delivered)
+	assert.Nil(t, getDelivered())
 
 	// Send follow-on fragment 2 (last)
 	msg3 := buildTestFollowOnTunnelMessage(t, msgID, 2, true, part3)
 	require.NoError(t, ep.Receive(msg3))
-	require.NotNil(t, delivered)
+	require.NotNil(t, getDelivered())
 
 	expected := append(append(part1, part2...), part3...)
-	assert.Equal(t, expected, delivered, "3 fragments must reassemble in order")
+	assert.Equal(t, expected, getDelivered(), "3 fragments must reassemble in order")
 }
 
 func TestTunnelMessages_FragmentReassembly_OutOfOrderFragments(t *testing.T) {
 	// Fragments arriving out of order should still reassemble correctly
-	var delivered []byte
-	handler := func(msgBytes []byte) error {
-		delivered = make([]byte, len(msgBytes))
-		copy(delivered, msgBytes)
-		return nil
-	}
-
-	enc := &mockPassthroughEncryptor{}
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep, getDelivered := newTestEndpoint(t)
 
 	msgID := uint32(0x11223344)
 	part1 := []byte{0xAA}
@@ -601,20 +561,20 @@ func TestTunnelMessages_FragmentReassembly_OutOfOrderFragments(t *testing.T) {
 	// Send follow-on fragment 2 (last) first
 	msg3 := buildTestFollowOnTunnelMessage(t, msgID, 2, true, part3)
 	require.NoError(t, ep.Receive(msg3))
-	assert.Nil(t, delivered)
+	assert.Nil(t, getDelivered())
 
 	// Send first fragment
 	msg1 := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
 	require.NoError(t, ep.Receive(msg1))
-	assert.Nil(t, delivered)
+	assert.Nil(t, getDelivered())
 
 	// Send follow-on fragment 1 (not last)
 	msg2 := buildTestFollowOnTunnelMessage(t, msgID, 1, false, part2)
 	require.NoError(t, ep.Receive(msg2))
-	require.NotNil(t, delivered)
+	require.NotNil(t, getDelivered())
 
 	expected := append(append(part1, part2...), part3...)
-	assert.Equal(t, expected, delivered, "Out-of-order fragments must reassemble correctly")
+	assert.Equal(t, expected, getDelivered(), "Out-of-order fragments must reassemble correctly")
 }
 
 func TestTunnelMessages_FragmentReassembly_DuplicateFragmentRejected(t *testing.T) {
@@ -903,6 +863,35 @@ func assembleTunnelMessage(t *testing.T, diBytes []byte, payload []byte) []byte 
 	return msg
 }
 
+// newTestEndpoint creates an Endpoint with a capture handler that stores
+// delivered messages. Returns the endpoint and a getter for the captured bytes.
+func newTestEndpoint(t *testing.T) (*Endpoint, func() []byte) {
+	t.Helper()
+	var delivered []byte
+	handler := func(msgBytes []byte) error {
+		delivered = make([]byte, len(msgBytes))
+		copy(delivered, msgBytes)
+		return nil
+	}
+	enc := &mockPassthroughEncryptor{}
+	ep, err := NewEndpoint(TunnelID(1), enc, handler)
+	require.NoError(t, err)
+	t.Cleanup(func() { ep.Stop() })
+	return ep, func() []byte { return delivered }
+}
+
+// buildTestTunnelResult creates a TunnelBuildResult from a specMockPeerSelector
+// with the given request. Reduces boilerplate for tests that only need the result.
+func buildTestTunnelResult(t *testing.T, peerCount int, req BuildTunnelRequest) *TunnelBuildResult {
+	t.Helper()
+	selector := &specMockPeerSelector{count: peerCount}
+	builder, err := NewTunnelBuilder(selector)
+	require.NoError(t, err)
+	result, err := builder.CreateBuildRequest(req)
+	require.NoError(t, err)
+	return result
+}
+
 // =============================================================================
 // Section 9: lib/tunnel — Tunnel Creation (ECIES — Proposal 152)
 // =============================================================================
@@ -911,16 +900,10 @@ func assembleTunnelMessage(t *testing.T, diBytes []byte, payload []byte) []byte 
 
 func TestTunnelCreation_BuildRequest_EachHopGetsRecord(t *testing.T) {
 	// Each hop in the tunnel receives its own encrypted BuildRequestRecord
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	req := BuildTunnelRequest{
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{
 		HopCount:  3,
 		IsInbound: false,
-	}
-	result, err := builder.CreateBuildRequest(req)
-	require.NoError(t, err)
+	})
 
 	assert.Equal(t, 3, len(result.Records), "must have one record per hop")
 	assert.Equal(t, 3, len(result.Hops), "must have one hop per record")
@@ -928,12 +911,7 @@ func TestTunnelCreation_BuildRequest_EachHopGetsRecord(t *testing.T) {
 
 func TestTunnelCreation_BuildRequest_UniqueKeysPerHop(t *testing.T) {
 	// Each hop must get unique layer key, IV key, and reply key
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
 
 	for i := 0; i < len(result.Records); i++ {
 		for j := i + 1; j < len(result.Records); j++ {
@@ -971,12 +949,7 @@ func TestTunnelCreation_BuildRequest_HopCountValidation(t *testing.T) {
 
 func TestTunnelCreation_ECIESRecordFormat_RecordFieldsPresent(t *testing.T) {
 	// Build request records must contain all required fields per spec
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
 
 	for i, record := range result.Records {
 		// ReceiveTunnel must be non-zero for all hops
@@ -998,12 +971,7 @@ func TestTunnelCreation_ECIESRecordFormat_RecordFieldsPresent(t *testing.T) {
 
 func TestTunnelCreation_ECIESRecordFormat_ReplyKeysStored(t *testing.T) {
 	// The builder must store reply keys and IVs for decrypting responses
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3})
 
 	assert.Equal(t, 3, len(result.ReplyKeys), "must have reply key per hop")
 	assert.Equal(t, 3, len(result.ReplyIVs), "must have reply IV per hop")
@@ -1029,27 +997,16 @@ func TestTunnelCreation_AcceptRejectCodes(t *testing.T) {
 
 func TestTunnelCreation_UseShortBuild(t *testing.T) {
 	// TunnelBuildResult must propagate UseShortBuild flag
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
 	assert.True(t, result.UseShortBuild, "UseShortBuild flag must be propagated")
 
-	result2, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
-	require.NoError(t, err)
+	result2 := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
 	assert.False(t, result2.UseShortBuild, "UseShortBuild=false must be propagated")
 }
 
 func TestTunnelCreation_RoutingParamsOutbound(t *testing.T) {
 	// Outbound tunnel: first hop is gateway, last hop is endpoint
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3, IsInbound: false})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, IsInbound: false})
 
 	// Last hop (endpoint) should have NextTunnel=0 for outbound
 	lastRecord := result.Records[2]
@@ -1064,21 +1021,16 @@ func TestTunnelCreation_RoutingParamsOutbound(t *testing.T) {
 
 func TestTunnelCreation_RoutingParamsInbound(t *testing.T) {
 	// Inbound tunnel: messages flow toward us
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
 	replyTunnelID := TunnelID(0x12345678)
 	var replyGateway common.Hash
 	replyGateway[0] = 0xFF
 
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{
 		HopCount:      3,
 		IsInbound:     true,
 		ReplyTunnelID: replyTunnelID,
 		ReplyGateway:  replyGateway,
 	})
-	require.NoError(t, err)
 
 	// Last hop (gateway) should point to our reply tunnel
 	lastRecord := result.Records[2]
@@ -1088,12 +1040,7 @@ func TestTunnelCreation_RoutingParamsInbound(t *testing.T) {
 
 func TestTunnelCreation_UniqueHopTunnelIDs(t *testing.T) {
 	// Each hop must get a unique receive tunnel ID
-	selector := &specMockPeerSelector{count: 8}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 8})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 8, BuildTunnelRequest{HopCount: 8})
 
 	seen := make(map[TunnelID]bool)
 	for i, record := range result.Records {
@@ -1118,23 +1065,13 @@ func TestShortTunnelBuild_UseShortBuildDefault(t *testing.T) {
 
 func TestShortTunnelBuild_ResultPropagatesFlag(t *testing.T) {
 	// TunnelBuildResult tracks whether short build was used
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: true})
 	assert.True(t, result.UseShortBuild, "Result must reflect UseShortBuild=true")
 }
 
 func TestShortTunnelBuild_VariableTunnelBuildBackwardCompat(t *testing.T) {
 	// Must still support UseShortBuild=false for VariableTunnelBuild
-	selector := &specMockPeerSelector{count: 3}
-	builder, err := NewTunnelBuilder(selector)
-	require.NoError(t, err)
-
-	result, err := builder.CreateBuildRequest(BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
-	require.NoError(t, err)
+	result := buildTestTunnelResult(t, 3, BuildTunnelRequest{HopCount: 3, UseShortBuild: false})
 	assert.False(t, result.UseShortBuild, "Must support legacy VariableTunnelBuild (UseShortBuild=false)")
 }
 

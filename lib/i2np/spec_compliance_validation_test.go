@@ -1441,6 +1441,60 @@ func setupGarlicPair(t *testing.T, hashByte byte) (sender, receiver *GarlicSessi
 	return
 }
 
+// generateReceiverWithPubKey creates a receiver GarlicSessionManager from
+// explicitly generated ECIES keys, returning the SM, public key, and destHash.
+func generateReceiverWithPubKey(t *testing.T) (sm *GarlicSessionManager, pubKey [32]byte, destHash [32]byte) {
+	t.Helper()
+	pubBytes, privBytes, err := ecies.GenerateKeyPair()
+	require.NoError(t, err)
+	copy(pubKey[:], pubBytes)
+	var privKey [32]byte
+	copy(privKey[:], privBytes)
+	sm, err = NewGarlicSessionManager(privKey)
+	require.NoError(t, err)
+	destHash = types.SHA256(pubKey[:])
+	return
+}
+
+// performFullHandshake performs a full NS → NSR → ES handshake between
+// sender and receiver. Returns the New Session ciphertext for tests that
+// need it for size comparison.
+func performFullHandshake(t *testing.T, sender, receiver *GarlicSessionManager,
+	destHash, destPubKey [32]byte, plaintext []byte,
+) []byte {
+	t.Helper()
+	nsMsg, err := sender.EncryptGarlicMessage(destHash, destPubKey, plaintext)
+	require.NoError(t, err)
+	_, _, sessionHash, err := receiver.DecryptGarlicMessage(nsMsg)
+	require.NoError(t, err)
+	require.NotNil(t, sessionHash)
+	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
+	require.NoError(t, err)
+	nsrMsg, err := receiver.EncryptNewSessionReply(*sessionHash, nsrPayload)
+	require.NoError(t, err)
+	_, _, _, err = sender.DecryptGarlicMessage(nsrMsg)
+	require.NoError(t, err)
+	return nsMsg
+}
+
+// encryptTestBuildRecord creates a BuildRecordCrypto, builds a success response
+// record with zero random data, encrypts it with a deterministic key, and
+// returns all components for subsequent assertions.
+func encryptTestBuildRecord(t *testing.T) (*BuildRecordCrypto, BuildResponseRecord, []byte, session_key.SessionKey, [16]byte) {
+	t.Helper()
+	crypto := NewBuildRecordCrypto()
+	var randomData [495]byte
+	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	var key session_key.SessionKey
+	for i := range key {
+		key[i] = byte(i)
+	}
+	var iv [16]byte
+	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
+	require.NoError(t, err)
+	return crypto, record, encrypted, key, iv
+}
+
 // TestGarlic_ECIES_NewSessionMessageFormat verifies the New Session wire format:
 // [ephemeralPubKey(32)] + [nonce(12)] + [ciphertext(N)] + [tag(16)]
 // Minimum size = 32 + 12 + 0 + 16 = 60 bytes (empty plaintext).
@@ -1484,24 +1538,7 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 
 	plaintext := []byte("existing session test")
 
-	// First message: creates New Session
-	nsMsg, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
-	require.NoError(t, err)
-
-	// Receiver decrypts the NS to get sessionHash
-	_, _, sessionHash, err := destSM.DecryptGarlicMessage(nsMsg)
-	require.NoError(t, err)
-	require.NotNil(t, sessionHash)
-
-	// Receiver sends NSR to complete the handshake
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
-	require.NoError(t, err)
-	nsrMsg, err := destSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
-	require.NoError(t, err)
-
-	// Sender processes NSR to transition to Existing Session
-	_, _, _, err = sm.DecryptGarlicMessage(nsrMsg)
-	require.NoError(t, err)
+	performFullHandshake(t, sm, destSM, destHash, destSM.GetPublicKey(), plaintext)
 
 	// Second message: uses Existing Session (handshake is complete)
 	encrypted, err := sm.EncryptGarlicMessage(destHash, destSM.GetPublicKey(), plaintext)
@@ -2372,11 +2409,7 @@ func TestGarlic_SessionLifecycle_FirstMessageIsNewSession(t *testing.T) {
 	sm, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
+	destPubKey, destHash := generateDestKey(t)
 
 	plaintext := []byte("first message to new destination")
 	ciphertext, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
@@ -2412,24 +2445,7 @@ func TestGarlic_SessionLifecycle_SecondMessageIsExistingSession(t *testing.T) {
 
 	plaintext := []byte("test payload")
 
-	// First message (New Session).
-	firstMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
-	require.NoError(t, err)
-
-	// Receiver decrypts the NS to establish session and get sessionHash.
-	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(firstMsg)
-	require.NoError(t, err)
-	require.NotNil(t, sessionHash)
-
-	// Receiver sends NSR to complete the handshake.
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr"))
-	require.NoError(t, err)
-	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
-	require.NoError(t, err)
-
-	// Sender processes NSR to transition to Existing Session.
-	_, _, _, err = sm.DecryptGarlicMessage(nsrMsg)
-	require.NoError(t, err)
+	firstMsg := performFullHandshake(t, sm, receiverSM, destHash, destPubKey, plaintext)
 
 	// Second message (should be Existing Session, handshake is complete).
 	secondMsg, err := sm.EncryptGarlicMessage(destHash, destPubKey, plaintext)
@@ -2456,15 +2472,7 @@ func TestGarlic_SessionLifecycle_InboundNewSessionCreatesRatchetState(t *testing
 	senderSM, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	require.NoError(t, err)
-
-	destHash := types.SHA256(receiverPubKey[:])
+	receiverSM, receiverPubKey, destHash := generateReceiverWithPubKey(t)
 	plaintext := []byte("new session message")
 
 	ciphertext, err := senderSM.EncryptGarlicMessage(destHash, receiverPubKey, plaintext)
@@ -2503,36 +2511,11 @@ func TestGarlic_SessionLifecycle_NewSessionFormatDistinctFromExistingSession(t *
 	senderSM, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	destPubBytes, destPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-	var destPubKey, destPrivKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	copy(destPrivKey[:], destPrivBytes)
-	destHash := types.SHA256(destPubKey[:])
-
-	receiverSM, err := NewGarlicSessionManager(destPrivKey)
-	require.NoError(t, err)
+	receiverSM, destPubKey, destHash := generateReceiverWithPubKey(t)
 
 	plaintext := []byte("test message")
 
-	// First message is New Session.
-	newSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, plaintext)
-	require.NoError(t, err)
-
-	// Receiver decrypts the NS to establish the session, completing the responder side.
-	_, _, sessionHash, err := receiverSM.DecryptGarlicMessage(newSessionMsg)
-	require.NoError(t, err)
-	require.NotNil(t, sessionHash, "sessionHash must be non-nil for New Session")
-
-	// Receiver sends a New Session Reply (NSR) to complete the handshake.
-	nsrPayload, err := noiseratchet.BuildNSPayload([]byte("nsr reply"))
-	require.NoError(t, err)
-	nsrMsg, err := receiverSM.EncryptNewSessionReply(*sessionHash, nsrPayload)
-	require.NoError(t, err)
-
-	// Sender processes the NSR to transition to Existing Session.
-	_, _, _, err = senderSM.DecryptGarlicMessage(nsrMsg)
-	require.NoError(t, err)
+	newSessionMsg := performFullHandshake(t, senderSM, receiverSM, destHash, destPubKey, plaintext)
 
 	// Second message is Existing Session (handshake is now complete).
 	existingSessionMsg, err := senderSM.EncryptGarlicMessage(destHash, destPubKey, plaintext)
@@ -2601,15 +2584,7 @@ func TestGarlic_AssociatedData_NewSessionDecryptionUsesNilAD(t *testing.T) {
 	senderSM, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	require.NoError(t, err)
-
-	destHash := types.SHA256(receiverPubKey[:])
+	receiverSM, receiverPubKey, destHash := generateReceiverWithPubKey(t)
 	plaintext := []byte("new session roundtrip verifying nil AD")
 
 	// Encrypt (New Session — uses nil AD internally).
@@ -3287,49 +3262,25 @@ func TestShortTunnelBuild_LayerEncryption_ChaCha20Poly1305Used(t *testing.T) {
 
 // TestShortTunnelBuild_LayerEncryption_AuthTagRequired verifies authentication tag is checked.
 func TestShortTunnelBuild_LayerEncryption_AuthTagRequired(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
-	var randomData [495]byte
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
-
-	var key session_key.SessionKey
-	for i := range key {
-		key[i] = byte(i)
-	}
-	var iv [16]byte
-
-	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
-	require.NoError(t, err)
+	crypto, _, encrypted, key, iv := encryptTestBuildRecord(t)
 
 	// Corrupt the auth tag (last 16 bytes)
 	encrypted[len(encrypted)-1] ^= 0xFF
 
-	_, err = crypto.DecryptReplyRecord(encrypted, key, iv)
+	_, err := crypto.DecryptReplyRecord(encrypted, key, iv)
 	assert.Error(t, err, "corrupted auth tag must cause decryption failure")
 }
 
 // TestShortTunnelBuild_LayerEncryption_WrongKeyFails verifies wrong key detection.
 func TestShortTunnelBuild_LayerEncryption_WrongKeyFails(t *testing.T) {
-	crypto := NewBuildRecordCrypto()
-
-	var randomData [495]byte
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
-
-	var key session_key.SessionKey
-	for i := range key {
-		key[i] = 0xAA
-	}
-	var iv [16]byte
-
-	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
-	require.NoError(t, err)
+	crypto, _, encrypted, _, iv := encryptTestBuildRecord(t)
 
 	// Try with wrong key
 	var wrongKey session_key.SessionKey
 	for i := range wrongKey {
 		wrongKey[i] = 0xBB
 	}
-	_, err = crypto.DecryptReplyRecord(encrypted, wrongKey, iv)
+	_, err := crypto.DecryptReplyRecord(encrypted, wrongKey, iv)
 	assert.Error(t, err, "wrong key must cause decryption failure")
 }
 
