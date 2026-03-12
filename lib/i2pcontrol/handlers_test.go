@@ -765,44 +765,36 @@ func TestI2PControlHandler_PasswordChange_NilConfig(t *testing.T) {
 	}
 }
 
-func TestI2PControlHandler_EmptyPassword(t *testing.T) {
-	authMgr := &mockAuthManager{password: "oldpass"}
-	cfg := &config.I2PControlConfig{Password: "oldpass"}
-	handler := NewI2PControlHandler(authMgr, cfg)
-	params := json.RawMessage(`{"i2pcontrol.password": ""}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for empty password, got nil")
+func TestI2PControlHandler_InvalidPasswordInputs(t *testing.T) {
+	tests := []struct {
+		name   string
+		params string
+	}{
+		{"EmptyPassword", `{"i2pcontrol.password": ""}`},
+		{"NumericPassword", `{"i2pcontrol.password": 12345}`},
 	}
 
-	requireRPCError(t, err, ErrCodeInvalidParams)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authMgr := &mockAuthManager{password: "oldpass"}
+			cfg := &config.I2PControlConfig{Password: "oldpass"}
+			handler := NewI2PControlHandler(authMgr, cfg)
+			params := json.RawMessage(tt.params)
 
-	// Password should not have changed in either auth manager or config
-	if authMgr.password != "oldpass" {
-		t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
-	}
-	if cfg.Password != "oldpass" {
-		t.Errorf("config.Password changed to %v, should remain oldpass", cfg.Password)
-	}
-}
+			_, err := handler.Handle(context.Background(), params)
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", tt.name)
+			}
 
-func TestI2PControlHandler_InvalidPasswordType(t *testing.T) {
-	authMgr := &mockAuthManager{password: "oldpass"}
-	cfg := &config.I2PControlConfig{Password: "oldpass"}
-	handler := NewI2PControlHandler(authMgr, cfg)
-	params := json.RawMessage(`{"i2pcontrol.password": 12345}`)
+			requireRPCError(t, err, ErrCodeInvalidParams)
 
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("expected error for numeric password, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
-
-	// Password should not have changed
-	if authMgr.password != "oldpass" {
-		t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
+			if authMgr.password != "oldpass" {
+				t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
+			}
+			if cfg.Password != "oldpass" {
+				t.Errorf("config.Password changed to %v, should remain oldpass", cfg.Password)
+			}
+		})
 	}
 }
 

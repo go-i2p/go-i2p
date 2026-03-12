@@ -18,27 +18,33 @@ func testPeerHash(suffix byte) common.Hash {
 	return hash
 }
 
-// TestGetActivePeerCount tests counting peers with recent successful connections
-func TestGetActivePeerCount(t *testing.T) {
+// setupPeerClassificationDB creates a StdNetDB with 3 test peers registered in the RouterInfos map.
+func setupPeerClassificationDB(t *testing.T, suffix1, suffix2, suffix3 byte) (*StdNetDB, common.Hash, common.Hash, common.Hash) {
+	t.Helper()
 	tempDir := t.TempDir()
 	db := NewStdNetDB(tempDir)
 	require.NoError(t, db.Create())
-	defer db.Stop()
+	t.Cleanup(func() { db.Stop() })
 
-	// Initially should be 0
-	assert.Equal(t, 0, db.GetActivePeerCount())
+	hash1 := testPeerHash(suffix1)
+	hash2 := testPeerHash(suffix2)
+	hash3 := testPeerHash(suffix3)
 
-	// Create test hashes
-	hash1 := testPeerHash(1)
-	hash2 := testPeerHash(2)
-	hash3 := testPeerHash(3)
-
-	// Add hashes to RouterInfos map so they're counted
 	db.riMutex.Lock()
 	db.RouterInfos[hash1] = Entry{}
 	db.RouterInfos[hash2] = Entry{}
 	db.RouterInfos[hash3] = Entry{}
 	db.riMutex.Unlock()
+
+	return db, hash1, hash2, hash3
+}
+
+// TestGetActivePeerCount tests counting peers with recent successful connections
+func TestGetActivePeerCount(t *testing.T) {
+	db, hash1, hash2, _ := setupPeerClassificationDB(t, 1, 2, 3)
+
+	// Initially should be 0 (no success recorded yet)
+	assert.Equal(t, 0, db.GetActivePeerCount())
 
 	// Record peer 1 as active (recent success)
 	db.PeerTracker.RecordAttempt(hash1)
@@ -65,25 +71,10 @@ func TestGetActivePeerCount(t *testing.T) {
 
 // TestGetFastPeerCount tests counting peers with low latency
 func TestGetFastPeerCount(t *testing.T) {
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-	require.NoError(t, db.Create())
-	defer db.Stop()
+	db, hash1, hash2, hash3 := setupPeerClassificationDB(t, 10, 20, 30)
 
 	// Initially should be 0
 	assert.Equal(t, 0, db.GetFastPeerCount())
-
-	// Create test hashes
-	hash1 := testPeerHash(10)
-	hash2 := testPeerHash(20)
-	hash3 := testPeerHash(30)
-
-	// Add hashes to RouterInfos map
-	db.riMutex.Lock()
-	db.RouterInfos[hash1] = Entry{}
-	db.RouterInfos[hash2] = Entry{}
-	db.RouterInfos[hash3] = Entry{}
-	db.riMutex.Unlock()
 
 	// Record peer 1 as fast (< 500ms, enough attempts)
 	for i := 0; i < 5; i++ {

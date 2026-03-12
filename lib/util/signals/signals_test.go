@@ -39,49 +39,51 @@ func resetSignalHandlers(t *testing.T, resetReloaders, resetInterrupters bool) {
 // Signal Handler Registration Tests
 // =============================================================================
 
-// TestRegisterReloadHandler verifies reload handler registration.
-func TestRegisterReloadHandler(t *testing.T) {
-	resetSignalHandlers(t, true, false)
-
-	called := false
-	handler := func() {
-		called = true
+// TestRegisterHandler verifies reload and interrupt handler registration.
+func TestRegisterHandler(t *testing.T) {
+	tests := []struct {
+		name           string
+		resetReloaders bool
+		resetInterrupt bool
+		register       func(func()) HandlerID
+		getSliceLen    func() int
+		trigger        func()
+	}{
+		{
+			name:           "ReloadHandler",
+			resetReloaders: true,
+			resetInterrupt: false,
+			register:       func(f func()) HandlerID { return RegisterReloadHandler(f) },
+			getSliceLen:    func() int { return len(reloaders) },
+			trigger:        handleReload,
+		},
+		{
+			name:           "InterruptHandler",
+			resetReloaders: false,
+			resetInterrupt: true,
+			register:       func(f func()) HandlerID { return RegisterInterruptHandler(f) },
+			getSliceLen:    func() int { return len(interrupters) },
+			trigger:        handleInterrupted,
+		},
 	}
 
-	RegisterReloadHandler(handler)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetSignalHandlers(t, tt.resetReloaders, tt.resetInterrupt)
 
-	if len(reloaders) != 1 {
-		t.Errorf("Expected 1 reloader registered, got %d", len(reloaders))
-	}
+			called := false
+			tt.register(func() { called = true })
 
-	// Trigger the handler
-	handleReload()
+			if tt.getSliceLen() != 1 {
+				t.Errorf("Expected 1 handler registered, got %d", tt.getSliceLen())
+			}
 
-	if !called {
-		t.Error("Reload handler was not called")
-	}
-}
+			tt.trigger()
 
-// TestRegisterInterruptHandler verifies interrupt handler registration.
-func TestRegisterInterruptHandler(t *testing.T) {
-	resetSignalHandlers(t, false, true)
-
-	called := false
-	handler := func() {
-		called = true
-	}
-
-	RegisterInterruptHandler(handler)
-
-	if len(interrupters) != 1 {
-		t.Errorf("Expected 1 interrupter registered, got %d", len(interrupters))
-	}
-
-	// Trigger the handler
-	handleInterrupted()
-
-	if !called {
-		t.Error("Interrupt handler was not called")
+			if !called {
+				t.Errorf("%s was not called", tt.name)
+			}
+		})
 	}
 }
 

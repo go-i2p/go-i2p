@@ -43,39 +43,36 @@ func (e *testError) Error() string {
 	return e.message
 }
 
-func TestDatabaseManager_StoreData_Success(t *testing.T) {
-	// Create mock NetDB store
-	mockStore := newMockNetDBStore()
-
-	// Create test data
+// newTestDatabaseStore creates a standard test DatabaseStore message.
+func newTestDatabaseStore(t *testing.T) (common.Hash, []byte, *DatabaseStore) {
+	t.Helper()
 	var testKey common.Hash
 	copy(testKey[:], "test-router-key-12345678901234567")
 	testData := []byte("test-router-info-data")
-	testType := byte(0)
 
-	// Create DatabaseManager with mock
-	dm := NewDatabaseManager(mockStore)
-
-	// Create DatabaseStore message
 	dbStore := &DatabaseStore{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
 		Key:             testKey,
 		Data:            testData,
-		StoreType:       testType,
+		StoreType:       byte(0),
 	}
+	return testKey, testData, dbStore
+}
 
-	// Test StoreData
+func TestDatabaseManager_StoreData_Success(t *testing.T) {
+	mockStore := newMockNetDBStore()
+	dm := NewDatabaseManager(mockStore)
+	testKey, testData, dbStore := newTestDatabaseStore(t)
+
 	err := dm.StoreData(dbStore)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
 
-	// Verify mock was called
 	if mockStore.callCount != 1 {
 		t.Errorf("Expected 1 call to Store, got %d", mockStore.callCount)
 	}
 
-	// Verify data was stored
 	if storedData, exists := mockStore.stored[string(testKey[:])]; !exists {
 		t.Error("Data was not stored in mock NetDB")
 	} else if string(storedData) != string(testData) {
@@ -84,31 +81,14 @@ func TestDatabaseManager_StoreData_Success(t *testing.T) {
 }
 
 func TestDatabaseManager_StoreData_NetDBError(t *testing.T) {
-	// Create mock NetDB store that returns error
 	mockStore := newMockNetDBStore()
 	testErr := &testError{message: "mock netdb error"}
 	mockStore.storeFunc = func(key common.Hash, data []byte, dataType byte) error {
 		return testErr
 	}
-
-	// Create test data
-	var testKey common.Hash
-	copy(testKey[:], "test-router-key-12345678901234567")
-	testData := []byte("test-router-info-data")
-	testType := byte(0)
-
-	// Create DatabaseManager with mock
 	dm := NewDatabaseManager(mockStore)
+	_, _, dbStore := newTestDatabaseStore(t)
 
-	// Create DatabaseStore message
-	dbStore := &DatabaseStore{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
-		Key:             testKey,
-		Data:            testData,
-		StoreType:       testType,
-	}
-
-	// Test StoreData - should return the error from NetDB
 	err := dm.StoreData(dbStore)
 	if err == nil {
 		t.Error("Expected error from NetDB, got nil")
@@ -117,7 +97,6 @@ func TestDatabaseManager_StoreData_NetDBError(t *testing.T) {
 		t.Errorf("Expected specific test error, got: %v", err)
 	}
 
-	// Verify mock was called
 	if mockStore.callCount != 1 {
 		t.Errorf("Expected 1 call to Store, got %d", mockStore.callCount)
 	}

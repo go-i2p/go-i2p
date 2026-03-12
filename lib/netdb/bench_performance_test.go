@@ -83,33 +83,40 @@ func BenchmarkBytesInvalid(b *testing.B) {
 	}
 }
 
-// BenchmarkStoreRouterInfo benchmarks NetDB storage operations.
-func BenchmarkStoreRouterInfo(b *testing.B) {
+// setupBenchNetDB creates a temp directory, StdNetDB, valid RouterInfo, hash, and serialized bytes.
+func setupBenchNetDB(b *testing.B) (*StdNetDB, common.Hash, []byte) {
+	b.Helper()
 	tmpDir, err := os.MkdirTemp("", "netdb-bench-*")
 	if err != nil {
 		b.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	b.Cleanup(func() { os.RemoveAll(tmpDir) })
 
 	db := NewStdNetDB(tmpDir)
 	ri := newValidRouterInfoForBench(b)
 
-	// Get RouterInfo hash and bytes for storage
 	hash, err := ri.IdentHash()
 	if err != nil {
 		b.Fatalf("Failed to get hash: %v", err)
 	}
 
-	bytes, err := ri.Bytes()
+	riBytes, err := ri.Bytes()
 	if err != nil {
 		b.Fatalf("Failed to serialize: %v", err)
 	}
+
+	return db, hash, riBytes
+}
+
+// BenchmarkStoreRouterInfo benchmarks NetDB storage operations.
+func BenchmarkStoreRouterInfo(b *testing.B) {
+	db, hash, riBytes := setupBenchNetDB(b)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		err := db.StoreRouterInfoFromMessage(hash, bytes, 0)
+		err := db.StoreRouterInfoFromMessage(hash, riBytes, 0)
 		if err != nil {
 			b.Fatalf("Store failed: %v", err)
 		}
@@ -118,27 +125,9 @@ func BenchmarkStoreRouterInfo(b *testing.B) {
 
 // BenchmarkGetRouterInfo benchmarks NetDB retrieval operations.
 func BenchmarkGetRouterInfo(b *testing.B) {
-	tmpDir, err := os.MkdirTemp("", "netdb-bench-*")
-	if err != nil {
-		b.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	db, hash, riBytes := setupBenchNetDB(b)
 
-	db := NewStdNetDB(tmpDir)
-	ri := newValidRouterInfoForBench(b)
-
-	// Store RouterInfo first
-	hash, err := ri.IdentHash()
-	if err != nil {
-		b.Fatalf("Failed to get hash: %v", err)
-	}
-
-	bytes, err := ri.Bytes()
-	if err != nil {
-		b.Fatalf("Failed to serialize: %v", err)
-	}
-
-	err = db.StoreRouterInfoFromMessage(hash, bytes, 0)
+	err := db.StoreRouterInfoFromMessage(hash, riBytes, 0)
 	if err != nil {
 		b.Fatalf("Store failed: %v", err)
 	}

@@ -49,6 +49,32 @@ func completeGarlicHandshake(t *testing.T, senderSM, receiverSM *GarlicSessionMa
 	return destHash
 }
 
+// setupGarlicSenderReceiver creates a sender and receiver GarlicSessionManager pair
+// along with the receiver's public key for use in garlic encryption tests.
+func setupGarlicSenderReceiver(t *testing.T) (senderSM, receiverSM *GarlicSessionManager, receiverPubKey [32]byte) {
+	t.Helper()
+	senderSM, err := GenerateGarlicSessionManager()
+	if err != nil {
+		t.Fatalf("Failed to generate sender session manager: %v", err)
+	}
+
+	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate receiver key pair: %v", err)
+	}
+
+	var receiverPrivKey [32]byte
+	copy(receiverPubKey[:], receiverPubBytes)
+	copy(receiverPrivKey[:], receiverPrivBytes)
+
+	receiverSM, err = NewGarlicSessionManager(receiverPrivKey)
+	if err != nil {
+		t.Fatalf("Failed to create receiver session manager: %v", err)
+	}
+
+	return senderSM, receiverSM, receiverPubKey
+}
+
 // TestSessionManagerCreation tests creating a new session manager.
 func TestSessionManagerCreation(t *testing.T) {
 	sm, err := GenerateGarlicSessionManager()
@@ -137,24 +163,7 @@ func TestNewSessionEncryption(t *testing.T) {
 
 // TestNewSessionDecryption tests decrypting a new session garlic message.
 func TestNewSessionDecryption(t *testing.T) {
-	senderSM, err := GenerateGarlicSessionManager()
-	if err != nil {
-		t.Fatalf("Failed to generate sender session manager: %v", err)
-	}
-
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("Failed to generate receiver key pair: %v", err)
-	}
-
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	if err != nil {
-		t.Fatalf("Failed to create receiver session manager: %v", err)
-	}
+	senderSM, receiverSM, receiverPubKey := setupGarlicSenderReceiver(t)
 
 	destHash := types.SHA256(receiverPubKey[:])
 
@@ -198,24 +207,7 @@ func TestNewSessionDecryption(t *testing.T) {
 
 // TestExistingSessionEncryptDecrypt tests encrypt/decrypt round-trip via existing session.
 func TestExistingSessionEncryptDecrypt(t *testing.T) {
-	senderSM, err := GenerateGarlicSessionManager()
-	if err != nil {
-		t.Fatalf("Failed to generate sender session manager: %v", err)
-	}
-
-	receiverPubBytes, receiverPrivBytes, err := ecies.GenerateKeyPair()
-	if err != nil {
-		t.Fatalf("Failed to generate receiver key pair: %v", err)
-	}
-
-	var receiverPubKey, receiverPrivKey [32]byte
-	copy(receiverPubKey[:], receiverPubBytes)
-	copy(receiverPrivKey[:], receiverPrivBytes)
-
-	receiverSM, err := NewGarlicSessionManager(receiverPrivKey)
-	if err != nil {
-		t.Fatalf("Failed to create receiver session manager: %v", err)
-	}
+	senderSM, receiverSM, receiverPubKey := setupGarlicSenderReceiver(t)
 
 	destHash := completeGarlicHandshake(t, senderSM, receiverSM, receiverPubKey)
 

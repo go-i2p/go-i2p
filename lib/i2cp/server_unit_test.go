@@ -462,17 +462,7 @@ func TestBuildRequestVariableLeaseSetPayload_FilteredCount(t *testing.T) {
 		t.Fatalf("buildRequestVariableLeaseSetPayload() error = %v", err)
 	}
 
-	// The count byte should be 2 (only the valid tunnels), not 4
-	leaseCount := int(payload[0])
-	if leaseCount != 2 {
-		t.Errorf("Lease count = %d, want 2 (should exclude nil and zero-hop tunnels)", leaseCount)
-	}
-
-	// Verify payload size matches: 1 + 2*44 = 89 bytes
-	expectedSize := 1 + 2*44
-	if len(payload) != expectedSize {
-		t.Errorf("Payload size = %d, want %d", len(payload), expectedSize)
-	}
+	assertLeaseSetPayload(t, payload, 2)
 
 	// Verify first lease gateway hash
 	if string(payload[1:1+32]) != string(hash1[:]) {
@@ -502,6 +492,19 @@ func TestBuildRequestVariableLeaseSetPayload_AllFilteredReturnsError(t *testing.
 	}
 }
 
+// assertLeaseSetPayload verifies payload count byte and size match expected lease count.
+func assertLeaseSetPayload(t *testing.T, payload []byte, expectedCount int) {
+	t.Helper()
+	leaseCount := int(payload[0])
+	if leaseCount != expectedCount {
+		t.Errorf("Lease count = %d, want %d", leaseCount, expectedCount)
+	}
+	expectedSize := 1 + expectedCount*44
+	if len(payload) != expectedSize {
+		t.Errorf("Payload size = %d, want %d", len(payload), expectedSize)
+	}
+}
+
 // TestBuildRequestVariableLeaseSetPayload_AllValid verifies correct behavior
 // when all tunnels are valid (no filtering needed).
 func TestBuildRequestVariableLeaseSetPayload_AllValid(t *testing.T) {
@@ -521,15 +524,7 @@ func TestBuildRequestVariableLeaseSetPayload_AllValid(t *testing.T) {
 		t.Fatalf("buildRequestVariableLeaseSetPayload() error = %v", err)
 	}
 
-	leaseCount := int(payload[0])
-	if leaseCount != 3 {
-		t.Errorf("Lease count = %d, want 3", leaseCount)
-	}
-
-	expectedSize := 1 + 3*44
-	if len(payload) != expectedSize {
-		t.Errorf("Payload size = %d, want %d", len(payload), expectedSize)
-	}
+	assertLeaseSetPayload(t, payload, 3)
 }
 
 // TestServerTunnelPoolConfiguration verifies that tunnel pools are properly configured
@@ -1501,47 +1496,34 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 	}
 }
 
-// TestServerWithLeaseSetPublisher tests I2CP server with publisher
-func TestServerWithLeaseSetPublisher(t *testing.T) {
-	publisher := newMockLeaseSetPublisher()
-
+// createTestServerWithPublisher creates a Server, starts it, and registers cleanup.
+func createTestServerWithPublisher(t *testing.T, addr string, publisher LeaseSetPublisher) *Server {
+	t.Helper()
 	config := &ServerConfig{
-		ListenAddr:        "localhost:17670",
+		ListenAddr:        addr,
 		Network:           "tcp",
 		MaxSessions:       10,
 		LeaseSetPublisher: publisher,
 	}
-
 	server, err := NewServer(config)
 	require.NoError(t, err, "Failed to create server")
 	require.NotNil(t, server, "Server should not be nil")
-
 	err = server.Start()
 	require.NoError(t, err, "Failed to start server")
-	defer server.Stop()
+	t.Cleanup(func() { server.Stop() })
+	return server
+}
 
-	// The server should have the publisher set
+// TestServerWithLeaseSetPublisher tests I2CP server with publisher
+func TestServerWithLeaseSetPublisher(t *testing.T) {
+	publisher := newMockLeaseSetPublisher()
+	server := createTestServerWithPublisher(t, "localhost:17670", publisher)
 	assert.NotNil(t, server.leaseSetPublisher, "Server should have publisher")
 }
 
 // TestServerWithoutLeaseSetPublisher tests I2CP server without publisher
 func TestServerWithoutLeaseSetPublisher(t *testing.T) {
-	config := &ServerConfig{
-		ListenAddr:        "localhost:17671",
-		Network:           "tcp",
-		MaxSessions:       10,
-		LeaseSetPublisher: nil, // No publisher
-	}
-
-	server, err := NewServer(config)
-	require.NoError(t, err, "Failed to create server")
-	require.NotNil(t, server, "Server should not be nil")
-
-	err = server.Start()
-	require.NoError(t, err, "Failed to start server")
-	defer server.Stop()
-
-	// The server should work without a publisher
+	server := createTestServerWithPublisher(t, "localhost:17671", nil)
 	assert.Nil(t, server.leaseSetPublisher, "Server should have nil publisher")
 }
 
@@ -1575,27 +1557,39 @@ func TestSessionStatusCreatedCode(t *testing.T) {
 	}
 }
 
-// TestParseSendMessagePayloadWithSessionIDPrefix verifies that
-// parseSendMessagePayload correctly strips the 2-byte SessionID prefix
-// from the wire payload before parsing the destination hash.
-func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
+// createTestServerSession creates a Server and a Session for message parsing tests.
+func createTestServerSession(t *testing.T) (*Server, *Session) {
+	t.Helper()
 	server, err := NewServer(nil)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
-
 	session, err := server.manager.CreateSession(nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
+	return server, session
+}
 
-	// Create a known destination hash
+// buildWirePayload creates a wire payload with 2-byte SessionID prefix followed by inner bytes.
+func buildWirePayload(sessionID uint16, innerBytes []byte) []byte {
+	wirePayload := make([]byte, 2+len(innerBytes))
+	binary.BigEndian.PutUint16(wirePayload[0:2], sessionID)
+	copy(wirePayload[2:], innerBytes)
+	return wirePayload
+}
+
+// TestParseSendMessagePayloadWithSessionIDPrefix verifies that
+// parseSendMessagePayload correctly strips the 2-byte SessionID prefix
+// from the wire payload before parsing the destination hash.
+func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
+	server, session := createTestServerSession(t)
+
 	var destHash data.Hash
 	copy(destHash[:], []byte("known_destination_hash_32bytes!"))
 
 	messagePayload := []byte("hello i2p network")
 
-	// Build the inner payload (what ParseSendMessagePayload expects)
 	sendPayload := &SendMessagePayload{
 		Destination: destHash,
 		Payload:     messagePayload,
@@ -1606,30 +1600,21 @@ func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 		t.Fatalf("MarshalBinary() error = %v", err)
 	}
 
-	// Build the WIRE payload: SessionID(2) + inner payload
-	// This is what ReadMessage produces in msg.Payload
-	wirePayload := make([]byte, 2+len(innerBytes))
-	binary.BigEndian.PutUint16(wirePayload[0:2], session.ID())
-	copy(wirePayload[2:], innerBytes)
-
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
 		SessionID: session.ID(),
-		Payload:   wirePayload,
+		Payload:   buildWirePayload(session.ID(), innerBytes),
 	}
 
-	// Parse via the server method (which should strip SessionID prefix)
 	parsed, err := server.parseSendMessagePayload(msg, session)
 	if err != nil {
 		t.Fatalf("parseSendMessagePayload() error = %v", err)
 	}
 
-	// Verify the destination hash was correctly extracted
 	if parsed.Destination != destHash {
 		t.Errorf("destination hash mismatch:\n  got:  %x\n  want: %x", parsed.Destination, destHash)
 	}
 
-	// Verify the payload data was correctly extracted
 	if string(parsed.Payload) != string(messagePayload) {
 		t.Errorf("payload mismatch:\n  got:  %q\n  want: %q", parsed.Payload, messagePayload)
 	}
@@ -1638,15 +1623,7 @@ func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 // TestParseSendMessagePayloadTooShort verifies that parseSendMessagePayload
 // returns an error when the payload is too short to contain even a SessionID.
 func TestParseSendMessagePayloadTooShort(t *testing.T) {
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
+	server, session := createTestServerSession(t)
 
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
@@ -1654,7 +1631,7 @@ func TestParseSendMessagePayloadTooShort(t *testing.T) {
 		Payload:   []byte{0x01}, // Only 1 byte — too short for 2-byte SessionID
 	}
 
-	_, err = server.parseSendMessagePayload(msg, session)
+	_, err := server.parseSendMessagePayload(msg, session)
 	if err == nil {
 		t.Error("Expected error for payload too short for SessionID, got nil")
 	}
@@ -1664,28 +1641,18 @@ func TestParseSendMessagePayloadTooShort(t *testing.T) {
 // parseSendMessageExpiresPayload correctly strips the 2-byte SessionID prefix
 // from the wire payload before parsing the destination hash.
 func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
-	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	server, session := createTestServerSession(t)
 
-	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
-
-	// Create a known destination hash
 	var destHash data.Hash
 	copy(destHash[:], []byte("known_destination_hash_32bytes!"))
 
 	messagePayload := []byte("expires test payload")
 
-	// Build the inner payload (what ParseSendMessageExpiresPayload expects)
 	sendPayload := &SendMessageExpiresPayload{
 		Destination: destHash,
 		Payload:     messagePayload,
 		Nonce:       12345,
-		Expiration:  1700000000000, // milliseconds
+		Expiration:  1700000000000,
 	}
 
 	innerBytes, err := sendPayload.MarshalBinary()
@@ -1693,24 +1660,17 @@ func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
 		t.Fatalf("MarshalBinary() error = %v", err)
 	}
 
-	// Build the WIRE payload: SessionID(2) + inner payload
-	wirePayload := make([]byte, 2+len(innerBytes))
-	binary.BigEndian.PutUint16(wirePayload[0:2], session.ID())
-	copy(wirePayload[2:], innerBytes)
-
 	msg := &Message{
 		Type:      MessageTypeSendMessageExpires,
 		SessionID: session.ID(),
-		Payload:   wirePayload,
+		Payload:   buildWirePayload(session.ID(), innerBytes),
 	}
 
-	// Parse via the server method (which should strip SessionID prefix)
 	parsed, err := server.parseSendMessageExpiresPayload(msg, session)
 	if err != nil {
 		t.Fatalf("parseSendMessageExpiresPayload() error = %v", err)
 	}
 
-	// Verify the destination hash was correctly extracted
 	if parsed.Destination != destHash {
 		t.Errorf("destination hash mismatch:\n  got:  %x\n  want: %x", parsed.Destination, destHash)
 	}

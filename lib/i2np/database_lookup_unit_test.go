@@ -49,6 +49,71 @@ func appendExcludedPeers(data []byte, count int, seeds ...byte) ([]byte, []commo
 	return data, peers
 }
 
+// lookupExpected holds expected values from a full DatabaseLookup message build.
+type lookupExpected struct {
+	Key      common.Hash
+	From     common.Hash
+	Flags    byte
+	TunnelID [4]byte
+	Size     int
+	Peers    []common.Hash
+	ReplyKey session_key.SessionKey
+	Tags     int
+}
+
+// buildFullLookupMessage builds a DatabaseLookup wire message with key, from, flags,
+// tunnel ID, excluded peers, and reply key. Returns data and expected values.
+func buildFullLookupMessage(flags byte, peerCount int) ([]byte, lookupExpected) {
+	data := make([]byte, 32)
+	for i := range 31 {
+		data[i] = 0x31
+	}
+	expectedKey := common.Hash(data)
+
+	from := make([]byte, 32)
+	from[14] = 0x69
+	from[27] = 0x15
+	data = append(data, from...)
+	expectedFrom := common.Hash(from)
+
+	data = append(data, flags)
+
+	tunnelIDData := make([]byte, 4)
+	tunnelIDData[0] = 0xff
+	tunnelIDData[2] = 0xf2
+	data = append(data, tunnelIDData...)
+	expectedTunnelID := [4]byte(tunnelIDData)
+
+	sizeData := []byte{0x0, byte(peerCount)}
+	data = append(data, sizeData...)
+	expectedSize := common.Integer(sizeData).Int()
+
+	var expectedExcludedPeers []common.Hash
+	for i := 0; i < expectedSize; i++ {
+		peer := make([]byte, 32)
+		peer[5] = byte(0xDD + i)
+		peer[13] = 0x35
+		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
+		data = append(data, peer...)
+	}
+
+	replyKeyData := make([]byte, 32)
+	replyKeyData[6] = 0x11
+	replyKeyData[14] = 0x13
+	data = append(data, replyKeyData...)
+	expectedReplyKey := session_key.SessionKey(replyKeyData)
+
+	return data, lookupExpected{
+		Key:      expectedKey,
+		From:     expectedFrom,
+		Flags:    flags,
+		TunnelID: expectedTunnelID,
+		Size:     expectedSize,
+		Peers:    expectedExcludedPeers,
+		ReplyKey: expectedReplyKey,
+	}
+}
+
 func TestReadDatabaseLookupKeyTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
@@ -421,48 +486,7 @@ func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 func TestReadDatabaseLookupValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	data := make([]byte, 32)
-	for i := range 31 {
-		data[i] = 0x31
-	}
-	expectedKey := common.Hash(data)
-
-	from := make([]byte, 32)
-	from[14] = 0x69
-	from[27] = 0x15
-	data = append(data, from...)
-	expectedFrom := common.Hash(from)
-
-	// Flags: tunnel reply (bit 0) AND encryption (bit 1) = 0x03
-	// Encryption flag must be set for encryption fields to be parsed.
-	expectedFlags := byte(0x03)
-	data = append(data, expectedFlags)
-
-	tunnelIDData := make([]byte, 4)
-	tunnelIDData[0] = 0xff
-	tunnelIDData[2] = 0xf2
-	data = append(data, tunnelIDData...)
-	expectedTunnelID := [4]byte(tunnelIDData)
-
-	sizeData := []byte{0x0, 0xf}
-	data = append(data, sizeData...)
-	expectedSize := common.Integer(sizeData).Int()
-
-	var expectedExcludedPeers []common.Hash
-	for i := range expectedSize {
-		peer := make([]byte, 32)
-		// random data:
-		peer[i+5] = 0xdd
-		peer[i+13] = 0x35
-		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
-		data = append(data, peer...)
-	}
-
-	replyKeyData := make([]byte, 32)
-	replyKeyData[6] = 0x11
-	replyKeyData[14] = 0x13
-	data = append(data, replyKeyData...)
-	expectedReplyKey := session_key.SessionKey(replyKeyData)
+	data, exp := buildFullLookupMessage(0x03, 15)
 
 	expectedTags := 15
 	data = append(data, byte(expectedTags))
@@ -470,7 +494,6 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	var expectedReplyTags []session_tag.SessionTag
 	for i := range expectedTags {
 		tag := make([]byte, 32)
-		// random data:
 		tag[i+3] = 0x22
 		tag[i+13] = 0x11
 		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
@@ -482,13 +505,13 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 		data = append(data, tag...)
 	}
 	databaseLookup, err := ReadDatabaseLookup(data)
-	assert.Equal(expectedKey, databaseLookup.Key)
-	assert.Equal(expectedFrom, databaseLookup.From)
-	assert.Equal(expectedFlags, databaseLookup.Flags)
-	assert.Equal(expectedTunnelID, databaseLookup.ReplyTunnelID)
-	assert.Equal(expectedSize, databaseLookup.Size)
-	assert.Equal(expectedExcludedPeers, databaseLookup.ExcludedPeers)
-	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
+	assert.Equal(exp.Key, databaseLookup.Key)
+	assert.Equal(exp.From, databaseLookup.From)
+	assert.Equal(exp.Flags, databaseLookup.Flags)
+	assert.Equal(exp.TunnelID, databaseLookup.ReplyTunnelID)
+	assert.Equal(exp.Size, databaseLookup.Size)
+	assert.Equal(exp.Peers, databaseLookup.ExcludedPeers)
+	assert.Equal(exp.ReplyKey, databaseLookup.ReplyKey)
 	assert.Equal(expectedTags, databaseLookup.Tags)
 	assert.Equal(expectedReplyTags, databaseLookup.ReplyTags)
 	assert.Equal(err, nil)
@@ -554,53 +577,8 @@ func TestReadDatabaseLookupECIESReplyTagsValidData(t *testing.T) {
 func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 	assert := assert.New(t)
 
-	// Build a complete DatabaseLookup message with ECIESFlag set
-	// Key (32 bytes)
-	data := make([]byte, 32)
-	for i := range 31 {
-		data[i] = 0x31
-	}
-	expectedKey := common.Hash(data)
-
-	// From (32 bytes)
-	from := make([]byte, 32)
-	from[14] = 0x69
-	from[27] = 0x15
-	data = append(data, from...)
-	expectedFrom := common.Hash(from)
-
 	// Flags: deliveryFlag=1 (bit 0) + ECIESFlag=1 (bit 4) = 0x11
-	expectedFlags := byte(0x11)
-	data = append(data, expectedFlags)
-
-	// ReplyTunnelID (4 bytes, because deliveryFlag=1)
-	tunnelIDData := make([]byte, 4)
-	tunnelIDData[0] = 0xff
-	tunnelIDData[2] = 0xf2
-	data = append(data, tunnelIDData...)
-	expectedTunnelID := [4]byte(tunnelIDData)
-
-	// Size (2 bytes) = 2 excluded peers
-	sizeData := []byte{0x0, 0x02}
-	data = append(data, sizeData...)
-	expectedSize := common.Integer(sizeData).Int()
-
-	// ExcludedPeers (2 * 32 bytes)
-	var expectedExcludedPeers []common.Hash
-	for i := 0; i < expectedSize; i++ {
-		peer := make([]byte, 32)
-		peer[5] = byte(0xDD + i)
-		peer[13] = 0x35
-		expectedExcludedPeers = append(expectedExcludedPeers, common.Hash(peer))
-		data = append(data, peer...)
-	}
-
-	// ReplyKey (32 bytes)
-	replyKeyData := make([]byte, 32)
-	replyKeyData[6] = 0x11
-	replyKeyData[14] = 0x13
-	data = append(data, replyKeyData...)
-	expectedReplyKey := session_key.SessionKey(replyKeyData)
+	data, exp := buildFullLookupMessage(0x11, 2)
 
 	// Tags count = 2
 	expectedTags := 2
@@ -624,13 +602,13 @@ func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 
 	databaseLookup, err := ReadDatabaseLookup(data)
 	assert.Nil(err)
-	assert.Equal(expectedKey, databaseLookup.Key)
-	assert.Equal(expectedFrom, databaseLookup.From)
-	assert.Equal(expectedFlags, databaseLookup.Flags)
-	assert.Equal(expectedTunnelID, databaseLookup.ReplyTunnelID)
-	assert.Equal(expectedSize, databaseLookup.Size)
-	assert.Equal(expectedExcludedPeers, databaseLookup.ExcludedPeers)
-	assert.Equal(expectedReplyKey, databaseLookup.ReplyKey)
+	assert.Equal(exp.Key, databaseLookup.Key)
+	assert.Equal(exp.From, databaseLookup.From)
+	assert.Equal(exp.Flags, databaseLookup.Flags)
+	assert.Equal(exp.TunnelID, databaseLookup.ReplyTunnelID)
+	assert.Equal(exp.Size, databaseLookup.Size)
+	assert.Equal(exp.Peers, databaseLookup.ExcludedPeers)
+	assert.Equal(exp.ReplyKey, databaseLookup.ReplyKey)
 	assert.Equal(expectedTags, databaseLookup.Tags)
 	assert.True(databaseLookup.IsECIES())
 	// ElGamal tags should be nil/empty since ECIESFlag is set

@@ -481,34 +481,12 @@ func TestKeyEntropyQuality(t *testing.T) {
 	}
 
 	// Check that key bytes are not all zeros
-	pubBytes := pubKey.Bytes()
-	privBytes := privKey.Bytes()
-
-	allZeroPub := true
-	for _, b := range pubBytes {
-		if b != 0 {
-			allZeroPub = false
-			break
-		}
-	}
-	if allZeroPub {
-		t.Error("Public key is all zeros - entropy problem detected")
-	}
-
-	allZeroPriv := true
-	for _, b := range privBytes {
-		if b != 0 {
-			allZeroPriv = false
-			break
-		}
-	}
-	if allZeroPriv {
-		t.Error("Private key is all zeros - entropy problem detected")
-	}
+	assertNotAllZeros(t, pubKey.Bytes(), "Public key is all zeros - entropy problem detected")
+	assertNotAllZeros(t, privKey.Bytes(), "Private key is all zeros - entropy problem detected")
 
 	// Check byte distribution (crude entropy check)
 	byteFreq := make(map[byte]int)
-	for _, b := range privBytes {
+	for _, b := range privKey.Bytes() {
 		byteFreq[b]++
 	}
 

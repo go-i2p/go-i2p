@@ -146,33 +146,13 @@ func TestDestinationKeyStore_Close_ZeroesKeyMaterial(t *testing.T) {
 	}
 
 	// Verify keys are not all zeros before close
-	encKeyBytes := dks.EncryptionPrivateKey().Bytes()
-	allZeroEnc := true
-	for _, b := range encKeyBytes {
-		if b != 0 {
-			allZeroEnc = false
-			break
-		}
-	}
-	if allZeroEnc {
-		t.Fatal("Encryption key should not be all zeros before Close")
-	}
+	assertNotAllZeros(t, dks.EncryptionPrivateKey().Bytes(), "Encryption key should not be all zeros before Close")
 
 	// Close should zero the key material
 	dks.Close()
 
 	// After Close, encryption key should be zeroed
-	postCloseEncBytes := dks.EncryptionPrivateKey().Bytes()
-	allZeroEncPost := true
-	for _, b := range postCloseEncBytes {
-		if b != 0 {
-			allZeroEncPost = false
-			break
-		}
-	}
-	if !allZeroEncPost {
-		t.Error("Encryption key should be all zeros after Close()")
-	}
+	assertAllZeros(t, dks.EncryptionPrivateKey().Bytes(), "Encryption key should be all zeros after Close()")
 }
 
 // TestDestinationKeyStore_UsesModernCrypto verifies that NewDestinationKeyStore

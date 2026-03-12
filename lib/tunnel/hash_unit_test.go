@@ -33,29 +33,32 @@ func createDTTunnelDeliveryInstructions(tb testing.TB) (*DeliveryInstructions, c
 	return di, expectedHash
 }
 
-// TestHashDTRouter verifies hash extraction for DT_ROUTER delivery type.
-// For DT_ROUTER, hash starts immediately after FLAG_SIZE.
-func TestHashDTRouter(t *testing.T) {
-	// Create test hash
+// createDTRouterDeliveryInstructions builds a DT_ROUTER delivery instruction
+// with a random hash, returning the DeliveryInstructions and the expected hash.
+func createDTRouterDeliveryInstructions(tb testing.TB) (*DeliveryInstructions, common.Hash) {
+	tb.Helper()
 	expectedHash := common.Hash{}
 	if _, err := rand.Read(expectedHash[:]); err != nil {
-		t.Fatalf("Failed to generate random hash: %v", err)
+		tb.Fatalf("Failed to generate random hash: %v", err)
 	}
-
-	// Build DT_ROUTER delivery instructions
-	// Flag byte: delivery type = 0x02 (DT_ROUTER) << 5 = 0x40
-	flag := byte(0x40)
+	flag := byte(0x40) // DT_ROUTER (2 << 5)
 	instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
 	instructions[0] = flag
 	copy(instructions[FLAG_SIZE:FLAG_SIZE+HASH_SIZE], expectedHash[:])
-	// Add dummy size field
 	instructions[FLAG_SIZE+HASH_SIZE] = 0x00
 	instructions[FLAG_SIZE+HASH_SIZE+1] = 0x10
-
 	di, err := NewDeliveryInstructions(instructions)
 	if err != nil {
-		t.Fatalf("Failed to create DeliveryInstructions: %v", err)
+		tb.Fatalf("Failed to create DeliveryInstructions: %v", err)
 	}
+	return di, expectedHash
+}
+
+// TestHashDTRouter verifies hash extraction for DT_ROUTER delivery type.
+// For DT_ROUTER, hash starts immediately after FLAG_SIZE.
+func TestHashDTRouter(t *testing.T) {
+	di, expectedHash := createDTRouterDeliveryInstructions(t)
+
 	hash, err := di.Hash()
 	if err != nil {
 		t.Fatalf("Hash() failed for DT_ROUTER: %v", err)

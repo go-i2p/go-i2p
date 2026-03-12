@@ -520,56 +520,13 @@ func TestRouterInfoKeystore_Close_ZeroesKeyMaterial(t *testing.T) {
 	}
 
 	// Capture key bytes before Close
-	sigKeyBytes := ks.privateKey.Bytes()
-	encKeyBytes := ks.encryptionPrivKey.Bytes()
-
-	allZeroSig := true
-	for _, b := range sigKeyBytes {
-		if b != 0 {
-			allZeroSig = false
-			break
-		}
-	}
-	if allZeroSig {
-		t.Fatal("Signing key should not be all zeros before Close")
-	}
-
-	allZeroEnc := true
-	for _, b := range encKeyBytes {
-		if b != 0 {
-			allZeroEnc = false
-			break
-		}
-	}
-	if allZeroEnc {
-		t.Fatal("Encryption key should not be all zeros before Close")
-	}
+	assertNotAllZeros(t, ks.privateKey.Bytes(), "Signing key should not be all zeros before Close")
+	assertNotAllZeros(t, ks.encryptionPrivKey.Bytes(), "Encryption key should not be all zeros before Close")
 
 	ks.Close()
 
-	postCloseBytes := ks.privateKey.Bytes()
-	allZeroPost := true
-	for _, b := range postCloseBytes {
-		if b != 0 {
-			allZeroPost = false
-			break
-		}
-	}
-	if !allZeroPost {
-		t.Error("Signing key should be all zeros after Close()")
-	}
-
-	postCloseEncBytes := ks.encryptionPrivKey.Bytes()
-	allZeroEncPost := true
-	for _, b := range postCloseEncBytes {
-		if b != 0 {
-			allZeroEncPost = false
-			break
-		}
-	}
-	if !allZeroEncPost {
-		t.Error("Encryption key should be all zeros after Close()")
-	}
+	assertAllZeros(t, ks.privateKey.Bytes(), "Signing key should be all zeros after Close()")
+	assertAllZeros(t, ks.encryptionPrivKey.Bytes(), "Encryption key should be all zeros after Close()")
 }
 
 // TestRouterInfoKeystorePaddingGeneration verifies that generateIdentityPaddingFromSizes

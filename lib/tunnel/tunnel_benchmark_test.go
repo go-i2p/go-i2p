@@ -4,9 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/crypto/rand"
 )
 
 // =============================================================================
@@ -91,22 +89,7 @@ func BenchmarkLocalDeliveryRoundTrip(b *testing.B) {
 
 // BenchmarkHashDTRouter measures performance of hash extraction for DT_ROUTER delivery type.
 func BenchmarkHashDTRouter(b *testing.B) {
-	expectedHash := common.Hash{}
-	if _, err := rand.Read(expectedHash[:]); err != nil {
-		b.Fatalf("Failed to generate random hash: %v", err)
-	}
-
-	flag := byte(0x40) // DT_ROUTER (2 << 5)
-	instructions := make([]byte, FLAG_SIZE+HASH_SIZE+SIZE_FIELD_SIZE)
-	instructions[0] = flag
-	copy(instructions[FLAG_SIZE:FLAG_SIZE+HASH_SIZE], expectedHash[:])
-	instructions[FLAG_SIZE+HASH_SIZE] = 0x00
-	instructions[FLAG_SIZE+HASH_SIZE+1] = 0x10
-
-	di, err := NewDeliveryInstructions(instructions)
-	if err != nil {
-		b.Fatalf("Failed to create DeliveryInstructions: %v", err)
-	}
+	di, _ := createDTRouterDeliveryInstructions(b)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
