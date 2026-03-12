@@ -2,6 +2,9 @@ package config
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -9,110 +12,62 @@ import (
 // =============================================================================
 
 func TestDefaultBootstrapConfig_ReseedServers(t *testing.T) {
-	// Default should use all known reseed servers
-	if len(DefaultBootstrapConfig.ReseedServers) != len(KnownReseedServers) {
-		t.Errorf("DefaultBootstrapConfig.ReseedServers should have %d servers, got %d",
-			len(KnownReseedServers), len(DefaultBootstrapConfig.ReseedServers))
-	}
+	assert.Equal(t, len(KnownReseedServers), len(DefaultBootstrapConfig.ReseedServers),
+		"DefaultBootstrapConfig.ReseedServers should have all known reseed servers")
 }
 
 func TestDefaultBootstrapConfig_MinReseedServers(t *testing.T) {
-	// Should default to 1 for backward compatibility
-	if DefaultBootstrapConfig.MinReseedServers != DefaultMinReseedServers {
-		t.Errorf("DefaultBootstrapConfig.MinReseedServers should be %d, got %d",
-			DefaultMinReseedServers, DefaultBootstrapConfig.MinReseedServers)
-	}
+	assert.Equal(t, DefaultMinReseedServers, DefaultBootstrapConfig.MinReseedServers, "MinReseedServers")
 }
 
 func TestDefaultBootstrapConfig_ReseedStrategy(t *testing.T) {
-	// Should default to union strategy
-	if DefaultBootstrapConfig.ReseedStrategy != ReseedStrategyUnion {
-		t.Errorf("DefaultBootstrapConfig.ReseedStrategy should be %q, got %q",
-			ReseedStrategyUnion, DefaultBootstrapConfig.ReseedStrategy)
-	}
-
-	// Verify it's a valid strategy
-	if !IsValidReseedStrategy(DefaultBootstrapConfig.ReseedStrategy) {
-		t.Errorf("DefaultBootstrapConfig.ReseedStrategy %q is not valid",
-			DefaultBootstrapConfig.ReseedStrategy)
-	}
+	assert.Equal(t, ReseedStrategyUnion, DefaultBootstrapConfig.ReseedStrategy, "ReseedStrategy")
+	assert.True(t, IsValidReseedStrategy(DefaultBootstrapConfig.ReseedStrategy),
+		"DefaultBootstrapConfig.ReseedStrategy %q is not valid", DefaultBootstrapConfig.ReseedStrategy)
 }
 
 func TestDefaultBootstrapConfig_BootstrapType(t *testing.T) {
-	if DefaultBootstrapConfig.BootstrapType != "auto" {
-		t.Errorf("DefaultBootstrapConfig.BootstrapType should be 'auto', got %q",
-			DefaultBootstrapConfig.BootstrapType)
-	}
+	assert.Equal(t, "auto", DefaultBootstrapConfig.BootstrapType, "BootstrapType")
 }
 
 func TestDefaultBootstrapConfig_LowPeerThreshold(t *testing.T) {
-	if DefaultBootstrapConfig.LowPeerThreshold != 10 {
-		t.Errorf("DefaultBootstrapConfig.LowPeerThreshold should be 10, got %d",
-			DefaultBootstrapConfig.LowPeerThreshold)
-	}
+	assert.Equal(t, 10, DefaultBootstrapConfig.LowPeerThreshold, "LowPeerThreshold")
 }
 
 func TestBootstrapConfig_NewFieldsAccessible(t *testing.T) {
-	// Test that we can create a BootstrapConfig with the new fields
 	cfg := BootstrapConfig{
 		LowPeerThreshold: 5,
 		BootstrapType:    "reseed",
-		ReseedServers:    KnownReseedServers[:3], // First 3 servers
+		ReseedServers:    KnownReseedServers[:3],
 		MinReseedServers: 2,
 		ReseedStrategy:   ReseedStrategyIntersection,
 	}
 
-	if cfg.MinReseedServers != 2 {
-		t.Errorf("MinReseedServers not set correctly")
-	}
-	if cfg.ReseedStrategy != ReseedStrategyIntersection {
-		t.Errorf("ReseedStrategy not set correctly")
-	}
+	assert.Equal(t, 2, cfg.MinReseedServers, "MinReseedServers")
+	assert.Equal(t, ReseedStrategyIntersection, cfg.ReseedStrategy, "ReseedStrategy")
 }
 
 // TestBootstrapConfigViperRoundTrip verifies that MinReseedServers and
 // ReseedStrategy are populated from viper in NewRouterConfigFromViper.
 func TestBootstrapConfigViperRoundTrip(t *testing.T) {
-	if err := InitConfig(); err != nil {
-		t.Fatalf("InitConfig failed: %v", err)
-	}
+	require.NoError(t, InitConfig(), "InitConfig failed")
 
 	cfg := NewRouterConfigFromViper()
-	if cfg.Bootstrap == nil {
-		t.Fatal("Bootstrap config should not be nil")
-	}
+	require.NotNil(t, cfg.Bootstrap, "Bootstrap config should not be nil")
 
-	if cfg.Bootstrap.MinReseedServers == 0 {
-		t.Error("MinReseedServers should be populated from viper defaults, got 0")
-	}
-	if cfg.Bootstrap.MinReseedServers != DefaultMinReseedServers {
-		t.Errorf("MinReseedServers = %d, want %d", cfg.Bootstrap.MinReseedServers, DefaultMinReseedServers)
-	}
-	if cfg.Bootstrap.ReseedStrategy == "" {
-		t.Error("ReseedStrategy should be populated from viper defaults, got empty string")
-	}
-	if cfg.Bootstrap.ReseedStrategy != ReseedStrategyUnion {
-		t.Errorf("ReseedStrategy = %q, want %q", cfg.Bootstrap.ReseedStrategy, ReseedStrategyUnion)
-	}
+	assert.Equal(t, DefaultMinReseedServers, cfg.Bootstrap.MinReseedServers, "MinReseedServers")
+	assert.Equal(t, ReseedStrategyUnion, cfg.Bootstrap.ReseedStrategy, "ReseedStrategy")
 }
 
 // TestBootstrapConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // MinReseedServers and ReseedStrategy from viper.
 func TestBootstrapConfigUpdateRoundTrip(t *testing.T) {
-	if err := InitConfig(); err != nil {
-		t.Fatalf("InitConfig failed: %v", err)
-	}
+	require.NoError(t, InitConfig(), "InitConfig failed")
 	UpdateRouterConfig()
 
 	bootstrap := routerConfigProperties.Bootstrap
-	if bootstrap == nil {
-		t.Fatal("Bootstrap config should not be nil after UpdateRouterConfig")
-	}
+	require.NotNil(t, bootstrap, "Bootstrap config should not be nil after UpdateRouterConfig")
 
-	if bootstrap.MinReseedServers == 0 {
-		t.Error("MinReseedServers should be populated after UpdateRouterConfig, got 0")
-	}
-	if bootstrap.ReseedStrategy == "" {
-		t.Error("ReseedStrategy should be populated after UpdateRouterConfig, got empty string")
-	}
+	assert.NotZero(t, bootstrap.MinReseedServers, "MinReseedServers should be populated")
+	assert.NotEmpty(t, bootstrap.ReseedStrategy, "ReseedStrategy should be populated")
 }

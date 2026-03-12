@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,33 @@ func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 	return transport
 }
 
+// assertValidNTCP2RouterAddress verifies the common fields of a converted RouterAddress:
+// transport style is "ntcp2", host/port are set, and static key is valid base64.
+func assertValidNTCP2RouterAddress(t *testing.T, routerAddr *router_address.RouterAddress) {
+	t.Helper()
+
+	style := routerAddr.TransportStyle()
+	styleData, err := style.Data()
+	require.NoError(t, err)
+	assert.Equal(t, "ntcp2", styleData)
+
+	host, err := routerAddr.Host()
+	require.NoError(t, err)
+	assert.NotNil(t, host)
+
+	port, err := routerAddr.Port()
+	require.NoError(t, err)
+	assert.NotEmpty(t, port)
+
+	staticKeyString := routerAddr.StaticKeyString()
+	staticKeyData, err := staticKeyString.Data()
+	require.NoError(t, err)
+	assert.NotEmpty(t, staticKeyData)
+
+	_, err = base64.StdEncoding.DecodeString(staticKeyData)
+	assert.NoError(t, err, "static key should be valid base64")
+}
+
 // TestConvertToRouterAddress_Success tests successful conversion of NTCP2 transport to RouterAddress
 func TestConvertToRouterAddress_Success(t *testing.T) {
 	transport := createTestTransport(t, "127.0.0.1:0")
@@ -70,31 +98,7 @@ func TestConvertToRouterAddress_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, routerAddr)
 
-	// Verify transport style
-	style := routerAddr.TransportStyle()
-	styleData, err := style.Data()
-	require.NoError(t, err)
-	assert.Equal(t, "ntcp2", styleData)
-
-	// Verify host is set and retrievable
-	host, err := routerAddr.Host()
-	require.NoError(t, err)
-	assert.NotNil(t, host)
-
-	// Verify port is set and valid
-	port, err := routerAddr.Port()
-	require.NoError(t, err)
-	assert.NotEmpty(t, port)
-
-	// Verify static key exists
-	staticKeyString := routerAddr.StaticKeyString()
-	staticKeyData, err := staticKeyString.Data()
-	require.NoError(t, err)
-	assert.NotEmpty(t, staticKeyData)
-
-	// Verify static key can be decoded
-	_, err = base64.StdEncoding.DecodeString(staticKeyData)
-	assert.NoError(t, err, "static key should be valid base64")
+	assertValidNTCP2RouterAddress(t, routerAddr)
 
 	// Verify cost is reasonable
 	cost := routerAddr.Cost()
@@ -254,24 +258,7 @@ func TestConvertToRouterAddress_Integration(t *testing.T) {
 	bytes := routerAddr.Bytes()
 	assert.NotEmpty(t, bytes)
 
-	// Verify transport style is correct
-	style := routerAddr.TransportStyle()
-	styleData, _ := style.Data()
-	assert.Equal(t, "ntcp2", styleData)
-
-	// Verify we can retrieve host and port
-	host, err := routerAddr.Host()
-	assert.NoError(t, err)
-	assert.NotNil(t, host)
-
-	port, err := routerAddr.Port()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, port)
-
-	// Verify static key is set
-	staticKey := routerAddr.StaticKeyString()
-	staticKeyData, _ := staticKey.Data()
-	assert.NotEmpty(t, staticKeyData)
+	assertValidNTCP2RouterAddress(t, routerAddr)
 }
 
 // BenchmarkConvertToRouterAddress benchmarks the conversion function

@@ -3,6 +3,9 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -10,30 +13,19 @@ import (
 // =============================================================================
 
 func TestKnownReseedServers_NotEmpty(t *testing.T) {
-	if len(KnownReseedServers) == 0 {
-		t.Fatal("KnownReseedServers should not be empty")
-	}
+	require.NotEmpty(t, KnownReseedServers, "KnownReseedServers should not be empty")
 }
 
 func TestKnownReseedServers_MinimumCount(t *testing.T) {
-	// Should have at least 10 servers per PLAN.md
-	if len(KnownReseedServers) < 10 {
-		t.Errorf("expected at least 10 known reseed servers, got %d", len(KnownReseedServers))
-	}
+	assert.GreaterOrEqual(t, len(KnownReseedServers), 10, "expected at least 10 known reseed servers")
 }
 
 func TestKnownReseedServers_ValidURLs(t *testing.T) {
 	for i, server := range KnownReseedServers {
 		t.Run(server.Url, func(t *testing.T) {
-			if server.Url == "" {
-				t.Errorf("server %d has empty URL", i)
-			}
-			if !strings.HasPrefix(server.Url, "https://") {
-				t.Errorf("server %d URL should use HTTPS: %s", i, server.Url)
-			}
-			if !strings.HasSuffix(server.Url, "/") {
-				t.Errorf("server %d URL should end with /: %s", i, server.Url)
-			}
+			assert.NotEmpty(t, server.Url, "server %d has empty URL", i)
+			assert.True(t, strings.HasPrefix(server.Url, "https://"), "server %d URL should use HTTPS: %s", i, server.Url)
+			assert.True(t, strings.HasSuffix(server.Url, "/"), "server %d URL should end with /: %s", i, server.Url)
 		})
 	}
 }
@@ -41,12 +33,9 @@ func TestKnownReseedServers_ValidURLs(t *testing.T) {
 func TestKnownReseedServers_ValidFingerprints(t *testing.T) {
 	for i, server := range KnownReseedServers {
 		t.Run(server.Url, func(t *testing.T) {
-			if server.SU3Fingerprint == "" {
-				t.Errorf("server %d has empty SU3Fingerprint", i)
-			}
-			if !strings.HasSuffix(server.SU3Fingerprint, ".crt") {
-				t.Errorf("server %d SU3Fingerprint should end with .crt: %s", i, server.SU3Fingerprint)
-			}
+			assert.NotEmpty(t, server.SU3Fingerprint, "server %d has empty SU3Fingerprint", i)
+			assert.True(t, strings.HasSuffix(server.SU3Fingerprint, ".crt"),
+				"server %d SU3Fingerprint should end with .crt: %s", i, server.SU3Fingerprint)
 		})
 	}
 }
@@ -54,15 +43,12 @@ func TestKnownReseedServers_ValidFingerprints(t *testing.T) {
 func TestKnownReseedServers_NoDuplicateURLs(t *testing.T) {
 	seen := make(map[string]bool)
 	for _, server := range KnownReseedServers {
-		if seen[server.Url] {
-			t.Errorf("duplicate URL found: %s", server.Url)
-		}
+		assert.False(t, seen[server.Url], "duplicate URL found: %s", server.Url)
 		seen[server.Url] = true
 	}
 }
 
 func TestKnownReseedServers_ContainsI2pGitOrg(t *testing.T) {
-	// The go-i2p dev team server should always be present
 	found := false
 	for _, server := range KnownReseedServers {
 		if strings.Contains(server.Url, "reseed.i2pgit.org") {
@@ -70,39 +56,22 @@ func TestKnownReseedServers_ContainsI2pGitOrg(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Error("reseed.i2pgit.org should be in KnownReseedServers")
-	}
+	assert.True(t, found, "reseed.i2pgit.org should be in KnownReseedServers")
 }
 
 func TestReseedStrategyConstants(t *testing.T) {
-	if ReseedStrategyUnion != "union" {
-		t.Errorf("ReseedStrategyUnion should be 'union', got %s", ReseedStrategyUnion)
-	}
-	if ReseedStrategyIntersection != "intersection" {
-		t.Errorf("ReseedStrategyIntersection should be 'intersection', got %s", ReseedStrategyIntersection)
-	}
-	if ReseedStrategyRandom != "random" {
-		t.Errorf("ReseedStrategyRandom should be 'random', got %s", ReseedStrategyRandom)
-	}
+	assert.Equal(t, "union", string(ReseedStrategyUnion), "ReseedStrategyUnion")
+	assert.Equal(t, "intersection", string(ReseedStrategyIntersection), "ReseedStrategyIntersection")
+	assert.Equal(t, "random", string(ReseedStrategyRandom), "ReseedStrategyRandom")
 }
 
 func TestValidReseedStrategies(t *testing.T) {
 	strategies := ValidReseedStrategies()
-	if len(strategies) != 3 {
-		t.Errorf("expected 3 valid strategies, got %d", len(strategies))
-	}
+	assert.Len(t, strategies, 3, "expected 3 valid strategies")
 
-	expected := map[string]bool{
-		"union":        true,
-		"intersection": true,
-		"random":       true,
-	}
-
+	expected := map[string]bool{"union": true, "intersection": true, "random": true}
 	for _, strategy := range strategies {
-		if !expected[strategy] {
-			t.Errorf("unexpected strategy in list: %s", strategy)
-		}
+		assert.True(t, expected[strategy], "unexpected strategy in list: %s", strategy)
 	}
 }
 
@@ -116,23 +85,18 @@ func TestIsValidReseedStrategy(t *testing.T) {
 		{"random", true},
 		{"", false},
 		{"invalid", false},
-		{"UNION", false}, // case sensitive
+		{"UNION", false},
 		{"Union", false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.strategy, func(t *testing.T) {
-			result := IsValidReseedStrategy(tc.strategy)
-			if result != tc.valid {
-				t.Errorf("IsValidReseedStrategy(%q) = %v, want %v", tc.strategy, result, tc.valid)
-			}
+			assert.Equal(t, tc.valid, IsValidReseedStrategy(tc.strategy),
+				"IsValidReseedStrategy(%q)", tc.strategy)
 		})
 	}
 }
 
 func TestDefaultMinReseedServers(t *testing.T) {
-	// Should be 2 for Java I2P parity (enhanced security through multi-server confirmation)
-	if DefaultMinReseedServers != 2 {
-		t.Errorf("DefaultMinReseedServers should be 2 for Java I2P parity, got %d", DefaultMinReseedServers)
-	}
+	assert.Equal(t, 2, DefaultMinReseedServers, "DefaultMinReseedServers should be 2 for Java I2P parity")
 }

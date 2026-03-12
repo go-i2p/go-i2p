@@ -5,182 +5,107 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParseCreateSessionPayload_Empty tests parsing with empty/minimal payload
 func TestParseCreateSessionPayload_Empty(t *testing.T) {
-	// Empty payload
 	_, _, err := ParseCreateSessionPayload([]byte{})
-	if err == nil {
-		t.Error("Expected error for empty payload, got nil")
-	}
+	assert.Error(t, err, "Expected error for empty payload")
 
-	// Too short payload
 	_, _, err = ParseCreateSessionPayload([]byte{0x01})
-	if err == nil {
-		t.Error("Expected error for too short payload, got nil")
-	}
+	assert.Error(t, err, "Expected error for too short payload")
 }
 
 // TestParseCreateSessionPayload_DefaultOptions tests parsing with default options (empty mapping)
 func TestParseCreateSessionPayload_DefaultOptions(t *testing.T) {
-	// Create a test destination
 	dest, err := createTestDestination()
-	if err != nil {
-		t.Fatalf("Failed to create test destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test destination")
 
-	// Serialize destination
 	destBytes, err := dest.Bytes()
-	if err != nil {
-		t.Fatalf("Failed to serialize destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to serialize destination")
 
 	// Create empty options mapping - just 2 bytes for size=0
-	// This is the minimal valid mapping format
-	mappingBytes := []byte{0x00, 0x00} // Size = 0 (no options)
-
-	// Combine destination + empty mapping
+	mappingBytes := []byte{0x00, 0x00}
 	payload := append(destBytes, mappingBytes...)
 
-	// Parse
 	parsedDest, config, err := ParseCreateSessionPayload(payload)
-	if err != nil {
-		t.Fatalf("Failed to parse create session payload: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse create session payload")
+	require.NotNil(t, parsedDest, "Parsed destination is nil")
 
-	// Verify destination parsed correctly
-	if parsedDest == nil {
-		t.Fatal("Parsed destination is nil")
-	}
-
-	// Verify config has default values
 	defaultConfig := DefaultSessionConfig()
-	if config.InboundTunnelLength != defaultConfig.InboundTunnelLength {
-		t.Errorf("InboundTunnelLength = %d, want %d", config.InboundTunnelLength, defaultConfig.InboundTunnelLength)
-	}
-	if config.OutboundTunnelLength != defaultConfig.OutboundTunnelLength {
-		t.Errorf("OutboundTunnelLength = %d, want %d", config.OutboundTunnelLength, defaultConfig.OutboundTunnelLength)
-	}
-	if config.InboundTunnelCount != defaultConfig.InboundTunnelCount {
-		t.Errorf("InboundTunnelCount = %d, want %d", config.InboundTunnelCount, defaultConfig.InboundTunnelCount)
-	}
-	if config.OutboundTunnelCount != defaultConfig.OutboundTunnelCount {
-		t.Errorf("OutboundTunnelCount = %d, want %d", config.OutboundTunnelCount, defaultConfig.OutboundTunnelCount)
-	}
+	assert.Equal(t, defaultConfig.InboundTunnelLength, config.InboundTunnelLength, "InboundTunnelLength")
+	assert.Equal(t, defaultConfig.OutboundTunnelLength, config.OutboundTunnelLength, "OutboundTunnelLength")
+	assert.Equal(t, defaultConfig.InboundTunnelCount, config.InboundTunnelCount, "InboundTunnelCount")
+	assert.Equal(t, defaultConfig.OutboundTunnelCount, config.OutboundTunnelCount, "OutboundTunnelCount")
 }
 
 // TestParseCreateSessionPayload_CustomOptions tests parsing with custom tunnel configuration
 func TestParseCreateSessionPayload_CustomOptions(t *testing.T) {
-	// Create a test destination
 	dest, err := createTestDestination()
-	if err != nil {
-		t.Fatalf("Failed to create test destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test destination")
 
 	destBytes, err := dest.Bytes()
-	if err != nil {
-		t.Fatalf("Failed to serialize destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to serialize destination")
 
-	// Create options mapping with custom values
 	options := map[string]string{
-		"inbound.length":    "2", // 2 hops instead of default 3
-		"outbound.length":   "4", // 4 hops instead of default 3
-		"inbound.quantity":  "3", // 3 tunnels instead of default 5
-		"outbound.quantity": "7", // 7 tunnels instead of default 5
+		"inbound.length":    "2",
+		"outbound.length":   "4",
+		"inbound.quantity":  "3",
+		"outbound.quantity": "7",
 		"inbound.nickname":  "test-session",
 	}
 
 	mapping, err := data.GoMapToMapping(options)
-	if err != nil {
-		t.Fatalf("Failed to create mapping: %v", err)
-	}
+	require.NoError(t, err, "Failed to create mapping")
 
 	mappingBytes := mapping.Data()
 	payload := append(destBytes, mappingBytes...)
 
-	// Parse
 	parsedDest, config, err := ParseCreateSessionPayload(payload)
-	if err != nil {
-		t.Fatalf("Failed to parse create session payload: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse create session payload")
+	require.NotNil(t, parsedDest, "Parsed destination is nil")
 
-	// Verify destination
-	if parsedDest == nil {
-		t.Fatal("Parsed destination is nil")
-	}
-
-	// Verify custom config values
-	if config.InboundTunnelLength != 2 {
-		t.Errorf("InboundTunnelLength = %d, want 2", config.InboundTunnelLength)
-	}
-	if config.OutboundTunnelLength != 4 {
-		t.Errorf("OutboundTunnelLength = %d, want 4", config.OutboundTunnelLength)
-	}
-	if config.InboundTunnelCount != 3 {
-		t.Errorf("InboundTunnelCount = %d, want 3", config.InboundTunnelCount)
-	}
-	if config.OutboundTunnelCount != 7 {
-		t.Errorf("OutboundTunnelCount = %d, want 7", config.OutboundTunnelCount)
-	}
-	if config.Nickname != "test-session" {
-		t.Errorf("Nickname = %q, want %q", config.Nickname, "test-session")
-	}
+	assert.Equal(t, 2, config.InboundTunnelLength, "InboundTunnelLength")
+	assert.Equal(t, 4, config.OutboundTunnelLength, "OutboundTunnelLength")
+	assert.Equal(t, 3, config.InboundTunnelCount, "InboundTunnelCount")
+	assert.Equal(t, 7, config.OutboundTunnelCount, "OutboundTunnelCount")
+	assert.Equal(t, "test-session", config.Nickname, "Nickname")
 }
 
 // TestParseCreateSessionPayload_InvalidOptions tests parsing with invalid option values
 func TestParseCreateSessionPayload_InvalidOptions(t *testing.T) {
 	dest, err := createTestDestination()
-	if err != nil {
-		t.Fatalf("Failed to create test destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test destination")
 
 	destBytes, err := dest.Bytes()
-	if err != nil {
-		t.Fatalf("Failed to serialize destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to serialize destination")
 
-	// Create options with invalid values (should fall back to defaults)
 	options := map[string]string{
-		"inbound.length":    "99",           // Invalid (> 7)
-		"outbound.length":   "-1",           // Invalid (< 0)
-		"inbound.quantity":  "not_a_number", // Invalid
-		"outbound.quantity": "0",            // Invalid (< 1)
+		"inbound.length":    "99",
+		"outbound.length":   "-1",
+		"inbound.quantity":  "not_a_number",
+		"outbound.quantity": "0",
 	}
 
 	mapping, err := data.GoMapToMapping(options)
-	if err != nil {
-		t.Fatalf("Failed to create mapping: %v", err)
-	}
+	require.NoError(t, err, "Failed to create mapping")
 
 	payload := append(destBytes, mapping.Data()...)
 
-	// Parse (should succeed with defaults)
 	_, config, err := ParseCreateSessionPayload(payload)
-	if err != nil {
-		t.Fatalf("Failed to parse create session payload: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse create session payload")
 
-	// Verify fallback to defaults
 	defaultConfig := DefaultSessionConfig()
-	if config.InboundTunnelLength != defaultConfig.InboundTunnelLength {
-		t.Errorf("InboundTunnelLength = %d, want default %d", config.InboundTunnelLength, defaultConfig.InboundTunnelLength)
-	}
-	if config.OutboundTunnelLength != defaultConfig.OutboundTunnelLength {
-		t.Errorf("OutboundTunnelLength = %d, want default %d", config.OutboundTunnelLength, defaultConfig.OutboundTunnelLength)
-	}
-	if config.InboundTunnelCount != defaultConfig.InboundTunnelCount {
-		t.Errorf("InboundTunnelCount = %d, want default %d", config.InboundTunnelCount, defaultConfig.InboundTunnelCount)
-	}
-	if config.OutboundTunnelCount != defaultConfig.OutboundTunnelCount {
-		t.Errorf("OutboundTunnelCount = %d, want default %d", config.OutboundTunnelCount, defaultConfig.OutboundTunnelCount)
-	}
+	assert.Equal(t, defaultConfig.InboundTunnelLength, config.InboundTunnelLength, "InboundTunnelLength")
+	assert.Equal(t, defaultConfig.OutboundTunnelLength, config.OutboundTunnelLength, "OutboundTunnelLength")
+	assert.Equal(t, defaultConfig.InboundTunnelCount, config.InboundTunnelCount, "InboundTunnelCount")
+	assert.Equal(t, defaultConfig.OutboundTunnelCount, config.OutboundTunnelCount, "OutboundTunnelCount")
 }
 
 // TestParseReconfigureSessionPayload tests parsing reconfiguration payloads
 func TestParseReconfigureSessionPayload(t *testing.T) {
-	// Create options mapping
 	options := map[string]string{
 		"inbound.length":    "1",
 		"outbound.length":   "5",
@@ -189,44 +114,24 @@ func TestParseReconfigureSessionPayload(t *testing.T) {
 	}
 
 	mapping, err := data.GoMapToMapping(options)
-	if err != nil {
-		t.Fatalf("Failed to create mapping: %v", err)
-	}
+	require.NoError(t, err, "Failed to create mapping")
 
-	payload := mapping.Data()
+	config, err := ParseReconfigureSessionPayload(mapping.Data())
+	require.NoError(t, err, "Failed to parse reconfigure session payload")
 
-	// Parse
-	config, err := ParseReconfigureSessionPayload(payload)
-	if err != nil {
-		t.Fatalf("Failed to parse reconfigure session payload: %v", err)
-	}
-
-	// Verify values
-	if config.InboundTunnelLength != 1 {
-		t.Errorf("InboundTunnelLength = %d, want 1", config.InboundTunnelLength)
-	}
-	if config.OutboundTunnelLength != 5 {
-		t.Errorf("OutboundTunnelLength = %d, want 5", config.OutboundTunnelLength)
-	}
-	if config.InboundTunnelCount != 2 {
-		t.Errorf("InboundTunnelCount = %d, want 2", config.InboundTunnelCount)
-	}
-	if config.OutboundTunnelCount != 8 {
-		t.Errorf("OutboundTunnelCount = %d, want 8", config.OutboundTunnelCount)
-	}
+	assert.Equal(t, 1, config.InboundTunnelLength, "InboundTunnelLength")
+	assert.Equal(t, 5, config.OutboundTunnelLength, "OutboundTunnelLength")
+	assert.Equal(t, 2, config.InboundTunnelCount, "InboundTunnelCount")
+	assert.Equal(t, 8, config.OutboundTunnelCount, "OutboundTunnelCount")
 }
 
 // TestParseReconfigureSessionPayload_Empty tests error handling for empty payload
 func TestParseReconfigureSessionPayload_Empty(t *testing.T) {
 	_, err := ParseReconfigureSessionPayload([]byte{})
-	if err == nil {
-		t.Error("Expected error for empty payload, got nil")
-	}
+	assert.Error(t, err, "Expected error for empty payload")
 
 	_, err = ParseReconfigureSessionPayload([]byte{0x00})
-	if err == nil {
-		t.Error("Expected error for too short payload, got nil")
-	}
+	assert.Error(t, err, "Expected error for too short payload")
 }
 
 // TestValidateSessionConfig tests session configuration validation
@@ -369,14 +274,10 @@ func TestValidateSessionConfig(t *testing.T) {
 // TestParseCreateSessionPayload_BoundaryValues tests edge cases for option values
 func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 	dest, err := createTestDestination()
-	if err != nil {
-		t.Fatalf("Failed to create test destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test destination")
 
 	destBytes, err := dest.Bytes()
-	if err != nil {
-		t.Fatalf("Failed to serialize destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to serialize destination")
 
 	tests := []struct {
 		name     string
@@ -390,12 +291,8 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 				"outbound.length": "0",
 			},
 			validate: func(t *testing.T, c *SessionConfig) {
-				if c.InboundTunnelLength != 0 {
-					t.Errorf("InboundTunnelLength = %d, want 0", c.InboundTunnelLength)
-				}
-				if c.OutboundTunnelLength != 0 {
-					t.Errorf("OutboundTunnelLength = %d, want 0", c.OutboundTunnelLength)
-				}
+				assert.Equal(t, 0, c.InboundTunnelLength, "InboundTunnelLength")
+				assert.Equal(t, 0, c.OutboundTunnelLength, "OutboundTunnelLength")
 			},
 		},
 		{
@@ -405,12 +302,8 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 				"outbound.length": "7",
 			},
 			validate: func(t *testing.T, c *SessionConfig) {
-				if c.InboundTunnelLength != 7 {
-					t.Errorf("InboundTunnelLength = %d, want 7", c.InboundTunnelLength)
-				}
-				if c.OutboundTunnelLength != 7 {
-					t.Errorf("OutboundTunnelLength = %d, want 7", c.OutboundTunnelLength)
-				}
+				assert.Equal(t, 7, c.InboundTunnelLength, "InboundTunnelLength")
+				assert.Equal(t, 7, c.OutboundTunnelLength, "OutboundTunnelLength")
 			},
 		},
 		{
@@ -420,12 +313,8 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 				"outbound.quantity": "1",
 			},
 			validate: func(t *testing.T, c *SessionConfig) {
-				if c.InboundTunnelCount != 1 {
-					t.Errorf("InboundTunnelCount = %d, want 1", c.InboundTunnelCount)
-				}
-				if c.OutboundTunnelCount != 1 {
-					t.Errorf("OutboundTunnelCount = %d, want 1", c.OutboundTunnelCount)
-				}
+				assert.Equal(t, 1, c.InboundTunnelCount, "InboundTunnelCount")
+				assert.Equal(t, 1, c.OutboundTunnelCount, "OutboundTunnelCount")
 			},
 		},
 		{
@@ -435,12 +324,8 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 				"outbound.quantity": "16",
 			},
 			validate: func(t *testing.T, c *SessionConfig) {
-				if c.InboundTunnelCount != 16 {
-					t.Errorf("InboundTunnelCount = %d, want 16", c.InboundTunnelCount)
-				}
-				if c.OutboundTunnelCount != 16 {
-					t.Errorf("OutboundTunnelCount = %d, want 16", c.OutboundTunnelCount)
-				}
+				assert.Equal(t, 16, c.InboundTunnelCount, "InboundTunnelCount")
+				assert.Equal(t, 16, c.OutboundTunnelCount, "OutboundTunnelCount")
 			},
 		},
 	}
@@ -448,15 +333,11 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mapping, err := data.GoMapToMapping(tt.options)
-			if err != nil {
-				t.Fatalf("Failed to create mapping: %v", err)
-			}
+			require.NoError(t, err, "Failed to create mapping")
 
 			payload := append(destBytes, mapping.Data()...)
 			_, config, err := ParseCreateSessionPayload(payload)
-			if err != nil {
-				t.Fatalf("Failed to parse payload: %v", err)
-			}
+			require.NoError(t, err, "Failed to parse payload")
 
 			tt.validate(t, config)
 		})
@@ -470,55 +351,36 @@ func TestApplyMessageOptions_Reliability(t *testing.T) {
 			config := DefaultSessionConfig()
 			options := map[string]string{"i2cp.messageReliability": rel}
 			applyMessageOptions(config, options)
-			if config.MessageReliability != rel {
-				t.Errorf("MessageReliability = %q, want %q", config.MessageReliability, rel)
-			}
-			if !config.ExplicitlySetFields["MessageReliability"] {
-				t.Error("MessageReliability not marked as explicitly set")
-			}
+			assert.Equal(t, rel, config.MessageReliability, "MessageReliability")
+			assert.True(t, config.ExplicitlySetFields["MessageReliability"], "MessageReliability not marked as explicitly set")
 		})
 	}
-	// Unknown value should keep default
 	t.Run("unknown_value", func(t *testing.T) {
 		config := DefaultSessionConfig()
 		options := map[string]string{"i2cp.messageReliability": "Invalid"}
 		applyMessageOptions(config, options)
-		if config.MessageReliability != "BestEffort" {
-			t.Errorf("MessageReliability = %q, want default BestEffort", config.MessageReliability)
-		}
+		assert.Equal(t, "BestEffort", config.MessageReliability, "MessageReliability")
 	})
 }
 
 // TestApplyMessageOptions_EncryptLeaseSet tests that i2cp.encryptLeaseSet enables UseEncryptedLeaseSet.
 func TestApplyMessageOptions_EncryptLeaseSet(t *testing.T) {
 	config := DefaultSessionConfig()
-	if config.UseEncryptedLeaseSet {
-		t.Fatal("UseEncryptedLeaseSet should default to false")
-	}
+	require.False(t, config.UseEncryptedLeaseSet, "UseEncryptedLeaseSet should default to false")
 	options := map[string]string{"i2cp.encryptLeaseSet": "true"}
 	applyMessageOptions(config, options)
-	if !config.UseEncryptedLeaseSet {
-		t.Error("UseEncryptedLeaseSet should be true after setting i2cp.encryptLeaseSet=true")
-	}
-	if !config.ExplicitlySetFields["UseEncryptedLeaseSet"] {
-		t.Error("UseEncryptedLeaseSet not marked as explicitly set")
-	}
+	assert.True(t, config.UseEncryptedLeaseSet, "UseEncryptedLeaseSet should be true")
+	assert.True(t, config.ExplicitlySetFields["UseEncryptedLeaseSet"], "not marked as explicitly set")
 }
 
 // TestApplyMessageOptions_DontPublishLeaseSet tests that i2cp.dontPublishLeaseSet is wired correctly.
 func TestApplyMessageOptions_DontPublishLeaseSet(t *testing.T) {
 	config := DefaultSessionConfig()
-	if config.DontPublishLeaseSet {
-		t.Fatal("DontPublishLeaseSet should default to false")
-	}
+	require.False(t, config.DontPublishLeaseSet, "DontPublishLeaseSet should default to false")
 	options := map[string]string{"i2cp.dontPublishLeaseSet": "true"}
 	applyMessageOptions(config, options)
-	if !config.DontPublishLeaseSet {
-		t.Error("DontPublishLeaseSet should be true after setting i2cp.dontPublishLeaseSet=true")
-	}
-	if !config.ExplicitlySetFields["DontPublishLeaseSet"] {
-		t.Error("DontPublishLeaseSet not marked as explicitly set")
-	}
+	assert.True(t, config.DontPublishLeaseSet, "DontPublishLeaseSet should be true")
+	assert.True(t, config.ExplicitlySetFields["DontPublishLeaseSet"], "not marked as explicitly set")
 }
 
 // TestApplyMessageOptions_GzipStillUnsupported verifies i2cp.gzip is tracked as unsupported.
@@ -526,9 +388,7 @@ func TestApplyMessageOptions_GzipStillUnsupported(t *testing.T) {
 	config := DefaultSessionConfig()
 	options := map[string]string{"i2cp.gzip": "true"}
 	applyMessageOptions(config, options)
-	if val, ok := config.UnsupportedOptions["i2cp.gzip"]; !ok || val != "true" {
-		t.Errorf("i2cp.gzip should be recorded in UnsupportedOptions, got %v", config.UnsupportedOptions)
-	}
+	assert.Equal(t, "true", config.UnsupportedOptions["i2cp.gzip"], "i2cp.gzip should be recorded in UnsupportedOptions")
 }
 
 // TestLogUnsupportedBackupQuantities_AppliesValues tests that backup quantities are stored.
@@ -539,18 +399,10 @@ func TestLogUnsupportedBackupQuantities_AppliesValues(t *testing.T) {
 		"outbound.backupQuantity": "3",
 	}
 	logUnsupportedBackupQuantities(config, options)
-	if config.InboundBackupQuantity != 2 {
-		t.Errorf("InboundBackupQuantity = %d, want 2", config.InboundBackupQuantity)
-	}
-	if config.OutboundBackupQuantity != 3 {
-		t.Errorf("OutboundBackupQuantity = %d, want 3", config.OutboundBackupQuantity)
-	}
-	if !config.ExplicitlySetFields["InboundBackupQuantity"] {
-		t.Error("InboundBackupQuantity not marked as explicitly set")
-	}
-	if !config.ExplicitlySetFields["OutboundBackupQuantity"] {
-		t.Error("OutboundBackupQuantity not marked as explicitly set")
-	}
+	assert.Equal(t, 2, config.InboundBackupQuantity, "InboundBackupQuantity")
+	assert.Equal(t, 3, config.OutboundBackupQuantity, "OutboundBackupQuantity")
+	assert.True(t, config.ExplicitlySetFields["InboundBackupQuantity"], "InboundBackupQuantity not marked")
+	assert.True(t, config.ExplicitlySetFields["OutboundBackupQuantity"], "OutboundBackupQuantity not marked")
 }
 
 // TestLogUnsupportedBackupQuantities_OutOfRange tests that out-of-range values are ignored.
@@ -561,12 +413,8 @@ func TestLogUnsupportedBackupQuantities_OutOfRange(t *testing.T) {
 		"outbound.backupQuantity": "17",
 	}
 	logUnsupportedBackupQuantities(config, options)
-	if config.InboundBackupQuantity != 0 {
-		t.Errorf("InboundBackupQuantity = %d, want 0 (default for out-of-range)", config.InboundBackupQuantity)
-	}
-	if config.OutboundBackupQuantity != 0 {
-		t.Errorf("OutboundBackupQuantity = %d, want 0 (default for out-of-range)", config.OutboundBackupQuantity)
-	}
+	assert.Equal(t, 0, config.InboundBackupQuantity, "InboundBackupQuantity")
+	assert.Equal(t, 0, config.OutboundBackupQuantity, "OutboundBackupQuantity")
 }
 
 // TestApplyTunnelLifetimeOptions_AppliesVariance tests that length variance is stored.
@@ -577,18 +425,10 @@ func TestApplyTunnelLifetimeOptions_AppliesVariance(t *testing.T) {
 		"outbound.lengthVariance": "2",
 	}
 	applyTunnelLifetimeOptions(config, options)
-	if config.InboundLengthVariance != -1 {
-		t.Errorf("InboundLengthVariance = %d, want -1", config.InboundLengthVariance)
-	}
-	if config.OutboundLengthVariance != 2 {
-		t.Errorf("OutboundLengthVariance = %d, want 2", config.OutboundLengthVariance)
-	}
-	if !config.ExplicitlySetFields["InboundLengthVariance"] {
-		t.Error("InboundLengthVariance not marked as explicitly set")
-	}
-	if !config.ExplicitlySetFields["OutboundLengthVariance"] {
-		t.Error("OutboundLengthVariance not marked as explicitly set")
-	}
+	assert.Equal(t, -1, config.InboundLengthVariance, "InboundLengthVariance")
+	assert.Equal(t, 2, config.OutboundLengthVariance, "OutboundLengthVariance")
+	assert.True(t, config.ExplicitlySetFields["InboundLengthVariance"], "InboundLengthVariance not marked")
+	assert.True(t, config.ExplicitlySetFields["OutboundLengthVariance"], "OutboundLengthVariance not marked")
 }
 
 // TestApplyTunnelLifetimeOptions_OutOfRange tests that out-of-range variance values are ignored.
@@ -599,25 +439,17 @@ func TestApplyTunnelLifetimeOptions_OutOfRange(t *testing.T) {
 		"outbound.lengthVariance": "8",
 	}
 	applyTunnelLifetimeOptions(config, options)
-	if config.InboundLengthVariance != 0 {
-		t.Errorf("InboundLengthVariance = %d, want 0 (default for out-of-range)", config.InboundLengthVariance)
-	}
-	if config.OutboundLengthVariance != 0 {
-		t.Errorf("OutboundLengthVariance = %d, want 0 (default for out-of-range)", config.OutboundLengthVariance)
-	}
+	assert.Equal(t, 0, config.InboundLengthVariance, "InboundLengthVariance")
+	assert.Equal(t, 0, config.OutboundLengthVariance, "OutboundLengthVariance")
 }
 
 // TestFullParsePipeline_NewOptions tests end-to-end parsing of the newly implemented options
 // through the full CreateSession payload parsing pipeline.
 func TestFullParsePipeline_NewOptions(t *testing.T) {
 	dest, err := createTestDestination()
-	if err != nil {
-		t.Fatalf("Failed to create test destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test destination")
 	destBytes, err := dest.Bytes()
-	if err != nil {
-		t.Fatalf("Failed to serialize destination: %v", err)
-	}
+	require.NoError(t, err, "Failed to serialize destination")
 
 	options := map[string]string{
 		"inbound.length":           "3",
@@ -634,44 +466,20 @@ func TestFullParsePipeline_NewOptions(t *testing.T) {
 	}
 
 	mapping, err := data.GoMapToMapping(options)
-	if err != nil {
-		t.Fatalf("Failed to create mapping: %v", err)
-	}
+	require.NoError(t, err, "Failed to create mapping")
 
 	payload := append(destBytes, mapping.Data()...)
 	_, config, err := ParseCreateSessionPayload(payload)
-	if err != nil {
-		t.Fatalf("Failed to parse payload: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse payload")
 
-	// Verify all newly-wired options
-	if config.InboundBackupQuantity != 1 {
-		t.Errorf("InboundBackupQuantity = %d, want 1", config.InboundBackupQuantity)
-	}
-	if config.OutboundBackupQuantity != 2 {
-		t.Errorf("OutboundBackupQuantity = %d, want 2", config.OutboundBackupQuantity)
-	}
-	if config.InboundLengthVariance != -1 {
-		t.Errorf("InboundLengthVariance = %d, want -1", config.InboundLengthVariance)
-	}
-	if config.OutboundLengthVariance != 3 {
-		t.Errorf("OutboundLengthVariance = %d, want 3", config.OutboundLengthVariance)
-	}
-	if config.MessageReliability != "Guaranteed" {
-		t.Errorf("MessageReliability = %q, want Guaranteed", config.MessageReliability)
-	}
-	if !config.UseEncryptedLeaseSet {
-		t.Error("UseEncryptedLeaseSet should be true")
-	}
-	if !config.DontPublishLeaseSet {
-		t.Error("DontPublishLeaseSet should be true")
-	}
+	assert.Equal(t, 1, config.InboundBackupQuantity, "InboundBackupQuantity")
+	assert.Equal(t, 2, config.OutboundBackupQuantity, "OutboundBackupQuantity")
+	assert.Equal(t, -1, config.InboundLengthVariance, "InboundLengthVariance")
+	assert.Equal(t, 3, config.OutboundLengthVariance, "OutboundLengthVariance")
+	assert.Equal(t, "Guaranteed", config.MessageReliability, "MessageReliability")
+	assert.True(t, config.UseEncryptedLeaseSet, "UseEncryptedLeaseSet should be true")
+	assert.True(t, config.DontPublishLeaseSet, "DontPublishLeaseSet should be true")
 
-	// i2cp.encryptLeaseSet should NOT appear in UnsupportedOptions anymore
-	if _, exists := config.UnsupportedOptions["i2cp.encryptLeaseSet"]; exists {
-		t.Error("i2cp.encryptLeaseSet should not be in UnsupportedOptions after being wired")
-	}
-	if _, exists := config.UnsupportedOptions["i2cp.messageReliability"]; exists {
-		t.Error("i2cp.messageReliability should not be in UnsupportedOptions after being wired")
-	}
+	assert.NotContains(t, config.UnsupportedOptions, "i2cp.encryptLeaseSet")
+	assert.NotContains(t, config.UnsupportedOptions, "i2cp.messageReliability")
 }

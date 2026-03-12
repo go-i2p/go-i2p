@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -33,11 +35,7 @@ func TestCurrentConfigRouterInfoRefreshInterval(t *testing.T) {
 	// The key fix: CurrentConfig() must read from the same key that
 	// setDefaults() writes to. Before the fix, it read from a different
 	// key ("router.routerinfo_refresh_interval") and always got 0s.
-	expected := 30 * time.Minute
-	if cfg.Router.RouterInfoRefreshInterval != expected {
-		t.Errorf("CurrentConfig().Router.RouterInfoRefreshInterval = %v, want %v",
-			cfg.Router.RouterInfoRefreshInterval, expected)
-	}
+	assert.Equal(t, 30*time.Minute, cfg.Router.RouterInfoRefreshInterval, "RouterInfoRefreshInterval")
 }
 
 // TestCurrentConfigDefaultsRoundTrip verifies that all defaults set via
@@ -49,44 +47,20 @@ func TestCurrentConfigDefaultsRoundTrip(t *testing.T) {
 	cfg := CurrentConfig()
 
 	// Router section
-	if cfg.Router.RouterInfoRefreshInterval != defaults.Router.RouterInfoRefreshInterval {
-		t.Errorf("RouterInfoRefreshInterval mismatch: got %v, want %v",
-			cfg.Router.RouterInfoRefreshInterval, defaults.Router.RouterInfoRefreshInterval)
-	}
-	if cfg.Router.MessageExpirationTime != defaults.Router.MessageExpirationTime {
-		t.Errorf("MessageExpirationTime mismatch: got %v, want %v",
-			cfg.Router.MessageExpirationTime, defaults.Router.MessageExpirationTime)
-	}
-	if cfg.Router.MaxConcurrentSessions != defaults.Router.MaxConcurrentSessions {
-		t.Errorf("MaxConcurrentSessions mismatch: got %d, want %d",
-			cfg.Router.MaxConcurrentSessions, defaults.Router.MaxConcurrentSessions)
-	}
+	assert.Equal(t, defaults.Router.RouterInfoRefreshInterval, cfg.Router.RouterInfoRefreshInterval, "RouterInfoRefreshInterval")
+	assert.Equal(t, defaults.Router.MessageExpirationTime, cfg.Router.MessageExpirationTime, "MessageExpirationTime")
+	assert.Equal(t, defaults.Router.MaxConcurrentSessions, cfg.Router.MaxConcurrentSessions, "MaxConcurrentSessions")
 
 	// NetDB section
-	if cfg.NetDB.MaxRouterInfos != defaults.NetDB.MaxRouterInfos {
-		t.Errorf("MaxRouterInfos mismatch: got %d, want %d",
-			cfg.NetDB.MaxRouterInfos, defaults.NetDB.MaxRouterInfos)
-	}
-	if cfg.NetDB.ExpirationCheckInterval != defaults.NetDB.ExpirationCheckInterval {
-		t.Errorf("ExpirationCheckInterval mismatch: got %v, want %v",
-			cfg.NetDB.ExpirationCheckInterval, defaults.NetDB.ExpirationCheckInterval)
-	}
+	assert.Equal(t, defaults.NetDB.MaxRouterInfos, cfg.NetDB.MaxRouterInfos, "MaxRouterInfos")
+	assert.Equal(t, defaults.NetDB.ExpirationCheckInterval, cfg.NetDB.ExpirationCheckInterval, "ExpirationCheckInterval")
 
 	// Bootstrap section
-	if cfg.Bootstrap.LowPeerThreshold != defaults.Bootstrap.LowPeerThreshold {
-		t.Errorf("LowPeerThreshold mismatch: got %d, want %d",
-			cfg.Bootstrap.LowPeerThreshold, defaults.Bootstrap.LowPeerThreshold)
-	}
+	assert.Equal(t, defaults.Bootstrap.LowPeerThreshold, cfg.Bootstrap.LowPeerThreshold, "LowPeerThreshold")
 
 	// I2CP section
-	if cfg.I2CP.Enabled != defaults.I2CP.Enabled {
-		t.Errorf("I2CP.Enabled mismatch: got %v, want %v",
-			cfg.I2CP.Enabled, defaults.I2CP.Enabled)
-	}
-	if cfg.I2CP.Address != defaults.I2CP.Address {
-		t.Errorf("I2CP.Address mismatch: got %v, want %v",
-			cfg.I2CP.Address, defaults.I2CP.Address)
-	}
+	assert.Equal(t, defaults.I2CP.Enabled, cfg.I2CP.Enabled, "I2CP.Enabled")
+	assert.Equal(t, defaults.I2CP.Address, cfg.I2CP.Address, "I2CP.Address")
 }
 
 // TestCurrentConfigViperOverride verifies that RouterInfoRefreshInterval
@@ -99,10 +73,7 @@ func TestCurrentConfigViperOverride(t *testing.T) {
 	viper.Set("router.info_refresh_interval", override)
 
 	cfg := CurrentConfig()
-	if cfg.Router.RouterInfoRefreshInterval != override {
-		t.Errorf("Override failed: got %v, want %v",
-			cfg.Router.RouterInfoRefreshInterval, override)
-	}
+	assert.Equal(t, override, cfg.Router.RouterInfoRefreshInterval, "Override failed")
 }
 
 // TestBuildI2CPConfigAllFields verifies that buildI2CPConfig reads ALL I2CPConfig
@@ -113,45 +84,21 @@ func TestBuildI2CPConfigAllFields(t *testing.T) {
 
 	cfg := buildI2CPConfig()
 
-	// Fields that were previously populated (should still work)
-	if cfg.Enabled != defaults.I2CP.Enabled {
-		t.Errorf("I2CP.Enabled = %v, want %v", cfg.Enabled, defaults.I2CP.Enabled)
-	}
-	if cfg.Address != defaults.I2CP.Address {
-		t.Errorf("I2CP.Address = %v, want %v", cfg.Address, defaults.I2CP.Address)
-	}
-	if cfg.Network != defaults.I2CP.Network {
-		t.Errorf("I2CP.Network = %v, want %v", cfg.Network, defaults.I2CP.Network)
-	}
-	if cfg.MaxSessions != defaults.I2CP.MaxSessions {
-		t.Errorf("I2CP.MaxSessions = %d, want %d", cfg.MaxSessions, defaults.I2CP.MaxSessions)
-	}
+	// Fields that were previously populated
+	assert.Equal(t, defaults.I2CP.Enabled, cfg.Enabled, "I2CP.Enabled")
+	assert.Equal(t, defaults.I2CP.Address, cfg.Address, "I2CP.Address")
+	assert.Equal(t, defaults.I2CP.Network, cfg.Network, "I2CP.Network")
+	assert.Equal(t, defaults.I2CP.MaxSessions, cfg.MaxSessions, "I2CP.MaxSessions")
 
 	// Fields that were previously MISSING (the bug)
-	if cfg.MessageQueueSize != defaults.I2CP.MessageQueueSize {
-		t.Errorf("I2CP.MessageQueueSize = %d, want %d (was zero before fix)",
-			cfg.MessageQueueSize, defaults.I2CP.MessageQueueSize)
-	}
-	if cfg.SessionTimeout != defaults.I2CP.SessionTimeout {
-		t.Errorf("I2CP.SessionTimeout = %v, want %v (was zero before fix)",
-			cfg.SessionTimeout, defaults.I2CP.SessionTimeout)
-	}
-	if cfg.ReadTimeout != defaults.I2CP.ReadTimeout {
-		t.Errorf("I2CP.ReadTimeout = %v, want %v (was zero before fix)",
-			cfg.ReadTimeout, defaults.I2CP.ReadTimeout)
-	}
-	if cfg.WriteTimeout != defaults.I2CP.WriteTimeout {
-		t.Errorf("I2CP.WriteTimeout = %v, want %v (was zero before fix)",
-			cfg.WriteTimeout, defaults.I2CP.WriteTimeout)
-	}
+	assert.Equal(t, defaults.I2CP.MessageQueueSize, cfg.MessageQueueSize, "I2CP.MessageQueueSize (was zero before fix)")
+	assert.Equal(t, defaults.I2CP.SessionTimeout, cfg.SessionTimeout, "I2CP.SessionTimeout (was zero before fix)")
+	assert.Equal(t, defaults.I2CP.ReadTimeout, cfg.ReadTimeout, "I2CP.ReadTimeout (was zero before fix)")
+	assert.Equal(t, defaults.I2CP.WriteTimeout, cfg.WriteTimeout, "I2CP.WriteTimeout (was zero before fix)")
 
 	// Auth fields (default to empty = auth disabled)
-	if cfg.Username != "" {
-		t.Errorf("I2CP.Username = %q, want empty string", cfg.Username)
-	}
-	if cfg.Password != "" {
-		t.Errorf("I2CP.Password = %q, want empty string", cfg.Password)
-	}
+	assert.Empty(t, cfg.Username, "I2CP.Username should be empty")
+	assert.Empty(t, cfg.Password, "I2CP.Password should be empty")
 }
 
 // TestBuildI2CPConfigViperOverrides verifies that all I2CPConfig fields
@@ -173,36 +120,16 @@ func TestBuildI2CPConfigViperOverrides(t *testing.T) {
 
 	cfg := buildI2CPConfig()
 
-	if cfg.Enabled != false {
-		t.Errorf("I2CP.Enabled override failed: got %v, want false", cfg.Enabled)
-	}
-	if cfg.Address != "0.0.0.0:9999" {
-		t.Errorf("I2CP.Address override failed: got %v, want 0.0.0.0:9999", cfg.Address)
-	}
-	if cfg.Network != "unix" {
-		t.Errorf("I2CP.Network override failed: got %v, want unix", cfg.Network)
-	}
-	if cfg.MaxSessions != 50 {
-		t.Errorf("I2CP.MaxSessions override failed: got %d, want 50", cfg.MaxSessions)
-	}
-	if cfg.MessageQueueSize != 128 {
-		t.Errorf("I2CP.MessageQueueSize override failed: got %d, want 128", cfg.MessageQueueSize)
-	}
-	if cfg.SessionTimeout != 1*time.Hour {
-		t.Errorf("I2CP.SessionTimeout override failed: got %v, want 1h", cfg.SessionTimeout)
-	}
-	if cfg.ReadTimeout != 90*time.Second {
-		t.Errorf("I2CP.ReadTimeout override failed: got %v, want 1m30s", cfg.ReadTimeout)
-	}
-	if cfg.WriteTimeout != 45*time.Second {
-		t.Errorf("I2CP.WriteTimeout override failed: got %v, want 45s", cfg.WriteTimeout)
-	}
-	if cfg.Username != "admin" {
-		t.Errorf("I2CP.Username override failed: got %q, want admin", cfg.Username)
-	}
-	if cfg.Password != "secret" {
-		t.Errorf("I2CP.Password override failed: got %q, want secret", cfg.Password)
-	}
+	assert.Equal(t, false, cfg.Enabled, "I2CP.Enabled override")
+	assert.Equal(t, "0.0.0.0:9999", cfg.Address, "I2CP.Address override")
+	assert.Equal(t, "unix", cfg.Network, "I2CP.Network override")
+	assert.Equal(t, 50, cfg.MaxSessions, "I2CP.MaxSessions override")
+	assert.Equal(t, 128, cfg.MessageQueueSize, "I2CP.MessageQueueSize override")
+	assert.Equal(t, 1*time.Hour, cfg.SessionTimeout, "I2CP.SessionTimeout override")
+	assert.Equal(t, 90*time.Second, cfg.ReadTimeout, "I2CP.ReadTimeout override")
+	assert.Equal(t, 45*time.Second, cfg.WriteTimeout, "I2CP.WriteTimeout override")
+	assert.Equal(t, "admin", cfg.Username, "I2CP.Username override")
+	assert.Equal(t, "secret", cfg.Password, "I2CP.Password override")
 }
 
 // TestNewRouterConfigFromViperI2CPFields verifies that NewRouterConfigFromViper
@@ -212,22 +139,10 @@ func TestNewRouterConfigFromViperI2CPFields(t *testing.T) {
 
 	cfg := NewRouterConfigFromViper()
 
-	if cfg.I2CP.SessionTimeout != defaults.I2CP.SessionTimeout {
-		t.Errorf("NewRouterConfigFromViper I2CP.SessionTimeout = %v, want %v",
-			cfg.I2CP.SessionTimeout, defaults.I2CP.SessionTimeout)
-	}
-	if cfg.I2CP.MessageQueueSize != defaults.I2CP.MessageQueueSize {
-		t.Errorf("NewRouterConfigFromViper I2CP.MessageQueueSize = %d, want %d",
-			cfg.I2CP.MessageQueueSize, defaults.I2CP.MessageQueueSize)
-	}
-	if cfg.I2CP.ReadTimeout != defaults.I2CP.ReadTimeout {
-		t.Errorf("NewRouterConfigFromViper I2CP.ReadTimeout = %v, want %v",
-			cfg.I2CP.ReadTimeout, defaults.I2CP.ReadTimeout)
-	}
-	if cfg.I2CP.WriteTimeout != defaults.I2CP.WriteTimeout {
-		t.Errorf("NewRouterConfigFromViper I2CP.WriteTimeout = %v, want %v",
-			cfg.I2CP.WriteTimeout, defaults.I2CP.WriteTimeout)
-	}
+	assert.Equal(t, defaults.I2CP.SessionTimeout, cfg.I2CP.SessionTimeout, "I2CP.SessionTimeout")
+	assert.Equal(t, defaults.I2CP.MessageQueueSize, cfg.I2CP.MessageQueueSize, "I2CP.MessageQueueSize")
+	assert.Equal(t, defaults.I2CP.ReadTimeout, cfg.I2CP.ReadTimeout, "I2CP.ReadTimeout")
+	assert.Equal(t, defaults.I2CP.WriteTimeout, cfg.I2CP.WriteTimeout, "I2CP.WriteTimeout")
 }
 
 // TestNewRouterConfigFromViperSubsystemFields verifies that NewRouterConfigFromViper
@@ -239,48 +154,22 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 	cfg := NewRouterConfigFromViper()
 
 	// Tunnel config
-	if cfg.Tunnel == nil {
-		t.Fatal("NewRouterConfigFromViper Tunnel config is nil")
-	}
-	if cfg.Tunnel.TunnelLength != defaults.Tunnel.TunnelLength {
-		t.Errorf("Tunnel.TunnelLength = %d, want %d",
-			cfg.Tunnel.TunnelLength, defaults.Tunnel.TunnelLength)
-	}
-	if cfg.Tunnel.TunnelLifetime != defaults.Tunnel.TunnelLifetime {
-		t.Errorf("Tunnel.TunnelLifetime = %v, want %v",
-			cfg.Tunnel.TunnelLifetime, defaults.Tunnel.TunnelLifetime)
-	}
+	require.NotNil(t, cfg.Tunnel, "NewRouterConfigFromViper Tunnel config is nil")
+	assert.Equal(t, defaults.Tunnel.TunnelLength, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
+	assert.Equal(t, defaults.Tunnel.TunnelLifetime, cfg.Tunnel.TunnelLifetime, "Tunnel.TunnelLifetime")
 
 	// Transport config
-	if cfg.Transport == nil {
-		t.Fatal("NewRouterConfigFromViper Transport config is nil")
-	}
-	if cfg.Transport.NTCP2Enabled != defaults.Transport.NTCP2Enabled {
-		t.Errorf("Transport.NTCP2Enabled = %v, want %v",
-			cfg.Transport.NTCP2Enabled, defaults.Transport.NTCP2Enabled)
-	}
-	if cfg.Transport.MaxMessageSize != defaults.Transport.MaxMessageSize {
-		t.Errorf("Transport.MaxMessageSize = %d, want %d",
-			cfg.Transport.MaxMessageSize, defaults.Transport.MaxMessageSize)
-	}
+	require.NotNil(t, cfg.Transport, "NewRouterConfigFromViper Transport config is nil")
+	assert.Equal(t, defaults.Transport.NTCP2Enabled, cfg.Transport.NTCP2Enabled, "Transport.NTCP2Enabled")
+	assert.Equal(t, defaults.Transport.MaxMessageSize, cfg.Transport.MaxMessageSize, "Transport.MaxMessageSize")
 
 	// Performance config
-	if cfg.Performance == nil {
-		t.Fatal("NewRouterConfigFromViper Performance config is nil")
-	}
-	if cfg.Performance.WorkerPoolSize != defaults.Performance.WorkerPoolSize {
-		t.Errorf("Performance.WorkerPoolSize = %d, want %d",
-			cfg.Performance.WorkerPoolSize, defaults.Performance.WorkerPoolSize)
-	}
+	require.NotNil(t, cfg.Performance, "NewRouterConfigFromViper Performance config is nil")
+	assert.Equal(t, defaults.Performance.WorkerPoolSize, cfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
 
 	// Congestion config
-	if cfg.Congestion == nil {
-		t.Fatal("NewRouterConfigFromViper Congestion config is nil")
-	}
-	if cfg.Congestion.DFlagThreshold != defaults.Congestion.DFlagThreshold {
-		t.Errorf("Congestion.DFlagThreshold = %f, want %f",
-			cfg.Congestion.DFlagThreshold, defaults.Congestion.DFlagThreshold)
-	}
+	require.NotNil(t, cfg.Congestion, "NewRouterConfigFromViper Congestion config is nil")
+	assert.Equal(t, defaults.Congestion.DFlagThreshold, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
 // TestUpdateRouterConfigSubsystemFields verifies that UpdateRouterConfig
@@ -297,30 +186,14 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 	UpdateRouterConfig()
 
 	cfg := GetRouterConfig()
-	if cfg.Tunnel == nil {
-		t.Fatal("Tunnel config is nil after UpdateRouterConfig")
-	}
-	if cfg.Tunnel.TunnelLength != 2 {
-		t.Errorf("Tunnel.TunnelLength = %d, want 2", cfg.Tunnel.TunnelLength)
-	}
-	if cfg.Transport == nil {
-		t.Fatal("Transport config is nil after UpdateRouterConfig")
-	}
-	if cfg.Transport.NTCP2MaxConnections != 300 {
-		t.Errorf("Transport.NTCP2MaxConnections = %d, want 300", cfg.Transport.NTCP2MaxConnections)
-	}
-	if cfg.Performance == nil {
-		t.Fatal("Performance config is nil after UpdateRouterConfig")
-	}
-	if cfg.Performance.WorkerPoolSize != 16 {
-		t.Errorf("Performance.WorkerPoolSize = %d, want 16", cfg.Performance.WorkerPoolSize)
-	}
-	if cfg.Congestion == nil {
-		t.Fatal("Congestion config is nil after UpdateRouterConfig")
-	}
-	if cfg.Congestion.DFlagThreshold != 0.80 {
-		t.Errorf("Congestion.DFlagThreshold = %f, want 0.80", cfg.Congestion.DFlagThreshold)
-	}
+	require.NotNil(t, cfg.Tunnel, "Tunnel config is nil after UpdateRouterConfig")
+	assert.Equal(t, 2, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
+	require.NotNil(t, cfg.Transport, "Transport config is nil after UpdateRouterConfig")
+	assert.Equal(t, 300, cfg.Transport.NTCP2MaxConnections, "Transport.NTCP2MaxConnections")
+	require.NotNil(t, cfg.Performance, "Performance config is nil after UpdateRouterConfig")
+	assert.Equal(t, 16, cfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
+	require.NotNil(t, cfg.Congestion, "Congestion config is nil after UpdateRouterConfig")
+	assert.Equal(t, 0.80, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
 // TestGetRouterConfigDeepCopySubsystems verifies deep copy includes subsystem configs.
@@ -329,9 +202,7 @@ func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 	UpdateRouterConfig()
 
 	cfg := GetRouterConfig()
-	if cfg.Tunnel == nil {
-		t.Fatal("Tunnel config is nil")
-	}
+	require.NotNil(t, cfg.Tunnel, "Tunnel config is nil")
 
 	// Modify the copy
 	cfg.Tunnel.TunnelLength = 99
@@ -339,12 +210,8 @@ func TestGetRouterConfigDeepCopySubsystems(t *testing.T) {
 
 	// Verify original is unchanged
 	original := GetRouterConfig()
-	if original.Tunnel.TunnelLength == 99 {
-		t.Error("Tunnel deep copy failed: original was modified")
-	}
-	if original.Transport.NTCP2MaxConnections == 99 {
-		t.Error("Transport deep copy failed: original was modified")
-	}
+	assert.NotEqual(t, 99, original.Tunnel.TunnelLength, "Tunnel deep copy failed: original was modified")
+	assert.NotEqual(t, 99, original.Transport.NTCP2MaxConnections, "Transport deep copy failed: original was modified")
 }
 
 // TestUpdateRouterConfig_IncludesAllFields verifies UpdateRouterConfig propagates all fields.
@@ -359,13 +226,7 @@ func TestUpdateRouterConfig_IncludesAllFields(t *testing.T) {
 	UpdateRouterConfig()
 
 	cfg := GetRouterConfig()
-	if cfg.MaxBandwidth != 2048000 {
-		t.Errorf("MaxBandwidth = %d, want 2048000", cfg.MaxBandwidth)
-	}
-	if cfg.MaxConnections != 500 {
-		t.Errorf("MaxConnections = %d, want 500", cfg.MaxConnections)
-	}
-	if cfg.AcceptTunnels != false {
-		t.Errorf("AcceptTunnels = %v, want false", cfg.AcceptTunnels)
-	}
+	assert.Equal(t, uint64(2048000), cfg.MaxBandwidth, "MaxBandwidth")
+	assert.Equal(t, 500, cfg.MaxConnections, "MaxConnections")
+	assert.Equal(t, false, cfg.AcceptTunnels, "AcceptTunnels")
 }

@@ -1,8 +1,6 @@
 package signals
 
 import (
-	"bytes"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -174,38 +172,13 @@ func TestDeregisterPreShutdownHandler(t *testing.T) {
 func TestPreShutdownHandlers_PanicRecovery(t *testing.T) {
 	resetPreShutdownHandlers(t, false)
 
-	calledAfterPanic := false
-
-	RegisterPreShutdownHandler(func() {
-		panic("test panic in pre-shutdown")
+	var result bool
+	assertPanicRecovery(t, RegisterPreShutdownHandler, func() {
+		result = handlePreShutdown()
 	})
-	RegisterPreShutdownHandler(func() {
-		calledAfterPanic = true
-	})
-
-	// Capture stderr output
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	result := handlePreShutdown()
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	b := make([]byte, 1024)
-	n, _ := r.Read(b)
-	buf.Write(b[:n])
 
 	if !result {
 		t.Error("expected true even with panicking handler (others completed)")
-	}
-	if !calledAfterPanic {
-		t.Error("handler after panicking handler was not called")
-	}
-	if buf.Len() == 0 {
-		t.Error("expected panic to be logged to stderr")
 	}
 }
 

@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // expectedReseedCerts lists the certificates we expect to be embedded from PLAN.md
@@ -25,18 +28,10 @@ var expectedReseedCerts = []string{
 }
 
 func TestCertificatesFS_EmbeddedCorrectly(t *testing.T) {
-	// Verify the CertificatesFS contains the certificates directory
 	entries, err := fs.ReadDir(CertificatesFS, "certificates")
-	if err != nil {
-		t.Fatalf("failed to read embedded certificates directory: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, entries, "certificates directory is empty")
 
-	if len(entries) == 0 {
-		t.Fatal("certificates directory is empty")
-	}
-
-	// Check for expected subdirectories
-	expectedDirs := []string{"reseed", "family", "ssl"}
 	foundDirs := make(map[string]bool)
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -44,29 +39,19 @@ func TestCertificatesFS_EmbeddedCorrectly(t *testing.T) {
 		}
 	}
 
-	for _, dir := range expectedDirs {
-		if !foundDirs[dir] {
-			t.Errorf("expected directory %q not found in embedded certificates", dir)
-		}
+	for _, dir := range []string{"reseed", "family", "ssl"} {
+		assert.True(t, foundDirs[dir], "expected directory %q not found in embedded certificates", dir)
 	}
 }
 
 func TestGetReseedCertificates(t *testing.T) {
 	reseedFS, err := GetReseedCertificates()
-	if err != nil {
-		t.Fatalf("GetReseedCertificates() error: %v", err)
-	}
+	require.NoError(t, err)
 
 	entries, err := fs.ReadDir(reseedFS, ".")
-	if err != nil {
-		t.Fatalf("failed to read reseed certificates: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, entries, "no reseed certificates found")
 
-	if len(entries) == 0 {
-		t.Fatal("no reseed certificates found")
-	}
-
-	// Count .crt files
 	crtCount := 0
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".crt") {
@@ -74,116 +59,66 @@ func TestGetReseedCertificates(t *testing.T) {
 		}
 	}
 
-	if crtCount < 10 {
-		t.Errorf("expected at least 10 reseed certificates, got %d", crtCount)
-	}
+	assert.GreaterOrEqual(t, crtCount, 10, "reseed certificate count")
 }
 
 func TestGetReseedCertificateByName(t *testing.T) {
 	for _, certName := range expectedReseedCerts {
 		t.Run(certName, func(t *testing.T) {
 			data, err := GetReseedCertificateByName(certName)
-			if err != nil {
-				t.Fatalf("GetReseedCertificateByName(%q) error: %v", certName, err)
-			}
-
-			if len(data) == 0 {
-				t.Errorf("certificate %q is empty", certName)
-			}
-
-			// Verify it's PEM format
-			if !strings.Contains(string(data), "-----BEGIN CERTIFICATE-----") {
-				t.Errorf("certificate %q doesn't appear to be PEM format", certName)
-			}
-
-			if !strings.Contains(string(data), "-----END CERTIFICATE-----") {
-				t.Errorf("certificate %q missing PEM end marker", certName)
-			}
+			require.NoError(t, err)
+			assert.NotEmpty(t, data, "certificate %q is empty", certName)
+			assert.Contains(t, string(data), "-----BEGIN CERTIFICATE-----", "certificate %q not PEM format", certName)
+			assert.Contains(t, string(data), "-----END CERTIFICATE-----", "certificate %q missing PEM end marker", certName)
 		})
 	}
 }
 
 func TestGetReseedCertificateByName_NotFound(t *testing.T) {
 	_, err := GetReseedCertificateByName("nonexistent_cert.crt")
-	if err == nil {
-		t.Error("expected error for nonexistent certificate, got nil")
-	}
+	assert.Error(t, err, "expected error for nonexistent certificate")
 }
 
 func TestGetCertificateByPath(t *testing.T) {
-	// Test with full path
 	data, err := GetCertificateByPath("reseed/admin_at_stormycloud.org.crt")
-	if err != nil {
-		t.Fatalf("GetCertificateByPath() error: %v", err)
-	}
-
-	if len(data) == 0 {
-		t.Error("certificate data is empty")
-	}
-
-	if !strings.Contains(string(data), "-----BEGIN CERTIFICATE-----") {
-		t.Error("certificate doesn't appear to be PEM format")
-	}
+	require.NoError(t, err)
+	assert.NotEmpty(t, data, "certificate data is empty")
+	assert.Contains(t, string(data), "-----BEGIN CERTIFICATE-----", "not PEM format")
 }
 
 func TestListReseedCertificates(t *testing.T) {
 	certs, err := ListReseedCertificates()
-	if err != nil {
-		t.Fatalf("ListReseedCertificates() error: %v", err)
-	}
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(certs), 10, "certificate count")
 
-	if len(certs) < 10 {
-		t.Errorf("expected at least 10 certificates, got %d", len(certs))
-	}
-
-	// Verify all returned names end with .crt
 	for _, cert := range certs {
-		if !strings.HasSuffix(cert, ".crt") {
-			t.Errorf("certificate %q doesn't end with .crt", cert)
-		}
+		assert.True(t, strings.HasSuffix(cert, ".crt"), "certificate %q doesn't end with .crt", cert)
 	}
 
-	// Check that expected certs are present
 	certMap := make(map[string]bool)
 	for _, cert := range certs {
 		certMap[cert] = true
 	}
 
 	for _, expected := range expectedReseedCerts {
-		if !certMap[expected] {
-			t.Errorf("expected certificate %q not found in list", expected)
-		}
+		assert.True(t, certMap[expected], "expected certificate %q not found in list", expected)
 	}
 }
 
 func TestExtractCertificates(t *testing.T) {
-	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "cert-extract-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// Extract certificates
-	if err := ExtractCertificates(tmpDir); err != nil {
-		t.Fatalf("ExtractCertificates() error: %v", err)
-	}
+	require.NoError(t, ExtractCertificates(tmpDir))
 
-	// Verify reseed directory was created
 	reseedDir := filepath.Join(tmpDir, "reseed")
 	info, err := os.Stat(reseedDir)
-	if err != nil {
-		t.Fatalf("reseed directory not created: %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("reseed should be a directory")
-	}
+	require.NoError(t, err, "reseed directory not created")
+	assert.True(t, info.IsDir(), "reseed should be a directory")
 
-	// Verify at least one certificate was extracted
 	entries, err := os.ReadDir(reseedDir)
-	if err != nil {
-		t.Fatalf("failed to read extracted reseed dir: %v", err)
-	}
+	require.NoError(t, err)
 
 	crtCount := 0
 	for _, entry := range entries {
@@ -191,46 +126,27 @@ func TestExtractCertificates(t *testing.T) {
 			crtCount++
 		}
 	}
+	assert.GreaterOrEqual(t, crtCount, 10, "extracted certificate count")
 
-	if crtCount < 10 {
-		t.Errorf("expected at least 10 extracted certificates, got %d", crtCount)
-	}
-
-	// Verify a specific certificate's content matches embedded version
 	extractedPath := filepath.Join(reseedDir, "admin_at_stormycloud.org.crt")
 	extractedData, err := os.ReadFile(extractedPath)
-	if err != nil {
-		t.Fatalf("failed to read extracted certificate: %v", err)
-	}
+	require.NoError(t, err)
 
 	embeddedData, err := GetReseedCertificateByName("admin_at_stormycloud.org.crt")
-	if err != nil {
-		t.Fatalf("failed to read embedded certificate: %v", err)
-	}
+	require.NoError(t, err)
 
-	if string(extractedData) != string(embeddedData) {
-		t.Error("extracted certificate content doesn't match embedded version")
-	}
+	assert.Equal(t, string(embeddedData), string(extractedData), "extracted content should match embedded")
 }
 
 func TestExtractReseedCertificates(t *testing.T) {
-	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "reseed-extract-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// Extract reseed certificates only
-	if err := ExtractReseedCertificates(tmpDir); err != nil {
-		t.Fatalf("ExtractReseedCertificates() error: %v", err)
-	}
+	require.NoError(t, ExtractReseedCertificates(tmpDir))
 
-	// Verify certificates are directly in tmpDir (not in subdirectory)
 	entries, err := os.ReadDir(tmpDir)
-	if err != nil {
-		t.Fatalf("failed to read temp dir: %v", err)
-	}
+	require.NoError(t, err)
 
 	crtCount := 0
 	for _, entry := range entries {
@@ -238,41 +154,25 @@ func TestExtractReseedCertificates(t *testing.T) {
 			crtCount++
 		}
 	}
+	assert.GreaterOrEqual(t, crtCount, 10, "reseed certificate count")
 
-	if crtCount < 10 {
-		t.Errorf("expected at least 10 certificates in root of temp dir, got %d", crtCount)
-	}
-
-	// Verify no subdirectories were created
 	for _, entry := range entries {
-		if entry.IsDir() {
-			t.Errorf("unexpected directory %q found", entry.Name())
-		}
+		assert.False(t, entry.IsDir(), "unexpected directory %q found", entry.Name())
 	}
 }
 
 func TestGetFamilyCertificates(t *testing.T) {
 	familyFS, err := GetFamilyCertificates()
-	if err != nil {
-		t.Fatalf("GetFamilyCertificates() error: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Just verify we can read from it (may be empty)
 	_, err = fs.ReadDir(familyFS, ".")
-	if err != nil {
-		t.Errorf("failed to read family certificates directory: %v", err)
-	}
+	assert.NoError(t, err, "failed to read family certificates directory")
 }
 
 func TestGetSSLCertificates(t *testing.T) {
 	sslFS, err := GetSSLCertificates()
-	if err != nil {
-		t.Fatalf("GetSSLCertificates() error: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Just verify we can read from it (may be empty)
 	_, err = fs.ReadDir(sslFS, ".")
-	if err != nil {
-		t.Errorf("failed to read SSL certificates directory: %v", err)
-	}
+	assert.NoError(t, err, "failed to read SSL certificates directory")
 }

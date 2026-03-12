@@ -13,6 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newTestRP creates a ReplyProcessor with decryption disabled and allows
+// optional config tweaks via configFn.
+func newTestRP(t *testing.T, configFn func(*ReplyProcessorConfig)) *ReplyProcessor {
+	t.Helper()
+	config := DefaultReplyProcessorConfig()
+	config.EnableDecryption = false
+	if configFn != nil {
+		configFn(&config)
+	}
+	return NewReplyProcessor(config, nil)
+}
+
 // TestReplyProcessor_RegisterPendingBuild tests registration of pending builds
 func TestReplyProcessor_RegisterPendingBuild(t *testing.T) {
 	config := DefaultReplyProcessorConfig()
@@ -53,9 +65,7 @@ func TestReplyProcessor_RegisterPendingBuild_KeyMismatch(t *testing.T) {
 
 // TestReplyProcessor_ProcessBuildReply_Success tests successful reply processing
 func TestReplyProcessor_ProcessBuildReply_Success(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false // Disable decryption for simplicity
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, nil)
 
 	// Register pending build
 	tunnelID := registerTestBuild(t, rp)
@@ -72,9 +82,7 @@ func TestReplyProcessor_ProcessBuildReply_Success(t *testing.T) {
 
 // TestReplyProcessor_ProcessBuildReply_UnknownTunnel tests reply for unknown tunnel
 func TestReplyProcessor_ProcessBuildReply_UnknownTunnel(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, nil)
 
 	unknownID := tunnel.TunnelID(99999)
 	reply := createSuccessfulVariableTunnelBuildReply(3)
@@ -87,10 +95,9 @@ func TestReplyProcessor_ProcessBuildReply_UnknownTunnel(t *testing.T) {
 
 // TestReplyProcessor_ProcessBuildReply_Failure tests failed reply processing
 func TestReplyProcessor_ProcessBuildReply_Failure(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	config.MaxRetries = 0 // Disable retries for this test
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, func(c *ReplyProcessorConfig) {
+		c.MaxRetries = 0
+	})
 
 	// Register pending build
 	tunnelID := registerTestBuild(t, rp)
@@ -124,11 +131,10 @@ func TestReplyProcessor_Timeout(t *testing.T) {
 
 // TestReplyProcessor_Retry tests retry logic
 func TestReplyProcessor_Retry(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	config.MaxRetries = 2
-	config.RetryBackoff = 10 * time.Millisecond
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, func(c *ReplyProcessorConfig) {
+		c.MaxRetries = 2
+		c.RetryBackoff = 10 * time.Millisecond
+	})
 
 	// Track retry callbacks
 	var retryMutex sync.Mutex
@@ -165,11 +171,10 @@ func TestReplyProcessor_Retry(t *testing.T) {
 
 // TestReplyProcessor_RetryExhausted tests behavior when retries are exhausted
 func TestReplyProcessor_RetryExhausted(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	config.MaxRetries = 1
-	config.RetryBackoff = 10 * time.Millisecond
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, func(c *ReplyProcessorConfig) {
+		c.MaxRetries = 1
+		c.RetryBackoff = 10 * time.Millisecond
+	})
 
 	var retryCount int
 	var retryMutex sync.Mutex
@@ -186,7 +191,7 @@ func TestReplyProcessor_RetryExhausted(t *testing.T) {
 	// Manually set retry count to max
 	info := rp.GetPendingBuildInfo(tunnelID)
 	require.NotNil(t, info)
-	info.Retries = config.MaxRetries
+	info.Retries = 1 // Match MaxRetries
 
 	// Create failed reply
 	reply := createMixedVariableTunnelBuildReply(3)
@@ -268,9 +273,7 @@ func TestReplyProcessor_ConcurrentRegistration(t *testing.T) {
 
 // TestReplyProcessor_ConcurrentProcessing tests concurrent reply processing
 func TestReplyProcessor_ConcurrentProcessing(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, nil)
 
 	const numBuilds = 50
 	var wg sync.WaitGroup
@@ -313,9 +316,7 @@ func TestReplyProcessor_DefaultConfig(t *testing.T) {
 
 // TestReplyProcessor_DecryptionDisabled tests behavior with decryption disabled
 func TestReplyProcessor_DecryptionDisabled(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, nil)
 
 	tunnelID := registerTestBuild(t, rp)
 
@@ -367,10 +368,9 @@ func TestReplyProcessor_TimeoutCancellation(t *testing.T) {
 
 // TestReplyProcessor_NoRetryCallback tests behavior without retry callback
 func TestReplyProcessor_NoRetryCallback(t *testing.T) {
-	config := DefaultReplyProcessorConfig()
-	config.EnableDecryption = false
-	config.MaxRetries = 2
-	rp := NewReplyProcessor(config, nil)
+	rp := newTestRP(t, func(c *ReplyProcessorConfig) {
+		c.MaxRetries = 2
+	})
 	// No retry callback set
 
 	tunnelID := registerTestBuild(t, rp)

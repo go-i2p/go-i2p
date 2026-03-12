@@ -16,6 +16,8 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -26,9 +28,7 @@ import (
 // to prevent timing attacks.
 func TestAuthTokenValidationConstantTime(t *testing.T) {
 	am, err := NewAuthManager("correctpassword")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Measure timing for correct password
 	start := time.Now()
@@ -70,17 +70,13 @@ func TestAuthTokenValidationConstantTime(t *testing.T) {
 // TestAuthTokenUnpredictability verifies tokens are cryptographically random and unpredictable.
 func TestAuthTokenUnpredictability(t *testing.T) {
 	am, err := NewAuthManager("password")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Generate many tokens and verify they don't have predictable patterns
 	tokens := make([]string, 100)
 	for i := 0; i < 100; i++ {
 		token, err := am.Authenticate("password", 10*time.Minute)
-		if err != nil {
-			t.Fatalf("Authenticate failed: %v", err)
-		}
+		require.NoError(t, err)
 		tokens[i] = token
 		time.Sleep(time.Millisecond) // Ensure different timestamps
 	}
@@ -88,9 +84,7 @@ func TestAuthTokenUnpredictability(t *testing.T) {
 	// Check for duplicates (should never happen)
 	seen := make(map[string]bool)
 	for _, token := range tokens {
-		if seen[token] {
-			t.Errorf("Duplicate token generated: %s", token)
-		}
+		assert.False(t, seen[token], "Duplicate token generated: %s", token)
 		seen[token] = true
 	}
 
@@ -107,9 +101,7 @@ func TestAuthTokenUnpredictability(t *testing.T) {
 
 	// With 100 random tokens, no prefix should appear more than ~5 times
 	for prefix, count := range prefixes {
-		if count > 10 {
-			t.Errorf("Prefix %q appeared %d times, suggesting predictable token generation", prefix, count)
-		}
+		assert.LessOrEqual(t, count, 10, "Prefix %q appeared %d times, suggesting predictable token generation", prefix, count)
 	}
 }
 
@@ -118,53 +110,37 @@ func TestAuthTokenExpirationBoundary(t *testing.T) {
 	am, token := createAuthManagerWithToken(t, "password", 100*time.Millisecond)
 
 	// Token should be valid immediately
-	if !am.ValidateToken(token) {
-		t.Error("Token should be valid immediately after creation")
-	}
+	assert.True(t, am.ValidateToken(token), "Token should be valid immediately after creation")
 
 	// Token should be valid just before expiration
 	time.Sleep(50 * time.Millisecond)
-	if !am.ValidateToken(token) {
-		t.Error("Token should be valid before expiration")
-	}
+	assert.True(t, am.ValidateToken(token), "Token should be valid before expiration")
 
 	// Token should be invalid after expiration
 	time.Sleep(100 * time.Millisecond)
-	if am.ValidateToken(token) {
-		t.Error("Token should be invalid after expiration")
-	}
+	assert.False(t, am.ValidateToken(token), "Token should be invalid after expiration")
 }
 
 // TestAuthSecretIsolation verifies different AuthManager instances have different secrets.
 func TestAuthSecretIsolation(t *testing.T) {
 	am1, err := NewAuthManager("password")
-	if err != nil {
-		t.Fatalf("NewAuthManager 1 failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	am2, err := NewAuthManager("password")
-	if err != nil {
-		t.Fatalf("NewAuthManager 2 failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Generate tokens with same password
 	token1, _ := am1.Authenticate("password", 10*time.Minute)
 	token2, _ := am2.Authenticate("password", 10*time.Minute)
 
 	// Tokens should be different due to different secrets
-	if token1 == token2 {
-		t.Error("Different AuthManager instances should generate different tokens")
-	}
+	assert.NotEqual(t, token1, token2, "Different AuthManager instances should generate different tokens")
 
 	// Token from am1 should not validate on am2
-	if am2.ValidateToken(token1) {
-		t.Error("Token from am1 should not validate on am2")
-	}
+	assert.False(t, am2.ValidateToken(token1), "Token from am1 should not validate on am2")
 
 	// Token from am2 should not validate on am1
-	if am1.ValidateToken(token2) {
-		t.Error("Token from am2 should not validate on am1")
-	}
+	assert.False(t, am1.ValidateToken(token2), "Token from am2 should not validate on am1")
 }
 
 // =============================================================================
@@ -212,9 +188,7 @@ func setupAuthTestServer(t *testing.T) (*Server, *httptest.Server) {
 	}
 
 	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
 	t.Cleanup(func() { ts.Close() })
@@ -245,21 +219,16 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 			})
 
 			resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			var rpcResp Response
-			if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-				t.Fatalf("Failed to decode response: %v", err)
-			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
-			if rpcResp.Error == nil {
-				t.Errorf("Method %s should require authentication", method)
-			}
-			if rpcResp.Error != nil && rpcResp.Error.Code != ErrCodeInvalidParams && rpcResp.Error.Code != ErrCodeAuthRequired {
-				t.Errorf("Expected auth error for %s, got code %d: %s", method, rpcResp.Error.Code, rpcResp.Error.Message)
+			assert.NotNil(t, rpcResp.Error, "Method %s should require authentication", method)
+			if rpcResp.Error != nil {
+				assert.True(t, rpcResp.Error.Code == ErrCodeInvalidParams || rpcResp.Error.Code == ErrCodeAuthRequired,
+					"Expected auth error for %s, got code %d: %s", method, rpcResp.Error.Code, rpcResp.Error.Message)
 			}
 		})
 	}
@@ -281,28 +250,18 @@ func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 	})
 
 	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		t.Fatalf("Request failed: %v", err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	var rpcResp Response
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
-	if rpcResp.Error != nil {
-		t.Errorf("Authenticate should not require existing token: %v", rpcResp.Error)
-	}
+	assert.Nil(t, rpcResp.Error, "Authenticate should not require existing token")
 
 	// Verify we got a token back
 	result, ok := rpcResp.Result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected map result, got %T", rpcResp.Result)
-	}
-	if _, hasToken := result["Token"]; !hasToken {
-		t.Error("Expected Token in response")
-	}
+	require.True(t, ok, "Expected map result, got %T", rpcResp.Result)
+	assert.Contains(t, result, "Token", "Expected Token in response")
 }
 
 // TestAuthorizationInvalidTokenRejected verifies invalid tokens are rejected.
@@ -320,21 +279,15 @@ func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 	})
 
 	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		t.Fatalf("Request failed: %v", err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	var rpcResp Response
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
-	if rpcResp.Error == nil {
-		t.Error("Expected error for invalid token")
-	}
-	if rpcResp.Error != nil && rpcResp.Error.Code != ErrCodeAuthRequired {
-		t.Errorf("Expected ErrCodeAuthRequired, got %d", rpcResp.Error.Code)
+	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token")
+	if rpcResp.Error != nil {
+		assert.Equal(t, ErrCodeAuthRequired, rpcResp.Error.Code)
 	}
 }
 
@@ -343,25 +296,19 @@ func TestAuthorizationExpiredTokenRejected(t *testing.T) {
 	am, token := createAuthManagerWithToken(t, "testpassword", 50*time.Millisecond)
 
 	// Token should be valid initially
-	if !am.ValidateToken(token) {
-		t.Error("Token should be valid initially")
-	}
+	assert.True(t, am.ValidateToken(token), "Token should be valid initially")
 
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
 
 	// Token should be invalid after expiration
-	if am.ValidateToken(token) {
-		t.Error("Expired token should be rejected")
-	}
+	assert.False(t, am.ValidateToken(token), "Expired token should be rejected")
 }
 
 // TestAuthorizationTokenRevokedAfterPasswordChange verifies all tokens are revoked on password change.
 func TestAuthorizationTokenRevokedAfterPasswordChange(t *testing.T) {
 	am, err := NewAuthManager("oldpassword")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Create several tokens
 	tokens := make([]string, 5)
@@ -371,38 +318,26 @@ func TestAuthorizationTokenRevokedAfterPasswordChange(t *testing.T) {
 
 	// All tokens should be valid
 	for i, token := range tokens {
-		if !am.ValidateToken(token) {
-			t.Errorf("Token %d should be valid before password change", i)
-		}
+		assert.True(t, am.ValidateToken(token), "Token %d should be valid before password change", i)
 	}
 
 	// Change password
 	revokedCount := am.ChangePassword("newpassword")
-	if revokedCount != 5 {
-		t.Errorf("Expected 5 tokens revoked, got %d", revokedCount)
-	}
+	assert.Equal(t, 5, revokedCount)
 
 	// All old tokens should be invalid
 	for i, token := range tokens {
-		if am.ValidateToken(token) {
-			t.Errorf("Token %d should be invalid after password change", i)
-		}
+		assert.False(t, am.ValidateToken(token), "Token %d should be invalid after password change", i)
 	}
 
 	// Old password should not work
 	_, err = am.Authenticate("oldpassword", 10*time.Minute)
-	if err == nil {
-		t.Error("Old password should not authenticate after change")
-	}
+	assert.Error(t, err, "Old password should not authenticate after change")
 
 	// New password should work
 	newToken, err := am.Authenticate("newpassword", 10*time.Minute)
-	if err != nil {
-		t.Fatalf("New password should authenticate: %v", err)
-	}
-	if !am.ValidateToken(newToken) {
-		t.Error("New token should be valid")
-	}
+	require.NoError(t, err)
+	assert.True(t, am.ValidateToken(newToken), "New token should be valid")
 }
 
 // =============================================================================
@@ -428,9 +363,7 @@ func TestInputValidationMalformedJSON(t *testing.T) {
 	for _, tc := range malformedInputs {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := http.Post(ts.URL, "application/json", strings.NewReader(tc.input))
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
@@ -467,9 +400,7 @@ func TestInputValidationOversizedRequest(t *testing.T) {
 	})
 
 	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		t.Fatalf("Request failed: %v", err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -487,9 +418,7 @@ func TestInputValidationOversizedRequest(t *testing.T) {
 	})
 
 	resp2, err := http.Post(ts.URL, "application/json", bytes.NewReader(smallReq))
-	if err != nil {
-		t.Fatalf("Server stopped responding after oversized request: %v", err)
-	}
+	require.NoError(t, err, "Server stopped responding after oversized request")
 	defer resp2.Body.Close()
 }
 
@@ -506,19 +435,13 @@ func TestInputValidationWrongHTTPMethod(t *testing.T) {
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			var rpcResp Response
-			if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-				t.Fatalf("Failed to decode response: %v", err)
-			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
-			if rpcResp.Error == nil {
-				t.Errorf("Method %s should be rejected", method)
-			}
+			assert.NotNil(t, rpcResp.Error, "Method %s should be rejected", method)
 		})
 	}
 }
@@ -545,19 +468,13 @@ func TestInputValidationWrongContentType(t *testing.T) {
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			var rpcResp Response
-			if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-				t.Fatalf("Failed to decode response: %v", err)
-			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
-			if rpcResp.Error == nil {
-				t.Errorf("Content-Type '%s' should be rejected", contentType)
-			}
+			assert.NotNil(t, rpcResp.Error, "Content-Type '%s' should be rejected", contentType)
 		})
 	}
 }
@@ -584,20 +501,14 @@ func TestInputValidationUnknownMethod(t *testing.T) {
 			})
 
 			resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			var rpcResp Response
-			if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-				t.Fatalf("Failed to decode response: %v", err)
-			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
 			// Should return method not found error
-			if rpcResp.Error == nil {
-				t.Errorf("Unknown method '%s' should return error", method)
-			}
+			assert.NotNil(t, rpcResp.Error, "Unknown method '%s' should return error", method)
 		})
 	}
 }
@@ -637,7 +548,7 @@ func TestInputValidationSQLInjection(t *testing.T) {
 			}
 
 			if resultMap["Result"] != input {
-				t.Errorf("Echo modified input: got %v, want %v", resultMap["Result"], input)
+				assert.Equal(t, input, resultMap["Result"])
 			}
 		})
 	}
@@ -658,9 +569,7 @@ func TestInfoDisclosureNoPasswordInResponse(t *testing.T) {
 	}
 
 	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	ts := httptest.NewServer(http.HandlerFunc(server.handleRPC))
 	defer ts.Close()
@@ -685,18 +594,14 @@ func TestInfoDisclosureNoPasswordInResponse(t *testing.T) {
 			})
 
 			resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			body, _ := io.ReadAll(resp.Body)
 			bodyStr := string(body)
 
 			// Password should never appear in response
-			if strings.Contains(bodyStr, "supersecretpassword123") {
-				t.Errorf("Password found in response: %s", bodyStr)
-			}
+			assert.NotContains(t, bodyStr, "supersecretpassword123", "Password found in response")
 
 			// Token generation secrets should never appear
 			if strings.Contains(bodyStr, "secret") && strings.Contains(strings.ToLower(bodyStr), "secret") {
@@ -744,9 +649,8 @@ func TestInfoDisclosureNoInternalPaths(t *testing.T) {
 		}
 
 		for _, pattern := range pathPatterns {
-			if strings.Contains(bodyStr, pattern) {
-				t.Errorf("Internal path/stack trace leaked in response: found '%s' in %s", pattern, bodyStr)
-			}
+			assert.NotContains(t, bodyStr, pattern,
+				"Internal path/stack trace leaked in response: found '%s'", pattern)
 		}
 	}
 }
@@ -764,9 +668,7 @@ func TestInfoDisclosureNoVersionLeakInErrors(t *testing.T) {
 	})
 
 	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		t.Fatalf("Request failed: %v", err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	// Check response headers for version disclosure
@@ -777,30 +679,22 @@ func TestInfoDisclosureNoVersionLeakInErrors(t *testing.T) {
 	}
 
 	// X-Powered-By should not exist
-	if resp.Header.Get("X-Powered-By") != "" {
-		t.Errorf("X-Powered-By header should not be set: %s", resp.Header.Get("X-Powered-By"))
-	}
+	assert.Empty(t, resp.Header.Get("X-Powered-By"), "X-Powered-By header should not be set")
 }
 
 // TestInfoDisclosureErrorMessagesGeneric verifies error messages don't reveal implementation details.
 func TestInfoDisclosureErrorMessagesGeneric(t *testing.T) {
 	am, err := NewAuthManager("correctpassword")
-	if err != nil {
-		t.Fatalf("NewAuthManager failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Test authentication error message
 	_, authErr := am.Authenticate("wrongpassword", 10*time.Minute)
-	if authErr == nil {
-		t.Fatal("Expected error for wrong password")
-	}
+	require.Error(t, authErr)
 
 	errMsg := authErr.Error()
 
 	// Error should be generic, not revealing specifics
-	if strings.Contains(errMsg, "correctpassword") {
-		t.Error("Error message contains the correct password")
-	}
+	assert.NotContains(t, errMsg, "correctpassword", "Error message contains the correct password")
 	if strings.Contains(errMsg, "password mismatch") || strings.Contains(errMsg, "bytes differ") {
 		t.Logf("Error might be too specific: %s", errMsg)
 	}
@@ -830,12 +724,8 @@ func TestBandwidthStatsAccuracy(t *testing.T) {
 
 	stats := provider.GetBandwidthStats()
 
-	if stats.InboundRate != expectedInbound {
-		t.Errorf("InboundRate: got %f, want %f", stats.InboundRate, expectedInbound)
-	}
-	if stats.OutboundRate != expectedOutbound {
-		t.Errorf("OutboundRate: got %f, want %f", stats.OutboundRate, expectedOutbound)
-	}
+	assert.Equal(t, expectedInbound, stats.InboundRate)
+	assert.Equal(t, expectedOutbound, stats.OutboundRate)
 }
 
 // mockRouterAccessBandwidth implements RouterAccess for bandwidth testing
@@ -871,12 +761,8 @@ func TestBandwidthStatsZeroValues(t *testing.T) {
 	provider := NewRouterStatsProvider(mock, "test-version")
 	stats := provider.GetBandwidthStats()
 
-	if stats.InboundRate != 0 {
-		t.Errorf("InboundRate should be 0, got %f", stats.InboundRate)
-	}
-	if stats.OutboundRate != 0 {
-		t.Errorf("OutboundRate should be 0, got %f", stats.OutboundRate)
-	}
+	assert.Equal(t, float64(0), stats.InboundRate)
+	assert.Equal(t, float64(0), stats.OutboundRate)
 }
 
 // TestBandwidthStatsLargeValues verifies large bandwidth values don't overflow.
@@ -892,12 +778,8 @@ func TestBandwidthStatsLargeValues(t *testing.T) {
 	provider := NewRouterStatsProvider(mock, "test-version")
 	stats := provider.GetBandwidthStats()
 
-	if stats.InboundRate != float64(largeValue) {
-		t.Errorf("InboundRate: got %f, want %f", stats.InboundRate, float64(largeValue))
-	}
-	if stats.OutboundRate != float64(largeValue) {
-		t.Errorf("OutboundRate: got %f, want %f", stats.OutboundRate, float64(largeValue))
-	}
+	assert.Equal(t, float64(largeValue), stats.InboundRate)
+	assert.Equal(t, float64(largeValue), stats.OutboundRate)
 }
 
 // TestBandwidthStatsHandlerIntegration verifies GetRate handler returns correct data.
@@ -912,33 +794,21 @@ func TestBandwidthStatsHandlerIntegration(t *testing.T) {
 	})
 
 	result, err := handler.Handle(ctx, params)
-	if err != nil {
-		t.Fatalf("GetRate handler failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected map result, got %T", result)
-	}
+	require.True(t, ok, "Expected map result, got %T", result)
 
 	// Verify expected fields are present
-	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
-		t.Error("Missing i2p.router.net.bw.inbound.15s in response")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; !ok {
-		t.Error("Missing i2p.router.net.bw.outbound.15s in response")
-	}
+	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
+	assert.Contains(t, resultMap, "i2p.router.net.bw.outbound.15s")
 
 	// Values should match what mockStatsForAuth returns
 	expectedInbound := float64(1000)
 	expectedOutbound := float64(2000)
 
-	if resultMap["i2p.router.net.bw.inbound.15s"] != expectedInbound {
-		t.Errorf("Inbound rate: got %v, want %v", resultMap["i2p.router.net.bw.inbound.15s"], expectedInbound)
-	}
-	if resultMap["i2p.router.net.bw.outbound.15s"] != expectedOutbound {
-		t.Errorf("Outbound rate: got %v, want %v", resultMap["i2p.router.net.bw.outbound.15s"], expectedOutbound)
-	}
+	assert.Equal(t, expectedInbound, resultMap["i2p.router.net.bw.inbound.15s"])
+	assert.Equal(t, expectedOutbound, resultMap["i2p.router.net.bw.outbound.15s"])
 }
 
 // TestBandwidthStatsConcurrentAccess verifies thread-safe bandwidth stat access.
@@ -958,12 +828,8 @@ func TestBandwidthStatsConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			stats := provider.GetBandwidthStats()
-			if stats.InboundRate != 1000 {
-				t.Errorf("Unexpected inbound rate: %f", stats.InboundRate)
-			}
-			if stats.OutboundRate != 2000 {
-				t.Errorf("Unexpected outbound rate: %f", stats.OutboundRate)
-			}
+			assert.Equal(t, float64(1000), stats.InboundRate)
+			assert.Equal(t, float64(2000), stats.OutboundRate)
 		}()
 	}
 
@@ -982,23 +848,16 @@ func TestBandwidthStatsSelectiveFieldRequest(t *testing.T) {
 	})
 
 	result, err := handler.Handle(ctx, params)
-	if err != nil {
-		t.Fatalf("GetRate handler failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected map result, got %T", result)
-	}
+	require.True(t, ok, "Expected map result, got %T", result)
 
-	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
-		t.Error("Missing requested inbound field")
-	}
+	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
 
 	// Outbound should not be in response when only inbound was requested
-	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; ok {
-		t.Error("Outbound field should not be present when not requested")
-	}
+	assert.NotContains(t, resultMap, "i2p.router.net.bw.outbound.15s",
+		"Outbound field should not be present when not requested")
 }
 
 // =============================================================================
@@ -1017,28 +876,17 @@ func TestRPCErrorCodesCorrect(t *testing.T) {
 	}
 
 	// Verify our constants match
-	if ErrCodeParseError != -32700 {
-		t.Errorf("ErrCodeParseError: got %d, want -32700", ErrCodeParseError)
-	}
-	if ErrCodeInvalidRequest != -32600 {
-		t.Errorf("ErrCodeInvalidRequest: got %d, want -32600", ErrCodeInvalidRequest)
-	}
-	if ErrCodeMethodNotFound != -32601 {
-		t.Errorf("ErrCodeMethodNotFound: got %d, want -32601", ErrCodeMethodNotFound)
-	}
-	if ErrCodeInvalidParams != -32602 {
-		t.Errorf("ErrCodeInvalidParams: got %d, want -32602", ErrCodeInvalidParams)
-	}
-	if ErrCodeInternalError != -32603 {
-		t.Errorf("ErrCodeInternalError: got %d, want -32603", ErrCodeInternalError)
-	}
+	assert.Equal(t, -32700, ErrCodeParseError)
+	assert.Equal(t, -32600, ErrCodeInvalidRequest)
+	assert.Equal(t, -32601, ErrCodeMethodNotFound)
+	assert.Equal(t, -32602, ErrCodeInvalidParams)
+	assert.Equal(t, -32603, ErrCodeInternalError)
 
 	// Implementation-defined codes should be in -32000 to -32099 range
 	implCodes := []int{ErrCodeAuthRequired, ErrCodeAuthFailed, ErrCodeNotImpl}
 	for _, code := range implCodes {
-		if code < -32099 || code > -32000 {
-			t.Errorf("Implementation code %d not in range -32099 to -32000", code)
-		}
+		assert.True(t, code >= -32099 && code <= -32000,
+			"Implementation code %d not in range -32099 to -32000", code)
 	}
 
 	t.Logf("Standard codes verified: %v", standardCodes)
@@ -1052,9 +900,7 @@ func TestCORSHeadersSet(t *testing.T) {
 	req, _ := http.NewRequest("OPTIONS", ts.URL, nil)
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("OPTIONS request failed: %v", err)
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	// Check CORS headers
@@ -1065,12 +911,8 @@ func TestCORSHeadersSet(t *testing.T) {
 	if allowOrigin != "*" {
 		t.Logf("Access-Control-Allow-Origin: %s (may want to restrict in production)", allowOrigin)
 	}
-	if !strings.Contains(allowMethods, "POST") {
-		t.Errorf("Access-Control-Allow-Methods should include POST: %s", allowMethods)
-	}
-	if !strings.Contains(allowHeaders, "Content-Type") {
-		t.Errorf("Access-Control-Allow-Headers should include Content-Type: %s", allowHeaders)
-	}
+	assert.Contains(t, allowMethods, "POST", "Access-Control-Allow-Methods should include POST")
+	assert.Contains(t, allowHeaders, "Content-Type", "Access-Control-Allow-Headers should include Content-Type")
 }
 
 // TestGracefulShutdown verifies server shuts down gracefully.
@@ -1084,9 +926,7 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 
 	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Don't actually start HTTP server for this test
 	// Just verify Stop() doesn't panic on unstarted server
@@ -1107,21 +947,13 @@ func TestTimeoutEnforced(t *testing.T) {
 	}
 
 	server, err := NewServer(cfg, stats)
-	if err != nil {
-		t.Fatalf("NewServer failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify HTTP server has timeouts configured
 	httpServer := server.httpServer
-	if httpServer.ReadTimeout == 0 {
-		t.Error("ReadTimeout should be non-zero")
-	}
-	if httpServer.WriteTimeout == 0 {
-		t.Error("WriteTimeout should be non-zero")
-	}
-	if httpServer.IdleTimeout == 0 {
-		t.Error("IdleTimeout should be non-zero")
-	}
+	assert.NotZero(t, httpServer.ReadTimeout, "ReadTimeout should be non-zero")
+	assert.NotZero(t, httpServer.WriteTimeout, "WriteTimeout should be non-zero")
+	assert.NotZero(t, httpServer.IdleTimeout, "IdleTimeout should be non-zero")
 
 	t.Logf("ReadTimeout: %v, WriteTimeout: %v, IdleTimeout: %v",
 		httpServer.ReadTimeout, httpServer.WriteTimeout, httpServer.IdleTimeout)

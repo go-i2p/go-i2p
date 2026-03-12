@@ -7,6 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setupServerWithAuth creates a Server with a password authenticator (user/pass).
+func setupServerWithAuth(t *testing.T) *Server {
+	t.Helper()
+	server, err := NewServer(nil)
+	require.NoError(t, err)
+	auth, err := NewPasswordAuthenticator("user", "pass")
+	require.NoError(t, err)
+	server.SetAuthenticator(auth)
+	return server
+}
+
 // TestPasswordAuthenticator_ValidCredentials tests that correct credentials are accepted.
 func TestPasswordAuthenticator_ValidCredentials(t *testing.T) {
 	auth, err := NewPasswordAuthenticator("admin", "secret123")
@@ -75,12 +86,7 @@ func TestServer_AuthenticationNotRequired(t *testing.T) {
 // TestServer_AuthenticationRequired tests that when an authenticator is set,
 // authentication is required and unauthenticated connections are rejected.
 func TestServer_AuthenticationRequired(t *testing.T) {
-	server, err := NewServer(nil)
-	require.NoError(t, err)
-
-	auth, err := NewPasswordAuthenticator("user", "pass")
-	require.NoError(t, err)
-	server.SetAuthenticator(auth)
+	server := setupServerWithAuth(t)
 	assert.True(t, server.isAuthenticationRequired())
 
 	state := &connectionState{}
@@ -91,12 +97,7 @@ func TestServer_AuthenticationRequired(t *testing.T) {
 // TestServer_AuthenticateConnection_Success tests successful authentication
 // marks the connection as authenticated.
 func TestServer_AuthenticateConnection_Success(t *testing.T) {
-	server, err := NewServer(nil)
-	require.NoError(t, err)
-
-	auth, err := NewPasswordAuthenticator("user", "pass")
-	require.NoError(t, err)
-	server.SetAuthenticator(auth)
+	server := setupServerWithAuth(t)
 
 	state := &connectionState{}
 	assert.True(t, server.authenticateConnection(state, "user", "pass"))
@@ -107,12 +108,7 @@ func TestServer_AuthenticateConnection_Success(t *testing.T) {
 // TestServer_AuthenticateConnection_Failure tests that failed authentication
 // leaves the connection unauthenticated.
 func TestServer_AuthenticateConnection_Failure(t *testing.T) {
-	server, err := NewServer(nil)
-	require.NoError(t, err)
-
-	auth, err := NewPasswordAuthenticator("user", "pass")
-	require.NoError(t, err)
-	server.SetAuthenticator(auth)
+	server := setupServerWithAuth(t)
 
 	state := &connectionState{}
 	assert.False(t, server.authenticateConnection(state, "user", "wrong"))
@@ -123,12 +119,7 @@ func TestServer_AuthenticateConnection_Failure(t *testing.T) {
 // TestServer_SetAuthenticator_Nil tests that setting nil authenticator
 // disables authentication.
 func TestServer_SetAuthenticator_Nil(t *testing.T) {
-	server, err := NewServer(nil)
-	require.NoError(t, err)
-
-	auth, err := NewPasswordAuthenticator("user", "pass")
-	require.NoError(t, err)
-	server.SetAuthenticator(auth)
+	server := setupServerWithAuth(t)
 	assert.True(t, server.isAuthenticationRequired())
 
 	server.SetAuthenticator(nil)
@@ -150,12 +141,7 @@ func TestServer_RequiresAuthentication_NoAuthenticator(t *testing.T) {
 // TestServer_RequiresAuthentication_WithAuthenticator tests that session-mutating
 // operations require auth but handshake messages do not.
 func TestServer_RequiresAuthentication_WithAuthenticator(t *testing.T) {
-	server, err := NewServer(nil)
-	require.NoError(t, err)
-
-	auth, err := NewPasswordAuthenticator("user", "pass")
-	require.NoError(t, err)
-	server.SetAuthenticator(auth)
+	server := setupServerWithAuth(t)
 
 	// Should NOT require auth (handshake / read-only)
 	assert.False(t, server.requiresAuthentication(MessageTypeGetDate),

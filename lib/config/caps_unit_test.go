@@ -1,8 +1,10 @@
 package config
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -55,11 +57,8 @@ func TestBandwidthClassFromRate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BandwidthClassFromRate(tt.bytesPerSec)
-			if got != tt.want {
-				t.Errorf("BandwidthClassFromRate(%d) = %s, want %s",
-					tt.bytesPerSec, got, tt.want)
-			}
+			assert.Equal(t, tt.want, BandwidthClassFromRate(tt.bytesPerSec),
+				"BandwidthClassFromRate(%d)", tt.bytesPerSec)
 		})
 	}
 }
@@ -72,10 +71,7 @@ func TestBandwidthClassString(t *testing.T) {
 	expected := []string{"K", "L", "M", "N", "O", "P", "X"}
 
 	for i, class := range classes {
-		if class.String() != expected[i] {
-			t.Errorf("BandwidthClass[%d].String() = %q, want %q",
-				i, class.String(), expected[i])
-		}
+		assert.Equal(t, expected[i], class.String(), "BandwidthClass[%d].String()", i)
 	}
 }
 
@@ -86,19 +82,13 @@ func TestBandwidthClassAllSingleCharacters(t *testing.T) {
 	}
 
 	for _, class := range classes {
-		if len(class.String()) != 1 {
-			t.Errorf("BandwidthClass %q is not a single character", class)
-		}
+		assert.Len(t, class.String(), 1, "BandwidthClass %q is not a single character", class)
 	}
 }
 
 func TestDefaultBandwidthClassIsP(t *testing.T) {
-	// The default MaxBandwidth is 1 MB/s (1048576 bytes/s) = 1024 KB/s → class P
-	got := BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth)
-	if got != BandwidthClassP {
-		t.Errorf("default MaxBandwidth %d maps to class %s, want P (256-2000 KB/s range)",
-			defaultRouterConfig.MaxBandwidth, got)
-	}
+	assert.Equal(t, BandwidthClassP, BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth),
+		"default MaxBandwidth %d should map to class P", defaultRouterConfig.MaxBandwidth)
 }
 
 // =============================================================================
@@ -191,11 +181,8 @@ func TestBuildCapsString_Basic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildCapsString(tt.bandwidth, tt.reachable, tt.floodfill, tt.hidden, tt.congestion)
-			if got != tt.want {
-				t.Errorf("BuildCapsString(%s, reachable=%v, ff=%v, hidden=%v, cong=%s) = %q, want %q",
-					tt.bandwidth, tt.reachable, tt.floodfill, tt.hidden, tt.congestion, got, tt.want)
-			}
+			assert.Equal(t, tt.want,
+				BuildCapsString(tt.bandwidth, tt.reachable, tt.floodfill, tt.hidden, tt.congestion))
 		})
 	}
 }
@@ -216,11 +203,9 @@ func TestBuildCapsStringProducesValidCaps(t *testing.T) {
 				for _, hidden := range []bool{true, false} {
 					for _, cong := range congestions {
 						caps := BuildCapsString(bw, reachable, ff, hidden, cong)
-						if err := ValidateCapsString(caps); err != nil {
-							t.Errorf("BuildCapsString(%s, reach=%v, ff=%v, hid=%v, cong=%s) "+
-								"produced invalid caps %q: %v",
-								bw, reachable, ff, hidden, cong, caps, err)
-						}
+						assert.NoError(t, ValidateCapsString(caps),
+							"BuildCapsString(%s, reach=%v, ff=%v, hid=%v, cong=%s) produced invalid caps %q",
+							bw, reachable, ff, hidden, cong, caps)
 					}
 				}
 			}
@@ -229,28 +214,18 @@ func TestBuildCapsStringProducesValidCaps(t *testing.T) {
 }
 
 func TestBuildCapsStringCanonicalOrder(t *testing.T) {
-	// Verify the canonical ordering: bandwidth + reachability + floodfill + hidden + congestion
-	caps := BuildCapsString(BandwidthClassX, true, true, true, CongestionFlagD)
-	if caps != "XRfHD" {
-		t.Errorf("canonical order should be bandwidth+reachability+floodfill+hidden+congestion, got %q", caps)
-	}
+	assert.Equal(t, "XRfHD",
+		BuildCapsString(BandwidthClassX, true, true, true, CongestionFlagD),
+		"canonical order should be bandwidth+reachability+floodfill+hidden+congestion")
 }
 
 func TestBuildCapsFromDefaults(t *testing.T) {
-	// Build a caps string using the default configuration values
 	bw := BandwidthClassFromRate(defaultRouterConfig.MaxBandwidth)
 	floodfill := Defaults().NetDB.FloodfillEnabled
-
 	caps := BuildCapsString(bw, true, floodfill, false, CongestionFlagNone)
 
-	// Default should be: P class, reachable, no floodfill, no congestion → "PR"
-	if caps != "PR" {
-		t.Errorf("caps from defaults = %q, want %q", caps, "PR")
-	}
-
-	if err := ValidateCapsString(caps); err != nil {
-		t.Errorf("caps from defaults is invalid: %v", err)
-	}
+	assert.Equal(t, "PR", caps, "caps from defaults")
+	assert.NoError(t, ValidateCapsString(caps), "caps from defaults is invalid")
 }
 
 // =============================================================================
@@ -275,9 +250,7 @@ func TestValidateCapsString_Valid(t *testing.T) {
 
 	for _, caps := range validCaps {
 		t.Run(caps, func(t *testing.T) {
-			if err := ValidateCapsString(caps); err != nil {
-				t.Errorf("ValidateCapsString(%q) = %v, want nil", caps, err)
-			}
+			assert.NoError(t, ValidateCapsString(caps), "ValidateCapsString(%q)", caps)
 		})
 	}
 }
@@ -303,15 +276,8 @@ func TestValidateCapsString_Invalid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateCapsString(tt.caps)
-			if err == nil {
-				t.Errorf("ValidateCapsString(%q) = nil, want error containing %q",
-					tt.caps, tt.wantErr)
-				return
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("ValidateCapsString(%q) error = %q, want containing %q",
-					tt.caps, err.Error(), tt.wantErr)
-			}
+			require.Error(t, err, "ValidateCapsString(%q) should return error", tt.caps)
+			assert.Contains(t, err.Error(), tt.wantErr, "ValidateCapsString(%q)", tt.caps)
 		})
 	}
 }
@@ -325,9 +291,7 @@ func TestValidateCongestionFlag_Valid(t *testing.T) {
 		CongestionFlagNone, CongestionFlagD, CongestionFlagE, CongestionFlagG,
 	}
 	for _, f := range validFlags {
-		if err := ValidateCongestionFlag(f); err != nil {
-			t.Errorf("ValidateCongestionFlag(%q) = %v, want nil", f, err)
-		}
+		assert.NoError(t, ValidateCongestionFlag(f), "ValidateCongestionFlag(%q)", f)
 	}
 }
 
@@ -335,32 +299,25 @@ func TestValidateCongestionFlag_Invalid(t *testing.T) {
 	invalidFlags := []CongestionFlag{"A", "Z", "DE", "GG", "X", "d", "e", "g"}
 	for _, f := range invalidFlags {
 		t.Run(string(f), func(t *testing.T) {
-			if err := ValidateCongestionFlag(f); err == nil {
-				t.Errorf("ValidateCongestionFlag(%q) = nil, want error", f)
-			}
+			assert.Error(t, ValidateCongestionFlag(f), "ValidateCongestionFlag(%q)", f)
 		})
 	}
 }
 
 func TestCongestionFlagsAreValidCapsCharacters(t *testing.T) {
-	// All CongestionFlag constants must be recognized in validCapsFlags
 	flags := []CongestionFlag{CongestionFlagD, CongestionFlagE, CongestionFlagG}
 	for _, f := range flags {
-		if len(f.String()) != 1 {
-			t.Errorf("CongestionFlag %q is not a single character", f)
-		}
+		assert.Len(t, f.String(), 1, "CongestionFlag %q is not a single character", f)
 		r := rune(f.String()[0])
-		if _, ok := validCapsFlags[r]; !ok {
-			t.Errorf("CongestionFlag %q is not in validCapsFlags", f)
-		}
+		_, ok := validCapsFlags[r]
+		assert.True(t, ok, "CongestionFlag %q is not in validCapsFlags", f)
 	}
 }
 
 func TestCongestionFlagNoneProducesNoCapsCharacter(t *testing.T) {
-	caps := BuildCapsString(BandwidthClassP, true, false, false, CongestionFlagNone)
-	if caps != "PR" {
-		t.Errorf("CongestionFlagNone should not add any character, got caps %q", caps)
-	}
+	assert.Equal(t, "PR",
+		BuildCapsString(BandwidthClassP, true, false, false, CongestionFlagNone),
+		"CongestionFlagNone should not add any character")
 }
 
 // =============================================================================
@@ -378,25 +335,19 @@ func TestValidateRouterInfoOptionKeys_AllSpecKeys(t *testing.T) {
 		"family.key":           "base64key==",
 		"family.sig":           "base64sig==",
 	}
-	if err := ValidateRouterInfoOptionKeys(options); err != nil {
-		t.Errorf("ValidateRouterInfoOptionKeys(all spec keys) = %v, want nil", err)
-	}
+	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "all spec keys")
 }
 
 func TestValidateRouterInfoOptionKeys_DeprecatedKeysAccepted(t *testing.T) {
-	// Deprecated keys should be accepted (with warning) but not rejected
 	options := map[string]string{
 		"router.version": "0.9.64",
 		"coreVersion":    "0.9.64",
 		"stat_uptime":    "3600",
 	}
-	if err := ValidateRouterInfoOptionKeys(options); err != nil {
-		t.Errorf("ValidateRouterInfoOptionKeys(deprecated keys) = %v, want nil", err)
-	}
+	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "deprecated keys")
 }
 
 func TestValidateRouterInfoOptionKeys_StatPrefixAccepted(t *testing.T) {
-	// stat_ prefixed keys should be accepted per spec (various statistics)
 	options := map[string]string{
 		"router.version":                          "0.9.64",
 		"stat_tunnel.buildExploratoryExpire.60m":  "100",
@@ -404,9 +355,7 @@ func TestValidateRouterInfoOptionKeys_StatPrefixAccepted(t *testing.T) {
 		"stat_tunnel.buildExploratorySuccess.60m": "200",
 		"stat_tunnel.participatingTunnels.60m":    "500",
 	}
-	if err := ValidateRouterInfoOptionKeys(options); err != nil {
-		t.Errorf("ValidateRouterInfoOptionKeys(stat_ prefix) = %v, want nil", err)
-	}
+	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "stat_ prefix")
 }
 
 func TestValidateRouterInfoOptionKeys_SubsetValid(t *testing.T) {
@@ -414,16 +363,11 @@ func TestValidateRouterInfoOptionKeys_SubsetValid(t *testing.T) {
 		"router.version": "0.9.64",
 		"caps":           "PR",
 	}
-	if err := ValidateRouterInfoOptionKeys(options); err != nil {
-		t.Errorf("ValidateRouterInfoOptionKeys(subset) = %v, want nil", err)
-	}
+	assert.NoError(t, ValidateRouterInfoOptionKeys(options), "subset")
 }
 
 func TestValidateRouterInfoOptionKeys_EmptyValid(t *testing.T) {
-	options := map[string]string{}
-	if err := ValidateRouterInfoOptionKeys(options); err != nil {
-		t.Errorf("ValidateRouterInfoOptionKeys(empty) = %v, want nil", err)
-	}
+	assert.NoError(t, ValidateRouterInfoOptionKeys(map[string]string{}), "empty")
 }
 
 func TestValidateRouterInfoOptionKeys_ProprietaryKeyRejected(t *testing.T) {
@@ -432,13 +376,8 @@ func TestValidateRouterInfoOptionKeys_ProprietaryKeyRejected(t *testing.T) {
 		"my.custom.option": "value",
 	}
 	err := ValidateRouterInfoOptionKeys(options)
-	if err == nil {
-		t.Error("ValidateRouterInfoOptionKeys(proprietary key) = nil, want error")
-		return
-	}
-	if !strings.Contains(err.Error(), "my.custom.option") {
-		t.Errorf("error should mention the unrecognized key, got: %v", err)
-	}
+	require.Error(t, err, "proprietary key should be rejected")
+	assert.Contains(t, err.Error(), "my.custom.option")
 }
 
 func TestValidateRouterInfoOptionKeys_MultipleProprietaryKeys(t *testing.T) {
@@ -448,29 +387,14 @@ func TestValidateRouterInfoOptionKeys_MultipleProprietaryKeys(t *testing.T) {
 		"debug.mode":     "true",
 	}
 	err := ValidateRouterInfoOptionKeys(options)
-	if err == nil {
-		t.Error("ValidateRouterInfoOptionKeys(multiple proprietary) = nil, want error")
-		return
-	}
-	// Both unrecognized keys should be mentioned
-	if !strings.Contains(err.Error(), "debug.mode") {
-		t.Errorf("error should mention 'debug.mode': %v", err)
-	}
-	if !strings.Contains(err.Error(), "foo") {
-		t.Errorf("error should mention 'foo': %v", err)
-	}
+	require.Error(t, err, "multiple proprietary keys should be rejected")
+	assert.Contains(t, err.Error(), "debug.mode")
+	assert.Contains(t, err.Error(), "foo")
 }
 
 func TestSpecRouterInfoOptionKeysContainsRequiredKeys(t *testing.T) {
-	// Per I2P spec, these keys are commonly required in RouterInfo
-	requiredKeys := []string{
-		"router.version",
-		"caps",
-		"netId",
-	}
-	for _, key := range requiredKeys {
-		if _, ok := SpecRouterInfoOptionKeys[key]; !ok {
-			t.Errorf("SpecRouterInfoOptionKeys missing required key: %s", key)
-		}
+	for _, key := range []string{"router.version", "caps", "netId"} {
+		_, ok := SpecRouterInfoOptionKeys[key]
+		assert.True(t, ok, "SpecRouterInfoOptionKeys missing required key: %s", key)
 	}
 }

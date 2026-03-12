@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/go-i2p/common/data"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParseSendMessagePayload tests parsing of SendMessage payloads
@@ -84,32 +86,18 @@ func TestParseSendMessagePayload(t *testing.T) {
 			result, err := ParseSendMessagePayload(tt.input)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ParseSendMessagePayload() expected error, got nil")
-				} else if tt.errorContains != "" && !bytes.Contains([]byte(err.Error()), []byte(tt.errorContains)) {
-					t.Errorf("ParseSendMessagePayload() error = %v, should contain %q", err, tt.errorContains)
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("ParseSendMessagePayload() unexpected error = %v", err)
-				return
-			}
+			require.NoError(t, err)
+			require.NotNil(t, result)
 
-			if result == nil {
-				t.Fatalf("ParseSendMessagePayload() returned nil result")
-			}
-
-			// Verify destination hash
-			if result.Destination != tt.expectedDest {
-				t.Errorf("Destination mismatch: got %x, want %x", result.Destination, tt.expectedDest)
-			}
-
-			// Verify payload size
-			if len(result.Payload) != tt.expectedSize {
-				t.Errorf("Payload size mismatch: got %d, want %d", len(result.Payload), tt.expectedSize)
-			}
+			assert.Equal(t, tt.expectedDest, result.Destination, "destination")
+			assert.Equal(t, tt.expectedSize, len(result.Payload), "payload size")
 		})
 	}
 }
@@ -131,27 +119,16 @@ func TestSendMessagePayloadMarshalBinary(t *testing.T) {
 
 	// Marshal
 	data, err := smp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	// Verify total size
 	expectedSize := 32 + len(payload)
-	if len(data) != expectedSize {
-		t.Errorf("Marshaled size = %d, want %d", len(data), expectedSize)
-	}
+	assert.Equal(t, expectedSize, len(data), "marshaled size")
 
-	// Verify destination hash
 	for i := 0; i < 32; i++ {
-		if data[i] != byte(i*2) {
-			t.Errorf("Destination byte %d = %d, want %d", i, data[i], i*2)
-		}
+		assert.Equal(t, byte(i*2), data[i], "destination byte %d", i)
 	}
 
-	// Verify payload
-	if !bytes.Equal(data[32:], payload) {
-		t.Errorf("Payload mismatch: got %v, want %v", data[32:], payload)
-	}
+	assert.True(t, bytes.Equal(data[32:], payload), "payload mismatch")
 }
 
 // TestSendMessagePayloadRoundTrip tests marshal/unmarshal round trip
@@ -166,24 +143,14 @@ func TestSendMessagePayloadRoundTrip(t *testing.T) {
 
 	// Marshal
 	data, err := original.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Unmarshal
 	result, err := ParseSendMessagePayload(data)
-	if err != nil {
-		t.Fatalf("ParseSendMessagePayload() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	// Compare
-	if result.Destination != original.Destination {
-		t.Errorf("Destination mismatch after round trip")
-	}
-
-	if !bytes.Equal(result.Payload, original.Payload) {
-		t.Errorf("Payload mismatch after round trip")
-	}
+	assert.Equal(t, original.Destination, result.Destination, "destination")
+	assert.True(t, bytes.Equal(original.Payload, result.Payload), "payload")
 }
 
 // TestParseMessagePayloadPayload tests parsing of MessagePayload payloads
@@ -255,32 +222,18 @@ func TestParseMessagePayloadPayload(t *testing.T) {
 			result, err := ParseMessagePayloadPayload(tt.input)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ParseMessagePayloadPayload() expected error, got nil")
-				} else if tt.errorContains != "" && !bytes.Contains([]byte(err.Error()), []byte(tt.errorContains)) {
-					t.Errorf("ParseMessagePayloadPayload() error = %v, should contain %q", err, tt.errorContains)
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 				return
 			}
 
-			if err != nil {
-				t.Errorf("ParseMessagePayloadPayload() unexpected error = %v", err)
-				return
-			}
+			require.NoError(t, err)
+			require.NotNil(t, result)
 
-			if result == nil {
-				t.Fatalf("ParseMessagePayloadPayload() returned nil result")
-			}
-
-			// Verify message ID
-			if result.MessageID != tt.expectedMsgID {
-				t.Errorf("MessageID mismatch: got %d, want %d", result.MessageID, tt.expectedMsgID)
-			}
-
-			// Verify payload size
-			if len(result.Payload) != tt.expectedSize {
-				t.Errorf("Payload size mismatch: got %d, want %d", len(result.Payload), tt.expectedSize)
-			}
+			assert.Equal(t, tt.expectedMsgID, result.MessageID, "message ID")
+			assert.Equal(t, tt.expectedSize, len(result.Payload), "payload size")
 		})
 	}
 }
@@ -297,30 +250,20 @@ func TestMessagePayloadPayloadMarshalBinary(t *testing.T) {
 
 	// Marshal
 	data, err := mpp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	// Verify total size: SessionID(2) + MessageID(4) + payload
 	expectedSize := 6 + len(payload)
-	if len(data) != expectedSize {
-		t.Errorf("Marshaled size = %d, want %d", len(data), expectedSize)
-	}
+	assert.Equal(t, expectedSize, len(data), "marshaled size")
 
-	// Verify session ID (big endian)
-	if data[0] != 0x12 || data[1] != 0x34 {
-		t.Errorf("SessionID bytes incorrect: got [%02x %02x]", data[0], data[1])
-	}
+	assert.Equal(t, byte(0x12), data[0], "sessionID high byte")
+	assert.Equal(t, byte(0x34), data[1], "sessionID low byte")
 
-	// Verify message ID (big endian)
-	if data[2] != 0x00 || data[3] != 0xAB || data[4] != 0xCD || data[5] != 0xEF {
-		t.Errorf("MessageID bytes incorrect: got [%02x %02x %02x %02x]", data[2], data[3], data[4], data[5])
-	}
+	assert.Equal(t, byte(0x00), data[2], "messageID byte 0")
+	assert.Equal(t, byte(0xAB), data[3], "messageID byte 1")
+	assert.Equal(t, byte(0xCD), data[4], "messageID byte 2")
+	assert.Equal(t, byte(0xEF), data[5], "messageID byte 3")
 
-	// Verify payload
-	if !bytes.Equal(data[6:], payload) {
-		t.Errorf("Payload mismatch: got %v, want %v", data[6:], payload)
-	}
+	assert.True(t, bytes.Equal(data[6:], payload), "payload mismatch")
 }
 
 // TestMessagePayloadPayloadRoundTrip tests marshal/unmarshal round trip
@@ -333,56 +276,33 @@ func TestMessagePayloadPayloadRoundTrip(t *testing.T) {
 
 	// Marshal
 	data, err := original.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Unmarshal
 	result, err := ParseMessagePayloadPayload(data)
-	if err != nil {
-		t.Fatalf("ParseMessagePayloadPayload() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	// Compare
-	if result.MessageID != original.MessageID {
-		t.Errorf("MessageID mismatch after round trip: got %d, want %d", result.MessageID, original.MessageID)
-	}
-
-	if !bytes.Equal(result.Payload, original.Payload) {
-		t.Errorf("Payload mismatch after round trip")
-	}
+	assert.Equal(t, original.MessageID, result.MessageID, "message ID")
+	assert.True(t, bytes.Equal(original.Payload, result.Payload), "payload")
 }
 
 // TestSendMessagePayloadEmptyPayload tests handling of empty payload
 func TestSendMessagePayloadEmptyPayload(t *testing.T) {
 	var destHash data.Hash
-	copy(destHash[:], make([]byte, 32)) // All zeros
+	copy(destHash[:], make([]byte, 32))
 
 	smp := &SendMessagePayload{
 		Destination: destHash,
-		Payload:     []byte{}, // Empty payload
+		Payload:     []byte{},
 	}
 
-	// Marshal
 	data, err := smp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 32, len(data), "marshaled size")
 
-	// Should be exactly 32 bytes (just the destination)
-	if len(data) != 32 {
-		t.Errorf("Marshaled size = %d, want 32", len(data))
-	}
-
-	// Unmarshal
 	result, err := ParseSendMessagePayload(data)
-	if err != nil {
-		t.Fatalf("ParseSendMessagePayload() error = %v", err)
-	}
-
-	if len(result.Payload) != 0 {
-		t.Errorf("Expected empty payload, got %d bytes", len(result.Payload))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, result.Payload)
 }
 
 // TestMessagePayloadPayloadZeroID tests handling of message ID = 0
@@ -393,21 +313,12 @@ func TestMessagePayloadPayloadZeroID(t *testing.T) {
 		Payload:   []byte("Message with ID 0"),
 	}
 
-	// Marshal
 	data, err := mpp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	// Unmarshal
 	result, err := ParseMessagePayloadPayload(data)
-	if err != nil {
-		t.Fatalf("ParseMessagePayloadPayload() error = %v", err)
-	}
-
-	if result.MessageID != 0 {
-		t.Errorf("MessageID should be 0, got %d", result.MessageID)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, uint32(0), result.MessageID)
 }
 
 // BenchmarkParseSendMessagePayload benchmarks SendMessage parsing
@@ -507,23 +418,13 @@ func TestBlindingInfoPayloadParse(t *testing.T) {
 			payload, err := ParseBlindingInfoPayload(tt.data)
 
 			if tt.shouldError {
-				if err == nil {
-					t.Error("expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if payload.Enabled != tt.wantEnabled {
-				t.Errorf("Enabled = %v, want %v", payload.Enabled, tt.wantEnabled)
-			}
-
-			if !bytes.Equal(payload.Secret, tt.wantSecret) {
-				t.Errorf("Secret = %v, want %v", payload.Secret, tt.wantSecret)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEnabled, payload.Enabled)
+			assert.True(t, bytes.Equal(tt.wantSecret, payload.Secret), "secret mismatch")
 		})
 	}
 }
@@ -577,32 +478,21 @@ func TestBlindingInfoPayloadMarshal(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
 
 			if tt.shouldError {
-				if err == nil {
-					t.Error("expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSize, len(data), "data length")
+
+			if tt.payload.Enabled {
+				assert.Equal(t, byte(0x01), data[0], "enabled flag")
+			} else {
+				assert.Equal(t, byte(0x00), data[0], "enabled flag")
 			}
 
-			if len(data) != tt.wantSize {
-				t.Errorf("data length = %d, want %d", len(data), tt.wantSize)
-			}
-
-			// Verify enabled flag
-			if tt.payload.Enabled && data[0] != 0x01 {
-				t.Errorf("enabled flag = 0x%02x, want 0x01", data[0])
-			} else if !tt.payload.Enabled && data[0] != 0x00 {
-				t.Errorf("enabled flag = 0x%02x, want 0x00", data[0])
-			}
-
-			// Verify secret if present
 			if tt.payload.Enabled && len(tt.payload.Secret) == 32 {
-				if !bytes.Equal(data[1:33], tt.payload.Secret) {
-					t.Error("marshaled secret does not match input")
-				}
+				assert.True(t, bytes.Equal(data[1:33], tt.payload.Secret), "marshaled secret mismatch")
 			}
 		})
 	}
@@ -652,68 +542,40 @@ func TestBlindingInfoRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
-			}
+			require.NoError(t, err)
 
 			parsed, err := ParseBlindingInfoPayload(data)
-			if err != nil {
-				t.Fatalf("ParseBlindingInfoPayload() error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if parsed.Enabled != tt.payload.Enabled {
-				t.Errorf("Enabled = %v, want %v", parsed.Enabled, tt.payload.Enabled)
-			}
-
-			if !bytes.Equal(parsed.Secret, tt.payload.Secret) {
-				t.Errorf("Secret mismatch after round trip")
-			}
+			assert.Equal(t, tt.payload.Enabled, parsed.Enabled)
+			assert.True(t, bytes.Equal(tt.payload.Secret, parsed.Secret), "secret mismatch")
 		})
 	}
 }
 
 func TestBlindingInfoConstants(t *testing.T) {
-	if MessageTypeBlindingInfo != 42 {
-		t.Errorf("MessageTypeBlindingInfo = %d, want 42", MessageTypeBlindingInfo)
-	}
-
-	if name := MessageTypeName(MessageTypeBlindingInfo); name != "BlindingInfo" {
-		t.Errorf("MessageTypeName(BlindingInfo) = %q, want %q", name, "BlindingInfo")
-	}
+	assert.Equal(t, uint8(42), MessageTypeBlindingInfo)
+	assert.Equal(t, "BlindingInfo", MessageTypeName(MessageTypeBlindingInfo))
 }
 
 func TestBlindingInfoEnableDisable(t *testing.T) {
-	// Test enabling blinding
 	enablePayload := &BlindingInfoPayload{
 		Enabled: true,
-		Secret:  nil, // Random secret will be generated
+		Secret:  nil,
 	}
 	enableData, err := enablePayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error: %v", err)
-	}
-	if len(enableData) != 1 {
-		t.Errorf("enable payload length = %d, want 1", len(enableData))
-	}
-	if enableData[0] != 0x01 {
-		t.Errorf("enable flag = 0x%02x, want 0x01", enableData[0])
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(enableData), "enable payload length")
+	assert.Equal(t, byte(0x01), enableData[0], "enable flag")
 
-	// Test disabling blinding
 	disablePayload := &BlindingInfoPayload{
 		Enabled: false,
 		Secret:  nil,
 	}
 	disableData, err := disablePayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error: %v", err)
-	}
-	if len(disableData) != 1 {
-		t.Errorf("disable payload length = %d, want 1", len(disableData))
-	}
-	if disableData[0] != 0x00 {
-		t.Errorf("disable flag = 0x%02x, want 0x00", disableData[0])
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(disableData), "disable payload length")
+	assert.Equal(t, byte(0x00), disableData[0], "disable flag")
 }
 
 func TestBlindingInfoSecretFormats(t *testing.T) {
@@ -769,19 +631,14 @@ func TestBlindingInfoSecretFormats(t *testing.T) {
 			data, err := payload.MarshalBinary()
 
 			if tt.valid {
-				if err != nil {
-					t.Errorf("unexpected error for valid secret: %v", err)
-				}
-				if tt.secret != nil && len(data) != 33 {
-					t.Errorf("data length = %d, want 33", len(data))
-				}
-				if tt.secret == nil && len(data) != 1 {
-					t.Errorf("data length = %d, want 1", len(data))
+				require.NoError(t, err, "unexpected error for valid secret")
+				if tt.secret != nil {
+					assert.Equal(t, 33, len(data), "data length")
+				} else {
+					assert.Equal(t, 1, len(data), "data length")
 				}
 			} else {
-				if err == nil {
-					t.Error("expected error for invalid secret length but got none")
-				}
+				assert.Error(t, err, "expected error for invalid secret length")
 			}
 		})
 	}
@@ -880,19 +737,12 @@ func TestDisconnectPayloadParse(t *testing.T) {
 			parsed, err := ParseDisconnectPayload(tt.payload)
 
 			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if parsed.Reason != tt.expectReason {
-				t.Errorf("Reason mismatch: got %q, want %q", parsed.Reason, tt.expectReason)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectReason, parsed.Reason)
 		})
 	}
 }
@@ -915,27 +765,16 @@ func TestDisconnectPayloadMarshal(t *testing.T) {
 			dp := &DisconnectPayload{Reason: tt.reason}
 
 			marshaled, err := dp.MarshalBinary()
-			if err != nil {
-				t.Fatalf("Marshal error: %v", err)
-			}
+			require.NoError(t, err)
 
 			expectedSize := 2 + len(tt.reason)
-			if len(marshaled) != expectedSize {
-				t.Errorf("Marshaled size mismatch: got %d, want %d", len(marshaled), expectedSize)
-			}
+			assert.Equal(t, expectedSize, len(marshaled), "marshaled size")
 
-			// Verify length field
 			reasonLen := binary.BigEndian.Uint16(marshaled[0:2])
-			if reasonLen != uint16(len(tt.reason)) {
-				t.Errorf("Length field mismatch: got %d, want %d", reasonLen, len(tt.reason))
-			}
+			assert.Equal(t, uint16(len(tt.reason)), reasonLen, "length field")
 
-			// Verify reason string
 			if len(tt.reason) > 0 {
-				actualReason := string(marshaled[2:])
-				if actualReason != tt.reason {
-					t.Errorf("Reason mismatch: got %q, want %q", actualReason, tt.reason)
-				}
+				assert.Equal(t, tt.reason, string(marshaled[2:]), "reason")
 			}
 		})
 	}
@@ -957,22 +796,13 @@ func TestDisconnectRoundTrip(t *testing.T) {
 		t.Run("reason_"+reason, func(t *testing.T) {
 			original := &DisconnectPayload{Reason: reason}
 
-			// Marshal
 			marshaled, err := original.MarshalBinary()
-			if err != nil {
-				t.Fatalf("Marshal error: %v", err)
-			}
+			require.NoError(t, err)
 
-			// Unmarshal
 			parsed, err := ParseDisconnectPayload(marshaled)
-			if err != nil {
-				t.Fatalf("Parse error: %v", err)
-			}
+			require.NoError(t, err)
 
-			// Compare
-			if parsed.Reason != original.Reason {
-				t.Errorf("Reason mismatch after round trip: got %q, want %q", parsed.Reason, original.Reason)
-			}
+			assert.Equal(t, original.Reason, parsed.Reason)
 		})
 	}
 }
@@ -992,46 +822,30 @@ func TestDisconnectCommonReasons(t *testing.T) {
 
 	for _, reason := range commonReasons {
 		t.Run(reason, func(t *testing.T) {
-			// Create payload
 			dp := &DisconnectPayload{Reason: reason}
 			data, err := dp.MarshalBinary()
-			if err != nil {
-				t.Fatalf("Marshal failed: %v", err)
-			}
+			require.NoError(t, err)
 
-			// Parse it back
 			parsed, err := ParseDisconnectPayload(data)
-			if err != nil {
-				t.Fatalf("Parse failed: %v", err)
-			}
+			require.NoError(t, err)
 
-			if parsed.Reason != reason {
-				t.Errorf("Reason mismatch: got %q, want %q", parsed.Reason, reason)
-			}
+			assert.Equal(t, reason, parsed.Reason)
 		})
 	}
 }
 
 // TestDisconnectMaxLength tests handling of maximum length reasons
 func TestDisconnectMaxLength(t *testing.T) {
-	// Maximum uint16 is 65535, but that's impractical
-	// Test a reasonable maximum (e.g., 1024 bytes)
 	longReason := string(bytes.Repeat([]byte("X"), 1024))
 
 	dp := &DisconnectPayload{Reason: longReason}
 	data, err := dp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("Marshal failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	parsed, err := ParseDisconnectPayload(data)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
+	require.NoError(t, err)
 
-	if parsed.Reason != longReason {
-		t.Errorf("Long reason not preserved: got %d bytes, want %d bytes", len(parsed.Reason), len(longReason))
-	}
+	assert.Equal(t, longReason, parsed.Reason)
 }
 
 // TestSendMessageExpiresPayloadParse tests parsing of SendMessageExpires payload
@@ -1144,31 +958,15 @@ func TestSendMessageExpiresPayloadParse(t *testing.T) {
 			parsed, err := ParseSendMessageExpiresPayload(tt.payload)
 
 			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if parsed.Nonce != tt.checkNonce {
-				t.Errorf("Nonce mismatch: got 0x%X, want 0x%X", parsed.Nonce, tt.checkNonce)
-			}
-
-			if parsed.Flags != tt.checkFlags {
-				t.Errorf("Flags mismatch: got 0x%X, want 0x%X", parsed.Flags, tt.checkFlags)
-			}
-
-			if !bytes.Equal(parsed.Payload, tt.checkPayload) {
-				t.Errorf("Payload mismatch: got %d bytes, want %d bytes", len(parsed.Payload), len(tt.checkPayload))
-			}
-
-			if parsed.Expiration == 0 {
-				t.Error("Expiration should not be zero")
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.checkNonce, parsed.Nonce, "nonce")
+			assert.Equal(t, tt.checkFlags, parsed.Flags, "flags")
+			assert.True(t, bytes.Equal(tt.checkPayload, parsed.Payload), "payload")
+			assert.NotZero(t, parsed.Expiration, "expiration")
 		})
 	}
 }
@@ -1189,38 +987,21 @@ func TestSendMessageExpiresPayloadMarshal(t *testing.T) {
 	}
 
 	marshaled, err := smp.MarshalBinary()
-	if err != nil {
-		t.Fatalf("Marshal error: %v", err)
-	}
+	require.NoError(t, err)
 
-	expectedSize := 32 + len(smp.Payload) + 12 // dest + payload + fixed
-	if len(marshaled) != expectedSize {
-		t.Errorf("Marshaled size mismatch: got %d, want %d", len(marshaled), expectedSize)
-	}
+	expectedSize := 32 + len(smp.Payload) + 12
+	assert.Equal(t, expectedSize, len(marshaled), "marshaled size")
 
-	// Verify destination
-	if !bytes.Equal(marshaled[0:32], dest[:]) {
-		t.Error("Destination mismatch in marshaled data")
-	}
+	assert.True(t, bytes.Equal(marshaled[0:32], dest[:]), "destination mismatch")
+	assert.True(t, bytes.Equal(marshaled[32:32+len(smp.Payload)], smp.Payload), "payload mismatch")
 
-	// Verify payload
-	if !bytes.Equal(marshaled[32:32+len(smp.Payload)], smp.Payload) {
-		t.Error("Payload mismatch in marshaled data")
-	}
-
-	// Verify fixed fields
 	offset := 32 + len(smp.Payload)
 	nonce := binary.BigEndian.Uint32(marshaled[offset : offset+4])
-	if nonce != 0x11223344 {
-		t.Errorf("Nonce mismatch: got 0x%X, want 0x11223344", nonce)
-	}
+	assert.Equal(t, uint32(0x11223344), nonce, "nonce")
 
 	flags := binary.BigEndian.Uint16(marshaled[offset+4 : offset+6])
-	if flags != 0x0002 {
-		t.Errorf("Flags mismatch: got 0x%X, want 0x0002", flags)
-	}
+	assert.Equal(t, uint16(0x0002), flags, "flags")
 
-	// Verify expiration (48-bit)
 	expBytes := marshaled[offset+6 : offset+12]
 	exp := uint64(expBytes[0])<<40 |
 		uint64(expBytes[1])<<32 |
@@ -1228,9 +1009,7 @@ func TestSendMessageExpiresPayloadMarshal(t *testing.T) {
 		uint64(expBytes[3])<<16 |
 		uint64(expBytes[4])<<8 |
 		uint64(expBytes[5])
-	if exp != expMs {
-		t.Errorf("Expiration mismatch: got %d, want %d", exp, expMs)
-	}
+	assert.Equal(t, expMs, exp, "expiration")
 }
 
 // TestSendMessageExpiresRoundTrip tests marshal/unmarshal integrity
@@ -1260,84 +1039,44 @@ func TestSendMessageExpiresRoundTrip(t *testing.T) {
 
 			// Marshal
 			marshaled, err := original.MarshalBinary()
-			if err != nil {
-				t.Fatalf("Marshal error: %v", err)
-			}
+			require.NoError(t, err)
 
 			// Unmarshal
 			parsed, err := ParseSendMessageExpiresPayload(marshaled)
-			if err != nil {
-				t.Fatalf("Parse error: %v", err)
-			}
+			require.NoError(t, err)
 
-			// Compare
-			if parsed.Destination != original.Destination {
-				t.Error("Destination mismatch after round trip")
-			}
-
-			if !bytes.Equal(parsed.Payload, original.Payload) {
-				t.Errorf("Payload mismatch: got %d bytes, want %d bytes", len(parsed.Payload), len(original.Payload))
-			}
-
-			if parsed.Nonce != original.Nonce {
-				t.Errorf("Nonce mismatch: got 0x%X, want 0x%X", parsed.Nonce, original.Nonce)
-			}
-
-			if parsed.Flags != original.Flags {
-				t.Errorf("Flags mismatch: got 0x%X, want 0x%X", parsed.Flags, original.Flags)
-			}
-
-			if parsed.Expiration != original.Expiration {
-				t.Errorf("Expiration mismatch: got %d, want %d", parsed.Expiration, original.Expiration)
-			}
+			assert.Equal(t, original.Destination, parsed.Destination, "destination")
+			assert.True(t, bytes.Equal(original.Payload, parsed.Payload), "payload")
+			assert.Equal(t, original.Nonce, parsed.Nonce, "nonce")
+			assert.Equal(t, original.Flags, parsed.Flags, "flags")
+			assert.Equal(t, original.Expiration, parsed.Expiration, "expiration")
 		})
 	}
 }
 
 // TestMessageTypeConstants verifies SendMessageExpires constant
 func TestMessageTypeSendMessageExpires(t *testing.T) {
-	if MessageTypeSendMessageExpires != 36 {
-		t.Errorf("MessageTypeSendMessageExpires = %d, want 36", MessageTypeSendMessageExpires)
-	}
-
-	name := MessageTypeName(MessageTypeSendMessageExpires)
-	if name != "SendMessageExpires" {
-		t.Errorf("MessageTypeName(36) = %q, want %q", name, "SendMessageExpires")
-	}
+	assert.Equal(t, uint8(36), MessageTypeSendMessageExpires)
+	assert.Equal(t, "SendMessageExpires", MessageTypeName(MessageTypeSendMessageExpires))
 }
 
 // TestMessageTypeDisconnect verifies Disconnect constant
 func TestMessageTypeDisconnect(t *testing.T) {
-	if MessageTypeDisconnect != 30 {
-		t.Errorf("MessageTypeDisconnect = %d, want 30", MessageTypeDisconnect)
-	}
-
-	name := MessageTypeName(MessageTypeDisconnect)
-	if name != "Disconnect" {
-		t.Errorf("MessageTypeName(30) = %q, want %q", name, "Disconnect")
-	}
+	assert.Equal(t, uint8(30), MessageTypeDisconnect)
+	assert.Equal(t, "Disconnect", MessageTypeName(MessageTypeDisconnect))
 }
 
 // TestExpirationTime tests expiration time calculations
 func TestExpirationTime(t *testing.T) {
-	// Test past expiration
 	pastMs := uint64(time.Now().Add(-5 * time.Minute).UnixMilli())
 	currentMs := uint64(time.Now().UnixMilli())
-	if currentMs < pastMs {
-		t.Error("Past time should be less than current time")
-	}
+	assert.Greater(t, currentMs, pastMs, "past time should be less than current")
 
-	// Test future expiration
 	futureMs := uint64(time.Now().Add(10 * time.Minute).UnixMilli())
-	if futureMs <= currentMs {
-		t.Error("Future time should be greater than current time")
-	}
+	assert.Greater(t, futureMs, currentMs, "future time should be greater than current")
 
-	// Test 48-bit range (max value that fits in 6 bytes)
-	maxExpiration := uint64(1<<48 - 1) // 2814740.9.67655 ms = ~8925 years from epoch
-	if maxExpiration < futureMs {
-		t.Error("48-bit expiration should support far future dates")
-	}
+	maxExpiration := uint64(1<<48 - 1)
+	assert.GreaterOrEqual(t, maxExpiration, futureMs, "48-bit expiration should support far future")
 }
 
 func TestHostLookupPayloadParse(t *testing.T) {
@@ -1418,27 +1157,14 @@ func TestHostLookupPayloadParse(t *testing.T) {
 			payload, err := ParseHostLookupPayload(tt.data)
 
 			if tt.shouldError {
-				if err == nil {
-					t.Error("expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if payload.RequestID != tt.wantID {
-				t.Errorf("RequestID = %d, want %d", payload.RequestID, tt.wantID)
-			}
-
-			if payload.LookupType != tt.wantType {
-				t.Errorf("LookupType = %d, want %d", payload.LookupType, tt.wantType)
-			}
-
-			if payload.Query != tt.wantQuery {
-				t.Errorf("Query = %q, want %q", payload.Query, tt.wantQuery)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, payload.RequestID)
+			assert.Equal(t, tt.wantType, payload.LookupType)
+			assert.Equal(t, tt.wantQuery, payload.Query)
 		})
 	}
 }
@@ -1457,21 +1183,13 @@ func TestHostLookupPayloadMarshal(t *testing.T) {
 				Query:      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			},
 			check: func(data []byte) error {
-				if len(data) != 8+52 {
-					t.Errorf("data length = %d, want %d", len(data), 8+52)
-				}
+				assert.Equal(t, 8+52, len(data), "data length")
 				reqID := binary.BigEndian.Uint32(data[0:4])
-				if reqID != 54321 {
-					t.Errorf("RequestID = %d, want 54321", reqID)
-				}
+				assert.Equal(t, uint32(54321), reqID, "RequestID")
 				lookupType := binary.BigEndian.Uint16(data[4:6])
-				if lookupType != HostLookupTypeHash {
-					t.Errorf("LookupType = %d, want %d", lookupType, HostLookupTypeHash)
-				}
+				assert.Equal(t, HostLookupTypeHash, lookupType, "LookupType")
 				queryLen := binary.BigEndian.Uint16(data[6:8])
-				if queryLen != 52 {
-					t.Errorf("QueryLength = %d, want 52", queryLen)
-				}
+				assert.Equal(t, uint16(52), queryLen, "QueryLength")
 				return nil
 			},
 		},
@@ -1483,17 +1201,11 @@ func TestHostLookupPayloadMarshal(t *testing.T) {
 				Query:      "test.i2p",
 			},
 			check: func(data []byte) error {
-				if len(data) != 8+8 {
-					t.Errorf("data length = %d, want 16", len(data))
-				}
+				assert.Equal(t, 16, len(data), "data length")
 				lookupType := binary.BigEndian.Uint16(data[4:6])
-				if lookupType != HostLookupTypeHostname {
-					t.Errorf("LookupType = %d, want %d", lookupType, HostLookupTypeHostname)
-				}
+				assert.Equal(t, HostLookupTypeHostname, lookupType, "LookupType")
 				query := string(data[8:])
-				if query != "test.i2p" {
-					t.Errorf("Query = %q, want %q", query, "test.i2p")
-				}
+				assert.Equal(t, "test.i2p", query, "Query")
 				return nil
 			},
 		},
@@ -1505,13 +1217,9 @@ func TestHostLookupPayloadMarshal(t *testing.T) {
 				Query:      "",
 			},
 			check: func(data []byte) error {
-				if len(data) != 8 {
-					t.Errorf("data length = %d, want 8", len(data))
-				}
+				assert.Equal(t, 8, len(data), "data length")
 				queryLen := binary.BigEndian.Uint16(data[6:8])
-				if queryLen != 0 {
-					t.Errorf("QueryLength = %d, want 0", queryLen)
-				}
+				assert.Equal(t, uint16(0), queryLen, "QueryLength")
 				return nil
 			},
 		},
@@ -1520,9 +1228,7 @@ func TestHostLookupPayloadMarshal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
-			}
+			require.NoError(t, err)
 
 			if err := tt.check(data); err != nil {
 				t.Error(err)
@@ -1573,26 +1279,14 @@ func TestHostLookupRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
-			}
+			require.NoError(t, err)
 
 			parsed, err := ParseHostLookupPayload(data)
-			if err != nil {
-				t.Fatalf("ParseHostLookupPayload() error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if parsed.RequestID != tt.payload.RequestID {
-				t.Errorf("RequestID = %d, want %d", parsed.RequestID, tt.payload.RequestID)
-			}
-
-			if parsed.LookupType != tt.payload.LookupType {
-				t.Errorf("LookupType = %d, want %d", parsed.LookupType, tt.payload.LookupType)
-			}
-
-			if parsed.Query != tt.payload.Query {
-				t.Errorf("Query = %q, want %q", parsed.Query, tt.payload.Query)
-			}
+			assert.Equal(t, tt.payload.RequestID, parsed.RequestID)
+			assert.Equal(t, tt.payload.LookupType, parsed.LookupType)
+			assert.Equal(t, tt.payload.Query, parsed.Query)
 		})
 	}
 }
@@ -1671,27 +1365,14 @@ func TestHostReplyPayloadParse(t *testing.T) {
 			payload, err := ParseHostReplyPayload(tt.data)
 
 			if tt.shouldError {
-				if err == nil {
-					t.Error("expected error but got none")
-				}
+				assert.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if payload.RequestID != tt.wantID {
-				t.Errorf("RequestID = %d, want %d", payload.RequestID, tt.wantID)
-			}
-
-			if payload.ResultCode != tt.wantCode {
-				t.Errorf("ResultCode = %d, want %d", payload.ResultCode, tt.wantCode)
-			}
-
-			if len(payload.Destination) != tt.wantDestLen {
-				t.Errorf("Destination length = %d, want %d", len(payload.Destination), tt.wantDestLen)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, payload.RequestID)
+			assert.Equal(t, tt.wantCode, payload.ResultCode)
+			assert.Equal(t, tt.wantDestLen, len(payload.Destination))
 		})
 	}
 }
@@ -1710,17 +1391,10 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 				Destination: make([]byte, 387),
 			},
 			check: func(data []byte) error {
-				if len(data) != 5+387 {
-					t.Errorf("data length = %d, want %d", len(data), 5+387)
-				}
+				assert.Equal(t, 5+387, len(data), "data length")
 				reqID := binary.BigEndian.Uint32(data[0:4])
-				if reqID != 54321 {
-					t.Errorf("RequestID = %d, want 54321", reqID)
-				}
-				resultCode := data[4]
-				if resultCode != HostReplySuccess {
-					t.Errorf("ResultCode = %d, want %d", resultCode, HostReplySuccess)
-				}
+				assert.Equal(t, uint32(54321), reqID, "RequestID")
+				assert.Equal(t, HostReplySuccess, data[4], "ResultCode")
 				return nil
 			},
 		},
@@ -1732,13 +1406,8 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 				Destination: nil,
 			},
 			check: func(data []byte) error {
-				if len(data) != 5 {
-					t.Errorf("data length = %d, want 5", len(data))
-				}
-				resultCode := data[4]
-				if resultCode != HostReplyNotFound {
-					t.Errorf("ResultCode = %d, want %d", resultCode, HostReplyNotFound)
-				}
+				assert.Equal(t, 5, len(data), "data length")
+				assert.Equal(t, HostReplyNotFound, data[4], "ResultCode")
 				return nil
 			},
 		},
@@ -1750,13 +1419,8 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 				Destination: []byte{}, // Empty slice
 			},
 			check: func(data []byte) error {
-				if len(data) != 5 {
-					t.Errorf("data length = %d, want 5", len(data))
-				}
-				resultCode := data[4]
-				if resultCode != HostReplyTimeout {
-					t.Errorf("ResultCode = %d, want %d", resultCode, HostReplyTimeout)
-				}
+				assert.Equal(t, 5, len(data), "data length")
+				assert.Equal(t, HostReplyTimeout, data[4], "ResultCode")
 				return nil
 			},
 		},
@@ -1765,9 +1429,7 @@ func TestHostReplyPayloadMarshal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
-			}
+			require.NoError(t, err)
 
 			if err := tt.check(data); err != nil {
 				t.Error(err)
@@ -1818,79 +1480,35 @@ func TestHostReplyRoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := tt.payload.MarshalBinary()
-			if err != nil {
-				t.Fatalf("MarshalBinary() error: %v", err)
-			}
+			require.NoError(t, err)
 
 			parsed, err := ParseHostReplyPayload(data)
-			if err != nil {
-				t.Fatalf("ParseHostReplyPayload() error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if parsed.RequestID != tt.payload.RequestID {
-				t.Errorf("RequestID = %d, want %d", parsed.RequestID, tt.payload.RequestID)
-			}
-
-			if parsed.ResultCode != tt.payload.ResultCode {
-				t.Errorf("ResultCode = %d, want %d", parsed.ResultCode, tt.payload.ResultCode)
-			}
-
-			if len(parsed.Destination) != len(tt.payload.Destination) {
-				t.Errorf("Destination length = %d, want %d",
-					len(parsed.Destination), len(tt.payload.Destination))
-			}
+			assert.Equal(t, tt.payload.RequestID, parsed.RequestID)
+			assert.Equal(t, tt.payload.ResultCode, parsed.ResultCode)
+			assert.Equal(t, len(tt.payload.Destination), len(parsed.Destination))
 		})
 	}
 }
 
 func TestHostLookupConstants(t *testing.T) {
-	// Verify lookup type constants
-	if HostLookupTypeHash != 0 {
-		t.Errorf("HostLookupTypeHash = %d, want 0", HostLookupTypeHash)
-	}
-	if HostLookupTypeHostname != 1 {
-		t.Errorf("HostLookupTypeHostname = %d, want 1", HostLookupTypeHostname)
-	}
+	assert.Equal(t, uint16(0), HostLookupTypeHash)
+	assert.Equal(t, uint16(1), HostLookupTypeHostname)
 
-	// Verify result code constants
-	if HostReplySuccess != 0 {
-		t.Errorf("HostReplySuccess = %d, want 0", HostReplySuccess)
-	}
-	if HostReplyNotFound != 1 {
-		t.Errorf("HostReplyNotFound = %d, want 1", HostReplyNotFound)
-	}
-	if HostReplyTimeout != 2 {
-		t.Errorf("HostReplyTimeout = %d, want 2", HostReplyTimeout)
-	}
-	if HostReplyError != 3 {
-		t.Errorf("HostReplyError = %d, want 3", HostReplyError)
-	}
+	assert.Equal(t, uint8(0), HostReplySuccess)
+	assert.Equal(t, uint8(1), HostReplyNotFound)
+	assert.Equal(t, uint8(2), HostReplyTimeout)
+	assert.Equal(t, uint8(3), HostReplyError)
 }
 
 func TestHostLookupTypeNames(t *testing.T) {
-	// Verify message type constants
-	if MessageTypeHostLookup != 38 {
-		t.Errorf("MessageTypeHostLookup = %d, want 38", MessageTypeHostLookup)
-	}
-	if MessageTypeHostReply != 39 {
-		t.Errorf("MessageTypeHostReply = %d, want 39", MessageTypeHostReply)
-	}
-
-	// Verify message type names
-	if name := MessageTypeName(MessageTypeHostLookup); name != "HostLookup" {
-		t.Errorf("MessageTypeName(HostLookup) = %q, want %q", name, "HostLookup")
-	}
-	if name := MessageTypeName(MessageTypeHostReply); name != "HostReply" {
-		t.Errorf("MessageTypeName(HostReply) = %q, want %q", name, "HostReply")
-	}
-
-	// Verify deprecated types are distinct
-	if MessageTypeDestLookup != 34 {
-		t.Errorf("MessageTypeDestLookup = %d, want 34", MessageTypeDestLookup)
-	}
-	if MessageTypeDestReply != 35 {
-		t.Errorf("MessageTypeDestReply = %d, want 35", MessageTypeDestReply)
-	}
+	assert.Equal(t, uint8(38), MessageTypeHostLookup)
+	assert.Equal(t, uint8(39), MessageTypeHostReply)
+	assert.Equal(t, "HostLookup", MessageTypeName(MessageTypeHostLookup))
+	assert.Equal(t, "HostReply", MessageTypeName(MessageTypeHostReply))
+	assert.Equal(t, uint8(34), MessageTypeDestLookup)
+	assert.Equal(t, uint8(35), MessageTypeDestReply)
 }
 
 // =============================================================================
@@ -1914,16 +1532,10 @@ func TestHostLookup_PayloadParsing(t *testing.T) {
 		copy(payload[8:], hashQuery)
 
 		lookup, err := ParseHostLookupPayload(payload)
-		if err != nil {
-			t.Fatalf("ParseHostLookupPayload() error: %v", err)
-		}
+		require.NoError(t, err)
 
-		if lookup.RequestID != 12345 {
-			t.Errorf("RequestID = %d, want 12345", lookup.RequestID)
-		}
-		if lookup.LookupType != HostLookupTypeHash {
-			t.Errorf("LookupType = %d, want %d", lookup.LookupType, HostLookupTypeHash)
-		}
+		assert.Equal(t, uint32(12345), lookup.RequestID)
+		assert.Equal(t, HostLookupTypeHash, lookup.LookupType)
 	})
 
 	// Truncated payload
@@ -1931,9 +1543,7 @@ func TestHostLookup_PayloadParsing(t *testing.T) {
 		payload := []byte{1, 2} // Too short
 
 		_, err := ParseHostLookupPayload(payload)
-		if err == nil {
-			t.Error("Expected error for truncated payload")
-		}
+		assert.Error(t, err)
 	})
 }
 
@@ -1946,17 +1556,11 @@ func TestHostLookup_ReplyPayloadMarshaling(t *testing.T) {
 	}
 
 	data, err := reply.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify header
-	if binary.BigEndian.Uint32(data[0:4]) != 12345 {
-		t.Error("RequestID not serialized correctly")
-	}
-	if data[4] != HostReplySuccess {
-		t.Error("ResultCode not serialized correctly")
-	}
+	assert.Equal(t, uint32(12345), binary.BigEndian.Uint32(data[0:4]), "RequestID not serialized correctly")
+	assert.Equal(t, HostReplySuccess, data[4], "ResultCode not serialized correctly")
 }
 
 // =============================================================================
@@ -1974,16 +1578,10 @@ func TestBlindingInfo_PayloadParsing(t *testing.T) {
 		copy(payload[1:], make([]byte, 32)) // 32-byte secret
 
 		info, err := ParseBlindingInfoPayload(payload)
-		if err != nil {
-			t.Fatalf("ParseBlindingInfoPayload() error: %v", err)
-		}
+		require.NoError(t, err)
 
-		if !info.Enabled {
-			t.Error("Enabled should be true")
-		}
-		if len(info.Secret) != 32 {
-			t.Errorf("Secret length = %d, want 32", len(info.Secret))
-		}
+		assert.True(t, info.Enabled)
+		assert.Equal(t, 32, len(info.Secret))
 	})
 
 	// Disabled blinding
@@ -1991,12 +1589,8 @@ func TestBlindingInfo_PayloadParsing(t *testing.T) {
 		payload := []byte{0x00} // disabled
 
 		info, err := ParseBlindingInfoPayload(payload)
-		if err != nil {
-			t.Fatalf("ParseBlindingInfoPayload() error: %v", err)
-		}
+		require.NoError(t, err)
 
-		if info.Enabled {
-			t.Error("Enabled should be false")
-		}
+		assert.False(t, info.Enabled)
 	})
 }

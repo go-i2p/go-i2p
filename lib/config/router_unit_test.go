@@ -3,6 +3,8 @@ package config
 import (
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // =============================================================================
@@ -124,18 +126,10 @@ func TestGetRouterConfigReturnsDeepCopy(t *testing.T) {
 
 	// Verify original is unchanged
 	original := GetRouterConfig()
-	if original.BaseDir != "/original/base" {
-		t.Errorf("BaseDir was modified: got %s, want /original/base", original.BaseDir)
-	}
-	if original.Bootstrap.LowPeerThreshold != 5 {
-		t.Errorf("LowPeerThreshold was modified: got %d, want 5", original.Bootstrap.LowPeerThreshold)
-	}
-	if original.Bootstrap.ReseedServers[0].Url != "https://original.example.com" {
-		t.Errorf("ReseedServer Url was modified: got %s", original.Bootstrap.ReseedServers[0].Url)
-	}
-	if original.Bootstrap.LocalNetDbPaths[0] != "/original/path" {
-		t.Errorf("LocalNetDbPaths was modified: got %s", original.Bootstrap.LocalNetDbPaths[0])
-	}
+	assert.Equal(t, "/original/base", original.BaseDir, "BaseDir was modified")
+	assert.Equal(t, 5, original.Bootstrap.LowPeerThreshold, "LowPeerThreshold was modified")
+	assert.Equal(t, "https://original.example.com", original.Bootstrap.ReseedServers[0].Url, "ReseedServer Url was modified")
+	assert.Equal(t, "/original/path", original.Bootstrap.LocalNetDbPaths[0], "LocalNetDbPaths was modified")
 }
 
 // TestLockRouterConfigForWrite verifies that the write lock provides exclusive access
@@ -156,24 +150,17 @@ func TestRouterConfigProperties_ReturnsCopy(t *testing.T) {
 
 	// Modifying cfg1 should not affect cfg2
 	cfg1.MaxBandwidth = 999999
-	if cfg2.MaxBandwidth == 999999 {
-		t.Error("RouterConfigProperties() should return independent copies")
-	}
+	assert.NotEqual(t, uint64(999999), cfg2.MaxBandwidth, "RouterConfigProperties() should return independent copies")
 }
 
 // TestI2CPPortDefaultIs7654 verifies the I2CP port constant per spec.
 // (Moved from caps_test.go — tests DefaultI2CPPort from router.go)
 func TestI2CPPortDefaultIs7654(t *testing.T) {
-	if DefaultI2CPPort != 7654 {
-		t.Errorf("DefaultI2CPPort = %d, want 7654 per I2CP spec", DefaultI2CPPort)
-	}
+	assert.Equal(t, 7654, DefaultI2CPPort, "DefaultI2CPPort per I2CP spec")
 }
 
 // TestDefaultI2CPConfigAddressHasCorrectPort verifies DefaultI2CPConfig has correct port.
 // (Moved from caps_test.go — tests DefaultI2CPConfig from router.go)
 func TestDefaultI2CPConfigAddressHasCorrectPort(t *testing.T) {
-	if DefaultI2CPConfig.Address != "localhost:7654" {
-		t.Errorf("DefaultI2CPConfig.Address = %q, want %q",
-			DefaultI2CPConfig.Address, "localhost:7654")
-	}
+	assert.Equal(t, "localhost:7654", DefaultI2CPConfig.Address, "DefaultI2CPConfig.Address")
 }

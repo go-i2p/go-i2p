@@ -11,6 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setupBuildReplyTest creates a MessageProcessor wired to a mock forwarder and
+// participant manager.  accept controls whether the participant manager accepts
+// build requests.
+func setupBuildReplyTest(t *testing.T, accept bool) (*MessageProcessor, *mockBuildReplyForwarder, *mockParticipantManager) {
+	t.Helper()
+	processor := NewMessageProcessor()
+	fwd := newMockBuildReplyForwarder()
+	pm := newMockParticipantManager(accept)
+	processor.SetBuildReplyForwarder(fwd)
+	processor.SetParticipantManager(pm)
+	return processor, fwd, pm
+}
+
 func TestBuildReplyForwarderInterface(t *testing.T) {
 	t.Run("interface_compiles", func(t *testing.T) {
 		// Verify the interface can be implemented
@@ -19,13 +32,7 @@ func TestBuildReplyForwarderInterface(t *testing.T) {
 }
 
 func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
-	// Setup
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true) // Accept all requests
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0 // Force direct router forwarding
@@ -50,15 +57,9 @@ func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 }
 
 func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
-	// Setup
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(false) // Reject all requests
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
 	mockParticipant.rejectCode = TUNNEL_BUILD_REPLY_OVERLOAD
 	mockParticipant.rejectReason = "router overloaded"
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0 // Force direct router forwarding
@@ -75,13 +76,7 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 }
 
 func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
-	// Setup
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true)
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = tunnel.TunnelID(67890) // Non-zero means tunnel forwarding
@@ -123,13 +118,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 }
 
 func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
-	// Setup
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true)
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0 // Force direct router forwarding
@@ -168,12 +157,7 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			processor := NewMessageProcessor()
-			mockForwarder := newMockBuildReplyForwarder()
-			mockParticipant := newMockParticipantManager(true)
-
-			processor.SetBuildReplyForwarder(mockForwarder)
-			processor.SetParticipantManager(mockParticipant)
+			processor, mockForwarder, _ := setupBuildReplyTest(t, true)
 
 			record := createTestBuildRequestRecord(t)
 			record.NextTunnel = 0 // Force direct router forwarding
@@ -232,13 +216,7 @@ func TestForwardBuildReply_TunnelForwardError(t *testing.T) {
 }
 
 func TestMultipleBuildRecords_Processing(t *testing.T) {
-	// Setup
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true)
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
 	// Set our router hash so records are processed.
 	var ourHash common.Hash
@@ -294,13 +272,8 @@ func TestBuildRecordCrypto_InitializedInProcessor(t *testing.T) {
 // reply is sent instead of a false success reply. Previously, the code sent
 // TUNNEL_BUILD_REPLY_SUCCESS even when registration failed, creating phantom tunnels.
 func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true) // Accept all requests
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")
-
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0

@@ -3,6 +3,9 @@ package config
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -14,78 +17,40 @@ import (
 func TestDefaultNetDbConfig(t *testing.T) {
 	cfg := DefaultNetDbConfig
 
-	if cfg.Path == "" {
-		t.Error("Path should not be empty")
-	}
-	if cfg.MaxRouterInfos != 5000 {
-		t.Errorf("MaxRouterInfos = %d, want 5000", cfg.MaxRouterInfos)
-	}
-	if cfg.MaxLeaseSets != 1000 {
-		t.Errorf("MaxLeaseSets = %d, want 1000", cfg.MaxLeaseSets)
-	}
-	if cfg.ExpirationCheckInterval != 1*time.Minute {
-		t.Errorf("ExpirationCheckInterval = %v, want 1m", cfg.ExpirationCheckInterval)
-	}
-	if cfg.LeaseSetRefreshThreshold != 2*time.Minute {
-		t.Errorf("LeaseSetRefreshThreshold = %v, want 2m", cfg.LeaseSetRefreshThreshold)
-	}
-	if cfg.ExplorationInterval != 5*time.Minute {
-		t.Errorf("ExplorationInterval = %v, want 5m", cfg.ExplorationInterval)
-	}
-	if cfg.FloodfillEnabled {
-		t.Error("FloodfillEnabled should be false by default")
-	}
+	assert.NotEmpty(t, cfg.Path, "Path should not be empty")
+	assert.Equal(t, 5000, cfg.MaxRouterInfos, "MaxRouterInfos")
+	assert.Equal(t, 1000, cfg.MaxLeaseSets, "MaxLeaseSets")
+	assert.Equal(t, 1*time.Minute, cfg.ExpirationCheckInterval, "ExpirationCheckInterval")
+	assert.Equal(t, 2*time.Minute, cfg.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold")
+	assert.Equal(t, 5*time.Minute, cfg.ExplorationInterval, "ExplorationInterval")
+	assert.False(t, cfg.FloodfillEnabled, "FloodfillEnabled should be false by default")
 }
 
 // TestNetDbConfigViperRoundTrip verifies that NetDbConfig fields are populated
 // from viper when using NewRouterConfigFromViper.
 func TestNetDbConfigViperRoundTrip(t *testing.T) {
-	if err := InitConfig(); err != nil {
-		t.Fatalf("InitConfig failed: %v", err)
-	}
+	require.NoError(t, InitConfig(), "InitConfig failed")
 
 	cfg := NewRouterConfigFromViper()
-	if cfg.NetDb == nil {
-		t.Fatal("NetDb config should not be nil")
-	}
+	require.NotNil(t, cfg.NetDb, "NetDb config should not be nil")
 
-	if cfg.NetDb.MaxRouterInfos == 0 {
-		t.Error("MaxRouterInfos should be populated from viper defaults, got 0")
-	}
-	if cfg.NetDb.MaxLeaseSets == 0 {
-		t.Error("MaxLeaseSets should be populated from viper defaults, got 0")
-	}
-	if cfg.NetDb.ExpirationCheckInterval == 0 {
-		t.Error("ExpirationCheckInterval should be populated from viper defaults, got 0")
-	}
-	if cfg.NetDb.LeaseSetRefreshThreshold == 0 {
-		t.Error("LeaseSetRefreshThreshold should be populated from viper defaults, got 0")
-	}
-	if cfg.NetDb.ExplorationInterval == 0 {
-		t.Error("ExplorationInterval should be populated from viper defaults, got 0")
-	}
+	assert.NotZero(t, cfg.NetDb.MaxRouterInfos, "MaxRouterInfos should be populated from viper defaults")
+	assert.NotZero(t, cfg.NetDb.MaxLeaseSets, "MaxLeaseSets should be populated from viper defaults")
+	assert.NotZero(t, cfg.NetDb.ExpirationCheckInterval, "ExpirationCheckInterval should be populated")
+	assert.NotZero(t, cfg.NetDb.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold should be populated")
+	assert.NotZero(t, cfg.NetDb.ExplorationInterval, "ExplorationInterval should be populated")
 }
 
 // TestNetDbConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // all NetDbConfig fields from viper.
 func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
-	if err := InitConfig(); err != nil {
-		t.Fatalf("InitConfig failed: %v", err)
-	}
+	require.NoError(t, InitConfig(), "InitConfig failed")
 	UpdateRouterConfig()
 
 	netdb := routerConfigProperties.NetDb
-	if netdb == nil {
-		t.Fatal("NetDb config should not be nil after UpdateRouterConfig")
-	}
+	require.NotNil(t, netdb, "NetDb config should not be nil after UpdateRouterConfig")
 
-	if netdb.MaxRouterInfos == 0 {
-		t.Error("MaxRouterInfos should be populated after UpdateRouterConfig, got 0")
-	}
-	if netdb.MaxLeaseSets == 0 {
-		t.Error("MaxLeaseSets should be populated after UpdateRouterConfig, got 0")
-	}
-	if netdb.ExpirationCheckInterval == 0 {
-		t.Error("ExpirationCheckInterval should be populated after UpdateRouterConfig, got 0")
-	}
+	assert.NotZero(t, netdb.MaxRouterInfos, "MaxRouterInfos should be populated after UpdateRouterConfig")
+	assert.NotZero(t, netdb.MaxLeaseSets, "MaxLeaseSets should be populated after UpdateRouterConfig")
+	assert.NotZero(t, netdb.ExpirationCheckInterval, "ExpirationCheckInterval should be populated after UpdateRouterConfig")
 }

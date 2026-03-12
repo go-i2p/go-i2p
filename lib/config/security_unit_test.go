@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -56,12 +59,8 @@ func TestSanitizePath_ValidPaths(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := SanitizePath(tc.basePath, tc.userPath)
-			if err != nil {
-				t.Fatalf("SanitizePath(%q, %q) returned error: %v", tc.basePath, tc.userPath, err)
-			}
-			if got != tc.wantPath {
-				t.Errorf("SanitizePath(%q, %q) = %q, want %q", tc.basePath, tc.userPath, got, tc.wantPath)
-			}
+			require.NoError(t, err, "SanitizePath(%q, %q)", tc.basePath, tc.userPath)
+			assert.Equal(t, tc.wantPath, got, "SanitizePath(%q, %q)", tc.basePath, tc.userPath)
 		})
 	}
 }
@@ -105,9 +104,7 @@ func TestSanitizePath_PathTraversal(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := SanitizePath(tc.basePath, tc.userPath)
-			if err == nil {
-				t.Errorf("SanitizePath(%q, %q) should have returned an error for path traversal", tc.basePath, tc.userPath)
-			}
+			assert.Error(t, err, "SanitizePath(%q, %q) should have returned an error for path traversal", tc.basePath, tc.userPath)
 		})
 	}
 }
@@ -115,32 +112,22 @@ func TestSanitizePath_PathTraversal(t *testing.T) {
 // TestSanitizePath_EmptyBasePath verifies that empty base path is rejected
 func TestSanitizePath_EmptyBasePath(t *testing.T) {
 	_, err := SanitizePath("", "some/path")
-	if err == nil {
-		t.Error("SanitizePath with empty base path should return an error")
-	}
+	assert.Error(t, err, "SanitizePath with empty base path should return an error")
 }
 
 // TestValidateConfigPath verifies the convenience wrapper works
 func TestValidateConfigPath(t *testing.T) {
-	// ValidateConfigPath uses BuildI2PDirPath() as base
 	basePath := BuildI2PDirPath()
 
-	// Valid relative path should work
 	result, err := ValidateConfigPath("config.yaml")
-	if err != nil {
-		t.Fatalf("ValidateConfigPath(\"config.yaml\") returned error: %v", err)
-	}
+	require.NoError(t, err, "ValidateConfigPath(\"config.yaml\")")
 
 	expected := filepath.Join(basePath, "config.yaml")
-	if result != expected {
-		t.Errorf("ValidateConfigPath(\"config.yaml\") = %q, want %q", result, expected)
-	}
+	assert.Equal(t, expected, result, "ValidateConfigPath(\"config.yaml\")")
 
 	// Path traversal should fail
 	_, err = ValidateConfigPath("../../../etc/passwd")
-	if err == nil {
-		t.Error("ValidateConfigPath with traversal should return an error")
-	}
+	assert.Error(t, err, "ValidateConfigPath with traversal should return an error")
 }
 
 // TestCreateSecureDirectory verifies directories are created with secure permissions
@@ -148,25 +135,12 @@ func TestCreateSecureDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	securePath := filepath.Join(tempDir, "secure_subdir")
 
-	err := CreateSecureDirectory(securePath)
-	if err != nil {
-		t.Fatalf("CreateSecureDirectory(%q) returned error: %v", securePath, err)
-	}
+	require.NoError(t, CreateSecureDirectory(securePath), "CreateSecureDirectory")
 
-	// Verify directory exists
 	info, err := os.Stat(securePath)
-	if err != nil {
-		t.Fatalf("Directory was not created: %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("Created path is not a directory")
-	}
-
-	// Verify permissions (on Unix-like systems)
-	perm := info.Mode().Perm()
-	if perm != SecureDirPermissions {
-		t.Errorf("Directory permissions = %04o, want %04o", perm, SecureDirPermissions)
-	}
+	require.NoError(t, err, "Directory was not created")
+	assert.True(t, info.IsDir(), "Created path is not a directory")
+	assert.Equal(t, SecureDirPermissions, info.Mode().Perm(), "Directory permissions")
 }
 
 // TestCreateStandardDirectory verifies directories are created with standard permissions
@@ -174,19 +148,11 @@ func TestCreateStandardDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	standardPath := filepath.Join(tempDir, "standard_subdir")
 
-	err := CreateStandardDirectory(standardPath)
-	if err != nil {
-		t.Fatalf("CreateStandardDirectory(%q) returned error: %v", standardPath, err)
-	}
+	require.NoError(t, CreateStandardDirectory(standardPath), "CreateStandardDirectory")
 
-	// Verify directory exists
 	info, err := os.Stat(standardPath)
-	if err != nil {
-		t.Fatalf("Directory was not created: %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("Created path is not a directory")
-	}
+	require.NoError(t, err, "Directory was not created")
+	assert.True(t, info.IsDir(), "Created path is not a directory")
 }
 
 // TestWriteSecureFile verifies files are created with secure permissions
@@ -195,30 +161,15 @@ func TestWriteSecureFile(t *testing.T) {
 	securePath := filepath.Join(tempDir, "secret.txt")
 	testData := []byte("secret content")
 
-	err := WriteSecureFile(securePath, testData)
-	if err != nil {
-		t.Fatalf("WriteSecureFile(%q) returned error: %v", securePath, err)
-	}
+	require.NoError(t, WriteSecureFile(securePath, testData), "WriteSecureFile")
 
-	// Verify file exists and has correct content
 	data, err := os.ReadFile(securePath)
-	if err != nil {
-		t.Fatalf("Could not read file: %v", err)
-	}
-	if string(data) != string(testData) {
-		t.Error("File content mismatch")
-	}
+	require.NoError(t, err, "Could not read file")
+	assert.Equal(t, string(testData), string(data), "File content mismatch")
 
-	// Verify permissions
 	info, err := os.Stat(securePath)
-	if err != nil {
-		t.Fatalf("Could not stat file: %v", err)
-	}
-
-	perm := info.Mode().Perm()
-	if perm != SecureFilePermissions {
-		t.Errorf("File permissions = %04o, want %04o", perm, SecureFilePermissions)
-	}
+	require.NoError(t, err, "Could not stat file")
+	assert.Equal(t, SecureFilePermissions, info.Mode().Perm(), "File permissions")
 }
 
 // TestIsPathSecure verifies permission checking works
@@ -227,42 +178,24 @@ func TestIsPathSecure(t *testing.T) {
 
 	// Create a file with secure permissions
 	securePath := filepath.Join(tempDir, "secure.txt")
-	if err := os.WriteFile(securePath, []byte("test"), SecureFilePermissions); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(securePath, []byte("test"), SecureFilePermissions))
 
-	// Should be secure with maxMode of 0600
 	isSecure, err := IsPathSecure(securePath, 0o600)
-	if err != nil {
-		t.Fatalf("IsPathSecure returned error: %v", err)
-	}
-	if !isSecure {
-		t.Error("Path with 0600 should be considered secure")
-	}
+	require.NoError(t, err, "IsPathSecure(secure)")
+	assert.True(t, isSecure, "Path with 0600 should be considered secure")
 
 	// Create a file with world-readable permissions
 	insecurePath := filepath.Join(tempDir, "insecure.txt")
-	if err := os.WriteFile(insecurePath, []byte("test"), 0o644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(insecurePath, []byte("test"), 0o644))
 
-	// Should not be secure with maxMode of 0600
 	isSecure, err = IsPathSecure(insecurePath, 0o600)
-	if err != nil {
-		t.Fatalf("IsPathSecure returned error: %v", err)
-	}
-	if isSecure {
-		t.Error("Path with 0644 should NOT be considered secure for max 0600")
-	}
+	require.NoError(t, err, "IsPathSecure(insecure)")
+	assert.False(t, isSecure, "Path with 0644 should NOT be considered secure for max 0600")
 
 	// Non-existent paths should be considered secure (nothing to leak)
 	isSecure, err = IsPathSecure(filepath.Join(tempDir, "nonexistent.txt"), 0o600)
-	if err != nil {
-		t.Fatalf("IsPathSecure returned error for non-existent: %v", err)
-	}
-	if !isSecure {
-		t.Error("Non-existent path should be considered secure")
-	}
+	require.NoError(t, err, "IsPathSecure(nonexistent)")
+	assert.True(t, isSecure, "Non-existent path should be considered secure")
 }
 
 // TestSecureExistingPath verifies permission fixing works
@@ -271,76 +204,40 @@ func TestSecureExistingPath(t *testing.T) {
 
 	// Create a file with insecure permissions
 	filePath := filepath.Join(tempDir, "insecure.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(filePath, []byte("test"), 0o644))
 
-	// Secure it
-	if err := SecureExistingPath(filePath, false); err != nil {
-		t.Fatalf("SecureExistingPath returned error: %v", err)
-	}
+	require.NoError(t, SecureExistingPath(filePath, false), "SecureExistingPath(file)")
 
-	// Verify permissions were updated
 	info, err := os.Stat(filePath)
-	if err != nil {
-		t.Fatalf("Could not stat file: %v", err)
-	}
-
-	perm := info.Mode().Perm()
-	if perm != SecureFilePermissions {
-		t.Errorf("File permissions after securing = %04o, want %04o", perm, SecureFilePermissions)
-	}
+	require.NoError(t, err, "Could not stat file")
+	assert.Equal(t, SecureFilePermissions, info.Mode().Perm(), "File permissions after securing")
 
 	// Create a directory with insecure permissions
 	dirPath := filepath.Join(tempDir, "insecure_dir")
-	if err := os.Mkdir(dirPath, 0o755); err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
+	require.NoError(t, os.Mkdir(dirPath, 0o755))
 
-	// Secure it
-	if err := SecureExistingPath(dirPath, true); err != nil {
-		t.Fatalf("SecureExistingPath returned error for dir: %v", err)
-	}
+	require.NoError(t, SecureExistingPath(dirPath, true), "SecureExistingPath(dir)")
 
-	// Verify permissions were updated
 	info, err = os.Stat(dirPath)
-	if err != nil {
-		t.Fatalf("Could not stat directory: %v", err)
-	}
-
-	perm = info.Mode().Perm()
-	if perm != SecureDirPermissions {
-		t.Errorf("Directory permissions after securing = %04o, want %04o", perm, SecureDirPermissions)
-	}
+	require.NoError(t, err, "Could not stat directory")
+	assert.Equal(t, SecureDirPermissions, info.Mode().Perm(), "Directory permissions after securing")
 }
 
 // TestSecureExistingPath_TypeMismatch verifies type checking
 func TestSecureExistingPath_TypeMismatch(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Create a file
 	filePath := filepath.Join(tempDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(filePath, []byte("test"), 0o644))
 
-	// Try to secure as directory should fail
-	err := SecureExistingPath(filePath, true)
-	if err == nil {
-		t.Error("SecureExistingPath should fail when treating file as directory")
-	}
+	assert.Error(t, SecureExistingPath(filePath, true),
+		"SecureExistingPath should fail when treating file as directory")
 
-	// Create a directory
 	dirPath := filepath.Join(tempDir, "dir")
-	if err := os.Mkdir(dirPath, 0o755); err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
+	require.NoError(t, os.Mkdir(dirPath, 0o755))
 
-	// Try to secure as file should fail
-	err = SecureExistingPath(dirPath, false)
-	if err == nil {
-		t.Error("SecureExistingPath should fail when treating directory as file")
-	}
+	assert.Error(t, SecureExistingPath(dirPath, false),
+		"SecureExistingPath should fail when treating directory as file")
 }
 
 // TestCheckDefaultPasswordWarning verifies warning is logged for default password
@@ -353,23 +250,8 @@ func TestCheckDefaultPasswordWarning(t *testing.T) {
 
 // TestSecurityConstants verifies permission constants are correct
 func TestSecurityConstants(t *testing.T) {
-	// Secure file permissions should be owner-only read/write
-	if SecureFilePermissions != 0o600 {
-		t.Errorf("SecureFilePermissions = %04o, want 0600", SecureFilePermissions)
-	}
-
-	// Secure directory permissions should be owner-only rwx
-	if SecureDirPermissions != 0o700 {
-		t.Errorf("SecureDirPermissions = %04o, want 0700", SecureDirPermissions)
-	}
-
-	// Standard file permissions should be owner read/write, others read
-	if StandardFilePermissions != 0o644 {
-		t.Errorf("StandardFilePermissions = %04o, want 0644", StandardFilePermissions)
-	}
-
-	// Standard directory permissions should be owner rwx, others rx
-	if StandardDirPermissions != 0o755 {
-		t.Errorf("StandardDirPermissions = %04o, want 0755", StandardDirPermissions)
-	}
+	assert.Equal(t, os.FileMode(0o600), SecureFilePermissions, "SecureFilePermissions")
+	assert.Equal(t, os.FileMode(0o700), SecureDirPermissions, "SecureDirPermissions")
+	assert.Equal(t, os.FileMode(0o644), StandardFilePermissions, "StandardFilePermissions")
+	assert.Equal(t, os.FileMode(0o755), StandardDirPermissions, "StandardDirPermissions")
 }

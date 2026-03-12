@@ -6,35 +6,26 @@ import (
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // requireRPCError asserts that err is a non-nil *RPCError with the expected code.
 func requireRPCError(t *testing.T, err error, expectedCode int) {
 	t.Helper()
-	if err == nil {
-		t.Fatal("expected RPC error, got nil")
-	}
+	require.Error(t, err, "expected RPC error, got nil")
 	rpcErr, ok := err.(*RPCError)
-	if !ok {
-		t.Fatalf("error is not *RPCError: %T", err)
-	}
-	if rpcErr.Code != expectedCode {
-		t.Errorf("error code = %v, want %v", rpcErr.Code, expectedCode)
-	}
+	require.True(t, ok, "error is not *RPCError: %T", err)
+	assert.Equal(t, expectedCode, rpcErr.Code)
 }
 
 // invokeHandler calls handler.Handle and returns the result as a map.
-// Fails the test if Handle returns an error or the result is not a map.
 func invokeHandler(t *testing.T, handler RPCHandler, paramsJSON string) map[string]interface{} {
 	t.Helper()
 	result, err := handler.Handle(context.Background(), json.RawMessage(paramsJSON))
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("result type = %T, want map[string]interface{}", result)
-	}
+	require.True(t, ok, "result type = %T, want map[string]interface{}", result)
 	return resultMap
 }
 
@@ -50,18 +41,12 @@ func TestEchoHandler_String(t *testing.T) {
 	params := json.RawMessage(`{"Echo": "test message"}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("result is not map[string]interface{}: %T", result)
-	}
+	require.True(t, ok, "result is not map[string]interface{}: %T", result)
 
-	if resultMap["Result"] != "test message" {
-		t.Errorf("Result = %v, want %v", resultMap["Result"], "test message")
-	}
+	assert.Equal(t, "test message", resultMap["Result"])
 }
 
 func TestEchoHandler_Number(t *testing.T) {
@@ -69,15 +54,10 @@ func TestEchoHandler_Number(t *testing.T) {
 	params := json.RawMessage(`{"Echo": 12345}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
-	// JSON numbers are decoded as float64
-	if resultMap["Result"] != float64(12345) {
-		t.Errorf("Result = %v, want %v", resultMap["Result"], 12345)
-	}
+	assert.Equal(t, float64(12345), resultMap["Result"])
 }
 
 func TestEchoHandler_Object(t *testing.T) {
@@ -85,19 +65,13 @@ func TestEchoHandler_Object(t *testing.T) {
 	params := json.RawMessage(`{"Echo": {"nested": "value"}}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
 	resultVal, ok := resultMap["Result"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result is not map: %T", resultMap["Result"])
-	}
+	require.True(t, ok, "Result is not map: %T", resultMap["Result"])
 
-	if resultVal["nested"] != "value" {
-		t.Errorf("nested = %v, want value", resultVal["nested"])
-	}
+	assert.Equal(t, "value", resultVal["nested"])
 }
 
 func TestEchoHandler_InvalidJSON(t *testing.T) {
@@ -121,32 +95,20 @@ func TestGetRateHandler_AllFields(t *testing.T) {
 		"i2p.router.net.bw.outbound.15s": null
 	}`)
 
-	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
-		t.Error("missing i2p.router.net.bw.inbound.15s")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; !ok {
-		t.Error("missing i2p.router.net.bw.outbound.15s")
-	}
+	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
+	assert.Contains(t, resultMap, "i2p.router.net.bw.outbound.15s")
 
 	// Should return actual bandwidth from mock (1024 bytes/sec from GetBandwidthRates)
-	if resultMap["i2p.router.net.bw.inbound.15s"] != 0.0 {
-		t.Errorf("inbound = %v, want 0.0", resultMap["i2p.router.net.bw.inbound.15s"])
-	}
-	if resultMap["i2p.router.net.bw.outbound.15s"] != 1024.0 {
-		t.Errorf("outbound = %v, want 1024.0", resultMap["i2p.router.net.bw.outbound.15s"])
-	}
+	assert.Equal(t, 0.0, resultMap["i2p.router.net.bw.inbound.15s"])
+	assert.Equal(t, 1024.0, resultMap["i2p.router.net.bw.outbound.15s"])
 }
 
 func TestGetRateHandler_SingleField(t *testing.T) {
 	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
 	resultMap := invokeHandler(t, handler, `{"i2p.router.net.bw.inbound.15s": null}`)
 
-	if _, ok := resultMap["i2p.router.net.bw.inbound.15s"]; !ok {
-		t.Error("missing requested field")
-	}
-	if _, ok := resultMap["i2p.router.net.bw.outbound.15s"]; ok {
-		t.Error("should not include unrequested field")
-	}
+	assert.Contains(t, resultMap, "i2p.router.net.bw.inbound.15s")
+	assert.NotContains(t, resultMap, "i2p.router.net.bw.outbound.15s")
 }
 
 func TestGetRateHandler_NoFields(t *testing.T) {
@@ -154,9 +116,7 @@ func TestGetRateHandler_NoFields(t *testing.T) {
 	resultMap := invokeHandler(t, handler, `{}`)
 
 	// Should return all fields when none specified
-	if len(resultMap) != 2 {
-		t.Errorf("result has %d fields, want 2", len(resultMap))
-	}
+	assert.Equal(t, 2, len(resultMap))
 }
 
 func TestGetRateHandler_InvalidJSON(t *testing.T) {
@@ -182,22 +142,11 @@ func TestRouterInfoHandler_AllFields(t *testing.T) {
 
 	// Check uptime exists and is >= 0
 	uptime, ok := resultMap["i2p.router.uptime"].(int64)
-	if !ok {
-		t.Errorf("uptime not int64: %T", resultMap["i2p.router.uptime"])
-	}
-	if uptime < 0 {
-		t.Errorf("uptime = %d, want >= 0", uptime)
-	}
+	require.True(t, ok, "uptime not int64: %T", resultMap["i2p.router.uptime"])
+	assert.GreaterOrEqual(t, uptime, int64(0))
 
-	// Check version
-	if resultMap["i2p.router.version"] != "0.1.0-test" {
-		t.Errorf("version = %v, want 0.1.0-test", resultMap["i2p.router.version"])
-	}
-
-	// Check status (0 = OK for running router)
-	if resultMap["i2p.router.net.status"] != 0 {
-		t.Errorf("status = %v, want 0", resultMap["i2p.router.net.status"])
-	}
+	assert.Equal(t, "0.1.0-test", resultMap["i2p.router.version"])
+	assert.Equal(t, 0, resultMap["i2p.router.net.status"])
 }
 
 func TestRouterInfoHandler_DefaultFields(t *testing.T) {

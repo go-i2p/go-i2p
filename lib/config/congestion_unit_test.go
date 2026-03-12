@@ -3,6 +3,9 @@ package config
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -15,45 +18,23 @@ func TestBuildCongestionDefaults(t *testing.T) {
 	cfg := buildCongestionDefaults()
 
 	// Flag advertisement thresholds
-	if cfg.DFlagThreshold != 0.70 {
-		t.Errorf("DFlagThreshold = %v, want 0.70", cfg.DFlagThreshold)
-	}
-	if cfg.EFlagThreshold != 0.85 {
-		t.Errorf("EFlagThreshold = %v, want 0.85", cfg.EFlagThreshold)
-	}
-	if cfg.GFlagThreshold != 1.00 {
-		t.Errorf("GFlagThreshold = %v, want 1.00", cfg.GFlagThreshold)
-	}
+	assert.Equal(t, 0.70, cfg.DFlagThreshold, "DFlagThreshold")
+	assert.Equal(t, 0.85, cfg.EFlagThreshold, "EFlagThreshold")
+	assert.Equal(t, 1.00, cfg.GFlagThreshold, "GFlagThreshold")
 
 	// Hysteresis thresholds
-	if cfg.ClearDFlagThreshold != 0.60 {
-		t.Errorf("ClearDFlagThreshold = %v, want 0.60", cfg.ClearDFlagThreshold)
-	}
-	if cfg.ClearEFlagThreshold != 0.75 {
-		t.Errorf("ClearEFlagThreshold = %v, want 0.75", cfg.ClearEFlagThreshold)
-	}
-	if cfg.ClearGFlagThreshold != 0.95 {
-		t.Errorf("ClearGFlagThreshold = %v, want 0.95", cfg.ClearGFlagThreshold)
-	}
+	assert.Equal(t, 0.60, cfg.ClearDFlagThreshold, "ClearDFlagThreshold")
+	assert.Equal(t, 0.75, cfg.ClearEFlagThreshold, "ClearEFlagThreshold")
+	assert.Equal(t, 0.95, cfg.ClearGFlagThreshold, "ClearGFlagThreshold")
 
 	// Timing values
-	if cfg.AveragingWindow != 5*time.Minute {
-		t.Errorf("AveragingWindow = %v, want 5m", cfg.AveragingWindow)
-	}
-	if cfg.EFlagAgeThreshold != 15*time.Minute {
-		t.Errorf("EFlagAgeThreshold = %v, want 15m", cfg.EFlagAgeThreshold)
-	}
+	assert.Equal(t, 5*time.Minute, cfg.AveragingWindow, "AveragingWindow")
+	assert.Equal(t, 15*time.Minute, cfg.EFlagAgeThreshold, "EFlagAgeThreshold")
 
 	// Capacity multipliers
-	if cfg.DFlagCapacityMultiplier != 0.5 {
-		t.Errorf("DFlagCapacityMultiplier = %v, want 0.5", cfg.DFlagCapacityMultiplier)
-	}
-	if cfg.EFlagCapacityMultiplier != 0.1 {
-		t.Errorf("EFlagCapacityMultiplier = %v, want 0.1", cfg.EFlagCapacityMultiplier)
-	}
-	if cfg.StaleEFlagCapacityMultiplier != 0.5 {
-		t.Errorf("StaleEFlagCapacityMultiplier = %v, want 0.5", cfg.StaleEFlagCapacityMultiplier)
-	}
+	assert.Equal(t, 0.5, cfg.DFlagCapacityMultiplier, "DFlagCapacityMultiplier")
+	assert.Equal(t, 0.1, cfg.EFlagCapacityMultiplier, "EFlagCapacityMultiplier")
+	assert.Equal(t, 0.5, cfg.StaleEFlagCapacityMultiplier, "StaleEFlagCapacityMultiplier")
 }
 
 // TestCongestionDefaults_IntegratedWithConfigDefaults verifies congestion
@@ -61,13 +42,8 @@ func TestBuildCongestionDefaults(t *testing.T) {
 func TestCongestionDefaults_IntegratedWithConfigDefaults(t *testing.T) {
 	cfg := Defaults()
 
-	// Verify congestion config is present and has expected values
-	if cfg.Congestion.DFlagThreshold != 0.70 {
-		t.Errorf("Congestion.DFlagThreshold = %v, want 0.70", cfg.Congestion.DFlagThreshold)
-	}
-	if cfg.Congestion.AveragingWindow != 5*time.Minute {
-		t.Errorf("Congestion.AveragingWindow = %v, want 5m", cfg.Congestion.AveragingWindow)
-	}
+	assert.Equal(t, 0.70, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
+	assert.Equal(t, 5*time.Minute, cfg.Congestion.AveragingWindow, "Congestion.AveragingWindow")
 }
 
 // =============================================================================
@@ -77,10 +53,7 @@ func TestCongestionDefaults_IntegratedWithConfigDefaults(t *testing.T) {
 // TestValidateCongestion_ValidConfig verifies that valid config passes validation
 func TestValidateCongestion_ValidConfig(t *testing.T) {
 	cfg := buildCongestionDefaults()
-
-	if err := validateCongestion(cfg); err != nil {
-		t.Errorf("validateCongestion() failed for default config: %v", err)
-	}
+	require.NoError(t, validateCongestion(cfg), "validateCongestion() failed for default config")
 }
 
 // TestValidateCongestion_ThresholdOrdering verifies threshold ordering validation
@@ -326,9 +299,7 @@ func TestCongestionFlag_CongestionLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.flag), func(t *testing.T) {
-			if got := tt.flag.CongestionLevel(); got != tt.level {
-				t.Errorf("CongestionFlag(%q).CongestionLevel() = %d, want %d", tt.flag, got, tt.level)
-			}
+			assert.Equal(t, tt.level, tt.flag.CongestionLevel(), "CongestionFlag(%q).CongestionLevel()", tt.flag)
 		})
 	}
 }
@@ -347,9 +318,7 @@ func TestCongestionFlag_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			if got := tt.flag.String(); got != tt.want {
-				t.Errorf("CongestionFlag.String() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, tt.flag.String(), "CongestionFlag.String()")
 		})
 	}
 }
@@ -415,9 +384,7 @@ func TestParseCongestionFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ParseCongestionFlag(tt.caps)
-			if got != tt.want {
-				t.Errorf("ParseCongestionFlag(%q) = %q, want %q", tt.caps, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "ParseCongestionFlag(%q)", tt.caps)
 		})
 	}
 }
@@ -432,13 +399,9 @@ func TestValidate_CongestionConfigIntegration(t *testing.T) {
 	cfg := Defaults()
 
 	// Valid defaults should pass
-	if err := Validate(cfg); err != nil {
-		t.Errorf("Validate() failed for default config: %v", err)
-	}
+	require.NoError(t, Validate(cfg), "Validate() failed for default config")
 
 	// Invalid congestion config should fail
 	cfg.Congestion.DFlagThreshold = 1.5 // Out of range
-	if err := Validate(cfg); err == nil {
-		t.Error("Validate() should fail when congestion config is invalid")
-	}
+	require.Error(t, Validate(cfg), "Validate() should fail when congestion config is invalid")
 }

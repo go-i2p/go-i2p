@@ -19,15 +19,24 @@ type mockForwarder struct {
 	routerErr   error
 }
 
+// createTestEndpoint creates an Endpoint with a no-op handler (or a custom one)
+// and registers cleanup.  Pass nil for a default no-op handler.
+func createTestEndpoint(t *testing.T, handler func([]byte) error) *Endpoint {
+	t.Helper()
+	if handler == nil {
+		handler = func([]byte) error { return nil }
+	}
+	ep, err := NewEndpoint(TunnelID(1), &tunnel.AESEncryptor{}, handler)
+	require.NoError(t, err)
+	t.Cleanup(func() { ep.Stop() })
+	return ep
+}
+
 // createTestEndpointWithForwarder creates an Endpoint with a no-op handler and
 // an attached mockForwarder, ready for delivery-instruction tests.
 func createTestEndpointWithForwarder(t *testing.T) (*Endpoint, *mockForwarder) {
 	t.Helper()
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	t.Cleanup(func() { ep.Stop() })
+	ep := createTestEndpoint(t, nil)
 	fwd := &mockForwarder{}
 	ep.SetForwarder(fwd)
 	return ep, fwd
@@ -60,12 +69,7 @@ func (f *mockForwarder) ForwardToRouter(routerHash [32]byte, msgBytes []byte) er
 
 // TestSetForwarder tests the SetForwarder method.
 func TestSetForwarder(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	// Initially nil
 	assert.Nil(t, ep.forwarder)
@@ -77,21 +81,16 @@ func TestSetForwarder(t *testing.T) {
 
 // TestDeliverWithInstructionsLocal tests DT_LOCAL delivery goes to handler.
 func TestDeliverWithInstructionsLocal(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
 	var received []byte
-	handler := func(msgBytes []byte) error {
+	ep := createTestEndpoint(t, func(msgBytes []byte) error {
 		received = msgBytes
 		return nil
-	}
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	})
 
 	msg := []byte("hello local delivery")
 	di := &DeliveryInstructions{}
 
-	err = ep.deliverWithInstructions(DT_LOCAL, di, msg)
+	err := ep.deliverWithInstructions(DT_LOCAL, di, msg)
 	assert.NoError(t, err)
 	assert.Equal(t, msg, received, "DT_LOCAL should deliver to handler")
 }
@@ -142,16 +141,11 @@ func TestDeliverWithInstructionsRouter(t *testing.T) {
 
 // TestDeliverViaForwarderNoForwarder tests graceful handling when no forwarder is set.
 func TestDeliverViaForwarderNoForwarder(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	// No forwarder set — should not error, just silently skip
 	var hash [32]byte
-	err = ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
 	assert.NoError(t, err, "No forwarder should be a no-op, not an error")
 
 	err = ep.deliverViaForwarder(DT_ROUTER, 0, hash, []byte("test"))
@@ -160,12 +154,7 @@ func TestDeliverViaForwarderNoForwarder(t *testing.T) {
 
 // TestDeliverViaForwarderError tests error propagation from forwarder.
 func TestDeliverViaForwarderError(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	fwd := &mockForwarder{
 		tunnelErr: errors.New("tunnel forward failed"),
@@ -174,7 +163,7 @@ func TestDeliverViaForwarderError(t *testing.T) {
 	ep.SetForwarder(fwd)
 
 	var hash [32]byte
-	err = ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
 	assert.Error(t, err, "Should propagate tunnel forwarding error")
 
 	err = ep.deliverViaForwarder(DT_ROUTER, 0, hash, []byte("test"))
@@ -197,12 +186,7 @@ func TestDeliverViaForwarderUnknownType(t *testing.T) {
 
 // TestStoreFirstFragmentWithDI tests storing first fragment with routing info.
 func TestStoreFirstFragmentWithDI(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_hash_for_first_frag_test"))
@@ -211,7 +195,7 @@ func TestStoreFirstFragmentWithDI(t *testing.T) {
 		hash:     hash,
 	}
 
-	err = ep.storeFirstFragmentWithDI(1, DT_TUNNEL, di, []byte("fragment data"))
+	err := ep.storeFirstFragmentWithDI(1, DT_TUNNEL, di, []byte("fragment data"))
 	assert.NoError(t, err)
 
 	// Verify assembler has routing info
@@ -227,12 +211,7 @@ func TestStoreFirstFragmentWithDI(t *testing.T) {
 
 // TestStoreFirstFragmentWithDIRouter tests storing first fragment with router routing info.
 func TestStoreFirstFragmentWithDIRouter(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	var hash [32]byte
 	copy(hash[:], []byte("router_hash_for_first_frag_test!"))
@@ -240,7 +219,7 @@ func TestStoreFirstFragmentWithDIRouter(t *testing.T) {
 		hash: hash,
 	}
 
-	err = ep.storeFirstFragmentWithDI(2, DT_ROUTER, di, []byte("router fragment"))
+	err := ep.storeFirstFragmentWithDI(2, DT_ROUTER, di, []byte("router fragment"))
 	assert.NoError(t, err)
 
 	ep.fragmentsMutex.Lock()
@@ -322,12 +301,7 @@ func TestReassembleAndDeliverRouter(t *testing.T) {
 
 // TestReassembleAndDeliverNoForwarder tests reassembly skips gracefully without forwarder.
 func TestReassembleAndDeliverNoForwarder(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep := createTestEndpoint(t, nil)
 
 	// No forwarder set
 	assembler := &fragmentAssembler{
@@ -344,22 +318,17 @@ func TestReassembleAndDeliverNoForwarder(t *testing.T) {
 	result := ep.reassembleFragments(101, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.deliverReassembled(result)
+	err := ep.deliverReassembled(result)
 	assert.NoError(t, err, "Should not error without forwarder")
 }
 
 // TestReassembleAndDeliverLocal tests reassembly delivers to handler for DT_LOCAL.
 func TestReassembleAndDeliverLocal(t *testing.T) {
-	mockEncryptor := &tunnel.AESEncryptor{}
 	var received []byte
-	handler := func(msgBytes []byte) error {
+	ep := createTestEndpoint(t, func(msgBytes []byte) error {
 		received = msgBytes
 		return nil
-	}
-
-	ep, err := NewEndpoint(TunnelID(1), mockEncryptor, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	})
 
 	assembler := &fragmentAssembler{
 		fragments: map[int][]byte{
@@ -376,7 +345,7 @@ func TestReassembleAndDeliverLocal(t *testing.T) {
 	result := ep.reassembleFragments(102, assembler)
 	ep.fragmentsMutex.Unlock()
 
-	err = ep.deliverReassembled(result)
+	err := ep.deliverReassembled(result)
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("local_msg"), received)
 }
