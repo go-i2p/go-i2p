@@ -10,29 +10,29 @@ import (
 // Unit Tests for closeables.go — RegisterCloser, CloseAll
 // =============================================================================
 
+// registerClosersAndVerifyAll registers the given closers, calls CloseAll,
+// and asserts every closer was closed.
+func registerClosersAndVerifyAll(t *testing.T, closers ...*mockCloser) {
+	t.Helper()
+	resetCloseables()
+	for _, c := range closers {
+		RegisterCloser(c)
+	}
+	CloseAll()
+	for i, c := range closers {
+		if !c.IsClosed() {
+			t.Errorf("closer%d was not closed", i+1)
+		}
+	}
+}
+
 // TestRegisterAndCloseAll verifies basic registration and cleanup.
 func TestRegisterAndCloseAll(t *testing.T) {
-	resetCloseables()
-
 	closer1 := &mockCloser{}
 	closer2 := &mockCloser{}
 	closer3 := &mockCloser{}
 
-	RegisterCloser(closer1)
-	RegisterCloser(closer2)
-	RegisterCloser(closer3)
-
-	CloseAll()
-
-	if !closer1.IsClosed() {
-		t.Error("closer1 was not closed")
-	}
-	if !closer2.IsClosed() {
-		t.Error("closer2 was not closed")
-	}
-	if !closer3.IsClosed() {
-		t.Error("closer3 was not closed")
-	}
+	registerClosersAndVerifyAll(t, closer1, closer2, closer3)
 
 	// Verify list is cleared
 	closeMutex.Lock()
@@ -45,28 +45,12 @@ func TestRegisterAndCloseAll(t *testing.T) {
 
 // TestCloseAllWithErrors verifies errors during close don't stop other closers.
 func TestCloseAllWithErrors(t *testing.T) {
-	resetCloseables()
-
 	closer1 := &mockCloser{}
 	closer2 := &mockCloser{closeError: errors.New("close error")}
 	closer3 := &mockCloser{}
 
-	RegisterCloser(closer1)
-	RegisterCloser(closer2) // This will error
-	RegisterCloser(closer3)
-
 	// Should not panic and should close all closers
-	CloseAll()
-
-	if !closer1.IsClosed() {
-		t.Error("closer1 was not closed")
-	}
-	if !closer2.IsClosed() {
-		t.Error("closer2 was not closed despite error")
-	}
-	if !closer3.IsClosed() {
-		t.Error("closer3 was not closed (should continue after error)")
-	}
+	registerClosersAndVerifyAll(t, closer1, closer2, closer3)
 }
 
 // TestRegisterCloserThreadSafety verifies thread-safe registration.

@@ -163,9 +163,7 @@ func TestRouterInfoHandler_DefaultFields(t *testing.T) {
 	}
 
 	for _, field := range expectedFields {
-		if _, ok := resultMap[field]; !ok {
-			t.Errorf("missing default field: %s", field)
-		}
+		assert.Contains(t, resultMap, field, "missing default field")
 	}
 }
 
@@ -174,9 +172,7 @@ func TestRouterInfoHandler_NotRunning(t *testing.T) {
 	resultMap := invokeHandler(t, handler, `{"i2p.router.net.status": null}`)
 
 	// Status should be 5 (Error) when not running
-	if resultMap["i2p.router.net.status"] != 5 {
-		t.Errorf("status = %v, want 5 (Error)", resultMap["i2p.router.net.status"])
-	}
+	assert.Equal(t, 5, resultMap["i2p.router.net.status"])
 }
 
 func TestRouterInfoHandler_InvalidJSON(t *testing.T) {
@@ -194,7 +190,7 @@ func TestRouterInfoHandler_StatusField(t *testing.T) {
 		resultMap := invokeHandler(t, handler, `{"i2p.router.status": null}`)
 
 		if resultMap["i2p.router.status"] != "OK" {
-			t.Errorf("status = %v, want OK", resultMap["i2p.router.status"])
+			assert.Equal(t, "OK", resultMap["i2p.router.status"])
 		}
 	})
 
@@ -202,9 +198,7 @@ func TestRouterInfoHandler_StatusField(t *testing.T) {
 		handler := NewRouterInfoHandler(newStatsHandler(false, "0.1.0"))
 		resultMap := invokeHandler(t, handler, `{"i2p.router.status": null}`)
 
-		if resultMap["i2p.router.status"] != "ERROR" {
-			t.Errorf("status = %v, want ERROR", resultMap["i2p.router.status"])
-		}
+		assert.Equal(t, "ERROR", resultMap["i2p.router.status"])
 	})
 }
 
@@ -224,20 +218,11 @@ func TestRouterInfoHandler_BandwidthFields(t *testing.T) {
 		"i2p.router.net.bw.outbound.1s",
 		"i2p.router.net.bw.outbound.15s",
 	} {
-		if _, ok := resultMap[field]; !ok {
-			t.Errorf("missing %s", field)
-		}
+		assert.Contains(t, resultMap, field)
 	}
 
-	// Check that bandwidth values are from mock (1024 bytes/sec)
-	// Inbound should be 0 (not tracked separately yet)
-	if resultMap["i2p.router.net.bw.inbound.1s"] != 0.0 {
-		t.Errorf("inbound.1s = %v, want 0.0", resultMap["i2p.router.net.bw.inbound.1s"])
-	}
-	// Outbound should be 1024.0 from mock
-	if resultMap["i2p.router.net.bw.outbound.1s"] != 1024.0 {
-		t.Errorf("outbound.1s = %v, want 1024.0", resultMap["i2p.router.net.bw.outbound.1s"])
-	}
+	assert.Equal(t, 0.0, resultMap["i2p.router.net.bw.inbound.1s"])
+	assert.Equal(t, 1024.0, resultMap["i2p.router.net.bw.outbound.1s"])
 }
 
 // Test RouterManager Handler
@@ -272,9 +257,7 @@ func TestRouterManagerHandler_Operations(t *testing.T) {
 			handler := NewRouterManagerHandler(mockControl)
 			resultMap := invokeHandler(t, handler, `{"`+op.operation+`": null}`)
 
-			if _, ok := resultMap[op.operation]; !ok {
-				t.Errorf("result should contain %s key", op.operation)
-			}
+			assert.Contains(t, resultMap, op.operation)
 		})
 	}
 }
@@ -323,31 +306,14 @@ func TestNetworkSettingHandler_AllSettings(t *testing.T) {
 	}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
 
-	// Port should return mock value
-	if resultMap["i2p.router.net.ntcp.port"] != 12345 {
-		t.Errorf("port = %v, want 12345", resultMap["i2p.router.net.ntcp.port"])
-	}
-
-	// Hostname should return mock value
-	if resultMap["i2p.router.net.ntcp.hostname"] != "127.0.0.1" {
-		t.Errorf("hostname = %v, want 127.0.0.1", resultMap["i2p.router.net.ntcp.hostname"])
-	}
-
-	// Bandwidth in should return mock value
-	if resultMap["i2p.router.bandwidth.in"] != 1024 {
-		t.Errorf("bandwidth.in = %v, want 1024", resultMap["i2p.router.bandwidth.in"])
-	}
-
-	// Bandwidth out should return mock value
-	if resultMap["i2p.router.bandwidth.out"] != 2048 {
-		t.Errorf("bandwidth.out = %v, want 2048", resultMap["i2p.router.bandwidth.out"])
-	}
+	assert.Equal(t, 12345, resultMap["i2p.router.net.ntcp.port"])
+	assert.Equal(t, "127.0.0.1", resultMap["i2p.router.net.ntcp.hostname"])
+	assert.Equal(t, 1024, resultMap["i2p.router.bandwidth.in"])
+	assert.Equal(t, 2048, resultMap["i2p.router.bandwidth.out"])
 }
 
 func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
@@ -365,33 +331,21 @@ func TestNetworkSettingHandler_DefaultSettings(t *testing.T) {
 	params := json.RawMessage(`{}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
 
-	// Should return default fields
-	expectedFields := []string{
+	for _, field := range []string{
 		"i2p.router.net.ntcp.port",
 		"i2p.router.net.ntcp.hostname",
+		"i2p.router.bandwidth.in",
+		"i2p.router.bandwidth.out",
+	} {
+		assert.Contains(t, resultMap, field)
 	}
 
-	for _, field := range expectedFields {
-		if _, ok := resultMap[field]; !ok {
-			t.Errorf("missing default field: %s", field)
-		}
-	}
-
-	// Verify port value
-	if resultMap["i2p.router.net.ntcp.port"] != 9999 {
-		t.Errorf("port = %v, want 9999", resultMap["i2p.router.net.ntcp.port"])
-	}
-
-	// Verify hostname value
-	if resultMap["i2p.router.net.ntcp.hostname"] != "0.0.0.0" {
-		t.Errorf("hostname = %v, want 0.0.0.0", resultMap["i2p.router.net.ntcp.hostname"])
-	}
+	assert.Equal(t, 9999, resultMap["i2p.router.net.ntcp.port"])
+	assert.Equal(t, "0.0.0.0", resultMap["i2p.router.net.ntcp.hostname"])
 }
 
 func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
@@ -401,16 +355,10 @@ func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
 	params := json.RawMessage(`{"unknown.setting": null}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap := result.(map[string]interface{})
-
-	// Unknown setting should return nil
-	if resultMap["unknown.setting"] != nil {
-		t.Errorf("unknown setting = %v, want nil", resultMap["unknown.setting"])
-	}
+	assert.Nil(t, resultMap["unknown.setting"])
 }
 
 func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
@@ -490,23 +438,13 @@ func TestNetworkSettingHandler_HostnameAndBandwidth(t *testing.T) {
 			}`)
 
 			result, err := handler.Handle(context.Background(), params)
-			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
-			}
+			require.NoError(t, err)
 
 			resultMap := result.(map[string]interface{})
 
-			if resultMap["i2p.router.net.ntcp.hostname"] != tt.wantHostname {
-				t.Errorf("hostname = %v, want %v", resultMap["i2p.router.net.ntcp.hostname"], tt.wantHostname)
-			}
-
-			if resultMap["i2p.router.bandwidth.in"] != tt.wantBandwidthIn {
-				t.Errorf("bandwidth.in = %v, want %v", resultMap["i2p.router.bandwidth.in"], tt.wantBandwidthIn)
-			}
-
-			if resultMap["i2p.router.bandwidth.out"] != tt.wantBandwidthOut {
-				t.Errorf("bandwidth.out = %v, want %v", resultMap["i2p.router.bandwidth.out"], tt.wantBandwidthOut)
-			}
+			assert.Equal(t, tt.wantHostname, resultMap["i2p.router.net.ntcp.hostname"])
+			assert.Equal(t, tt.wantBandwidthIn, resultMap["i2p.router.bandwidth.in"])
+			assert.Equal(t, tt.wantBandwidthOut, resultMap["i2p.router.bandwidth.out"])
 		})
 	}
 }
@@ -526,9 +464,7 @@ func TestGetStatusCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := getStatusCode(tt.running)
-			if got != tt.want {
-				t.Errorf("getStatusCode(%v) = %d, want %d", tt.running, got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -551,11 +487,8 @@ func TestRouterInfoHandler_PeerClassificationFields(t *testing.T) {
 		"i2p.router.netdb.highcapacitypeers",
 	} {
 		val, ok := resultMap[field].(int)
-		if !ok {
-			t.Errorf("%s not int: %T", field, resultMap[field])
-		} else if val < 0 {
-			t.Errorf("%s = %d, want >= 0", field, val)
-		}
+		require.True(t, ok, "%s not int: %T", field, resultMap[field])
+		assert.GreaterOrEqual(t, val, 0, "%s should be >= 0", field)
 	}
 }
 
@@ -566,20 +499,11 @@ func TestRouterInfoHandler_IsReseedingField(t *testing.T) {
 
 	// Verify isreseeding field exists and is boolean
 	isReseeding, exists := resultMap["i2p.router.netdb.isreseeding"]
-	if !exists {
-		t.Error("i2p.router.netdb.isreseeding field not found in response")
-	}
+	assert.True(t, exists, "i2p.router.netdb.isreseeding field not found")
 
-	// Verify it's a boolean
 	_, isBool := isReseeding.(bool)
-	if !isBool {
-		t.Errorf("i2p.router.netdb.isreseeding = %v (%T), want bool", isReseeding, isReseeding)
-	}
-
-	// Verify it's false (mock always returns false)
-	if isReseeding != false {
-		t.Errorf("i2p.router.netdb.isreseeding = %v, want false", isReseeding)
-	}
+	assert.True(t, isBool, "i2p.router.netdb.isreseeding = %v (%T), want bool", isReseeding, isReseeding)
+	assert.Equal(t, false, isReseeding)
 }
 
 func BenchmarkEchoHandler(b *testing.B) {
@@ -659,34 +583,17 @@ func TestI2PControlHandler_PasswordChange(t *testing.T) {
 	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("result is not map[string]interface{}: %T", result)
-	}
+	require.True(t, ok, "result is not map[string]interface{}: %T", result)
 
-	// Check password was changed in auth manager
-	if authMgr.password != "newpass123" {
-		t.Errorf("authManager password = %v, want newpass123", authMgr.password)
-	}
+	assert.Equal(t, "newpass123", authMgr.password)
+	assert.Equal(t, "newpass123", cfg.Password)
 
-	// Check password was persisted to config struct
-	if cfg.Password != "newpass123" {
-		t.Errorf("config.Password = %v, want newpass123", cfg.Password)
-	}
-
-	// Check SettingsSaved flag
-	if settingsSaved, ok := resultMap["SettingsSaved"].(bool); !ok || !settingsSaved {
-		t.Errorf("SettingsSaved = %v, want true", resultMap["SettingsSaved"])
-	}
-
-	// Check password field is null in response
-	if resultMap["i2pcontrol.password"] != nil {
-		t.Errorf("i2pcontrol.password = %v, want nil", resultMap["i2pcontrol.password"])
-	}
+	settingsSaved, ok := resultMap["SettingsSaved"].(bool)
+	assert.True(t, ok && settingsSaved, "SettingsSaved should be true")
+	assert.Nil(t, resultMap["i2pcontrol.password"])
 }
 
 func TestI2PControlHandler_PasswordChange_NilConfig(t *testing.T) {
@@ -696,22 +603,15 @@ func TestI2PControlHandler_PasswordChange_NilConfig(t *testing.T) {
 	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
 
 	result, err := handler.Handle(context.Background(), params)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resultMap, ok := result.(map[string]interface{})
-	if !ok {
-		t.Fatalf("result is not map[string]interface{}: %T", result)
-	}
+	require.True(t, ok, "result is not map[string]interface{}: %T", result)
 
-	if authMgr.password != "newpass123" {
-		t.Errorf("authManager password = %v, want newpass123", authMgr.password)
-	}
+	assert.Equal(t, "newpass123", authMgr.password)
 
-	if settingsSaved, ok := resultMap["SettingsSaved"].(bool); !ok || !settingsSaved {
-		t.Errorf("SettingsSaved = %v, want true", resultMap["SettingsSaved"])
-	}
+	settingsSaved, ok := resultMap["SettingsSaved"].(bool)
+	assert.True(t, ok && settingsSaved, "SettingsSaved should be true")
 }
 
 func TestI2PControlHandler_InvalidPasswordInputs(t *testing.T) {
@@ -737,12 +637,8 @@ func TestI2PControlHandler_InvalidPasswordInputs(t *testing.T) {
 
 			requireRPCError(t, err, ErrCodeInvalidParams)
 
-			if authMgr.password != "oldpass" {
-				t.Errorf("password changed to %v, should remain oldpass", authMgr.password)
-			}
-			if cfg.Password != "oldpass" {
-				t.Errorf("config.Password changed to %v, should remain oldpass", cfg.Password)
-			}
+			assert.Equal(t, "oldpass", authMgr.password)
+			assert.Equal(t, "oldpass", cfg.Password)
 		})
 	}
 }
@@ -779,34 +675,19 @@ func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {
 	// First change
 	params1 := json.RawMessage(`{"i2pcontrol.password": "pass2"}`)
 	_, err := handler.Handle(context.Background(), params1)
-	if err != nil {
-		t.Fatalf("first Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if authMgr.password != "pass2" {
-		t.Errorf("after first change, password = %v, want pass2", authMgr.password)
-	}
-	if cfg.Password != "pass2" {
-		t.Errorf("after first change, config.Password = %v, want pass2", cfg.Password)
-	}
+	assert.Equal(t, "pass2", authMgr.password)
+	assert.Equal(t, "pass2", cfg.Password)
 
 	// Second change
 	params2 := json.RawMessage(`{"i2pcontrol.password": "pass3"}`)
 	_, err = handler.Handle(context.Background(), params2)
-	if err != nil {
-		t.Fatalf("second Handle() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if authMgr.password != "pass3" {
-		t.Errorf("after second change, password = %v, want pass3", authMgr.password)
-	}
-	if cfg.Password != "pass3" {
-		t.Errorf("after second change, config.Password = %v, want pass3", cfg.Password)
-	}
-
-	if authMgr.changeCount != 2 {
-		t.Errorf("changeCount = %v, want 2", authMgr.changeCount)
-	}
+	assert.Equal(t, "pass3", authMgr.password)
+	assert.Equal(t, "pass3", cfg.Password)
+	assert.Equal(t, 2, authMgr.changeCount)
 }
 
 func BenchmarkI2PControlHandler(b *testing.B) {

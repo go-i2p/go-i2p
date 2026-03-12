@@ -212,6 +212,24 @@ func TestParticipantCount(t *testing.T) {
 	}
 }
 
+// verifyCleanupResults asserts participant count and checks which IDs remain or were removed.
+func verifyCleanupResults(t *testing.T, m *Manager, expectedCount int, shouldRemain, shouldBeRemoved []TunnelID) {
+	t.Helper()
+	if m.ParticipantCount() != expectedCount {
+		t.Errorf("Expected %d participants after cleanup, got %d", expectedCount, m.ParticipantCount())
+	}
+	for _, id := range shouldBeRemoved {
+		if m.GetParticipant(id) != nil {
+			t.Errorf("Participant %d should have been cleaned up", id)
+		}
+	}
+	for _, id := range shouldRemain {
+		if m.GetParticipant(id) == nil {
+			t.Errorf("Participant %d should not have been removed", id)
+		}
+	}
+}
+
 // TestCleanupExpiredParticipants verifies automatic cleanup of expired participants
 func TestCleanupExpiredParticipants(t *testing.T) {
 	m := NewManager()
@@ -232,19 +250,7 @@ func TestCleanupExpiredParticipants(t *testing.T) {
 	// Trigger cleanup
 	m.cleanupExpiredParticipants()
 
-	// Should have only 1 participant left (the non-expired one)
-	if m.ParticipantCount() != 1 {
-		t.Errorf("Expected 1 participant after cleanup, got %d", m.ParticipantCount())
-	}
-
-	// Verify the correct one remains
-	if m.GetParticipant(11111) != nil {
-		t.Error("Expired participant was not cleaned up")
-	}
-
-	if m.GetParticipant(22222) == nil {
-		t.Error("Non-expired participant was incorrectly removed")
-	}
+	verifyCleanupResults(t, m, 1, []TunnelID{22222}, []TunnelID{11111})
 }
 
 // TestManagerConcurrency verifies thread-safe concurrent access
@@ -374,25 +380,7 @@ func TestCleanupIdleParticipants(t *testing.T) {
 	// Trigger cleanup
 	m.cleanupExpiredParticipants()
 
-	// Should have only 2 participants left (the active and almost-idle ones)
-	if m.ParticipantCount() != 2 {
-		t.Errorf("Expected 2 participants after cleanup, got %d", m.ParticipantCount())
-	}
-
-	// Verify the idle one was removed
-	if m.GetParticipant(11111) != nil {
-		t.Error("Idle participant was not cleaned up")
-	}
-
-	// Verify the active one remains
-	if m.GetParticipant(22222) == nil {
-		t.Error("Active participant was incorrectly removed")
-	}
-
-	// Verify the almost-idle one remains
-	if m.GetParticipant(33333) == nil {
-		t.Error("Almost-idle participant was incorrectly removed")
-	}
+	verifyCleanupResults(t, m, 2, []TunnelID{22222, 33333}, []TunnelID{11111})
 }
 
 // TestIdleAndExpiredParticipantCleanup verifies that both idle and expired
@@ -420,21 +408,7 @@ func TestIdleAndExpiredParticipantCleanup(t *testing.T) {
 	// Trigger cleanup
 	m.cleanupExpiredParticipants()
 
-	// Should have only 1 participant left (the healthy one)
-	if m.ParticipantCount() != 1 {
-		t.Errorf("Expected 1 participant after cleanup, got %d", m.ParticipantCount())
-	}
-
-	// Verify only the healthy one remains
-	if m.GetParticipant(11111) != nil {
-		t.Error("Expired participant was not cleaned up")
-	}
-	if m.GetParticipant(22222) != nil {
-		t.Error("Idle participant was not cleaned up")
-	}
-	if m.GetParticipant(33333) == nil {
-		t.Error("Healthy participant was incorrectly removed")
-	}
+	verifyCleanupResults(t, m, 1, []TunnelID{33333}, []TunnelID{11111, 22222})
 }
 
 // TestNewManagerWithConfig verifies manager creation with custom configuration

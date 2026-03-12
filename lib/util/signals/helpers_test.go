@@ -37,3 +37,19 @@ func assertHandlersCalledInOrder(t *testing.T, registerFn func(func()), handleFn
 		}
 	}
 }
+
+// assertDeregisterRemovesHandler verifies that deregistering a handler prevents
+// it from being called. Consolidates the repeated deregistration pattern.
+func assertDeregisterRemovesHandler(t *testing.T, register func(Handler) HandlerID, deregister func(HandlerID), trigger func(), getCount func() int) {
+	t.Helper()
+	called := false
+	id := register(func() { called = true })
+	deregister(id)
+	if count := getCount(); count != 0 {
+		t.Errorf("Expected 0 handlers after deregistration, got %d", count)
+	}
+	trigger()
+	if called {
+		t.Error("Deregistered handler should not have been called")
+	}
+}

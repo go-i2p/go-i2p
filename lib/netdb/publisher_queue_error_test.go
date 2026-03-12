@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
@@ -31,17 +32,25 @@ func (m *failingTransportManager) GetSession(routerInfo router_info.RouterInfo) 
 	return m.session, nil
 }
 
-// TestSendMessageThroughGatewayQueueError verifies that sendMessageThroughGateway
-// propagates errors from QueueSendI2NP instead of silently discarding them.
-// This covers CRITICAL BUG: QueueSendI2NP Error Silently Discarded in publisher.go.
-func TestSendMessageThroughGatewayQueueError(t *testing.T) {
+// setupGatewayTest creates a mock NetDB with a valid gateway RouterInfo and returns
+// the db, gateway hash, and a test I2NP message. Reduces boilerplate in gateway tests.
+func setupGatewayTest(t *testing.T) (*mockNetDB, common.Hash, i2np.I2NPMessage) {
+	t.Helper()
 	db := newMockNetDB()
-
-	// Add a gateway router to the NetDB so the lookup succeeds
 	gatewayRI := createValidRouterInfo(t)
 	gatewayHash, err := gatewayRI.IdentHash()
 	require.NoError(t, err)
 	db.StoreRouterInfo(gatewayRI)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	msg.SetData([]byte("test data"))
+	return db, gatewayHash, msg
+}
+
+// TestSendMessageThroughGatewayQueueError verifies that sendMessageThroughGateway
+// propagates errors from QueueSendI2NP instead of silently discarding them.
+// This covers CRITICAL BUG: QueueSendI2NP Error Silently Discarded in publisher.go.
+func TestSendMessageThroughGatewayQueueError(t *testing.T) {
+	db, gatewayHash, msg := setupGatewayTest(t)
 
 	// Create a transport that returns an error on QueueSendI2NP
 	sendErr := fmt.Errorf("send queue full: 256/256 messages pending")
@@ -51,12 +60,8 @@ func TestSendMessageThroughGatewayQueueError(t *testing.T) {
 
 	publisher := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
 
-	// Create a test message
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
-	msg.SetData([]byte("test data"))
-
 	// Call sendMessageThroughGateway — should propagate the error
-	err = publisher.sendMessageThroughGateway(gatewayHash, msg)
+	err := publisher.sendMessageThroughGateway(gatewayHash, msg)
 
 	assert.Error(t, err, "Expected error from QueueSendI2NP failure")
 	assert.Contains(t, err.Error(), "failed to queue message",
@@ -66,23 +71,13 @@ func TestSendMessageThroughGatewayQueueError(t *testing.T) {
 // TestSendMessageThroughGatewaySuccess verifies the happy path where
 // QueueSendI2NP succeeds and no error is returned.
 func TestSendMessageThroughGatewaySuccess(t *testing.T) {
-	db := newMockNetDB()
+	db, gatewayHash, msg := setupGatewayTest(t)
 	transport := newMockTransportManager()
-
-	// Add a gateway router to the NetDB
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, err := gatewayRI.IdentHash()
-	require.NoError(t, err)
-	db.StoreRouterInfo(gatewayRI)
 
 	publisher := NewPublisher(db, nil, transport, nil, DefaultPublisherConfig())
 
-	// Create a test message
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
-	msg.SetData([]byte("test data"))
-
 	// Should succeed
-	err = publisher.sendMessageThroughGateway(gatewayHash, msg)
+	err := publisher.sendMessageThroughGateway(gatewayHash, msg)
 	assert.NoError(t, err)
 
 	// Verify message was sent
@@ -94,21 +89,12 @@ func TestSendMessageThroughGatewaySuccess(t *testing.T) {
 // the transport manager is nil. The function first retrieves the gateway
 // RouterInfo, then checks transport, so we need a valid gateway in the DB.
 func TestSendMessageThroughGatewayNoTransport(t *testing.T) {
-	db := newMockNetDB()
-
-	// Add a gateway router to the NetDB so the lookup succeeds
-	gatewayRI := createValidRouterInfo(t)
-	gatewayHash, err := gatewayRI.IdentHash()
-	require.NoError(t, err)
-	db.StoreRouterInfo(gatewayRI)
+	db, gatewayHash, msg := setupGatewayTest(t)
 
 	// Create publisher with nil transport
 	publisher := NewPublisher(db, nil, nil, nil, DefaultPublisherConfig())
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
-	msg.SetData([]byte("test"))
-
-	err = publisher.sendMessageThroughGateway(gatewayHash, msg)
+	err := publisher.sendMessageThroughGateway(gatewayHash, msg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "transport manager not available")
 }

@@ -148,24 +148,12 @@ func TestPreShutdownHandlers_HungHandlerDoesNotBlockChain(t *testing.T) {
 func TestDeregisterPreShutdownHandler(t *testing.T) {
 	resetPreShutdownHandlers(t, false)
 
-	called := false
-	id := RegisterPreShutdownHandler(func() { called = true })
-
-	DeregisterPreShutdownHandler(id)
-
-	preShutdownMu.RLock()
-	count := len(preShutdownHandlers)
-	preShutdownMu.RUnlock()
-
-	if count != 0 {
-		t.Errorf("Expected 0 handlers after deregistration, got %d", count)
-	}
-
-	handlePreShutdown()
-
-	if called {
-		t.Error("Deregistered handler should not have been called")
-	}
+	assertDeregisterRemovesHandler(t,
+		RegisterPreShutdownHandler,
+		DeregisterPreShutdownHandler,
+		func() { handlePreShutdown() },
+		func() int { preShutdownMu.RLock(); defer preShutdownMu.RUnlock(); return len(preShutdownHandlers) },
+	)
 }
 
 // TestPreShutdownHandlers_PanicRecovery verifies panic recovery in pre-shutdown handlers.

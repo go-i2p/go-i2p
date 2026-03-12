@@ -86,42 +86,30 @@ func TestPublishOurRouterInfo_InvalidRouterInfo(t *testing.T) {
 	assert.Equal(t, 0, db.Size())
 }
 
+// setupPublisherWithValidRI creates a Publisher with a valid RouterInfo provider.
+func setupPublisherWithValidRI(t *testing.T) (*Publisher, *mockRouterInfoProvider) {
+	t.Helper()
+	db := newMockNetDB()
+	validRI := createValidTestRouterInfo(t)
+	provider := &mockRouterInfoProvider{routerInfo: validRI}
+	publisher := NewPublisher(db, nil, nil, provider, DefaultPublisherConfig())
+	return publisher, provider
+}
+
 // TestPublishOurRouterInfo_Success tests successful RouterInfo publishing
 func TestPublishOurRouterInfo_Success(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultPublisherConfig()
-
-	// Create a valid RouterInfo for testing
-	// Note: In real usage, this would come from keys.RouterInfoKeystore.ConstructRouterInfo()
-	validRI := createValidTestRouterInfo(t)
-
-	provider := &mockRouterInfoProvider{
-		routerInfo: validRI,
-	}
-
-	publisher := NewPublisher(db, nil, nil, provider, config)
+	publisher, provider := setupPublisherWithValidRI(t)
 
 	// Should successfully publish RouterInfo
 	publisher.publishOurRouterInfo()
 
 	// Verify provider was called
 	assert.Equal(t, 1, provider.callCount)
-
-	// Note: Actual storage in mockNetDB depends on implementation
-	// The important part is that PublishRouterInfo was called without panic
 }
 
 // TestPublisherWithRouterInfoProvider tests Publisher creation with provider
 func TestPublisherWithRouterInfoProvider(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultPublisherConfig()
-
-	validRI := createValidTestRouterInfo(t)
-	provider := &mockRouterInfoProvider{
-		routerInfo: validRI,
-	}
-
-	publisher := NewPublisher(db, nil, nil, provider, config)
+	publisher, provider := setupPublisherWithValidRI(t)
 
 	assert.NotNil(t, publisher)
 	assert.NotNil(t, publisher.routerInfoProvider)
@@ -130,15 +118,7 @@ func TestPublisherWithRouterInfoProvider(t *testing.T) {
 
 // TestPublishOurRouterInfo_MultipleCallsToProvider tests that provider is called correctly
 func TestPublishOurRouterInfo_MultipleCallsToProvider(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultPublisherConfig()
-
-	validRI := createValidTestRouterInfo(t)
-	provider := &mockRouterInfoProvider{
-		routerInfo: validRI,
-	}
-
-	publisher := NewPublisher(db, nil, nil, provider, config)
+	publisher, provider := setupPublisherWithValidRI(t)
 
 	// Call publishOurRouterInfo multiple times
 	publisher.publishOurRouterInfo()

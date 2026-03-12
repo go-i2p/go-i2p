@@ -83,10 +83,7 @@ func TestGetRouterInfo_PeerClassification(t *testing.T) {
 	provider := NewRouterStatsProvider(mockRouter, "0.1.0-test")
 
 	// Initially all peer counts should be 0
-	stats := provider.GetRouterInfo()
-	assert.Equal(t, 0, stats.ActivePeersCount, "Expected 0 active peers initially")
-	assert.Equal(t, 0, stats.FastPeersCount, "Expected 0 fast peers initially")
-	assert.Equal(t, 0, stats.HighCapacityPeersCount, "Expected 0 high-capacity peers initially")
+	assertZeroPeerStats(t, provider)
 
 	// Add some test peers
 	hash1 := testHash(1) // Will be active and fast
@@ -119,13 +116,23 @@ func TestGetRouterInfo_PeerClassification(t *testing.T) {
 	}
 
 	// Get updated stats
-	stats = provider.GetRouterInfo()
+	stats := provider.GetRouterInfo()
 
 	// Verify peer classification counts
 	assert.Equal(t, 3, stats.ActivePeersCount, "Expected 3 active peers (all have recent successes)")
 	assert.Equal(t, 2, stats.FastPeersCount, "Expected 2 fast peers (hash1 @ 100ms, hash2 @ 400ms, both <500ms)")
 	assert.Equal(t, 2, stats.HighCapacityPeersCount, "Expected 2 high-capacity peers (hash1, hash2)")
 	assert.Equal(t, 3, stats.KnownPeers, "Expected 3 known peers total")
+}
+
+// assertZeroPeerStats verifies all peer count fields are zero.
+func assertZeroPeerStats(t *testing.T, provider RouterStatsProvider) {
+	t.Helper()
+	stats := provider.GetRouterInfo()
+	assert.Equal(t, 0, stats.ActivePeersCount)
+	assert.Equal(t, 0, stats.FastPeersCount)
+	assert.Equal(t, 0, stats.HighCapacityPeersCount)
+	assert.Equal(t, 0, stats.KnownPeers)
 }
 
 // TestGetRouterInfo_PeerStats_NoNetDB tests graceful handling when NetDB is nil
@@ -135,15 +142,8 @@ func TestGetRouterInfo_PeerStats_NoNetDB(t *testing.T) {
 		netdb: nil,
 	}
 
-	// Create stats provider
-	provider := NewRouterStatsProvider(mockRouter, "0.1.0-test")
-
 	// Should not panic and should return 0 for all peer counts
-	stats := provider.GetRouterInfo()
-	assert.Equal(t, 0, stats.ActivePeersCount)
-	assert.Equal(t, 0, stats.FastPeersCount)
-	assert.Equal(t, 0, stats.HighCapacityPeersCount)
-	assert.Equal(t, 0, stats.KnownPeers)
+	assertZeroPeerStats(t, NewRouterStatsProvider(mockRouter, "0.1.0-test"))
 }
 
 // TestGetRouterInfo_PeerStats_EmptyNetDB tests behavior with empty NetDB
@@ -154,20 +154,12 @@ func TestGetRouterInfo_PeerStats_EmptyNetDB(t *testing.T) {
 	require.NoError(t, db.Create())
 	defer db.Stop()
 
-	// Create mock router
 	mockRouter := &mockRouterAccessForPeerStats{
 		netdb: db,
 	}
 
-	// Create stats provider
-	provider := NewRouterStatsProvider(mockRouter, "0.1.0-test")
-
 	// Should return 0 for all peer counts
-	stats := provider.GetRouterInfo()
-	assert.Equal(t, 0, stats.ActivePeersCount)
-	assert.Equal(t, 0, stats.FastPeersCount)
-	assert.Equal(t, 0, stats.HighCapacityPeersCount)
-	assert.Equal(t, 0, stats.KnownPeers)
+	assertZeroPeerStats(t, NewRouterStatsProvider(mockRouter, "0.1.0-test"))
 }
 
 // TestGetRouterInfo_PeerStats_VariedQuality tests classification with peers of varied quality

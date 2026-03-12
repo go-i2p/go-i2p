@@ -1,7 +1,6 @@
 package i2cp
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"net"
@@ -24,9 +23,7 @@ func newTestI2CPServer(t *testing.T, addr string) *Server {
 		MaxSessions: 100,
 	}
 	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	require.NoError(t, err, "NewServer() error")
 	return server
 }
 
@@ -34,17 +31,13 @@ func newTestI2CPServer(t *testing.T, addr string) *Server {
 // The connection and server are registered for cleanup via t.Cleanup.
 func startServerAndConnect(t *testing.T, server *Server, addr string) net.Conn {
 	t.Helper()
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, server.Start(), "Start() error")
 	t.Cleanup(func() { server.Stop() })
 
 	time.Sleep(10 * time.Millisecond)
 
 	conn, err := dialI2CPClient(addr)
-	if err != nil {
-		t.Fatalf("Failed to connect to server: %v", err)
-	}
+	require.NoError(t, err, "Failed to connect to server")
 	t.Cleanup(func() { conn.Close() })
 	return conn
 }
@@ -57,62 +50,40 @@ func createSessionOnConn(t *testing.T, conn net.Conn) uint16 {
 		SessionID: SessionIDReservedControl,
 		Payload:   []byte{},
 	}
-	if err := WriteMessage(conn, createMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
+	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
 	response, err := ReadMessage(conn)
-	if err != nil {
-		t.Fatalf("ReadMessage() error = %v", err)
-	}
-	if response.Type != MessageTypeSessionStatus {
-		t.Fatalf("Response type = %d, want %d", response.Type, MessageTypeSessionStatus)
-	}
+	require.NoError(t, err, "ReadMessage() error")
+	require.Equal(t, MessageTypeSessionStatus, response.Type, "Response type mismatch")
 	return response.SessionID
 }
 
 func TestServerStartStop(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17654")
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-
-	if !server.IsRunning() {
-		t.Error("Server should be running after Start()")
-	}
+	require.NoError(t, server.Start(), "Start() error")
+	assert.True(t, server.IsRunning(), "Server should be running after Start()")
 
 	// Give server time to start listening
 	time.Sleep(10 * time.Millisecond)
 
-	if err := server.Stop(); err != nil {
-		t.Fatalf("Stop() error = %v", err)
-	}
-
-	if server.IsRunning() {
-		t.Error("Server should not be running after Stop()")
-	}
+	require.NoError(t, server.Stop(), "Stop() error")
+	assert.False(t, server.IsRunning(), "Server should not be running after Stop()")
 }
 
 func TestServerDoubleStart(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17655")
 	defer server.Stop()
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, server.Start(), "Start() error")
 
 	// Second start should fail
-	if err := server.Start(); err == nil {
-		t.Error("Expected error on second Start(), got nil")
-	}
+	assert.Error(t, server.Start(), "Expected error on second Start()")
 }
 
 func TestServerCreateSession(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17656")
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, server.Start(), "Start() error")
 	defer server.Stop()
 
 	// Give server time to start listening
@@ -120,9 +91,7 @@ func TestServerCreateSession(t *testing.T) {
 
 	// Connect to server
 	conn, err := dialI2CPClient("localhost:17656")
-	if err != nil {
-		t.Fatalf("Failed to connect to server: %v", err)
-	}
+	require.NoError(t, err, "Failed to connect to server")
 	defer conn.Close()
 
 	// Send CreateSession message
@@ -132,44 +101,27 @@ func TestServerCreateSession(t *testing.T) {
 		Payload:   []byte{}, // Empty config for now
 	}
 
-	if err := WriteMessage(conn, createMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
+	require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
 
 	// Read SessionStatus response
 	response, err := ReadMessage(conn)
-	if err != nil {
-		t.Fatalf("ReadMessage() error = %v", err)
-	}
+	require.NoError(t, err, "ReadMessage() error")
 
-	if response.Type != MessageTypeSessionStatus {
-		t.Errorf("Response type = %d, want %d", response.Type, MessageTypeSessionStatus)
-	}
-
-	if response.SessionID == SessionIDReservedControl {
-		t.Error("Session ID should not be reserved control value")
-	}
+	assert.Equal(t, MessageTypeSessionStatus, response.Type)
+	assert.NotEqual(t, SessionIDReservedControl, response.SessionID, "Session ID should not be reserved control value")
 
 	// Per I2CP spec: SessionStatus payload is SessionID(2 bytes) + Status(1 byte) = 3 bytes
-	if len(response.Payload) != 3 {
-		t.Errorf("SessionStatus payload length = %d, want 3", len(response.Payload))
-	}
+	require.Len(t, response.Payload, 3, "SessionStatus payload length")
 
 	// Verify SessionID in payload matches the SessionID in message header
 	payloadSessionID := binary.BigEndian.Uint16(response.Payload[0:2])
-	if payloadSessionID != response.SessionID {
-		t.Errorf("SessionID in payload = %d, want %d", payloadSessionID, response.SessionID)
-	}
+	assert.Equal(t, response.SessionID, payloadSessionID, "SessionID in payload")
 
 	// Verify status byte is 0x01 (Created) per I2CP spec
-	if response.Payload[2] != SessionStatusCreated {
-		t.Errorf("SessionStatus status byte = 0x%02x, want 0x%02x (Created)", response.Payload[2], SessionStatusCreated)
-	}
+	assert.Equal(t, SessionStatusCreated, response.Payload[2], "SessionStatus status byte")
 
 	// Verify session was created
-	if server.SessionManager().SessionCount() != 1 {
-		t.Errorf("SessionCount() = %d, want 1", server.SessionManager().SessionCount())
-	}
+	assert.Equal(t, 1, server.SessionManager().SessionCount(), "SessionCount()")
 }
 
 func TestServerDestroySession(t *testing.T) {
@@ -185,17 +137,13 @@ func TestServerDestroySession(t *testing.T) {
 		Payload:   []byte{},
 	}
 
-	if err := WriteMessage(conn, destroyMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
+	require.NoError(t, WriteMessage(conn, destroyMsg), "WriteMessage() error")
 
 	// Give server time to process
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify session was destroyed
-	if server.SessionManager().SessionCount() != 0 {
-		t.Errorf("SessionCount() = %d, want 0", server.SessionManager().SessionCount())
-	}
+	assert.Equal(t, 0, server.SessionManager().SessionCount(), "SessionCount()")
 }
 
 func TestServerMaxSessions(t *testing.T) {
@@ -206,13 +154,9 @@ func TestServerMaxSessions(t *testing.T) {
 	}
 
 	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	require.NoError(t, err, "NewServer() error")
 
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, server.Start(), "Start() error")
 	defer server.Stop()
 
 	time.Sleep(10 * time.Millisecond)
@@ -221,9 +165,7 @@ func TestServerMaxSessions(t *testing.T) {
 	var conns []net.Conn
 	for i := 0; i < 2; i++ {
 		conn, err := dialI2CPClient("localhost:17654")
-		if err != nil {
-			t.Fatalf("Failed to connect: %v", err)
-		}
+		require.NoError(t, err, "Failed to connect")
 		defer conn.Close()
 		conns = append(conns, conn)
 
@@ -233,25 +175,17 @@ func TestServerMaxSessions(t *testing.T) {
 			Payload:   []byte{},
 		}
 
-		if err := WriteMessage(conn, createMsg); err != nil {
-			t.Fatalf("WriteMessage() error = %v", err)
-		}
-
-		if _, err := ReadMessage(conn); err != nil {
-			t.Fatalf("ReadMessage() error = %v", err)
-		}
+		require.NoError(t, WriteMessage(conn, createMsg), "WriteMessage() error")
+		_, err = ReadMessage(conn)
+		require.NoError(t, err, "ReadMessage() error")
 	}
 
 	// Verify 2 sessions exist
-	if server.SessionManager().SessionCount() != 2 {
-		t.Errorf("SessionCount() = %d, want 2", server.SessionManager().SessionCount())
-	}
+	assert.Equal(t, 2, server.SessionManager().SessionCount(), "SessionCount()")
 
 	// Third connection should be rejected immediately
 	conn3, err := dialI2CPClient("localhost:17654")
-	if err != nil {
-		t.Fatalf("Failed to connect: %v", err)
-	}
+	require.NoError(t, err, "Failed to connect")
 	defer conn3.Close()
 
 	createMsg := &Message{
@@ -264,9 +198,7 @@ func TestServerMaxSessions(t *testing.T) {
 	_ = WriteMessage(conn3, createMsg)
 
 	// Trying to read should get EOF or error
-	if err := conn3.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
-		t.Fatalf("Failed to set read deadline: %v", err)
-	}
+	require.NoError(t, conn3.SetReadDeadline(time.Now().Add(100*time.Millisecond)), "Failed to set read deadline")
 	_, readErr := ReadMessage(conn3)
 	// Connection should be closed, so read should fail
 	// We don't check exact error since it could be EOF or network error
@@ -283,18 +215,12 @@ func TestServerGetDate(t *testing.T) {
 		Payload:   []byte{},
 	}
 
-	if err := WriteMessage(conn, getDateMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
+	require.NoError(t, WriteMessage(conn, getDateMsg), "WriteMessage() error")
 
 	response, err := ReadMessage(conn)
-	if err != nil {
-		t.Fatalf("ReadMessage() error = %v", err)
-	}
+	require.NoError(t, err, "ReadMessage() error")
 
-	if response.Type != MessageTypeSetDate {
-		t.Errorf("Response type = %d, want %d", response.Type, MessageTypeSetDate)
-	}
+	assert.Equal(t, MessageTypeSetDate, response.Type)
 }
 
 func TestServerHandleCreateLeaseSet(t *testing.T) {
@@ -309,9 +235,7 @@ func TestServerHandleCreateLeaseSet(t *testing.T) {
 		Payload:   []byte{},
 	}
 
-	if err := WriteMessage(conn, leaseSetMsg); err != nil {
-		t.Fatalf("WriteMessage() error = %v", err)
-	}
+	require.NoError(t, WriteMessage(conn, leaseSetMsg), "WriteMessage() error")
 
 	// Server should handle it and log error but not disconnect
 	// Give it time to process
@@ -324,9 +248,7 @@ func TestServerHandleCreateLeaseSet(t *testing.T) {
 		Payload:   []byte{},
 	}
 
-	if err := WriteMessage(conn, testMsg); err != nil {
-		t.Errorf("Connection should still be alive after CreateLeaseSet failure")
-	}
+	assert.NoError(t, WriteMessage(conn, testMsg), "Connection should still be alive after CreateLeaseSet failure")
 }
 
 func BenchmarkServerCreateSession(b *testing.B) {
@@ -372,13 +294,8 @@ func BenchmarkServerCreateSession(b *testing.B) {
 func TestServerConnWriteMuInitialized(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:0")
 
-	if server.connWriteMu == nil {
-		t.Fatal("connWriteMu should be initialized, not nil")
-	}
-
-	if len(server.connWriteMu) != 0 {
-		t.Fatalf("connWriteMu should be empty initially, got %d entries", len(server.connWriteMu))
-	}
+	require.NotNil(t, server.connWriteMu, "connWriteMu should be initialized, not nil")
+	assert.Empty(t, server.connWriteMu, "connWriteMu should be empty initially")
 }
 
 // TestSessionStatusDestroyedCode verifies that handleDestroySession returns
@@ -388,9 +305,7 @@ func TestSessionStatusDestroyedCode(t *testing.T) {
 	server := newTestI2CPServer(t, "localhost:17690")
 
 	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
+	require.NoError(t, err, "CreateSession() error")
 
 	sessionID := session.ID()
 	sessionCopy := session
@@ -401,29 +316,18 @@ func TestSessionStatusDestroyedCode(t *testing.T) {
 	}
 
 	response, err := server.handleDestroySession(destroyMsg, &sessionCopy)
-	if err != nil {
-		t.Fatalf("handleDestroySession() error = %v", err)
-	}
-
-	if response == nil {
-		t.Fatal("handleDestroySession() returned nil response")
-	}
+	require.NoError(t, err, "handleDestroySession() error")
+	require.NotNil(t, response, "handleDestroySession() returned nil response")
 
 	// Verify payload is 3 bytes: SessionID(2) + Status(1)
-	if len(response.Payload) != 3 {
-		t.Fatalf("payload length = %d, want 3", len(response.Payload))
-	}
+	require.Len(t, response.Payload, 3, "payload length")
 
 	// Verify the session ID is correctly encoded in the payload
 	payloadSessionID := binary.BigEndian.Uint16(response.Payload[0:2])
-	if payloadSessionID != sessionID {
-		t.Errorf("Payload SessionID = %d, want %d", payloadSessionID, sessionID)
-	}
+	assert.Equal(t, sessionID, payloadSessionID, "Payload SessionID")
 
 	// Destroyed status must be 0
-	if response.Payload[2] != SessionStatusDestroyed {
-		t.Errorf("status byte = 0x%02x, want 0x%02x (Destroyed)", response.Payload[2], SessionStatusDestroyed)
-	}
+	assert.Equal(t, SessionStatusDestroyed, response.Payload[2], "status byte")
 }
 
 // TestBuildRequestVariableLeaseSetPayload_FilteredCount verifies that the
@@ -458,21 +362,15 @@ func TestBuildRequestVariableLeaseSetPayload_FilteredCount(t *testing.T) {
 	}
 
 	payload, err := server.buildRequestVariableLeaseSetPayload(tunnels)
-	if err != nil {
-		t.Fatalf("buildRequestVariableLeaseSetPayload() error = %v", err)
-	}
+	require.NoError(t, err, "buildRequestVariableLeaseSetPayload() error")
 
 	assertLeaseSetPayload(t, payload, 2)
 
 	// Verify first lease gateway hash
-	if string(payload[1:1+32]) != string(hash1[:]) {
-		t.Error("First lease gateway hash does not match hash1")
-	}
+	assert.Equal(t, string(hash1[:]), string(payload[1:1+32]), "First lease gateway hash")
 
 	// Verify second lease gateway hash (offset: 1 + 44)
-	if string(payload[45:45+32]) != string(hash2[:]) {
-		t.Error("Second lease gateway hash does not match hash2")
-	}
+	assert.Equal(t, string(hash2[:]), string(payload[45:45+32]), "Second lease gateway hash")
 }
 
 // TestBuildRequestVariableLeaseSetPayload_AllFilteredReturnsError verifies
@@ -487,22 +385,16 @@ func TestBuildRequestVariableLeaseSetPayload_AllFilteredReturnsError(t *testing.
 	}
 
 	_, err := server.buildRequestVariableLeaseSetPayload(tunnels)
-	if err == nil {
-		t.Error("Expected error when all tunnels are filtered out, got nil")
-	}
+	assert.Error(t, err, "Expected error when all tunnels are filtered out")
 }
 
 // assertLeaseSetPayload verifies payload count byte and size match expected lease count.
 func assertLeaseSetPayload(t *testing.T, payload []byte, expectedCount int) {
 	t.Helper()
 	leaseCount := int(payload[0])
-	if leaseCount != expectedCount {
-		t.Errorf("Lease count = %d, want %d", leaseCount, expectedCount)
-	}
+	assert.Equal(t, expectedCount, leaseCount, "Lease count")
 	expectedSize := 1 + expectedCount*44
-	if len(payload) != expectedSize {
-		t.Errorf("Payload size = %d, want %d", len(payload), expectedSize)
-	}
+	assert.Equal(t, expectedSize, len(payload), "Payload size")
 }
 
 // TestBuildRequestVariableLeaseSetPayload_AllValid verifies correct behavior
@@ -520,9 +412,7 @@ func TestBuildRequestVariableLeaseSetPayload_AllValid(t *testing.T) {
 	}
 
 	payload, err := server.buildRequestVariableLeaseSetPayload(tunnels)
-	if err != nil {
-		t.Fatalf("buildRequestVariableLeaseSetPayload() error = %v", err)
-	}
+	require.NoError(t, err, "buildRequestVariableLeaseSetPayload() error")
 
 	assertLeaseSetPayload(t, payload, 3)
 }
@@ -531,9 +421,7 @@ func TestBuildRequestVariableLeaseSetPayload_AllValid(t *testing.T) {
 // when tunnel builder and peer selector are set before session creation
 func TestServerTunnelPoolConfiguration(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 	defer server.Stop()
 
 	// Configure tunnel infrastructure (reusing mocks from integration_test.go)
@@ -552,63 +440,42 @@ func TestServerTunnelPoolConfiguration(t *testing.T) {
 	}
 
 	session, err := server.manager.CreateSession(nil, config)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(t, err, "Failed to create session")
 
 	// Initialize tunnel pools
-	if err := server.initializeSessionTunnelPools(session, config); err != nil {
-		t.Fatalf("Failed to initialize tunnel pools: %v", err)
-	}
+	require.NoError(t, server.initializeSessionTunnelPools(session, config), "Failed to initialize tunnel pools")
 
 	// Verify inbound pool is configured
-	inboundPool := session.InboundPool()
-	if inboundPool == nil {
-		t.Error("Inbound pool not set")
-	}
+	assert.NotNil(t, session.InboundPool(), "Inbound pool not set")
 
 	// Verify outbound pool is configured
-	outboundPool := session.OutboundPool()
-	if outboundPool == nil {
-		t.Error("Outbound pool not set")
-	}
+	assert.NotNil(t, session.OutboundPool(), "Outbound pool not set")
 }
 
 // TestServerTunnelPoolWithoutInfrastructure verifies that session creation succeeds
 // even when tunnel infrastructure is not configured (graceful degradation)
 func TestServerTunnelPoolWithoutInfrastructure(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 	defer server.Stop()
 
 	// Create a session without setting tunnel builder or peer selector
 	config := DefaultSessionConfig()
 	session, err := server.manager.CreateSession(nil, config)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(t, err, "Failed to create session")
 
 	// Try to initialize tunnel pools (should fail gracefully)
-	err = server.initializeSessionTunnelPools(session, config)
-	if err == nil {
-		t.Error("Expected error when initializing pools without infrastructure")
-	}
+	assert.Error(t, server.initializeSessionTunnelPools(session, config), "Expected error when initializing pools without infrastructure")
 
 	// Session should still be valid
-	if session.ID() == 0 {
-		t.Error("Session ID should be non-zero")
-	}
+	assert.NotZero(t, session.ID(), "Session ID should be non-zero")
 }
 
 // TestServerTunnelPoolConfigurationFromSessionConfig verifies that tunnel pool
 // configuration correctly reflects the session configuration parameters
 func TestServerTunnelPoolConfigurationFromSessionConfig(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 	defer server.Stop()
 
 	// Configure tunnel infrastructure
@@ -627,30 +494,20 @@ func TestServerTunnelPoolConfigurationFromSessionConfig(t *testing.T) {
 	}
 
 	session, err := server.manager.CreateSession(nil, config)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(t, err, "Failed to create session")
 
 	// Initialize tunnel pools
-	if err := server.initializeSessionTunnelPools(session, config); err != nil {
-		t.Fatalf("Failed to initialize tunnel pools: %v", err)
-	}
+	require.NoError(t, server.initializeSessionTunnelPools(session, config), "Failed to initialize tunnel pools")
 
 	// Verify pools are set
-	if session.InboundPool() == nil {
-		t.Error("Inbound pool should be set")
-	}
-	if session.OutboundPool() == nil {
-		t.Error("Outbound pool should be set")
-	}
+	assert.NotNil(t, session.InboundPool(), "Inbound pool should be set")
+	assert.NotNil(t, session.OutboundPool(), "Outbound pool should be set")
 }
 
 // TestServerSetTunnelBuilderThreadSafety verifies thread-safe access to tunnel builder
 func TestServerSetTunnelBuilderThreadSafety(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 	defer server.Stop()
 
 	builder := &mockTunnelBuilder{nextID: 3000}
@@ -679,9 +536,7 @@ func TestServerSetTunnelBuilderThreadSafety(t *testing.T) {
 // TestServerSetPeerSelectorThreadSafety verifies thread-safe access to peer selector
 func TestServerSetPeerSelectorThreadSafety(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 	defer server.Stop()
 
 	selector := &mockPeerSelector{}
@@ -723,9 +578,7 @@ func setupLeaseSetTest(tb testing.TB, publisher *mockLeaseSetPublisher, addTunne
 	tb.Helper()
 
 	session, err := NewSession(1, nil, nil)
-	if err != nil {
-		tb.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(tb, err, "Failed to create session")
 	tb.Cleanup(func() { session.Stop() })
 
 	if publisher != nil {
@@ -756,9 +609,7 @@ func setupLeaseSetTest(tb testing.TB, publisher *mockLeaseSetPublisher, addTunne
 	config := DefaultServerConfig()
 	config.LeaseSetPublisher = publisher
 	server, err := NewServer(config)
-	if err != nil {
-		tb.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(tb, err, "Failed to create server")
 
 	return &leaseSetTestFixture{
 		session:   session,
@@ -1083,45 +934,29 @@ func TestBuildMessageStatusResponse(t *testing.T) {
 			msg := buildMessageStatusResponse(tt.sessionID, tt.messageID, tt.statusCode, tt.messageSize, tt.nonce)
 
 			// Verify message type
-			if msg.Type != MessageTypeMessageStatus {
-				t.Errorf("Type = %d, want %d", msg.Type, MessageTypeMessageStatus)
-			}
+			assert.Equal(t, MessageTypeMessageStatus, msg.Type)
 
 			// Verify session ID
-			if msg.SessionID != tt.sessionID {
-				t.Errorf("SessionID = %d, want %d", msg.SessionID, tt.sessionID)
-			}
+			assert.Equal(t, tt.sessionID, msg.SessionID)
 
 			// Verify payload length (15 bytes per I2CP spec: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4))
-			if len(msg.Payload) != 15 {
-				t.Fatalf("Payload length = %d, want 15", len(msg.Payload))
-			}
+			require.Len(t, msg.Payload, 15, "Payload length")
 
 			// Parse and verify payload fields
 			gotSessionID := binary.BigEndian.Uint16(msg.Payload[0:2])
-			if gotSessionID != tt.sessionID {
-				t.Errorf("Payload SessionID = %d, want %d", gotSessionID, tt.sessionID)
-			}
+			assert.Equal(t, tt.sessionID, gotSessionID, "Payload SessionID")
 
 			gotMessageID := binary.BigEndian.Uint32(msg.Payload[2:6])
-			if gotMessageID != tt.messageID {
-				t.Errorf("MessageID = %d, want %d", gotMessageID, tt.messageID)
-			}
+			assert.Equal(t, tt.messageID, gotMessageID, "MessageID")
 
 			gotStatusCode := msg.Payload[6]
-			if gotStatusCode != tt.statusCode {
-				t.Errorf("StatusCode = %d, want %d", gotStatusCode, tt.statusCode)
-			}
+			assert.Equal(t, tt.statusCode, gotStatusCode, "StatusCode")
 
 			gotMessageSize := binary.BigEndian.Uint32(msg.Payload[7:11])
-			if gotMessageSize != tt.messageSize {
-				t.Errorf("MessageSize = %d, want %d", gotMessageSize, tt.messageSize)
-			}
+			assert.Equal(t, tt.messageSize, gotMessageSize, "MessageSize")
 
 			gotNonce := binary.BigEndian.Uint32(msg.Payload[11:15])
-			if gotNonce != tt.nonce {
-				t.Errorf("Nonce = %d, want %d", gotNonce, tt.nonce)
-			}
+			assert.Equal(t, tt.nonce, gotNonce, "Nonce")
 		})
 	}
 }
@@ -1135,44 +970,32 @@ func TestBuildMessageStatusResponseMarshal(t *testing.T) {
 
 	// Verify session ID in payload (bytes 5-6)
 	gotSessionID := binary.BigEndian.Uint16(data[5:7])
-	if gotSessionID != 100 {
-		t.Errorf("SessionID = %d, want 100", gotSessionID)
-	}
+	assert.Equal(t, uint16(100), gotSessionID, "SessionID")
 
 	// Verify message ID in payload (bytes 7-10)
 	gotMessageID := binary.BigEndian.Uint32(data[7:11])
-	if gotMessageID != 12345 {
-		t.Errorf("MessageID = %d, want 12345", gotMessageID)
-	}
+	assert.Equal(t, uint32(12345), gotMessageID, "MessageID")
 
 	// Verify status code (byte 11)
-	if data[11] != MessageStatusSuccess {
-		t.Errorf("StatusCode = %d, want %d", data[11], MessageStatusSuccess)
-	}
+	assert.Equal(t, MessageStatusSuccess, data[11], "StatusCode")
 }
 
 // TestMessageIDGeneration verifies the Server generates unique message IDs.
 func TestMessageIDGeneration(t *testing.T) {
 	config := DefaultServerConfig()
 	server, err := NewServer(config)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	require.NoError(t, err, "NewServer() error")
 
 	// Generate multiple IDs and verify they're sequential and unique
 	ids := make(map[uint32]bool)
 	for i := 0; i < 100; i++ {
 		id := server.nextMessageID.Add(1)
-		if ids[id] {
-			t.Errorf("Duplicate message ID generated: %d", id)
-		}
+		assert.False(t, ids[id], "Duplicate message ID generated: %d", id)
 		ids[id] = true
 	}
 
 	// Verify we generated 100 unique IDs
-	if len(ids) != 100 {
-		t.Errorf("Generated %d unique IDs, want 100", len(ids))
-	}
+	assert.Len(t, ids, 100, "unique IDs")
 }
 
 // TestMessageStatusPayloadFormat verifies the exact wire format specification.
@@ -1187,40 +1010,23 @@ func TestMessageStatusPayloadFormat(t *testing.T) {
 
 	msg := buildMessageStatusResponse(1, 0x12345678, 0xAB, 0xCDEF0123, 0x9ABCDEF0)
 
-	if len(msg.Payload) != 15 {
-		t.Fatalf("Payload length = %d, want 15", len(msg.Payload))
-	}
+	require.Len(t, msg.Payload, 15, "Payload length")
 
 	// Verify exact byte positions
-	expectedSessionID := uint16(1)
 	gotSessionID := binary.BigEndian.Uint16(msg.Payload[0:2])
-	if gotSessionID != expectedSessionID {
-		t.Errorf("Session ID at bytes 0-1 = 0x%04X, want 0x%04X", gotSessionID, expectedSessionID)
-	}
+	assert.Equal(t, uint16(1), gotSessionID, "Session ID at bytes 0-1")
 
-	expectedMessageID := uint32(0x12345678)
 	gotMessageID := binary.BigEndian.Uint32(msg.Payload[2:6])
-	if gotMessageID != expectedMessageID {
-		t.Errorf("Message ID at bytes 2-5 = 0x%08X, want 0x%08X", gotMessageID, expectedMessageID)
-	}
+	assert.Equal(t, uint32(0x12345678), gotMessageID, "Message ID at bytes 2-5")
 
-	expectedStatus := uint8(0xAB)
 	gotStatus := msg.Payload[6]
-	if gotStatus != expectedStatus {
-		t.Errorf("Status code at byte 6 = 0x%02X, want 0x%02X", gotStatus, expectedStatus)
-	}
+	assert.Equal(t, uint8(0xAB), gotStatus, "Status code at byte 6")
 
-	expectedSize := uint32(0xCDEF0123)
 	gotSize := binary.BigEndian.Uint32(msg.Payload[7:11])
-	if gotSize != expectedSize {
-		t.Errorf("Message size at bytes 7-10 = 0x%08X, want 0x%08X", gotSize, expectedSize)
-	}
+	assert.Equal(t, uint32(0xCDEF0123), gotSize, "Message size at bytes 7-10")
 
-	expectedNonce := uint32(0x9ABCDEF0)
 	gotNonce := binary.BigEndian.Uint32(msg.Payload[11:15])
-	if gotNonce != expectedNonce {
-		t.Errorf("Nonce at bytes 11-14 = 0x%08X, want 0x%08X", gotNonce, expectedNonce)
-	}
+	assert.Equal(t, uint32(0x9ABCDEF0), gotNonce, "Nonce at bytes 11-14")
 }
 
 // TestHandleSendMessage tests the SendMessage handler
@@ -1230,12 +1036,8 @@ func TestHandleSendMessage(t *testing.T) {
 	// Test without outbound pool (should fail)
 	sessionPtr := session
 	response, err := server.handleSendMessage(msg, &sessionPtr)
-	if err == nil {
-		t.Error("Expected error when no outbound pool, got nil")
-	}
-	if response != nil {
-		t.Error("Expected nil response on error")
-	}
+	assert.Error(t, err, "Expected error when no outbound pool")
+	assert.Nil(t, response, "Expected nil response on error")
 
 	// Add outbound pool
 	pool := &tunnel.Pool{}
@@ -1243,32 +1045,20 @@ func TestHandleSendMessage(t *testing.T) {
 
 	// Test with pool (should succeed and return acceptance status)
 	response, err = server.handleSendMessage(msg, &sessionPtr)
-	if err != nil {
-		t.Errorf("Unexpected error with outbound pool: %v", err)
-	}
-	if response == nil {
-		t.Fatal("Expected MessageStatus response, got nil")
-	}
-	if response.Type != MessageTypeMessageStatus {
-		t.Errorf("Expected MessageStatus type, got %d", response.Type)
-	}
+	assert.NoError(t, err, "Unexpected error with outbound pool")
+	require.NotNil(t, response, "Expected MessageStatus response")
+	assert.Equal(t, MessageTypeMessageStatus, response.Type, "Expected MessageStatus type")
 	// Verify it's an acceptance status (status code should be 1)
 	// MessageStatus format: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4) = 15 bytes
-	if len(response.Payload) < 15 {
-		t.Fatalf("MessageStatus payload too short: got %d bytes, expected 15", len(response.Payload))
-	}
+	require.GreaterOrEqual(t, len(response.Payload), 15, "MessageStatus payload too short")
 	// Status byte is at index 6 (after SessionID(2) + MessageID(4))
-	if response.Payload[6] != MessageStatusAccepted {
-		t.Errorf("Expected MessageStatusAccepted (%d), got %d", MessageStatusAccepted, response.Payload[6])
-	}
+	assert.Equal(t, MessageStatusAccepted, response.Payload[6], "Expected MessageStatusAccepted")
 }
 
 // TestHandleSendMessageNoSession tests SendMessage without active session
 func TestHandleSendMessageNoSession(t *testing.T) {
 	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
@@ -1278,22 +1068,16 @@ func TestHandleSendMessageNoSession(t *testing.T) {
 
 	var session *Session
 	_, err = server.handleSendMessage(msg, &session)
-	if err == nil {
-		t.Error("Expected error when no session, got nil")
-	}
+	assert.Error(t, err, "Expected error when no session")
 }
 
 // TestHandleSendMessageInvalidPayload tests SendMessage with malformed payload
 func TestHandleSendMessageInvalidPayload(t *testing.T) {
 	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 
 	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(t, err, "Failed to create session")
 
 	// Add outbound pool
 	pool := &tunnel.Pool{}
@@ -1309,9 +1093,7 @@ func TestHandleSendMessageInvalidPayload(t *testing.T) {
 
 	sessionPtr := session
 	_, err = server.handleSendMessage(msg, &sessionPtr)
-	if err == nil {
-		t.Error("Expected error for invalid payload, got nil")
-	}
+	assert.Error(t, err, "Expected error for invalid payload")
 }
 
 // TestDeliverMessagesToClientIntegration tests the message delivery goroutine
@@ -1323,14 +1105,10 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 
 	// Create server and session
 	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+	require.NoError(t, err, "Failed to create server")
 
 	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
+	require.NoError(t, err, "Failed to create session")
 
 	// Start delivery goroutine
 	server.wg.Add(1)
@@ -1338,9 +1116,7 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 
 	// Queue a message
 	testPayload := []byte("Test incoming message")
-	if err := session.QueueIncomingMessage(testPayload); err != nil {
-		t.Fatalf("Failed to queue message: %v", err)
-	}
+	require.NoError(t, session.QueueIncomingMessage(testPayload), "Failed to queue message")
 
 	// Read MessagePayload from client connection
 	readDone := make(chan struct{})
@@ -1360,35 +1136,23 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 		t.Fatal("Timeout waiting for message delivery")
 	}
 
-	if readErr != nil {
-		t.Fatalf("Failed to read message: %v", readErr)
-	}
+	require.NoError(t, readErr, "Failed to read message")
 
 	// Verify message type
-	if readMsg.Type != MessageTypeMessagePayload {
-		t.Errorf("Message type = %d, want %d", readMsg.Type, MessageTypeMessagePayload)
-	}
+	assert.Equal(t, MessageTypeMessagePayload, readMsg.Type)
 
 	// Verify session ID
-	if readMsg.SessionID != session.ID() {
-		t.Errorf("SessionID = %d, want %d", readMsg.SessionID, session.ID())
-	}
+	assert.Equal(t, session.ID(), readMsg.SessionID)
 
 	// Parse MessagePayload payload
 	msgPayload, err := ParseMessagePayloadPayload(readMsg.Payload)
-	if err != nil {
-		t.Fatalf("Failed to parse MessagePayload: %v", err)
-	}
+	require.NoError(t, err, "Failed to parse MessagePayload")
 
 	// Verify message ID is non-zero
-	if msgPayload.MessageID == 0 {
-		t.Error("Expected non-zero message ID")
-	}
+	assert.NotZero(t, msgPayload.MessageID, "Expected non-zero message ID")
 
 	// Verify payload
-	if !bytes.Equal(msgPayload.Payload, testPayload) {
-		t.Errorf("Payload mismatch: got %v, want %v", msgPayload.Payload, testPayload)
-	}
+	assert.Equal(t, testPayload, msgPayload.Payload, "Payload mismatch")
 
 	// Clean up
 	session.Stop()
@@ -1403,9 +1167,7 @@ func TestDeliverMessagesToClientMultiple(t *testing.T) {
 	numMessages := 5
 	for i := 0; i < numMessages; i++ {
 		payload := []byte{byte(i), byte(i + 1), byte(i + 2)}
-		if err := session.QueueIncomingMessage(payload); err != nil {
-			t.Fatalf("Failed to queue message %d: %v", i, err)
-		}
+		require.NoError(t, session.QueueIncomingMessage(payload), "Failed to queue message %d", i)
 	}
 
 	// Read all messages
@@ -1438,9 +1200,7 @@ func TestDeliverMessagesToClientMultiple(t *testing.T) {
 		t.Fatal("Timeout waiting for messages")
 	}
 
-	if receivedCount != numMessages {
-		t.Errorf("Received %d messages, want %d", receivedCount, numMessages)
-	}
+	assert.Equal(t, numMessages, receivedCount, "Received messages")
 }
 
 // TestDeliverMessagesToClientMessageIDIncrement tests message ID increments
@@ -1450,9 +1210,7 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 	// Queue messages and verify IDs increment
 	numMessages := 3
 	for i := 0; i < numMessages; i++ {
-		if err := session.QueueIncomingMessage([]byte{byte(i)}); err != nil {
-			t.Fatalf("Failed to queue message: %v", err)
-		}
+		require.NoError(t, session.QueueIncomingMessage([]byte{byte(i)}), "Failed to queue message")
 	}
 
 	// Read and check message IDs
@@ -1484,15 +1242,11 @@ func TestDeliverMessagesToClientMessageIDIncrement(t *testing.T) {
 	}
 
 	// Verify IDs increment
-	if len(messageIDs) != numMessages {
-		t.Fatalf("Got %d IDs, want %d", len(messageIDs), numMessages)
-	}
+	require.Len(t, messageIDs, numMessages, "Got wrong number of IDs")
 
 	for i := 0; i < len(messageIDs); i++ {
 		expectedID := uint32(i + 1) // IDs start at 1
-		if messageIDs[i] != expectedID {
-			t.Errorf("Message %d: ID = %d, want %d", i, messageIDs[i], expectedID)
-		}
+		assert.Equal(t, expectedID, messageIDs[i], "Message %d ID", i)
 	}
 }
 
@@ -1537,37 +1291,25 @@ func TestSessionStatusCreatedCode(t *testing.T) {
 	sessionID := uint16(42)
 	msg := buildSessionStatusResponse(sessionID)
 
-	if msg.Type != MessageTypeSessionStatus {
-		t.Errorf("message type = %d, want %d (SessionStatus)", msg.Type, MessageTypeSessionStatus)
-	}
+	assert.Equal(t, MessageTypeSessionStatus, msg.Type, "message type")
 
-	if len(msg.Payload) != 3 {
-		t.Fatalf("payload length = %d, want 3 (SessionID(2) + Status(1))", len(msg.Payload))
-	}
+	require.Len(t, msg.Payload, 3, "payload length")
 
 	// Verify SessionID in payload
 	payloadSessionID := binary.BigEndian.Uint16(msg.Payload[0:2])
-	if payloadSessionID != sessionID {
-		t.Errorf("payload SessionID = %d, want %d", payloadSessionID, sessionID)
-	}
+	assert.Equal(t, sessionID, payloadSessionID, "payload SessionID")
 
 	// Critical: status byte MUST be 1 (Created), not 0 (Destroyed)
-	if msg.Payload[2] != SessionStatusCreated {
-		t.Errorf("status byte = 0x%02x, want 0x%02x (Created)", msg.Payload[2], SessionStatusCreated)
-	}
+	assert.Equal(t, SessionStatusCreated, msg.Payload[2], "status byte")
 }
 
 // createTestServerSession creates a Server and a Session for message parsing tests.
 func createTestServerSession(t *testing.T) (*Server, *Session) {
 	t.Helper()
 	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	require.NoError(t, err, "NewServer() error")
 	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
+	require.NoError(t, err, "CreateSession() error")
 	return server, session
 }
 
@@ -1596,9 +1338,7 @@ func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 	}
 
 	innerBytes, err := sendPayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err, "MarshalBinary() error")
 
 	msg := &Message{
 		Type:      MessageTypeSendMessage,
@@ -1607,17 +1347,10 @@ func TestParseSendMessagePayloadWithSessionIDPrefix(t *testing.T) {
 	}
 
 	parsed, err := server.parseSendMessagePayload(msg, session)
-	if err != nil {
-		t.Fatalf("parseSendMessagePayload() error = %v", err)
-	}
+	require.NoError(t, err, "parseSendMessagePayload() error")
 
-	if parsed.Destination != destHash {
-		t.Errorf("destination hash mismatch:\n  got:  %x\n  want: %x", parsed.Destination, destHash)
-	}
-
-	if string(parsed.Payload) != string(messagePayload) {
-		t.Errorf("payload mismatch:\n  got:  %q\n  want: %q", parsed.Payload, messagePayload)
-	}
+	assert.Equal(t, destHash, parsed.Destination, "destination hash mismatch")
+	assert.Equal(t, string(messagePayload), string(parsed.Payload), "payload mismatch")
 }
 
 // TestParseSendMessagePayloadTooShort verifies that parseSendMessagePayload
@@ -1632,9 +1365,7 @@ func TestParseSendMessagePayloadTooShort(t *testing.T) {
 	}
 
 	_, err := server.parseSendMessagePayload(msg, session)
-	if err == nil {
-		t.Error("Expected error for payload too short for SessionID, got nil")
-	}
+	assert.Error(t, err, "Expected error for payload too short for SessionID")
 }
 
 // TestParseSendMessageExpiresPayloadWithSessionIDPrefix verifies that
@@ -1656,9 +1387,7 @@ func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
 	}
 
 	innerBytes, err := sendPayload.MarshalBinary()
-	if err != nil {
-		t.Fatalf("MarshalBinary() error = %v", err)
-	}
+	require.NoError(t, err, "MarshalBinary() error")
 
 	msg := &Message{
 		Type:      MessageTypeSendMessageExpires,
@@ -1667,40 +1396,22 @@ func TestParseSendMessageExpiresPayloadWithSessionIDPrefix(t *testing.T) {
 	}
 
 	parsed, err := server.parseSendMessageExpiresPayload(msg, session)
-	if err != nil {
-		t.Fatalf("parseSendMessageExpiresPayload() error = %v", err)
-	}
+	require.NoError(t, err, "parseSendMessageExpiresPayload() error")
 
-	if parsed.Destination != destHash {
-		t.Errorf("destination hash mismatch:\n  got:  %x\n  want: %x", parsed.Destination, destHash)
-	}
-
-	// Verify the payload data was correctly extracted
-	if string(parsed.Payload) != string(messagePayload) {
-		t.Errorf("payload mismatch:\n  got:  %q\n  want: %q", parsed.Payload, messagePayload)
-	}
-
-	// Verify nonce and expiration
-	if parsed.Nonce != 12345 {
-		t.Errorf("nonce = %d, want 12345", parsed.Nonce)
-	}
-	if parsed.Expiration != 1700000000000 {
-		t.Errorf("expiration = %d, want 1700000000000", parsed.Expiration)
-	}
+	assert.Equal(t, destHash, parsed.Destination, "destination hash mismatch")
+	assert.Equal(t, string(messagePayload), string(parsed.Payload), "payload mismatch")
+	assert.Equal(t, uint32(12345), parsed.Nonce, "nonce")
+	assert.Equal(t, uint64(1700000000000), parsed.Expiration, "expiration")
 }
 
 // TestParseSendMessageExpiresPayloadTooShort verifies that
 // parseSendMessageExpiresPayload returns an error when the payload is too short.
 func TestParseSendMessageExpiresPayloadTooShort(t *testing.T) {
 	server, err := NewServer(nil)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
+	require.NoError(t, err, "NewServer() error")
 
 	session, err := server.manager.CreateSession(nil, nil)
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
-	}
+	require.NoError(t, err, "CreateSession() error")
 
 	msg := &Message{
 		Type:      MessageTypeSendMessageExpires,
@@ -1709,9 +1420,7 @@ func TestParseSendMessageExpiresPayloadTooShort(t *testing.T) {
 	}
 
 	_, err = server.parseSendMessageExpiresPayload(msg, session)
-	if err == nil {
-		t.Error("Expected error for payload too short for SessionID, got nil")
-	}
+	assert.Error(t, err, "Expected error for payload too short for SessionID")
 }
 
 // TestHandleSendMessageWithWireFormatPayload is an end-to-end test that
@@ -1726,27 +1435,16 @@ func TestHandleSendMessageWithWireFormatPayload(t *testing.T) {
 
 	sessionPtr := session
 	response, err := server.handleSendMessage(msg, &sessionPtr)
-	if err != nil {
-		t.Fatalf("handleSendMessage() error = %v", err)
-	}
+	require.NoError(t, err, "handleSendMessage() error")
+	require.NotNil(t, response, "Expected MessageStatus response")
 
-	if response == nil {
-		t.Fatal("Expected MessageStatus response, got nil")
-	}
-
-	if response.Type != MessageTypeMessageStatus {
-		t.Errorf("response type = %d, want %d (MessageStatus)", response.Type, MessageTypeMessageStatus)
-	}
+	assert.Equal(t, MessageTypeMessageStatus, response.Type, "response type")
 
 	// MessageStatus payload: SessionID(2) + MessageID(4) + Status(1) + Size(4) + Nonce(4) = 15
-	if len(response.Payload) < 15 {
-		t.Fatalf("MessageStatus payload too short: %d bytes, want >= 15", len(response.Payload))
-	}
+	require.GreaterOrEqual(t, len(response.Payload), 15, "MessageStatus payload too short")
 
 	// Status byte at index 6 should be MessageStatusAccepted
-	if response.Payload[6] != MessageStatusAccepted {
-		t.Errorf("message status = %d, want %d (Accepted)", response.Payload[6], MessageStatusAccepted)
-	}
+	assert.Equal(t, MessageStatusAccepted, response.Payload[6], "message status")
 }
 
 // TestResolveDestinationKey_NilResolver verifies that resolveDestinationKey returns
@@ -1759,18 +1457,11 @@ func TestResolveDestinationKey_NilResolver(t *testing.T) {
 	copy(destHash[:], []byte("test-destination-hash-value-here!"))
 
 	key, err := server.resolveDestinationKey(destHash)
-	if err == nil {
-		t.Fatal("expected error when destinationResolver is nil, got nil")
-	}
-	if !errors.Is(err, ErrNoDestinationResolver) {
-		t.Fatalf("expected ErrNoDestinationResolver, got: %v", err)
-	}
+	assert.ErrorIs(t, err, ErrNoDestinationResolver)
 
 	// Verify the returned key is zero (no partial key leakage)
 	var zeroKey [32]byte
-	if key != zeroKey {
-		t.Error("expected zero key on error, got non-zero key")
-	}
+	assert.Equal(t, zeroKey, key, "expected zero key on error")
 }
 
 // TestResolveDestinationKey_WithResolver verifies that resolveDestinationKey
@@ -1792,12 +1483,8 @@ func TestResolveDestinationKey_WithResolver(t *testing.T) {
 	copy(destHash[:], []byte("test-destination-hash-value-here!"))
 
 	key, err := server.resolveDestinationKey(destHash)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if key != expectedKey {
-		t.Errorf("expected key %x, got %x", expectedKey, key)
-	}
+	require.NoError(t, err, "unexpected error")
+	assert.Equal(t, expectedKey, key)
 }
 
 // TestResolveDestinationKey_ResolverError verifies that errors from the resolver
@@ -1814,19 +1501,13 @@ func TestResolveDestinationKey_ResolverError(t *testing.T) {
 	copy(destHash[:], []byte("test-destination-hash-value-here!"))
 
 	_, err := server.resolveDestinationKey(destHash)
-	if err == nil {
-		t.Fatal("expected error from resolver, got nil")
-	}
-	if !errors.Is(err, resolverErr) {
-		t.Fatalf("expected wrapped resolver error, got: %v", err)
-	}
+	require.Error(t, err, "expected error from resolver")
+	assert.ErrorIs(t, err, resolverErr)
 }
 
 // TestErrNoDestinationResolver_ErrorMessage verifies the sentinel error message
 // is descriptive enough for debugging.
 func TestErrNoDestinationResolver_ErrorMessage(t *testing.T) {
 	expected := "no destination resolver configured: cannot resolve encryption key"
-	if ErrNoDestinationResolver.Error() != expected {
-		t.Errorf("unexpected error message: %q", ErrNoDestinationResolver.Error())
-	}
+	assert.Equal(t, expected, ErrNoDestinationResolver.Error())
 }

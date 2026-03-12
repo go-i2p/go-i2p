@@ -134,19 +134,7 @@ func TestRouterInfoKeystore_StoreKeys_SecurePermissions(t *testing.T) {
 	}
 
 	expectedPath := filepath.Join(tmpDir, "test-router.key")
-	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
-		t.Errorf("Key file was not created at expected path: %s", expectedPath)
-	}
-
-	fileInfo, err := os.Stat(expectedPath)
-	if err != nil {
-		t.Fatalf("Failed to stat key file: %v", err)
-	}
-
-	perm := fileInfo.Mode().Perm()
-	if perm != testKeyFilePerms {
-		t.Errorf("Expected file permissions %o, got %o", testKeyFilePerms, perm)
-	}
+	assertKeyFilePermissions(t, expectedPath, testKeyFilePerms)
 }
 
 // TestDirectoryPermissions verifies that keystore directories are created with

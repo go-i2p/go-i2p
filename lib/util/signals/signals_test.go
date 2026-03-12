@@ -326,24 +326,12 @@ func TestDeregisterReloadHandler(t *testing.T) {
 func TestDeregisterInterruptHandler(t *testing.T) {
 	resetSignalHandlers(t, false, true)
 
-	called := false
-	id := RegisterInterruptHandler(func() { called = true })
-
-	DeregisterInterruptHandler(id)
-
-	mu.RLock()
-	count := len(interrupters)
-	mu.RUnlock()
-
-	if count != 0 {
-		t.Errorf("Expected 0 handlers after deregistration, got %d", count)
-	}
-
-	handleInterrupted()
-
-	if called {
-		t.Error("Deregistered handler should not have been called")
-	}
+	assertDeregisterRemovesHandler(t,
+		RegisterInterruptHandler,
+		DeregisterInterruptHandler,
+		handleInterrupted,
+		func() int { mu.RLock(); defer mu.RUnlock(); return len(interrupters) },
+	)
 }
 
 // TestDeregisterInvalidID verifies that deregistering an invalid ID is a no-op.

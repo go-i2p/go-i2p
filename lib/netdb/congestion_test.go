@@ -8,13 +8,35 @@ import (
 	"github.com/go-i2p/go-i2p/lib/config"
 )
 
+// newTestCongestionHash returns a deterministic test hash for cache tests.
+func newTestCongestionHash() common.Hash {
+	var hash common.Hash
+	copy(hash[:], []byte("test-hash-value-12345678901234"))
+	return hash
+}
+
+// assertCacheEntry verifies a cache entry has expected flag, age, and expected size.
+func assertCacheEntry(t *testing.T, cache *CongestionCache, hash common.Hash, expectedFlag config.CongestionFlag, expectedAge time.Time, expectedSize int) {
+	t.Helper()
+	flag, age, found := cache.Get(hash)
+	if !found {
+		t.Error("Expected cache hit")
+	}
+	if flag != expectedFlag {
+		t.Errorf("Expected %q, got %q", expectedFlag, flag)
+	}
+	if !age.Equal(expectedAge) {
+		t.Errorf("Expected age %v, got %v", expectedAge, age)
+	}
+	if size := cache.Size(); size != expectedSize {
+		t.Errorf("Expected size %d, got %d", expectedSize, size)
+	}
+}
+
 // TestCongestionCache_BasicOperations tests cache get/set/delete operations
 func TestCongestionCache_BasicOperations(t *testing.T) {
 	cache := NewCongestionCache()
-
-	// Create test hash
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-value-12345678901234"))
+	hash := newTestCongestionHash()
 
 	// Test get on empty cache
 	flag, _, found := cache.Get(hash)
@@ -25,26 +47,10 @@ func TestCongestionCache_BasicOperations(t *testing.T) {
 		t.Errorf("Expected CongestionFlagNone, got %q", flag)
 	}
 
-	// Test set
+	// Test set and get
 	riAge := time.Now().Add(-5 * time.Minute)
 	cache.Set(hash, config.CongestionFlagD, riAge)
-
-	// Test get after set
-	flag, age, found := cache.Get(hash)
-	if !found {
-		t.Error("Expected cache hit after set")
-	}
-	if flag != config.CongestionFlagD {
-		t.Errorf("Expected CongestionFlagD, got %q", flag)
-	}
-	if !age.Equal(riAge) {
-		t.Errorf("Expected age %v, got %v", riAge, age)
-	}
-
-	// Test size
-	if size := cache.Size(); size != 1 {
-		t.Errorf("Expected size 1, got %d", size)
-	}
+	assertCacheEntry(t, cache, hash, config.CongestionFlagD, riAge, 1)
 
 	// Test delete
 	cache.Delete(hash)
@@ -84,9 +90,7 @@ func TestCongestionCache_Clear(t *testing.T) {
 // TestCongestionCache_Overwrite tests overwriting existing entries
 func TestCongestionCache_Overwrite(t *testing.T) {
 	cache := NewCongestionCache()
-
-	var hash common.Hash
-	copy(hash[:], []byte("test-hash-value-12345678901234"))
+	hash := newTestCongestionHash()
 
 	// Set initial value
 	cache.Set(hash, config.CongestionFlagD, time.Now())
@@ -95,21 +99,7 @@ func TestCongestionCache_Overwrite(t *testing.T) {
 	newAge := time.Now().Add(-10 * time.Minute)
 	cache.Set(hash, config.CongestionFlagE, newAge)
 
-	flag, age, found := cache.Get(hash)
-	if !found {
-		t.Error("Expected cache hit")
-	}
-	if flag != config.CongestionFlagE {
-		t.Errorf("Expected CongestionFlagE after overwrite, got %q", flag)
-	}
-	if !age.Equal(newAge) {
-		t.Errorf("Expected age %v after overwrite, got %v", newAge, age)
-	}
-
-	// Size should still be 1
-	if size := cache.Size(); size != 1 {
-		t.Errorf("Expected size 1, got %d", size)
-	}
+	assertCacheEntry(t, cache, hash, config.CongestionFlagE, newAge, 1)
 }
 
 // TestCongestionStats_CongestedRatio tests the congested ratio calculation

@@ -40,21 +40,6 @@ func TestStoreKeys_SecurePermissions(t *testing.T) {
 		t.Fatalf("StoreKeys failed: %v", err)
 	}
 
-	// Check that the file was created in the correct directory
 	expectedPath := filepath.Join(tmpDir, "private-test.key")
-	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
-		t.Errorf("Key file was not created at expected path: %s", expectedPath)
-	}
-
-	// Check file permissions
-	fileInfo, err := os.Stat(expectedPath)
-	if err != nil {
-		t.Fatalf("Failed to stat key file: %v", err)
-	}
-
-	// Check that permissions are 0o600 (owner read/write only)
-	perm := fileInfo.Mode().Perm()
-	if perm != testKeyFilePerms {
-		t.Errorf("Expected file permissions %o, got %o", testKeyFilePerms, perm)
-	}
+	assertKeyFilePermissions(t, expectedPath, testKeyFilePerms)
 }
