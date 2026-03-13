@@ -137,6 +137,30 @@ func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, message
 	return record
 }
 
+// lookupRoundtrip marshals dl and parses it back, fataling on error.
+func lookupRoundtrip(t *testing.T, dl *DatabaseLookup) DatabaseLookup {
+	t.Helper()
+	data, err := dl.MarshalBinary()
+	require.NoError(t, err)
+	parsed, err := ReadDatabaseLookup(data)
+	require.NoError(t, err)
+	return parsed
+}
+
+// makeHashSeeded creates a common.Hash with h[0] = seed.
+func makeHashSeeded(seed byte) common.Hash {
+	h := common.Hash{}
+	h[0] = seed
+	return h
+}
+
+// makeSessionKeySeeded creates a session_key.SessionKey with k[0] = seed.
+func makeSessionKeySeeded(seed byte) session_key.SessionKey {
+	var k session_key.SessionKey
+	k[0] = seed
+	return k
+}
+
 // marshalUnmarshalLookup marshals a DatabaseLookup, verifies the wire size equals
 // expectedSize, then unmarshals it and returns the parsed result.
 func marshalUnmarshalLookup(t *testing.T, lookup *DatabaseLookup, expectedSize int) DatabaseLookup {

@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// addTestEntries populates db with count entries keyed by byte(i).
+func addTestEntries(db *StdNetDB, count int) {
+	for i := 0; i < count; i++ {
+		var h common.Hash
+		h[0] = byte(i)
+		ri := router_info.RouterInfo{}
+		db.riMutex.Lock()
+		db.RouterInfos[h] = Entry{RouterInfo: &ri}
+		db.riMutex.Unlock()
+	}
+}
+
 // TestStdNetDB_Size_EmptyDatabase tests Size() returns 0 for empty database
 func TestStdNetDB_Size_EmptyDatabase(t *testing.T) {
 	tempDir := t.TempDir()
@@ -42,17 +54,8 @@ func TestStdNetDB_Size_MultipleEntries(t *testing.T) {
 	tempDir := t.TempDir()
 	db := NewStdNetDB(tempDir)
 
-	// Add multiple RouterInfos
 	expectedCount := 5
-	for i := 0; i < expectedCount; i++ {
-		var testHash common.Hash
-		testHash[0] = byte(i)
-
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addTestEntries(db, expectedCount)
 
 	size := db.Size()
 	assert.Equal(t, expectedCount, size, "Database should report correct count of entries")
@@ -99,15 +102,7 @@ func TestStdNetDB_Size_ConcurrentReads(t *testing.T) {
 	tempDir := t.TempDir()
 	db := NewStdNetDB(tempDir)
 
-	// Add some entries
-	for i := 0; i < 10; i++ {
-		var testHash common.Hash
-		testHash[0] = byte(i)
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addTestEntries(db, 10)
 
 	// Perform multiple concurrent reads
 	var wg sync.WaitGroup
@@ -177,17 +172,7 @@ func TestStdNetDB_Size_LargeDatabase(t *testing.T) {
 
 	// Add many entries
 	expectedCount := 1000
-	for i := 0; i < expectedCount; i++ {
-		var testHash common.Hash
-		// Use more bytes to ensure uniqueness
-		testHash[0] = byte(i >> 8)
-		testHash[1] = byte(i & 0xFF)
-
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addRouterInfoEntries(db, expectedCount)
 
 	size := db.Size()
 	assert.Equal(t, expectedCount, size, "Database should handle large number of entries")
@@ -264,15 +249,7 @@ func TestStdNetDB_RecalculateSize_NoOp(t *testing.T) {
 	tempDir := t.TempDir()
 	db := NewStdNetDB(tempDir)
 
-	// Add some entries
-	for i := 0; i < 5; i++ {
-		var testHash common.Hash
-		testHash[0] = byte(i)
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addTestEntries(db, 5)
 
 	// RecalculateSize should not affect Size() result
 	sizeBefore := db.Size()
@@ -289,15 +266,7 @@ func BenchmarkStdNetDB_Size(b *testing.B) {
 	tempDir := b.TempDir()
 	db := NewStdNetDB(tempDir)
 
-	// Add some entries
-	for i := 0; i < 100; i++ {
-		var testHash common.Hash
-		testHash[0] = byte(i)
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addTestEntries(db, 100)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -310,15 +279,7 @@ func BenchmarkStdNetDB_Size_Parallel(b *testing.B) {
 	tempDir := b.TempDir()
 	db := NewStdNetDB(tempDir)
 
-	// Add entries
-	for i := 0; i < 100; i++ {
-		var testHash common.Hash
-		testHash[0] = byte(i)
-		ri := router_info.RouterInfo{}
-		db.riMutex.Lock()
-		db.RouterInfos[testHash] = Entry{RouterInfo: &ri}
-		db.riMutex.Unlock()
-	}
+	addTestEntries(db, 100)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {

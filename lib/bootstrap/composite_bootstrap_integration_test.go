@@ -29,15 +29,7 @@ func TestGetPeers_FileOnlyWithPath(t *testing.T) {
 	cb := newTestCompositeBootstrap(t, "file", "/nonexistent/test-data.su3", nil)
 
 	peers, err := cb.GetPeers(context.Background(), 5)
-	// Should fail because file doesn't exist
-	require.Error(t, err)
-	assert.Nil(t, peers)
-	// Error should be about file bootstrap, not about netDb
-	assert.Contains(t, err.Error(), "file bootstrap failed")
-	// Should NOT contain netDb errors (no fallback occurred)
-	assert.NotContains(t, err.Error(), "netDb")
-	// Should NOT contain "all bootstrap methods" (no auto fallback)
-	assert.NotContains(t, err.Error(), "all bootstrap methods")
+	assertBootstrapError(t, err, peers, "file bootstrap failed", "netDb", "all bootstrap methods")
 }
 
 // TestGetPeers_ReseedOnly verifies that BootstrapType "reseed"
@@ -46,13 +38,7 @@ func TestGetPeers_ReseedOnly(t *testing.T) {
 	cb := newTestCompositeBootstrap(t, "reseed", "/some/file.su3", newTestInvalidReseedServers())
 
 	peers, err := cb.GetPeers(context.Background(), 5)
-	// Should fail because the reseed server is invalid
-	require.Error(t, err)
-	assert.Nil(t, peers)
-	// Error should be about reseed, not file or netDb
-	assert.Contains(t, err.Error(), "reseed bootstrap failed")
-	assert.NotContains(t, err.Error(), "file bootstrap")
-	assert.NotContains(t, err.Error(), "netDb")
+	assertBootstrapError(t, err, peers, "reseed bootstrap failed", "file bootstrap", "netDb")
 }
 
 // TestGetPeers_LocalOnly verifies that BootstrapType "local"

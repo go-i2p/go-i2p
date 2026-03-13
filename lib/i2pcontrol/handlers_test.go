@@ -474,40 +474,19 @@ func TestRouterInfoHandler_IsReseedingField(t *testing.T) {
 }
 
 func BenchmarkEchoHandler(b *testing.B) {
-	handler := NewEchoHandler()
-	params := json.RawMessage(`{"Echo": "test"}`)
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = handler.Handle(ctx, params)
-	}
+	benchmarkRPCHandler(b, NewEchoHandler(), json.RawMessage(`{"Echo": "test"}`))
 }
 
 func BenchmarkGetRateHandler(b *testing.B) {
 	mockStats := &mockRouterAccess{running: true}
 	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-	handler := NewGetRateHandler(statsProvider)
-	params := json.RawMessage(`{"i2p.router.net.bw.inbound.15s": null}`)
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = handler.Handle(ctx, params)
-	}
+	benchmarkRPCHandler(b, NewGetRateHandler(statsProvider), json.RawMessage(`{"i2p.router.net.bw.inbound.15s": null}`))
 }
 
 func BenchmarkRouterInfoHandler(b *testing.B) {
 	mockStats := &mockRouterAccess{running: true}
 	statsProvider := NewRouterStatsProvider(mockStats, "0.1.0")
-	handler := NewRouterInfoHandler(statsProvider)
-	params := json.RawMessage(`{"i2p.router.uptime": null}`)
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = handler.Handle(ctx, params)
-	}
+	benchmarkRPCHandler(b, NewRouterInfoHandler(statsProvider), json.RawMessage(`{"i2p.router.uptime": null}`))
 }
 
 func BenchmarkNetworkSettingHandler(b *testing.B) {
@@ -517,14 +496,7 @@ func BenchmarkNetworkSettingHandler(b *testing.B) {
 			NTCP2Address: "127.0.0.1:12345",
 		},
 	}
-	handler := NewNetworkSettingHandler(stats)
-	params := json.RawMessage(`{"i2p.router.net.ntcp.port": null}`)
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = handler.Handle(ctx, params)
-	}
+	benchmarkRPCHandler(b, NewNetworkSettingHandler(stats), json.RawMessage(`{"i2p.router.net.ntcp.port": null}`))
 }
 
 // Test I2PControl Handler

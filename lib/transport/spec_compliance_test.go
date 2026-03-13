@@ -66,12 +66,7 @@ func TestTransportInterface_RequiredMethods(t *testing.T) {
 // (net.Conn, error) as required for generic transport acceptance.
 func TestTransportInterface_AcceptReturnsNetConn(t *testing.T) {
 	transportType := reflect.TypeOf((*Transport)(nil)).Elem()
-	m, found := transportType.MethodByName("Accept")
-	require.True(t, found, "Accept method must exist")
-
-	// Accept takes no arguments and returns (net.Conn, error)
-	assert.Equal(t, 0, m.Type.NumIn(), "Accept should take no arguments")
-	assert.Equal(t, 2, m.Type.NumOut(), "Accept should return 2 values")
+	m := requireInterfaceMethod(t, transportType, "Accept", 0, 2)
 
 	// First return: net.Conn
 	netConnType := reflect.TypeOf((*net.Conn)(nil)).Elem()
@@ -88,12 +83,7 @@ func TestTransportInterface_AcceptReturnsNetConn(t *testing.T) {
 // GetSession(RouterInfo) returns (TransportSession, error) for session establishment.
 func TestTransportInterface_GetSessionReturnsTransportSession(t *testing.T) {
 	transportType := reflect.TypeOf((*Transport)(nil)).Elem()
-	m, found := transportType.MethodByName("GetSession")
-	require.True(t, found, "GetSession method must exist")
-
-	// GetSession takes RouterInfo and returns (TransportSession, error)
-	assert.Equal(t, 1, m.Type.NumIn(), "GetSession should take 1 argument (RouterInfo)")
-	assert.Equal(t, 2, m.Type.NumOut(), "GetSession should return 2 values")
+	m := requireInterfaceMethod(t, transportType, "GetSession", 1, 2)
 
 	sessionType := reflect.TypeOf((*TransportSession)(nil)).Elem()
 	assert.True(t, m.Type.Out(0).Implements(sessionType),
@@ -104,11 +94,7 @@ func TestTransportInterface_GetSessionReturnsTransportSession(t *testing.T) {
 // Compatible(RouterInfo) returns bool for transport selection.
 func TestTransportInterface_CompatibleUsesRouterInfo(t *testing.T) {
 	transportType := reflect.TypeOf((*Transport)(nil)).Elem()
-	m, found := transportType.MethodByName("Compatible")
-	require.True(t, found, "Compatible method must exist")
-
-	assert.Equal(t, 1, m.Type.NumIn(), "Compatible should take 1 argument")
-	assert.Equal(t, 1, m.Type.NumOut(), "Compatible should return 1 value")
+	m := requireInterfaceMethod(t, transportType, "Compatible", 1, 1)
 	assert.Equal(t, reflect.Bool, m.Type.Out(0).Kind(),
 		"Compatible must return bool")
 }
@@ -147,11 +133,7 @@ func TestTransportSessionInterface_BidirectionalI2NP(t *testing.T) {
 // QueueSendI2NP accepts an i2np.I2NPMessage parameter.
 func TestTransportSessionInterface_QueueSendAcceptsI2NPMessage(t *testing.T) {
 	sessionType := reflect.TypeOf((*TransportSession)(nil)).Elem()
-	m, found := sessionType.MethodByName("QueueSendI2NP")
-	require.True(t, found, "QueueSendI2NP must exist")
-
-	assert.Equal(t, 1, m.Type.NumIn(), "QueueSendI2NP should take 1 argument (I2NPMessage)")
-	assert.Equal(t, 1, m.Type.NumOut(), "QueueSendI2NP should return 1 value (error)")
+	m := requireInterfaceMethod(t, sessionType, "QueueSendI2NP", 1, 1)
 
 	// Verify the parameter type is the I2NP message interface
 	i2npMsgType := reflect.TypeOf((*i2np.I2NPMessage)(nil)).Elem()
@@ -163,11 +145,7 @@ func TestTransportSessionInterface_QueueSendAcceptsI2NPMessage(t *testing.T) {
 // ReadNextI2NP returns an i2np.I2NPMessage for inbound message delivery.
 func TestTransportSessionInterface_ReadNextI2NPReturnsI2NPMessage(t *testing.T) {
 	sessionType := reflect.TypeOf((*TransportSession)(nil)).Elem()
-	m, found := sessionType.MethodByName("ReadNextI2NP")
-	require.True(t, found, "ReadNextI2NP must exist")
-
-	assert.Equal(t, 0, m.Type.NumIn(), "ReadNextI2NP should take no arguments")
-	assert.Equal(t, 2, m.Type.NumOut(), "ReadNextI2NP should return 2 values")
+	m := requireInterfaceMethod(t, sessionType, "ReadNextI2NP", 0, 2)
 
 	// First return: i2np.I2NPMessage
 	i2npMsgType := reflect.TypeOf((*i2np.I2NPMessage)(nil)).Elem()

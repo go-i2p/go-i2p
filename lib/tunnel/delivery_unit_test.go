@@ -7,6 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// buildTunnelDeliveryData builds a delivery instruction byte slice with
+// flg as the flag byte, a fixed tunnel ID [0,0,0,1], and hash appended.
+func buildTunnelDeliveryData(flg byte, hash []byte) []byte {
+	data := []byte{flg}
+	data = append(data, 0x00, 0x00, 0x00, 0x01) // tunnel ID
+	data = append(data, hash...)
+	return data
+}
+
 type DeliveryInstructionsFlags struct {
 	FirstFragment bool
 	Type          byte
@@ -118,17 +127,8 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	assert := assert.New(t)
 
 	// Create delivery instruction with DT_TUNNEL and all-zero hash
-	data := []byte{}
-
-	flag := byte(0x30) // DT_TUNNEL (1 << 5) with hasDelay (1 << 4)
-	data = append(data, flag)
-
-	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}
-	data = append(data, tunnelID...)
-
-	// All-zero hash
 	emptyHash := make([]byte, HASH_SIZE)
-	data = append(data, emptyHash...)
+	data := buildTunnelDeliveryData(0x30, emptyHash) // DT_TUNNEL + hasDelay
 
 	// Delay byte (since flag 0x10 has both DT_TUNNEL and hasDelay bits set)
 	data = append(data, 0x00)
@@ -151,17 +151,8 @@ func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 	assert := assert.New(t)
 
 	// Create delivery instruction with DT_TUNNEL but insufficient data
-	data := []byte{}
-
-	flag := byte(0x20) // DT_TUNNEL (1 << 5) without hasDelay
-	data = append(data, flag)
-
-	tunnelID := []byte{0x00, 0x00, 0x00, 0x01}
-	data = append(data, tunnelID...)
-
-	// Only partial hash (10 bytes instead of 32)
 	partialHash := make([]byte, 10)
-	data = append(data, partialHash...)
+	data := buildTunnelDeliveryData(0x20, partialHash) // DT_TUNNEL without hasDelay
 
 	_, err := NewDeliveryInstructions(data)
 

@@ -7,7 +7,29 @@ import (
 
 	"github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/crypto/types"
+	"github.com/stretchr/testify/require"
 )
+
+// createAndStoreKeyStore creates a new DestinationKeyStore, stores it to a temp
+// dir under name, and returns the key store plus the directory path.
+func createAndStoreKeyStore(t *testing.T, name string) (*DestinationKeyStore, string) {
+	t.Helper()
+	dir := t.TempDir()
+	dks, err := NewDestinationKeyStore()
+	require.NoError(t, err)
+	err = dks.StoreKeys(dir, name)
+	require.NoError(t, err)
+	return dks, dir
+}
+
+// storeAndLoadKeyStore creates, stores, loads and returns the loaded key store.
+func storeAndLoadKeyStore(t *testing.T, name string) (*DestinationKeyStore, string) {
+	t.Helper()
+	_, dir := createAndStoreKeyStore(t, name)
+	loaded, err := LoadDestinationKeyStore(dir, name)
+	require.NoError(t, err)
+	return loaded, dir
+}
 
 // assertNotAllZeros fails the test if all bytes in data are zero.
 func assertNotAllZeros(t testing.TB, data []byte, msg string) {

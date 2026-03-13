@@ -7,7 +7,25 @@ import (
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/common/session_tag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// buildSessionTagsAndAppend creates count session tags with unique marker bytes
+// and appends both tags and raw bytes to the data slice.
+func buildSessionTagsAndAppend(t *testing.T, data []byte, count int, off1, off2 int, val1, val2 byte) ([]byte, []session_tag.SessionTag) {
+	t.Helper()
+	var tags []session_tag.SessionTag
+	for i := 0; i < count; i++ {
+		tag := make([]byte, 32)
+		tag[i+off1] = val1
+		tag[i+off2] = val2
+		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
+		require.NoError(t, err, "Failed to create session tag %d", i)
+		tags = append(tags, sessionTag)
+		data = append(data, tag...)
+	}
+	return data, tags
+}
 
 // assertNoEncryptionFields verifies encryption-related fields are zero/nil.
 func assertNoEncryptionFields(t *testing.T, dl DatabaseLookup) {
@@ -440,21 +458,7 @@ func TestReadDatabaseLookupReplyTagsValidData(t *testing.T) {
 
 	length, tags, err := readDatabaseLookupTags(length, data)
 
-	var expectedReplyTags []session_tag.SessionTag
-	for i := range tags {
-		tag := make([]byte, 32)
-		// random data:
-		tag[i+1] = 0x43
-		tag[i+5] = 0x89
-		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
-		if err != nil {
-			assert.Fail("Failed to create session tag from bytes: %v", err)
-			return
-		}
-		expectedReplyTags = append(expectedReplyTags, sessionTag)
-		// expectedReplyTags = append(expectedReplyTags, session_tag.SessionTag(tag))
-		data = append(data, tag...)
-	}
+	data, expectedReplyTags := buildSessionTagsAndAppend(t, data, tags, 1, 5, 0x43, 0x89)
 
 	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
 	assert.Equal(expectedReplyTags, replyTags)
@@ -482,19 +486,8 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 	expectedTags := 15
 	data = append(data, byte(expectedTags))
 
-	var expectedReplyTags []session_tag.SessionTag
-	for i := range expectedTags {
-		tag := make([]byte, 32)
-		tag[i+3] = 0x22
-		tag[i+13] = 0x11
-		sessionTag, err := session_tag.NewSessionTagFromBytes(tag)
-		if err != nil {
-			assert.Fail("Failed to create session tag from bytes: %v", err)
-			return
-		}
-		expectedReplyTags = append(expectedReplyTags, sessionTag)
-		data = append(data, tag...)
-	}
+	data, expectedReplyTags := buildSessionTagsAndAppend(t, data, expectedTags, 3, 13, 0x22, 0x11)
+
 	databaseLookup, err := ReadDatabaseLookup(data)
 	assertLookupFieldsMatch(t, databaseLookup, exp)
 	assert.Equal(expectedTags, databaseLookup.Tags)

@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +28,18 @@ func newTestCompositeBootstrap(t *testing.T, bootstrapType, reseedFilePath strin
 	cb := NewCompositeBootstrap(cfg)
 	require.NotNil(t, cb)
 	return cb
+}
+
+// assertBootstrapError asserts that err is non-nil, peers is nil, the error
+// message contains contains, and does NOT contain any of notContains.
+func assertBootstrapError(t *testing.T, err error, peers interface{}, contains string, notContains ...string) {
+	t.Helper()
+	require.Error(t, err)
+	assert.Nil(t, peers)
+	assert.Contains(t, err.Error(), contains)
+	for _, nc := range notContains {
+		assert.NotContains(t, err.Error(), nc)
+	}
 }
 
 // assertApplyStrategyNotNil creates a ReseedBootstrap with the given strategy,

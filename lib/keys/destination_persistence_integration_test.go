@@ -121,17 +121,7 @@ func TestLoadOrCreateDestinationKeyStore_StableAcrossMultipleLoads(t *testing.T)
 }
 
 func TestDestinationKeyStore_LoadedKeysAreUsable(t *testing.T) {
-	dir := t.TempDir()
-	name := "usable"
-
-	original, err := NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	err = original.StoreKeys(dir, name)
-	require.NoError(t, err)
-
-	loaded, err := LoadDestinationKeyStore(dir, name)
-	require.NoError(t, err)
+	loaded, _ := storeAndLoadKeyStore(t, "usable")
 
 	sigPub, err := loaded.SigningPublicKey()
 	assert.NoError(t, err)

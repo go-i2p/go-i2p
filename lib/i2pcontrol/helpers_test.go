@@ -11,6 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// benchmarkRPCHandler runs a standard benchmark loop for an RPCHandler.
+func benchmarkRPCHandler(b *testing.B, handler RPCHandler, params json.RawMessage) {
+	b.Helper()
+	ctx := context.Background()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = handler.Handle(ctx, params)
+	}
+}
+
 // newRegistryWithMethod creates a MethodRegistry with a single mockHandler
 // registered under the given name. The handler returns result when invoked.
 func newRegistryWithMethod(t *testing.T, name string, result interface{}) *MethodRegistry {

@@ -75,6 +75,23 @@ func setupTestProvider() {
 	})
 }
 
+// newTestCertPool creates a CertificatePool from mock certificates.
+func newTestCertPool(t *testing.T) *CertificatePool {
+	t.Helper()
+	pool, err := NewCertificatePoolFromFS(createMockCertFS())
+	require.NoError(t, err)
+	return pool
+}
+
+// newTestCertPoolWithSigner creates a pool and returns the first signer ID.
+func newTestCertPoolWithSigner(t *testing.T) (*CertificatePool, string) {
+	t.Helper()
+	pool := newTestCertPool(t)
+	signerIDs := pool.ListSignerIDs()
+	require.NotEmpty(t, signerIDs)
+	return pool, signerIDs[0]
+}
+
 func TestNewCertificatePoolFromFS(t *testing.T) {
 	mockFS := createMockCertFS()
 	pool, err := NewCertificatePoolFromFS(mockFS)
@@ -88,18 +105,14 @@ func TestNewCertificatePoolFromFS(t *testing.T) {
 }
 
 func TestCertificatePool_Count(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool := newTestCertPool(t)
 
 	count := pool.Count()
 	assert.Equal(t, 2, count, "Should have 2 test certificates")
 }
 
 func TestCertificatePool_ListSignerIDs(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool := newTestCertPool(t)
 
 	signerIDs := pool.ListSignerIDs()
 	assert.NotEmpty(t, signerIDs, "Should have signer IDs")
@@ -109,24 +122,15 @@ func TestCertificatePool_ListSignerIDs(t *testing.T) {
 }
 
 func TestCertificatePool_GetCertificate(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool, signerID := newTestCertPoolWithSigner(t)
 
-	// Get a known signer ID from the pool
-	signerIDs := pool.ListSignerIDs()
-	require.NotEmpty(t, signerIDs)
-
-	signerID := signerIDs[0]
 	cert, ok := pool.GetCertificate(signerID)
 	assert.True(t, ok, "Should find certificate for signer ID %s", signerID)
 	assert.NotNil(t, cert, "Certificate should not be nil")
 }
 
 func TestCertificatePool_GetCertificate_NotFound(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool := newTestCertPool(t)
 
 	cert, ok := pool.GetCertificate("nonexistent@example.com")
 	assert.False(t, ok, "Should not find certificate for unknown signer")
@@ -134,38 +138,25 @@ func TestCertificatePool_GetCertificate_NotFound(t *testing.T) {
 }
 
 func TestCertificatePool_HasSigner(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
-
-	signerIDs := pool.ListSignerIDs()
-	require.NotEmpty(t, signerIDs)
+	pool, signerID := newTestCertPoolWithSigner(t)
 
 	// Should find existing signer
-	assert.True(t, pool.HasSigner(signerIDs[0]))
+	assert.True(t, pool.HasSigner(signerID))
 
 	// Should not find non-existent signer
 	assert.False(t, pool.HasSigner("nonexistent@example.com"))
 }
 
 func TestCertificatePool_GetPublicKey(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool, signerID := newTestCertPoolWithSigner(t)
 
-	signerIDs := pool.ListSignerIDs()
-	require.NotEmpty(t, signerIDs)
-
-	signerID := signerIDs[0]
 	pubKey, err := pool.GetPublicKey(signerID)
 	assert.NoError(t, err)
 	assert.NotNil(t, pubKey, "Public key should not be nil")
 }
 
 func TestCertificatePool_GetPublicKey_NotFound(t *testing.T) {
-	mockFS := createMockCertFS()
-	pool, err := NewCertificatePoolFromFS(mockFS)
-	require.NoError(t, err)
+	pool := newTestCertPool(t)
 
 	pubKey, err := pool.GetPublicKey("nonexistent@example.com")
 	assert.Error(t, err, "Should error for unknown signer")

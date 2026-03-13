@@ -1024,11 +1024,7 @@ func TestDatabaseLookup_ReplyEncryption_ElGamalFields(t *testing.T) {
 	dl.Tags = 2
 	dl.ReplyTags = []session_tag.SessionTag{tag1, tag2}
 
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.True(t, parsed.hasEncryption(), "encryption flag must be set")
 	assert.False(t, parsed.IsECIES(), "ECIES flag must NOT be set")
@@ -1060,11 +1056,7 @@ func TestDatabaseLookup_ReplyEncryption_ECIESFields(t *testing.T) {
 	dl.Tags = 3
 	dl.ECIESReplyTags = []session_tag.ECIESSessionTag{eciesTag1, eciesTag2, eciesTag3}
 
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.True(t, parsed.IsECIES(), "ECIES flag must be set")
 	assert.Equal(t, replyKey, parsed.ReplyKey, "reply key must survive roundtrip")
@@ -1104,12 +1096,7 @@ func TestDatabaseLookup_ExcludeList_EmptyList(t *testing.T) {
 	from := common.Hash{}
 
 	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeNormal, nil)
-
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.Equal(t, 0, parsed.Size, "empty exclude list must have size 0")
 	assert.Empty(t, parsed.ExcludedPeers, "empty exclude list must have no peer hashes")
@@ -1122,21 +1109,11 @@ func TestDatabaseLookup_ExcludeList_MultiplePeers(t *testing.T) {
 	from := common.Hash{}
 
 	// Create 3 distinct excluded peers
-	peer1 := common.Hash{}
-	peer1[0] = 0x01
-	peer2 := common.Hash{}
-	peer2[0] = 0x02
-	peer3 := common.Hash{}
-	peer3[0] = 0x03
+	peer1, peer2, peer3 := makeHashSeeded(0x01), makeHashSeeded(0x02), makeHashSeeded(0x03)
 	excludedPeers := []common.Hash{peer1, peer2, peer3}
 
 	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeExploration, excludedPeers)
-
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.Equal(t, 3, parsed.Size, "exclude list must report 3 peers")
 	require.Equal(t, 3, len(parsed.ExcludedPeers))
@@ -1175,11 +1152,7 @@ func TestDatabaseLookup_ExcludeList_Size2BytesBigEndian(t *testing.T) {
 	}
 
 	dl := NewDatabaseLookup(key, from, DatabaseLookupFlagTypeNormal, peers)
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.Equal(t, 256, parsed.Size,
 		"size field must correctly encode 256 in 2-byte big-endian")
@@ -1198,12 +1171,7 @@ func TestDatabaseLookup_ExcludeList_WithTunnelReply(t *testing.T) {
 	peer[0] = 0xBB
 
 	dl := NewDatabaseLookupWithTunnel(key, gateway, tunnelID, DatabaseLookupFlagTypeLS, []common.Hash{peer})
-
-	data, err := dl.MarshalBinary()
-	require.NoError(t, err)
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.NoError(t, err)
+	parsed := lookupRoundtrip(t, dl)
 
 	assert.Equal(t, 1, parsed.Size)
 	require.Equal(t, 1, len(parsed.ExcludedPeers))
@@ -1219,15 +1187,10 @@ func TestDatabaseLookup_ExcludeList_WithTunnelReply(t *testing.T) {
 // TestDatabaseSearchReply_Format_WireLayout verifies the exact wire layout:
 // key(32) + count(1) + peers(count*32) + from(32).
 func TestDatabaseSearchReply_Format_WireLayout(t *testing.T) {
-	key := common.Hash{}
-	key[0] = 0x11
-	from := common.Hash{}
-	from[0] = 0x22
+	key := makeHashSeeded(0x11)
+	from := makeHashSeeded(0x22)
 
-	peer1 := common.Hash{}
-	peer1[0] = 0xAA
-	peer2 := common.Hash{}
-	peer2[0] = 0xBB
+	peer1, peer2 := makeHashSeeded(0xAA), makeHashSeeded(0xBB)
 
 	dsr := NewDatabaseSearchReply(key, from, []common.Hash{peer1, peer2})
 
@@ -1274,12 +1237,7 @@ func TestDatabaseSearchReply_Format_Roundtrip(t *testing.T) {
 	from := common.Hash{}
 	from[15] = 0x99
 
-	peer1 := common.Hash{}
-	peer1[0] = 0x01
-	peer2 := common.Hash{}
-	peer2[0] = 0x02
-	peer3 := common.Hash{}
-	peer3[0] = 0x03
+	peer1, peer2, peer3 := makeHashSeeded(0x01), makeHashSeeded(0x02), makeHashSeeded(0x03)
 
 	original := NewDatabaseSearchReply(key, from, []common.Hash{peer1, peer2, peer3})
 

@@ -10,16 +10,9 @@ import (
 )
 
 func TestDestinationKeyStore_StoreKeys_FilePermissions(t *testing.T) {
-	dir := t.TempDir()
-	name := "test-perm"
+	_, dir := createAndStoreKeyStore(t, "test-perm")
 
-	dks, err := NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	err = dks.StoreKeys(dir, name)
-	require.NoError(t, err)
-
-	filename := filepath.Join(dir, name+".dest.key")
+	filename := filepath.Join(dir, "test-perm"+".dest.key")
 	info, err := os.Stat(filename)
 	require.NoError(t, err)
 
