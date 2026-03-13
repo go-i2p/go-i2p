@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,4 +58,23 @@ func postRPC(t *testing.T, tsURL string, method string, params map[string]interf
 	var rpcResp Response
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 	return rpcResp
+}
+
+// assertPasswordChangeSucceeds invokes handler.Handle with a password-change
+// payload and asserts common post-conditions: no error, authMgr updated,
+// SettingsSaved=true. Returns the result map for callers to add extra checks.
+func assertPasswordChangeSucceeds(t *testing.T, handler *I2PControlHandler, authMgr *mockAuthManager) map[string]interface{} {
+	t.Helper()
+	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	resultMap, ok := result.(map[string]interface{})
+	require.True(t, ok, "result is not map[string]interface{}: %T", result)
+
+	assert.Equal(t, "newpass123", authMgr.password)
+
+	settingsSaved, ok := resultMap["SettingsSaved"].(bool)
+	assert.True(t, ok && settingsSaved, "SettingsSaved should be true")
+	return resultMap
 }

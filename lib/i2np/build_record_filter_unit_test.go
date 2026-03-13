@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -68,44 +69,38 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 // TestForwardBuildReply_UsesIsShortBuild verifies that the isShortBuild
 // parameter is correctly passed through to the build reply forwarder
 // instead of being hardcoded to false.
-func TestForwardBuildReply_UsesIsShortBuild(t *testing.T) {
-	processor, mockForwarder := setupProcessorWithForwarder(t)
+func TestForwardBuildReply_IsShortBuildPropagation(t *testing.T) {
+	tests := []struct {
+		name         string
+		nextTunnel   tunnel.TunnelID
+		isShortBuild bool
+		checkRouter  bool // true = check router calls, false = check tunnel calls
+	}{
+		{"Router_ShortTrue", 0, true, true},
+		{"Router_ShortFalse", 0, false, true},
+		{"Tunnel_ShortTrue", 12345, true, false},
+	}
 
-	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = 0
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor, mockForwarder := setupProcessorWithForwarder(t)
+			record := createTestBuildRequestRecord(t)
+			record.NextTunnel = tt.nextTunnel
 
-	// Forward with isShortBuild=true.
-	err := processor.forwardBuildReply(1, record, []byte("encrypted"), true)
-	assert.NoError(t, err)
+			err := processor.forwardBuildReply(1, record, []byte("encrypted"), tt.isShortBuild)
+			assert.NoError(t, err)
 
-	routerCalls := mockForwarder.getRouterCalls()
-	assert.Len(t, routerCalls, 1)
-	assert.True(t, routerCalls[0].isShortBuild,
-		"isShortBuild=true should be passed to ForwardBuildReplyToRouter")
-
-	// Forward with isShortBuild=false.
-	err = processor.forwardBuildReply(2, record, []byte("encrypted"), false)
-	assert.NoError(t, err)
-
-	routerCalls = mockForwarder.getRouterCalls()
-	assert.Len(t, routerCalls, 2)
-	assert.False(t, routerCalls[1].isShortBuild,
-		"isShortBuild=false should be passed to ForwardBuildReplyToRouter")
-}
-
-// TestForwardBuildReply_TunnelUsesIsShortBuild verifies tunnel forwarding
-// also passes isShortBuild correctly.
-func TestForwardBuildReply_TunnelUsesIsShortBuild(t *testing.T) {
-	processor, mockForwarder := setupProcessorWithForwarder(t)
-
-	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = 12345 // Force tunnel forwarding
-
-	err := processor.forwardBuildReply(1, record, []byte("encrypted"), true)
-	assert.NoError(t, err)
-
-	tunnelCalls := mockForwarder.getTunnelCalls()
-	assert.Len(t, tunnelCalls, 1)
-	assert.True(t, tunnelCalls[0].isShortBuild,
-		"isShortBuild=true should be passed to ForwardBuildReplyThroughTunnel")
+			if tt.checkRouter {
+				routerCalls := mockForwarder.getRouterCalls()
+				assert.Len(t, routerCalls, 1)
+				assert.Equal(t, tt.isShortBuild, routerCalls[0].isShortBuild,
+					"isShortBuild should be passed to ForwardBuildReplyToRouter")
+			} else {
+				tunnelCalls := mockForwarder.getTunnelCalls()
+				assert.Len(t, tunnelCalls, 1)
+				assert.Equal(t, tt.isShortBuild, tunnelCalls[0].isShortBuild,
+					"isShortBuild should be passed to ForwardBuildReplyThroughTunnel")
+			}
+		})
+	}
 }

@@ -187,24 +187,12 @@ func TestShutdownSequence_ContextCancellation(t *testing.T) {
 	router.Start()
 	time.Sleep(100 * time.Millisecond)
 
-	// Create a goroutine that waits on context
 	ctx := getRouterCtx(t, router)
-
-	contextDone := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		close(contextDone)
-	}()
 
 	// Stop and verify context is cancelled
 	router.Stop()
 
-	select {
-	case <-contextDone:
-		// Success - context was cancelled
-	case <-time.After(time.Second):
-		t.Error("Context was not cancelled within timeout")
-	}
+	assertContextCancelled(t, ctx, time.Second)
 }
 
 // TestShutdownSequence_WaitGroupCompletion verifies all goroutines complete

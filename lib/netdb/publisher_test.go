@@ -95,19 +95,8 @@ func TestPublisherCustomConfiguration(t *testing.T) {
 
 // TestPublishLeaseSetWithNoFloodfills tests publishing when no floodfills are available
 func TestPublishLeaseSetWithNoFloodfills(t *testing.T) {
-	db := newMockNetDB() // Empty database
-	config := DefaultPublisherConfig()
-	publisher := NewPublisher(db, nil, nil, nil, config)
-
-	// Create an empty LeaseSet for testing (will use zero values)
-	ls := lease_set.LeaseSet{}
-	hash := common.Hash{1, 2, 3, 4} // Simple test hash
-
-	err := publisher.PublishLeaseSet(hash, ls)
-
-	// Should return error for invalid LeaseSet (prevents panic)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid LeaseSet")
+	// Empty database — verifies error for invalid LeaseSet (prevents panic)
+	assertPublishEmptyLeaseSetFails(t)
 }
 
 // TestPublishRouterInfoWithFloodfills tests publishing RouterInfo to floodfills

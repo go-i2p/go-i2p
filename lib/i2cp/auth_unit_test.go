@@ -143,33 +143,31 @@ func TestServer_RequiresAuthentication_NoAuthenticator(t *testing.T) {
 func TestServer_RequiresAuthentication_WithAuthenticator(t *testing.T) {
 	server := setupServerWithAuth(t)
 
-	// Should NOT require auth (handshake / read-only)
-	assert.False(t, server.requiresAuthentication(MessageTypeGetDate),
-		"GetDate should not require auth")
-	assert.False(t, server.requiresAuthentication(MessageTypeGetBandwidthLimits),
-		"GetBandwidthLimits should not require auth")
-	assert.False(t, server.requiresAuthentication(MessageTypeDisconnect),
-		"Disconnect should not require auth")
-	assert.False(t, server.requiresAuthentication(MessageTypeHostLookup),
-		"HostLookup should not require auth")
+	tests := []struct {
+		name     string
+		msgType  byte
+		expected bool
+	}{
+		{"GetDate", MessageTypeGetDate, false},
+		{"GetBandwidthLimits", MessageTypeGetBandwidthLimits, false},
+		{"Disconnect", MessageTypeDisconnect, false},
+		{"HostLookup", MessageTypeHostLookup, false},
+		{"CreateSession", MessageTypeCreateSession, true},
+		{"DestroySession", MessageTypeDestroySession, true},
+		{"SendMessage", MessageTypeSendMessage, true},
+		{"SendMessageExpires", MessageTypeSendMessageExpires, true},
+		{"CreateLeaseSet", MessageTypeCreateLeaseSet, true},
+		{"CreateLeaseSet2", MessageTypeCreateLeaseSet2, true},
+		{"ReconfigureSession", MessageTypeReconfigureSession, true},
+		{"BlindingInfo", MessageTypeBlindingInfo, true},
+	}
 
-	// SHOULD require auth (session-mutating)
-	assert.True(t, server.requiresAuthentication(MessageTypeCreateSession),
-		"CreateSession should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeDestroySession),
-		"DestroySession should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeSendMessage),
-		"SendMessage should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeSendMessageExpires),
-		"SendMessageExpires should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeCreateLeaseSet),
-		"CreateLeaseSet should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeCreateLeaseSet2),
-		"CreateLeaseSet2 should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeReconfigureSession),
-		"ReconfigureSession should require auth")
-	assert.True(t, server.requiresAuthentication(MessageTypeBlindingInfo),
-		"BlindingInfo should require auth")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, server.requiresAuthentication(tt.msgType),
+				"%s should require auth = %v", tt.name, tt.expected)
+		})
+	}
 }
 
 // TestParseGetDateOptions_ValidMapping tests parsing of a well-formed options mapping.

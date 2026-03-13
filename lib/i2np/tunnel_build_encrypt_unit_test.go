@@ -112,61 +112,68 @@ func TestCreateShortTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 	assert.Error(t, err, "record 1 should NOT decrypt with hop2's key")
 }
 
-// TestCreateTunnelBuildMessage_EncryptsRecords verifies that the TunnelBuild (type 21)
-// message creation path encrypts each build record with fixed 8-record format.
-func TestCreateTunnelBuildMessage_EncryptsRecords(t *testing.T) {
-	hop1RI, hop1KS := createTestHop(t)
+// TestCreateBuildMessage_EncryptsRecords verifies that both TunnelBuild (type 21)
+// and VariableTunnelBuild (type 23) encrypt records correctly.
+func TestCreateBuildMessage_EncryptsRecords(t *testing.T) {
+	tests := []struct {
+		name         string
+		createMsg    func(*TunnelManager, *tunnel.TunnelBuildResult, int) (I2NPMessage, error)
+		expectedLen  int
+		recordOffset int
+		checkPrefix  bool
+		tunnelID     tunnel.TunnelID
+		msgID        int
+	}{
+		{
+			name: "TunnelBuild_Type21_Fixed8Records",
+			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (I2NPMessage, error) {
+				return tm.createTunnelBuildMessage(r, id)
+			},
+			expectedLen:  8 * 528,
+			recordOffset: 0,
+			tunnelID:     tunnel.TunnelID(11111),
+			msgID:        2002,
+		},
+		{
+			name: "VariableTunnelBuild_Type23_CountPrefix",
+			createMsg: func(tm *TunnelManager, r *tunnel.TunnelBuildResult, id int) (I2NPMessage, error) {
+				return tm.createVariableTunnelBuildMessage(r, id)
+			},
+			expectedLen:  1 + 1*528,
+			recordOffset: 1,
+			checkPrefix:  true,
+			tunnelID:     tunnel.TunnelID(11112),
+			msgID:        2003,
+		},
+	}
 
-	rec1 := createTestTunnelRecord(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hop1RI, hop1KS := createTestHop(t)
+			rec1 := createTestTunnelRecord(t)
+			result := makeSingleHopBuildResult(*hop1RI, rec1, tt.tunnelID, false)
 
-	result := makeSingleHopBuildResult(*hop1RI, rec1, tunnel.TunnelID(11111), false)
+			tm := &TunnelManager{}
+			msg, err := tt.createMsg(tm, result, tt.msgID)
+			require.NoError(t, err)
+			require.NotNil(t, msg)
 
-	tm := &TunnelManager{}
-	msg, err := tm.createTunnelBuildMessage(result, 2002)
-	require.NoError(t, err)
-	require.NotNil(t, msg)
+			baseMsg := msg.(*BaseI2NPMessage)
+			data := baseMsg.GetData()
+			require.Equal(t, tt.expectedLen, len(data))
 
-	// TunnelBuild (type 21) data should be 8 * 528 = 4224 bytes (no count prefix)
-	baseMsg := msg.(*BaseI2NPMessage)
-	data := baseMsg.GetData()
-	require.Equal(t, 8*528, len(data), "TunnelBuild data should be 8*528 bytes")
+			if tt.checkPrefix {
+				assert.Equal(t, byte(1), data[0], "First byte should be record count")
+			}
 
-	// Decrypt the first record with hop1's private key
-	var enc1 [528]byte
-	copy(enc1[:], data[0:528])
-	decrypted1, err := DecryptBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
-	require.NoError(t, err, "decryption of record 1 should succeed")
-	assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel)
-	assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID)
-}
-
-// TestCreateVariableTunnelBuildMessage_CountPrefix verifies that the VTB (type 23)
-// message includes a 1-byte count prefix.
-func TestCreateVariableTunnelBuildMessage_CountPrefix(t *testing.T) {
-	hop1RI, hop1KS := createTestHop(t)
-
-	rec1 := createTestTunnelRecord(t)
-
-	result := makeSingleHopBuildResult(*hop1RI, rec1, tunnel.TunnelID(11112), false)
-
-	tm := &TunnelManager{}
-	msg, err := tm.createVariableTunnelBuildMessage(result, 2003)
-	require.NoError(t, err)
-	require.NotNil(t, msg)
-
-	// VTB (type 23) data should be 1 + recordCount*528 bytes
-	baseMsg := msg.(*BaseI2NPMessage)
-	data := baseMsg.GetData()
-	require.Equal(t, 1+1*528, len(data), "VTB data should be 1+N*528 bytes")
-	assert.Equal(t, byte(1), data[0], "First byte should be record count")
-
-	// Decrypt the first record (at offset 1) with hop1's private key
-	var enc1 [528]byte
-	copy(enc1[:], data[1:1+528])
-	decrypted1, err := DecryptBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
-	require.NoError(t, err, "decryption of record 1 should succeed")
-	assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel)
-	assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID)
+			var enc1 [528]byte
+			copy(enc1[:], data[tt.recordOffset:tt.recordOffset+528])
+			decrypted1, err := DecryptBuildRequestRecord(enc1, hop1KS.GetEncryptionPrivateKey().Bytes())
+			require.NoError(t, err, "decryption of record 1 should succeed")
+			assert.Equal(t, rec1.ReceiveTunnel, decrypted1.ReceiveTunnel)
+			assert.Equal(t, rec1.SendMessageID, decrypted1.SendMessageID)
+		})
+	}
 }
 
 // TestSelectBuildMessage_ShortBuild verifies that selectBuildMessage routes

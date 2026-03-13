@@ -262,46 +262,45 @@ func TestHandleRequestSuccess(t *testing.T) {
 }
 
 // TestHandleRequestParseError tests handling invalid JSON
-func TestHandleRequestParseError(t *testing.T) {
-	registry := NewMethodRegistry()
-
-	requestData := []byte(`invalid json`)
-	response := registry.HandleRequest(context.Background(), requestData)
-
-	if response == nil {
-		t.Fatal("Expected response, got nil")
+func TestHandleRequestErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		requestData  []byte
+		expectedCode int
+		expectNilID  bool
+	}{
+		{
+			name:         "ParseError",
+			requestData:  []byte(`invalid json`),
+			expectedCode: ErrCodeParseError,
+			expectNilID:  true,
+		},
+		{
+			name:         "MethodNotFound",
+			requestData:  []byte(`{"jsonrpc":"2.0","id":1,"method":"UnknownMethod"}`),
+			expectedCode: ErrCodeMethodNotFound,
+			expectNilID:  false,
+		},
 	}
 
-	if response.Error == nil {
-		t.Fatal("Expected error response")
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewMethodRegistry()
+			response := registry.HandleRequest(context.Background(), tt.requestData)
 
-	if response.Error.Code != ErrCodeParseError {
-		t.Errorf("error code: got %d, want %d", response.Error.Code, ErrCodeParseError)
-	}
-
-	if response.ID != nil {
-		t.Errorf("Expected null ID for parse error, got %v", response.ID)
-	}
-}
-
-// TestHandleRequestMethodNotFound tests handling unknown method
-func TestHandleRequestMethodNotFound(t *testing.T) {
-	registry := NewMethodRegistry()
-
-	requestData := []byte(`{"jsonrpc":"2.0","id":1,"method":"UnknownMethod"}`)
-	response := registry.HandleRequest(context.Background(), requestData)
-
-	if response == nil {
-		t.Fatal("Expected response, got nil")
-	}
-
-	if response.Error == nil {
-		t.Fatal("Expected error response")
-	}
-
-	if response.Error.Code != ErrCodeMethodNotFound {
-		t.Errorf("error code: got %d, want %d", response.Error.Code, ErrCodeMethodNotFound)
+			if response == nil {
+				t.Fatal("Expected response, got nil")
+			}
+			if response.Error == nil {
+				t.Fatal("Expected error response")
+			}
+			if response.Error.Code != tt.expectedCode {
+				t.Errorf("error code: got %d, want %d", response.Error.Code, tt.expectedCode)
+			}
+			if tt.expectNilID && response.ID != nil {
+				t.Errorf("Expected null ID for %s, got %v", tt.name, response.ID)
+			}
+		})
 	}
 }
 

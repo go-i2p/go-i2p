@@ -54,24 +54,11 @@ func TestRouterContextCancellation(t *testing.T) {
 	// Get context before stopping
 	ctx := getRouterCtx(t, router)
 
-	// Create a goroutine that waits on the context
-	contextDone := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		close(contextDone)
-	}()
-
 	// Stop the router
 	router.Stop()
 
 	// Verify context was cancelled
-	select {
-	case <-contextDone:
-		// Expected: context cancelled
-		assert.Error(t, ctx.Err())
-	case <-time.After(200 * time.Millisecond):
-		t.Error("Context should be cancelled within timeout")
-	}
+	assertContextCancelled(t, ctx, 200*time.Millisecond)
 }
 
 // TestRouterMultipleStartStop tests that Start/Stop can be called multiple times

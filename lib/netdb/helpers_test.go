@@ -379,3 +379,19 @@ func marshalAndProcessSearchReply(t *testing.T, marshalFn func(*i2np.DatabaseSea
 	}
 	return processErr, peerHashes
 }
+
+// assertPublishEmptyLeaseSetFails creates a Publisher with default config and
+// verifies that publishing an empty LeaseSet returns an "invalid LeaseSet" error.
+func assertPublishEmptyLeaseSetFails(t *testing.T) {
+	t.Helper()
+	db := newMockNetDB()
+	config := DefaultPublisherConfig()
+	publisher := NewPublisher(db, nil, nil, nil, config)
+
+	ls := lease_set.LeaseSet{}
+	hash := common.Hash{1, 2, 3, 4}
+
+	err := publisher.PublishLeaseSet(hash, ls)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid LeaseSet")
+}

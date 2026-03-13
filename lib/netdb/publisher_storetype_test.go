@@ -111,17 +111,7 @@ func TestPublishLeaseSetEntry_EmptyEntryReturnsError(t *testing.T) {
 func TestPublishLeaseSet_UsesCorrectStoreType(t *testing.T) {
 	// The PublishLeaseSet method validates the LeaseSet first, so an empty one will fail.
 	// This test verifies the error comes from validation, not from wrong type handling.
-	db := newMockNetDB()
-	config := DefaultPublisherConfig()
-	publisher := NewPublisher(db, nil, nil, nil, config)
-
-	ls := lease_set.LeaseSet{}
-	hash := common.Hash{1, 2, 3, 4}
-
-	err := publisher.PublishLeaseSet(hash, ls)
-	// Should fail at validation, not at store type
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid LeaseSet")
+	assertPublishEmptyLeaseSetFails(t)
 }
 
 // TestStoreTypeConstants verifies that the I2NP store type constants

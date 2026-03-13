@@ -547,19 +547,9 @@ func TestI2PControlHandler_PasswordChange(t *testing.T) {
 	authMgr := &mockAuthManager{password: "oldpass"}
 	cfg := &config.I2PControlConfig{Password: "oldpass"}
 	handler := NewI2PControlHandler(authMgr, cfg)
-	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
 
-	result, err := handler.Handle(context.Background(), params)
-	require.NoError(t, err)
-
-	resultMap, ok := result.(map[string]interface{})
-	require.True(t, ok, "result is not map[string]interface{}: %T", result)
-
-	assert.Equal(t, "newpass123", authMgr.password)
+	resultMap := assertPasswordChangeSucceeds(t, handler, authMgr)
 	assert.Equal(t, "newpass123", cfg.Password)
-
-	settingsSaved, ok := resultMap["SettingsSaved"].(bool)
-	assert.True(t, ok && settingsSaved, "SettingsSaved should be true")
 	assert.Nil(t, resultMap["i2pcontrol.password"])
 }
 
@@ -567,18 +557,8 @@ func TestI2PControlHandler_PasswordChange_NilConfig(t *testing.T) {
 	authMgr := &mockAuthManager{password: "oldpass"}
 	// Passing nil config should not panic — password change still works in auth manager
 	handler := NewI2PControlHandler(authMgr, nil)
-	params := json.RawMessage(`{"i2pcontrol.password": "newpass123"}`)
 
-	result, err := handler.Handle(context.Background(), params)
-	require.NoError(t, err)
-
-	resultMap, ok := result.(map[string]interface{})
-	require.True(t, ok, "result is not map[string]interface{}: %T", result)
-
-	assert.Equal(t, "newpass123", authMgr.password)
-
-	settingsSaved, ok := resultMap["SettingsSaved"].(bool)
-	assert.True(t, ok && settingsSaved, "SettingsSaved should be true")
+	assertPasswordChangeSucceeds(t, handler, authMgr)
 }
 
 func TestI2PControlHandler_InvalidPasswordInputs(t *testing.T) {
