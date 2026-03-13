@@ -153,22 +153,12 @@ func TestNewRouterConfigFromViperSubsystemFields(t *testing.T) {
 
 	cfg := NewRouterConfigFromViper()
 
-	// Tunnel config
-	require.NotNil(t, cfg.Tunnel, "NewRouterConfigFromViper Tunnel config is nil")
+	requireSubsystemConfigsNotNil(t, cfg)
 	assert.Equal(t, defaults.Tunnel.TunnelLength, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
 	assert.Equal(t, defaults.Tunnel.TunnelLifetime, cfg.Tunnel.TunnelLifetime, "Tunnel.TunnelLifetime")
-
-	// Transport config
-	require.NotNil(t, cfg.Transport, "NewRouterConfigFromViper Transport config is nil")
 	assert.Equal(t, defaults.Transport.NTCP2Enabled, cfg.Transport.NTCP2Enabled, "Transport.NTCP2Enabled")
 	assert.Equal(t, defaults.Transport.MaxMessageSize, cfg.Transport.MaxMessageSize, "Transport.MaxMessageSize")
-
-	// Performance config
-	require.NotNil(t, cfg.Performance, "NewRouterConfigFromViper Performance config is nil")
 	assert.Equal(t, defaults.Performance.WorkerPoolSize, cfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
-
-	// Congestion config
-	require.NotNil(t, cfg.Congestion, "NewRouterConfigFromViper Congestion config is nil")
 	assert.Equal(t, defaults.Congestion.DFlagThreshold, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 
@@ -186,13 +176,10 @@ func TestUpdateRouterConfigSubsystemFields(t *testing.T) {
 	UpdateRouterConfig()
 
 	cfg := GetRouterConfig()
-	require.NotNil(t, cfg.Tunnel, "Tunnel config is nil after UpdateRouterConfig")
+	requireSubsystemConfigsNotNil(t, cfg)
 	assert.Equal(t, 2, cfg.Tunnel.TunnelLength, "Tunnel.TunnelLength")
-	require.NotNil(t, cfg.Transport, "Transport config is nil after UpdateRouterConfig")
 	assert.Equal(t, 300, cfg.Transport.NTCP2MaxConnections, "Transport.NTCP2MaxConnections")
-	require.NotNil(t, cfg.Performance, "Performance config is nil after UpdateRouterConfig")
 	assert.Equal(t, 16, cfg.Performance.WorkerPoolSize, "Performance.WorkerPoolSize")
-	require.NotNil(t, cfg.Congestion, "Congestion config is nil after UpdateRouterConfig")
 	assert.Equal(t, 0.80, cfg.Congestion.DFlagThreshold, "Congestion.DFlagThreshold")
 }
 

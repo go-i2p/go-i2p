@@ -1,8 +1,6 @@
 package signals
 
 import (
-	"bytes"
-	"os"
 	"sync"
 	"testing"
 )
@@ -222,38 +220,6 @@ func TestInterruptHandlerPanicRecovery(t *testing.T) {
 	resetSignalHandlers(t, false, true)
 
 	assertPanicRecovery(t, RegisterInterruptHandler, handleInterrupted)
-}
-
-// assertPanicRecovery registers a panicking handler and a follow-up handler via
-// registerFn, invokes triggerFn, and verifies the follow-up ran and stderr output
-// was produced.
-func assertPanicRecovery(t *testing.T, registerFn func(Handler) HandlerID, triggerFn func()) {
-	t.Helper()
-
-	calledAfterPanic := false
-	registerFn(func() { panic("test panic in handler") })
-	registerFn(func() { calledAfterPanic = true })
-
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	triggerFn()
-
-	w.Close()
-	os.Stderr = oldStderr
-	var buf bytes.Buffer
-	b := make([]byte, 1024)
-	n, _ := r.Read(b)
-	buf.Write(b[:n])
-	stderrOutput := buf.String()
-
-	if !calledAfterPanic {
-		t.Error("Handler after panicking handler was not called")
-	}
-	if len(stderrOutput) == 0 {
-		t.Error("Expected panic to be logged to stderr")
-	}
 }
 
 // TestConcurrentRegistration verifies thread-safe registration of handlers.

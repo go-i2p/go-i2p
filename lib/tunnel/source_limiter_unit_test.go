@@ -159,18 +159,7 @@ func TestSourceLimiter_AutoBan(t *testing.T) {
 
 	hash := createTestHash(3)
 
-	// Use the single burst token
-	sl.AllowRequest(hash)
-
-	// Generate more than 10 rejections to trigger auto-ban
-	for i := 0; i < 11; i++ {
-		sl.AllowRequest(hash)
-	}
-
-	// Check that source is now banned
-	if !sl.IsBanned(hash) {
-		t.Error("source should be banned after >10 rejections")
-	}
+	exhaustBurstAndBan(t, sl, hash)
 
 	// Next request should fail with "source_banned"
 	allowed, reason := sl.AllowRequest(hash)
@@ -194,15 +183,7 @@ func TestSourceLimiter_BanExpiry(t *testing.T) {
 
 	hash := createTestHash(4)
 
-	// Use burst and trigger auto-ban
-	sl.AllowRequest(hash)
-	for i := 0; i < 11; i++ {
-		sl.AllowRequest(hash)
-	}
-
-	if !sl.IsBanned(hash) {
-		t.Error("source should be banned")
-	}
+	exhaustBurstAndBan(t, sl, hash)
 
 	// Manually expire the ban
 	sl.mu.Lock()
@@ -304,11 +285,7 @@ func TestSourceLimiter_CleanupPreservesBanned(t *testing.T) {
 
 	hash := createTestHash(6)
 
-	// Trigger ban
-	sl.AllowRequest(hash)
-	for i := 0; i < 11; i++ {
-		sl.AllowRequest(hash)
-	}
+	exhaustBurstAndBan(t, sl, hash)
 
 	// Make entry stale but still banned
 	sl.mu.Lock()

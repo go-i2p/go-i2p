@@ -50,9 +50,7 @@ func TestBootstrapConfig_NewFieldsAccessible(t *testing.T) {
 // TestBootstrapConfigViperRoundTrip verifies that MinReseedServers and
 // ReseedStrategy are populated from viper in NewRouterConfigFromViper.
 func TestBootstrapConfigViperRoundTrip(t *testing.T) {
-	require.NoError(t, InitConfig(), "InitConfig failed")
-
-	cfg := NewRouterConfigFromViper()
+	cfg := initConfigAndNewFromViper(t)
 	require.NotNil(t, cfg.Bootstrap, "Bootstrap config should not be nil")
 
 	assert.Equal(t, DefaultMinReseedServers, cfg.Bootstrap.MinReseedServers, "MinReseedServers")
@@ -62,8 +60,7 @@ func TestBootstrapConfigViperRoundTrip(t *testing.T) {
 // TestBootstrapConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // MinReseedServers and ReseedStrategy from viper.
 func TestBootstrapConfigUpdateRoundTrip(t *testing.T) {
-	require.NoError(t, InitConfig(), "InitConfig failed")
-	UpdateRouterConfig()
+	initConfigAndUpdate(t)
 
 	bootstrap := routerConfigProperties.Bootstrap
 	require.NotNil(t, bootstrap, "Bootstrap config should not be nil after UpdateRouterConfig")

@@ -130,9 +130,7 @@ func TestMaxPayloadForDelivery(t *testing.T) {
 
 // TestSendWithDeliveryEmptyMessage tests error on empty message.
 func TestSendWithDeliveryEmptyMessage(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	result, err := gw.SendWithDelivery(nil, LocalDelivery())
 	assert.Error(t, err)
@@ -146,9 +144,7 @@ func TestSendWithDeliveryEmptyMessage(t *testing.T) {
 
 // TestSendWithDeliveryLocalSmallMessage tests single-fragment local delivery.
 func TestSendWithDeliveryLocalSmallMessage(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	// Small message should produce a single fragment
 	msg := make([]byte, 100)
@@ -165,9 +161,7 @@ func TestSendWithDeliveryLocalSmallMessage(t *testing.T) {
 
 // TestSendWithDeliveryTunnelType tests single-fragment tunnel delivery.
 func TestSendWithDeliveryTunnelType(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_hash_for_tunnel_delivery"))
@@ -183,9 +177,7 @@ func TestSendWithDeliveryTunnelType(t *testing.T) {
 
 // TestSendWithDeliveryRouterType tests single-fragment router delivery.
 func TestSendWithDeliveryRouterType(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("router_hash_for_router_delivery!"))
@@ -201,9 +193,7 @@ func TestSendWithDeliveryRouterType(t *testing.T) {
 
 // TestSendWithDeliveryFragmentedMessage tests fragmentation with a large message.
 func TestSendWithDeliveryFragmentedMessage(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	// Create a message larger than what fits in a single tunnel message.
 	// Actual max payload is ~1003 bytes (1028 - 24 header - 1 zero byte).
@@ -227,9 +217,7 @@ func TestSendWithDeliveryFragmentedMessage(t *testing.T) {
 
 // TestSendWithDeliveryFragmentedTunnel tests fragmentation for DT_TUNNEL delivery.
 func TestSendWithDeliveryFragmentedTunnel(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_hash_for_frag_tunnel_del"))
@@ -247,16 +235,14 @@ func TestSendWithDeliveryFragmentedTunnel(t *testing.T) {
 
 // TestSendWithDeliveryMsgIDIncrement tests that message IDs are unique per fragmented send.
 func TestSendWithDeliveryMsgIDIncrement(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	// Initial msgIDSeq should be 0
 	assert.Equal(t, uint32(0), gw.msgIDSeq)
 
 	// A non-fragmented send should not increment msgIDSeq
 	smallMsg := make([]byte, 100)
-	_, err = gw.SendWithDelivery(smallMsg, LocalDelivery())
+	_, err := gw.SendWithDelivery(smallMsg, LocalDelivery())
 	require.NoError(t, err)
 	assert.Equal(t, uint32(0), gw.msgIDSeq, "Non-fragmented send should not increment msgIDSeq")
 
@@ -274,9 +260,7 @@ func TestSendWithDeliveryMsgIDIncrement(t *testing.T) {
 
 // TestCreateDeliveryInstructionsForConfig tests delivery instructions generation.
 func TestCreateDeliveryInstructionsForConfig(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	t.Run("LOCAL", func(t *testing.T) {
 		di, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
@@ -316,9 +300,7 @@ func TestCreateDeliveryInstructionsForConfig(t *testing.T) {
 
 // TestCreateFollowOnInstructions tests follow-on fragment instruction generation.
 func TestCreateFollowOnInstructions(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	di, err := gw.createFollowOnInstructions(42, 1, false, make([]byte, 100))
 	require.NoError(t, err)
@@ -331,9 +313,7 @@ func TestCreateFollowOnInstructions(t *testing.T) {
 
 // TestSendBackwardCompatibility tests that Send() still works for DT_LOCAL.
 func TestSendBackwardCompatibility(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	msg := make([]byte, 100)
 	result, err := gw.Send(msg)
@@ -346,9 +326,7 @@ func TestSendBackwardCompatibility(t *testing.T) {
 // createDeliveryInstructionsForConfig returns an error instead of silently
 // falling back to DT_LOCAL when serialization fails.
 func TestCreateDeliveryInstructionsForConfigReturnsError(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	// Valid delivery configs should succeed
 	t.Run("ValidLocalDelivery", func(t *testing.T) {
@@ -379,9 +357,7 @@ func TestCreateDeliveryInstructionsForConfigReturnsError(t *testing.T) {
 // TestCreateFollowOnInstructionsReturnsError verifies that
 // createFollowOnInstructions returns an error instead of nil when serialization fails.
 func TestCreateFollowOnInstructionsReturnsError(t *testing.T) {
-	mockEncryptor := &passthroughEncryptor{}
-	gw, err := NewGateway(TunnelID(1), mockEncryptor, TunnelID(2))
-	require.NoError(t, err)
+	gw := createTestGatewayPassthrough(t)
 
 	// Valid follow-on instructions should succeed
 	t.Run("ValidFirstFollowOn", func(t *testing.T) {

@@ -235,17 +235,7 @@ func TestExecuteBuildWithRetry_ProgressiveExclusionGrows(t *testing.T) {
 }
 
 func TestExecuteBuildWithRetry_AllFailures_MarkAllPeers(t *testing.T) {
-	pool := NewTunnelPool(&MockPeerSelector{})
-	defer pool.Stop()
-
-	peerA := makePeerHash(0x10)
-	peerB := makePeerHash(0x20)
-
-	builder := &PeerTrackingBuilder{
-		shouldFail:  true,
-		failedPeers: []common.Hash{peerA, peerB},
-	}
-	pool.SetTunnelBuilder(builder)
+	pool, builder, peers := setupPoolWithFailingPeerBuilder(t, 0x10, 0x20)
 
 	req := BuildTunnelRequest{
 		HopCount:  3,
@@ -257,8 +247,8 @@ func TestExecuteBuildWithRetry_AllFailures_MarkAllPeers(t *testing.T) {
 	assert.Contains(t, err.Error(), "tunnel build failed after 3 retries")
 
 	// All peers should be marked as failed
-	assert.True(t, pool.IsPeerFailed(peerA))
-	assert.True(t, pool.IsPeerFailed(peerB))
+	assert.True(t, pool.IsPeerFailed(peers[0]))
+	assert.True(t, pool.IsPeerFailed(peers[1]))
 
 	// Builder should have been called 3 times (maxRetries)
 	assert.Equal(t, 3, builder.GetBuildCount())
@@ -359,45 +349,25 @@ func TestBuilderInterface_FailureStillReturnsPeerHashes(t *testing.T) {
 }
 
 func TestAttemptBuildTunnels_MarksPeersOnFailure(t *testing.T) {
-	pool := NewTunnelPool(&MockPeerSelector{})
-	defer pool.Stop()
-
-	peerA := makePeerHash(0xAA)
-	peerB := makePeerHash(0xBB)
-
-	builder := &PeerTrackingBuilder{
-		shouldFail:  true,
-		failedPeers: []common.Hash{peerA, peerB},
-	}
-	pool.SetTunnelBuilder(builder)
+	pool, _, peers := setupPoolWithFailingPeerBuilder(t, 0xAA, 0xBB)
 
 	success := pool.attemptBuildTunnels(1)
 	assert.False(t, success)
 
 	// Peers should be marked as failed
-	assert.True(t, pool.IsPeerFailed(peerA))
-	assert.True(t, pool.IsPeerFailed(peerB))
+	assert.True(t, pool.IsPeerFailed(peers[0]))
+	assert.True(t, pool.IsPeerFailed(peers[1]))
 }
 
 func TestRetryTunnelBuild_MarksPeersOnFailure(t *testing.T) {
-	pool := NewTunnelPool(&MockPeerSelector{})
-	defer pool.Stop()
-
-	peerA := makePeerHash(0xDD)
-	peerB := makePeerHash(0xEE)
-
-	builder := &PeerTrackingBuilder{
-		shouldFail:  true,
-		failedPeers: []common.Hash{peerA, peerB},
-	}
-	pool.SetTunnelBuilder(builder)
+	pool, _, peers := setupPoolWithFailingPeerBuilder(t, 0xDD, 0xEE)
 
 	err := pool.RetryTunnelBuild(TunnelID(100), false, 3)
 	assert.Error(t, err)
 
 	// Failed peers from the retry should be marked
-	assert.True(t, pool.IsPeerFailed(peerA))
-	assert.True(t, pool.IsPeerFailed(peerB))
+	assert.True(t, pool.IsPeerFailed(peers[0]))
+	assert.True(t, pool.IsPeerFailed(peers[1]))
 }
 
 func TestRetryTunnelBuild_SuccessDoesNotMarkPeers(t *testing.T) {

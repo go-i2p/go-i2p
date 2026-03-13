@@ -194,17 +194,7 @@ func TestSelectTunnelNoActive(t *testing.T) {
 }
 
 func TestGetPoolStats(t *testing.T) {
-	selector := &MockPeerSelector{}
-	config := PoolConfig{
-		MinTunnels:       4,
-		MaxTunnels:       6,
-		TunnelLifetime:   10 * time.Minute,
-		RebuildThreshold: 2 * time.Minute,
-		HopCount:         3,
-		IsInbound:        false,
-	}
-	pool := NewTunnelPoolWithConfig(selector, config)
-	defer pool.Stop()
+	pool := createTestPoolWithDefaultConfig(t)
 
 	// Add tunnels in various states
 	pool.AddTunnel(&TunnelState{
@@ -286,17 +276,7 @@ func TestCleanupExpiredTunnelsLocked(t *testing.T) {
 }
 
 func TestCountTunnelsLocked(t *testing.T) {
-	selector := &MockPeerSelector{}
-	config := PoolConfig{
-		MinTunnels:       4,
-		MaxTunnels:       6,
-		TunnelLifetime:   10 * time.Minute,
-		RebuildThreshold: 2 * time.Minute,
-		HopCount:         3,
-		IsInbound:        false,
-	}
-	pool := NewTunnelPoolWithConfig(selector, config)
-	defer pool.Stop()
+	pool := createTestPoolWithDefaultConfig(t)
 
 	// Add active tunnel not near expiry
 	pool.AddTunnel(&TunnelState{

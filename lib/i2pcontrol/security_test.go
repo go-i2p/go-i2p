@@ -210,20 +210,7 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 
 	for _, method := range protectedMethods {
 		t.Run(method+"_without_token", func(t *testing.T) {
-			// Request without token
-			reqBody, _ := json.Marshal(map[string]interface{}{
-				"jsonrpc": "2.0",
-				"id":      1,
-				"method":  method,
-				"params":  map[string]interface{}{},
-			})
-
-			resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			var rpcResp Response
-			require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
+			rpcResp := postRPC(t, ts.URL, method, map[string]interface{}{})
 
 			assert.NotNil(t, rpcResp.Error, "Method %s should require authentication", method)
 			if rpcResp.Error != nil {
@@ -238,23 +225,10 @@ func TestAuthorizationRequiredForProtectedMethods(t *testing.T) {
 func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
-	// Authenticate should work without existing token
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "Authenticate",
-		"params": map[string]interface{}{
-			"API":      1,
-			"Password": "testpassword",
-		},
+	rpcResp := postRPC(t, ts.URL, "Authenticate", map[string]interface{}{
+		"API":      1,
+		"Password": "testpassword",
 	})
-
-	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var rpcResp Response
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
 	assert.Nil(t, rpcResp.Error, "Authenticate should not require existing token")
 
@@ -268,22 +242,9 @@ func TestAuthorizationAuthenticateMethodNoTokenRequired(t *testing.T) {
 func TestAuthorizationInvalidTokenRejected(t *testing.T) {
 	_, ts := setupAuthTestServer(t)
 
-	// Request with invalid token
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "RouterInfo",
-		"params": map[string]interface{}{
-			"Token": "invalid_fake_token_12345",
-		},
+	rpcResp := postRPC(t, ts.URL, "RouterInfo", map[string]interface{}{
+		"Token": "invalid_fake_token_12345",
 	})
-
-	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var rpcResp Response
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 
 	assert.NotNil(t, rpcResp.Error, "Expected error for invalid token")
 	if rpcResp.Error != nil {

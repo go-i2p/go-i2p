@@ -14,13 +14,7 @@ import (
 // TestGetPeers_FileOnlyWithoutPath verifies that BootstrapType "file"
 // without a configured ReseedFilePath returns a clear error.
 func TestGetPeers_FileOnlyWithoutPath(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "file",
-		ReseedFilePath:   "",
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "file", "", nil)
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	require.Error(t, err)
@@ -32,13 +26,7 @@ func TestGetPeers_FileOnlyWithoutPath(t *testing.T) {
 // dispatches to file-only bootstrap (which will fail because the file
 // doesn't exist, but it should NOT fall back to reseed or local).
 func TestGetPeers_FileOnlyWithPath(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "file",
-		ReseedFilePath:   "/nonexistent/test-data.su3",
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "file", "/nonexistent/test-data.su3", nil)
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	// Should fail because file doesn't exist
@@ -55,14 +43,7 @@ func TestGetPeers_FileOnlyWithPath(t *testing.T) {
 // TestGetPeers_ReseedOnly verifies that BootstrapType "reseed"
 // only attempts reseed bootstrap. The error should be reseed-specific.
 func TestGetPeers_ReseedOnly(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "reseed",
-		ReseedFilePath:   "/some/file.su3",
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "reseed", "/some/file.su3", newTestInvalidReseedServers())
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	// Should fail because the reseed server is invalid
@@ -77,14 +58,7 @@ func TestGetPeers_ReseedOnly(t *testing.T) {
 // TestGetPeers_LocalOnly verifies that BootstrapType "local"
 // only attempts local netDb bootstrap.
 func TestGetPeers_LocalOnly(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "local",
-		ReseedFilePath:   "/some/file.su3",
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "local", "/some/file.su3", newTestInvalidReseedServers())
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	// Local netDb may succeed (returns empty) or fail depending on environment.
@@ -101,14 +75,7 @@ func TestGetPeers_LocalOnly(t *testing.T) {
 // TestGetPeers_AutoFallback verifies that BootstrapType "auto"
 // tries all methods and produces an aggregated error when all fail.
 func TestGetPeers_AutoFallback(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "auto",
-		ReseedFilePath:   testNonExistentFilePath,
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "auto", testNonExistentFilePath, newTestInvalidReseedServers())
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	if err != nil {
@@ -125,25 +92,12 @@ func TestGetPeers_AutoFallback(t *testing.T) {
 // TestGetPeers_EmptyTypeDefaultsToAuto verifies that an empty
 // BootstrapType defaults to "auto" (the full fallback chain).
 func TestGetPeers_EmptyTypeDefaultsToAuto(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "",
-		ReseedFilePath:   testNonExistentFilePath,
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "", testNonExistentFilePath, newTestInvalidReseedServers())
 
 	// Empty type should behave identically to "auto"
 	peersEmpty, errEmpty := cb.GetPeers(context.Background(), 5)
 
-	cfgAuto := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "auto",
-		ReseedFilePath:   testNonExistentFilePath,
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cbAuto := NewCompositeBootstrap(cfgAuto)
+	cbAuto := newTestCompositeBootstrap(t, "auto", testNonExistentFilePath, newTestInvalidReseedServers())
 	peersAuto, errAuto := cbAuto.GetPeers(context.Background(), 5)
 
 	// Both should either succeed or fail
@@ -159,14 +113,7 @@ func TestGetPeers_EmptyTypeDefaultsToAuto(t *testing.T) {
 // TestGetPeers_UnknownTypeDefaultsToAuto verifies that an unrecognized
 // BootstrapType falls through to auto mode.
 func TestGetPeers_UnknownTypeDefaultsToAuto(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "unknown_type",
-		ReseedFilePath:   testNonExistentFilePath,
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "unknown_type", testNonExistentFilePath, newTestInvalidReseedServers())
 
 	peers, err := cb.GetPeers(context.Background(), 5)
 	if err != nil {
@@ -181,13 +128,7 @@ func TestGetPeers_UnknownTypeDefaultsToAuto(t *testing.T) {
 // TestGetPeers_ContextCancellation verifies that GetPeers respects
 // context cancellation regardless of bootstrap type.
 func TestGetPeers_ContextCancellation(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		LowPeerThreshold: testLowPeerThreshold,
-		BootstrapType:    "auto",
-		ReseedServers:    newTestInvalidReseedServers(),
-	}
-	cb := NewCompositeBootstrap(cfg)
-	require.NotNil(t, cb)
+	cb := newTestCompositeBootstrap(t, "auto", "", newTestInvalidReseedServers())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately

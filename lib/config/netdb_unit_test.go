@@ -29,9 +29,7 @@ func TestDefaultNetDbConfig(t *testing.T) {
 // TestNetDbConfigViperRoundTrip verifies that NetDbConfig fields are populated
 // from viper when using NewRouterConfigFromViper.
 func TestNetDbConfigViperRoundTrip(t *testing.T) {
-	require.NoError(t, InitConfig(), "InitConfig failed")
-
-	cfg := NewRouterConfigFromViper()
+	cfg := initConfigAndNewFromViper(t)
 	require.NotNil(t, cfg.NetDb, "NetDb config should not be nil")
 
 	assert.NotZero(t, cfg.NetDb.MaxRouterInfos, "MaxRouterInfos should be populated from viper defaults")
@@ -44,8 +42,7 @@ func TestNetDbConfigViperRoundTrip(t *testing.T) {
 // TestNetDbConfigUpdateRoundTrip verifies that UpdateRouterConfig populates
 // all NetDbConfig fields from viper.
 func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
-	require.NoError(t, InitConfig(), "InitConfig failed")
-	UpdateRouterConfig()
+	initConfigAndUpdate(t)
 
 	netdb := routerConfigProperties.NetDb
 	require.NotNil(t, netdb, "NetDb config should not be nil after UpdateRouterConfig")

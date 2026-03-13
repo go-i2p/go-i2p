@@ -294,39 +294,12 @@ func TestReseedResult_WithError(t *testing.T) {
 
 // TestApplyStrategy_DefaultsToUnion verifies empty strategy defaults to union.
 func TestApplyStrategy_DefaultsToUnion(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		ReseedStrategy: "", // Empty should default to union
-	}
-	rb := &ReseedBootstrap{config: cfg}
-
-	// With empty strategy, should use union (returns all unique)
-	results := []ReseedResult{
-		{ServerURL: "https://s1/", RouterInfos: make([]router_info.RouterInfo, 3)},
-	}
-
-	// This should not panic and should return results
-	combined := rb.applyStrategy(results)
-	if combined == nil {
-		t.Error("applyStrategy with empty strategy should not return nil")
-	}
+	assertApplyStrategyNotNil(t, "", "applyStrategy with empty strategy should not return nil")
 }
 
 // TestApplyStrategy_InvalidStrategy verifies invalid strategy defaults to union.
 func TestApplyStrategy_InvalidStrategy(t *testing.T) {
-	cfg := &config.BootstrapConfig{
-		ReseedStrategy: "invalid_strategy",
-	}
-	rb := &ReseedBootstrap{config: cfg}
-
-	results := []ReseedResult{
-		{ServerURL: "https://s1/", RouterInfos: make([]router_info.RouterInfo, 3)},
-	}
-
-	// Invalid strategy should default to union
-	combined := rb.applyStrategy(results)
-	if combined == nil {
-		t.Error("applyStrategy with invalid strategy should default to union")
-	}
+	assertApplyStrategyNotNil(t, "invalid_strategy", "applyStrategy with invalid strategy should default to union")
 }
 
 // TestUnionStrategy_Empty tests union strategy with no results.

@@ -168,29 +168,12 @@ func TestWaitForInitialization(t *testing.T) {
 }
 
 func TestQueryTime(t *testing.T) {
-	defaultClient := &DefaultNTPClient{}
-	timestamper := NewRouterTimestamper(defaultClient)
-	listener := &MockListener{}
-	timestamper.AddListener(listener)
+	timestamper, listener := setupTimestamperWithMock(t, 1*time.Second)
 
-	// Mock injection
-	mockNTPClient := &MockNTPClient{
-		ClockOffset: 1 * time.Second,
-	}
-	timestamper.ntpClient = mockNTPClient
-
-	servers := []string{"pool.ntp.org"}
-	success := timestamper.queryTime(servers, 5*time.Second, false)
-	if !success {
-		t.Error("Expected queryTime to succeed")
-	}
+	queryTimeAndAssertSuccess(t, timestamper)
 
 	// Ensure that the listener received an update
-	listener.mu.Lock()
-	defer listener.mu.Unlock()
-	if len(listener.updates) == 0 {
-		t.Error("Expected listener to receive time update")
-	}
+	assertListenerGotUpdates(t, listener)
 }
 
 func TestUpdateConfig(t *testing.T) {
@@ -214,16 +197,8 @@ func TestUpdateConfig(t *testing.T) {
 // TestStratumPropagation verifies that the actual NTP stratum from the server
 // response is propagated to listeners (BUG #2 fix).
 func TestStratumPropagation(t *testing.T) {
-	listener := &MockListener{}
-	mockClient := &MockNTPClient{ClockOffset: 100 * time.Millisecond}
-	timestamper := NewRouterTimestamper(mockClient)
-	timestamper.AddListener(listener)
-
-	servers := []string{"pool.ntp.org"}
-	success := timestamper.queryTime(servers, 5*time.Second, false)
-	if !success {
-		t.Fatal("Expected queryTime to succeed")
-	}
+	timestamper, listener := setupTimestamperWithMock(t, 100*time.Millisecond)
+	queryTimeAndAssertSuccess(t, timestamper)
 
 	listener.mu.Lock()
 	defer listener.mu.Unlock()
@@ -239,23 +214,11 @@ func TestStratumPropagation(t *testing.T) {
 // TestLargeClockOffsetAccepted verifies that the SNTP subsystem can correct
 // clock offsets larger than 10 seconds (BUG #1 fix).
 func TestLargeClockOffsetAccepted(t *testing.T) {
-	listener := &MockListener{}
-	// Simulate a 30-second clock offset — previously rejected
-	mockClient := &MockNTPClient{ClockOffset: 30 * time.Second}
-	timestamper := NewRouterTimestamper(mockClient)
-	timestamper.AddListener(listener)
+	timestamper, listener := setupTimestamperWithMock(t, 30*time.Second)
 
-	servers := []string{"pool.ntp.org"}
-	success := timestamper.queryTime(servers, 5*time.Second, false)
-	if !success {
-		t.Error("Expected queryTime to succeed with 30s clock offset")
-	}
+	queryTimeAndAssertSuccess(t, timestamper)
 
-	listener.mu.Lock()
-	defer listener.mu.Unlock()
-	if len(listener.updates) == 0 {
-		t.Error("Expected listener to receive time update for 30s offset")
-	}
+	assertListenerGotUpdates(t, listener)
 }
 
 // TestRetryExcludesFailedServer verifies that retry logic does not re-query

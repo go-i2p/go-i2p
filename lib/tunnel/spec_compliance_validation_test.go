@@ -77,16 +77,7 @@ func TestTunnelMessages_FixedSize_EncryptedDataIs1008Bytes(t *testing.T) {
 
 func TestTunnelMessages_FixedSize_GatewayProduces1028ByteOutput(t *testing.T) {
 	// Gateway.buildTunnelMessage must produce exactly 1028 bytes
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
-
-	// Create small delivery instructions and message
-	di := []byte{0x00, 0x00, 0x05} // DT_LOCAL, unfragmented, size=5
-	payload := []byte{1, 2, 3, 4, 5}
-
-	msg, err := gw.buildTunnelMessage(di, payload)
-	require.NoError(t, err)
+	_, msg := buildSpecGatewayMsg(t)
 	assert.Equal(t, 1028, len(msg), "Gateway.buildTunnelMessage must produce exactly 1028 bytes")
 }
 
@@ -130,15 +121,7 @@ func TestTunnelMessages_FixedSize_MaxTunnelPayloadConstant(t *testing.T) {
 func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 	// Per I2P spec: Checksum = first 4 bytes of SHA256(data_after_zero_byte + IV)
 	// "The checksum does NOT cover the padding or the zero byte."
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
-
-	di := []byte{0x00, 0x00, 0x05}
-	payload := []byte{1, 2, 3, 4, 5}
-
-	msg, err := gw.buildTunnelMessage(di, payload)
-	require.NoError(t, err)
+	_, msg := buildSpecGatewayMsg(t)
 
 	// Extract components
 	iv := msg[4:20]
@@ -170,15 +153,7 @@ func TestTunnelMessages_FixedSize_ChecksumIsSHA256First4Bytes(t *testing.T) {
 
 func TestTunnelMessages_FixedSize_NonZeroPadding(t *testing.T) {
 	// I2P spec requires padding bytes to be non-zero
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
-
-	di := []byte{0x00, 0x00, 0x05}
-	payload := []byte{1, 2, 3, 4, 5}
-
-	msg, err := gw.buildTunnelMessage(di, payload)
-	require.NoError(t, err)
+	_, msg := buildSpecGatewayMsg(t)
 
 	// Find the zero separator byte
 	paddingStart := 24 // after tunnelID(4) + IV(16) + checksum(4)
@@ -720,9 +695,7 @@ func TestTunnelMessages_MessageID_NotPresentWhenUnfragmented(t *testing.T) {
 
 func TestTunnelMessages_MessageID_GatewayUsesMonotonicCounter(t *testing.T) {
 	// Gateway uses atomic counter for message IDs during fragmentation
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
+	gw := createSpecGateway(t)
 
 	// The msgIDSeq is an atomic uint32 counter starting at 0
 	// Each call to sendFragmented increments it

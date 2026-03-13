@@ -37,18 +37,8 @@ func TestNewMethodRegistry(t *testing.T) {
 
 // TestRegister tests method registration
 func TestRegister(t *testing.T) {
-	registry := NewMethodRegistry()
-	handler := &mockHandler{result: "test"}
-
-	registry.Register("TestMethod", handler)
-
-	if !registry.IsRegistered("TestMethod") {
-		t.Error("Method should be registered")
-	}
-
-	if registry.MethodCount() != 1 {
-		t.Errorf("method count: got %d, want 1", registry.MethodCount())
-	}
+	registry := newRegistryWithMethod(t, "TestMethod", "test")
+	assertMethodState(t, registry, "TestMethod", true, 1)
 }
 
 // TestRegisterReplace tests replacing an existing handler
@@ -77,19 +67,9 @@ func TestRegisterReplace(t *testing.T) {
 
 // TestUnregister tests method unregistration
 func TestUnregister(t *testing.T) {
-	registry := NewMethodRegistry()
-	handler := &mockHandler{result: "test"}
-
-	registry.Register("TestMethod", handler)
+	registry := newRegistryWithMethod(t, "TestMethod", "test")
 	registry.Unregister("TestMethod")
-
-	if registry.IsRegistered("TestMethod") {
-		t.Error("Method should not be registered after unregister")
-	}
-
-	if registry.MethodCount() != 0 {
-		t.Errorf("method count: got %d, want 0", registry.MethodCount())
-	}
+	assertMethodState(t, registry, "TestMethod", false, 0)
 }
 
 // TestUnregisterNonexistent tests unregistering non-existent method
@@ -158,19 +138,15 @@ func TestListMethods(t *testing.T) {
 
 // TestDispatchSuccess tests successful method dispatch
 func TestDispatchSuccess(t *testing.T) {
-	registry := NewMethodRegistry()
-	expectedResult := "test_result"
-	handler := &mockHandler{result: expectedResult}
-
-	registry.Register("TestMethod", handler)
+	registry := newRegistryWithMethod(t, "TestMethod", "test_result")
 
 	result, err := registry.Dispatch(context.Background(), "TestMethod", nil)
 	if err != nil {
 		t.Fatalf("Dispatch failed: %v", err)
 	}
 
-	if result != expectedResult {
-		t.Errorf("result: got %v, want %v", result, expectedResult)
+	if result != "test_result" {
+		t.Errorf("result: got %v, want %v", result, "test_result")
 	}
 }
 

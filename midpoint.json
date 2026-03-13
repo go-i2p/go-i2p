@@ -1,0 +1,2121 @@
+{
+  "metadata": {
+    "repository": "",
+    "generated_at": "0001-01-01T00:00:00Z",
+    "analysis_time": 0,
+    "files_processed": 0,
+    "tool_version": "",
+    "go_version": ""
+  },
+  "overview": {
+    "total_lines_of_code": 0,
+    "total_functions": 0,
+    "total_methods": 0,
+    "total_structs": 0,
+    "total_interfaces": 0,
+    "total_packages": 0,
+    "total_files": 0
+  },
+  "functions": null,
+  "structs": null,
+  "interfaces": null,
+  "packages": null,
+  "circular_dependencies": null,
+  "patterns": {
+    "design_patterns": {
+      "singleton": null,
+      "factory": null,
+      "builder": null,
+      "observer": null,
+      "strategy": null
+    },
+    "concurrency_patterns": {
+      "worker_pools": null,
+      "pipelines": null,
+      "fan_out": null,
+      "fan_in": null,
+      "semaphores": null,
+      "goroutines": {
+        "total_count": 0,
+        "anonymous_count": 0,
+        "named_count": 0,
+        "potential_leaks": null,
+        "instances": null
+      },
+      "channels": {
+        "total_count": 0,
+        "buffered_count": 0,
+        "unbuffered_count": 0,
+        "directional_count": 0,
+        "instances": null
+      },
+      "sync_primitives": {
+        "mutexes": null,
+        "rw_mutexes": null,
+        "wait_groups": null,
+        "once": null,
+        "cond": null,
+        "atomic": null
+      }
+    },
+    "anti_patterns": {
+      "god_objects": null,
+      "long_methods": null,
+      "deep_nesting": null,
+      "magic_numbers": null
+    }
+  },
+  "complexity": {
+    "average_function_complexity": 0,
+    "average_struct_complexity": 0,
+    "highest_complexity": null,
+    "complexity_distribution": null
+  },
+  "documentation": {
+    "coverage": {
+      "packages": 0,
+      "functions": 0,
+      "types": 0,
+      "methods": 0,
+      "overall": 0
+    },
+    "quality": {
+      "average_length": 0,
+      "code_examples": 0,
+      "inline_comments": 0,
+      "block_comments": 0,
+      "quality_score": 0
+    },
+    "todo_comments": null,
+    "fixme_comments": null,
+    "hack_comments": null,
+    "bug_comments": null,
+    "xxx_comments": null,
+    "deprecated_comments": null,
+    "note_comments": null,
+    "stale_annotations": 0,
+    "annotations_by_category": null
+  },
+  "generics": {
+    "type_parameters": {
+      "count": 0,
+      "constraints": null,
+      "complexity": null
+    },
+    "instantiations": {
+      "functions": null,
+      "types": null,
+      "methods": null
+    },
+    "constraint_usage": null,
+    "complexity_score": 0
+  },
+  "duplication": {
+    "clone_pairs": 99,
+    "duplicated_lines": 1098,
+    "duplication_ratio": 0.014946909882929486,
+    "largest_clone_size": 49,
+    "clones": [
+      {
+        "hash": "48cb98a9bdf879ab",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 320,
+            "end_line": 325,
+            "node_count": 56
+          },
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 342,
+            "end_line": 347,
+            "node_count": 56
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "9a4a56ff19eeabc5",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/build_record_crypto_unit_test.go",
+            "start_line": 48,
+            "end_line": 53,
+            "node_count": 42
+          },
+          {
+            "file": "lib/i2np/build_record_crypto_unit_test.go",
+            "start_line": 408,
+            "end_line": 416,
+            "node_count": 42
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "b45ac0ce6474f5f7",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/peer_tracker_test.go",
+            "start_line": 100,
+            "end_line": 105,
+            "node_count": 39
+          },
+          {
+            "file": "lib/netdb/peer_tracker_test.go",
+            "start_line": 225,
+            "end_line": 230,
+            "node_count": 39
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "b4be170edce026bc",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1143,
+            "end_line": 1148,
+            "node_count": 33
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1240,
+            "end_line": 1246,
+            "node_count": 33
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1292,
+            "end_line": 1298,
+            "node_count": 33
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "d76936c7035f262b",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 74,
+            "end_line": 79,
+            "node_count": 58
+          },
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 136,
+            "end_line": 141,
+            "node_count": 58
+          },
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 196,
+            "end_line": 201,
+            "node_count": 58
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "ec1c8c6fbe1d603c",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/helpers_test.go",
+            "start_line": 62,
+            "end_line": 67,
+            "node_count": 50
+          },
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 183,
+            "end_line": 189,
+            "node_count": 50
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "fef89bba01d99e29",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/tunnel/gateway_delivery_unit_test.go",
+            "start_line": 170,
+            "end_line": 175,
+            "node_count": 48
+          },
+          {
+            "file": "lib/tunnel/gateway_delivery_unit_test.go",
+            "start_line": 186,
+            "end_line": 191,
+            "node_count": 48
+          }
+        ],
+        "line_count": 6
+      },
+      {
+        "hash": "0665f2272fd732e6",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/reseed/certificate_test.go",
+            "start_line": 127,
+            "end_line": 133,
+            "node_count": 41
+          },
+          {
+            "file": "lib/netdb/reseed/certificate_test.go",
+            "start_line": 166,
+            "end_line": 172,
+            "node_count": 41
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "1151352c6c4dd063",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 48,
+            "end_line": 54,
+            "node_count": 46
+          },
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 104,
+            "end_line": 109,
+            "node_count": 46
+          },
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 269,
+            "end_line": 274,
+            "node_count": 46
+          },
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 294,
+            "end_line": 299,
+            "node_count": 46
+          },
+          {
+            "file": "lib/netdb/size_test.go",
+            "start_line": 315,
+            "end_line": 320,
+            "node_count": 46
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "17b3466b2bab0753",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/tunnel/endpoint_forwarding_unit_test.go",
+            "start_line": 111,
+            "end_line": 117,
+            "node_count": 61
+          },
+          {
+            "file": "lib/tunnel/endpoint_forwarding_unit_test.go",
+            "start_line": 245,
+            "end_line": 251,
+            "node_count": 61
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "4614ff222c0bdcb5",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/helpers_test.go",
+            "start_line": 74,
+            "end_line": 80,
+            "node_count": 50
+          },
+          {
+            "file": "lib/netdb/helpers_test.go",
+            "start_line": 86,
+            "end_line": 92,
+            "node_count": 50
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "653dd1f0cb3e3bad",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/congestion_selector_unit_test.go",
+            "start_line": 124,
+            "end_line": 130,
+            "node_count": 35
+          },
+          {
+            "file": "lib/tunnel/congestion_selector_unit_test.go",
+            "start_line": 528,
+            "end_line": 534,
+            "node_count": 35
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "6b8a4429b32f1655",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/keys/destination_persistence_integration_test.go",
+            "start_line": 136,
+            "end_line": 142,
+            "node_count": 42
+          },
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 484,
+            "end_line": 490,
+            "node_count": 42
+          },
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 76,
+            "end_line": 82,
+            "node_count": 42
+          },
+          {
+            "file": "lib/transport/ntcp2/transport_accept_test.go",
+            "start_line": 180,
+            "end_line": 186,
+            "node_count": 42
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "ec0a1795b7cc92d4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/selector_stack_builder_unit_test.go",
+            "start_line": 113,
+            "end_line": 119,
+            "node_count": 41
+          },
+          {
+            "file": "lib/tunnel/selector_stack_builder_unit_test.go",
+            "start_line": 356,
+            "end_line": 362,
+            "node_count": 41
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "ee2e139102bb47a4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 81,
+            "end_line": 87,
+            "node_count": 41
+          },
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 124,
+            "end_line": 131,
+            "node_count": 41
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "f1844539932c708d",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/endpoint_forwarding_unit_test.go",
+            "start_line": 109,
+            "end_line": 115,
+            "node_count": 46
+          },
+          {
+            "file": "lib/tunnel/endpoint_forwarding_unit_test.go",
+            "start_line": 131,
+            "end_line": 137,
+            "node_count": 46
+          }
+        ],
+        "line_count": 7
+      },
+      {
+        "hash": "0efbcccb263e95dd",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1572,
+            "end_line": 1579,
+            "node_count": 51
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1590,
+            "end_line": 1598,
+            "node_count": 51
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "22fab44996c62959",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 260,
+            "end_line": 267,
+            "node_count": 38
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 353,
+            "end_line": 360,
+            "node_count": 38
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "234cf0ea6e7ea520",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 508,
+            "end_line": 515,
+            "node_count": 86
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 605,
+            "end_line": 612,
+            "node_count": 86
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "52fb70c172235f84",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 30,
+            "end_line": 37,
+            "node_count": 43
+          },
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 157,
+            "end_line": 164,
+            "node_count": 43
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "605bcddac0837d0f",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/exploration_test.go",
+            "start_line": 25,
+            "end_line": 32,
+            "node_count": 39
+          },
+          {
+            "file": "lib/netdb/exploration_test.go",
+            "start_line": 95,
+            "end_line": 102,
+            "node_count": 39
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "7c7dd1477217bcf0",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/client_netdb_test.go",
+            "start_line": 14,
+            "end_line": 21,
+            "node_count": 50
+          },
+          {
+            "file": "lib/netdb/router_netdb_test.go",
+            "start_line": 14,
+            "end_line": 21,
+            "node_count": 50
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "81003bda595aec1b",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/security_test.go",
+            "start_line": 427,
+            "end_line": 434,
+            "node_count": 48
+          },
+          {
+            "file": "lib/transport/ntcp2/spec_compliance_test.go",
+            "start_line": 903,
+            "end_line": 908,
+            "node_count": 48
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "8c48141dcbab79d2",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/reply_correlation_validation_test.go",
+            "start_line": 102,
+            "end_line": 109,
+            "node_count": 43
+          },
+          {
+            "file": "lib/i2np/reply_correlation_validation_test.go",
+            "start_line": 165,
+            "end_line": 172,
+            "node_count": 43
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "901c3990103b0e89",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 123,
+            "end_line": 130,
+            "node_count": 40
+          },
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 221,
+            "end_line": 228,
+            "node_count": 40
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "9a8329c3cb7a96a4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 135,
+            "end_line": 142,
+            "node_count": 47
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 269,
+            "end_line": 275,
+            "node_count": 47
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "a08e7c668e76a76d",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/tunnel_build_encrypt_unit_test.go",
+            "start_line": 130,
+            "end_line": 137,
+            "node_count": 40
+          },
+          {
+            "file": "lib/i2np/tunnel_build_encrypt_unit_test.go",
+            "start_line": 164,
+            "end_line": 171,
+            "node_count": 40
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "b9e7ae9764b55f69",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2469,
+            "end_line": 2476,
+            "node_count": 42
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2581,
+            "end_line": 2589,
+            "node_count": 42
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "c62ddaf39b107d2e",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1241,
+            "end_line": 1248,
+            "node_count": 38
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1291,
+            "end_line": 1298,
+            "node_count": 38
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "cb309b859a1f9cc7",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/spec_compliance_validation_test.go",
+            "start_line": 509,
+            "end_line": 516,
+            "node_count": 61
+          },
+          {
+            "file": "lib/tunnel/spec_compliance_validation_test.go",
+            "start_line": 542,
+            "end_line": 549,
+            "node_count": 61
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "ce6097521f8eccae",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 127,
+            "end_line": 134,
+            "node_count": 46
+          },
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 188,
+            "end_line": 195,
+            "node_count": 46
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "d641e4975920e64a",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/keys/destination_persistence_integration_test.go",
+            "start_line": 124,
+            "end_line": 131,
+            "node_count": 36
+          },
+          {
+            "file": "lib/keys/destination_persistence_validation_test.go",
+            "start_line": 13,
+            "end_line": 20,
+            "node_count": 36
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "ef5ad0a7175945e3",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 181,
+            "end_line": 188,
+            "node_count": 40
+          },
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 212,
+            "end_line": 219,
+            "node_count": 40
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "f29f0ac815314a79",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/garlic_builder_unit_test.go",
+            "start_line": 220,
+            "end_line": 227,
+            "node_count": 45
+          },
+          {
+            "file": "lib/i2np/garlic_builder_unit_test.go",
+            "start_line": 232,
+            "end_line": 239,
+            "node_count": 45
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "f2f9fec0502923d4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 394,
+            "end_line": 401,
+            "node_count": 36
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 443,
+            "end_line": 450,
+            "node_count": 36
+          }
+        ],
+        "line_count": 8
+      },
+      {
+        "hash": "02792f030f9f72d6",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 179,
+            "end_line": 187,
+            "node_count": 50
+          },
+          {
+            "file": "lib/transport/ntcp2/router_address_test.go",
+            "start_line": 192,
+            "end_line": 200,
+            "node_count": 50
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "0b05d49c9740cd91",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/source_limiter_unit_test.go",
+            "start_line": 125,
+            "end_line": 133,
+            "node_count": 38
+          },
+          {
+            "file": "lib/tunnel/source_limiter_unit_test.go",
+            "start_line": 244,
+            "end_line": 252,
+            "node_count": 38
+          },
+          {
+            "file": "lib/tunnel/source_limiter_unit_test.go",
+            "start_line": 307,
+            "end_line": 315,
+            "node_count": 38
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "10da7000b9615f53",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/security_test.go",
+            "start_line": 48,
+            "end_line": 56,
+            "node_count": 70
+          },
+          {
+            "file": "lib/router/helpers_test.go",
+            "start_line": 34,
+            "end_line": 40,
+            "node_count": 70
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "2564a31fb99f5d37",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/destination_lookup_queue_test.go",
+            "start_line": 90,
+            "end_line": 98,
+            "node_count": 42
+          },
+          {
+            "file": "lib/router/destination_lookup_queue_test.go",
+            "start_line": 123,
+            "end_line": 133,
+            "node_count": 42
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "3a0343ad2f9b52f4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 3090,
+            "end_line": 3098,
+            "node_count": 46
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 3364,
+            "end_line": 3372,
+            "node_count": 46
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "3a8874875b77a161",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1124,
+            "end_line": 1132,
+            "node_count": 46
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1151,
+            "end_line": 1159,
+            "node_count": 46
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1195,
+            "end_line": 1203,
+            "node_count": 46
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "5be7eb61a495eb1d",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/reply_correlation_validation_test.go",
+            "start_line": 103,
+            "end_line": 111,
+            "node_count": 49
+          },
+          {
+            "file": "lib/i2np/reply_correlation_validation_test.go",
+            "start_line": 144,
+            "end_line": 152,
+            "node_count": 49
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "61822f7455a4c018",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 199,
+            "end_line": 207,
+            "node_count": 40
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 237,
+            "end_line": 245,
+            "node_count": 40
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "61acb4ebd2c4d845",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1240,
+            "end_line": 1248,
+            "node_count": 44
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1292,
+            "end_line": 1300,
+            "node_count": 44
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "6f92cc5da2852d16",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/pool_integration_test.go",
+            "start_line": 463,
+            "end_line": 471,
+            "node_count": 43
+          },
+          {
+            "file": "lib/tunnel/pool_integration_test.go",
+            "start_line": 481,
+            "end_line": 487,
+            "node_count": 43
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "73cab573a4ea6f15",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/client_netdb_test.go",
+            "start_line": 17,
+            "end_line": 25,
+            "node_count": 65
+          },
+          {
+            "file": "lib/netdb/router_netdb_test.go",
+            "start_line": 22,
+            "end_line": 30,
+            "node_count": 65
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "7e49e19f876f5092",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/helpers_test.go",
+            "start_line": 152,
+            "end_line": 160,
+            "node_count": 50
+          },
+          {
+            "file": "lib/netdb/router_netdb_test.go",
+            "start_line": 47,
+            "end_line": 57,
+            "node_count": 50
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "80b7de911cc37c15",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 408,
+            "end_line": 416,
+            "node_count": 42
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 424,
+            "end_line": 432,
+            "node_count": 42
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "82b442e890025ba4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 207,
+            "end_line": 215,
+            "node_count": 47
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 246,
+            "end_line": 254,
+            "node_count": 47
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "b2208d84a89f1daf",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/config/defaults_unit_test.go",
+            "start_line": 142,
+            "end_line": 150,
+            "node_count": 45
+          },
+          {
+            "file": "lib/transport/security_test.go",
+            "start_line": 26,
+            "end_line": 34,
+            "node_count": 45
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "ba7f49090942d5d7",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 209,
+            "end_line": 217,
+            "node_count": 53
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 225,
+            "end_line": 233,
+            "node_count": 53
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "cf141ae518a764ba",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2cp/payload_unit_test.go",
+            "start_line": 145,
+            "end_line": 153,
+            "node_count": 57
+          },
+          {
+            "file": "lib/i2cp/payload_unit_test.go",
+            "start_line": 278,
+            "end_line": 286,
+            "node_count": 57
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "ff7214ac31f9260e",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1994,
+            "end_line": 2002,
+            "node_count": 62
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2013,
+            "end_line": 2021,
+            "node_count": 62
+          }
+        ],
+        "line_count": 9
+      },
+      {
+        "hash": "01559108c14212d5",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/spec_compliance_validation_test.go",
+            "start_line": 515,
+            "end_line": 524,
+            "node_count": 66
+          },
+          {
+            "file": "lib/tunnel/spec_compliance_validation_test.go",
+            "start_line": 543,
+            "end_line": 552,
+            "node_count": 66
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "0381fb2a6aca8bf6",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2pcontrol/handlers_test.go",
+            "start_line": 549,
+            "end_line": 558,
+            "node_count": 60
+          },
+          {
+            "file": "lib/i2pcontrol/handlers_test.go",
+            "start_line": 569,
+            "end_line": 578,
+            "node_count": 60
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "079928a8ecd855ee",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/delivery_unit_test.go",
+            "start_line": 118,
+            "end_line": 127,
+            "node_count": 38
+          },
+          {
+            "file": "lib/tunnel/delivery_unit_test.go",
+            "start_line": 151,
+            "end_line": 160,
+            "node_count": 38
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "1508d14a8d34351f",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2970,
+            "end_line": 2979,
+            "node_count": 72
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2982,
+            "end_line": 2991,
+            "node_count": 72
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "28f5f35d25ac1865",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/bootstrap/composite_bootstrap_integration_test.go",
+            "start_line": 31,
+            "end_line": 40,
+            "node_count": 59
+          },
+          {
+            "file": "lib/bootstrap/composite_bootstrap_integration_test.go",
+            "start_line": 48,
+            "end_line": 55,
+            "node_count": 59
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "34293e42eef1bd30",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 156,
+            "end_line": 165,
+            "node_count": 41
+          },
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 182,
+            "end_line": 191,
+            "node_count": 41
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "37139282e982a9b8",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/reseed/certificate_test.go",
+            "start_line": 112,
+            "end_line": 121,
+            "node_count": 43
+          },
+          {
+            "file": "lib/netdb/reseed/certificate_test.go",
+            "start_line": 152,
+            "end_line": 160,
+            "node_count": 43
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "5e6011117f322a09",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/config/config_unit_test.go",
+            "start_line": 50,
+            "end_line": 59,
+            "node_count": 102
+          },
+          {
+            "file": "lib/config/config_unit_test.go",
+            "start_line": 157,
+            "end_line": 162,
+            "node_count": 102
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "73fb3231a31e8782",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/gateway_delivery_unit_test.go",
+            "start_line": 164,
+            "end_line": 173,
+            "node_count": 57
+          },
+          {
+            "file": "lib/tunnel/gateway_delivery_unit_test.go",
+            "start_line": 220,
+            "end_line": 232,
+            "node_count": 57
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "78b93734777c68d3",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 493,
+            "end_line": 502,
+            "node_count": 67
+          },
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 505,
+            "end_line": 514,
+            "node_count": 67
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "80119d9d0f9e52b4",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 224,
+            "end_line": 233,
+            "node_count": 79
+          },
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 505,
+            "end_line": 516,
+            "node_count": 79
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "b6553c9f89c49927",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/spec_compliance_test.go",
+            "start_line": 68,
+            "end_line": 77,
+            "node_count": 74
+          },
+          {
+            "file": "lib/transport/spec_compliance_test.go",
+            "start_line": 149,
+            "end_line": 157,
+            "node_count": 74
+          },
+          {
+            "file": "lib/transport/spec_compliance_test.go",
+            "start_line": 165,
+            "end_line": 173,
+            "node_count": 74
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "b9c3834fd73d0474",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/security_test.go",
+            "start_line": 23,
+            "end_line": 32,
+            "node_count": 55
+          },
+          {
+            "file": "lib/netdb/security_test.go",
+            "start_line": 45,
+            "end_line": 52,
+            "node_count": 55
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "c48473f56834dd73",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1151,
+            "end_line": 1160,
+            "node_count": 58
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1195,
+            "end_line": 1204,
+            "node_count": 58
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "c964bdec663cdc01",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/ntcp2/transport_session_race_test.go",
+            "start_line": 18,
+            "end_line": 27,
+            "node_count": 40
+          },
+          {
+            "file": "lib/transport/ntcp2/transport_session_race_test.go",
+            "start_line": 149,
+            "end_line": 158,
+            "node_count": 40
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "e17c3840122859c6",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2pcontrol/handlers_test.go",
+            "start_line": 488,
+            "end_line": 497,
+            "node_count": 58
+          },
+          {
+            "file": "lib/i2pcontrol/handlers_test.go",
+            "start_line": 501,
+            "end_line": 510,
+            "node_count": 58
+          }
+        ],
+        "line_count": 10
+      },
+      {
+        "hash": "36f34c85fb54ab8e",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2cp/server_integration_test.go",
+            "start_line": 838,
+            "end_line": 848,
+            "node_count": 62
+          },
+          {
+            "file": "lib/i2cp/server_integration_test.go",
+            "start_line": 851,
+            "end_line": 861,
+            "node_count": 62
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "6daf261c57397e46",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1025,
+            "end_line": 1035,
+            "node_count": 41
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 1061,
+            "end_line": 1071,
+            "node_count": 41
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "b4cbd8c9876a4193",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/netdb/publisher_storetype_test.go",
+            "start_line": 114,
+            "end_line": 124,
+            "node_count": 59
+          },
+          {
+            "file": "lib/netdb/publisher_test.go",
+            "start_line": 98,
+            "end_line": 110,
+            "node_count": 59
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "c277bc00807c834d",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 206,
+            "end_line": 216,
+            "node_count": 55
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 578,
+            "end_line": 586,
+            "node_count": 55
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "dd789e6af2c3d3b2",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/config/config_unit_test.go",
+            "start_line": 45,
+            "end_line": 55,
+            "node_count": 77
+          },
+          {
+            "file": "lib/config/config_unit_test.go",
+            "start_line": 138,
+            "end_line": 145,
+            "node_count": 77
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "e00ddc534e156fdc",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/expiration_test.go",
+            "start_line": 89,
+            "end_line": 99,
+            "node_count": 58
+          },
+          {
+            "file": "lib/netdb/expiration_test.go",
+            "start_line": 251,
+            "end_line": 261,
+            "node_count": 58
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "ece2b0171917b04a",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/transport/spec_compliance_test.go",
+            "start_line": 149,
+            "end_line": 159,
+            "node_count": 89
+          },
+          {
+            "file": "lib/transport/spec_compliance_test.go",
+            "start_line": 165,
+            "end_line": 175,
+            "node_count": 89
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "eeb1ec38c6241919",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 153,
+            "end_line": 163,
+            "node_count": 50
+          },
+          {
+            "file": "lib/tunnel/peer_selector_integration_test.go",
+            "start_line": 211,
+            "end_line": 221,
+            "node_count": 50
+          }
+        ],
+        "line_count": 11
+      },
+      {
+        "hash": "291c2a78b1782e64",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/util/closeables_unit_test.go",
+            "start_line": 76,
+            "end_line": 87,
+            "node_count": 36
+          },
+          {
+            "file": "lib/util/signals/graceful_test.go",
+            "start_line": 232,
+            "end_line": 242,
+            "node_count": 36
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "357b1c24a3c428df",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/client_netdb_test.go",
+            "start_line": 46,
+            "end_line": 57,
+            "node_count": 54
+          },
+          {
+            "file": "lib/netdb/router_netdb_test.go",
+            "start_line": 95,
+            "end_line": 106,
+            "node_count": 54
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "4618ec2438a2f179",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 68,
+            "end_line": 79,
+            "node_count": 95
+          },
+          {
+            "file": "lib/i2np/ecies_marshal_unit_test.go",
+            "start_line": 190,
+            "end_line": 201,
+            "node_count": 95
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "7da2330e2d3f13da",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/build_reply_generation_unit_test.go",
+            "start_line": 37,
+            "end_line": 48,
+            "node_count": 49
+          },
+          {
+            "file": "lib/i2np/build_reply_generation_unit_test.go",
+            "start_line": 64,
+            "end_line": 75,
+            "node_count": 49
+          },
+          {
+            "file": "lib/i2np/build_reply_generation_unit_test.go",
+            "start_line": 278,
+            "end_line": 291,
+            "node_count": 49
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "ab9d08328f5bb10e",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/router_close_test.go",
+            "start_line": 19,
+            "end_line": 30,
+            "node_count": 40
+          },
+          {
+            "file": "lib/router/router_close_test.go",
+            "start_line": 43,
+            "end_line": 57,
+            "node_count": 40
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "d5319cb745227073",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 454,
+            "end_line": 465,
+            "node_count": 54
+          },
+          {
+            "file": "lib/i2np/database_lookup_unit_test.go",
+            "start_line": 496,
+            "end_line": 505,
+            "node_count": 54
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "f5deb5a322d9168b",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/pool_integration_test.go",
+            "start_line": 442,
+            "end_line": 453,
+            "node_count": 51
+          },
+          {
+            "file": "lib/tunnel/pool_integration_test.go",
+            "start_line": 484,
+            "end_line": 495,
+            "node_count": 51
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "fd5ed62c2069907e",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/e2e_integration_test.go",
+            "start_line": 242,
+            "end_line": 253,
+            "node_count": 77
+          },
+          {
+            "file": "lib/router/helpers_test.go",
+            "start_line": 160,
+            "end_line": 171,
+            "node_count": 77
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "fe1ac7b033b06808",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/tunnel_reply_handler_integration_test.go",
+            "start_line": 153,
+            "end_line": 164,
+            "node_count": 47
+          },
+          {
+            "file": "lib/i2np/tunnel_reply_handler_integration_test.go",
+            "start_line": 197,
+            "end_line": 208,
+            "node_count": 47
+          }
+        ],
+        "line_count": 12
+      },
+      {
+        "hash": "692015cb699ba2ae",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2970,
+            "end_line": 2982,
+            "node_count": 84
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2983,
+            "end_line": 2995,
+            "node_count": 84
+          }
+        ],
+        "line_count": 13
+      },
+      {
+        "hash": "e34ecc3ca6c942e0",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/build_record_filter_unit_test.go",
+            "start_line": 80,
+            "end_line": 92,
+            "node_count": 62
+          },
+          {
+            "file": "lib/i2np/build_record_filter_unit_test.go",
+            "start_line": 107,
+            "end_line": 118,
+            "node_count": 62
+          }
+        ],
+        "line_count": 13
+      },
+      {
+        "hash": "a829edcca089a1d9",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2cp/auth_unit_test.go",
+            "start_line": 147,
+            "end_line": 160,
+            "node_count": 72
+          },
+          {
+            "file": "lib/i2cp/auth_unit_test.go",
+            "start_line": 161,
+            "end_line": 172,
+            "node_count": 72
+          }
+        ],
+        "line_count": 14
+      },
+      {
+        "hash": "c5188f974a85ad7d",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2970,
+            "end_line": 2983,
+            "node_count": 96
+          },
+          {
+            "file": "lib/i2np/spec_compliance_validation_test.go",
+            "start_line": 2986,
+            "end_line": 2999,
+            "node_count": 96
+          }
+        ],
+        "line_count": 14
+      },
+      {
+        "hash": "1a83afafbcc2d6aa",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/router/router_context_test.go",
+            "start_line": 51,
+            "end_line": 65,
+            "node_count": 49
+          },
+          {
+            "file": "lib/router/security_test.go",
+            "start_line": 187,
+            "end_line": 200,
+            "node_count": 49
+          }
+        ],
+        "line_count": 15
+      },
+      {
+        "hash": "38290a0701e0c9ca",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2cp/mocks_test.go",
+            "start_line": 186,
+            "end_line": 200,
+            "node_count": 81
+          },
+          {
+            "file": "lib/router/e2e_integration_test.go",
+            "start_line": 366,
+            "end_line": 381,
+            "node_count": 81
+          }
+        ],
+        "line_count": 15
+      },
+      {
+        "hash": "412d217a6c5b8401",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/tunnel/source_limiter_unit_test.go",
+            "start_line": 316,
+            "end_line": 331,
+            "node_count": 72
+          },
+          {
+            "file": "lib/tunnel/source_limiter_unit_test.go",
+            "start_line": 452,
+            "end_line": 466,
+            "node_count": 72
+          }
+        ],
+        "line_count": 16
+      },
+      {
+        "hash": "6984aca9787f7ae1",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2pcontrol/methods_test.go",
+            "start_line": 266,
+            "end_line": 281,
+            "node_count": 66
+          },
+          {
+            "file": "lib/i2pcontrol/methods_test.go",
+            "start_line": 290,
+            "end_line": 305,
+            "node_count": 66
+          }
+        ],
+        "line_count": 16
+      },
+      {
+        "hash": "f210154f7b1fad39",
+        "type": "exact",
+        "instances": [
+          {
+            "file": "lib/i2pcontrol/server_test.go",
+            "start_line": 86,
+            "end_line": 101,
+            "node_count": 84
+          },
+          {
+            "file": "lib/router/i2pcontrol_test.go",
+            "start_line": 169,
+            "end_line": 184,
+            "node_count": 84
+          }
+        ],
+        "line_count": 16
+      },
+      {
+        "hash": "704f83c8e64f4382",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/netdb/iterative_lookup_test.go",
+            "start_line": 396,
+            "end_line": 412,
+            "node_count": 88
+          },
+          {
+            "file": "lib/netdb/kademlia_resolver_test.go",
+            "start_line": 243,
+            "end_line": 261,
+            "node_count": 88
+          }
+        ],
+        "line_count": 17
+      },
+      {
+        "hash": "0e84f9e28a780c17",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/i2pcontrol/stats_test.go",
+            "start_line": 226,
+            "end_line": 243,
+            "node_count": 86
+          },
+          {
+            "file": "lib/tunnel/testing_unit_test.go",
+            "start_line": 230,
+            "end_line": 250,
+            "node_count": 86
+          }
+        ],
+        "line_count": 18
+      },
+      {
+        "hash": "e99e77ab61e17f20",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/bootstrap/helpers_test.go",
+            "start_line": 137,
+            "end_line": 156,
+            "node_count": 62
+          },
+          {
+            "file": "lib/netdb/exploration_strategy_test.go",
+            "start_line": 82,
+            "end_line": 101,
+            "node_count": 62
+          }
+        ],
+        "line_count": 20
+      },
+      {
+        "hash": "e8664b2f2cb20e07",
+        "type": "renamed",
+        "instances": [
+          {
+            "file": "lib/bootstrap/helpers_test.go",
+            "start_line": 82,
+            "end_line": 130,
+            "node_count": 283
+          },
+          {
+            "file": "lib/netdb/exploration_strategy_test.go",
+            "start_line": 30,
+            "end_line": 78,
+            "node_count": 283
+          }
+        ],
+        "line_count": 49
+      }
+    ]
+  },
+  "naming": {
+    "file_name_violations": 0,
+    "identifier_violations": 0,
+    "package_name_violations": 0,
+    "overall_naming_score": 0,
+    "file_name_issues": null,
+    "identifier_issues": null,
+    "package_name_issues": null
+  },
+  "placement": {
+    "misplaced_functions": 0,
+    "misplaced_methods": 0,
+    "low_cohesion_files": 0,
+    "avg_file_cohesion": 0,
+    "function_issues": null,
+    "method_issues": null,
+    "cohesion_issues": null
+  },
+  "organization": {
+    "oversized_files": null,
+    "oversized_packages": null,
+    "deep_directories": null,
+    "high_fan_in_packages": null,
+    "high_fan_out_packages": null,
+    "avg_package_instability": 0
+  },
+  "burden": {
+    "magic_numbers": null,
+    "dead_code": {
+      "unreferenced_functions": null,
+      "unreachable_code": null,
+      "total_dead_lines": 0,
+      "dead_code_percent": 0
+    },
+    "complex_signatures": null,
+    "deeply_nested_functions": null,
+    "feature_envy_methods": null
+  },
+  "scores": {
+    "file_scores": null,
+    "package_scores": null
+  },
+  "test_coverage": {
+    "function_coverage_rate": 0,
+    "complexity_coverage_rate": 0,
+    "high_risk_functions": null,
+    "coverage_gaps": null
+  },
+  "test_quality": {
+    "total_tests": 0,
+    "avg_assertions_per_test": 0,
+    "test_files": null
+  }
+}

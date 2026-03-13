@@ -49,27 +49,15 @@ func TestLocalDeliveryInstructionsSerialization(t *testing.T) {
 
 // TestLocalDeliveryInstructionsRoundTrip tests serialization and deserialization
 func TestLocalDeliveryInstructionsRoundTrip(t *testing.T) {
-	assert := assert.New(t)
-	require := require.New(t)
-
 	fragmentSize := uint16(800)
 	original := NewLocalDeliveryInstructions(fragmentSize)
 
-	// Serialize
-	bytes, err := original.Bytes()
-	require.NoError(err, "Serialization should succeed")
+	parsed := assertDeliveryInstructionsRoundTrip(t, original)
 
-	// Deserialize
-	parsed, err := NewDeliveryInstructions(bytes)
-	require.NoError(err, "Deserialization should succeed")
-
-	// Verify all fields match
-	assert.Equal(original.fragmentType, parsed.fragmentType)
-	assert.Equal(original.deliveryType, parsed.deliveryType)
-	assert.Equal(original.hasDelay, parsed.hasDelay)
-	assert.Equal(original.fragmented, parsed.fragmented)
-	assert.Equal(original.hasExtOptions, parsed.hasExtOptions)
-	assert.Equal(original.fragmentSize, parsed.fragmentSize)
+	// Verify LOCAL-specific fields
+	assert.Equal(t, original.hasDelay, parsed.hasDelay)
+	assert.Equal(t, original.fragmented, parsed.fragmented)
+	assert.Equal(t, original.hasExtOptions, parsed.hasExtOptions)
 }
 
 // TestNewTunnelDeliveryInstructions tests creation of TUNNEL delivery instructions
@@ -131,29 +119,17 @@ func TestTunnelDeliveryInstructionsSerialization(t *testing.T) {
 
 // TestTunnelDeliveryInstructionsRoundTrip tests TUNNEL round-trip
 func TestTunnelDeliveryInstructionsRoundTrip(t *testing.T) {
-	assert := assert.New(t)
-	require := require.New(t)
-
 	tunnelID := uint32(99999)
 	gatewayHash := [32]byte{0xAA, 0xBB, 0xCC, 0xDD}
 	fragmentSize := uint16(750)
 
 	original := NewTunnelDeliveryInstructions(tunnelID, gatewayHash, fragmentSize)
 
-	bytes, err := original.Bytes()
-	require.NoError(err)
+	parsed := assertDeliveryInstructionsRoundTrip(t, original)
 
-	// Debug: print length
-	t.Logf("Serialized %d bytes", len(bytes))
-
-	parsed, err := NewDeliveryInstructions(bytes)
-	require.NoError(err)
-
-	assert.Equal(original.fragmentType, parsed.fragmentType)
-	assert.Equal(original.deliveryType, parsed.deliveryType)
-	assert.Equal(original.tunnelID, parsed.tunnelID)
-	assert.Equal(original.hash, parsed.hash)
-	assert.Equal(original.fragmentSize, parsed.fragmentSize)
+	// Verify TUNNEL-specific fields
+	assert.Equal(t, original.tunnelID, parsed.tunnelID)
+	assert.Equal(t, original.hash, parsed.hash)
 }
 
 // TestNewRouterDeliveryInstructions tests creation of ROUTER delivery instructions
@@ -208,24 +184,15 @@ func TestRouterDeliveryInstructionsSerialization(t *testing.T) {
 
 // TestRouterDeliveryInstructionsRoundTrip tests ROUTER round-trip
 func TestRouterDeliveryInstructionsRoundTrip(t *testing.T) {
-	assert := assert.New(t)
-	require := require.New(t)
-
 	routerHash := [32]byte{0x11, 0x22, 0x33, 0x44, 0x55}
 	fragmentSize := uint16(300)
 
 	original := NewRouterDeliveryInstructions(routerHash, fragmentSize)
 
-	bytes, err := original.Bytes()
-	require.NoError(err)
+	parsed := assertDeliveryInstructionsRoundTrip(t, original)
 
-	parsed, err := NewDeliveryInstructions(bytes)
-	require.NoError(err)
-
-	assert.Equal(original.fragmentType, parsed.fragmentType)
-	assert.Equal(original.deliveryType, parsed.deliveryType)
-	assert.Equal(original.hash, parsed.hash)
-	assert.Equal(original.fragmentSize, parsed.fragmentSize)
+	// Verify ROUTER-specific fields
+	assert.Equal(t, original.hash, parsed.hash)
 }
 
 // TestDeliveryInstructionsVariousSizes tests different fragment sizes

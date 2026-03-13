@@ -136,11 +136,7 @@ func TestCreateSecureDirectory(t *testing.T) {
 	securePath := filepath.Join(tempDir, "secure_subdir")
 
 	require.NoError(t, CreateSecureDirectory(securePath), "CreateSecureDirectory")
-
-	info, err := os.Stat(securePath)
-	require.NoError(t, err, "Directory was not created")
-	assert.True(t, info.IsDir(), "Created path is not a directory")
-	assert.Equal(t, SecureDirPermissions, info.Mode().Perm(), "Directory permissions")
+	assertDirectoryCreatedWithPerm(t, securePath, SecureDirPermissions)
 }
 
 // TestCreateStandardDirectory verifies directories are created with standard permissions
@@ -149,10 +145,7 @@ func TestCreateStandardDirectory(t *testing.T) {
 	standardPath := filepath.Join(tempDir, "standard_subdir")
 
 	require.NoError(t, CreateStandardDirectory(standardPath), "CreateStandardDirectory")
-
-	info, err := os.Stat(standardPath)
-	require.NoError(t, err, "Directory was not created")
-	assert.True(t, info.IsDir(), "Created path is not a directory")
+	assertDirectoryCreatedWithPerm(t, standardPath)
 }
 
 // TestWriteSecureFile verifies files are created with secure permissions

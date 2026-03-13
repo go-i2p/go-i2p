@@ -238,24 +238,10 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_for_reassemble_delivery!"))
 
-	assembler := &fragmentAssembler{
-		fragments: map[int][]byte{
-			0: []byte("part1"),
-			1: []byte("part2"),
-		},
-		deliveryType: DT_TUNNEL,
-		tunnelID:     42,
-		hash:         hash,
-		totalCount:   2,
-		receivedMask: 0x03,
-	}
-
-	ep.fragmentsMutex.Lock()
-	ep.fragments[99] = assembler
-	result := ep.reassembleFragments(99, assembler)
-	ep.fragmentsMutex.Unlock()
-
-	err := ep.deliverReassembled(result)
+	err := reassembleTestFragments(t, ep, 99, DT_TUNNEL, 42, hash, map[int][]byte{
+		0: []byte("part1"),
+		1: []byte("part2"),
+	})
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -273,23 +259,10 @@ func TestReassembleAndDeliverRouter(t *testing.T) {
 	var hash [32]byte
 	copy(hash[:], []byte("router_for_reassemble_delivery!!"))
 
-	assembler := &fragmentAssembler{
-		fragments: map[int][]byte{
-			0: []byte("router_part1"),
-			1: []byte("router_part2"),
-		},
-		deliveryType: DT_ROUTER,
-		hash:         hash,
-		totalCount:   2,
-		receivedMask: 0x03,
-	}
-
-	ep.fragmentsMutex.Lock()
-	ep.fragments[100] = assembler
-	result := ep.reassembleFragments(100, assembler)
-	ep.fragmentsMutex.Unlock()
-
-	err := ep.deliverReassembled(result)
+	err := reassembleTestFragments(t, ep, 100, DT_ROUTER, 0, hash, map[int][]byte{
+		0: []byte("router_part1"),
+		1: []byte("router_part2"),
+	})
 	assert.NoError(t, err)
 
 	fwd.mu.Lock()
@@ -304,21 +277,9 @@ func TestReassembleAndDeliverNoForwarder(t *testing.T) {
 	ep := createTestEndpoint(t, nil)
 
 	// No forwarder set
-	assembler := &fragmentAssembler{
-		fragments: map[int][]byte{
-			0: []byte("data"),
-		},
-		deliveryType: DT_TUNNEL,
-		totalCount:   1,
-		receivedMask: 0x01,
-	}
-
-	ep.fragmentsMutex.Lock()
-	ep.fragments[101] = assembler
-	result := ep.reassembleFragments(101, assembler)
-	ep.fragmentsMutex.Unlock()
-
-	err := ep.deliverReassembled(result)
+	err := reassembleTestFragments(t, ep, 101, DT_TUNNEL, 0, [32]byte{}, map[int][]byte{
+		0: []byte("data"),
+	})
 	assert.NoError(t, err, "Should not error without forwarder")
 }
 
@@ -330,22 +291,10 @@ func TestReassembleAndDeliverLocal(t *testing.T) {
 		return nil
 	})
 
-	assembler := &fragmentAssembler{
-		fragments: map[int][]byte{
-			0: []byte("local_"),
-			1: []byte("msg"),
-		},
-		deliveryType: DT_LOCAL,
-		totalCount:   2,
-		receivedMask: 0x03,
-	}
-
-	ep.fragmentsMutex.Lock()
-	ep.fragments[102] = assembler
-	result := ep.reassembleFragments(102, assembler)
-	ep.fragmentsMutex.Unlock()
-
-	err := ep.deliverReassembled(result)
+	err := reassembleTestFragments(t, ep, 102, DT_LOCAL, 0, [32]byte{}, map[int][]byte{
+		0: []byte("local_"),
+		1: []byte("msg"),
+	})
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("local_msg"), received)
 }

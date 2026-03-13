@@ -71,76 +71,20 @@ func TestReadDeliveryInstructions(t *testing.T) {
 // This test verifies the variable shadowing bug fix where hash_start and hash_end
 // must be reassigned (not redeclared) to adjust offsets correctly.
 func TestDeliveryInstructionsHashTunnel(t *testing.T) {
-	assert := assert.New(t)
-
-	// Create a delivery instruction with DT_TUNNEL type
-	// Format: flag(1) + tunnel_id(4) + hash(32) + ...
-	expectedHash := make([]byte, HASH_SIZE)
-	for i := 0; i < HASH_SIZE; i++ {
-		expectedHash[i] = byte(i)
-	}
-
-	data := []byte{}
-
-	// Flag byte: bit 7=0 (first fragment), bits 6-5=01 (DT_TUNNEL), others=0
-	// DT_TUNNEL (value 1) in bits 6-5: (1 << 5) = 0x20
-	flag := byte(0x20) // 0b00100000 = DT_TUNNEL (0x01 << 5)
-	data = append(data, flag)
-
-	// Tunnel ID (4 bytes)
-	tunnelID := []byte{0x00, 0x00, 0x30, 0x39} // 12345 in big-endian
-	data = append(data, tunnelID...)
-
-	// Hash (32 bytes)
-	data = append(data, expectedHash...)
-
-	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
-	data = append(data, 0x00, 0x10) // size = 16
-
-	di, err := NewDeliveryInstructions(data)
-	assert.Nil(err, "Failed to create DeliveryInstructions")
-
-	// Call Hash() method
-	resultHash, err := di.Hash()
-
-	// Verify no error and hash matches
-	assert.Nil(err, "Hash() should not return an error for DT_TUNNEL type")
-	assert.Equal(expectedHash, resultHash[:], "Hash should match the stored hash value")
+	assertDeliveryInstructionHash(t,
+		0x20,                           // DT_TUNNEL flag
+		[]byte{0x00, 0x00, 0x30, 0x39}, // tunnelID = 12345
+		func(i int) byte { return byte(i) },
+	)
 }
 
 // TestDeliveryInstructionsHashRouter tests Hash() method for DT_ROUTER delivery type
 func TestDeliveryInstructionsHashRouter(t *testing.T) {
-	assert := assert.New(t)
-
-	// Create a delivery instruction with DT_ROUTER type
-	// Format: flag(1) + hash(32) + ...
-	expectedHash := make([]byte, HASH_SIZE)
-	for i := 0; i < HASH_SIZE; i++ {
-		expectedHash[i] = byte(255 - i)
-	}
-
-	data := []byte{}
-
-	// Flag byte: bit 7=0 (first fragment), bits 6-5=10 (DT_ROUTER), others=0
-	// DT_ROUTER (value 2) in bits 6-5: (2 << 5) = 0x40
-	flag := byte(0x40) // 0b01000000 = DT_ROUTER (0x02 << 5)
-	data = append(data, flag)
-
-	// Hash (32 bytes) - immediately after flag for DT_ROUTER
-	data = append(data, expectedHash...)
-
-	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
-	data = append(data, 0x00, 0x10) // size = 16
-
-	di, err := NewDeliveryInstructions(data)
-	assert.Nil(err, "Failed to create DeliveryInstructions")
-
-	// Call Hash() method
-	resultHash, err := di.Hash()
-
-	// Verify no error and hash matches
-	assert.Nil(err, "Hash() should not return an error for DT_ROUTER type")
-	assert.Equal(expectedHash, resultHash[:], "Hash should match the stored hash value")
+	assertDeliveryInstructionHash(t,
+		0x40, // DT_ROUTER flag
+		nil,  // no tunnelID
+		func(i int) byte { return byte(255 - i) },
+	)
 }
 
 // TestDeliveryInstructionsHashLocal tests Hash() method for DT_LOCAL delivery type (error case)

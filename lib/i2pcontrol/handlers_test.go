@@ -75,15 +75,7 @@ func TestEchoHandler_Object(t *testing.T) {
 }
 
 func TestEchoHandler_InvalidJSON(t *testing.T) {
-	handler := NewEchoHandler()
-	params := json.RawMessage(`{invalid json}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("Handle() expected error for invalid JSON, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
+	assertHandlerError(t, NewEchoHandler(), `{invalid json}`, ErrCodeInvalidParams)
 }
 
 // Test GetRate Handler
@@ -120,14 +112,7 @@ func TestGetRateHandler_NoFields(t *testing.T) {
 }
 
 func TestGetRateHandler_InvalidJSON(t *testing.T) {
-	handler := NewGetRateHandler(newStatsHandler(true, "0.1.0"))
-
-	_, err := handler.Handle(context.Background(), json.RawMessage(`{invalid}`))
-	if err == nil {
-		t.Fatal("Handle() expected error for invalid JSON, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
+	assertHandlerError(t, NewGetRateHandler(newStatsHandler(true, "0.1.0")), `{invalid}`, ErrCodeInvalidParams)
 }
 
 // Test RouterInfo Handler
@@ -263,15 +248,7 @@ func TestRouterManagerHandler_Operations(t *testing.T) {
 }
 
 func TestRouterManagerHandler_NoOperations(t *testing.T) {
-	mockControl := &mockRouterControl{}
-	handler := NewRouterManagerHandler(mockControl)
-
-	_, err := handler.Handle(context.Background(), json.RawMessage(`{}`))
-	if err == nil {
-		t.Fatal("Handle() expected error for no operations, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeInvalidParams)
+	assertHandlerError(t, NewRouterManagerHandler(&mockRouterControl{}), `{}`, ErrCodeInvalidParams)
 }
 
 func TestRouterManagerHandler_InvalidJSON(t *testing.T) {
@@ -362,18 +339,8 @@ func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
 }
 
 func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
-	stats := &mockServerStatsProvider{}
-	handler := NewNetworkSettingHandler(stats)
-
 	// Try to write a value (non-null)
-	params := json.RawMessage(`{"i2p.router.net.ntcp.port": 12345}`)
-
-	_, err := handler.Handle(context.Background(), params)
-	if err == nil {
-		t.Fatal("Handle() expected error for write operation, got nil")
-	}
-
-	requireRPCError(t, err, ErrCodeNotImpl)
+	assertHandlerError(t, NewNetworkSettingHandler(&mockServerStatsProvider{}), `{"i2p.router.net.ntcp.port": 12345}`, ErrCodeNotImpl)
 }
 
 func TestNetworkSettingHandler_InvalidJSON(t *testing.T) {
@@ -658,11 +625,7 @@ func TestI2PControlHandler_NotImplementedOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			authMgr := &mockAuthManager{}
 			handler := NewI2PControlHandler(authMgr, &config.I2PControlConfig{})
-			_, err := handler.Handle(context.Background(), json.RawMessage(tt.params))
-			if err == nil {
-				t.Fatalf("expected error for %s, got nil", tt.name)
-			}
-			requireRPCError(t, err, tt.code)
+			assertHandlerError(t, handler, tt.params, tt.code)
 		})
 	}
 }

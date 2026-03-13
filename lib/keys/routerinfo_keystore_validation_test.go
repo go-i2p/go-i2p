@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-i2p/common/certificate"
 	"github.com/go-i2p/common/keys_and_cert"
-	"github.com/go-i2p/crypto/ed25519"
 	"github.com/go-i2p/crypto/types"
 )
 
@@ -107,20 +106,7 @@ func TestGenerateIdentityPaddingFromSizes_NegativePadding(t *testing.T) {
 // =============================================================================
 
 func TestRouterInfoKeystore_StoreKeys_SecurePermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping file permission test on Windows")
-	}
-
-	tmpDir, err := os.MkdirTemp("", "routerinfo_keys_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	_, privateKey, err := ed25519.GenerateEd25519KeyPair()
-	if err != nil {
-		t.Fatalf("Failed to create private key: %v", err)
-	}
+	tmpDir, privateKey := setupPermissionTest(t, "routerinfo_keys_test")
 
 	ks := &RouterInfoKeystore{
 		dir:        tmpDir,
@@ -128,7 +114,7 @@ func TestRouterInfoKeystore_StoreKeys_SecurePermissions(t *testing.T) {
 		name:       "test-router",
 	}
 
-	err = ks.StoreKeys()
+	err := ks.StoreKeys()
 	if err != nil {
 		t.Fatalf("StoreKeys failed: %v", err)
 	}
@@ -171,20 +157,7 @@ func TestDirectoryPermissions(t *testing.T) {
 // TestKeyFilePermissions verifies that key files are written with secure
 // permissions (0600).
 func TestKeyFilePermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping file permission test on Windows")
-	}
-
-	tmpDir, err := os.MkdirTemp("", "keys_security_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	_, privKey, err := ed25519.GenerateEd25519KeyPair()
-	if err != nil {
-		t.Fatalf("Failed to generate key: %v", err)
-	}
+	tmpDir, privKey := setupPermissionTest(t, "keys_security_test")
 
 	ks := &RouterInfoKeystore{
 		dir:        tmpDir,
@@ -192,7 +165,7 @@ func TestKeyFilePermissions(t *testing.T) {
 		privateKey: privKey,
 	}
 
-	err = ks.StoreKeys()
+	err := ks.StoreKeys()
 	if err != nil {
 		t.Fatalf("StoreKeys failed: %v", err)
 	}
