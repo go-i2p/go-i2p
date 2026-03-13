@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 )
 
 // mockStatsProvider implements RouterStatsProvider for testing
@@ -82,23 +83,7 @@ func doRequest(t *testing.T, url, method string, params interface{}) *Response {
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", url+"/jsonrpc", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	httpResp, err := client.Do(httpReq)
-	if err != nil {
-		t.Fatalf("Failed to send request: %v", err)
-	}
-	defer httpResp.Body.Close()
-
-	respBody, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response: %v", err)
-	}
+	respBody := testutil.PostJSON(t, url+"/jsonrpc", body)
 
 	var resp Response
 	if err := json.Unmarshal(respBody, &resp); err != nil {
