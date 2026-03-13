@@ -40,12 +40,7 @@ func TestReadBuildResponseRecordRandomDataTooLittleData(t *testing.T) {
 func TestReadBuildResponseRecordRandomDataValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32)
-	hash[31] = 0x13
-	random_data := make([]byte, 495)
-	random_data[493] = 0x33
-	random_data[494] = 0x74
-	data := append(hash, random_data...)
+	_, random_data, data := buildResponseRecordTestData(0x13)
 	res_random_data, err := readBuildResponseRecordRandomData(data)
 	assert.Equal([495]byte(random_data), res_random_data)
 	assert.Equal(nil, err)
@@ -54,11 +49,7 @@ func TestReadBuildResponseRecordRandomDataValidData(t *testing.T) {
 func TestReadBuildResponseRecordReplyTooLittleData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32)
-	random_data := make([]byte, 495)
-	random_data[493] = 0x33
-	random_data[494] = 0x74
-	data := append(hash, random_data...)
+	_, _, data := buildResponseRecordTestData(0x00)
 
 	res_reply, err := readBuildResponseRecordReply(data)
 	assert.Equal(byte(0), res_reply)
@@ -68,13 +59,8 @@ func TestReadBuildResponseRecordReplyTooLittleData(t *testing.T) {
 func TestReadBuildResponseRecordReplyValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32)
-	hash[31] = 0x13
-	random_data := make([]byte, 495)
-	random_data[493] = 0x33
-	random_data[494] = 0x74
+	_, _, data := buildResponseRecordTestData(0x13)
 	reply := byte(37)
-	data := append(hash, random_data...)
 	data = append(data, reply)
 
 	res_reply, err := readBuildResponseRecordReply(data)
@@ -98,13 +84,8 @@ func TestReadBuildResponseRecordTooLittleData(t *testing.T) {
 func TestReadBuildResponseRecordValidData(t *testing.T) {
 	assert := assert.New(t)
 
-	hash := make([]byte, 32)
-	hash[31] = 0x12
-	random_data := make([]byte, 495)
-	random_data[493] = 0x33
-	random_data[494] = 0x74
+	hash, random_data, data := buildResponseRecordTestData(0x12)
 	reply := byte(37)
-	data := append(hash, random_data...)
 	data = append(data, reply)
 
 	build_response_record, err := ReadBuildResponseRecord(data)

@@ -1,14 +1,11 @@
 package ntcp2
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-i2p/common/data"
-	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,12 +15,10 @@ import (
 // instead of *NTCP2Session. This was a CRITICAL BUG: the original code used
 // existing.(*NTCP2Session) without checking the type.
 func TestSetupSession_HandlesNetConnFromAccept(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
 	// Simulate Accept() having stored a raw net.Conn in the session map.
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-peer-hash-for-race-test!"))
+	peerHash := newTestPeerHash("test-peer-hash-for-race-test!")
 	rawConn := newAcceptMockConn("192.168.1.1:5001")
 	transport.sessions.Store(peerHash, rawConn)
 	atomic.AddInt32(&transport.sessionCount, 1)
@@ -55,11 +50,9 @@ func TestSetupSession_HandlesNetConnFromAccept(t *testing.T) {
 // TestResolveExistingSession_NTCP2Session verifies the fast path where the
 // existing entry is already an *NTCP2Session.
 func TestResolveExistingSession_NTCP2Session(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-peer-hash-ntcp2-session"))
+	peerHash := newTestPeerHash("test-peer-hash-ntcp2-session")
 
 	mockConn := newAcceptMockConn("192.168.1.2:5002")
 	existingSession := NewNTCP2Session(mockConn, transport.ctx, transport.logger)
@@ -74,11 +67,9 @@ func TestResolveExistingSession_NTCP2Session(t *testing.T) {
 // TestResolveExistingSession_RawNetConn verifies the slow path where the
 // existing entry is a raw net.Conn that needs promotion.
 func TestResolveExistingSession_RawNetConn(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-peer-hash-raw-conn-promo"))
+	peerHash := newTestPeerHash("test-peer-hash-raw-conn-promo")
 
 	rawConn := newAcceptMockConn("192.168.1.3:5003")
 	transport.sessions.Store(peerHash, rawConn)
@@ -98,11 +89,9 @@ func TestResolveExistingSession_RawNetConn(t *testing.T) {
 // TestResolveExistingSession_ConcurrentPromotion verifies that concurrent
 // promotion of the same net.Conn is safe — no panics, no data races.
 func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-peer-hash-concurrent-prm"))
+	peerHash := newTestPeerHash("test-peer-hash-concurrent-prm")
 
 	rawConn := newAcceptMockConn("192.168.1.4:5004")
 	transport.sessions.Store(peerHash, rawConn)
@@ -157,19 +146,16 @@ func TestResolveExistingSession_ConcurrentPromotion(t *testing.T) {
 // closeAllActiveSessions closes raw net.Conn entries (from Accept)
 // in addition to *NTCP2Session entries, preventing connection leaks.
 func TestCloseAllActiveSessions_ClosesNetConnEntries(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
 	// Store a raw net.Conn (as Accept() would).
-	var connHash data.Hash
-	copy(connHash[:], []byte("test-raw-conn-shutdown-close!"))
+	connHash := newTestPeerHash("test-raw-conn-shutdown-close!")
 	rawConn := newAcceptMockConn("192.168.1.5:5005")
 	transport.sessions.Store(connHash, rawConn)
 	atomic.AddInt32(&transport.sessionCount, 1)
 
 	// Store an *NTCP2Session.
-	var sessionHash data.Hash
-	copy(sessionHash[:], []byte("test-session-shutdown-close!!"))
+	sessionHash := newTestPeerHash("test-session-shutdown-close!!")
 	sessionConn := newAcceptMockConn("192.168.1.6:5006")
 	session := NewNTCP2Session(sessionConn, transport.ctx, transport.logger)
 	transport.sessions.Store(sessionHash, session)
@@ -192,11 +178,9 @@ func TestCloseAllActiveSessions_ClosesNetConnEntries(t *testing.T) {
 // TestCloseIndividualSession_NetConn verifies that closeIndividualSession
 // properly closes a raw net.Conn value without panicking.
 func TestCloseIndividualSession_NetConn(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var hash data.Hash
-	copy(hash[:], []byte("test-close-individual-netconn"))
+	hash := newTestPeerHash("test-close-individual-netconn")
 	conn := newAcceptMockConn("192.168.1.7:5007")
 
 	require.NotPanics(t, func() {
@@ -211,11 +195,9 @@ func TestCloseIndividualSession_NetConn(t *testing.T) {
 // TestCloseIndividualSession_NTCP2Session verifies that closeIndividualSession
 // properly closes an *NTCP2Session value.
 func TestCloseIndividualSession_NTCP2Session(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var hash data.Hash
-	copy(hash[:], []byte("test-close-individual-session"))
+	hash := newTestPeerHash("test-close-individual-session")
 	mockConn := newAcceptMockConn("192.168.1.8:5008")
 	session := NewNTCP2Session(mockConn, transport.ctx, transport.logger)
 
@@ -227,11 +209,9 @@ func TestCloseIndividualSession_NTCP2Session(t *testing.T) {
 // TestCloseIndividualSession_UnexpectedType verifies that closeIndividualSession
 // handles unexpected types without panicking.
 func TestCloseIndividualSession_UnexpectedType(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var hash data.Hash
-	copy(hash[:], []byte("test-close-individual-unknown"))
+	hash := newTestPeerHash("test-close-individual-unknown")
 
 	require.NotPanics(t, func() {
 		transport.closeIndividualSession(hash, "unexpected-string-value")
@@ -242,11 +222,9 @@ func TestCloseIndividualSession_UnexpectedType(t *testing.T) {
 // createOutboundSession handles the case where setupSession.resolveExistingSession
 // might return nil (defensive programming).
 func TestResolveExistingSession_UnexpectedType(t *testing.T) {
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-peer-hash-unexpected-typ"))
+	peerHash := newTestPeerHash("test-peer-hash-unexpected-typ")
 
 	// Store something that is neither *NTCP2Session nor net.Conn.
 	transport.sessions.Store(peerHash, "unexpected-type")
@@ -258,19 +236,9 @@ func TestResolveExistingSession_UnexpectedType(t *testing.T) {
 // TestSetupSession_WinsStoreRace verifies the normal path where setupSession
 // successfully stores a new session (no existing entry).
 func TestSetupSession_NewSessionPath(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
-	transport := &NTCP2Transport{
-		config:   &Config{ListenerAddress: "127.0.0.1:0", MaxSessions: 100},
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   logger.WithField("test", "setup_session"),
-		sessions: sync.Map{},
-	}
-
-	var peerHash data.Hash
-	copy(peerHash[:], []byte("test-new-session-store-path!!"))
+	peerHash := newTestPeerHash("test-new-session-store-path!!")
 
 	// Reserve a session slot as createOutboundSession would.
 	atomic.AddInt32(&transport.sessionCount, 1)
@@ -280,7 +248,7 @@ func TestSetupSession_NewSessionPath(t *testing.T) {
 	// We can't create a real *ntcp2.NTCP2Conn without a handshake,
 	// so we test the resolveExistingSession path separately.
 	// Verify the session map structure after store.
-	session := NewNTCP2SessionDeferred(mockConn, ctx, transport.logger)
+	session := NewNTCP2SessionDeferred(mockConn, transport.ctx, transport.logger)
 	session.StartWorkers()
 	session.SetCleanupCallback(func() {
 		transport.removeSession(peerHash)
@@ -299,10 +267,7 @@ func TestSetupSession_NewSessionPath(t *testing.T) {
 // flow doesn't panic even when Accept() stores a net.Conn and findExistingSession
 // tries to promote it.
 func TestAccept_ThenFindExistingSession_Promotion(t *testing.T) {
-	conn := newAcceptMockConn("10.0.0.50:5050")
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, 10)
-	defer transport.cancel()
+	transport, conn := newAcceptTestSetup(t, "10.0.0.50:5050", 10)
 
 	// Accept stores a raw net.Conn in the session map.
 	accepted, err := transport.Accept()
@@ -337,8 +302,7 @@ func TestAccept_ThenFindExistingSession_Promotion(t *testing.T) {
 // but we verify the error path structure is correct.
 func TestCreateNewListenerWithConfig_ErrorPathStructure(t *testing.T) {
 	// Verify the function exists and has the correct signature.
-	transport := newTestTransport(nil, 100)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 100)
 
 	// Calling with a valid address but nil config should fail at
 	// NewNTCP2Listener, and the fix ensures tcpListener is closed.

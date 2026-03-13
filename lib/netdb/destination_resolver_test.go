@@ -11,7 +11,6 @@ import (
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // mockNetDB implements the minimal interface needed for DestinationResolver
@@ -153,86 +152,59 @@ func TestNewDestinationResolver(t *testing.T) {
 
 // TestResolveDestination_NotFound tests resolution of non-existent destination
 func TestResolveDestination_NotFound(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	// Create a random hash that doesn't exist
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, _, destHash := newTestResolverWithHash(t)
 
 	// Attempt to resolve non-existent destination
-	_, err = resolver.ResolveDestination(destHash)
+	_, err := resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found in netdb")
 }
 
 // TestResolveDestination_InvalidLeaseSet tests handling of corrupted LeaseSet data
 func TestResolveDestination_InvalidLeaseSet(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	// Create a hash and store invalid data
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store invalid LeaseSet data
 	invalidData := []byte{0x01, 0x02, 0x03}
 	netdb.StoreLeaseSet(destHash, invalidData)
 
 	// Attempt to resolve - should fail due to invalid data
-	_, err = resolver.ResolveDestination(destHash)
+	_, err := resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
 }
 
 // TestResolveDestination_LeaseSet2NotFound tests LeaseSet2 fallback behavior
 func TestResolveDestination_LeaseSet2NotFound(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, _, destHash := newTestResolverWithHash(t)
 
 	// extractKeyFromLeaseSet2 should fail for non-existent data
-	_, err = resolver.extractKeyFromLeaseSet2(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
 }
 
 // TestExtractKeyFromLeaseSet2_NotLeaseSet2 tests rejection of non-LeaseSet2 data
 func TestExtractKeyFromLeaseSet2_NotLeaseSet2(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store data that is not a valid LeaseSet2 structure
 	notLS2Data := []byte{0x01, 0x02, 0x03, 0x04}
 	netdb.StoreLeaseSet(destHash, notLS2Data)
 
 	// Should fail because data cannot be parsed as LeaseSet2
-	_, err = resolver.extractKeyFromLeaseSet2(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse LeaseSet2")
 }
 
 // TestExtractKeyFromLeaseSet2_EmptyData tests handling of empty data
 func TestExtractKeyFromLeaseSet2_EmptyData(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store empty data
 	netdb.StoreLeaseSet(destHash, []byte{})
 
 	// Should fail due to empty data
-	_, err = resolver.extractKeyFromLeaseSet2(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty lease set data")
 }
@@ -329,17 +301,12 @@ func TestValidateLeaseSet2Format_NonEmptyData(t *testing.T) {
 // TestExtractKeyFromLeaseSet2_ShortData verifies that short but non-empty data
 // fails at the ReadLeaseSet2 parsing stage, not at format validation.
 func TestExtractKeyFromLeaseSet2_ShortData(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store short data - passes format validation but fails parsing
 	netdb.StoreLeaseSet(destHash, []byte{0x03, 0x04, 0x05})
 
-	_, err = resolver.extractKeyFromLeaseSet2(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse LeaseSet2")
 }
@@ -347,31 +314,21 @@ func TestExtractKeyFromLeaseSet2_ShortData(t *testing.T) {
 // TestExtractKeyFromLeaseSet2Direct_NotFound tests that the direct LeaseSet2 lookup
 // returns an error when no LeaseSet2 data is stored.
 func TestExtractKeyFromLeaseSet2Direct_NotFound(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
+	resolver, _, destHash := newTestResolverWithHash(t)
 
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
-
-	_, err = resolver.extractKeyFromLeaseSet2Direct(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2Direct(destHash)
 	assert.Error(t, err)
 }
 
 // TestExtractKeyFromLeaseSet2Direct_InvalidData tests that the direct LeaseSet2 lookup
 // returns an error when stored data is not valid LeaseSet2.
 func TestExtractKeyFromLeaseSet2Direct_InvalidData(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store invalid data in LeaseSet2 bucket
 	netdb.StoreLeaseSet2(destHash, []byte{0x01, 0x02, 0x03})
 
-	_, err = resolver.extractKeyFromLeaseSet2Direct(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2Direct(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse LeaseSet2")
 }
@@ -379,17 +336,12 @@ func TestExtractKeyFromLeaseSet2Direct_InvalidData(t *testing.T) {
 // TestExtractKeyFromLeaseSet2Direct_EmptyData tests that the direct LeaseSet2 lookup
 // returns an error for empty data.
 func TestExtractKeyFromLeaseSet2Direct_EmptyData(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store empty data in LeaseSet2 bucket
 	netdb.StoreLeaseSet2(destHash, []byte{})
 
-	_, err = resolver.extractKeyFromLeaseSet2Direct(destHash)
+	_, err := resolver.extractKeyFromLeaseSet2Direct(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty lease set data")
 }
@@ -408,12 +360,7 @@ func TestResolveDestination_TriesLeaseSet2DirectFirst(t *testing.T) {
 // TestResolveDestination_FallsBackToClassicAfterLeaseSet2Miss tests that
 // when no LeaseSet2 exists, the resolver falls back to classic LeaseSet.
 func TestResolveDestination_FallsBackToClassicAfterLeaseSet2Miss(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, netdb, destHash := newTestResolverWithHash(t)
 
 	// Store data only in classic LeaseSet bucket (not LeaseSet2)
 	invalidData := []byte{0x01, 0x02, 0x03}
@@ -421,22 +368,17 @@ func TestResolveDestination_FallsBackToClassicAfterLeaseSet2Miss(t *testing.T) {
 
 	// Should attempt LeaseSet2Direct (miss) → LeaseSet2 via classic bytes (fail parse)
 	// → classic LeaseSet (fail parse) → error
-	_, err = resolver.ResolveDestination(destHash)
+	_, err := resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
 }
 
 // TestResolveDestination_NoDataAnywhere tests that the resolver returns a clear
 // error when the destination is not found in any LeaseSet bucket.
 func TestResolveDestination_NoDataAnywhere(t *testing.T) {
-	netdb := newMockNetDB()
-	resolver := NewDestinationResolver(netdb)
-
-	var destHash common.Hash
-	_, err := rand.Read(destHash[:])
-	require.NoError(t, err)
+	resolver, _, destHash := newTestResolverWithHash(t)
 
 	// No data stored anywhere
-	_, err = resolver.ResolveDestination(destHash)
+	_, err := resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found in netdb")
 }

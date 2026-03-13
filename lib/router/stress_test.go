@@ -158,18 +158,7 @@ func TestStress_100ConcurrentSessions(t *testing.T) {
 		errorCount)
 
 	// Memory check - allow reasonable growth
-	runtime.GC()
-	var afterMem runtime.MemStats
-	runtime.ReadMemStats(&afterMem)
-
-	memGrowthMB := (float64(afterMem.Alloc) - float64(initialMem.Alloc)) / 1024 / 1024
-	t.Logf("Memory growth: %.2f MB (initial: %.2f MB, current: %.2f MB)",
-		memGrowthMB,
-		float64(initialMem.Alloc)/1024/1024,
-		float64(afterMem.Alloc)/1024/1024)
-
-	// Allow up to 100MB growth for 100 sessions with data
-	assert.Less(t, memGrowthMB, 100.0, "Excessive memory growth detected")
+	assertMemoryGrowthBelow(t, &initialMem, 100.0, "Session stress")
 
 	// Goroutine leak check - allow some growth for background workers
 	afterGoroutines := runtime.NumGoroutine()
@@ -288,19 +277,7 @@ func TestStress_1000RouterInfoNetDB(t *testing.T) {
 		float64(retrieveSuccess)/retrieveDuration.Seconds())
 
 	// Memory check
-	runtime.GC()
-	var afterMem runtime.MemStats
-	runtime.ReadMemStats(&afterMem)
-
-	// Use signed arithmetic to handle cases where GC frees more than was allocated
-	memGrowthMB := (float64(afterMem.Alloc) - float64(initialMem.Alloc)) / 1024 / 1024
-	t.Logf("Memory growth: %.2f MB (initial: %.2f MB, current: %.2f MB)",
-		memGrowthMB,
-		float64(initialMem.Alloc)/1024/1024,
-		float64(afterMem.Alloc)/1024/1024)
-
-	// Allow up to 150MB for 1000 RouterInfos with overhead
-	assert.Less(t, memGrowthMB, 150.0, "Excessive memory growth for NetDB")
+	assertMemoryGrowthBelow(t, &initialMem, 150.0, "NetDB stress")
 }
 
 // TestStress_TunnelPoolUnderLoad tests tunnel pool management under sustained load.

@@ -323,16 +323,9 @@ func createMockDataMessage() i2np.I2NPMessage {
 
 // TestCreateEndpointForSession tests creating an endpoint with I2CP handler wired in
 func TestCreateEndpointForSession(t *testing.T) {
-	sessionManager := i2cp.NewSessionManager()
-	handler := NewInboundMessageHandler(sessionManager)
+	handler, sessionID, mockDecryptor := setupInboundHandlerWithSession(t)
 
-	// Create a session first
-	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
-	require.NoError(t, err)
-
-	sessionID := session.ID()
 	tunnelID := tunnelpkg.TunnelID(54321)
-	mockDecryptor := &mockTunnelEncryptor{}
 
 	// Create endpoint for session
 	endpoint, err := handler.CreateEndpointForSession(tunnelID, sessionID, mockDecryptor)
@@ -351,15 +344,9 @@ func TestCreateEndpointForSession(t *testing.T) {
 
 // TestCreateEndpointForSession_DuplicateTunnel tests duplicate tunnel ID detection
 func TestCreateEndpointForSession_DuplicateTunnel(t *testing.T) {
-	sessionManager := i2cp.NewSessionManager()
-	handler := NewInboundMessageHandler(sessionManager)
+	handler, sessionID, mockDecryptor := setupInboundHandlerWithSession(t)
 
-	session, err := sessionManager.CreateSession(nil, i2cp.DefaultSessionConfig())
-	require.NoError(t, err)
-
-	sessionID := session.ID()
 	tunnelID := tunnelpkg.TunnelID(54321)
-	mockDecryptor := &mockTunnelEncryptor{}
 
 	// Create first endpoint
 	endpoint1, err := handler.CreateEndpointForSession(tunnelID, sessionID, mockDecryptor)

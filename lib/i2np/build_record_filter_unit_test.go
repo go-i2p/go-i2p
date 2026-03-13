@@ -77,9 +77,7 @@ func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
 // parameter is correctly passed through to the build reply forwarder
 // instead of being hardcoded to false.
 func TestForwardBuildReply_UsesIsShortBuild(t *testing.T) {
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	processor.SetBuildReplyForwarder(mockForwarder)
+	processor, mockForwarder := setupProcessorWithForwarder(t)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 0
@@ -106,9 +104,7 @@ func TestForwardBuildReply_UsesIsShortBuild(t *testing.T) {
 // TestForwardBuildReply_TunnelUsesIsShortBuild verifies tunnel forwarding
 // also passes isShortBuild correctly.
 func TestForwardBuildReply_TunnelUsesIsShortBuild(t *testing.T) {
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	processor.SetBuildReplyForwarder(mockForwarder)
+	processor, mockForwarder := setupProcessorWithForwarder(t)
 
 	record := createTestBuildRequestRecord(t)
 	record.NextTunnel = 12345 // Force tunnel forwarding

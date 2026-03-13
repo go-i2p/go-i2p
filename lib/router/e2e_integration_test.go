@@ -164,24 +164,7 @@ func TestE2E_MessageRoutingWithLeaseSet(t *testing.T) {
 
 	// Send message using LeaseSet information
 	testPayload := []byte("Message routed via LeaseSet")
-	err = env.SendMessageFromClient(env.senderSession, env.receiverDestHash, env.receiverPubKey, testPayload)
-	require.NoError(t, err)
-
-	// Process delivery
-	env.WaitForOutboundTransmission(t, 2*time.Second)
-	garlicMsg := env.ExtractSentGarlicMessage(t)
-	require.NotNil(t, garlicMsg)
-
-	err = env.ProcessInboundMessage(garlicMsg, testPayload)
-	require.NoError(t, err)
-
-	// Verify delivery
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	receivedMsg, err := env.ReceiveMessageAtClient(ctx, env.receiverSession)
-	require.NoError(t, err)
-	assert.Equal(t, testPayload, receivedMsg.Payload)
+	sendAndReceiveE2E(t, env, testPayload)
 }
 
 // TestE2E_TunnelFailureAndRecovery tests message delivery when tunnels fail and rebuild
@@ -220,21 +203,7 @@ func TestE2E_TunnelFailureAndRecovery(t *testing.T) {
 
 	// Send another message with new tunnels
 	payload2 := []byte("Message after tunnel recovery")
-	err = env.SendMessageFromClient(env.senderSession, env.receiverDestHash, env.receiverPubKey, payload2)
-	require.NoError(t, err)
-
-	env.WaitForOutboundTransmission(t, 2*time.Second)
-	garlicMsg2 := env.ExtractSentGarlicMessage(t)
-	require.NotNil(t, garlicMsg2)
-
-	err = env.ProcessInboundMessage(garlicMsg2, payload2)
-	require.NoError(t, err)
-
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
-	msg2, err := env.ReceiveMessageAtClient(ctx2, env.receiverSession)
-	cancel2()
-	require.NoError(t, err)
-	assert.Equal(t, payload2, msg2.Payload)
+	sendAndReceiveE2E(t, env, payload2)
 }
 
 // TestE2E_MessageFragmentation tests handling of fragmented messages across tunnel boundaries.

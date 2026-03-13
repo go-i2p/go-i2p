@@ -36,27 +36,18 @@ func TestRouterSessionTracking(t *testing.T) {
 	// For this unit test, we're only testing map operations, not session functionality
 
 	// Test adding sessions
-	router.addSession(peer1Hash, session1)
-	router.addSession(peer2Hash, session2)
+	addAndAssertSession(t, router, peer1Hash, session1)
+	addAndAssertSession(t, router, peer2Hash, session2)
 
 	// Verify sessions were added
 	assert.Equal(t, 2, len(router.activeSessions), "Should have 2 active sessions")
-
-	// Test retrieving sessions
-	retrievedSession1, err := router.getSessionByHash(peer1Hash)
-	require.NoError(t, err, "Should retrieve session1 without error")
-	assert.Equal(t, session1, retrievedSession1, "Should retrieve correct session1")
-
-	retrievedSession2, err := router.getSessionByHash(peer2Hash)
-	require.NoError(t, err, "Should retrieve session2 without error")
-	assert.Equal(t, session2, retrievedSession2, "Should retrieve correct session2")
 
 	// Test removing a session
 	router.removeSession(peer1Hash)
 	assert.Equal(t, 1, len(router.activeSessions), "Should have 1 active session after removal")
 
 	// Verify removed session can't be retrieved
-	_, err = router.getSessionByHash(peer1Hash)
+	_, err := router.getSessionByHash(peer1Hash)
 	assert.Error(t, err, "Should return error for removed session")
 	assert.Contains(t, err.Error(), "no session found", "Error should indicate session not found")
 
@@ -85,11 +76,7 @@ func TestGetSessionByHash(t *testing.T) {
 
 	// Use nil session for testing map operations only
 	session := (*ntcp.NTCP2Session)(nil)
-	router.addSession(peerHash, session)
-
-	retrievedSession, err := router.getSessionByHash(peerHash)
-	require.NoError(t, err, "Should retrieve existing session without error")
-	assert.Equal(t, session, retrievedSession, "Should retrieve the correct session")
+	addAndAssertSession(t, router, peerHash, session)
 }
 
 // TestSessionThreadSafety tests concurrent session operations

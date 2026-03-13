@@ -38,11 +38,7 @@ func TestSetSearchReplyHandler(t *testing.T) {
 
 // TestProcessDatabaseSearchReplyWithHandler tests that the handler receives suggestions.
 func TestProcessDatabaseSearchReplyWithHandler(t *testing.T) {
-	processor := NewMessageProcessor()
-	processor.DisableExpirationCheck()
-
-	handler := &mockSearchReplyHandler{}
-	processor.SetSearchReplyHandler(handler)
+	processor, handler := setupSearchReplyProcessor(t)
 
 	key := common.Hash{1, 2, 3}
 	from := common.Hash{4, 5, 6}
@@ -93,11 +89,7 @@ func TestProcessDatabaseSearchReplyWithoutHandler(t *testing.T) {
 
 // TestProcessDatabaseSearchReplyEmptySuggestions tests handling with no peer suggestions.
 func TestProcessDatabaseSearchReplyEmptySuggestions(t *testing.T) {
-	processor := NewMessageProcessor()
-	processor.DisableExpirationCheck()
-
-	handler := &mockSearchReplyHandler{}
-	processor.SetSearchReplyHandler(handler)
+	processor, handler := setupSearchReplyProcessor(t)
 
 	key := common.Hash{1, 2, 3}
 	from := common.Hash{4, 5, 6}

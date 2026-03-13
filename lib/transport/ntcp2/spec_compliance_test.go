@@ -40,13 +40,7 @@ import (
 //
 // Spec reference: ntcp2.rst Section "Noise Protocol"
 func TestNoiseXKHandshake_PatternString(t *testing.T) {
-	routerHash := make([]byte, 32)
-	for i := range routerHash {
-		routerHash[i] = byte(i)
-	}
-
-	config, err := ntcp2.NewNTCP2Config(routerHash, false)
-	require.NoError(t, err, "NewNTCP2Config must succeed with valid 32-byte hash")
+	config := newTestNTCP2Config(t, false)
 
 	// Verify pattern is "XK" (Noise XK handshake pattern)
 	assert.Equal(t, "XK", config.Pattern,
@@ -63,10 +57,7 @@ func TestNoiseXKHandshake_PatternString(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Prologue"
 func TestNoiseXKHandshake_Prologue(t *testing.T) {
-	routerHash := make([]byte, 32)
-	for i := range routerHash {
-		routerHash[i] = byte(i + 0x10)
-	}
+	routerHash := newTestRouterHash(0x10)
 
 	config, err := ntcp2.NewNTCP2Config(routerHash, true)
 	require.NoError(t, err)
@@ -85,9 +76,7 @@ func TestNoiseXKHandshake_Prologue(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "SessionRequest (Message 1)"
 func TestNoiseXKHandshake_Message1_EphemeralKey(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// AES obfuscation of ephemeral keys is enabled by default per spec
 	assert.True(t, config.EnableAESObfuscation,
@@ -100,11 +89,8 @@ func TestNoiseXKHandshake_Message1_EphemeralKey(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "SessionCreated (Message 2)"
 func TestNoiseXKHandshake_Message2_EphemeralKey(t *testing.T) {
-	routerHash := make([]byte, 32)
-
 	// Responder config
-	responderCfg, err := ntcp2.NewNTCP2Config(routerHash, false)
-	require.NoError(t, err)
+	responderCfg := newTestNTCP2Config(t, false)
 
 	assert.True(t, responderCfg.EnableAESObfuscation,
 		"Responder must also have AES obfuscation enabled for Message 2 ephemeral key")
@@ -118,9 +104,7 @@ func TestNoiseXKHandshake_Message2_EphemeralKey(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "SessionConfirmed (Message 3)"
 func TestNoiseXKHandshake_Message3_StaticKeyAndRouterInfo(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// XK pattern: initiator sends static key in message 3
 	assert.Equal(t, "XK", config.Pattern,
@@ -145,9 +129,7 @@ func TestNoiseXKHandshake_Message3_StaticKeyAndRouterInfo(t *testing.T) {
 func TestNoiseXKHandshake_StaticKeyBinding(t *testing.T) {
 	// loadStaticKeyFromRouter extracts X25519 private key from keystore
 	// and sets it as NTCP2Config.StaticKey
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, false)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, false)
 
 	// Simulate what loadStaticKeyFromRouter does
 	fakeEncryptionKey := make([]byte, 32)
@@ -175,15 +157,12 @@ func TestNoiseXKHandshake_StaticKeyBinding(t *testing.T) {
 // Spec reference: ntcp2.rst Section "RouterInfo exchange"
 func TestNoiseXKHandshake_RouterInfoDelivery(t *testing.T) {
 	// The initiator config must be configured for outbound (Message 3 carries RouterInfo)
-	routerHash := make([]byte, 32)
-	initiatorCfg, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	initiatorCfg := newTestNTCP2Config(t, true)
 	assert.True(t, initiatorCfg.Initiator,
 		"Initiator config must be set for outbound connections (carries RouterInfo in Message 3)")
 
 	// Responder expects to receive RouterInfo in Message 3
-	responderCfg, err := ntcp2.NewNTCP2Config(routerHash, false)
-	require.NoError(t, err)
+	responderCfg := newTestNTCP2Config(t, false)
 	assert.False(t, responderCfg.Initiator,
 		"Responder receives initiator's RouterInfo in Message 3, sends own in first data frame")
 }
@@ -193,9 +172,7 @@ func TestNoiseXKHandshake_RouterInfoDelivery(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Padding"
 func TestNoiseXKHandshake_Padding(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// Frame padding must be enabled by default per spec
 	assert.True(t, config.FramePaddingEnabled,
@@ -221,9 +198,7 @@ func TestNoiseXKHandshake_Padding(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Options block"
 func TestNoiseXKHandshake_Timestamp(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// Handshake timeout is the overall timeout for the handshake exchange
 	assert.Greater(t, config.HandshakeTimeout.Seconds(), float64(0),
@@ -289,9 +264,7 @@ func TestDataPhase_FrameFormat(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Length Obfuscation"
 func TestDataPhase_LengthObfuscation(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	assert.True(t, config.EnableSipHashLength,
 		"SipHash-based length obfuscation must be enabled by default per ntcp2.rst")
@@ -370,9 +343,7 @@ func TestDataPhase_DateTimeBlock(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Padding Block (type 254)"
 func TestDataPhase_PaddingBlock(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	assert.True(t, config.FramePaddingEnabled,
 		"Data phase padding (block type 254) must be enabled for traffic obfuscation")
@@ -390,12 +361,7 @@ func TestDataPhase_PaddingBlock(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Termination Block (type 4)"
 func TestDataPhase_TerminationBlock(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	logger := logger.WithField("test", "termination")
-
-	session := NewNTCP2Session(conn, ctx, logger)
+	session := newTestSession(t)
 	require.NotNil(t, session)
 
 	// Close should drain queue then terminate
@@ -426,9 +392,7 @@ func TestDataPhase_MaxFrameSize(t *testing.T) {
 	assert.NoError(t, err, "Messages within maxI2NPMessageSize must be frameable")
 
 	// The NTCP2 frame size limit is configured in the Noise library
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	assert.Greater(t, config.MaxFrameSize, 0,
 		"MaxFrameSize must be positive")
@@ -644,9 +608,7 @@ func TestConnectionManagement_IPPortFromRouterAddress(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Noise Protocol"
 func TestCryptoAudit_NoiseFramework(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// XK pattern: initiator knows responder's static key before handshake
 	assert.Equal(t, "XK", config.Pattern,
@@ -682,9 +644,7 @@ func TestCryptoAudit_StaticKeyDerivation(t *testing.T) {
 		"Static key must equal the router's X25519 encryption private key")
 
 	// Verify the key can be loaded into NTCP2Config
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, false)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, false)
 
 	config.StaticKey = staticKey
 	assert.Len(t, config.StaticKey, 32,
@@ -696,9 +656,7 @@ func TestCryptoAudit_StaticKeyDerivation(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Length Obfuscation"
 func TestCryptoAudit_SipHashLengthObfuscation(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	assert.True(t, config.EnableSipHashLength,
 		"SipHash length obfuscation must be enabled by default")
@@ -721,9 +679,7 @@ func TestCryptoAudit_SipHashLengthObfuscation(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Data Phase Encryption"
 func TestCryptoAudit_AEAD(t *testing.T) {
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	// Verify the Noise framework provides encryption
 	// Pattern XK ensures keys are established during handshake
@@ -812,9 +768,7 @@ func TestLegacyCrypto_NoDHKeyExchangeNotX25519(t *testing.T) {
 	}
 
 	// Verify the static key is X25519 (32 bytes = Curve25519 key size)
-	routerHash := make([]byte, 32)
-	config, err := ntcp2.NewNTCP2Config(routerHash, true)
-	require.NoError(t, err)
+	config := newTestNTCP2Config(t, true)
 
 	testKey := make([]byte, 32)
 	config, err = config.WithStaticKey(testKey)
@@ -883,13 +837,7 @@ func TestSessionCompliance_TransportSession(t *testing.T) {
 
 // TestSessionCompliance_BandwidthTracking verifies atomic bandwidth tracking.
 func TestSessionCompliance_BandwidthTracking(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	logger := logger.WithField("test", "bandwidth")
-
-	session := NewNTCP2Session(conn, ctx, logger)
-	defer session.Close()
+	session := newTestSession(t)
 
 	// Initial bandwidth must be zero
 	sent, received := session.GetBandwidthStats()
@@ -907,13 +855,7 @@ func TestSessionCompliance_BandwidthTracking(t *testing.T) {
 
 // TestSessionCompliance_DroppedMessageTracking verifies dropped message counting.
 func TestSessionCompliance_DroppedMessageTracking(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	logger := logger.WithField("test", "dropped")
-
-	session := NewNTCP2Session(conn, ctx, logger)
-	defer session.Close()
+	session := newTestSession(t)
 
 	assert.Equal(t, uint64(0), session.DroppedMessages(),
 		"Initial dropped messages must be zero")
@@ -928,12 +870,7 @@ func TestSessionCompliance_DroppedMessageTracking(t *testing.T) {
 //
 // Spec reference: ntcp2.rst Section "Published Addresses" (IV must be stable)
 func TestObfuscationIV_Persistence(t *testing.T) {
-	tmpDir := t.TempDir()
-	pc := NewPersistentConfig(tmpDir)
-
-	// First call generates and stores IV
-	iv1, err := pc.LoadOrGenerateObfuscationIV()
-	require.NoError(t, err)
+	tmpDir, pc, iv1 := newPersistentConfigWithIV(t)
 	assert.Len(t, iv1, obfuscationIVSize,
 		"Generated IV must be exactly %d bytes", obfuscationIVSize)
 

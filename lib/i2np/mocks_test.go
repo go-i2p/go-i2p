@@ -1,7 +1,6 @@
 package i2np
 
 import (
-	"crypto/rand"
 	"fmt"
 	"sync"
 	"time"
@@ -237,19 +236,7 @@ func (m *mockParticipantManager) getRegisteredCount() int {
 func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 	t.Helper()
 
-	var layerKey, ivKey, replyKey session_key.SessionKey
-	var replyIV [16]byte
-	var padding [29]byte
-	var ourIdent, nextIdent common.Hash
-
-	// Fill with random data
-	rand.Read(layerKey[:])
-	rand.Read(ivKey[:])
-	rand.Read(replyKey[:])
-	rand.Read(replyIV[:])
-	rand.Read(padding[:])
-	rand.Read(ourIdent[:])
-	rand.Read(nextIdent[:])
+	layerKey, ivKey, replyKey, replyIV, padding, ourIdent, nextIdent := generateRandomBuildKeys()
 
 	return BuildRequestRecord{
 		ReceiveTunnel: tunnel.TunnelID(12345),

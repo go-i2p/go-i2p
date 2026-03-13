@@ -6,13 +6,11 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestTrackRouterInfoExpiration tests that expiration tracking records the correct expiry time.
 func TestTrackRouterInfoExpiration(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	testHash := common.Hash{0x01, 0x02, 0x03}
 	publishedTime := time.Now().Add(-1 * time.Hour) // published 1 hour ago
@@ -31,24 +29,14 @@ func TestTrackRouterInfoExpiration(t *testing.T) {
 
 // TestCleanExpiredRouterInfos_RemovesExpired tests that expired RouterInfos are removed.
 func TestCleanExpiredRouterInfos_RemovesExpired(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
+	db := newTestStdNetDB(t)
 
 	// Add enough non-expired entries to stay above MinRouterInfoCount
 	for i := 0; i < MinRouterInfoCount+5; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
 		hash[1] = 0xAA // distinguish from expired entries
-
-		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{}
-		db.riMutex.Unlock()
-
-		// Track as not expired (far future)
-		db.expiryMutex.Lock()
-		db.routerInfoExpiry[hash] = time.Now().Add(24 * time.Hour)
-		db.expiryMutex.Unlock()
+		addRouterInfoWithExpiry(db, hash, 24*time.Hour)
 	}
 
 	// Add 3 expired entries
@@ -56,15 +44,7 @@ func TestCleanExpiredRouterInfos_RemovesExpired(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(0xF0 + i)
-
-		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{}
-		db.riMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		db.routerInfoExpiry[hash] = time.Now().Add(-1 * time.Hour) // expired 1 hour ago
-		db.expiryMutex.Unlock()
-
+		addRouterInfoWithExpiry(db, hash, -1*time.Hour)
 		expiredHashes[i] = hash
 	}
 
@@ -86,21 +66,13 @@ func TestCleanExpiredRouterInfos_RemovesExpired(t *testing.T) {
 // TestCleanExpiredRouterInfos_PreservesMinimumCount tests that the cleanup
 // does not remove entries if doing so would bring the count below MinRouterInfoCount.
 func TestCleanExpiredRouterInfos_PreservesMinimumCount(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	// Add exactly MinRouterInfoCount entries, all expired
 	for i := 0; i < MinRouterInfoCount; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
-
-		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{}
-		db.riMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		db.routerInfoExpiry[hash] = time.Now().Add(-1 * time.Hour)
-		db.expiryMutex.Unlock()
+		addRouterInfoWithExpiry(db, hash, -1*time.Hour)
 	}
 
 	db.cleanExpiredRouterInfos()
@@ -113,26 +85,18 @@ func TestCleanExpiredRouterInfos_PreservesMinimumCount(t *testing.T) {
 // TestCleanExpiredRouterInfos_PartialRemoval tests that when removing all expired
 // entries would go below minimum, only some are removed.
 func TestCleanExpiredRouterInfos_PartialRemoval(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	// Add MinRouterInfoCount+2 entries, with 5 expired
 	totalEntries := MinRouterInfoCount + 2
 	for i := 0; i < totalEntries; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
-
-		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{}
-		db.riMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		if i < 5 { // first 5 are expired
-			db.routerInfoExpiry[hash] = time.Now().Add(-1 * time.Hour)
+		if i < 5 {
+			addRouterInfoWithExpiry(db, hash, -1*time.Hour)
 		} else {
-			db.routerInfoExpiry[hash] = time.Now().Add(24 * time.Hour)
+			addRouterInfoWithExpiry(db, hash, 24*time.Hour)
 		}
-		db.expiryMutex.Unlock()
 	}
 
 	db.cleanExpiredRouterInfos()
@@ -145,20 +109,12 @@ func TestCleanExpiredRouterInfos_PartialRemoval(t *testing.T) {
 // TestCleanExpiredRouterInfos_NoExpired tests that nothing happens when
 // there are no expired entries.
 func TestCleanExpiredRouterInfos_NoExpired(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	for i := 0; i < 10; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
-
-		db.riMutex.Lock()
-		db.RouterInfos[hash] = Entry{}
-		db.riMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		db.routerInfoExpiry[hash] = time.Now().Add(24 * time.Hour) // not expired
-		db.expiryMutex.Unlock()
+		addRouterInfoWithExpiry(db, hash, 24*time.Hour)
 	}
 
 	db.cleanExpiredRouterInfos()
@@ -168,8 +124,7 @@ func TestCleanExpiredRouterInfos_NoExpired(t *testing.T) {
 
 // TestGetRouterInfoExpirationStats tests the stats reporting function.
 func TestGetRouterInfoExpirationStats(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	// Add mix of expired and non-expired entries
 	for i := 0; i < 5; i++ {
@@ -194,8 +149,7 @@ func TestGetRouterInfoExpirationStats(t *testing.T) {
 // TestStartExpirationCleaner_IncludesRouterInfoCleanup tests that the expiration
 // cleaner includes RouterInfo cleanup in its tick cycle.
 func TestStartExpirationCleaner_IncludesRouterInfoCleanup(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
+	db := newTestStdNetDBBasic(t)
 
 	// Just verify the cleaner starts and stops cleanly
 	db.StartExpirationCleaner()

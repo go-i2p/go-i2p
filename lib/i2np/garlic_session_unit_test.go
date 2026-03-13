@@ -82,15 +82,7 @@ func TestNewSessionManagerWithKey(t *testing.T) {
 
 // TestNewSessionEncryption tests encrypting a garlic message for a new session.
 func TestNewSessionEncryption(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
+	sm, destPubKey, destHash := setupNewGarlicSession(t)
 
 	builder, err := NewGarlicBuilderWithDefaults()
 	require.NoError(t, err)
@@ -201,15 +193,7 @@ func TestWrapInGarlicMessage_EmptyData(t *testing.T) {
 
 // TestNewSessionMessageFormat tests that New Session messages follow the correct format.
 func TestNewSessionMessageFormat(t *testing.T) {
-	sm, err := GenerateGarlicSessionManager()
-	require.NoError(t, err)
-
-	destPubBytes, _, err := ecies.GenerateKeyPair()
-	require.NoError(t, err)
-
-	var destPubKey [32]byte
-	copy(destPubKey[:], destPubBytes)
-	destHash := types.SHA256(destPubKey[:])
+	sm, destPubKey, destHash := setupNewGarlicSession(t)
 
 	builder, _ := NewGarlicBuilderWithDefaults()
 	dataMsg := NewDataMessage([]byte("format test"))

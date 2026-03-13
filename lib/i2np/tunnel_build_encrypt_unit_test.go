@@ -4,10 +4,7 @@ import (
 	"testing"
 	"time"
 
-	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -27,18 +24,7 @@ func createTestHop(t *testing.T) (*router_info.RouterInfo, *keys.RouterInfoKeyst
 // createTestTunnelRecord creates a test tunnel.BuildRequestRecord with random crypto keys.
 func createTestTunnelRecord(t *testing.T) tunnel.BuildRequestRecord {
 	t.Helper()
-	var layerKey, ivKey, replyKey session_key.SessionKey
-	var replyIV [16]byte
-	var padding [29]byte
-	var ourIdent, nextIdent common.Hash
-
-	rand.Read(layerKey[:])
-	rand.Read(ivKey[:])
-	rand.Read(replyKey[:])
-	rand.Read(replyIV[:])
-	rand.Read(padding[:])
-	rand.Read(ourIdent[:])
-	rand.Read(nextIdent[:])
+	layerKey, ivKey, replyKey, replyIV, padding, ourIdent, nextIdent := generateRandomBuildKeys()
 
 	return tunnel.BuildRequestRecord{
 		ReceiveTunnel: tunnel.TunnelID(12345),

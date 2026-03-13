@@ -26,33 +26,21 @@ func TestRouterContextLifecycle(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Context should be initialized after Start()
+	ctx := getRouterCtx(t, router)
+
 	router.runMux.RLock()
-	ctx := router.ctx
 	cancel := router.cancel
 	router.runMux.RUnlock()
-
-	require.NotNil(t, ctx, "Router context should be initialized after Start()")
 	require.NotNil(t, cancel, "Router cancel function should be initialized after Start()")
 
 	// Context should not be cancelled while router is running
-	select {
-	case <-ctx.Done():
-		t.Error("Context should not be cancelled while router is running")
-	default:
-		// Expected: context still active
-	}
+	assertContextActive(t, ctx)
 
 	// Stop the router
 	router.Stop()
 
 	// Context should be cancelled after Stop()
-	select {
-	case <-ctx.Done():
-		// Expected: context cancelled
-		assert.Error(t, ctx.Err(), "Context error should be set after cancellation")
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Context should be cancelled after Stop()")
-	}
+	assertContextCancelled(t, ctx, 100*time.Millisecond)
 }
 
 // TestRouterContextCancellation tests that stopping the router cancels the context
@@ -64,10 +52,7 @@ func TestRouterContextCancellation(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Get context before stopping
-	router.runMux.RLock()
-	ctx := router.ctx
-	router.runMux.RUnlock()
-	require.NotNil(t, ctx)
+	ctx := getRouterCtx(t, router)
 
 	// Create a goroutine that waits on the context
 	contextDone := make(chan struct{})
@@ -96,48 +81,27 @@ func TestRouterMultipleStartStop(t *testing.T) {
 	// First Start/Stop cycle
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
-	router.runMux.RLock()
-	ctx1 := router.ctx
-	router.runMux.RUnlock()
-	require.NotNil(t, ctx1)
+	ctx1 := getRouterCtx(t, router)
 	router.Stop()
 
 	// Verify first context is cancelled
-	select {
-	case <-ctx1.Done():
-		// Expected
-	case <-time.After(100 * time.Millisecond):
-		t.Error("First context should be cancelled")
-	}
+	assertContextCancelled(t, ctx1, 100*time.Millisecond)
 
 	// Second Start/Stop cycle
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
-	router.runMux.RLock()
-	ctx2 := router.ctx
-	router.runMux.RUnlock()
-	require.NotNil(t, ctx2)
+	ctx2 := getRouterCtx(t, router)
 
 	// New context should be different from old one
 	assert.NotEqual(t, ctx1, ctx2, "New start should create new context")
 
 	// New context should not be cancelled
-	select {
-	case <-ctx2.Done():
-		t.Error("New context should not be cancelled")
-	default:
-		// Expected
-	}
+	assertContextActive(t, ctx2)
 
 	router.Stop()
 
 	// Second context should be cancelled
-	select {
-	case <-ctx2.Done():
-		// Expected
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Second context should be cancelled")
-	}
+	assertContextCancelled(t, ctx2, 100*time.Millisecond)
 }
 
 // TestRouterStopWithoutStart tests that Stop() is safe to call without Start()
@@ -188,10 +152,7 @@ func TestRouterContextInheritance(t *testing.T) {
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
 
-	router.runMux.RLock()
-	parentCtx := router.ctx
-	router.runMux.RUnlock()
-	require.NotNil(t, parentCtx)
+	parentCtx := getRouterCtx(t, router)
 
 	// Simulate creating a child context (like sessions would)
 	childCtx, childCancel := context.WithCancel(parentCtx)

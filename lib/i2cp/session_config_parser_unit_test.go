@@ -34,11 +34,7 @@ func TestParseCreateSessionPayload_DefaultOptions(t *testing.T) {
 	require.NoError(t, err, "Failed to parse create session payload")
 	require.NotNil(t, parsedDest, "Parsed destination is nil")
 
-	defaultConfig := DefaultSessionConfig()
-	assert.Equal(t, defaultConfig.InboundTunnelLength, config.InboundTunnelLength, "InboundTunnelLength")
-	assert.Equal(t, defaultConfig.OutboundTunnelLength, config.OutboundTunnelLength, "OutboundTunnelLength")
-	assert.Equal(t, defaultConfig.InboundTunnelCount, config.InboundTunnelCount, "InboundTunnelCount")
-	assert.Equal(t, defaultConfig.OutboundTunnelCount, config.OutboundTunnelCount, "OutboundTunnelCount")
+	assertDefaultSessionConfig(t, config)
 }
 
 // TestParseCreateSessionPayload_CustomOptions tests parsing with custom tunnel configuration
@@ -97,11 +93,7 @@ func TestParseCreateSessionPayload_InvalidOptions(t *testing.T) {
 	_, config, err := ParseCreateSessionPayload(payload)
 	require.NoError(t, err, "Failed to parse create session payload")
 
-	defaultConfig := DefaultSessionConfig()
-	assert.Equal(t, defaultConfig.InboundTunnelLength, config.InboundTunnelLength, "InboundTunnelLength")
-	assert.Equal(t, defaultConfig.OutboundTunnelLength, config.OutboundTunnelLength, "OutboundTunnelLength")
-	assert.Equal(t, defaultConfig.InboundTunnelCount, config.InboundTunnelCount, "InboundTunnelCount")
-	assert.Equal(t, defaultConfig.OutboundTunnelCount, config.OutboundTunnelCount, "OutboundTunnelCount")
+	assertDefaultSessionConfig(t, config)
 }
 
 // TestParseReconfigureSessionPayload tests parsing reconfiguration payloads

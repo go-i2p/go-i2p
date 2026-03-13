@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,9 +13,7 @@ import (
 
 // TestStartExpirationCleaner verifies that the expiration cleaner starts successfully
 func TestStartExpirationCleaner(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Start the cleaner
 	db.StartExpirationCleaner()
@@ -41,9 +40,7 @@ func TestStartExpirationCleaner(t *testing.T) {
 
 // TestStopWithoutStart verifies Stop() is safe to call even if cleaner wasn't started
 func TestStopWithoutStart(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Should not panic
 	db.Stop()
@@ -51,9 +48,7 @@ func TestStopWithoutStart(t *testing.T) {
 
 // TestExpirationTracking verifies expiration time tracking
 func TestExpirationTracking(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	hash := common.Hash{0x01, 0x02, 0x03}
 	expiryTime := time.Now().Add(5 * time.Minute)
@@ -74,25 +69,15 @@ func TestExpirationTracking(t *testing.T) {
 
 // TestCleanExpiredLeaseSets verifies that expired LeaseSets are removed
 func TestCleanExpiredLeaseSets(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Create hash for expired LeaseSet
 	expiredHash := common.Hash{0x10, 0x11, 0x12}
 	validHash := common.Hash{0x20, 0x21, 0x22}
 
-	// Add both to cache (with empty entries for testing)
-	db.lsMutex.Lock()
-	db.LeaseSets[expiredHash] = Entry{}
-	db.LeaseSets[validHash] = Entry{}
-	db.lsMutex.Unlock()
-
-	// Track expirations: one expired, one valid
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[expiredHash] = time.Now().Add(-1 * time.Minute) // Expired 1 min ago
-	db.leaseSetExpiry[validHash] = time.Now().Add(5 * time.Minute)    // Valid for 5 min
-	db.expiryMutex.Unlock()
+	// Add both to cache + expiry tracking
+	addLeaseSetWithExpiry(db, expiredHash, -1*time.Minute)
+	addLeaseSetWithExpiry(db, validHash, 5*time.Minute)
 
 	// Verify both are in cache initially
 	db.lsMutex.Lock()
@@ -126,9 +111,7 @@ func TestCleanExpiredLeaseSets(t *testing.T) {
 
 // TestRemoveLeaseSetFromDisk verifies filesystem cleanup
 func TestRemoveLeaseSetFromDisk(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Create netdb directory structure
 	err := db.Create()
@@ -139,7 +122,7 @@ func TestRemoveLeaseSetFromDisk(t *testing.T) {
 	fpath := db.SkiplistFileForLeaseSet(hash)
 
 	// Ensure directory exists
-	err = os.MkdirAll(tmpDir+"/l3", 0o700)
+	err = os.MkdirAll(filepath.Dir(fpath), 0o700)
 	require.NoError(t, err)
 
 	// Create a dummy file
@@ -163,9 +146,7 @@ func TestRemoveLeaseSetFromDisk(t *testing.T) {
 
 // TestRemoveLeaseSetFromDiskNonexistent verifies safe handling of missing files
 func TestRemoveLeaseSetFromDiskNonexistent(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	hash := common.Hash{0x40, 0x41, 0x42}
 
@@ -175,9 +156,7 @@ func TestRemoveLeaseSetFromDiskNonexistent(t *testing.T) {
 
 // TestGetLeaseSetExpirationStats verifies statistics reporting
 func TestGetLeaseSetExpirationStats(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	now := time.Now()
 
@@ -211,9 +190,7 @@ func TestGetLeaseSetExpirationStats(t *testing.T) {
 
 // TestGetLeaseSetExpirationStatsEmpty verifies stats with no LeaseSets
 func TestGetLeaseSetExpirationStatsEmpty(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	total, expired, nextExpiry := db.GetLeaseSetExpirationStats()
 
@@ -224,20 +201,11 @@ func TestGetLeaseSetExpirationStatsEmpty(t *testing.T) {
 
 // TestCleanExpiredLeaseSetsNoExpired verifies no action when all valid
 func TestCleanExpiredLeaseSetsNoExpired(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Add only valid LeaseSet
 	validHash := common.Hash{0x70}
-
-	db.lsMutex.Lock()
-	db.LeaseSets[validHash] = Entry{}
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[validHash] = time.Now().Add(10 * time.Minute)
-	db.expiryMutex.Unlock()
+	addLeaseSetWithExpiry(db, validHash, 10*time.Minute)
 
 	initialCount := len(db.LeaseSets)
 
@@ -254,56 +222,26 @@ func TestCleanExpiredLeaseSetsNoExpired(t *testing.T) {
 
 // TestRemoveExpiredLeaseSet verifies complete removal of expired entry
 func TestRemoveExpiredLeaseSet(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	hash := common.Hash{0x80}
-
-	// Add entry to all three maps
-	db.lsMutex.Lock()
-	db.LeaseSets[hash] = Entry{}
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[hash] = time.Now().Add(-1 * time.Minute)
-	db.expiryMutex.Unlock()
+	addLeaseSetWithExpiry(db, hash, -1*time.Minute)
 
 	// Remove expired entry
 	db.removeExpiredLeaseSet(hash)
 
-	// Verify removed from LeaseSet cache
-	db.lsMutex.Lock()
-	_, inCache := db.LeaseSets[hash]
-	db.lsMutex.Unlock()
-	assert.False(t, inCache, "Should be removed from LeaseSet cache")
-
-	// Verify removed from expiry tracking
-	db.expiryMutex.RLock()
-	_, inExpiry := db.leaseSetExpiry[hash]
-	db.expiryMutex.RUnlock()
-	assert.False(t, inExpiry, "Should be removed from expiry tracking")
+	assertLeaseSetPresence(t, db, hash, false, "Removed entry")
 }
 
 // TestExpirationCleanerIntegration tests the full lifecycle
 func TestExpirationCleanerIntegration(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Add one expired and one valid LeaseSet
 	expiredHash := common.Hash{0x90}
 	validHash := common.Hash{0x91}
-
-	db.lsMutex.Lock()
-	db.LeaseSets[expiredHash] = Entry{}
-	db.LeaseSets[validHash] = Entry{}
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[expiredHash] = time.Now().Add(-1 * time.Second)
-	db.leaseSetExpiry[validHash] = time.Now().Add(1 * time.Hour)
-	db.expiryMutex.Unlock()
+	addLeaseSetWithExpiry(db, expiredHash, -1*time.Second)
+	addLeaseSetWithExpiry(db, validHash, 1*time.Hour)
 
 	// Start cleaner (runs every minute, but we'll trigger manually)
 	db.StartExpirationCleaner()
@@ -326,9 +264,7 @@ func TestExpirationCleanerIntegration(t *testing.T) {
 
 // TestMultipleStopCalls verifies Stop() is idempotent
 func TestMultipleStopCalls(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	db.StartExpirationCleaner()
 
@@ -340,9 +276,7 @@ func TestMultipleStopCalls(t *testing.T) {
 
 // TestCleanupWithManyExpired verifies performance with many expired LeaseSets
 func TestCleanupWithManyExpired(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	const numExpired = 100
 	const numValid = 50
@@ -351,28 +285,14 @@ func TestCleanupWithManyExpired(t *testing.T) {
 	for i := 0; i < numExpired; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(i)
-
-		db.lsMutex.Lock()
-		db.LeaseSets[hash] = Entry{}
-		db.lsMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		db.leaseSetExpiry[hash] = time.Now().Add(-1 * time.Minute)
-		db.expiryMutex.Unlock()
+		addLeaseSetWithExpiry(db, hash, -1*time.Minute)
 	}
 
 	// Add some valid LeaseSets
 	for i := 0; i < numValid; i++ {
 		hash := common.Hash{}
 		hash[0] = byte(numExpired + i)
-
-		db.lsMutex.Lock()
-		db.LeaseSets[hash] = Entry{}
-		db.lsMutex.Unlock()
-
-		db.expiryMutex.Lock()
-		db.leaseSetExpiry[hash] = time.Now().Add(10 * time.Minute)
-		db.expiryMutex.Unlock()
+		addLeaseSetWithExpiry(db, hash, 10*time.Minute)
 	}
 
 	// Run cleanup
@@ -400,19 +320,11 @@ func TestCleanerRunsPeriodically(t *testing.T) {
 		t.Skip("Skipping periodic test in short mode")
 	}
 
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 
 	// Add a LeaseSet that will expire very soon
 	expHash := common.Hash{0xA0}
-	db.lsMutex.Lock()
-	db.LeaseSets[expHash] = Entry{}
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[expHash] = time.Now().Add(2 * time.Second)
-	db.expiryMutex.Unlock()
+	addLeaseSetWithExpiry(db, expHash, 2*time.Second)
 
 	// Start cleaner - it runs every minute, but for this test we've made one expire soon
 	db.StartExpirationCleaner()
@@ -447,9 +359,7 @@ func TestCleanerRunsPeriodically(t *testing.T) {
 // 10 minutes and is impractical to wait for in tests) and verify the PeerTracker
 // is properly initialized and accessible from StdNetDB.
 func TestPeerTrackerPruningIntegration(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 	require.NotNil(t, db.PeerTracker, "PeerTracker should be initialized")
 
 	// Add peer entries — one recent, one old
@@ -479,9 +389,7 @@ func TestPeerTrackerPruningIntegration(t *testing.T) {
 // TestPeerTrackerAvailableInNetDB verifies PeerTracker is wired into StdNetDB
 // and can be used for peer reputation queries.
 func TestPeerTrackerAvailableInNetDB(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 	require.NotNil(t, db.PeerTracker)
 
 	hash := testHash(0xCC)

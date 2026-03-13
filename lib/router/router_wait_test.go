@@ -4,19 +4,11 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/go-i2p/go-i2p/lib/config"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRouterWaitGroupSemantics tests the WaitGroup implementation directly
 func TestRouterWaitGroupSemantics(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := newTestRouterForWait(t)
 
 	// Simulate starting a goroutine
 	router.wg.Add(1)
@@ -51,12 +43,7 @@ func TestRouterWaitGroupSemantics(t *testing.T) {
 
 // TestRouterMultipleGoroutines tests WaitGroup with multiple goroutines
 func TestRouterMultipleGoroutines(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := newTestRouterForWait(t)
 
 	const numGoroutines = 3
 	var started sync.WaitGroup
@@ -93,12 +80,7 @@ func TestRouterMultipleGoroutines(t *testing.T) {
 
 // TestRouterMultipleWaiters tests that multiple goroutines can Wait()
 func TestRouterMultipleWaiters(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := newTestRouterForWait(t)
 
 	// Simulate one active goroutine
 	router.wg.Add(1)
@@ -133,12 +115,7 @@ func TestRouterMultipleWaiters(t *testing.T) {
 
 // TestRouterWaitWithoutStart tests Wait() when nothing was started
 func TestRouterWaitWithoutStart(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := config.DefaultRouterConfig()
-	cfg.WorkingDir = tempDir
-
-	router, err := FromConfig(cfg)
-	require.NoError(t, err)
+	router := newTestRouterForWait(t)
 
 	// Call Wait() without ever adding to WaitGroup
 	done := make(chan struct{})

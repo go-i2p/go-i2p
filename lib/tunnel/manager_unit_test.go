@@ -99,21 +99,12 @@ func TestAddNilParticipant(t *testing.T) {
 
 // TestAddDuplicateParticipant verifies handling of duplicate tunnel IDs
 func TestAddDuplicateParticipant(t *testing.T) {
-	m := NewManager()
-	defer m.Stop()
-
 	tunnelID := TunnelID(99999)
-
-	// Add first participant
-	p1, _ := NewParticipant(tunnelID, &mockTunnelEncryptor{})
-	err := m.AddParticipant(p1)
-	if err != nil {
-		t.Fatalf("Failed to add first participant: %v", err)
-	}
+	m, _ := setupManagerWithParticipant(t, tunnelID)
 
 	// Add second participant with same ID (should return error)
 	p2, _ := NewParticipant(tunnelID, &mockTunnelEncryptor{})
-	err = m.AddParticipant(p2)
+	err := m.AddParticipant(p2)
 	if err == nil {
 		t.Errorf("Expected error when adding duplicate participant, got nil")
 	}
@@ -126,17 +117,8 @@ func TestAddDuplicateParticipant(t *testing.T) {
 
 // TestRemoveParticipant verifies participant removal
 func TestRemoveParticipant(t *testing.T) {
-	m := NewManager()
-	defer m.Stop()
-
 	tunnelID := TunnelID(54321)
-
-	// Add a participant
-	p, _ := NewParticipant(tunnelID, &mockTunnelEncryptor{})
-	err := m.AddParticipant(p)
-	if err != nil {
-		t.Fatalf("Failed to add participant: %v", err)
-	}
+	m, _ := setupManagerWithParticipant(t, tunnelID)
 
 	// Verify it exists
 	if m.ParticipantCount() != 1 {

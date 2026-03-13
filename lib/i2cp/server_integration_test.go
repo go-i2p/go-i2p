@@ -654,27 +654,7 @@ func TestErrorFlowIntegration_SessionCreationWithErrorHandling(t *testing.T) {
 	defer session.Stop()
 
 	// Verify destination is valid and error handling works
-	dest := session.Destination()
-	require.NotNil(t, dest)
-
-	// Test 1: Bytes() should work without error - exercises error handling from Phase 2
-	bytes, err := dest.Bytes()
-	assert.NoError(t, err, "Bytes() should succeed with proper error handling")
-	assert.NotEmpty(t, bytes)
-
-	// Test 2: Validate() should work without error
-	err = dest.Validate()
-	assert.NoError(t, err, "Validate() should succeed with proper error handling")
-
-	// Test 3: Base64() should work without error - exercises Bytes() internally
-	base64Str, err := dest.Base64()
-	assert.NoError(t, err, "Base64() should succeed with proper error handling")
-	assert.NotEmpty(t, base64Str)
-
-	// Test 4: Base32Address() should work without error
-	base32Addr, err := dest.Base32Address()
-	assert.NoError(t, err, "Base32Address() should succeed with proper error handling")
-	assert.NotEmpty(t, base32Addr)
+	assertDestinationMethodsWork(t, session.Destination(), "error handling")
 }
 
 // TestErrorFlowIntegration_LeaseSetCreationWithErrorHandling tests that LeaseSet creation
@@ -881,22 +861,7 @@ func TestErrorFlowIntegration_SessionLifecycleErrorRecovery(t *testing.T) {
 	assert.NotNil(t, msg2)
 
 	// 5. Verify destination methods still work correctly
-	dest := session.Destination()
-
-	bytes, err := dest.Bytes()
-	assert.NoError(t, err, "Bytes() after lifecycle operations should succeed")
-	assert.NotEmpty(t, bytes)
-
-	base64Str, err := dest.Base64()
-	assert.NoError(t, err, "Base64() after lifecycle operations should succeed")
-	assert.NotEmpty(t, base64Str)
-
-	base32Addr, err := dest.Base32Address()
-	assert.NoError(t, err, "Base32Address() after lifecycle operations should succeed")
-	assert.NotEmpty(t, base32Addr)
-
-	err = dest.Validate()
-	assert.NoError(t, err, "Validate() after lifecycle operations should succeed")
+	assertDestinationMethodsWork(t, session.Destination(), "after lifecycle operations")
 
 	// 6. Verify we can still create LeaseSet at the end
 	leaseSet3, err := session.CreateLeaseSet()

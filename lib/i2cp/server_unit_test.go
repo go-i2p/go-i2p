@@ -626,8 +626,7 @@ func TestHandleCreateLeaseSetWithPublisher(t *testing.T) {
 	publisher := newMockLeaseSetPublisher()
 	f := setupLeaseSetTest(t, publisher, true)
 
-	sessionPtr := f.session
-	response, err := f.server.handleCreateLeaseSet(f.msg, &sessionPtr)
+	response, err := callHandleCreateLeaseSet(t, f)
 
 	assert.NoError(t, err, "handleCreateLeaseSet should succeed")
 	assert.Nil(t, response, "CreateLeaseSet should not return a response")
@@ -650,8 +649,7 @@ func TestHandleCreateLeaseSetWithPublisher(t *testing.T) {
 func TestHandleCreateLeaseSetWithoutPublisher(t *testing.T) {
 	f := setupLeaseSetTest(t, nil, true)
 
-	sessionPtr := f.session
-	response, err := f.server.handleCreateLeaseSet(f.msg, &sessionPtr)
+	response, err := callHandleCreateLeaseSet(t, f)
 
 	assert.NoError(t, err, "handleCreateLeaseSet should succeed without publisher")
 	assert.Nil(t, response, "CreateLeaseSet should not return a response")
@@ -667,8 +665,7 @@ func TestHandleCreateLeaseSetPublisherError(t *testing.T) {
 	publisher.publishErr = assert.AnError
 	f := setupLeaseSetTest(t, publisher, true)
 
-	sessionPtr := f.session
-	response, err := f.server.handleCreateLeaseSet(f.msg, &sessionPtr)
+	response, err := callHandleCreateLeaseSet(t, f)
 
 	assert.NoError(t, err, "handleCreateLeaseSet should succeed even when publisher fails")
 	assert.Nil(t, response, "CreateLeaseSet should not return a response")
@@ -685,8 +682,7 @@ func TestHandleCreateLeaseSetNoActiveTunnels(t *testing.T) {
 	publisher := newMockLeaseSetPublisher()
 	f := setupLeaseSetTest(t, publisher, false)
 
-	sessionPtr := f.session
-	response, err := f.server.handleCreateLeaseSet(f.msg, &sessionPtr)
+	response, err := callHandleCreateLeaseSet(t, f)
 
 	assert.Error(t, err, "handleCreateLeaseSet should fail with no active tunnels")
 	assert.Nil(t, response, "Should not return response on error")
@@ -1098,21 +1094,7 @@ func TestHandleSendMessageInvalidPayload(t *testing.T) {
 
 // TestDeliverMessagesToClientIntegration tests the message delivery goroutine
 func TestDeliverMessagesToClientIntegration(t *testing.T) {
-	// Create in-memory pipe for testing
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	// Create server and session
-	server, err := NewServer(nil)
-	require.NoError(t, err, "Failed to create server")
-
-	session, err := server.manager.CreateSession(nil, nil)
-	require.NoError(t, err, "Failed to create session")
-
-	// Start delivery goroutine
-	server.wg.Add(1)
-	go server.deliverMessagesToClient(session, serverConn)
+	_, session, clientConn := setupDeliveryTest(t)
 
 	// Queue a message
 	testPayload := []byte("Test incoming message")
@@ -1153,10 +1135,6 @@ func TestDeliverMessagesToClientIntegration(t *testing.T) {
 
 	// Verify payload
 	assert.Equal(t, testPayload, msgPayload.Payload, "Payload mismatch")
-
-	// Clean up
-	session.Stop()
-	server.wg.Wait()
 }
 
 // TestDeliverMessagesToClientMultiple tests delivering multiple messages

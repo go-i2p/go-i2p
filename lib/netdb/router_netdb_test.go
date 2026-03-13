@@ -6,18 +6,12 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRouterNetDB_Isolation tests that RouterNetDB only exposes RouterInfo operations.
 // This validates the interface isolation principle.
 func TestRouterNetDB_Isolation(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// Verify RouterNetDB has RouterInfo operations
 	assert.NotNil(t, routerDB.GetRouterInfo)
@@ -38,12 +32,7 @@ func TestRouterNetDB_Isolation(t *testing.T) {
 
 // TestRouterNetDB_RouterInfoOperations tests RouterInfo storage and retrieval.
 func TestRouterNetDB_RouterInfoOperations(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// Test GetRouterInfoCount on empty database
 	count := routerDB.GetRouterInfoCount()
@@ -75,12 +64,7 @@ func TestRouterNetDB_RouterInfoOperations(t *testing.T) {
 
 // TestRouterNetDB_PeerSelection tests peer selection operations.
 func TestRouterNetDB_PeerSelection(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// Test SelectPeers on empty database - should return error
 	peers, err := routerDB.SelectPeers(5, nil)
@@ -124,12 +108,7 @@ func TestRouterNetDB_Ensure(t *testing.T) {
 
 // TestRouterNetDB_RecalculateSize tests size recalculation.
 func TestRouterNetDB_RecalculateSize(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// RecalculateSize should succeed on empty database
 	err := routerDB.RecalculateSize()
@@ -141,12 +120,7 @@ func TestRouterNetDB_RecalculateSize(t *testing.T) {
 
 // TestRouterNetDB_ConcurrentAccess tests thread safety of RouterNetDB operations.
 func TestRouterNetDB_ConcurrentAccess(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// Run concurrent operations
 	done := make(chan bool)
@@ -185,11 +159,6 @@ func TestRouterNetDB_IsolationFromClient(t *testing.T) {
 
 // TestRouterNetDB_LeaseSetOperations tests LeaseSet storage and retrieval for direct router operations.
 func TestRouterNetDB_LeaseSetOperations(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 	assertEmptyLeaseSetOperations(t, routerDB)
 }

@@ -20,27 +20,17 @@ func TestRouterCloseReleasesResources(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify resources are initialized
-	router.runMux.RLock()
-	assert.True(t, router.running, "Router should be running")
-	router.runMux.RUnlock()
+	assertRouterRunning(t, router, true, "Router should be running")
 
 	// Close the router (should call Stop() internally if still running)
 	err := router.Close()
 	assert.NoError(t, err)
 
 	// Verify all resources are released
-	assert.Nil(t, router.TransportMuxer, "TransportMuxer should be nil after Close()")
-	assert.Nil(t, router.messageRouter, "messageRouter should be nil after Close()")
-	assert.Nil(t, router.garlicRouter, "garlicRouter should be nil after Close()")
-	assert.Nil(t, router.tunnelManager, "tunnelManager should be nil after Close()")
-	assert.Nil(t, router.RouterInfoKeystore, "RouterInfoKeystore should be nil after Close()")
-	assert.Nil(t, router.StdNetDB, "StdNetDB should be nil after Close()")
-	assert.Nil(t, router.closeChnl, "closeChnl should be nil after Close()")
+	assertResourcesNilAfterClose(t, router)
 
 	// Verify router is no longer running
-	router.runMux.RLock()
-	assert.False(t, router.running, "Router should not be running after Close()")
-	router.runMux.RUnlock()
+	assertRouterRunning(t, router, false, "Router should not be running after Close()")
 }
 
 // TestRouterCloseAfterStop verifies that Close() works correctly after Stop() has been called
@@ -57,18 +47,14 @@ func TestRouterCloseAfterStop(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify router is stopped but resources may still exist
-	router.runMux.RLock()
-	assert.False(t, router.running, "Router should not be running after Stop()")
-	router.runMux.RUnlock()
+	assertRouterRunning(t, router, false, "Router should not be running after Stop()")
 
 	// Close should still work and release remaining resources
 	err := router.Close()
 	assert.NoError(t, err)
 
 	// Verify all resources are released
-	assert.Nil(t, router.TransportMuxer, "TransportMuxer should be nil after Close()")
-	assert.Nil(t, router.StdNetDB, "StdNetDB should be nil after Close()")
-	assert.Nil(t, router.closeChnl, "closeChnl should be nil after Close()")
+	assertResourcesNilAfterClose(t, router)
 }
 
 // TestRouterCloseWithoutStart verifies that Close() handles a never-started router
@@ -80,9 +66,7 @@ func TestRouterCloseWithoutStart(t *testing.T) {
 	assert.NoError(t, err, "Close() should not error on a never-started router")
 
 	// Verify state is clean
-	router.runMux.RLock()
-	assert.False(t, router.running, "Router should not be running")
-	router.runMux.RUnlock()
+	assertRouterRunning(t, router, false, "Router should not be running")
 }
 
 // TestRouterCloseIdempotent verifies that calling Close() multiple times is safe

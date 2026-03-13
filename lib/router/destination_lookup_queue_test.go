@@ -87,9 +87,7 @@ func createTestMessage() i2np.I2NPMessage {
 
 // TestQueuePendingMessage_Success tests successful message queueing
 func TestQueuePendingMessage_Success(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 	msg := createTestMessage()
@@ -97,19 +95,12 @@ func TestQueuePendingMessage_Success(t *testing.T) {
 	err := router.queuePendingMessage(destHash, msg)
 	require.NoError(t, err)
 
-	router.pendingMutex.RLock()
-	pending := router.pendingMsgs[destHash]
-	router.pendingMutex.RUnlock()
-
-	assert.Len(t, pending, 1)
-	assert.Equal(t, msg, pending[0].msg)
+	assertPendingCount(t, router, destHash, 1, "Should have one pending message")
 }
 
 // TestQueuePendingMessage_MaxLimit tests queue size limit
 func TestQueuePendingMessage_MaxLimit(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 
@@ -129,9 +120,7 @@ func TestQueuePendingMessage_MaxLimit(t *testing.T) {
 
 // TestForwardToDestination_NotFound_QueuesMessage tests async queueing when LeaseSet not found
 func TestForwardToDestination_NotFound_QueuesMessage(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 	msg := createTestMessage()
@@ -141,18 +130,12 @@ func TestForwardToDestination_NotFound_QueuesMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify message was queued
-	router.pendingMutex.RLock()
-	pending := router.pendingMsgs[destHash]
-	router.pendingMutex.RUnlock()
-
-	assert.Len(t, pending, 1)
+	assertPendingCount(t, router, destHash, 1, "Should have one pending message")
 }
 
 // TestProcessPendingMessages_LeaseSetBecomesAvailable tests message processing when LeaseSet arrives
 func TestProcessPendingMessages_LeaseSetBecomesAvailable(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, netdb := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 	msg := createTestMessage()
@@ -169,18 +152,12 @@ func TestProcessPendingMessages_LeaseSetBecomesAvailable(t *testing.T) {
 	router.retryPendingLookups()
 
 	// Verify queue is cleared (messages processed/cleaned up)
-	router.pendingMutex.RLock()
-	pending := router.pendingMsgs[destHash]
-	router.pendingMutex.RUnlock()
-
-	assert.Len(t, pending, 0, "Pending messages should be cleared after processing")
+	assertPendingCount(t, router, destHash, 0, "Pending messages should be cleared after processing")
 }
 
 // TestCleanupExpiredMessages tests expiration of old queued messages
 func TestCleanupExpiredMessages(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 
@@ -208,18 +185,12 @@ func TestCleanupExpiredMessages(t *testing.T) {
 	router.pendingMutex.Unlock()
 
 	// Verify only fresh message remains
-	router.pendingMutex.RLock()
-	pending := router.pendingMsgs[destHash]
-	router.pendingMutex.RUnlock()
-
-	assert.Len(t, pending, 1)
+	assertPendingCount(t, router, destHash, 1, "Should have one message remaining after cleanup")
 }
 
 // TestCleanupExpiredMessages_AllExpired tests cleanup when all messages expire
 func TestCleanupExpiredMessages_AllExpired(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 
@@ -254,8 +225,7 @@ func TestCleanupExpiredMessages_AllExpired(t *testing.T) {
 
 // TestStop_GracefulShutdown tests graceful shutdown
 func TestStop_GracefulShutdown(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	// Queue a message
 	destHash := common.Hash{0x01, 0x02, 0x03}
@@ -277,9 +247,7 @@ func TestStop_GracefulShutdown(t *testing.T) {
 
 // TestProcessPendingMessages_MultipleMessages tests processing multiple queued messages
 func TestProcessPendingMessages_MultipleMessages(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, netdb := newTestGarlicRouterWithMock(t)
 
 	destHash := common.Hash{0x01, 0x02, 0x03}
 
@@ -298,18 +266,12 @@ func TestProcessPendingMessages_MultipleMessages(t *testing.T) {
 	router.retryPendingLookups()
 
 	// Verify all messages processed
-	router.pendingMutex.RLock()
-	pending := router.pendingMsgs[destHash]
-	router.pendingMutex.RUnlock()
-
-	assert.Len(t, pending, 0, "All pending messages should be processed")
+	assertPendingCount(t, router, destHash, 0, "All pending messages should be processed")
 }
 
 // TestRetryPendingLookups_EmptyQueue tests retry with empty queue
 func TestRetryPendingLookups_EmptyQueue(t *testing.T) {
-	netdb := newMockLeaseSetNetDB()
-	router := NewGarlicMessageRouter(netdb, nil, nil, common.Hash{})
-	defer router.Stop()
+	router, _ := newTestGarlicRouterWithMock(t)
 
 	// Should not panic with empty queue
 	router.retryPendingLookups()

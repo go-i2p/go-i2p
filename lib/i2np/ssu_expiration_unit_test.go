@@ -15,11 +15,7 @@ import (
 func TestReadI2NPSSUMessageExpiration_CorrectMillisecondConversion(t *testing.T) {
 	assert := assert.New(t)
 
-	// Use a known epoch time: 2024-01-01 00:00:00 UTC = 1704067200 seconds
-	var seconds uint32 = 1704067200
-	data := make([]byte, 5)
-	data[0] = 0x00 // type byte (ignored by the function but needed for offset)
-	binary.BigEndian.PutUint32(data[1:5], seconds)
+	data := makeSSUExpirationData(1704067200)
 
 	date, err := ReadI2NPSSUMessageExpiration(data)
 	assert.Nil(err)
@@ -56,9 +52,7 @@ func TestReadI2NPSSUMessageExpiration_MaxUint32(t *testing.T) {
 	assert := assert.New(t)
 
 	var seconds uint32 = 0xFFFFFFFF // 4294967295 seconds
-	data := make([]byte, 5)
-	data[0] = 0x00
-	binary.BigEndian.PutUint32(data[1:5], seconds)
+	data := makeSSUExpirationData(seconds)
 
 	date, err := ReadI2NPSSUMessageExpiration(data)
 	assert.Nil(err)
@@ -93,11 +87,7 @@ func TestReadI2NPSSUMessageExpiration_NotEnoughData(t *testing.T) {
 func TestReadI2NPSSUMessageExpiration_KnownTimestamp(t *testing.T) {
 	assert := assert.New(t)
 
-	// 1000 seconds since epoch = Jan 1 1970 00:16:40 UTC
-	var seconds uint32 = 1000
-	data := make([]byte, 5)
-	data[0] = 0x00
-	binary.BigEndian.PutUint32(data[1:5], seconds)
+	data := makeSSUExpirationData(1000)
 
 	date, err := ReadI2NPSSUMessageExpiration(data)
 	assert.Nil(err)

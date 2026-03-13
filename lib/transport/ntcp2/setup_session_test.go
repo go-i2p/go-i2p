@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,11 +67,7 @@ func newMinimalTransport() (*NTCP2Transport, context.CancelFunc) {
 // the exact LoadOrStore + Close pattern using NewNTCP2Session, which
 // accepts net.Conn.
 func TestSetupSession_DuplicateSession(t *testing.T) {
-	transport, cancel := newMinimalTransport()
-	defer cancel()
-
-	routerHash := data.Hash{}
-	copy(routerHash[:], []byte("test-router-hash-32bytes-pad!!XX"))
+	transport, routerHash := newMinimalTransportWithHash(t, "test-router-hash-32bytes-pad!!XX")
 
 	// --- First session: simulate a successful store ---
 	conn1 := newMockSetupConn()
@@ -119,11 +114,7 @@ func TestSetupSession_DuplicateSession(t *testing.T) {
 // to setupSession for the same peer result in only one active session.
 // Run with -race to detect data races.
 func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
-	transport, cancel := newMinimalTransport()
-	defer cancel()
-
-	routerHash := data.Hash{}
-	copy(routerHash[:], []byte("concurrent-hash-32bytes-pad!!XX"))
+	transport, routerHash := newMinimalTransportWithHash(t, "concurrent-hash-32bytes-pad!!XX")
 
 	const numGoroutines = 10
 	var wg sync.WaitGroup
@@ -185,11 +176,7 @@ func TestSetupSession_ConcurrentDuplicate(t *testing.T) {
 // session does NOT get a cleanup callback set, so closing it won't remove
 // the existing session from the transport's session map.
 func TestSetupSession_NoCleanupCallbackOnDuplicate(t *testing.T) {
-	transport, cancel := newMinimalTransport()
-	defer cancel()
-
-	routerHash := data.Hash{}
-	copy(routerHash[:], []byte("no-callback-hash-32bytes-pad!XX"))
+	transport, routerHash := newMinimalTransportWithHash(t, "no-callback-hash-32bytes-pad!XX")
 
 	// Store the first session.
 	conn1 := newMockSetupConn()
@@ -222,11 +209,7 @@ func TestSetupSession_NoCleanupCallbackOnDuplicate(t *testing.T) {
 // promotes a raw net.Conn (stored by Accept) into a full NTCP2Session so that
 // GetSession can return it instead of creating a redundant outbound connection.
 func TestFindExistingSession_PromotesInboundConn(t *testing.T) {
-	transport, cancel := newMinimalTransport()
-	defer cancel()
-
-	routerHash := data.Hash{}
-	copy(routerHash[:], []byte("inbound-conn-hash-32bytes-pad!X"))
+	transport, routerHash := newMinimalTransportWithHash(t, "inbound-conn-hash-32bytes-pad!X")
 
 	// Simulate Accept: store a raw net.Conn in the sessions map.
 	conn := newMockSetupConn()

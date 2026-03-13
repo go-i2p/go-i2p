@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -117,10 +116,7 @@ func newTestTransport(listener net.Listener, maxSessions int) *NTCP2Transport {
 // TestAccept_TracksInboundSession verifies that Accept() stores the inbound
 // connection in the transport's session map so GetSessionCount() is accurate.
 func TestAccept_TracksInboundSession(t *testing.T) {
-	conn := newAcceptMockConn("10.0.0.1:5001")
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, 10)
-	defer transport.cancel()
+	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
 
 	// Session count should start at 0
 	assert.Equal(t, 0, transport.GetSessionCount(), "initial session count should be 0")
@@ -136,10 +132,7 @@ func TestAccept_TracksInboundSession(t *testing.T) {
 // TestAccept_SessionCountDecrementsOnClose verifies that closing the accepted
 // connection removes it from the session map via the trackedConn wrapper.
 func TestAccept_SessionCountDecrementsOnClose(t *testing.T) {
-	conn := newAcceptMockConn("10.0.0.1:5001")
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, 10)
-	defer transport.cancel()
+	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
 
 	accepted, err := transport.Accept()
 	require.NoError(t, err)
@@ -158,10 +151,7 @@ func TestAccept_SessionCountDecrementsOnClose(t *testing.T) {
 // TestAccept_DoubleCloseIsIdempotent verifies that closing a tracked connection
 // twice does not panic or double-decrement the session count.
 func TestAccept_DoubleCloseIsIdempotent(t *testing.T) {
-	conn := newAcceptMockConn("10.0.0.1:5001")
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, 10)
-	defer transport.cancel()
+	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
 
 	accepted, err := transport.Accept()
 	require.NoError(t, err)
@@ -242,9 +232,8 @@ func TestAccept_SessionLimitRecovery(t *testing.T) {
 // TestAccept_NilListener verifies that Accept() returns an error
 // when the listener is nil.
 func TestAccept_NilListener(t *testing.T) {
-	transport := newTestTransport(nil, 10)
+	transport := newNilListenerTestTransport(t, 10)
 	transport.listener = nil
-	defer transport.cancel()
 
 	_, err := transport.Accept()
 	assert.Error(t, err)
@@ -253,8 +242,7 @@ func TestAccept_NilListener(t *testing.T) {
 // TestExtractPeerHash_FallbackToAddress verifies that extractPeerHash returns
 // a unique hash derived from the remote address when NTCP2Addr is not available.
 func TestExtractPeerHash_FallbackToAddress(t *testing.T) {
-	transport := newTestTransport(nil, 10)
-	defer transport.cancel()
+	transport := newNilListenerTestTransport(t, 10)
 
 	conn1 := newAcceptMockConn("10.0.0.1:5001")
 	conn2 := newAcceptMockConn("10.0.0.2:5002")
@@ -312,14 +300,10 @@ func TestTrackedConn_PreservesConnBehavior(t *testing.T) {
 // TestAccept_MixedInboundOutbound verifies that session count reflects both
 // inbound (Accept) and outbound (setupSession) sessions.
 func TestAccept_MixedInboundOutbound(t *testing.T) {
-	conn := newAcceptMockConn("10.0.0.1:5001")
-	listener := newMockListener(conn)
-	transport := newTestTransport(listener, 10)
-	defer transport.cancel()
+	transport, _ := newAcceptTestSetup(t, "10.0.0.1:5001", 10)
 
 	// Simulate an outbound session by storing directly in sessions map
-	var outboundHash data.Hash
-	copy(outboundHash[:], []byte("outbound-peer-hash-for-testing!!"))
+	outboundHash := newTestPeerHash("outbound-peer-hash-for-testing!!")
 	transport.sessions.Store(outboundHash, "outbound-placeholder")
 	atomic.AddInt32(&transport.sessionCount, 1)
 	assert.Equal(t, 1, transport.GetSessionCount())

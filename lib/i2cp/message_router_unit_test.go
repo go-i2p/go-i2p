@@ -37,9 +37,7 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 	router := NewMessageRouter(garlicMgr, transportSend)
 
 	// Create destination
-	destHash := createTestHash()
-	var destPubKey [32]byte
-	copy(destPubKey[:], "dest-public-key-32-bytes-pads")
+	destHash, destPubKey := createTestDestAndPubKey()
 
 	// Test payload
 	payload := []byte("test message payload")
@@ -181,9 +179,7 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 	}
 
 	// Attempt to route message through zero-hop tunnel
-	destHash := createTestHash()
-	var destPubKey [32]byte
-	copy(destPubKey[:], "dest-public-key-32-bytes-pads")
+	destHash, destPubKey := createTestDestAndPubKey()
 	payload := []byte("test message payload")
 
 	err := router.RouteOutboundMessage(session, 42, destHash, destPubKey, payload, 0, statusCallback)

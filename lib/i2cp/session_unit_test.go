@@ -773,14 +773,11 @@ func TestNewSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 	defer session.Stop()
 
 	// Session destination should match the original
-	sessionDestBytes, err := session.Destination().Bytes()
-	require.NoError(t, err)
-	assert.True(t, bytes.Equal(id.DestBytes, sessionDestBytes),
+	assertSessionDestinationMatch(t, session, id.DestBytes, true,
 		"session destination should match original when private keys are provided")
 
 	// Session keys should produce the same signing and encryption behavior
-	assert.NotNil(t, session.keys, "session keys must not be nil")
-	assert.NotNil(t, session.keys.SigningPrivateKey(), "signing private key must be present")
+	assertSessionKeysPresent(t, session)
 	assert.NotNil(t, session.keys.EncryptionPrivateKey(), "encryption private key must be present")
 }
 
@@ -796,9 +793,7 @@ func TestCreateSession_WithPrivateKeys_PreservesIdentity(t *testing.T) {
 	defer sm.DestroySession(session.ID())
 
 	// Session destination should match the original
-	sessionDestBytes, err := session.Destination().Bytes()
-	require.NoError(t, err)
-	assert.True(t, bytes.Equal(id.DestBytes, sessionDestBytes),
+	assertSessionDestinationMatch(t, session, id.DestBytes, true,
 		"session destination should match original when private keys are provided via SessionManager")
 }
 
@@ -815,14 +810,11 @@ func TestNewSession_WithoutPrivateKeys_GeneratesFreshIdentity(t *testing.T) {
 
 	// Session destination should be DIFFERENT from the original
 	// (fresh keys generated, different identity)
-	sessionDestBytes, err := session.Destination().Bytes()
-	require.NoError(t, err)
-	assert.False(t, bytes.Equal(id.DestBytes, sessionDestBytes),
+	assertSessionDestinationMatch(t, session, id.DestBytes, false,
 		"session destination should differ when no private keys are provided")
 
 	// But session should still have valid keys
-	assert.NotNil(t, session.keys, "session keys must not be nil")
-	assert.NotNil(t, session.keys.SigningPrivateKey(), "signing private key must be present")
+	assertSessionKeysPresent(t, session)
 }
 
 // TestNewSession_WithNilDestAndNilKeys_GeneratesFreshIdentity verifies the
@@ -1360,12 +1352,7 @@ func TestCreateEncryptedLeaseSetWithMockTunnels(t *testing.T) {
 
 // TestCreateEncryptedLeaseSetSerialization verifies EncryptedLeaseSet can be serialized
 func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
-	keyStore, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	config := DefaultSessionConfig()
-	config.UseEncryptedLeaseSet = true
-	config.BlindingSecret = []byte("test-secret-32bytes-long!!!!!!!!")
+	keyStore, config := setupEncryptedLeaseSetConfig(t)
 
 	tunnels := createMockTunnels(2)
 
@@ -1378,7 +1365,7 @@ func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
 	}
 
 	// Build the EncryptedLeaseSet
-	err = session.updateBlindedDestination()
+	err := session.updateBlindedDestination()
 	require.NoError(t, err)
 
 	leases, err := session.buildLeasesFromTunnels(tunnels)
@@ -1411,12 +1398,7 @@ func TestCreateEncryptedLeaseSetSerialization(t *testing.T) {
 
 // TestPublishLeaseSetNetworkWithEncrypted verifies blinded hash is used for EncryptedLeaseSet
 func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
-	keyStore, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	config := DefaultSessionConfig()
-	config.UseEncryptedLeaseSet = true
-	config.BlindingSecret = []byte("test-secret-32bytes-long!!!!!!!!")
+	keyStore, config := setupEncryptedLeaseSetConfig(t)
 
 	session := &Session{
 		id:          1,
@@ -1426,7 +1408,7 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 	}
 
 	// Update blinded destination
-	err = session.updateBlindedDestination()
+	err := session.updateBlindedDestination()
 	require.NoError(t, err)
 
 	// Calculate expected hashes
@@ -1469,12 +1451,7 @@ func TestPublishLeaseSetNetworkWithEncrypted(t *testing.T) {
 
 // TestRegenerateAndPublishWithEncrypted verifies maintenance loop uses EncryptedLeaseSet when configured
 func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
-	keyStore, err := keys.NewDestinationKeyStore()
-	require.NoError(t, err)
-
-	config := DefaultSessionConfig()
-	config.UseEncryptedLeaseSet = true
-	config.BlindingSecret = []byte("test-secret-32bytes-long!!!!!!!!")
+	keyStore, config := setupEncryptedLeaseSetConfig(t)
 
 	tunnels := createMockTunnels(2)
 	inboundPool := &tunnel.Pool{}
@@ -1496,7 +1473,7 @@ func TestRegenerateAndPublishWithEncrypted(t *testing.T) {
 
 	// Verify EncryptedLeaseSet can be created when enabled
 	session.config.UseEncryptedLeaseSet = true
-	err = session.updateBlindedDestination()
+	err := session.updateBlindedDestination()
 	assert.NoError(t, err)
 
 	// Verify the blinded destination is properly set

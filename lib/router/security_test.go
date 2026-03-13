@@ -118,9 +118,7 @@ func TestStartupSequence_InitializationOrder(t *testing.T) {
 	// Stop the router
 	router.Stop()
 
-	router.runMux.RLock()
-	assert.False(t, router.running, "Router should not be running after Stop()")
-	router.runMux.RUnlock()
+	assertRouterRunning(t, router, false, "Router should not be running after Stop()")
 }
 
 // TestStartupSequence_DoubleStart verifies that calling Start() twice is safe
@@ -141,10 +139,7 @@ func TestStartupSequence_DoubleStart(t *testing.T) {
 	router.Start()
 	time.Sleep(50 * time.Millisecond)
 
-	router.runMux.RLock()
-	secondRunning := router.running
-	router.runMux.RUnlock()
-	assert.True(t, secondRunning, "Router should still be running after second Start()")
+	assertRouterRunning(t, router, true, "Router should still be running after second Start()")
 
 	router.Stop()
 }
@@ -167,10 +162,7 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Store context for later verification
-	router.runMux.RLock()
-	ctx := router.ctx
-	router.runMux.RUnlock()
-	require.NotNil(t, ctx)
+	ctx := getRouterCtx(t, router)
 
 	// Stop the router with timeout
 	requireStopsWithin(t, router.Stop, 10*time.Second)
@@ -196,9 +188,7 @@ func TestShutdownSequence_ContextCancellation(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a goroutine that waits on context
-	router.runMux.RLock()
-	ctx := router.ctx
-	router.runMux.RUnlock()
+	ctx := getRouterCtx(t, router)
 
 	contextDone := make(chan struct{})
 	go func() {

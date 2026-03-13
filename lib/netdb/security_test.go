@@ -20,12 +20,7 @@ import (
 // TestStorageIsolation_ClientCannotAccessRouterInfo verifies that ClientNetDB
 // does not expose RouterInfo operations, enforcing type-safety isolation.
 func TestStorageIsolation_ClientCannotAccessRouterInfo(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	clientDB := NewClientNetDB(stdDB)
+	clientDB := newTestClientNetDB(t)
 
 	// Verify ClientNetDB has no RouterInfo methods exposed
 	// (compile-time enforcement via Go's type system)
@@ -47,12 +42,7 @@ func TestStorageIsolation_ClientCannotAccessRouterInfo(t *testing.T) {
 // TestStorageIsolation_RouterHasBothOperations verifies that RouterNetDB
 // provides both RouterInfo and LeaseSet operations for direct router operations.
 func TestStorageIsolation_RouterHasBothOperations(t *testing.T) {
-	tmpDir := t.TempDir()
-	stdDB := NewStdNetDB(tmpDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	routerDB := NewRouterNetDB(stdDB)
+	routerDB := newTestRouterNetDB(t)
 
 	// Verify RouterNetDB has RouterInfo methods
 	assert.NotNil(t, routerDB.GetRouterInfo, "GetRouterInfo should be available")
@@ -113,52 +103,25 @@ func TestStorageIsolation_SeparateInstances(t *testing.T) {
 // TestExpirationLogic_CleanupRemovesExpired verifies that expired LeaseSets
 // are properly removed from both memory and expiry tracking.
 func TestExpirationLogic_CleanupRemovesExpired(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 	defer db.Stop()
 
-	// Add an expired entry directly to the maps
+	// Add an expired and a valid entry
 	expiredHash := common.Hash{0x10, 0x11, 0x12}
 	validHash := common.Hash{0x20, 0x21, 0x22}
-
-	db.lsMutex.Lock()
-	db.LeaseSets[expiredHash] = Entry{}
-	db.LeaseSets[validHash] = Entry{}
-	db.lsMutex.Unlock()
-
-	db.expiryMutex.Lock()
-	db.leaseSetExpiry[expiredHash] = time.Now().Add(-1 * time.Hour) // Expired
-	db.leaseSetExpiry[validHash] = time.Now().Add(1 * time.Hour)    // Valid
-	db.expiryMutex.Unlock()
+	addLeaseSetWithExpiry(db, expiredHash, -1*time.Hour)
+	addLeaseSetWithExpiry(db, validHash, 1*time.Hour)
 
 	// Run cleanup
 	db.cleanExpiredLeaseSets()
 
-	// Verify expired was removed
-	db.lsMutex.Lock()
-	_, hasExpired := db.LeaseSets[expiredHash]
-	_, hasValid := db.LeaseSets[validHash]
-	db.lsMutex.Unlock()
-
-	assert.False(t, hasExpired, "Expired LeaseSet should be removed from cache")
-	assert.True(t, hasValid, "Valid LeaseSet should remain in cache")
-
-	// Verify expiry tracking was also cleaned
-	db.expiryMutex.RLock()
-	_, trackedExpired := db.leaseSetExpiry[expiredHash]
-	_, trackedValid := db.leaseSetExpiry[validHash]
-	db.expiryMutex.RUnlock()
-
-	assert.False(t, trackedExpired, "Expired entry should be removed from expiry tracking")
-	assert.True(t, trackedValid, "Valid entry should remain in expiry tracking")
+	assertLeaseSetPresence(t, db, expiredHash, false, "Expired")
+	assertLeaseSetPresence(t, db, validHash, true, "Valid")
 }
 
 // TestExpirationLogic_Stats verifies GetLeaseSetExpirationStats accuracy.
 func TestExpirationLogic_Stats(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 	defer db.Stop()
 
 	now := time.Now()
@@ -295,10 +258,7 @@ func TestKademliaDistance_Symmetry(t *testing.T) {
 
 // TestConcurrentAccess_RouterInfoMutex tests thread safety of RouterInfo operations.
 func TestConcurrentAccess_RouterInfoMutex(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
-	defer db.Stop()
+	db := newTestStdNetDB(t)
 
 	var wg sync.WaitGroup
 	iterations := 100
@@ -328,10 +288,7 @@ func TestConcurrentAccess_RouterInfoMutex(t *testing.T) {
 
 // TestConcurrentAccess_LeaseSetMutex tests thread safety of LeaseSet operations.
 func TestConcurrentAccess_LeaseSetMutex(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NoError(t, db.Create())
-	defer db.Stop()
+	db := newTestStdNetDB(t)
 
 	var wg sync.WaitGroup
 	iterations := 100
@@ -360,9 +317,7 @@ func TestConcurrentAccess_LeaseSetMutex(t *testing.T) {
 
 // TestConcurrentAccess_ExpiryMutex tests thread safety of expiry tracking.
 func TestConcurrentAccess_ExpiryMutex(t *testing.T) {
-	tmpDir := t.TempDir()
-	db := NewStdNetDB(tmpDir)
-	require.NotNil(t, db)
+	db := newTestStdNetDBBasic(t)
 	defer db.Stop()
 
 	var wg sync.WaitGroup
@@ -484,7 +439,7 @@ func TestDiskPersistence_PathValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	db := NewStdNetDB(tmpDir)
 	require.NoError(t, db.Create())
-	defer db.Stop()
+	t.Cleanup(db.Stop)
 
 	tests := []struct {
 		name    string

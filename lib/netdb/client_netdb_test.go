@@ -5,18 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	// keep for TestClientNetDB_Ensure
 )
 
 // TestClientNetDB_Isolation tests that ClientNetDB only exposes LeaseSet operations.
 // This validates the interface isolation principle.
 func TestClientNetDB_Isolation(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	clientDB := NewClientNetDB(stdDB)
+	clientDB := newTestClientNetDB(t)
 
 	// Verify ClientNetDB has LeaseSet operations
 	assert.NotNil(t, clientDB.GetLeaseSet)
@@ -32,12 +27,7 @@ func TestClientNetDB_Isolation(t *testing.T) {
 
 // TestClientNetDB_LeaseSetOperations tests LeaseSet storage and retrieval.
 func TestClientNetDB_LeaseSetOperations(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	clientDB := NewClientNetDB(stdDB)
+	clientDB := newTestClientNetDB(t)
 	assertEmptyLeaseSetOperations(t, clientDB)
 }
 
@@ -69,12 +59,7 @@ func TestClientNetDB_Ensure(t *testing.T) {
 
 // TestClientNetDB_ConcurrentAccess tests thread safety of ClientNetDB operations.
 func TestClientNetDB_ConcurrentAccess(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
-
-	clientDB := NewClientNetDB(stdDB)
+	clientDB := newTestClientNetDB(t)
 
 	// Run concurrent GetLeaseSetCount operations
 	done := make(chan bool)
@@ -95,10 +80,7 @@ func TestClientNetDB_ConcurrentAccess(t *testing.T) {
 
 // TestClientNetDB_SharedStdNetDB tests that ClientNetDB and RouterNetDB can share the same StdNetDB.
 func TestClientNetDB_SharedStdNetDB(t *testing.T) {
-	tempDir := t.TempDir()
-	stdDB := NewStdNetDB(tempDir)
-	require.NoError(t, stdDB.Create())
-	defer stdDB.Stop()
+	stdDB := newTestStdNetDB(t)
 
 	clientDB := NewClientNetDB(stdDB)
 	routerDB := NewRouterNetDB(stdDB)

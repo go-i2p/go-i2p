@@ -1,13 +1,11 @@
 package ntcp2
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
-	"github.com/go-i2p/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -126,11 +124,7 @@ func TestObfuscationIVLengthValidation(t *testing.T) {
 
 // TestSessionCleanupCallback verifies that cleanup callbacks are called exactly once.
 func TestSessionCleanupCallback(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx := context.Background()
-	logger := logger.WithField("test", "cleanup")
-
-	session := NewNTCP2Session(conn, ctx, logger)
+	session := newTestSession(t)
 
 	callCount := 0
 	session.SetCleanupCallback(func() {
@@ -148,12 +142,7 @@ func TestSessionCleanupCallback(t *testing.T) {
 
 // TestSessionErrorOnce verifies that session errors are set exactly once.
 func TestSessionErrorOnce(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx := context.Background()
-	logger := logger.WithField("test", "error")
-
-	session := NewNTCP2Session(conn, ctx, logger)
-	defer session.Close()
+	session := newTestSession(t)
 
 	// Set error multiple times
 	err1 := WrapNTCP2Error(ErrFramingError, "first error")
@@ -232,12 +221,7 @@ func TestTimeoutConfiguration(t *testing.T) {
 
 // TestConcurrentSessionAccess verifies thread-safe session operations.
 func TestConcurrentSessionAccess(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx := context.Background()
-	logger := logger.WithField("test", "concurrent")
-
-	session := NewNTCP2Session(conn, ctx, logger)
-	defer session.Close()
+	session := newTestSession(t)
 
 	// Run concurrent operations
 	done := make(chan bool)
@@ -304,12 +288,7 @@ func TestSupportsDirectNTCP2NilSafe(t *testing.T) {
 
 // TestBandwidthTrackingAtomic verifies that bandwidth tracking is thread-safe.
 func TestBandwidthTrackingAtomic(t *testing.T) {
-	conn := &mockConn{data: []byte{}}
-	ctx := context.Background()
-	logger := logger.WithField("test", "bandwidth")
-
-	session := NewNTCP2Session(conn, ctx, logger)
-	defer session.Close()
+	session := newTestSession(t)
 
 	// Initial values should be zero
 	sent, received := session.GetBandwidthStats()

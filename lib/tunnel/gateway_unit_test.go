@@ -219,17 +219,7 @@ func TestBuildTunnelMessage(t *testing.T) {
 // TestGatewayIVIsWritten verifies that buildTunnelMessage writes a non-zero
 // random IV at bytes 4-19, fixing CRITICAL BUG #5.
 func TestGatewayIVIsWritten(t *testing.T) {
-	gw := &Gateway{
-		tunnelID:  TunnelID(12345),
-		nextHopID: TunnelID(67890),
-	}
-
-	testMsg := []byte("test")
-	instructions, err := gw.createDeliveryInstructions(testMsg)
-	require.NoError(t, err)
-
-	tunnelMsg, err := gw.buildTunnelMessage(instructions, testMsg)
-	require.NoError(t, err)
+	_, _, tunnelMsg := buildTestTunnelMsg(t)
 	assert.Equal(t, 1028, len(tunnelMsg))
 
 	// Verify IV (bytes 4-19) is not all zeros
@@ -246,17 +236,8 @@ func TestGatewayIVIsWritten(t *testing.T) {
 
 // TestGatewayIVIsRandom verifies that the IV differs between calls.
 func TestGatewayIVIsRandom(t *testing.T) {
-	gw := &Gateway{
-		tunnelID:  TunnelID(12345),
-		nextHopID: TunnelID(67890),
-	}
-
+	gw, instructions, msg1 := buildTestTunnelMsg(t)
 	testMsg := []byte("test")
-	instructions, err := gw.createDeliveryInstructions(testMsg)
-	require.NoError(t, err)
-
-	msg1, err := gw.buildTunnelMessage(instructions, testMsg)
-	require.NoError(t, err)
 
 	msg2, err := gw.buildTunnelMessage(instructions, testMsg)
 	require.NoError(t, err)
@@ -276,17 +257,7 @@ func TestGatewayIVIsRandom(t *testing.T) {
 
 // TestGatewayChecksumIncludesIV verifies the checksum is calculated using the IV.
 func TestGatewayChecksumIncludesIV(t *testing.T) {
-	gw := &Gateway{
-		tunnelID:  TunnelID(12345),
-		nextHopID: TunnelID(67890),
-	}
-
-	testMsg := []byte("test")
-	instructions, err := gw.createDeliveryInstructions(testMsg)
-	require.NoError(t, err)
-
-	tunnelMsg, err := gw.buildTunnelMessage(instructions, testMsg)
-	require.NoError(t, err)
+	_, _, tunnelMsg := buildTestTunnelMsg(t)
 
 	// Verify checksum: first 4 bytes of SHA256(data_after_zero_byte + IV)
 	// Per I2P spec: "The checksum does NOT cover the padding or the zero byte."

@@ -82,15 +82,7 @@ func TestDatabaseManager_FloodfillConfiguration(t *testing.T) {
 
 // TestDatabaseManager_SelectClosestFloodfills tests floodfill router selection
 func TestDatabaseManager_SelectClosestFloodfills(t *testing.T) {
-	mockNetDB := newMockFloodfillNetDB()
-
-	// Add some mock floodfill routers
-	for i := 0; i < 10; i++ {
-		mockNetDB.addFloodfillRouter()
-	}
-
-	dbManager := NewDatabaseManager(mockNetDB)
-	dbManager.SetFloodfillSelector(mockNetDB)
+	dbManager, mockNetDB := setupFloodfillTest(t, 10)
 
 	targetKey := common.Hash{0xFF}
 	// Don't call IdentHash() on the returned RouterInfos - just check the count
@@ -112,15 +104,7 @@ func TestDatabaseManager_SelectClosestFloodfills(t *testing.T) {
 
 // TestDatabaseManager_SelectClosestFloodfills_LimitedPeers tests with fewer floodfills than requested
 func TestDatabaseManager_SelectClosestFloodfills_LimitedPeers(t *testing.T) {
-	mockNetDB := newMockFloodfillNetDB()
-
-	// Add only 3 mock floodfill routers (less than default 7)
-	for i := 0; i < 3; i++ {
-		mockNetDB.addFloodfillRouter()
-	}
-
-	dbManager := NewDatabaseManager(mockNetDB)
-	dbManager.SetFloodfillSelector(mockNetDB)
+	dbManager, mockNetDB := setupFloodfillTest(t, 3)
 
 	targetKey := common.Hash{0xFF}
 	_ = dbManager.selectClosestFloodfills(targetKey)

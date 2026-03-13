@@ -299,20 +299,7 @@ func createTestSessionWithLeaseSet(t *testing.T) (*Session, []byte) {
 	selector := &mockPeerSelector{}
 	inboundPool := tunnel.NewTunnelPool(selector)
 
-	for i := 0; i < 2; i++ {
-		tunnelID := tunnel.TunnelID(5000 + i)
-		var gateway common.Hash
-		copy(gateway[:], []byte("gateway-router-hash-1234567890ab"))
-		gateway[31] = byte(i)
-
-		tunnelState := &tunnel.TunnelState{
-			ID:        tunnelID,
-			Hops:      []common.Hash{gateway},
-			State:     tunnel.TunnelReady,
-			CreatedAt: time.Now(),
-		}
-		inboundPool.AddTunnel(tunnelState)
-	}
+	addTestTunnelsToPool(inboundPool, 5000, "gateway-router-hash-1234567890ab", 2)
 	session.SetInboundPool(inboundPool)
 
 	leaseSetBytes, err := session.CreateLeaseSet()
@@ -334,26 +321,13 @@ func createTestHash() common.Hash {
 // createTestSessionWithoutPools creates a minimal session without pools.
 func createTestSessionWithoutPools(t *testing.T) *Session {
 	t.Helper()
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-	}
-	return session
+	return newBaseTestSession()
 }
 
 // createTestSessionWithEmptyPools creates minimal session with empty pools.
 func createTestSessionWithEmptyPools(t *testing.T) *Session {
 	t.Helper()
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-	}
+	session := newBaseTestSession()
 
 	selector := &mockPeerSelector{}
 	session.outboundPool = tunnel.NewTunnelPool(selector)
@@ -365,13 +339,7 @@ func createTestSessionWithEmptyPools(t *testing.T) *Session {
 // createTestSessionWithZeroHopTunnels creates a session with a zero-hop tunnel for testing.
 func createTestSessionWithZeroHopTunnels(t *testing.T) *Session {
 	t.Helper()
-	config := DefaultSessionConfig()
-	session := &Session{
-		id:        1,
-		config:    config,
-		active:    true,
-		createdAt: time.Now(),
-	}
+	session := newBaseTestSession()
 
 	selector := &mockPeerSelector{}
 	session.outboundPool = tunnel.NewTunnelPool(selector)
@@ -426,20 +394,7 @@ func setupMessageRouterTest(t *testing.T) (*Session, GarlicMessageEncryptor, Tra
 	t.Cleanup(cleanup)
 	_ = server
 
-	for i := 0; i < 2; i++ {
-		tunnelID := tunnel.TunnelID(2000 + i)
-		var gateway common.Hash
-		copy(gateway[:], []byte("mock-outbound-gateway-hash-12345678901234567890"))
-		gateway[31] = byte(i)
-
-		tunnelState := &tunnel.TunnelState{
-			ID:        tunnelID,
-			Hops:      []common.Hash{gateway},
-			State:     tunnel.TunnelReady,
-			CreatedAt: time.Now(),
-		}
-		outboundPool.AddTunnel(tunnelState)
-	}
+	addTestTunnelsToPool(outboundPool, 2000, "mock-outbound-gateway-hash-12345678901234567890", 2)
 
 	garlicMock := newMockGarlicEncryptor()
 

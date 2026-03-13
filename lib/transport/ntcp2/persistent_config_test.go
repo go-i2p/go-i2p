@@ -10,14 +10,7 @@ import (
 
 // TestLoadOrGenerateObfuscationIV_NewFile tests IV generation when file doesn't exist
 func TestLoadOrGenerateObfuscationIV_NewFile(t *testing.T) {
-	// Create temporary directory for test
-	tempDir := t.TempDir()
-
-	pc := NewPersistentConfig(tempDir)
-	iv, err := pc.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate obfuscation IV: %v", err)
-	}
+	tempDir, _, iv := newPersistentConfigWithIV(t)
 
 	if len(iv) != obfuscationIVSize {
 		t.Errorf("Expected IV size %d, got %d", obfuscationIVSize, len(iv))
@@ -32,14 +25,8 @@ func TestLoadOrGenerateObfuscationIV_NewFile(t *testing.T) {
 
 // TestLoadOrGenerateObfuscationIV_ExistingFile tests loading from existing file
 func TestLoadOrGenerateObfuscationIV_ExistingFile(t *testing.T) {
-	tempDir := t.TempDir()
-
 	// First call creates the file
-	pc := NewPersistentConfig(tempDir)
-	iv1, err := pc.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate obfuscation IV: %v", err)
-	}
+	_, pc, iv1 := newPersistentConfigWithIV(t)
 
 	// Second call should load the same IV
 	iv2, err := pc.LoadOrGenerateObfuscationIV()
@@ -55,14 +42,8 @@ func TestLoadOrGenerateObfuscationIV_ExistingFile(t *testing.T) {
 
 // TestLoadOrGenerateObfuscationIV_Persistence tests IV persists across instances
 func TestLoadOrGenerateObfuscationIV_Persistence(t *testing.T) {
-	tempDir := t.TempDir()
-
 	// Generate IV with first instance
-	pc1 := NewPersistentConfig(tempDir)
-	iv1, err := pc1.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate obfuscation IV: %v", err)
-	}
+	tempDir, _, iv1 := newPersistentConfigWithIV(t)
 
 	// Load IV with second instance (simulates router restart)
 	pc2 := NewPersistentConfig(tempDir)
@@ -97,13 +78,7 @@ func TestLoadOrGenerateObfuscationIV_InvalidSize(t *testing.T) {
 
 // TestLoadOrGenerateObfuscationIV_FilePermissions tests file is created with secure permissions
 func TestLoadOrGenerateObfuscationIV_FilePermissions(t *testing.T) {
-	tempDir := t.TempDir()
-
-	pc := NewPersistentConfig(tempDir)
-	_, err := pc.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate obfuscation IV: %v", err)
-	}
+	tempDir, _, _ := newPersistentConfigWithIV(t)
 
 	// Check file permissions
 	ivPath := filepath.Join(tempDir, obfuscationIVFilename)
@@ -138,20 +113,8 @@ func TestLoadOrGenerateObfuscationIV_DirectoryCreation(t *testing.T) {
 
 // TestLoadOrGenerateObfuscationIV_Randomness tests generated IVs are unique
 func TestLoadOrGenerateObfuscationIV_Randomness(t *testing.T) {
-	tempDir1 := t.TempDir()
-	tempDir2 := t.TempDir()
-
-	pc1 := NewPersistentConfig(tempDir1)
-	iv1, err := pc1.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate first IV: %v", err)
-	}
-
-	pc2 := NewPersistentConfig(tempDir2)
-	iv2, err := pc2.LoadOrGenerateObfuscationIV()
-	if err != nil {
-		t.Fatalf("Failed to generate second IV: %v", err)
-	}
+	_, _, iv1 := newPersistentConfigWithIV(t)
+	_, _, iv2 := newPersistentConfigWithIV(t)
 
 	// Different instances should generate different IVs
 	if string(iv1) == string(iv2) {

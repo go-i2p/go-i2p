@@ -162,17 +162,9 @@ func TestCongestionMonitor_DFlagThreshold(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset monitor state
-			monitor.mu.Lock()
-			monitor.samples = nil
-			monitor.currentFlag = config.CongestionFlagNone
-			monitor.mu.Unlock()
+			resetCongestionMonitor(monitor)
 
-			collector.SetRatio(tt.ratio)
-
-			// Take enough samples to establish average
-			for i := 0; i < 10; i++ {
-				monitor.takeSample()
-			}
+			feedSamples(collector, monitor, tt.ratio, 10)
 
 			flag := monitor.GetCongestionFlag()
 			if flag != tt.wantFlag {
@@ -202,16 +194,9 @@ func TestCongestionMonitor_EFlagThreshold(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset monitor state
-			monitor.mu.Lock()
-			monitor.samples = nil
-			monitor.currentFlag = config.CongestionFlagNone
-			monitor.mu.Unlock()
+			resetCongestionMonitor(monitor)
 
-			collector.SetRatio(tt.ratio)
-
-			for i := 0; i < 10; i++ {
-				monitor.takeSample()
-			}
+			feedSamples(collector, monitor, tt.ratio, 10)
 
 			flag := monitor.GetCongestionFlag()
 			if flag != tt.wantFlag {
@@ -240,16 +225,9 @@ func TestCongestionMonitor_GFlagThreshold(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset monitor state
-			monitor.mu.Lock()
-			monitor.samples = nil
-			monitor.currentFlag = config.CongestionFlagNone
-			monitor.mu.Unlock()
+			resetCongestionMonitor(monitor)
 
-			collector.SetRatio(tt.ratio)
-
-			for i := 0; i < 10; i++ {
-				monitor.takeSample()
-			}
+			feedSamples(collector, monitor, tt.ratio, 10)
 
 			flag := monitor.GetCongestionFlag()
 			if flag != tt.wantFlag {
@@ -304,10 +282,7 @@ func TestCongestionMonitor_Hysteresis(t *testing.T) {
 			monitor.maxSamples = 5
 
 			for _, step := range tt.steps {
-				collector.SetRatio(step.ratio)
-				for i := 0; i < 10; i++ {
-					monitor.takeSample()
-				}
+				feedSamples(collector, monitor, step.ratio, 10)
 				flag := monitor.GetCongestionFlag()
 				if flag != step.wantFlag {
 					if step.fatal {
@@ -359,15 +334,9 @@ func TestCongestionMonitor_GetCongestionLevel(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		monitor.mu.Lock()
-		monitor.samples = nil
-		monitor.currentFlag = config.CongestionFlagNone
-		monitor.mu.Unlock()
+		resetCongestionMonitor(monitor)
 
-		collector.SetRatio(tt.ratio)
-		for i := 0; i < 10; i++ {
-			monitor.takeSample()
-		}
+		feedSamples(collector, monitor, tt.ratio, 10)
 
 		level := monitor.GetCongestionLevel()
 		if level != tt.wantLevel {
@@ -384,24 +353,15 @@ func TestCongestionMonitor_ShouldAdvertiseCongestion(t *testing.T) {
 	monitor.startupGraceSec = 0
 
 	// No congestion - should not advertise
-	collector.SetRatio(0.50)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
+	feedSamples(collector, monitor, 0.50, 10)
 	if monitor.ShouldAdvertiseCongestion() {
 		t.Error("at 0.50 ratio, ShouldAdvertiseCongestion() = true, want false")
 	}
 
 	// With congestion - should advertise
-	monitor.mu.Lock()
-	monitor.samples = nil
-	monitor.currentFlag = config.CongestionFlagNone
-	monitor.mu.Unlock()
+	resetCongestionMonitor(monitor)
 
-	collector.SetRatio(0.80)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
+	feedSamples(collector, monitor, 0.80, 10)
 	if !monitor.ShouldAdvertiseCongestion() {
 		t.Error("at 0.80 ratio, ShouldAdvertiseCongestion() = false, want true")
 	}
@@ -415,10 +375,7 @@ func TestCongestionMonitor_ForceFlag(t *testing.T) {
 	monitor.startupGraceSec = 0
 
 	// Low ratio - should be None
-	collector.SetRatio(0.30)
-	for i := 0; i < 10; i++ {
-		monitor.takeSample()
-	}
+	feedSamples(collector, monitor, 0.30, 10)
 	if flag := monitor.GetCongestionFlag(); flag != config.CongestionFlagNone {
 		t.Fatalf("setup: flag = %v, want None", flag)
 	}
@@ -656,10 +613,7 @@ func TestCongestionMonitor_BandwidthSaturationTriggersCongestion(t *testing.T) {
 	// With zero tunnels but full bandwidth/connections:
 	// ratio should still be non-zero (0.50), showing bandwidth impact
 	collector.SetAllMetrics(0.0, 1.0, 1.0)
-	monitor.mu.Lock()
-	monitor.samples = nil
-	monitor.currentFlag = config.CongestionFlagNone
-	monitor.mu.Unlock()
+	resetCongestionMonitor(monitor)
 
 	for i := 0; i < 10; i++ {
 		monitor.takeSample()

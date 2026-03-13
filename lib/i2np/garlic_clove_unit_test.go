@@ -91,11 +91,7 @@ func TestDeserializeGarlicClove_InsufficientDataForHeader(t *testing.T) {
 	partialHeader := make([]byte, 10)
 	cloveData = append(cloveData, partialHeader...)
 
-	clove, _, err := deserializeGarlicClove(cloveData, 0)
-
-	require.Error(t, err)
-	assert.Nil(t, clove)
-	assert.Contains(t, err.Error(), "insufficient data for I2NP message header")
+	assertDeserializeCloveError(t, cloveData, "insufficient data for I2NP message header")
 }
 
 // TestDeserializeGarlicClove_InsufficientDataForMessage tests error handling
@@ -112,11 +108,7 @@ func TestDeserializeGarlicClove_InsufficientDataForMessage(t *testing.T) {
 	messageData := make([]byte, 100)
 	cloveData = append(cloveData, messageData...)
 
-	clove, _, err := deserializeGarlicClove(cloveData, 0)
-
-	require.Error(t, err)
-	assert.Nil(t, clove)
-	assert.Contains(t, err.Error(), "insufficient data for I2NP message")
+	assertDeserializeCloveError(t, cloveData, "insufficient data for I2NP message")
 }
 
 // TestDeserializeGarlicClove_ValidCloveStructure tests a complete valid clove

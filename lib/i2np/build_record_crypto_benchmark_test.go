@@ -3,24 +3,14 @@ package i2np
 import (
 	"testing"
 
-	"github.com/go-i2p/common/session_key"
-	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkEncryptReplyRecord benchmarks the encryption performance
 func BenchmarkEncryptReplyRecord(b *testing.B) {
+	replyKey, replyIV, randomData := makeBenchmarkReplyKeys()
 	crypto := NewBuildRecordCrypto()
-
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	var randomData [495]byte
-
-	rand.Read(replyKey[:])
-	rand.Read(replyIV[:])
-	rand.Read(randomData[:])
-
 	record := CreateBuildResponseRecord(0, randomData)
 
 	b.ResetTimer()
@@ -34,16 +24,8 @@ func BenchmarkEncryptReplyRecord(b *testing.B) {
 
 // BenchmarkDecryptReplyRecord benchmarks the decryption performance
 func BenchmarkDecryptReplyRecord(b *testing.B) {
+	replyKey, replyIV, randomData := makeBenchmarkReplyKeys()
 	crypto := NewBuildRecordCrypto()
-
-	var replyKey session_key.SessionKey
-	var replyIV [16]byte
-	var randomData [495]byte
-
-	rand.Read(replyKey[:])
-	rand.Read(replyIV[:])
-	rand.Read(randomData[:])
-
 	record := CreateBuildResponseRecord(0, randomData)
 	encrypted, err := crypto.EncryptReplyRecord(record, replyKey, replyIV)
 	if err != nil {

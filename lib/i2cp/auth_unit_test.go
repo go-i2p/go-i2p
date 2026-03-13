@@ -176,10 +176,7 @@ func TestServer_RequiresAuthentication_WithAuthenticator(t *testing.T) {
 func TestParseGetDateOptions_ValidMapping(t *testing.T) {
 	// Build a mapping: 2-byte size + "key1=val1;key2=val2;"
 	content := "i2cp.username=admin;i2cp.password=secret;"
-	data := make([]byte, 2+len(content))
-	data[0] = byte(len(content) >> 8)
-	data[1] = byte(len(content))
-	copy(data[2:], content)
+	data := buildGetDateOptionsData(content)
 
 	options := parseGetDateOptions(data)
 	require.NotNil(t, options)
@@ -207,10 +204,7 @@ func TestParseGetDateOptions_TooShort(t *testing.T) {
 // parsed correctly even without a trailing semicolon.
 func TestParseGetDateOptions_NoTrailingSemicolon(t *testing.T) {
 	content := "key=value"
-	data := make([]byte, 2+len(content))
-	data[0] = byte(len(content) >> 8)
-	data[1] = byte(len(content))
-	copy(data[2:], content)
+	data := buildGetDateOptionsData(content)
 
 	options := parseGetDateOptions(data)
 	require.NotNil(t, options)
