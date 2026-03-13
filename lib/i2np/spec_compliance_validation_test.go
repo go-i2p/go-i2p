@@ -202,17 +202,7 @@ func TestSecondGenTransportHeader_TooShort(t *testing.T) {
 // TestSecondGenTransportHeader_ExpirationIsSeconds verifies the short expiration
 // field is in seconds (not milliseconds) per i2np.rst.
 func TestSecondGenTransportHeader_ExpirationIsSeconds(t *testing.T) {
-	// Encode 86400 seconds (exactly 1 day) as a 4-byte big-endian uint32
-	data := make([]byte, 9)
-	data[0] = byte(I2NP_MESSAGE_TYPE_DATA)
-	binary.BigEndian.PutUint32(data[5:9], 86400)
-
-	header, err := ReadI2NPSecondGenTransportHeader(data)
-	require.NoError(t, err)
-
-	// If seconds: 86400 → 1970-01-02T00:00:00Z
-	// If milliseconds: 86400 → 1970-01-01T00:01:26Z (wrong)
-	assert.Equal(t, int64(86400), header.Expiration.Unix(),
+	assertSecondGenExpirationSeconds(t, 86400,
 		"short expiration must be seconds since epoch, not milliseconds")
 }
 
@@ -574,15 +564,7 @@ func TestExpiration_ProcessorAcceptsFutureMessages(t *testing.T) {
 // TestExpiration_SSUShortExpiration_IsSeconds verifies the 4-byte short
 // expiration in SSU/NTCP2 headers is seconds since epoch (not milliseconds).
 func TestExpiration_SSUShortExpiration_IsSeconds(t *testing.T) {
-	// 1704067200 seconds = 2024-01-01 00:00:00 UTC
-	data := make([]byte, 9)
-	data[0] = byte(I2NP_MESSAGE_TYPE_DATA)
-	binary.BigEndian.PutUint32(data[5:9], 1704067200)
-
-	header, err := ReadI2NPSecondGenTransportHeader(data)
-	require.NoError(t, err)
-
-	assert.Equal(t, int64(1704067200), header.Expiration.Unix(),
+	assertSecondGenExpirationSeconds(t, 1704067200,
 		"short expiration uses seconds, not milliseconds")
 }
 
@@ -1570,17 +1552,7 @@ func TestGarlic_ECIES_ExistingSessionMessageFormat(t *testing.T) {
 // message can be decrypted by the recipient using their static private key.
 func TestGarlic_ECIES_NewSessionDecryptionRoundtrip(t *testing.T) {
 	sender, receiver, destHash := setupGarlicPair(t, 0x44)
-	plaintext := []byte("hello from new session")
-
-	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
-	require.NoError(t, err)
-
-	decrypted, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
-	require.NoError(t, err)
-
-	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
-	assert.Equal(t, [8]byte{}, sessionTag,
-		"New Session decryption must return empty session tag")
+	assertGarlicNewSessionRoundtrip(t, sender, receiver, destHash, []byte("hello from new session"))
 }
 
 // TestGarlic_ECIES_ExistingSessionRoundtrip verifies the session transition:
@@ -1590,14 +1562,7 @@ func TestGarlic_ECIES_ExistingSessionRoundtrip(t *testing.T) {
 	sender, receiver, destHash := setupGarlicPair(t, 0x45)
 
 	// Message 1: New Session
-	msg1 := []byte("first message")
-	enc1, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), msg1)
-	require.NoError(t, err)
-
-	dec1, tag1, _, err := receiver.DecryptGarlicMessage(enc1)
-	require.NoError(t, err)
-	assert.Equal(t, msg1, dec1)
-	assert.Equal(t, [8]byte{}, tag1, "first message is New Session (no tag)")
+	assertGarlicNewSessionRoundtrip(t, sender, receiver, destHash, []byte("first message"))
 
 	// Verify session was established
 	assert.Equal(t, 1, sender.GetSessionCount(),
@@ -1995,15 +1960,7 @@ func TestGarlic_DeliveryInstructions_DestinationWireFormat(t *testing.T) {
 		destHash[i] = byte(0xAA + i)
 	}
 	di := NewDestinationDeliveryInstructions(destHash)
-	data, err := serializeDeliveryInstructions(&di)
-	require.NoError(t, err)
-
-	assert.Equal(t, 33, len(data), "DESTINATION delivery must be 33 bytes")
-	assert.Equal(t, byte(0x20), data[0], "DESTINATION flag must be 0x20")
-
-	// Verify the 32-byte destination hash follows immediately after the flag
-	assert.True(t, bytes.Equal(destHash[:], data[1:33]),
-		"destination hash must follow flag byte")
+	assertDeliveryInstructionWireFormat(t, &di, destHash, 0x20, "DESTINATION")
 }
 
 // TestGarlic_DeliveryInstructions_RouterWireFormat verifies ROUTER delivery
@@ -2014,15 +1971,7 @@ func TestGarlic_DeliveryInstructions_RouterWireFormat(t *testing.T) {
 		routerHash[i] = byte(0xBB + i)
 	}
 	di := NewRouterDeliveryInstructions(routerHash)
-	data, err := serializeDeliveryInstructions(&di)
-	require.NoError(t, err)
-
-	assert.Equal(t, 33, len(data), "ROUTER delivery must be 33 bytes")
-	assert.Equal(t, byte(0x40), data[0], "ROUTER flag must be 0x40")
-
-	// Verify the 32-byte router hash follows immediately after the flag
-	assert.True(t, bytes.Equal(routerHash[:], data[1:33]),
-		"router hash must follow flag byte")
+	assertDeliveryInstructionWireFormat(t, &di, routerHash, 0x40, "ROUTER")
 }
 
 // TestGarlic_DeliveryInstructions_TunnelWireFormat verifies TUNNEL delivery
@@ -2966,37 +2915,16 @@ func TestTunnelBuild_RecordFormat_FieldLayout(t *testing.T) {
 	data := record.Bytes()
 	require.Equal(t, 222, len(data))
 
-	// ReceiveTunnel at [0:4]
-	assert.Equal(t, byte(0x01), data[0])
-	assert.Equal(t, byte(0x04), data[3])
-
-	// OurIdent at [4:36]
-	assert.Equal(t, byte(0xAA), data[4])
-	assert.Equal(t, byte(0xAA), data[35])
-
-	// NextTunnel at [36:40]
-	assert.Equal(t, byte(0x05), data[36])
-	assert.Equal(t, byte(0x08), data[39])
-
-	// NextIdent at [40:72]
-	assert.Equal(t, byte(0xBB), data[40])
-	assert.Equal(t, byte(0xBB), data[71])
-
-	// LayerKey at [72:104]
-	assert.Equal(t, byte(0x11), data[72])
-	assert.Equal(t, byte(0x11), data[103])
-
-	// IVKey at [104:136]
-	assert.Equal(t, byte(0x22), data[104])
-	assert.Equal(t, byte(0x22), data[135])
-
-	// ReplyKey at [136:168]
-	assert.Equal(t, byte(0x33), data[136])
-	assert.Equal(t, byte(0x33), data[167])
-
-	// ReplyIV at [168:184]
-	assert.Equal(t, byte(0x44), data[168])
-	assert.Equal(t, byte(0x44), data[183])
+	assertFieldOffsets(t, data, []fieldCheck{
+		{0, 3, 0x01, 0x04, "ReceiveTunnel"},
+		{4, 35, 0xAA, 0xAA, "OurIdent"},
+		{36, 39, 0x05, 0x08, "NextTunnel"},
+		{40, 71, 0xBB, 0xBB, "NextIdent"},
+		{72, 103, 0x11, 0x11, "LayerKey"},
+		{104, 135, 0x22, 0x22, "IVKey"},
+		{136, 167, 0x33, 0x33, "ReplyKey"},
+		{168, 183, 0x44, 0x44, "ReplyIV"},
+	})
 
 	// Flag at [184]
 	assert.Equal(t, byte(7), data[184])
@@ -3086,16 +3014,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 
 // TestTunnelBuild_ReplyProcessing_HashIntegrity verifies SHA-256 hash verification.
 func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
-	randomData := makeRandomData(func(i int) byte { return byte(i) })
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
-
-	// Verify the hash is correct
-	hashInput := make([]byte, 496)
-	copy(hashInput[:495], randomData[:])
-	hashInput[495] = TUNNEL_BUILD_REPLY_SUCCESS
-	expectedHash := types.SHA256(hashInput)
-	assert.Equal(t, expectedHash[:], record.Hash[:],
-		"CreateBuildResponseRecord must set Hash = SHA256(RandomData + Reply)")
+	assertBuildResponseRecordHash(t, TUNNEL_BUILD_REPLY_SUCCESS, func(i int) byte { return byte(i) })
 
 	// Create a full set of 8 valid records, then corrupt one
 	records := makeTestResponseRecords(8)
@@ -3360,16 +3279,7 @@ func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
 
 // TestVariableTunnelBuildReply_Format_SHA256Integrity verifies hash integrity check.
 func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
-	randomData := makeRandomData(func(i int) byte { return byte(i * 3) })
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_OVERLOAD, randomData)
-
-	// Verify the hash is SHA256(RandomData || Reply)
-	hashInput := make([]byte, 496)
-	copy(hashInput[:495], randomData[:])
-	hashInput[495] = TUNNEL_BUILD_REPLY_OVERLOAD
-	expectedHash := types.SHA256(hashInput)
-	// Compare bytes since record.Hash is common.Hash (named type)
-	assert.Equal(t, expectedHash[:], record.Hash[:], "Hash must be SHA256(RandomData || Reply)")
+	assertBuildResponseRecordHash(t, TUNNEL_BUILD_REPLY_OVERLOAD, func(i int) byte { return byte(i * 3) })
 }
 
 // TestShortTunnelBuildReply_Format_AllAccepted verifies ShortTunnelBuildReply processes correctly.

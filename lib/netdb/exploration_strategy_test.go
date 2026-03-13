@@ -1,104 +1,20 @@
 package netdb
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/go-i2p/crypto/rand"
-
-	"github.com/go-i2p/common/certificate"
 	common "github.com/go-i2p/common/data"
-	"github.com/go-i2p/common/key_certificate"
-	"github.com/go-i2p/common/keys_and_cert"
-	"github.com/go-i2p/common/router_address"
-	"github.com/go-i2p/common/router_identity"
 	"github.com/go-i2p/common/router_info"
-	"github.com/go-i2p/common/signature"
-	"github.com/go-i2p/crypto/ed25519"
-	elgamal "github.com/go-i2p/crypto/elg"
-	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // createTestRouterInfoWithOptions creates a valid RouterInfo with the specified options.
-// This helper is used to construct properly signed RouterInfo objects for testing
-// exploration strategy features like floodfill detection and bucket distribution.
 func createTestRouterInfoWithOptions(t *testing.T, options map[string]string) *router_info.RouterInfo {
 	t.Helper()
-
-	// Generate Ed25519 signing key pair
-	ed25519PrivKey, err := ed25519.GenerateEd25519Key()
-	require.NoError(t, err, "Failed to generate Ed25519 key")
-
-	ed25519PrivKeyTyped := ed25519PrivKey.(ed25519.Ed25519PrivateKey)
-	ed25519PubKeyRaw, err := ed25519PrivKeyTyped.Public()
-	require.NoError(t, err, "Failed to derive Ed25519 public key")
-
-	ed25519PubKey, ok := ed25519PubKeyRaw.(types.SigningPublicKey)
-	require.True(t, ok, "Failed to cast Ed25519 public key")
-
-	// Generate ElGamal encryption key pair
-	var elgPrivKey elgamal.PrivateKey
-	err = elgamal.ElgamalGenerate(&elgPrivKey.PrivateKey, rand.Reader)
-	require.NoError(t, err, "Failed to generate ElGamal key")
-
-	var elgPubKey elgamal.ElgPublicKey
-	yBytes := elgPrivKey.PublicKey.Y.Bytes()
-	require.LessOrEqual(t, len(yBytes), 256, "ElGamal public key Y too large")
-	copy(elgPubKey[256-len(yBytes):], yBytes)
-
-	// Create KEY certificate for Ed25519/ElGamal
-	var payload bytes.Buffer
-	signingType, err := common.NewIntegerFromInt(7, 2) // Ed25519
-	require.NoError(t, err)
-	cryptoType, err := common.NewIntegerFromInt(0, 2) // ElGamal
-	require.NoError(t, err)
-	payload.Write(*signingType)
-	payload.Write(*cryptoType)
-
-	cert, err := certificate.NewCertificateWithType(certificate.CERT_KEY, payload.Bytes())
-	require.NoError(t, err, "Failed to create certificate")
-
-	keyCert, err := key_certificate.KeyCertificateFromCertificate(cert)
-	require.NoError(t, err, "Failed to create key certificate")
-
-	// Create padding
-	pubKeySize := keyCert.CryptoSize()
-	sigKeySize := keyCert.SigningPublicKeySize()
-	paddingSize := keys_and_cert.KEYS_AND_CERT_DATA_SIZE - pubKeySize - sigKeySize
-	padding := make([]byte, paddingSize)
-	_, err = rand.Read(padding)
-	require.NoError(t, err, "Failed to generate padding")
-
-	// Create RouterIdentity
-	routerIdentity, err := router_identity.NewRouterIdentity(elgPubKey, ed25519PubKey, cert, padding)
-	require.NoError(t, err, "Failed to create router identity")
-
-	// Create router address
-	routerAddr, err := router_address.NewRouterAddress(3, <-time.After(1*time.Second), "NTCP2", map[string]string{})
-	require.NoError(t, err, "Failed to create router address")
-
-	// Merge default options with provided options
-	mergedOptions := map[string]string{"router.version": "0.9.64"}
-	for k, v := range options {
-		mergedOptions[k] = v
-	}
-
-	// Create RouterInfo
-	ri, err := router_info.NewRouterInfo(
-		routerIdentity,
-		time.Now(),
-		[]*router_address.RouterAddress{routerAddr},
-		mergedOptions,
-		&ed25519PrivKeyTyped,
-		signature.SIGNATURE_TYPE_EDDSA_SHA512_ED25519,
-	)
-	require.NoError(t, err, "Failed to create RouterInfo")
-
-	return ri
+	return testutil.CreateSignedTestRouterInfo(t, options, nil)
 }
 
 // TestNewAdaptiveStrategy verifies adaptive strategy initialization

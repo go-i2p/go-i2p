@@ -23,13 +23,7 @@ func TestRouterCloseReleasesResources(t *testing.T) {
 	assertRouterRunning(t, router, true, "Router should be running")
 
 	// Close the router (should call Stop() internally if still running)
-	err := router.Close()
-	assert.NoError(t, err)
-
-	// Verify all resources are released
-	assertResourcesNilAfterClose(t, router)
-
-	// Verify router is no longer running
+	assertCloseReleasesResources(t, router)
 	assertRouterRunning(t, router, false, "Router should not be running after Close()")
 }
 
@@ -50,11 +44,7 @@ func TestRouterCloseAfterStop(t *testing.T) {
 	assertRouterRunning(t, router, false, "Router should not be running after Stop()")
 
 	// Close should still work and release remaining resources
-	err := router.Close()
-	assert.NoError(t, err)
-
-	// Verify all resources are released
-	assertResourcesNilAfterClose(t, router)
+	assertCloseReleasesResources(t, router)
 }
 
 // TestRouterCloseWithoutStart verifies that Close() handles a never-started router

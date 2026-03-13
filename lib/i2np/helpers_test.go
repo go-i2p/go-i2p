@@ -1,6 +1,7 @@
 package i2np
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 
@@ -191,6 +192,77 @@ func serializeAndAssertInstructions(t *testing.T, instructions *GarlicCloveDeliv
 	assert.Len(t, serialized, expectedLen)
 	assert.Equal(t, expectedFlag, serialized[0], "flag")
 	return serialized
+}
+
+// assertBuildResponseRecordHash creates a BuildResponseRecord with the given reply code
+// and data generator function, then verifies its Hash equals SHA256(RandomData || Reply).
+func assertBuildResponseRecordHash(t *testing.T, replyCode byte, dataFn func(int) byte) {
+	t.Helper()
+	randomData := makeRandomData(dataFn)
+	record := CreateBuildResponseRecord(replyCode, randomData)
+	hashInput := make([]byte, 496)
+	copy(hashInput[:495], randomData[:])
+	hashInput[495] = replyCode
+	expectedHash := types.SHA256(hashInput)
+	assert.Equal(t, expectedHash[:], record.Hash[:], "Hash must be SHA256(RandomData || Reply)")
+}
+
+// assertSecondGenExpirationSeconds constructs a 9-byte second-gen transport header
+// with the given expiration value, parses it, and verifies the expiration matches.
+func assertSecondGenExpirationSeconds(t *testing.T, seconds uint32, msg string) {
+	t.Helper()
+	data := make([]byte, 9)
+	data[0] = byte(I2NP_MESSAGE_TYPE_DATA)
+	binary.BigEndian.PutUint32(data[5:9], seconds)
+	header, err := ReadI2NPSecondGenTransportHeader(data)
+	require.NoError(t, err)
+	assert.Equal(t, int64(seconds), header.Expiration.Unix(), msg)
+}
+
+// fieldCheck describes a pair of byte positions and expected values for
+// verifying field layout in serialized records.
+type fieldCheck struct {
+	startOffset int
+	endOffset   int
+	startByte   byte
+	endByte     byte
+	name        string
+}
+
+// assertFieldOffsets loops through field checks and asserts the expected byte values
+// at the given start and end offsets in data.
+func assertFieldOffsets(t *testing.T, data []byte, checks []fieldCheck) {
+	t.Helper()
+	for _, fc := range checks {
+		assert.Equal(t, fc.startByte, data[fc.startOffset], "%s start", fc.name)
+		assert.Equal(t, fc.endByte, data[fc.endOffset], "%s end", fc.name)
+	}
+}
+
+// assertGarlicNewSessionRoundtrip encrypts plaintext as a New Session message from sender
+// to receiver, decrypts it, asserts the plaintext matches and the session tag is empty.
+// Returns the ciphertext for further testing.
+func assertGarlicNewSessionRoundtrip(t *testing.T, sender, receiver *GarlicSessionManager, destHash [32]byte, plaintext []byte) []byte {
+	t.Helper()
+	encrypted, err := sender.EncryptGarlicMessage(destHash, receiver.GetPublicKey(), plaintext)
+	require.NoError(t, err)
+	decrypted, sessionTag, _, err := receiver.DecryptGarlicMessage(encrypted)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted, "decrypted plaintext must match original")
+	assert.Equal(t, [8]byte{}, sessionTag, "New Session decryption must return empty session tag")
+	return encrypted
+}
+
+// assertDeliveryInstructionWireFormat verifies that a delivery instruction serializes
+// to exactly 33 bytes with the expected flag byte and hash payload.
+func assertDeliveryInstructionWireFormat(t *testing.T, di *GarlicCloveDeliveryInstructions, hash common.Hash, expectedFlag byte, label string) {
+	t.Helper()
+	data, err := serializeDeliveryInstructions(di)
+	require.NoError(t, err)
+	assert.Equal(t, 33, len(data), "%s delivery must be 33 bytes", label)
+	assert.Equal(t, expectedFlag, data[0], "%s flag must be 0x%02X", label, expectedFlag)
+	assert.True(t, bytes.Equal(hash[:], data[1:33]),
+		"%s hash must follow flag byte", label)
 }
 
 // makeSingleHopBuildResult creates a TunnelBuildResult with one hop and one record.

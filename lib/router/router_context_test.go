@@ -46,19 +46,7 @@ func TestRouterContextLifecycle(t *testing.T) {
 // TestRouterContextCancellation tests that stopping the router cancels the context
 func TestRouterContextCancellation(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
-
-	// Start the router
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
-
-	// Get context before stopping
-	ctx := getRouterCtx(t, router)
-
-	// Stop the router
-	router.Stop()
-
-	// Verify context was cancelled
-	assertContextCancelled(t, ctx, 200*time.Millisecond)
+	startStopAndAssertCancelled(t, router, 200*time.Millisecond)
 }
 
 // TestRouterMultipleStartStop tests that Start/Stop can be called multiple times
@@ -66,13 +54,7 @@ func TestRouterMultipleStartStop(t *testing.T) {
 	router := createTestRouterWithKeystore(t)
 
 	// First Start/Stop cycle
-	router.Start()
-	time.Sleep(50 * time.Millisecond)
-	ctx1 := getRouterCtx(t, router)
-	router.Stop()
-
-	// Verify first context is cancelled
-	assertContextCancelled(t, ctx1, 100*time.Millisecond)
+	ctx1 := startStopAndAssertCancelled(t, router, 100*time.Millisecond)
 
 	// Second Start/Stop cycle
 	router.Start()

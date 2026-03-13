@@ -46,6 +46,19 @@ func newTestRouter(t *testing.T, cfg *config.RouterConfig) *Router {
 	return router
 }
 
+// createStartedTestRouterLocal creates a router with local bootstrap, starts it,
+// and waits briefly for initialization. Returns the started router.
+func createStartedTestRouterLocal(t *testing.T) *Router {
+	t.Helper()
+	cfg := newTestConfig(t)
+	cfg.Bootstrap.BootstrapType = "local"
+	router, err := CreateRouter(cfg)
+	require.NoError(t, err)
+	router.Start()
+	time.Sleep(100 * time.Millisecond)
+	return router
+}
+
 // requireStopsWithin runs fn in a goroutine and fails if it doesn't complete within timeout.
 func requireStopsWithin(t *testing.T, fn func(), timeout time.Duration) {
 	t.Helper()
@@ -178,14 +191,7 @@ func TestShutdownSequence_GracefulCleanup(t *testing.T) {
 
 // TestShutdownSequence_ContextCancellation verifies context-based shutdown signals
 func TestShutdownSequence_ContextCancellation(t *testing.T) {
-	cfg := newTestConfig(t)
-	cfg.Bootstrap.BootstrapType = "local"
-
-	router, err := CreateRouter(cfg)
-	require.NoError(t, err)
-
-	router.Start()
-	time.Sleep(100 * time.Millisecond)
+	router := createStartedTestRouterLocal(t)
 
 	ctx := getRouterCtx(t, router)
 
@@ -197,14 +203,7 @@ func TestShutdownSequence_ContextCancellation(t *testing.T) {
 
 // TestShutdownSequence_WaitGroupCompletion verifies all goroutines complete
 func TestShutdownSequence_WaitGroupCompletion(t *testing.T) {
-	cfg := newTestConfig(t)
-	cfg.Bootstrap.BootstrapType = "local"
-
-	router, err := CreateRouter(cfg)
-	require.NoError(t, err)
-
-	router.Start()
-	time.Sleep(100 * time.Millisecond)
+	router := createStartedTestRouterLocal(t)
 
 	// Stop should block until all goroutines complete
 	requireStopsWithin(t, router.Stop, 10*time.Second)

@@ -73,6 +73,27 @@ func assertContextActive(t *testing.T, ctx context.Context) {
 	}
 }
 
+// startStopAndAssertCancelled starts the router, retrieves its context, stops it,
+// and asserts that the context is cancelled within the given timeout.
+func startStopAndAssertCancelled(t *testing.T, router *Router, timeout time.Duration) context.Context {
+	t.Helper()
+	router.Start()
+	time.Sleep(50 * time.Millisecond)
+	ctx := getRouterCtx(t, router)
+	router.Stop()
+	assertContextCancelled(t, ctx, timeout)
+	return ctx
+}
+
+// assertCloseReleasesResources calls Close on the router, asserts no error,
+// and verifies all resources are nil.
+func assertCloseReleasesResources(t *testing.T, router *Router) {
+	t.Helper()
+	err := router.Close()
+	assert.NoError(t, err)
+	assertResourcesNilAfterClose(t, router)
+}
+
 // --- Router construction helpers ---
 
 // newTestRouterForWait creates a Router via FromConfig with DefaultRouterConfig.
