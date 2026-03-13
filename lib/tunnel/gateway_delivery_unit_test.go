@@ -152,11 +152,7 @@ func TestSendWithDeliveryLocalSmallMessage(t *testing.T) {
 		msg[i] = byte(i)
 	}
 
-	result, err := gw.SendWithDelivery(msg, LocalDelivery())
-	assert.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Len(t, result, 1, "Small message should produce a single tunnel message")
-	assert.Len(t, result[0], 1028, "Each tunnel message should be 1028 bytes")
+	assertSendProducesSingleMsg(t, gw, msg, LocalDelivery())
 }
 
 // TestSendWithDeliveryTunnelType tests single-fragment tunnel delivery.
@@ -167,12 +163,7 @@ func TestSendWithDeliveryTunnelType(t *testing.T) {
 	copy(hash[:], []byte("gateway_hash_for_tunnel_delivery"))
 	dc := TunnelDelivery(42, hash)
 
-	msg := make([]byte, 100)
-	result, err := gw.SendWithDelivery(msg, dc)
-	assert.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Len(t, result, 1)
-	assert.Len(t, result[0], 1028)
+	assertSendProducesSingleMsg(t, gw, make([]byte, 100), dc)
 }
 
 // TestSendWithDeliveryRouterType tests single-fragment router delivery.
@@ -183,12 +174,7 @@ func TestSendWithDeliveryRouterType(t *testing.T) {
 	copy(hash[:], []byte("router_hash_for_router_delivery!"))
 	dc := RouterDelivery(hash)
 
-	msg := make([]byte, 100)
-	result, err := gw.SendWithDelivery(msg, dc)
-	assert.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Len(t, result, 1)
-	assert.Len(t, result[0], 1028)
+	assertSendProducesSingleMsg(t, gw, make([]byte, 100), dc)
 }
 
 // TestSendWithDeliveryFragmentedMessage tests fragmentation with a large message.

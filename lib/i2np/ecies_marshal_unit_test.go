@@ -54,19 +54,8 @@ func TestDatabaseLookup_ECIESOnlyMarshalRoundTrip(t *testing.T) {
 	require.False(lookup.hasEncryption(), "ElGamal encryption flag should NOT be set")
 	require.True(lookup.hasAnyEncryption(), "hasAnyEncryption should return true for ECIES-only")
 
-	// Marshal
-	data, err := lookup.MarshalBinary()
-	require.Nil(err)
-
-	// The size should include encryption fields:
-	// key(32) + from(32) + flags(1) + size(2) + replyKey(32) + tagsCount(1) + eciesTag(8) = 108
-	expectedSize := 32 + 32 + 1 + 2 + 32 + 1 + 8
-	require.Equal(expectedSize, len(data),
-		"Marshal size should include ECIES encryption fields")
-
-	// Unmarshal and verify round-trip
-	parsed, err := ReadDatabaseLookup(data)
-	require.Nil(err)
+	// Marshal, verify size, and unmarshal
+	parsed := marshalUnmarshalLookup(t, lookup, 32+32+1+2+32+1+8)
 
 	assert := assert.New(t)
 	assert.Equal(key, parsed.Key)
@@ -119,15 +108,7 @@ func TestDatabaseLookup_ECIESWithTunnelMarshalRoundTrip(t *testing.T) {
 		ECIESReplyTags: []session_tag.ECIESSessionTag{tag1, tag2},
 	}
 
-	data, err := lookup.MarshalBinary()
-	require.Nil(err)
-
-	// key(32) + from(32) + flags(1) + tunnelID(4) + size(2) + replyKey(32) + tags(1) + 2*eciesTags(16) = 120
-	expectedSize := 32 + 32 + 1 + 4 + 2 + 32 + 1 + 2*8
-	require.Equal(expectedSize, len(data))
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.Nil(err)
+	parsed := marshalUnmarshalLookup(t, lookup, 32+32+1+4+2+32+1+2*8)
 
 	assert := assert.New(t)
 	assert.Equal(key, parsed.Key)
@@ -180,15 +161,7 @@ func TestDatabaseLookup_ElGamalEncryptionStillWorks(t *testing.T) {
 	require.False(lookup.IsECIES())
 	require.True(lookup.hasAnyEncryption())
 
-	data, err := lookup.MarshalBinary()
-	require.Nil(err)
-
-	// key(32) + from(32) + flags(1) + size(2) + replyKey(32) + tags(1) + tag(32) = 132
-	expectedSize := 32 + 32 + 1 + 2 + 32 + 1 + 32
-	require.Equal(expectedSize, len(data))
-
-	parsed, err := ReadDatabaseLookup(data)
-	require.Nil(err)
+	parsed := marshalUnmarshalLookup(t, lookup, 32+32+1+2+32+1+32)
 
 	assert := assert.New(t)
 	assert.Equal(key, parsed.Key)

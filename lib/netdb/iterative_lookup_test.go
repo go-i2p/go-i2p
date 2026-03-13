@@ -393,17 +393,7 @@ func TestQueryBatchParallel(t *testing.T) {
 // TestProcessDatabaseSearchReplyResponse_ReturnsSuggestions verifies that
 // processDatabaseSearchReplyResponse returns a SearchReplyError with suggestions.
 func TestProcessDatabaseSearchReplyResponse_ReturnsSuggestions(t *testing.T) {
-	mockDB := newMockNetworkDatabase()
-	resolver := &KademliaResolver{
-		NetworkDatabase: mockDB,
-		responseHandler: NewLookupResponseHandler(),
-	}
-
-	targetHash := common.Hash{1, 2, 3, 4}
-	fromHash := common.Hash{5, 6, 7, 8}
-	peerHashes := []common.Hash{{9, 10, 11}, {12, 13, 14}}
-
-	searchReply := i2np.NewDatabaseSearchReply(targetHash, fromHash, peerHashes)
+	resolver, targetHash, searchReply, peerHashes := newResolverWithSearchReply(t)
 	data, err := searchReply.MarshalPayload()
 	if err != nil {
 		t.Fatalf("Failed to marshal search reply payload: %v", err)

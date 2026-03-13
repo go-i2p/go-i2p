@@ -1,7 +1,6 @@
 package netdb
 
 import (
-	"os"
 	"testing"
 
 	common "github.com/go-i2p/common/data"
@@ -85,9 +84,7 @@ func TestRouterNetDB_Path(t *testing.T) {
 	tempDir := t.TempDir()
 	stdDB := NewStdNetDB(tempDir)
 	routerDB := NewRouterNetDB(stdDB)
-
-	path := routerDB.Path()
-	assert.Equal(t, tempDir, path)
+	assertNetDBPath(t, routerDB, tempDir)
 }
 
 // TestRouterNetDB_Ensure tests database initialization.
@@ -95,15 +92,7 @@ func TestRouterNetDB_Ensure(t *testing.T) {
 	tempDir := t.TempDir()
 	stdDB := NewStdNetDB(tempDir)
 	routerDB := NewRouterNetDB(stdDB)
-
-	// Ensure should create necessary directories
-	err := routerDB.Ensure()
-	assert.NoError(t, err)
-
-	// Verify directory exists
-	info, err := os.Stat(tempDir)
-	assert.NoError(t, err)
-	assert.True(t, info.IsDir())
+	assertNetDBEnsure(t, routerDB, tempDir)
 }
 
 // TestRouterNetDB_RecalculateSize tests size recalculation.

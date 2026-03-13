@@ -1,11 +1,9 @@
 package netdb
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	// keep for TestClientNetDB_Ensure
 )
 
 // TestClientNetDB_Isolation tests that ClientNetDB only exposes LeaseSet operations.
@@ -36,9 +34,7 @@ func TestClientNetDB_Path(t *testing.T) {
 	tempDir := t.TempDir()
 	stdDB := NewStdNetDB(tempDir)
 	clientDB := NewClientNetDB(stdDB)
-
-	path := clientDB.Path()
-	assert.Equal(t, tempDir, path)
+	assertNetDBPath(t, clientDB, tempDir)
 }
 
 // TestClientNetDB_Ensure tests database initialization.
@@ -46,15 +42,7 @@ func TestClientNetDB_Ensure(t *testing.T) {
 	tempDir := t.TempDir()
 	stdDB := NewStdNetDB(tempDir)
 	clientDB := NewClientNetDB(stdDB)
-
-	// Ensure should create necessary directories
-	err := clientDB.Ensure()
-	assert.NoError(t, err)
-
-	// Verify directory exists
-	info, err := os.Stat(tempDir)
-	assert.NoError(t, err)
-	assert.True(t, info.IsDir())
+	assertNetDBEnsure(t, clientDB, tempDir)
 }
 
 // TestClientNetDB_ConcurrentAccess tests thread safety of ClientNetDB operations.

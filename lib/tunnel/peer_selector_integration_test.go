@@ -152,10 +152,7 @@ func TestExecuteBuildWithRetry_ExcludesFailedPeersOnRetry(t *testing.T) {
 	}
 	pool.SetTunnelBuilder(builder)
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	tunnelID, err := pool.executeBuildWithRetry(&req)
 	assert.NoError(t, err)
@@ -210,10 +207,7 @@ func TestExecuteBuildWithRetry_ProgressiveExclusionGrows(t *testing.T) {
 	}
 	pool.SetTunnelBuilder(builder)
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	tunnelID, err := pool.executeBuildWithRetry(&req)
 	assert.NoError(t, err)
@@ -237,10 +231,7 @@ func TestExecuteBuildWithRetry_ProgressiveExclusionGrows(t *testing.T) {
 func TestExecuteBuildWithRetry_AllFailures_MarkAllPeers(t *testing.T) {
 	pool, builder, peers := setupPoolWithFailingPeerBuilder(t, 0x10, 0x20)
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	_, err := pool.executeBuildWithRetry(&req)
 	assert.Error(t, err)
@@ -277,10 +268,7 @@ func TestExecuteBuildWithRetry_NilPeerHashesOnFailure(t *testing.T) {
 	}
 	pool.SetTunnelBuilder(builder)
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	tunnelID, err := pool.executeBuildWithRetry(&req)
 	assert.NoError(t, err)
@@ -312,10 +300,7 @@ func TestBuilderInterface_ReturnsBuildTunnelResult(t *testing.T) {
 		successPeers: []common.Hash{peerA},
 	}
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	result, err := builder.BuildTunnel(req)
 	require.NoError(t, err)
@@ -334,10 +319,7 @@ func TestBuilderInterface_FailureStillReturnsPeerHashes(t *testing.T) {
 		failedPeers: []common.Hash{peerA, peerB},
 	}
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: true,
-	}
+	req := newBuildTunnelRequest(3, true)
 
 	result, err := builder.BuildTunnel(req)
 	assert.Error(t, err)
@@ -489,10 +471,7 @@ func TestEndToEnd_FailedBuildExcludesPeersFromNextAttempt(t *testing.T) {
 	}
 	pool.SetTunnelBuilder(builder)
 
-	req := BuildTunnelRequest{
-		HopCount:  3,
-		IsInbound: false,
-	}
+	req := newBuildTunnelRequest(3, false)
 
 	tunnelID, err := pool.executeBuildWithRetry(&req)
 	require.NoError(t, err)

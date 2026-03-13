@@ -175,3 +175,101 @@ func createTestPoolWithDefaultConfig(t *testing.T) *Pool {
 	t.Cleanup(pool.Stop)
 	return pool
 }
+
+// createLimiterWithTwoHashes creates a SourceLimiter with the given params,
+// registers cleanup, and returns it along with two deterministic test hashes.
+// Used by source_limiter_unit_test.go.
+func createLimiterWithTwoHashes(t *testing.T, maxPerMin, burstSize int, banDuration time.Duration) (*SourceLimiter, common.Hash, common.Hash) {
+	t.Helper()
+	sl := createTestSourceLimiter(maxPerMin, burstSize, banDuration)
+	t.Cleanup(sl.Stop)
+	return sl, createTestHash(1), createTestHash(2)
+}
+
+// assertSendProducesSingleMsg sends msg with delivery config dc via the gateway,
+// and asserts a single 1028-byte tunnel message is produced.
+// Used by gateway_delivery_unit_test.go.
+func assertSendProducesSingleMsg(t *testing.T, gw *Gateway, msg []byte, dc DeliveryConfig) {
+	t.Helper()
+	result, err := gw.SendWithDelivery(msg, dc)
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Len(t, result, 1)
+	assert.Len(t, result[0], 1028)
+}
+
+// assertTunnelForwarded locks the mock forwarder and asserts exactly one tunnel
+// forwarding call with the expected tunnel ID, gateway hash, and message bytes.
+// Used by endpoint_forwarding_unit_test.go.
+func assertTunnelForwarded(t *testing.T, fwd *mockForwarder, expectedTunnelID uint32, expectedHash [32]byte, expectedMsg []byte) {
+	t.Helper()
+	fwd.mu.Lock()
+	defer fwd.mu.Unlock()
+	require.Len(t, fwd.tunnelCalls, 1)
+	assert.Equal(t, expectedTunnelID, fwd.tunnelCalls[0].tunnelID)
+	assert.Equal(t, expectedHash, fwd.tunnelCalls[0].gatewayHash)
+	assert.Equal(t, expectedMsg, fwd.tunnelCalls[0].msgBytes)
+}
+
+// assertRouterForwarded locks the mock forwarder and asserts exactly one router
+// forwarding call with the expected router hash and message bytes.
+// Used by endpoint_forwarding_unit_test.go.
+func assertRouterForwarded(t *testing.T, fwd *mockForwarder, expectedHash [32]byte, expectedMsg []byte) {
+	t.Helper()
+	fwd.mu.Lock()
+	defer fwd.mu.Unlock()
+	require.Len(t, fwd.routerCalls, 1)
+	assert.Equal(t, expectedHash, fwd.routerCalls[0].routerHash)
+	assert.Equal(t, expectedMsg, fwd.routerCalls[0].msgBytes)
+}
+
+// createSpecEndpointWithCapture creates an Endpoint backed by specMockEncryptor
+// with a handler that captures delivered bytes. Returns the endpoint and a getter
+// for the captured message. Used by spec_compliance_validation_test.go.
+func createSpecEndpointWithCapture(t *testing.T) (*Endpoint, func() []byte) {
+	t.Helper()
+	enc := &specMockEncryptor{}
+	var received []byte
+	handler := func(msgBytes []byte) error {
+		received = msgBytes
+		return nil
+	}
+	ep, err := NewEndpoint(TunnelID(1), enc, handler)
+	require.NoError(t, err)
+	t.Cleanup(ep.Stop)
+	return ep, func() []byte { return received }
+}
+
+// createSpecEndpointWithForwarder creates an Endpoint backed by specMockEncryptor
+// with a no-op handler and an attached specMockForwarder. Used by
+// spec_compliance_validation_test.go.
+func createSpecEndpointWithForwarder(t *testing.T) (*Endpoint, *specMockForwarder) {
+	t.Helper()
+	enc := &specMockEncryptor{}
+	handler := func(msgBytes []byte) error { return nil }
+	ep, err := NewEndpoint(TunnelID(1), enc, handler)
+	require.NoError(t, err)
+	t.Cleanup(ep.Stop)
+	fwd := &specMockForwarder{}
+	ep.SetForwarder(fwd)
+	return ep, fwd
+}
+
+// newBuildTunnelRequest creates a BuildTunnelRequest with the given hop count
+// and direction. Used by peer_selector_integration_test.go.
+func newBuildTunnelRequest(hopCount int, isInbound bool) BuildTunnelRequest {
+	return BuildTunnelRequest{
+		HopCount:  hopCount,
+		IsInbound: isInbound,
+	}
+}
+
+// waitForBuildRetries drains count items from completionChan (waiting for
+// retried builds to complete) and sleeps briefly for goroutine state updates.
+// Used by pool_integration_test.go.
+func waitForBuildRetries(completionChan chan struct{}, count int) {
+	for i := 0; i < count; i++ {
+		<-completionChan
+	}
+	time.Sleep(10 * time.Millisecond)
+}

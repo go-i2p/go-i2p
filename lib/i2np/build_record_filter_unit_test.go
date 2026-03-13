@@ -12,11 +12,7 @@ import (
 // Before the fix, ALL records were processed, causing spurious accept/reject
 // decisions for records destined for other routers.
 func TestProcessAllBuildRecords_FiltersRecordsNotForUs(t *testing.T) {
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true)
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
 	// Set our router hash.
 	var ourHash common.Hash
@@ -49,11 +45,7 @@ func TestProcessAllBuildRecords_FiltersRecordsNotForUs(t *testing.T) {
 // the router from incorrectly participating in all hops of a tunnel build
 // when its identity is unknown.
 func TestProcessAllBuildRecords_NoProcessingWhenHashUnset(t *testing.T) {
-	processor := NewMessageProcessor()
-	mockForwarder := newMockBuildReplyForwarder()
-	mockParticipant := newMockParticipantManager(true)
-	processor.SetBuildReplyForwarder(mockForwarder)
-	processor.SetParticipantManager(mockParticipant)
+	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
 	// Do NOT set our router hash — it stays zero.
 

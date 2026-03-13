@@ -34,12 +34,7 @@ func TestBuildReplyForwarderInterface(t *testing.T) {
 func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 
-	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = 0 // Force direct router forwarding
-	messageID := 1001
-
-	// Execute
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	record := processDirectBuildRecord(t, processor, 1001)
 
 	// Verify
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should be registered")
@@ -49,7 +44,7 @@ func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 
 	if len(routerCalls) > 0 {
 		assert.Equal(t, record.NextIdent, routerCalls[0].routerHash, "Router hash should match NextIdent")
-		assert.Equal(t, messageID, routerCalls[0].messageID, "Message ID should match")
+		assert.Equal(t, 1001, routerCalls[0].messageID, "Message ID should match")
 		assert.NotEmpty(t, routerCalls[0].encryptedRecords, "Encrypted records should not be empty")
 		// ChaCha20-Poly1305 produces 544 bytes (528 + 16 auth tag)
 		assert.Equal(t, 544, len(routerCalls[0].encryptedRecords), "Encrypted reply should be 544 bytes")
@@ -61,12 +56,7 @@ func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	mockParticipant.rejectCode = TUNNEL_BUILD_REPLY_OVERLOAD
 	mockParticipant.rejectReason = "router overloaded"
 
-	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = 0 // Force direct router forwarding
-	messageID := 1002
-
-	// Execute
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	processDirectBuildRecord(t, processor, 1002)
 
 	// Verify
 	assert.Equal(t, 0, mockParticipant.getRegisteredCount(), "Participant should not be registered when rejected")
@@ -275,12 +265,7 @@ func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")
 
-	record := createTestBuildRequestRecord(t)
-	record.NextTunnel = 0
-	messageID := 3001
-
-	// Execute
-	processor.processSingleBuildRecord(messageID, 0, record, false)
+	processDirectBuildRecord(t, processor, 3001)
 
 	// Registration was attempted but failed.
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(),

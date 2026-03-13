@@ -100,13 +100,8 @@ func TestReplyProcessor_DuplicateRegistration(t *testing.T) {
 func TestReplyProcessor_CorrelationRemoval(t *testing.T) {
 	config := DefaultReplyProcessorConfig()
 	config.EnableDecryption = false // Disable decryption for this test
-	rp := NewReplyProcessor(config, nil)
-
 	tunnelID := tunnel.TunnelID(999)
-	replyKeys, replyIVs := generateReplyKeys(t, 2)
-
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 2)
-	require.NoError(t, err)
+	rp := registerPendingBuild(t, config, tunnelID, 2, true)
 
 	assert.Equal(t, 1, rp.GetPendingBuildCount())
 
@@ -114,7 +109,7 @@ func TestReplyProcessor_CorrelationRemoval(t *testing.T) {
 	handler := createSuccessfulVariableTunnelBuildReply(2)
 
 	// Process the reply
-	err = rp.ProcessBuildReply(handler, tunnelID)
+	err := rp.ProcessBuildReply(handler, tunnelID)
 	require.NoError(t, err)
 
 	// Pending build should be removed
@@ -141,13 +136,7 @@ func TestReplyProcessor_TimeoutExpiration(t *testing.T) {
 	config := DefaultReplyProcessorConfig()
 	config.BuildTimeout = 50 * time.Millisecond
 	config.MaxRetries = 0 // No retries for this test
-	rp := NewReplyProcessor(config, nil)
-
-	tunnelID := tunnel.TunnelID(777)
-	replyKeys, replyIVs := generateReplyKeys(t, 1)
-
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 1)
-	require.NoError(t, err)
+	rp := registerPendingBuild(t, config, tunnel.TunnelID(777), 1, true)
 
 	assert.Equal(t, 1, rp.GetPendingBuildCount())
 
@@ -163,17 +152,12 @@ func TestReplyProcessor_TimeoutCancellationOnReply(t *testing.T) {
 	config := DefaultReplyProcessorConfig()
 	config.BuildTimeout = 200 * time.Millisecond
 	config.EnableDecryption = false
-	rp := NewReplyProcessor(config, nil)
-
 	tunnelID := tunnel.TunnelID(888)
-	replyKeys, replyIVs := generateReplyKeys(t, 2)
-
-	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, true, 2)
-	require.NoError(t, err)
+	rp := registerPendingBuild(t, config, tunnelID, 2, true)
 
 	// Process reply before timeout
 	handler := createSuccessfulVariableTunnelBuildReply(2)
-	err = rp.ProcessBuildReply(handler, tunnelID)
+	err := rp.ProcessBuildReply(handler, tunnelID)
 	require.NoError(t, err)
 
 	// Verify build is removed

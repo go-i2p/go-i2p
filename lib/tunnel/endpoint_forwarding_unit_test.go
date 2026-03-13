@@ -110,12 +110,7 @@ func TestDeliverWithInstructionsTunnel(t *testing.T) {
 	err := ep.deliverWithInstructions(DT_TUNNEL, di, msg)
 	assert.NoError(t, err)
 
-	fwd.mu.Lock()
-	defer fwd.mu.Unlock()
-	require.Len(t, fwd.tunnelCalls, 1)
-	assert.Equal(t, uint32(42), fwd.tunnelCalls[0].tunnelID)
-	assert.Equal(t, hash, fwd.tunnelCalls[0].gatewayHash)
-	assert.Equal(t, msg, fwd.tunnelCalls[0].msgBytes)
+	assertTunnelForwarded(t, fwd, 42, hash, msg)
 }
 
 // TestDeliverWithInstructionsRouter tests DT_ROUTER delivery forwards via MessageForwarder.
@@ -132,11 +127,7 @@ func TestDeliverWithInstructionsRouter(t *testing.T) {
 	err := ep.deliverWithInstructions(DT_ROUTER, di, msg)
 	assert.NoError(t, err)
 
-	fwd.mu.Lock()
-	defer fwd.mu.Unlock()
-	require.Len(t, fwd.routerCalls, 1)
-	assert.Equal(t, hash, fwd.routerCalls[0].routerHash)
-	assert.Equal(t, msg, fwd.routerCalls[0].msgBytes)
+	assertRouterForwarded(t, fwd, hash, msg)
 }
 
 // TestDeliverViaForwarderNoForwarder tests graceful handling when no forwarder is set.
@@ -244,12 +235,7 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	fwd.mu.Lock()
-	defer fwd.mu.Unlock()
-	require.Len(t, fwd.tunnelCalls, 1)
-	assert.Equal(t, uint32(42), fwd.tunnelCalls[0].tunnelID)
-	assert.Equal(t, hash, fwd.tunnelCalls[0].gatewayHash)
-	assert.Equal(t, []byte("part1part2"), fwd.tunnelCalls[0].msgBytes)
+	assertTunnelForwarded(t, fwd, 42, hash, []byte("part1part2"))
 }
 
 // TestReassembleAndDeliverRouter tests reassembly delivers to forwarder for DT_ROUTER.
@@ -265,11 +251,7 @@ func TestReassembleAndDeliverRouter(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	fwd.mu.Lock()
-	defer fwd.mu.Unlock()
-	require.Len(t, fwd.routerCalls, 1)
-	assert.Equal(t, hash, fwd.routerCalls[0].routerHash)
-	assert.Equal(t, []byte("router_part1router_part2"), fwd.routerCalls[0].msgBytes)
+	assertRouterForwarded(t, fwd, hash, []byte("router_part1router_part2"))
 }
 
 // TestReassembleAndDeliverNoForwarder tests reassembly skips gracefully without forwarder.

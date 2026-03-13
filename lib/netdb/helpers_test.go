@@ -1,6 +1,7 @@
 package netdb
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -174,4 +176,94 @@ func newTestResolverWithHash(t *testing.T) (*DestinationResolver, *mockNetDB, co
 	_, err := rand.Read(h[:])
 	require.NoError(t, err)
 	return resolver, db, h
+}
+
+// ---------------------------------------------------------------------------
+// Ephemeral StdNetDB helper
+// ---------------------------------------------------------------------------
+
+// newEphemeralStdNetDB creates a StdNetDB with empty path (in-memory only)
+// and registers cleanup. Use for distance/XOR tests that don't need disk.
+func newEphemeralStdNetDB(t *testing.T) *StdNetDB {
+	t.Helper()
+	db := NewStdNetDB("")
+	t.Cleanup(db.Stop)
+	return db
+}
+
+// ---------------------------------------------------------------------------
+// Resolver + DatabaseSearchReply setup
+// ---------------------------------------------------------------------------
+
+// newResolverWithSearchReply creates a KademliaResolver with a mock database and
+// a pre-built DatabaseSearchReply with standard test hashes. Returns the resolver,
+// target hash, search reply (for caller to marshal), and peer hashes.
+func newResolverWithSearchReply(t *testing.T) (*KademliaResolver, common.Hash, *i2np.DatabaseSearchReply, []common.Hash) {
+	t.Helper()
+	mockDB := newMockNetworkDatabase()
+	resolver := &KademliaResolver{
+		NetworkDatabase: mockDB,
+		responseHandler: NewLookupResponseHandler(),
+	}
+	targetHash := common.Hash{1, 2, 3, 4}
+	fromHash := common.Hash{5, 6, 7, 8}
+	peerHashes := []common.Hash{{9, 10, 11}, {12, 13, 14}}
+	searchReply := i2np.NewDatabaseSearchReply(targetHash, fromHash, peerHashes)
+	return resolver, targetHash, searchReply, peerHashes
+}
+
+// ---------------------------------------------------------------------------
+// Explorer creation helper
+// ---------------------------------------------------------------------------
+
+// newTestExplorerDefault creates an Explorer with a mock database and default
+// config. Use for tests that don't need custom explorer configuration.
+func newTestExplorerDefault(t *testing.T) *Explorer {
+	t.Helper()
+	db := newMockNetDB()
+	config := DefaultExplorerConfig()
+	return NewExplorer(db, nil, config)
+}
+
+// ---------------------------------------------------------------------------
+// Path/Ensure assertion helpers
+// ---------------------------------------------------------------------------
+
+// netDBPathEnsurer covers Path()/Ensure() common to ClientNetDB and RouterNetDB.
+type netDBPathEnsurer interface {
+	Path() string
+	Ensure() error
+}
+
+// assertNetDBPath verifies that a netDB wrapper returns the expected path.
+func assertNetDBPath(t *testing.T, db netDBPathEnsurer, expectedPath string) {
+	t.Helper()
+	assert.Equal(t, expectedPath, db.Path())
+}
+
+// assertNetDBEnsure verifies Ensure() succeeds and the directory exists.
+func assertNetDBEnsure(t *testing.T, db netDBPathEnsurer, dir string) {
+	t.Helper()
+	err := db.Ensure()
+	assert.NoError(t, err)
+	info, err := os.Stat(dir)
+	assert.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+// ---------------------------------------------------------------------------
+// Expiration cleanup assertion helper
+// ---------------------------------------------------------------------------
+
+// assertLeaseSetCleanupResult verifies that after cleanup, the expired hash is
+// gone and the valid hash remains (checking both cache and expiry tracking),
+// and the total LeaseSet count matches expectedCount.
+func assertLeaseSetCleanupResult(t *testing.T, db *StdNetDB, expiredHash, validHash common.Hash, expectedCount int) {
+	t.Helper()
+	assertLeaseSetPresence(t, db, expiredHash, false, "Expired")
+	assertLeaseSetPresence(t, db, validHash, true, "Valid")
+	db.lsMutex.Lock()
+	count := len(db.LeaseSets)
+	db.lsMutex.Unlock()
+	assert.Equal(t, expectedCount, count)
 }

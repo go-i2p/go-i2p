@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -122,4 +124,82 @@ func assertDeserializeCloveError(t *testing.T, cloveData []byte, errMsg string) 
 	require.Error(t, err)
 	assert.Nil(t, clove)
 	assert.Contains(t, err.Error(), errMsg)
+}
+
+// processDirectBuildRecord creates a test build request record with NextTunnel=0
+// (direct router forwarding) and calls processSingleBuildRecord.
+func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, messageID int) BuildRequestRecord {
+	t.Helper()
+	record := createTestBuildRequestRecord(t)
+	record.NextTunnel = 0
+	processor.processSingleBuildRecord(messageID, 0, record, false)
+	return record
+}
+
+// marshalUnmarshalLookup marshals a DatabaseLookup, verifies the wire size equals
+// expectedSize, then unmarshals it and returns the parsed result.
+func marshalUnmarshalLookup(t *testing.T, lookup *DatabaseLookup, expectedSize int) DatabaseLookup {
+	t.Helper()
+	data, err := lookup.MarshalBinary()
+	require.Nil(t, err)
+	require.Equal(t, expectedSize, len(data))
+	parsed, err := ReadDatabaseLookup(data)
+	require.Nil(t, err)
+	return parsed
+}
+
+// mustParseDatabaseLookupFlags calls readDatabaseLookupFlags and fatals on error.
+func mustParseDatabaseLookupFlags(t *testing.T, length int, data []byte) (int, byte) {
+	t.Helper()
+	length, flags, err := readDatabaseLookupFlags(length, data)
+	if err != nil {
+		t.Fatalf("readDatabaseLookupFlags failed: %v", err)
+	}
+	return length, flags
+}
+
+// assertLookupFieldsMatch asserts that the common DatabaseLookup fields match
+// the expected values from a lookupExpected struct.
+func assertLookupFieldsMatch(t *testing.T, dl DatabaseLookup, exp lookupExpected) {
+	t.Helper()
+	assert.Equal(t, exp.Key, dl.Key)
+	assert.Equal(t, exp.From, dl.From)
+	assert.Equal(t, exp.Flags, dl.Flags)
+	assert.Equal(t, exp.TunnelID, dl.ReplyTunnelID)
+	assert.Equal(t, exp.Size, dl.Size)
+	assert.Equal(t, exp.Peers, dl.ExcludedPeers)
+	assert.Equal(t, exp.ReplyKey, dl.ReplyKey)
+}
+
+// registerPendingBuild creates a ReplyProcessor with the given config, generates
+// numKeys reply keys, and registers a pending build for the given tunnel ID.
+func registerPendingBuild(t *testing.T, config ReplyProcessorConfig, tunnelID tunnel.TunnelID, numKeys int, isInbound bool) *ReplyProcessor {
+	t.Helper()
+	rp := NewReplyProcessor(config, nil)
+	replyKeys, replyIVs := generateReplyKeys(t, numKeys)
+	err := rp.RegisterPendingBuild(tunnelID, replyKeys, replyIVs, isInbound, numKeys)
+	require.NoError(t, err)
+	return rp
+}
+
+// serializeAndAssertInstructions serializes delivery instructions and verifies
+// the output length and leading flag byte.
+func serializeAndAssertInstructions(t *testing.T, instructions *GarlicCloveDeliveryInstructions, expectedLen int, expectedFlag byte) []byte {
+	t.Helper()
+	serialized, err := serializeDeliveryInstructions(instructions)
+	require.NoError(t, err)
+	assert.Len(t, serialized, expectedLen)
+	assert.Equal(t, expectedFlag, serialized[0], "flag")
+	return serialized
+}
+
+// makeSingleHopBuildResult creates a TunnelBuildResult with one hop and one record.
+func makeSingleHopBuildResult(hopRI router_info.RouterInfo, rec tunnel.BuildRequestRecord, tunnelID tunnel.TunnelID, useShortBuild bool) *tunnel.TunnelBuildResult {
+	return &tunnel.TunnelBuildResult{
+		TunnelID:      tunnelID,
+		Hops:          []router_info.RouterInfo{hopRI},
+		Records:       []tunnel.BuildRequestRecord{rec},
+		UseShortBuild: useShortBuild,
+		IsInbound:     false,
+	}
 }

@@ -206,10 +206,7 @@ func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	excessData := make([]byte, 2)
 	excessData[1] = 0x32
 	data = append(data, excessData...)
-	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
-	if flagsErr != nil {
-		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
-	}
+	length, flags := mustParseDatabaseLookupFlags(t, length, data)
 
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(65, length)
@@ -222,10 +219,7 @@ func TestReadDatabaseLookupReplyTunnelIDNotIncluded(t *testing.T) {
 
 	length := 64
 	data := make([]byte, length+1)
-	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
-	if flagsErr != nil {
-		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
-	}
+	length, flags := mustParseDatabaseLookupFlags(t, length, data)
 
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(65, length)
@@ -245,10 +239,7 @@ func TestReadDatabaseLookupReplyTunnelIDValidData(t *testing.T) {
 	expected[1] = 0x32
 	expected[3] = 0x34
 	data = append(data, expected...)
-	length, flags, flagsErr := readDatabaseLookupFlags(length, data)
-	if flagsErr != nil {
-		t.Fatalf("readDatabaseLookupFlags failed: %v", flagsErr)
-	}
+	length, flags := mustParseDatabaseLookupFlags(t, length, data)
 
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(69, length)
@@ -505,13 +496,7 @@ func TestReadDatabaseLookupValidData(t *testing.T) {
 		data = append(data, tag...)
 	}
 	databaseLookup, err := ReadDatabaseLookup(data)
-	assert.Equal(exp.Key, databaseLookup.Key)
-	assert.Equal(exp.From, databaseLookup.From)
-	assert.Equal(exp.Flags, databaseLookup.Flags)
-	assert.Equal(exp.TunnelID, databaseLookup.ReplyTunnelID)
-	assert.Equal(exp.Size, databaseLookup.Size)
-	assert.Equal(exp.Peers, databaseLookup.ExcludedPeers)
-	assert.Equal(exp.ReplyKey, databaseLookup.ReplyKey)
+	assertLookupFieldsMatch(t, databaseLookup, exp)
 	assert.Equal(expectedTags, databaseLookup.Tags)
 	assert.Equal(expectedReplyTags, databaseLookup.ReplyTags)
 	assert.Equal(err, nil)
@@ -602,13 +587,7 @@ func TestReadDatabaseLookupWithECIESFlag(t *testing.T) {
 
 	databaseLookup, err := ReadDatabaseLookup(data)
 	assert.Nil(err)
-	assert.Equal(exp.Key, databaseLookup.Key)
-	assert.Equal(exp.From, databaseLookup.From)
-	assert.Equal(exp.Flags, databaseLookup.Flags)
-	assert.Equal(exp.TunnelID, databaseLookup.ReplyTunnelID)
-	assert.Equal(exp.Size, databaseLookup.Size)
-	assert.Equal(exp.Peers, databaseLookup.ExcludedPeers)
-	assert.Equal(exp.ReplyKey, databaseLookup.ReplyKey)
+	assertLookupFieldsMatch(t, databaseLookup, exp)
 	assert.Equal(expectedTags, databaseLookup.Tags)
 	assert.True(databaseLookup.IsECIES())
 	// ElGamal tags should be nil/empty since ECIESFlag is set

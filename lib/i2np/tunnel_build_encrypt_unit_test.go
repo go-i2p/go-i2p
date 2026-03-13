@@ -119,13 +119,7 @@ func TestCreateTunnelBuildMessage_EncryptsRecords(t *testing.T) {
 
 	rec1 := createTestTunnelRecord(t)
 
-	result := &tunnel.TunnelBuildResult{
-		TunnelID:      tunnel.TunnelID(11111),
-		Hops:          []router_info.RouterInfo{*hop1RI},
-		Records:       []tunnel.BuildRequestRecord{rec1},
-		UseShortBuild: false,
-		IsInbound:     false,
-	}
+	result := makeSingleHopBuildResult(*hop1RI, rec1, tunnel.TunnelID(11111), false)
 
 	tm := &TunnelManager{}
 	msg, err := tm.createTunnelBuildMessage(result, 2002)
@@ -153,13 +147,7 @@ func TestCreateVariableTunnelBuildMessage_CountPrefix(t *testing.T) {
 
 	rec1 := createTestTunnelRecord(t)
 
-	result := &tunnel.TunnelBuildResult{
-		TunnelID:      tunnel.TunnelID(11112),
-		Hops:          []router_info.RouterInfo{*hop1RI},
-		Records:       []tunnel.BuildRequestRecord{rec1},
-		UseShortBuild: false,
-		IsInbound:     false,
-	}
+	result := makeSingleHopBuildResult(*hop1RI, rec1, tunnel.TunnelID(11112), false)
 
 	tm := &TunnelManager{}
 	msg, err := tm.createVariableTunnelBuildMessage(result, 2003)
@@ -187,13 +175,7 @@ func TestSelectBuildMessage_ShortBuild(t *testing.T) {
 	hopRI, _ := createTestHop(t)
 	rec := createTestTunnelRecord(t)
 
-	result := &tunnel.TunnelBuildResult{
-		TunnelID:      tunnel.TunnelID(33333),
-		Hops:          []router_info.RouterInfo{*hopRI},
-		Records:       []tunnel.BuildRequestRecord{rec},
-		UseShortBuild: true,
-		IsInbound:     false,
-	}
+	result := makeSingleHopBuildResult(*hopRI, rec, tunnel.TunnelID(33333), true)
 
 	tm := &TunnelManager{}
 	msg, err := tm.selectBuildMessage(result, 3003)

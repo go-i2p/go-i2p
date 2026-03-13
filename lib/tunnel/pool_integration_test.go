@@ -426,9 +426,7 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 	pool.launchAsyncBuild(2)
 
 	// Wait for both tunnels to complete
-	<-completionChan
-	<-completionChan
-	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update state
+	waitForBuildRetries(completionChan, 2)
 
 	assert.Equal(t, 2, builder.GetBuildCount(), "First build should create 2 tunnels")
 
@@ -447,10 +445,7 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 
 	// Wait for the tunnel build to complete (with retries)
 	// Failed builds retry up to 3 times, so wait for all attempts
-	<-completionChan
-	<-completionChan
-	<-completionChan
-	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update buildFailures
+	waitForBuildRetries(completionChan, 3)
 
 	pool.mutex.Lock()
 	failures := pool.buildFailures
@@ -489,10 +484,7 @@ func TestBuildTunnelsWithBackoff(t *testing.T) {
 
 	// Wait for the tunnel build to complete (with retries)
 	// Failed builds retry up to 3 times, so wait for all attempts
-	<-completionChan
-	<-completionChan
-	<-completionChan
-	time.Sleep(10 * time.Millisecond) // Brief delay for async goroutine to update state
+	waitForBuildRetries(completionChan, 3)
 
 	// lastBuildTime should have been updated
 	assert.True(t, timeAfterBackoff.After(initialTime), "Build should proceed after backoff period")

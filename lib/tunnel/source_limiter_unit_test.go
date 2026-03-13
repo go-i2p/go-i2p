@@ -122,11 +122,7 @@ func TestSourceLimiter_AllowRequest_TokenReplenishment(t *testing.T) {
 
 // TestSourceLimiter_AllowRequest_MultipleSources verifies independent tracking per source.
 func TestSourceLimiter_AllowRequest_MultipleSources(t *testing.T) {
-	sl := createTestSourceLimiter(10, 2, 5*time.Minute)
-	defer sl.Stop()
-
-	hash1 := createTestHash(1)
-	hash2 := createTestHash(2)
+	sl, hash1, hash2 := createLimiterWithTwoHashes(t, 10, 2, 5*time.Minute)
 
 	// Exhaust hash1's burst
 	sl.AllowRequest(hash1)
@@ -241,11 +237,7 @@ func TestSourceLimiter_GetSourceStats(t *testing.T) {
 
 // TestSourceLimiter_Cleanup verifies stale entry cleanup.
 func TestSourceLimiter_Cleanup(t *testing.T) {
-	sl := createTestSourceLimiter(10, 3, 5*time.Minute)
-	defer sl.Stop()
-
-	hash1 := createTestHash(1)
-	hash2 := createTestHash(2)
+	sl, hash1, hash2 := createLimiterWithTwoHashes(t, 10, 3, 5*time.Minute)
 
 	// Create entries
 	sl.AllowRequest(hash1)
@@ -304,11 +296,7 @@ func TestSourceLimiter_CleanupPreservesBanned(t *testing.T) {
 
 // TestSourceLimiter_Stats verifies overall statistics.
 func TestSourceLimiter_Stats(t *testing.T) {
-	sl := createTestSourceLimiter(10, 2, 5*time.Minute)
-	defer sl.Stop()
-
-	hash1 := createTestHash(1)
-	hash2 := createTestHash(2)
+	sl, hash1, hash2 := createLimiterWithTwoHashes(t, 10, 2, 5*time.Minute)
 
 	// hash1: 2 allowed, 1 rejected
 	sl.AllowRequest(hash1)

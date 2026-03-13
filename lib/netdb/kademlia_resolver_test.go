@@ -240,18 +240,8 @@ func TestQueryPeerPeerNotFound(t *testing.T) {
 
 // TestProcessDatabaseSearchReplyResponse tests handling of search reply responses
 func TestProcessDatabaseSearchReplyResponse(t *testing.T) {
-	mockDB := newMockNetworkDatabase()
-	resolver := &KademliaResolver{
-		NetworkDatabase: mockDB,
-		responseHandler: NewLookupResponseHandler(),
-	}
+	resolver, targetHash, searchReply, _ := newResolverWithSearchReply(t)
 
-	targetHash := common.Hash{1, 2, 3, 4}
-	fromHash := common.Hash{5, 6, 7, 8}
-	peerHashes := []common.Hash{{9, 10, 11}, {12, 13, 14}}
-
-	// Create a valid DatabaseSearchReply
-	searchReply := i2np.NewDatabaseSearchReply(targetHash, fromHash, peerHashes)
 	data, err := searchReply.MarshalBinary()
 	if err != nil {
 		t.Fatalf("Failed to marshal search reply: %v", err)

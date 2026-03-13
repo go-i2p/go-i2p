@@ -209,22 +209,14 @@ func TestSerializeGarlicClove_NilMessage(t *testing.T) {
 
 func TestSerializeDeliveryInstructions_Local(t *testing.T) {
 	instructions := NewLocalDeliveryInstructions()
-	serialized, err := serializeDeliveryInstructions(&instructions)
-	require.NoError(t, err)
-
-	assert.Len(t, serialized, 1, "local delivery should be 1 byte")
-	assert.Equal(t, byte(0x00), serialized[0], "flag")
+	serializeAndAssertInstructions(t, &instructions, 1, 0x00)
 }
 
 func TestSerializeDeliveryInstructions_Destination(t *testing.T) {
 	destHash := createTestHash()
 	instructions := NewDestinationDeliveryInstructions(destHash)
 
-	serialized, err := serializeDeliveryInstructions(&instructions)
-	require.NoError(t, err)
-
-	assert.Len(t, serialized, 33, "destination delivery should be 33 bytes")
-	assert.Equal(t, byte(0x20), serialized[0], "flag")
+	serialized := serializeAndAssertInstructions(t, &instructions, 33, 0x20)
 	assert.True(t, bytes.Equal(destHash[:], serialized[1:33]), "hash mismatch")
 }
 
@@ -232,11 +224,7 @@ func TestSerializeDeliveryInstructions_Router(t *testing.T) {
 	routerHash := createTestHash()
 	instructions := NewRouterDeliveryInstructions(routerHash)
 
-	serialized, err := serializeDeliveryInstructions(&instructions)
-	require.NoError(t, err)
-
-	assert.Len(t, serialized, 33, "router delivery should be 33 bytes")
-	assert.Equal(t, byte(0x40), serialized[0], "flag")
+	serializeAndAssertInstructions(t, &instructions, 33, 0x40)
 }
 
 func TestSerializeDeliveryInstructions_Tunnel(t *testing.T) {
@@ -244,11 +232,7 @@ func TestSerializeDeliveryInstructions_Tunnel(t *testing.T) {
 	tunnelID := tunnel.TunnelID(98765)
 	instructions := NewTunnelDeliveryInstructions(gatewayHash, tunnelID)
 
-	serialized, err := serializeDeliveryInstructions(&instructions)
-	require.NoError(t, err)
-
-	assert.Len(t, serialized, 37, "tunnel delivery should be 37 bytes")
-	assert.Equal(t, byte(0x60), serialized[0], "flag")
+	serialized := serializeAndAssertInstructions(t, &instructions, 37, 0x60)
 	assert.Equal(t, uint32(tunnelID), binary.BigEndian.Uint32(serialized[33:37]), "tunnel ID")
 }
 

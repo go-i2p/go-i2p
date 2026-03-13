@@ -403,17 +403,7 @@ func TestVerifyIdentityHash(t *testing.T) {
 
 // TestDecryptWithWrongKey verifies decryption fails with wrong key
 func TestDecryptWithWrongKey(t *testing.T) {
-	// Create first router
-	keystore1, err := keys.NewRouterInfoKeystore(t.TempDir(), "router1")
-	require.NoError(t, err)
-
-	routerInfo1, err := keystore1.ConstructRouterInfo(nil)
-	require.NoError(t, err)
-
-	// Create and encrypt record for router1
-	record := createTestBuildRequestRecord(t)
-	encrypted, err := EncryptBuildRequestRecord(record, *routerInfo1)
-	require.NoError(t, err)
+	f1 := newBuildRequestFixture(t, "router1")
 
 	// Create second router with different key
 	keystore2, err := keys.NewRouterInfoKeystore(t.TempDir(), "router2")
@@ -422,7 +412,7 @@ func TestDecryptWithWrongKey(t *testing.T) {
 	privKey2 := keystore2.GetEncryptionPrivateKey()
 
 	// Attempt to decrypt with wrong key
-	_, err = DecryptBuildRequestRecord(encrypted, privKey2.Bytes())
+	_, err = DecryptBuildRequestRecord(f1.encrypted, privKey2.Bytes())
 	assert.Error(t, err, "Decryption should fail with wrong key")
 }
 

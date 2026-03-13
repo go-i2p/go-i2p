@@ -1054,9 +1054,7 @@ func TestShortTunnelBuild_VariableTunnelBuildBackwardCompat(t *testing.T) {
 
 func TestTunnelRoles_GatewayEncryptsAndAddsInstructions(t *testing.T) {
 	// Gateway must encrypt messages entering the tunnel and add delivery instructions
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
+	gw := createSpecGateway(t)
 
 	payload := []byte("test message for gateway")
 	encrypted, err := gw.Send(payload)
@@ -1066,9 +1064,7 @@ func TestTunnelRoles_GatewayEncryptsAndAddsInstructions(t *testing.T) {
 
 func TestTunnelRoles_GatewaySupportsAllDeliveryTypes(t *testing.T) {
 	// Gateway must support DT_LOCAL, DT_TUNNEL, and DT_ROUTER
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
+	gw := createSpecGateway(t)
 
 	payload := []byte("small payload")
 
@@ -1129,40 +1125,25 @@ func TestTunnelRoles_ParticipantNoMessageInspection(t *testing.T) {
 
 func TestTunnelRoles_EndpointDecryptsAndDelivers(t *testing.T) {
 	// Endpoint must decrypt final layer, validate checksum, parse DI, and deliver
-	enc := &specMockEncryptor{}
-	var received []byte
-	handler := func(msgBytes []byte) error {
-		received = msgBytes
-		return nil
-	}
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
+	ep, getReceived := createSpecEndpointWithCapture(t)
 
 	payload := []byte("hello endpoint")
 	msg := buildTestTunnelMessage(t, DT_LOCAL, false, 0, 0, [32]byte{}, payload)
-	err = ep.Receive(msg)
+	err := ep.Receive(msg)
 	require.NoError(t, err)
-	assert.Equal(t, payload, received, "endpoint must deliver the message payload")
+	assert.Equal(t, payload, getReceived(), "endpoint must deliver the message payload")
 }
 
 func TestTunnelRoles_EndpointRoutesNonLocalMessages(t *testing.T) {
 	// Endpoint must support DT_TUNNEL and DT_ROUTER delivery via forwarder
-	enc := &specMockEncryptor{}
-	handler := func(msgBytes []byte) error { return nil }
-	ep, err := NewEndpoint(TunnelID(1), enc, handler)
-	require.NoError(t, err)
-	defer ep.Stop()
-
-	fwd := &specMockForwarder{}
-	ep.SetForwarder(fwd)
+	ep, fwd := createSpecEndpointWithForwarder(t)
 
 	// DT_TUNNEL message
 	var hash [32]byte
 	hash[0] = 0x42
 	payload := []byte("tunnel message")
 	msg := buildTestTunnelMessage(t, DT_TUNNEL, false, 0, 100, hash, payload)
-	err = ep.Receive(msg)
+	err := ep.Receive(msg)
 	require.NoError(t, err)
 	assert.True(t, fwd.tunnelCalled, "endpoint must forward DT_TUNNEL to ForwardToTunnel")
 }
@@ -1587,9 +1568,7 @@ func TestCryptoAudit_ManagerUsesAESForParticipants(t *testing.T) {
 
 func TestCryptoAudit_GatewayEncryptionConcurrencySafe(t *testing.T) {
 	// Gateway must serialize concurrent encryption calls (encMu)
-	enc := &specMockEncryptor{}
-	gw, err := NewGateway(TunnelID(1), enc, TunnelID(2))
-	require.NoError(t, err)
+	gw := createSpecGateway(t)
 
 	// Multiple concurrent sends should not race
 	done := make(chan error, 10)
