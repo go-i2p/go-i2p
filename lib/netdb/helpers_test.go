@@ -99,6 +99,17 @@ func addRouterInfoWithExpiry(db *StdNetDB, hash common.Hash, offset time.Duratio
 // Assertion helpers
 // ---------------------------------------------------------------------------
 
+// assertSizeAfterPopulate creates a fresh StdNetDB, populates it with populate,
+// and asserts that Size() equals expectedCount.
+func assertSizeAfterPopulate(t *testing.T, expectedCount int, populate func(*StdNetDB, int), msg string) {
+	t.Helper()
+	tempDir := t.TempDir()
+	db := NewStdNetDB(tempDir)
+	populate(db, expectedCount)
+	size := db.Size()
+	assert.Equal(t, expectedCount, size, msg)
+}
+
 // assertLeaseSetPresence checks whether hash is (or is not) present in both
 // the LeaseSets map and the expiry tracking map.
 func assertLeaseSetPresence(t *testing.T, db *StdNetDB, hash common.Hash, shouldExist bool, label string) {

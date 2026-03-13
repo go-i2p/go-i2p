@@ -51,14 +51,7 @@ func TestStdNetDB_Size_SingleEntry(t *testing.T) {
 
 // TestStdNetDB_Size_MultipleEntries tests Size() with multiple RouterInfos
 func TestStdNetDB_Size_MultipleEntries(t *testing.T) {
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-
-	expectedCount := 5
-	addTestEntries(db, expectedCount)
-
-	size := db.Size()
-	assert.Equal(t, expectedCount, size, "Database should report correct count of entries")
+	assertSizeAfterPopulate(t, 5, addTestEntries, "Database should report correct count of entries")
 }
 
 // TestStdNetDB_Size_AfterRemoval tests Size() decreases after removing entries
@@ -167,15 +160,7 @@ func TestStdNetDB_Size_ConcurrentReadWrite(t *testing.T) {
 
 // TestStdNetDB_Size_LargeDatabase tests Size() with many entries
 func TestStdNetDB_Size_LargeDatabase(t *testing.T) {
-	tempDir := t.TempDir()
-	db := NewStdNetDB(tempDir)
-
-	// Add many entries
-	expectedCount := 1000
-	addRouterInfoEntries(db, expectedCount)
-
-	size := db.Size()
-	assert.Equal(t, expectedCount, size, "Database should handle large number of entries")
+	assertSizeAfterPopulate(t, 1000, addRouterInfoEntries, "Database should handle large number of entries")
 }
 
 // TestStdNetDB_Size_DuplicateHash tests that duplicate hashes don't increase size
