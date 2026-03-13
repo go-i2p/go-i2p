@@ -88,25 +88,8 @@ func TestCleanExpiredLeaseSets(t *testing.T) {
 	// Run cleanup
 	db.cleanExpiredLeaseSets()
 
-	// Verify expired was removed but valid remains
-	db.lsMutex.Lock()
-	_, hasExpired := db.LeaseSets[expiredHash]
-	_, hasValid := db.LeaseSets[validHash]
-	finalCount := len(db.LeaseSets)
-	db.lsMutex.Unlock()
-
-	assert.False(t, hasExpired, "Expired LeaseSet should be removed")
-	assert.True(t, hasValid, "Valid LeaseSet should remain")
-	assert.Equal(t, 1, finalCount)
-
-	// Verify expiry tracking was also cleaned
-	db.expiryMutex.RLock()
-	_, trackedExpired := db.leaseSetExpiry[expiredHash]
-	_, trackedValid := db.leaseSetExpiry[validHash]
-	db.expiryMutex.RUnlock()
-
-	assert.False(t, trackedExpired, "Expired entry should be removed from tracking")
-	assert.True(t, trackedValid, "Valid entry should remain in tracking")
+	// Verify expired was removed but valid remains (checks both cache and expiry tracking)
+	assertLeaseSetCleanupResult(t, db, expiredHash, validHash, 1)
 }
 
 // TestRemoveLeaseSetFromDisk verifies filesystem cleanup
@@ -251,15 +234,7 @@ func TestExpirationCleanerIntegration(t *testing.T) {
 	db.cleanExpiredLeaseSets()
 
 	// Verify expired was removed, valid remains
-	db.lsMutex.Lock()
-	_, hasExpired := db.LeaseSets[expiredHash]
-	_, hasValid := db.LeaseSets[validHash]
-	count := len(db.LeaseSets)
-	db.lsMutex.Unlock()
-
-	assert.False(t, hasExpired, "Expired LeaseSet should be cleaned up")
-	assert.True(t, hasValid, "Valid LeaseSet should remain")
-	assert.Equal(t, 1, count, "Should have exactly 1 LeaseSet remaining")
+	assertLeaseSetCleanupResult(t, db, expiredHash, validHash, 1)
 }
 
 // TestMultipleStopCalls verifies Stop() is idempotent

@@ -25,8 +25,7 @@ func TestRouterNetDB_Isolation(t *testing.T) {
 	assert.NotNil(t, routerDB.RecalculateSize)
 
 	// Verify basic operations work
-	assert.NotNil(t, routerDB.Path())
-	assert.NoError(t, routerDB.Ensure())
+	assertBasicNetDBOperations(t, routerDB)
 }
 
 // TestRouterNetDB_RouterInfoOperations tests RouterInfo storage and retrieval.
@@ -112,22 +111,11 @@ func TestRouterNetDB_ConcurrentAccess(t *testing.T) {
 	routerDB := newTestRouterNetDB(t)
 
 	// Run concurrent operations
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			for j := 0; j < 100; j++ {
-				_ = routerDB.GetRouterInfoCount()
-				_ = routerDB.Size()
-				_, _ = routerDB.SelectPeers(1, nil)
-			}
-			done <- true
-		}()
-	}
-
-	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	runConcurrentOps(t, 10, 100, func() {
+		_ = routerDB.GetRouterInfoCount()
+		_ = routerDB.Size()
+		_, _ = routerDB.SelectPeers(1, nil)
+	})
 }
 
 // TestRouterNetDB_IsolationFromClient tests that RouterNetDB doesn't expose LeaseSet operations.

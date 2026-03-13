@@ -393,19 +393,9 @@ func TestQueryBatchParallel(t *testing.T) {
 // TestProcessDatabaseSearchReplyResponse_ReturnsSuggestions verifies that
 // processDatabaseSearchReplyResponse returns a SearchReplyError with suggestions.
 func TestProcessDatabaseSearchReplyResponse_ReturnsSuggestions(t *testing.T) {
-	resolver, targetHash, searchReply, peerHashes := newResolverWithSearchReply(t)
-	data, err := searchReply.MarshalPayload()
-	if err != nil {
-		t.Fatalf("Failed to marshal search reply payload: %v", err)
-	}
-
-	ri, err := resolver.processDatabaseSearchReplyResponse(data, targetHash)
-	if ri != nil {
-		t.Error("Should return nil RouterInfo for search reply")
-	}
-	if err == nil {
-		t.Fatal("Should return error for search reply")
-	}
+	err, peerHashes := marshalAndProcessSearchReply(t, func(sr *i2np.DatabaseSearchReply) ([]byte, error) {
+		return sr.MarshalPayload()
+	})
 
 	// Verify it's a SearchReplyError with the correct suggestions
 	var searchErr *SearchReplyError

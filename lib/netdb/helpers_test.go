@@ -2,6 +2,7 @@ package netdb
 
 import (
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -266,4 +267,115 @@ func assertLeaseSetCleanupResult(t *testing.T, db *StdNetDB, expiredHash, validH
 	count := len(db.LeaseSets)
 	db.lsMutex.Unlock()
 	assert.Equal(t, expectedCount, count)
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent execution helpers
+// ---------------------------------------------------------------------------
+
+// runConcurrentOps launches count goroutines, each calling work opsPerGoroutine
+// times, and waits for all to finish via a done channel.
+func runConcurrentOps(t *testing.T, count, opsPerGoroutine int, work func()) {
+	t.Helper()
+	done := make(chan bool)
+	for i := 0; i < count; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				work()
+			}
+			done <- true
+		}()
+	}
+	for i := 0; i < count; i++ {
+		<-done
+	}
+}
+
+// runConcurrentWg launches goroutines workers, each calling work(id, iter)
+// iterations times, using a sync.WaitGroup for synchronization.
+func runConcurrentWg(t *testing.T, goroutines, iterations int, work func(id, iter int)) {
+	t.Helper()
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				work(id, j)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// ---------------------------------------------------------------------------
+// Basic NetDB operation assertion helpers
+// ---------------------------------------------------------------------------
+
+// assertBasicNetDBOperations verifies that Path() is non-nil and Ensure() succeeds.
+func assertBasicNetDBOperations(t *testing.T, db netDBPathEnsurer) {
+	t.Helper()
+	assert.NotNil(t, db.Path())
+	assert.NoError(t, db.Ensure())
+}
+
+// assertClientLeaseSetMethodsExist verifies that a ClientNetDB exposes all
+// expected LeaseSet operation methods.
+func assertClientLeaseSetMethodsExist(t *testing.T, clientDB *ClientNetDB) {
+	t.Helper()
+	assert.NotNil(t, clientDB.GetLeaseSet, "GetLeaseSet should be available")
+	assert.NotNil(t, clientDB.GetLeaseSetBytes, "GetLeaseSetBytes should be available")
+	assert.NotNil(t, clientDB.StoreLeaseSet, "StoreLeaseSet should be available")
+	assert.NotNil(t, clientDB.StoreLeaseSet2, "StoreLeaseSet2 should be available")
+	assert.NotNil(t, clientDB.GetLeaseSetCount, "GetLeaseSetCount should be available")
+}
+
+// assertRouterInfoMethodsExist verifies that a RouterNetDB exposes the
+// expected RouterInfo operation methods.
+func assertRouterInfoMethodsExist(t *testing.T, routerDB *RouterNetDB) {
+	t.Helper()
+	assert.NotNil(t, routerDB.GetRouterInfo, "GetRouterInfo should be available")
+	assert.NotNil(t, routerDB.GetAllRouterInfos, "GetAllRouterInfos should be available")
+	assert.NotNil(t, routerDB.StoreRouterInfo, "StoreRouterInfo should be available")
+	assert.NotNil(t, routerDB.GetRouterInfoBytes, "GetRouterInfoBytes should be available")
+	assert.NotNil(t, routerDB.SelectPeers, "SelectPeers should be available")
+	assert.NotNil(t, routerDB.SelectFloodfillRouters, "SelectFloodfillRouters should be available")
+}
+
+// ---------------------------------------------------------------------------
+// Explorer assertion helpers
+// ---------------------------------------------------------------------------
+
+// assertExplorerRequiresTunnelPool verifies that the given explorer operation
+// fails with a "tunnel pool required" error.
+func assertExplorerRequiresTunnelPool(t *testing.T, op func() error) {
+	t.Helper()
+	err := op()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "tunnel pool required")
+}
+
+// ---------------------------------------------------------------------------
+// Search reply processing helper
+// ---------------------------------------------------------------------------
+
+// marshalAndProcessSearchReply sets up a KademliaResolver with a canned
+// DatabaseSearchReply, marshals it via marshalFn, processes the response,
+// and asserts that the result is a nil RouterInfo with a non-nil error.
+// Returns the processing error and the peer hashes from the reply.
+func marshalAndProcessSearchReply(t *testing.T, marshalFn func(*i2np.DatabaseSearchReply) ([]byte, error)) (error, []common.Hash) {
+	t.Helper()
+	resolver, targetHash, searchReply, peerHashes := newResolverWithSearchReply(t)
+	data, err := marshalFn(searchReply)
+	if err != nil {
+		t.Fatalf("Failed to marshal search reply: %v", err)
+	}
+	ri, processErr := resolver.processDatabaseSearchReplyResponse(data, targetHash)
+	if ri != nil {
+		t.Error("Should return nil RouterInfo for search reply")
+	}
+	if processErr == nil {
+		t.Fatal("Should return error for search reply")
+	}
+	return processErr, peerHashes
 }

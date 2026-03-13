@@ -12,15 +12,10 @@ func TestClientNetDB_Isolation(t *testing.T) {
 	clientDB := newTestClientNetDB(t)
 
 	// Verify ClientNetDB has LeaseSet operations
-	assert.NotNil(t, clientDB.GetLeaseSet)
-	assert.NotNil(t, clientDB.GetLeaseSetBytes)
-	assert.NotNil(t, clientDB.StoreLeaseSet)
-	assert.NotNil(t, clientDB.StoreLeaseSet2)
-	assert.NotNil(t, clientDB.GetLeaseSetCount)
+	assertClientLeaseSetMethodsExist(t, clientDB)
 
 	// Verify basic operations work
-	assert.NotNil(t, clientDB.Path())
-	assert.NoError(t, clientDB.Ensure())
+	assertBasicNetDBOperations(t, clientDB)
 }
 
 // TestClientNetDB_LeaseSetOperations tests LeaseSet storage and retrieval.
@@ -50,20 +45,9 @@ func TestClientNetDB_ConcurrentAccess(t *testing.T) {
 	clientDB := newTestClientNetDB(t)
 
 	// Run concurrent GetLeaseSetCount operations
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			for j := 0; j < 100; j++ {
-				_ = clientDB.GetLeaseSetCount()
-			}
-			done <- true
-		}()
-	}
-
-	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	runConcurrentOps(t, 10, 100, func() {
+		_ = clientDB.GetLeaseSetCount()
+	})
 }
 
 // TestClientNetDB_SharedStdNetDB tests that ClientNetDB and RouterNetDB can share the same StdNetDB.

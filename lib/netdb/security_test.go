@@ -25,11 +25,7 @@ func TestStorageIsolation_ClientCannotAccessRouterInfo(t *testing.T) {
 	// Verify ClientNetDB has no RouterInfo methods exposed
 	// (compile-time enforcement via Go's type system)
 	// ClientNetDB only has LeaseSet operations:
-	assert.NotNil(t, clientDB.GetLeaseSet, "GetLeaseSet should be available")
-	assert.NotNil(t, clientDB.GetLeaseSetBytes, "GetLeaseSetBytes should be available")
-	assert.NotNil(t, clientDB.StoreLeaseSet, "StoreLeaseSet should be available")
-	assert.NotNil(t, clientDB.StoreLeaseSet2, "StoreLeaseSet2 should be available")
-	assert.NotNil(t, clientDB.GetLeaseSetCount, "GetLeaseSetCount should be available")
+	assertClientLeaseSetMethodsExist(t, clientDB)
 
 	// The following are NOT available on ClientNetDB (enforced at compile time):
 	// - GetRouterInfo
@@ -45,12 +41,7 @@ func TestStorageIsolation_RouterHasBothOperations(t *testing.T) {
 	routerDB := newTestRouterNetDB(t)
 
 	// Verify RouterNetDB has RouterInfo methods
-	assert.NotNil(t, routerDB.GetRouterInfo, "GetRouterInfo should be available")
-	assert.NotNil(t, routerDB.GetAllRouterInfos, "GetAllRouterInfos should be available")
-	assert.NotNil(t, routerDB.StoreRouterInfo, "StoreRouterInfo should be available")
-	assert.NotNil(t, routerDB.GetRouterInfoBytes, "GetRouterInfoBytes should be available")
-	assert.NotNil(t, routerDB.SelectPeers, "SelectPeers should be available")
-	assert.NotNil(t, routerDB.SelectFloodfillRouters, "SelectFloodfillRouters should be available")
+	assertRouterInfoMethodsExist(t, routerDB)
 
 	// Verify RouterNetDB also has LeaseSet methods for direct operations
 	assert.NotNil(t, routerDB.GetLeaseSet, "GetLeaseSet should be available for direct operations")
@@ -150,8 +141,7 @@ func TestExpirationLogic_Stats(t *testing.T) {
 
 // TestKademliaDistance_XORCalculation verifies XOR distance calculation.
 func TestKademliaDistance_XORCalculation(t *testing.T) {
-	db := NewStdNetDB("")
-	defer db.Stop()
+	db := newEphemeralStdNetDB(t)
 
 	tests := []struct {
 		name string
@@ -192,8 +182,7 @@ func TestKademliaDistance_XORCalculation(t *testing.T) {
 
 // TestKademliaDistance_Comparison verifies distance comparison logic.
 func TestKademliaDistance_Comparison(t *testing.T) {
-	db := NewStdNetDB("")
-	defer db.Stop()
+	db := newEphemeralStdNetDB(t)
 
 	tests := []struct {
 		name   string
@@ -237,8 +226,7 @@ func TestKademliaDistance_Comparison(t *testing.T) {
 
 // TestKademliaDistance_Symmetry verifies XOR distance is symmetric.
 func TestKademliaDistance_Symmetry(t *testing.T) {
-	db := NewStdNetDB("")
-	defer db.Stop()
+	db := newEphemeralStdNetDB(t)
 
 	h1 := common.Hash{0xDE, 0xAD, 0xBE, 0xEF}
 	h2 := common.Hash{0xCA, 0xFE, 0xBA, 0xBE}
@@ -260,29 +248,11 @@ func TestKademliaDistance_Symmetry(t *testing.T) {
 func TestConcurrentAccess_RouterInfoMutex(t *testing.T) {
 	db := newTestStdNetDB(t)
 
-	var wg sync.WaitGroup
-	iterations := 100
-	goroutines := 10
-
-	// Concurrent reads and writes
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				// Concurrent Size() calls (reads riMutex)
-				_ = db.Size()
-
-				// Concurrent GetAllRouterInfos() calls (reads riMutex)
-				_ = db.GetAllRouterInfos()
-
-				// Concurrent GetRouterInfoCount() calls
-				_ = db.GetRouterInfoCount()
-			}
-		}(i)
-	}
-
-	wg.Wait()
+	runConcurrentWg(t, 10, 100, func(id, iter int) {
+		_ = db.Size()
+		_ = db.GetAllRouterInfos()
+		_ = db.GetRouterInfoCount()
+	})
 	// Test passes if no race conditions detected (run with -race flag)
 }
 
@@ -290,29 +260,12 @@ func TestConcurrentAccess_RouterInfoMutex(t *testing.T) {
 func TestConcurrentAccess_LeaseSetMutex(t *testing.T) {
 	db := newTestStdNetDB(t)
 
-	var wg sync.WaitGroup
-	iterations := 100
-	goroutines := 10
-
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				// Concurrent GetLeaseSetCount() calls
-				_ = db.GetLeaseSetCount()
-
-				// Concurrent GetAllLeaseSets() calls
-				_ = db.GetAllLeaseSets()
-
-				// Concurrent GetLeaseSet lookup (should return nil)
-				hash := common.Hash{byte(id), byte(j)}
-				_ = db.GetLeaseSet(hash)
-			}
-		}(i)
-	}
-
-	wg.Wait()
+	runConcurrentWg(t, 10, 100, func(id, iter int) {
+		_ = db.GetLeaseSetCount()
+		_ = db.GetAllLeaseSets()
+		hash := common.Hash{byte(id), byte(iter)}
+		_ = db.GetLeaseSet(hash)
+	})
 }
 
 // TestConcurrentAccess_ExpiryMutex tests thread safety of expiry tracking.
@@ -320,28 +273,13 @@ func TestConcurrentAccess_ExpiryMutex(t *testing.T) {
 	db := newTestStdNetDBBasic(t)
 	defer db.Stop()
 
-	var wg sync.WaitGroup
-	iterations := 100
-	goroutines := 10
-
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				// Concurrent stats retrieval
-				_, _, _ = db.GetLeaseSetExpirationStats()
-
-				// Concurrent writes
-				hash := common.Hash{byte(id), byte(j)}
-				db.expiryMutex.Lock()
-				db.leaseSetExpiry[hash] = time.Now().Add(time.Duration(j) * time.Minute)
-				db.expiryMutex.Unlock()
-			}
-		}(i)
-	}
-
-	wg.Wait()
+	runConcurrentWg(t, 10, 100, func(id, iter int) {
+		_, _, _ = db.GetLeaseSetExpirationStats()
+		hash := common.Hash{byte(id), byte(iter)}
+		db.expiryMutex.Lock()
+		db.leaseSetExpiry[hash] = time.Now().Add(time.Duration(iter) * time.Minute)
+		db.expiryMutex.Unlock()
+	})
 }
 
 // TestConcurrentAccess_CleanupDuringAccess tests that cleanup doesn't race with reads.
@@ -398,8 +336,7 @@ func TestConcurrentAccess_CleanupDuringAccess(t *testing.T) {
 
 // TestFloodfillSelection_EmptyDatabase tests error handling for empty NetDB.
 func TestFloodfillSelection_EmptyDatabase(t *testing.T) {
-	db := NewStdNetDB("")
-	defer db.Stop()
+	db := newEphemeralStdNetDB(t)
 
 	targetHash := common.Hash{0x12, 0x34, 0x56}
 	result, err := db.SelectFloodfillRouters(targetHash, 5)

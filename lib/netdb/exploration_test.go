@@ -22,14 +22,8 @@ func TestExplorerCreation(t *testing.T) {
 
 // TestExplorerStartWithoutTunnelPool tests that Start fails without a tunnel pool
 func TestExplorerStartWithoutTunnelPool(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultExplorerConfig()
-
-	explorer := NewExplorer(db, nil, config)
-	err := explorer.Start()
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tunnel pool required")
+	explorer := newTestExplorerDefault(t)
+	assertExplorerRequiresTunnelPool(t, explorer.Start)
 }
 
 // TestExplorerDefaultConfig tests the default configuration values
@@ -61,10 +55,7 @@ func TestExplorerGetStats(t *testing.T) {
 
 // TestExplorerStopBeforeStart tests stopping an explorer that was never started
 func TestExplorerStopBeforeStart(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultExplorerConfig()
-
-	explorer := NewExplorer(db, nil, config)
+	explorer := newTestExplorerDefault(t)
 
 	// Should not panic
 	explorer.Stop()
@@ -75,9 +66,7 @@ func TestExplorerStopBeforeStart(t *testing.T) {
 
 // TestGenerateRandomHash tests random hash generation
 func TestGenerateRandomHash(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultExplorerConfig()
-	explorer := NewExplorer(db, nil, config)
+	explorer := newTestExplorerDefault(t)
 
 	hash1, err1 := explorer.generateRandomHash()
 	hash2, err2 := explorer.generateRandomHash()
@@ -92,14 +81,8 @@ func TestGenerateRandomHash(t *testing.T) {
 
 // TestExplorerExploreOnceWithoutTunnelPool tests ExploreOnce without tunnel pool
 func TestExplorerExploreOnceWithoutTunnelPool(t *testing.T) {
-	db := newMockNetDB()
-	config := DefaultExplorerConfig()
-	explorer := NewExplorer(db, nil, config)
-
-	err := explorer.ExploreOnce()
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tunnel pool required")
+	explorer := newTestExplorerDefault(t)
+	assertExplorerRequiresTunnelPool(t, explorer.ExploreOnce)
 }
 
 // TestExplorerConcurrencyLimits tests that concurrency is respected

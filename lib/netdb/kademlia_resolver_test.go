@@ -240,21 +240,9 @@ func TestQueryPeerPeerNotFound(t *testing.T) {
 
 // TestProcessDatabaseSearchReplyResponse tests handling of search reply responses
 func TestProcessDatabaseSearchReplyResponse(t *testing.T) {
-	resolver, targetHash, searchReply, _ := newResolverWithSearchReply(t)
-
-	data, err := searchReply.MarshalBinary()
-	if err != nil {
-		t.Fatalf("Failed to marshal search reply: %v", err)
-	}
-
-	// Process the response
-	ri, err := resolver.processDatabaseSearchReplyResponse(data, targetHash)
-	if err == nil {
-		t.Error("Should return error for search reply (peer didn't have target)")
-	}
-	if ri != nil {
-		t.Error("Should return nil RouterInfo for search reply")
-	}
+	marshalAndProcessSearchReply(t, func(sr *i2np.DatabaseSearchReply) ([]byte, error) {
+		return sr.MarshalBinary()
+	})
 }
 
 // TestSetTransport tests the SetTransport method
