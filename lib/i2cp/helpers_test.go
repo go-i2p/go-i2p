@@ -136,3 +136,19 @@ func assertSessionKeysPresent(t *testing.T, session *Session) {
 	assert.NotNil(t, session.keys, "session keys must not be nil")
 	assert.NotNil(t, session.keys.SigningPrivateKey(), "signing private key must be present")
 }
+
+// doLeaseSetAndMessage creates a LeaseSet, queues msgContent, and receives it,
+// asserting success at each step. label prefixes the assertion messages.
+func doLeaseSetAndMessage(t *testing.T, session *Session, msgContent string, label string) {
+	t.Helper()
+	ls, err := session.CreateLeaseSet()
+	assert.NoError(t, err, label+" LeaseSet creation should succeed")
+	assert.NotNil(t, ls)
+
+	err = session.QueueIncomingMessage([]byte(msgContent))
+	assert.NoError(t, err, label+" message queue should succeed")
+
+	msg, err := session.ReceiveMessage()
+	assert.NoError(t, err, label+" message receive should succeed")
+	assert.NotNil(t, msg)
+}

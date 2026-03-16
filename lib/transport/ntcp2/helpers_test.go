@@ -7,6 +7,7 @@ import (
 	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,4 +94,14 @@ func newPersistentConfigWithIV(t *testing.T) (string, *PersistentConfig, []byte)
 	iv, err := pc.LoadOrGenerateObfuscationIV()
 	require.NoError(t, err, "Failed to generate obfuscation IV")
 	return tempDir, pc, iv
+}
+
+// assertConvertToRouterAddressError calls ConvertToRouterAddress on transport
+// and asserts that it returns an error containing errContains.
+func assertConvertToRouterAddressError(t *testing.T, transport *NTCP2Transport, errContains string) {
+	t.Helper()
+	routerAddr, err := ConvertToRouterAddress(transport)
+	assert.Error(t, err)
+	assert.Nil(t, routerAddr)
+	assert.Contains(t, err.Error(), errContains)
 }

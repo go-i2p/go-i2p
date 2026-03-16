@@ -834,31 +834,11 @@ func TestErrorFlowIntegration_SessionLifecycleErrorRecovery(t *testing.T) {
 	// Perform multiple operations in sequence, verifying error handling works
 	// throughout the session lifecycle
 
-	// 1. Initial LeaseSet creation
-	leaseSet1, err := session.CreateLeaseSet()
-	assert.NoError(t, err, "initial LeaseSet creation should succeed")
-	assert.NotNil(t, leaseSet1)
+	// 1-2. Create LeaseSet, queue and receive messages
+	doLeaseSetAndMessage(t, session, "test 1", "initial")
 
-	// 2. Queue and receive messages
-	err = session.QueueIncomingMessage([]byte("test 1"))
-	assert.NoError(t, err, "first message queue should succeed")
-
-	msg1, err := session.ReceiveMessage()
-	assert.NoError(t, err, "first message receive should succeed")
-	assert.NotNil(t, msg1)
-
-	// 3. Create LeaseSet again
-	leaseSet2, err := session.CreateLeaseSet()
-	assert.NoError(t, err, "second LeaseSet creation should succeed")
-	assert.NotNil(t, leaseSet2)
-
-	// 4. More message operations
-	err = session.QueueIncomingMessage([]byte("test 2"))
-	assert.NoError(t, err, "second message queue should succeed")
-
-	msg2, err := session.ReceiveMessage()
-	assert.NoError(t, err, "second message receive should succeed")
-	assert.NotNil(t, msg2)
+	// 3-4. Repeat lifecycle step
+	doLeaseSetAndMessage(t, session, "test 2", "second")
 
 	// 5. Verify destination methods still work correctly
 	assertDestinationMethodsWork(t, session.Destination(), "after lifecycle operations")

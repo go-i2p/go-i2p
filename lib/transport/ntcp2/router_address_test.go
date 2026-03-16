@@ -138,10 +138,7 @@ func TestConvertToRouterAddress_WithObfuscationIV(t *testing.T) {
 
 // TestConvertToRouterAddress_NilTransport tests error handling for nil transport
 func TestConvertToRouterAddress_NilTransport(t *testing.T) {
-	routerAddr, err := ConvertToRouterAddress(nil)
-	assert.Error(t, err)
-	assert.Nil(t, routerAddr)
-	assert.Contains(t, err.Error(), "transport cannot be nil")
+	assertConvertToRouterAddressError(t, nil, "transport cannot be nil")
 }
 
 // TestConvertToRouterAddress_NoListener tests error handling when transport has no listener
@@ -151,10 +148,7 @@ func TestConvertToRouterAddress_NoListener(t *testing.T) {
 		config:   &Config{},
 	}
 
-	routerAddr, err := ConvertToRouterAddress(transport)
-	assert.Error(t, err)
-	assert.Nil(t, routerAddr)
-	assert.Contains(t, err.Error(), "no listening address")
+	assertConvertToRouterAddressError(t, transport, "no listening address")
 }
 
 // TestConvertToRouterAddress_NoConfig tests error handling when transport has no config
@@ -168,10 +162,7 @@ func TestConvertToRouterAddress_NoConfig(t *testing.T) {
 		config:   nil,
 	}
 
-	routerAddr, err := ConvertToRouterAddress(transport)
-	assert.Error(t, err)
-	assert.Nil(t, routerAddr)
-	assert.Contains(t, err.Error(), "configuration is not initialized")
+	assertConvertToRouterAddressError(t, transport, "configuration is not initialized")
 }
 
 // TestConvertToRouterAddress_InvalidStaticKey tests error handling for invalid static key
@@ -181,10 +172,7 @@ func TestConvertToRouterAddress_InvalidStaticKey(t *testing.T) {
 	// Corrupt the static key to wrong length
 	transport.config.NTCP2Config.StaticKey = make([]byte, 16) // Wrong length
 
-	routerAddr, err := ConvertToRouterAddress(transport)
-	assert.Error(t, err)
-	assert.Nil(t, routerAddr)
-	assert.Contains(t, err.Error(), "invalid static key length")
+	assertConvertToRouterAddressError(t, transport, "invalid static key length")
 }
 
 // TestConvertToRouterAddress_InvalidIV tests error handling for invalid IV
@@ -194,10 +182,7 @@ func TestConvertToRouterAddress_InvalidIV(t *testing.T) {
 	// Corrupt the IV to wrong length
 	transport.config.NTCP2Config.ObfuscationIV = make([]byte, 8) // Wrong length (should be 16)
 
-	routerAddr, err := ConvertToRouterAddress(transport)
-	assert.Error(t, err)
-	assert.Nil(t, routerAddr)
-	assert.Contains(t, err.Error(), "invalid IV length")
+	assertConvertToRouterAddressError(t, transport, "invalid IV length")
 }
 
 // TestConvertToRouterAddress_SpecificPort tests conversion with specific port
