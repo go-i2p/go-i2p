@@ -44,7 +44,7 @@ func assertBootstrapError(t *testing.T, err error, peers interface{}, contains s
 
 // assertApplyStrategyNotNil creates a ReseedBootstrap with the given strategy,
 // applies it to a single-result set, and asserts the result is not nil.
-func assertApplyStrategyNotNil(t *testing.T, strategy string, errMsg string) {
+func assertApplyStrategyNotNil(t *testing.T, strategy, errMsg string) {
 	t.Helper()
 	cfg := &config.BootstrapConfig{
 		ReseedStrategy: strategy,

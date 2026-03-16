@@ -456,7 +456,7 @@ func setupSessionInboundPool(t *testing.T, session *Session) *tunnel.Pool {
 // for testing handleSendMessage. Returns the server, session, and ready-to-send
 // I2CP Message. Consolidates the repeated server→session→destHash→marshal→wire
 // setup that appeared in multiple send-message tests.
-func buildSendMessageRequest(t *testing.T, dest string, payload string) (*Server, *Session, *Message) {
+func buildSendMessageRequest(t *testing.T, dest, payload string) (*Server, *Session, *Message) {
 	t.Helper()
 
 	server, err := NewServer(nil)

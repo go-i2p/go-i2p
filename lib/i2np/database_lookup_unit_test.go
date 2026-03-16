@@ -12,7 +12,7 @@ import (
 
 // buildSessionTagsAndAppend creates count session tags with unique marker bytes
 // and appends both tags and raw bytes to the data slice.
-func buildSessionTagsAndAppend(t *testing.T, data []byte, count int, off1, off2 int, val1, val2 byte) ([]byte, []session_tag.SessionTag) {
+func buildSessionTagsAndAppend(t *testing.T, data []byte, count, off1, off2 int, val1, val2 byte) ([]byte, []session_tag.SessionTag) {
 	t.Helper()
 	var tags []session_tag.SessionTag
 	for i := 0; i < count; i++ {

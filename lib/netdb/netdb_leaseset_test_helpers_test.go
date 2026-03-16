@@ -20,7 +20,7 @@ type leaseSetTestConfig struct {
 	// store calls the variant-specific Store method.
 	store func(db *StdNetDB, hash common.Hash, data []byte, dataType byte) error
 	// getChannel calls the variant-specific Get method and returns (notNil, chanOpen).
-	getChannel func(db *StdNetDB, hash common.Hash) (notNil bool, chanOpen bool)
+	getChannel func(db *StdNetDB, hash common.Hash) (notNil, chanOpen bool)
 	// getBytes calls the variant-specific GetBytes method.
 	getBytes func(db *StdNetDB, hash common.Hash) ([]byte, error)
 	// threadSafeOps runs all ops for one hash during the thread-safety test.

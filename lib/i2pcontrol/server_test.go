@@ -118,7 +118,7 @@ func startTestServer(t *testing.T) (*Server, *config.I2PControlConfig, string) {
 
 // authenticateTestServer authenticates against a running test server and
 // returns the auth token.
-func authenticateTestServer(t *testing.T, url string, password string) string {
+func authenticateTestServer(t *testing.T, url, password string) string {
 	t.Helper()
 	authResp := doRequest(t, url, "Authenticate", map[string]interface{}{
 		"API":      1,

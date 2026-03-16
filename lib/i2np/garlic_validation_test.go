@@ -26,7 +26,7 @@ func generateDestKey(t testing.TB) (destPubKey, destHash [32]byte) {
 	require.NoError(t, err)
 	copy(destPubKey[:], pubBytes)
 	destHash = types.SHA256(destPubKey[:])
-	return
+	return destPubKey, destHash
 }
 
 // newSenderWithDest creates a fresh GarlicSessionManager and a random destination key + hash.
@@ -35,7 +35,7 @@ func newSenderWithDest(t testing.TB) (sm *GarlicSessionManager, destPubKey, dest
 	sm, err := GenerateGarlicSessionManager()
 	require.NoError(t, err)
 	destPubKey, destHash = generateDestKey(t)
-	return
+	return sm, destPubKey, destHash
 }
 
 // buildAndEncryptGarlic creates a single-clove garlic message and encrypts it.
@@ -50,7 +50,7 @@ func buildAndEncryptGarlic(t testing.TB, sm *GarlicSessionManager,
 	require.NoError(t, err)
 	ciphertext, err = EncryptGarlicWithBuilder(sm, builder, destHash, destPubKey)
 	require.NoError(t, err)
-	return
+	return ciphertext, builder
 }
 
 // newReceiverSessionManager creates a GarlicSessionManager from a freshly generated private key.
@@ -61,7 +61,7 @@ func newReceiverSessionManager(t testing.TB) (sm *GarlicSessionManager, privKey 
 	copy(privKey[:], privBytes)
 	sm, err = NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
-	return
+	return sm, privKey
 }
 
 // garlicCryptoFixture holds pre-generated ECIES key pair and session managers

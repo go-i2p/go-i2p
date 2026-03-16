@@ -54,7 +54,7 @@ func assertHandlerError(t *testing.T, handler RPCHandler, paramsJSON string, exp
 }
 
 // postRPC sends a JSON-RPC request to tsURL and returns the decoded Response.
-func postRPC(t *testing.T, tsURL string, method string, params map[string]interface{}) Response {
+func postRPC(t *testing.T, tsURL, method string, params map[string]interface{}) Response {
 	t.Helper()
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"jsonrpc": "2.0",

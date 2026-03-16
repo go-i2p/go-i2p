@@ -140,52 +140,60 @@ func ValidateCapsString(caps string) error {
 		return newValidationError("caps string must not be empty")
 	}
 
-	seen := make(map[rune]bool)
-	bwCount := 0
-	reachCount := 0
-	congCount := 0
+	counts, err := countCapsFlags(caps)
+	if err != nil {
+		return err
+	}
 
+	return validateCapsCounts(counts)
+}
+
+// capsFlagCounts holds category counts from a parsed caps string.
+type capsFlagCounts struct {
+	bandwidth    int
+	reachability int
+	congestion   int
+}
+
+// countCapsFlags iterates over the caps string checking for duplicates and
+// unrecognized flags, returning per-category counts.
+func countCapsFlags(caps string) (capsFlagCounts, error) {
+	seen := make(map[rune]bool, len(caps))
+	var c capsFlagCounts
 	for _, r := range caps {
-		// Check for duplicates
 		if seen[r] {
-			return newValidationError(fmt.Sprintf("duplicate caps flag: %c", r))
+			return c, newValidationError(fmt.Sprintf("duplicate caps flag: %c", r))
 		}
 		seen[r] = true
-
-		// Check if recognized
 		if _, ok := validCapsFlags[r]; !ok {
-			return newValidationError(fmt.Sprintf("unrecognized caps flag: %c", r))
+			return c, newValidationError(fmt.Sprintf("unrecognized caps flag: %c", r))
 		}
-
-		// Count by category
 		if bandwidthFlags[r] {
-			bwCount++
+			c.bandwidth++
 		}
 		if reachabilityFlags[r] {
-			reachCount++
+			c.reachability++
 		}
 		if congestionFlags[r] {
-			congCount++
+			c.congestion++
 		}
 	}
+	return c, nil
+}
 
-	// At least one bandwidth class required; multiple allowed for backward compat
-	// (spec: "For compatibility with older routers, a router may publish multiple
-	// bandwidth letters, for example 'PO'")
-	if bwCount < 1 {
+// validateCapsCounts checks that the per-category flag counts are within spec limits.
+func validateCapsCounts(c capsFlagCounts) error {
+	if c.bandwidth < 1 {
 		return newValidationError("caps string must contain at least one bandwidth class letter (K/L/M/N/O/P/X)")
 	}
-	// Reachability is optional when state is unknown (spec: "unless the
-	// reachability state is currently unknown"), but at most one allowed
-	if reachCount > 1 {
+	if c.reachability > 1 {
 		return newValidationError(fmt.Sprintf(
-			"caps string must contain at most one reachability flag (R/U), found %d", reachCount))
+			"caps string must contain at most one reachability flag (R/U), found %d", c.reachability))
 	}
-	if congCount > 1 {
+	if c.congestion > 1 {
 		return newValidationError(fmt.Sprintf(
-			"caps string must contain at most one congestion flag (D/E/G), found %d", congCount))
+			"caps string must contain at most one congestion flag (D/E/G), found %d", c.congestion))
 	}
-
 	return nil
 }
 
@@ -197,7 +205,7 @@ func ValidateCapsString(caps string) error {
 // This ensures all caps strings produced by this router follow a consistent
 // ordering for easy comparison, even though the I2P spec does not mandate
 // flag ordering.
-func BuildCapsString(bandwidth BandwidthClass, reachable bool, floodfill bool, hidden bool, congestion CongestionFlag) string {
+func BuildCapsString(bandwidth BandwidthClass, reachable, floodfill, hidden bool, congestion CongestionFlag) string {
 	var b strings.Builder
 
 	// Bandwidth class (required)

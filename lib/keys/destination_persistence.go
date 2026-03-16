@@ -30,8 +30,10 @@ import (
 //
 // All files are written with 0600 permissions. Directories use 0700.
 
-var destinationKeyStoreMagicV1 = []byte("DKS\x01")
-var destinationKeyStoreMagicV2 = []byte("DKS\x02")
+var (
+	destinationKeyStoreMagicV1 = []byte("DKS\x01")
+	destinationKeyStoreMagicV2 = []byte("DKS\x02")
+)
 
 // StoreKeys persists the destination key store to disk at the given path.
 // The file contains the signing private key, encryption private key, and
@@ -233,7 +235,7 @@ func unmarshalDestinationKeyStore(data []byte) (*DestinationKeyStore, error) {
 
 // detectFormatVersion checks the magic header and returns the version (1 or 2)
 // and the offset past the header.
-func detectFormatVersion(data []byte) (version int, offset int, err error) {
+func detectFormatVersion(data []byte) (version, offset int, err error) {
 	if len(data) < 4 {
 		return 0, 0, fmt.Errorf("data too short for magic header")
 	}

@@ -3,7 +3,6 @@ package netdb
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 
@@ -381,6 +380,5 @@ func TestSendDatabaseStoreWithTransport(t *testing.T) {
 		t.Error("Response sent to wrong destination")
 	}
 
-	_ = fs                // suppress unused
-	fmt.Sprintf("%v", fs) // use fs
+	_ = fs // suppress unused
 }

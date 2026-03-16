@@ -1,11 +1,12 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/logger"

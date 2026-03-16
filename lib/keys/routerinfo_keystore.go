@@ -645,7 +645,7 @@ func (ks *RouterInfoKeystore) assembleRouterInfo(routerIdentity *router_identity
 // buildCapsString constructs the capabilities string for RouterInfo.
 // Per PROP_162, congestion flags (D/E/G) are appended after R/U.
 // Capabilities: f = Floodfill, N = Not floodfill, R = Reachable, U = Unreachable
-func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable bool, floodfill bool) string {
+func (ks *RouterInfoKeystore) buildCapsString(congestionFlag string, reachable, floodfill bool) string {
 	reachabilityFlag := "U"
 	if reachable {
 		reachabilityFlag = "R"

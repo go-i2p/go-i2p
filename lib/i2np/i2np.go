@@ -1,9 +1,10 @@
 package i2np
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	datalib "github.com/go-i2p/common/data"
 	"github.com/go-i2p/crypto/rand"

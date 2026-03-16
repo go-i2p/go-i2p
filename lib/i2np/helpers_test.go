@@ -39,14 +39,14 @@ func setupFloodfillTest(t *testing.T, n int) (*DatabaseManager, *mockFloodfillNe
 
 // buildResponseRecordTestData creates common test data for build response record tests:
 // a 32-byte hash (with hash[31] set to hashEndByte), 495-byte random data, and their concatenation.
-func buildResponseRecordTestData(hashEndByte byte) (hash []byte, randomData []byte, data []byte) {
+func buildResponseRecordTestData(hashEndByte byte) (hash, randomData, data []byte) {
 	hash = make([]byte, 32)
 	hash[31] = hashEndByte
 	randomData = make([]byte, 495)
 	randomData[493] = 0x33
 	randomData[494] = 0x74
 	data = append(hash, randomData...)
-	return
+	return hash, randomData, data
 }
 
 // setupNewGarlicSession creates a GarlicSessionManager with a freshly generated ECIES
@@ -104,17 +104,17 @@ func generateRandomBuildKeys() (layerKey, ivKey, replyKey session_key.SessionKey
 	rand.Read(padding[:])
 	rand.Read(ourIdent[:])
 	rand.Read(nextIdent[:])
-	return
+	return layerKey, ivKey, replyKey, replyIV, padding, ourIdent, nextIdent
 }
 
 // buildOurIdentTestData creates test data for build request record OurIdent tests:
 // a 4-byte receive tunnel followed by an identity of the specified length.
-func buildOurIdentTestData(identLen int, identByte byte) (testData []byte, ourIdent []byte) {
+func buildOurIdentTestData(identLen int, identByte byte) (testData, ourIdent []byte) {
 	receiveTunnel := []byte{0x00, 0x00, 0x00, 0x01}
 	ourIdent = make([]byte, identLen)
 	ourIdent[identLen-1] = identByte
 	testData = append(receiveTunnel, ourIdent...)
-	return
+	return testData, ourIdent
 }
 
 // assertDeserializeCloveError asserts that deserializeGarlicClove returns an error

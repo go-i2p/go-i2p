@@ -7,8 +7,10 @@ import (
 )
 
 // Compile-time interface verification for mocks.
-var _ GarlicMessageDecryptor = (*mockGarlicDecryptor)(nil)
-var _ ReplyRecordEncryptor = (*mockReplyEncryptor)(nil)
+var (
+	_ GarlicMessageDecryptor = (*mockGarlicDecryptor)(nil)
+	_ ReplyRecordEncryptor   = (*mockReplyEncryptor)(nil)
+)
 
 // mockGarlicDecryptor implements GarlicMessageDecryptor for testing.
 // Allows configuring return values per-call or via callback functions.

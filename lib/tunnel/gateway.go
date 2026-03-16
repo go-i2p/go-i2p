@@ -1,12 +1,13 @@
 package tunnel
 
 import (
-	"github.com/go-i2p/crypto/types"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/go-i2p/crypto/types"
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/tunnel"

@@ -746,7 +746,7 @@ func (m *specMockEncryptor) Type() cryptotunnel.TunnelEncryptionType {
 
 // buildTestTunnelMessage constructs a valid 1028-byte tunnel message for testing.
 // Uses passthrough encryption (no actual crypto) so the endpoint can process it directly.
-func buildTestTunnelMessage(t *testing.T, deliveryType byte, fragmented bool, msgID uint32, tunnelID uint32, hash [32]byte, payload []byte) []byte {
+func buildTestTunnelMessage(t *testing.T, deliveryType byte, fragmented bool, msgID, tunnelID uint32, hash [32]byte, payload []byte) []byte {
 	t.Helper()
 
 	var di *DeliveryInstructions
@@ -789,7 +789,7 @@ func buildTestFollowOnTunnelMessage(t *testing.T, msgID uint32, fragNum int, isL
 }
 
 // assembleTunnelMessage creates a valid 1028-byte tunnel message from delivery instructions and payload.
-func assembleTunnelMessage(t *testing.T, diBytes []byte, payload []byte) []byte {
+func assembleTunnelMessage(t *testing.T, diBytes, payload []byte) []byte {
 	t.Helper()
 
 	msg := make([]byte, 1028)

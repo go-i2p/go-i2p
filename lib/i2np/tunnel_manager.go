@@ -1,17 +1,17 @@
 package i2np
 
 import (
-"encoding/binary"
-"fmt"
-"sync"
-"time"
+	"encoding/binary"
+	"fmt"
+	"sync"
+	"time"
 
-common "github.com/go-i2p/common/data"
-"github.com/go-i2p/common/router_info"
-"github.com/go-i2p/common/session_key"
-"github.com/go-i2p/crypto/rand"
-"github.com/go-i2p/go-i2p/lib/tunnel"
-"github.com/go-i2p/logger"
+	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
+	"github.com/go-i2p/logger"
 )
 
 // buildRequest tracks a pending tunnel build request for correlation with replies.
@@ -1154,4 +1154,3 @@ func (tm *TunnelManager) cleanupExpiredBuildByID(messageID int) {
 		}).Debug("Cleaned up expired tunnel build via timeout")
 	}
 }
-

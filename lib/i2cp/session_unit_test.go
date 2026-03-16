@@ -30,7 +30,7 @@ func createTwoSessions(t *testing.T) (s1, s2 *Session) {
 	s2, err = NewSession(2, nil, nil)
 	require.NoError(t, err, "NewSession(2) error")
 	t.Cleanup(s2.Stop)
-	return
+	return s1, s2
 }
 
 // testIdentity holds keys extracted from a generated DestinationKeyStore.

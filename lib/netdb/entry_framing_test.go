@@ -80,7 +80,7 @@ func TestEntryWriteReadRoundTrip(t *testing.T) {
 	// This will fail to parse 0xDEADBEEF as a LeaseSet, but that's fine —
 	// the framing was correctly stripped. ReadFrom should at least attempt
 	// to parse the 4-byte payload (and fail with a parse error, not a framing error).
-	err = entry.ReadFrom(f2)
+	err = entry.Deserialize(f2)
 	// We expect a parse error here, not a framing error
 	if err != nil {
 		assert.Contains(t, err.Error(), "failed to parse", "Error should be a parse failure, not a framing issue")

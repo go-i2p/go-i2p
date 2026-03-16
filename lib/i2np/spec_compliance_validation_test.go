@@ -1378,12 +1378,12 @@ func setupGarlicPair(t *testing.T, hashByte byte) (sender, receiver *GarlicSessi
 	receiver, err = GenerateGarlicSessionManager()
 	require.NoError(t, err)
 	destHash[0] = hashByte
-	return
+	return sender, receiver, destHash
 }
 
 // generateReceiverWithPubKey creates a receiver GarlicSessionManager from
 // explicitly generated ECIES keys, returning the SM, public key, and destHash.
-func generateReceiverWithPubKey(t *testing.T) (sm *GarlicSessionManager, pubKey [32]byte, destHash [32]byte) {
+func generateReceiverWithPubKey(t *testing.T) (sm *GarlicSessionManager, pubKey, destHash [32]byte) {
 	t.Helper()
 	pubBytes, privBytes, err := ecies.GenerateKeyPair()
 	require.NoError(t, err)
@@ -1393,7 +1393,7 @@ func generateReceiverWithPubKey(t *testing.T) (sm *GarlicSessionManager, pubKey 
 	sm, err = NewGarlicSessionManager(privKey)
 	require.NoError(t, err)
 	destHash = types.SHA256(pubKey[:])
-	return
+	return sm, pubKey, destHash
 }
 
 // performFullHandshake performs a full NS → NSR → ES handshake between

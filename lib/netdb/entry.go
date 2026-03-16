@@ -45,9 +45,9 @@ type Entry struct {
 	*meta_leaseset.MetaLeaseSet
 }
 
-// WriteTo writes the Entry to the provided writer.
-func (e *Entry) WriteTo(w io.Writer) error {
-	log.WithField("at", "Entry.WriteTo").Debug("Writing netdb entry")
+// Serialize writes the Entry to the provided writer.
+func (e *Entry) Serialize(w io.Writer) error {
+	log.WithField("at", "Entry.Serialize").Debug("Writing netdb entry")
 
 	if e.RouterInfo != nil {
 		log.WithField("type", "RouterInfo").Debug("Writing RouterInfo entry")
@@ -74,7 +74,7 @@ func (e *Entry) WriteTo(w io.Writer) error {
 		return e.writeMetaLeaseSet(w)
 	}
 
-	log.WithField("at", "Entry.WriteTo").Error("Entry contains no valid data")
+	log.WithField("at", "Entry.Serialize").Error("Entry contains no valid data")
 	return fmt.Errorf("entry contains no valid data (RouterInfo, LeaseSet, LeaseSet2, EncryptedLeaseSet, or MetaLeaseSet)")
 }
 
@@ -226,7 +226,7 @@ func (e *Entry) writeData(w io.Writer, data []byte) error {
 	return nil
 }
 
-func (e *Entry) ReadFrom(r io.Reader) (err error) {
+func (e *Entry) Deserialize(r io.Reader) (err error) {
 	entryType, err := e.readEntryType(r)
 	if err != nil {
 		return err

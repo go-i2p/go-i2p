@@ -53,9 +53,11 @@ func encryptedLeaseSetConfig() leaseSetTestConfig {
 func TestStoreEncryptedLeaseSetInvalidDataType(t *testing.T) {
 	testStoreInvalidDataType(t, encryptedLeaseSetConfig())
 }
+
 func TestStoreEncryptedLeaseSetParseError(t *testing.T) {
 	testStoreParseError(t, encryptedLeaseSetConfig())
 }
+
 func TestStoreEncryptedLeaseSetEmptyData(t *testing.T) {
 	testStoreEmptyData(t, encryptedLeaseSetConfig())
 }
@@ -64,9 +66,11 @@ func TestGetEncryptedLeaseSetNotFound(t *testing.T)  { testGetNotFound(t, encryp
 func TestGetEncryptedLeaseSetBytesNotFound(t *testing.T) {
 	testGetBytesNotFound(t, encryptedLeaseSetConfig())
 }
+
 func TestEncryptedLeaseSetThreadSafety(t *testing.T) {
 	testLeaseSetThreadSafety(t, encryptedLeaseSetConfig())
 }
+
 func TestEncryptedLeaseSetConcurrentStoreAndRetrieve(t *testing.T) {
 	testConcurrentStoreAndRetrieve(t, encryptedLeaseSetConfig())
 }

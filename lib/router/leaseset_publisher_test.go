@@ -2,9 +2,10 @@ package router
 
 import (
 	"context"
-	"github.com/go-i2p/crypto/types"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/crypto/types"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
