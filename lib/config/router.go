@@ -196,50 +196,34 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 	}
 }
 
+// copyPtr creates a shallow copy of a pointer value.
+// Returns nil if src is nil, otherwise returns a pointer to a copy of the value.
+func copyPtr[T any](src *T) *T {
+	if src == nil {
+		return nil
+	}
+	v := *src
+	return &v
+}
+
 // copyNestedConfigs deep-copies all nested configuration structs from src into dst.
 func copyNestedConfigs(dst, src *RouterConfig) {
-	if src.NetDb != nil {
-		netDbCopy := *src.NetDb
-		dst.NetDb = &netDbCopy
-	}
-
-	if src.Bootstrap != nil {
-		dst.Bootstrap = copyBootstrapConfig(src.Bootstrap)
-	}
-
-	if src.I2CP != nil {
-		i2cpCopy := *src.I2CP
-		dst.I2CP = &i2cpCopy
-	}
-
-	if src.I2PControl != nil {
-		i2pControlCopy := *src.I2PControl
-		dst.I2PControl = &i2pControlCopy
-	}
-
-	if src.Tunnel != nil {
-		tunnelCopy := *src.Tunnel
-		dst.Tunnel = &tunnelCopy
-	}
-
-	if src.Transport != nil {
-		transportCopy := *src.Transport
-		dst.Transport = &transportCopy
-	}
-
-	if src.Performance != nil {
-		performanceCopy := *src.Performance
-		dst.Performance = &performanceCopy
-	}
-
-	if src.Congestion != nil {
-		congestionCopy := *src.Congestion
-		dst.Congestion = &congestionCopy
-	}
+	dst.NetDb = copyPtr(src.NetDb)
+	dst.Bootstrap = copyBootstrapConfig(src.Bootstrap)
+	dst.I2CP = copyPtr(src.I2CP)
+	dst.I2PControl = copyPtr(src.I2PControl)
+	dst.Tunnel = copyPtr(src.Tunnel)
+	dst.Transport = copyPtr(src.Transport)
+	dst.Performance = copyPtr(src.Performance)
+	dst.Congestion = copyPtr(src.Congestion)
 }
 
 // copyBootstrapConfig creates a deep copy of a BootstrapConfig including its slices.
+// Returns nil if src is nil.
 func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
+	if src == nil {
+		return nil
+	}
 	bootstrapCopy := *src
 
 	if src.ReseedServers != nil {

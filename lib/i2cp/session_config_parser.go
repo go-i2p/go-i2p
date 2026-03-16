@@ -387,51 +387,52 @@ func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string
 //
 // NOTE: i2cp.gzip is parsed and acknowledged but NOT implemented (payload compression not performed)
 func applyMessageOptions(config *SessionConfig, options map[string]string) {
-	// i2cp.messageReliability: "BestEffort", "Guaranteed", or "None"
-	if val, exists := options["i2cp.messageReliability"]; exists {
-		switch val {
-		case "BestEffort", "Guaranteed", "None":
-			config.MessageReliability = val
-			markExplicitlySet(config, "MessageReliability")
-			log.WithFields(logger.Fields{
-				"at":          "i2cp.applyMessageOptions",
-				"option":      "i2cp.messageReliability",
-				"reliability": val,
-			}).Debug("applied_message_reliability")
-		default:
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyMessageOptions",
-				"option": "i2cp.messageReliability",
-				"value":  val,
-			}).Warn("unrecognized message reliability value - using default BestEffort")
-		}
-	}
+	applyMessageReliability(config, options)
+	applyBoolOption(config, options, "i2cp.encryptLeaseSet", "UseEncryptedLeaseSet",
+		func() { config.UseEncryptedLeaseSet = true }, "enabled_encrypted_leaseset")
+	applyBoolOption(config, options, "i2cp.dontPublishLeaseSet", "DontPublishLeaseSet",
+		func() { config.DontPublishLeaseSet = true }, "disabled_leaseset_publication")
+	warnUnsupportedGzip(config, options)
+}
 
-	// i2cp.encryptLeaseSet: "true" enables encrypted LeaseSet
-	if val, exists := options["i2cp.encryptLeaseSet"]; exists {
-		if val == "true" {
-			config.UseEncryptedLeaseSet = true
-			markExplicitlySet(config, "UseEncryptedLeaseSet")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyMessageOptions",
-				"option": "i2cp.encryptLeaseSet",
-			}).Debug("enabled_encrypted_leaseset")
-		}
+// applyMessageReliability handles the i2cp.messageReliability option.
+func applyMessageReliability(config *SessionConfig, options map[string]string) {
+	val, exists := options["i2cp.messageReliability"]
+	if !exists {
+		return
 	}
-
-	// i2cp.dontPublishLeaseSet: "true" prevents publication to NetDB
-	if val, exists := options["i2cp.dontPublishLeaseSet"]; exists {
-		if val == "true" {
-			config.DontPublishLeaseSet = true
-			markExplicitlySet(config, "DontPublishLeaseSet")
-			log.WithFields(logger.Fields{
-				"at":     "i2cp.applyMessageOptions",
-				"option": "i2cp.dontPublishLeaseSet",
-			}).Debug("disabled_leaseset_publication")
-		}
+	switch val {
+	case "BestEffort", "Guaranteed", "None":
+		config.MessageReliability = val
+		markExplicitlySet(config, "MessageReliability")
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.applyMessageOptions",
+			"option":      "i2cp.messageReliability",
+			"reliability": val,
+		}).Debug("applied_message_reliability")
+	default:
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyMessageOptions",
+			"option": "i2cp.messageReliability",
+			"value":  val,
+		}).Warn("unrecognized message reliability value - using default BestEffort")
 	}
+}
 
-	// i2cp.gzip remains unsupported
+// applyBoolOption applies a boolean "true" option from the options map.
+func applyBoolOption(config *SessionConfig, options map[string]string, key, fieldName string, setter func(), logMsg string) {
+	if val, exists := options[key]; exists && val == "true" {
+		setter()
+		markExplicitlySet(config, fieldName)
+		log.WithFields(logger.Fields{
+			"at":     "i2cp.applyMessageOptions",
+			"option": key,
+		}).Debug(logMsg)
+	}
+}
+
+// warnUnsupportedGzip logs a warning for the unsupported i2cp.gzip option.
+func warnUnsupportedGzip(config *SessionConfig, options map[string]string) {
 	if val, exists := options["i2cp.gzip"]; exists {
 		log.WithFields(logger.Fields{
 			"at":     "i2cp.applyMessageOptions",
