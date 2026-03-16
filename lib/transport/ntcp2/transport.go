@@ -184,29 +184,23 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 }
 
 // setupNetworkListener creates and attaches the TCP and NTCP2 listeners to the transport.
+//
+// NAT traversal (UPnP/NAT-PMP) is not yet enabled for NTCP2. A prototype implementation
+// using github.com/go-i2p/go-nat-listener exists but is disabled pending integration testing
+// behind NAT. Routers behind NAT currently operate in outbound-only mode for NTCP2.
+// Full NAT traversal with introducer support is planned as part of SSU2 transport (see
+// lib/transport/ssu2/doc.go). To enable NAT traversal for NTCP2, uncomment the
+// nattraversal.ListenWithFallback code below and add go-nat-listener to go.mod.
 func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config *ntcp2.NTCP2Config) error {
-	// Here's where we do NAT traversal if needed (not implemented yet)
-	// uses github.com/go-i2p/go-nat-listener
+	// NAT traversal prototype (disabled — requires go-nat-listener dependency and NAT testing):
+	//   _, port, _ := net.SplitHostPort(config.ListenerAddress)
+	//   iport, _ := strconv.Atoi(port)
+	//   tcpListener, err := nattraversal.ListenWithFallback(iport)
 
 	tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
 		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}
-	/*
-		This works now, but it's disabled until we can test it properly.
-			_, port, err := net.SplitHostPort(config.ListenerAddress)
-			if err != nil {
-				return fmt.Errorf("invalid listener address: %w", err)
-			}
-			iport, err := strconv.Atoi(port)
-			if err != nil {
-				return fmt.Errorf("invalid listener port: %w", err)
-			}
-			tcpListener, err := nattraversal.ListenWithFallback(iport)
-			if err != nil {
-				log.Fatal("Failed to create listener:", err)
-			}
-	*/
 
 	listener, err := ntcp2.NewNTCP2Listener(tcpListener, ntcp2Config)
 	if err != nil {
