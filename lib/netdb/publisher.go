@@ -14,19 +14,19 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// TransportManager provides access to the transport layer for sending I2NP messages.
+// SessionProvider provides access to the transport layer for sending I2NP messages.
 // This interface allows the Publisher to send messages to gateway routers without
 // tight coupling to the router/transport implementation.
-type TransportManager interface {
+type SessionProvider interface {
 	// GetSession obtains a transport session with a router given its RouterInfo.
 	// If a session with this router is NOT already made, attempts to create one.
 	// Returns an established TransportSession and nil on success.
 	// Returns nil and an error on error.
-	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
+	GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error)
 }
 
-// TransportSession represents a session for sending I2NP messages to a router.
-type TransportSession interface {
+// I2NPSender represents a session for sending I2NP messages to a router.
+type I2NPSender interface {
 	// QueueSendI2NP queues an I2NP message to be sent over the session.
 	// Returns an error if the session is closed or send queue is full.
 	QueueSendI2NP(msg i2np.I2NPMessage) error
@@ -55,7 +55,7 @@ type Publisher struct {
 	fieldMu sync.RWMutex
 
 	// transport for sending I2NP messages to gateway routers
-	transport TransportManager
+	transport SessionProvider
 
 	// routerInfoProvider supplies our local RouterInfo for publishing
 	routerInfoProvider RouterInfoProvider
@@ -102,7 +102,7 @@ func DefaultPublisherConfig() PublisherConfig {
 //   - transport: TransportManager for sending I2NP messages to gateway routers (can be nil initially)
 //   - routerInfoProvider: Provider for accessing local RouterInfo (can be nil if not publishing RouterInfo)
 //   - config: Publisher configuration (intervals, floodfill count)
-func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport TransportManager, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher {
+func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvider, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Publisher{
@@ -598,7 +598,7 @@ func (p *Publisher) getGatewayRouterInfo(gatewayHash common.Hash) (*router_info.
 
 // SetTransport sets the transport manager after publisher creation.
 // This allows the transport to be configured after initial publisher setup.
-func (p *Publisher) SetTransport(transport TransportManager) {
+func (p *Publisher) SetTransport(transport SessionProvider) {
 	p.fieldMu.Lock()
 	p.transport = transport
 	p.fieldMu.Unlock()

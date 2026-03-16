@@ -22,7 +22,7 @@ import (
 func TestRouteMessageWithoutNetDB(t *testing.T) {
 	// Create a minimal router with message router but no NetDB
 	router := &Router{
-		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -80,7 +80,7 @@ func TestRouteMessageWithoutNetDB(t *testing.T) {
 func TestRouteMessageSwitchStatement(t *testing.T) {
 	// Create minimal router
 	router := &Router{
-		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -217,7 +217,7 @@ func (m *mockNetConn) SetWriteDeadline(t time.Time) error {
 // instead of being rejected with "unsupported message type".
 func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -259,7 +259,7 @@ func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 // falls through to the "unsupported message type" default case.
 func TestRouteMessageAllSupportedTypes(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,
@@ -306,7 +306,7 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 // message types are still properly rejected.
 func TestRouteMessageUnsupportedTypeStillRejected(t *testing.T) {
 	router := &Router{
-		messageRouter: i2np.NewMessageRouter(i2np.MessageRouterConfig{
+		messageRouter: i2np.NewI2NPMessageDispatcher(i2np.I2NPMessageDispatcherConfig{
 			MaxRetries:     3,
 			DefaultTimeout: 30,
 			EnableLogging:  false,

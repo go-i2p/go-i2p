@@ -28,7 +28,7 @@ type failingTransportManager struct {
 	session *failingTransportSession
 }
 
-func (m *failingTransportManager) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
+func (m *failingTransportManager) GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error) {
 	return m.session, nil
 }
 

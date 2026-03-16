@@ -631,7 +631,7 @@ func (r *Router) getSessionByHash(peerHash common.Hash) (*ntcp.NTCP2Session, err
 // the router's active transport sessions.
 // NTCP2Session already implements the i2np.TransportSession interface.
 // If no active session exists, it attempts to establish an outbound connection.
-func (r *Router) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error) {
+func (r *Router) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, error) {
 	// Check if router is still running before proceeding
 	r.runMux.RLock()
 	running := r.running
@@ -694,7 +694,7 @@ func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.R
 }
 
 // establishOutboundSession creates a new transport session to a peer.
-func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_info.RouterInfo) (i2np.TransportSession, error) {
+func (r *Router) establishOutboundSession(hash common.Hash, routerInfo *router_info.RouterInfo) (i2np.I2NPTransportSession, error) {
 	if err := r.validateTransportMuxer(hash); err != nil {
 		return nil, err
 	}
@@ -724,7 +724,7 @@ func (r *Router) validateTransportMuxer(hash common.Hash) error {
 }
 
 // registerNewSession stores a newly established session if it's an NTCP2 session.
-func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.TransportSession) {
+func (r *Router) registerNewSession(hash common.Hash, transportSession i2np.I2NPTransportSession) {
 	if ntcp2Session, ok := transportSession.(*ntcp.NTCP2Session); ok {
 		r.addSession(hash, ntcp2Session)
 		log.WithField("peer_hash", fmt.Sprintf("%x", hash[:8])).Info("Established and registered new outbound session")

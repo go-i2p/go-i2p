@@ -136,7 +136,7 @@ func TestPublisherNetDBAdapterGetAllRouterInfos(t *testing.T) {
 
 // TestPublisherTransportAdapterInterface verifies the adapter satisfies TransportManager.
 func TestPublisherTransportAdapterInterface(t *testing.T) {
-	var _ netdb.TransportManager = (*publisherTransportAdapter)(nil)
+	var _ netdb.SessionProvider = (*publisherTransportAdapter)(nil)
 }
 
 // --- mock bootstrapper for reseed test ---

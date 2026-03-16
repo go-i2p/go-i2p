@@ -356,12 +356,12 @@ func (kr *KademliaResolver) mergeQueryResults(results []iterativeQueryResult, qu
 func (kr *KademliaResolver) selectClosestUnqueried(target common.Hash, unqueried map[common.Hash]bool, count int) []common.Hash {
 	peers := make([]peerDistance, 0, len(unqueried))
 	for h := range unqueried {
-		dist := kr.calculateXORDistance(target, h)
+		dist := CalculateXORDistance(target, h)
 		peers = append(peers, peerDistance{hash: h, distance: dist})
 	}
 
 	sort.Slice(peers, func(i, j int) bool {
-		return kr.compareDistances(peers[i].distance, peers[j].distance)
+		return CompareXORDistances(peers[i].distance, peers[j].distance)
 	})
 
 	if count > len(peers) {
@@ -480,7 +480,7 @@ func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.
 		}
 
 		// Calculate XOR distance between target and peer
-		distance := kr.calculateXORDistance(target, peerHash)
+		distance := CalculateXORDistance(target, peerHash)
 
 		peers = append(peers, peerDistance{
 			hash:     peerHash,
@@ -491,17 +491,11 @@ func (kr *KademliaResolver) calculatePeerDistances(allRouterInfos []router_info.
 	return peers
 }
 
-// calculateXORDistance calculates the XOR distance between two hashes.
-// Delegates to the shared CalculateXORDistance function.
-func (kr *KademliaResolver) calculateXORDistance(target, peer common.Hash) []byte {
-	return CalculateXORDistance(target, peer)
-}
-
 // selectClosestPeers sorts peers by distance and returns the K closest ones.
 func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target common.Hash, K int) []common.Hash {
 	// Sort peers by XOR distance (closest first)
 	sort.Slice(peers, func(i, j int) bool {
-		return kr.compareDistances(peers[i].distance, peers[j].distance)
+		return CompareXORDistances(peers[i].distance, peers[j].distance)
 	})
 
 	// Take up to K closest peers
@@ -522,12 +516,6 @@ func (kr *KademliaResolver) selectClosestPeers(peers []peerDistance, target comm
 	}).Debug("Found closest peers by XOR distance")
 
 	return result
-}
-
-// compareDistances compares two distance byte arrays (big endian comparison).
-// Delegates to the shared CompareXORDistances function.
-func (kr *KademliaResolver) compareDistances(dist1, dist2 []byte) bool {
-	return CompareXORDistances(dist1, dist2)
 }
 
 // queryPeer sends a DatabaseLookup request to a specific peer and waits for a response.

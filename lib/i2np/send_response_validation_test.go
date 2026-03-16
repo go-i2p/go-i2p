@@ -30,11 +30,11 @@ func (m *FailingMockTransportSession) SendQueueSize() int {
 
 // FailingMockSessionProvider returns a FailingMockTransportSession.
 type FailingMockSessionProvider struct {
-	session TransportSession
+	session I2NPTransportSession
 	getErr  error
 }
 
-func (m *FailingMockSessionProvider) GetSessionByHash(hash common.Hash) (TransportSession, error) {
+func (m *FailingMockSessionProvider) GetSessionByHash(hash common.Hash) (I2NPTransportSession, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}

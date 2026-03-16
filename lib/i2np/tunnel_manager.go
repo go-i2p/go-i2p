@@ -371,7 +371,7 @@ func validateTunnelBuild(result *tunnel.TunnelBuildResult) (router_info.RouterIn
 }
 
 // getGatewaySession retrieves the transport session for the gateway router.
-func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (TransportSession, [32]byte, error) {
+func (tm *TunnelManager) getGatewaySession(firstHop router_info.RouterInfo) (I2NPTransportSession, [32]byte, error) {
 	peerHash, err := firstHop.IdentHash()
 	if err != nil {
 		return nil, [32]byte{}, fmt.Errorf("failed to get first hop identity: %w", err)
@@ -398,7 +398,7 @@ func (tm *TunnelManager) selectBuildMessage(result *tunnel.TunnelBuildResult, me
 }
 
 // queueBuildMessageToGateway queues the build message for sending to the gateway.
-func (tm *TunnelManager) queueBuildMessageToGateway(session TransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) {
+func (tm *TunnelManager) queueBuildMessageToGateway(session I2NPTransportSession, buildMsg I2NPMessage, messageID int, peerHash [32]byte, useShortBuild bool) {
 	session.QueueSendI2NP(buildMsg)
 
 	log.WithFields(logger.Fields{
@@ -756,7 +756,7 @@ func (tm *TunnelManager) logSendingBuildRequests(tunnelID tunnel.TunnelID, peerC
 }
 
 // getSessionForPeer retrieves a transport session for the specified peer.
-func (tm *TunnelManager) getSessionForPeer(peerHash common.Hash) (TransportSession, error) {
+func (tm *TunnelManager) getSessionForPeer(peerHash common.Hash) (I2NPTransportSession, error) {
 	session, err := tm.sessionProvider.GetSessionByHash(peerHash)
 	if err != nil {
 		log.WithFields(logger.Fields{

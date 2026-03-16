@@ -90,7 +90,7 @@ type publisherTransportAdapter struct {
 	muxer *transport.TransportMuxer
 }
 
-func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo) (netdb.TransportSession, error) {
+func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo) (netdb.I2NPSender, error) {
 	session, err := a.muxer.GetSession(routerInfo)
 	if err != nil {
 		return nil, err
@@ -100,4 +100,4 @@ func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo
 }
 
 // Compile-time interface check
-var _ netdb.TransportManager = (*publisherTransportAdapter)(nil)
+var _ netdb.SessionProvider = (*publisherTransportAdapter)(nil)

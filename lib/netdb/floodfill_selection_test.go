@@ -27,7 +27,6 @@ func TestSelectFloodfillRouters_NoFloodfills(t *testing.T) {
 
 // TestCalculateXORDistance tests XOR distance calculation
 func TestCalculateXORDistance(t *testing.T) {
-	db := NewStdNetDB("")
 
 	tests := []struct {
 		name string
@@ -57,7 +56,7 @@ func TestCalculateXORDistance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := db.calculateXORDistance(tt.h1, tt.h2)
+			got := CalculateXORDistance(tt.h1, tt.h2)
 			if !bytes.Equal(got[:3], tt.want) {
 				t.Errorf("calculateXORDistance() = %x, want %x", got[:3], tt.want)
 			}
@@ -67,7 +66,6 @@ func TestCalculateXORDistance(t *testing.T) {
 
 // TestCompareXORDistances tests distance comparison
 func TestCompareXORDistances(t *testing.T) {
-	db := NewStdNetDB("")
 
 	tests := []struct {
 		name string
@@ -97,7 +95,7 @@ func TestCompareXORDistances(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := db.compareXORDistances(tt.d1, tt.d2)
+			got := CompareXORDistances(tt.d1, tt.d2)
 			if got != tt.want {
 				t.Errorf("compareXORDistances() = %v, want %v", got, tt.want)
 			}

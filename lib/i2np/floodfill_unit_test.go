@@ -182,10 +182,10 @@ func TestDatabaseManager_SendDatabaseSearchReply(t *testing.T) {
 
 // TestMessageRouter_SetOurRouterHash tests router hash configuration
 func TestMessageRouter_SetOurRouterHash(t *testing.T) {
-	config := MessageRouterConfig{
+	config := I2NPMessageDispatcherConfig{
 		EnableLogging: false,
 	}
-	router := NewMessageRouter(config)
+	router := NewI2NPMessageDispatcher(config)
 
 	ourHash := common.Hash{0xDE, 0xAD, 0xBE, 0xEF}
 	router.SetOurRouterHash(ourHash)
@@ -197,10 +197,10 @@ func TestMessageRouter_SetOurRouterHash(t *testing.T) {
 
 // TestMessageRouter_SetNetDB_FloodfillAutoConfiguration tests automatic floodfill configuration
 func TestMessageRouter_SetNetDB_FloodfillAutoConfiguration(t *testing.T) {
-	config := MessageRouterConfig{
+	config := I2NPMessageDispatcherConfig{
 		EnableLogging: false,
 	}
-	router := NewMessageRouter(config)
+	router := NewI2NPMessageDispatcher(config)
 
 	mockNetDB := newMockFloodfillNetDB()
 	router.SetNetDB(mockNetDB)
@@ -333,7 +333,7 @@ type mockSessionProvider struct {
 	sessions map[common.Hash]*mockTransportSession
 }
 
-func (m *mockSessionProvider) GetSessionByHash(hash common.Hash) (TransportSession, error) {
+func (m *mockSessionProvider) GetSessionByHash(hash common.Hash) (I2NPTransportSession, error) {
 	if session, exists := m.sessions[hash]; exists {
 		return session, nil
 	}

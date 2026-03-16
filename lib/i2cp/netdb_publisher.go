@@ -5,9 +5,9 @@ import (
 	"github.com/go-i2p/logger"
 )
 
-// NetDBStore defines the minimal interface needed for storing LeaseSets in the NetDB.
+// LeaseSetStore defines the minimal interface needed for storing LeaseSets in the NetDB.
 // This is satisfied by *netdb.StdNetDB.
-type NetDBStore interface {
+type LeaseSetStore interface {
 	// StoreLeaseSet stores a LeaseSet in the local network database.
 	// dataType indicates the LeaseSet type: 1=LeaseSet, 3=LeaseSet2, 5=Encrypted, 7=Meta.
 	StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
@@ -20,13 +20,13 @@ type NetDBStore interface {
 // For full network distribution (sending DatabaseStore messages to floodfill routers),
 // an extended implementation should also distribute via I2NP DatabaseStore messages.
 type NetDBLeaseSetPublisher struct {
-	store    NetDBStore
+	store    LeaseSetStore
 	dataType byte // LeaseSet type (default: 3 for LeaseSet2)
 }
 
 // NewNetDBLeaseSetPublisher creates a new publisher that stores LeaseSets in the given NetDB.
 // Uses LeaseSet2 (type 3) by default.
-func NewNetDBLeaseSetPublisher(store NetDBStore) *NetDBLeaseSetPublisher {
+func NewNetDBLeaseSetPublisher(store LeaseSetStore) *NetDBLeaseSetPublisher {
 	return &NetDBLeaseSetPublisher{
 		store:    store,
 		dataType: 3, // LeaseSet2
@@ -35,7 +35,7 @@ func NewNetDBLeaseSetPublisher(store NetDBStore) *NetDBLeaseSetPublisher {
 
 // NewNetDBLeaseSetPublisherWithType creates a new publisher with a specific LeaseSet data type.
 // Valid types: 1 (LeaseSet), 3 (LeaseSet2), 5 (EncryptedLeaseSet), 7 (MetaLeaseSet).
-func NewNetDBLeaseSetPublisherWithType(store NetDBStore, dataType byte) *NetDBLeaseSetPublisher {
+func NewNetDBLeaseSetPublisherWithType(store LeaseSetStore, dataType byte) *NetDBLeaseSetPublisher {
 	return &NetDBLeaseSetPublisher{
 		store:    store,
 		dataType: dataType,

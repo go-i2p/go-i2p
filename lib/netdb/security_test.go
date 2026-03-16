@@ -141,7 +141,6 @@ func TestExpirationLogic_Stats(t *testing.T) {
 
 // TestKademliaDistance_XORCalculation verifies XOR distance calculation.
 func TestKademliaDistance_XORCalculation(t *testing.T) {
-	db := newEphemeralStdNetDB(t)
 
 	tests := []struct {
 		name string
@@ -171,7 +170,7 @@ func TestKademliaDistance_XORCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := db.calculateXORDistance(tt.h1, tt.h2)
+			result := CalculateXORDistance(tt.h1, tt.h2)
 			for i := 0; i < len(tt.want); i++ {
 				assert.Equal(t, tt.want[i], result[i],
 					"XOR distance byte %d mismatch", i)
@@ -182,7 +181,6 @@ func TestKademliaDistance_XORCalculation(t *testing.T) {
 
 // TestKademliaDistance_Comparison verifies distance comparison logic.
 func TestKademliaDistance_Comparison(t *testing.T) {
-	db := newEphemeralStdNetDB(t)
 
 	tests := []struct {
 		name   string
@@ -218,7 +216,7 @@ func TestKademliaDistance_Comparison(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := db.compareXORDistances(tt.d1, tt.d2)
+			result := CompareXORDistances(tt.d1, tt.d2)
 			assert.Equal(t, tt.d1Less, result)
 		})
 	}
@@ -226,13 +224,12 @@ func TestKademliaDistance_Comparison(t *testing.T) {
 
 // TestKademliaDistance_Symmetry verifies XOR distance is symmetric.
 func TestKademliaDistance_Symmetry(t *testing.T) {
-	db := newEphemeralStdNetDB(t)
 
 	h1 := common.Hash{0xDE, 0xAD, 0xBE, 0xEF}
 	h2 := common.Hash{0xCA, 0xFE, 0xBA, 0xBE}
 
-	d1 := db.calculateXORDistance(h1, h2)
-	d2 := db.calculateXORDistance(h2, h1)
+	d1 := CalculateXORDistance(h1, h2)
+	d2 := CalculateXORDistance(h2, h1)
 
 	for i := range d1 {
 		assert.Equal(t, d1[i], d2[i], "XOR distance should be symmetric at byte %d", i)

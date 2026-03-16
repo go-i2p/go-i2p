@@ -33,7 +33,7 @@ func NewMockMultiSessionProvider() *MockMultiSessionProvider {
 	}
 }
 
-func (m *MockMultiSessionProvider) GetSessionByHash(hash common.Hash) (TransportSession, error) {
+func (m *MockMultiSessionProvider) GetSessionByHash(hash common.Hash) (I2NPTransportSession, error) {
 	hashStr := string(hash[:])
 	if session, exists := m.sessions[hashStr]; exists {
 		return session, nil

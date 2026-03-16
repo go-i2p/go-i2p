@@ -37,12 +37,12 @@ func TestMessageRouterSessionProvider(t *testing.T) {
 	}
 
 	// Create a MessageRouter with configuration
-	messageConfig := i2np.MessageRouterConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,
 	}
-	messageRouter := i2np.NewMessageRouter(messageConfig)
+	messageRouter := i2np.NewI2NPMessageDispatcher(messageConfig)
 
 	// Create a test peer hash
 	peerHash := common.Hash{}
@@ -105,12 +105,12 @@ func TestInitializeMessageRouterWithSessionProvider(t *testing.T) {
 	}
 
 	// Initialize the MessageRouter (without NetDB for this unit test)
-	messageConfig := i2np.MessageRouterConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,
 	}
-	router.messageRouter = i2np.NewMessageRouter(messageConfig)
+	router.messageRouter = i2np.NewI2NPMessageDispatcher(messageConfig)
 
 	// Set the SessionProvider (this is what initializeMessageRouter does)
 	router.messageRouter.SetSessionProvider(router)
@@ -173,10 +173,10 @@ func TestSessionProviderThreadSafety(t *testing.T) {
 
 // mockSessionProvider implements SessionProvider for testing
 type mockSessionProvider struct {
-	sessions map[common.Hash]i2np.TransportSession
+	sessions map[common.Hash]i2np.I2NPTransportSession
 }
 
-func (m *mockSessionProvider) GetSessionByHash(hash common.Hash) (i2np.TransportSession, error) {
+func (m *mockSessionProvider) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, error) {
 	if session, ok := m.sessions[hash]; ok {
 		return session, nil
 	}
@@ -187,16 +187,16 @@ func (m *mockSessionProvider) GetSessionByHash(hash common.Hash) (i2np.Transport
 func TestMessageRouterWithMockSessionProvider(t *testing.T) {
 	// Create a mock session provider
 	mockProvider := &mockSessionProvider{
-		sessions: make(map[common.Hash]i2np.TransportSession),
+		sessions: make(map[common.Hash]i2np.I2NPTransportSession),
 	}
 
 	// Create a MessageRouter
-	messageConfig := i2np.MessageRouterConfig{
+	messageConfig := i2np.I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  false, // Disable logging for cleaner test output
 	}
-	messageRouter := i2np.NewMessageRouter(messageConfig)
+	messageRouter := i2np.NewI2NPMessageDispatcher(messageConfig)
 
 	// Set the mock provider
 	messageRouter.SetSessionProvider(mockProvider)

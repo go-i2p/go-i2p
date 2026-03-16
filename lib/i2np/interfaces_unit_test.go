@@ -152,12 +152,12 @@ func TestDatabaseManager(t *testing.T) {
 }
 
 func TestMessageRouter(t *testing.T) {
-	config := MessageRouterConfig{
+	config := I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  true,
 	}
-	router := NewMessageRouter(config)
+	router := NewI2NPMessageDispatcher(config)
 
 	// Set up peer selector for tunnel operations
 	router.SetPeerSelector(&MockTestPeerSelector{})

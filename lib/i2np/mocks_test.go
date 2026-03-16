@@ -80,7 +80,7 @@ func NewMockSessionProvider() *MockSessionProvider {
 	}
 }
 
-func (m *MockSessionProvider) GetSessionByHash(hash common.Hash) (TransportSession, error) {
+func (m *MockSessionProvider) GetSessionByHash(hash common.Hash) (I2NPTransportSession, error) {
 	return m.session, nil
 }
 

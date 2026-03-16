@@ -131,12 +131,12 @@ func TestDatabaseManager_StoreData_NoNetDB(t *testing.T) {
 
 func TestMessageRouter_SetNetDB(t *testing.T) {
 	// Create MessageRouter
-	config := MessageRouterConfig{
+	config := I2NPMessageDispatcherConfig{
 		MaxRetries:     3,
 		DefaultTimeout: 30 * time.Second,
 		EnableLogging:  false,
 	}
-	router := NewMessageRouter(config)
+	router := NewI2NPMessageDispatcher(config)
 
 	// Initially should have nil NetDB (will cause "no NetDB available" error)
 	var testKey common.Hash

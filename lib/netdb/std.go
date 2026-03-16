@@ -546,7 +546,7 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 			log.WithError(err).Warn("Failed to get router hash for XOR distance calculation, skipping")
 			continue
 		}
-		distance := db.calculateXORDistance(targetHash, riHash)
+		distance := CalculateXORDistance(targetHash, riHash)
 		distances = append(distances, routerDistance{
 			routerInfo: ri,
 			distance:   distance,
@@ -555,7 +555,7 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 
 	// Sort by XOR distance (ascending)
 	sort.Slice(distances, func(i, j int) bool {
-		return db.compareXORDistances(distances[i].distance, distances[j].distance)
+		return CompareXORDistances(distances[i].distance, distances[j].distance)
 	})
 
 	// Take up to count closest routers
@@ -576,19 +576,6 @@ func (db *StdNetDB) selectClosestByXORDistance(routers []router_info.RouterInfo,
 	}).Debug("Selected closest floodfill routers by XOR distance")
 
 	return result
-}
-
-// calculateXORDistance calculates the XOR distance between two hashes.
-// Delegates to the shared CalculateXORDistance function.
-func (db *StdNetDB) calculateXORDistance(hash1, hash2 common.Hash) []byte {
-	return CalculateXORDistance(hash1, hash2)
-}
-
-// compareXORDistances compares two XOR distances using big-endian byte comparison.
-// Returns true if dist1 < dist2 (dist1 is closer).
-// Delegates to the shared CompareXORDistances function.
-func (db *StdNetDB) compareXORDistances(dist1, dist2 []byte) bool {
-	return CompareXORDistances(dist1, dist2)
 }
 
 // get the skiplist file that a RouterInfo with this hash would go in

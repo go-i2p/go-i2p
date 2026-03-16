@@ -15,7 +15,7 @@ import (
 
 // DatabaseManager coordinates database-related message processing and response generation.
 type DatabaseManager struct {
-	netdb             NetDBStore
+	netdb             I2NPNetDBStore
 	retriever         NetDBRetriever
 	floodfillSelector FloodfillSelector
 	sessionProvider   SessionProvider
@@ -29,14 +29,14 @@ type DatabaseManager struct {
 	}
 }
 
-// NetDBStore defines the interface for storing network database entries.
+// I2NPNetDBStore defines the interface for storing network database entries.
 // Implementations must dispatch to the appropriate storage method based on dataType:
 //   - 0: RouterInfo
 //   - 1: LeaseSet
 //   - 3: LeaseSet2
 //   - 5: EncryptedLeaseSet
 //   - 7: MetaLeaseSet
-type NetDBStore interface {
+type I2NPNetDBStore interface {
 	Store(key common.Hash, data []byte, dataType byte) error
 }
 
@@ -51,19 +51,19 @@ type FloodfillSelector interface {
 	SelectFloodfillRouters(targetHash common.Hash, count int) ([]router_info.RouterInfo, error)
 }
 
-// TransportSession defines the interface for sending I2NP messages back to requesters
-type TransportSession interface {
+// I2NPTransportSession defines the interface for sending I2NP messages back to requesters
+type I2NPTransportSession interface {
 	QueueSendI2NP(msg I2NPMessage) error
 	SendQueueSize() int
 }
 
 // SessionProvider defines the interface for obtaining transport sessions
 type SessionProvider interface {
-	GetSessionByHash(hash common.Hash) (TransportSession, error)
+	GetSessionByHash(hash common.Hash) (I2NPTransportSession, error)
 }
 
 // NewDatabaseManager creates a new database manager with NetDB integration
-func NewDatabaseManager(netdb NetDBStore) *DatabaseManager {
+func NewDatabaseManager(netdb I2NPNetDBStore) *DatabaseManager {
 	dm := &DatabaseManager{
 		netdb:             netdb,
 		retriever:         nil, // Will be set later via SetRetriever

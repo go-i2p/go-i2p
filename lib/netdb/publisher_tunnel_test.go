@@ -48,7 +48,7 @@ func newMockTransportManager() *mockTransportManager {
 	}
 }
 
-func (m *mockTransportManager) GetSession(routerInfo router_info.RouterInfo) (TransportSession, error) {
+func (m *mockTransportManager) GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error) {
 	hash, err := routerInfo.IdentHash()
 	if err != nil {
 		return nil, err
