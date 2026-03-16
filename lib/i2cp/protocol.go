@@ -23,44 +23,44 @@ import (
 // Message type constants as defined in I2CP v0.9.67
 const (
 	// Session management - PER I2CP SPEC v0.9.67
-	MessageTypeCreateSession      = 1  // Client -> Router: Create new session
-	MessageTypeSessionStatus      = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
-	MessageTypeReconfigureSession = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
-	MessageTypeDestroySession     = 3  // Client -> Router: Terminate session (SPEC: 3, was 4)
+	MessageTypeCreateSession      uint8 = 1  // Client -> Router: Create new session
+	MessageTypeSessionStatus      uint8 = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
+	MessageTypeReconfigureSession uint8 = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
+	MessageTypeDestroySession     uint8 = 3  // Client -> Router: Terminate session (SPEC: 3, was 4)
 
 	// LeaseSet management
-	MessageTypeCreateLeaseSet          = 4  // Client -> Router: Publish LeaseSet (SPEC: 4, was 5)
-	MessageTypeRequestLeaseSet         = 21 // Router -> Client: Request LeaseSet update (SPEC: 21, was 6)
-	MessageTypeRequestVariableLeaseSet = 37 // Router -> Client: Request LeaseSet (with lease data)
-	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
+	MessageTypeCreateLeaseSet          uint8 = 4  // Client -> Router: Publish LeaseSet (SPEC: 4, was 5)
+	MessageTypeRequestLeaseSet         uint8 = 21 // Router -> Client: Request LeaseSet update (SPEC: 21, was 6)
+	MessageTypeRequestVariableLeaseSet uint8 = 37 // Router -> Client: Request LeaseSet (with lease data)
+	MessageTypeCreateLeaseSet2         uint8 = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage        = 5  // Client -> Router: Send message to destination (SPEC: 5, was 7)
-	MessageTypeMessagePayload     = 31 // Router -> Client: Received message (SPEC: 31, was 8)
-	MessageTypeMessageStatus      = 22 // Router -> Client: Message delivery status
-	MessageTypeDisconnect         = 30 // Client -> Router: Graceful disconnect
-	MessageTypeSendMessageExpires = 36 // Client -> Router: Send message with TTL
+	MessageTypeSendMessage        uint8 = 5  // Client -> Router: Send message to destination (SPEC: 5, was 7)
+	MessageTypeMessagePayload     uint8 = 31 // Router -> Client: Received message (SPEC: 31, was 8)
+	MessageTypeMessageStatus      uint8 = 22 // Router -> Client: Message delivery status
+	MessageTypeDisconnect         uint8 = 30 // Client -> Router: Graceful disconnect
+	MessageTypeSendMessageExpires uint8 = 36 // Client -> Router: Send message with TTL
 
 	// Status and information
-	MessageTypeGetBandwidthLimits = 8  // Client -> Router: Query bandwidth (SPEC: 8, was 9)
-	MessageTypeBandwidthLimits    = 23 // Router -> Client: Bandwidth limits response (SPEC: 23, was 10)
-	MessageTypeGetDate            = 32 // Client -> Router: Query router time (SPEC: 32, was 11)
-	MessageTypeSetDate            = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
+	MessageTypeGetBandwidthLimits uint8 = 8  // Client -> Router: Query bandwidth (SPEC: 8, was 9)
+	MessageTypeBandwidthLimits    uint8 = 23 // Router -> Client: Bandwidth limits response (SPEC: 23, was 10)
+	MessageTypeGetDate            uint8 = 32 // Client -> Router: Query router time (SPEC: 32, was 11)
+	MessageTypeSetDate            uint8 = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
 
 	// Naming service (modern types)
-	MessageTypeHostLookup = 38 // Client -> Router: Destination lookup by hash or hostname
-	MessageTypeHostReply  = 39 // Router -> Client: Destination lookup result
+	MessageTypeHostLookup uint8 = 38 // Client -> Router: Destination lookup by hash or hostname
+	MessageTypeHostReply  uint8 = 39 // Router -> Client: Destination lookup result
 
 	// Advanced features
-	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
+	MessageTypeBlindingInfo uint8 = 42 // Client -> Router: Blinded destination parameters
 
 	// Deprecated/legacy message types
-	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
+	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
+	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
 
 	// Deprecated receive messages (unused in fast receive mode)
-	MessageTypeReceiveMessageBegin = 6 // Client -> Router: DEPRECATED, not supported
-	MessageTypeReceiveMessageEnd   = 7 // Client -> Router: DEPRECATED, not supported
+	MessageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: DEPRECATED, not supported
+	MessageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: DEPRECATED, not supported
 )
 
 // Reserved session IDs
@@ -71,11 +71,11 @@ const (
 
 // SessionStatus status codes per I2CP spec v0.9.67
 const (
-	SessionStatusDestroyed = 0 // Session has been destroyed
-	SessionStatusCreated   = 1 // Session has been created successfully
-	SessionStatusUpdated   = 2 // Session has been updated/reconfigured
-	SessionStatusInvalid   = 3 // Session request was invalid
-	SessionStatusRefused   = 4 // Session request was refused
+	SessionStatusDestroyed uint8 = 0 // Session has been destroyed
+	SessionStatusCreated   uint8 = 1 // Session has been created successfully
+	SessionStatusUpdated   uint8 = 2 // Session has been updated/reconfigured
+	SessionStatusInvalid   uint8 = 3 // Session request was invalid
+	SessionStatusRefused   uint8 = 4 // Session request was refused
 )
 
 // Protocol version constants
@@ -98,23 +98,23 @@ const (
 const (
 	// MessageStatusAccepted indicates the message was accepted for delivery.
 	// Sent immediately when SendMessage is received.
-	MessageStatusAccepted = 1
+	MessageStatusAccepted uint8 = 1
 
 	// MessageStatusSuccess indicates the message was successfully delivered.
 	// Sent after routing completes successfully.
-	MessageStatusSuccess = 4
+	MessageStatusSuccess uint8 = 4
 
 	// MessageStatusFailure indicates the message delivery failed.
 	// Generic failure status.
-	MessageStatusFailure = 5
+	MessageStatusFailure uint8 = 5
 
 	// MessageStatusNoTunnels indicates delivery failed due to no available tunnels.
 	// Sent when the session has no outbound tunnels.
-	MessageStatusNoTunnels = 16
+	MessageStatusNoTunnels uint8 = 16
 
 	// MessageStatusNoLeaseSet indicates delivery failed due to missing LeaseSet.
 	// Sent when the destination's LeaseSet cannot be found.
-	MessageStatusNoLeaseSet = 21
+	MessageStatusNoLeaseSet uint8 = 21
 )
 
 // Protocol limits as per I2CP specification

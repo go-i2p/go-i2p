@@ -451,8 +451,8 @@ type HostLookupPayload struct {
 }
 
 const (
-	HostLookupTypeHash     = 0 // Lookup by destination hash
-	HostLookupTypeHostname = 1 // Lookup by hostname
+	HostLookupTypeHash     uint16 = 0 // Lookup by destination hash
+	HostLookupTypeHostname uint16 = 1 // Lookup by hostname
 )
 
 // ParseHostLookupPayload deserializes a HostLookup payload from wire format.
@@ -575,10 +575,10 @@ type HostReplyPayload struct {
 }
 
 const (
-	HostReplySuccess  = 0 // Destination found
-	HostReplyNotFound = 1 // Destination not found
-	HostReplyTimeout  = 2 // Lookup timed out
-	HostReplyError    = 3 // Generic error
+	HostReplySuccess  uint8 = 0 // Destination found
+	HostReplyNotFound uint8 = 1 // Destination not found
+	HostReplyTimeout  uint8 = 2 // Lookup timed out
+	HostReplyError    uint8 = 3 // Generic error
 )
 
 // ParseHostReplyPayload deserializes a HostReply payload from wire format.

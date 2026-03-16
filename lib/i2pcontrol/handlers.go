@@ -441,6 +441,8 @@ func (h *NetworkSettingHandler) buildDefaultSettings(netConfig NetworkConfig) ma
 	return map[string]interface{}{
 		"i2p.router.net.ntcp.port":     netConfig.NTCP2Port,
 		"i2p.router.net.ntcp.hostname": netConfig.NTCP2Hostname,
+		"i2p.router.bandwidth.in":      netConfig.BandwidthLimitIn,
+		"i2p.router.bandwidth.out":     netConfig.BandwidthLimitOut,
 	}
 }
 

@@ -10,16 +10,16 @@ import (
 )
 
 // SecureFilePermissions for files containing sensitive data (e.g., passwords, keys)
-const SecureFilePermissions = 0o600
+const SecureFilePermissions os.FileMode = 0o600
 
 // SecureDirPermissions for directories containing sensitive files
-const SecureDirPermissions = 0o700
+const SecureDirPermissions os.FileMode = 0o700
 
 // StandardFilePermissions for non-sensitive configuration files
-const StandardFilePermissions = 0o644
+const StandardFilePermissions os.FileMode = 0o644
 
 // StandardDirPermissions for non-sensitive directories
-const StandardDirPermissions = 0o755
+const StandardDirPermissions os.FileMode = 0o755
 
 // SanitizePath cleans and validates a path to prevent directory traversal attacks.
 // It ensures the path does not escape the specified base directory.
