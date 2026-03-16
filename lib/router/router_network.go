@@ -440,7 +440,7 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 
 	// Route based on message type to appropriate handler
 	switch msg.Type() {
-	case i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE:
+	case i2np.I2NPMessageTypeDatabaseStore:
 		// Parse DatabaseStore message from BaseI2NPMessage data
 		dbStore, err := r.parseDatabaseStoreMessage(msg)
 		if err != nil {
@@ -448,42 +448,42 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		}
 		return mr.RouteDatabaseMessage(dbStore)
 
-	case i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
+	case i2np.I2NPMessageTypeDatabaseLookup:
 		return mr.RouteDatabaseMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY:
+	case i2np.I2NPMessageTypeDatabaseSearchReply:
 		return mr.RouteDatabaseMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_DATA:
+	case i2np.I2NPMessageTypeData:
 		return mr.RouteMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
+	case i2np.I2NPMessageTypeDeliveryStatus:
 		return mr.RouteMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_GARLIC:
+	case i2np.I2NPMessageTypeGarlic:
 		// Route garlic messages to the MessageProcessor for decryption and clove processing.
 		// The processor handles ECIES-X25519-AEAD-Ratchet decryption and clove routing.
 		return mr.RouteMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA:
+	case i2np.I2NPMessageTypeTunnelData:
 		return mr.RouteMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY:
+	case i2np.I2NPMessageTypeTunnelGateway:
 		// Route TunnelGateway messages to the MessageProcessor for tunnel injection.
 		// The processor delegates to the configured tunnelGatewayHandler for
 		// layered encryption and forwarding to the next hop.
 		return mr.RouteMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
+	case i2np.I2NPMessageTypeTunnelBuild:
 		return mr.RouteTunnelMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
+	case i2np.I2NPMessageTypeTunnelBuildReply:
 		return mr.RouteTunnelMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
+	case i2np.I2NPMessageTypeVariableTunnelBuild:
 		return mr.RouteTunnelMessage(msg)
 
-	case i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
+	case i2np.I2NPMessageTypeVariableTunnelBuildReply:
 		return mr.RouteTunnelMessage(msg)
 
 	default:

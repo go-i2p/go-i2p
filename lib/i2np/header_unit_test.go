@@ -12,7 +12,7 @@ func TestReadI2NPTypeWithNoData(t *testing.T) {
 
 	mtype, err := ReadI2NPType([]byte{})
 	assert.Equal(0, mtype)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPTypeWithValidData(t *testing.T) {
@@ -28,7 +28,7 @@ func TestReadI2NPNTCPMessageIDWithMissingData(t *testing.T) {
 
 	mid, err := ReadI2NPNTCPMessageID([]byte{0x00, 0x00, 0x00, 0x00})
 	assert.Equal(0, mid)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPMessageIDWithValidData(t *testing.T) {
@@ -44,7 +44,7 @@ func TestReadI2NPNTCPMessageExpirationWithMissingData(t *testing.T) {
 
 	date, err := ReadI2NPNTCPMessageExpiration([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	assert.Equal(common.Date{}, date)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPMessageExpirationWithValidData(t *testing.T) {
@@ -60,7 +60,7 @@ func TestReadI2NPSSUMessageExpirationWithMissingData(t *testing.T) {
 
 	date, err := ReadI2NPSSUMessageExpiration([]byte{0x00, 0x00, 0x00, 0x00})
 	assert.Equal(common.Date{}, date)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPSSUMessageExpirationWithValidData(t *testing.T) {
@@ -79,7 +79,7 @@ func TestReadI2NPNTCPMessageSizeWithMissingData(t *testing.T) {
 
 	size, err := ReadI2NPNTCPMessageSize([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	assert.Equal(0, size)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPMessageSizeWithValidData(t *testing.T) {
@@ -95,7 +95,7 @@ func TestReadI2NPNTCPMessageChecksumWithMissingData(t *testing.T) {
 
 	checksum, err := ReadI2NPNTCPMessageChecksum([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	assert.Equal(0, checksum)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPMessageChecksumWithValidData(t *testing.T) {
@@ -111,7 +111,7 @@ func TestReadI2NPNTCPDataWithNoData(t *testing.T) {
 
 	data, err := ReadI2NPNTCPData([]byte{}, 3)
 	assert.Equal([]byte{}, data)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPDataWithMissingData(t *testing.T) {
@@ -119,7 +119,7 @@ func TestReadI2NPNTCPDataWithMissingData(t *testing.T) {
 
 	data, err := ReadI2NPNTCPData([]byte{0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x05, 0x26, 0x5c, 0x00, 0x00, 0x03, 0x01, 0x01, 0x02}, 3)
 	assert.Equal([]byte{}, data)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 func TestReadI2NPNTCPDataWithExtraData(t *testing.T) {

@@ -53,7 +53,7 @@ func TestTunnelBuildMessage_Creation(t *testing.T) {
 	msg := NewTunnelBuildMessage(records)
 
 	// Verify I2NPMessage interface compliance
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type())
+	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 	assert.NotEqual(t, 0, msg.MessageID())             // Should have random message ID
 	assert.True(t, msg.Expiration().After(time.Now())) // Should have future expiration
 
@@ -80,7 +80,7 @@ func TestTunnelBuildMessage_Serialization(t *testing.T) {
 
 	// Unmarshal into new message
 	newMsg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 	}
 	err = newMsg.UnmarshalBinary(data)
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func TestI2NPMessageFactory_CreateTunnelBuildMessage(t *testing.T) {
 
 	// Verify it returns I2NPMessage interface
 	assert.NotNil(t, msg)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type())
+	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 
 	// Verify it can be cast to TunnelBuilder
 	builder, ok := msg.(TunnelBuilder)

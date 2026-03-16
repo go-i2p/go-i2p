@@ -7,33 +7,33 @@ import (
 // I2NP Message Type Constants
 // Moved from: header.go
 const (
-	I2NP_MESSAGE_TYPE_DATABASE_STORE              = 1
-	I2NP_MESSAGE_TYPE_DATABASE_LOOKUP             = 2
-	I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY       = 3
-	I2NP_MESSAGE_TYPE_DELIVERY_STATUS             = 10
-	I2NP_MESSAGE_TYPE_GARLIC                      = 11
-	I2NP_MESSAGE_TYPE_TUNNEL_DATA                 = 18
-	I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY              = 19
-	I2NP_MESSAGE_TYPE_DATA                        = 20
-	I2NP_MESSAGE_TYPE_TUNNEL_BUILD                = 21
-	I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY          = 22
-	I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD       = 23
-	I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY = 24
-	I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD          = 25
-	I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY    = 26
+	I2NPMessageTypeDatabaseStore              = 1
+	I2NPMessageTypeDatabaseLookup             = 2
+	I2NPMessageTypeDatabaseSearchReply       = 3
+	I2NPMessageTypeDeliveryStatus             = 10
+	I2NPMessageTypeGarlic                      = 11
+	I2NPMessageTypeTunnelData                 = 18
+	I2NPMessageTypeTunnelGateway              = 19
+	I2NPMessageTypeData                        = 20
+	I2NPMessageTypeTunnelBuild                = 21
+	I2NPMessageTypeTunnelBuildReply          = 22
+	I2NPMessageTypeVariableTunnelBuild       = 23
+	I2NPMessageTypeVariableTunnelBuildReply = 24
+	I2NPMessageTypeShortTunnelBuild          = 25
+	I2NPMessageTypeShortTunnelBuildReply    = 26
 )
 
 // I2NP Error Constants
 // These use errors.New (not oops.Errorf) so callers can match them with errors.Is().
 // Moved from: header.go, build_request_record.go, build_response_record.go, database_lookup.go
 var (
-	ERR_I2NP_NOT_ENOUGH_DATA                  = errors.New("not enough i2np header data")
-	ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA  = errors.New("not enough i2np build request record data")
-	ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA = errors.New("not enough i2np build response record data")
-	ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA       = errors.New("not enough i2np database lookup data")
-	ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA = errors.New("not enough i2np database search reply data")
-	ERR_DATABASE_LOOKUP_INVALID_SIZE          = errors.New("database lookup excluded peers size exceeds protocol limit")
-	ERR_I2NP_MESSAGE_EXPIRED                  = errors.New("i2np message has expired")
+	ErrI2NPNotEnoughData                  = errors.New("not enough i2np header data")
+	ErrBuildRequestRecordNotEnoughData  = errors.New("not enough i2np build request record data")
+	ErrBuildResponseRecordNotEnoughData = errors.New("not enough i2np build response record data")
+	ErrDatabaseLookupNotEnoughData       = errors.New("not enough i2np database lookup data")
+	ErrDatabaseSearchReplyNotEnoughData = errors.New("not enough i2np database search reply data")
+	ErrDatabaseLookupInvalidSize          = errors.New("database lookup excluded peers size exceeds protocol limit")
+	ErrI2NPMessageExpired                  = errors.New("i2np message has expired")
 )
 
 // Build record size constants per the I2P specification.

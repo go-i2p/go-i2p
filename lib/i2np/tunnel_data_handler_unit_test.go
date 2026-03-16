@@ -102,7 +102,7 @@ func TestProcessTunnelDataInvalidMessage(t *testing.T) {
 	proc.DisableExpirationCheck()
 
 	// Use a Data message which doesn't implement TunnelCarrier
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeTunnelData)
 	msg.SetExpiration(time.Now().Add(5 * time.Minute))
 
 	err := proc.processTunnelDataMessage(msg)

@@ -252,13 +252,6 @@ func (s *Server) cleanupSessionConnection(sessionPtr **Session) {
 	}
 }
 
-// getConnWriteMutex returns the per-connection write mutex for the given session.
-// Returns nil if the session is not tracked. The caller must hold s.mu.RLock
-// to call this safely.
-func (s *Server) getConnWriteMutex(sessionID uint16) *sync.Mutex {
-	return s.connWriteMu[sessionID]
-}
-
 // cleanupConnectionState removes connection state tracking on disconnect
 // and decrements the active connection counter.
 func (s *Server) cleanupConnectionState(conn net.Conn) {

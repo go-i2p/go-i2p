@@ -285,7 +285,7 @@ func TestDataPhase_BlockTypes(t *testing.T) {
 		name    string
 		msgType int
 	}{
-		{"Data message", i2np.I2NP_MESSAGE_TYPE_DATA},
+		{"Data message", i2np.I2NPMessageTypeData},
 		// Additional I2NP message types handled by the framing layer
 	}
 
@@ -317,7 +317,7 @@ func TestDataPhase_I2NPBlock(t *testing.T) {
 	unframed, err := UnframeI2NPMessage(conn)
 	require.NoError(t, err)
 
-	assert.Equal(t, i2np.I2NP_MESSAGE_TYPE_DATA, unframed.Type(),
+	assert.Equal(t, i2np.I2NPMessageTypeData, unframed.Type(),
 		"I2NP message type must survive framing roundtrip")
 	assert.Equal(t, 12345, unframed.MessageID(),
 		"I2NP message ID must survive framing roundtrip")

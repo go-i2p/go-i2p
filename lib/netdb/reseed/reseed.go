@@ -611,11 +611,6 @@ func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
 	return tempDir, fullPaths, nil
 }
 
-// parseRouterInfoFiles reads and parses router info files from the extracted files.
-func (r Reseed) parseRouterInfoFiles(files []string) ([]router_info.RouterInfo, error) {
-	return r.parseRouterInfoFilesWithLimit(files, 0)
-}
-
 // parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.
 // If limit <= 0, all files are parsed. Otherwise, parsing stops after successfully parsing 'limit' RouterInfos.
 // This minimizes memory usage when only a small number of RouterInfos is needed.

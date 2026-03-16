@@ -206,7 +206,7 @@ func WrapInGarlicMessage(encryptedGarlic []byte) (*BaseI2NPMessage, error) {
 	}
 	messageID := int(binary.BigEndian.Uint32(msgIDBytes) & 0x7FFFFFFF)
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_GARLIC)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
 	msg.SetMessageID(messageID)
 	msg.SetExpiration(time.Now().Add(10 * time.Second))
 	msg.data = encryptedGarlic

@@ -93,7 +93,7 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 	}).Debug("Creating new TunnelBuild message")
 
 	msg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 		Records:         TunnelBuild(records),
 	}
 
@@ -223,7 +223,7 @@ func NewEncryptedTunnelBuildMessage(records [8]BuildRequestRecord, recipientRout
 	}).Debug("Creating encrypted TunnelBuild message")
 
 	msg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 		Records:         TunnelBuild(records),
 	}
 

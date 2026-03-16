@@ -106,7 +106,7 @@ func TestUnmarshalBinary_MessageIDAlwaysPositive(t *testing.T) {
 
 // TestMarshalUnmarshalBinary_RoundTrip verifies that marshal/unmarshal preserves messageID.
 func TestMarshalUnmarshalBinary_RoundTrip(t *testing.T) {
-	original := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	original := NewBaseI2NPMessage(I2NPMessageTypeData)
 	originalID := original.MessageID()
 
 	// Verify the generated ID is positive
@@ -126,7 +126,7 @@ func TestMarshalUnmarshalBinary_RoundTrip(t *testing.T) {
 // TestMarshalBinary_HighBitMessageID verifies that MarshalBinary correctly
 // serializes a messageID as 4 bytes, even with the full 31-bit range.
 func TestMarshalBinary_HighBitMessageID(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetMessageID(0x7FFFFFFF) // maximum 31-bit value
 
 	data, err := msg.MarshalBinary()
@@ -148,7 +148,7 @@ func TestMarshalBinary_HighBitMessageID(t *testing.T) {
 // always have positive message IDs.
 func TestNewBaseI2NPMessage_MessageIDPositive(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+		msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 		assert.GreaterOrEqual(t, msg.MessageID(), 0,
 			"newly created message should have non-negative ID (iteration %d)", i)
 	}
@@ -195,7 +195,7 @@ func TestNewBaseI2NPMessage_NoPanic(t *testing.T) {
 			done <- true
 		}()
 		for i := 0; i < 100; i++ {
-			msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+			msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 			assert.NotNil(t, msg)
 		}
 	}()

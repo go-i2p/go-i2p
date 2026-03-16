@@ -75,11 +75,11 @@ func TestReadI2NPSSUMessageExpiration_NotEnoughData(t *testing.T) {
 	// Only 4 bytes, need at least 5
 	data := make([]byte, 4)
 	_, err := ReadI2NPSSUMessageExpiration(data)
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 
 	// Empty data
 	_, err = ReadI2NPSSUMessageExpiration([]byte{})
-	assert.Equal(ERR_I2NP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrI2NPNotEnoughData, err)
 }
 
 // TestReadI2NPSSUMessageExpiration_KnownTimestamp verifies conversion with

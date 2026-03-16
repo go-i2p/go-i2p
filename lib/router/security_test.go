@@ -294,7 +294,7 @@ func (m *mockTunnelCarrier) GetTunnelID() tunnel.TunnelID {
 	}
 	return 0
 }
-func (m *mockTunnelCarrier) Type() int                      { return int(i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA) }
+func (m *mockTunnelCarrier) Type() int                      { return int(i2np.I2NPMessageTypeTunnelData) }
 func (m *mockTunnelCarrier) MessageID() int                 { return m.msgID }
 func (m *mockTunnelCarrier) SetMessageID(id int)            { m.msgID = id }
 func (m *mockTunnelCarrier) Expiration() time.Time          { return m.expiration }
@@ -321,7 +321,7 @@ func TestGarlicRouter_ReflexiveDelivery(t *testing.T) {
 	gr.SetMessageProcessor(processor)
 
 	// Create test message
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 
 	// Forward to ourselves (reflexive) - will try to process locally
 	err := gr.ForwardToRouter(routerHash, msg)
@@ -340,7 +340,7 @@ func TestGarlicRouter_ReflexiveWithoutProcessor(t *testing.T) {
 	gr := NewGarlicMessageRouter(mockNetDB, nil, nil, routerHash)
 	// Don't set processor
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 
 	err := gr.ForwardToRouter(routerHash, msg)
 	assert.Error(t, err, "Should fail without processor")
@@ -355,7 +355,7 @@ func TestGarlicRouter_PendingMessageQueue(t *testing.T) {
 
 	destHash := makeHash(0xBB)
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 
 	// Forward to unknown destination - should queue
 	err := gr.ForwardToDestination(destHash, msg)
@@ -381,13 +381,13 @@ func TestGarlicRouter_MaxPendingMessages(t *testing.T) {
 
 	// Queue up to max limit
 	for i := 0; i < maxPendingMessages; i++ {
-		msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+		msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 		err := gr.queuePendingMessage(destHash, msg)
 		assert.NoError(t, err, "Should accept message %d", i)
 	}
 
 	// Next message should fail
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	err := gr.queuePendingMessage(destHash, msg)
 	assert.Error(t, err, "Should reject message beyond max limit")
 	assert.Contains(t, err.Error(), "too many pending messages")

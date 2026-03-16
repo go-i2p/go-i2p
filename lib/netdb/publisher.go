@@ -531,7 +531,7 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 //   - DATABASE_STORE_TYPE_META_LEASESET (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.I2NPMessage, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
-	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
 
 	dbStoreData, err := dbStore.MarshalBinary()
 	if err != nil {

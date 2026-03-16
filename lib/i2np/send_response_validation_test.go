@@ -203,9 +203,9 @@ func TestCreateDatabaseSearchReplyMessageNilOnFailure(t *testing.T) {
 	// If MarshalBinary failed, msg should be nil (no partial messages)
 	// If MarshalBinary succeeded, msg should be non-nil with valid type
 	if msg != nil {
-		if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY {
+		if msg.Type() != I2NPMessageTypeDatabaseSearchReply {
 			t.Errorf("Expected message type %d, got %d",
-				I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY, msg.Type())
+				I2NPMessageTypeDatabaseSearchReply, msg.Type())
 		}
 	}
 	// Either outcome is valid depending on MarshalBinary behavior;

@@ -91,9 +91,9 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test that database message types are recognized by the switch statement
 	databaseTypes := []byte{
-		i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE,
-		i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP,
-		i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
+		i2np.I2NPMessageTypeDatabaseStore,
+		i2np.I2NPMessageTypeDatabaseLookup,
+		i2np.I2NPMessageTypeDatabaseSearchReply,
 	}
 
 	for _, msgType := range databaseTypes {
@@ -104,9 +104,9 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test general message types
 	generalTypes := []byte{
-		i2np.I2NP_MESSAGE_TYPE_DATA,
-		i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS,
-		i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA,
+		i2np.I2NPMessageTypeData,
+		i2np.I2NPMessageTypeDeliveryStatus,
+		i2np.I2NPMessageTypeTunnelData,
 	}
 
 	for _, msgType := range generalTypes {
@@ -115,10 +115,10 @@ func TestRouteMessageSwitchStatement(t *testing.T) {
 
 	// Test tunnel message types
 	tunnelTypes := []byte{
-		i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD,
-		i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY,
-		i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD,
-		i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY,
+		i2np.I2NPMessageTypeTunnelBuild,
+		i2np.I2NPMessageTypeTunnelBuildReply,
+		i2np.I2NPMessageTypeVariableTunnelBuild,
+		i2np.I2NPMessageTypeVariableTunnelBuildReply,
 	}
 
 	for _, msgType := range tunnelTypes {
@@ -229,7 +229,7 @@ func TestRouteMessageGarlicAndTunnelGateway(t *testing.T) {
 
 	t.Run("Garlic message is not rejected as unsupported", func(t *testing.T) {
 		// Create a base message with type GARLIC (11)
-		msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_GARLIC)
+		msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeGarlic)
 		msg.SetData([]byte("encrypted garlic payload"))
 
 		err := router.routeMessage(msg, peerHash)
@@ -273,18 +273,18 @@ func TestRouteMessageAllSupportedTypes(t *testing.T) {
 		name    string
 		msgType int
 	}{
-		{"DatabaseStore", i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE},
-		{"DatabaseLookup", i2np.I2NP_MESSAGE_TYPE_DATABASE_LOOKUP},
-		{"DatabaseSearchReply", i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY},
-		{"DeliveryStatus", i2np.I2NP_MESSAGE_TYPE_DELIVERY_STATUS},
-		{"Garlic", i2np.I2NP_MESSAGE_TYPE_GARLIC},
-		{"TunnelData", i2np.I2NP_MESSAGE_TYPE_TUNNEL_DATA},
-		{"TunnelGateway", i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY},
-		{"Data", i2np.I2NP_MESSAGE_TYPE_DATA},
-		{"TunnelBuild", i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD},
-		{"TunnelBuildReply", i2np.I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY},
-		{"VariableTunnelBuild", i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD},
-		{"VariableTunnelBuildReply", i2np.I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY},
+		{"DatabaseStore", i2np.I2NPMessageTypeDatabaseStore},
+		{"DatabaseLookup", i2np.I2NPMessageTypeDatabaseLookup},
+		{"DatabaseSearchReply", i2np.I2NPMessageTypeDatabaseSearchReply},
+		{"DeliveryStatus", i2np.I2NPMessageTypeDeliveryStatus},
+		{"Garlic", i2np.I2NPMessageTypeGarlic},
+		{"TunnelData", i2np.I2NPMessageTypeTunnelData},
+		{"TunnelGateway", i2np.I2NPMessageTypeTunnelGateway},
+		{"Data", i2np.I2NPMessageTypeData},
+		{"TunnelBuild", i2np.I2NPMessageTypeTunnelBuild},
+		{"TunnelBuildReply", i2np.I2NPMessageTypeTunnelBuildReply},
+		{"VariableTunnelBuild", i2np.I2NPMessageTypeVariableTunnelBuild},
+		{"VariableTunnelBuildReply", i2np.I2NPMessageTypeVariableTunnelBuildReply},
 	}
 
 	for _, tc := range supportedTypes {

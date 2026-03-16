@@ -40,7 +40,7 @@ import (
 // TestStandardHeaderSize_Is16Bytes verifies the NTCP standard header is exactly
 // 16 bytes as defined in i2np.rst.
 func TestStandardHeaderSize_Is16Bytes(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetMessageID(1)
 	msg.SetData([]byte{})
 
@@ -61,7 +61,7 @@ func TestStandardHeaderSize_Is16Bytes(t *testing.T) {
 //	offset 15:   checksum   (1 byte, first byte of SHA256(payload))
 //	offset 16+:  data       (variable)
 func TestStandardHeaderLayout_FieldOffsets(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)
 	msg.SetMessageID(0x01020304)
 	payload := []byte{0xAA, 0xBB, 0xCC}
 	msg.SetData(payload)
@@ -72,7 +72,7 @@ func TestStandardHeaderLayout_FieldOffsets(t *testing.T) {
 	require.True(t, len(data) >= 16+3, "must have header + 3-byte payload")
 
 	// Type at offset 0
-	assert.Equal(t, byte(I2NP_MESSAGE_TYPE_DATABASE_STORE), data[0],
+	assert.Equal(t, byte(I2NPMessageTypeDatabaseStore), data[0],
 		"type field at offset 0")
 
 	// Message ID at offset 1-4 (big-endian)
@@ -104,7 +104,7 @@ func TestStandardHeaderLayout_FieldOffsets(t *testing.T) {
 // TestStandardHeaderRoundtrip_MarshalUnmarshal verifies marshal/unmarshal preserves
 // all header fields.
 func TestStandardHeaderRoundtrip_MarshalUnmarshal(t *testing.T) {
-	original := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_GARLIC)
+	original := NewBaseI2NPMessage(I2NPMessageTypeGarlic)
 	original.SetMessageID(999999)
 	original.SetData([]byte("garlic message test payload"))
 	original.SetExpiration(time.Now().Add(5 * time.Minute).Truncate(time.Millisecond))
@@ -127,7 +127,7 @@ func TestStandardHeaderRoundtrip_MarshalUnmarshal(t *testing.T) {
 // TestStandardHeader_ReadI2NPNTCPHeader verifies the separate field-reader pipeline
 // produces the same result as UnmarshalBinary.
 func TestStandardHeader_ReadI2NPNTCPHeader(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeTunnelData)
 	msg.SetMessageID(42)
 	payload := []byte("hello world")
 	msg.SetData(payload)
@@ -138,7 +138,7 @@ func TestStandardHeader_ReadI2NPNTCPHeader(t *testing.T) {
 	header, err := ReadI2NPNTCPHeader(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_DATA, header.Type)
+	assert.Equal(t, I2NPMessageTypeTunnelData, header.Type)
 	assert.Equal(t, 42, header.MessageID)
 	assert.Equal(t, len(payload), header.Size)
 	assert.Equal(t, payload, header.Data)
@@ -151,7 +151,7 @@ func TestStandardHeader_ReadI2NPNTCPHeader(t *testing.T) {
 // TestStandardHeader_PayloadSizeLimit verifies the 2-byte (uint16) payload
 // size limit of 65535 bytes.
 func TestStandardHeader_PayloadSizeLimit(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 
 	// At the limit: 65535 bytes — should succeed
 	msg.SetData(make([]byte, MaxI2NPStandardPayload))
@@ -175,14 +175,14 @@ func TestStandardHeader_PayloadSizeLimit(t *testing.T) {
 func TestSecondGenTransportHeader_Is9Bytes(t *testing.T) {
 	// Construct a known 9-byte header
 	data := make([]byte, 9)
-	data[0] = byte(I2NP_MESSAGE_TYPE_TUNNEL_DATA)             // type
+	data[0] = byte(I2NPMessageTypeTunnelData)             // type
 	binary.BigEndian.PutUint32(data[1:5], 0x12345678)         // msg_id
 	binary.BigEndian.PutUint32(data[5:9], uint32(1704067200)) // exp (2024-01-01 00:00:00 UTC)
 
 	header, err := ReadI2NPSecondGenTransportHeader(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_DATA, header.Type)
+	assert.Equal(t, I2NPMessageTypeTunnelData, header.Type)
 	assert.Equal(t, 0x12345678, header.MessageID)
 
 	expected := time.Unix(1704067200, 0)
@@ -194,7 +194,7 @@ func TestSecondGenTransportHeader_Is9Bytes(t *testing.T) {
 func TestSecondGenTransportHeader_TooShort(t *testing.T) {
 	for _, length := range []int{0, 1, 4, 8} {
 		_, err := ReadI2NPSecondGenTransportHeader(make([]byte, length))
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err,
+		assert.Equal(t, ErrI2NPNotEnoughData, err,
 			"data of length %d must be rejected", length)
 	}
 }
@@ -210,7 +210,7 @@ func TestSecondGenTransportHeader_ExpirationIsSeconds(t *testing.T) {
 // roundtrip for the NTCP2/SSU2 9-byte header.
 func TestSecondGenTransportHeader_MarshalRoundtrip(t *testing.T) {
 	original := I2NPSecondGenTransportHeader{
-		Type:       I2NP_MESSAGE_TYPE_GARLIC,
+		Type:       I2NPMessageTypeGarlic,
 		MessageID:  0x00ABCDEF,
 		Expiration: time.Unix(1704067200, 0), // 2024-01-01
 	}
@@ -230,13 +230,13 @@ func TestSecondGenTransportHeader_MarshalRoundtrip(t *testing.T) {
 // TestLegacySSUHeader_Is5Bytes verifies the legacy SSU header (5 bytes).
 func TestLegacySSUHeader_Is5Bytes(t *testing.T) {
 	data := make([]byte, 5)
-	data[0] = byte(I2NP_MESSAGE_TYPE_DATABASE_LOOKUP)
+	data[0] = byte(I2NPMessageTypeDatabaseLookup)
 	binary.BigEndian.PutUint32(data[1:5], 86400) // 86400 seconds
 
 	header, err := ReadI2NPSSUHeader(data)
 	require.NoError(t, err)
 
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DATABASE_LOOKUP, header.Type)
+	assert.Equal(t, I2NPMessageTypeDatabaseLookup, header.Type)
 	assert.Equal(t, int64(86400), header.Expiration.Unix())
 }
 
@@ -244,7 +244,7 @@ func TestLegacySSUHeader_Is5Bytes(t *testing.T) {
 func TestLegacySSUHeader_TooShort(t *testing.T) {
 	for _, length := range []int{0, 1, 3, 4} {
 		_, err := ReadI2NPSSUHeader(make([]byte, length))
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err,
+		assert.Equal(t, ErrI2NPNotEnoughData, err,
 			"data of length %d must be rejected", length)
 	}
 }
@@ -253,7 +253,7 @@ func TestLegacySSUHeader_TooShort(t *testing.T) {
 // parsed from both standard (16-byte) and second-gen transport (9-byte) headers.
 func TestBothHeaderFormats_Supported(t *testing.T) {
 	// Build standard NTCP header
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeDeliveryStatus)
 	msg.SetMessageID(0x00112233)
 	msg.SetData([]byte{0x01, 0x02})
 	standardData, err := msg.MarshalBinary()
@@ -261,18 +261,18 @@ func TestBothHeaderFormats_Supported(t *testing.T) {
 
 	standardHeader, err := ReadI2NPNTCPHeader(standardData)
 	require.NoError(t, err)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DELIVERY_STATUS, standardHeader.Type)
+	assert.Equal(t, I2NPMessageTypeDeliveryStatus, standardHeader.Type)
 	assert.Equal(t, 0x00112233, standardHeader.MessageID)
 
 	// Build second-gen transport header for the same message
 	shortData := make([]byte, 9)
-	shortData[0] = byte(I2NP_MESSAGE_TYPE_DELIVERY_STATUS)
+	shortData[0] = byte(I2NPMessageTypeDeliveryStatus)
 	binary.BigEndian.PutUint32(shortData[1:5], 0x00112233)
 	binary.BigEndian.PutUint32(shortData[5:9], uint32(time.Now().Add(time.Minute).Unix()))
 
 	shortHeader, err := ReadI2NPSecondGenTransportHeader(shortData)
 	require.NoError(t, err)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DELIVERY_STATUS, shortHeader.Type)
+	assert.Equal(t, I2NPMessageTypeDeliveryStatus, shortHeader.Type)
 	assert.Equal(t, 0x00112233, shortHeader.MessageID)
 }
 
@@ -303,20 +303,20 @@ func TestMessageTypeIDs_MatchSpec(t *testing.T) {
 	}
 
 	codeTypes := map[string]int{
-		"DatabaseStore":            I2NP_MESSAGE_TYPE_DATABASE_STORE,
-		"DatabaseLookup":           I2NP_MESSAGE_TYPE_DATABASE_LOOKUP,
-		"DatabaseSearchReply":      I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
-		"DeliveryStatus":           I2NP_MESSAGE_TYPE_DELIVERY_STATUS,
-		"Garlic":                   I2NP_MESSAGE_TYPE_GARLIC,
-		"TunnelData":               I2NP_MESSAGE_TYPE_TUNNEL_DATA,
-		"TunnelGateway":            I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY,
-		"Data":                     I2NP_MESSAGE_TYPE_DATA,
-		"TunnelBuild":              I2NP_MESSAGE_TYPE_TUNNEL_BUILD,
-		"TunnelBuildReply":         I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY,
-		"VariableTunnelBuild":      I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD,
-		"VariableTunnelBuildReply": I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY,
-		"ShortTunnelBuild":         I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD,
-		"ShortTunnelBuildReply":    I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY,
+		"DatabaseStore":            I2NPMessageTypeDatabaseStore,
+		"DatabaseLookup":           I2NPMessageTypeDatabaseLookup,
+		"DatabaseSearchReply":      I2NPMessageTypeDatabaseSearchReply,
+		"DeliveryStatus":           I2NPMessageTypeDeliveryStatus,
+		"Garlic":                   I2NPMessageTypeGarlic,
+		"TunnelData":               I2NPMessageTypeTunnelData,
+		"TunnelGateway":            I2NPMessageTypeTunnelGateway,
+		"Data":                     I2NPMessageTypeData,
+		"TunnelBuild":              I2NPMessageTypeTunnelBuild,
+		"TunnelBuildReply":         I2NPMessageTypeTunnelBuildReply,
+		"VariableTunnelBuild":      I2NPMessageTypeVariableTunnelBuild,
+		"VariableTunnelBuildReply": I2NPMessageTypeVariableTunnelBuildReply,
+		"ShortTunnelBuild":         I2NPMessageTypeShortTunnelBuild,
+		"ShortTunnelBuildReply":    I2NPMessageTypeShortTunnelBuildReply,
 	}
 
 	assert.Equal(t, len(specTypes), 14, "spec defines exactly 14 I2NP message types")
@@ -347,20 +347,20 @@ func TestMessageTypeIDs_AllValidTypesRecognized(t *testing.T) {
 // and the set of assigned IDs is exactly {1,2,3,10,11,18,19,20,21,22,23,24,25,26}.
 func TestMessageTypeIDs_NoGapOverlap(t *testing.T) {
 	allConstants := []int{
-		I2NP_MESSAGE_TYPE_DATABASE_STORE,
-		I2NP_MESSAGE_TYPE_DATABASE_LOOKUP,
-		I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
-		I2NP_MESSAGE_TYPE_DELIVERY_STATUS,
-		I2NP_MESSAGE_TYPE_GARLIC,
-		I2NP_MESSAGE_TYPE_TUNNEL_DATA,
-		I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY,
-		I2NP_MESSAGE_TYPE_DATA,
-		I2NP_MESSAGE_TYPE_TUNNEL_BUILD,
-		I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY,
-		I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD,
-		I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY,
-		I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD,
-		I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY,
+		I2NPMessageTypeDatabaseStore,
+		I2NPMessageTypeDatabaseLookup,
+		I2NPMessageTypeDatabaseSearchReply,
+		I2NPMessageTypeDeliveryStatus,
+		I2NPMessageTypeGarlic,
+		I2NPMessageTypeTunnelData,
+		I2NPMessageTypeTunnelGateway,
+		I2NPMessageTypeData,
+		I2NPMessageTypeTunnelBuild,
+		I2NPMessageTypeTunnelBuildReply,
+		I2NPMessageTypeVariableTunnelBuild,
+		I2NPMessageTypeVariableTunnelBuildReply,
+		I2NPMessageTypeShortTunnelBuild,
+		I2NPMessageTypeShortTunnelBuildReply,
 	}
 
 	expected := map[int]bool{
@@ -396,7 +396,7 @@ func TestChecksum_IsSHA256FirstByte(t *testing.T) {
 	}
 
 	for _, payload := range payloads {
-		msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+		msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 		msg.SetData(payload)
 
 		data, err := msg.MarshalBinary()
@@ -416,7 +416,7 @@ func TestChecksum_IsSHA256FirstByte(t *testing.T) {
 // TestChecksum_VerifiedOnUnmarshal verifies that UnmarshalBinary rejects
 // messages with corrupted checksums.
 func TestChecksum_VerifiedOnUnmarshal(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetData([]byte("integrity check"))
 
 	data, err := msg.MarshalBinary()
@@ -435,7 +435,7 @@ func TestChecksum_VerifiedOnUnmarshal(t *testing.T) {
 // TestChecksum_VerifiedOnUnmarshal_CorruptedPayload verifies that a corrupted
 // payload fails the checksum check.
 func TestChecksum_VerifiedOnUnmarshal_CorruptedPayload(t *testing.T) {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetData([]byte("original payload data"))
 
 	data, err := msg.MarshalBinary()
@@ -462,7 +462,7 @@ func TestChecksum_VerifiedOnUnmarshal_CorruptedPayload(t *testing.T) {
 func TestExpiration_Is8ByteMilliseconds(t *testing.T) {
 	// Use a known time: 2024-01-01 00:00:00 UTC = 1704067200 seconds
 	knownTime := time.Unix(1704067200, 0)
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetExpiration(knownTime)
 	msg.SetData([]byte{})
 
@@ -491,7 +491,7 @@ func TestExpiration_MUST_DropExpiredMessages(t *testing.T) {
 	pastExp := now.Add(-1 * time.Second)
 	err := v.ValidateExpiration(pastExp)
 	assert.Error(t, err, "expired message MUST be rejected")
-	assert.ErrorIs(t, err, ERR_I2NP_MESSAGE_EXPIRED)
+	assert.ErrorIs(t, err, ErrI2NPMessageExpired)
 
 	// Message that expires 1 second in the future
 	futureExp := now.Add(1 * time.Second)
@@ -532,13 +532,13 @@ func TestExpiration_ProcessorRejectsExpiredMessages(t *testing.T) {
 	)
 
 	// Create a message that expired 1 hour ago
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetExpiration(now.Add(-1 * time.Hour))
 	msg.SetData([]byte("expired"))
 
 	err := processor.ProcessMessage(msg)
 	assert.Error(t, err, "processor must reject expired messages")
-	assert.ErrorIs(t, err, ERR_I2NP_MESSAGE_EXPIRED)
+	assert.ErrorIs(t, err, ErrI2NPMessageExpired)
 }
 
 // TestExpiration_ProcessorAcceptsFutureMessages verifies the processor accepts
@@ -1134,7 +1134,7 @@ func TestDatabaseLookup_ExcludeList_MaxPeers512(t *testing.T) {
 
 	_, err := ReadDatabaseLookup(raw)
 	assert.Error(t, err, "excluded peers count > 512 must be rejected")
-	assert.Equal(t, ERR_DATABASE_LOOKUP_INVALID_SIZE, err)
+	assert.Equal(t, ErrDatabaseLookupInvalidSize, err)
 }
 
 // TestDatabaseLookup_ExcludeList_Size2BytesBigEndian verifies the exclude list
@@ -1271,7 +1271,7 @@ func TestDatabaseSearchReply_Format_MinimumSize(t *testing.T) {
 	shortData := make([]byte, 64)
 	err = (&DatabaseSearchReply{}).UnmarshalBinary(shortData)
 	assert.Error(t, err, "64 bytes must be rejected")
-	assert.Equal(t, ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA, err)
+	assert.Equal(t, ErrDatabaseSearchReplyNotEnoughData, err)
 }
 
 // =============================================================================
@@ -1334,7 +1334,7 @@ func TestDeliveryStatus_Format_Roundtrip(t *testing.T) {
 	require.NoError(t, err)
 
 	parsed := &DeliveryStatusMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDeliveryStatus),
 	}
 	err = parsed.UnmarshalBinary(wireData)
 	require.NoError(t, err)
@@ -1349,7 +1349,7 @@ func TestDeliveryStatus_Format_Roundtrip(t *testing.T) {
 // with a payload shorter than 12 bytes is rejected on unmarshal.
 func TestDeliveryStatus_Format_TooShortPayload(t *testing.T) {
 	// Build a valid I2NP message with only 11 bytes of payload
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeDeliveryStatus)
 	msg.SetMessageID(1)
 	msg.SetData(make([]byte, 11)) // Too short for DeliveryStatus
 
@@ -1357,7 +1357,7 @@ func TestDeliveryStatus_Format_TooShortPayload(t *testing.T) {
 	require.NoError(t, err)
 
 	parsed := &DeliveryStatusMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDeliveryStatus),
 	}
 	err = parsed.UnmarshalBinary(wireData)
 	assert.Error(t, err, "payload < 12 bytes must be rejected")
@@ -2572,7 +2572,7 @@ func TestTunnelData_Padding_TunnelDataMessageEnforcesExact1028(t *testing.T) {
 	wire, err := validMsg.MarshalBinary()
 	require.NoError(t, err)
 
-	parsed := &TunnelDataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA)}
+	parsed := &TunnelDataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelData)}
 	err = parsed.UnmarshalBinary(wire)
 	assert.NoError(t, err, "valid TunnelDataMessage must unmarshal successfully")
 
@@ -2653,7 +2653,7 @@ func TestTunnelGateway_Format_TruncatedData(t *testing.T) {
 	// Truncate: remove last 50 bytes of the wire format
 	truncated := wire[:len(wire)-50]
 
-	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY)}
+	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelGateway)}
 	err = parsed.UnmarshalBinary(truncated)
 	assert.Error(t, err, "truncated data must be detected")
 }
@@ -2667,7 +2667,7 @@ func TestTunnelGateway_Format_RoundTrip(t *testing.T) {
 	data, err := original.MarshalBinary()
 	require.NoError(t, err)
 
-	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY)}
+	parsed := &TunnelGateway{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelGateway)}
 	err = parsed.UnmarshalBinary(data)
 	require.NoError(t, err)
 
@@ -2722,7 +2722,7 @@ func TestData_Format_TruncatedPayload(t *testing.T) {
 	// Truncate the wire form
 	truncated := wire[:len(wire)-100]
 
-	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)}
+	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeData)}
 	err = parsed.UnmarshalBinary(truncated)
 	assert.Error(t, err, "truncated payload must be detected")
 }
@@ -2735,7 +2735,7 @@ func TestData_Format_RoundTrip(t *testing.T) {
 	data, err := original.MarshalBinary()
 	require.NoError(t, err)
 
-	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)}
+	parsed := &DataMessage{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeData)}
 	err = parsed.UnmarshalBinary(data)
 	require.NoError(t, err)
 

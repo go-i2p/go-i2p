@@ -25,7 +25,7 @@ func BenchmarkExpirationValidator_ValidateMessage(b *testing.B) {
 		WithTolerance(300).
 		WithTimeSource(func() time.Time { return now })
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetExpiration(now.Add(5 * time.Minute))
 
 	b.ResetTimer()
@@ -44,7 +44,7 @@ func BenchmarkCheckMessageExpiration(b *testing.B) {
 			WithTimeSource(func() time.Time { return now }),
 	)
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetExpiration(now.Add(5 * time.Minute))
 
 	b.ResetTimer()

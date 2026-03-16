@@ -83,7 +83,7 @@ func TestDataMessage_BoundsChecking(t *testing.T) {
 				payload := make([]byte, 4)
 				// Set length field to 1000 but only provide 0 actual bytes
 				payload[0], payload[1], payload[2], payload[3] = 0, 0, 3, 232 // 1000 in big-endian
-				return createValidI2NPMessage(I2NP_MESSAGE_TYPE_DATA, payload)
+				return createValidI2NPMessage(I2NPMessageTypeData, payload)
 			},
 			expectError: true,
 			errContains: "truncated",
@@ -92,7 +92,7 @@ func TestDataMessage_BoundsChecking(t *testing.T) {
 			name: "payload too short for length field",
 			setupMsg: func() []byte {
 				// Create valid I2NP wrapper with only 2 bytes of payload (need 4 for length)
-				return createValidI2NPMessage(I2NP_MESSAGE_TYPE_DATA, []byte{0, 0})
+				return createValidI2NPMessage(I2NPMessageTypeData, []byte{0, 0})
 			},
 			expectError: true,
 			errContains: "too short",
@@ -130,7 +130,7 @@ func TestDeliveryStatusMessage_BoundsChecking(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := make([]byte, tt.payloadSize)
-			data := createValidI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS, payload)
+			data := createValidI2NPMessage(I2NPMessageTypeDeliveryStatus, payload)
 
 			msg := &DeliveryStatusMessage{BaseI2NPMessage: &BaseI2NPMessage{}}
 			err := msg.UnmarshalBinary(data)
@@ -162,7 +162,7 @@ func TestTunnelDataMessage_BoundsChecking(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := make([]byte, tt.payloadSize)
-			data := createValidI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA, payload)
+			data := createValidI2NPMessage(I2NPMessageTypeTunnelData, payload)
 
 			msg := &TunnelDataMessage{BaseI2NPMessage: &BaseI2NPMessage{}}
 			err := msg.UnmarshalBinary(data)
@@ -193,7 +193,7 @@ func TestTunnelBuildMessage_BoundsChecking(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := make([]byte, tt.payloadSize)
-			data := createValidI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD, payload)
+			data := createValidI2NPMessage(I2NPMessageTypeTunnelBuild, payload)
 
 			msg := &TunnelBuildMessage{BaseI2NPMessage: &BaseI2NPMessage{}}
 			err := msg.UnmarshalBinary(data)
@@ -270,12 +270,12 @@ func TestDatabaseLookup_ExcludedPeersLimit(t *testing.T) {
 			_, err := ReadDatabaseLookup(data)
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Equal(t, ERR_DATABASE_LOOKUP_INVALID_SIZE, err)
+				assert.Equal(t, ErrDatabaseLookupInvalidSize, err)
 			} else {
 				// May still fail due to insufficient data for actual peers,
 				// but should not fail on size validation
 				if err != nil {
-					assert.NotEqual(t, ERR_DATABASE_LOOKUP_INVALID_SIZE, err)
+					assert.NotEqual(t, ErrDatabaseLookupInvalidSize, err)
 				}
 			}
 		})
@@ -385,7 +385,7 @@ func TestBuildRequestRecord_BoundsChecking(t *testing.T) {
 			_, err := ReadBuildRequestRecord(data)
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Equal(t, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA, err)
+				assert.Equal(t, ErrBuildRequestRecordNotEnoughData, err)
 			} else {
 				require.NoError(t, err)
 			}
@@ -485,7 +485,7 @@ func TestGarlicElGamal_BoundsChecking(t *testing.T) {
 func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 	t.Run("ReadI2NPType", func(t *testing.T) {
 		_, err := ReadI2NPType([]byte{})
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 
 		mtype, err := ReadI2NPType([]byte{0x01})
 		assert.NoError(t, err)
@@ -494,7 +494,7 @@ func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 
 	t.Run("ReadI2NPNTCPMessageID", func(t *testing.T) {
 		_, err := ReadI2NPNTCPMessageID([]byte{0, 0, 0, 0}) // 4 bytes, need 5
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 
 		mid, err := ReadI2NPNTCPMessageID([]byte{0, 0, 0, 0, 1})
 		assert.NoError(t, err)
@@ -503,22 +503,22 @@ func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 
 	t.Run("ReadI2NPNTCPMessageExpiration", func(t *testing.T) {
 		_, err := ReadI2NPNTCPMessageExpiration(make([]byte, 12)) // Need 13
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 	})
 
 	t.Run("ReadI2NPNTCPMessageSize", func(t *testing.T) {
 		_, err := ReadI2NPNTCPMessageSize(make([]byte, 14)) // Need 15
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 	})
 
 	t.Run("ReadI2NPNTCPMessageChecksum", func(t *testing.T) {
 		_, err := ReadI2NPNTCPMessageChecksum(make([]byte, 15)) // Need 16
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 	})
 
 	t.Run("ReadI2NPNTCPData", func(t *testing.T) {
 		_, err := ReadI2NPNTCPData(make([]byte, 20), 10) // Need 16+10=26
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 
 		data, err := ReadI2NPNTCPData(make([]byte, 26), 10)
 		assert.NoError(t, err)
@@ -527,7 +527,7 @@ func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 
 	t.Run("ReadI2NPSecondGenTransportHeader", func(t *testing.T) {
 		_, err := ReadI2NPSecondGenTransportHeader(make([]byte, 8)) // Need 9
-		assert.Equal(t, ERR_I2NP_NOT_ENOUGH_DATA, err)
+		assert.Equal(t, ErrI2NPNotEnoughData, err)
 	})
 
 	t.Run("ReadI2NPSSUHeader", func(t *testing.T) {
@@ -543,7 +543,7 @@ func TestI2NPHeaderParsing_BoundsChecking(t *testing.T) {
 func TestI2NPMessage_ChecksumVerification(t *testing.T) {
 	t.Run("valid checksum passes", func(t *testing.T) {
 		// Create a valid message
-		msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+		msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 		msg.SetData([]byte("test payload"))
 
 		data, err := msg.MarshalBinary()
@@ -557,7 +557,7 @@ func TestI2NPMessage_ChecksumVerification(t *testing.T) {
 
 	t.Run("corrupted data fails checksum", func(t *testing.T) {
 		// Create a valid message
-		msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+		msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 		msg.SetData([]byte("test payload"))
 
 		data, err := msg.MarshalBinary()
@@ -582,7 +582,7 @@ func TestI2NPMessage_ChecksumVerification(t *testing.T) {
 
 func TestI2NPMessage_RoundTrip(t *testing.T) {
 	t.Run("BaseI2NPMessage", func(t *testing.T) {
-		original := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+		original := NewBaseI2NPMessage(I2NPMessageTypeData)
 		original.SetMessageID(12345)
 		original.SetExpiration(time.Now().Add(time.Hour).Truncate(time.Millisecond))
 		original.SetData([]byte("round trip test data"))
@@ -630,7 +630,7 @@ func TestI2NPMessage_RoundTrip(t *testing.T) {
 		payloadData, err := original.MarshalPayload()
 		require.NoError(t, err)
 
-		restored := &DatabaseStore{BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)}
+		restored := &DatabaseStore{BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)}
 		err = restored.UnmarshalBinary(payloadData)
 		require.NoError(t, err)
 
@@ -726,7 +726,7 @@ func createValidI2NPMessage(msgType int, payload []byte) []byte {
 // createInvalidI2NPMessage creates an I2NP message with mismatched size
 func createInvalidI2NPMessage(claimedSize, actualSize int) []byte {
 	header := make([]byte, 16)
-	header[0] = byte(I2NP_MESSAGE_TYPE_DATA)
+	header[0] = byte(I2NPMessageTypeData)
 
 	// Size (2 bytes) - claims more than available
 	header[13] = byte(claimedSize >> 8)
@@ -743,7 +743,7 @@ func createInvalidI2NPMessage(claimedSize, actualSize int) []byte {
 // createI2NPMessageWithBadChecksum creates a message with invalid checksum
 func createI2NPMessageWithBadChecksum() []byte {
 	payload := []byte("test data")
-	msg := createValidI2NPMessage(I2NP_MESSAGE_TYPE_DATA, payload)
+	msg := createValidI2NPMessage(I2NPMessageTypeData, payload)
 
 	// Corrupt the checksum
 	msg[15] ^= 0xFF

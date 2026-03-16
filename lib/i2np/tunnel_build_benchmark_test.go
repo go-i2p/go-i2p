@@ -22,7 +22,7 @@ func BenchmarkTunnelBuildMessage_MarshalUnmarshal(b *testing.B) {
 		data, _ := msg.MarshalBinary()
 
 		newMsg := &TunnelBuildMessage{
-			BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+			BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 		}
 		_ = newMsg.UnmarshalBinary(data)
 	}

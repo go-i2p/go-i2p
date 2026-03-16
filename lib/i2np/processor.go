@@ -342,7 +342,7 @@ func (p *MessageProcessor) EnableExpirationCheck() {
 
 // ProcessMessage processes any I2NP message using interfaces.
 // Messages are first validated for expiration before processing.
-// Expired messages are rejected with ERR_I2NP_MESSAGE_EXPIRED.
+// Expired messages are rejected with ErrI2NPMessageExpired.
 //
 // The lock is acquired only to snapshot handler references and validate
 // expiration, then released before dispatching. This avoids a deadlock
@@ -380,33 +380,33 @@ func (p *MessageProcessor) ProcessMessage(msg I2NPMessage) error {
 // from garlic LOCAL delivery (handleLocalDelivery → ProcessMessage).
 func (p *MessageProcessor) processMessageDispatch(msg I2NPMessage) error {
 	switch msg.Type() {
-	case I2NP_MESSAGE_TYPE_DATA:
+	case I2NPMessageTypeData:
 		return p.processDataMessage(msg)
-	case I2NP_MESSAGE_TYPE_DATABASE_STORE:
+	case I2NPMessageTypeDatabaseStore:
 		return p.processDatabaseStoreMessage(msg)
-	case I2NP_MESSAGE_TYPE_DELIVERY_STATUS:
+	case I2NPMessageTypeDeliveryStatus:
 		return p.processDeliveryStatusMessage(msg)
-	case I2NP_MESSAGE_TYPE_DATABASE_LOOKUP:
+	case I2NPMessageTypeDatabaseLookup:
 		return p.processDatabaseLookupMessage(msg)
-	case I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY:
+	case I2NPMessageTypeDatabaseSearchReply:
 		return p.processDatabaseSearchReplyMessage(msg)
-	case I2NP_MESSAGE_TYPE_GARLIC:
+	case I2NPMessageTypeGarlic:
 		return p.processGarlicMessage(msg)
-	case I2NP_MESSAGE_TYPE_TUNNEL_DATA:
+	case I2NPMessageTypeTunnelData:
 		return p.processTunnelDataMessage(msg)
-	case I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY:
+	case I2NPMessageTypeTunnelGateway:
 		return p.processTunnelGatewayMessage(msg)
-	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD:
+	case I2NPMessageTypeShortTunnelBuild:
 		return p.processShortTunnelBuildMessage(msg)
-	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD:
+	case I2NPMessageTypeVariableTunnelBuild:
 		return p.processVariableTunnelBuildMessage(msg)
-	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD:
+	case I2NPMessageTypeTunnelBuild:
 		return p.processTunnelBuildMessage(msg) // Legacy fixed 8-record format (no count prefix)
-	case I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY:
+	case I2NPMessageTypeTunnelBuildReply:
 		return p.processTunnelBuildReplyMessage(msg)
-	case I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY:
+	case I2NPMessageTypeVariableTunnelBuildReply:
 		return p.processVariableTunnelBuildReplyMessage(msg)
-	case I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY:
+	case I2NPMessageTypeShortTunnelBuildReply:
 		return p.processShortTunnelBuildReplyMessage(msg)
 	default:
 		// Per I2P spec, message types 224-254 are reserved for experimental use.

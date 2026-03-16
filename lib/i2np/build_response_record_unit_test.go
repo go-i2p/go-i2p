@@ -12,7 +12,7 @@ func TestReadBuildResponseRecordHashTooLittleData(t *testing.T) {
 
 	hash, err := readBuildResponseRecordHash([]byte{0x01})
 	assert.Equal(common.Hash{}, hash)
-	assert.Equal(ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrBuildResponseRecordNotEnoughData, err)
 }
 
 func TestReadBuildResponseRecordHashValidData(t *testing.T) {
@@ -34,7 +34,7 @@ func TestReadBuildResponseRecordRandomDataTooLittleData(t *testing.T) {
 	data := append(hash, 0x01)
 	random_data, err := readBuildResponseRecordRandomData(data)
 	assert.Equal([495]byte{}, random_data)
-	assert.Equal(ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrBuildResponseRecordNotEnoughData, err)
 }
 
 func TestReadBuildResponseRecordRandomDataValidData(t *testing.T) {
@@ -53,7 +53,7 @@ func TestReadBuildResponseRecordReplyTooLittleData(t *testing.T) {
 
 	res_reply, err := readBuildResponseRecordReply(data)
 	assert.Equal(byte(0), res_reply)
-	assert.Equal(ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrBuildResponseRecordNotEnoughData, err)
 }
 
 func TestReadBuildResponseRecordReplyValidData(t *testing.T) {
@@ -78,7 +78,7 @@ func TestReadBuildResponseRecordTooLittleData(t *testing.T) {
 
 	assert.Equal(common.Hash(hash), build_response_record.Hash)
 	assert.Equal([495]byte{}, build_response_record.RandomData)
-	assert.Equal(ERR_BUILD_RESPONSE_RECORD_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrBuildResponseRecordNotEnoughData, err)
 }
 
 func TestReadBuildResponseRecordValidData(t *testing.T) {

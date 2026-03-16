@@ -20,7 +20,7 @@ func TestProcessMessage_NoDeadlockOnGarlicLocalDelivery(t *testing.T) {
 	processor.DisableExpirationCheck()
 
 	// Create a simple Data message to be wrapped as a LOCAL delivery clove.
-	innerMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	innerMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	innerMsg.data = []byte("test-payload")
 
 	// Build a clove with LOCAL delivery type (0x00 in bits 6-5 of Flag).
@@ -98,7 +98,7 @@ func TestProcessMessage_ConcurrentSetAndProcess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+			msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 			msg.data = []byte("concurrent-test")
 			for j := 0; j < iterations; j++ {
 				_ = processor.ProcessMessage(msg)
@@ -139,7 +139,7 @@ func TestProcessMessage_ReentrantLocalDelivery(t *testing.T) {
 	processor.DisableExpirationCheck()
 
 	// Create an inner Data message.
-	innerMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	innerMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	innerMsg.data = []byte("inner-payload")
 
 	clove := GarlicClove{

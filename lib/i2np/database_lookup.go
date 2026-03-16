@@ -349,7 +349,7 @@ func readReplyTagsByType(databaseLookup *DatabaseLookup, offset int, data []byte
 
 func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
 	if len(data) < 32 {
-		return 0, common.Hash{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return 0, common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 
 	key := common.Hash(data[:32])
@@ -362,7 +362,7 @@ func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
 
 func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
 	if len(data) < length+32 {
-		return length, common.Hash{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 
 	from := common.Hash(data[length : length+32])
@@ -375,7 +375,7 @@ func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
 
 func readDatabaseLookupFlags(length int, data []byte) (int, byte, error) {
 	if len(data) < length+1 {
-		return length, byte(0), ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, byte(0), ErrDatabaseLookupNotEnoughData
 	}
 	flags := data[length]
 
@@ -391,7 +391,7 @@ func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, 
 		return length, [4]byte{}, nil
 	}
 	if len(data) < length+4 {
-		return length, [4]byte{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, [4]byte{}, ErrDatabaseLookupNotEnoughData
 	}
 
 	replyTunnelID := [4]byte(data[length : length+4])
@@ -404,7 +404,7 @@ func readDatabaseLookupReplyTunnelID(flags byte, length int, data []byte) (int, 
 
 func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 	if len(data) < length+2 {
-		return length, 0, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 
 	size := common.Integer(data[length : length+2]).Int()
@@ -418,7 +418,7 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 			"at":   "i2np.database_lookup.readDatabaseLookupSize",
 			"size": size,
 		}).Error("invalid_excluded_peers_size")
-		return length, 0, ERR_DATABASE_LOOKUP_INVALID_SIZE
+		return length, 0, ErrDatabaseLookupInvalidSize
 	}
 
 	log.WithFields(logger.Fields{
@@ -430,7 +430,7 @@ func readDatabaseLookupSize(length int, data []byte) (int, int, error) {
 
 func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []common.Hash, error) {
 	if len(data) < length+size*32 {
-		return length, []common.Hash{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, []common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 	var excludedPeers []common.Hash
 	for i := 0; i < size; i++ {
@@ -448,7 +448,7 @@ func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []
 
 func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.SessionKey, error) {
 	if len(data) < length+32 {
-		return length, session_key.SessionKey{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, session_key.SessionKey{}, ErrDatabaseLookupNotEnoughData
 	}
 	replyKey := session_key.SessionKey(data[length : length+32])
 
@@ -461,7 +461,7 @@ func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.Sessi
 
 func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 	if len(data) < length+1 {
-		return length, 0, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, 0, ErrDatabaseLookupNotEnoughData
 	}
 	tags := int(data[length])
 
@@ -474,7 +474,7 @@ func readDatabaseLookupTags(length int, data []byte) (int, int, error) {
 
 func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []session_tag.SessionTag, error) {
 	if len(data) < length+tags*32 {
-		return length, []session_tag.SessionTag{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, []session_tag.SessionTag{}, ErrDatabaseLookupNotEnoughData
 	}
 	var reply_tags []session_tag.SessionTag
 	for i := 0; i < tags; i++ {
@@ -496,7 +496,7 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
 	tagSize := session_tag.ECIESSessionTagSize
 	if len(data) < length+tags*tagSize {
-		return length, []session_tag.ECIESSessionTag{}, ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA
+		return length, []session_tag.ECIESSessionTag{}, ErrDatabaseLookupNotEnoughData
 	}
 	var reply_tags []session_tag.ECIESSessionTag
 	for i := 0; i < tags; i++ {

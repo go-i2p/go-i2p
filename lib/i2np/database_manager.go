@@ -354,7 +354,7 @@ func (dm *DatabaseManager) sendResponse(response interface{}, to common.Hash) er
 // wrapper. This also avoids a panic when the store's embedded BaseI2NPMessage
 // is nil (e.g., from deserialized/corrupted data).
 func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NPMessage {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore)
 	data, err := store.MarshalPayload()
 	if err != nil {
 		log.WithField("error", err).Error("Failed to marshal DatabaseStore payload")
@@ -368,7 +368,7 @@ func (dm *DatabaseManager) createDatabaseStoreMessage(store *DatabaseStore) I2NP
 // Uses MarshalPayload (payload-only serialization) rather than MarshalBinary
 // to avoid a panic when the reply's embedded BaseI2NPMessage is nil.
 func (dm *DatabaseManager) createDatabaseSearchReplyMessage(reply *DatabaseSearchReply) I2NPMessage {
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply)
 	data, err := reply.MarshalPayload()
 	if err != nil {
 		log.WithField("error", err).Error("Failed to marshal DatabaseSearchReply payload")

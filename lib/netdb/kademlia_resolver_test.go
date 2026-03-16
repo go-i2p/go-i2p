@@ -95,7 +95,7 @@ func TestLookupResponseHandler(t *testing.T) {
 		ch := handler.RegisterPending(messageID)
 
 		// Simulate response arrival
-		handled := handler.HandleResponse(messageID, i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE, []byte("test data"))
+		handled := handler.HandleResponse(messageID, i2np.I2NPMessageTypeDatabaseStore, []byte("test data"))
 		if !handled {
 			t.Error("HandleResponse should return true for registered message")
 		}
@@ -103,8 +103,8 @@ func TestLookupResponseHandler(t *testing.T) {
 		// Check response received
 		select {
 		case resp := <-ch:
-			if resp.msgType != i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE {
-				t.Errorf("Expected msgType %d, got %d", i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE, resp.msgType)
+			if resp.msgType != i2np.I2NPMessageTypeDatabaseStore {
+				t.Errorf("Expected msgType %d, got %d", i2np.I2NPMessageTypeDatabaseStore, resp.msgType)
 			}
 			if string(resp.data) != "test data" {
 				t.Errorf("Expected data 'test data', got '%s'", string(resp.data))
@@ -115,7 +115,7 @@ func TestLookupResponseHandler(t *testing.T) {
 	})
 
 	t.Run("HandleUnregistered", func(t *testing.T) {
-		handled := handler.HandleResponse(99999, i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE, []byte("data"))
+		handled := handler.HandleResponse(99999, i2np.I2NPMessageTypeDatabaseStore, []byte("data"))
 		if handled {
 			t.Error("HandleResponse should return false for unregistered message")
 		}
@@ -137,7 +137,7 @@ func TestLookupResponseHandler(t *testing.T) {
 		}
 
 		// HandleResponse should return false
-		handled := handler.HandleResponse(messageID, i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE, []byte("data"))
+		handled := handler.HandleResponse(messageID, i2np.I2NPMessageTypeDatabaseStore, []byte("data"))
 		if handled {
 			t.Error("HandleResponse should return false after unregister")
 		}

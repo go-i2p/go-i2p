@@ -200,7 +200,7 @@ func TestSetMessageProcessor(t *testing.T) {
 func TestForwardToDestination(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	destHash := common.Hash{10, 20, 30, 40}
 
 	err := gr.ForwardToDestination(destHash, msg)
@@ -226,7 +226,7 @@ func TestForwardToRouter_Reflexive(t *testing.T) {
 	processor := i2np.NewMessageProcessor()
 	gr.SetMessageProcessor(processor)
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetMessageID(12345)
 
 	// Forward to ourselves (reflexive delivery)
@@ -250,7 +250,7 @@ func TestForwardToRouter_ReflexiveNoProcessor(t *testing.T) {
 	defer gr.Stop()
 	// Don't set processor
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 
 	err := gr.ForwardToRouter(gr.routerIdentity, msg)
 
@@ -269,7 +269,7 @@ func TestForwardToRouter_NotFound(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	unknownHash := common.Hash{99, 88, 77, 66}
 
 	err := gr.ForwardToRouter(unknownHash, msg)
@@ -296,7 +296,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 	// Add to netdb using the interface method
 	gr.netdb.StoreRouterInfo(peerRI)
 
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetMessageID(54321)
 
 	// Verify NetDB lookup succeeds
@@ -314,7 +314,7 @@ func TestForwardToRouter_Success(t *testing.T) {
 func TestForwardThroughTunnel(t *testing.T) {
 	gr := createTestGarlicRouter()
 	defer gr.Stop()
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	gatewayHash := common.Hash{11, 22, 33, 44}
 	tunnelID := tunnel.TunnelID(12345)
 

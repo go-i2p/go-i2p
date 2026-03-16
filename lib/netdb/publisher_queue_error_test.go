@@ -41,7 +41,7 @@ func setupGatewayTest(t *testing.T) (*mockNetDB, common.Hash, i2np.I2NPMessage) 
 	gatewayHash, err := gatewayRI.IdentHash()
 	require.NoError(t, err)
 	db.StoreRouterInfo(gatewayRI)
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
 	msg.SetData([]byte("test data"))
 	return db, gatewayHash, msg
 }

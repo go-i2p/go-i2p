@@ -46,7 +46,7 @@ func TestMessageFactory(t *testing.T) {
 	// Test data message creation
 	payload := []byte("test data")
 	dataMsg := factory.CreateDataMessage(payload)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DATA, dataMsg.Type())
+	assert.Equal(t, I2NPMessageTypeData, dataMsg.Type())
 
 	// Test that it implements PayloadCarrier
 	if pc, ok := dataMsg.(PayloadCarrier); ok {
@@ -58,7 +58,7 @@ func TestMessageFactory(t *testing.T) {
 	// Test delivery status message creation
 	timestamp := time.Now()
 	statusMsg := factory.CreateDeliveryStatusMessage(12345, timestamp)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DELIVERY_STATUS, statusMsg.Type())
+	assert.Equal(t, I2NPMessageTypeDeliveryStatus, statusMsg.Type())
 
 	// Test that it implements StatusReporter
 	if sr, ok := statusMsg.(StatusReporter); ok {
@@ -138,7 +138,7 @@ func TestDatabaseManager(t *testing.T) {
 	// Test database store
 	storeData := []byte("test data to store")
 	store := &DatabaseStore{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             key,
 		Data:            storeData,
 		StoreType:       0x00,

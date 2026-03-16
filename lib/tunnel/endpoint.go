@@ -472,20 +472,6 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 	return e.deliverReassembled(result)
 }
 
-// storeFirstFragment stores the first fragment of a multi-fragment message.
-// Creates or updates the fragment assembler and checks for completion.
-func (e *Endpoint) storeFirstFragment(msgID uint32, deliveryType byte, fragmentData []byte) error {
-	e.fragmentsMutex.Lock()
-
-	assembler := e.ensureAssemblerExists(msgID, deliveryType)
-	e.recordFirstFragmentData(assembler, fragmentData, msgID)
-	result := e.checkFragmentCompletion(msgID, assembler)
-
-	e.fragmentsMutex.Unlock()
-
-	return e.deliverReassembled(result)
-}
-
 // ensureAssemblerExists retrieves existing assembler or creates a new one for the message ID.
 // Updates delivery type on existing assemblers to ensure correct routing.
 // Note: Caller must hold fragmentsMutex.

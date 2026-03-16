@@ -236,7 +236,7 @@ func assertBuildResponseRecordHash(t *testing.T, replyCode byte, dataFn func(int
 func assertSecondGenExpirationSeconds(t *testing.T, seconds uint32, msg string) {
 	t.Helper()
 	data := make([]byte, 9)
-	data[0] = byte(I2NP_MESSAGE_TYPE_DATA)
+	data[0] = byte(I2NPMessageTypeData)
 	binary.BigEndian.PutUint32(data[5:9], seconds)
 	header, err := ReadI2NPSecondGenTransportHeader(data)
 	require.NoError(t, err)

@@ -10,7 +10,7 @@ import (
 
 func TestBaseI2NPMessage(t *testing.T) {
 	// Test basic message creation and marshaling
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	msg.SetMessageID(12345)
 	msg.SetData([]byte("Hello I2P"))
 
@@ -23,7 +23,7 @@ func TestBaseI2NPMessage(t *testing.T) {
 	msg2 := &BaseI2NPMessage{}
 	err = msg2.UnmarshalBinary(data)
 	assert.NoError(t, err)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DATA, msg2.Type())
+	assert.Equal(t, I2NPMessageTypeData, msg2.Type())
 	assert.Equal(t, 12345, msg2.MessageID())
 	assert.Equal(t, []byte("Hello I2P"), msg2.GetData())
 }
@@ -33,7 +33,7 @@ func TestDataMessage(t *testing.T) {
 	msg := NewDataMessage(payload)
 
 	// Test the message
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DATA, msg.Type())
+	assert.Equal(t, I2NPMessageTypeData, msg.Type())
 	assert.Equal(t, payload, msg.GetPayload())
 
 	// Marshal and unmarshal
@@ -51,7 +51,7 @@ func TestDeliveryStatusMessage(t *testing.T) {
 	msg := NewDeliveryStatusMessage(54321, timestamp)
 
 	// Test the message
-	assert.Equal(t, I2NP_MESSAGE_TYPE_DELIVERY_STATUS, msg.Type())
+	assert.Equal(t, I2NPMessageTypeDeliveryStatus, msg.Type())
 	assert.Equal(t, 54321, msg.StatusMessageID)
 
 	// Marshal and unmarshal
@@ -73,7 +73,7 @@ func TestTunnelDataMessage(t *testing.T) {
 	msg := NewTunnelDataMessage(tunnelID, data)
 
 	// Test the message
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_DATA, msg.Type())
+	assert.Equal(t, I2NPMessageTypeTunnelData, msg.Type())
 	assert.Equal(t, tunnelID, msg.TunnelID)
 	assert.Equal(t, data, msg.Data)
 

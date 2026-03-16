@@ -138,7 +138,7 @@ func TestReadDatabaseLookupKeyTooLittleData(t *testing.T) {
 	length, key, err := readDatabaseLookupKey([]byte{0x01})
 	assert.Equal(0, length)
 	assert.Equal(common.Hash{}, key)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupKeyValidData(t *testing.T) {
@@ -166,7 +166,7 @@ func TestReadDatabaseLookupFromTooLittleData(t *testing.T) {
 	length, key, err := readDatabaseLookupFrom(length, data)
 	assert.Equal(32, length)
 	assert.Equal(common.Hash{}, key)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupFromValidData(t *testing.T) {
@@ -196,7 +196,7 @@ func TestReadDatabaseLookupFlagsTooLittleData(t *testing.T) {
 	length, flags, err := readDatabaseLookupFlags(length, data)
 	assert.Equal(64, length)
 	assert.Equal(byte(0), flags)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupFlagsValidData(t *testing.T) {
@@ -229,7 +229,7 @@ func TestReadDatabaseLookupReplyTunnelIDTooLittleData(t *testing.T) {
 	length, replyTunnelID, err := readDatabaseLookupReplyTunnelID(flags, length, data)
 	assert.Equal(65, length)
 	assert.Equal([4]byte{}, replyTunnelID)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupReplyTunnelIDNotIncluded(t *testing.T) {
@@ -275,7 +275,7 @@ func TestReadDatabaseLookupSizeTooLittleData(t *testing.T) {
 	length, size, err := readDatabaseLookupSize(length, data)
 	assert.Equal(65, length)
 	assert.Equal(0, size)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupSizeValidData(t *testing.T) {
@@ -310,7 +310,7 @@ func TestReadDatabaseLookupExcludedPeersTooLittleData(t *testing.T) {
 	length, excludedPeers, err := readDatabaseLookupExcludedPeers(length, data, size)
 	assert.Equal([]common.Hash{}, excludedPeers)
 	assert.Equal(67, length)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupExcludedPeersZeroSize(t *testing.T) {
@@ -368,7 +368,7 @@ func TestReadDatabaseLookupReplyKeyTooLittleData(t *testing.T) {
 	length, replyKey, err := readDatabaseLookupReplyKey(length, data)
 	assert.Equal(67, length)
 	assert.Equal(session_key.SessionKey{}, replyKey)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupReplyKeyValidData(t *testing.T) {
@@ -396,7 +396,7 @@ func TestReadDatabaseLookupTagsTooLittleData(t *testing.T) {
 	length, tags, err := readDatabaseLookupTags(length, data)
 	assert.Equal(99, length)
 	assert.Equal(0, tags)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupTagsValidData(t *testing.T) {
@@ -426,7 +426,7 @@ func TestReadDatabaseLookupReplyTagsTooLittleData(t *testing.T) {
 	length, replyTags, err := readDatabaseLookupReplyTags(length, data, tags)
 	assert.Equal(100, length)
 	assert.Equal([]session_tag.SessionTag{}, replyTags)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupReplyTagsZeroTags(t *testing.T) {
@@ -475,7 +475,7 @@ func TestReadDatabaseLookupTooLittleData(t *testing.T) {
 	data = append(data, make([]byte, 10)...)
 
 	_, err := ReadDatabaseLookup(data)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupValidData(t *testing.T) {
@@ -507,7 +507,7 @@ func TestReadDatabaseLookupECIESReplyTagsTooLittleData(t *testing.T) {
 	length, replyTags, err := readDatabaseLookupECIESReplyTags(length, data, tags)
 	assert.Equal(99, length)
 	assert.Equal([]session_tag.ECIESSessionTag{}, replyTags)
-	assert.Equal(ERR_DATABASE_LOOKUP_NOT_ENOUGH_DATA, err)
+	assert.Equal(ErrDatabaseLookupNotEnoughData, err)
 }
 
 func TestReadDatabaseLookupECIESReplyTagsZeroTags(t *testing.T) {

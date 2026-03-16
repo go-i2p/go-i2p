@@ -51,7 +51,7 @@ func newTestDatabaseStore(t *testing.T) (common.Hash, []byte, *DatabaseStore) {
 	testData := []byte("test-router-info-data")
 
 	dbStore := &DatabaseStore{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             testKey,
 		Data:            testData,
 		StoreType:       byte(0),
@@ -113,7 +113,7 @@ func TestDatabaseManager_StoreData_NoNetDB(t *testing.T) {
 
 	// Create DatabaseStore message
 	dbStore := &DatabaseStore{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             testKey,
 		Data:            testData,
 		StoreType:       testType,
@@ -210,7 +210,7 @@ func TestNetDBStore_DispatchByType(t *testing.T) {
 			copy(testKey[:], "test-key-for-dispatch-test-12345")
 
 			dbStore := &DatabaseStore{
-				BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+				BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 				Key:             testKey,
 				Data:            []byte("test-data"),
 				StoreType:       tt.dataType,
@@ -381,7 +381,7 @@ func TestSetBuildReplyProcessor(t *testing.T) {
 func TestProcessBuildReplyCommon_NoProcessor(t *testing.T) {
 	processor := NewMessageProcessor()
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
 	err := processor.processBuildReplyCommon(msg, false)
 	assert.NoError(t, err) // Should succeed silently (logged + discarded)
 }
@@ -392,7 +392,7 @@ func TestProcessBuildReplyCommon_EmptyData(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
 	// No data set on message
 	err := processor.processBuildReplyCommon(msg, false)
 	assert.Error(t, err)
@@ -405,7 +405,7 @@ func TestProcessBuildReplyCommon_InvalidRecordCount(t *testing.T) {
 	proc := &mockBuildReplyProcessor{}
 	processor.SetBuildReplyProcessor(proc)
 
-	msg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY)
+	msg := NewBaseI2NPMessage(I2NPMessageTypeVariableTunnelBuildReply)
 	msg.SetData([]byte{0}) // record count 0 is invalid
 	err := processor.processBuildReplyCommon(msg, false)
 	assert.Error(t, err)
@@ -421,9 +421,9 @@ func TestProcessMessageDispatch_TunnelBuildReply(t *testing.T) {
 
 	// Test that reply types no longer return "unknown message type"
 	for _, msgType := range []int{
-		I2NP_MESSAGE_TYPE_TUNNEL_BUILD_REPLY,
-		I2NP_MESSAGE_TYPE_VARIABLE_TUNNEL_BUILD_REPLY,
-		I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY,
+		I2NPMessageTypeTunnelBuildReply,
+		I2NPMessageTypeVariableTunnelBuildReply,
+		I2NPMessageTypeShortTunnelBuildReply,
 	} {
 		msg := NewBaseI2NPMessage(msgType)
 		// Even with no data, it should not return "unknown message type"

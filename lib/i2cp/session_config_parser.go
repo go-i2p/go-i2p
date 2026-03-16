@@ -449,16 +449,6 @@ func applyGzipOption(config *SessionConfig, options map[string]string) {
 	}).Debug("applied_gzip_option")
 }
 
-// recordUnsupportedOption records an I2CP option that the client set but is
-// not implemented. This allows clients to inspect SessionConfig.UnsupportedOptions
-// after session creation to detect features that were silently ignored.
-func recordUnsupportedOption(config *SessionConfig, key, value string) {
-	if config.UnsupportedOptions == nil {
-		config.UnsupportedOptions = make(map[string]string)
-	}
-	config.UnsupportedOptions[key] = value
-}
-
 // applyMetadataOptions applies metadata configuration options.
 // Keys: inbound.nickname, outbound.nickname (for debugging)
 func applyMetadataOptions(config *SessionConfig, options map[string]string) {

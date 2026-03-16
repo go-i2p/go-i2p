@@ -189,7 +189,7 @@ func TestExpirationValidator_ValidateExpiration(t *testing.T) {
 			err := v.ValidateExpiration(tt.expiration)
 			if tt.expectError {
 				require.Error(t, err)
-				assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+				assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 				// Error message should contain useful context
 				assert.Contains(t, err.Error(), "expired")
 			} else {
@@ -223,25 +223,25 @@ func TestExpirationValidator_ValidateMessage(t *testing.T) {
 	}{
 		{
 			name:        "valid data message",
-			msgType:     I2NP_MESSAGE_TYPE_DATA,
+			msgType:     I2NPMessageTypeData,
 			expiration:  now.Add(5 * time.Minute),
 			expectError: false,
 		},
 		{
 			name:        "expired data message",
-			msgType:     I2NP_MESSAGE_TYPE_DATA,
+			msgType:     I2NPMessageTypeData,
 			expiration:  now.Add(-10 * time.Minute),
 			expectError: true,
 		},
 		{
 			name:        "valid tunnel data message",
-			msgType:     I2NP_MESSAGE_TYPE_TUNNEL_DATA,
+			msgType:     I2NPMessageTypeTunnelData,
 			expiration:  now.Add(1 * time.Minute),
 			expectError: false,
 		},
 		{
 			name:        "expired tunnel data message",
-			msgType:     I2NP_MESSAGE_TYPE_TUNNEL_DATA,
+			msgType:     I2NPMessageTypeTunnelData,
 			expiration:  now.Add(-20 * time.Minute),
 			expectError: true,
 		},
@@ -259,7 +259,7 @@ func TestExpirationValidator_ValidateMessage(t *testing.T) {
 			err := v.ValidateMessage(msg)
 			if tt.expectError {
 				require.Error(t, err)
-				assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+				assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 			} else {
 				require.NoError(t, err)
 			}
@@ -285,17 +285,17 @@ func TestCheckMessageExpiration(t *testing.T) {
 	)
 
 	// Test with valid message
-	validMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	validMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	validMsg.SetExpiration(now.Add(5 * time.Minute))
 	err := CheckMessageExpiration(validMsg)
 	require.NoError(t, err)
 
 	// Test with expired message
-	expiredMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	expiredMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	expiredMsg.SetExpiration(now.Add(-10 * time.Minute))
 	err = CheckMessageExpiration(expiredMsg)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+	assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 }
 
 func TestIsMessageExpired(t *testing.T) {
@@ -311,12 +311,12 @@ func TestIsMessageExpired(t *testing.T) {
 	)
 
 	// Test with valid message
-	validMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	validMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	validMsg.SetExpiration(now.Add(5 * time.Minute))
 	assert.False(t, IsMessageExpired(validMsg))
 
 	// Test with expired message
-	expiredMsg := NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA)
+	expiredMsg := NewBaseI2NPMessage(I2NPMessageTypeData)
 	expiredMsg.SetExpiration(now.Add(-10 * time.Minute))
 	assert.True(t, IsMessageExpired(expiredMsg))
 }
@@ -371,7 +371,7 @@ func TestMessageProcessor_ExpirationValidation(t *testing.T) {
 
 		err := processor.ProcessMessage(msg)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+		assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 	})
 }
 
@@ -392,7 +392,7 @@ func TestMessageProcessor_DisableExpirationCheck(t *testing.T) {
 	// Should fail with expiration check enabled
 	err := processor.ProcessMessage(msg)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+	assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 
 	// Disable expiration check
 	processor.DisableExpirationCheck()
@@ -427,7 +427,7 @@ func TestMessageProcessor_EnableExpirationCheck(t *testing.T) {
 	// Should fail now
 	err = processor.ProcessMessage(msg)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ERR_I2NP_MESSAGE_EXPIRED))
+	assert.True(t, errors.Is(err, ErrI2NPMessageExpired))
 }
 
 func TestMessageProcessor_NilExpirationValidator(t *testing.T) {

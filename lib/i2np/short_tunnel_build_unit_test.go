@@ -72,12 +72,12 @@ func TestShortTunnelBuildInterface(t *testing.T) {
 
 // TestMessageTypeConstants verifies STBM message type constants are defined
 func TestMessageTypeConstants(t *testing.T) {
-	if I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD != 25 {
-		t.Errorf("SHORT_TUNNEL_BUILD should be 25, got %d", I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD)
+	if I2NPMessageTypeShortTunnelBuild != 25 {
+		t.Errorf("SHORT_TUNNEL_BUILD should be 25, got %d", I2NPMessageTypeShortTunnelBuild)
 	}
 
-	if I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY != 26 {
-		t.Errorf("SHORT_TUNNEL_BUILD_REPLY should be 26, got %d", I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD_REPLY)
+	if I2NPMessageTypeShortTunnelBuildReply != 26 {
+		t.Errorf("SHORT_TUNNEL_BUILD_REPLY should be 26, got %d", I2NPMessageTypeShortTunnelBuildReply)
 	}
 }
 

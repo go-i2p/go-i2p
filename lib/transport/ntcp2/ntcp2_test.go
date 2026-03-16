@@ -95,7 +95,7 @@ func TestFramingIntegration(t *testing.T) {
 	// Unframe it
 	unframedMsg, err := UnframeI2NPMessage(conn)
 	require.NoError(t, err)
-	assert.Equal(t, i2np.I2NP_MESSAGE_TYPE_DATA, unframedMsg.Type())
+	assert.Equal(t, i2np.I2NPMessageTypeData, unframedMsg.Type())
 	assert.Equal(t, 42, unframedMsg.MessageID())
 }
 

@@ -170,7 +170,7 @@ func TestDatabaseManager_SendDatabaseSearchReply(t *testing.T) {
 	}
 
 	msg := mockSession.messages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY {
+	if msg.Type() != I2NPMessageTypeDatabaseSearchReply {
 		t.Errorf("Expected DatabaseSearchReply message type, got %d", msg.Type())
 	}
 
@@ -258,7 +258,7 @@ func TestDatabaseManager_PerformLookup_NotFound_WithFloodfills(t *testing.T) {
 	}
 
 	msg := mockSession.messages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY {
+	if msg.Type() != I2NPMessageTypeDatabaseSearchReply {
 		t.Errorf("Expected DatabaseSearchReply for lookup miss, got message type %d", msg.Type())
 	}
 
@@ -310,7 +310,7 @@ func TestDatabaseManager_PerformLookup_Found(t *testing.T) {
 	}
 
 	msg := mockSession.messages[0]
-	if msg.Type() != I2NP_MESSAGE_TYPE_DATABASE_STORE {
+	if msg.Type() != I2NPMessageTypeDatabaseStore {
 		t.Errorf("Expected DatabaseStore for lookup hit, got message type %d", msg.Type())
 	}
 }

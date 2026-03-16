@@ -46,7 +46,7 @@ func NewTunnelGatewayMessage(tunnelID tunnel.TunnelID, payload []byte) *TunnelGa
 	}).Debug("Creating TunnelGateway message")
 
 	msg := &TunnelGateway{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelGateway),
 		TunnelID:        tunnelID,
 		Length:          len(payload),
 		Data:            payload,

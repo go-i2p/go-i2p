@@ -23,7 +23,7 @@ func NewDataMessage(payload []byte) *DataMessage {
 	}).Debug("Creating new data message")
 
 	msg := &DataMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATA),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeData),
 		PayloadLength:   len(payload),
 		Payload:         payload,
 	}

@@ -288,7 +288,7 @@ func parseMetadata(data []byte, record *BuildRequestRecord) error {
 
 func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 	if len(data) < 4 {
-		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
 	receive_tunnel := tunnel.TunnelID(
@@ -304,7 +304,7 @@ func readBuildRequestRecordReceiveTunnel(data []byte) (tunnel.TunnelID, error) {
 
 func readBuildRequestRecordOurIdent(data []byte) (common.Hash, error) {
 	if len(data) < 36 {
-		return common.Hash{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return common.Hash{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	hash := common.Hash{}
@@ -318,7 +318,7 @@ func readBuildRequestRecordOurIdent(data []byte) (common.Hash, error) {
 
 func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 	if len(data) < 40 {
-		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
 	next_tunnel := tunnel.TunnelID(
@@ -334,7 +334,7 @@ func readBuildRequestRecordNextTunnel(data []byte) (tunnel.TunnelID, error) {
 
 func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
 	if len(data) < 72 {
-		return common.Hash{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return common.Hash{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	hash := common.Hash{}
@@ -348,7 +348,7 @@ func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
 
 func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 104 {
-		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	session_key := session_key.SessionKey{}
@@ -362,7 +362,7 @@ func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error)
 
 func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 136 {
-		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	session_key := session_key.SessionKey{}
@@ -376,7 +376,7 @@ func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 
 func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error) {
 	if len(data) < 168 {
-		return session_key.SessionKey{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	session_key := session_key.SessionKey{}
@@ -390,7 +390,7 @@ func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error)
 
 func readBuildRequestRecordReplyIV(data []byte) ([16]byte, error) {
 	if len(data) < 184 {
-		return [16]byte{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return [16]byte{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	iv := [16]byte{}
@@ -404,7 +404,7 @@ func readBuildRequestRecordReplyIV(data []byte) ([16]byte, error) {
 
 func readBuildRequestRecordFlag(data []byte) (int, error) {
 	if len(data) < 185 {
-		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
 	flag := common.Integer([]byte{data[184]}).Int()
@@ -418,7 +418,7 @@ func readBuildRequestRecordFlag(data []byte) (int, error) {
 
 func readBuildRequestRecordRequestTime(data []byte) (time.Time, error) {
 	if len(data) < 189 {
-		return time.Time{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return time.Time{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	count := common.Integer(data[185:189]).Int()
@@ -432,7 +432,7 @@ func readBuildRequestRecordRequestTime(data []byte) (time.Time, error) {
 
 func readBuildRequestRecordSendMessageID(data []byte) (int, error) {
 	if len(data) < 193 {
-		return 0, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return 0, ErrBuildRequestRecordNotEnoughData
 	}
 
 	send_message_id := common.Integer(data[189:193]).Int()
@@ -445,7 +445,7 @@ func readBuildRequestRecordSendMessageID(data []byte) (int, error) {
 
 func readBuildRequestRecordPadding(data []byte) ([29]byte, error) {
 	if len(data) < 222 {
-		return [29]byte{}, ERR_BUILD_REQUEST_RECORD_NOT_ENOUGH_DATA
+		return [29]byte{}, ErrBuildRequestRecordNotEnoughData
 	}
 
 	padding := [29]byte{}

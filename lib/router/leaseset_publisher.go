@@ -170,7 +170,7 @@ func (p *LeaseSetPublisher) sendToFloodfill(ffHash common.Hash, dbStore *i2np.Da
 	}
 
 	// Wrap DatabaseStore in I2NPMessage interface
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATABASE_STORE)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)
 	data, err := dbStore.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal DatabaseStore: %w", err)

@@ -179,7 +179,7 @@ func TestWrapInGarlicMessage(t *testing.T) {
 	msg, err := WrapInGarlicMessage(encryptedData)
 	require.NoError(t, err)
 
-	assert.Equal(t, I2NP_MESSAGE_TYPE_GARLIC, msg.Type(), "message type")
+	assert.Equal(t, I2NPMessageTypeGarlic, msg.Type(), "message type")
 	assert.True(t, bytes.Equal(msg.data, encryptedData), "payload mismatch")
 	assert.NotZero(t, msg.MessageID(), "message ID should not be zero")
 	assert.True(t, msg.Expiration().After(time.Now()), "expiration should be in the future")

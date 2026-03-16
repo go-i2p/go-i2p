@@ -21,21 +21,21 @@ func TestDatabaseLookupScenarios(t *testing.T) {
 			setupRetriever:  true,
 			addData:         true,
 			lookupKey:       common.Hash{0x01, 0x02, 0x03},
-			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_STORE,
+			expectedMsgType: I2NPMessageTypeDatabaseStore,
 		},
 		{
 			name:            "NotFound_DatabaseSearchReply",
 			setupRetriever:  true,
 			addData:         false,
 			lookupKey:       common.Hash{0x99, 0x99, 0x99},
-			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
+			expectedMsgType: I2NPMessageTypeDatabaseSearchReply,
 		},
 		{
 			name:            "NoRetriever_DatabaseSearchReply",
 			setupRetriever:  false,
 			addData:         false,
 			lookupKey:       common.Hash{0x01, 0x02, 0x03},
-			expectedMsgType: I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY,
+			expectedMsgType: I2NPMessageTypeDatabaseSearchReply,
 		},
 	}
 

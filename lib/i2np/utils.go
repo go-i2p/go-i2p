@@ -101,7 +101,7 @@ func ReadI2NPSecondGenTransportHeader(dat []byte) (I2NPSecondGenTransportHeader,
 	header := I2NPSecondGenTransportHeader{}
 
 	if len(dat) < 9 {
-		return header, ERR_I2NP_NOT_ENOUGH_DATA
+		return header, ErrI2NPNotEnoughData
 	}
 
 	messageType, err := ReadI2NPType(dat)
@@ -158,7 +158,7 @@ func ReadI2NPSSUHeader(data []byte) (I2NPSSUHeader, error) {
 // ReadI2NPType reads the I2NP message type from data
 func ReadI2NPType(data []byte) (int, error) {
 	if len(data) < 1 {
-		return 0, ERR_I2NP_NOT_ENOUGH_DATA
+		return 0, ErrI2NPNotEnoughData
 	}
 
 	message_type := datalib.Integer([]byte{data[0]})
@@ -198,7 +198,7 @@ func ReadI2NPType(data []byte) (int, error) {
 // ReadI2NPNTCPMessageID reads the message ID from NTCP data
 func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 	if len(data) < 5 {
-		return 0, ERR_I2NP_NOT_ENOUGH_DATA
+		return 0, ErrI2NPNotEnoughData
 	}
 
 	message_id := datalib.Integer(data[1:5])
@@ -213,7 +213,7 @@ func ReadI2NPNTCPMessageID(data []byte) (int, error) {
 // ReadI2NPNTCPMessageExpiration reads the expiration from NTCP data
 func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 	if len(data) < 13 {
-		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
+		return datalib.Date{}, ErrI2NPNotEnoughData
 	}
 
 	date := datalib.Date{}
@@ -232,7 +232,7 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 // correct time. See I2NP specification for details.
 func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 	if len(data) < 5 {
-		return datalib.Date{}, ERR_I2NP_NOT_ENOUGH_DATA
+		return datalib.Date{}, ErrI2NPNotEnoughData
 	}
 
 	// SSU short expiration is a 4-byte unsigned integer in seconds since epoch.
@@ -254,7 +254,7 @@ func ReadI2NPSSUMessageExpiration(data []byte) (datalib.Date, error) {
 // ReadI2NPNTCPMessageSize reads the message size from NTCP data
 func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 	if len(data) < 15 {
-		return 0, ERR_I2NP_NOT_ENOUGH_DATA
+		return 0, ErrI2NPNotEnoughData
 	}
 
 	size := datalib.Integer(data[13:15])
@@ -269,7 +269,7 @@ func ReadI2NPNTCPMessageSize(data []byte) (int, error) {
 // ReadI2NPNTCPMessageChecksum reads the message checksum from NTCP data
 func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 	if len(data) < 16 {
-		return 0, ERR_I2NP_NOT_ENOUGH_DATA
+		return 0, ErrI2NPNotEnoughData
 	}
 
 	checksum := datalib.Integer(data[15:16])
@@ -284,7 +284,7 @@ func ReadI2NPNTCPMessageChecksum(data []byte) (int, error) {
 // ReadI2NPNTCPData reads the message data from NTCP payload
 func ReadI2NPNTCPData(data []byte, size int) ([]byte, error) {
 	if len(data) < 16+size {
-		return []byte{}, ERR_I2NP_NOT_ENOUGH_DATA
+		return []byte{}, ErrI2NPNotEnoughData
 	}
 	log.WithField("data_size", size).Debug("Read I2NP NTCP message data")
 	return data[16 : 16+size], nil
@@ -317,7 +317,7 @@ func CreateDatabaseQuery(key, from common.Hash, flags byte) DatabaseReader {
 // CreateDatabaseEntry creates a database store with interface methods
 func CreateDatabaseEntry(key common.Hash, data []byte, dataType byte) DatabaseWriter {
 	return &DatabaseStore{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_STORE),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseStore),
 		Key:             key,
 		Data:            data,
 		StoreType:       dataType,

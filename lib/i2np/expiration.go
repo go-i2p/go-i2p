@@ -103,7 +103,7 @@ func (v *ExpirationValidator) ValidateExpiration(expiration time.Time) error {
 	if v.IsExpired(expiration) {
 		now := v.now()
 		age := now.Sub(expiration)
-		return oops.Wrapf(ERR_I2NP_MESSAGE_EXPIRED,
+		return oops.Wrapf(ErrI2NPMessageExpired,
 			"message expired %v ago (expiration: %v, now: %v, tolerance: %ds)",
 			age.Round(time.Second), expiration.UTC(), now.UTC(), v.toleranceSeconds)
 	}

@@ -365,7 +365,7 @@ func TestQueryBatchParallel(t *testing.T) {
 		sendFunc: func(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error) {
 			reply := i2np.NewDatabaseSearchReply(target, common.Hash{0}, nil)
 			data, _ := reply.MarshalBinary()
-			return data, i2np.I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY, nil
+			return data, i2np.I2NPMessageTypeDatabaseSearchReply, nil
 		},
 	}
 

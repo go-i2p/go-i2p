@@ -85,7 +85,7 @@ func NewDatabaseSearchReply(key, from common.Hash, peerHashes []common.Hash) *Da
 	}).Debug("Creating DatabaseSearchReply")
 
 	return &DatabaseSearchReply{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DATABASE_SEARCH_REPLY),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDatabaseSearchReply),
 		Key:             key,
 		Count:           len(peerHashes),
 		PeerHashes:      peerHashes,
@@ -146,7 +146,7 @@ func (d *DatabaseSearchReply) MarshalBinary() ([]byte, error) {
 func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Minimum size: key(32) + count(1) + from(32) = 65 bytes
 	if len(data) < 65 {
-		return ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA
+		return ErrDatabaseSearchReplyNotEnoughData
 	}
 
 	offset := 0
@@ -162,7 +162,7 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Validate total length
 	expectedLen := 32 + 1 + (d.Count * 32) + 32
 	if len(data) < expectedLen {
-		return ERR_DATABASE_SEARCH_REPLY_NOT_ENOUGH_DATA
+		return ErrDatabaseSearchReplyNotEnoughData
 	}
 
 	// Peer hashes (count * 32 bytes)

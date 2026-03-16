@@ -190,7 +190,7 @@ func TestSendDatabaseStoreToFloodfill_WithActiveTunnel(t *testing.T) {
 
 	// Verify message is a TunnelGateway message
 	msg := sentMessages[0]
-	assert.Equal(t, i2np.I2NP_MESSAGE_TYPE_TUNNEL_GATEWAY, msg.Type(), "Expected TunnelGateway message type")
+	assert.Equal(t, i2np.I2NPMessageTypeTunnelGateway, msg.Type(), "Expected TunnelGateway message type")
 }
 
 // TestSendDatabaseStoreToFloodfill_TunnelWithNoHops tests error handling for invalid tunnels

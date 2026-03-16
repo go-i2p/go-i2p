@@ -187,7 +187,7 @@ func TestSelectBuildMessage_ShortBuild(t *testing.T) {
 	tm := &TunnelManager{}
 	msg, err := tm.selectBuildMessage(result, 3003)
 	require.NoError(t, err)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_SHORT_TUNNEL_BUILD, msg.Type(),
+	assert.Equal(t, I2NPMessageTypeShortTunnelBuild, msg.Type(),
 		"should create SHORT_TUNNEL_BUILD message")
 }
 
@@ -208,7 +208,7 @@ func TestSelectBuildMessage_LegacyBuild(t *testing.T) {
 	tm := &TunnelManager{}
 	msg, err := tm.selectBuildMessage(result, 4004)
 	require.NoError(t, err)
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type(),
+	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type(),
 		"should create TUNNEL_BUILD message")
 }
 

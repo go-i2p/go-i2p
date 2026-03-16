@@ -26,7 +26,7 @@ func NewDeliveryStatusMessage(messageID int, timestamp time.Time) *DeliveryStatu
 	}).Debug("Creating new DeliveryStatus message")
 
 	msg := &DeliveryStatusMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_DELIVERY_STATUS),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeDeliveryStatus),
 		StatusMessageID: messageID,
 		Timestamp:       timestamp,
 	}

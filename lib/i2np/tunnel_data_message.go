@@ -20,7 +20,7 @@ type TunnelDataMessage struct {
 // NewTunnelDataMessage creates a new TunnelData message with the given tunnel ID and data.
 func NewTunnelDataMessage(tunnelID tunnel.TunnelID, data [1024]byte) *TunnelDataMessage {
 	msg := &TunnelDataMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_DATA),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelData),
 		TunnelID:        tunnelID,
 		Data:            data,
 	}

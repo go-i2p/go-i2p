@@ -166,7 +166,7 @@ func TestTransportSessionInterface_MockRoundtrip(t *testing.T) {
 	}
 
 	// Create a test I2NP message
-	msg := i2np.NewBaseI2NPMessage(i2np.I2NP_MESSAGE_TYPE_DATA)
+	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
 	msg.SetMessageID(42)
 	msg.SetData([]byte("test payload"))
 

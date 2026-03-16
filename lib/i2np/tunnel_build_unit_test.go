@@ -35,7 +35,7 @@ func TestTunnelBuildMessage_SerializeDeserialize(t *testing.T) {
 
 	// Unmarshal into new message
 	newMsg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 	}
 	err = newMsg.UnmarshalBinary(wireData)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestTunnelBuildMessage_EmptyRecords(t *testing.T) {
 	msg := NewTunnelBuildMessage(records)
 
 	// Should still create valid message structure
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type())
+	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 	assert.Equal(t, 8, msg.GetRecordCount())
 	assert.Equal(t, 8*528, len(msg.GetData()))
 }
@@ -99,7 +99,7 @@ func TestTunnelBuildMessage_EmptyRecords(t *testing.T) {
 // TestTunnelBuildMessage_InvalidDataSize tests error handling for invalid data size
 func TestTunnelBuildMessage_InvalidDataSize(t *testing.T) {
 	msg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 	}
 
 	// Set invalid data size
@@ -111,7 +111,7 @@ func TestTunnelBuildMessage_InvalidDataSize(t *testing.T) {
 
 	// Try to unmarshal - should fail due to wrong size
 	newMsg := &TunnelBuildMessage{
-		BaseI2NPMessage: NewBaseI2NPMessage(I2NP_MESSAGE_TYPE_TUNNEL_BUILD),
+		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 	}
 	err = newMsg.UnmarshalBinary(wireData)
 	assert.Error(t, err)
@@ -181,7 +181,7 @@ func TestTunnelBuildMessage_Interfaces(t *testing.T) {
 	msg := NewTunnelBuildMessage(records)
 
 	// Verify I2NPMessage interface
-	assert.Equal(t, I2NP_MESSAGE_TYPE_TUNNEL_BUILD, msg.Type())
+	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
 	assert.NotNil(t, msg.GetData())
 
 	// Verify TunnelBuilder interface
