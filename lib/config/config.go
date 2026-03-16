@@ -12,7 +12,7 @@ import (
 
 var CfgFile string
 
-const GOI2P_BASE_DIR = ".go-i2p"
+const GoI2PBaseDir = ".go-i2p"
 
 // InitConfig initializes the configuration subsystem: loads or creates the
 // config file, sets defaults, and updates the router config.
@@ -572,5 +572,5 @@ func handleConfigFile() error {
 }
 
 func BuildI2PDirPath() string {
-	return filepath.Join(util.UserHome(), GOI2P_BASE_DIR)
+	return filepath.Join(util.UserHome(), GoI2PBaseDir)
 }

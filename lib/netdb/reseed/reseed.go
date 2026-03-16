@@ -550,16 +550,9 @@ func (r Reseed) writeZipFile(content []byte) (string, error) {
 // The caller is responsible for cleaning up the temporary directory after use.
 // Validates that total decompressed size does not exceed maxDecompressedSize to prevent zip bombs.
 func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
-	// Maximum total decompressed output size (200 MB).
-	// The SU3 file is limited to 50 MB compressed; legitimate reseed data
-	// (a few thousand ~1 KB RouterInfos) should be well under this limit.
-	const maxDecompressedSize int64 = 200 * 1024 * 1024
-
-	// Create temporary directory for extraction
-	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
+	tempDir, err := r.createExtractionDir()
 	if err != nil {
-		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
-		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return "", nil, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -567,22 +560,58 @@ func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
 		"temp_dir": tempDir,
 	}).Info("Extracting reseed zip file to temporary directory")
 
+	files, err := r.extractAndValidateZip(zipPath, tempDir)
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return "", nil, err
+	}
+
+	if err := r.validateDecompressedSize(tempDir, files); err != nil {
+		os.RemoveAll(tempDir)
+		return "", nil, err
+	}
+
+	fullPaths := buildFullPaths(tempDir, files)
+
+	log.WithFields(logger.Fields{
+		"file_count": len(fullPaths),
+		"temp_dir":   tempDir,
+	}).Info("Successfully extracted reseed files to temporary directory")
+	return tempDir, fullPaths, nil
+}
+
+// createExtractionDir creates a temporary directory for zip extraction.
+func (r Reseed) createExtractionDir() (string, error) {
+	tempDir, err := os.MkdirTemp("", "reseed-extract-*")
+	if err != nil {
+		log.WithError(err).Error("Failed to create temporary directory for reseed extraction")
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	return tempDir, nil
+}
+
+// extractAndValidateZip extracts the zip and validates it has content.
+func (r Reseed) extractAndValidateZip(zipPath, tempDir string) ([]string, error) {
 	files, err := unzip.New().Extract(zipPath, tempDir)
 	if err != nil {
 		log.WithError(err).WithFields(logger.Fields{
 			"zip_path": zipPath,
 			"temp_dir": tempDir,
 		}).Error("Failed to extract reseed zip file")
-		os.RemoveAll(tempDir) // Clean up on error
-		return "", nil, err
+		return nil, err
 	}
 	if len(files) <= 0 {
 		log.WithField("zip_path", zipPath).Error("Reseed zip file appears to have no content")
-		os.RemoveAll(tempDir) // Clean up on error
-		return "", nil, oops.Errorf("error: reseed appears to have no content")
+		return nil, oops.Errorf("error: reseed appears to have no content")
 	}
+	return files, nil
+}
 
-	// Validate total decompressed size to prevent zip bombs
+// maxDecompressedSize is the maximum total decompressed output size (200 MB).
+const maxDecompressedSize int64 = 200 * 1024 * 1024
+
+// validateDecompressedSize checks that extracted files don't exceed the size limit.
+func (r Reseed) validateDecompressedSize(tempDir string, files []string) error {
 	var totalSize int64
 	for _, filename := range files {
 		fullPath := filepath.Join(tempDir, filename)
@@ -592,23 +621,19 @@ func (r Reseed) extractZipFile(zipPath string) (string, []string, error) {
 		}
 		totalSize += info.Size()
 		if totalSize > maxDecompressedSize {
-			os.RemoveAll(tempDir)
-			return "", nil, fmt.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
+			return fmt.Errorf("decompressed reseed data exceeds %d MB size limit (possible zip bomb)", maxDecompressedSize/(1024*1024))
 		}
 	}
+	return nil
+}
 
-	// The unzip library returns just the filenames, not full paths
-	// We need to prepend the temporary directory path to each filename
+// buildFullPaths prepends the directory path to each filename.
+func buildFullPaths(tempDir string, files []string) []string {
 	fullPaths := make([]string, len(files))
 	for i, filename := range files {
 		fullPaths[i] = filepath.Join(tempDir, filename)
 	}
-
-	log.WithFields(logger.Fields{
-		"file_count": len(fullPaths),
-		"temp_dir":   tempDir,
-	}).Info("Successfully extracted reseed files to temporary directory")
-	return tempDir, fullPaths, nil
+	return fullPaths
 }
 
 // parseRouterInfoFilesWithLimit reads and parses router info files from the extracted files with a limit.
