@@ -41,6 +41,11 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	inboundPool.SetTunnelBuilder(builder)
 	session.SetInboundPool(inboundPool)
 
+	// Start inbound pool maintenance to begin building tunnels
+	if err := inboundPool.StartMaintenance(); err != nil {
+		return fmt.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
+	}
+
 	// Create outbound tunnel pool
 	outboundConfig := tunnel.PoolConfig{
 		MinTunnels:       config.OutboundTunnelCount,
@@ -55,6 +60,13 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	outboundPool := tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
 	outboundPool.SetTunnelBuilder(builder)
 	session.SetOutboundPool(outboundPool)
+
+	// Start outbound pool maintenance to begin building tunnels
+	if err := outboundPool.StartMaintenance(); err != nil {
+		// Stop the already-started inbound pool before returning
+		inboundPool.Stop()
+		return fmt.Errorf("failed to start outbound tunnel pool maintenance: %w", err)
+	}
 
 	log.WithFields(logger.Fields{
 		"at":                    "i2cp.Server.initializeSessionTunnelPools",
@@ -87,12 +99,9 @@ func (s *Server) rebuildSessionTunnelPools(session *Session) error {
 // Per I2CP spec: After session creation, router waits for inbound+outbound tunnels,
 // then sends type 37 with lease data. Client responds with CreateLeaseSet (type 5).
 //
-// TODO: Full tunnel pool integration required. The router must:
-// 1. Attach tunnel pools with proper TunnelBuilder during session creation
-// 2. Provide peer selector for tunnel hop selection
-// 3. Integrate with transport layer for tunnel establishment
-// 4. Set up tunnel lifecycle management (expiry, rotation)
-// Currently pools may not build tunnels automatically without this integration.
+// Tunnel pools are initialized with TunnelBuilder and PeerSelector during session
+// creation (initializeSessionTunnelPools), and their maintenance loops are started
+// automatically. This monitor waits for the pools to report tunnel readiness.
 func (s *Server) monitorTunnelsAndRequestLeaseSet(session *Session, conn net.Conn) {
 	sessionID := session.ID()
 	logMonitoringStart(sessionID)

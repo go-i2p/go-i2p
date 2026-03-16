@@ -382,17 +382,16 @@ func applyTunnelLifetimeOptions(config *SessionConfig, options map[string]string
 //
 // Implemented options:
 //   - i2cp.messageReliability: Stored for relay decision logic ("BestEffort", "Guaranteed", "None")
+//   - i2cp.gzip: Controls whether the I2CP client library compresses/decompresses payloads (default: true)
 //   - i2cp.encryptLeaseSet: Enables LeaseSet encryption via UseEncryptedLeaseSet
 //   - i2cp.dontPublishLeaseSet: Prevents LeaseSet publication to NetDB
-//
-// NOTE: i2cp.gzip is parsed and acknowledged but NOT implemented (payload compression not performed)
 func applyMessageOptions(config *SessionConfig, options map[string]string) {
 	applyMessageReliability(config, options)
+	applyGzipOption(config, options)
 	applyBoolOption(config, options, "i2cp.encryptLeaseSet", "UseEncryptedLeaseSet",
 		func() { config.UseEncryptedLeaseSet = true }, "enabled_encrypted_leaseset")
 	applyBoolOption(config, options, "i2cp.dontPublishLeaseSet", "DontPublishLeaseSet",
 		func() { config.DontPublishLeaseSet = true }, "disabled_leaseset_publication")
-	warnUnsupportedGzip(config, options)
 }
 
 // applyMessageReliability handles the i2cp.messageReliability option.
@@ -431,17 +430,23 @@ func applyBoolOption(config *SessionConfig, options map[string]string, key, fiel
 	}
 }
 
-// warnUnsupportedGzip logs a warning for the unsupported i2cp.gzip option.
-func warnUnsupportedGzip(config *SessionConfig, options map[string]string) {
-	if val, exists := options["i2cp.gzip"]; exists {
-		log.WithFields(logger.Fields{
-			"at":     "i2cp.applyMessageOptions",
-			"option": "i2cp.gzip",
-			"value":  val,
-			"status": "unsupported",
-		}).Warn("gzip compression option not implemented - value ignored")
-		recordUnsupportedOption(config, "i2cp.gzip", val)
+// applyGzipOption handles the i2cp.gzip option.
+// Per I2CP spec, gzip compression is performed by the I2CP client library,
+// not the router. The router stores this flag so that session configuration
+// can be queried by the client library to determine compression behavior.
+// Default is true (enabled) per the specification.
+func applyGzipOption(config *SessionConfig, options map[string]string) {
+	val, exists := options["i2cp.gzip"]
+	if !exists {
+		return
 	}
+	config.GzipEnabled = val == "true"
+	markExplicitlySet(config, "GzipEnabled")
+	log.WithFields(logger.Fields{
+		"at":     "i2cp.applyGzipOption",
+		"option": "i2cp.gzip",
+		"value":  val,
+	}).Debug("applied_gzip_option")
 }
 
 // recordUnsupportedOption records an I2CP option that the client set but is

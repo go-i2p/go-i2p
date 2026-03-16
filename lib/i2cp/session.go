@@ -120,6 +120,9 @@ type SessionConfig struct {
 	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
 	BlindingSecret       []byte // Secret for destination blinding (if empty, random generated)
 
+	// Gzip compression (per I2CP spec, compression is performed by the client library)
+	GzipEnabled bool // If true, the I2CP client library compresses/decompresses payloads (default: true per spec)
+
 	// ExplicitlySetFields tracks which fields were explicitly set by the client
 	// during reconfiguration, allowing zero values (e.g., zero-hop tunnels) to
 	// be distinguished from "not provided".
@@ -155,7 +158,8 @@ func DefaultSessionConfig() *SessionConfig {
 		DontPublishLeaseSet:    false,
 		UseEncryptedLeaseSet:   false,
 		BlindingSecret:         nil,
-		LeaseSetExpiration:     600, // 10 minutes
+		GzipEnabled:            true, // Per I2CP spec, gzip is enabled by default
+		LeaseSetExpiration:     600,  // 10 minutes
 		Nickname:               "",
 	}
 }

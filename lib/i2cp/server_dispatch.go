@@ -236,20 +236,6 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 	}, nil
 }
 
-// monitorTunnelsAndRequestLeaseSet monitors a session's tunnel pools and sends
-// RequestVariableLeaseSet (type 37) when tunnels are ready. This is required by
-// I2CP protocol - the router must tell the client when to publish its LeaseSet.
-//
-// Per I2CP spec: After session creation, router waits for inbound+outbound tunnels,
-// then sends type 37 with lease data. Client responds with CreateLeaseSet (type 5).
-//
-// TODO: Full tunnel pool integration required. The router must:
-// 1. Attach tunnel pools with proper TunnelBuilder during session creation
-// 2. Provide peer selector for tunnel hop selection
-// 3. Integrate with transport layer for tunnel establishment
-// 4. Set up tunnel lifecycle management (expiry, rotation)
-// Currently pools may not build tunnels automatically without this integration.
-
 func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
 	if *sessionPtr == nil {
 		return nil, fmt.Errorf("session not active")

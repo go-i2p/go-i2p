@@ -67,10 +67,13 @@ func (m *mockLeaseSetPublisher) GetPublishCount() int {
 
 // mockTunnelBuilder implements tunnel.BuilderInterface for testing.
 type mockTunnelBuilder struct {
+	mu     sync.Mutex
 	nextID tunnel.TunnelID
 }
 
 func (m *mockTunnelBuilder) BuildTunnel(req tunnel.BuildTunnelRequest) (*tunnel.BuildTunnelResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.nextID++
 	return &tunnel.BuildTunnelResult{
 		TunnelID:   m.nextID,

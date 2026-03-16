@@ -375,12 +375,21 @@ func TestApplyMessageOptions_DontPublishLeaseSet(t *testing.T) {
 	assert.True(t, config.ExplicitlySetFields["DontPublishLeaseSet"], "not marked as explicitly set")
 }
 
-// TestApplyMessageOptions_GzipStillUnsupported verifies i2cp.gzip is tracked as unsupported.
-func TestApplyMessageOptions_GzipStillUnsupported(t *testing.T) {
+// TestApplyMessageOptions_GzipEnabled verifies i2cp.gzip is properly stored in SessionConfig.
+func TestApplyMessageOptions_GzipEnabled(t *testing.T) {
 	config := DefaultSessionConfig()
 	options := map[string]string{"i2cp.gzip": "true"}
 	applyMessageOptions(config, options)
-	assert.Equal(t, "true", config.UnsupportedOptions["i2cp.gzip"], "i2cp.gzip should be recorded in UnsupportedOptions")
+	assert.True(t, config.GzipEnabled, "GzipEnabled should be true when i2cp.gzip=true")
+	assert.True(t, config.ExplicitlySetFields["GzipEnabled"], "GzipEnabled should be marked as explicitly set")
+}
+
+// TestApplyMessageOptions_GzipDisabled verifies i2cp.gzip=false disables compression.
+func TestApplyMessageOptions_GzipDisabled(t *testing.T) {
+	config := DefaultSessionConfig()
+	options := map[string]string{"i2cp.gzip": "false"}
+	applyMessageOptions(config, options)
+	assert.False(t, config.GzipEnabled, "GzipEnabled should be false when i2cp.gzip=false")
 }
 
 // TestLogUnsupportedBackupQuantities_AppliesValues tests that backup quantities are stored.
