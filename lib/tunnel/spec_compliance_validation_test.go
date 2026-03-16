@@ -186,7 +186,7 @@ func TestTunnelMessages_DeliveryInstructions_FirstFragmentFlagBit7Is0(t *testing
 func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentFlagBit7Is1(t *testing.T) {
 	// Follow-on fragment: bit 7 = 1
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 1,
 		lastFragment:   false,
 		messageID:      0x12345678,
@@ -205,17 +205,17 @@ func TestTunnelMessages_DeliveryInstructions_FirstFragmentDeliveryTypes(t *testi
 		expectedBits byte
 	}{
 		{
-			name:         "DT_LOCAL",
+			name:         "DTLocal",
 			di:           NewLocalDeliveryInstructions(10),
 			expectedBits: 0x00, // bits 6-5 = 00
 		},
 		{
-			name:         "DT_TUNNEL",
+			name:         "DTTunnel",
 			di:           NewTunnelDeliveryInstructions(1234, [32]byte{0xAA}, 10),
 			expectedBits: 0x20, // bits 6-5 = 01
 		},
 		{
-			name:         "DT_ROUTER",
+			name:         "DTRouter",
 			di:           NewRouterDeliveryInstructions([32]byte{0xBB}, 10),
 			expectedBits: 0x40, // bits 6-5 = 10
 		},
@@ -273,7 +273,7 @@ func TestTunnelMessages_DeliveryInstructions_FirstFragmentSizes(t *testing.T) {
 func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentIs7Bytes(t *testing.T) {
 	// Follow-on fragment is exactly 7 bytes: flag(1) + messageID(4) + size(2)
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 5,
 		lastFragment:   false,
 		messageID:      0xABCD1234,
@@ -288,7 +288,7 @@ func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentNumberBits6to1(t *t
 	// Follow-on fragment number is encoded in bits 6-1 of flag byte
 	for fragNum := 1; fragNum <= 63; fragNum++ {
 		di := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: fragNum,
 			lastFragment:   false,
 			messageID:      1,
@@ -307,7 +307,7 @@ func TestTunnelMessages_DeliveryInstructions_FollowOnFragmentNumberBits6to1(t *t
 func TestTunnelMessages_DeliveryInstructions_FollowOnLastFragmentBit0(t *testing.T) {
 	// Last fragment flag is bit 0 of follow-on flag byte
 	diNotLast := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 3,
 		lastFragment:   false,
 		messageID:      1,
@@ -318,7 +318,7 @@ func TestTunnelMessages_DeliveryInstructions_FollowOnLastFragmentBit0(t *testing
 	assert.Equal(t, byte(0), dataNotLast[0]&0x01, "Non-last fragment must have bit 0 = 0")
 
 	diLast := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 3,
 		lastFragment:   true,
 		messageID:      1,
@@ -345,11 +345,11 @@ func TestTunnelMessages_DeliveryInstructions_FragmentedBit3(t *testing.T) {
 }
 
 func TestTunnelMessages_DeliveryInstructions_DT_UNUSEDRejected(t *testing.T) {
-	// DT_UNUSED (0x03) delivery type must be rejected
+	// DTUnused (0x03) delivery type must be rejected
 	// Create raw bytes with delivery type 0x03 in bits 6-5
-	raw := []byte{0x60, 0x00, 0x05} // flag = 0x60 means bits 6-5 = 11 = DT_UNUSED
+	raw := []byte{0x60, 0x00, 0x05} // flag = 0x60 means bits 6-5 = 11 = DTUnused
 	_, err := NewDeliveryInstructions(raw)
-	assert.Error(t, err, "DT_UNUSED (0x03) delivery type must be rejected")
+	assert.Error(t, err, "DTUnused (0x03) delivery type must be rejected")
 }
 
 func TestTunnelMessages_DeliveryInstructions_SerializeDeserializeRoundtrip(t *testing.T) {
@@ -373,7 +373,7 @@ func TestTunnelMessages_DeliveryInstructions_SerializeDeserializeRoundtrip(t *te
 		{
 			name: "Follow-on fragment",
 			di: &DeliveryInstructions{
-				fragmentType:   FOLLOW_ON_FRAGMENT,
+				fragmentType:   FollowOnFragment,
 				fragmentNumber: 7,
 				lastFragment:   true,
 				messageID:      0xDEADBEEF,
@@ -400,7 +400,7 @@ func TestTunnelMessages_DeliveryInstructions_SerializeDeserializeRoundtrip(t *te
 			origSize, _ := tt.di.FragmentSize()
 			assert.Equal(t, origSize, fragSize, "Fragment size must survive roundtrip")
 
-			if fragType == FOLLOW_ON_FRAGMENT {
+			if fragType == FollowOnFragment {
 				parsedMsgID, err := parsed.MessageID()
 				require.NoError(t, err)
 				origMsgID, _ := tt.di.MessageID()
@@ -417,7 +417,7 @@ func TestTunnelMessages_DeliveryInstructions_SerializeDeserializeRoundtrip(t *te
 				assert.Equal(t, origIsLast, parsedIsLast, "Last fragment flag must survive roundtrip")
 			}
 
-			if fragType == FIRST_FRAGMENT {
+			if fragType == FirstFragment {
 				parsedDT, err := parsed.DeliveryType()
 				require.NoError(t, err)
 				origDT, _ := tt.di.DeliveryType()
@@ -428,7 +428,7 @@ func TestTunnelMessages_DeliveryInstructions_SerializeDeserializeRoundtrip(t *te
 }
 
 func TestTunnelMessages_DeliveryInstructions_TunnelIDPresence(t *testing.T) {
-	// TunnelID is only present for DT_TUNNEL
+	// TunnelID is only present for DTTunnel
 	tunnelDI := NewTunnelDeliveryInstructions(9999, [32]byte{0xFF}, 50)
 	tid, err := tunnelDI.TunnelID()
 	require.NoError(t, err)
@@ -436,26 +436,26 @@ func TestTunnelMessages_DeliveryInstructions_TunnelIDPresence(t *testing.T) {
 
 	localDI := NewLocalDeliveryInstructions(50)
 	_, err = localDI.TunnelID()
-	assert.Error(t, err, "TunnelID must not be available for DT_LOCAL")
+	assert.Error(t, err, "TunnelID must not be available for DTLocal")
 }
 
 func TestTunnelMessages_DeliveryInstructions_HashPresence(t *testing.T) {
-	// Hash present for DT_TUNNEL and DT_ROUTER, not for DT_LOCAL
+	// Hash present for DTTunnel and DTRouter, not for DTLocal
 	expectedHash := common.Hash{0x01, 0x02, 0x03}
 
 	tunnelDI := NewTunnelDeliveryInstructions(1, [32]byte(expectedHash), 50)
 	hash, err := tunnelDI.Hash()
 	require.NoError(t, err)
-	assert.Equal(t, expectedHash, hash, "DT_TUNNEL must include gateway hash")
+	assert.Equal(t, expectedHash, hash, "DTTunnel must include gateway hash")
 
 	routerDI := NewRouterDeliveryInstructions([32]byte(expectedHash), 50)
 	hash, err = routerDI.Hash()
 	require.NoError(t, err)
-	assert.Equal(t, expectedHash, hash, "DT_ROUTER must include router hash")
+	assert.Equal(t, expectedHash, hash, "DTRouter must include router hash")
 
 	localDI := NewLocalDeliveryInstructions(50)
 	_, err = localDI.Hash()
-	assert.Error(t, err, "DT_LOCAL must not have hash")
+	assert.Error(t, err, "DTLocal must not have hash")
 }
 
 // --- Fragment Reassembly ---
@@ -466,7 +466,7 @@ func TestTunnelMessages_FragmentReassembly_UnfragmentedMessageDelivered(t *testi
 
 	// Build a valid tunnel message with unfragmented LOCAL delivery
 	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE}
-	tunnelMsg := buildTestTunnelMessage(t, DT_LOCAL, false, 0, 0, [32]byte{}, payload)
+	tunnelMsg := buildTestTunnelMessage(t, DTLocal, false, 0, 0, [32]byte{}, payload)
 
 	err := ep.Receive(tunnelMsg)
 	require.NoError(t, err)
@@ -482,7 +482,7 @@ func TestTunnelMessages_FragmentReassembly_TwoFragmentsReassembled(t *testing.T)
 	part2 := []byte{0x06, 0x07, 0x08, 0x09, 0x0A}
 
 	// First fragment
-	firstMsg := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
+	firstMsg := buildTestTunnelMessage(t, DTLocal, true, msgID, 0, [32]byte{}, part1)
 	err := ep.Receive(firstMsg)
 	require.NoError(t, err)
 	assert.Nil(t, getDelivered(), "Message should not be delivered after first fragment only")
@@ -506,7 +506,7 @@ func TestTunnelMessages_FragmentReassembly_ThreeFragmentsReassembled(t *testing.
 	part3 := []byte{0x70, 0x80, 0x90}
 
 	// Send first fragment
-	msg1 := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
+	msg1 := buildTestTunnelMessage(t, DTLocal, true, msgID, 0, [32]byte{}, part1)
 	require.NoError(t, ep.Receive(msg1))
 	assert.Nil(t, getDelivered())
 
@@ -539,7 +539,7 @@ func TestTunnelMessages_FragmentReassembly_OutOfOrderFragments(t *testing.T) {
 	assert.Nil(t, getDelivered())
 
 	// Send first fragment
-	msg1 := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
+	msg1 := buildTestTunnelMessage(t, DTLocal, true, msgID, 0, [32]byte{}, part1)
 	require.NoError(t, ep.Receive(msg1))
 	assert.Nil(t, getDelivered())
 
@@ -567,7 +567,7 @@ func TestTunnelMessages_FragmentReassembly_DuplicateFragmentRejected(t *testing.
 	part3 := []byte{0x05, 0x06}
 
 	// Send first fragment
-	msg1 := buildTestTunnelMessage(t, DT_LOCAL, true, msgID, 0, [32]byte{}, part1)
+	msg1 := buildTestTunnelMessage(t, DTLocal, true, msgID, 0, [32]byte{}, part1)
 	require.NoError(t, ep.Receive(msg1))
 
 	// Send follow-on fragment 1 (not last)
@@ -587,7 +587,7 @@ func TestTunnelMessages_FragmentReassembly_DuplicateFragmentRejected(t *testing.
 func TestTunnelMessages_FragmentReassembly_MaxFragments63(t *testing.T) {
 	// Fragment number is 6-bit field (1-63), so max follow-on fragments = 63
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 63,
 		lastFragment:   true,
 		messageID:      1,
@@ -645,7 +645,7 @@ func TestTunnelMessages_MessageID_Is4Bytes(t *testing.T) {
 func TestTunnelMessages_MessageID_FollowOnFragment4Bytes(t *testing.T) {
 	// Follow-on fragment message ID at bytes [1:5]
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 2,
 		lastFragment:   false,
 		messageID:      0xCAFEBABE,
@@ -668,7 +668,7 @@ func TestTunnelMessages_MessageID_CorrelatesFragments(t *testing.T) {
 	firstDI.messageID = msgID
 
 	followDI := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 1,
 		lastFragment:   true,
 		messageID:      msgID,
@@ -706,7 +706,7 @@ func TestTunnelMessages_MessageID_FragmentSizeField2Bytes(t *testing.T) {
 	// Fragment size is 2-byte big-endian uint16
 	// For follow-on: at bytes [5:7]
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: 1,
 		lastFragment:   true,
 		messageID:      1,
@@ -751,9 +751,9 @@ func buildTestTunnelMessage(t *testing.T, deliveryType byte, fragmented bool, ms
 
 	var di *DeliveryInstructions
 	switch deliveryType {
-	case DT_TUNNEL:
+	case DTTunnel:
 		di = NewTunnelDeliveryInstructions(tunnelID, hash, uint16(len(payload)))
-	case DT_ROUTER:
+	case DTRouter:
 		di = NewRouterDeliveryInstructions(hash, uint16(len(payload)))
 	default:
 		di = NewLocalDeliveryInstructions(uint16(len(payload)))
@@ -775,7 +775,7 @@ func buildTestFollowOnTunnelMessage(t *testing.T, msgID uint32, fragNum int, isL
 	t.Helper()
 
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: fragNum,
 		lastFragment:   isLast,
 		messageID:      msgID,
@@ -1063,25 +1063,25 @@ func TestTunnelRoles_GatewayEncryptsAndAddsInstructions(t *testing.T) {
 }
 
 func TestTunnelRoles_GatewaySupportsAllDeliveryTypes(t *testing.T) {
-	// Gateway must support DT_LOCAL, DT_TUNNEL, and DT_ROUTER
+	// Gateway must support DTLocal, DTTunnel, and DTRouter
 	gw := createSpecGateway(t)
 
 	payload := []byte("small payload")
 
-	// DT_LOCAL
+	// DTLocal
 	msgs, err := gw.SendWithDelivery(payload, LocalDelivery())
 	require.NoError(t, err)
 	assert.Len(t, msgs, 1)
 	assert.Equal(t, 1028, len(msgs[0]))
 
-	// DT_TUNNEL
+	// DTTunnel
 	var hash [32]byte
 	hash[0] = 0x42
 	msgs, err = gw.SendWithDelivery(payload, TunnelDelivery(100, hash))
 	require.NoError(t, err)
 	assert.Len(t, msgs, 1)
 
-	// DT_ROUTER
+	// DTRouter
 	msgs, err = gw.SendWithDelivery(payload, RouterDelivery(hash))
 	require.NoError(t, err)
 	assert.Len(t, msgs, 1)
@@ -1128,24 +1128,24 @@ func TestTunnelRoles_EndpointDecryptsAndDelivers(t *testing.T) {
 	ep, getReceived := createSpecEndpointWithCapture(t)
 
 	payload := []byte("hello endpoint")
-	msg := buildTestTunnelMessage(t, DT_LOCAL, false, 0, 0, [32]byte{}, payload)
+	msg := buildTestTunnelMessage(t, DTLocal, false, 0, 0, [32]byte{}, payload)
 	err := ep.Receive(msg)
 	require.NoError(t, err)
 	assert.Equal(t, payload, getReceived(), "endpoint must deliver the message payload")
 }
 
 func TestTunnelRoles_EndpointRoutesNonLocalMessages(t *testing.T) {
-	// Endpoint must support DT_TUNNEL and DT_ROUTER delivery via forwarder
+	// Endpoint must support DTTunnel and DTRouter delivery via forwarder
 	ep, fwd := createSpecEndpointWithForwarder(t)
 
-	// DT_TUNNEL message
+	// DTTunnel message
 	var hash [32]byte
 	hash[0] = 0x42
 	payload := []byte("tunnel message")
-	msg := buildTestTunnelMessage(t, DT_TUNNEL, false, 0, 100, hash, payload)
+	msg := buildTestTunnelMessage(t, DTTunnel, false, 0, 100, hash, payload)
 	err := ep.Receive(msg)
 	require.NoError(t, err)
-	assert.True(t, fwd.tunnelCalled, "endpoint must forward DT_TUNNEL to ForwardToTunnel")
+	assert.True(t, fwd.tunnelCalled, "endpoint must forward DTTunnel to ForwardToTunnel")
 }
 
 func TestTunnelRoles_IBGWandOBEPDetermination(t *testing.T) {

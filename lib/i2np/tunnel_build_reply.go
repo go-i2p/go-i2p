@@ -16,12 +16,12 @@ Same format as TunnelBuildMessage, with BuildResponseRecords
 
 // TunnelBuildReply constants for processing responses
 const (
-	TUNNEL_BUILD_REPLY_SUCCESS   = 0x00 // Tunnel hop accepted the request
-	TUNNEL_BUILD_REPLY_REJECT    = 0x01 // General rejection
-	TUNNEL_BUILD_REPLY_OVERLOAD  = 0x02 // Router is overloaded
-	TUNNEL_BUILD_REPLY_BANDWIDTH = 0x03 // Insufficient bandwidth
-	TUNNEL_BUILD_REPLY_INVALID   = 0x04 // Invalid request data
-	TUNNEL_BUILD_REPLY_EXPIRED   = 0x05 // Request has expired
+	TunnelBuildReplySuccess   = 0x00 // Tunnel hop accepted the request
+	TunnelBuildReplyReject    = 0x01 // General rejection
+	TunnelBuildReplyOverload  = 0x02 // Router is overloaded
+	TunnelBuildReplyBandwidth = 0x03 // Insufficient bandwidth
+	TunnelBuildReplyInvalid   = 0x04 // Invalid request data
+	TunnelBuildReplyExpired   = 0x05 // Request has expired
 )
 
 type TunnelBuildReply struct {
@@ -124,27 +124,27 @@ func (t *TunnelBuildReply) processHopResponse(hopIndex int, record BuildResponse
 
 	// Process reply code
 	switch record.Reply {
-	case TUNNEL_BUILD_REPLY_SUCCESS:
+	case TunnelBuildReplySuccess:
 		log.WithField("hop_index", hopIndex).Debug("Hop accepted tunnel build request")
 		return true, nil
 
-	case TUNNEL_BUILD_REPLY_REJECT:
+	case TunnelBuildReplyReject:
 		log.WithField("hop_index", hopIndex).Warn("Hop rejected tunnel build request")
 		return false, fmt.Errorf("hop %d: rejected request", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_OVERLOAD:
+	case TunnelBuildReplyOverload:
 		log.WithField("hop_index", hopIndex).Warn("Hop is overloaded")
 		return false, fmt.Errorf("hop %d: router overloaded", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_BANDWIDTH:
+	case TunnelBuildReplyBandwidth:
 		log.WithField("hop_index", hopIndex).Warn("Hop has insufficient bandwidth")
 		return false, fmt.Errorf("hop %d: insufficient bandwidth", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_INVALID:
+	case TunnelBuildReplyInvalid:
 		log.WithField("hop_index", hopIndex).Warn("Hop received invalid request data")
 		return false, fmt.Errorf("hop %d: invalid request data", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_EXPIRED:
+	case TunnelBuildReplyExpired:
 		log.WithField("hop_index", hopIndex).Warn("Hop request has expired")
 		return false, fmt.Errorf("hop %d: request expired", hopIndex)
 

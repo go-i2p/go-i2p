@@ -123,7 +123,7 @@ func (s *ShortTunnelBuildReply) processHopResponse(hopIndex int, record BuildRes
 	// Check if this hop accepted the tunnel request
 	// The Reply field contains the response code
 	replyCode := record.Reply
-	accepted := replyCode == TUNNEL_BUILD_REPLY_SUCCESS
+	accepted := replyCode == TunnelBuildReplySuccess
 
 	log.WithFields(logger.Fields{
 		"at":         "ShortTunnelBuildReply.processHopResponse",

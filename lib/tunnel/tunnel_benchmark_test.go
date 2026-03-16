@@ -87,7 +87,7 @@ func BenchmarkLocalDeliveryRoundTrip(b *testing.B) {
 // Hash extraction benchmarks
 // ---------------------------------------------------------------------------
 
-// BenchmarkHashDTRouter measures performance of hash extraction for DT_ROUTER delivery type.
+// BenchmarkHashDTRouter measures performance of hash extraction for DTRouter delivery type.
 func BenchmarkHashDTRouter(b *testing.B) {
 	di, _ := createDTRouterDeliveryInstructions(b)
 
@@ -97,7 +97,7 @@ func BenchmarkHashDTRouter(b *testing.B) {
 	}
 }
 
-// BenchmarkHashDTTunnel measures performance of hash extraction for DT_TUNNEL delivery type.
+// BenchmarkHashDTTunnel measures performance of hash extraction for DTTunnel delivery type.
 func BenchmarkHashDTTunnel(b *testing.B) {
 	di, _ := createDTTunnelDeliveryInstructions(b)
 

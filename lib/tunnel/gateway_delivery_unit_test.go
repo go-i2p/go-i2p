@@ -31,7 +31,7 @@ func (p *passthroughEncryptor) Type() tunnel.TunnelEncryptionType {
 func TestDeliveryConfigConstructors(t *testing.T) {
 	t.Run("LocalDelivery", func(t *testing.T) {
 		dc := LocalDelivery()
-		assert.Equal(t, byte(DT_LOCAL), dc.DeliveryType)
+		assert.Equal(t, byte(DTLocal), dc.DeliveryType)
 		assert.Equal(t, uint32(0), dc.TunnelID)
 		assert.Equal(t, [32]byte{}, dc.Hash)
 	})
@@ -40,7 +40,7 @@ func TestDeliveryConfigConstructors(t *testing.T) {
 		var hash [32]byte
 		copy(hash[:], []byte("tunnel_gateway_hash_for_test_val"))
 		dc := TunnelDelivery(12345, hash)
-		assert.Equal(t, byte(DT_TUNNEL), dc.DeliveryType)
+		assert.Equal(t, byte(DTTunnel), dc.DeliveryType)
 		assert.Equal(t, uint32(12345), dc.TunnelID)
 		assert.Equal(t, hash, dc.Hash)
 	})
@@ -49,7 +49,7 @@ func TestDeliveryConfigConstructors(t *testing.T) {
 		var hash [32]byte
 		copy(hash[:], []byte("router_dest_hash_for_testing!!!!"))
 		dc := RouterDelivery(hash)
-		assert.Equal(t, byte(DT_ROUTER), dc.DeliveryType)
+		assert.Equal(t, byte(DTRouter), dc.DeliveryType)
 		assert.Equal(t, uint32(0), dc.TunnelID)
 		assert.Equal(t, hash, dc.Hash)
 	})
@@ -183,7 +183,7 @@ func TestSendWithDeliveryFragmentedMessage(t *testing.T) {
 
 	// Create a message larger than what fits in a single tunnel message.
 	// Actual max payload is ~1003 bytes (1028 - 24 header - 1 zero byte).
-	// With DT_LOCAL unfragmented DI (3 bytes), max single msg ≈ 1000 bytes.
+	// With DTLocal unfragmented DI (3 bytes), max single msg ≈ 1000 bytes.
 	// We go slightly over to trigger fragmentation.
 	msg := make([]byte, 1050)
 	for i := range msg {
@@ -201,7 +201,7 @@ func TestSendWithDeliveryFragmentedMessage(t *testing.T) {
 	}
 }
 
-// TestSendWithDeliveryFragmentedTunnel tests fragmentation for DT_TUNNEL delivery.
+// TestSendWithDeliveryFragmentedTunnel tests fragmentation for DTTunnel delivery.
 func TestSendWithDeliveryFragmentedTunnel(t *testing.T) {
 	gw := createTestGatewayPassthrough(t)
 
@@ -209,8 +209,8 @@ func TestSendWithDeliveryFragmentedTunnel(t *testing.T) {
 	copy(hash[:], []byte("gateway_hash_for_frag_tunnel_del"))
 	dc := TunnelDelivery(42, hash)
 
-	// Make a message that requires fragmentation for DT_TUNNEL
-	// DT_TUNNEL DI is larger, so smaller payload fits
+	// Make a message that requires fragmentation for DTTunnel
+	// DTTunnel DI is larger, so smaller payload fits
 	msg := make([]byte, 1050)
 
 	result, err := gw.SendWithDelivery(msg, dc)
@@ -297,7 +297,7 @@ func TestCreateFollowOnInstructions(t *testing.T) {
 	assert.NotNil(t, diLast, "Last follow-on DI should not be nil")
 }
 
-// TestSendBackwardCompatibility tests that Send() still works for DT_LOCAL.
+// TestSendBackwardCompatibility tests that Send() still works for DTLocal.
 func TestSendBackwardCompatibility(t *testing.T) {
 	gw := createTestGatewayPassthrough(t)
 
@@ -310,7 +310,7 @@ func TestSendBackwardCompatibility(t *testing.T) {
 
 // TestCreateDeliveryInstructionsForConfigReturnsError verifies that
 // createDeliveryInstructionsForConfig returns an error instead of silently
-// falling back to DT_LOCAL when serialization fails.
+// falling back to DTLocal when serialization fails.
 func TestCreateDeliveryInstructionsForConfigReturnsError(t *testing.T) {
 	gw := createTestGatewayPassthrough(t)
 
@@ -319,8 +319,8 @@ func TestCreateDeliveryInstructionsForConfigReturnsError(t *testing.T) {
 		di, err := gw.createDeliveryInstructionsForConfig(LocalDelivery(), make([]byte, 50), false, 0)
 		require.NoError(t, err)
 		assert.NotNil(t, di)
-		// Verify it's actually DT_LOCAL and not silently changed
-		assert.Equal(t, byte(DT_LOCAL), di[0]&0xC0>>6, "Should be DT_LOCAL delivery type")
+		// Verify it's actually DTLocal and not silently changed
+		assert.Equal(t, byte(DTLocal), di[0]&0xC0>>6, "Should be DTLocal delivery type")
 	})
 
 	t.Run("ValidTunnelDelivery", func(t *testing.T) {

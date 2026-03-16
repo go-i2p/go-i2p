@@ -889,7 +889,7 @@ func (tm *TunnelManager) createBuildResponses(records []BuildResponseRecord) []t
 	for i, record := range records {
 		responses[i] = tunnel.BuildResponse{
 			HopIndex: i,
-			Success:  record.Reply == TUNNEL_BUILD_REPLY_SUCCESS,
+			Success:  record.Reply == TunnelBuildReplySuccess,
 			Reply:    []byte{record.Reply},
 		}
 	}

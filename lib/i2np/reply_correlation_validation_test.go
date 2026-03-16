@@ -428,7 +428,7 @@ func TestReplyProcessor_KeyIVMismatch(t *testing.T) {
 func createRejectedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
-		records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_REJECT)
+		records[i] = createValidResponseRecordWithReply(TunnelBuildReplyReject)
 	}
 	return &VariableTunnelBuildReply{
 		Count:                hopCount,

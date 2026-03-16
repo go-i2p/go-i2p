@@ -20,12 +20,12 @@ func TestProcessInstructionLoop_ZeroLengthFragment(t *testing.T) {
 
 	// Construct a LOCAL first-fragment delivery instruction with fragmentSize == 0.
 	// Byte layout for a LOCAL first fragment (no delay, not fragmented, no ext opts):
-	//   byte 0: flag = 0x00  (bit7=0 → FIRST_FRAGMENT, bits6:5=00 → LOCAL)
+	//   byte 0: flag = 0x00  (bit7=0 → FirstFragment, bits6:5=00 → LOCAL)
 	//   bytes 1-2: fragmentSize = 0x0000
 	// Append extra bytes so remainder is non-empty, which would trigger the
 	// infinite loop in the original code.
 	data := []byte{
-		0x00,       // flag: FIRST_FRAGMENT, DT_LOCAL, no delay/frag/ext
+		0x00,       // flag: FirstFragment, DTLocal, no delay/frag/ext
 		0x00, 0x00, // fragmentSize = 0
 		0xFF, 0xFF, 0xFF, // extra bytes (would cause infinite loop without fix)
 	}
@@ -60,7 +60,7 @@ func TestProcessInstructionLoop_ValidFragment(t *testing.T) {
 
 	// Construct a LOCAL first-fragment delivery instruction with fragmentSize == 5.
 	// Byte layout:
-	//   byte 0:   flag = 0x00  (FIRST_FRAGMENT, DT_LOCAL)
+	//   byte 0:   flag = 0x00  (FirstFragment, DTLocal)
 	//   bytes 1-2: fragmentSize = 0x0005
 	//   bytes 3-7: fragment data (5 bytes)
 	data := []byte{

@@ -175,7 +175,7 @@ func TestStandardHeader_PayloadSizeLimit(t *testing.T) {
 func TestSecondGenTransportHeader_Is9Bytes(t *testing.T) {
 	// Construct a known 9-byte header
 	data := make([]byte, 9)
-	data[0] = byte(I2NPMessageTypeTunnelData)             // type
+	data[0] = byte(I2NPMessageTypeTunnelData)                 // type
 	binary.BigEndian.PutUint32(data[1:5], 0x12345678)         // msg_id
 	binary.BigEndian.PutUint32(data[5:9], uint32(1704067200)) // exp (2024-01-01 00:00:00 UTC)
 
@@ -593,11 +593,11 @@ func TestDatabaseStore_StoreTypes_MatchSpec(t *testing.T) {
 	}
 
 	codeTypes := map[string]int{
-		"RouterInfo":        DATABASE_STORE_TYPE_ROUTER_INFO,
-		"LeaseSet":          DATABASE_STORE_TYPE_LEASESET,
-		"LeaseSet2":         DATABASE_STORE_TYPE_LEASESET2,
-		"EncryptedLeaseSet": DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-		"MetaLeaseSet":      DATABASE_STORE_TYPE_META_LEASESET,
+		"RouterInfo":        DatabaseStoreTypeRouterInfo,
+		"LeaseSet":          DatabaseStoreTypeLeaseSet,
+		"LeaseSet2":         DatabaseStoreTypeLeaseSet2,
+		"EncryptedLeaseSet": DatabaseStoreTypeEncryptedLeaseSet,
+		"MetaLeaseSet":      DatabaseStoreTypeMetaLeaseSet,
 	}
 
 	for name, specVal := range specTypes {
@@ -616,15 +616,15 @@ func TestDatabaseStore_StoreTypes_Bits3to0(t *testing.T) {
 		rawType  byte
 		expected int
 	}{
-		{"RouterInfo_0x00", 0x00, DATABASE_STORE_TYPE_ROUTER_INFO},
-		{"LeaseSet_0x01", 0x01, DATABASE_STORE_TYPE_LEASESET},
-		{"LeaseSet2_0x03", 0x03, DATABASE_STORE_TYPE_LEASESET2},
-		{"EncryptedLeaseSet_0x05", 0x05, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET},
-		{"MetaLeaseSet_0x07", 0x07, DATABASE_STORE_TYPE_META_LEASESET},
+		{"RouterInfo_0x00", 0x00, DatabaseStoreTypeRouterInfo},
+		{"LeaseSet_0x01", 0x01, DatabaseStoreTypeLeaseSet},
+		{"LeaseSet2_0x03", 0x03, DatabaseStoreTypeLeaseSet2},
+		{"EncryptedLeaseSet_0x05", 0x05, DatabaseStoreTypeEncryptedLeaseSet},
+		{"MetaLeaseSet_0x07", 0x07, DatabaseStoreTypeMetaLeaseSet},
 		// Bits 7-4 set (reserved, should be masked out)
-		{"RouterInfo_HighBitsSet", 0xF0, DATABASE_STORE_TYPE_ROUTER_INFO},
-		{"LeaseSet2_HighBitsSet", 0xF3, DATABASE_STORE_TYPE_LEASESET2},
-		{"EncryptedLeaseSet_HighBitsSet", 0xA5, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET},
+		{"RouterInfo_HighBitsSet", 0xF0, DatabaseStoreTypeRouterInfo},
+		{"LeaseSet2_HighBitsSet", 0xF3, DatabaseStoreTypeLeaseSet2},
+		{"EncryptedLeaseSet_HighBitsSet", 0xA5, DatabaseStoreTypeEncryptedLeaseSet},
 	}
 
 	for _, tc := range tests {
@@ -638,27 +638,27 @@ func TestDatabaseStore_StoreTypes_Bits3to0(t *testing.T) {
 
 // TestDatabaseStore_StoreTypes_IsRouterInfo verifies the IsRouterInfo helper.
 func TestDatabaseStore_StoreTypes_IsRouterInfo(t *testing.T) {
-	ri := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_ROUTER_INFO}
+	ri := &DatabaseStore{StoreType: DatabaseStoreTypeRouterInfo}
 	assert.True(t, ri.IsRouterInfo(), "type 0 must be RouterInfo")
 
-	ls := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_LEASESET}
+	ls := &DatabaseStore{StoreType: DatabaseStoreTypeLeaseSet}
 	assert.False(t, ls.IsRouterInfo(), "type 1 must NOT be RouterInfo")
 
-	ls2 := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_LEASESET2}
+	ls2 := &DatabaseStore{StoreType: DatabaseStoreTypeLeaseSet2}
 	assert.False(t, ls2.IsRouterInfo(), "type 3 must NOT be RouterInfo")
 }
 
 // TestDatabaseStore_StoreTypes_IsLeaseSet verifies the IsLeaseSet helper
 // recognizes all LeaseSet variants (1, 3, 5, 7) but NOT RouterInfo (0).
 func TestDatabaseStore_StoreTypes_IsLeaseSet(t *testing.T) {
-	ri := &DatabaseStore{StoreType: DATABASE_STORE_TYPE_ROUTER_INFO}
+	ri := &DatabaseStore{StoreType: DatabaseStoreTypeRouterInfo}
 	assert.False(t, ri.IsLeaseSet(), "RouterInfo (0) must NOT be a LeaseSet")
 
 	for _, lsType := range []byte{
-		DATABASE_STORE_TYPE_LEASESET,
-		DATABASE_STORE_TYPE_LEASESET2,
-		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-		DATABASE_STORE_TYPE_META_LEASESET,
+		DatabaseStoreTypeLeaseSet,
+		DatabaseStoreTypeLeaseSet2,
+		DatabaseStoreTypeEncryptedLeaseSet,
+		DatabaseStoreTypeMetaLeaseSet,
 	} {
 		ds := &DatabaseStore{StoreType: lsType}
 		assert.True(t, ds.IsLeaseSet(),
@@ -670,11 +670,11 @@ func TestDatabaseStore_StoreTypes_IsLeaseSet(t *testing.T) {
 // survives a marshal→unmarshal cycle.
 func TestDatabaseStore_StoreTypes_MarshalRoundtrip(t *testing.T) {
 	storeTypes := []byte{
-		DATABASE_STORE_TYPE_ROUTER_INFO,
-		DATABASE_STORE_TYPE_LEASESET,
-		DATABASE_STORE_TYPE_LEASESET2,
-		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-		DATABASE_STORE_TYPE_META_LEASESET,
+		DatabaseStoreTypeRouterInfo,
+		DatabaseStoreTypeLeaseSet,
+		DatabaseStoreTypeLeaseSet2,
+		DatabaseStoreTypeEncryptedLeaseSet,
+		DatabaseStoreTypeMetaLeaseSet,
 	}
 
 	for _, st := range storeTypes {
@@ -714,7 +714,7 @@ func TestDatabaseStore_ReplyToken_ZeroMeansNoReplyFields(t *testing.T) {
 	key[0] = 0xAA
 	data := []byte("test payload")
 
-	ds := NewDatabaseStore(key, data, DATABASE_STORE_TYPE_LEASESET2)
+	ds := NewDatabaseStore(key, data, DatabaseStoreTypeLeaseSet2)
 	// Default reply token is zero
 
 	payload, err := ds.MarshalPayload()
@@ -737,7 +737,7 @@ func TestDatabaseStore_ReplyToken_NonzeroIncludesReplyFields(t *testing.T) {
 	gateway[0] = 0xCC
 	data := []byte("payload")
 
-	ds := NewDatabaseStore(key, data, DATABASE_STORE_TYPE_ROUTER_INFO)
+	ds := NewDatabaseStore(key, data, DatabaseStoreTypeRouterInfo)
 	ds.ReplyToken = [4]byte{0x00, 0x00, 0x00, 0x01} // nonzero
 	ds.ReplyTunnelID = [4]byte{0x00, 0x00, 0x10, 0x00}
 	ds.ReplyGateway = gateway
@@ -760,7 +760,7 @@ func TestDatabaseStore_ReplyToken_RoundtripWithReply(t *testing.T) {
 	gateway[0] = 0xDE
 	gateway[31] = 0xAD
 
-	original := NewDatabaseStore(key, []byte("reply test"), DATABASE_STORE_TYPE_LEASESET)
+	original := NewDatabaseStore(key, []byte("reply test"), DatabaseStoreTypeLeaseSet)
 	original.ReplyToken = [4]byte{0x00, 0x01, 0x02, 0x03}
 	original.ReplyTunnelID = [4]byte{0x00, 0x00, 0xFF, 0xFE}
 	original.ReplyGateway = gateway
@@ -810,7 +810,7 @@ func TestDatabaseStore_Compression_RouterInfoHas2ByteLengthPrefix(t *testing.T) 
 	copy(riPayload[2:], compressedRI)
 
 	key := common.Hash{}
-	ds := NewDatabaseStore(key, riPayload, DATABASE_STORE_TYPE_ROUTER_INFO)
+	ds := NewDatabaseStore(key, riPayload, DatabaseStoreTypeRouterInfo)
 
 	payload, err := ds.MarshalPayload()
 	require.NoError(t, err)
@@ -820,7 +820,7 @@ func TestDatabaseStore_Compression_RouterInfoHas2ByteLengthPrefix(t *testing.T) 
 	err = parsed.UnmarshalBinary(payload)
 	require.NoError(t, err)
 
-	assert.Equal(t, byte(DATABASE_STORE_TYPE_ROUTER_INFO), parsed.StoreType)
+	assert.Equal(t, byte(DatabaseStoreTypeRouterInfo), parsed.StoreType)
 
 	// Verify the data starts with a 2-byte length prefix
 	require.True(t, len(parsed.Data) >= 2, "RouterInfo data must have 2-byte length prefix")
@@ -835,10 +835,10 @@ func TestDatabaseStore_Compression_RouterInfoHas2ByteLengthPrefix(t *testing.T) 
 // store types carry uncompressed data (no 2-byte length prefix required by spec).
 func TestDatabaseStore_Compression_LeaseSetTypesUncompressed(t *testing.T) {
 	leaseSetTypes := []byte{
-		DATABASE_STORE_TYPE_LEASESET,
-		DATABASE_STORE_TYPE_LEASESET2,
-		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-		DATABASE_STORE_TYPE_META_LEASESET,
+		DatabaseStoreTypeLeaseSet,
+		DatabaseStoreTypeLeaseSet2,
+		DatabaseStoreTypeEncryptedLeaseSet,
+		DatabaseStoreTypeMetaLeaseSet,
 	}
 
 	rawData := []byte("uncompressed leaseset data for test")
@@ -865,17 +865,17 @@ func TestDatabaseStore_Compression_LeaseSetTypesUncompressed(t *testing.T) {
 // for both RouterInfo and LeaseSet types.
 func TestDatabaseStore_Compression_SizeLimits(t *testing.T) {
 	// RouterInfo: max 65536 bytes
-	err := validateDatabaseStoreSize(DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize)
+	err := validateDatabaseStoreSize(DatabaseStoreTypeRouterInfo, MaxRouterInfoSize)
 	assert.NoError(t, err, "RouterInfo at exactly MaxRouterInfoSize must be accepted")
 
-	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize+1)
+	err = validateDatabaseStoreSize(DatabaseStoreTypeRouterInfo, MaxRouterInfoSize+1)
 	assert.Error(t, err, "RouterInfo exceeding MaxRouterInfoSize must be rejected")
 
 	// LeaseSet: max 32768 bytes
-	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_LEASESET2, MaxLeaseSetSize)
+	err = validateDatabaseStoreSize(DatabaseStoreTypeLeaseSet2, MaxLeaseSetSize)
 	assert.NoError(t, err, "LeaseSet2 at exactly MaxLeaseSetSize must be accepted")
 
-	err = validateDatabaseStoreSize(DATABASE_STORE_TYPE_LEASESET2, MaxLeaseSetSize+1)
+	err = validateDatabaseStoreSize(DatabaseStoreTypeLeaseSet2, MaxLeaseSetSize+1)
 	assert.Error(t, err, "LeaseSet2 exceeding MaxLeaseSetSize must be rejected")
 }
 
@@ -1424,7 +1424,7 @@ func encryptTestBuildRecord(t *testing.T) (*BuildRecordCrypto, BuildResponseReco
 	t.Helper()
 	crypto := NewBuildRecordCrypto()
 	var randomData [495]byte
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
 	key := makeSessionKey(0)
 	var iv [16]byte
 	encrypted, err := crypto.EncryptReplyRecord(record, key, iv)
@@ -2931,21 +2931,21 @@ func TestTunnelBuild_RecordFormat_ParseRoundTrip(t *testing.T) {
 
 // TestTunnelBuild_ReplyProcessing_ReplyCodes verifies all defined reply codes.
 func TestTunnelBuild_ReplyProcessing_ReplyCodes(t *testing.T) {
-	assert.Equal(t, byte(0x00), byte(TUNNEL_BUILD_REPLY_SUCCESS), "SUCCESS = 0x00")
-	assert.Equal(t, byte(0x01), byte(TUNNEL_BUILD_REPLY_REJECT), "REJECT = 0x01")
-	assert.Equal(t, byte(0x02), byte(TUNNEL_BUILD_REPLY_OVERLOAD), "OVERLOAD = 0x02")
-	assert.Equal(t, byte(0x03), byte(TUNNEL_BUILD_REPLY_BANDWIDTH), "BANDWIDTH = 0x03")
-	assert.Equal(t, byte(0x04), byte(TUNNEL_BUILD_REPLY_INVALID), "INVALID = 0x04")
-	assert.Equal(t, byte(0x05), byte(TUNNEL_BUILD_REPLY_EXPIRED), "EXPIRED = 0x05")
+	assert.Equal(t, byte(0x00), byte(TunnelBuildReplySuccess), "SUCCESS = 0x00")
+	assert.Equal(t, byte(0x01), byte(TunnelBuildReplyReject), "REJECT = 0x01")
+	assert.Equal(t, byte(0x02), byte(TunnelBuildReplyOverload), "OVERLOAD = 0x02")
+	assert.Equal(t, byte(0x03), byte(TunnelBuildReplyBandwidth), "BANDWIDTH = 0x03")
+	assert.Equal(t, byte(0x04), byte(TunnelBuildReplyInvalid), "INVALID = 0x04")
+	assert.Equal(t, byte(0x05), byte(TunnelBuildReplyExpired), "EXPIRED = 0x05")
 }
 
-// makeTestResponseRecords creates n BuildResponseRecords all with TUNNEL_BUILD_REPLY_SUCCESS.
+// makeTestResponseRecords creates n BuildResponseRecords all with TunnelBuildReplySuccess.
 func makeTestResponseRecords(n int) []BuildResponseRecord {
 	records := make([]BuildResponseRecord, n)
 	for i := range records {
 		seed := i
 		rd := makeRandomData(func(j int) byte { return byte(seed*10 + j%256) })
-		records[i] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd)
+		records[i] = CreateBuildResponseRecord(TunnelBuildReplySuccess, rd)
 	}
 	return records
 }
@@ -2963,7 +2963,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 	records := makeTestResponseRecords(8)
 	// Override record 3 with a rejection
 	rd := makeRandomData(func(j int) byte { return byte(3 + j%256) })
-	records[3] = CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_REJECT, rd)
+	records[3] = CreateBuildResponseRecord(TunnelBuildReplyReject, rd)
 
 	reply := &TunnelBuildReply{Records: [8]BuildResponseRecord(records)}
 	err := reply.ProcessReply()
@@ -2972,7 +2972,7 @@ func TestTunnelBuild_ReplyProcessing_OneReject(t *testing.T) {
 
 // TestTunnelBuild_ReplyProcessing_HashIntegrity verifies SHA-256 hash verification.
 func TestTunnelBuild_ReplyProcessing_HashIntegrity(t *testing.T) {
-	assertBuildResponseRecordHash(t, TUNNEL_BUILD_REPLY_SUCCESS, func(i int) byte { return byte(i) })
+	assertBuildResponseRecordHash(t, TunnelBuildReplySuccess, func(i int) byte { return byte(i) })
 
 	// Create a full set of 8 valid records, then corrupt one
 	records := makeTestResponseRecords(8)
@@ -3137,7 +3137,7 @@ func TestBuildRecordEncryption_ChaCha20Poly1305Roundtrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			crypto := NewBuildRecordCrypto()
 			randomData := makeRandomData(tc.randomDataFn)
-			record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+			record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
 			key := makeSessionKey(tc.keyOffset)
 			iv := makeIV(tc.ivOffset)
 
@@ -3202,7 +3202,7 @@ func TestTunnelBuildReply_Format_ResponseRecordIs528(t *testing.T) {
 // TestTunnelBuildReply_Format_HashIsFirst32Bytes verifies Hash occupies first 32 bytes.
 func TestTunnelBuildReply_Format_HashIsFirst32Bytes(t *testing.T) {
 	randomData := makeRandomData(func(i int) byte { return byte(i) })
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
 
 	// Serialize manually
 	buf := make([]byte, 528)
@@ -3237,7 +3237,7 @@ func TestVariableTunnelBuildReply_Format_CountPlusRecords(t *testing.T) {
 
 // TestVariableTunnelBuildReply_Format_SHA256Integrity verifies hash integrity check.
 func TestVariableTunnelBuildReply_Format_SHA256Integrity(t *testing.T) {
-	assertBuildResponseRecordHash(t, TUNNEL_BUILD_REPLY_OVERLOAD, func(i int) byte { return byte(i * 3) })
+	assertBuildResponseRecordHash(t, TunnelBuildReplyOverload, func(i int) byte { return byte(i * 3) })
 }
 
 // TestShortTunnelBuildReply_Format_AllAccepted verifies ShortTunnelBuildReply processes correctly.
@@ -3257,9 +3257,9 @@ func TestShortTunnelBuildReply_Format_MixedResults(t *testing.T) {
 	rd1 := makeRandomData(func(int) byte { return 0x22 })
 	rd2 := makeRandomData(func(int) byte { return 0x33 })
 	records := []BuildResponseRecord{
-		CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd0),
-		CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_BANDWIDTH, rd1),
-		CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, rd2),
+		CreateBuildResponseRecord(TunnelBuildReplySuccess, rd0),
+		CreateBuildResponseRecord(TunnelBuildReplyBandwidth, rd1),
+		CreateBuildResponseRecord(TunnelBuildReplySuccess, rd2),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -3308,7 +3308,7 @@ func TestCryptoAudit_BuildRecordEncryption_Nonce12Bytes(t *testing.T) {
 	crypto := NewBuildRecordCrypto()
 
 	var randomData [495]byte
-	record := CreateBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS, randomData)
+	record := CreateBuildResponseRecord(TunnelBuildReplySuccess, randomData)
 
 	var key session_key.SessionKey
 	for i := range key {

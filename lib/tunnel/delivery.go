@@ -125,50 +125,50 @@ total length: 7 bytes
 */
 
 const (
-	DT_LOCAL = iota
-	DT_TUNNEL
-	DT_ROUTER
-	DT_UNUSED
+	DTLocal = iota
+	DTTunnel
+	DTRouter
+	DTUnused
 )
 
 const (
-	FIRST_FRAGMENT = iota
-	FOLLOW_ON_FRAGMENT
+	FirstFragment = iota
+	FollowOnFragment
 )
 
 const (
-	FLAG_SIZE                 = 1
-	TUNNEL_ID_SIZE            = 4
-	HASH_SIZE                 = 32
-	DELAY_SIZE                = 1
-	MESSAGE_ID_SIZE           = 4
-	EXTENDED_OPTIONS_MIN_SIZE = 2
-	SIZE_FIELD_SIZE           = 2
+	FlagSize               = 1
+	TunnelIDSize           = 4
+	HashSize               = 32
+	DelaySize              = 1
+	MessageIDSize          = 4
+	ExtendedOptionsMinSize = 2
+	SizeFieldSize          = 2
 )
 
 type DelayFactor byte
 
 // DeliveryInstructions represents I2P tunnel message delivery instructions
 type DeliveryInstructions struct {
-	// Type: FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT
+	// Type: FirstFragment or FollowOnFragment
 	fragmentType int
 
-	// For FIRST_FRAGMENT
-	deliveryType  byte // DT_LOCAL, DT_TUNNEL, DT_ROUTER
+	// For FirstFragment
+	deliveryType  byte // DTLocal, DTTunnel, DTRouter
 	hasDelay      bool
 	fragmented    bool
 	hasExtOptions bool
-	tunnelID      uint32      // Present if deliveryType == DT_TUNNEL
-	hash          common.Hash // Present if deliveryType == DT_TUNNEL or DT_ROUTER
+	tunnelID      uint32      // Present if deliveryType == DTTunnel
+	hash          common.Hash // Present if deliveryType == DTTunnel or DTRouter
 	delay         DelayFactor // Present if hasDelay
 	messageID     uint32      // Present if fragmented
 	extendedOpts  []byte      // Present if hasExtOptions
 	fragmentSize  uint16
 
-	// For FOLLOW_ON_FRAGMENT
+	// For FollowOnFragment
 	fragmentNumber int
 	lastFragment   bool
-	// messageID and fragmentSize also used for FOLLOW_ON_FRAGMENT
+	// messageID and fragmentSize also used for FollowOnFragment
 }
 
 // NewDeliveryInstructions creates a new DeliveryInstructions from raw bytes
@@ -183,7 +183,7 @@ func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 		return nil, oops.Errorf("cannot serialize nil DeliveryInstructions")
 	}
 
-	if di.fragmentType == FOLLOW_ON_FRAGMENT {
+	if di.fragmentType == FollowOnFragment {
 		return di.serializeFollowOnFragment()
 	}
 	return di.serializeFirstFragment()
@@ -194,12 +194,12 @@ func (di *DeliveryInstructions) Bytes() ([]byte, error) {
 // Returns the parsed DeliveryInstructions and the number of bytes consumed.
 func parseFollowOnFragment(data []byte, flag byte) (*DeliveryInstructions, int, error) {
 	di := &DeliveryInstructions{}
-	di.fragmentType = FOLLOW_ON_FRAGMENT
+	di.fragmentType = FollowOnFragment
 	di.fragmentNumber = int((flag & 0x7e) >> 1)
 	di.lastFragment = (flag & 0x01) == 0x01
 
 	if len(data) < 7 {
-		return nil, 0, oops.Errorf("insufficient data for FOLLOW_ON_FRAGMENT")
+		return nil, 0, oops.Errorf("insufficient data for FollowOnFragment")
 	}
 
 	di.messageID = binary.BigEndian.Uint32(data[1:5])
@@ -209,7 +209,7 @@ func parseFollowOnFragment(data []byte, flag byte) (*DeliveryInstructions, int, 
 
 // parseFirstFragmentFlags extracts delivery type and feature flags from the first fragment flag byte.
 func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
-	di.fragmentType = FIRST_FRAGMENT
+	di.fragmentType = FirstFragment
 	di.deliveryType = (flag & 0x60) >> 5     // bits 6-5
 	di.hasDelay = (flag & 0x10) == 0x10      // bit 4
 	di.fragmented = (flag & 0x08) == 0x08    // bit 3
@@ -219,7 +219,7 @@ func parseFirstFragmentFlags(di *DeliveryInstructions, flag byte) {
 // readTunnelID reads the tunnel ID field if present in the delivery instructions.
 // Returns the updated offset and any error encountered.
 func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error) {
-	if di.deliveryType != DT_TUNNEL {
+	if di.deliveryType != DTTunnel {
 		return offset, nil
 	}
 
@@ -234,7 +234,7 @@ func readTunnelID(data []byte, offset int, di *DeliveryInstructions) (int, error
 // readDestinationHash reads the destination hash field if present in the delivery instructions.
 // Returns the updated offset and any error encountered.
 func readDestinationHash(data []byte, offset int, di *DeliveryInstructions) (int, error) {
-	if di.deliveryType != DT_TUNNEL && di.deliveryType != DT_ROUTER {
+	if di.deliveryType != DTTunnel && di.deliveryType != DTRouter {
 		return offset, nil
 	}
 
@@ -363,9 +363,9 @@ func (di *DeliveryInstructions) buildFlagByte() byte {
 	return flag
 }
 
-// appendTunnelIDIfPresent adds the tunnel ID to the result if delivery type is DT_TUNNEL.
+// appendTunnelIDIfPresent adds the tunnel ID to the result if delivery type is DTTunnel.
 func (di *DeliveryInstructions) appendTunnelIDIfPresent(result []byte) []byte {
-	if di.deliveryType == DT_TUNNEL {
+	if di.deliveryType == DTTunnel {
 		tunnelBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(tunnelBytes, di.tunnelID)
 		result = append(result, tunnelBytes...)
@@ -375,7 +375,7 @@ func (di *DeliveryInstructions) appendTunnelIDIfPresent(result []byte) []byte {
 
 // appendHashIfPresent adds the destination hash to the result if delivery type requires it.
 func (di *DeliveryInstructions) appendHashIfPresent(result []byte) []byte {
-	if di.deliveryType == DT_TUNNEL || di.deliveryType == DT_ROUTER {
+	if di.deliveryType == DTTunnel || di.deliveryType == DTRouter {
 		result = append(result, di.hash[:]...)
 	}
 	return result
@@ -416,7 +416,7 @@ func (di *DeliveryInstructions) appendFragmentSize(result []byte) []byte {
 	return result
 }
 
-// Return if the DeliveryInstructions are of type FIRST_FRAGMENT or FOLLOW_ON_FRAGMENT.
+// Return if the DeliveryInstructions are of type FirstFragment or FollowOnFragment.
 func (delivery_instructions *DeliveryInstructions) Type() (int, error) {
 	log.Debug("Determining DeliveryInstructions type")
 	if delivery_instructions == nil {
@@ -427,7 +427,7 @@ func (delivery_instructions *DeliveryInstructions) Type() (int, error) {
 	return delivery_instructions.fragmentType, nil
 }
 
-// Read the integer stored in the 6-1 bits of a FOLLOW_ON_FRAGMENT's flag, indicating
+// Read the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
 // the fragment number.
 func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error) {
 	log.Debug("Getting FragmentNumber")
@@ -435,15 +435,15 @@ func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error)
 		log.Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FOLLOW_ON_FRAGMENT {
-		log.Error("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
-		return 0, oops.Errorf("Fragment Number only exists on FOLLOW_ON_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FollowOnFragment {
+		log.Error("Fragment Number only exists on FollowOnFragment Delivery Instructions")
+		return 0, oops.Errorf("Fragment Number only exists on FollowOnFragment Delivery Instructions")
 	}
 	log.WithField("fragment_number", delivery_instructions.fragmentNumber).Debug("FragmentNumber retrieved")
 	return delivery_instructions.fragmentNumber, nil
 }
 
-// Read the value of the 0 bit of a FOLLOW_ON_FRAGMENT, which is set to 1 to indicate the
+// Read the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate the
 // last fragment.
 func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool, error) {
 	log.Debug("Checking if this is the LastFollowOnFragment")
@@ -451,25 +451,25 @@ func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool,
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FOLLOW_ON_FRAGMENT {
-		log.Error("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("Last Fragment only exists for FOLLOW_ON_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FollowOnFragment {
+		log.Error("Last Fragment only exists for FollowOnFragment Delivery Instructions")
+		return false, oops.Errorf("Last Fragment only exists for FollowOnFragment Delivery Instructions")
 	}
 	log.WithField("is_last", delivery_instructions.lastFragment).Debug("LastFollowOnFragment status determined")
 	return delivery_instructions.lastFragment, nil
 }
 
 // Return the delivery type for these DeliveryInstructions, can be of type
-// DT_LOCAL, DT_TUNNEL, DT_ROUTER, or DT_UNUSED.
+// DTLocal, DTTunnel, DTRouter, or DTUnused.
 func (delivery_instructions *DeliveryInstructions) DeliveryType() (byte, error) {
 	log.Debug("Getting DeliveryType")
 	if delivery_instructions == nil {
 		log.Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("DeliveryType only exists for FIRST_FRAGMENT Delivery Instructions")
-		return 0, oops.Errorf("DeliveryType only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("DeliveryType only exists for FirstFragment Delivery Instructions")
+		return 0, oops.Errorf("DeliveryType only exists for FirstFragment Delivery Instructions")
 	}
 	log.WithField("delivery_type", delivery_instructions.deliveryType).Debug("DeliveryType retrieved")
 	return delivery_instructions.deliveryType, nil
@@ -482,9 +482,9 @@ func (delivery_instructions *DeliveryInstructions) HasDelay() (bool, error) {
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("HasDelay only exists for FIRST_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("HasDelay only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("HasDelay only exists for FirstFragment Delivery Instructions")
+		return false, oops.Errorf("HasDelay only exists for FirstFragment Delivery Instructions")
 	}
 	if delivery_instructions.hasDelay {
 		log.WithFields(logger.Fields{
@@ -504,9 +504,9 @@ func (delivery_instructions *DeliveryInstructions) Fragmented() (bool, error) {
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("Fragmented only exists for FIRST_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("Fragmented only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("Fragmented only exists for FirstFragment Delivery Instructions")
+		return false, oops.Errorf("Fragmented only exists for FirstFragment Delivery Instructions")
 	}
 	log.WithField("fragmented", delivery_instructions.fragmented).Debug("Fragmented status determined")
 	return delivery_instructions.fragmented, nil
@@ -519,9 +519,9 @@ func (delivery_instructions *DeliveryInstructions) HasExtendedOptions() (bool, e
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("HasExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("HasExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("HasExtendedOptions only exists for FirstFragment Delivery Instructions")
+		return false, oops.Errorf("HasExtendedOptions only exists for FirstFragment Delivery Instructions")
 	}
 	if delivery_instructions.hasExtOptions {
 		log.WithFields(logger.Fields{
@@ -533,18 +533,18 @@ func (delivery_instructions *DeliveryInstructions) HasExtendedOptions() (bool, e
 	return delivery_instructions.hasExtOptions, nil
 }
 
-// Check if the DeliveryInstructions is of type DT_TUNNEL.
+// Check if the DeliveryInstructions is of type DTTunnel.
 func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error) {
 	log.Debug("Checking if DeliveryInstructions has TunnelID")
 	if delivery_instructions == nil {
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("HasTunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("HasTunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("HasTunnelID only exists for FirstFragment Delivery Instructions")
+		return false, oops.Errorf("HasTunnelID only exists for FirstFragment Delivery Instructions")
 	}
-	hasTunnelID := delivery_instructions.deliveryType == DT_TUNNEL
+	hasTunnelID := delivery_instructions.deliveryType == DTTunnel
 	log.WithField("has_tunnel_id", hasTunnelID).Debug("HasTunnelID status determined")
 	return hasTunnelID, nil
 }
@@ -555,30 +555,30 @@ func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error) {
 		log.Error("DeliveryInstructions is nil")
 		return false, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("HasHash only exists for FIRST_FRAGMENT Delivery Instructions")
-		return false, oops.Errorf("HasHash only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("HasHash only exists for FirstFragment Delivery Instructions")
+		return false, oops.Errorf("HasHash only exists for FirstFragment Delivery Instructions")
 	}
-	hasHash := delivery_instructions.deliveryType == DT_TUNNEL || delivery_instructions.deliveryType == DT_ROUTER
+	hasHash := delivery_instructions.deliveryType == DTTunnel || delivery_instructions.deliveryType == DTRouter
 	log.WithField("has_hash", hasHash).Debug("HasHash status determined")
 	return hasHash, nil
 }
 
 // Return the tunnel ID in this DeliveryInstructions or 0 and an error if the
-// DeliveryInstructions are not of type DT_TUNNEL.
+// DeliveryInstructions are not of type DTTunnel.
 func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32, err error) {
 	log.Debug("Getting TunnelID")
 	if delivery_instructions == nil {
 		log.Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("TunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
-		return 0, oops.Errorf("TunnelID only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("TunnelID only exists for FirstFragment Delivery Instructions")
+		return 0, oops.Errorf("TunnelID only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.deliveryType != DT_TUNNEL {
-		log.Error("DeliveryInstructions are not of type DT_TUNNEL")
-		return 0, oops.Errorf("DeliveryInstructions are not of type DT_TUNNEL")
+	if delivery_instructions.deliveryType != DTTunnel {
+		log.Error("DeliveryInstructions are not of type DTTunnel")
+		return 0, oops.Errorf("DeliveryInstructions are not of type DTTunnel")
 	}
 	log.WithField("tunnel_id", delivery_instructions.tunnelID).Debug("TunnelID retrieved")
 	return delivery_instructions.tunnelID, nil
@@ -586,21 +586,21 @@ func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32,
 
 // Return the hash for these DeliveryInstructions, which varies by hash type.
 //
-//	If the type is DT_TUNNEL, hash is the SHA256 of the gateway router, if
-//	the type is DT_ROUTER it is the SHA256 of the router.
+//	If the type is DTTunnel, hash is the SHA256 of the gateway router, if
+//	the type is DTRouter it is the SHA256 of the router.
 func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err error) {
 	log.Debug("Getting Hash")
 	if delivery_instructions == nil {
 		log.Error("DeliveryInstructions is nil")
 		return common.Hash{}, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("Hash only exists for FIRST_FRAGMENT Delivery Instructions")
-		return common.Hash{}, oops.Errorf("Hash only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("Hash only exists for FirstFragment Delivery Instructions")
+		return common.Hash{}, oops.Errorf("Hash only exists for FirstFragment Delivery Instructions")
 	}
-	if delivery_instructions.deliveryType != DT_TUNNEL && delivery_instructions.deliveryType != DT_ROUTER {
-		log.Error("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
-		return common.Hash{}, oops.Errorf("No Hash on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
+	if delivery_instructions.deliveryType != DTTunnel && delivery_instructions.deliveryType != DTRouter {
+		log.Error("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
+		return common.Hash{}, oops.Errorf("No Hash on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
 	log.WithField("hash", delivery_instructions.hash).Debug("Hash retrieved")
 	return delivery_instructions.hash, nil
@@ -612,17 +612,17 @@ func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFa
 		log.Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("Delay only exists for FIRST_FRAGMENT Delivery Instructions")
-		return 0, oops.Errorf("Delay only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("Delay only exists for FirstFragment Delivery Instructions")
+		return 0, oops.Errorf("Delay only exists for FirstFragment Delivery Instructions")
 	}
 	if !delivery_instructions.hasDelay {
 		return 0, nil
 	}
-	if delivery_instructions.deliveryType != DT_TUNNEL && delivery_instructions.deliveryType != DT_ROUTER {
+	if delivery_instructions.deliveryType != DTTunnel && delivery_instructions.deliveryType != DTRouter {
 		log.WithFields(logger.Fields{
 			"at": "(DeliveryInstructions) Delay",
-		}).Warn("Delay not present on DeliveryInstructions not of type DT_TUNNEL or DT_ROUTER")
+		}).Warn("Delay not present on DeliveryInstructions not of type DTTunnel or DTRouter")
 	}
 	log.WithField("delay_factor", delivery_instructions.delay).Debug("Delay factor retrieved")
 	return delivery_instructions.delay, nil
@@ -636,10 +636,10 @@ func (delivery_instructions *DeliveryInstructions) MessageID() (msgid uint32, er
 		log.Error("DeliveryInstructions is nil")
 		return 0, oops.Errorf("DeliveryInstructions is nil")
 	}
-	// MessageID is present for both FIRST_FRAGMENT (if fragmented) and FOLLOW_ON_FRAGMENT
-	if delivery_instructions.fragmentType == FIRST_FRAGMENT && !delivery_instructions.fragmented {
-		log.Error("No Message ID for non-fragmented FIRST_FRAGMENT Delivery Instructions")
-		return 0, oops.Errorf("No Message ID for non-fragmented FIRST_FRAGMENT Delivery Instructions")
+	// MessageID is present for both FirstFragment (if fragmented) and FollowOnFragment
+	if delivery_instructions.fragmentType == FirstFragment && !delivery_instructions.fragmented {
+		log.Error("No Message ID for non-fragmented FirstFragment Delivery Instructions")
+		return 0, oops.Errorf("No Message ID for non-fragmented FirstFragment Delivery Instructions")
 	}
 	log.WithField("message_id", delivery_instructions.messageID).Debug("MessageID retrieved")
 	return delivery_instructions.messageID, nil
@@ -653,9 +653,9 @@ func (delivery_instructions *DeliveryInstructions) ExtendedOptions() (data []byt
 		log.Error("DeliveryInstructions is nil")
 		return nil, oops.Errorf("DeliveryInstructions is nil")
 	}
-	if delivery_instructions.fragmentType != FIRST_FRAGMENT {
-		log.Error("ExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
-		return nil, oops.Errorf("ExtendedOptions only exists for FIRST_FRAGMENT Delivery Instructions")
+	if delivery_instructions.fragmentType != FirstFragment {
+		log.Error("ExtendedOptions only exists for FirstFragment Delivery Instructions")
+		return nil, oops.Errorf("ExtendedOptions only exists for FirstFragment Delivery Instructions")
 	}
 	if !delivery_instructions.hasExtOptions {
 		log.Error("DeliveryInstruction does not have the ExtendedOptions flag set")
@@ -695,15 +695,15 @@ func readDeliveryInstructions(data []byte) (instructions *DeliveryInstructions, 
 //   - *DeliveryInstructions: A new delivery instruction configured for LOCAL delivery
 //
 // The resulting instruction will have:
-//   - deliveryType: DT_LOCAL
-//   - fragmentType: FIRST_FRAGMENT
+//   - deliveryType: DTLocal
+//   - fragmentType: FirstFragment
 //   - fragmented: false (unfragmented message)
 //   - hasDelay: false
 //   - hasExtOptions: false
 func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions {
 	return &DeliveryInstructions{
-		fragmentType:  FIRST_FRAGMENT,
-		deliveryType:  DT_LOCAL,
+		fragmentType:  FirstFragment,
+		deliveryType:  DTLocal,
 		hasDelay:      false,
 		fragmented:    false,
 		hasExtOptions: false,
@@ -723,8 +723,8 @@ func NewLocalDeliveryInstructions(fragmentSize uint16) *DeliveryInstructions {
 //   - *DeliveryInstructions: A new delivery instruction configured for TUNNEL delivery
 func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
 	return &DeliveryInstructions{
-		fragmentType:  FIRST_FRAGMENT,
-		deliveryType:  DT_TUNNEL,
+		fragmentType:  FirstFragment,
+		deliveryType:  DTTunnel,
 		tunnelID:      tunnelID,
 		hash:          gatewayHash,
 		hasDelay:      false,
@@ -745,8 +745,8 @@ func NewTunnelDeliveryInstructions(tunnelID uint32, gatewayHash [32]byte, fragme
 //   - *DeliveryInstructions: A new delivery instruction configured for ROUTER delivery
 func NewRouterDeliveryInstructions(routerHash [32]byte, fragmentSize uint16) *DeliveryInstructions {
 	return &DeliveryInstructions{
-		fragmentType:  FIRST_FRAGMENT,
-		deliveryType:  DT_ROUTER,
+		fragmentType:  FirstFragment,
+		deliveryType:  DTRouter,
 		hash:          routerHash,
 		hasDelay:      false,
 		fragmented:    false,
@@ -793,8 +793,8 @@ func readFirstFragmentInstructions(data []byte, flag byte) (*DeliveryInstruction
 	di := &DeliveryInstructions{}
 	parseFirstFragmentFlags(di, flag)
 
-	// Reject reserved/unused delivery type 0x03 (DT_UNUSED)
-	if di.deliveryType == DT_UNUSED {
+	// Reject reserved/unused delivery type 0x03 (DTUnused)
+	if di.deliveryType == DTUnused {
 		return nil, nil, oops.Errorf("invalid delivery type 0x03 (reserved/unused)")
 	}
 

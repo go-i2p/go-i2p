@@ -131,27 +131,27 @@ func (v *VariableTunnelBuildReply) processHopResponse(hopIndex int, record Build
 
 	// Process reply code (same logic as TunnelBuildReply)
 	switch record.Reply {
-	case TUNNEL_BUILD_REPLY_SUCCESS:
+	case TunnelBuildReplySuccess:
 		log.WithField("hop_index", hopIndex).Debug("Variable tunnel hop accepted build request")
 		return true, nil
 
-	case TUNNEL_BUILD_REPLY_REJECT:
+	case TunnelBuildReplyReject:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop rejected build request")
 		return false, fmt.Errorf("hop %d: rejected request", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_OVERLOAD:
+	case TunnelBuildReplyOverload:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop is overloaded")
 		return false, fmt.Errorf("hop %d: router overloaded", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_BANDWIDTH:
+	case TunnelBuildReplyBandwidth:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop has insufficient bandwidth")
 		return false, fmt.Errorf("hop %d: insufficient bandwidth", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_INVALID:
+	case TunnelBuildReplyInvalid:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop received invalid request data")
 		return false, fmt.Errorf("hop %d: invalid request data", hopIndex)
 
-	case TUNNEL_BUILD_REPLY_EXPIRED:
+	case TunnelBuildReplyExpired:
 		log.WithField("hop_index", hopIndex).Warn("Variable tunnel hop request has expired")
 		return false, fmt.Errorf("hop %d: request expired", hopIndex)
 

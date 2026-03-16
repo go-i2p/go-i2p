@@ -361,11 +361,11 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 		if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
 			// Registration failed — send a rejection reply so the tunnel builder
 			// knows this hop is non-functional instead of a phantom success.
-			rejectCode = TUNNEL_BUILD_REPLY_REJECT
+			rejectCode = TunnelBuildReplyReject
 			p.handleRejectedBuildRecord(messageID, index, record, rejectCode,
 				fmt.Sprintf("participant registration failed: %v", err))
 		} else {
-			rejectCode = TUNNEL_BUILD_REPLY_SUCCESS
+			rejectCode = TunnelBuildReplySuccess
 		}
 	} else {
 		p.handleRejectedBuildRecord(messageID, index, record, rejectCode, reason)

@@ -466,7 +466,7 @@ func TestFragmentReassembly_MemoryLimits(t *testing.T) {
 		invalidFragNums := []int{0, 64, 100}
 		for _, fragNum := range invalidFragNums {
 			di := &DeliveryInstructions{
-				fragmentType:   FOLLOW_ON_FRAGMENT,
+				fragmentType:   FollowOnFragment,
 				fragmentNumber: fragNum,
 				messageID:      12345,
 			}
@@ -577,38 +577,38 @@ func TestFragmentReassembly_TimeoutHandling(t *testing.T) {
 // TestDeliveryInstructions_AllTypesCorrect verifies all delivery types
 // are parsed correctly.
 func TestDeliveryInstructions_AllTypesCorrect(t *testing.T) {
-	t.Run("DT_LOCAL", func(t *testing.T) {
+	t.Run("DTLocal", func(t *testing.T) {
 		di := NewLocalDeliveryInstructions(100)
 		dtype, err := di.DeliveryType()
 		if err != nil {
 			t.Fatalf("failed to get delivery type: %v", err)
 		}
-		if dtype != DT_LOCAL {
-			t.Errorf("delivery type = %d, want DT_LOCAL (%d)", dtype, DT_LOCAL)
+		if dtype != DTLocal {
+			t.Errorf("delivery type = %d, want DTLocal (%d)", dtype, DTLocal)
 		}
 	})
 
-	t.Run("DT_TUNNEL", func(t *testing.T) {
+	t.Run("DTTunnel", func(t *testing.T) {
 		hash := [32]byte{1, 2, 3}
 		di := NewTunnelDeliveryInstructions(12345, hash, 100)
 		dtype, err := di.DeliveryType()
 		if err != nil {
 			t.Fatalf("failed to get delivery type: %v", err)
 		}
-		if dtype != DT_TUNNEL {
-			t.Errorf("delivery type = %d, want DT_TUNNEL (%d)", dtype, DT_TUNNEL)
+		if dtype != DTTunnel {
+			t.Errorf("delivery type = %d, want DTTunnel (%d)", dtype, DTTunnel)
 		}
 	})
 
-	t.Run("DT_ROUTER", func(t *testing.T) {
+	t.Run("DTRouter", func(t *testing.T) {
 		hash := [32]byte{1, 2, 3}
 		di := NewRouterDeliveryInstructions(hash, 100)
 		dtype, err := di.DeliveryType()
 		if err != nil {
 			t.Fatalf("failed to get delivery type: %v", err)
 		}
-		if dtype != DT_ROUTER {
-			t.Errorf("delivery type = %d, want DT_ROUTER (%d)", dtype, DT_ROUTER)
+		if dtype != DTRouter {
+			t.Errorf("delivery type = %d, want DTRouter (%d)", dtype, DTRouter)
 		}
 	})
 }
@@ -1004,10 +1004,10 @@ func createValidTunnelMessage(t *testing.T) []byte {
 	// Zero separator
 	msg[100] = 0x00
 
-	// Delivery instructions (DT_LOCAL)
-	msg[101] = DT_LOCAL // Flag byte
-	msg[102] = 0x00     // Size high byte
-	msg[103] = 0x04     // Size low byte (4 bytes of data)
+	// Delivery instructions (DTLocal)
+	msg[101] = DTLocal // Flag byte
+	msg[102] = 0x00    // Size high byte
+	msg[103] = 0x04    // Size low byte (4 bytes of data)
 
 	// Message data
 	msg[104] = 'T'

@@ -9,16 +9,16 @@ import (
 
 // DatabaseStore type constants (bits 3-0 of type field)
 const (
-	// DATABASE_STORE_TYPE_ROUTER_INFO indicates a RouterInfo entry
-	DATABASE_STORE_TYPE_ROUTER_INFO = 0
-	// DATABASE_STORE_TYPE_LEASESET indicates original LeaseSet (deprecated)
-	DATABASE_STORE_TYPE_LEASESET = 1
-	// DATABASE_STORE_TYPE_LEASESET2 indicates LeaseSet2 (standard as of 0.9.38+)
-	DATABASE_STORE_TYPE_LEASESET2 = 3
-	// DATABASE_STORE_TYPE_ENCRYPTED_LEASESET indicates EncryptedLeaseSet (0.9.39+, not yet implemented)
-	DATABASE_STORE_TYPE_ENCRYPTED_LEASESET = 5
-	// DATABASE_STORE_TYPE_META_LEASESET indicates MetaLeaseSet (0.9.40+, not yet implemented)
-	DATABASE_STORE_TYPE_META_LEASESET = 7
+	// DatabaseStoreTypeRouterInfo indicates a RouterInfo entry
+	DatabaseStoreTypeRouterInfo = 0
+	// DatabaseStoreTypeLeaseSet indicates original LeaseSet (deprecated)
+	DatabaseStoreTypeLeaseSet = 1
+	// DatabaseStoreTypeLeaseSet2 indicates LeaseSet2 (standard as of 0.9.38+)
+	DatabaseStoreTypeLeaseSet2 = 3
+	// DatabaseStoreTypeEncryptedLeaseSet indicates EncryptedLeaseSet (0.9.39+, not yet implemented)
+	DatabaseStoreTypeEncryptedLeaseSet = 5
+	// DatabaseStoreTypeMetaLeaseSet indicates MetaLeaseSet (0.9.40+, not yet implemented)
+	DatabaseStoreTypeMetaLeaseSet = 7
 )
 
 // Size limits for DatabaseStore data payloads
@@ -165,9 +165,9 @@ func (d *DatabaseStore) GetStoreType() byte {
 }
 
 // GetLeaseSetType returns the LeaseSet type variant from bits 3-0 of the type field.
-// Returns one of: DATABASE_STORE_TYPE_ROUTER_INFO, DATABASE_STORE_TYPE_LEASESET,
-// DATABASE_STORE_TYPE_LEASESET2, DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-// or DATABASE_STORE_TYPE_META_LEASESET.
+// Returns one of: DatabaseStoreTypeRouterInfo, DatabaseStoreTypeLeaseSet,
+// DatabaseStoreTypeLeaseSet2, DatabaseStoreTypeEncryptedLeaseSet,
+// or DatabaseStoreTypeMetaLeaseSet.
 func (d *DatabaseStore) GetLeaseSetType() int {
 	// Extract bits 3-0 for LeaseSet variant
 	typeField := int(d.StoreType & 0x0F)
@@ -176,21 +176,21 @@ func (d *DatabaseStore) GetLeaseSetType() int {
 
 // IsRouterInfo returns true if this DatabaseStore contains a RouterInfo
 func (d *DatabaseStore) IsRouterInfo() bool {
-	return d.GetLeaseSetType() == DATABASE_STORE_TYPE_ROUTER_INFO
+	return d.GetLeaseSetType() == DatabaseStoreTypeRouterInfo
 }
 
 // IsLeaseSet returns true if this DatabaseStore contains any type of LeaseSet
 func (d *DatabaseStore) IsLeaseSet() bool {
 	leaseSetType := d.GetLeaseSetType()
-	return leaseSetType == DATABASE_STORE_TYPE_LEASESET ||
-		leaseSetType == DATABASE_STORE_TYPE_LEASESET2 ||
-		leaseSetType == DATABASE_STORE_TYPE_ENCRYPTED_LEASESET ||
-		leaseSetType == DATABASE_STORE_TYPE_META_LEASESET
+	return leaseSetType == DatabaseStoreTypeLeaseSet ||
+		leaseSetType == DatabaseStoreTypeLeaseSet2 ||
+		leaseSetType == DatabaseStoreTypeEncryptedLeaseSet ||
+		leaseSetType == DatabaseStoreTypeMetaLeaseSet
 }
 
 // IsLeaseSet2 returns true if this DatabaseStore contains a LeaseSet2
 func (d *DatabaseStore) IsLeaseSet2() bool {
-	return d.GetLeaseSetType() == DATABASE_STORE_TYPE_LEASESET2
+	return d.GetLeaseSetType() == DatabaseStoreTypeLeaseSet2
 }
 
 // MarshalPayload serializes only the DatabaseStore-specific payload fields
@@ -336,14 +336,14 @@ func validateDatabaseStoreSize(dataType byte, size int) error {
 	leaseSetType := dataType & 0x0F // Extract bits 3-0
 
 	switch leaseSetType {
-	case DATABASE_STORE_TYPE_ROUTER_INFO:
+	case DatabaseStoreTypeRouterInfo:
 		if size > MaxRouterInfoSize {
 			return fmt.Errorf("RouterInfo size %d exceeds maximum %d", size, MaxRouterInfoSize)
 		}
-	case DATABASE_STORE_TYPE_LEASESET,
-		DATABASE_STORE_TYPE_LEASESET2,
-		DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
-		DATABASE_STORE_TYPE_META_LEASESET:
+	case DatabaseStoreTypeLeaseSet,
+		DatabaseStoreTypeLeaseSet2,
+		DatabaseStoreTypeEncryptedLeaseSet,
+		DatabaseStoreTypeMetaLeaseSet:
 		if size > MaxLeaseSetSize {
 			return fmt.Errorf("LeaseSet size %d exceeds maximum %d", size, MaxLeaseSetSize)
 		}

@@ -335,14 +335,14 @@ func TestDatabaseStore_SizeLimits(t *testing.T) {
 		dataSize    int
 		expectError bool
 	}{
-		{"RouterInfo - valid small", DATABASE_STORE_TYPE_ROUTER_INFO, 1000, false},
-		{"RouterInfo - valid max", DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize, false},
-		{"RouterInfo - exceeds max", DATABASE_STORE_TYPE_ROUTER_INFO, MaxRouterInfoSize + 1, true},
-		{"LeaseSet - valid small", DATABASE_STORE_TYPE_LEASESET, 500, false},
-		{"LeaseSet - valid max", DATABASE_STORE_TYPE_LEASESET, MaxLeaseSetSize, false},
-		{"LeaseSet - exceeds max", DATABASE_STORE_TYPE_LEASESET, MaxLeaseSetSize + 1, true},
-		{"LeaseSet2 - valid", DATABASE_STORE_TYPE_LEASESET2, 1000, false},
-		{"LeaseSet2 - exceeds max", DATABASE_STORE_TYPE_LEASESET2, MaxLeaseSetSize + 1, true},
+		{"RouterInfo - valid small", DatabaseStoreTypeRouterInfo, 1000, false},
+		{"RouterInfo - valid max", DatabaseStoreTypeRouterInfo, MaxRouterInfoSize, false},
+		{"RouterInfo - exceeds max", DatabaseStoreTypeRouterInfo, MaxRouterInfoSize + 1, true},
+		{"LeaseSet - valid small", DatabaseStoreTypeLeaseSet, 500, false},
+		{"LeaseSet - valid max", DatabaseStoreTypeLeaseSet, MaxLeaseSetSize, false},
+		{"LeaseSet - exceeds max", DatabaseStoreTypeLeaseSet, MaxLeaseSetSize + 1, true},
+		{"LeaseSet2 - valid", DatabaseStoreTypeLeaseSet2, 1000, false},
+		{"LeaseSet2 - exceeds max", DatabaseStoreTypeLeaseSet2, MaxLeaseSetSize + 1, true},
 		{"Unknown type - uses conservative limit", 15, MaxLeaseSetSize, false},
 		{"Unknown type - exceeds conservative limit", 15, MaxLeaseSetSize + 1, true},
 	}
@@ -618,7 +618,7 @@ func TestI2NPMessage_RoundTrip(t *testing.T) {
 		copy(key[:], bytes.Repeat([]byte{0xAB}, 32))
 		storeData := []byte("router info data")
 
-		original := NewDatabaseStore(key, storeData, DATABASE_STORE_TYPE_ROUTER_INFO)
+		original := NewDatabaseStore(key, storeData, DatabaseStoreTypeRouterInfo)
 
 		// MarshalBinary now produces header + payload; verify it includes the header
 		fullData, err := original.MarshalBinary()

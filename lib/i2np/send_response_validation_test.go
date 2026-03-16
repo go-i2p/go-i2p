@@ -60,7 +60,7 @@ func TestSendResponseNilMessage(t *testing.T) {
 	// so message creation should succeed. Test the full flow.
 	store := &DatabaseStore{
 		Key:       common.Hash{0x01, 0x02, 0x03},
-		StoreType: DATABASE_STORE_TYPE_ROUTER_INFO,
+		StoreType: DatabaseStoreTypeRouterInfo,
 		Data:      []byte("test data"),
 	}
 

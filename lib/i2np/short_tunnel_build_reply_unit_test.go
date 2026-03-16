@@ -13,8 +13,8 @@ func TestShortTunnelBuildReplyImplementsTunnelReplyHandler(t *testing.T) {
 // TestNewShortTunnelBuildReply tests the constructor
 func TestNewShortTunnelBuildReply(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -35,8 +35,8 @@ func TestNewShortTunnelBuildReply(t *testing.T) {
 // TestShortTunnelBuildReplyGetReplyRecords tests the GetReplyRecords method
 func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_REJECT),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplyReject),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -47,19 +47,19 @@ func TestShortTunnelBuildReplyGetReplyRecords(t *testing.T) {
 	}
 
 	// Verify records are the same
-	if replyRecords[0].Reply != TUNNEL_BUILD_REPLY_SUCCESS {
-		t.Errorf("Expected first record Reply=%d, got %d", TUNNEL_BUILD_REPLY_SUCCESS, replyRecords[0].Reply)
+	if replyRecords[0].Reply != TunnelBuildReplySuccess {
+		t.Errorf("Expected first record Reply=%d, got %d", TunnelBuildReplySuccess, replyRecords[0].Reply)
 	}
 
-	if replyRecords[1].Reply != TUNNEL_BUILD_REPLY_REJECT {
-		t.Errorf("Expected second record Reply=%d, got %d", TUNNEL_BUILD_REPLY_REJECT, replyRecords[1].Reply)
+	if replyRecords[1].Reply != TunnelBuildReplyReject {
+		t.Errorf("Expected second record Reply=%d, got %d", TunnelBuildReplyReject, replyRecords[1].Reply)
 	}
 }
 
 // TestShortTunnelBuildReplyGetResponseRecords tests backward compatibility
 func TestShortTunnelBuildReplyGetResponseRecords(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -77,9 +77,9 @@ func TestShortTunnelBuildReplyGetResponseRecords(t *testing.T) {
 // TestShortTunnelBuildReplyProcessReplyAllSuccess tests ProcessReply with all hops accepting
 func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -92,9 +92,9 @@ func TestShortTunnelBuildReplyProcessReplyAllSuccess(t *testing.T) {
 // TestShortTunnelBuildReplyProcessReplyWithRejection tests ProcessReply with rejections
 func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_REJECT), // One hop rejects
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplyReject), // One hop rejects
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -113,8 +113,8 @@ func TestShortTunnelBuildReplyProcessReplyWithRejection(t *testing.T) {
 // TestShortTunnelBuildReplyProcessReplyAllRejected tests ProcessReply when all hops reject
 func TestShortTunnelBuildReplyProcessReplyAllRejected(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_OVERLOAD),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_BANDWIDTH),
+		createTestBuildResponseRecord(TunnelBuildReplyOverload),
+		createTestBuildResponseRecord(TunnelBuildReplyBandwidth),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -154,8 +154,8 @@ func TestShortTunnelBuildReplyProcessReplyCountMismatch(t *testing.T) {
 	reply := &ShortTunnelBuildReply{
 		Count: 5, // Claims 5 records
 		BuildResponseRecords: []BuildResponseRecord{
-			createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-			createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+			createTestBuildResponseRecord(TunnelBuildReplySuccess),
+			createTestBuildResponseRecord(TunnelBuildReplySuccess),
 		}, // Actually has 2 records
 	}
 
@@ -174,9 +174,9 @@ func TestShortTunnelBuildReplyProcessReplyCountMismatch(t *testing.T) {
 // TestShortTunnelBuildReplyGetRecordCount tests GetRecordCount method
 func TestShortTunnelBuildReplyGetRecordCount(t *testing.T) {
 	records := []BuildResponseRecord{
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
-		createTestBuildResponseRecord(TUNNEL_BUILD_REPLY_SUCCESS),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
+		createTestBuildResponseRecord(TunnelBuildReplySuccess),
 	}
 
 	reply := NewShortTunnelBuildReply(records)
@@ -193,12 +193,12 @@ func TestShortTunnelBuildReplyVariousReplyCodes(t *testing.T) {
 		replyCode  byte
 		shouldPass bool
 	}{
-		{"Success", TUNNEL_BUILD_REPLY_SUCCESS, true},
-		{"Reject", TUNNEL_BUILD_REPLY_REJECT, false},
-		{"Overload", TUNNEL_BUILD_REPLY_OVERLOAD, false},
-		{"Bandwidth", TUNNEL_BUILD_REPLY_BANDWIDTH, false},
-		{"Invalid", TUNNEL_BUILD_REPLY_INVALID, false},
-		{"Expired", TUNNEL_BUILD_REPLY_EXPIRED, false},
+		{"Success", TunnelBuildReplySuccess, true},
+		{"Reject", TunnelBuildReplyReject, false},
+		{"Overload", TunnelBuildReplyOverload, false},
+		{"Bandwidth", TunnelBuildReplyBandwidth, false},
+		{"Invalid", TunnelBuildReplyInvalid, false},
+		{"Expired", TunnelBuildReplyExpired, false},
 	}
 
 	for _, tc := range testCases {

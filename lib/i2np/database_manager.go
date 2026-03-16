@@ -448,7 +448,7 @@ func validateStoreData(data []byte, dataType byte) error {
 	}
 
 	// For RouterInfo (type 0), validate compression if data appears compressed
-	if dataType == DATABASE_STORE_TYPE_ROUTER_INFO && len(data) > 2 {
+	if dataType == DatabaseStoreTypeRouterInfo && len(data) > 2 {
 		return validateRouterInfoCompression(data, MaxUncompressedSize, MaxCompressionRatio)
 	}
 

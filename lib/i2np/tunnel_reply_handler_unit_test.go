@@ -134,7 +134,7 @@ func TestTunnelBuildReply_ValidateResponseRecord(t *testing.T) {
 	invalidRecord := BuildResponseRecord{
 		Hash:       common.Hash{}, // All zeros
 		RandomData: [495]byte{},
-		Reply:      TUNNEL_BUILD_REPLY_SUCCESS,
+		Reply:      TunnelBuildReplySuccess,
 	}
 	err = reply.validateResponseRecord(invalidRecord)
 	assert.Error(t, err, "Invalid record with empty hash should fail validation")
@@ -151,12 +151,12 @@ func TestProcessHopResponse_AllReplyCodes(t *testing.T) {
 		expectError   bool
 		errorContains string
 	}{
-		{TUNNEL_BUILD_REPLY_SUCCESS, true, false, ""},
-		{TUNNEL_BUILD_REPLY_REJECT, false, true, "rejected request"},
-		{TUNNEL_BUILD_REPLY_OVERLOAD, false, true, "router overloaded"},
-		{TUNNEL_BUILD_REPLY_BANDWIDTH, false, true, "insufficient bandwidth"},
-		{TUNNEL_BUILD_REPLY_INVALID, false, true, "invalid request data"},
-		{TUNNEL_BUILD_REPLY_EXPIRED, false, true, "request expired"},
+		{TunnelBuildReplySuccess, true, false, ""},
+		{TunnelBuildReplyReject, false, true, "rejected request"},
+		{TunnelBuildReplyOverload, false, true, "router overloaded"},
+		{TunnelBuildReplyBandwidth, false, true, "insufficient bandwidth"},
+		{TunnelBuildReplyInvalid, false, true, "invalid request data"},
+		{TunnelBuildReplyExpired, false, true, "request expired"},
 		{0xFF, false, true, "unknown reply code"}, // Unknown code
 	}
 

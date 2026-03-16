@@ -47,7 +47,7 @@ func validFirstFragmentDeliveryInstructions(mapping common.Mapping) []byte {
 	tunnel_id := []byte{0x00, 0x00, 0x00, 0x01}
 	data = append(data, tunnel_id...)
 
-	hash := make([]byte, HASH_SIZE)
+	hash := make([]byte, HashSize)
 	data = append(data, hash...)
 
 	if flag.Delay {
@@ -76,39 +76,39 @@ func TestReadDeliveryInstructions(t *testing.T) {
 	assert.Nil(err)
 }
 
-// TestDeliveryInstructionsHashTunnel tests Hash() method for DT_TUNNEL delivery type
+// TestDeliveryInstructionsHashTunnel tests Hash() method for DTTunnel delivery type
 // This test verifies the variable shadowing bug fix where hash_start and hash_end
 // must be reassigned (not redeclared) to adjust offsets correctly.
 func TestDeliveryInstructionsHashTunnel(t *testing.T) {
 	assertDeliveryInstructionHash(t,
-		0x20,                           // DT_TUNNEL flag
+		0x20,                           // DTTunnel flag
 		[]byte{0x00, 0x00, 0x30, 0x39}, // tunnelID = 12345
 		func(i int) byte { return byte(i) },
 	)
 }
 
-// TestDeliveryInstructionsHashRouter tests Hash() method for DT_ROUTER delivery type
+// TestDeliveryInstructionsHashRouter tests Hash() method for DTRouter delivery type
 func TestDeliveryInstructionsHashRouter(t *testing.T) {
 	assertDeliveryInstructionHash(t,
-		0x40, // DT_ROUTER flag
+		0x40, // DTRouter flag
 		nil,  // no tunnelID
 		func(i int) byte { return byte(255 - i) },
 	)
 }
 
-// TestDeliveryInstructionsHashLocal tests Hash() method for DT_LOCAL delivery type (error case)
+// TestDeliveryInstructionsHashLocal tests Hash() method for DTLocal delivery type (error case)
 func TestDeliveryInstructionsHashLocal(t *testing.T) {
 	assert := assert.New(t)
 
-	// Create a delivery instruction with DT_LOCAL type
+	// Create a delivery instruction with DTLocal type
 	// Format: flag(1) + ...
 	data := []byte{}
 
-	// Flag byte: bit 7=0 (first fragment), bits 5-4=00 (DT_LOCAL), others=0
-	flag := byte(0x00) // 0b00000000 = DT_LOCAL
+	// Flag byte: bit 7=0 (first fragment), bits 5-4=00 (DTLocal), others=0
+	flag := byte(0x00) // 0b00000000 = DTLocal
 	data = append(data, flag)
 
-	// Fragment size (2 bytes) - required for FIRST_FRAGMENT
+	// Fragment size (2 bytes) - required for FirstFragment
 	data = append(data, 0x00, 0x10)
 
 	di, err := NewDeliveryInstructions(data)
@@ -118,19 +118,19 @@ func TestDeliveryInstructionsHashLocal(t *testing.T) {
 	_, err = di.Hash()
 
 	// Verify error is returned
-	assert.NotNil(err, "Hash() should return an error for DT_LOCAL type")
-	assert.Contains(err.Error(), "not of type DT_TUNNEL or DT_ROUTER", "Error message should mention valid delivery types")
+	assert.NotNil(err, "Hash() should return an error for DTLocal type")
+	assert.Contains(err.Error(), "not of type DTTunnel or DTRouter", "Error message should mention valid delivery types")
 }
 
 // TestDeliveryInstructionsHashEmptyHash tests Hash() with all-zero hash value
 func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	assert := assert.New(t)
 
-	// Create delivery instruction with DT_TUNNEL and all-zero hash
-	emptyHash := make([]byte, HASH_SIZE)
-	data := buildTunnelDeliveryData(0x30, emptyHash) // DT_TUNNEL + hasDelay
+	// Create delivery instruction with DTTunnel and all-zero hash
+	emptyHash := make([]byte, HashSize)
+	data := buildTunnelDeliveryData(0x30, emptyHash) // DTTunnel + hasDelay
 
-	// Delay byte (since flag 0x10 has both DT_TUNNEL and hasDelay bits set)
+	// Delay byte (since flag 0x10 has both DTTunnel and hasDelay bits set)
 	data = append(data, 0x00)
 
 	// Fragment size (2 bytes)
@@ -142,7 +142,7 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 	resultHash, err := di.Hash()
 
 	assert.Nil(err, "Hash() should not return error for valid delivery type")
-	assert.Equal(HASH_SIZE, len(resultHash), "Hash should have correct length")
+	assert.Equal(HashSize, len(resultHash), "Hash should have correct length")
 	assert.Equal(emptyHash, resultHash[:], "Empty hash should be returned as-is")
 }
 
@@ -150,9 +150,9 @@ func TestDeliveryInstructionsHashEmptyHash(t *testing.T) {
 func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 	assert := assert.New(t)
 
-	// Create delivery instruction with DT_TUNNEL but insufficient data
+	// Create delivery instruction with DTTunnel but insufficient data
 	partialHash := make([]byte, 10)
-	data := buildTunnelDeliveryData(0x20, partialHash) // DT_TUNNEL without hasDelay
+	data := buildTunnelDeliveryData(0x20, partialHash) // DTTunnel without hasDelay
 
 	_, err := NewDeliveryInstructions(data)
 
@@ -164,10 +164,10 @@ func TestDeliveryInstructionsHashInsufficientDataTunnel(t *testing.T) {
 func TestDeliveryInstructionsHashInsufficientDataRouter(t *testing.T) {
 	assert := assert.New(t)
 
-	// Create delivery instruction with DT_ROUTER but insufficient data
+	// Create delivery instruction with DTRouter but insufficient data
 	data := []byte{}
 
-	flag := byte(0x20) // DT_ROUTER (2 << 4)
+	flag := byte(0x20) // DTRouter (2 << 4)
 	data = append(data, flag)
 
 	// Only partial hash (10 bytes instead of 32)

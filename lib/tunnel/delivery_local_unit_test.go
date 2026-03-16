@@ -16,8 +16,8 @@ func TestNewLocalDeliveryInstructions(t *testing.T) {
 	di := NewLocalDeliveryInstructions(fragmentSize)
 
 	require.NotNil(t, di, "DeliveryInstructions should not be nil")
-	assert.Equal(FIRST_FRAGMENT, di.fragmentType, "Should be first fragment")
-	assert.Equal(byte(DT_LOCAL), di.deliveryType, "Should be LOCAL delivery type")
+	assert.Equal(FirstFragment, di.fragmentType, "Should be first fragment")
+	assert.Equal(byte(DTLocal), di.deliveryType, "Should be LOCAL delivery type")
 	assert.False(di.hasDelay, "Should not have delay")
 	assert.False(di.fragmented, "Should not be fragmented")
 	assert.False(di.hasExtOptions, "Should not have extended options")
@@ -39,7 +39,7 @@ func TestLocalDeliveryInstructionsSerialization(t *testing.T) {
 	// LOCAL delivery should be compact: flag(1) + size(2) = 3 bytes
 	assert.Equal(3, len(bytes), "LOCAL delivery should be 3 bytes")
 
-	// Check flag byte: DT_LOCAL (0x00 << 4) = 0x00
+	// Check flag byte: DTLocal (0x00 << 4) = 0x00
 	assert.Equal(byte(0x00), bytes[0], "Flag should be 0x00 for unfragmented LOCAL")
 
 	// Check fragment size (big-endian)
@@ -74,8 +74,8 @@ func TestNewTunnelDeliveryInstructions(t *testing.T) {
 	di := NewTunnelDeliveryInstructions(tunnelID, gatewayHash, fragmentSize)
 
 	require.NotNil(t, di, "DeliveryInstructions should not be nil")
-	assert.Equal(FIRST_FRAGMENT, di.fragmentType)
-	assert.Equal(byte(DT_TUNNEL), di.deliveryType)
+	assert.Equal(FirstFragment, di.fragmentType)
+	assert.Equal(byte(DTTunnel), di.deliveryType)
 	assert.Equal(tunnelID, di.tunnelID)
 	assert.Equal(gatewayHash[:], di.hash[:])
 	assert.Equal(fragmentSize, di.fragmentSize)
@@ -104,7 +104,7 @@ func TestTunnelDeliveryInstructionsSerialization(t *testing.T) {
 	// TUNNEL delivery: flag(1) + tunnelID(4) + hash(32) + size(2) = 39 bytes
 	assert.Equal(39, len(bytes), "TUNNEL delivery should be 39 bytes")
 
-	// Check flag byte: DT_TUNNEL (0x01 << 5) = 0x20 (bits 6-5)
+	// Check flag byte: DTTunnel (0x01 << 5) = 0x20 (bits 6-5)
 	assert.Equal(byte(0x20), bytes[0], "Flag should be 0x20 for TUNNEL delivery")
 
 	// Verify tunnel ID
@@ -145,8 +145,8 @@ func TestNewRouterDeliveryInstructions(t *testing.T) {
 	di := NewRouterDeliveryInstructions(routerHash, fragmentSize)
 
 	require.NotNil(t, di)
-	assert.Equal(FIRST_FRAGMENT, di.fragmentType)
-	assert.Equal(byte(DT_ROUTER), di.deliveryType)
+	assert.Equal(FirstFragment, di.fragmentType)
+	assert.Equal(byte(DTRouter), di.deliveryType)
 	assert.Equal(routerHash[:], di.hash[:])
 	assert.Equal(fragmentSize, di.fragmentSize)
 	assert.False(di.hasDelay)
@@ -173,7 +173,7 @@ func TestRouterDeliveryInstructionsSerialization(t *testing.T) {
 	// ROUTER delivery: flag(1) + hash(32) + size(2) = 35 bytes
 	assert.Equal(35, len(bytes), "ROUTER delivery should be 35 bytes")
 
-	// Check flag byte: DT_ROUTER (0x02 << 5) = 0x40 (bits 6-5)
+	// Check flag byte: DTRouter (0x02 << 5) = 0x40 (bits 6-5)
 	assert.Equal(byte(0x40), bytes[0], "Flag should be 0x40 for ROUTER delivery")
 
 	// Verify hash

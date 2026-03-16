@@ -18,37 +18,37 @@ func TestDatabaseStore_GetLeaseSetType(t *testing.T) {
 		{
 			name:         "RouterInfo",
 			typeField:    0x00,
-			expectedType: DATABASE_STORE_TYPE_ROUTER_INFO,
+			expectedType: DatabaseStoreTypeRouterInfo,
 			description:  "Type 0 should be RouterInfo",
 		},
 		{
 			name:         "Original LeaseSet",
 			typeField:    0x01,
-			expectedType: DATABASE_STORE_TYPE_LEASESET,
+			expectedType: DatabaseStoreTypeLeaseSet,
 			description:  "Type 1 should be original LeaseSet (deprecated)",
 		},
 		{
 			name:         "LeaseSet2",
 			typeField:    0x03,
-			expectedType: DATABASE_STORE_TYPE_LEASESET2,
+			expectedType: DatabaseStoreTypeLeaseSet2,
 			description:  "Type 3 should be LeaseSet2 (standard)",
 		},
 		{
 			name:         "EncryptedLeaseSet",
 			typeField:    0x05,
-			expectedType: DATABASE_STORE_TYPE_ENCRYPTED_LEASESET,
+			expectedType: DatabaseStoreTypeEncryptedLeaseSet,
 			description:  "Type 5 should be EncryptedLeaseSet",
 		},
 		{
 			name:         "MetaLeaseSet",
 			typeField:    0x07,
-			expectedType: DATABASE_STORE_TYPE_META_LEASESET,
+			expectedType: DatabaseStoreTypeMetaLeaseSet,
 			description:  "Type 7 should be MetaLeaseSet",
 		},
 		{
 			name:         "Type with high bits set (should be masked)",
 			typeField:    0xF3, // bits 7-4 set, bits 3-0 = 0x3
-			expectedType: DATABASE_STORE_TYPE_LEASESET2,
+			expectedType: DatabaseStoreTypeLeaseSet2,
 			description:  "High bits should be ignored, only bits 3-0 matter",
 		},
 	}
@@ -146,7 +146,7 @@ func TestDatabaseStore_IsLeaseSet2(t *testing.T) {
 func TestDatabaseStore_NewDatabaseStore(t *testing.T) {
 	key := common.Hash{1, 2, 3, 4, 5, 6, 7, 8}
 	data := []byte{10, 20, 30, 40}
-	dataType := byte(DATABASE_STORE_TYPE_LEASESET2)
+	dataType := byte(DatabaseStoreTypeLeaseSet2)
 
 	ds := NewDatabaseStore(key, data, dataType)
 
@@ -178,7 +178,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "RouterInfo without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{1, 2, 3},
-				StoreType:     DATABASE_STORE_TYPE_ROUTER_INFO,
+				StoreType:     DatabaseStoreTypeRouterInfo,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{10, 20, 30},
@@ -190,7 +190,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet2 without reply",
 			store: &DatabaseStore{
 				Key:           common.Hash{5, 6, 7},
-				StoreType:     DATABASE_STORE_TYPE_LEASESET2,
+				StoreType:     DatabaseStoreTypeLeaseSet2,
 				ReplyToken:    [4]byte{0, 0, 0, 0},
 				ReplyTunnelID: [4]byte{0, 0, 0, 0},
 				Data:          []byte{40, 50},
@@ -202,7 +202,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 			name: "LeaseSet with reply token",
 			store: &DatabaseStore{
 				Key:           common.Hash{8, 9, 10},
-				StoreType:     DATABASE_STORE_TYPE_LEASESET,
+				StoreType:     DatabaseStoreTypeLeaseSet,
 				ReplyToken:    [4]byte{0, 0, 0, 1},
 				ReplyTunnelID: [4]byte{0, 0, 0, 100},
 				ReplyGateway:  common.Hash{11, 12, 13},
@@ -243,7 +243,7 @@ func TestDatabaseStore_MarshalBinary(t *testing.T) {
 func TestDatabaseStore_Getters(t *testing.T) {
 	key := common.Hash{100, 101, 102}
 	data := []byte{200, 201, 202}
-	storeType := byte(DATABASE_STORE_TYPE_LEASESET2)
+	storeType := byte(DatabaseStoreTypeLeaseSet2)
 
 	ds := &DatabaseStore{
 		Key:       key,
@@ -271,11 +271,11 @@ func TestDatabaseStore_TypeConstants(t *testing.T) {
 		constant int
 		expected int
 	}{
-		{"RouterInfo", DATABASE_STORE_TYPE_ROUTER_INFO, 0},
-		{"LeaseSet", DATABASE_STORE_TYPE_LEASESET, 1},
-		{"LeaseSet2", DATABASE_STORE_TYPE_LEASESET2, 3},
-		{"EncryptedLeaseSet", DATABASE_STORE_TYPE_ENCRYPTED_LEASESET, 5},
-		{"MetaLeaseSet", DATABASE_STORE_TYPE_META_LEASESET, 7},
+		{"RouterInfo", DatabaseStoreTypeRouterInfo, 0},
+		{"LeaseSet", DatabaseStoreTypeLeaseSet, 1},
+		{"LeaseSet2", DatabaseStoreTypeLeaseSet2, 3},
+		{"EncryptedLeaseSet", DatabaseStoreTypeEncryptedLeaseSet, 5},
+		{"MetaLeaseSet", DatabaseStoreTypeMetaLeaseSet, 7},
 	}
 
 	for _, tt := range tests {

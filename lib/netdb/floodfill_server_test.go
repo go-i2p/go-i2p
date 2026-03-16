@@ -178,7 +178,7 @@ func TestFloodDatabaseStoreDisabled(t *testing.T) {
 	copy(key[:], []byte("flood_test_key_for_disabled_srv!"))
 
 	// Should be a no-op when disabled
-	fs.FloodDatabaseStore(key, []byte("test data"), i2np.DATABASE_STORE_TYPE_ROUTER_INFO)
+	fs.FloodDatabaseStore(key, []byte("test data"), i2np.DatabaseStoreTypeRouterInfo)
 
 	msgs := transport.getMessages()
 	if len(msgs) != 0 {
@@ -367,7 +367,7 @@ func TestSendDatabaseStoreWithTransport(t *testing.T) {
 	copy(key[:], []byte("store_key_for_db_store_test_msg"))
 	copy(to[:], []byte("destination_for_store_response!"))
 
-	err := fs.sendDatabaseStore(key, []byte("test data"), i2np.DATABASE_STORE_TYPE_ROUTER_INFO, to, transport)
+	err := fs.sendDatabaseStore(key, []byte("test data"), i2np.DatabaseStoreTypeRouterInfo, to, transport)
 	if err != nil {
 		t.Fatalf("sendDatabaseStore failed: %v", err)
 	}

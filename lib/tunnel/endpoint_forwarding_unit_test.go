@@ -79,7 +79,7 @@ func TestSetForwarder(t *testing.T) {
 	assert.NotNil(t, ep.forwarder)
 }
 
-// TestDeliverWithInstructionsLocal tests DT_LOCAL delivery goes to handler.
+// TestDeliverWithInstructionsLocal tests DTLocal delivery goes to handler.
 func TestDeliverWithInstructionsLocal(t *testing.T) {
 	var received []byte
 	ep := createTestEndpoint(t, func(msgBytes []byte) error {
@@ -90,12 +90,12 @@ func TestDeliverWithInstructionsLocal(t *testing.T) {
 	msg := []byte("hello local delivery")
 	di := &DeliveryInstructions{}
 
-	err := ep.deliverWithInstructions(DT_LOCAL, di, msg)
+	err := ep.deliverWithInstructions(DTLocal, di, msg)
 	assert.NoError(t, err)
-	assert.Equal(t, msg, received, "DT_LOCAL should deliver to handler")
+	assert.Equal(t, msg, received, "DTLocal should deliver to handler")
 }
 
-// TestDeliverWithInstructionsTunnel tests DT_TUNNEL delivery forwards via MessageForwarder.
+// TestDeliverWithInstructionsTunnel tests DTTunnel delivery forwards via MessageForwarder.
 func TestDeliverWithInstructionsTunnel(t *testing.T) {
 	ep, fwd := createTestEndpointWithForwarder(t)
 
@@ -107,13 +107,13 @@ func TestDeliverWithInstructionsTunnel(t *testing.T) {
 	}
 
 	msg := []byte("tunnel delivery message")
-	err := ep.deliverWithInstructions(DT_TUNNEL, di, msg)
+	err := ep.deliverWithInstructions(DTTunnel, di, msg)
 	assert.NoError(t, err)
 
 	assertTunnelForwarded(t, fwd, 42, hash, msg)
 }
 
-// TestDeliverWithInstructionsRouter tests DT_ROUTER delivery forwards via MessageForwarder.
+// TestDeliverWithInstructionsRouter tests DTRouter delivery forwards via MessageForwarder.
 func TestDeliverWithInstructionsRouter(t *testing.T) {
 	ep, fwd := createTestEndpointWithForwarder(t)
 
@@ -124,7 +124,7 @@ func TestDeliverWithInstructionsRouter(t *testing.T) {
 	}
 
 	msg := []byte("router delivery message")
-	err := ep.deliverWithInstructions(DT_ROUTER, di, msg)
+	err := ep.deliverWithInstructions(DTRouter, di, msg)
 	assert.NoError(t, err)
 
 	assertRouterForwarded(t, fwd, hash, msg)
@@ -136,10 +136,10 @@ func TestDeliverViaForwarderNoForwarder(t *testing.T) {
 
 	// No forwarder set — should not error, just silently skip
 	var hash [32]byte
-	err := ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DTTunnel, 42, hash, []byte("test"))
 	assert.NoError(t, err, "No forwarder should be a no-op, not an error")
 
-	err = ep.deliverViaForwarder(DT_ROUTER, 0, hash, []byte("test"))
+	err = ep.deliverViaForwarder(DTRouter, 0, hash, []byte("test"))
 	assert.NoError(t, err, "No forwarder should be a no-op for router too")
 }
 
@@ -154,10 +154,10 @@ func TestDeliverViaForwarderError(t *testing.T) {
 	ep.SetForwarder(fwd)
 
 	var hash [32]byte
-	err := ep.deliverViaForwarder(DT_TUNNEL, 42, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DTTunnel, 42, hash, []byte("test"))
 	assert.Error(t, err, "Should propagate tunnel forwarding error")
 
-	err = ep.deliverViaForwarder(DT_ROUTER, 0, hash, []byte("test"))
+	err = ep.deliverViaForwarder(DTRouter, 0, hash, []byte("test"))
 	assert.Error(t, err, "Should propagate router forwarding error")
 }
 
@@ -166,7 +166,7 @@ func TestDeliverViaForwarderUnknownType(t *testing.T) {
 	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
-	err := ep.deliverViaForwarder(DT_UNUSED, 0, hash, []byte("test"))
+	err := ep.deliverViaForwarder(DTUnused, 0, hash, []byte("test"))
 	assert.NoError(t, err, "Unknown delivery type should be silently skipped")
 
 	fwd.mu.Lock()
@@ -186,7 +186,7 @@ func TestStoreFirstFragmentWithDI(t *testing.T) {
 		hash:     hash,
 	}
 
-	err := ep.storeFirstFragmentWithDI(1, DT_TUNNEL, di, []byte("fragment data"))
+	err := ep.storeFirstFragmentWithDI(1, DTTunnel, di, []byte("fragment data"))
 	assert.NoError(t, err)
 
 	// Verify assembler has routing info
@@ -195,7 +195,7 @@ func TestStoreFirstFragmentWithDI(t *testing.T) {
 	ep.fragmentsMutex.Unlock()
 
 	require.True(t, exists, "Assembler should exist for message ID 1")
-	assert.Equal(t, byte(DT_TUNNEL), assembler.deliveryType)
+	assert.Equal(t, byte(DTTunnel), assembler.deliveryType)
 	assert.Equal(t, uint32(42), assembler.tunnelID)
 	assert.Equal(t, hash, assembler.hash)
 }
@@ -210,7 +210,7 @@ func TestStoreFirstFragmentWithDIRouter(t *testing.T) {
 		hash: hash,
 	}
 
-	err := ep.storeFirstFragmentWithDI(2, DT_ROUTER, di, []byte("router fragment"))
+	err := ep.storeFirstFragmentWithDI(2, DTRouter, di, []byte("router fragment"))
 	assert.NoError(t, err)
 
 	ep.fragmentsMutex.Lock()
@@ -218,18 +218,18 @@ func TestStoreFirstFragmentWithDIRouter(t *testing.T) {
 	ep.fragmentsMutex.Unlock()
 
 	require.True(t, exists)
-	assert.Equal(t, byte(DT_ROUTER), assembler.deliveryType)
+	assert.Equal(t, byte(DTRouter), assembler.deliveryType)
 	assert.Equal(t, hash, assembler.hash)
 }
 
-// TestReassembleAndDeliverTunnel tests reassembly delivers to forwarder for DT_TUNNEL.
+// TestReassembleAndDeliverTunnel tests reassembly delivers to forwarder for DTTunnel.
 func TestReassembleAndDeliverTunnel(t *testing.T) {
 	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("gateway_for_reassemble_delivery!"))
 
-	err := reassembleTestFragments(t, ep, 99, DT_TUNNEL, 42, hash, map[int][]byte{
+	err := reassembleTestFragments(t, ep, 99, DTTunnel, 42, hash, map[int][]byte{
 		0: []byte("part1"),
 		1: []byte("part2"),
 	})
@@ -238,14 +238,14 @@ func TestReassembleAndDeliverTunnel(t *testing.T) {
 	assertTunnelForwarded(t, fwd, 42, hash, []byte("part1part2"))
 }
 
-// TestReassembleAndDeliverRouter tests reassembly delivers to forwarder for DT_ROUTER.
+// TestReassembleAndDeliverRouter tests reassembly delivers to forwarder for DTRouter.
 func TestReassembleAndDeliverRouter(t *testing.T) {
 	ep, fwd := createTestEndpointWithForwarder(t)
 
 	var hash [32]byte
 	copy(hash[:], []byte("router_for_reassemble_delivery!!"))
 
-	err := reassembleTestFragments(t, ep, 100, DT_ROUTER, 0, hash, map[int][]byte{
+	err := reassembleTestFragments(t, ep, 100, DTRouter, 0, hash, map[int][]byte{
 		0: []byte("router_part1"),
 		1: []byte("router_part2"),
 	})
@@ -259,13 +259,13 @@ func TestReassembleAndDeliverNoForwarder(t *testing.T) {
 	ep := createTestEndpoint(t, nil)
 
 	// No forwarder set
-	err := reassembleTestFragments(t, ep, 101, DT_TUNNEL, 0, [32]byte{}, map[int][]byte{
+	err := reassembleTestFragments(t, ep, 101, DTTunnel, 0, [32]byte{}, map[int][]byte{
 		0: []byte("data"),
 	})
 	assert.NoError(t, err, "Should not error without forwarder")
 }
 
-// TestReassembleAndDeliverLocal tests reassembly delivers to handler for DT_LOCAL.
+// TestReassembleAndDeliverLocal tests reassembly delivers to handler for DTLocal.
 func TestReassembleAndDeliverLocal(t *testing.T) {
 	var received []byte
 	ep := createTestEndpoint(t, func(msgBytes []byte) error {
@@ -273,7 +273,7 @@ func TestReassembleAndDeliverLocal(t *testing.T) {
 		return nil
 	})
 
-	err := reassembleTestFragments(t, ep, 102, DT_LOCAL, 0, [32]byte{}, map[int][]byte{
+	err := reassembleTestFragments(t, ep, 102, DTLocal, 0, [32]byte{}, map[int][]byte{
 		0: []byte("local_"),
 		1: []byte("msg"),
 	})
@@ -293,12 +293,12 @@ func TestFragmentAssemblerRoutingFields(t *testing.T) {
 
 	assembler := &fragmentAssembler{
 		fragments:    make(map[int][]byte),
-		deliveryType: DT_TUNNEL,
+		deliveryType: DTTunnel,
 		tunnelID:     123,
 		hash:         hash,
 	}
 
-	assert.Equal(t, byte(DT_TUNNEL), assembler.deliveryType)
+	assert.Equal(t, byte(DTTunnel), assembler.deliveryType)
 	assert.Equal(t, uint32(123), assembler.tunnelID)
 	assert.Equal(t, hash, assembler.hash)
 }

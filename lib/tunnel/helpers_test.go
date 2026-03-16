@@ -142,8 +142,8 @@ func assertDeliveryInstructionsRoundTrip(t *testing.T, original *DeliveryInstruc
 // Hash() returns the expected hash.
 func assertDeliveryInstructionHash(t *testing.T, flagByte byte, tunnelIDBytes []byte, hashFn func(int) byte) {
 	t.Helper()
-	expectedHash := make([]byte, HASH_SIZE)
-	for i := 0; i < HASH_SIZE; i++ {
+	expectedHash := make([]byte, HashSize)
+	for i := 0; i < HashSize; i++ {
 		expectedHash[i] = hashFn(i)
 	}
 	data := []byte{flagByte}

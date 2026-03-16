@@ -238,7 +238,7 @@ func TestClearFragments(t *testing.T) {
 		fragments: map[int][]byte{
 			0: []byte("test"),
 		},
-		deliveryType: DT_LOCAL,
+		deliveryType: DTLocal,
 		totalCount:   2,
 		receivedMask: 1,
 	}
@@ -246,7 +246,7 @@ func TestClearFragments(t *testing.T) {
 		fragments: map[int][]byte{
 			0: []byte("test2"),
 		},
-		deliveryType: DT_LOCAL,
+		deliveryType: DTLocal,
 		totalCount:   1,
 		receivedMask: 1,
 	}
@@ -419,8 +419,8 @@ func TestFragmentReassembly(t *testing.T) {
 				if frag.isFirst {
 					// Create first fragment delivery instructions
 					di := &DeliveryInstructions{
-						fragmentType: FIRST_FRAGMENT,
-						deliveryType: DT_LOCAL,
+						fragmentType: FirstFragment,
+						deliveryType: DTLocal,
 						fragmented:   len(tt.fragments) > 1,
 						messageID:    msgID,
 						fragmentSize: uint16(len(frag.data)),
@@ -430,7 +430,7 @@ func TestFragmentReassembly(t *testing.T) {
 				} else {
 					// Create follow-on fragment delivery instructions
 					di := &DeliveryInstructions{
-						fragmentType:   FOLLOW_ON_FRAGMENT,
+						fragmentType:   FollowOnFragment,
 						fragmentNumber: frag.fragNum,
 						lastFragment:   frag.isLast,
 						messageID:      msgID,
@@ -467,8 +467,8 @@ func TestFragmentErrors(t *testing.T) {
 
 		// First fragment
 		di1 := &DeliveryInstructions{
-			fragmentType: FIRST_FRAGMENT,
-			deliveryType: DT_LOCAL,
+			fragmentType: FirstFragment,
+			deliveryType: DTLocal,
 			fragmented:   true,
 			messageID:    msgID,
 			fragmentSize: 5,
@@ -478,7 +478,7 @@ func TestFragmentErrors(t *testing.T) {
 
 		// Second fragment
 		di2 := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 1,
 			lastFragment:   false,
 			messageID:      msgID,
@@ -500,7 +500,7 @@ func TestFragmentErrors(t *testing.T) {
 
 		// Fragment with number > 63
 		di := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 64,
 			lastFragment:   true,
 			messageID:      msgID,
@@ -518,7 +518,7 @@ func TestFragmentErrors(t *testing.T) {
 
 		// Fragment 0 in follow-on fragment (invalid)
 		di := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 0,
 			lastFragment:   false,
 			messageID:      msgID,
@@ -549,8 +549,8 @@ func TestFragmentPartialReassembly(t *testing.T) {
 
 		// First fragment
 		di1 := &DeliveryInstructions{
-			fragmentType: FIRST_FRAGMENT,
-			deliveryType: DT_LOCAL,
+			fragmentType: FirstFragment,
+			deliveryType: DTLocal,
 			fragmented:   true,
 			messageID:    msgID,
 			fragmentSize: 5,
@@ -560,7 +560,7 @@ func TestFragmentPartialReassembly(t *testing.T) {
 
 		// Skip fragment 1, send fragment 2 (last)
 		di3 := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 2,
 			lastFragment:   true,
 			messageID:      msgID,
@@ -574,7 +574,7 @@ func TestFragmentPartialReassembly(t *testing.T) {
 
 		// Now send the missing fragment 1
 		di2 := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 1,
 			lastFragment:   false,
 			messageID:      msgID,
@@ -597,7 +597,7 @@ func TestFragmentPartialReassembly(t *testing.T) {
 
 		// Send follow-on fragment without first fragment
 		di := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 1,
 			lastFragment:   true,
 			messageID:      msgID,
@@ -631,8 +631,8 @@ func TestNonLocalDelivery(t *testing.T) {
 		require.NoError(t, err)
 
 		di := &DeliveryInstructions{
-			fragmentType: FIRST_FRAGMENT,
-			deliveryType: DT_ROUTER,
+			fragmentType: FirstFragment,
+			deliveryType: DTRouter,
 			fragmented:   false,
 			fragmentSize: 10,
 		}
@@ -652,8 +652,8 @@ func TestNonLocalDelivery(t *testing.T) {
 
 		// First fragment - tunnel delivery
 		di1 := &DeliveryInstructions{
-			fragmentType: FIRST_FRAGMENT,
-			deliveryType: DT_TUNNEL,
+			fragmentType: FirstFragment,
+			deliveryType: DTTunnel,
 			fragmented:   true,
 			messageID:    msgID,
 			fragmentSize: 5,
@@ -663,7 +663,7 @@ func TestNonLocalDelivery(t *testing.T) {
 
 		// Last fragment
 		di2 := &DeliveryInstructions{
-			fragmentType:   FOLLOW_ON_FRAGMENT,
+			fragmentType:   FollowOnFragment,
 			fragmentNumber: 1,
 			lastFragment:   true,
 			messageID:      msgID,

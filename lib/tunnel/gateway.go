@@ -23,7 +23,7 @@ import (
 // - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 // - Simple interface focused on core functionality
 // - Error handling at each step with clear error messages
-// - Supports DT_LOCAL, DT_TUNNEL, and DT_ROUTER delivery types
+// - Supports DTLocal, DTTunnel, and DTRouter delivery types
 // - Fragments oversized messages across multiple tunnel messages
 type Gateway struct {
 	tunnelID   TunnelID
@@ -111,7 +111,7 @@ func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 		return nil, ErrInvalidMessage
 	}
 
-	// Create simple delivery instructions for local delivery (type DT_LOCAL)
+	// Create simple delivery instructions for local delivery (type DTLocal)
 	deliveryInstructions, err := g.createDeliveryInstructions(msgBytes)
 	if err != nil {
 		log.WithFields(logger.Fields{
@@ -151,32 +151,32 @@ func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 
 // DeliveryConfig specifies the delivery type and addressing for a tunnel message.
 type DeliveryConfig struct {
-	// DeliveryType: DT_LOCAL (0), DT_TUNNEL (1), or DT_ROUTER (2)
+	// DeliveryType: DTLocal (0), DTTunnel (1), or DTRouter (2)
 	DeliveryType byte
-	// TunnelID is the destination tunnel ID (required for DT_TUNNEL)
+	// TunnelID is the destination tunnel ID (required for DTTunnel)
 	TunnelID uint32
-	// Hash is the gateway router hash (DT_TUNNEL) or destination router hash (DT_ROUTER)
+	// Hash is the gateway router hash (DTTunnel) or destination router hash (DTRouter)
 	Hash [32]byte
 }
 
-// LocalDelivery returns a DeliveryConfig for DT_LOCAL delivery.
+// LocalDelivery returns a DeliveryConfig for DTLocal delivery.
 func LocalDelivery() DeliveryConfig {
-	return DeliveryConfig{DeliveryType: DT_LOCAL}
+	return DeliveryConfig{DeliveryType: DTLocal}
 }
 
-// TunnelDelivery returns a DeliveryConfig for DT_TUNNEL delivery.
+// TunnelDelivery returns a DeliveryConfig for DTTunnel delivery.
 func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig {
 	return DeliveryConfig{
-		DeliveryType: DT_TUNNEL,
+		DeliveryType: DTTunnel,
 		TunnelID:     tunnelID,
 		Hash:         gatewayHash,
 	}
 }
 
-// RouterDelivery returns a DeliveryConfig for DT_ROUTER delivery.
+// RouterDelivery returns a DeliveryConfig for DTRouter delivery.
 func RouterDelivery(routerHash [32]byte) DeliveryConfig {
 	return DeliveryConfig{
-		DeliveryType: DT_ROUTER,
+		DeliveryType: DTRouter,
 		Hash:         routerHash,
 	}
 }
@@ -185,9 +185,9 @@ func RouterDelivery(routerHash [32]byte) DeliveryConfig {
 func deliveryInstructionsSize(dc DeliveryConfig, fragmented bool) int {
 	// flag(1) + size(2) = 3 bytes base
 	size := 3
-	if dc.DeliveryType == DT_TUNNEL {
+	if dc.DeliveryType == DTTunnel {
 		size += 4 + 32 // tunnel ID + hash
-	} else if dc.DeliveryType == DT_ROUTER {
+	} else if dc.DeliveryType == DTRouter {
 		size += 32 // hash
 	}
 	if fragmented {
@@ -203,7 +203,7 @@ func maxPayloadForDelivery(dc DeliveryConfig) int {
 }
 
 // SendWithDelivery sends an I2NP message with the specified delivery type.
-// Supports DT_LOCAL, DT_TUNNEL, and DT_ROUTER delivery types.
+// Supports DTLocal, DTTunnel, and DTRouter delivery types.
 // Automatically fragments messages that exceed the tunnel payload limit.
 //
 // Returns a slice of encrypted tunnel messages (one per fragment), or an error.
@@ -362,11 +362,11 @@ func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgByte
 	var di *DeliveryInstructions
 
 	switch dc.DeliveryType {
-	case DT_TUNNEL:
+	case DTTunnel:
 		di = NewTunnelDeliveryInstructions(dc.TunnelID, dc.Hash, uint16(len(msgBytes)))
-	case DT_ROUTER:
+	case DTRouter:
 		di = NewRouterDeliveryInstructions(dc.Hash, uint16(len(msgBytes)))
-	default: // DT_LOCAL
+	default: // DTLocal
 		di = NewLocalDeliveryInstructions(uint16(len(msgBytes)))
 	}
 
@@ -385,7 +385,7 @@ func (g *Gateway) createDeliveryInstructionsForConfig(dc DeliveryConfig, msgByte
 // createFollowOnInstructions creates follow-on fragment delivery instructions.
 func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast bool, fragData []byte) ([]byte, error) {
 	di := &DeliveryInstructions{
-		fragmentType:   FOLLOW_ON_FRAGMENT,
+		fragmentType:   FollowOnFragment,
 		fragmentNumber: fragNum,
 		lastFragment:   isLast,
 		messageID:      msgID,
@@ -399,7 +399,7 @@ func (g *Gateway) createFollowOnInstructions(msgID uint32, fragNum int, isLast b
 	return data, nil
 }
 
-// createDeliveryInstructions creates DT_LOCAL delivery instructions for a message.
+// createDeliveryInstructions creates DTLocal delivery instructions for a message.
 // For messages that exceed the single-message limit, use SendWithDelivery which
 // supports fragmentation automatically.
 func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
@@ -415,8 +415,8 @@ func (g *Gateway) createDeliveryInstructions(msgBytes []byte) ([]byte, error) {
 
 	instructions := make([]byte, 3)
 
-	// Byte 0: flags - DT_LOCAL (0) and not fragmented
-	instructions[0] = DT_LOCAL
+	// Byte 0: flags - DTLocal (0) and not fragmented
+	instructions[0] = DTLocal
 
 	// Bytes 1-2: message size
 	binary.BigEndian.PutUint16(instructions[1:3], uint16(len(msgBytes)))

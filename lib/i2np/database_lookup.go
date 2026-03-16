@@ -476,21 +476,21 @@ func readDatabaseLookupReplyTags(length int, data []byte, tags int) (int, []sess
 	if len(data) < length+tags*32 {
 		return length, []session_tag.SessionTag{}, ErrDatabaseLookupNotEnoughData
 	}
-	var reply_tags []session_tag.SessionTag
+	var replyTags []session_tag.SessionTag
 	for i := 0; i < tags; i++ {
 		offset := length + i*32
 		tag, err := session_tag.NewSessionTagFromBytes(data[offset : offset+32])
 		if err != nil {
 			return length, []session_tag.SessionTag{}, err
 		}
-		reply_tags = append(reply_tags, tag)
+		replyTags = append(replyTags, tag)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "i2np.database_lookup.readDatabaseLookupReplyTags",
-		"reply_tags": reply_tags,
+		"reply_tags": replyTags,
 	}).Debug("parsed_database_lookup_reply_tags")
-	return length + tags*32, reply_tags, nil
+	return length + tags*32, replyTags, nil
 }
 
 func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, []session_tag.ECIESSessionTag, error) {
@@ -498,21 +498,21 @@ func readDatabaseLookupECIESReplyTags(length int, data []byte, tags int) (int, [
 	if len(data) < length+tags*tagSize {
 		return length, []session_tag.ECIESSessionTag{}, ErrDatabaseLookupNotEnoughData
 	}
-	var reply_tags []session_tag.ECIESSessionTag
+	var replyTags []session_tag.ECIESSessionTag
 	for i := 0; i < tags; i++ {
 		offset := length + i*tagSize
 		tag, err := session_tag.NewECIESSessionTagFromBytes(data[offset : offset+tagSize])
 		if err != nil {
 			return length, []session_tag.ECIESSessionTag{}, err
 		}
-		reply_tags = append(reply_tags, tag)
+		replyTags = append(replyTags, tag)
 	}
 
 	log.WithFields(logger.Fields{
 		"at":         "i2np.database_lookup.readDatabaseLookupECIESReplyTags",
-		"reply_tags": reply_tags,
+		"reply_tags": replyTags,
 	}).Debug("parsed_database_lookup_ecies_reply_tags")
-	return length + tags*tagSize, reply_tags, nil
+	return length + tags*tagSize, replyTags, nil
 }
 
 // GetKey returns the lookup key

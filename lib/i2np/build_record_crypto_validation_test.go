@@ -297,12 +297,12 @@ func TestBuildRecordCrypto_AllReplyCodes(t *testing.T) {
 	crypto := NewBuildRecordCrypto()
 
 	replyCodes := []byte{
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_REJECT,
-		TUNNEL_BUILD_REPLY_OVERLOAD,
-		TUNNEL_BUILD_REPLY_BANDWIDTH,
-		TUNNEL_BUILD_REPLY_INVALID,
-		TUNNEL_BUILD_REPLY_EXPIRED,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyReject,
+		TunnelBuildReplyOverload,
+		TunnelBuildReplyBandwidth,
+		TunnelBuildReplyInvalid,
+		TunnelBuildReplyExpired,
 		0xFF, // Unknown code
 	}
 
@@ -337,17 +337,17 @@ func TestBuildRecordCrypto_AllReplyCodes(t *testing.T) {
 // Helper function to get reply code name
 func replyCodeName(code byte) string {
 	switch code {
-	case TUNNEL_BUILD_REPLY_SUCCESS:
+	case TunnelBuildReplySuccess:
 		return "SUCCESS"
-	case TUNNEL_BUILD_REPLY_REJECT:
+	case TunnelBuildReplyReject:
 		return "REJECT"
-	case TUNNEL_BUILD_REPLY_OVERLOAD:
+	case TunnelBuildReplyOverload:
 		return "OVERLOAD"
-	case TUNNEL_BUILD_REPLY_BANDWIDTH:
+	case TunnelBuildReplyBandwidth:
 		return "BANDWIDTH"
-	case TUNNEL_BUILD_REPLY_INVALID:
+	case TunnelBuildReplyInvalid:
 		return "INVALID"
-	case TUNNEL_BUILD_REPLY_EXPIRED:
+	case TunnelBuildReplyExpired:
 		return "EXPIRED"
 	default:
 		return "UNKNOWN"

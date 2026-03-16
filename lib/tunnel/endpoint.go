@@ -17,7 +17,7 @@ import (
 type MessageHandler func(msgBytes []byte) error
 
 // MessageForwarder handles routing messages to non-local delivery targets.
-// When the tunnel endpoint receives a message with DT_TUNNEL or DT_ROUTER
+// When the tunnel endpoint receives a message with DTTunnel or DTRouter
 // delivery type, it delegates to this interface for proper forwarding.
 type MessageForwarder interface {
 	// ForwardToTunnel sends a message to a specific tunnel on a gateway router.
@@ -46,7 +46,7 @@ type MessageForwarder interface {
 // - Automatic cleanup of stale fragments (default: 60 seconds)
 // - Thread-safe for concurrent message processing
 // - Clear error handling and logging
-// - Routes DT_TUNNEL and DT_ROUTER messages via MessageForwarder
+// - Routes DTTunnel and DTRouter messages via MessageForwarder
 type Endpoint struct {
 	tunnelID        TunnelID
 	decryption      tunnel.TunnelEncryptor
@@ -74,8 +74,8 @@ type Endpoint struct {
 type fragmentAssembler struct {
 	fragments    map[int][]byte // fragment number -> fragment data
 	deliveryType byte           // Delivery type from first fragment
-	tunnelID     uint32         // Destination tunnel ID (DT_TUNNEL only)
-	hash         [32]byte       // Gateway or router hash (DT_TUNNEL, DT_ROUTER)
+	tunnelID     uint32         // Destination tunnel ID (DTTunnel only)
+	hash         [32]byte       // Gateway or router hash (DTTunnel, DTRouter)
 	totalCount   int            // Expected number of fragments (0 until last fragment seen)
 	receivedMask uint64         // Bitmap of received fragments (supports up to 64 fragments)
 	createdAt    time.Time      // Timestamp when first fragment was received
@@ -137,7 +137,7 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 	return ep, nil
 }
 
-// SetForwarder sets the message forwarder for routing DT_TUNNEL and DT_ROUTER messages.
+// SetForwarder sets the message forwarder for routing DTTunnel and DTRouter messages.
 // If not set, non-local messages will be logged and dropped (backward compatible).
 func (e *Endpoint) SetForwarder(forwarder MessageForwarder) {
 	e.forwarderMu.Lock()
@@ -376,9 +376,9 @@ func (e *Endpoint) processFragmentByType(di *DeliveryInstructions, fragmentData 
 		return err
 	}
 
-	if fragmentType == FIRST_FRAGMENT {
+	if fragmentType == FirstFragment {
 		return e.processFirstFragment(di, fragmentData)
-	} else if fragmentType == FOLLOW_ON_FRAGMENT {
+	} else if fragmentType == FollowOnFragment {
 		return e.processFollowOnFragment(di, fragmentData)
 	}
 	return nil
@@ -414,12 +414,12 @@ func (e *Endpoint) processFirstFragment(di *DeliveryInstructions, fragmentData [
 // deliverWithInstructions delivers a message using routing info from delivery instructions.
 func (e *Endpoint) deliverWithInstructions(deliveryType byte, di *DeliveryInstructions, msgBytes []byte) error {
 	switch deliveryType {
-	case DT_LOCAL:
+	case DTLocal:
 		return e.handler(msgBytes)
-	case DT_TUNNEL:
-		return e.deliverViaForwarder(DT_TUNNEL, di.tunnelID, di.hash, msgBytes)
-	case DT_ROUTER:
-		return e.deliverViaForwarder(DT_ROUTER, 0, di.hash, msgBytes)
+	case DTTunnel:
+		return e.deliverViaForwarder(DTTunnel, di.tunnelID, di.hash, msgBytes)
+	case DTRouter:
+		return e.deliverViaForwarder(DTRouter, 0, di.hash, msgBytes)
 	default:
 		log.WithField("delivery_type", deliveryType).Warn("Unknown delivery type, dropping fragment")
 		return fmt.Errorf("unknown delivery type 0x%02x", deliveryType)
@@ -438,14 +438,14 @@ func (e *Endpoint) deliverViaForwarder(deliveryType byte, tunnelID uint32, hash 
 	}
 
 	switch deliveryType {
-	case DT_TUNNEL:
+	case DTTunnel:
 		log.WithFields(map[string]interface{}{
-			"delivery_type": "DT_TUNNEL",
+			"delivery_type": "DTTunnel",
 			"tunnel_id":     tunnelID,
 		}).Debug("Forwarding message to tunnel")
 		return fwd.ForwardToTunnel(tunnelID, hash, msgBytes)
-	case DT_ROUTER:
-		log.WithField("delivery_type", "DT_ROUTER").Debug("Forwarding message to router")
+	case DTRouter:
+		log.WithField("delivery_type", "DTRouter").Debug("Forwarding message to router")
 		return fwd.ForwardToRouter(hash, msgBytes)
 	default:
 		return nil
@@ -458,10 +458,10 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 
 	assembler := e.ensureAssemblerExists(msgID, deliveryType)
 	// Store routing info from DI for later delivery
-	if deliveryType == DT_TUNNEL {
+	if deliveryType == DTTunnel {
 		assembler.tunnelID = di.tunnelID
 		assembler.hash = di.hash
-	} else if deliveryType == DT_ROUTER {
+	} else if deliveryType == DTRouter {
 		assembler.hash = di.hash
 	}
 	e.recordFirstFragmentData(assembler, fragmentData, msgID)
@@ -623,7 +623,7 @@ func (e *Endpoint) getOrCreateAssembler(msgID uint32) *fragmentAssembler {
 		log.WithField("message_id", msgID).Warn("Received follow-on fragment without first fragment")
 		assembler = &fragmentAssembler{
 			fragments:    make(map[int][]byte),
-			deliveryType: DT_LOCAL,
+			deliveryType: DTLocal,
 			totalCount:   0,
 			receivedMask: 0,
 			createdAt:    time.Now(),
@@ -743,9 +743,9 @@ func (e *Endpoint) deliverReassembled(result *reassembledResult) error {
 	}
 
 	switch result.deliveryType {
-	case DT_LOCAL:
+	case DTLocal:
 		return e.handler(result.data)
-	case DT_TUNNEL, DT_ROUTER:
+	case DTTunnel, DTRouter:
 		e.forwarderMu.RLock()
 		fwd := e.forwarder
 		e.forwarderMu.RUnlock()

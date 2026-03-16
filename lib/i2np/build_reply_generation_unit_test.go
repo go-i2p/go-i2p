@@ -53,7 +53,7 @@ func TestProcessSingleBuildRecord_AcceptedRequest(t *testing.T) {
 
 func TestProcessSingleBuildRecord_RejectedRequest(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, false)
-	mockParticipant.rejectCode = TUNNEL_BUILD_REPLY_OVERLOAD
+	mockParticipant.rejectCode = TunnelBuildReplyOverload
 	mockParticipant.rejectReason = "router overloaded"
 
 	processDirectBuildRecord(t, processor, 1002)
@@ -115,7 +115,7 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 	messageID := 1005
 
 	// Execute
-	err := processor.generateAndSendBuildReply(messageID, 0, record, TUNNEL_BUILD_REPLY_SUCCESS, false)
+	err := processor.generateAndSendBuildReply(messageID, 0, record, TunnelBuildReplySuccess, false)
 
 	// Verify
 	require.NoError(t, err, "Should successfully generate and send reply")
@@ -129,7 +129,7 @@ func TestGenerateAndSendBuildReply_EncryptionWorks(t *testing.T) {
 
 	decrypted, err := crypto.DecryptReplyRecord(encryptedReply, record.ReplyKey, record.ReplyIV)
 	require.NoError(t, err, "Should be able to decrypt the reply")
-	assert.Equal(t, byte(TUNNEL_BUILD_REPLY_SUCCESS), decrypted.Reply, "Reply code should be SUCCESS")
+	assert.Equal(t, byte(TunnelBuildReplySuccess), decrypted.Reply, "Reply code should be SUCCESS")
 }
 
 func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
@@ -137,12 +137,12 @@ func TestGenerateAndSendBuildReply_AllReplyCodes(t *testing.T) {
 		name      string
 		replyCode byte
 	}{
-		{"SUCCESS", TUNNEL_BUILD_REPLY_SUCCESS},
-		{"REJECT", TUNNEL_BUILD_REPLY_REJECT},
-		{"OVERLOAD", TUNNEL_BUILD_REPLY_OVERLOAD},
-		{"BANDWIDTH", TUNNEL_BUILD_REPLY_BANDWIDTH},
-		{"INVALID", TUNNEL_BUILD_REPLY_INVALID},
-		{"EXPIRED", TUNNEL_BUILD_REPLY_EXPIRED},
+		{"SUCCESS", TunnelBuildReplySuccess},
+		{"REJECT", TunnelBuildReplyReject},
+		{"OVERLOAD", TunnelBuildReplyOverload},
+		{"BANDWIDTH", TunnelBuildReplyBandwidth},
+		{"INVALID", TunnelBuildReplyInvalid},
+		{"EXPIRED", TunnelBuildReplyExpired},
 	}
 
 	for _, tc := range testCases {
@@ -260,7 +260,7 @@ func TestBuildRecordCrypto_InitializedInProcessor(t *testing.T) {
 // TestProcessSingleBuildRecord_RegisterParticipantFailure verifies that when
 // ProcessBuildRequest accepts a record but RegisterParticipant fails, a rejection
 // reply is sent instead of a false success reply. Previously, the code sent
-// TUNNEL_BUILD_REPLY_SUCCESS even when registration failed, creating phantom tunnels.
+// TunnelBuildReplySuccess even when registration failed, creating phantom tunnels.
 func TestProcessSingleBuildRecord_RegisterParticipantFailure(t *testing.T) {
 	processor, mockForwarder, mockParticipant := setupBuildReplyTest(t, true)
 	mockParticipant.registerErr = fmt.Errorf("participant slots exhausted")

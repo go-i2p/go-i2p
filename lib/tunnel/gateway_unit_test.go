@@ -152,8 +152,8 @@ func TestCreateDeliveryInstructions(t *testing.T) {
 				assert.NoError(t, err)
 				require.NotNil(t, instructions)
 				assert.Equal(t, 3, len(instructions))
-				// First byte should be DT_LOCAL (0)
-				assert.Equal(t, byte(DT_LOCAL), instructions[0])
+				// First byte should be DTLocal (0)
+				assert.Equal(t, byte(DTLocal), instructions[0])
 			}
 		})
 	}

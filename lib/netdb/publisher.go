@@ -256,10 +256,10 @@ func (p *Publisher) publishAllLeaseSets() {
 // publishLeaseSetEntry publishes a single LeaseSetEntry to floodfill routers.
 // This is a helper method that determines which type of LeaseSet to publish.
 // The DatabaseStore type byte must match the actual LeaseSet type per the I2P spec:
-//   - DATABASE_STORE_TYPE_LEASESET (1) for original LeaseSet
-//   - DATABASE_STORE_TYPE_LEASESET2 (3) for LeaseSet2
-//   - DATABASE_STORE_TYPE_ENCRYPTED_LEASESET (5) for EncryptedLeaseSet
-//   - DATABASE_STORE_TYPE_META_LEASESET (7) for MetaLeaseSet
+//   - DatabaseStoreTypeLeaseSet (1) for original LeaseSet
+//   - DatabaseStoreTypeLeaseSet2 (3) for LeaseSet2
+//   - DatabaseStoreTypeEncryptedLeaseSet (5) for EncryptedLeaseSet
+//   - DatabaseStoreTypeMetaLeaseSet (7) for MetaLeaseSet
 func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 	// Determine which type of LeaseSet we have, serialize it, and select the correct store type
 	var lsBytes []byte
@@ -269,16 +269,16 @@ func (p *Publisher) publishLeaseSetEntry(lsEntry LeaseSetEntry) error {
 	switch {
 	case lsEntry.Entry.LeaseSet != nil:
 		lsBytes, err = lsEntry.Entry.LeaseSet.Bytes()
-		storeType = i2np.DATABASE_STORE_TYPE_LEASESET
+		storeType = i2np.DatabaseStoreTypeLeaseSet
 	case lsEntry.Entry.LeaseSet2 != nil:
 		lsBytes, err = lsEntry.Entry.LeaseSet2.Bytes()
-		storeType = i2np.DATABASE_STORE_TYPE_LEASESET2
+		storeType = i2np.DatabaseStoreTypeLeaseSet2
 	case lsEntry.Entry.EncryptedLeaseSet != nil:
 		lsBytes, err = lsEntry.Entry.EncryptedLeaseSet.Bytes()
-		storeType = i2np.DATABASE_STORE_TYPE_ENCRYPTED_LEASESET
+		storeType = i2np.DatabaseStoreTypeEncryptedLeaseSet
 	case lsEntry.Entry.MetaLeaseSet != nil:
 		lsBytes, err = lsEntry.Entry.MetaLeaseSet.Bytes()
-		storeType = i2np.DATABASE_STORE_TYPE_META_LEASESET
+		storeType = i2np.DatabaseStoreTypeMetaLeaseSet
 	default:
 		return fmt.Errorf("LeaseSetEntry contains no valid LeaseSet data")
 	}
@@ -316,12 +316,12 @@ func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) err
 	}
 
 	// Send DatabaseStore message to each selected floodfill
-	// Use DATABASE_STORE_TYPE_LEASESET (1) since this is an original LeaseSet, not LeaseSet2
+	// Use DatabaseStoreTypeLeaseSet (1) since this is an original LeaseSet, not LeaseSet2
 	lsBytes, err := ls.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to serialize LeaseSet: %w", err)
 	}
-	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DATABASE_STORE_TYPE_LEASESET, floodfills)
+	return p.sendDatabaseStoreMessages(hash, lsBytes, i2np.DatabaseStoreTypeLeaseSet, floodfills)
 }
 
 // PublishRouterInfo publishes a specific RouterInfo to floodfill routers
@@ -348,7 +348,7 @@ func (p *Publisher) PublishRouterInfo(ri router_info.RouterInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to gzip-compress RouterInfo: %w", err)
 	}
-	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DATABASE_STORE_TYPE_ROUTER_INFO, floodfills)
+	return p.sendDatabaseStoreMessages(hash, compressed, i2np.DatabaseStoreTypeRouterInfo, floodfills)
 }
 
 // selectFloodfillsForPublishing selects the closest floodfills for a given hash
@@ -524,11 +524,11 @@ func (p *Publisher) createTunnelGatewayMessage(hash common.Hash, data []byte, da
 
 // createDatabaseStoreMessage creates a DatabaseStore I2NP message with the provided
 // hash, data, and type. The dataType should be one of the DATABASE_STORE_TYPE_* constants:
-//   - DATABASE_STORE_TYPE_ROUTER_INFO (0): For RouterInfo entries
-//   - DATABASE_STORE_TYPE_LEASESET (1): For original LeaseSet entries
-//   - DATABASE_STORE_TYPE_LEASESET2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
-//   - DATABASE_STORE_TYPE_ENCRYPTED_LEASESET (5): For EncryptedLeaseSet entries (0.9.39+)
-//   - DATABASE_STORE_TYPE_META_LEASESET (7): For MetaLeaseSet entries (0.9.40+)
+//   - DatabaseStoreTypeRouterInfo (0): For RouterInfo entries
+//   - DatabaseStoreTypeLeaseSet (1): For original LeaseSet entries
+//   - DatabaseStoreTypeLeaseSet2 (3): For LeaseSet2 entries (standard as of 0.9.38+)
+//   - DatabaseStoreTypeEncryptedLeaseSet (5): For EncryptedLeaseSet entries (0.9.39+)
+//   - DatabaseStoreTypeMetaLeaseSet (7): For MetaLeaseSet entries (0.9.40+)
 func (p *Publisher) createDatabaseStoreMessage(hash common.Hash, data []byte, dataType byte) (i2np.I2NPMessage, error) {
 	dbStore := i2np.NewDatabaseStore(hash, data, dataType)
 	dbStoreMsg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeDatabaseStore)

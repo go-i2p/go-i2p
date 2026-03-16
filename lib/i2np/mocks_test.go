@@ -203,7 +203,7 @@ type mockParticipantManager struct {
 func newMockParticipantManager(acceptAll bool) *mockParticipantManager {
 	return &mockParticipantManager{
 		acceptAll:    acceptAll,
-		rejectCode:   TUNNEL_BUILD_REPLY_REJECT,
+		rejectCode:   TunnelBuildReplyReject,
 		rejectReason: "mock rejection",
 	}
 }
@@ -260,7 +260,7 @@ func createTestBuildRequestRecord(t interface{ Helper() }) BuildRequestRecord {
 func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
 	return &reply
 }
@@ -269,7 +269,7 @@ func createSuccessfulTunnelBuildReply() *TunnelBuildReply {
 func createRejectedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
-		reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_REJECT)
+		reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyReject)
 	}
 	return &reply
 }
@@ -278,14 +278,14 @@ func createRejectedTunnelBuildReply() *TunnelBuildReply {
 func createMixedTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	replyCodes := []byte{
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_REJECT,
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_OVERLOAD,
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_BANDWIDTH,
-		TUNNEL_BUILD_REPLY_SUCCESS,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyReject,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyOverload,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyBandwidth,
+		TunnelBuildReplySuccess,
 	}
 	for i, replyCode := range replyCodes {
 		reply.Records[i] = createValidResponseRecordWithReply(replyCode)
@@ -298,9 +298,9 @@ func createSingleFailureTunnelBuildReply() *TunnelBuildReply {
 	var reply TunnelBuildReply
 	for i := 0; i < 8; i++ {
 		if i == 3 {
-			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_OVERLOAD)
+			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplyOverload)
 		} else {
-			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
 	return &reply
@@ -313,7 +313,7 @@ func createUnknownReplyCodeTunnelBuildReply() *TunnelBuildReply {
 		if i == 0 {
 			reply.Records[i] = createValidResponseRecordWithReply(0xFF)
 		} else {
-			reply.Records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+			reply.Records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 		}
 	}
 	return &reply
@@ -327,11 +327,11 @@ func createEmptyHashTunnelBuildReply() *TunnelBuildReply {
 			reply.Records[i] = BuildResponseRecord{
 				Hash:       common.Hash{},
 				RandomData: [495]byte{},
-				Reply:      TUNNEL_BUILD_REPLY_SUCCESS,
+				Reply:      TunnelBuildReplySuccess,
 			}
 		} else {
 			reply.Records[i] = createValidResponseRecord()
-			reply.Records[i].Reply = TUNNEL_BUILD_REPLY_SUCCESS
+			reply.Records[i].Reply = TunnelBuildReplySuccess
 		}
 	}
 	return &reply
@@ -341,7 +341,7 @@ func createEmptyHashTunnelBuildReply() *TunnelBuildReply {
 func createSuccessfulVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	for i := 0; i < hopCount; i++ {
-		records[i] = createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+		records[i] = createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 	}
 	return &VariableTunnelBuildReply{
 		Count:                hopCount,
@@ -353,10 +353,10 @@ func createSuccessfulVariableTunnelBuildReply(hopCount int) *VariableTunnelBuild
 func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply {
 	records := make([]BuildResponseRecord, hopCount)
 	replyCodes := []byte{
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_REJECT,
-		TUNNEL_BUILD_REPLY_SUCCESS,
-		TUNNEL_BUILD_REPLY_OVERLOAD,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyReject,
+		TunnelBuildReplySuccess,
+		TunnelBuildReplyOverload,
 	}
 	for i := 0; i < hopCount; i++ {
 		records[i] = createValidResponseRecordWithReply(replyCodes[i%len(replyCodes)])
@@ -369,7 +369,7 @@ func createMixedVariableTunnelBuildReply(hopCount int) *VariableTunnelBuildReply
 
 // createValidResponseRecord creates a valid BuildResponseRecord for testing
 func createValidResponseRecord() BuildResponseRecord {
-	return createValidResponseRecordWithReply(TUNNEL_BUILD_REPLY_SUCCESS)
+	return createValidResponseRecordWithReply(TunnelBuildReplySuccess)
 }
 
 // createValidResponseRecordWithReply creates a valid BuildResponseRecord with a specific reply code

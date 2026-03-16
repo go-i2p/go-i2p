@@ -354,7 +354,7 @@ func (fs *FloodfillServer) lookupRouterInfo(key common.Hash) ([]byte, byte, erro
 		return nil, 0, err
 	}
 
-	return compressed, i2np.DATABASE_STORE_TYPE_ROUTER_INFO, nil
+	return compressed, i2np.DatabaseStoreTypeRouterInfo, nil
 }
 
 // lookupLeaseSet looks up a LeaseSet by hash.
@@ -364,25 +364,25 @@ func (fs *FloodfillServer) lookupLeaseSet(key common.Hash) ([]byte, byte, error)
 	// Try LeaseSet2 first (most common modern format)
 	data, err := fs.db.GetLeaseSet2Bytes(key)
 	if err == nil && len(data) > 0 {
-		return data, i2np.DATABASE_STORE_TYPE_LEASESET2, nil
+		return data, i2np.DatabaseStoreTypeLeaseSet2, nil
 	}
 
 	// Try EncryptedLeaseSet
 	data, err = fs.db.GetEncryptedLeaseSetBytes(key)
 	if err == nil && len(data) > 0 {
-		return data, i2np.DATABASE_STORE_TYPE_ENCRYPTED_LEASESET, nil
+		return data, i2np.DatabaseStoreTypeEncryptedLeaseSet, nil
 	}
 
 	// Try MetaLeaseSet
 	data, err = fs.db.GetMetaLeaseSetBytes(key)
 	if err == nil && len(data) > 0 {
-		return data, i2np.DATABASE_STORE_TYPE_META_LEASESET, nil
+		return data, i2np.DatabaseStoreTypeMetaLeaseSet, nil
 	}
 
 	// Try original LeaseSet
 	data, err = fs.db.GetLeaseSetBytes(key)
 	if err == nil && len(data) > 0 {
-		return data, i2np.DATABASE_STORE_TYPE_LEASESET, nil
+		return data, i2np.DatabaseStoreTypeLeaseSet, nil
 	}
 
 	return nil, 0, fmt.Errorf("LeaseSet not found for %x", key[:8])
