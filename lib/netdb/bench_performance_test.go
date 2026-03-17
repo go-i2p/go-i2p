@@ -16,7 +16,11 @@ func newValidRouterInfoForBench(b *testing.B) *router_info.RouterInfo {
 	if err != nil {
 		b.Fatalf("Failed to create key certificate: %v", err)
 	}
-	return router_info.OwnedRouterInfo(*keyCert)
+	ri, err := router_info.OwnedRouterInfo(*keyCert)
+	if err != nil {
+		b.Fatalf("Failed to create owned RouterInfo: %v", err)
+	}
+	return ri
 }
 
 // BenchmarkIdentHashValid benchmarks IdentHash() with valid RouterInfo.

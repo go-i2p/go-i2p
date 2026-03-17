@@ -13,6 +13,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/go-i2p/lib/naming"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 
@@ -607,6 +608,14 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 	} else {
 		server.SetPeerSelector(peerSelector)
 		log.Debug("I2CP server: peer selector configured")
+	}
+
+	hostResolver, err := naming.NewHostsTxtResolver()
+	if err != nil {
+		log.WithError(err).Warn("Failed to create hostname resolver for I2CP")
+	} else {
+		server.SetHostnameResolver(hostResolver)
+		log.Debug("I2CP server: hostname resolver configured")
 	}
 }
 
