@@ -740,11 +740,9 @@ type NetDBStats struct {
 	RouterInfos int
 
 	// LeaseSets is the count of LeaseSet entries in NetDB
-	// Currently returns 0 as LeaseSet counting is not implemented
 	LeaseSets int
 
 	// Floodfill indicates if we're operating as a floodfill router
-	// Currently returns false as floodfill status is not exposed
 	Floodfill bool
 }
 ```

@@ -234,7 +234,6 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 		return nil, ErrSessionClosed
 	}
 
-	// Enforce session limit before accepting (reserves a session slot atomically)
 	if err := t.checkSessionLimit(); err != nil {
 		t.logger.WithFields(map[string]interface{}{
 			"session_count": t.GetSessionCount(),
@@ -245,51 +244,48 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 
 	t.logger.Debug("Accepting incoming NTCP2 connection")
 
-	// Use the listener's bare Accept() (no handshake) so we can intercept
-	// handshake failures and apply probing resistance.
 	conn, err := t.listener.Accept()
 	if err != nil {
-		t.unreserveSessionSlot() // Release the reserved slot on accept failure
+		t.unreserveSessionSlot()
 		t.logger.WithError(err).Warn("Failed to accept incoming connection")
 		return nil, err
 	}
 
-	// Perform the Noise XK handshake manually.
-	ntcp2Conn, ok := conn.(*ntcp2.NTCP2Conn)
-	if !ok {
-		// Unexpected type — fall through without handshake (shouldn't happen)
-		t.logger.Warn("Accepted connection is not *ntcp2.NTCP2Conn, skipping manual handshake")
-	} else {
-		ctx := t.ctx
-		if err := ntcp2Conn.UnderlyingConn().Handshake(ctx); err != nil {
-			// Handshake failed — apply probing resistance before closing.
-			// Extract the raw TCP connection for the junk-read since the
-			// Noise layer may be in an unusable state.
-			raw := extractRawConn(ntcp2Conn.UnderlyingConn())
-			t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
-			applyProbingResistance(raw)
-			ntcp2Conn.Close()
-			t.unreserveSessionSlot()
-			return nil, WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
-		}
-		t.logger.Debug("Inbound Noise XK handshake completed successfully")
+	if err := t.performInboundHandshake(conn); err != nil {
+		return nil, err
 	}
 
-	// Track the inbound connection for accurate session counting.
-	// We store the raw conn as a placeholder in the session map keyed by a hash
-	// derived from the connection's remote address. This ensures GetSessionCount()
-	// includes inbound connections and checkSessionLimit() prevents exceeding MaxSessions.
-	// We do NOT create an NTCP2Session here because the router layer creates its own
-	// session from the returned conn (in createSessionFromConn), and having two
-	// sessions with send/receive workers on the same conn would corrupt the stream.
+	return t.trackInboundConnection(conn), nil
+}
+
+// performInboundHandshake performs the Noise XK handshake on an accepted connection.
+// On failure, applies probing resistance and releases the reserved session slot.
+func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
+	ntcp2Conn, ok := conn.(*ntcp2.NTCP2Conn)
+	if !ok {
+		t.logger.Warn("Accepted connection is not *ntcp2.NTCP2Conn, skipping manual handshake")
+		return nil
+	}
+	if err := ntcp2Conn.UnderlyingConn().Handshake(t.ctx); err != nil {
+		raw := extractRawConn(ntcp2Conn.UnderlyingConn())
+		t.logger.WithError(err).Debug("Inbound handshake failed, applying probing resistance")
+		applyProbingResistance(raw)
+		ntcp2Conn.Close()
+		t.unreserveSessionSlot()
+		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
+	}
+	t.logger.Debug("Inbound Noise XK handshake completed successfully")
+	return nil
+}
+
+// trackInboundConnection registers the accepted connection for session counting
+// and wraps it to ensure cleanup on close.
+func (t *NTCP2Transport) trackInboundConnection(conn net.Conn) net.Conn {
 	peerHash := t.extractPeerHash(conn)
 	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
-		// Session already existed for this peer — release the reserved slot
 		t.unreserveSessionSlot()
 	}
 
-	// Wrap the connection so that closing it also removes it from the session map,
-	// preventing session counter drift.
 	wrappedConn := &trackedConn{
 		Conn: conn,
 		onClose: func() {
@@ -302,7 +298,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 		"peer_hash":     fmt.Sprintf("%x", peerHash[:8]),
 		"session_count": t.GetSessionCount(),
 	}).Info("Accepted and tracked incoming NTCP2 connection")
-	return wrappedConn, nil
+	return wrappedConn
 }
 
 // extractPeerHash extracts the peer's router hash from an accepted connection.

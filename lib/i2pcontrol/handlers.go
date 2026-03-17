@@ -326,7 +326,7 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 			h.RouterControl.Stop()
 			log.Info("Router restart/stop completed via I2PControl")
 		}()
-		result["Restart"] = "initiated"
+		result["Restart"] = "initiated (shutdown only — external supervisor must restart the process)"
 	}
 }
 

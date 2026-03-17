@@ -237,13 +237,40 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 		"outboundTunnelLength": config.OutboundTunnelLength,
 		"inboundTunnelCount":   config.InboundTunnelCount,
 		"outboundTunnelCount":  config.OutboundTunnelCount,
-		"messageQueueSize":     config.MessageQueueSize,
-		"messageRateLimit":     config.MessageRateLimit,
-		"useEncryptedLeaseSet": config.UseEncryptedLeaseSet,
 	}).Info("creating_i2cp_session")
 
-	// Extract private keys and optional identity padding from variadic args.
-	// Expected order: signingPrivKey, encryptionPrivKey, [identityPadding []byte]
+	sigPriv, encPriv, identityPadding := extractPrivateKeys(privKeys)
+
+	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv, identityPadding)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.NewSession",
+			"sessionID": id,
+			"error":     err.Error(),
+		}).Error("failed_to_prepare_destination")
+		return nil, err
+	}
+
+	queueSize := determineQueueSize(config)
+
+	return &Session{
+		id:                 id,
+		destination:        dest,
+		keys:               keyStore,
+		config:             config,
+		clientNetDB:        createIsolatedNetDB(),
+		createdAt:          time.Now(),
+		lastActivity:       time.Now(),
+		active:             true,
+		incomingMessages:   make(chan *IncomingMessage, queueSize),
+		messageRateLimiter: createRateLimiterIfNeeded(config, id),
+		queueHighWaterMark: queueSize,
+		stopCh:             make(chan struct{}),
+	}, nil
+}
+
+// extractPrivateKeys extracts signing/encryption keys and optional identity padding from variadic args.
+func extractPrivateKeys(privKeys []interface{}) (types.SigningPrivateKey, types.PrivateEncryptionKey, []byte) {
 	var sigPriv types.SigningPrivateKey
 	var encPriv types.PrivateEncryptionKey
 	var identityPadding []byte
@@ -260,40 +287,7 @@ func NewSession(id uint16, dest *destination.Destination, config *SessionConfig,
 			identityPadding = pad
 		}
 	}
-
-	keyStore, dest, err := prepareDestinationAndKeys(dest, sigPriv, encPriv, identityPadding)
-	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.NewSession",
-			"sessionID": id,
-			"error":     err.Error(),
-		}).Error("failed_to_prepare_destination")
-		return nil, err
-	}
-
-	clientNetDB := createIsolatedNetDB()
-	queueSize := determineQueueSize(config)
-	rateLimiter := createRateLimiterIfNeeded(config, id)
-
-	log.WithFields(logger.Fields{
-		"at":        "i2cp.NewSession",
-		"sessionID": id,
-	}).Info("session_created_successfully")
-
-	return &Session{
-		id:                 id,
-		destination:        dest,
-		keys:               keyStore,
-		config:             config,
-		clientNetDB:        clientNetDB,
-		createdAt:          time.Now(),
-		lastActivity:       time.Now(),
-		active:             true,
-		incomingMessages:   make(chan *IncomingMessage, queueSize),
-		messageRateLimiter: rateLimiter,
-		queueHighWaterMark: queueSize,
-		stopCh:             make(chan struct{}),
-	}, nil
+	return sigPriv, encPriv, identityPadding
 }
 
 // ensureValidConfig returns the provided config or a default config if nil.

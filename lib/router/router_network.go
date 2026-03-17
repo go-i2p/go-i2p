@@ -538,53 +538,13 @@ func (r *Router) addSession(peerHash common.Hash, session *ntcp.NTCP2Session) {
 // startI2CPServer initializes and starts the I2CP server
 func (r *Router) startI2CPServer() error {
 	r.leaseSetPublisher = NewLeaseSetPublisher(r)
-	serverConfig := &i2cp.ServerConfig{
-		ListenAddr:        r.cfg.I2CP.Address,
-		Network:           r.cfg.I2CP.Network,
-		MaxSessions:       r.cfg.I2CP.MaxSessions,
-		ReadTimeout:       r.cfg.I2CP.ReadTimeout,
-		WriteTimeout:      r.cfg.I2CP.WriteTimeout,
-		SessionTimeout:    r.cfg.I2CP.SessionTimeout,
-		LeaseSetPublisher: r.leaseSetPublisher,
-	}
 
-	server, err := i2cp.NewServer(serverConfig)
+	server, err := r.createI2CPServer()
 	if err != nil {
-		return fmt.Errorf("failed to create I2CP server: %w", err)
+		return err
 	}
 
-	// Set NetDB for HostLookup functionality
-	server.SetNetDB(r.StdNetDB)
-
-	// Configure optional I2CP authentication from config
-	if r.cfg.I2CP.Username != "" && r.cfg.I2CP.Password != "" {
-		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
-		if authErr != nil {
-			return fmt.Errorf("failed to create I2CP authenticator: %w", authErr)
-		}
-		server.SetAuthenticator(auth)
-		log.Info("I2CP server: authentication enabled")
-	}
-
-	// Provide real bandwidth limits from router config
-	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})
-
-	// Configure tunnel infrastructure for session tunnel pool initialization
-	if r.tunnelManager != nil {
-		server.SetTunnelBuilder(r.tunnelManager)
-		log.Debug("I2CP server: tunnel builder configured")
-	} else {
-		log.Warn("I2CP server: tunnel manager not available for session pools")
-	}
-
-	// Create peer selector for tunnel building
-	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
-	if err != nil {
-		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
-	} else {
-		server.SetPeerSelector(peerSelector)
-		log.Debug("I2CP server: peer selector configured")
-	}
+	r.configureI2CPServerInfrastructure(server)
 
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start I2CP server: %w", err)
@@ -599,6 +559,55 @@ func (r *Router) startI2CPServer() error {
 	}).Info("I2CP server started")
 
 	return nil
+}
+
+// createI2CPServer creates a new I2CP server with the router's configuration.
+func (r *Router) createI2CPServer() (*i2cp.Server, error) {
+	serverConfig := &i2cp.ServerConfig{
+		ListenAddr:        r.cfg.I2CP.Address,
+		Network:           r.cfg.I2CP.Network,
+		MaxSessions:       r.cfg.I2CP.MaxSessions,
+		ReadTimeout:       r.cfg.I2CP.ReadTimeout,
+		WriteTimeout:      r.cfg.I2CP.WriteTimeout,
+		SessionTimeout:    r.cfg.I2CP.SessionTimeout,
+		LeaseSetPublisher: r.leaseSetPublisher,
+	}
+
+	server, err := i2cp.NewServer(serverConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create I2CP server: %w", err)
+	}
+	return server, nil
+}
+
+// configureI2CPServerInfrastructure sets up NetDB, auth, bandwidth, tunnels, and peer selection.
+func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
+	server.SetNetDB(r.StdNetDB)
+
+	if r.cfg.I2CP.Username != "" && r.cfg.I2CP.Password != "" {
+		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
+		if authErr == nil {
+			server.SetAuthenticator(auth)
+			log.Info("I2CP server: authentication enabled")
+		}
+	}
+
+	server.SetBandwidthProvider(&routerBandwidthProvider{cfg: r.cfg})
+
+	if r.tunnelManager != nil {
+		server.SetTunnelBuilder(r.tunnelManager)
+		log.Debug("I2CP server: tunnel builder configured")
+	} else {
+		log.Warn("I2CP server: tunnel manager not available for session pools")
+	}
+
+	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
+	if err != nil {
+		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
+	} else {
+		server.SetPeerSelector(peerSelector)
+		log.Debug("I2CP server: peer selector configured")
+	}
 }
 
 // removeSession removes a session when it closes.
