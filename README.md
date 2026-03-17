@@ -13,6 +13,8 @@ A pure Go implementation of the I2P router.
 
 The core router functionality is now operational. We have tested functionality using i2psnark-standalone against our I2CP API server. Basic compatibility is available. We are now focused application layer protocols. We have a mostly-complete I2CP client, a prototype of a Streaming library, and a pretty boring Datagrams library, all of which are requirements for SAMv3.3(which we also have), which is what all our applications use. Refining these components and making them production-ready is the immediate goal. After the turn of the year, we will return our focus to transports by implementing SSU2.
 
+The current release(0.1.4 and earlier) have literally hundreds of bugs pending resolution in 0.1.5. Probably hold off until I release it in a few days.
+
 **`go-i2p`'s network presence is HIGHLY DISTINCTIVE at this time.** This is because:
 
  - We do not yet implement SSU2, all our routers are NTCP2 only. This will change.

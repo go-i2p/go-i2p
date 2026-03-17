@@ -153,14 +153,27 @@ The following JSON-RPC methods are implemented:
     - Echo: Connection test (returns input value)
     - GetRate: Bandwidth statistics (in/out rates)
     - RouterInfo: Router status (uptime, version, tunnels, peers)
-    - RouterManager: Control operations (shutdown)
-    - NetworkSetting: Configuration queries (read-only)
+    - RouterManager: Control operations (shutdown, restart via external supervisor)
+    - NetworkSetting: Configuration queries and updates (port, address, bandwidth)
     - I2PControl: Server management (password changes)
 
 Planned for future implementation:
 
-    - RouterManager: Restart, reseed operations
-    - NetworkSetting: Configuration updates (write operations)
+    - RouterManager: Reseed operations
+
+## Restart Behavior
+
+The `RouterManager` "Restart" command performs a graceful shutdown only.
+go-i2p does not re-execute itself; an external process supervisor must
+restart the process. Supported supervisors include:
+
+    - systemd: set Restart=on-failure in the service unit
+    - Docker: use restart: unless-stopped in docker-compose.yml
+    - s6 / runit: configure the run script for automatic respawn
+
+Port and address changes applied via `NetworkSetting` also set
+`RestartNeeded: true` in the response, indicating the supervisor
+should restart the process for the new listen address to take effect.
 
 # Available Router Metrics
 

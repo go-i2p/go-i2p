@@ -708,6 +708,7 @@ func (m *mockRouterAccessBandwidth) IsReseeding() bool               { return fa
 func (m *mockRouterAccessBandwidth) GetBandwidthRates() (inbound, outbound uint64) {
 	return m.inbound, m.outbound
 }
+func (m *mockRouterAccessBandwidth) GetActiveSessionCount() int    { return 0 }
 func (m *mockRouterAccessBandwidth) GetTransportAddr() interface{} { return nil }
 func (m *mockRouterAccessBandwidth) Stop()                         {}
 func (m *mockRouterAccessBandwidth) Reseed() error                 { return nil }

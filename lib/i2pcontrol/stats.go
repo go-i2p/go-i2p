@@ -216,6 +216,9 @@ type RouterAccess interface {
 	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
 	GetBandwidthRates() (inbound, outbound uint64)
 
+	// GetActiveSessionCount returns the number of active transport sessions (connected peers)
+	GetActiveSessionCount() int
+
 	// Stop initiates graceful shutdown of the router
 	Stop()
 
@@ -260,7 +263,7 @@ func (rsp *routerStatsProvider) GetRouterInfo() RouterInfoStats {
 		Uptime:      rsp.calculateUptime(),
 		Version:     rsp.version,
 		Status:      rsp.determineRouterStatus(),
-		ActivePeers: 0, // Active session tracking not yet exposed
+		ActivePeers: rsp.router.GetActiveSessionCount(),
 	}
 
 	rsp.collectNetDBStats(&stats)
@@ -551,6 +554,7 @@ type RealRouter struct {
 		IsRunning() bool
 		IsReseeding() bool
 		GetBandwidthRates() (inbound, outbound uint64)
+		GetActiveSessionCount() int
 		Stop()
 		Reseed() error
 		GetTransportAddr() interface{}
@@ -590,6 +594,11 @@ func (rr RealRouter) IsReseeding() bool {
 // GetBandwidthRates returns current bandwidth rates (implements RouterAccess)
 func (rr RealRouter) GetBandwidthRates() (inbound, outbound uint64) {
 	return rr.Router.GetBandwidthRates()
+}
+
+// GetActiveSessionCount returns active transport session count (implements RouterAccess)
+func (rr RealRouter) GetActiveSessionCount() int {
+	return rr.Router.GetActiveSessionCount()
 }
 
 // Stop initiates graceful shutdown (implements RouterAccess)

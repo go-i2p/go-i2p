@@ -294,6 +294,14 @@ func (r *Router) GetBandwidthRates() (inbound, outbound uint64) {
 	return r.bandwidthTracker.GetRates()
 }
 
+// GetActiveSessionCount returns the number of active transport sessions.
+// Thread-safe access to the activeSessions map.
+func (r *Router) GetActiveSessionCount() int {
+	r.sessionMutex.RLock()
+	defer r.sessionMutex.RUnlock()
+	return len(r.activeSessions)
+}
+
 // GetTransportAddr returns the listening address of the first available transport.
 // This is used by I2PControl to expose NTCP2 port and address information.
 // Returns nil if no transports are available.

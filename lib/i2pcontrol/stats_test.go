@@ -65,6 +65,10 @@ func (m *mockRouterAccess) GetBandwidthRates() (inbound, outbound uint64) {
 	return 0, 1024
 }
 
+func (m *mockRouterAccess) GetActiveSessionCount() int {
+	return 0
+}
+
 func (m *mockRouterAccess) GetTransportAddr() interface{} {
 	// Return a mock TCP address for testing
 	type mockAddr struct{}
@@ -465,5 +469,42 @@ func TestGetNetworkConfig_NilConfigReportsUnlimited(t *testing.T) {
 	}
 	if netCfg.BandwidthLimitOut != 0 {
 		t.Errorf("BandwidthLimitOut = %d, want 0 (unlimited)", netCfg.BandwidthLimitOut)
+	}
+}
+
+// mockRouterAccessWithSessions wraps mockRouterAccess with a configurable session count.
+type mockRouterAccessWithSessions struct {
+	mockRouterAccess
+	sessionCount int
+}
+
+func (m *mockRouterAccessWithSessions) GetActiveSessionCount() int {
+	return m.sessionCount
+}
+
+// TestStatsActivePeers verifies ActivePeers reflects the router's active session count.
+func TestStatsActivePeers(t *testing.T) {
+	tests := []struct {
+		name     string
+		sessions int
+	}{
+		{"no sessions", 0},
+		{"one session", 1},
+		{"many sessions", 42},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := &mockRouterAccessWithSessions{
+				mockRouterAccess: mockRouterAccess{running: true},
+				sessionCount:     tt.sessions,
+			}
+			provider := NewRouterStatsProvider(router, "0.1.0-test")
+			stats := provider.GetRouterInfo()
+
+			if stats.ActivePeers != tt.sessions {
+				t.Errorf("ActivePeers = %d, want %d", stats.ActivePeers, tt.sessions)
+			}
+		})
 	}
 }

@@ -45,6 +45,10 @@ func (m *mockRouterAccessForPeerStats) GetBandwidthRates() (rate1s, rate15s uint
 	return 0, 0
 }
 
+func (m *mockRouterAccessForPeerStats) GetActiveSessionCount() int {
+	return 0
+}
+
 func (m *mockRouterAccessForPeerStats) GetTransportAddr() interface{} {
 	return nil
 }
