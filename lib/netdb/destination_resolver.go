@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
+	"github.com/go-i2p/common/meta_leaseset"
 	"github.com/go-i2p/logger"
 )
 
@@ -21,24 +22,25 @@ import (
 // back to classic LeaseSet. EncryptedLeaseSets are supported via
 // ResolveEncryptedDestination, which requires the original destination and derives
 // the blinded hash, subcredential, and decrypts the inner LeaseSet2.
-// MetaLeaseSets are directories of other LeaseSets and would require recursive resolution.
+// MetaLeaseSets are supported via ResolveMetaDestination, which fetches the
+// MetaLeaseSet, selects the best entry by cost, and resolves the referenced LeaseSet.
 type DestinationResolver struct {
 	netdb interface {
 		GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 		GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 		GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
+		GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error)
 	}
 }
 
 // NewDestinationResolver creates a new destination resolver with the given NetDB.
-// The netdb parameter must implement GetLeaseSet, GetLeaseSetBytes, GetLeaseSet2Bytes,
-// and GetEncryptedLeaseSetBytes methods.
 func NewDestinationResolver(netdb interface {
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 	GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
+	GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error)
 },
 ) *DestinationResolver {
 	return &DestinationResolver{
@@ -349,4 +351,93 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 		return [32]byte{}, fmt.Errorf("failed to hash destination: %w", err)
 	}
 	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
+}
+
+// ResolveMetaDestination resolves a destination that publishes a MetaLeaseSet (type 7).
+// A MetaLeaseSet is a directory of other LeaseSets; each entry references a
+// LeaseSet by its hash and includes a cost metric for load balancing.
+//
+// The resolution process:
+//  1. Retrieve the MetaLeaseSet from NetDB by destHash
+//  2. Sort entries by cost (lowest first) and filter out expired entries
+//  3. For each entry, attempt to resolve the referenced LeaseSet (LS2 or classic)
+//  4. Return the X25519 key from the first successfully resolved entry
+//
+// Returns:
+//   - publicKey: The X25519 public key from the best available component LeaseSet
+//   - error: Non-nil if no component LeaseSet can be resolved
+func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":               "DestinationResolver.ResolveMetaDestination",
+		"reason":           "meta_lookup_requested",
+		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
+	}).Debug("resolving MetaLeaseSet destination")
+
+	// Step 1: Retrieve MetaLeaseSet from NetDB
+	mlsBytes, err := dr.netdb.GetMetaLeaseSetBytes(destHash)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
+	}
+
+	mls, _, err := meta_leaseset.ReadMetaLeaseSet(mlsBytes)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+	}
+
+	// Step 2: Sort entries by cost and filter expired
+	entries := mls.SortEntriesByCost()
+	now := time.Now()
+	var validEntries []meta_leaseset.MetaLeaseSetEntry
+	for _, entry := range entries {
+		if entry.ExpiresTime().After(now) {
+			validEntries = append(validEntries, entry)
+		}
+	}
+
+	if len(validEntries) == 0 {
+		return [32]byte{}, fmt.Errorf("all MetaLeaseSet entries are expired")
+	}
+
+	log.WithFields(logger.Fields{
+		"at":            "ResolveMetaDestination",
+		"total_entries": len(entries),
+		"valid_entries": len(validEntries),
+	}).Debug("found valid MetaLeaseSet entries")
+
+	// Step 3: Try each entry in cost order
+	for _, entry := range validEntries {
+		entryHash := entry.Hash()
+		key, err := dr.resolveMetaEntry(entryHash, entry.Type())
+		if err == nil {
+			return key, nil
+		}
+		log.WithFields(logger.Fields{
+			"at":         "ResolveMetaDestination",
+			"entry_hash": fmt.Sprintf("%x...", entryHash[:8]),
+			"entry_type": entry.Type(),
+			"error":      err.Error(),
+		}).Debug("MetaLeaseSet entry resolution failed, trying next")
+	}
+
+	return [32]byte{}, fmt.Errorf("no resolvable component LeaseSet found in MetaLeaseSet")
+}
+
+// resolveMetaEntry attempts to resolve a single MetaLeaseSet entry by its hash
+// and type. Supports LeaseSet (1), LeaseSet2 (3), and recursive MetaLeaseSet (5).
+func (dr *DestinationResolver) resolveMetaEntry(entryHash [32]byte, entryType uint8) ([32]byte, error) {
+	hash := common.Hash(entryHash)
+
+	switch entryType {
+	case 3: // LeaseSet2
+		return dr.extractKeyFromLeaseSet2Direct(hash)
+	case 1: // Classic LeaseSet
+		return dr.extractKeyFromLeaseSet2(hash)
+	case 5: // Nested MetaLeaseSet (recursive, limited depth)
+		return dr.ResolveMetaDestination(hash)
+	default: // type 0 (unknown) — try LS2 then classic
+		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {
+			return key, nil
+		}
+		return dr.extractKeyFromLeaseSet2(hash)
+	}
 }
