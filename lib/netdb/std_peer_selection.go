@@ -129,12 +129,31 @@ func logNTCP2ValidationFailure(err error, index int) {
 	}
 }
 
-// filterAvailablePeers filters router infos excluding specified hashes and checking reachability
+// filterAvailablePeers filters router infos excluding specified hashes and checking reachability.
+// Results are sorted by PeerTracker reliability score (reliable peers first).
 func (db *StdNetDB) filterAvailablePeers(allRouterInfos []router_info.RouterInfo, excludeMap map[common.Hash]bool) []router_info.RouterInfo {
 	stats := &peerFilterStats{}
 	available := db.collectAvailablePeers(allRouterInfos, excludeMap, stats)
 	logPeerFilteringResults(allRouterInfos, available, stats)
+	db.sortPeersByReliability(available)
 	return available
+}
+
+// sortPeersByReliability sorts peers in descending order of PeerTracker reliability score.
+// Reliable peers (high success rate) appear first, unknown peers in the middle,
+// and less reliable peers last.
+func (db *StdNetDB) sortPeersByReliability(peers []router_info.RouterInfo) {
+	if db.PeerTracker == nil || len(peers) < 2 {
+		return
+	}
+	sort.SliceStable(peers, func(i, j int) bool {
+		hashI, errI := peers[i].IdentHash()
+		hashJ, errJ := peers[j].IdentHash()
+		if errI != nil || errJ != nil {
+			return errI == nil // peers with valid hashes first
+		}
+		return db.PeerTracker.ScorePeer(hashI) > db.PeerTracker.ScorePeer(hashJ)
+	})
 }
 
 // peerFilterStats tracks filtering statistics for peer selection.
@@ -331,15 +350,24 @@ func (db *StdNetDB) SelectFloodfillRouters(targetHash common.Hash, count int) ([
 	return db.selectClosestByXORDistance(floodfills, targetHash, count), nil
 }
 
-// filterFloodfillRouters filters RouterInfos to return only floodfill routers.
+// filterFloodfillRouters filters RouterInfos to return only floodfill routers
+// that are not marked stale by PeerTracker.
 // A router is considered floodfill if its "caps" option contains the character 'f'.
 func (db *StdNetDB) filterFloodfillRouters(routers []router_info.RouterInfo) []router_info.RouterInfo {
 	var floodfills []router_info.RouterInfo
 
 	for _, ri := range routers {
-		if db.isFloodfillRouter(ri) {
-			floodfills = append(floodfills, ri)
+		if !db.isFloodfillRouter(ri) {
+			continue
 		}
+		if db.PeerTracker != nil {
+			if riHash, err := ri.IdentHash(); err == nil && db.PeerTracker.IsLikelyStale(riHash) {
+				log.WithField("peer_hash", fmt.Sprintf("%x", riHash[:8])).
+					Debug("Skipping stale floodfill router")
+				continue
+			}
+		}
+		floodfills = append(floodfills, ri)
 	}
 
 	return floodfills

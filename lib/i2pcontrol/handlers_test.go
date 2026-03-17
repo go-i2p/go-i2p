@@ -339,8 +339,18 @@ func TestNetworkSettingHandler_UnknownSetting(t *testing.T) {
 }
 
 func TestNetworkSettingHandler_WriteOperation(t *testing.T) {
-	// Try to write a value (non-null)
-	assertHandlerError(t, NewNetworkSettingHandler(&mockServerStatsProvider{}), `{"i2p.router.net.ntcp.port": 12345}`, ErrCodeNotImpl)
+	// Write a value (non-null) — should succeed and persist via Viper
+	stats := &mockServerStatsProvider{}
+	handler := NewNetworkSettingHandler(stats)
+
+	params := json.RawMessage(`{"i2p.router.net.ntcp.port": 12345}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	resultMap := result.(map[string]interface{})
+	assert.Equal(t, float64(12345), resultMap["i2p.router.net.ntcp.port"])
+	assert.Equal(t, true, resultMap["SettingsSaved"])
+	assert.Equal(t, true, resultMap["RestartNeeded"])
 }
 
 func TestNetworkSettingHandler_InvalidJSON(t *testing.T) {
@@ -568,8 +578,6 @@ func TestI2PControlHandler_NotImplementedOperations(t *testing.T) {
 		params string
 		code   int
 	}{
-		{"PortChange", `{"i2pcontrol.port": 7657}`, ErrCodeNotImpl},
-		{"AddressChange", `{"i2pcontrol.address": "127.0.0.1"}`, ErrCodeNotImpl},
 		{"NoSettings", `{}`, ErrCodeInvalidParams},
 		{"InvalidJSON", `{"invalid json`, ErrCodeInvalidParams},
 	}
@@ -580,6 +588,30 @@ func TestI2PControlHandler_NotImplementedOperations(t *testing.T) {
 			assertHandlerError(t, handler, tt.params, tt.code)
 		})
 	}
+}
+
+func TestI2PControlHandler_PortAndAddressChange(t *testing.T) {
+	authMgr := &mockAuthManager{}
+	cfg := &config.I2PControlConfig{}
+	handler := NewI2PControlHandler(authMgr, cfg)
+
+	// Port change should succeed and flag restart needed
+	params := json.RawMessage(`{"i2pcontrol.port": 7657}`)
+	result, err := handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	resultMap := result.(map[string]interface{})
+	assert.Equal(t, true, resultMap["SettingsSaved"])
+	assert.Equal(t, true, resultMap["RestartNeeded"])
+
+	// Address change should succeed and flag restart needed
+	params = json.RawMessage(`{"i2pcontrol.address": "127.0.0.1"}`)
+	result, err = handler.Handle(context.Background(), params)
+	require.NoError(t, err)
+
+	resultMap = result.(map[string]interface{})
+	assert.Equal(t, true, resultMap["SettingsSaved"])
+	assert.Equal(t, true, resultMap["RestartNeeded"])
 }
 
 func TestI2PControlHandler_MultiplePasswordChanges(t *testing.T) {

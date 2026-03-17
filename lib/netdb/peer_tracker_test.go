@@ -291,3 +291,76 @@ func TestConcurrentAccess(t *testing.T) {
 	assert.NotNil(t, stats)
 	assert.GreaterOrEqual(t, stats.TotalAttempts, 10)
 }
+
+func TestScorePeer_UnknownPeer(t *testing.T) {
+	pt := NewPeerTracker()
+	hash := testHash(60)
+
+	score := pt.ScorePeer(hash)
+	assert.Equal(t, 0.5, score, "unknown peer should get neutral score")
+}
+
+func TestScorePeer_InsufficientData(t *testing.T) {
+	pt := NewPeerTracker()
+	hash := testHash(61)
+
+	// Only 2 attempts — below minAttemptsForStats (5)
+	pt.RecordAttempt(hash)
+	pt.RecordSuccess(hash, 50)
+	pt.RecordAttempt(hash)
+	pt.RecordSuccess(hash, 60)
+
+	score := pt.ScorePeer(hash)
+	assert.Equal(t, 0.5, score, "peer with insufficient data should get neutral score")
+}
+
+func TestScorePeer_ReliablePeer(t *testing.T) {
+	pt := NewPeerTracker()
+	hash := testHash(62)
+
+	// 5 attempts, all successful
+	for i := 0; i < 5; i++ {
+		pt.RecordAttempt(hash)
+		pt.RecordSuccess(hash, 50)
+	}
+
+	score := pt.ScorePeer(hash)
+	assert.Equal(t, 1.0, score, "fully reliable peer should score 1.0")
+}
+
+func TestScorePeer_UnreliablePeer(t *testing.T) {
+	pt := NewPeerTracker()
+	hash := testHash(63)
+
+	// 5 attempts, 1 success (20% rate)
+	pt.RecordAttempt(hash)
+	pt.RecordSuccess(hash, 50)
+	for i := 0; i < 4; i++ {
+		pt.RecordAttempt(hash)
+		pt.RecordFailure(hash, "timeout")
+	}
+
+	score := pt.ScorePeer(hash)
+	// successRate = 0.2, penalty = min(4*0.1, 0.3) = 0.3, result = max(0.2 - 0.3, 0.0) = 0.0
+	assert.Equal(t, 0.0, score, "unreliable peer should score 0.0")
+}
+
+func TestScorePeer_ConsecutiveFailPenalty(t *testing.T) {
+	pt := NewPeerTracker()
+	hash := testHash(64)
+
+	// 5 successes then 2 failures: 5/7 ≈ 0.714, penalty = 2*0.1 = 0.2
+	for i := 0; i < 5; i++ {
+		pt.RecordAttempt(hash)
+		pt.RecordSuccess(hash, 50)
+	}
+	for i := 0; i < 2; i++ {
+		pt.RecordAttempt(hash)
+		pt.RecordFailure(hash, "timeout")
+	}
+
+	score := pt.ScorePeer(hash)
+	expectedRate := 5.0 / 7.0
+	expectedScore := expectedRate - 0.2 // consecutive fail penalty
+	assert.InDelta(t, expectedScore, score, 0.01)
+}

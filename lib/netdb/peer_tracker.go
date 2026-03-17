@@ -332,6 +332,39 @@ func (pt *PeerTracker) GetSummary() map[string]interface{} {
 	}
 }
 
+// ScorePeer returns a reliability score for a peer (0.0 to 1.0).
+// Unknown peers (no tracking data) receive 0.5 (neutral).
+// Reliable peers score higher; unreliable peers score lower.
+func (pt *PeerTracker) ScorePeer(hash common.Hash) float64 {
+	pt.mu.RLock()
+	defer pt.mu.RUnlock()
+
+	stats, exists := pt.stats[hash]
+	if !exists {
+		return 0.5 // Unknown peer — neutral score
+	}
+
+	if stats.TotalAttempts < minAttemptsForStats {
+		return 0.5 // Insufficient data — neutral score
+	}
+
+	successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
+
+	// Penalize peers with recent consecutive failures
+	if stats.ConsecutiveFails > 0 {
+		penalty := float64(stats.ConsecutiveFails) * 0.1
+		if penalty > 0.3 {
+			penalty = 0.3
+		}
+		successRate -= penalty
+	}
+
+	if successRate < 0.0 {
+		return 0.0
+	}
+	return successRate
+}
+
 // isStaleUnlocked performs the staleness check without acquiring any locks.
 // Caller must hold at least pt.mu.RLock.
 func isStaleUnlocked(stats *PeerStats) bool {

@@ -261,6 +261,7 @@ func (t *NTCP2Transport) Accept() (net.Conn, error) {
 
 // performInboundHandshake performs the Noise XK handshake on an accepted connection.
 // On failure, applies probing resistance and releases the reserved session slot.
+// On success, propagates the peer's static key to derive the remote router hash.
 func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 	ntcp2Conn, ok := conn.(*ntcp2.NTCP2Conn)
 	if !ok {
@@ -275,6 +276,10 @@ func (t *NTCP2Transport) performInboundHandshake(conn net.Conn) error {
 		t.unreserveSessionSlot()
 		return WrapNTCP2Error(err, "inbound handshake (probing resistance applied)")
 	}
+	// Propagate the peer's static key from the completed handshake into the
+	// remote NTCP2Addr so that extractPeerHash returns the real router hash
+	// instead of the fallback address-derived hash.
+	ntcp2Conn.PropagatePeerStaticKey()
 	t.logger.Debug("Inbound Noise XK handshake completed successfully")
 	return nil
 }
@@ -321,8 +326,9 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 	}
 
 	// Fallback: generate a unique key from the remote address.
-	// This handles the case where the noise handshake doesn't yet populate
-	// the router hash (currently returns zeros for inbound connections).
+	// After PropagatePeerStaticKey() in performInboundHandshake, NTCP2
+	// connections should have a real router hash. This fallback handles
+	// non-NTCP2 connections or edge cases where the hash is unavailable.
 	// Strip the ephemeral port so reconnections from the same host produce
 	// the same hash, avoiding duplicate session tracking entries.
 	addrStr := conn.RemoteAddr().String()

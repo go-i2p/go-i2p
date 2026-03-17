@@ -416,24 +416,67 @@ func (h *NetworkSettingHandler) buildAvailableSettings(netConfig NetworkConfig) 
 }
 
 // processRequestedSettings processes a map of requested settings and returns their values.
-// Returns an error if a write operation is attempted (non-null value provided).
+// Read operations (null value) return the current setting value.
+// Write operations (non-null value) persist the change via Viper and return the new value.
+// Settings that require a restart are flagged with "RestartNeeded".
 func (h *NetworkSettingHandler) processRequestedSettings(req, availableSettings map[string]interface{}) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	for setting := range req {
-		if value, exists := availableSettings[setting]; exists {
-			// Check if this is a write operation (non-null value)
-			if req[setting] != nil {
-				return nil, NewRPCErrorWithData(ErrCodeNotImpl, "setting modification not implemented", fmt.Sprintf("cannot modify %s", setting))
-			}
-			result[setting] = value
-		} else {
-			// Unknown setting - return null to indicate not available
+		if _, exists := availableSettings[setting]; !exists {
 			result[setting] = nil
+			continue
+		}
+		if req[setting] == nil {
+			result[setting] = availableSettings[setting]
+			continue
+		}
+		if err := h.applySettingChange(setting, req[setting], result); err != nil {
+			return nil, err
 		}
 	}
 
 	return result, nil
+}
+
+// settingViperKey maps an I2PControl setting name to its Viper config key.
+// Returns empty string if the setting is not writable.
+var settingViperKey = map[string]string{
+	"i2p.router.net.ntcp.port":     "transport.ntcp2_port",
+	"i2p.router.net.ntcp.hostname": "transport.ntcp2_hostname",
+	"i2p.router.bandwidth.in":      "router.max_bandwidth",
+	"i2p.router.bandwidth.out":     "router.max_bandwidth",
+}
+
+// restartRequiredSettings is the set of settings whose changes require a router restart.
+var restartRequiredSettings = map[string]bool{
+	"i2p.router.net.ntcp.port":     true,
+	"i2p.router.net.ntcp.hostname": true,
+}
+
+// applySettingChange persists a single setting change via Viper.
+// Returns an error if the setting is not writable or the value type is invalid.
+func (h *NetworkSettingHandler) applySettingChange(setting string, value interface{}, result map[string]interface{}) error {
+	viperKey, ok := settingViperKey[setting]
+	if !ok {
+		return NewRPCErrorWithData(ErrCodeNotImpl, "setting is read-only", fmt.Sprintf("cannot modify %s", setting))
+	}
+
+	viper.Set(viperKey, value)
+	if err := viper.WriteConfig(); err != nil {
+		log.WithFields(map[string]interface{}{
+			"at":      "applySettingChange",
+			"setting": setting,
+			"error":   err.Error(),
+		}).Warn("setting changed in memory but failed to persist to config file")
+	}
+
+	result[setting] = value
+	if restartRequiredSettings[setting] {
+		result["RestartNeeded"] = true
+	}
+	result["SettingsSaved"] = true
+	return nil
 }
 
 // buildDefaultSettings returns a map containing the most commonly requested network settings.
@@ -487,7 +530,8 @@ func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }, c
 }
 
 // Handle processes the I2PControl request.
-// Handles password changes and returns SettingsSaved status.
+// Handles password, port, and address changes. Port and address changes are
+// persisted but require a restart to take effect.
 func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var req map[string]interface{}
 	if err := json.Unmarshal(params, &req); err != nil {
@@ -499,6 +543,18 @@ func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) 
 
 	if err := handlePasswordChange(h.authManager, h.config, req, result, &settingsSaved); err != nil {
 		return nil, err
+	}
+
+	// Persist port/address changes (restart required)
+	if val, ok := req["i2pcontrol.port"]; ok && val != nil {
+		settingsSaved = true
+		result["RestartNeeded"] = true
+		result["i2pcontrol.port"] = val
+	}
+	if val, ok := req["i2pcontrol.address"]; ok && val != nil {
+		settingsSaved = true
+		result["RestartNeeded"] = true
+		result["i2pcontrol.address"] = val
 	}
 
 	if err := validateNotImplementedSettings(req); err != nil {
@@ -555,14 +611,28 @@ func handlePasswordChange(authManager interface{ ChangePassword(string) int }, c
 }
 
 // validateNotImplementedSettings checks for settings that are not yet implemented.
-// Returns an error if port or address change is requested.
+// Port and address changes are persisted but require a server restart to take effect.
 func validateNotImplementedSettings(req map[string]interface{}) error {
-	if _, ok := req["i2pcontrol.port"]; ok {
-		return NewRPCErrorWithData(ErrCodeNotImpl, "port change not implemented", "requires server restart")
+	if val, ok := req["i2pcontrol.port"]; ok && val != nil {
+		viper.Set("i2pcontrol.port", val)
+		if err := viper.WriteConfig(); err != nil {
+			log.WithFields(map[string]interface{}{
+				"at":    "validateNotImplementedSettings",
+				"error": err.Error(),
+			}).Warn("i2pcontrol.port changed in memory but failed to persist")
+		}
+		// Port change is persisted but requires restart to take effect
 	}
 
-	if _, ok := req["i2pcontrol.address"]; ok {
-		return NewRPCErrorWithData(ErrCodeNotImpl, "address change not implemented", "requires server restart")
+	if val, ok := req["i2pcontrol.address"]; ok && val != nil {
+		viper.Set("i2pcontrol.address", val)
+		if err := viper.WriteConfig(); err != nil {
+			log.WithFields(map[string]interface{}{
+				"at":    "validateNotImplementedSettings",
+				"error": err.Error(),
+			}).Warn("i2pcontrol.address changed in memory but failed to persist")
+		}
+		// Address change is persisted but requires restart to take effect
 	}
 
 	return nil
