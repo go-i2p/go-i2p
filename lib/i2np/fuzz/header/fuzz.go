@@ -1,4 +1,4 @@
-package exportable
+package header
 
 import "github.com/go-i2p/go-i2p/lib/i2np"
 
