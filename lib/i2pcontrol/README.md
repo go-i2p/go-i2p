@@ -277,6 +277,7 @@ robustness. Current status:
     - ✅ RouterManager method (shutdown)
     - ✅ NetworkSetting method (read-only)
     - ✅ I2PControl method (password changes)
+    - ⚠️  I2PControl port/address changes return ErrCodeNotImpl (requires server restart; not planned)
     - ✅ Thread-safe concurrent access
     - ✅ Graceful shutdown
     - ✅ 78%+ test coverage

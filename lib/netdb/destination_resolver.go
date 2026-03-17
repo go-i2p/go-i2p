@@ -2,9 +2,11 @@ package netdb
 
 import (
 	"fmt"
+	"time"
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/destination"
+	"github.com/go-i2p/common/encrypted_leaseset"
 	"github.com/go-i2p/common/key_certificate"
 	"github.com/go-i2p/common/lease_set"
 	"github.com/go-i2p/common/lease_set2"
@@ -16,23 +18,27 @@ import (
 // based on the destination's key type (ElGamal for legacy, X25519 for modern).
 //
 // The resolver tries LeaseSet2 first (modern default since I2P 0.9.38), then falls
-// back to classic LeaseSet. EncryptedLeaseSets are not supported because they require
-// the recipient's private key and auth cookie to decrypt. MetaLeaseSets are directories
-// of other LeaseSets and would require recursive resolution.
+// back to classic LeaseSet. EncryptedLeaseSets are supported via
+// ResolveEncryptedDestination, which requires the original destination and derives
+// the blinded hash, subcredential, and decrypts the inner LeaseSet2.
+// MetaLeaseSets are directories of other LeaseSets and would require recursive resolution.
 type DestinationResolver struct {
 	netdb interface {
 		GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 		GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 		GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
+		GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
 	}
 }
 
 // NewDestinationResolver creates a new destination resolver with the given NetDB.
-// The netdb parameter must implement GetLeaseSet, GetLeaseSetBytes, and GetLeaseSet2Bytes methods.
+// The netdb parameter must implement GetLeaseSet, GetLeaseSetBytes, GetLeaseSet2Bytes,
+// and GetEncryptedLeaseSetBytes methods.
 func NewDestinationResolver(netdb interface {
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
+	GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
 },
 ) *DestinationResolver {
 	return &DestinationResolver{
@@ -265,4 +271,82 @@ func (dr *DestinationResolver) extractX25519KeyBytes(dest destination.Destinatio
 		"reason": "legacy_leaseset_x25519_dest",
 	}).Debug("extracted X25519 key from legacy LeaseSet")
 	return key, nil
+}
+
+// ResolveEncryptedDestination resolves an I2P destination that publishes an
+// EncryptedLeaseSet. The caller must supply the original (unblinded) destination
+// so that the blinded lookup hash and subcredential can be derived.
+//
+// The resolution process:
+//  1. Derive the blinded public key from the destination for today's date
+//  2. Hash the blinded public key to get the NetDB lookup key
+//  3. Retrieve the EncryptedLeaseSet from NetDB
+//  4. Derive the subcredential from the original signing key and blinded key
+//  5. Decrypt the inner LeaseSet2 using the subcredential
+//  6. Extract the X25519 encryption key from the inner LeaseSet2
+//
+// Parameters:
+//   - dest: The original (unblinded) destination. Must use Ed25519 signing key.
+//   - secret: The per-destination secret used for blinding (may be nil for default).
+//
+// Returns:
+//   - publicKey: The X25519 public key for garlic encryption (32 bytes)
+//   - error: Non-nil if resolution fails at any step
+func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Destination, secret []byte) ([32]byte, error) {
+	log.WithFields(logger.Fields{
+		"at":     "DestinationResolver.ResolveEncryptedDestination",
+		"reason": "encrypted_lookup_requested",
+	}).Debug("resolving encrypted destination")
+
+	// Step 1: Derive blinded public key for today
+	blindedDest, err := encrypted_leaseset.CreateBlindedDestination(dest, secret, time.Now())
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to derive blinded destination: %w", err)
+	}
+
+	// Step 2: Hash blinded public key to get NetDB lookup key
+	blindedSigningKey, err := blindedDest.SigningPublicKey()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to get blinded signing key: %w", err)
+	}
+	lookupHash := common.HashData(blindedSigningKey.Bytes())
+
+	log.WithFields(logger.Fields{
+		"at":          "ResolveEncryptedDestination",
+		"lookup_hash": fmt.Sprintf("%x...", lookupHash[:8]),
+	}).Debug("looking up EncryptedLeaseSet")
+
+	// Step 3: Retrieve EncryptedLeaseSet from NetDB
+	elsBytes, err := dr.netdb.GetEncryptedLeaseSetBytes(lookupHash)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
+	}
+
+	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+	}
+
+	// Step 4: Derive subcredential from original signing key + blinded key
+	origSigningKey, err := dest.SigningPublicKey()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to get original signing key: %w", err)
+	}
+	subcredential := encrypted_leaseset.DeriveSubcredential(
+		origSigningKey.Bytes(),
+		els.BlindedPublicKey(),
+	)
+
+	// Step 5: Decrypt the inner LeaseSet2
+	innerLS2, err := els.DecryptInnerData(subcredential)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
+	}
+
+	// Step 6: Extract X25519 encryption key from inner LeaseSet2
+	destHash, err := dest.Hash()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to hash destination: %w", err)
+	}
+	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
 }
