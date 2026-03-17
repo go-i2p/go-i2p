@@ -72,6 +72,17 @@ func NewMessageRouter(garlicMgr GarlicMessageEncryptor, transportSend TransportS
 	}
 }
 
+// RouteRequest bundles the parameters for routing an outbound I2CP message.
+type RouteRequest struct {
+	Session           *Session              // I2CP session sending the message
+	MessageID         uint32                // Unique identifier for tracking this message
+	DestinationHash   common.Hash           // Hash of the target I2P destination
+	DestinationPubKey [32]byte              // X25519 public key of the destination
+	Payload           []byte                // Raw message data to send
+	ExpirationMs      uint64                // Expiration timestamp in ms since epoch (0 = none)
+	StatusCallback    MessageStatusCallback // Optional delivery status callback (nil allowed)
+}
+
 // RouteOutboundMessage routes a message from an I2CP client through the I2P network.
 // This implements the complete outbound message flow:
 // 1. Check message expiration (if expirationMs > 0)
@@ -81,56 +92,39 @@ func NewMessageRouter(garlicMgr GarlicMessageEncryptor, transportSend TransportS
 // 5. Send encrypted garlic through tunnel gateway
 // 6. Invoke status callback with delivery status
 //
-// Parameters:
-// - session: I2CP session sending the message
-// - messageID: Unique identifier for tracking this message
-// - destinationHash: Hash of the target I2P destination
-// - destinationPubKey: X25519 public key of the destination (for garlic encryption)
-// - payload: Raw message data to send
-// - expirationMs: Expiration timestamp in milliseconds since epoch (0 = no expiration)
-// - statusCallback: Optional callback to notify about delivery status (nil allowed)
-//
 // Returns an error if routing fails at any step.
-func (mr *MessageRouter) RouteOutboundMessage(
-	session *Session,
-	messageID uint32,
-	destinationHash common.Hash,
-	destinationPubKey [32]byte,
-	payload []byte,
-	expirationMs uint64,
-	statusCallback MessageStatusCallback,
-) error {
-	mr.logRoutingStart(session, messageID, destinationHash, payload, expirationMs)
+func (mr *MessageRouter) RouteOutboundMessage(req RouteRequest) error {
+	mr.logRoutingStart(req.Session, req.MessageID, req.DestinationHash, req.Payload, req.ExpirationMs)
 
-	if err := checkMessageExpiration(session, messageID, expirationMs, payload, statusCallback); err != nil {
+	if err := checkMessageExpiration(req.Session, req.MessageID, req.ExpirationMs, req.Payload, req.StatusCallback); err != nil {
 		return err
 	}
 
-	selectedTunnel, err := mr.validateAndSelectTunnel(session, destinationHash)
+	selectedTunnel, err := mr.validateAndSelectTunnel(req.Session, req.DestinationHash)
 	if err != nil {
-		notifyStatusCallback(statusCallback, messageID, MessageStatusNoTunnels, payload)
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusNoTunnels, req.Payload)
 		return err
 	}
 
-	garlicMsg, err := mr.buildEncryptedGarlicMessage(session, destinationHash, destinationPubKey, payload)
+	garlicMsg, err := mr.buildEncryptedGarlicMessage(req.Session, req.DestinationHash, req.DestinationPubKey, req.Payload)
 	if err != nil {
-		notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload)
 		return err
 	}
 
-	if err := mr.sendThroughGateway(session, selectedTunnel, destinationHash, garlicMsg); err != nil {
-		notifyStatusCallback(statusCallback, messageID, MessageStatusFailure, payload)
+	if err := mr.sendThroughGateway(req.Session, selectedTunnel, req.DestinationHash, garlicMsg); err != nil {
+		notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusFailure, req.Payload)
 		return err
 	}
 
-	mr.logSuccessfulRouting(session, selectedTunnel, destinationHash, len(payload))
+	mr.logSuccessfulRouting(req.Session, selectedTunnel, req.DestinationHash, len(req.Payload))
 	// Report MessageStatusSuccess (best-effort success) once the message has been
 	// encrypted and handed off to the tunnel gateway. Per I2CP specification,
 	// SEND_BEST_EFFORT_SUCCESS (status 4) indicates the message was sent through
 	// the tunnel subsystem. This does not guarantee end-to-end delivery, but
 	// I2CP clients (e.g., i2psnark-standalone) expect this status to track
 	// message progress rather than just ACCEPTED (status 1).
-	notifyStatusCallback(statusCallback, messageID, MessageStatusSuccess, payload)
+	notifyStatusCallback(req.StatusCallback, req.MessageID, MessageStatusSuccess, req.Payload)
 
 	return nil
 }

@@ -23,6 +23,19 @@ const (
 	BuildReplyCodeCritical            = 50 // Rejected: critical (router shutdown, etc.)
 )
 
+// Rejection probability constants for participation load-based throttling.
+// The probability ramps from normalZoneBaseProb at the soft limit to
+// criticalZoneBaseProb at the critical threshold, then to 1.0 at maxParticipants.
+const (
+	criticalZoneSize     = 100  // Number of tunnel slots in the critical zone
+	criticalZoneBaseProb = 0.90 // Rejection probability entering the critical zone
+	criticalZoneScale    = 0.10 // Additional probability fraction across the critical zone
+	criticalZoneFallback = 0.95 // Fallback probability when critical range is zero
+	normalZoneBaseProb   = 0.50 // Rejection probability entering the normal (soft-limit) zone
+	normalZoneScale      = 0.40 // Additional probability fraction across the normal zone
+	normalZoneFallback   = 0.70 // Fallback probability when normal range is zero
+)
+
 // Manager coordinates all tunnel operations including participant tracking.
 // It manages the lifecycle of tunnels where this router acts as an intermediate hop.
 //
@@ -302,7 +315,7 @@ func (m *Manager) checkSoftLimit(count int) (bool, string) {
 // calculateRejectProbability computes the rejection probability based on load.
 // Uses dynamic scaling with a critical zone for the last 100 tunnels.
 func (m *Manager) calculateRejectProbability(count, softLimitValue int) float64 {
-	criticalThreshold := m.maxParticipants - 100
+	criticalThreshold := m.maxParticipants - criticalZoneSize
 	if criticalThreshold < softLimitValue {
 		criticalThreshold = softLimitValue
 	}
@@ -318,9 +331,9 @@ func (m *Manager) calculateCriticalZoneProbability(count, criticalThreshold int)
 	criticalRange := float64(m.maxParticipants - criticalThreshold)
 	if criticalRange > 0 {
 		criticalRatio := float64(count-criticalThreshold) / criticalRange
-		return 0.90 + (0.10 * criticalRatio)
+		return criticalZoneBaseProb + (criticalZoneScale * criticalRatio)
 	}
-	return 0.95
+	return criticalZoneFallback
 }
 
 // calculateNormalZoneProbability returns rejection probability for soft limit zone (50% → 90%).
@@ -328,9 +341,9 @@ func (m *Manager) calculateNormalZoneProbability(count, softLimitValue, critical
 	normalRange := float64(criticalThreshold - softLimitValue)
 	if normalRange > 0 {
 		normalRatio := float64(count-softLimitValue) / normalRange
-		return 0.50 + (0.40 * normalRatio)
+		return normalZoneBaseProb + (normalZoneScale * normalRatio)
 	}
-	return 0.70
+	return normalZoneFallback
 }
 
 // GetRejectStats returns the current rejection statistics.

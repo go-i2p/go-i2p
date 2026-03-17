@@ -87,7 +87,7 @@ func DefaultPoolConfig() PoolConfig {
 		MaxTunnels:       6,
 		TunnelLifetime:   10 * time.Minute,
 		RebuildThreshold: 2 * time.Minute,
-		BuildRetryDelay:  2 * time.Second, // BUG FIX #4: Reduced initial delay (exponential backoff will increase)
+		BuildRetryDelay:  2 * time.Second, // FIX #4: Reduced initial delay (exponential backoff will increase)
 		MaxBuildRetries:  3,
 		HopCount:         3,
 		IsInbound:        false,
@@ -107,8 +107,8 @@ type Pool struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	maintWg        sync.WaitGroup            // Track maintenance goroutine
-	failedPeers    map[common.Hash]time.Time // BUG FIX #5: Track failed peer connection attempts
-	failedPeersMu  sync.RWMutex              // BUG FIX #5: Protect failed peers map
+	failedPeers    map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
+	failedPeersMu  sync.RWMutex              // FIX #5: Protect failed peers map
 	peerTracker    PeerTracker               // Optional peer reputation tracking (netdb integration)
 }
 
@@ -132,7 +132,7 @@ func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 		peerSelector:  selector,
 		config:        config,
 		lastBuildTime: time.Time{},                     // Zero time
-		failedPeers:   make(map[common.Hash]time.Time), // BUG FIX #5: Track failed connection attempts
+		failedPeers:   make(map[common.Hash]time.Time), // FIX #5: Track failed connection attempts
 		ctx:           ctx,
 		cancel:        cancel,
 		peerTracker:   nil, // Will be set via SetPeerTracker if NetDB integration is enabled
@@ -662,7 +662,7 @@ func (p *Pool) prepareBuildRequest(excludePeers []common.Hash) BuildTunnelReques
 		IsInbound:                 p.config.IsInbound,
 		UseShortBuild:             true, // Use modern STBM by default
 		ExcludePeers:              progressiveExclude,
-		RequireDirectConnectivity: true, // BUG FIX: Only select directly-contactable peers
+		RequireDirectConnectivity: true, // FIX: Only select directly-contactable peers
 	}
 }
 
@@ -884,15 +884,15 @@ func (p *Pool) RetryTunnelBuild(tunnelID TunnelID, isInbound bool, hopCount int)
 		return fmt.Errorf("tunnel builder not set; cannot retry tunnel build for tunnel %d", tunnelID)
 	}
 
-	// BUG FIX: Exclude failed peers from retry attempts
+	// FIX: Exclude failed peers from retry attempts
 	excludePeers := p.GetFailedPeers()
 
 	// Create build request with the same parameters
 	req := BuildTunnelRequest{
 		IsInbound:                 isInbound,
 		HopCount:                  hopCount,
-		ExcludePeers:              excludePeers, // BUG FIX: Exclude recently failed peers from retry
-		RequireDirectConnectivity: true,         // BUG FIX: Only select directly-contactable peers
+		ExcludePeers:              excludePeers, // FIX: Exclude recently failed peers from retry
+		RequireDirectConnectivity: true,         // FIX: Only select directly-contactable peers
 	}
 
 	// Attempt to build the tunnel
@@ -948,7 +948,7 @@ func (p *Pool) extractAndMarkFailedPeers(result *BuildTunnelResult) []common.Has
 	return result.PeerHashes
 }
 
-// BUG FIX #5: Failed peer tracking to avoid retry loops
+// FIX #5: Failed peer tracking to avoid retry loops
 // MarkPeerFailed records that a peer failed to establish a connection.
 // This peer will be avoided for a cooldown period to prevent wasted retry attempts.
 // If a PeerTracker is configured, the failure is also reported for reputation tracking.

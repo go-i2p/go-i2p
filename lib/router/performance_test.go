@@ -28,15 +28,13 @@ func BenchmarkMessageThroughput(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := env.messageRouter.RouteOutboundMessage(
-			env.senderSession,
-			0, // messageID
-			env.receiverDestHash,
-			env.receiverPubKey,
-			payload,
-			0,   // no expiration
-			nil, // no status callback
-		)
+		err := env.messageRouter.RouteOutboundMessage(i2cp.RouteRequest{
+			Session:           env.senderSession,
+			MessageID:         0,
+			DestinationHash:   env.receiverDestHash,
+			DestinationPubKey: env.receiverPubKey,
+			Payload:           payload,
+		})
 		if err != nil {
 			b.Fatalf("Failed to route message: %v", err)
 		}
@@ -59,15 +57,13 @@ func BenchmarkMessageThroughputParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			err := env.messageRouter.RouteOutboundMessage(
-				env.senderSession,
-				0, // messageID
-				env.receiverDestHash,
-				env.receiverPubKey,
-				payload,
-				0,   // no expiration
-				nil, // no status callback
-			)
+			err := env.messageRouter.RouteOutboundMessage(i2cp.RouteRequest{
+				Session:           env.senderSession,
+				MessageID:         0,
+				DestinationHash:   env.receiverDestHash,
+				DestinationPubKey: env.receiverPubKey,
+				Payload:           payload,
+			})
 			if err != nil {
 				b.Fatalf("Failed to route message: %v", err)
 			}

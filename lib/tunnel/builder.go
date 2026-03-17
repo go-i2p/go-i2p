@@ -48,7 +48,7 @@ func NewTunnelBuilder(selector PeerSelector) (*TunnelBuilder, error) {
 
 // BuildTunnelRequest contains the parameters needed to build a tunnel.
 //
-// BUG FIX: Added RequireDirectConnectivity to enable pre-filtering of introducer-only peers.
+// FIX: Added RequireDirectConnectivity to enable pre-filtering of introducer-only peers.
 // This prevents session establishment failures by only selecting peers with direct NTCP2 addresses.
 // Set to true in production; tests may leave false to test with mock peers.
 type BuildTunnelRequest struct {

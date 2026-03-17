@@ -1311,15 +1311,15 @@ func (s *Server) dispatchToMessageRouter(caller string, session *Session, messag
 		return
 	}
 
-	err := s.messageRouter.RouteOutboundMessage(
-		session,
-		messageID,
-		destination,
-		destPubKey,
-		payload,
-		expiration,
-		statusCallback,
-	)
+	err := s.messageRouter.RouteOutboundMessage(RouteRequest{
+		Session:           session,
+		MessageID:         messageID,
+		DestinationHash:   destination,
+		DestinationPubKey: destPubKey,
+		Payload:           payload,
+		ExpirationMs:      expiration,
+		StatusCallback:    statusCallback,
+	})
 	if err != nil {
 		log.WithFields(logger.Fields{
 			"at":          "i2cp.Server." + caller,

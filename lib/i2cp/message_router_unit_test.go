@@ -43,7 +43,10 @@ func TestRouteOutboundMessageSuccess(t *testing.T) {
 	payload := []byte("test message payload")
 
 	// Route message
-	err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+	err := router.RouteOutboundMessage(RouteRequest{
+		Session: session, MessageID: 0, DestinationHash: destHash, DestinationPubKey: destPubKey,
+		Payload: payload, ExpirationMs: 0, StatusCallback: nil,
+	})
 	assert.NoError(t, err)
 
 	// Verify message was sent to gateway
@@ -91,7 +94,10 @@ func TestRouteOutboundMessageErrors(t *testing.T) {
 			var destPubKey [32]byte
 			payload := []byte("test")
 
-			err := router.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+			err := router.RouteOutboundMessage(RouteRequest{
+				Session: session, MessageID: 0, DestinationHash: destHash, DestinationPubKey: destPubKey,
+				Payload: payload, ExpirationMs: 0, StatusCallback: nil,
+			})
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -182,7 +188,10 @@ func TestRouteOutboundMessageZeroHopTunnelRejected(t *testing.T) {
 	destHash, destPubKey := createTestDestAndPubKey()
 	payload := []byte("test message payload")
 
-	err := router.RouteOutboundMessage(session, 42, destHash, destPubKey, payload, 0, statusCallback)
+	err := router.RouteOutboundMessage(RouteRequest{
+		Session: session, MessageID: 42, DestinationHash: destHash, DestinationPubKey: destPubKey,
+		Payload: payload, ExpirationMs: 0, StatusCallback: statusCallback,
+	})
 
 	// Verify the message was rejected
 	assert.Error(t, err)
@@ -239,7 +248,10 @@ func TestMessageRouter_StatusCallbackInvoked(t *testing.T) {
 	var destHash common.Hash
 	var destKey [32]byte
 
-	err := router.RouteOutboundMessage(session, 1, destHash, destKey, []byte("test"), 0, callback)
+	err := router.RouteOutboundMessage(RouteRequest{
+		Session: session, MessageID: 1, DestinationHash: destHash, DestinationPubKey: destKey,
+		Payload: []byte("test"), ExpirationMs: 0, StatusCallback: callback,
+	})
 	if err == nil {
 		t.Error("Expected error without outbound pool")
 	}

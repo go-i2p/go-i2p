@@ -251,8 +251,7 @@ func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
 	return false
 }
 
-// Check if RouterInfo supports NTCP2
-// TODO: This should be moved to router_info package
+// SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address.
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
 		log.Debug("RouterInfo is nil, NTCP2 not supported")

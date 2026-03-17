@@ -30,6 +30,14 @@ type PeerTracker struct {
 	mu    sync.RWMutex
 }
 
+// Peer reliability/staleness thresholds.
+const (
+	lowSuccessRateThreshold  = 0.25 // Below this rate, peer is considered stale
+	highSuccessRateThreshold = 0.75 // Above this rate, peer is considered reliable
+	minAttemptsForStats      = 5    // Minimum attempts before success rate is meaningful
+	consecutiveFailThreshold = 3    // Consecutive failures triggering staleness
+)
+
 // NewPeerTracker creates a new peer tracking system.
 func NewPeerTracker() *PeerTracker {
 	log.WithFields(logger.Fields{
@@ -183,7 +191,7 @@ func (pt *PeerTracker) IsLikelyStale(hash common.Hash) bool {
 // hasExcessiveConsecutiveFailures checks if the peer has too many consecutive failures.
 // Returns true if consecutive failures meet or exceed the threshold of 3.
 func (pt *PeerTracker) hasExcessiveConsecutiveFailures(stats *PeerStats, hash common.Hash) bool {
-	if stats.ConsecutiveFails >= 3 {
+	if stats.ConsecutiveFails >= consecutiveFailThreshold {
 		log.WithFields(logger.Fields{
 			"peer_hash":         shortHash(hash.String(), 16),
 			"consecutive_fails": stats.ConsecutiveFails,
@@ -197,9 +205,9 @@ func (pt *PeerTracker) hasExcessiveConsecutiveFailures(stats *PeerStats, hash co
 // hasLowSuccessRate checks if the peer's overall success rate is below acceptable threshold.
 // Returns true if success rate is below 25% with at least 5 attempts.
 func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) bool {
-	if stats.TotalAttempts >= 5 {
+	if stats.TotalAttempts >= minAttemptsForStats {
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
-		if successRate < 0.25 {
+		if successRate < lowSuccessRateThreshold {
 			log.WithFields(logger.Fields{
 				"peer_hash":    shortHash(hash.String(), 16),
 				"success_rate": successRate,
@@ -215,7 +223,7 @@ func (pt *PeerTracker) hasLowSuccessRate(stats *PeerStats, hash common.Hash) boo
 // Returns true if peer has consecutive failures in the last hour but no success in that period.
 func (pt *PeerTracker) hasRecentFailuresWithoutSuccess(stats *PeerStats, hash common.Hash) bool {
 	hourAgo := time.Now().Add(-1 * time.Hour)
-	if stats.ConsecutiveFails >= 3 && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
+	if stats.ConsecutiveFails >= consecutiveFailThreshold && !stats.LastFailure.IsZero() && stats.LastFailure.After(hourAgo) {
 		if stats.LastSuccess.IsZero() || stats.LastSuccess.Before(hourAgo) {
 			log.WithFields(logger.Fields{
 				"peer_hash":    shortHash(hash.String(), 16),
@@ -245,7 +253,7 @@ func (pt *PeerTracker) GetReliablePeers(minAttempts int) []common.Hash {
 
 		// Check success rate
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
-		if successRate >= 0.75 {
+		if successRate >= highSuccessRateThreshold {
 			reliable = append(reliable, hash)
 		}
 	}
@@ -328,13 +336,13 @@ func (pt *PeerTracker) GetSummary() map[string]interface{} {
 // Caller must hold at least pt.mu.RLock.
 func isStaleUnlocked(stats *PeerStats) bool {
 	// Excessive consecutive failures (threshold: 3)
-	if stats.ConsecutiveFails >= 3 {
+	if stats.ConsecutiveFails >= consecutiveFailThreshold {
 		return true
 	}
 	// Low success rate with enough attempts
-	if stats.TotalAttempts >= 5 {
+	if stats.TotalAttempts >= minAttemptsForStats {
 		successRate := float64(stats.SuccessCount) / float64(stats.TotalAttempts)
-		if successRate < 0.25 {
+		if successRate < lowSuccessRateThreshold {
 			return true
 		}
 	}

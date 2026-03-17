@@ -38,7 +38,8 @@ type TunnelBuild [8]BuildRequestRecord
 // TunnelBuildMessage wraps TunnelBuild to implement I2NPMessage interface
 type TunnelBuildMessage struct {
 	*BaseI2NPMessage
-	Records TunnelBuild
+	Records   TunnelBuild
+	encrypted bool // true when records have been encrypted for network transmission
 }
 
 // GetBuildRecords returns the build request records
@@ -132,8 +133,15 @@ func (msg *TunnelBuildMessage) GetRecordCount() int {
 	return 8
 }
 
-// MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage
+// MarshalBinary serializes the TunnelBuild message using BaseI2NPMessage.
+// Logs a warning if the records have not been encrypted, as cleartext
+// build records are not specification-compliant for network transmission.
 func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
+	if !msg.encrypted {
+		log.WithFields(logger.Fields{
+			"at": "TunnelBuildMessage.MarshalBinary",
+		}).Warn("Serializing cleartext TunnelBuild records — not safe for network transmission")
+	}
 	return msg.BaseI2NPMessage.MarshalBinary()
 }
 
@@ -225,6 +233,7 @@ func NewEncryptedTunnelBuildMessage(records [8]BuildRequestRecord, recipientRout
 	msg := &TunnelBuildMessage{
 		BaseI2NPMessage: NewBaseI2NPMessage(I2NPMessageTypeTunnelBuild),
 		Records:         TunnelBuild(records),
+		encrypted:       true,
 	}
 
 	data := make([]byte, 8*528)

@@ -424,7 +424,9 @@ func (env *e2eTestEnvironment) SendMessageFromClient(
 	destPubKey [32]byte,
 	payload []byte,
 ) error {
-	return env.messageRouter.RouteOutboundMessage(session, 0, destHash, destPubKey, payload, 0, nil)
+	return env.messageRouter.RouteOutboundMessage(i2cp.RouteRequest{
+		Session: session, DestinationHash: destHash, DestinationPubKey: destPubKey, Payload: payload,
+	})
 }
 
 // WaitForOutboundTransmission waits for messages to be transmitted through the gateway
