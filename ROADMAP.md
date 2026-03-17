@@ -134,7 +134,7 @@
   - ✅ LeaseSet2 (LS2) support (storage, retrieval, type discrimination)
   - ✅ Pluggable peer selection algorithm interface
   - ✅ Database exploration and publishings (random selection, XOR distance, floodfill routing)
-  - 📋 EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking)(Partial support)
+  - ✅ EncryptedLeaseSet and MetaLeaseSet support (storage, retrieval, expiration tracking, client-side decryption, pointer resolution)
 
 ### Application Layer
 
