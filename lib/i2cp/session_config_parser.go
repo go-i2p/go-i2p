@@ -294,7 +294,7 @@ func markExplicitlySet(config *SessionConfig, field string) {
 func applyTunnelQuantityOptions(config *SessionConfig, options map[string]string) {
 	applyQuantityOption(config, options, "inbound.quantity", &config.InboundTunnelCount)
 	applyQuantityOption(config, options, "outbound.quantity", &config.OutboundTunnelCount)
-	logUnsupportedBackupQuantities(config, options)
+	applyBackupQuantities(config, options)
 }
 
 // applyQuantityOption parses and applies a single tunnel quantity option if present.
@@ -322,9 +322,9 @@ func applyQuantityOption(config *SessionConfig, options map[string]string, key s
 	}
 }
 
-// logUnsupportedBackupQuantities logs and records backup quantity options that are
-// parsed into SessionConfig fields but not yet consumed by the tunnel pool manager.
-func logUnsupportedBackupQuantities(config *SessionConfig, options map[string]string) {
+// applyBackupQuantities parses and applies backup quantity options.
+// These values are consumed by the tunnel pool manager in server_tunnels.go.
+func applyBackupQuantities(config *SessionConfig, options map[string]string) {
 	if val, exists := options["inbound.backupQuantity"]; exists {
 		if quantity, err := strconv.Atoi(val); err == nil && quantity >= 0 && quantity <= 16 {
 			config.InboundBackupQuantity = quantity

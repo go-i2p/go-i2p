@@ -64,21 +64,6 @@ func TestExplorerStopBeforeStart(t *testing.T) {
 	assert.False(t, stats.IsRunning)
 }
 
-// TestGenerateRandomHash tests random hash generation
-func TestGenerateRandomHash(t *testing.T) {
-	explorer := newTestExplorerDefault(t)
-
-	hash1, err1 := explorer.generateRandomHash()
-	hash2, err2 := explorer.generateRandomHash()
-
-	assert.NoError(t, err1)
-	assert.NoError(t, err2)
-	assert.NotEqual(t, hash1, hash2, "Random hashes should be different")
-
-	// Verify it's a valid 32-byte hash
-	assert.Equal(t, 32, len(hash1))
-}
-
 // TestExplorerExploreOnceWithoutTunnelPool tests ExploreOnce without tunnel pool
 func TestExplorerExploreOnceWithoutTunnelPool(t *testing.T) {
 	explorer := newTestExplorerDefault(t)

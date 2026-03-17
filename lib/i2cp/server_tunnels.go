@@ -10,6 +10,24 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// backupQuantityOrDefault returns the backup quantity, defaulting to 2 if not explicitly set.
+func backupQuantityOrDefault(backup int) int {
+	if backup > 0 {
+		return backup
+	}
+	return 2
+}
+
+// applyLengthVariance adjusts hop count by the configured length variance.
+// Positive variance adds hops; negative variance subtracts (minimum 0 hops).
+func applyLengthVariance(baseLength, variance int) int {
+	adjusted := baseLength + variance
+	if adjusted < 0 {
+		return 0
+	}
+	return adjusted
+}
+
 // initializeSessionTunnelPools creates and configures tunnel pools for a session.
 // This requires both tunnelBuilder and peerSelector to be set via SetTunnelBuilder
 // and SetPeerSelector. If either is missing, pools are not initialized and an error
@@ -27,14 +45,15 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	}
 
 	// Create inbound tunnel pool
+	inboundBackup := backupQuantityOrDefault(config.InboundBackupQuantity)
 	inboundConfig := tunnel.PoolConfig{
 		MinTunnels:       config.InboundTunnelCount,
-		MaxTunnels:       config.InboundTunnelCount + 2, // Allow some extra capacity
+		MaxTunnels:       config.InboundTunnelCount + inboundBackup,
 		TunnelLifetime:   10 * time.Minute,
 		RebuildThreshold: 2 * time.Minute,
 		BuildRetryDelay:  2 * time.Second,
 		MaxBuildRetries:  3,
-		HopCount:         config.InboundTunnelLength,
+		HopCount:         applyLengthVariance(config.InboundTunnelLength, config.InboundLengthVariance),
 		IsInbound:        true,
 	}
 	inboundPool := tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
@@ -47,14 +66,15 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	}
 
 	// Create outbound tunnel pool
+	outboundBackup := backupQuantityOrDefault(config.OutboundBackupQuantity)
 	outboundConfig := tunnel.PoolConfig{
 		MinTunnels:       config.OutboundTunnelCount,
-		MaxTunnels:       config.OutboundTunnelCount + 2, // Allow some extra capacity
+		MaxTunnels:       config.OutboundTunnelCount + outboundBackup,
 		TunnelLifetime:   10 * time.Minute,
 		RebuildThreshold: 2 * time.Minute,
 		BuildRetryDelay:  2 * time.Second,
 		MaxBuildRetries:  3,
-		HopCount:         config.OutboundTunnelLength,
+		HopCount:         applyLengthVariance(config.OutboundTunnelLength, config.OutboundLengthVariance),
 		IsInbound:        false,
 	}
 	outboundPool := tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
@@ -69,12 +89,16 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 	}
 
 	log.WithFields(logger.Fields{
-		"at":                    "i2cp.Server.initializeSessionTunnelPools",
-		"sessionID":             session.ID(),
-		"inbound_hop_count":     config.InboundTunnelLength,
-		"outbound_hop_count":    config.OutboundTunnelLength,
-		"inbound_tunnel_count":  config.InboundTunnelCount,
-		"outbound_tunnel_count": config.OutboundTunnelCount,
+		"at":                       "i2cp.Server.initializeSessionTunnelPools",
+		"sessionID":                session.ID(),
+		"inbound_hop_count":        inboundConfig.HopCount,
+		"outbound_hop_count":       outboundConfig.HopCount,
+		"inbound_tunnel_count":     config.InboundTunnelCount,
+		"outbound_tunnel_count":    config.OutboundTunnelCount,
+		"inbound_backup_quantity":  inboundBackup,
+		"outbound_backup_quantity": outboundBackup,
+		"inbound_length_variance":  config.InboundLengthVariance,
+		"outbound_length_variance": config.OutboundLengthVariance,
 	}).Info("tunnel_pools_initialized")
 
 	return nil

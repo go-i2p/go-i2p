@@ -385,17 +385,6 @@ func (e *Explorer) calculateExplorationInterval() time.Duration {
 	return e.maxInterval
 }
 
-// generateRandomHash creates a cryptographically random 32-byte hash for exploration
-// Deprecated: Use generateRandomKeys instead
-func (e *Explorer) generateRandomHash() (common.Hash, error) {
-	var hash common.Hash
-	_, err := rand.Read(hash[:])
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to read random bytes: %w", err)
-	}
-	return hash, nil
-}
-
 // ExploreOnce performs a single exploration round and returns immediately.
 // Useful for testing or manual exploration triggers.
 func (e *Explorer) ExploreOnce() error {

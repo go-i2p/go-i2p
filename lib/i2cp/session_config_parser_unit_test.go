@@ -392,28 +392,28 @@ func TestApplyMessageOptions_GzipDisabled(t *testing.T) {
 	assert.False(t, config.GzipEnabled, "GzipEnabled should be false when i2cp.gzip=false")
 }
 
-// TestLogUnsupportedBackupQuantities_AppliesValues tests that backup quantities are stored.
-func TestLogUnsupportedBackupQuantities_AppliesValues(t *testing.T) {
+// TestApplyBackupQuantities_AppliesValues tests that backup quantities are stored.
+func TestApplyBackupQuantities_AppliesValues(t *testing.T) {
 	config := DefaultSessionConfig()
 	options := map[string]string{
 		"inbound.backupQuantity":  "2",
 		"outbound.backupQuantity": "3",
 	}
-	logUnsupportedBackupQuantities(config, options)
+	applyBackupQuantities(config, options)
 	assert.Equal(t, 2, config.InboundBackupQuantity, "InboundBackupQuantity")
 	assert.Equal(t, 3, config.OutboundBackupQuantity, "OutboundBackupQuantity")
 	assert.True(t, config.ExplicitlySetFields["InboundBackupQuantity"], "InboundBackupQuantity not marked")
 	assert.True(t, config.ExplicitlySetFields["OutboundBackupQuantity"], "OutboundBackupQuantity not marked")
 }
 
-// TestLogUnsupportedBackupQuantities_OutOfRange tests that out-of-range values are ignored.
-func TestLogUnsupportedBackupQuantities_OutOfRange(t *testing.T) {
+// TestApplyBackupQuantities_OutOfRange tests that out-of-range values are ignored.
+func TestApplyBackupQuantities_OutOfRange(t *testing.T) {
 	config := DefaultSessionConfig()
 	options := map[string]string{
 		"inbound.backupQuantity":  "-1",
 		"outbound.backupQuantity": "17",
 	}
-	logUnsupportedBackupQuantities(config, options)
+	applyBackupQuantities(config, options)
 	assert.Equal(t, 0, config.InboundBackupQuantity, "InboundBackupQuantity")
 	assert.Equal(t, 0, config.OutboundBackupQuantity, "OutboundBackupQuantity")
 }

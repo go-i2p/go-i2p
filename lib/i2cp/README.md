@@ -33,6 +33,15 @@ Each message has: type (1 byte), session ID (2 bytes), length (4 bytes), payload
 - Session IDs 0x0000 and 0xFFFF are reserved - Supports authentication, tunnel
 management, and message delivery
 
+### Known Limitations
+
+- **Hostname Lookups (type 1)**: HostLookup messages with lookup type 1 (hostname)
+  require a `HostnameResolver` to be configured on the server via `SetHostnameResolver()`.
+  If no resolver is configured, hostname lookups return `HostReplyError`. Hash-based
+  lookups (type 0) work without a resolver. No naming service integration is provided
+  in-tree; callers must supply their own `HostnameResolver` implementation backed by
+  an address book or remote naming service.
+
 ## Usage
 
 ```go
