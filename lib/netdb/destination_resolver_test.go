@@ -19,6 +19,7 @@ type mockNetDB struct {
 	leaseSets           map[common.Hash][]byte
 	leaseSet2s          map[common.Hash][]byte
 	encryptedLeaseSets  map[common.Hash][]byte
+	metaLeaseSets       map[common.Hash][]byte
 	routerInfos         map[common.Hash]router_info.RouterInfo
 }
 
@@ -27,6 +28,7 @@ func newMockNetDB() *mockNetDB {
 		leaseSets:          make(map[common.Hash][]byte),
 		leaseSet2s:         make(map[common.Hash][]byte),
 		encryptedLeaseSets: make(map[common.Hash][]byte),
+		metaLeaseSets:      make(map[common.Hash][]byte),
 		routerInfos:        make(map[common.Hash]router_info.RouterInfo),
 	}
 }
@@ -137,6 +139,14 @@ func (m *mockNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error) {
 
 func (m *mockNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error) {
 	data, exists := m.encryptedLeaseSets[hash]
+	if !exists {
+		return nil, assert.AnError
+	}
+	return data, nil
+}
+
+func (m *mockNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error) {
+	data, exists := m.metaLeaseSets[hash]
 	if !exists {
 		return nil, assert.AnError
 	}
