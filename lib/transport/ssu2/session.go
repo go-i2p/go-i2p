@@ -12,6 +12,30 @@ import (
 	"github.com/go-i2p/logger"
 )
 
+// retransmitTickInterval is how often the send worker checks for expired
+// pending messages that need to be retransmitted.
+const retransmitTickInterval = 50 * time.Millisecond
+
+// ccPollInterval is the delay between congestion-window polling attempts
+// when the window is full.
+const ccPollInterval = 10 * time.Millisecond
+
+// maxRetransmitBackoff caps the exponential back-off delay for retransmissions.
+const maxRetransmitBackoff = 60 * time.Second
+
+// maxRTTSample discards implausibly large RTT measurements from one-sided
+// clock observations (e.g. when lastSendNano is stale).
+const maxRTTSample = 30 * time.Second
+
+// pendingI2NP tracks an I2NP message that has been written to the conn but
+// has not yet been confirmed delivered (used for session-level retransmission).
+type pendingI2NP struct {
+	data     []byte
+	sentAt   time.Time
+	deadline time.Time // sentAt + rto; extended on each retransmit with back-off
+	attempts int
+}
+
 // SSU2Session implements transport.TransportSession over an SSU2 connection.
 type SSU2Session struct {
 	conn *ssu2noise.SSU2Conn
@@ -23,6 +47,15 @@ type SSU2Session struct {
 	bytesSent       uint64
 	bytesReceived   uint64
 	droppedMessages uint64
+
+	// Phase 5: Reliability & congestion control
+	rttEstimator   *ssu2noise.RTTEstimator
+	congestionCtrl *ssu2noise.CongestionController
+	pendingMsgsMu  sync.Mutex
+	pendingMsgs    map[uint64]*pendingI2NP
+	pendingSeqNext uint64 // incremented atomically
+	maxRetransmit  int
+	lastSendNano   int64 // atomic unix-nano of most recent Write call
 
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -54,13 +87,18 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 	})
 	sessionLogger.Info("Creating new SSU2 session")
 
+	rtt := ssu2noise.NewRTTEstimator()
 	return &SSU2Session{
-		conn:      conn,
-		sendQueue: make(chan i2np.I2NPMessage, 256),
-		recvChan:  make(chan i2np.I2NPMessage, 256),
-		ctx:       sessionCtx,
-		cancel:    cancel,
-		logger:    sessionLogger,
+		conn:           conn,
+		sendQueue:      make(chan i2np.I2NPMessage, 256),
+		recvChan:       make(chan i2np.I2NPMessage, 256),
+		rttEstimator:   rtt,
+		congestionCtrl: ssu2noise.NewCongestionController(rtt),
+		pendingMsgs:    make(map[uint64]*pendingI2NP),
+		maxRetransmit:  DefaultMaxRetransmissions,
+		ctx:            sessionCtx,
+		cancel:         cancel,
+		logger:         sessionLogger,
 	}
 }
 
@@ -171,26 +209,142 @@ func (s *SSU2Session) drainSendQueue() {
 
 func (s *SSU2Session) sendWorker() {
 	defer s.wg.Done()
+	ticker := time.NewTicker(retransmitTickInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case msg := <-s.sendQueue:
 			atomic.AddInt32(&s.sendQueueSize, -1)
-			data, err := msg.MarshalBinary()
-			if err != nil {
-				s.logger.WithError(err).Error("Failed to marshal I2NP message")
-				continue
-			}
-			n, err := s.conn.Write(data)
-			if err != nil {
-				s.logger.WithError(err).Error("Failed to write message")
+			if err := s.sendWithCongestionControl(msg); err != nil {
+				s.logger.WithError(err).Error("Failed to send message")
 				s.discardRemainingMessages()
 				return
 			}
-			atomic.AddUint64(&s.bytesSent, uint64(n))
+		case <-ticker.C:
+			if s.handleRetransmissions() {
+				s.logger.Warn("Max retransmissions exceeded, closing session")
+				s.cancel()
+				return
+			}
 		case <-s.ctx.Done():
 			s.discardRemainingMessages()
 			return
 		}
+	}
+}
+
+// sendWithCongestionControl serializes msg, waits for congestion-window room,
+// then writes the bytes to the conn and records the pending delivery.
+func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
+	data, err := msg.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	for !s.congestionCtrl.CanSend(len(data)) {
+		select {
+		case <-s.ctx.Done():
+			return ErrSessionClosed
+		case <-time.After(ccPollInterval):
+		}
+	}
+
+	seq := s.trackPending(data)
+	n, err := s.conn.Write(data)
+	if err != nil {
+		s.removePending(seq)
+		s.congestionCtrl.OnPacketLoss()
+		return err
+	}
+	atomic.StoreInt64(&s.lastSendNano, time.Now().UnixNano())
+	atomic.AddUint64(&s.bytesSent, uint64(n))
+	s.congestionCtrl.OnPacketSent(n)
+	return nil
+}
+
+// trackPending stores an I2NP payload in the pending retransmission map and
+// returns its sequence number.
+func (s *SSU2Session) trackPending(data []byte) uint64 {
+	seq := atomic.AddUint64(&s.pendingSeqNext, 1)
+	rto := s.rttEstimator.GetRTO()
+	now := time.Now()
+	s.pendingMsgsMu.Lock()
+	s.pendingMsgs[seq] = &pendingI2NP{
+		data:     data,
+		sentAt:   now,
+		deadline: now.Add(rto),
+	}
+	s.pendingMsgsMu.Unlock()
+	return seq
+}
+
+// removePending deletes a pending message from the map.
+func (s *SSU2Session) removePending(seq uint64) {
+	s.pendingMsgsMu.Lock()
+	delete(s.pendingMsgs, seq)
+	s.pendingMsgsMu.Unlock()
+}
+
+// handleRetransmissions checks all pending I2NP messages and retransmits any
+// that have exceeded their RTO deadline.  Returns true if the session should
+// be closed (max retransmissions exceeded for at least one message).
+func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
+	now := time.Now()
+	var toDelete []uint64
+	var hadLoss bool
+
+	s.pendingMsgsMu.Lock()
+	for seq, p := range s.pendingMsgs {
+		if now.Before(p.deadline) {
+			continue
+		}
+		if p.attempts >= s.maxRetransmit {
+			toDelete = append(toDelete, seq)
+			hadLoss = true
+			shouldClose = true
+			continue
+		}
+		if n, err := s.conn.Write(p.data); err != nil {
+			toDelete = append(toDelete, seq)
+			hadLoss = true
+		} else {
+			atomic.AddUint64(&s.bytesSent, uint64(n))
+			p.attempts++
+			backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
+			if backoff > maxRetransmitBackoff {
+				backoff = maxRetransmitBackoff
+			}
+			p.deadline = now.Add(backoff)
+			s.pendingMsgs[seq] = p
+		}
+	}
+	for _, seq := range toDelete {
+		delete(s.pendingMsgs, seq)
+	}
+	s.pendingMsgsMu.Unlock()
+
+	if hadLoss {
+		s.congestionCtrl.OnRetransmissionTimeout()
+	}
+	return shouldClose
+}
+
+// ackPendingBeforeTime removes pending messages sent before t and credits the
+// congestion window for the freed bytes.  Called by receiveWorker to model
+// peer-responsiveness as a delivery confirmation.
+func (s *SSU2Session) ackPendingBeforeTime(t time.Time) {
+	var ackedBytes int
+	s.pendingMsgsMu.Lock()
+	for seq, p := range s.pendingMsgs {
+		if p.sentAt.Before(t) {
+			ackedBytes += len(p.data)
+			delete(s.pendingMsgs, seq)
+		}
+	}
+	s.pendingMsgsMu.Unlock()
+	if ackedBytes > 0 {
+		s.congestionCtrl.OnAck(ackedBytes)
 	}
 }
 
@@ -233,7 +387,17 @@ func (s *SSU2Session) receiveWorker() {
 			return
 		}
 
+		recvAt := time.Now()
 		atomic.AddUint64(&s.bytesReceived, uint64(n))
+
+		// Update RTT estimate using time since last send as a rough proxy.
+		if lastSendNano := atomic.LoadInt64(&s.lastSendNano); lastSendNano > 0 {
+			if rtt := recvAt.Sub(time.Unix(0, lastSendNano)); rtt > 0 && rtt < maxRTTSample {
+				s.rttEstimator.Update(rtt)
+			}
+		}
+		// Any data received means the peer is alive; ACK pending messages.
+		s.ackPendingBeforeTime(recvAt)
 
 		msg := i2np.NewI2NPMessage(0)
 		if err := msg.UnmarshalBinary(buf[:n]); err != nil {
