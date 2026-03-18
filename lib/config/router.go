@@ -244,6 +244,15 @@ func copyBootstrapConfig(src *BootstrapConfig) *BootstrapConfig {
 	return &bootstrapCopy
 }
 
+// SetRouterConfig atomically replaces the global router configuration with cfg.
+// This is the preferred way to update the configuration after building it via
+// NewRouterConfigFromViper(). Thread-safe.
+func SetRouterConfig(cfg *RouterConfig) {
+	routerConfigMutex.Lock()
+	defer routerConfigMutex.Unlock()
+	routerConfigProperties = cfg
+}
+
 // LockRouterConfigForWrite acquires an exclusive write lock on RouterConfigProperties.
 // This must be called before directly modifying RouterConfigProperties.
 // Always defer UnlockRouterConfigWrite() after acquiring the lock.

@@ -423,7 +423,7 @@ func registerSignalHandlers() {
 			log.Errorf("failed to reload config: %s", err)
 			return
 		}
-		config.UpdateRouterConfig()
+		config.SetRouterConfig(config.NewRouterConfigFromViper())
 	})
 
 	signals.RegisterInterruptHandler(func() {

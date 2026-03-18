@@ -373,26 +373,10 @@ func currentCongestionConfig() CongestionDefaults {
 }
 
 // UpdateRouterConfig updates the global routerConfigProperties from viper settings.
-// DEPRECATED: Use NewRouterConfigFromViper() instead to avoid global state mutation.
+// DEPRECATED: Use NewRouterConfigFromViper() + SetRouterConfig() instead.
 // This function is thread-safe and can be called during SIGHUP reloads.
 func UpdateRouterConfig() {
-	// Acquire write lock to prevent data races during config reload
-	LockRouterConfigForWrite()
-	defer UnlockRouterConfigWrite()
-
-	routerConfigProperties.BaseDir = viper.GetString("base_dir")
-	routerConfigProperties.WorkingDir = viper.GetString("working_dir")
-	routerConfigProperties.NetDb = buildNetDbConfig()
-	routerConfigProperties.Bootstrap = buildBootstrapConfig("UpdateRouterConfig")
-	routerConfigProperties.I2CP = buildI2CPConfig()
-	routerConfigProperties.I2PControl = buildI2PControlConfig()
-	routerConfigProperties.MaxBandwidth = viper.GetUint64("router.max_bandwidth")
-	routerConfigProperties.MaxConnections = viper.GetInt("router.max_connections")
-	routerConfigProperties.AcceptTunnels = viper.GetBool("router.accept_tunnels")
-	routerConfigProperties.Tunnel = buildTunnelConfig()
-	routerConfigProperties.Transport = buildTransportConfig()
-	routerConfigProperties.Performance = buildPerformanceConfig()
-	routerConfigProperties.Congestion = buildCongestionConfig()
+	SetRouterConfig(NewRouterConfigFromViper())
 }
 
 // buildNetDbConfig creates a NetDbConfig from current viper settings.

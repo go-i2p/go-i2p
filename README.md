@@ -78,7 +78,7 @@ The current release(0.1.4 and earlier) have literally hundreds of bugs pending r
   - [X] Exploration
   - [X] Publishing
   - [X] Floodfill
-  - [~] LS2 and Encrypted Leasesets (I2CP clients can publish; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution pending)
+  - [X] LS2 and Encrypted Leasesets (I2CP clients can publish; storage/retrieval supported; inbound client-side decryption and MetaLeaseSet resolution implemented)
 - Transport Layer
   - [X] Transport manager and interfaces
   - NTCP2

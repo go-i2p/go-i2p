@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-i2p/common/router_address"
 	i2pcurve25519 "github.com/go-i2p/crypto/curve25519"
+	nattraversal "github.com/go-i2p/go-nat-listener"
 	ntcp2noise "github.com/go-i2p/go-noise/ntcp2"
 	"github.com/go-i2p/logger"
 )
@@ -143,28 +144,49 @@ func extractTransportAddress(transport *NTCP2Transport) (string, string, error) 
 		return "", "", fmt.Errorf("transport has no listening address")
 	}
 
-	// Handle both *ntcp2.NTCP2Addr (wrapped) and *net.TCPAddr (direct)
-	var tcpAddr *net.TCPAddr
-	if ntcpAddr, ok := addr.(*ntcp2noise.NTCP2Addr); ok {
-		// Extract underlying TCP address from NTCP2Addr wrapper
-		underlying := ntcpAddr.UnderlyingAddr()
-		var ok2 bool
-		tcpAddr, ok2 = underlying.(*net.TCPAddr)
-		if !ok2 {
-			log.Errorf("NTCP2Addr underlying address is not *net.TCPAddr, got %T", underlying)
-			return "", "", fmt.Errorf("NTCP2Addr underlying address is not *net.TCPAddr, got %T", underlying)
+	// Handle *ntcp2.NTCP2Addr (wrapped), *net.TCPAddr (direct), and *nattraversal.NATAddr
+	var host, port string
+	switch typedAddr := addr.(type) {
+	case *ntcp2noise.NTCP2Addr:
+		// Extract underlying address from NTCP2Addr wrapper
+		underlying := typedAddr.UnderlyingAddr()
+		var err error
+		host, port, err = extractHostPort(underlying)
+		if err != nil {
+			log.Errorf("NTCP2Addr underlying address extraction failed: %v", err)
+			return "", "", fmt.Errorf("NTCP2Addr underlying address extraction failed: %w", err)
 		}
-	} else if directTCP, ok := addr.(*net.TCPAddr); ok {
-		tcpAddr = directTCP
-	} else {
-		log.Errorf("Expected *net.TCPAddr or *ntcp2.NTCP2Addr, got %T", addr)
-		return "", "", fmt.Errorf("expected *net.TCPAddr or *ntcp2.NTCP2Addr, got %T", addr)
+	case *net.TCPAddr:
+		host = typedAddr.IP.String()
+		port = fmt.Sprintf("%d", typedAddr.Port)
+	case *nattraversal.NATAddr:
+		var err error
+		host, port, err = net.SplitHostPort(typedAddr.ExternalAddr())
+		if err != nil {
+			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", typedAddr.ExternalAddr(), err)
+		}
+	default:
+		log.Errorf("Expected *net.TCPAddr, *ntcp2.NTCP2Addr, or *nattraversal.NATAddr, got %T", addr)
+		return "", "", fmt.Errorf("unsupported address type %T", addr)
 	}
 
-	host := tcpAddr.IP.String()
-	port := fmt.Sprintf("%d", tcpAddr.Port)
-
 	return host, port, nil
+}
+
+// extractHostPort extracts host and port from an address that may be *net.TCPAddr or *nattraversal.NATAddr.
+func extractHostPort(addr net.Addr) (string, string, error) {
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		return a.IP.String(), fmt.Sprintf("%d", a.Port), nil
+	case *nattraversal.NATAddr:
+		host, port, err := net.SplitHostPort(a.ExternalAddr())
+		if err != nil {
+			return "", "", fmt.Errorf("failed to parse NATAddr external address %q: %w", a.ExternalAddr(), err)
+		}
+		return host, port, nil
+	default:
+		return "", "", fmt.Errorf("unsupported underlying address type %T", addr)
+	}
 }
 
 // validateAndExtractStaticKey validates the NTCP2 configuration and extracts the base64-encoded
