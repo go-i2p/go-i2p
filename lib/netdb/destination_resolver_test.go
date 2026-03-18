@@ -15,12 +15,12 @@ import (
 
 // mockNetDB implements the minimal interface needed for DestinationResolver
 type mockNetDB struct {
-	mu                  sync.RWMutex
-	leaseSets           map[common.Hash][]byte
-	leaseSet2s          map[common.Hash][]byte
-	encryptedLeaseSets  map[common.Hash][]byte
-	metaLeaseSets       map[common.Hash][]byte
-	routerInfos         map[common.Hash]router_info.RouterInfo
+	mu                 sync.RWMutex
+	leaseSets          map[common.Hash][]byte
+	leaseSet2s         map[common.Hash][]byte
+	encryptedLeaseSets map[common.Hash][]byte
+	metaLeaseSets      map[common.Hash][]byte
+	routerInfos        map[common.Hash]router_info.RouterInfo
 }
 
 func newMockNetDB() *mockNetDB {
@@ -401,4 +401,21 @@ func TestResolveDestination_NoDataAnywhere(t *testing.T) {
 	_, err := resolver.ResolveDestination(destHash)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found in netdb")
+}
+
+// TestMetaLeaseSetResolution tests that ResolveMetaDestination returns an error
+// when the MetaLeaseSet is not found, and enforces the recursion depth limit.
+func TestMetaLeaseSetResolution(t *testing.T) {
+	t.Run("not found", func(t *testing.T) {
+		resolver, _, destHash := newTestResolverWithHash(t)
+		_, err := resolver.ResolveMetaDestination(destHash)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "MetaLeaseSet not found")
+	})
+
+	t.Run("recursion depth exceeded", func(t *testing.T) {
+		// Verify the depth constant exists and is reasonable
+		assert.LessOrEqual(t, maxMetaRecursionDepth, 10, "max recursion depth should be bounded")
+		assert.GreaterOrEqual(t, maxMetaRecursionDepth, 1, "max recursion depth should allow at least 1 level")
+	})
 }

@@ -353,6 +353,10 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
 }
 
+// maxMetaRecursionDepth limits how deep nested MetaLeaseSet resolution can go,
+// preventing infinite recursion from circular references.
+const maxMetaRecursionDepth = 3
+
 // ResolveMetaDestination resolves a destination that publishes a MetaLeaseSet (type 7).
 // A MetaLeaseSet is a directory of other LeaseSets; each entry references a
 // LeaseSet by its hash and includes a cost metric for load balancing.
@@ -367,10 +371,20 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 //   - publicKey: The X25519 public key from the best available component LeaseSet
 //   - error: Non-nil if no component LeaseSet can be resolved
 func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32]byte, error) {
+	return dr.resolveMetaDestinationWithDepth(destHash, 0)
+}
+
+// resolveMetaDestinationWithDepth is the depth-limited implementation of ResolveMetaDestination.
+func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.Hash, depth int) ([32]byte, error) {
+	if depth >= maxMetaRecursionDepth {
+		return [32]byte{}, fmt.Errorf("MetaLeaseSet recursion depth exceeded (%d)", maxMetaRecursionDepth)
+	}
+
 	log.WithFields(logger.Fields{
 		"at":               "DestinationResolver.ResolveMetaDestination",
 		"reason":           "meta_lookup_requested",
 		"destination_hash": fmt.Sprintf("%x...", destHash[:8]),
+		"depth":            depth,
 	}).Debug("resolving MetaLeaseSet destination")
 
 	// Step 1: Retrieve MetaLeaseSet from NetDB
@@ -407,7 +421,7 @@ func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32
 	// Step 3: Try each entry in cost order
 	for _, entry := range validEntries {
 		entryHash := entry.Hash()
-		key, err := dr.resolveMetaEntry(entryHash, entry.Type())
+		key, err := dr.resolveMetaEntryWithDepth(entryHash, entry.Type(), depth)
 		if err == nil {
 			return key, nil
 		}
@@ -422,9 +436,9 @@ func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32
 	return [32]byte{}, fmt.Errorf("no resolvable component LeaseSet found in MetaLeaseSet")
 }
 
-// resolveMetaEntry attempts to resolve a single MetaLeaseSet entry by its hash
+// resolveMetaEntryWithDepth attempts to resolve a single MetaLeaseSet entry by its hash
 // and type. Supports LeaseSet (1), LeaseSet2 (3), and recursive MetaLeaseSet (5).
-func (dr *DestinationResolver) resolveMetaEntry(entryHash [32]byte, entryType uint8) ([32]byte, error) {
+func (dr *DestinationResolver) resolveMetaEntryWithDepth(entryHash [32]byte, entryType uint8, depth int) ([32]byte, error) {
 	hash := common.Hash(entryHash)
 
 	switch entryType {
@@ -432,8 +446,8 @@ func (dr *DestinationResolver) resolveMetaEntry(entryHash [32]byte, entryType ui
 		return dr.extractKeyFromLeaseSet2Direct(hash)
 	case 1: // Classic LeaseSet
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 5: // Nested MetaLeaseSet (recursive, limited depth)
-		return dr.ResolveMetaDestination(hash)
+	case 5: // Nested MetaLeaseSet (recursive, depth-limited)
+		return dr.resolveMetaDestinationWithDepth(hash, depth+1)
 	default: // type 0 (unknown) — try LS2 then classic
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {
 			return key, nil
