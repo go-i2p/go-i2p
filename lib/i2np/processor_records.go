@@ -555,31 +555,70 @@ func (p *MessageProcessor) parseRecordsFromData(data []byte, recordCount, record
 	return records, nil
 }
 
-// tryParseAndAppendRecord attempts to parse a single record and appends it if successful.
-// Note: In a full implementation, we would:
-// 1. Check the first 16 bytes (toPeer) to see if this record is for us
-// 2. Decrypt the record if it's for us
-// 3. Parse the cleartext record
-// For now, attempt to read the record as cleartext (for testing).
-// In production, this would be the decrypted cleartext.
+// tryParseAndAppendRecord attempts to parse a single build request record.
+// For standard (VTB) 528-byte records it checks the first 16 bytes (toPeer)
+// against our router identity hash. If the record is destined for us and a
+// BuildRequestDecryptor + private key are configured, the record is decrypted
+// via ECIES-X25519-AEAD before parsing. Records not destined for us are still
+// appended so that processAllBuildRecords can forward them to other hops.
+// When no decryptor is configured the record is parsed as cleartext (testing mode).
 func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord, recordData []byte, index int, isShortBuild bool) {
 	if isShortBuild && len(recordData) >= ShortBuildRecordSize {
-		// STBM: 218-byte encrypted records (ECIES). The encrypted payload
-		// contains a 154-byte cleartext after decryption (keys are derived
-		// via HKDF, not transmitted). For testing, attempt to parse as cleartext.
-		record, err := ReadBuildRequestRecord(recordData)
-		if err != nil {
-			log.WithError(err).WithField("record_index", index).Warn("failed to parse STBM build request record (possible corruption)")
-		} else {
+		p.tryParseShortRecord(records, recordData, index)
+	} else if !isShortBuild && len(recordData) >= StandardBuildRecordSize {
+		p.tryParseStandardRecord(records, recordData, index)
+	}
+}
+
+// tryParseShortRecord handles STBM 218-byte encrypted records (ECIES).
+func (p *MessageProcessor) tryParseShortRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
+	record, err := ReadBuildRequestRecord(recordData)
+	if err != nil {
+		log.WithError(err).WithField("record_index", index).Warn("failed to parse STBM build request record")
+	} else {
+		*records = append(*records, record)
+	}
+}
+
+// tryParseStandardRecord handles VTB 528-byte records. It checks the toPeer
+// prefix, attempts ECIES decryption when a decryptor is available, and falls
+// back to cleartext parsing otherwise.
+func (p *MessageProcessor) tryParseStandardRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
+	if p.isRecordForUs(recordData) && p.buildRequestDecryptor != nil && len(p.ourPrivateKey) > 0 {
+		record, err := p.decryptStandardRecord(recordData, index)
+		if err == nil {
 			*records = append(*records, record)
+			return
 		}
-	} else if !isShortBuild && len(recordData) >= StandardBuildRecordCleartextLen {
-		// VTB: 528-byte encrypted records, parse as cleartext (222 bytes from the record)
-		record, err := ReadBuildRequestRecord(recordData)
-		if err != nil {
-			log.WithError(err).WithField("record_index", index).Warn("failed to parse VTB build request record (possible corruption)")
-		} else {
-			*records = append(*records, record)
+		log.WithError(err).WithField("record_index", index).Warn("ECIES decryption failed, falling back to cleartext parse")
+	}
+
+	record, err := ReadBuildRequestRecord(recordData)
+	if err != nil {
+		log.WithError(err).WithField("record_index", index).Warn("failed to parse VTB build request record")
+	} else {
+		*records = append(*records, record)
+	}
+}
+
+// isRecordForUs checks whether the first 16 bytes of the encrypted record
+// (the toPeer field) match the first 16 bytes of our router identity hash.
+func (p *MessageProcessor) isRecordForUs(recordData []byte) bool {
+	var zeroHash common.Hash
+	if p.ourRouterHash == zeroHash || len(recordData) < 16 {
+		return false
+	}
+	for i := 0; i < 16; i++ {
+		if recordData[i] != p.ourRouterHash[i] {
+			return false
 		}
 	}
+	return true
+}
+
+// decryptStandardRecord decrypts a 528-byte VTB record using ECIES-X25519-AEAD.
+func (p *MessageProcessor) decryptStandardRecord(recordData []byte, index int) (BuildRequestRecord, error) {
+	var encrypted [528]byte
+	copy(encrypted[:], recordData[:528])
+	return p.buildRequestDecryptor.DecryptRecord(encrypted, p.ourPrivateKey)
 }

@@ -154,6 +154,16 @@ type ReplyRecordEncryptor interface {
 	EncryptReplyRecord(record BuildResponseRecord, replyKey session_key.SessionKey, replyIV [16]byte) ([]byte, error)
 }
 
+// BuildRequestDecryptor decrypts inbound tunnel build request records.
+// When processing build requests from the network, encrypted records destined
+// for this router must be decrypted before parsing. This interface abstracts
+// the ECIES-X25519-AEAD decryption so that test mocks can be substituted.
+type BuildRequestDecryptor interface {
+	// DecryptRecord decrypts a 528-byte encrypted build request record
+	// using the router's static private key and returns the parsed record.
+	DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error)
+}
+
 // MessageProcessor demonstrates interface-based message processing
 type MessageProcessor struct {
 	mu                    sync.RWMutex
@@ -171,17 +181,21 @@ type MessageProcessor struct {
 	dataMessageHandler    DataMessageHandler        // Optional handler for Data message payloads
 	deliveryStatusHandler DeliveryStatusHandler     // Optional handler for delivery status confirmations
 	buildReplyProcessor   TunnelBuildReplyProcessor // Optional processor for tunnel build reply messages
+	buildRequestDecryptor BuildRequestDecryptor     // Optional decryptor for inbound build request records
 	ourRouterHash         common.Hash               // Our router identity hash for filtering build records
+	ourPrivateKey         []byte                    // Our router's static X25519 private key for build record decryption
 	garlicRecursionDepth  int32                     // Atomic counter for garlic nesting depth
 }
 
 // NewMessageProcessor creates a new message processor
 func NewMessageProcessor() *MessageProcessor {
 	log.WithField("at", "NewMessageProcessor").Debug("Creating new message processor")
+	crypto := NewBuildRecordCrypto()
 	return &MessageProcessor{
-		factory:             NewI2NPMessageFactory(),
-		expirationValidator: NewExpirationValidator(),
-		buildRecordCrypto:   NewBuildRecordCrypto(),
+		factory:               NewI2NPMessageFactory(),
+		expirationValidator:   NewExpirationValidator(),
+		buildRecordCrypto:     crypto,
+		buildRequestDecryptor: crypto,
 	}
 }
 
@@ -313,6 +327,26 @@ func (p *MessageProcessor) SetOurRouterHash(hash common.Hash) {
 	defer p.mu.Unlock()
 	log.WithField("at", "SetOurRouterHash").Debug("Setting our router hash for build record filtering")
 	p.ourRouterHash = hash
+}
+
+// SetBuildRequestDecryptor sets the decryptor used to decrypt inbound build request
+// records that are destined for this router. If not set, encrypted records will be
+// attempted as cleartext (testing mode only).
+func (p *MessageProcessor) SetBuildRequestDecryptor(dec BuildRequestDecryptor) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetBuildRequestDecryptor").Debug("Setting build request decryptor")
+	p.buildRequestDecryptor = dec
+}
+
+// SetOurPrivateKey sets the router's static X25519 private key used for
+// decrypting inbound build request records.
+func (p *MessageProcessor) SetOurPrivateKey(key []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	log.WithField("at", "SetOurPrivateKey").Debug("Setting our private key for build record decryption")
+	p.ourPrivateKey = make([]byte, len(key))
+	copy(p.ourPrivateKey, key)
 }
 
 // SetExpirationValidator sets a custom expiration validator for message processing.

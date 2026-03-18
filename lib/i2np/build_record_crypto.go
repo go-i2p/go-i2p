@@ -128,6 +128,13 @@ func EncryptBuildRequestRecord(record BuildRequestRecord, recipientRouterInfo ro
 	return crypto.EncryptBuildRequest(cleartext, pubKeyArr, identityHash)
 }
 
+// DecryptRecord decrypts an encrypted BuildRequestRecord using ECIES-X25519-AEAD.
+// This method satisfies the BuildRequestDecryptor interface, delegating to the
+// package-level DecryptBuildRequestRecord function.
+func (c *BuildRecordCrypto) DecryptRecord(encrypted [528]byte, privateKey []byte) (BuildRequestRecord, error) {
+	return DecryptBuildRequestRecord(encrypted, privateKey)
+}
+
 // DecryptBuildRequestRecord decrypts an encrypted BuildRequestRecord using ECIES-X25519-AEAD.
 //
 // This adapter delegates ECIES decryption to go-noise/ratchet, then parses

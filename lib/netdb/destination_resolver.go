@@ -223,8 +223,8 @@ func (dr *DestinationResolver) extractValidX25519Key(encKey lease_set2.Encryptio
 // Legacy LeaseSets use ElGamal encryption, which is incompatible with ECIES-X25519-AEAD.
 // This returns an error indicating the destination uses unsupported encryption.
 //
-// Note: In a full implementation, we would need to support ElGamal for backward compatibility,
-// but the current garlic encryption system only supports ECIES-X25519-AEAD.
+// Note: This router intentionally supports only ECIES-X25519-AEAD destinations.
+// ElGamal/AES+SessionTag is not and will not be implemented (see GAPS.md).
 func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSet) ([32]byte, error) {
 	dest := ls.Destination()
 
@@ -233,8 +233,8 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 		return dr.extractX25519KeyFromCertificate(dest)
 	}
 
-	// Legacy ElGamal key - not supported by current ECIES-X25519-AEAD implementation
-	return [32]byte{}, fmt.Errorf("elgamal encryption not supported by ecies-x25519-aead")
+	// Legacy ElGamal key — intentionally unsupported; this router only supports ECIES-X25519-AEAD
+	return [32]byte{}, fmt.Errorf("destination uses ElGamal encryption which is intentionally unsupported; this router only supports ECIES-X25519-AEAD destinations (see GAPS.md)")
 }
 
 // extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
