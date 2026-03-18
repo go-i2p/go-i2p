@@ -17,6 +17,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -143,9 +144,23 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		return nil, err
 	}
 
-	if err := setupNTCP2Transport(r, ri); err != nil {
+	ntcp2Transport, err := buildNTCP2Transport(r, ri)
+	if err != nil {
 		return nil, err
 	}
+
+	transports := []transport.Transport{ntcp2Transport}
+
+	if cfg.Transport != nil && cfg.Transport.SSU2Enabled {
+		ssu2Transport, err := buildSSU2Transport(r, ri)
+		if err != nil {
+			log.WithError(err).Warn("SSU2 transport setup failed; continuing without SSU2")
+		} else {
+			transports = append(transports, ssu2Transport)
+		}
+	}
+
+	r.TransportMuxer = transport.Mux(transports...)
 
 	return r, nil
 }
@@ -220,13 +235,13 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 	return ri, nil
 }
 
-// setupNTCP2Transport configures and initializes the NTCP2 transport layer
-func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
+// buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
+func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
 	// add NTCP2 transport
 	ntcp2Config, err := ntcp.NewConfig(":0") // Use port 0 for automatic assignment
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
-		return err
+		return nil, err
 	}
 
 	// Set working directory for persistent key storage
@@ -235,15 +250,14 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.RouterInfoKeystore)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 transport")
-		return err
+		return nil, err
 	}
 	log.Debug("NTCP2 transport created successfully")
 
-	r.TransportMuxer = transport.Mux(ntcp2Transport)
 	ntcpaddr := ntcp2Transport.Addr()
 	if ntcpaddr == nil {
 		log.Error("Failed to get NTCP2 address")
-		return errors.New("failed to get NTCP2 address")
+		return nil, errors.New("failed to get NTCP2 address")
 	}
 	log.Debug("NTCP2 address:", ntcpaddr)
 
@@ -251,7 +265,7 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 	routerAddress, err := ntcp.ConvertToRouterAddress(ntcp2Transport)
 	if err != nil {
 		log.WithError(err).Error("Failed to convert NTCP2 address to RouterAddress")
-		return fmt.Errorf("failed to convert NTCP2 address: %w", err)
+		return nil, fmt.Errorf("failed to convert NTCP2 address: %w", err)
 	}
 	ri.AddAddress(routerAddress)
 	log.WithFields(logger.Fields{
@@ -259,7 +273,50 @@ func setupNTCP2Transport(r *Router, ri *router_info.RouterInfo) error {
 		"cost": routerAddress.Cost(),
 	}).Info("NTCP2 address added to RouterInfo")
 
-	return nil
+	return ntcp2Transport, nil
+}
+
+// buildSSU2Transport creates the SSU2 transport, publishes its address to ri, and returns it.
+func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transport, error) {
+	port := 0 // default: automatic assignment
+	if r.cfg.Transport != nil && r.cfg.Transport.SSU2Port > 0 {
+		port = r.cfg.Transport.SSU2Port
+	}
+	addr := fmt.Sprintf(":%d", port)
+
+	ssu2Config, err := ssu2.NewConfig(addr)
+	if err != nil {
+		log.WithError(err).Error("Failed to create SSU2 config")
+		return nil, err
+	}
+	ssu2Config.WorkingDir = r.cfg.WorkingDir
+
+	ssu2Transport, err := ssu2.NewSSU2Transport(*ri, ssu2Config, r.RouterInfoKeystore)
+	if err != nil {
+		log.WithError(err).Error("Failed to create SSU2 transport")
+		return nil, err
+	}
+	log.Debug("SSU2 transport created successfully")
+
+	ssu2addr := ssu2Transport.Addr()
+	if ssu2addr == nil {
+		log.Error("Failed to get SSU2 address")
+		return nil, errors.New("failed to get SSU2 address")
+	}
+	log.Debug("SSU2 address:", ssu2addr)
+
+	routerAddress, err := ssu2.ConvertToRouterAddress(ssu2Transport)
+	if err != nil {
+		log.WithError(err).Error("Failed to convert SSU2 address to RouterAddress")
+		return nil, fmt.Errorf("failed to convert SSU2 address: %w", err)
+	}
+	ri.AddAddress(routerAddress)
+	log.WithFields(logger.Fields{
+		"host": ssu2addr.String(),
+		"cost": routerAddress.Cost(),
+	}).Info("SSU2 address added to RouterInfo")
+
+	return ssu2Transport, nil
 }
 
 // getTotalBandwidth returns the total bytes sent and received from all transports.
@@ -275,9 +332,13 @@ func (r *Router) getTotalBandwidth() (sent, received uint64) {
 
 	// Get all transports from the muxer
 	for _, t := range muxer.GetTransports() {
-		// Check if this is an NTCP2 transport
-		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			s, rcv := ntcp2Transport.GetTotalBandwidth()
+		switch tr := t.(type) {
+		case *ntcp.NTCP2Transport:
+			s, rcv := tr.GetTotalBandwidth()
+			sent += s
+			received += rcv
+		case *ssu2.SSU2Transport:
+			s, rcv := tr.GetTotalBandwidth()
 			sent += s
 			received += rcv
 		}

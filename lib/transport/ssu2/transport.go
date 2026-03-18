@@ -417,6 +417,19 @@ func (t *SSU2Transport) GetSessionCount() int {
 	return int(atomic.LoadInt32(&t.sessionCount))
 }
 
+// GetTotalBandwidth returns the total bytes sent and received across all active sessions.
+func (t *SSU2Transport) GetTotalBandwidth() (totalBytesSent, totalBytesReceived uint64) {
+	t.sessions.Range(func(_, value interface{}) bool {
+		if session, ok := value.(*SSU2Session); ok {
+			sent, received := session.GetBandwidthStats()
+			totalBytesSent += sent
+			totalBytesReceived += received
+		}
+		return true
+	})
+	return totalBytesSent, totalBytesReceived
+}
+
 func (t *SSU2Transport) checkSessionLimit() error {
 	maxSessions := t.config.GetMaxSessions()
 	for {
