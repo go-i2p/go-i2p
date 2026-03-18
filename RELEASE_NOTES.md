@@ -1,3 +1,15 @@
+Release notes for: `go-i2p` Version `0.1.5`
+==========================================
+
+This release is only recommended for developers at this time.
+The first general-use release will be version `0.2.0`
+
+This release resolves issues across the entire codebase.
+Bugs in the tunnel system were especially widespread and have been the focus of resolution.
+The code has been extensively refactored to enforce the intended scope of all packages.
+Ratchet has been factored out of go-i2p and moved to go-noise.
+Preliminary support for SSU2 is now available.
+
 Release notes for: `go-i2p` Version `0.1.4`
 ==========================================
 
