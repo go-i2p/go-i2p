@@ -1,0 +1,106 @@
+package ssu2
+
+import (
+	"math"
+	"sync"
+	"time"
+
+	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+)
+
+// SSU2Handler defines callback hooks for injecting I2P-specific behaviour
+// into the SSU2 transport layer. The go-noise/ssu2 library handles the
+// low-level Noise protocol mechanics; this interface allows the router
+// transport to add higher-level concerns: replay detection, timestamp
+// validation, and termination.
+type SSU2Handler interface {
+	// CheckReplay checks whether an ephemeral key has been seen before.
+	// Returns true if the key is a replay and the connection should be rejected.
+	CheckReplay(ephemeralKey [32]byte) bool
+
+	// ValidateTimestamp checks whether a peer's timestamp is within the
+	// allowed clock skew tolerance. Returns a non-nil error if the skew
+	// exceeds the tolerance.
+	ValidateTimestamp(peerTime uint32) error
+
+	// SendTermination sends a termination block through the SSU2 connection.
+	SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error
+}
+
+// DefaultHandler implements SSU2Handler with replay detection and clock skew
+// validation suitable for production use.
+type DefaultHandler struct {
+	mu      sync.Mutex
+	seen    map[[32]byte]time.Time
+	maxSkew time.Duration
+}
+
+// NewDefaultHandler creates a new DefaultHandler with ±60 second clock skew tolerance.
+func NewDefaultHandler() *DefaultHandler {
+	return &DefaultHandler{
+		seen:    make(map[[32]byte]time.Time),
+		maxSkew: 60 * time.Second,
+	}
+}
+
+// CheckReplay checks whether an ephemeral key has been seen before.
+// Returns true if the key is a duplicate (replay attack).
+func (h *DefaultHandler) CheckReplay(ephemeralKey [32]byte) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, exists := h.seen[ephemeralKey]; exists {
+		return true
+	}
+
+	h.seen[ephemeralKey] = time.Now()
+	return false
+}
+
+// ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds
+// of the local clock.
+func (h *DefaultHandler) ValidateTimestamp(peerTime uint32) error {
+	now := uint32(time.Now().Unix())
+	var diff uint32
+	if now > peerTime {
+		diff = now - peerTime
+	} else {
+		diff = peerTime - now
+	}
+	if diff > uint32(math.Round(h.maxSkew.Seconds())) {
+		return WrapSSU2Error(
+			ErrHandshakeFailed,
+			"clock skew too large",
+		)
+	}
+	return nil
+}
+
+// SendTermination sends a termination block through the SSU2 connection.
+func (h *DefaultHandler) SendTermination(conn *ssu2noise.SSU2Conn, reason byte) error {
+	block := buildTerminationBlock(reason)
+	_, err := conn.Write(block)
+	return err
+}
+
+// buildTerminationBlock constructs a termination block payload for SSU2.
+// Block type 6, 9 bytes of data per SSU2 spec.
+func buildTerminationBlock(reason byte) []byte {
+	// Block format: type (1) + length (2) + data (9)
+	// Data: seconds connected (4) + padding (4) + reason (1)
+	block := make([]byte, 12)
+	block[0] = 6 // BlockTypeTermination
+	block[1] = 0
+	block[2] = 9 // 9 bytes data
+	// Seconds connected (4 bytes) - zeroed for immediate termination
+	// Padding (4 bytes) - zeroed
+	block[11] = reason
+	return block
+}
+
+// Close releases resources held by the handler.
+func (h *DefaultHandler) Close() {
+	h.mu.Lock()
+	h.seen = make(map[[32]byte]time.Time)
+	h.mu.Unlock()
+}

@@ -1,0 +1,449 @@
+package ssu2
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"sync"
+	"sync/atomic"
+
+	"github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/go-i2p/lib/transport"
+	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/go-i2p/logger"
+)
+
+// SSU2Transport implements transport.Transport for SSU2 connections.
+type SSU2Transport struct {
+	listener *ssu2noise.SSU2Listener
+	config   *Config
+	identity router_info.RouterInfo
+	keystore KeystoreProvider
+	handler  *DefaultHandler
+
+	sessions     sync.Map
+	sessionCount int32
+
+	identityMu sync.RWMutex
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
+	logger *logger.Entry
+}
+
+// KeystoreProvider provides access to the router's encryption private key.
+type KeystoreProvider interface {
+	GetEncryptionPrivateKey() types.PrivateEncryptionKey
+}
+
+// NewSSU2Transport creates a new SSU2 transport instance.
+func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore KeystoreProvider) (*SSU2Transport, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	l := logger.WithField("component", "ssu2")
+
+	identHash, err := identity.IdentHash()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+	}
+	identHashBytes := identHash.Bytes()
+	l.WithFields(map[string]interface{}{
+		"router_hash":      fmt.Sprintf("%x", identHashBytes[:8]),
+		"listener_address": config.ListenerAddress,
+	}).Info("Initializing SSU2 transport")
+
+	ssu2Config, err := createSSU2Config(identity)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	if err := initializeCryptoKeys(ssu2Config, keystore); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	config.SSU2Config = ssu2Config
+
+	t := &SSU2Transport{
+		config:   config,
+		identity: identity,
+		keystore: keystore,
+		handler:  NewDefaultHandler(),
+		ctx:      ctx,
+		cancel:   cancel,
+		logger:   l,
+	}
+
+	if err := setupUDPListener(t, config, ssu2Config); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	l.WithField("address", t.Addr().String()).Info("SSU2 transport initialized")
+	return t, nil
+}
+
+// createSSU2Config creates an SSU2Config from the router identity.
+func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, error) {
+	identHash, err := identity.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
+	}
+	identityBytes := identHash.Bytes()
+	cfg, err := ssu2noise.NewSSU2Config(identityBytes[:], false)
+	if err != nil {
+		return nil, WrapSSU2Error(err, "creating SSU2 config")
+	}
+	return cfg, nil
+}
+
+// initializeCryptoKeys loads the X25519 static key from the keystore.
+func initializeCryptoKeys(cfg *ssu2noise.SSU2Config, keystore KeystoreProvider) error {
+	if len(cfg.StaticKey) != 0 {
+		return nil
+	}
+	encryptionPrivKey := keystore.GetEncryptionPrivateKey()
+	if encryptionPrivKey == nil {
+		return WrapSSU2Error(fmt.Errorf("encryption private key is nil"), "retrieving encryption key")
+	}
+	cfg.StaticKey = encryptionPrivKey.Bytes()
+	if len(cfg.StaticKey) != 32 {
+		return WrapSSU2Error(
+			fmt.Errorf("invalid static key size: expected 32 bytes, got %d", len(cfg.StaticKey)),
+			"loading static key",
+		)
+	}
+	return nil
+}
+
+// setupUDPListener creates the UDP listener and wraps it with SSU2.
+func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SSU2Config) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", config.ListenerAddress)
+	if err != nil {
+		return fmt.Errorf("failed to resolve UDP address: %w", err)
+	}
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return fmt.Errorf("failed to create UDP listener: %w", err)
+	}
+
+	listener, err := ssu2noise.NewSSU2Listener(udpConn, ssu2Config)
+	if err != nil {
+		udpConn.Close()
+		return WrapSSU2Error(err, "creating SSU2 listener")
+	}
+
+	if err := listener.Start(); err != nil {
+		udpConn.Close()
+		return WrapSSU2Error(err, "starting SSU2 listener")
+	}
+
+	t.listener = listener
+	return nil
+}
+
+// Accept accepts an incoming SSU2 connection.
+func (t *SSU2Transport) Accept() (net.Conn, error) {
+	if t.listener == nil {
+		return nil, ErrSessionClosed
+	}
+
+	if err := t.checkSessionLimit(); err != nil {
+		return nil, err
+	}
+
+	conn, err := t.listener.Accept()
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, err
+	}
+
+	return t.trackInboundConnection(conn), nil
+}
+
+func (t *SSU2Transport) trackInboundConnection(conn net.Conn) net.Conn {
+	peerHash := t.extractPeerHash(conn)
+	if _, loaded := t.sessions.LoadOrStore(peerHash, conn); loaded {
+		t.unreserveSessionSlot()
+	}
+	return &trackedConn{
+		Conn: conn,
+		onClose: func() {
+			t.removeSession(peerHash)
+		},
+	}
+}
+
+func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
+	var peerHash data.Hash
+	if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
+		hashBytes := ssu2Addr.RouterHash()
+		if len(hashBytes) == 32 {
+			copy(peerHash[:], hashBytes)
+			var zeroHash data.Hash
+			if peerHash != zeroHash {
+				return peerHash
+			}
+		}
+	}
+	addrStr := conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(addrStr); err == nil {
+		addrStr = host
+	}
+	copy(peerHash[:], []byte(addrStr))
+	if len([]byte(addrStr)) < 32 {
+		peerHash[31] = 0xFE // marker for address-derived SSU2 hash
+	}
+	return peerHash
+}
+
+// trackedConn wraps a net.Conn to execute a cleanup function when closed.
+type trackedConn struct {
+	net.Conn
+	onClose   func()
+	closeOnce sync.Once
+}
+
+func (tc *trackedConn) Close() error {
+	err := tc.Conn.Close()
+	tc.closeOnce.Do(tc.onClose)
+	return err
+}
+
+// Addr returns the network address the transport is bound to.
+func (t *SSU2Transport) Addr() net.Addr {
+	t.identityMu.RLock()
+	l := t.listener
+	t.identityMu.RUnlock()
+	if l == nil {
+		return nil
+	}
+	return l.Addr()
+}
+
+// SetIdentity sets the router identity for this transport.
+func (t *SSU2Transport) SetIdentity(ident router_info.RouterInfo) error {
+	identHash, err := ident.IdentHash()
+	if err != nil {
+		return fmt.Errorf("failed to get router identity hash: %w", err)
+	}
+	identHashBytes := identHash.Bytes()
+	t.logger.WithField("router_hash", fmt.Sprintf("%x", identHashBytes[:8])).Info("Updating SSU2 transport identity")
+
+	ssu2Config, err := createSSU2Config(ident)
+	if err != nil {
+		return WrapSSU2Error(err, "updating identity")
+	}
+
+	if err := initializeCryptoKeys(ssu2Config, t.keystore); err != nil {
+		return fmt.Errorf("failed to reinitialize crypto keys: %w", err)
+	}
+
+	t.identityMu.Lock()
+	t.identity = ident
+	t.config.SSU2Config = ssu2Config
+	t.identityMu.Unlock()
+
+	return nil
+}
+
+// GetSession obtains a transport session with a router given its RouterInfo.
+func (t *SSU2Transport) GetSession(routerInfo router_info.RouterInfo) (transport.TransportSession, error) {
+	routerHash, err := routerInfo.IdentHash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get router hash: %w", err)
+	}
+
+	if session, found := t.findExistingSession(routerHash); found {
+		return session, nil
+	}
+
+	return t.createOutboundSession(routerInfo, routerHash)
+}
+
+func (t *SSU2Transport) findExistingSession(routerHash data.Hash) (transport.TransportSession, bool) {
+	existing, exists := t.sessions.Load(routerHash)
+	if !exists {
+		return nil, false
+	}
+	if session, ok := existing.(*SSU2Session); ok {
+		if session.ctx.Err() != nil {
+			if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
+				atomic.AddInt32(&t.sessionCount, -1)
+			}
+			return nil, false
+		}
+		return session, true
+	}
+	if conn, ok := existing.(net.Conn); ok {
+		return t.promoteInboundConnection(conn, existing, routerHash)
+	}
+	return nil, false
+}
+
+func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interface{}, routerHash data.Hash) (transport.TransportSession, bool) {
+	ssu2Conn, ok := conn.(*ssu2noise.SSU2Conn)
+	if !ok {
+		return nil, false
+	}
+	promoted := NewSSU2Session(ssu2Conn, t.ctx, t.logger)
+	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
+		promoted.SetCleanupCallback(func() {
+			t.removeSession(routerHash)
+		})
+		return promoted, true
+	}
+	promoted.Close()
+	if winner, exists := t.sessions.Load(routerHash); exists {
+		if winnerSession, ok := winner.(*SSU2Session); ok {
+			return winnerSession, true
+		}
+	}
+	return nil, false
+}
+
+func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo, routerHash data.Hash) (transport.TransportSession, error) {
+	if err := t.checkSessionLimit(); err != nil {
+		return nil, err
+	}
+
+	ssu2Addr, err := ExtractSSU2Addr(routerInfo)
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, WrapSSU2Error(err, "extracting SSU2 address")
+	}
+
+	remoteUDPAddr, err := net.ResolveUDPAddr("udp", ssu2Addr.String())
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, WrapSSU2Error(err, "resolving remote UDP address")
+	}
+
+	t.identityMu.RLock()
+	identHash, err := t.identity.IdentHash()
+	t.identityMu.RUnlock()
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
+	}
+
+	identityBytes := identHash.Bytes()
+	dialConfig, err := ssu2noise.NewSSU2Config(identityBytes[:], true)
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, WrapSSU2Error(err, "creating dial config")
+	}
+
+	if err := initializeCryptoKeys(dialConfig, t.keystore); err != nil {
+		t.unreserveSessionSlot()
+		return nil, err
+	}
+
+	remoteHash, err := routerInfo.IdentHash()
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
+	}
+	remoteHashBytes := remoteHash.Bytes()
+	dialConfig = dialConfig.WithRemoteRouterHash(remoteHashBytes[:])
+
+	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
+	if err != nil {
+		t.unreserveSessionSlot()
+		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
+	}
+
+	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
+	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
+	if loaded {
+		session.Close()
+		t.unreserveSessionSlot()
+		if existingSession, ok := existing.(*SSU2Session); ok {
+			return existingSession, nil
+		}
+		return nil, fmt.Errorf("unexpected session map entry type")
+	}
+
+	session.StartWorkers()
+	session.SetCleanupCallback(func() {
+		t.removeSession(routerHash)
+	})
+	return session, nil
+}
+
+// Compatible returns true if the RouterInfo has an SSU2 transport address.
+func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
+	return HasDialableSSU2Address(&routerInfo)
+}
+
+// Close closes the transport cleanly.
+func (t *SSU2Transport) Close() error {
+	t.logger.Info("Closing SSU2 transport")
+	t.cancel()
+
+	var listenerErr error
+	if t.listener != nil {
+		listenerErr = t.listener.Close()
+	}
+
+	t.sessions.Range(func(key, value interface{}) bool {
+		if session, ok := value.(*SSU2Session); ok {
+			session.Close()
+		} else if conn, ok := value.(net.Conn); ok {
+			conn.Close()
+		}
+		return true
+	})
+
+	t.wg.Wait()
+	t.handler.Close()
+
+	t.logger.Info("SSU2 transport closed")
+	return listenerErr
+}
+
+// Name returns the name of this transport.
+func (t *SSU2Transport) Name() string {
+	return "SSU2"
+}
+
+// GetSessionCount returns the number of active sessions.
+func (t *SSU2Transport) GetSessionCount() int {
+	return int(atomic.LoadInt32(&t.sessionCount))
+}
+
+func (t *SSU2Transport) checkSessionLimit() error {
+	maxSessions := t.config.GetMaxSessions()
+	for {
+		current := atomic.LoadInt32(&t.sessionCount)
+		if int(current) >= maxSessions {
+			return ErrConnectionPoolFull
+		}
+		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current+1) {
+			return nil
+		}
+	}
+}
+
+func (t *SSU2Transport) unreserveSessionSlot() {
+	for {
+		current := atomic.LoadInt32(&t.sessionCount)
+		if current <= 0 {
+			return
+		}
+		if atomic.CompareAndSwapInt32(&t.sessionCount, current, current-1) {
+			return
+		}
+	}
+}
+
+func (t *SSU2Transport) removeSession(routerHash data.Hash) {
+	if _, loaded := t.sessions.LoadAndDelete(routerHash); loaded {
+		atomic.AddInt32(&t.sessionCount, -1)
+	}
+}

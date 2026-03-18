@@ -1,24 +1,22 @@
-// Package ssu2 will implement the SSU2 (Secure Semireliable UDP 2) transport
+// Package ssu2 implements the SSU2 (Secure Semireliable UDP 2) transport
 // protocol for I2P router-to-router communication.
 //
-// # Status: NOT IMPLEMENTED
+// SSU2 is a UDP-based transport that uses the Noise protocol framework (XK pattern)
+// for authenticated key agreement, providing forward secrecy, identity hiding,
+// and NAT traversal capabilities.
 //
-// This package is a placeholder. SSU2 transport is planned for future development
-// after the current focus on application layer protocols (Streaming, Datagrams, SAM v3.3).
+// This package wraps the go-noise/ssu2 library (which provides the Noise state
+// machine and UDP protocol primitives) behind the transport.Transport and
+// transport.TransportSession interfaces used by the go-i2p router.
 //
-// Until SSU2 is implemented, all go-i2p routers are NTCP2-only, which means:
-//   - Connections require TCP connectivity
-//   - NAT traversal via introducers is not available
-//   - Routers may be unreachable by peers that only support SSU2
+// # Features
 //
-// # Planned Features
-//
-// When implemented, SSU2 will provide:
 //   - UDP-based transport with lower latency than NTCP2
 //   - Session handshake using Noise XK pattern
 //   - Peer testing for NAT detection
 //   - Introducer support for NAT traversal
 //   - Connection migration for roaming clients
+//   - Congestion control and reliable delivery
 //
 // # I2P Specification
 //
@@ -27,20 +25,9 @@
 //
 // # Configuration
 //
-// The router configuration supports SSU2 settings (for future use):
+// The router configuration supports SSU2 settings:
 //
 //	transport:
-//	  ssu2_enabled: false  // Will be true when implemented
-//	  ssu2_port: 0         // Random port when 0
-//
-// # Implementation Notes
-//
-// SSU2 implementation will require:
-//   - Noise protocol integration (similar to NTCP2)
-//   - UDP socket management
-//   - Packet reassembly and congestion control
-//   - Session state machine
-//   - Introducer protocol
-//
-// See lib/transport/ntcp2 for the existing TCP transport implementation.
+//	  ssu2_enabled: true
+//	  ssu2_port: 9002  // Random port when 0
 package ssu2
