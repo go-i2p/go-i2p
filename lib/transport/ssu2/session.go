@@ -88,7 +88,7 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 	sessionLogger.Info("Creating new SSU2 session")
 
 	rtt := ssu2noise.NewRTTEstimator()
-	return &SSU2Session{
+	s := &SSU2Session{
 		conn:           conn,
 		sendQueue:      make(chan i2np.I2NPMessage, 256),
 		recvChan:       make(chan i2np.I2NPMessage, 256),
@@ -100,6 +100,36 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 		cancel:         cancel,
 		logger:         sessionLogger,
 	}
+	s.wireDataHandlerCallbacks()
+	return s
+}
+
+// wireDataHandlerCallbacks wires protocol-level callbacks from the go-noise
+// DataHandler into the SSU2Session. Called once during session construction,
+// before StartWorkers(), so callbacks are active from the first data packet.
+func (s *SSU2Session) wireDataHandlerCallbacks() {
+	s.conn.SetDataHandlerCallbacks(ssu2noise.DataHandlerCallbacks{
+		// OnTermination: peer gracefully closed the session; cancel our context.
+		OnTermination: func(reason uint8, _ []byte) {
+			s.logger.WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
+			s.cancel()
+		},
+		// OnDateTime: validate the peer's stated clock; large skews are a
+		// sign of misconfiguration or a replay attack.
+		OnDateTime: func(timestamp uint32) error {
+			now := time.Now().Unix()
+			delta := int64(timestamp) - now
+			if delta < 0 {
+				delta = -delta
+			}
+			if delta > 60 {
+				s.logger.WithField("skew_seconds", delta).Warn("SSU2 clock skew out of tolerance, closing session")
+				s.cancel()
+				return fmt.Errorf("clock skew %ds exceeds 60s tolerance", delta)
+			}
+			return nil
+		},
+	})
 }
 
 // StartWorkers launches the background send and receive goroutines.
