@@ -264,10 +264,15 @@ func (s *SSU2Session) sendWorker() {
 	}
 }
 
-// sendWithCongestionControl serializes msg, waits for congestion-window room,
-// then writes the bytes to the conn and records the pending delivery.
+// sendWithCongestionControl fragments msg into MTU-sized SSU2 blocks, waits
+// for congestion-window room, then writes the blocks to the conn.
 func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 	data, err := msg.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	blocks, err := FragmentI2NPMessage(msg, maxSSU2PayloadIPv4)
 	if err != nil {
 		return err
 	}
@@ -281,12 +286,12 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 	}
 
 	seq := s.trackPending(data)
-	n, err := s.conn.Write(data)
-	if err != nil {
+	if err := s.conn.WriteBlocks(blocks); err != nil {
 		s.removePending(seq)
 		s.congestionCtrl.OnPacketLoss()
 		return err
 	}
+	n := len(data)
 	atomic.StoreInt64(&s.lastSendNano, time.Now().UnixNano())
 	atomic.AddUint64(&s.bytesSent, uint64(n))
 	s.congestionCtrl.OnPacketSent(n)
