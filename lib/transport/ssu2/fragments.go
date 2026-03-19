@@ -8,13 +8,13 @@ import (
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
-// maxSSU2PayloadIPv4 is the maximum payload per SSU2 packet for IPv4.
-// 1472 (max packet) - 16 (short header) - 16 (MAC) = 1440 bytes available.
-const maxSSU2PayloadIPv4 = 1440
+// maxSSU2PayloadIPv4 is the maximum plaintext payload per SSU2 packet for IPv4.
+// 1472 (max wire) - 16 (short header) - 16 (MAC placeholder) - 16 (AEAD tag) = 1424 bytes.
+const maxSSU2PayloadIPv4 = 1424
 
-// maxSSU2PayloadIPv6 is the maximum payload per SSU2 packet for IPv6.
-// 1452 (max packet) - 16 (short header) - 16 (MAC) = 1420 bytes available.
-const maxSSU2PayloadIPv6 = 1420
+// maxSSU2PayloadIPv6 is the maximum plaintext payload per SSU2 packet for IPv6.
+// 1452 (max wire) - 16 (short header) - 16 (MAC placeholder) - 16 (AEAD tag) = 1404 bytes.
+const maxSSU2PayloadIPv6 = 1404
 
 // fragmentHeaderSize is the overhead per fragment block header.
 // TLV header (3 bytes) + MessageID (4 bytes) = 7 bytes minimum.
