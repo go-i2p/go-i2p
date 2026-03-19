@@ -397,9 +397,13 @@ func (s *SSU2Session) discardRemainingMessages() {
 // ssu2ReadDeadline is the maximum time to wait for a message before checking session state.
 const ssu2ReadDeadline = 5 * time.Minute
 
+// maxI2NPMessageSize is the maximum reassembled I2NP message size (I2NP spec
+// uses a 16-bit length field, ceiling is 65535 bytes).
+const maxI2NPMessageSize = 65536
+
 func (s *SSU2Session) receiveWorker() {
 	defer s.wg.Done()
-	buf := make([]byte, 1500)
+	buf := make([]byte, maxI2NPMessageSize)
 
 	for {
 		select {
