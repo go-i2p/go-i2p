@@ -2,30 +2,25 @@
 --
     import "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 
-Package ssu2 will implement the SSU2 (Secure Semireliable UDP 2) transport
-protocol for I2P router-to-router communication.
+Package ssu2 implements the SSU2 (Secure Semireliable UDP 2) transport protocol
+for I2P router-to-router communication.
 
-# Status: NOT IMPLEMENTED
+# Status: IMPLEMENTED
 
-This package is a placeholder. SSU2 transport is planned for future development
-after the current focus on application layer protocols (Streaming, Datagrams,
-SAM v3.3).
+This package wraps the `go-noise/ssu2` library behind the `transport.Transport`
+and `transport.TransportSession` interfaces used by the go-i2p router.
 
-Until SSU2 is implemented, all go-i2p routers are NTCP2-only, which means:
-
-    - Connections require TCP connectivity
-    - NAT traversal via introducers is not available
-    - Routers may be unreachable by peers that only support SSU2
-
-# Planned Features
-
-When implemented, SSU2 will provide:
+# Features
 
     - UDP-based transport with lower latency than NTCP2
     - Session handshake using Noise XK pattern
+    - Congestion control (slow-start, congestion-avoidance, fast-recovery)
+    - Retransmission with exponential backoff (configurable max attempts)
+    - RTT estimation (smoothed RTT + RTTVAR)
     - Peer testing for NAT detection
     - Introducer support for NAT traversal
     - Connection migration for roaming clients
+    - Block callback integration for all 20 SSU2 block types
 
 # I2P Specification
 
@@ -33,22 +28,29 @@ SSU2 is defined in the I2P specification at: https://geti2p.net/spec/ssu2
 
 # Configuration
 
-The router configuration supports SSU2 settings (for future use):
-
     transport:
-      ssu2_enabled: false  // Will be true when implemented
-      ssu2_port: 0         // Random port when 0
+      ssu2_enabled: true
+      ssu2_port: 9002   # 0 = random port assigned by OS
 
-# Implementation Notes
+Advanced options (set programmatically via ssu2.Config):
 
-SSU2 implementation will require:
+    config.KeepaliveInterval  = 15 * time.Second  // SSU2.md default
+    config.MaxRetransmissions = 3                 // attempts before teardown
+    config.MaxSessions        = 512               // concurrent session limit
 
-    - Noise protocol integration (similar to NTCP2)
-    - UDP socket management
-    - Packet reassembly and congestion control
-    - Session state machine
-    - Introducer protocol
+# Usage
 
-See lib/transport/ntcp2 for the existing TCP transport implementation.
+    cfg, _ := ssu2.NewConfig(":9002")
+    t, _ := ssu2.NewSSU2Transport(routerInfo, cfg, keystore)
+    defer t.Close()
+
+    // Outbound
+    session, _ := t.GetSession(peerRouterInfo)
+    session.QueueSendI2NP(msg)
+
+    // Inbound
+    conn, _ := t.Accept()
+
+See lib/transport/ntcp2 for the analogous TCP transport implementation.
 
 ## Usage

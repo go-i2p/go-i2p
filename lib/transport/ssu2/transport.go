@@ -292,6 +292,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 		return nil, false
 	}
 	promoted := NewSSU2Session(ssu2Conn, t.ctx, t.logger)
+	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
@@ -359,6 +360,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 	}
 
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
+	session.maxRetransmit = t.config.GetMaxRetransmissions()
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
 		session.Close()

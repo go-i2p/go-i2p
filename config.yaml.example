@@ -196,9 +196,9 @@ transport:
   ntcp2_port: 0  # 0 = random port assigned by OS
   ntcp2_max_connections: 200
   
-  # SSU2 transport settings (not yet implemented)
-  ssu2_enabled: false
-  ssu2_port: 0
+  # SSU2 transport settings
+  ssu2_enabled: true
+  ssu2_port: 0  # 0 = random port assigned by OS
   
   # Connection parameters
   connection_timeout: 30s
