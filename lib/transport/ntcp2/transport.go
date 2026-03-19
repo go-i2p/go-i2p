@@ -828,10 +828,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
 	remoteHashBytes := remoteHash.Bytes()
-	config, err = config.WithRemoteRouterHash(remoteHashBytes[:])
-	if err != nil {
-		return nil, fmt.Errorf("invalid remote router hash: %w", err)
-	}
+	config = config.WithRemoteRouterHash(remoteHashBytes[:])
 
 	// Extract and set the peer's static key and IV from their RouterInfo.
 	// Required by the Noise XK pattern: the initiator must know the

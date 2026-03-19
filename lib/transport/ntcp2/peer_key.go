@@ -94,10 +94,7 @@ func ConfigureDialConfig(config *ntcp2.NTCP2Config, peerInfo router_info.RouterI
 		return fmt.Errorf("failed to extract peer static key for XK handshake: %w", err)
 	}
 
-	config, err = config.WithStaticKey(staticKey)
-	if err != nil {
-		return fmt.Errorf("failed to set peer static key: %w", err)
-	}
+	config = config.WithStaticKey(staticKey)
 
 	log.WithFields(map[string]interface{}{
 		"static_key_len": len(staticKey),
