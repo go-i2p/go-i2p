@@ -571,13 +571,30 @@ func (p *MessageProcessor) tryParseAndAppendRecord(records *[]BuildRequestRecord
 }
 
 // tryParseShortRecord handles STBM 218-byte encrypted records (ECIES).
+// When an identity and decryptor are configured it attempts ECIES decryption;
+// otherwise it falls back to cleartext parsing (test/introspection mode).
 func (p *MessageProcessor) tryParseShortRecord(records *[]BuildRequestRecord, recordData []byte, index int) {
+	if p.isRecordForUs(recordData) && p.buildRequestDecryptor != nil && len(p.ourPrivateKey) > 0 {
+		record, err := p.decryptShortRecord(recordData, index)
+		if err == nil {
+			*records = append(*records, record)
+			return
+		}
+		log.WithError(err).WithField("record_index", index).Warn("STBM ECIES decryption failed, falling back to cleartext parse")
+	}
 	record, err := ReadBuildRequestRecord(recordData)
 	if err != nil {
 		log.WithError(err).WithField("record_index", index).Warn("failed to parse STBM build request record")
 	} else {
 		*records = append(*records, record)
 	}
+}
+
+// decryptShortRecord decrypts a 218-byte STBM record using ECIES-X25519-AEAD.
+func (p *MessageProcessor) decryptShortRecord(recordData []byte, index int) (BuildRequestRecord, error) {
+	var encrypted [218]byte
+	copy(encrypted[:], recordData[:218])
+	return DecryptShortBuildRequestRecord(encrypted, p.ourPrivateKey)
 }
 
 // tryParseStandardRecord handles VTB 528-byte records. It checks the toPeer

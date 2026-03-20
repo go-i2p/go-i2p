@@ -711,6 +711,21 @@ func (r *Router) initializeMessageRouter() {
 		log.Debug("InboundMessageHandler wired as TunnelData handler on message processor")
 	}
 
+	// Wire our router identity, build-record decryptor, and X25519 private key so that
+	// the MessageProcessor can recognise and decrypt inbound tunnel build records.
+	// Without this, isRecordForUs always returns false and all decryption paths are dead.
+	routerHash, err := r.getOurRouterHash()
+	if err != nil {
+		log.WithError(err).Error("Failed to get router hash for build record identity — transit tunnel building will be degraded")
+	} else {
+		privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+		buildCrypto := i2np.NewBuildRecordCrypto()
+		r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
+		r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
+		r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
+		log.Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
+	}
+
 	log.Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, and garlic forwarding")
 }
 

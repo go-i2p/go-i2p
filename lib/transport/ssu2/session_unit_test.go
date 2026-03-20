@@ -229,9 +229,10 @@ func TestQueueSendI2NP_ToOpenQueue(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestQueueSendI2NP_ClosedSession verifies that queuing a message on a session
-// whose context is cancelled returns an error. The queue is filled to capacity
-// first so the sendQueue <- case is always blocked, leaving only ctx.Done().
+// TestQueueSendI2NP_ClosedSession verifies that queuing a message on a closed
+// session returns an error. The session is fully shut down (workers stopped,
+// queue drained) before the test fills the buffer and queues the final message,
+// eliminating the race between the drain-on-cancel worker and the fill loop.
 func TestQueueSendI2NP_ClosedSession(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping loopback test in short mode")
@@ -240,10 +241,12 @@ func TestQueueSendI2NP_ClosedSession(t *testing.T) {
 	defer client.Close()
 	defer cancel()
 
-	// Cancel the session context directly (same package access).
-	server.cancel()
+	// Close the session fully: cancels the context and waits for all workers
+	// to exit (drainSendQueue + wg.Wait inside Close).  This guarantees no
+	// concurrent goroutine is draining the queue when the test fills it below.
+	server.Close()
 
-	// Fill the 256-slot send queue so the send case is blocked.
+	// Fill the 256-slot send queue so the sendQueue<-msg case is always blocked.
 	fill := newTestI2NPMessage([]byte("fill"))
 	for i := 0; i < 256; i++ {
 		server.sendQueue <- fill

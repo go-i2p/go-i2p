@@ -6,6 +6,7 @@ import (
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-noise/ratchet"
 	"github.com/samber/oops"
@@ -158,6 +159,42 @@ func DecryptBuildRequestRecord(encrypted [528]byte, privateKey []byte) (BuildReq
 		Debug("BuildRequestRecord decrypted successfully")
 
 	return record, nil
+}
+
+// DecryptShortBuildRequestRecord decrypts a 218-byte STBM (Short Tunnel Build Message) record
+// using ECIES-X25519-AEAD decryption.
+//
+// STBM on-wire layout:
+//   - Bytes   0-15:  toPeer (first 16 bytes of recipient identity hash)
+//   - Bytes  16-47:  ephemeral X25519 public key
+//   - Bytes  48-201: ChaCha20-Poly1305 ciphertext (154 bytes of cleartext)
+//   - Bytes 202-217: Poly1305 MAC tag (16 bytes)
+//
+// Unlike VTB (528 bytes), the STBM does not store a per-record nonce; a zero
+// nonce is used since the ephemeral key provides per-message cryptographic uniqueness.
+func DecryptShortBuildRequestRecord(encrypted [218]byte, privateKey []byte) (BuildRequestRecord, error) {
+	if len(privateKey) != 32 {
+		return BuildRequestRecord{}, oops.Errorf("invalid private key size: expected 32 bytes, got %d", len(privateKey))
+	}
+
+	// [eph_key(32)][zero_nonce(12)][aead_ciphertext(154+16=170)] = 214 bytes
+	// The STBM omits the stored nonce; nonce=0 is safe because each message uses a fresh ephemeral key.
+	const eciesInputLen = 32 + 12 + ShortBuildRecordCleartextLen + 16
+	eciesInput := make([]byte, eciesInputLen)
+	copy(eciesInput[:32], encrypted[16:48]) // ephemeral key
+	// eciesInput[32:44] = zero nonce (zero-initialized)
+	copy(eciesInput[44:], encrypted[48:218]) // ciphertext + MAC
+
+	cleartext, err := ecies.DecryptECIESX25519(privateKey, eciesInput)
+	if err != nil {
+		return BuildRequestRecord{}, oops.Wrapf(err, "STBM ECIES decryption failed")
+	}
+	if len(cleartext) != ShortBuildRecordCleartextLen {
+		return BuildRequestRecord{}, oops.Errorf("unexpected STBM cleartext length: got %d, want %d", len(cleartext), ShortBuildRecordCleartextLen)
+	}
+
+	log.WithField("cleartext_size", ShortBuildRecordCleartextLen).Debug("STBM build request record decrypted successfully")
+	return ReadShortBuildRequestRecord(cleartext)
 }
 
 // extractEncryptionPublicKey retrieves the X25519 public encryption key from a RouterInfo.

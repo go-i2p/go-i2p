@@ -626,6 +626,36 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	return data
 }
 
+// ReadShortBuildRequestRecord parses the 154-byte STBM cleartext payload into a BuildRequestRecord.
+// The STBM cleartext uses a compact layout: cryptographic keys (LayerKey, IVKey, ReplyKey)
+// are absent and must be derived via HKDF by the caller.
+//
+// Cleartext layout (154 bytes):
+//
+//	[0:4]    receive_tunnel (4 bytes)
+//	[4:8]    next_tunnel    (4 bytes)
+//	[8:40]   next_ident     (32 bytes)
+//	[40]     flag           (1 byte)
+//	[44:48]  request_time   (4 bytes, minutes since epoch)
+//	[52:56]  send_message_id (4 bytes)
+func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
+	if len(data) < ShortBuildRecordCleartextLen {
+		return BuildRequestRecord{}, ErrBuildRequestRecordNotEnoughData
+	}
+
+	record := BuildRequestRecord{}
+	record.ReceiveTunnel = tunnel.TunnelID(common.Integer(data[0:4]).Int())
+	record.NextTunnel = tunnel.TunnelID(common.Integer(data[4:8]).Int())
+	copy(record.NextIdent[:], data[8:40])
+	record.Flag = int(data[40])
+	minutesSinceEpoch := common.Integer(data[44:48]).Int()
+	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*60, 0)
+	record.SendMessageID = common.Integer(data[52:56]).Int()
+
+	log.Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
+	return record, nil
+}
+
 // Compile-time interface satisfaction checks
 var (
 	_ TunnelIdentifier   = (*BuildRequestRecord)(nil)
