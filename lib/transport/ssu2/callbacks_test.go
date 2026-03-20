@@ -74,3 +74,20 @@ func TestDefaultBlockCallbacks(t *testing.T) {
 	assert.Nil(t, config.OnACK)
 	assert.Nil(t, config.OnPeerTest)
 }
+
+// TestDefaultBlockCallbacks_InvokeCallbacks exercises the callback bodies so
+// that the closures are actually executed (coverage for function bodies).
+func TestDefaultBlockCallbacks_InvokeCallbacks(t *testing.T) {
+	config := DefaultBlockCallbacks()
+
+	// OnTermination callback should not panic.
+	config.OnTermination(0, nil)
+
+	// OnRouterInfo callback should return nil.
+	err := config.OnRouterInfo([]byte("dummy"))
+	assert.NoError(t, err)
+
+	// OnDateTime callback should return nil for a recent timestamp.
+	now := uint32(0) // epoch is far in the past but the logger path is exercised
+	_ = config.OnDateTime(now)
+}

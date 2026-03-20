@@ -1,6 +1,7 @@
 package ssu2
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
@@ -8,6 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// failMarshalMsg is a minimal I2NPMessage whose MarshalBinary always fails.
+type failMarshalMsg struct {
+	i2np.I2NPMessage
+}
+
+func (f *failMarshalMsg) MarshalBinary() ([]byte, error) {
+	return nil, errors.New("marshal error")
+}
 
 func TestFrameI2NPToBlock(t *testing.T) {
 	msg := i2np.NewBaseI2NPMessage(i2np.I2NPMessageTypeData)
@@ -69,4 +79,22 @@ func TestNewPaddingBlock(t *testing.T) {
 	block := NewPaddingBlock(32)
 	assert.Equal(t, ssu2noise.BlockTypePadding, block.Type)
 	assert.Len(t, block.Data, 32)
+}
+
+// TestFrameI2NPToBlock_MarshalError verifies that FrameI2NPToBlock propagates
+// a MarshalBinary error from the message.
+func TestFrameI2NPToBlock_MarshalError(t *testing.T) {
+	msg := &failMarshalMsg{}
+	_, err := FrameI2NPToBlock(msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marshal error")
+}
+
+// TestFrameI2NPForSSU2_MarshalError verifies that FrameI2NPForSSU2 propagates
+// a MarshalBinary error from the message.
+func TestFrameI2NPForSSU2_MarshalError(t *testing.T) {
+	msg := &failMarshalMsg{}
+	_, err := FrameI2NPForSSU2(msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marshal error")
 }

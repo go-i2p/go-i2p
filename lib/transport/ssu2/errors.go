@@ -12,6 +12,7 @@ var (
 	ErrConnectionPoolFull     = oops.New("SSU2 connection pool full")
 	ErrInvalidListenerAddress = oops.New("invalid listener address for SSU2")
 	ErrInvalidConfig          = oops.New("invalid SSU2 configuration")
+	ErrTransportNotStarted    = oops.New("SSU2 transport not yet started")
 )
 
 // WrapSSU2Error wraps an error with SSU2 operation context.

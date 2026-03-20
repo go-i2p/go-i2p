@@ -28,6 +28,16 @@ type SSU2Transport struct {
 
 	identityMu sync.RWMutex
 
+	// NAT traversal managers (initialised after listener starts).
+	peerTestManager    *ssu2noise.PeerTestManager
+	relayManager       *ssu2noise.RelayManager
+	introducerRegistry *ssu2noise.IntroducerRegistry
+	holePunchCoord     *ssu2noise.HolePunchCoordinator
+
+	// Key management.
+	persistentConfig   *PersistentConfig
+	keyRotationManager *ssu2noise.KeyRotationManager
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -82,6 +92,13 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	if err := setupUDPListener(t, config, ssu2Config); err != nil {
 		cancel()
 		return nil, err
+	}
+
+	if config.WorkingDir != "" {
+		if err := initKeyManagement(t, ssu2Config); err != nil {
+			cancel()
+			return nil, err
+		}
 	}
 
 	l.WithField("address", t.Addr().String()).Info("SSU2 transport initialized")
@@ -144,6 +161,7 @@ func setupUDPListener(t *SSU2Transport, config *Config, ssu2Config *ssu2noise.SS
 	}
 
 	t.listener = listener
+	initNATManagers(t)
 	return nil
 }
 
@@ -293,6 +311,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	}
 	promoted := NewSSU2Session(ssu2Conn, t.ctx, t.logger)
 	promoted.maxRetransmit = t.config.GetMaxRetransmissions()
+	promoted.SetTransportCallbacks(t.buildTransportCallbacks())
 	if t.sessions.CompareAndSwap(routerHash, original, promoted) {
 		promoted.SetCleanupCallback(func() {
 			t.removeSession(routerHash)
@@ -361,6 +380,7 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
 	session.maxRetransmit = t.config.GetMaxRetransmissions()
+	session.SetTransportCallbacks(t.buildTransportCallbacks())
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
 		session.Close()
@@ -387,6 +407,14 @@ func (t *SSU2Transport) Compatible(routerInfo router_info.RouterInfo) bool {
 func (t *SSU2Transport) Close() error {
 	t.logger.Info("Closing SSU2 transport")
 	t.cancel()
+
+	if t.relayManager != nil {
+		t.relayManager.Stop()
+	}
+
+	if t.keyRotationManager != nil {
+		t.keyRotationManager.Stop()
+	}
 
 	var listenerErr error
 	if t.listener != nil {

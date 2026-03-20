@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
+	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
 // SupportsSSU2 checks if a RouterInfo has an SSU2 transport address.
@@ -122,7 +123,14 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 		return nil, fmt.Errorf("transport has no listener address")
 	}
 
-	host, portStr, err := net.SplitHostPort(addr.String())
+	// SSU2Listener.Addr() returns *ssu2noise.SSU2Addr whose String() is a URI,
+	// not a plain "host:port". Unwrap to the underlying network address first.
+	effectiveAddr := addr
+	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
+		effectiveAddr = ssu2Addr.UnderlyingAddr()
+	}
+
+	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse listener address: %w", err)
 	}

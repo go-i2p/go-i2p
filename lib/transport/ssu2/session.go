@@ -108,14 +108,18 @@ func NewSSU2SessionDeferred(conn *ssu2noise.SSU2Conn, ctx context.Context, logge
 // DataHandler into the SSU2Session. Called once during session construction,
 // before StartWorkers(), so callbacks are active from the first data packet.
 func (s *SSU2Session) wireDataHandlerCallbacks() {
-	s.conn.SetDataHandlerCallbacks(ssu2noise.DataHandlerCallbacks{
-		// OnTermination: peer gracefully closed the session; cancel our context.
+	s.conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(nil))
+}
+
+// buildMergedCallbacks constructs a DataHandlerCallbacks that combines
+// session-local handlers (termination, clock validation) with any
+// transport-level handlers supplied in extra. extra may be nil.
+func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise.DataHandlerCallbacks {
+	cbs := ssu2noise.DataHandlerCallbacks{
 		OnTermination: func(reason uint8, _ []byte) {
 			s.logger.WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
 			s.cancel()
 		},
-		// OnDateTime: validate the peer's stated clock; large skews are a
-		// sign of misconfiguration or a replay attack.
 		OnDateTime: func(timestamp uint32) error {
 			now := time.Now().Unix()
 			delta := int64(timestamp) - now
@@ -129,7 +133,63 @@ func (s *SSU2Session) wireDataHandlerCallbacks() {
 			}
 			return nil
 		},
-	})
+	}
+	if extra != nil {
+		mergeBlockCallbacks(&cbs, extra)
+	}
+	return cbs
+}
+
+// SetTransportCallbacks merges transport-level block callbacks (relay,
+// peer-test, router-info, etc.) into the session's DataHandler without
+// overwriting the session-local termination and clock-validation handlers.
+// Safe to call after construction and before or after StartWorkers().
+func (s *SSU2Session) SetTransportCallbacks(cfg *BlockCallbackConfig) {
+	if cfg == nil {
+		return
+	}
+	s.conn.SetDataHandlerCallbacks(s.buildMergedCallbacks(cfg))
+}
+
+// mergeBlockCallbacks copies non-nil callbacks from cfg into cbs,
+// leaving any already-set fields (e.g. OnTermination) untouched.
+func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallbackConfig) {
+	if cfg.OnRouterInfo != nil {
+		cbs.OnRouterInfo = cfg.OnRouterInfo
+	}
+	if cfg.OnACK != nil {
+		cbs.OnACK = cfg.OnACK
+	}
+	if cfg.OnDateTime != nil {
+		cbs.OnDateTime = cfg.OnDateTime
+	}
+	if cfg.OnPeerTest != nil {
+		cbs.OnPeerTest = cfg.OnPeerTest
+	}
+	if cfg.OnRelayRequest != nil {
+		cbs.OnRelayRequest = cfg.OnRelayRequest
+	}
+	if cfg.OnRelayResponse != nil {
+		cbs.OnRelayResponse = cfg.OnRelayResponse
+	}
+	if cfg.OnRelayIntro != nil {
+		cbs.OnRelayIntro = cfg.OnRelayIntro
+	}
+	if cfg.OnNewToken != nil {
+		cbs.OnNewToken = cfg.OnNewToken
+	}
+	if cfg.OnAddress != nil {
+		cbs.OnAddress = cfg.OnAddress
+	}
+	if cfg.OnOptions != nil {
+		cbs.OnOptions = cfg.OnOptions
+	}
+	if cfg.OnPathChallenge != nil {
+		cbs.OnPathChallenge = cfg.OnPathChallenge
+	}
+	if cfg.OnPathResponse != nil {
+		cbs.OnPathResponse = cfg.OnPathResponse
+	}
 }
 
 // StartWorkers launches the background send and receive goroutines.

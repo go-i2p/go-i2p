@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"testing"
+	"time"
 )
 
 func TestNewConfig_DefaultValues(t *testing.T) {
@@ -72,5 +73,51 @@ func TestConfig_GetMaxSessions_Negative(t *testing.T) {
 	cfg.MaxSessions = -1
 	if got := cfg.GetMaxSessions(); got != DefaultMaxSessions {
 		t.Errorf("expected %d for negative MaxSessions, got %d", DefaultMaxSessions, got)
+	}
+}
+
+func TestConfig_GetKeepaliveInterval_Default(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	if got := cfg.GetKeepaliveInterval(); got != DefaultKeepaliveInterval {
+		t.Errorf("expected %v, got %v", DefaultKeepaliveInterval, got)
+	}
+}
+
+func TestConfig_GetKeepaliveInterval_Custom(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.KeepaliveInterval = 30 * time.Second
+	if got := cfg.GetKeepaliveInterval(); got != 30*time.Second {
+		t.Errorf("expected 30s, got %v", got)
+	}
+}
+
+func TestConfig_GetKeepaliveInterval_Zero(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.KeepaliveInterval = 0
+	if got := cfg.GetKeepaliveInterval(); got != DefaultKeepaliveInterval {
+		t.Errorf("expected default %v for zero, got %v", DefaultKeepaliveInterval, got)
+	}
+}
+
+func TestConfig_GetMaxRetransmissions_Default(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	if got := cfg.GetMaxRetransmissions(); got != DefaultMaxRetransmissions {
+		t.Errorf("expected %d, got %d", DefaultMaxRetransmissions, got)
+	}
+}
+
+func TestConfig_GetMaxRetransmissions_Custom(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.MaxRetransmissions = 5
+	if got := cfg.GetMaxRetransmissions(); got != 5 {
+		t.Errorf("expected 5, got %d", got)
+	}
+}
+
+func TestConfig_GetMaxRetransmissions_Zero(t *testing.T) {
+	cfg, _ := NewConfig(":9002")
+	cfg.MaxRetransmissions = 0
+	if got := cfg.GetMaxRetransmissions(); got != DefaultMaxRetransmissions {
+		t.Errorf("expected default %d for zero, got %d", DefaultMaxRetransmissions, got)
 	}
 }

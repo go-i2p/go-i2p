@@ -1,6 +1,7 @@
 package ssu2
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -72,5 +73,35 @@ func TestDefaultHandler_ValidateTimestamp_TooFar_Future(t *testing.T) {
 	future := uint32(time.Now().Unix()) + 61
 	if err := h.ValidateTimestamp(future); err == nil {
 		t.Error("timestamp 61s in the future should fail validation")
+	}
+}
+
+// TestDefaultHandler_Close verifies that Close resets the replay cache.
+func TestDefaultHandler_Close(t *testing.T) {
+	h := NewDefaultHandler()
+	var key [32]byte
+	key[0] = 0xAA
+	h.CheckReplay(key)
+	h.Close()
+	// After Close, the map is reset so the same key is no longer seen.
+	if h.CheckReplay(key) {
+		t.Error("after Close, key should not be flagged as replay")
+	}
+}
+
+// TestDefaultHandler_SendTermination sends a termination block over a loopback
+// conn pair and verifies no error is returned.
+func TestDefaultHandler_SendTermination(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping loopback test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	serverConn, _ := loopbackPair(t, ctx)
+	h := NewDefaultHandler()
+	err := h.SendTermination(serverConn, 0x00)
+	if err != nil {
+		t.Errorf("SendTermination returned error: %v", err)
 	}
 }
