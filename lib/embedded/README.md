@@ -58,6 +58,83 @@ in-flight operations. For immediate termination, use HardStop().
 
 ## Usage
 
+```go
+var CertificatesFS embed.FS
+```
+CertificatesFS embeds all certificates at compile time. This eliminates runtime
+file dependencies for certificate access.
+
+#### func  ExtractCertificates
+
+```go
+func ExtractCertificates(destDir string) error
+```
+ExtractCertificates extracts embedded certificates to the specified directory.
+This is useful for first-run setup or when external tools need file-based
+access. The directory structure under destDir will mirror the embedded
+structure.
+
+#### func  ExtractReseedCertificates
+
+```go
+func ExtractReseedCertificates(destDir string) error
+```
+ExtractReseedCertificates extracts only the reseed certificates to the specified
+directory. Unlike ExtractCertificates, this places files directly in destDir
+without subdirectories.
+
+#### func  GetCertificateByPath
+
+```go
+func GetCertificateByPath(certPath string) ([]byte, error)
+```
+GetCertificateByPath returns the PEM content for a certificate at the given
+path. The path should be relative to the certificates directory (e.g.,
+"reseed/admin_at_stormycloud.org.crt"). Returns an error if the path contains
+directory traversal components.
+
+#### func  GetFamilyCertificates
+
+```go
+func GetFamilyCertificates() (fs.FS, error)
+```
+GetFamilyCertificates returns the embedded family certificates as a filesystem.
+The returned fs.FS is rooted at the certificates/family directory.
+
+#### func  GetReseedCertificateByName
+
+```go
+func GetReseedCertificateByName(certFileName string) ([]byte, error)
+```
+GetReseedCertificateByName returns the PEM content for a specific reseed
+certificate. The certFileName should be just the filename (e.g.,
+"admin_at_stormycloud.org.crt"). Returns an error if the filename contains path
+separators or traversal components.
+
+#### func  GetReseedCertificates
+
+```go
+func GetReseedCertificates() (fs.FS, error)
+```
+GetReseedCertificates returns the embedded reseed certificates as a filesystem.
+The returned fs.FS is rooted at the certificates/reseed directory.
+
+#### func  GetSSLCertificates
+
+```go
+func GetSSLCertificates() (fs.FS, error)
+```
+GetSSLCertificates returns the embedded SSL certificates as a filesystem. The
+returned fs.FS is rooted at the certificates/ssl directory.
+
+#### func  ListReseedCertificates
+
+```go
+func ListReseedCertificates() ([]string, error)
+```
+ListReseedCertificates returns a list of all embedded reseed certificate
+filenames.
+
 #### type EmbeddedRouter
 
 ```go
@@ -79,6 +156,19 @@ type EmbeddedRouter interface {
 	// HardStop performs immediate termination of the router without waiting
 	// for graceful cleanup. Use only when Stop() is insufficient.
 	HardStop()
+
+	// Wait blocks until the router has stopped.
+	Wait()
+
+	// Close releases all resources held by the router. The router must be
+	// stopped before Close is called.
+	Close() error
+
+	// IsRunning reports whether the router is currently operational.
+	IsRunning() bool
+
+	// IsConfigured reports whether Configure has been called successfully.
+	IsConfigured() bool
 }
 ```
 
@@ -102,10 +192,12 @@ thread-safety and error handling.
 ```go
 func NewStandardEmbeddedRouter(cfg *config.RouterConfig) (*StandardEmbeddedRouter, error)
 ```
-NewStandardEmbeddedRouter creates a new embedded router instance. The router
-must be configured with Configure() before calling Start().
+NewStandardEmbeddedRouter creates a new embedded router instance. The router is
+automatically configured with the provided config. Call Start() to begin router
+operations.
 
-Returns error if the configuration is nil or invalid.
+Returns error if the configuration is nil or invalid, or if router creation
+fails.
 
 #### func (*StandardEmbeddedRouter) Close
 
@@ -123,13 +215,20 @@ func (e *StandardEmbeddedRouter) Configure(cfg *config.RouterConfig) error
 Configure initializes the router with the provided configuration. This method
 creates the underlying router instance but does not start it.
 
+Note: NewStandardEmbeddedRouter already calls Configure() internally. Callers
+using the constructor do NOT need to call Configure() again. Calling Configure()
+on an already-configured router returns nil (no-op) to prevent errors from the
+documented constructor + Configure pattern.
+
 #### func (*StandardEmbeddedRouter) HardStop
 
 ```go
 func (e *StandardEmbeddedRouter) HardStop()
 ```
-HardStop performs immediate termination without graceful cleanup. Use this only
-when Stop() fails or when immediate termination is required.
+HardStop performs immediate termination without graceful cleanup. Unlike Stop(),
+this does not wait for subsystems to shut down cleanly. It calls Stop() with a
+short timeout, then marks the router stopped. Use this only when Stop() fails or
+when immediate termination is required.
 
 #### func (*StandardEmbeddedRouter) IsConfigured
 
@@ -160,7 +259,9 @@ fully started.
 func (e *StandardEmbeddedRouter) Stop() error
 ```
 Stop performs graceful shutdown of the router. This method stops all router
-subsystems and waits for them to shut down cleanly.
+subsystems and waits for them to shut down cleanly. The mutex is released before
+calling router.Stop() to prevent deadlock with goroutines that call IsRunning()
+during shutdown.
 
 #### func (*StandardEmbeddedRouter) Wait
 
@@ -168,7 +269,9 @@ subsystems and waits for them to shut down cleanly.
 func (e *StandardEmbeddedRouter) Wait()
 ```
 Wait blocks until the router shuts down. This method can be called after Start()
-to keep the router running until Stop() is called.
+to keep the router running until Stop() is called. It uses a done channel to
+avoid TOCTOU races where Stop()+Close() could nil the router pointer between
+releasing the read lock and calling router.Wait().
 
 
 

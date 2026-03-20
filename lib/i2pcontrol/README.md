@@ -153,27 +153,14 @@ The following JSON-RPC methods are implemented:
     - Echo: Connection test (returns input value)
     - GetRate: Bandwidth statistics (in/out rates)
     - RouterInfo: Router status (uptime, version, tunnels, peers)
-    - RouterManager: Control operations (shutdown, restart via external supervisor)
-    - NetworkSetting: Configuration queries and updates (port, address, bandwidth)
+    - RouterManager: Control operations (shutdown)
+    - NetworkSetting: Configuration queries (read-only)
     - I2PControl: Server management (password changes)
 
 Planned for future implementation:
 
-    - RouterManager: Reseed operations
-
-## Restart Behavior
-
-The `RouterManager` "Restart" command performs a graceful shutdown only.
-go-i2p does not re-execute itself; an external process supervisor must
-restart the process. Supported supervisors include:
-
-    - systemd: set Restart=on-failure in the service unit
-    - Docker: use restart: unless-stopped in docker-compose.yml
-    - s6 / runit: configure the run script for automatic respawn
-
-Port and address changes applied via `NetworkSetting` also set
-`RestartNeeded: true` in the response, indicating the supervisor
-should restart the process for the new listen address to take effect.
+    - RouterManager: Restart, reseed operations
+    - NetworkSetting: Configuration updates (write operations)
 
 # Available Router Metrics
 
@@ -290,7 +277,6 @@ robustness. Current status:
     - ✅ RouterManager method (shutdown)
     - ✅ NetworkSetting method (read-only)
     - ✅ I2PControl method (password changes)
-    - ⚠️  I2PControl port/address changes return ErrCodeNotImpl (requires server restart; not planned)
     - ✅ Thread-safe concurrent access
     - ✅ Graceful shutdown
     - ✅ 78%+ test coverage
@@ -352,6 +338,9 @@ validates password and generates token 3. Token stored with expiration timestamp
 4. Client includes token in subsequent RPC requests 5. Server validates token
 before processing requests
 
+Rate limiting: After maxFailedAttempts consecutive failures, authentication is
+locked out for failedAttemptLockout duration to prevent brute-force attacks.
+
 #### func  NewAuthManager
 
 ```go
@@ -379,6 +368,10 @@ Authenticate validates a password and generates an access token. The token is a
 base64-encoded HMAC-SHA256 signature of the current timestamp, ensuring
 uniqueness and cryptographic security.
 
+Rate limiting: After maxFailedAttempts consecutive failures, authentication is
+locked out for failedAttemptLockout duration. Successful authentication resets
+the failure counter.
+
 Parameters:
 
     - password: The password to authenticate
@@ -387,7 +380,7 @@ Parameters:
 Returns:
 
     - token: Base64-encoded authentication token
-    - error: If password is invalid or token generation fails
+    - error: If password is invalid, token generation fails, or rate limited
 
 #### func (*AuthManager) ChangePassword
 
@@ -587,21 +580,23 @@ would require server restart and are deferred.
 #### func  NewI2PControlHandler
 
 ```go
-func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }) *I2PControlHandler
+func NewI2PControlHandler(authManager interface{ ChangePassword(string) int }, cfg *config.I2PControlConfig) *I2PControlHandler
 ```
 NewI2PControlHandler creates a new I2PControl handler.
 
 Parameters:
 
     - authManager: Authentication manager for password changes
+    - cfg: I2PControl config for persisting password changes
 
 #### func (*I2PControlHandler) Handle
 
 ```go
 func (h *I2PControlHandler) Handle(ctx context.Context, params json.RawMessage) (interface{}, error)
 ```
-Handle processes the I2PControl request. Handles password changes and returns
-SettingsSaved status.
+Handle processes the I2PControl request. Handles password, port, and address
+changes. Port and address changes are persisted but require a restart to take
+effect.
 
 #### type MethodRegistry
 
@@ -652,6 +647,15 @@ Error handling:
     - Returns RPCError with ErrCodeMethodNotFound if method not registered
     - Returns handler's error if invocation fails (should be *RPCError)
     - Wraps non-RPCError errors as ErrCodeInternalError
+
+#### func (*MethodRegistry) HandleParsedRequest
+
+```go
+func (mr *MethodRegistry) HandleParsedRequest(ctx context.Context, req *Request) *Response
+```
+HandleParsedRequest processes an already-parsed JSON-RPC request and returns a
+response. This avoids double-parsing when the caller has already parsed the
+request (e.g., for authentication).
 
 #### func (*MethodRegistry) HandleRequest
 
@@ -941,6 +945,12 @@ type RealRouter struct {
 		GetParticipantManager() *tunnel.Manager
 		GetConfig() *config.RouterConfig
 		IsRunning() bool
+		IsReseeding() bool
+		GetBandwidthRates() (inbound, outbound uint64)
+		GetActiveSessionCount() int
+		Stop()
+		Reseed() error
+		GetTransportAddr() interface{}
 	}
 }
 ```
@@ -957,6 +967,21 @@ Usage:
         i2pcontrol.RealRouter{Router: r},
         "0.1.0-go",
     )
+
+#### func (RealRouter) GetActiveSessionCount
+
+```go
+func (rr RealRouter) GetActiveSessionCount() int
+```
+GetActiveSessionCount returns active transport session count (implements
+RouterAccess)
+
+#### func (RealRouter) GetBandwidthRates
+
+```go
+func (rr RealRouter) GetBandwidthRates() (inbound, outbound uint64)
+```
+GetBandwidthRates returns current bandwidth rates (implements RouterAccess)
 
 #### func (RealRouter) GetConfig
 
@@ -979,6 +1004,14 @@ func (rr RealRouter) GetParticipantManager() *tunnel.Manager
 ```
 GetParticipantManager returns the participant manager (implements RouterAccess)
 
+#### func (RealRouter) GetTransportAddr
+
+```go
+func (rr RealRouter) GetTransportAddr() interface{}
+```
+GetTransportAddr returns the listening address of the first transport
+(implements RouterAccess)
+
 #### func (RealRouter) GetTunnelManager
 
 ```go
@@ -986,12 +1019,34 @@ func (rr RealRouter) GetTunnelManager() *i2np.TunnelManager
 ```
 GetTunnelManager returns the tunnel manager (implements RouterAccess)
 
+#### func (RealRouter) IsReseeding
+
+```go
+func (rr RealRouter) IsReseeding() bool
+```
+IsReseeding returns whether the router is currently reseeding (implements
+RouterAccess)
+
 #### func (RealRouter) IsRunning
 
 ```go
 func (rr RealRouter) IsRunning() bool
 ```
 IsRunning returns whether the router is running (implements RouterAccess)
+
+#### func (RealRouter) Reseed
+
+```go
+func (rr RealRouter) Reseed() error
+```
+Reseed triggers a manual NetDB reseed (implements RouterAccess)
+
+#### func (RealRouter) Stop
+
+```go
+func (rr RealRouter) Stop()
+```
+Stop initiates graceful shutdown (implements RouterAccess)
 
 #### type Request
 
@@ -1142,8 +1197,14 @@ type RouterAccess interface {
 	// GetBandwidthRates returns the current 15-second inbound and outbound bandwidth rates in bytes per second
 	GetBandwidthRates() (inbound, outbound uint64)
 
+	// GetActiveSessionCount returns the number of active transport sessions (connected peers)
+	GetActiveSessionCount() int
+
 	// Stop initiates graceful shutdown of the router
 	Stop()
+
+	// Reseed triggers a manual NetDB reseed operation
+	Reseed() error
 }
 ```
 
@@ -1260,6 +1321,8 @@ type RouterManagerHandler struct {
 	RouterControl interface {
 		// Stop initiates graceful router shutdown
 		Stop()
+		// Reseed triggers a manual NetDB reseed operation
+		Reseed() error
 	}
 }
 ```
@@ -1281,13 +1344,17 @@ Response:
       "Reseed": null
     }
 
-Note: Restart is not implemented initially. Shutdown will stop the router
-gracefully.
+Note: Restart performs a stop; the process supervisor is expected to restart the
+process. Shutdown will stop the router gracefully.
 
 #### func  NewRouterManagerHandler
 
 ```go
-func NewRouterManagerHandler(control interface{ Stop() }) *RouterManagerHandler
+func NewRouterManagerHandler(control interface {
+	Stop()
+	Reseed() error
+},
+) *RouterManagerHandler
 ```
 NewRouterManagerHandler creates a new RouterManager handler.
 
@@ -1332,7 +1399,10 @@ type RouterStatsProvider interface {
 
 	// GetRouterControl returns the underlying router control interface
 	// This is used by RouterManagerHandler to perform control operations (shutdown, restart, etc.)
-	GetRouterControl() interface{ Stop() }
+	GetRouterControl() interface {
+		Stop()
+		Reseed() error
+	}
 }
 ```
 

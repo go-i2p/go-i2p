@@ -4,6 +4,8 @@
 
 ![netdb.svg](netdb.svg)
 
+Package netdb provides network database functionality for I2P.
+
 Package netdb implements the Network Database for I2P router information and
 lease sets.
 
@@ -83,6 +85,31 @@ seconds per lookup).
 
 ```go
 const (
+	FileTypeRouterInfo        = 1
+	FileTypeLeaseSet          = 2
+	FileTypeLeaseSet2         = 3
+	FileTypeEncryptedLeaseSet = 5
+	FileTypeMetaLeaseSet      = 7
+)
+```
+File format type codes for local skiplist storage (Entry.WriteTo /
+Entry.ReadFrom).
+
+IMPORTANT: These differ from the DatabaseStore wire message type codes used in
+StdNetDB.Store and I2NP DatabaseStore messages:
+
+    Wire format (I2NP DatabaseStore):  File format (local skiplist):
+      0 = RouterInfo                     1 = RouterInfo
+      1 = LeaseSet                       2 = LeaseSet
+      3 = LeaseSet2                      3 = LeaseSet2  (same)
+      5 = EncryptedLeaseSet              5 = EncryptedLeaseSet  (same)
+      7 = MetaLeaseSet                   7 = MetaLeaseSet  (same)
+
+The file format offsets RouterInfo and LeaseSet by +1 to avoid a zero type byte,
+which simplifies distinguishing valid entries from uninitialized data on disk.
+
+```go
+const (
 	// NumKademliaBuckets is the number of Kademlia buckets (256 bits = 256 buckets)
 	NumKademliaBuckets = 256
 
@@ -92,9 +119,67 @@ const (
 ```
 
 ```go
-const CacheFileName = "sizecache.txt"
+const (
+	// MaxIterativeLookupHops is the maximum number of iterative lookup rounds.
+	// Each round queries the closest unqueried peers and follows suggestions.
+	MaxIterativeLookupHops = 5
+
+	// MaxConcurrentQueries is the number of peers queried in parallel per round.
+	MaxConcurrentQueries = 3
+)
 ```
-Moved from: std.go name of file to hold precomputed size of netdb
+
+```go
+const MinRouterInfoCount = 25
+```
+MinRouterInfoCount is the minimum number of RouterInfos to keep in the NetDB
+even if they are expired. This prevents the NetDB from becoming empty during
+periods of poor connectivity or clock skew, which would prevent
+re-bootstrapping.
+
+```go
+const RouterInfoCleanupInterval = 10 * time.Minute
+```
+RouterInfoCleanupInterval defines how often the RouterInfo expiration cleaner
+runs. RouterInfos change less frequently than LeaseSets, so a 10-minute interval
+is sufficient.
+
+```go
+const RouterInfoMaxAge = 48 * time.Hour
+```
+RouterInfoMaxAge defines the maximum age for a RouterInfo before it is
+considered stale. Per the I2P specification, RouterInfos are typically
+considered stale after about 27 hours, though some implementations use longer
+thresholds. We use 48 hours to be conservative and reduce unnecessary churn
+during periods of intermittent connectivity.
+
+#### func  CalculateXORDistance
+
+```go
+func CalculateXORDistance(hash1, hash2 common.Hash) []byte
+```
+CalculateXORDistance calculates the XOR distance between two hashes. XOR
+distance is the bitwise XOR of the two hashes, used in Kademlia DHT. This is the
+canonical implementation — all other XOR distance calculations in the package
+delegate to this function.
+
+#### func  CompareXORDistances
+
+```go
+func CompareXORDistances(dist1, dist2 []byte) bool
+```
+CompareXORDistances compares two XOR distances using big-endian byte comparison.
+Returns true if dist1 < dist2 (dist1 is closer). This is the canonical
+implementation for XOR distance comparison.
+
+#### func  IsFloodfillRouter
+
+```go
+func IsFloodfillRouter(ri router_info.RouterInfo) bool
+```
+IsFloodfillRouter checks if a RouterInfo represents a floodfill router. Returns
+true if the router's "caps" option contains 'f'. This is the canonical
+implementation — all floodfill detection should use this.
 
 #### type AdaptiveStrategy
 
@@ -267,6 +352,82 @@ StoreMetaLeaseSet stores a MetaLeaseSet in the database. key is the destination
 hash, data is the serialized MetaLeaseSet, and dataType should be 7 for
 MetaLeaseSet.
 
+#### type CongestionCache
+
+```go
+type CongestionCache struct {
+}
+```
+
+CongestionCache caches parsed congestion flags to avoid repeated parsing. The
+cache is invalidated when RouterInfo is updated. It enforces a maximum size and
+TTL to prevent unbounded memory growth.
+
+#### func  NewCongestionCache
+
+```go
+func NewCongestionCache() *CongestionCache
+```
+NewCongestionCache creates a new congestion flag cache with default limits.
+Default: max 2048 entries, 30-minute TTL.
+
+#### func (*CongestionCache) Clear
+
+```go
+func (c *CongestionCache) Clear()
+```
+Clear removes all cached flags.
+
+#### func (*CongestionCache) Delete
+
+```go
+func (c *CongestionCache) Delete(hash common.Hash)
+```
+Delete removes a cached flag (called when RouterInfo is updated).
+
+#### func (*CongestionCache) Get
+
+```go
+func (c *CongestionCache) Get(hash common.Hash) (config.CongestionFlag, time.Time, bool)
+```
+Get retrieves a cached congestion flag for a peer. Returns the flag and true if
+found and not expired, or CongestionFlagNone and false otherwise.
+
+#### func (*CongestionCache) Set
+
+```go
+func (c *CongestionCache) Set(hash common.Hash, flag config.CongestionFlag, riAge time.Time)
+```
+Set stores a congestion flag in the cache. If the cache exceeds its maximum
+size, the oldest entry is evicted.
+
+#### func (*CongestionCache) Size
+
+```go
+func (c *CongestionCache) Size() int
+```
+Size returns the number of cached flags.
+
+#### type CongestionStats
+
+```go
+type CongestionStats struct {
+	// TotalPeers is the total number of peers with known RouterInfo
+	TotalPeers int
+	// DFlagCount is the number of peers advertising medium congestion (D flag)
+	DFlagCount int
+	// EFlagCount is the number of peers advertising high congestion (E flag)
+	EFlagCount int
+	// GFlagCount is the number of peers rejecting all tunnels (G flag)
+	GFlagCount int
+	// CongestedRatio is the ratio of congested peers to total: (D+E+G)/Total
+	CongestedRatio float64
+}
+```
+
+CongestionStats contains network-wide congestion statistics. Used by PROP_170
+for PoW activation decisions based on network health.
+
 #### type DestinationResolver
 
 ```go
@@ -278,17 +439,26 @@ DestinationResolver resolves I2P destinations to their encryption public keys.
 It looks up LeaseSets from the NetDB and extracts the appropriate encryption key
 based on the destination's key type (ElGamal for legacy, X25519 for modern).
 
+The resolver tries LeaseSet2 first (modern default since I2P 0.9.38), then falls
+back to classic LeaseSet. EncryptedLeaseSets are supported via
+ResolveEncryptedDestination, which requires the original destination and derives
+the blinded hash, subcredential, and decrypts the inner LeaseSet2. MetaLeaseSets
+are supported via ResolveMetaDestination, which fetches the MetaLeaseSet,
+selects the best entry by cost, and resolves the referenced LeaseSet.
+
 #### func  NewDestinationResolver
 
 ```go
 func NewDestinationResolver(netdb interface {
 	GetLeaseSet(hash common.Hash) chan lease_set.LeaseSet
 	GetLeaseSetBytes(hash common.Hash) ([]byte, error)
+	GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
+	GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
+	GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error)
 },
 ) *DestinationResolver
 ```
 NewDestinationResolver creates a new destination resolver with the given NetDB.
-The netdb parameter must implement GetLeaseSet and GetLeaseSetBytes methods.
 
 #### func (*DestinationResolver) ResolveDestination
 
@@ -299,13 +469,64 @@ ResolveDestination looks up a destination by its hash and returns the encryption
 public key. This supports both legacy LeaseSets (with ElGamal keys) and modern
 LeaseSet2 (with X25519 keys).
 
-The resolution process: 1. Look up the LeaseSet from NetDB using the destination
-hash 2. Extract the encryption key based on the LeaseSet type 3. Return the key
-in [32]byte format suitable for ECIES-X25519-AEAD encryption
+The resolution process tries LeaseSet2 first (the modern default since I2P
+0.9.38), then falls back to classic LeaseSet: 1. Try to get LeaseSet2 bytes from
+NetDB and extract X25519 key 2. If LeaseSet2 not found, try classic LeaseSet
+bytes parsed as LeaseSet2 3. If that also fails, try classic LeaseSet lookup and
+extract from legacy format
 
 Returns: - publicKey: The X25519 public key for garlic encryption (32 bytes) -
 error: Non-nil if the destination cannot be resolved or has an unsupported key
 type
+
+#### func (*DestinationResolver) ResolveEncryptedDestination
+
+```go
+func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Destination, secret []byte) ([32]byte, error)
+```
+ResolveEncryptedDestination resolves an I2P destination that publishes an
+EncryptedLeaseSet. The caller must supply the original (unblinded) destination
+so that the blinded lookup hash and subcredential can be derived.
+
+The resolution process:
+
+    1. Derive the blinded public key from the destination for today's date
+    2. Hash the blinded public key to get the NetDB lookup key
+    3. Retrieve the EncryptedLeaseSet from NetDB
+    4. Derive the subcredential from the original signing key and blinded key
+    5. Decrypt the inner LeaseSet2 using the subcredential
+    6. Extract the X25519 encryption key from the inner LeaseSet2
+
+Parameters:
+
+    - dest: The original (unblinded) destination. Must use Ed25519 signing key.
+    - secret: The per-destination secret used for blinding (may be nil for default).
+
+Returns:
+
+    - publicKey: The X25519 public key for garlic encryption (32 bytes)
+    - error: Non-nil if resolution fails at any step
+
+#### func (*DestinationResolver) ResolveMetaDestination
+
+```go
+func (dr *DestinationResolver) ResolveMetaDestination(destHash common.Hash) ([32]byte, error)
+```
+ResolveMetaDestination resolves a destination that publishes a MetaLeaseSet
+(type 7). A MetaLeaseSet is a directory of other LeaseSets; each entry
+references a LeaseSet by its hash and includes a cost metric for load balancing.
+
+The resolution process:
+
+    1. Retrieve the MetaLeaseSet from NetDB by destHash
+    2. Sort entries by cost (lowest first) and filter out expired entries
+    3. For each entry, attempt to resolve the referenced LeaseSet (LS2 or classic)
+    4. Return the X25519 key from the first successfully resolved entry
+
+Returns:
+
+    - publicKey: The X25519 public key from the best available component LeaseSet
+    - error: Non-nil if no component LeaseSet can be resolved
 
 #### type Entry
 
@@ -322,18 +543,18 @@ type Entry struct {
 netdb entry wraps a router info, lease set, lease set2, encrypted lease set, or
 meta lease set and provides serialization
 
-#### func (*Entry) ReadFrom
+#### func (*Entry) Deserialize
 
 ```go
-func (e *Entry) ReadFrom(r io.Reader) (err error)
+func (e *Entry) Deserialize(r io.Reader) (err error)
 ```
 
-#### func (*Entry) WriteTo
+#### func (*Entry) Serialize
 
 ```go
-func (e *Entry) WriteTo(w io.Writer) error
+func (e *Entry) Serialize(w io.Writer) error
 ```
-WriteTo writes the Entry to the provided writer.
+Serialize writes the Entry to the provided writer.
 
 #### type ExplorationStrategy
 
@@ -390,6 +611,22 @@ func (e *Explorer) GetStats() ExplorerStats
 ```
 GetStats returns statistics about exploration activity
 
+#### func (*Explorer) SetOurHash
+
+```go
+func (e *Explorer) SetOurHash(hash common.Hash)
+```
+SetOurHash sets our router's identity hash for lookup message construction.
+
+#### func (*Explorer) SetTransport
+
+```go
+func (e *Explorer) SetTransport(transport LookupTransport)
+```
+SetTransport sets the lookup transport for network-based exploration lookups.
+This should be called before Start() to enable the explorer to query remote
+peers.
+
 #### func (*Explorer) Start
 
 ```go
@@ -433,6 +670,10 @@ type ExplorerConfig struct {
 	// Required for adaptive strategy
 	OurHash common.Hash
 
+	// Transport is the lookup transport for sending DatabaseLookup messages.
+	// Required for the explorer to perform actual network lookups.
+	Transport LookupTransport
+
 	// StatsUpdateInterval determines how often to update strategy statistics (default: 1 minute)
 	StatsUpdateInterval time.Duration
 }
@@ -465,6 +706,182 @@ type ExplorerStats struct {
 
 ExplorerStats contains statistics about explorer activity
 
+#### type FloodfillConfig
+
+```go
+type FloodfillConfig struct {
+	// Enabled controls whether the router serves as a floodfill
+	Enabled bool
+
+	// OurHash is this router's identity hash
+	OurHash common.Hash
+
+	// FloodCount is how many peers to flood data to (default: 4)
+	FloodCount int
+}
+```
+
+FloodfillConfig holds configuration for the floodfill server.
+
+#### func  DefaultFloodfillConfig
+
+```go
+func DefaultFloodfillConfig() FloodfillConfig
+```
+DefaultFloodfillConfig returns the default floodfill configuration (disabled by
+default).
+
+#### type FloodfillRateLimiter
+
+```go
+type FloodfillRateLimiter struct {
+}
+```
+
+FloodfillRateLimiter provides per-peer rate limiting for floodfill operations.
+Uses a token-bucket algorithm with automatic cleanup of stale entries.
+
+#### func  NewFloodfillRateLimiter
+
+```go
+func NewFloodfillRateLimiter(maxPerMinute, burstSize int) *FloodfillRateLimiter
+```
+NewFloodfillRateLimiter creates a rate limiter allowing maxPerMinute requests
+per peer per minute with burst capacity.
+
+#### func (*FloodfillRateLimiter) Allow
+
+```go
+func (rl *FloodfillRateLimiter) Allow(peer common.Hash) bool
+```
+Allow returns true if the peer is within its rate limit.
+
+#### func (*FloodfillRateLimiter) Stop
+
+```go
+func (rl *FloodfillRateLimiter) Stop()
+```
+Stop shuts down the rate limiter's cleanup goroutine.
+
+#### type FloodfillServer
+
+```go
+type FloodfillServer struct {
+}
+```
+
+FloodfillServer implements floodfill router functionality, handling incoming
+DatabaseLookup messages and responding with stored data or peer suggestions.
+
+When a DatabaseLookup is received:
+
+    1. If the requested key is in our NetDB, respond with a DatabaseStore containing the data.
+    2. If the key is not found, respond with a DatabaseSearchReply containing hashes of
+       the closest floodfill routers to the target key (by XOR distance).
+
+The server also handles flooding: when we receive a DatabaseStore with a
+non-zero reply token, we store the data and flood it to our closest floodfill
+peers.
+
+#### func  NewFloodfillServer
+
+```go
+func NewFloodfillServer(db *StdNetDB, transport FloodfillTransport, config FloodfillConfig) *FloodfillServer
+```
+NewFloodfillServer creates a new floodfill server.
+
+Parameters:
+
+    - db: the underlying StdNetDB for data storage and retrieval
+    - transport: transport for sending responses (can be nil, set later via SetTransport)
+    - config: floodfill configuration
+
+#### func (*FloodfillServer) FloodDatabaseStore
+
+```go
+func (fs *FloodfillServer) FloodDatabaseStore(key common.Hash, data []byte, dataType byte)
+```
+FloodDatabaseStore handles flooding a DatabaseStore to our closest floodfill
+peers. This should be called when we receive a DatabaseStore with a non-zero
+reply token, indicating that the sender expects us to flood the data.
+
+#### func (*FloodfillServer) GetFloodfillRouterInfo
+
+```go
+func (fs *FloodfillServer) GetFloodfillRouterInfo() (*router_info.RouterInfo, error)
+```
+GetFloodfillRouterInfo returns our router's RouterInfo if we are configured as
+floodfill. This can be used to advertise our floodfill capability to other
+routers.
+
+#### func (*FloodfillServer) HandleDatabaseLookup
+
+```go
+func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) error
+```
+HandleDatabaseLookup processes an incoming DatabaseLookup request. If the
+requested key is found locally, a DatabaseStore is sent back. If not found, a
+DatabaseSearchReply with closest floodfill peer suggestions is sent.
+
+Parameters:
+
+    - lookup: the incoming DatabaseLookup message
+
+Returns an error if the lookup cannot be processed or the response cannot be
+sent.
+
+#### func (*FloodfillServer) IsEnabled
+
+```go
+func (fs *FloodfillServer) IsEnabled() bool
+```
+IsEnabled returns whether the floodfill server is enabled.
+
+#### func (*FloodfillServer) SetEnabled
+
+```go
+func (fs *FloodfillServer) SetEnabled(enabled bool)
+```
+SetEnabled enables or disables floodfill serving.
+
+#### func (*FloodfillServer) SetTransport
+
+```go
+func (fs *FloodfillServer) SetTransport(transport FloodfillTransport)
+```
+SetTransport sets the transport used for sending responses.
+
+#### func (*FloodfillServer) Stop
+
+```go
+func (fs *FloodfillServer) Stop()
+```
+Stop shuts down the floodfill server.
+
+#### type FloodfillTransport
+
+```go
+type FloodfillTransport interface {
+	// SendI2NPMessage sends an I2NP message to the router identified by routerHash.
+	SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error
+}
+```
+
+FloodfillTransport defines the interface for sending I2NP messages back to
+lookup requesters. This decouples the floodfill server from the transport layer.
+
+#### type I2NPSender
+
+```go
+type I2NPSender interface {
+	// QueueSendI2NP queues an I2NP message to be sent over the session.
+	// Returns an error if the session is closed or send queue is full.
+	QueueSendI2NP(msg i2np.I2NPMessage) error
+}
+```
+
+I2NPSender represents a session for sending I2NP messages to a router.
+
 #### type KademliaResolver
 
 ```go
@@ -476,11 +893,51 @@ type KademliaResolver struct {
 
 resolves router infos with recursive kademlia lookup
 
+#### func  NewKademliaResolverWithTransport
+
+```go
+func NewKademliaResolverWithTransport(netDb NetworkDatabase, pool *tunnel.Pool, transport LookupTransport, ourHash common.Hash) *KademliaResolver
+```
+NewKademliaResolverWithTransport creates a resolver with transport capability
+for network lookups. This enables the resolver to send DatabaseLookup messages
+to peers and receive responses.
+
+Parameters:
+
+    - netDb: The network database to store discovered RouterInfos
+    - pool: The tunnel pool for sending messages (used for privacy)
+    - transport: The transport interface for sending DatabaseLookup messages
+    - ourHash: Our router's identity hash for constructing lookup messages
+
+#### func (*KademliaResolver) GetResponseHandler
+
+```go
+func (kr *KademliaResolver) GetResponseHandler() *LookupResponseHandler
+```
+GetResponseHandler returns the response handler for registering incoming
+responses. This should be called by the message processor to deliver
+DatabaseStore and DatabaseSearchReply messages to waiting lookups.
+
 #### func (*KademliaResolver) Lookup
 
 ```go
 func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*router_info.RouterInfo, error)
 ```
+
+#### func (*KademliaResolver) SetOurHash
+
+```go
+func (kr *KademliaResolver) SetOurHash(hash common.Hash)
+```
+SetOurHash sets our router's identity hash for constructing lookup messages.
+
+#### func (*KademliaResolver) SetTransport
+
+```go
+func (kr *KademliaResolver) SetTransport(transport LookupTransport)
+```
+SetTransport sets the lookup transport for network-based DHT lookups. This must
+be called before performing remote lookups if not set via constructor.
 
 #### type LeaseSetEntry
 
@@ -493,6 +950,147 @@ type LeaseSetEntry struct {
 
 LeaseSetEntry represents a LeaseSet with its hash for iteration. Used by
 GetAllLeaseSets() to return all LeaseSets stored in the database.
+
+#### type LookupResponseHandler
+
+```go
+type LookupResponseHandler struct {
+}
+```
+
+LookupResponseHandler handles incoming DatabaseStore and DatabaseSearchReply
+messages for pending lookups. It correlates responses with outstanding requests
+using message IDs.
+
+#### func  NewLookupResponseHandler
+
+```go
+func NewLookupResponseHandler() *LookupResponseHandler
+```
+NewLookupResponseHandler creates a new handler for lookup responses
+
+#### func (*LookupResponseHandler) HandleResponse
+
+```go
+func (h *LookupResponseHandler) HandleResponse(messageID, msgType int, data []byte) bool
+```
+HandleResponse delivers a response to the waiting lookup if one exists
+
+#### func (*LookupResponseHandler) RegisterPending
+
+```go
+func (h *LookupResponseHandler) RegisterPending(messageID int) chan lookupResponse
+```
+RegisterPending registers a pending lookup with the given message ID
+
+#### func (*LookupResponseHandler) UnregisterPending
+
+```go
+func (h *LookupResponseHandler) UnregisterPending(messageID int)
+```
+UnregisterPending removes a pending lookup registration
+
+#### type LookupTransport
+
+```go
+type LookupTransport interface {
+	// SendDatabaseLookup sends a DatabaseLookup message to a peer and waits for a response.
+	// Returns the response (either DatabaseStore or DatabaseSearchReply data) or an error.
+	// The timeout parameter specifies how long to wait for a response.
+	SendDatabaseLookup(ctx context.Context, peerRI router_info.RouterInfo, lookup *i2np.DatabaseLookup) ([]byte, int, error)
+}
+```
+
+LookupTransport defines the interface for sending DatabaseLookup messages and
+receiving responses. This enables the KademliaResolver to perform network-based
+DHT lookups.
+
+#### type NetDBCongestionTracker
+
+```go
+type NetDBCongestionTracker struct {
+}
+```
+
+NetDBCongestionTracker implements PeerCongestionInfo for StdNetDB. It provides
+congestion flag parsing and caching for remote peers.
+
+#### func  NewNetDBCongestionTracker
+
+```go
+func NewNetDBCongestionTracker(db *StdNetDB, cfg config.CongestionDefaults) *NetDBCongestionTracker
+```
+NewNetDBCongestionTracker creates a congestion tracker for the given NetDB.
+
+#### func (*NetDBCongestionTracker) ClearCache
+
+```go
+func (t *NetDBCongestionTracker) ClearCache()
+```
+ClearCache clears the entire congestion flag cache.
+
+#### func (*NetDBCongestionTracker) CountCongestedPeers
+
+```go
+func (t *NetDBCongestionTracker) CountCongestedPeers() (dCount, eCount, gCount, totalCount int)
+```
+CountCongestedPeers returns counts of peers by congestion level.
+
+#### func (*NetDBCongestionTracker) GetCacheSize
+
+```go
+func (t *NetDBCongestionTracker) GetCacheSize() int
+```
+GetCacheSize returns the number of cached congestion flags.
+
+#### func (*NetDBCongestionTracker) GetCongestionStats
+
+```go
+func (t *NetDBCongestionTracker) GetCongestionStats() CongestionStats
+```
+GetCongestionStats returns network-wide congestion statistics. Iterates through
+all known RouterInfos to calculate current statistics.
+
+#### func (*NetDBCongestionTracker) GetEffectiveCongestionFlag
+
+```go
+func (t *NetDBCongestionTracker) GetEffectiveCongestionFlag(hash common.Hash) config.CongestionFlag
+```
+GetEffectiveCongestionFlag returns the effective congestion flag for peer
+selection. Handles stale E flag → D downgrade per PROP_162 spec.
+
+#### func (*NetDBCongestionTracker) GetPeerCongestionFlag
+
+```go
+func (t *NetDBCongestionTracker) GetPeerCongestionFlag(hash common.Hash) config.CongestionFlag
+```
+GetPeerCongestionFlag returns the congestion flag for a specific peer. Uses
+caching to avoid repeated parsing of RouterInfo caps.
+
+#### func (*NetDBCongestionTracker) GetPeerCongestionFlagFromRI
+
+```go
+func (t *NetDBCongestionTracker) GetPeerCongestionFlagFromRI(ri *router_info.RouterInfo, hash common.Hash) config.CongestionFlag
+```
+GetPeerCongestionFlagFromRI parses congestion flag directly from RouterInfo.
+This is useful when RouterInfo is already loaded.
+
+#### func (*NetDBCongestionTracker) InvalidatePeerCache
+
+```go
+func (t *NetDBCongestionTracker) InvalidatePeerCache(hash common.Hash)
+```
+InvalidatePeerCache invalidates the cache for a specific peer. Should be called
+when a peer's RouterInfo is updated.
+
+#### func (*NetDBCongestionTracker) IsStaleEFlag
+
+```go
+func (t *NetDBCongestionTracker) IsStaleEFlag(hash common.Hash) bool
+```
+IsStaleEFlag checks if a peer's E flag should be treated as D due to stale
+RouterInfo. Per PROP_162: if RouterInfo is older than EFlagAgeThreshold (15
+min), treat E as D.
 
 #### type NetworkDatabase
 
@@ -538,6 +1136,27 @@ type NetworkDatabase interface {
 ```
 
 Moved from: netdb.go i2p network database, storage of i2p RouterInfos
+
+#### type PeerCongestionInfo
+
+```go
+type PeerCongestionInfo interface {
+	// GetPeerCongestionFlag returns the congestion flag for a specific peer.
+	// Returns CongestionFlagNone if peer is not found or has no congestion flag.
+	GetPeerCongestionFlag(hash common.Hash) config.CongestionFlag
+
+	// GetCongestionStats returns network-wide congestion statistics.
+	// Statistics are calculated on-demand from the current RouterInfo cache.
+	GetCongestionStats() CongestionStats
+
+	// CountCongestedPeers returns counts of peers by congestion level.
+	// Returns (dCount, eCount, gCount, totalCount).
+	CountCongestedPeers() (dCount, eCount, gCount, totalCount int)
+}
+```
+
+PeerCongestionInfo provides congestion information about remote peers. This
+interface enables congestion-aware tunnel building decisions.
 
 #### type PeerStats
 
@@ -645,6 +1264,15 @@ func (pt *PeerTracker) RecordSuccess(hash common.Hash, responseTimeMs int64)
 ```
 RecordSuccess records a successful connection to a peer.
 
+#### func (*PeerTracker) ScorePeer
+
+```go
+func (pt *PeerTracker) ScorePeer(hash common.Hash) float64
+```
+ScorePeer returns a reliability score for a peer (0.0 to 1.0). Unknown peers (no
+tracking data) receive 0.5 (neutral). Reliable peers score higher; unreliable
+peers score lower.
+
 #### type Publisher
 
 ```go
@@ -659,7 +1287,7 @@ routers in the network.
 #### func  NewPublisher
 
 ```go
-func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport TransportManager, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher
+func NewPublisher(db NetworkDatabase, pool *tunnel.Pool, transport SessionProvider, routerInfoProvider RouterInfoProvider, config PublisherConfig) *Publisher
 ```
 NewPublisher creates a new database publisher. The publisher periodically
 distributes RouterInfo and LeaseSets to the closest floodfill routers based on
@@ -685,9 +1313,10 @@ GetStats returns statistics about publishing activity
 ```go
 func (p *Publisher) PublishLeaseSet(hash common.Hash, ls lease_set.LeaseSet) error
 ```
-PublishLeaseSet publishes a specific LeaseSet to floodfill routers. This is the
-main publishing logic that sends DatabaseStore messages to the closest floodfill
-routers.
+PublishLeaseSet publishes a specific LeaseSet (original type) to floodfill
+routers. This is the main publishing logic that sends DatabaseStore messages to
+the closest floodfill routers. Note: This method publishes original LeaseSets
+(type 1), not LeaseSet2.
 
 #### func (*Publisher) PublishRouterInfo
 
@@ -699,7 +1328,7 @@ PublishRouterInfo publishes a specific RouterInfo to floodfill routers
 #### func (*Publisher) SetTransport
 
 ```go
-func (p *Publisher) SetTransport(transport TransportManager)
+func (p *Publisher) SetTransport(transport SessionProvider)
 ```
 SetTransport sets the transport manager after publisher creation. This allows
 the transport to be configured after initial publisher setup.
@@ -842,6 +1471,14 @@ GetLeaseSet retrieves a LeaseSet by its hash for direct router operations.
 Returns a channel that yields the LeaseSet if found, nil if not found or
 expired.
 
+#### func (*RouterNetDB) GetLeaseSet2Bytes
+
+```go
+func (r *RouterNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
+```
+GetLeaseSet2Bytes retrieves raw LeaseSet2 data by its hash for direct router
+operations. Returns the serialized LeaseSet2 bytes and any error encountered.
+
 #### func (*RouterNetDB) GetLeaseSetBytes
 
 ```go
@@ -927,6 +1564,20 @@ func (r *RouterNetDB) Size() int
 ```
 Size returns the number of RouterInfo entries in the database.
 
+#### func (*RouterNetDB) Store
+
+```go
+func (r *RouterNetDB) Store(key common.Hash, data []byte, dataType byte) error
+```
+Store stores a network database entry, dispatching to the appropriate handler
+based on the data type:
+
+    - 0: RouterInfo
+    - 1: LeaseSet
+    - 3: LeaseSet2
+    - 5: EncryptedLeaseSet
+    - 7: MetaLeaseSet
+
 #### func (*RouterNetDB) StoreEncryptedLeaseSet
 
 ```go
@@ -963,14 +1614,56 @@ StoreMetaLeaseSet stores a MetaLeaseSet in the database from direct router
 operations. key is the destination hash, data is the serialized MetaLeaseSet,
 and dataType should be 7 for MetaLeaseSet.
 
+#### func (*RouterNetDB) StoreRouterInfo
+
+```go
+func (r *RouterNetDB) StoreRouterInfo(ri router_info.RouterInfo)
+```
+StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase
+interface. It delegates to the underlying StdNetDB.StoreRouterInfo.
+
 #### func (*RouterNetDB) StoreRouterInfoFromMessage
 
 ```go
 func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error
 ```
-StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an I2NP DatabaseStore message.
-key is the router identity hash, data is the serialized RouterInfo, and dataType should be 0 for
-RouterInfo.
+StoreRouterInfoFromMessage stores a RouterInfo entry in the database from an
+I2NP DatabaseStore message. key is the router identity hash, data is the
+serialized RouterInfo, and dataType should be 0 for RouterInfo.
+
+#### type SearchReplyError
+
+```go
+type SearchReplyError struct {
+	Suggestions []common.Hash
+}
+```
+
+SearchReplyError is returned when a peer responds with a DatabaseSearchReply
+instead of a DatabaseStore. It contains the suggested peer hashes for iterative
+lookup.
+
+#### func (*SearchReplyError) Error
+
+```go
+func (e *SearchReplyError) Error() string
+```
+
+#### type SessionProvider
+
+```go
+type SessionProvider interface {
+	// GetSession obtains a transport session with a router given its RouterInfo.
+	// If a session with this router is NOT already made, attempts to create one.
+	// Returns an established TransportSession and nil on success.
+	// Returns nil and an error on error.
+	GetSession(routerInfo router_info.RouterInfo) (I2NPSender, error)
+}
+```
+
+SessionProvider provides access to the transport layer for sending I2NP
+messages. This interface allows the Publisher to send messages to gateway
+routers without tight coupling to the router/transport implementation.
 
 #### type StdNetDB
 
@@ -1046,6 +1739,7 @@ This is primarily used for publishing all LeaseSets to floodfill routers.
 ```go
 func (db *StdNetDB) GetAllRouterInfos() (ri []router_info.RouterInfo)
 ```
+GetAllRouterInfos returns all cached RouterInfos as a slice.
 
 #### func (*StdNetDB) GetEncryptedLeaseSet
 
@@ -1062,8 +1756,7 @@ Checks memory cache first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetEncryptedLeaseSetBytes(hash common.Hash) ([]byte, error)
 ```
 GetEncryptedLeaseSetBytes retrieves EncryptedLeaseSet data as bytes from the
-database. Checks memory cache first, then loads from filesystem if necessary.
-Returns serialized EncryptedLeaseSet bytes suitable for network transmission.
+database.
 
 #### func (*StdNetDB) GetFastPeerCount
 
@@ -1119,18 +1812,14 @@ first, then loads from filesystem if necessary.
 ```go
 func (db *StdNetDB) GetLeaseSet2Bytes(hash common.Hash) ([]byte, error)
 ```
-GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database. Checks
-memory cache first, then loads from filesystem if necessary. Returns serialized
-LeaseSet2 bytes suitable for network transmission.
+GetLeaseSet2Bytes retrieves LeaseSet2 data as bytes from the database.
 
 #### func (*StdNetDB) GetLeaseSetBytes
 
 ```go
 func (db *StdNetDB) GetLeaseSetBytes(hash common.Hash) ([]byte, error)
 ```
-GetLeaseSetBytes retrieves LeaseSet data as bytes from the database. Checks
-memory cache first, then loads from filesystem if necessary. Returns serialized
-LeaseSet bytes suitable for network transmission.
+GetLeaseSetBytes retrieves LeaseSet data as bytes from the database.
 
 #### func (*StdNetDB) GetLeaseSetCount
 
@@ -1162,8 +1851,6 @@ first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetMetaLeaseSetBytes(hash common.Hash) ([]byte, error)
 ```
 GetMetaLeaseSetBytes retrieves MetaLeaseSet data as bytes from the database.
-Checks memory cache first, then loads from filesystem if necessary. Returns
-serialized MetaLeaseSet bytes suitable for network transmission.
 
 #### func (*StdNetDB) GetRouterInfo
 
@@ -1185,6 +1872,23 @@ func (db *StdNetDB) GetRouterInfoCount() int
 ```
 GetRouterInfoCount returns the total number of RouterInfo entries in the
 database
+
+#### func (*StdNetDB) GetRouterInfoExpirationStats
+
+```go
+func (db *StdNetDB) GetRouterInfoExpirationStats() (total, expired int, nextExpiry time.Duration)
+```
+GetRouterInfoExpirationStats returns statistics about RouterInfo expiration
+tracking. Returns total tracked count, expired count, and time until next
+expiration.
+
+#### func (*StdNetDB) IsFloodfill
+
+```go
+func (db *StdNetDB) IsFloodfill() bool
+```
+IsFloodfill returns whether this router is configured to operate as a floodfill
+router. This checks the global router configuration for the floodfill flag.
 
 #### func (*StdNetDB) Path
 
@@ -1212,7 +1916,7 @@ failed
 #### func (*StdNetDB) Save
 
 ```go
-func (db *StdNetDB) Save() (err error)
+func (db *StdNetDB) Save() error
 ```
 
 #### func (*StdNetDB) SaveEntry
@@ -1280,9 +1984,10 @@ LeaseSets use 'l' prefix instead of 'r' for router infos
 func (db *StdNetDB) StartExpirationCleaner()
 ```
 StartExpirationCleaner starts a background goroutine that periodically removes
-expired LeaseSets. The cleanup runs every minute and removes any LeaseSets whose
-expiration time has passed. This method should be called once during NetDB
-initialization. Use Stop() to gracefully shut down the cleanup goroutine.
+expired LeaseSets and prunes stale peer tracking entries. The cleanup runs every
+minute for LeaseSets and every 10 minutes for peer tracking. This method should
+be called once during NetDB initialization. Use Stop() to gracefully shut down
+the cleanup goroutine.
 
 #### func (*StdNetDB) Stop
 
@@ -1291,6 +1996,21 @@ func (db *StdNetDB) Stop()
 ```
 Stop gracefully shuts down the expiration cleaner goroutine. Blocks until the
 cleanup goroutine has exited.
+
+#### func (*StdNetDB) Store
+
+```go
+func (db *StdNetDB) Store(key common.Hash, data []byte, dataType byte) error
+```
+Store dispatches a DatabaseStore message to the appropriate handler based on
+data type. This implements the NetDBStore interface used by the I2NP message
+processor.
+
+    - 0: RouterInfo
+    - 1: LeaseSet
+    - 3: LeaseSet2
+    - 5: EncryptedLeaseSet
+    - 7: MetaLeaseSet
 
 #### func (*StdNetDB) StoreEncryptedLeaseSet
 
@@ -1308,9 +2028,9 @@ protocol specification).
 func (db *StdNetDB) StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
 ```
 StoreLeaseSet stores a LeaseSet entry in the database from I2NP DatabaseStore
-message. This method validates, parses, caches, and persists LeaseSet data.
-dataType should be 1 for standard LeaseSets (matching I2P protocol
-specification).
+message. This method validates and dispatches to the appropriate typed store
+method based on dataType. Accepts dataType 1 (LeaseSet), 3 (LeaseSet2), 5
+(EncryptedLeaseSet), and 7 (MetaLeaseSet).
 
 #### func (*StdNetDB) StoreLeaseSet2
 
@@ -1331,13 +2051,25 @@ DatabaseStore message. This method validates, parses, caches, and persists
 MetaLeaseSet data. dataType should be 7 for MetaLeaseSet (matching I2P protocol
 specification).
 
+#### func (*StdNetDB) StoreRouterInfo
+
+```go
+func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo)
+```
+StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase
+interface. It computes the identity hash, serializes the RouterInfo, and
+delegates to StoreRouterInfoFromMessage for full validation (hash verification,
+signature check, caching, and filesystem persistence).
+
 #### func (*StdNetDB) StoreRouterInfoFromMessage
 
 ```go
 func (db *StdNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, dataType byte) error
 ```
 StoreRouterInfoFromMessage stores a RouterInfo entry in the database from I2NP
-DatabaseStore message.
+DatabaseStore message. It takes the pre-computed identity hash, raw serialized
+data, and data type byte. This is used internally by Store() and by adapters
+that receive RouterInfo from network messages.
 
 #### type StrategyStats
 
@@ -1352,34 +2084,6 @@ type StrategyStats struct {
 ```
 
 StrategyStats contains statistics about exploration strategy
-
-#### type TransportManager
-
-```go
-type TransportManager interface {
-	// GetSession obtains a transport session with a router given its RouterInfo.
-	// If a session with this router is NOT already made, attempts to create one.
-	// Returns an established TransportSession and nil on success.
-	// Returns nil and an error on error.
-	GetSession(routerInfo router_info.RouterInfo) (TransportSession, error)
-}
-```
-
-TransportManager provides access to the transport layer for sending I2NP
-messages. This interface allows the Publisher to send messages to gateway
-routers without tight coupling to the router/transport implementation.
-
-#### type TransportSession
-
-```go
-type TransportSession interface {
-	// QueueSendI2NP queues an I2NP message to be sent over the session.
-	// Will block as long as the send queue is full.
-	QueueSendI2NP(msg i2np.I2NPMessage)
-}
-```
-
-TransportSession represents a session for sending I2NP messages to a router.
 
 
 

@@ -1,62 +1,72 @@
 # skew
+--
+    import "github.com/go-i2p/go-i2p/lib/util/time/skew"
 
-Clock skew validation utilities for I2P router operations.
+![skew.svg](skew.svg)
 
-## Overview
+Package skew provides clock skew validation utilities for I2P router operations.
 
-Per the I2P specification (common-structures RouterInfo notes), routers **MUST**
+Per the I2P specification (common-structures RouterInfo notes), routers MUST
 reject RouterInfo with a published timestamp more than 60 minutes in the future
 or past relative to the router's NTP-synchronized clock. This package provides
-centralized timestamp validation functions to enforce this requirement.
+centralized timestamp validation functions to enforce this requirement
+consistently.
+
+Usage:
+
+    if err := skew.ValidateTimestamp(routerInfo.Published().Time()); err != nil {
+        // Reject the RouterInfo
+    }
 
 ## Usage
 
-### RouterInfo Validation (NetDB)
+```go
+const MaxClockSkew = 60 * time.Minute
+```
+MaxClockSkew is the maximum acceptable difference between a RouterInfo's
+published timestamp and the current time. Per the I2P specification
+(common-structures RouterInfo notes), routers MUST reject RouterInfo with a
+published timestamp more than 60 minutes in the future or past.
+
+#### func  IsTimestampValid
 
 ```go
-if err := skew.ValidateTimestamp(routerInfo.Published().Time()); err != nil {
-    // Reject the RouterInfo — clock skew too large
-    log.Warn("Rejecting RouterInfo:", err)
-    return
-}
+func IsTimestampValid(published time.Time) bool
 ```
+IsTimestampValid is a convenience wrapper around ValidateTimestamp that returns
+a boolean instead of an error. It returns true if the timestamp is within the
+acceptable clock skew window.
 
-### Boolean Check
+#### func  ValidateTimestamp
 
 ```go
-if !skew.IsTimestampValid(routerInfo.Published().Time()) {
-    return ErrClockSkew
-}
+func ValidateTimestamp(published time.Time) error
 ```
+ValidateTimestamp checks whether the given timestamp is within the acceptable
+clock skew window (±MaxClockSkew from the current time). It returns nil if the
+timestamp is valid, or a descriptive error if it falls outside the window.
 
-### Custom Skew Window (NTCP2 Handshake)
+A zero-value time.Time is always rejected as invalid.
 
-NTCP2 handshakes use a tighter ±2 minute tolerance:
+This implements the I2P spec requirement: "Router MUST reject RouterInfo with
+published timestamp >60 minutes in the future or past."
+
+#### func  ValidateTimestampWithSkew
 
 ```go
-err := skew.ValidateTimestampWithSkew(handshakeTimestamp, 2*time.Minute)
-if err != nil {
-    // Reject the handshake
-    return err
-}
+func ValidateTimestampWithSkew(published time.Time, maxSkew time.Duration) error
 ```
+ValidateTimestampWithSkew checks whether the given timestamp is within a custom
+clock skew window. This is useful for subsystems that need different tolerances
+(e.g., NTCP2 handshake uses ±2 minutes).
 
-## Constants
+A zero-value time.Time is always rejected. A non-positive maxSkew is rejected
+with an error.
 
-| Name | Value | Source |
-|------|-------|--------|
-| `MaxClockSkew` | 60 minutes | I2P spec: common-structures RouterInfo |
 
-## Spec Compliance
 
-- Boundary behavior uses `>` (not `>=`), so a timestamp exactly 60 minutes old
-  is accepted. This matches the Java I2P implementation.
-- Zero-value `time.Time` is always rejected.
-- `ValidateTimestampWithSkew` rejects non-positive `maxSkew` values.
+skew 
 
-## Integration
+github.com/go-i2p/go-i2p/lib/util/time/skew
 
-This package is used by:
-
-- **`lib/netdb`** — RouterInfo acceptance validation
-- **`lib/transport/ntcp2`** — Handshake timestamp validation (with ±2 min window)
+[go-i2p template file](/template.md)

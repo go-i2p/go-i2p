@@ -1,8 +1,8 @@
-# exportable
+# header
 --
     import "github.com/go-i2p/go-i2p/lib/i2np/fuzz/header"
 
-![exportable.svg](exportable.svg)
+![header.svg](header.svg)
 
 
 
@@ -16,7 +16,7 @@ func Fuzz(data []byte) int
 
 
 
-exportable 
+header 
 
 github.com/go-i2p/go-i2p/lib/i2np/fuzz/header
 

@@ -4,6 +4,8 @@
 
 ![tunnel.svg](tunnel.svg)
 
+Package tunnel provides I2P tunnel management functionality.
+
 Package tunnel implements I2P tunnel creation, management, and message routing.
 
 # Overview
@@ -49,19 +51,23 @@ TunnelPool is safe for concurrent access:
 
 # Usage Example
 
-    // Create tunnel pool
-    pool := tunnel.NewTunnelPool(config, netdb, transport)
+    // Create tunnel pool with peer selector
+    pool := tunnel.NewTunnelPool(peerSelector)
 
-    // Build outbound tunnel
-    outTunnel, err := pool.BuildOutboundTunnel(3) // 3 hops
-    if err != nil {
-        log.Printf("Failed to build tunnel: %v", err)
+    // Start maintenance (builds tunnels automatically)
+    if err := pool.StartMaintenance(); err != nil {
+        log.Printf("Failed to start maintenance: %v", err)
     }
 
-    // Route message through tunnel
-    if err := outTunnel.SendMessage(msg); err != nil {
-        log.Printf("Failed to send: %v", err)
+    // Select an active tunnel for sending
+    outTunnel := pool.SelectTunnel()
+    if outTunnel == nil {
+        log.Printf("No active tunnels available")
     }
+
+    // For message routing, use Gateway.Send() with an I2NP message
+    // gateway := tunnel.NewGateway(tunnelID, nextHopID, encryption)
+    // encryptedMsg, err := gateway.Send(i2npMessageBytes)
 
 # Cryptography
 
@@ -73,35 +79,65 @@ Each tunnel hop uses:
 
 See github.com/go-i2p/crypto for cryptographic primitives.
 
+Package tunnel provides I2P tunnel management functionality.
+
 ## Usage
 
 ```go
 const (
-	DT_LOCAL = iota
-	DT_TUNNEL
-	DT_ROUTER
-	DT_UNUSED
+	FlagIBGW = 0x80 // Inbound Gateway: allow messages from anyone
+	FlagOBEP = 0x40 // Outbound Endpoint: allow messages to anyone
+)
+```
+Build record flag bits per I2P spec §tunnel-creation: Bit 7 (0x80): IBGW — if
+set, allow messages from anyone (inbound gateway) Bit 6 (0x40): OBEP — if set,
+allow messages to anyone (outbound endpoint)
+
+```go
+const (
+	DTLocal = iota
+	DTTunnel
+	DTRouter
+	DTUnused
 )
 ```
 
 ```go
 const (
-	FIRST_FRAGMENT = iota
-	FOLLOW_ON_FRAGMENT
+	FirstFragment = iota
+	FollowOnFragment
 )
 ```
 
 ```go
 const (
-	FLAG_SIZE                 = 1
-	TUNNEL_ID_SIZE            = 4
-	HASH_SIZE                 = 32
-	DELAY_SIZE                = 1
-	MESSAGE_ID_SIZE           = 4
-	EXTENDED_OPTIONS_MIN_SIZE = 2
-	SIZE_FIELD_SIZE           = 2
+	FlagSize               = 1
+	TunnelIDSize           = 4
+	HashSize               = 32
+	DelaySize              = 1
+	MessageIDSize          = 4
+	ExtendedOptionsMinSize = 2
+	SizeFieldSize          = 2
 )
 ```
+
+```go
+const (
+	BuildReplyCodeAccepted            = 0  // Tunnel accepted
+	BuildReplyCodeProbabilisticReject = 10 // Rejected: probabilistic reject
+	BuildReplyCodeTransientOverload   = 20 // Rejected: transient overload
+	BuildReplyCodeBandwidth           = 30 // Rejected: bandwidth limit (used for most rejections)
+	BuildReplyCodeCritical            = 50 // Rejected: critical (router shutdown, etc.)
+)
+```
+Build reply codes per I2P specification (TUNNEL-CREATION)
+
+```go
+const DefaultIdleTimeout = 2 * time.Minute
+```
+DefaultIdleTimeout is the default duration after which an idle tunnel is
+dropped. This helps mitigate resource exhaustion attacks where attackers request
+excessive tunnels but send no data through them.
 
 ```go
 var (
@@ -140,6 +176,46 @@ var (
 	ErrInvalidParticipantData = errors.New("invalid participant tunnel data")
 )
 ```
+
+#### func  HashSetToSlice
+
+```go
+func HashSetToSlice(set map[common.Hash]struct{}) []common.Hash
+```
+HashSetToSlice converts a hash set to a slice. Exported for use by other
+selector implementations.
+
+#### type AnyFilter
+
+```go
+type AnyFilter struct {
+}
+```
+
+AnyFilter combines multiple filters with OR logic. A peer passes if ANY filter
+accepts it.
+
+#### func  NewAnyFilter
+
+```go
+func NewAnyFilter(name string, filters ...PeerFilter) *AnyFilter
+```
+NewAnyFilter creates a composite OR filter.
+
+#### func (*AnyFilter) Accept
+
+```go
+func (f *AnyFilter) Accept(ri router_info.RouterInfo) bool
+```
+Accept returns true if any inner filter accepts the peer. Returns true if there
+are no filters (empty OR = accept all).
+
+#### func (*AnyFilter) Name
+
+```go
+func (f *AnyFilter) Name() string
+```
+Name returns the filter name.
 
 #### type BuildRequestRecord
 
@@ -193,21 +269,187 @@ type BuildTunnelRequest struct {
 
 BuildTunnelRequest contains the parameters needed to build a tunnel.
 
-BUG FIX: Added RequireDirectConnectivity to enable pre-filtering of
-introducer-only peers. This prevents session establishment failures by only
-selecting peers with direct NTCP2 addresses. Set to true in production; tests
-may leave false to test with mock peers.
+FIX: Added RequireDirectConnectivity to enable pre-filtering of introducer-only
+peers. This prevents session establishment failures by only selecting peers with
+direct NTCP2 addresses. Set to true in production; tests may leave false to test
+with mock peers.
+
+#### type BuildTunnelResult
+
+```go
+type BuildTunnelResult struct {
+	TunnelID   TunnelID      // The assigned tunnel ID (0 on failure)
+	PeerHashes []common.Hash // Hashes of peers selected for this build attempt
+}
+```
+
+BuildTunnelResult contains the result of a tunnel build attempt. It provides the
+generated tunnel ID and the hashes of the peers that were selected for this
+build, enabling callers to track which peers participated in failed builds for
+exclusion on retry.
 
 #### type BuilderInterface
 
 ```go
 type BuilderInterface interface {
-	// BuildTunnel initiates building a new tunnel with the specified parameters
-	BuildTunnel(req BuildTunnelRequest) (TunnelID, error)
+	// BuildTunnel initiates building a new tunnel with the specified parameters.
+	// Returns a BuildTunnelResult containing the tunnel ID and selected peer hashes.
+	BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error)
 }
 ```
 
 BuilderInterface defines interface for building tunnels
+
+#### type CompositeFilter
+
+```go
+type CompositeFilter struct {
+}
+```
+
+CompositeFilter combines multiple filters with AND logic. A peer must pass ALL
+filters to be accepted.
+
+#### func  NewCompositeFilter
+
+```go
+func NewCompositeFilter(name string, filters ...PeerFilter) *CompositeFilter
+```
+NewCompositeFilter creates a composite AND filter.
+
+#### func (*CompositeFilter) Accept
+
+```go
+func (f *CompositeFilter) Accept(ri router_info.RouterInfo) bool
+```
+Accept returns true only if all inner filters accept the peer.
+
+#### func (*CompositeFilter) Name
+
+```go
+func (f *CompositeFilter) Name() string
+```
+Name returns the filter name.
+
+#### type CongestionAwarePeerSelector
+
+```go
+type CongestionAwarePeerSelector interface {
+	// SelectPeersWithCongestionAwareness selects peers, filtering/derating by congestion.
+	// Excludes G-flagged peers and applies capacity multipliers to D/E peers.
+	SelectPeersWithCongestionAwareness(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+
+	// ShouldExcludePeer returns true if peer should be completely excluded (G flag).
+	ShouldExcludePeer(ri router_info.RouterInfo) bool
+
+	// GetCapacityMultiplier returns a capacity multiplier for peer derating (0.0-1.0).
+	// Returns 1.0 for non-congested peers, 0.0 for G-flagged peers.
+	GetCapacityMultiplier(ri router_info.RouterInfo) float64
+}
+```
+
+CongestionAwarePeerSelector adjusts peer selection based on congestion flags.
+Implements PROP_162 peer selection rules:
+
+    - G flag: Exclude from selection entirely
+    - E flag: Apply severe capacity multiplier (0.1x default)
+    - D flag: Apply moderate capacity multiplier (0.5x default)
+    - Stale E flag (>15min): Treat as D flag
+
+#### type CongestionAwareSelectorOption
+
+```go
+type CongestionAwareSelectorOption func(*DefaultCongestionAwarePeerSelector)
+```
+
+CongestionAwareSelectorOption is a functional option for configuring the
+selector.
+
+#### func  WithMaxRetries
+
+```go
+func WithMaxRetries(n int) CongestionAwareSelectorOption
+```
+WithMaxRetries sets the maximum number of retries when replacing G-flagged
+peers.
+
+#### func  WithRetryDelay
+
+```go
+func WithRetryDelay(d time.Duration) CongestionAwareSelectorOption
+```
+WithRetryDelay sets the delay between retries (useful for testing).
+
+#### type CongestionFilter
+
+```go
+type CongestionFilter struct {
+}
+```
+
+CongestionFilter is a PeerFilter that excludes G-flagged peers. Use with
+FilteringPeerSelector for composable congestion filtering.
+
+#### func  NewCongestionFilter
+
+```go
+func NewCongestionFilter(congestionInfo CongestionInfoProvider) *CongestionFilter
+```
+NewCongestionFilter creates a filter that excludes G-flagged peers.
+
+#### func (*CongestionFilter) Accept
+
+```go
+func (f *CongestionFilter) Accept(ri router_info.RouterInfo) bool
+```
+
+#### func (*CongestionFilter) Name
+
+```go
+func (f *CongestionFilter) Name() string
+```
+
+#### type CongestionInfoProvider
+
+```go
+type CongestionInfoProvider interface {
+	// GetEffectiveCongestionFlag returns the effective congestion flag for a peer.
+	// Handles stale E flag → D downgrade automatically.
+	GetEffectiveCongestionFlag(hash common.Hash) config.CongestionFlag
+}
+```
+
+CongestionInfoProvider provides congestion information about peers. This is a
+subset of netdb.PeerCongestionInfo to avoid import cycles.
+
+#### type CongestionScorer
+
+```go
+type CongestionScorer struct {
+}
+```
+
+CongestionScorer is a PeerScorer that derates peers based on congestion flags.
+Use with ScoringPeerSelector for composable congestion scoring.
+
+#### func  NewCongestionScorer
+
+```go
+func NewCongestionScorer(congestionInfo CongestionInfoProvider, cfg config.CongestionDefaults) *CongestionScorer
+```
+NewCongestionScorer creates a scorer that derates congested peers.
+
+#### func (*CongestionScorer) Name
+
+```go
+func (s *CongestionScorer) Name() string
+```
+
+#### func (*CongestionScorer) Score
+
+```go
+func (s *CongestionScorer) Score(ri router_info.RouterInfo) float64
+```
 
 #### type DecryptedTunnelMessage
 
@@ -219,17 +461,19 @@ type DecryptedTunnelMessage [1028]byte
 #### func (DecryptedTunnelMessage) Checksum
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() tunnel.TunnelIV
+func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte
 ```
 
 #### func (DecryptedTunnelMessage) DeliveryInstructionsWithFragments
 
 ```go
-func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() []DeliveryInstructionsWithFragment
+func (decrypted_tunnel_message DecryptedTunnelMessage) DeliveryInstructionsWithFragments() ([]DeliveryInstructionsWithFragment, error)
 ```
 Returns a slice of DeliveryInstructionWithFragment structures, which all of the
 Delivery Instructions in the tunnel message and their corresponding
-MessageFragment structures.
+MessageFragment structures. Also returns an error if any delivery instructions
+could not be fully parsed; in that case the returned slice contains any
+successfully parsed entries.
 
 #### func (DecryptedTunnelMessage) ID
 
@@ -242,6 +486,75 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) ID() TunnelID
 ```go
 func (decrypted_tunnel_message DecryptedTunnelMessage) IV() tunnel.TunnelIV
 ```
+
+#### type DefaultCongestionAwarePeerSelector
+
+```go
+type DefaultCongestionAwarePeerSelector struct {
+}
+```
+
+DefaultCongestionAwarePeerSelector implements CongestionAwarePeerSelector. It
+wraps an underlying peer selector and applies congestion-based filtering.
+
+#### func  NewCongestionAwarePeerSelector
+
+```go
+func NewCongestionAwarePeerSelector(
+	underlying NetDBSelector,
+	congestionInfo CongestionInfoProvider,
+	cfg config.CongestionDefaults,
+	opts ...CongestionAwareSelectorOption,
+) (*DefaultCongestionAwarePeerSelector, error)
+```
+NewCongestionAwarePeerSelector creates a new congestion-aware peer selector. The
+underlying selector provides base peer selection, and congestionInfo provides
+congestion flags for filtering decisions.
+
+#### func (*DefaultCongestionAwarePeerSelector) GetCapacityMultiplier
+
+```go
+func (s *DefaultCongestionAwarePeerSelector) GetCapacityMultiplier(ri router_info.RouterInfo) float64
+```
+GetCapacityMultiplier returns the capacity multiplier for a peer. Returns:
+
+    - 1.0 for non-congested peers
+    - 0.5 for D-flagged peers (configurable)
+    - 0.1 for E-flagged peers (configurable)
+    - 0.5 for stale E-flagged peers (treated as D)
+    - 0.0 for G-flagged peers (should be excluded entirely)
+
+#### func (*DefaultCongestionAwarePeerSelector) GetSelectionMetrics
+
+```go
+func (s *DefaultCongestionAwarePeerSelector) GetSelectionMetrics() SelectionMetrics
+```
+GetSelectionMetrics returns current selection metrics for monitoring.
+
+#### func (*DefaultCongestionAwarePeerSelector) ResetSelectionMetrics
+
+```go
+func (s *DefaultCongestionAwarePeerSelector) ResetSelectionMetrics()
+```
+ResetSelectionMetrics resets all selection metrics to zero.
+
+#### func (*DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness
+
+```go
+func (s *DefaultCongestionAwarePeerSelector) SelectPeersWithCongestionAwareness(
+	count int,
+	exclude []common.Hash,
+) ([]router_info.RouterInfo, error)
+```
+SelectPeersWithCongestionAwareness selects peers with congestion awareness. It
+excludes G-flagged peers and may request additional peers to replace them.
+
+#### func (*DefaultCongestionAwarePeerSelector) ShouldExcludePeer
+
+```go
+func (s *DefaultCongestionAwarePeerSelector) ShouldExcludePeer(ri router_info.RouterInfo) bool
+```
+ShouldExcludePeer returns true if the peer should be excluded due to G flag.
 
 #### type DefaultPeerSelector
 
@@ -279,6 +592,42 @@ type DelayFactor byte
 ```
 
 
+#### type DeliveryConfig
+
+```go
+type DeliveryConfig struct {
+	// DeliveryType: DTLocal (0), DTTunnel (1), or DTRouter (2)
+	DeliveryType byte
+	// TunnelID is the destination tunnel ID (required for DTTunnel)
+	TunnelID uint32
+	// Hash is the gateway router hash (DTTunnel) or destination router hash (DTRouter)
+	Hash [32]byte
+}
+```
+
+DeliveryConfig specifies the delivery type and addressing for a tunnel message.
+
+#### func  LocalDelivery
+
+```go
+func LocalDelivery() DeliveryConfig
+```
+LocalDelivery returns a DeliveryConfig for DTLocal delivery.
+
+#### func  RouterDelivery
+
+```go
+func RouterDelivery(routerHash [32]byte) DeliveryConfig
+```
+RouterDelivery returns a DeliveryConfig for DTRouter delivery.
+
+#### func  TunnelDelivery
+
+```go
+func TunnelDelivery(tunnelID uint32, gatewayHash [32]byte) DeliveryConfig
+```
+TunnelDelivery returns a DeliveryConfig for DTTunnel delivery.
+
 #### type DeliveryInstructions
 
 ```go
@@ -315,8 +664,8 @@ Returns:
 
 The resulting instruction will have:
 
-    - deliveryType: DT_LOCAL
-    - fragmentType: FIRST_FRAGMENT
+    - deliveryType: DTLocal
+    - fragmentType: FirstFragment
     - fragmented: false (unfragmented message)
     - hasDelay: false
     - hasExtOptions: false
@@ -375,8 +724,8 @@ func (delivery_instructions *DeliveryInstructions) Delay() (delay_factor DelayFa
 ```go
 func (delivery_instructions *DeliveryInstructions) DeliveryType() (byte, error)
 ```
-Return the delivery type for these DeliveryInstructions, can be of type
-DT_LOCAL, DT_TUNNEL, DT_ROUTER, or DT_UNUSED.
+Return the delivery type for these DeliveryInstructions, can be of type DTLocal,
+DTTunnel, DTRouter, or DTUnused.
 
 #### func (*DeliveryInstructions) ExtendedOptions
 
@@ -392,8 +741,8 @@ extended options will generate a warning.
 ```go
 func (delivery_instructions *DeliveryInstructions) FragmentNumber() (int, error)
 ```
-Read the integer stored in the 6-1 bits of a FOLLOW_ON_FRAGMENT's flag,
-indicating the fragment number.
+Read the integer stored in the 6-1 bits of a FollowOnFragment's flag, indicating
+the fragment number.
 
 #### func (*DeliveryInstructions) FragmentSize
 
@@ -437,7 +786,7 @@ func (delivery_instructions *DeliveryInstructions) HasHash() (bool, error)
 ```go
 func (delivery_instructions *DeliveryInstructions) HasTunnelID() (bool, error)
 ```
-Check if the DeliveryInstructions is of type DT_TUNNEL.
+Check if the DeliveryInstructions is of type DTTunnel.
 
 #### func (*DeliveryInstructions) Hash
 
@@ -446,16 +795,16 @@ func (delivery_instructions *DeliveryInstructions) Hash() (hash common.Hash, err
 ```
 Return the hash for these DeliveryInstructions, which varies by hash type.
 
-    If the type is DT_TUNNEL, hash is the SHA256 of the gateway router, if
-    the type is DT_ROUTER it is the SHA256 of the router.
+    If the type is DTTunnel, hash is the SHA256 of the gateway router, if
+    the type is DTRouter it is the SHA256 of the router.
 
 #### func (*DeliveryInstructions) LastFollowOnFragment
 
 ```go
 func (delivery_instructions *DeliveryInstructions) LastFollowOnFragment() (bool, error)
 ```
-Read the value of the 0 bit of a FOLLOW_ON_FRAGMENT, which is set to 1 to
-indicate the last fragment.
+Read the value of the 0 bit of a FollowOnFragment, which is set to 1 to indicate
+the last fragment.
 
 #### func (*DeliveryInstructions) MessageID
 
@@ -471,15 +820,15 @@ this DeliveryInstructions.
 func (delivery_instructions *DeliveryInstructions) TunnelID() (tunnel_id uint32, err error)
 ```
 Return the tunnel ID in this DeliveryInstructions or 0 and an error if the
-DeliveryInstructions are not of type DT_TUNNEL.
+DeliveryInstructions are not of type DTTunnel.
 
 #### func (*DeliveryInstructions) Type
 
 ```go
 func (delivery_instructions *DeliveryInstructions) Type() (int, error)
 ```
-Return if the DeliveryInstructions are of type FIRST_FRAGMENT or
-FOLLOW_ON_FRAGMENT.
+Return if the DeliveryInstructions are of type FirstFragment or
+FollowOnFragment.
 
 #### type DeliveryInstructionsWithFragment
 
@@ -501,19 +850,23 @@ type EncryptedTunnelMessage tunnel.TunnelData
 #### func (EncryptedTunnelMessage) Data
 
 ```go
-func (tm EncryptedTunnelMessage) Data() tunnel.TunnelIV
+func (tm EncryptedTunnelMessage) Data() ([]byte, error)
 ```
+Data returns the encrypted data portion of the tunnel message (1008 bytes). The
+encrypted message format is: [TunnelID (4)] [IV (16)] [EncryptedData (1008)].
+There is no checksum field in the encrypted format; checksum exists only in the
+decrypted format.
 
 #### func (EncryptedTunnelMessage) ID
 
 ```go
-func (tm EncryptedTunnelMessage) ID() (tid TunnelID)
+func (tm EncryptedTunnelMessage) ID() (tid TunnelID, err error)
 ```
 
 #### func (EncryptedTunnelMessage) IV
 
 ```go
-func (tm EncryptedTunnelMessage) IV() tunnel.TunnelIV
+func (tm EncryptedTunnelMessage) IV() (tunnel.TunnelIV, error)
 ```
 
 #### type Endpoint
@@ -531,7 +884,8 @@ bytes to avoid import cycles - Uses crypto/tunnel package with ECIES-X25519-AEAD
 (ChaCha20/Poly1305) by default - Supports both modern ECIES and legacy
 AES-256-CBC for compatibility - Handles fragment reassembly for large messages -
 Automatic cleanup of stale fragments (default: 60 seconds) - Thread-safe for
-concurrent message processing - Clear error handling and logging
+concurrent message processing - Clear error handling and logging - Routes
+DTTunnel and DTRouter messages via MessageForwarder
 
 #### func  NewEndpoint
 
@@ -568,13 +922,23 @@ to handler
 Thread-safe: protects fragment map access with mutex. Returns an error if
 processing fails at any step.
 
+#### func (*Endpoint) SetForwarder
+
+```go
+func (e *Endpoint) SetForwarder(forwarder MessageForwarder)
+```
+SetForwarder sets the message forwarder for routing DTTunnel and DTRouter
+messages. If not set, non-local messages will be logged and dropped (backward
+compatible).
+
 #### func (*Endpoint) Stop
 
 ```go
 func (e *Endpoint) Stop()
 ```
-Stop gracefully shuts down the endpoint and stops the cleanup goroutine. Should
-be called when the endpoint is no longer needed to prevent resource leaks.
+Stop gracefully shuts down the endpoint and stops the cleanup goroutine. Safe to
+call multiple times — subsequent calls are no-ops. Should be called when the
+endpoint is no longer needed to prevent resource leaks.
 
 #### func (*Endpoint) TunnelID
 
@@ -582,6 +946,102 @@ be called when the endpoint is no longer needed to prevent resource leaks.
 func (e *Endpoint) TunnelID() TunnelID
 ```
 TunnelID returns the ID of this endpoint's tunnel
+
+#### type FilteringPeerSelector
+
+```go
+type FilteringPeerSelector struct {
+}
+```
+
+FilteringPeerSelector wraps an underlying selector and applies filters. It
+implements PeerSelector, enabling stacking of multiple filtering layers.
+
+#### func  NewFilteringPeerSelector
+
+```go
+func NewFilteringPeerSelector(
+	underlying PeerSelector,
+	opts ...FilteringPeerSelectorOption,
+) (*FilteringPeerSelector, error)
+```
+NewFilteringPeerSelector creates a new filtering peer selector. The underlying
+selector provides candidates, filters determine acceptance.
+
+#### func (*FilteringPeerSelector) AddFilter
+
+```go
+func (s *FilteringPeerSelector) AddFilter(filter PeerFilter)
+```
+AddFilter adds a filter to the selector chain.
+
+#### func (*FilteringPeerSelector) SelectPeers
+
+```go
+func (s *FilteringPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+```
+SelectPeers implements PeerSelector by filtering candidates from the underlying
+selector.
+
+#### type FilteringPeerSelectorOption
+
+```go
+type FilteringPeerSelectorOption func(*FilteringPeerSelector)
+```
+
+FilteringPeerSelectorOption is a functional option for FilteringPeerSelector.
+
+#### func  WithFilterMaxRetries
+
+```go
+func WithFilterMaxRetries(n int) FilteringPeerSelectorOption
+```
+WithFilterMaxRetries sets the maximum retry count for finding acceptable peers.
+
+#### func  WithFilterName
+
+```go
+func WithFilterName(name string) FilteringPeerSelectorOption
+```
+WithFilterName sets a descriptive name for logging.
+
+#### func  WithFilters
+
+```go
+func WithFilters(filters ...PeerFilter) FilteringPeerSelectorOption
+```
+WithFilters adds filters to the selector.
+
+#### type FuncFilter
+
+```go
+type FuncFilter struct {
+}
+```
+
+FuncFilter wraps a simple function as a PeerFilter. Useful for quick inline
+filters.
+
+#### func  NewFuncFilter
+
+```go
+func NewFuncFilter(name string, acceptFn func(ri router_info.RouterInfo) bool) *FuncFilter
+```
+NewFuncFilter creates a filter from a function.
+
+#### func (*FuncFilter) Accept
+
+```go
+func (f *FuncFilter) Accept(ri router_info.RouterInfo) bool
+```
+Accept returns whether the peer passes the filter function.
+
+#### func (*FuncFilter) Name
+
+```go
+func (f *FuncFilter) Name() string
+```
+Name returns the filter name.
 
 #### type Gateway
 
@@ -597,7 +1057,8 @@ Design decisions: - Works with raw bytes to avoid import cycles with i2np
 package - Uses crypto/tunnel package with ECIES-X25519-AEAD (ChaCha20/Poly1305)
 by default - Supports both modern ECIES and legacy AES-256-CBC for compatibility
 - Simple interface focused on core functionality - Error handling at each step
-with clear error messages
+with clear error messages - Supports DTLocal, DTTunnel, and DTRouter delivery
+types - Fragments oversized messages across multiple tunnel messages
 
 #### func  NewGateway
 
@@ -633,6 +1094,17 @@ tunnel message with padding 4. Calculate checksum 5. Apply encryption
 
 Returns the encrypted tunnel message ready for transmission, or an error.
 
+#### func (*Gateway) SendWithDelivery
+
+```go
+func (g *Gateway) SendWithDelivery(msgBytes []byte, dc DeliveryConfig) ([][]byte, error)
+```
+SendWithDelivery sends an I2NP message with the specified delivery type.
+Supports DTLocal, DTTunnel, and DTRouter delivery types. Automatically fragments
+messages that exceed the tunnel payload limit.
+
+Returns a slice of encrypted tunnel messages (one per fragment), or an error.
+
 #### func (*Gateway) TunnelID
 
 ```go
@@ -656,6 +1128,36 @@ type HealthCheckResult struct {
 
 HealthCheckResult summarizes the health of the tunnel pool.
 
+#### type InvertFilter
+
+```go
+type InvertFilter struct {
+}
+```
+
+InvertFilter negates another filter's result.
+
+#### func  NewInvertFilter
+
+```go
+func NewInvertFilter(inner PeerFilter) *InvertFilter
+```
+NewInvertFilter creates a filter that inverts another filter.
+
+#### func (*InvertFilter) Accept
+
+```go
+func (f *InvertFilter) Accept(ri router_info.RouterInfo) bool
+```
+Accept returns the opposite of the inner filter's result.
+
+#### func (*InvertFilter) Name
+
+```go
+func (f *InvertFilter) Name() string
+```
+Name returns a descriptive name indicating the negation.
+
 #### type Manager
 
 ```go
@@ -668,15 +1170,32 @@ manages the lifecycle of tunnels where this router acts as an intermediate hop.
 
 Design decisions: - Separate tracking for participants (where we relay) vs owned
 tunnels (where we originate) - Automatic cleanup of expired participant tunnels
-- Thread-safe concurrent access - Simple map-based storage for O(1) lookup
+- Thread-safe concurrent access - Simple map-based storage for O(1) lookup -
+Configurable participation limits to protect against resource exhaustion -
+Per-source rate limiting to prevent single-source flooding
 
 #### func  NewManager
 
 ```go
 func NewManager() *Manager
 ```
-NewManager creates a new tunnel manager. Starts a background goroutine to clean
-up expired participants.
+NewManager creates a new tunnel manager with default configuration. Starts a
+background goroutine to clean up expired participants. For custom limits, use
+NewManagerWithConfig instead.
+
+#### func  NewManagerWithConfig
+
+```go
+func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager
+```
+NewManagerWithConfig creates a new tunnel manager with the specified
+configuration. This allows customizing participation limits and other tunnel
+settings.
+
+Parameters: - cfg: TunnelDefaults containing limit configuration
+
+The manager will start a background cleanup goroutine automatically. If
+per-source rate limiting is enabled, a SourceLimiter will also be created.
 
 #### func (*Manager) AddParticipant
 
@@ -691,6 +1210,38 @@ Parameters: - p: the participant tunnel to track
 
 Returns an error if the participant is nil or already exists.
 
+#### func (*Manager) CanAcceptParticipant
+
+```go
+func (m *Manager) CanAcceptParticipant() (bool, string)
+```
+CanAcceptParticipant checks if we can accept a new participating tunnel. This
+implements a two-tier rejection system: 1. Soft limit (50% of max):
+probabilistic rejection starts, increasing toward hard limit 2. Hard limit
+(max): always reject
+
+The probabilistic rejection uses dynamic scaling: - From soft limit to critical
+threshold (last 100): 50% → 90% rejection - In critical zone (last 100 tunnels):
+90% → 100% rejection
+
+Returns: - canAccept: true if the tunnel build request should be accepted -
+reason: human-readable reason if rejected (empty string if accepted)
+
+#### func (*Manager) GetLimitConfig
+
+```go
+func (m *Manager) GetLimitConfig() (maxParticipants, softLimit int, limitsEnabled bool)
+```
+GetLimitConfig returns the current participation limit configuration. Returns
+maxParticipants, softLimit, and whether limits are enabled.
+
+#### func (*Manager) GetLimitStats
+
+```go
+func (m *Manager) GetLimitStats() TunnelLimitStats
+```
+GetLimitStats returns comprehensive statistics about all protection mechanisms.
+
 #### func (*Manager) GetParticipant
 
 ```go
@@ -702,6 +1253,30 @@ participant exists with the given ID.
 This is used when processing incoming TunnelData messages to find the
 appropriate participant to handle decryption and forwarding.
 
+#### func (*Manager) GetRejectStats
+
+```go
+func (m *Manager) GetRejectStats() (total, recent uint64)
+```
+GetRejectStats returns the current rejection statistics. Returns total
+rejections and recent rejections since last reset.
+
+#### func (*Manager) GetSourceLimiterStats
+
+```go
+func (m *Manager) GetSourceLimiterStats() *SourceLimiterStats
+```
+GetSourceLimiterStats returns statistics about per-source rate limiting. Returns
+nil if source limiting is not enabled.
+
+#### func (*Manager) MaxParticipants
+
+```go
+func (m *Manager) MaxParticipants() int
+```
+MaxParticipants returns the maximum allowed number of participant tunnels. This
+is the hard limit used for congestion monitoring (PROP_162).
+
 #### func (*Manager) ParticipantCount
 
 ```go
@@ -709,6 +1284,41 @@ func (m *Manager) ParticipantCount() int
 ```
 ParticipantCount returns the current number of participant tunnels. This is
 useful for monitoring and statistics.
+
+#### func (*Manager) ProcessBuildRequest
+
+```go
+func (m *Manager) ProcessBuildRequest(sourceHash common.Hash) (accepted bool, rejectCode byte, reason string)
+```
+ProcessBuildRequest validates a tunnel build request against all limits. This
+should be called before accepting any participating tunnel.
+
+Parameters: - sourceHash: The router hash of the requester (from
+BuildRequestRecord.OurIdent)
+
+Returns: - accepted: Whether the request should be accepted - rejectCode:
+I2P-compliant rejection code if not accepted (0 if accepted) - reason:
+Human-readable reason for logging (empty if accepted)
+
+Note: Per I2P specification, we use BuildReplyCodeBandwidth (30) for most
+rejections to hide the specific rejection reason from peers.
+
+#### func (*Manager) RegisterParticipant
+
+```go
+func (m *Manager) RegisterParticipant(tunnelID TunnelID, sourceHash common.Hash, expiry time.Time, layerKey, ivKey session_key.SessionKey) error
+```
+RegisterParticipant creates and registers a new participating tunnel. This is
+called after ProcessBuildRequest returns accepted=true.
+
+Parameters: - tunnelID: The tunnel ID for the participating tunnel - sourceHash:
+The router hash of the requester (used for tracking) - expiry: When the tunnel
+participation expires
+
+Returns an error if registration fails.
+
+The layerKey and ivKey are extracted from the BuildRequestRecord and used to
+create the AES encryptor for tunnel layer decryption.
 
 #### func (*Manager) RemoveParticipant
 
@@ -720,15 +1330,46 @@ when a tunnel expires or is no longer needed.
 
 Returns true if the participant was found and removed, false otherwise.
 
+#### func (*Manager) ResetRecentRejectCount
+
+```go
+func (m *Manager) ResetRecentRejectCount()
+```
+ResetRecentRejectCount resets the recent rejection counter. This is typically
+called periodically for monitoring purposes.
+
 #### func (*Manager) Stop
 
 ```go
 func (m *Manager) Stop()
 ```
 Stop gracefully stops the tunnel manager. Waits for background goroutines to
-finish.
+finish. Also stops the source limiter if it was enabled.
 
 This should be called during router shutdown.
+
+#### type MessageForwarder
+
+```go
+type MessageForwarder interface {
+	// ForwardToTunnel sends a message to a specific tunnel on a gateway router.
+	// Parameters:
+	//   - tunnelID: the destination tunnel ID
+	//   - gatewayHash: the hash of the gateway router
+	//   - msgBytes: the message payload
+	ForwardToTunnel(tunnelID uint32, gatewayHash [32]byte, msgBytes []byte) error
+
+	// ForwardToRouter sends a message directly to a router.
+	// Parameters:
+	//   - routerHash: the hash of the destination router
+	//   - msgBytes: the message payload
+	ForwardToRouter(routerHash [32]byte, msgBytes []byte) error
+}
+```
+
+MessageForwarder handles routing messages to non-local delivery targets. When
+the tunnel endpoint receives a message with DTTunnel or DTRouter delivery type,
+it delegates to this interface for proper forwarding.
 
 #### type MessageHandler
 
@@ -752,6 +1393,30 @@ peer selection. Any component that implements SelectPeers(count int, exclude
 []common.Hash) ([]router_info.RouterInfo, error) can be used. This avoids a hard
 dependency on a concrete netdb type.
 
+#### type NetDBSelectorAdapter
+
+```go
+type NetDBSelectorAdapter struct {
+}
+```
+
+NetDBSelectorAdapter wraps a NetDBSelector to implement PeerSelector. This
+allows NetDBSelector to be used with composable selectors.
+
+#### func  NewNetDBSelectorAdapter
+
+```go
+func NewNetDBSelectorAdapter(db NetDBSelector) (*NetDBSelectorAdapter, error)
+```
+NewNetDBSelectorAdapter creates an adapter from NetDBSelector to PeerSelector.
+
+#### func (*NetDBSelectorAdapter) SelectPeers
+
+```go
+func (a *NetDBSelectorAdapter) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+```
+SelectPeers delegates to the underlying NetDBSelector.
+
 #### type Participant
 
 ```go
@@ -767,7 +1432,9 @@ Design decisions: - Simple relay logic: decrypt and forward - Uses crypto/tunnel
 with ECIES-X25519-AEAD (ChaCha20/Poly1305) by default - Supports both modern
 ECIES and legacy AES-256-CBC for compatibility - No message inspection
 (maintains tunnel privacy) - Stateless processing for better performance -
-Tracks creation time and expiration (tunnels typically last 10 minutes)
+Tracks creation time and expiration (tunnels typically last 10 minutes) - Tracks
+last activity to detect idle tunnels (protection against resource exhaustion
+attacks) - Thread-safe: lastActivity is protected by a mutex
 
 #### func  NewParticipant
 
@@ -785,7 +1452,8 @@ Design note: We use TunnelEncryptor interface even though it's called
 "decryption" because the interface supports both encrypt and decrypt operations.
 The crypto/tunnel package uses the same interface for both directions. The
 participant is created with a default lifetime of 10 minutes (standard I2P
-tunnel lifetime).
+tunnel lifetime) and an idle timeout of 2 minutes to protect against resource
+exhaustion attacks.
 
 #### func (*Participant) CreatedAt
 
@@ -805,6 +1473,30 @@ current time is past createdAt + lifetime.
 Parameters: - now: the current time to check against
 
 This is used by the tunnel manager to clean up expired participants.
+Thread-safe: protected by mutex.
+
+#### func (*Participant) IsIdle
+
+```go
+func (p *Participant) IsIdle(now time.Time) bool
+```
+IsIdle checks if this participant tunnel has been idle for too long. Returns
+true if no data has been processed within the idle timeout period. This helps
+detect tunnels that may be part of a resource exhaustion attack where attackers
+request excessive tunnels but send no data through them. Thread-safe: protected
+by mutex.
+
+Parameters: - now: the current time to check against
+
+This is used by the tunnel manager to clean up idle participants.
+
+#### func (*Participant) LastActivity
+
+```go
+func (p *Participant) LastActivity() time.Time
+```
+LastActivity returns when data was last processed through this tunnel.
+Thread-safe: protected by mutex.
 
 #### func (*Participant) Process
 
@@ -828,13 +1520,23 @@ messages - The participant doesn't inspect message contents (privacy by design)
 - The tunnel ID in the message header specifies the next hop, not this hop - All
 1028 bytes are returned; the next hop will decrypt further
 
+#### func (*Participant) SetIdleTimeout
+
+```go
+func (p *Participant) SetIdleTimeout(timeout time.Duration)
+```
+SetIdleTimeout updates the idle timeout for this participant tunnel. This allows
+customization beyond the default 2 minutes if needed. Thread-safe: protected by
+mutex.
+
 #### func (*Participant) SetLifetime
 
 ```go
 func (p *Participant) SetLifetime(lifetime time.Duration)
 ```
 SetLifetime updates the lifetime for this participant tunnel. This allows
-customization beyond the default 10 minutes if needed.
+customization beyond the default 10 minutes if needed. Thread-safe: protected by
+mutex.
 
 #### func (*Participant) TunnelID
 
@@ -842,6 +1544,47 @@ customization beyond the default 10 minutes if needed.
 func (p *Participant) TunnelID() TunnelID
 ```
 TunnelID returns this participant's tunnel ID
+
+#### type PeerEvaluator
+
+```go
+type PeerEvaluator func(ri router_info.RouterInfo, hash common.Hash) bool
+```
+
+PeerEvaluator evaluates whether a peer should be selected. Returns true if the
+peer should be included, false otherwise.
+
+#### type PeerFilter
+
+```go
+type PeerFilter interface {
+	// Name returns a descriptive name for this filter (for logging/debugging).
+	Name() string
+
+	// Accept returns true if the peer should be included in the selection.
+	// Returning false excludes the peer from this selection round.
+	Accept(ri router_info.RouterInfo) bool
+}
+```
+
+PeerFilter defines a filter that can accept or reject peers during selection.
+Filters can be stacked to create composite selection logic.
+
+#### type PeerScorer
+
+```go
+type PeerScorer interface {
+	// Name returns a descriptive name for this scorer.
+	Name() string
+
+	// Score returns a score for the peer (higher = better, 0.0-1.0 normalized).
+	// A score of 0.0 means the peer should be avoided if possible.
+	Score(ri router_info.RouterInfo) float64
+}
+```
+
+PeerScorer provides a score or weight for peer selection prioritization. Higher
+scores indicate more preferred peers.
 
 #### type PeerSelector
 
@@ -852,6 +1595,91 @@ type PeerSelector interface {
 ```
 
 PeerSelector defines interface for selecting peers for tunnel building
+
+#### func  NewCongestionAwareScoringStack
+
+```go
+func NewCongestionAwareScoringStack(
+	db NetDBSelector,
+	congestionInfo CongestionInfoProvider,
+	cfg config.CongestionDefaults,
+) (PeerSelector, error)
+```
+NewCongestionAwareScoringStack creates a stacked selector with both congestion
+filtering (excludes G) and scoring (derates D/E).
+
+#### func  NewCongestionAwareStack
+
+```go
+func NewCongestionAwareStack(
+	db NetDBSelector,
+	congestionInfo CongestionInfoProvider,
+) (PeerSelector, error)
+```
+NewCongestionAwareStack creates a stacked selector with congestion filtering.
+This is equivalent to:
+
+    FromNetDB(db).WithFilter(NewCongestionFilter(info)).Build()
+
+For more complex stacking, use PeerSelectorStack directly.
+
+#### type PeerSelectorStack
+
+```go
+type PeerSelectorStack struct {
+}
+```
+
+PeerSelectorStack provides a fluent builder for composing peer selectors.
+
+#### func  FromNetDB
+
+```go
+func FromNetDB(db NetDBSelector) *PeerSelectorStack
+```
+FromNetDB starts a stack from a NetDBSelector.
+
+#### func  NewPeerSelectorStack
+
+```go
+func NewPeerSelectorStack(base PeerSelector) *PeerSelectorStack
+```
+NewPeerSelectorStack starts building a selector stack from a base selector.
+
+#### func (*PeerSelectorStack) Build
+
+```go
+func (s *PeerSelectorStack) Build() (PeerSelector, error)
+```
+Build returns the final composed selector, or an error if any step failed.
+
+#### func (*PeerSelectorStack) MustBuild
+
+```go
+func (s *PeerSelectorStack) MustBuild() PeerSelector
+```
+MustBuild returns the selector or panics on error (for initialization).
+
+#### func (*PeerSelectorStack) WithFilter
+
+```go
+func (s *PeerSelectorStack) WithFilter(filters ...PeerFilter) *PeerSelectorStack
+```
+WithFilter adds a filtering layer to the stack.
+
+#### func (*PeerSelectorStack) WithScoring
+
+```go
+func (s *PeerSelectorStack) WithScoring(scorers ...PeerScorer) *PeerSelectorStack
+```
+WithScoring adds a scoring layer to the stack.
+
+#### func (*PeerSelectorStack) WithThreshold
+
+```go
+func (s *PeerSelectorStack) WithThreshold(threshold float64, scorers ...PeerScorer) *PeerSelectorStack
+```
+WithThreshold adds scoring with a minimum threshold.
 
 #### type PeerTracker
 
@@ -953,10 +1781,10 @@ the peer failed recently and is still in cooldown.
 ```go
 func (p *Pool) MarkPeerFailed(peerHash common.Hash)
 ```
-BUG FIX #5: Failed peer tracking to avoid retry loops MarkPeerFailed records
-that a peer failed to establish a connection. This peer will be avoided for a
-cooldown period to prevent wasted retry attempts. If a PeerTracker is
-configured, the failure is also reported for reputation tracking.
+FIX #5: Failed peer tracking to avoid retry loops MarkPeerFailed records that a
+peer failed to establish a connection. This peer will be avoided for a cooldown
+period to prevent wasted retry attempts. If a PeerTracker is configured, the
+failure is also reported for reputation tracking.
 
 #### func (*Pool) RemoveTunnel
 
@@ -1067,6 +1895,212 @@ type PoolStats struct {
 
 PoolStats contains statistics about a tunnel pool
 
+#### type ScoringPeerSelector
+
+```go
+type ScoringPeerSelector struct {
+}
+```
+
+ScoringPeerSelector selects peers based on scores from multiple scorers.
+Higher-scoring peers are preferred but not guaranteed (allows for randomness).
+
+#### func  NewScoringPeerSelector
+
+```go
+func NewScoringPeerSelector(
+	underlying PeerSelector,
+	opts ...ScoringPeerSelectorOption,
+) (*ScoringPeerSelector, error)
+```
+NewScoringPeerSelector creates a scoring-based peer selector.
+
+#### func (*ScoringPeerSelector) AddScorer
+
+```go
+func (s *ScoringPeerSelector) AddScorer(scorer PeerScorer)
+```
+AddScorer adds a scorer to the selector.
+
+#### func (*ScoringPeerSelector) ComputeScore
+
+```go
+func (s *ScoringPeerSelector) ComputeScore(ri router_info.RouterInfo) float64
+```
+
+#### func (*ScoringPeerSelector) SelectPeers
+
+```go
+func (s *ScoringPeerSelector) SelectPeers(count int, exclude []common.Hash) ([]router_info.RouterInfo, error)
+```
+SelectPeers implements PeerSelector with scoring logic.
+
+#### type ScoringPeerSelectorOption
+
+```go
+type ScoringPeerSelectorOption func(*ScoringPeerSelector)
+```
+
+ScoringPeerSelectorOption is a functional option for ScoringPeerSelector.
+
+#### func  WithScoreThreshold
+
+```go
+func WithScoreThreshold(threshold float64) ScoringPeerSelectorOption
+```
+WithScoreThreshold sets the minimum acceptable score.
+
+#### func  WithScorers
+
+```go
+func WithScorers(scorers ...PeerScorer) ScoringPeerSelectorOption
+```
+WithScorers adds scorers to the selector.
+
+#### func  WithScoringMaxRetries
+
+```go
+func WithScoringMaxRetries(n int) ScoringPeerSelectorOption
+```
+WithScoringMaxRetries sets the maximum retry count.
+
+#### func  WithScoringName
+
+```go
+func WithScoringName(name string) ScoringPeerSelectorOption
+```
+WithScoringName sets the selector name for logging.
+
+#### type SelectionMetrics
+
+```go
+type SelectionMetrics struct {
+	TotalSelections   int64 // Total selection attempts
+	GFlagExclusions   int64 // Peers excluded due to G flag
+	DFlagDeratings    int64 // Peers selected with D flag derating
+	EFlagDeratings    int64 // Peers selected with E flag derating
+	StaleEDowngrades  int64 // E flags downgraded to D due to stale RI
+	InsufficientPeers int64 // Times we couldn't find enough non-G peers
+	SelectionFailures int64 // Total selection failures
+	AverageRetries    float64
+}
+```
+
+SelectionMetrics tracks peer selection statistics for monitoring.
+
+#### type SourceLimiter
+
+```go
+type SourceLimiter struct {
+}
+```
+
+SourceLimiter tracks tunnel build request rates per source router. It uses a
+token bucket algorithm with per-source tracking and automatic cleanup to protect
+against single-source tunnel flooding attacks.
+
+Design decisions: - Token bucket allows short bursts while limiting sustained
+rates - Automatic banning for sources that exceed limits excessively -
+Background cleanup prevents memory exhaustion from tracking - Thread-safe for
+concurrent access from multiple goroutines
+
+#### func  NewSourceLimiter
+
+```go
+func NewSourceLimiter() *SourceLimiter
+```
+NewSourceLimiter creates a new per-source rate limiter with default
+configuration. For custom configuration, use NewSourceLimiterWithConfig.
+
+#### func  NewSourceLimiterWithConfig
+
+```go
+func NewSourceLimiterWithConfig(cfg config.TunnelDefaults) *SourceLimiter
+```
+NewSourceLimiterWithConfig creates a new per-source rate limiter with the
+specified configuration.
+
+Parameters: - cfg: TunnelDefaults containing rate limit configuration
+
+The limiter will start a background cleanup goroutine automatically.
+
+#### func (*SourceLimiter) AllowRequest
+
+```go
+func (sl *SourceLimiter) AllowRequest(sourceHash common.Hash) (bool, string)
+```
+AllowRequest checks if a tunnel build request from the given source should be
+allowed. Uses token bucket algorithm: tokens replenish over time, each request
+consumes one token.
+
+Parameters: - sourceHash: The router hash of the tunnel build requester
+
+Returns: - allowed: true if the request should be accepted - reason:
+human-readable reason if rejected (empty string if accepted)
+
+Side effects: - Creates tracking entry for new sources - Updates token counts
+and timestamps - May auto-ban sources with excessive rejections (>10 rejections)
+
+#### func (*SourceLimiter) GetSourceStats
+
+```go
+func (sl *SourceLimiter) GetSourceStats(sourceHash common.Hash) *SourceStats
+```
+GetSourceStats returns statistics for a specific source. Returns nil if the
+source is not being tracked.
+
+#### func (*SourceLimiter) GetStats
+
+```go
+func (sl *SourceLimiter) GetStats() SourceLimiterStats
+```
+GetStats returns statistics about source limiting. This is useful for monitoring
+and debugging.
+
+#### func (*SourceLimiter) IsBanned
+
+```go
+func (sl *SourceLimiter) IsBanned(sourceHash common.Hash) bool
+```
+IsBanned checks if a source is currently banned. This is a read-only check that
+doesn't modify state.
+
+#### func (*SourceLimiter) Stop
+
+```go
+func (sl *SourceLimiter) Stop()
+```
+Stop gracefully stops the source limiter. Waits for background goroutines to
+finish.
+
+#### type SourceLimiterStats
+
+```go
+type SourceLimiterStats struct {
+	TrackedSources  int    // Number of sources currently being tracked
+	BannedSources   int    // Number of sources currently banned
+	TotalRequests   uint64 // Total requests processed
+	TotalRejections uint64 // Total requests rejected
+}
+```
+
+SourceLimiterStats contains statistics about the source limiter.
+
+#### type SourceStats
+
+```go
+type SourceStats struct {
+	RequestCount uint64    // Total requests from this source
+	RejectCount  uint64    // Total rejections for this source
+	Tokens       float64   // Current token count
+	IsBanned     bool      // Whether the source is currently banned
+	BannedUntil  time.Time // When the ban expires (zero if not banned)
+	LastUpdate   time.Time // Last time this source was seen
+}
+```
+
+SourceStats contains statistics for a specific source.
+
 #### type TunnelBuildResult
 
 ```go
@@ -1125,9 +2159,6 @@ Returns an error if the peer selector is nil.
 ```go
 func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuildResult, error)
 ```
-CreateBuildRequest generates a complete tunnel build request with encrypted
-records.
-
 The process: 1. Select peers for tunnel hops using the peer selector 2. Generate
 a unique tunnel ID for this tunnel 3. Create build request records for each hop
 with cryptographic keys 4. Prepare reply decryption keys for processing build
@@ -1143,6 +2174,46 @@ generation fails
 type TunnelID uint32
 ```
 
+
+#### type TunnelLimitStats
+
+```go
+type TunnelLimitStats struct {
+	// Global limits
+	CurrentParticipants    int
+	MaxParticipants        int
+	SoftLimitParticipants  int // Always 50% of MaxParticipants
+	GlobalRejectionsTotal  uint64
+	GlobalRejectionsRecent uint64
+
+	// Per-source limits (nil if not enabled)
+	SourceLimiter *SourceLimiterStats
+
+	// Health indicators
+	AtSoftLimit bool
+	AtHardLimit bool
+}
+```
+
+TunnelLimitStats provides visibility into protection mechanisms.
+
+#### type TunnelMessageSender
+
+```go
+type TunnelMessageSender interface {
+	// SendTestMessage sends a DeliveryStatus test message through the specified tunnel.
+	// Parameters:
+	//   - tunnelID: the tunnel to test
+	//   - messageID: unique identifier for the test message (used for response correlation)
+	// Returns error if the message could not be sent.
+	SendTestMessage(tunnelID TunnelID, messageID uint32) error
+}
+```
+
+TunnelMessageSender defines the interface for sending test messages through
+tunnels. This abstraction allows the TunnelTester to remain decoupled from the
+transport layer. The router or a higher-level component provides the actual
+implementation.
 
 #### type TunnelState
 
@@ -1185,10 +2256,10 @@ TunnelTester validates tunnel health and performance. It sends test messages
 through tunnels and measures latency, enabling automatic detection of failed or
 slow tunnels.
 
-Design decisions: - Simple echo-based testing (send test message, wait for
-reply) - Configurable timeout (default 5 seconds) - Latency tracking for tunnel
-selection optimization - Non-blocking test execution (returns immediately,
-callbacks for results) - Thread-safe for concurrent testing of multiple tunnels
+Design decisions: - Uses DeliveryStatus messages for echo-based testing -
+Correlates responses using unique message IDs - Configurable timeout (default 5
+seconds) - Latency tracking for tunnel selection optimization - Thread-safe for
+concurrent testing of multiple tunnels
 
 #### func  NewTunnelTester
 
@@ -1200,7 +2271,20 @@ NewTunnelTester creates a new tunnel tester for the given pool.
 Parameters: - pool: the tunnel pool to test
 
 The tester is created with a default 5-second timeout. Use SetTimeout to
-customize.
+customize. Use SetMessageSender to enable real I2NP-based testing.
+
+#### func (*TunnelTester) HandleTestResponse
+
+```go
+func (tt *TunnelTester) HandleTestResponse(messageID uint32) bool
+```
+HandleTestResponse processes a DeliveryStatus response for a pending test. This
+should be called by the message router when a DeliveryStatus message is received
+that matches a pending test message ID.
+
+Parameters: - messageID: the message ID from the DeliveryStatus response
+
+Returns true if the message was for a pending test, false otherwise.
 
 #### func (*TunnelTester) HealthCheck
 
@@ -1236,6 +2320,17 @@ for replacement if they:
 This is used by the pool maintenance system to proactively replace failing
 tunnels before they impact service quality.
 
+#### func (*TunnelTester) SetMessageSender
+
+```go
+func (tt *TunnelTester) SetMessageSender(sender TunnelMessageSender)
+```
+SetMessageSender configures the message sender for real tunnel testing. Without
+a sender configured, tests will use age-based health estimation.
+
+Parameters: - sender: implementation of TunnelMessageSender (typically provided
+by router)
+
 #### func (*TunnelTester) SetTimeout
 
 ```go
@@ -1257,6 +2352,15 @@ Returns: - slice of TunnelTestResult for each tunnel tested - tunnels are tested
 sequentially to avoid overwhelming the network
 
 Use TestAllTunnelsAsync for concurrent testing.
+
+#### func (*TunnelTester) TestAllTunnelsAsync
+
+```go
+func (tt *TunnelTester) TestAllTunnelsAsync() []TunnelTestResult
+```
+TestAllTunnelsAsync tests all ready tunnels in the pool concurrently. This
+avoids the O(n * timeout) latency of sequential testing. The results are
+collected and returned in no particular order.
 
 #### func (*TunnelTester) TestTunnel
 

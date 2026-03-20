@@ -33,74 +33,65 @@ Each message has: type (1 byte), session ID (2 bytes), length (4 bytes), payload
 - Session IDs 0x0000 and 0xFFFF are reserved - Supports authentication, tunnel
 management, and message delivery
 
-### Known Limitations
-
-- **Hostname Lookups (type 1)**: HostLookup messages with lookup type 1 (hostname)
-  require a `HostnameResolver` to be configured on the server via `SetHostnameResolver()`.
-  If no resolver is configured, hostname lookups return `HostReplyError`. Hash-based
-  lookups (type 0) work without a resolver. No naming service integration is provided
-  in-tree; callers must supply their own `HostnameResolver` implementation backed by
-  an address book or remote naming service.
-
 ## Usage
 
 ```go
 const (
-	HostLookupTypeHash     = 0 // Lookup by destination hash
-	HostLookupTypeHostname = 1 // Lookup by hostname
+	HostLookupTypeHash     uint16 = 0 // Lookup by destination hash
+	HostLookupTypeHostname uint16 = 1 // Lookup by hostname
 )
 ```
 
 ```go
 const (
-	HostReplySuccess  = 0 // Destination found
-	HostReplyNotFound = 1 // Destination not found
-	HostReplyTimeout  = 2 // Lookup timed out
-	HostReplyError    = 3 // Generic error
+	HostReplySuccess  uint8 = 0 // Destination found
+	HostReplyNotFound uint8 = 1 // Destination not found
+	HostReplyTimeout  uint8 = 2 // Lookup timed out
+	HostReplyError    uint8 = 3 // Generic error
 )
 ```
 
 ```go
 const (
 	// Session management - PER I2CP SPEC v0.9.67
-	MessageTypeCreateSession      = 1  // Client -> Router: Create new session
-	MessageTypeSessionStatus      = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
-	MessageTypeReconfigureSession = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
-	MessageTypeDestroySession     = 3  // Client -> Router: Terminate session (SPEC: 3, was 4)
+	MessageTypeCreateSession      uint8 = 1  // Client -> Router: Create new session
+	MessageTypeSessionStatus      uint8 = 20 // Router -> Client: Session creation result (SPEC: 20, was 2)
+	MessageTypeReconfigureSession uint8 = 2  // Client -> Router: Update session config (SPEC: 2, was 3)
+	MessageTypeDestroySession     uint8 = 3  // Client -> Router: Terminate session (SPEC: 3, was 4)
 
 	// LeaseSet management
-	MessageTypeCreateLeaseSet          = 4  // Client -> Router: Publish LeaseSet (SPEC: 4, was 5)
-	MessageTypeRequestLeaseSet         = 21 // Router -> Client: Request LeaseSet update (SPEC: 21, was 6)
-	MessageTypeRequestVariableLeaseSet = 37 // Router -> Client: Request LeaseSet (with lease data)
-	MessageTypeCreateLeaseSet2         = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
+	MessageTypeCreateLeaseSet          uint8 = 4  // Client -> Router: Publish LeaseSet (SPEC: 4, was 5)
+	MessageTypeRequestLeaseSet         uint8 = 21 // Router -> Client: Request LeaseSet update (SPEC: 21, was 6)
+	MessageTypeRequestVariableLeaseSet uint8 = 37 // Router -> Client: Request LeaseSet (with lease data)
+	MessageTypeCreateLeaseSet2         uint8 = 41 // Client -> Router: Publish LeaseSet2 (modern, v0.9.39+)
 
 	// Message delivery
-	MessageTypeSendMessage        = 5  // Client -> Router: Send message to destination (SPEC: 5, was 7)
-	MessageTypeMessagePayload     = 31 // Router -> Client: Received message (SPEC: 31, was 8)
-	MessageTypeMessageStatus      = 22 // Router -> Client: Message delivery status
-	MessageTypeDisconnect         = 30 // Client -> Router: Graceful disconnect
-	MessageTypeSendMessageExpires = 36 // Client -> Router: Send message with TTL
+	MessageTypeSendMessage        uint8 = 5  // Client -> Router: Send message to destination (SPEC: 5, was 7)
+	MessageTypeMessagePayload     uint8 = 31 // Router -> Client: Received message (SPEC: 31, was 8)
+	MessageTypeMessageStatus      uint8 = 22 // Router -> Client: Message delivery status
+	MessageTypeDisconnect         uint8 = 30 // Client -> Router: Graceful disconnect
+	MessageTypeSendMessageExpires uint8 = 36 // Client -> Router: Send message with TTL
 
 	// Status and information
-	MessageTypeGetBandwidthLimits = 8  // Client -> Router: Query bandwidth (SPEC: 8, was 9)
-	MessageTypeBandwidthLimits    = 23 // Router -> Client: Bandwidth limits response (SPEC: 23, was 10)
-	MessageTypeGetDate            = 32 // Client -> Router: Query router time (SPEC: 32, was 11)
-	MessageTypeSetDate            = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
+	MessageTypeGetBandwidthLimits uint8 = 8  // Client -> Router: Query bandwidth (SPEC: 8, was 9)
+	MessageTypeBandwidthLimits    uint8 = 23 // Router -> Client: Bandwidth limits response (SPEC: 23, was 10)
+	MessageTypeGetDate            uint8 = 32 // Client -> Router: Query router time (SPEC: 32, was 11)
+	MessageTypeSetDate            uint8 = 33 // Router -> Client: Current router time (SPEC: 33, was 12)
 
 	// Naming service (modern types)
-	MessageTypeHostLookup = 38 // Client -> Router: Destination lookup by hash or hostname
-	MessageTypeHostReply  = 39 // Router -> Client: Destination lookup result
+	MessageTypeHostLookup uint8 = 38 // Client -> Router: Destination lookup by hash or hostname
+	MessageTypeHostReply  uint8 = 39 // Router -> Client: Destination lookup result
 
 	// Advanced features
-	MessageTypeBlindingInfo = 42 // Client -> Router: Blinded destination parameters
+	MessageTypeBlindingInfo uint8 = 42 // Client -> Router: Blinded destination parameters
 
 	// Deprecated/legacy message types
-	MessageTypeDestLookup = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
-	MessageTypeDestReply  = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
+	MessageTypeDestLookup uint8 = 34 // Client -> Router: Deprecated in v0.9.67, use type 38 (SPEC: 34, was 13)
+	MessageTypeDestReply  uint8 = 35 // Router -> Client: Deprecated in v0.9.67, use type 39 (SPEC: 35, was 14)
 
 	// Deprecated receive messages (unused in fast receive mode)
-	MessageTypeReceiveMessageBegin = 6 // Client -> Router: DEPRECATED, not supported
-	MessageTypeReceiveMessageEnd   = 7 // Client -> Router: DEPRECATED, not supported
+	MessageTypeReceiveMessageBegin uint8 = 6 // Client -> Router: DEPRECATED, not supported
+	MessageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: DEPRECATED, not supported
 )
 ```
 Message type constants as defined in I2CP v0.9.67
@@ -112,6 +103,17 @@ const (
 )
 ```
 Reserved session IDs
+
+```go
+const (
+	SessionStatusDestroyed uint8 = 0 // Session has been destroyed
+	SessionStatusCreated   uint8 = 1 // Session has been created successfully
+	SessionStatusUpdated   uint8 = 2 // Session has been updated/reconfigured
+	SessionStatusInvalid   uint8 = 3 // Session request was invalid
+	SessionStatusRefused   uint8 = 4 // Session request was refused
+)
+```
+SessionStatus status codes per I2CP spec v0.9.67
 
 ```go
 const (
@@ -136,23 +138,23 @@ define the expected I2CP API version that this implementation supports.
 const (
 	// MessageStatusAccepted indicates the message was accepted for delivery.
 	// Sent immediately when SendMessage is received.
-	MessageStatusAccepted = 1
+	MessageStatusAccepted uint8 = 1
 
 	// MessageStatusSuccess indicates the message was successfully delivered.
 	// Sent after routing completes successfully.
-	MessageStatusSuccess = 4
+	MessageStatusSuccess uint8 = 4
 
 	// MessageStatusFailure indicates the message delivery failed.
 	// Generic failure status.
-	MessageStatusFailure = 5
+	MessageStatusFailure uint8 = 5
 
 	// MessageStatusNoTunnels indicates delivery failed due to no available tunnels.
 	// Sent when the session has no outbound tunnels.
-	MessageStatusNoTunnels = 16
+	MessageStatusNoTunnels uint8 = 16
 
 	// MessageStatusNoLeaseSet indicates delivery failed due to missing LeaseSet.
 	// Sent when the destination's LeaseSet cannot be found.
-	MessageStatusNoLeaseSet = 21
+	MessageStatusNoLeaseSet uint8 = 21
 )
 ```
 MessageStatus codes as defined in I2CP specification. These codes indicate the
@@ -185,6 +187,15 @@ const (
 ```
 Protocol limits as per I2CP specification
 
+```go
+var ErrNoDestinationResolver = errors.New("no destination resolver configured: cannot resolve encryption key")
+```
+recoverFromAcceptPanic recovers from any panic in the accept loop to prevent
+server crash. ErrNoDestinationResolver is returned when a message cannot be
+routed because no destination resolver has been configured on the I2CP server.
+Without a resolver, the server cannot look up the recipient's public key, so
+encryption (and therefore routing) is impossible.
+
 #### func  MessageTypeName
 
 ```go
@@ -206,6 +217,19 @@ acceptable ranges. Returns error if validation fails.
 func WriteMessage(w io.Writer, msg *Message) error
 ```
 WriteMessage writes a complete I2CP message to a writer
+
+#### type Authenticator
+
+```go
+type Authenticator interface {
+	// Authenticate checks whether the provided username and password are valid.
+	// Returns true if the credentials are accepted, false otherwise.
+	Authenticate(username, password string) bool
+}
+```
+
+Authenticator validates I2CP client credentials. Implementations must be safe
+for concurrent use.
 
 #### type BlindingInfoPayload
 
@@ -289,6 +313,24 @@ func (dp *DisconnectPayload) MarshalBinary() ([]byte, error)
 ```
 MarshalBinary serializes the DisconnectPayload to wire format. Returns the
 serialized bytes ready to be sent as an I2CP message payload.
+
+#### type GarlicMessageEncryptor
+
+```go
+type GarlicMessageEncryptor interface {
+	// EncryptGarlicMessage encrypts plaintext for a destination.
+	// destinationHash: I2P hash identifying the session.
+	// destinationPubKey: X25519 public key of the recipient.
+	// plaintextGarlic: serialized garlic message bytes.
+	// Returns encrypted bytes.
+	EncryptGarlicMessage(destinationHash common.Hash, destinationPubKey [32]byte, plaintextGarlic []byte) ([]byte, error)
+}
+```
+
+GarlicMessageEncryptor provides garlic message encryption for the message
+router. This interface is satisfied by both *i2np.GarlicSessionManager (the
+concrete adapter) and test mocks. It uses I2P-specific types (common.Hash) at
+the boundary.
 
 #### type HostLookupPayload
 
@@ -387,6 +429,21 @@ func (hrp *HostReplyPayload) MarshalBinary() ([]byte, error)
 MarshalBinary serializes the HostReplyPayload to wire format. Returns the
 serialized bytes ready to be sent as an I2CP message payload.
 
+#### type HostnameResolver
+
+```go
+type HostnameResolver interface {
+	// ResolveHostname resolves an I2P hostname (e.g., "forum.i2p") to the raw
+	// Destination bytes. Returns the destination bytes and nil on success,
+	// or nil and an error if the hostname cannot be resolved.
+	ResolveHostname(hostname string) ([]byte, error)
+}
+```
+
+HostnameResolver resolves .i2p hostnames to their binary Destination
+representation. Implementations may use an address book file, naming service, or
+subscription list.
+
 #### type IncomingMessage
 
 ```go
@@ -421,6 +478,19 @@ Implementations should: - Store the LeaseSet in the local NetDB - Send
 DatabaseStore messages to floodfill routers for network distribution - Handle
 any errors during the publication process
 
+#### type LeaseSetStore
+
+```go
+type LeaseSetStore interface {
+	// StoreLeaseSet stores a LeaseSet in the local network database.
+	// dataType indicates the LeaseSet type: 1=LeaseSet, 3=LeaseSet2, 5=Encrypted, 7=Meta.
+	StoreLeaseSet(key common.Hash, data []byte, dataType byte) error
+}
+```
+
+LeaseSetStore defines the minimal interface needed for storing LeaseSets in the
+NetDB. This is satisfied by *netdb.StdNetDB.
+
 #### type Message
 
 ```go
@@ -440,7 +510,7 @@ at the connection/session layer.
 ```go
 func ReadMessage(r io.Reader) (*Message, error)
 ```
-ReadMessage reads a complete I2CP message from a reader
+ReadMessage reads a complete I2CP message from a reader.
 
 #### func (*Message) MarshalBinary
 
@@ -525,24 +595,17 @@ for outbound routing - Delegates actual transmission to transport layer
 #### func  NewMessageRouter
 
 ```go
-func NewMessageRouter(garlicMgr *i2np.GarlicSessionManager, transportSend TransportSendFunc) *MessageRouter
+func NewMessageRouter(garlicMgr GarlicMessageEncryptor, transportSend TransportSendFunc) *MessageRouter
 ```
 NewMessageRouter creates a new message router with the given garlic session
 manager. The transportSend callback will be used to send encrypted messages to
-the network.
+the network. Accepts any implementation of GarlicMessageEncryptor, including
+*i2np.GarlicSessionManager and test mocks.
 
 #### func (*MessageRouter) RouteOutboundMessage
 
 ```go
-func (mr *MessageRouter) RouteOutboundMessage(
-	session *Session,
-	messageID uint32,
-	destinationHash common.Hash,
-	destinationPubKey [32]byte,
-	payload []byte,
-	expirationMs uint64,
-	statusCallback MessageStatusCallback,
-) error
+func (mr *MessageRouter) RouteOutboundMessage(req RouteRequest) error
 ```
 RouteOutboundMessage routes a message from an I2CP client through the I2P
 network. This implements the complete outbound message flow: 1. Check message
@@ -551,13 +614,6 @@ containing the payload 3. Encrypt garlic message for destination using
 ECIES-X25519-AEAD 4. Select outbound tunnel from session's pool 5. Send
 encrypted garlic through tunnel gateway 6. Invoke status callback with delivery
 status
-
-Parameters: - session: I2CP session sending the message - messageID: Unique
-identifier for tracking this message - destinationHash: Hash of the target I2P
-destination - destinationPubKey: X25519 public key of the destination (for
-garlic encryption) - payload: Raw message data to send - expirationMs:
-Expiration timestamp in milliseconds since epoch (0 = no expiration) -
-statusCallback: Optional callback to notify about delivery status (nil allowed)
 
 Returns an error if routing fails at any step.
 
@@ -588,6 +644,88 @@ Parameters: - messageID: Unique identifier for the message (client-provided or
 generated) - statusCode: Status code indicating delivery outcome (see
 MessageStatus* constants) - messageSize: Size of the original message payload in
 bytes - nonce: Optional nonce value (0 if not applicable)
+
+#### type NetDBLeaseSetPublisher
+
+```go
+type NetDBLeaseSetPublisher struct {
+}
+```
+
+NetDBLeaseSetPublisher is a default implementation of LeaseSetPublisher that
+stores LeaseSets in the local NetDB. This provides a concrete publisher for I2CP
+sessions that need their LeaseSets to be discoverable locally.
+
+For full network distribution (sending DatabaseStore messages to floodfill
+routers), an extended implementation should also distribute via I2NP
+DatabaseStore messages.
+
+#### func  NewNetDBLeaseSetPublisher
+
+```go
+func NewNetDBLeaseSetPublisher(store LeaseSetStore) *NetDBLeaseSetPublisher
+```
+NewNetDBLeaseSetPublisher creates a new publisher that stores LeaseSets in the
+given NetDB. Uses LeaseSet2 (type 3) by default.
+
+#### func  NewNetDBLeaseSetPublisherWithType
+
+```go
+func NewNetDBLeaseSetPublisherWithType(store LeaseSetStore, dataType byte) *NetDBLeaseSetPublisher
+```
+NewNetDBLeaseSetPublisherWithType creates a new publisher with a specific
+LeaseSet data type. Valid types: 1 (LeaseSet), 3 (LeaseSet2), 5
+(EncryptedLeaseSet), 7 (MetaLeaseSet).
+
+#### func (*NetDBLeaseSetPublisher) PublishLeaseSet
+
+```go
+func (p *NetDBLeaseSetPublisher) PublishLeaseSet(key common.Hash, leaseSetData []byte) error
+```
+PublishLeaseSet stores the LeaseSet in the local NetDB.
+
+#### type PasswordAuthenticator
+
+```go
+type PasswordAuthenticator struct {
+}
+```
+
+PasswordAuthenticator implements simple username/password authentication. It
+uses constant-time comparison to prevent timing attacks.
+
+#### func  NewPasswordAuthenticator
+
+```go
+func NewPasswordAuthenticator(username, password string) (*PasswordAuthenticator, error)
+```
+NewPasswordAuthenticator creates an authenticator that accepts a single
+username/password pair. Both fields are required and must be non-empty. Returns
+an error if username or password is empty.
+
+#### func (*PasswordAuthenticator) Authenticate
+
+```go
+func (a *PasswordAuthenticator) Authenticate(username, password string) bool
+```
+Authenticate checks if the provided credentials match the configured pair. Uses
+constant-time comparison to prevent timing side-channel attacks.
+
+#### type RouteRequest
+
+```go
+type RouteRequest struct {
+	Session           *Session              // I2CP session sending the message
+	MessageID         uint32                // Unique identifier for tracking this message
+	DestinationHash   common.Hash           // Hash of the target I2P destination
+	DestinationPubKey [32]byte              // X25519 public key of the destination
+	Payload           []byte                // Raw message data to send
+	ExpirationMs      uint64                // Expiration timestamp in ms since epoch (0 = none)
+	StatusCallback    MessageStatusCallback // Optional delivery status callback (nil allowed)
+}
+```
+
+RouteRequest bundles the parameters for routing an outbound I2CP message.
 
 #### type SendMessageExpiresPayload
 
@@ -711,6 +849,14 @@ func NewServer(config *ServerConfig) (*Server, error)
 ```
 NewServer creates a new I2CP server
 
+#### func (*Server) GetSessionManager
+
+```go
+func (s *Server) GetSessionManager() *SessionManager
+```
+GetSessionManager returns the underlying SessionManager. This is used by the
+Router to wire InboundMessageHandler for tunnel-to-session delivery.
+
 #### func (*Server) IsRunning
 
 ```go
@@ -725,6 +871,29 @@ func (s *Server) SessionManager() *SessionManager
 ```
 SessionManager returns the server's session manager
 
+#### func (*Server) SetAuthenticator
+
+```go
+func (s *Server) SetAuthenticator(auth Authenticator)
+```
+SetAuthenticator configures the optional authenticator for I2CP connections.
+When set, clients must provide valid credentials before creating sessions. Pass
+nil to disable authentication (all clients accepted).
+
+This should be called before Start() and is not safe to call concurrently with
+active connections.
+
+#### func (*Server) SetBandwidthProvider
+
+```go
+func (s *Server) SetBandwidthProvider(bp interface {
+	GetBandwidthLimits() (inbound, outbound uint32)
+},
+)
+```
+SetBandwidthProvider sets the provider used by handleGetBandwidthLimits to
+return real configured bandwidth limits instead of hardcoded defaults.
+
 #### func (*Server) SetDestinationResolver
 
 ```go
@@ -736,6 +905,15 @@ func (s *Server) SetDestinationResolver(resolver interface {
 SetDestinationResolver sets the destination resolver for looking up encryption
 keys. This enables the server to resolve destination hashes to X25519 public
 keys from the NetDB for garlic encryption.
+
+#### func (*Server) SetHostnameResolver
+
+```go
+func (s *Server) SetHostnameResolver(resolver HostnameResolver)
+```
+SetHostnameResolver sets the resolver used for hostname-based HostLookup
+queries. When set, hostname lookups (type 1) will delegate to this resolver
+instead of returning an error. If nil, hostname lookups return HostReplyError.
 
 #### func (*Server) SetMessageRouter
 
@@ -840,10 +1018,14 @@ Session represents an active I2CP client session
 #### func  NewSession
 
 ```go
-func NewSession(id uint16, dest *destination.Destination, config *SessionConfig) (*Session, error)
+func NewSession(id uint16, dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error)
 ```
 NewSession creates a new I2CP session with its own isolated in-memory NetDB. The
 destination parameter can be nil, in which case a new destination will be
+generated. The signingPrivKey and encryptionPrivKey parameters allow clients to
+provide their own key material for persistent identity across sessions. When
+both private keys are provided, the destination is reconstructed from them
+(honoring the client's identity per I2CP spec). When nil, fresh keys are
 generated. Each session gets a completely separate in-memory StdNetDB instance
 to prevent client linkability. Client NetDBs are ephemeral and not persisted to
 disk.
@@ -980,7 +1162,7 @@ QueueIncomingMessageWithID queues a message for delivery to the client with a
 message ID. This is a higher-level method that wraps the payload in a
 MessagePayloadPayload structure before queuing it for delivery. The message ID
 can be used for tracking and correlation. Returns an error if the session is not
-active or the queue is full.
+active, rate limited, or the queue is full.
 
 #### func (*Session) ReceiveMessage
 
@@ -999,6 +1181,14 @@ Reconfigure updates the session configuration by merging new values with
 existing config. Only non-zero values from newConfig are applied, preserving
 existing values for zero fields. Note: Tunnel pools need to be recreated
 separately to apply tunnel configuration changes.
+
+#### func (*Session) SetCurrentLeaseSet
+
+```go
+func (s *Session) SetCurrentLeaseSet(leaseSetBytes []byte)
+```
+SetCurrentLeaseSet caches externally-provided LeaseSet bytes (e.g. from
+CreateLeaseSet2). Updates the currentLeaseSet and leaseSetPublishedAt timestamp.
 
 #### func (*Session) SetInboundPool
 
@@ -1055,6 +1245,29 @@ func (s *Session) Stop()
 ```
 Stop gracefully stops the session and cleans up resources
 
+#### func (*Session) StopTunnelPools
+
+```go
+func (s *Session) StopTunnelPools()
+```
+StopTunnelPools stops both inbound and outbound tunnel pools gracefully. This is
+called before rebuilding pools during reconfiguration.
+
+#### func (*Session) ValidateLeaseSet2Data
+
+```go
+func (s *Session) ValidateLeaseSet2Data(leaseSetBytes []byte) error
+```
+ValidateLeaseSet2Data parses and validates client-provided LeaseSet2 bytes.
+Ensures the data is structurally valid and that the embedded destination matches
+the session's destination. Returns an error if validation fails.
+
+Checks performed:
+
+    1. Structural parsing via ReadLeaseSet2 (validates all fields and signature)
+    2. Destination match: the LeaseSet2's destination must match this session's destination
+    3. Expiration: the LeaseSet2 must not already be expired
+
 #### type SessionConfig
 
 ```go
@@ -1066,6 +1279,17 @@ type SessionConfig struct {
 	OutboundTunnelCount  int           // Number of outbound tunnels (default: 5)
 	TunnelLifetime       time.Duration // Tunnel lifetime before rotation (default: 10 minutes)
 
+	// Backup tunnel parameters (per I2CP spec)
+	InboundBackupQuantity  int // Extra standby inbound tunnels (default: 0)
+	OutboundBackupQuantity int // Extra standby outbound tunnels (default: 0)
+
+	// Tunnel length variance (per I2CP spec)
+	// When non-zero, the actual tunnel length is randomized within
+	// [length - |variance|, length + |variance|] (clamped to [0, 7]).
+	// A negative variance means "subtract only" (shorter tunnels only).
+	InboundLengthVariance  int // Variance for inbound tunnel length (default: 0)
+	OutboundLengthVariance int // Variance for outbound tunnel length (default: 0)
+
 	// Network parameters
 	MessageTimeout time.Duration // Message delivery timeout (default: 60 seconds)
 
@@ -1074,13 +1298,33 @@ type SessionConfig struct {
 	MessageRateLimit     int // Maximum messages per second (default: 100, 0 = unlimited)
 	MessageRateBurstSize int // Maximum burst size for rate limiting (default: 200)
 
+	// Message delivery semantics (per I2CP spec)
+	// Supported values: "BestEffort" (default), "Guaranteed", "None"
+	MessageReliability string // Message reliability mode (default: "BestEffort")
+
+	// LeaseSet configuration
+	DontPublishLeaseSet bool // If true, the LeaseSet is created but not published to the NetDB (default: false)
+
 	// EncryptedLeaseSet configuration (requires Ed25519 destination)
 	UseEncryptedLeaseSet bool   // Enable EncryptedLeaseSet generation (default: false)
 	BlindingSecret       []byte // Secret for destination blinding (if empty, random generated)
-	LeaseSetExpiration   uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
+
+	// Gzip compression (per I2CP spec, compression is performed by the client library)
+	GzipEnabled bool // If true, the I2CP client library compresses/decompresses payloads (default: true per spec)
+
+	// ExplicitlySetFields tracks which fields were explicitly set by the client
+	// during reconfiguration, allowing zero values (e.g., zero-hop tunnels) to
+	// be distinguished from "not provided".
+	ExplicitlySetFields map[string]bool
+	LeaseSetExpiration  uint16 // LeaseSet expiration in seconds (default: 600 = 10 minutes)
 
 	// Session metadata
 	Nickname string // Optional nickname for debugging
+
+	// UnsupportedOptions lists I2CP options that the client set but this
+	// implementation does not support. Each entry maps option name → value.
+	// Clients can inspect this after session creation to detect unsupported features.
+	UnsupportedOptions map[string]string
 }
 ```
 
@@ -1118,7 +1362,9 @@ Wire format:
 
     - Options Mapping (2-byte size + key=value; pairs)
 
-Note: SessionID is in the message header, not the payload.
+Note: The caller must strip the 2-byte SessionID prefix from the raw wire
+payload before calling this function. The SessionID is included in the wire
+payload but is extracted into msg.SessionID by ReadMessage.
 
 #### type SessionManager
 
@@ -1139,9 +1385,11 @@ NewSessionManager creates a new session manager
 #### func (*SessionManager) CreateSession
 
 ```go
-func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig) (*Session, error)
+func (sm *SessionManager) CreateSession(dest *destination.Destination, config *SessionConfig, privKeys ...interface{}) (*Session, error)
 ```
 CreateSession creates a new session with the given destination and config.
+Optional private keys (signingPrivKey, encryptionPrivKey) can be provided to
+preserve the client's persistent identity across sessions.
 
 #### func (*SessionManager) DestroySession
 

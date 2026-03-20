@@ -62,6 +62,16 @@ func GetRouterHashString(ri router_info.RouterInfo) string
 GetRouterHashString returns a hex string representation of the RouterInfo's
 IdentHash This is a helper function to avoid duplication in logging
 
+#### func  HasDirectConnectivity
+
+```go
+func HasDirectConnectivity(ri router_info.RouterInfo) bool
+```
+HasDirectConnectivity checks if a RouterInfo has at least one address (NTCP2 or
+SSU2) with direct connectivity (host and port present, not introducer-only).
+This is a broader check than HasDirectNTCP2Connectivity that also accepts
+SSU2-only routers, which are valid directly connectable peers.
+
 #### func  HasDirectNTCP2Connectivity
 
 ```go
@@ -97,6 +107,26 @@ func ValidateRouterInfo(ri router_info.RouterInfo) error
 ```
 ValidateRouterInfo performs comprehensive validation on a RouterInfo Returns nil
 if valid, otherwise returns an error describing the validation failure
+
+#### func  VerifyRouterInfoSignature
+
+```go
+func VerifyRouterInfoSignature(ri router_info.RouterInfo) error
+```
+VerifyRouterInfoSignature cryptographically verifies that a RouterInfo's
+signature is valid by checking it against the signing public key embedded in the
+RouterIdentity.
+
+The verification process:
+
+    1. Serialize the RouterInfo to bytes (which includes the signature at the end)
+    2. Determine the signature size from the RouterIdentity's key certificate
+    3. Split the serialized bytes into data (without signature) and signature
+    4. Create a verifier from the signing public key
+    5. Verify the signature against the data
+
+This prevents accepting RouterInfos with forged identity hashes from compromised
+reseed servers, which is critical for bootstrap trust.
 
 #### type Bootstrap
 
@@ -137,8 +167,11 @@ local netDb fallback
 ```go
 func (cb *CompositeBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
 ```
-GetPeers implements the Bootstrap interface by trying file first (if specified),
-then reseed, then falling back to local netDb if both fail
+GetPeers implements the Bootstrap interface. When BootstrapType is "auto"
+(default), it tries all methods in sequence: file → reseed → local netDb. When
+set to a specific type ("file", "reseed", "local"), only that method is used.
+This allows users in air-gapped environments to prevent remote reseed
+connections, or to force a specific bootstrap strategy.
 
 #### type FileBootstrap
 
@@ -220,7 +253,41 @@ NewReseedBootstrap creates a new reseeder with the provided configuration
 func (rb *ReseedBootstrap) GetPeers(ctx context.Context, n int) ([]router_info.RouterInfo, error)
 ```
 GetPeers implements the Bootstrap interface by obtaining RouterInfos from
-configured reseed servers
+configured reseed servers.
+
+When MinReseedServers > 1 and enough servers are configured, it uses
+MultiServerReseed for concurrent fetching with strategy-based result
+combination. This matches Java I2P's security model requiring multiple server
+confirmation.
+
+Falls back to sequential single-server mode if multi-server reseed fails or when
+MinReseedServers == 1.
+
+#### func (*ReseedBootstrap) MultiServerReseed
+
+```go
+func (rb *ReseedBootstrap) MultiServerReseed(ctx context.Context, n int) ([]router_info.RouterInfo, error)
+```
+MultiServerReseed fetches RouterInfos from multiple servers concurrently and
+applies the configured strategy to combine results. It requires at least
+MinReseedServers successful responses.
+
+#### type ReseedResult
+
+```go
+type ReseedResult struct {
+	// ServerURL is the URL of the reseed server
+	ServerURL string
+	// RouterInfos contains the successfully retrieved and validated RouterInfos
+	RouterInfos []router_info.RouterInfo
+	// Error contains any error that occurred during the fetch
+	Error error
+	// Duration is how long the fetch took
+	Duration time.Duration
+}
+```
+
+ReseedResult holds the result from a single reseed server fetch operation.
 
 #### type ValidationStats
 

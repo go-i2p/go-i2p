@@ -4,7 +4,9 @@
 
 ![sntp.svg](sntp.svg)
 
-
+Package sntp provides Simple Network Time Protocol (SNTP) time synchronization
+for the go-i2p router, used to maintain accurate clock for I2P protocol
+operations.
 
 ## Usage
 
@@ -20,6 +22,37 @@ type DefaultNTPClient struct{}
 ```go
 func (c *DefaultNTPClient) QueryWithOptions(host string, options ntp.QueryOptions) (*ntp.Response, error)
 ```
+
+#### type ExtendedUpdateListener
+
+```go
+type ExtendedUpdateListener interface {
+	UpdateListener
+	// OnInitialized is called when the SNTP subsystem completes its first sync.
+	OnInitialized()
+	// OnSyncFailure is called when an NTP query cycle fails.
+	OnSyncFailure(consecutiveFails int)
+	// OnSyncLost is called when consecutive failures exceed the threshold.
+	OnSyncLost()
+}
+```
+
+ExtendedUpdateListener is an optional interface that listeners may implement to
+receive additional notifications about NTP synchronization state changes.
+Implementations are checked via type assertion; existing UpdateListener
+implementations continue to work without modification.
+
+#### type ListenerIdentifier
+
+```go
+type ListenerIdentifier interface {
+	ListenerID() string
+}
+```
+
+ListenerIdentifier is an optional interface that listeners may implement to
+provide a stable identity for removal via RemoveListener. When implemented,
+RemoveListener compares ListenerID() values instead of using pointer equality.
 
 #### type NTPClient
 
