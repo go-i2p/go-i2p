@@ -167,7 +167,7 @@ func TestMergeBlockCallbacks_OverwritesNilOnly(t *testing.T) {
 	noopOptions := func(data []byte) error { return nil }
 	noopToken := func(token []byte) {}
 
-	existingTermination := func(reason uint8, _ []byte) {}
+	existingTermination := func(_ uint32, reason uint8, _ []byte) {}
 
 	cbs := &ssu2noise.DataHandlerCallbacks{
 		OnTermination: existingTermination, // should NOT be overwritten
@@ -341,7 +341,7 @@ func TestBuildMergedCallbacks_TerminationHandler(t *testing.T) {
 	cbs := server.buildMergedCallbacks(nil)
 	require.NotNil(t, cbs.OnTermination)
 	// Should not panic.
-	cbs.OnTermination(0, nil)
+	cbs.OnTermination(0, 0, nil)
 	// Now the session context should be cancelled.
 	assert.NoError(t, server.Close())
 }

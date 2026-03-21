@@ -12,7 +12,7 @@ func TestBlockCallbackConfig_ToDataHandlerCallbacks(t *testing.T) {
 	terminationCalled := false
 	routerInfoCalled := false
 	config := &BlockCallbackConfig{
-		OnTermination: func(reason uint8, _ []byte) {
+		OnTermination: func(_ uint32, reason uint8, _ []byte) {
 			terminationCalled = true
 			assert.Equal(t, uint8(1), reason)
 		},
@@ -23,7 +23,7 @@ func TestBlockCallbackConfig_ToDataHandlerCallbacks(t *testing.T) {
 	}
 	callbacks := config.ToDataHandlerCallbacks()
 	require.NotNil(t, callbacks.OnTermination)
-	callbacks.OnTermination(1, nil)
+	callbacks.OnTermination(0, 1, nil)
 	assert.True(t, terminationCalled)
 	require.NotNil(t, callbacks.OnRouterInfo)
 	err := callbacks.OnRouterInfo([]byte("router-info"))
@@ -36,7 +36,7 @@ func TestBlockCallbackConfig_ToDataHandlerCallbacks(t *testing.T) {
 
 func TestBlockCallbackConfig_AllCallbacks(t *testing.T) {
 	config := &BlockCallbackConfig{
-		OnTermination:   func(uint8, []byte) {},
+		OnTermination:   func(uint32, uint8, []byte) {},
 		OnRouterInfo:    func([]byte) error { return nil },
 		OnACK:           func(*ssu2noise.SSU2Block) error { return nil },
 		OnDateTime:      func(uint32) error { return nil },
@@ -81,7 +81,7 @@ func TestDefaultBlockCallbacks_InvokeCallbacks(t *testing.T) {
 	config := DefaultBlockCallbacks()
 
 	// OnTermination callback should not panic.
-	config.OnTermination(0, nil)
+	config.OnTermination(0, 0, nil)
 
 	// OnRouterInfo callback should return nil.
 	err := config.OnRouterInfo([]byte("dummy"))

@@ -55,6 +55,8 @@ func (r *Router) Stop() {
 	r.stopBandwidthTracker()
 	r.stopCongestionMonitor()
 	r.stopPublisher()
+	r.stopExplorer()
+	r.stopFloodfillServer()
 	r.stopI2CPServer()
 	r.stopI2PControlServer()
 	r.stopParticipantManager()
@@ -246,6 +248,80 @@ func (r *Router) stopPublisher() {
 			"reason": "netdb publisher stopped",
 		}).Debug("NetDB publisher stopped")
 	}
+}
+
+// stopExplorer shuts down the NetDB explorer if it is running.
+func (r *Router) stopExplorer() {
+	if r.explorer != nil {
+		r.explorer.Stop()
+		r.explorer = nil
+		log.Debug("NetDB explorer stopped")
+	}
+}
+
+// stopFloodfillServer shuts down the floodfill server if it is running.
+func (r *Router) stopFloodfillServer() {
+	if r.floodfillServer != nil {
+		r.floodfillServer.Stop()
+		r.floodfillServer = nil
+		log.Debug("Floodfill server stopped")
+	}
+}
+
+// startFloodfillServer instantiates a FloodfillServer backed by the current NetDB
+// and transport muxer. Floodfill serving is disabled by default; set
+// netdb.floodfill_enabled in the config to enable it.
+func (r *Router) startFloodfillServer() {
+	if r.StdNetDB == nil || r.TransportMuxer == nil {
+		log.Debug("Floodfill server deferred: NetDB or transport muxer not ready")
+		return
+	}
+	adapter := &floodfillTransportAdapter{muxer: r.TransportMuxer, db: r.StdNetDB}
+	cfg := netdb.DefaultFloodfillConfig()
+	if r.cfg != nil && r.cfg.NetDb != nil {
+		cfg.Enabled = r.cfg.NetDb.FloodfillEnabled
+	}
+	ourHash, err := r.getOurRouterHash()
+	if err == nil {
+		cfg.OurHash = ourHash
+	}
+	r.floodfillServer = netdb.NewFloodfillServer(r.StdNetDB, adapter, cfg)
+	log.WithField("enabled", cfg.Enabled).Debug("Floodfill server started")
+}
+
+// startExplorer instantiates and starts the NetDB explorer. The explorer
+// actively discovers new peers by performing iterative lookups for random keys,
+// improving peer diversity over time. It requires a running tunnel pool.
+func (r *Router) startExplorer() {
+	if r.StdNetDB == nil || r.tunnelManager == nil {
+		log.Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
+		return
+	}
+	tunnelPool := r.tunnelManager.GetPool()
+	if tunnelPool == nil {
+		log.Debug("NetDB explorer deferred: tunnel pool not available")
+		return
+	}
+
+	cfg := netdb.DefaultExplorerConfig()
+
+	ourHash, err := r.getOurRouterHash()
+	if err == nil {
+		cfg.OurHash = ourHash
+	}
+
+	r.explorer = netdb.NewExplorer(r.StdNetDB, tunnelPool, cfg)
+
+	if r.messageRouter != nil {
+		r.explorer.SetOurHash(ourHash)
+	}
+
+	if err := r.explorer.Start(); err != nil {
+		log.WithError(err).Warn("Failed to start NetDB explorer")
+		r.explorer = nil
+		return
+	}
+	log.Debug("NetDB explorer started")
 }
 
 // startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet
@@ -492,6 +568,8 @@ func (r *Router) clearRoutingComponents() {
 	r.tunnelManager = nil
 	r.inboundHandler = nil
 	r.publisher = nil
+	r.explorer = nil
+	r.floodfillServer = nil
 	r.StdNetDB = nil
 	r.runMux.Unlock()
 	log.WithFields(logger.Fields{

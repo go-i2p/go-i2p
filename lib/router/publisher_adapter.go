@@ -1,9 +1,13 @@
 package router
 
 import (
+	"context"
+	"fmt"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-i2p/lib/bootstrap"
+	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	"github.com/go-i2p/logger"
@@ -101,3 +105,36 @@ func (a *publisherTransportAdapter) GetSession(routerInfo router_info.RouterInfo
 
 // Compile-time interface check
 var _ netdb.SessionProvider = (*publisherTransportAdapter)(nil)
+
+// floodfillTransportAdapter implements netdb.FloodfillTransport by routing
+// I2NP messages via the TransportMuxer, resolving router addresses from StdNetDB.
+type floodfillTransportAdapter struct {
+	muxer *transport.TransportMuxer
+	db    *netdb.StdNetDB
+}
+
+// SendI2NPMessage looks up the RouterInfo for routerHash in the local NetDB,
+// obtains (or creates) a transport session to that router, and queues msg.
+func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerHash common.Hash, msg i2np.I2NPMessage) error {
+	if a.muxer == nil || a.db == nil {
+		return fmt.Errorf("floodfill transport not ready")
+	}
+
+	// Resolve RouterInfo from local NetDB (channel-based API)
+	riChan := a.db.GetRouterInfo(routerHash)
+	var ri router_info.RouterInfo
+	select {
+	case ri = <-riChan:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	session, err := a.muxer.GetSession(ri)
+	if err != nil {
+		return fmt.Errorf("floodfill: get session for %x: %w", routerHash[:8], err)
+	}
+	return session.QueueSendI2NP(msg)
+}
+
+// Compile-time interface check
+var _ netdb.FloodfillTransport = (*floodfillTransportAdapter)(nil)

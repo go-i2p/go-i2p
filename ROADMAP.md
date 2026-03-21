@@ -145,17 +145,31 @@
 
 ## In Progress Components 🚧
 
+### SSU2 Transport
+
+- **Core Transport**:
+  - ✅ SSU2 handshake implementation (XK pattern via go-noise)
+  - ✅ UDP-based session management
+  - ✅ I2NP message send/receive over SSU2 sessions
+  - ✅ Congestion control and RTT estimation
+  - ✅ Relay tag allocation and introducer registry
+  - 🚧 NAT traversal: PeerTest initiation wired (peer test protocol completion in progress)
+  - 🚧 Introducer publishing: registration wired, RouterInfo advertisement pending
+
+### NetDB Explorer
+
+- ✅ Explorer instantiated and started at router startup
+- ✅ Random-key XOR lookup for peer discovery
+- 🚧 Scheduling tuning (exploration interval based on netdb size)
+
+### FloodfillServer
+
+- ✅ FloodfillServer instantiated and wired to DatabaseLookup dispatch
+- ✅ DatabaseStore/DatabaseSearchReply responses implemented
+- ✅ Per-peer rate limiting
+- 🚧 Enabled only when `netdb.floodfill_enabled = true` in config (disabled by default)
+
 ## Next Priority Components 🎯
-
-## Future Components 📅
-
-### SSU2 Transport (Post-NTCP2)
-
-- **Secondary Transport Protocol**:
-  - 📋 SSU2 handshake implementation
-  - 📋 UDP-based session management
-  - 📋 Peer testing mechanisms
-  - 📋 Introducer functionality
 
 **Next Focus**: Application Layer (I2CP client library, streaming)
 

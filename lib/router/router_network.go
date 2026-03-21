@@ -15,6 +15,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/naming"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 
 	"github.com/go-i2p/logger"
@@ -214,6 +215,9 @@ func (r *Router) mainloop() {
 	r.wireInboundHandler()
 	r.initializeMessageRouter()
 	r.startPublisher()
+	r.startExplorer()
+	r.startFloodfillServer()
+	r.startSSU2NATDetection()
 
 	// Signal Start() that all startup-critical initialization succeeded
 	r.startupErr <- nil
@@ -430,9 +434,10 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
 	}).Debug("Routing I2NP message")
 
-	// Grab a local reference under lock to prevent race with clearRoutingComponents()
+	// Grab local references under lock to prevent race with clearRoutingComponents()
 	r.runMux.RLock()
 	mr := r.messageRouter
+	fs := r.floodfillServer
 	r.runMux.RUnlock()
 
 	if mr == nil {
@@ -450,6 +455,13 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		return mr.RouteDatabaseMessage(dbStore)
 
 	case i2np.I2NPMessageTypeDatabaseLookup:
+		if fs != nil {
+			if lookup, err := r.parseDatabaseLookupMessage(msg); err == nil {
+				if err := fs.HandleDatabaseLookup(lookup); err != nil {
+					log.WithError(err).Debug("Floodfill server lookup handling failed (non-fatal)")
+				}
+			}
+		}
 		return mr.RouteDatabaseMessage(msg)
 
 	case i2np.I2NPMessageTypeDatabaseSearchReply:
@@ -515,6 +527,19 @@ func (r *Router) parseDatabaseStoreMessage(msg i2np.I2NPMessage) (*i2np.Database
 	}).Info("Parsed DatabaseStore message from peer")
 
 	return dbStore, nil
+}
+
+// parseDatabaseLookupMessage extracts and parses a DatabaseLookup from a BaseI2NPMessage.
+func (r *Router) parseDatabaseLookupMessage(msg i2np.I2NPMessage) (*i2np.DatabaseLookup, error) {
+	payload, ok := msg.(i2np.PayloadCarrier)
+	if !ok {
+		return nil, fmt.Errorf("message does not implement PayloadCarrier interface")
+	}
+	dl, err := i2np.ReadDatabaseLookup(payload.GetPayload())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse DatabaseLookup: %w", err)
+	}
+	return &dl, nil
 }
 
 // Session Management Methods
@@ -772,6 +797,63 @@ func (r *Router) logRouterInfoTimeout(hash common.Hash) {
 		"peer_hash": fmt.Sprintf("%x", hash[:8]),
 		"timeout":   "30s",
 	}).Error("Timeout waiting for RouterInfo from NetDB")
+}
+
+// startSSU2NATDetection initiates peer testing on the SSU2 transport (if
+// enabled) to determine our NAT type. If NAT requires introducers they are
+// registered in the transport's IntroducerRegistry; a future RouterInfo
+// republication via the publisher will then include them.
+//
+// This runs non-blocking: it hands off work to a goroutine managed by the
+// SSU2 transport's WaitGroup, which exits when the transport is closed.
+func (r *Router) startSSU2NATDetection() {
+	muxer := r.TransportMuxer
+	if muxer == nil {
+		return
+	}
+
+	var ssu2Transport *ssu2.SSU2Transport
+	for _, t := range muxer.GetTransports() {
+		if s, ok := t.(*ssu2.SSU2Transport); ok {
+			ssu2Transport = s
+			break
+		}
+	}
+	if ssu2Transport == nil {
+		return // SSU2 not enabled
+	}
+
+	if r.StdNetDB == nil {
+		return
+	}
+	allRIs := r.StdNetDB.GetAllRouterInfos()
+
+	// Collect SSU2-capable candidates (skip ourselves).
+	ourHash, err := r.getOurRouterHash()
+	var candidates []router_info.RouterInfo
+	for _, ri := range allRIs {
+		h, herr := ri.IdentHash()
+		if herr != nil {
+			continue
+		}
+		if err == nil && h == ourHash {
+			continue
+		}
+		if ssu2.HasDialableSSU2Address(&ri) {
+			candidates = append(candidates, ri)
+		}
+	}
+
+	if len(candidates) < 2 {
+		log.WithField("count", len(candidates)).Debug("SSU2 NAT detection deferred: insufficient SSU2 peers")
+		return
+	}
+
+	republish := func() {
+		log.Info("SSU2 NAT detection: introducers registered — RouterInfo republication scheduled at next publish interval")
+	}
+	ssu2Transport.StartNATDetection(candidates, republish)
+	log.Debug("SSU2 NAT detection goroutine started")
 }
 
 // GetNetDB returns the network database for I2PControl statistics collection.

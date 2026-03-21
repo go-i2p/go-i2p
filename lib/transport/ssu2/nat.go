@@ -2,7 +2,9 @@ package ssu2
 
 import (
 	"net"
+	"time"
 
+	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
 
@@ -155,4 +157,162 @@ func (t *SSU2Transport) AllocateRelayTag(addr *net.UDPAddr) (uint32, error) {
 		return 0, ErrTransportNotStarted
 	}
 	return t.relayManager.AllocateRelayTag(addr)
+}
+
+// StartNATDetection spawns a background goroutine that performs SSU2 peer
+// testing to determine our NAT type. candidates must contain at least two
+// SSU2-capable RouterInfos: the first is Bob (relay peer), the second is
+// Charlie (responder peer).
+//
+// On NAT types that require introducers (Restricted or Symmetric), up to three
+// candidates are registered in the IntroducerRegistry and republish (if non-nil)
+// is invoked so the caller can re-publish the updated RouterInfo.
+//
+// The goroutine is tracked in the transport WaitGroup and exits cleanly when
+// the transport context is cancelled.
+func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, republish func()) {
+	if len(candidates) < 2 {
+		t.logger.Warn("NAT detection skipped: need at least 2 SSU2-capable peers")
+		return
+	}
+	t.wg.Add(1)
+	go func() {
+		defer t.wg.Done()
+		t.runNATDetection(candidates, republish)
+	}()
+}
+
+// runNATDetection carries out the NAT detection sequence inside a goroutine.
+func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, republish func()) {
+	bobRI := candidates[0]
+	charlieRI := candidates[1]
+
+	charlieAddr, err := ExtractSSU2Addr(charlieRI)
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to get Charlie address")
+		return
+	}
+	charlieHash, err := charlieRI.IdentHash()
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to get Charlie hash")
+		return
+	}
+	bobAddr, err := ExtractSSU2Addr(bobRI)
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to get Bob address")
+		return
+	}
+
+	// Register the test nonce — CompleteTest is later called by the incoming
+	// PeerTest block handler (handlePeerTestBlock) when Charlie responds.
+	nonce, err := t.InitiateNATDetection(bobAddr)
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to register peer test nonce")
+		return
+	}
+
+	// Establish a session with Bob so we can send the PeerTest Request.
+	session, err := t.GetSession(bobRI)
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to get session to Bob")
+		return
+	}
+	ssu2Session, ok := session.(*SSU2Session)
+	if !ok {
+		t.logger.Warn("NAT detection: session is not *SSU2Session")
+		return
+	}
+
+	// Build and send PeerTest message 1: Alice → Bob, informing Bob of Charlie.
+	charlieHashBytes := charlieHash.Bytes()
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode:    ssu2noise.PeerTestRequest,
+		Nonce:          nonce,
+		RouterHash:     charlieHashBytes[:],
+		CharlieAddress: charlieAddr,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
+	if err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to encode PeerTest block")
+		return
+	}
+	if err := ssu2Session.WriteBlocks([]*ssu2noise.SSU2Block{encoded}); err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to send PeerTest request to Bob")
+		return
+	}
+	t.logger.Debug("NAT detection: sent PeerTest request to Bob, awaiting Charlie probe")
+
+	// Poll for test completion for up to 60 seconds (I2P spec timeout).
+	timeout := time.NewTimer(60 * time.Second)
+	defer timeout.Stop()
+	poll := time.NewTicker(2 * time.Second)
+	defer poll.Stop()
+
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case <-timeout.C:
+			t.logger.Debug("NAT detection: timed out waiting for peer test result")
+			// Even without a result, register candidates as a best-effort
+			// fallback for routers likely to be behind NAT.
+			t.registerIntroducers(candidates, republish)
+			return
+		case <-poll.C:
+			test := t.peerTestManager.GetTest(nonce)
+			if test == nil || test.State != ssu2noise.TestComplete {
+				continue
+			}
+			natType := t.peerTestManager.DetermineNATType(&ssu2noise.TestResult{
+				ExternalAddr: test.ExternalAddr,
+				Reachable:    test.Reachable,
+				NATType:      test.NATType,
+			})
+			t.logger.WithField("nat_type", natType.String()).Info("NAT detection: peer test complete")
+			if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
+				t.registerIntroducers(candidates, republish)
+			}
+			return
+		}
+	}
+}
+
+// registerIntroducers attempts to register up to three candidates from
+// candidates as introducers in the IntroducerRegistry and calls republish.
+func (t *SSU2Transport) registerIntroducers(candidates []router_info.RouterInfo, republish func()) {
+	registered := 0
+	for _, ri := range candidates {
+		if registered >= 3 {
+			break
+		}
+		addr, err := ExtractSSU2Addr(ri)
+		if err != nil {
+			continue
+		}
+		h, err := ri.IdentHash()
+		if err != nil {
+			continue
+		}
+		hBytes := h.Bytes()
+		tag, err := t.AllocateRelayTag(addr)
+		if err != nil {
+			continue
+		}
+		intro := &ssu2noise.RegisteredIntroducer{
+			Addr:       addr,
+			RouterHash: hBytes[:],
+			RelayTag:   tag,
+			AddedAt:    time.Now(),
+			LastSeen:   time.Now(),
+		}
+		if err := t.RegisterIntroducer(intro); err == nil {
+			registered++
+		}
+	}
+	if registered > 0 {
+		t.logger.WithField("introducer_count", registered).Info("NAT detection: registered introducers")
+		if republish != nil {
+			republish()
+		}
+	}
 }

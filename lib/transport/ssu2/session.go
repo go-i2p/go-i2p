@@ -116,7 +116,7 @@ func (s *SSU2Session) wireDataHandlerCallbacks() {
 // transport-level handlers supplied in extra. extra may be nil.
 func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise.DataHandlerCallbacks {
 	cbs := ssu2noise.DataHandlerCallbacks{
-		OnTermination: func(reason uint8, _ []byte) {
+		OnTermination: func(_ uint32, reason uint8, _ []byte) {
 			s.logger.WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
 			s.cancel()
 		},
@@ -272,6 +272,13 @@ func (s *SSU2Session) callCleanupCallback() {
 // GetBandwidthStats returns total bytes sent and received by this session.
 func (s *SSU2Session) GetBandwidthStats() (bytesSent, bytesReceived uint64) {
 	return atomic.LoadUint64(&s.bytesSent), atomic.LoadUint64(&s.bytesReceived)
+}
+
+// WriteBlocks writes raw SSU2 blocks directly to the underlying connection,
+// bypassing the I2NP send queue. Used for protocol-level blocks such as PeerTest
+// and Relay that must not be fragmented or queued alongside I2NP traffic.
+func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
+	return s.conn.WriteBlocks(blocks)
 }
 
 func (s *SSU2Session) drainSendQueue() {
@@ -461,6 +468,57 @@ const ssu2ReadDeadline = 5 * time.Minute
 // uses a 16-bit length field, ceiling is 65535 bytes).
 const maxI2NPMessageSize = 65536
 
+// receiveAction classifies the outcome of a read error for the receive loop.
+type receiveAction int
+
+const (
+	receiveRetry receiveAction = iota // transient timeout / deadline, retry
+	receiveFatal                      // permanent error, close session
+)
+
+// classifyReceiveError returns receiveRetry for network timeouts and
+// receiveFatal for all other errors.
+func classifyReceiveError(err error) receiveAction {
+	if isTimeout(err) {
+		return receiveRetry
+	}
+	return receiveFatal
+}
+
+// dispatchReceived processes a freshly-read frame: updates RTT, ACKs pending
+// messages, parses the payload as an I2NP message, and delivers it to recvChan.
+// Returns a non-nil error only for fatal session-ending conditions (context done).
+// Parse failures are logged and silently dropped (non-fatal).
+func (s *SSU2Session) dispatchReceived(frame []byte) error {
+	recvAt := time.Now()
+	atomic.AddUint64(&s.bytesReceived, uint64(len(frame)))
+
+	// Update RTT estimate using time since last send as a rough proxy.
+	if lastSendNano := atomic.LoadInt64(&s.lastSendNano); lastSendNano > 0 {
+		if rtt := recvAt.Sub(time.Unix(0, lastSendNano)); rtt > 0 && rtt < maxRTTSample {
+			s.rttEstimator.Update(rtt)
+		}
+	}
+	// Any data received means the peer is alive; ACK pending messages.
+	s.ackPendingBeforeTime(recvAt)
+
+	msg := i2np.NewI2NPMessage(0)
+	if err := msg.UnmarshalBinary(frame); err != nil {
+		s.logger.WithError(err).Debug("Failed to parse I2NP message")
+		return nil // non-fatal: skip malformed frame
+	}
+
+	select {
+	case s.recvChan <- msg:
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case <-time.After(100 * time.Millisecond):
+		atomic.AddUint64(&s.droppedMessages, 1)
+		s.logger.Warn("Receive channel full, dropping message")
+	}
+	return nil
+}
+
 func (s *SSU2Session) receiveWorker() {
 	defer s.wg.Done()
 	buf := make([]byte, maxI2NPMessageSize)
@@ -479,38 +537,17 @@ func (s *SSU2Session) receiveWorker() {
 
 		n, err := s.conn.Read(buf)
 		if err != nil {
-			if isTimeout(err) {
+			switch classifyReceiveError(err) {
+			case receiveRetry:
 				continue
-			}
-			s.logger.WithError(err).Debug("Read error on SSU2 session")
-			return
-		}
-
-		recvAt := time.Now()
-		atomic.AddUint64(&s.bytesReceived, uint64(n))
-
-		// Update RTT estimate using time since last send as a rough proxy.
-		if lastSendNano := atomic.LoadInt64(&s.lastSendNano); lastSendNano > 0 {
-			if rtt := recvAt.Sub(time.Unix(0, lastSendNano)); rtt > 0 && rtt < maxRTTSample {
-				s.rttEstimator.Update(rtt)
+			default:
+				s.logger.WithError(err).Debug("Read error on SSU2 session")
+				return
 			}
 		}
-		// Any data received means the peer is alive; ACK pending messages.
-		s.ackPendingBeforeTime(recvAt)
 
-		msg := i2np.NewI2NPMessage(0)
-		if err := msg.UnmarshalBinary(buf[:n]); err != nil {
-			s.logger.WithError(err).Debug("Failed to parse I2NP message")
-			continue
-		}
-
-		select {
-		case s.recvChan <- msg:
-		case <-s.ctx.Done():
+		if err := s.dispatchReceived(buf[:n]); err != nil {
 			return
-		case <-time.After(100 * time.Millisecond):
-			atomic.AddUint64(&s.droppedMessages, 1)
-			s.logger.Warn("Receive channel full, dropping message")
 		}
 	}
 }

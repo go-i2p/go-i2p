@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/go-i2p/common/base32"
 	common "github.com/go-i2p/common/data"
+	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-i2p/lib/config"
@@ -86,6 +88,13 @@ type Router struct {
 
 	// publisher publishes our RouterInfo and LeaseSets to floodfill routers
 	publisher *netdb.Publisher
+
+	// explorer actively discovers new NetDB peers via random-key XOR lookups
+	explorer *netdb.Explorer
+
+	// floodfillServer handles incoming DatabaseLookup requests when this router
+	// is configured as a floodfill router
+	floodfillServer *netdb.FloodfillServer
 
 	// leaseSetPublisher handles LeaseSet publication to local NetDB and network
 	leaseSetPublisher *LeaseSetPublisher
@@ -237,14 +246,11 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 
 // buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
 func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
-	// add NTCP2 transport
 	ntcp2Config, err := ntcp.NewConfig(":0") // Use port 0 for automatic assignment
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
 		return nil, err
 	}
-
-	// Set working directory for persistent key storage
 	ntcp2Config.WorkingDir = r.cfg.WorkingDir
 
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.RouterInfoKeystore)
@@ -261,17 +267,11 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	}
 	log.Debug("NTCP2 address:", ntcpaddr)
 
-	// Convert NTCP2 transport address to RouterAddress and add to RouterInfo
-	routerAddress, err := ntcp.ConvertToRouterAddress(ntcp2Transport)
-	if err != nil {
-		log.WithError(err).Error("Failed to convert NTCP2 address to RouterAddress")
-		return nil, fmt.Errorf("failed to convert NTCP2 address: %w", err)
+	if err := addTransportAddress(ri, ntcpaddr, "NTCP2", func() (*router_address.RouterAddress, error) {
+		return ntcp.ConvertToRouterAddress(ntcp2Transport)
+	}); err != nil {
+		return nil, err
 	}
-	ri.AddAddress(routerAddress)
-	log.WithFields(logger.Fields{
-		"host": ntcpaddr.String(),
-		"cost": routerAddress.Cost(),
-	}).Info("NTCP2 address added to RouterInfo")
 
 	return ntcp2Transport, nil
 }
@@ -305,18 +305,29 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	}
 	log.Debug("SSU2 address:", ssu2addr)
 
-	routerAddress, err := ssu2.ConvertToRouterAddress(ssu2Transport)
+	if err := addTransportAddress(ri, ssu2addr, "SSU2", func() (*router_address.RouterAddress, error) {
+		return ssu2.ConvertToRouterAddress(ssu2Transport)
+	}); err != nil {
+		return nil, err
+	}
+
+	return ssu2Transport, nil
+}
+
+// addTransportAddress converts a transport's address to a RouterAddress via converter
+// and appends it to ri. proto is used in log messages only.
+func addTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string, converter func() (*router_address.RouterAddress, error)) error {
+	routerAddress, err := converter()
 	if err != nil {
-		log.WithError(err).Error("Failed to convert SSU2 address to RouterAddress")
-		return nil, fmt.Errorf("failed to convert SSU2 address: %w", err)
+		log.WithError(err).Errorf("Failed to convert %s address to RouterAddress", proto)
+		return fmt.Errorf("failed to convert %s address: %w", proto, err)
 	}
 	ri.AddAddress(routerAddress)
 	log.WithFields(logger.Fields{
-		"host": ssu2addr.String(),
+		"host": addr.String(),
 		"cost": routerAddress.Cost(),
-	}).Info("SSU2 address added to RouterInfo")
-
-	return ssu2Transport, nil
+	}).Infof("%s address added to RouterInfo", proto)
+	return nil
 }
 
 // getTotalBandwidth returns the total bytes sent and received from all transports.

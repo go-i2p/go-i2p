@@ -60,6 +60,7 @@ func (mr *I2NPMessageDispatcher) SetNetDB(netdb I2NPNetDBStore) {
 // The hash is used in DatabaseSearchReply "from" field to indicate which router sent the reply.
 func (mr *I2NPMessageDispatcher) SetOurRouterHash(hash common.Hash) {
 	mr.dbManager.SetOurRouterHash(hash)
+	mr.processor.SetOurRouterHash(hash)
 	log.WithField("router_hash", fmt.Sprintf("%x", hash[:8])).Debug("Configured router identity for floodfill responses")
 }
 

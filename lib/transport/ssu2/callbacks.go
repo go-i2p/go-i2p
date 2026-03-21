@@ -9,7 +9,9 @@ import (
 // These callbacks are wired into the go-noise/ssu2 DataHandler.
 type BlockCallbackConfig struct {
 	// OnTermination is called when a peer sends a Termination block (type 6).
-	OnTermination func(reason uint8, additionalData []byte)
+	// validAfterTime is the router's suggested earliest reconnect time (seconds since epoch);
+	// reason is the termination reason code; additionalData carries optional extended data.
+	OnTermination func(validAfterTime uint32, reason uint8, additionalData []byte)
 
 	// OnRouterInfo is called when a RouterInfo block (type 2) is received.
 	// The data should be forwarded to the NetDB subsystem.
@@ -51,50 +53,15 @@ type BlockCallbackConfig struct {
 
 // ToDataHandlerCallbacks converts BlockCallbackConfig into go-noise/ssu2
 // DataHandlerCallbacks for wiring into the DataHandler.
+// OnTermination is applied first; then all remaining non-nil callbacks are
+// merged via mergeBlockCallbacks (shared with session.go) to avoid duplication.
 func (c *BlockCallbackConfig) ToDataHandlerCallbacks() ssu2noise.DataHandlerCallbacks {
-	callbacks := ssu2noise.DataHandlerCallbacks{}
-
+	cbs := ssu2noise.DataHandlerCallbacks{}
 	if c.OnTermination != nil {
-		callbacks.OnTermination = c.OnTermination
+		cbs.OnTermination = c.OnTermination
 	}
-	if c.OnRouterInfo != nil {
-		callbacks.OnRouterInfo = c.OnRouterInfo
-	}
-	if c.OnACK != nil {
-		callbacks.OnACK = c.OnACK
-	}
-	if c.OnDateTime != nil {
-		callbacks.OnDateTime = c.OnDateTime
-	}
-	if c.OnPeerTest != nil {
-		callbacks.OnPeerTest = c.OnPeerTest
-	}
-	if c.OnRelayRequest != nil {
-		callbacks.OnRelayRequest = c.OnRelayRequest
-	}
-	if c.OnRelayResponse != nil {
-		callbacks.OnRelayResponse = c.OnRelayResponse
-	}
-	if c.OnRelayIntro != nil {
-		callbacks.OnRelayIntro = c.OnRelayIntro
-	}
-	if c.OnNewToken != nil {
-		callbacks.OnNewToken = c.OnNewToken
-	}
-	if c.OnAddress != nil {
-		callbacks.OnAddress = c.OnAddress
-	}
-	if c.OnOptions != nil {
-		callbacks.OnOptions = c.OnOptions
-	}
-	if c.OnPathChallenge != nil {
-		callbacks.OnPathChallenge = c.OnPathChallenge
-	}
-	if c.OnPathResponse != nil {
-		callbacks.OnPathResponse = c.OnPathResponse
-	}
-
-	return callbacks
+	mergeBlockCallbacks(&cbs, c)
+	return cbs
 }
 
 // DefaultBlockCallbacks returns a BlockCallbackConfig with logging-only
@@ -102,7 +69,7 @@ func (c *BlockCallbackConfig) ToDataHandlerCallbacks() ssu2noise.DataHandlerCall
 // for block types that need real handling.
 func DefaultBlockCallbacks() *BlockCallbackConfig {
 	return &BlockCallbackConfig{
-		OnTermination: func(reason uint8, _ []byte) {
+		OnTermination: func(_ uint32, reason uint8, _ []byte) {
 			log.WithField("reason", reason).Info("Received SSU2 termination block")
 		},
 		OnRouterInfo: func(_ []byte) error {
