@@ -45,21 +45,21 @@ func TestFragmentData_Roundtrip(t *testing.T) {
 	require.Greater(t, len(blocks), 1)
 	first := blocks[0]
 	assert.Equal(t, ssu2noise.BlockTypeFirstFragment, first.Type)
-	assert.True(t, len(first.Data) >= 8, "first fragment must have at least 8 bytes header")
+	assert.True(t, len(first.Data) >= 7, "first fragment must have at least 7 bytes header")
 }
 
 func TestBuildFirstFragment(t *testing.T) {
 	data := []byte("hello")
-	block := buildFirstFragment(42, 100, data)
+	block := buildFirstFragment(42, 100, data, false)
 	assert.Equal(t, ssu2noise.BlockTypeFirstFragment, block.Type)
-	assert.Len(t, block.Data, 8+len(data))
+	assert.Len(t, block.Data, 7+len(data))
 }
 
 func TestBuildFollowOnFragment(t *testing.T) {
 	data := []byte("world")
-	block := buildFollowOnFragment(42, 1, data)
+	block := buildFollowOnFragment(42, 1, data, false)
 	assert.Equal(t, ssu2noise.BlockTypeFollowOnFragment, block.Type)
-	assert.Len(t, block.Data, 5+len(data))
+	assert.Len(t, block.Data, 7+len(data))
 }
 
 func TestFragmentData_TooSmallPayload(t *testing.T) {

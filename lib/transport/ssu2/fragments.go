@@ -16,13 +16,16 @@ const maxSSU2PayloadIPv4 = 1424
 // 1452 (max wire) - 16 (short header) - 16 (MAC placeholder) - 16 (AEAD tag) = 1404 bytes.
 const maxSSU2PayloadIPv6 = 1404
 
-// fragmentHeaderSize is the overhead per fragment block header.
-// TLV header (3 bytes) + MessageID (4 bytes) = 7 bytes minimum.
-// FirstFragment adds TotalSize (4 bytes) = 11 bytes total.
-// FollowOnFragment adds FragmentNum (1 byte) = 8 bytes total.
+// Fragment block overhead per SSU2 spec.
+// Both block types carry a 7-byte header inside the TLV payload:
+//
+//	FirstFragment:    MessageID(4) + FragInfo(1) + TotalSize uint16(2)
+//	FollowOnFragment: FragInfo(1)  + Reserved(2) + MessageID(4)
+//
+// Plus the 3-byte TLV wrapper (type + 2-byte length) = 10 bytes total each.
 const (
-	firstFragmentOverhead    = 3 + 4 + 4 // TLV header + messageID + totalSize
-	followOnFragmentOverhead = 3 + 4 + 1 // TLV header + messageID + fragmentNum
+	firstFragmentOverhead    = 3 + 7 // TLV header + spec-defined fragment header
+	followOnFragmentOverhead = 3 + 7 // TLV header + spec-defined fragment header
 )
 
 // FragmentI2NPMessage splits a large I2NP message into SSU2 fragment blocks
@@ -58,7 +61,8 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 		firstDataSize = len(data)
 	}
 
-	firstBlock := buildFirstFragment(messageID, totalSize, data[:firstDataSize])
+	isLastFirst := firstDataSize == len(data)
+	firstBlock := buildFirstFragment(messageID, totalSize, data[:firstDataSize], isLastFirst)
 	blocks = append(blocks, firstBlock)
 
 	offset := firstDataSize
@@ -74,13 +78,14 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 			end = len(data)
 		}
 
-		followBlock := buildFollowOnFragment(messageID, fragmentNum, data[offset:end])
+		isLastFollow := end == len(data)
+		followBlock := buildFollowOnFragment(messageID, fragmentNum, data[offset:end], isLastFollow)
 		blocks = append(blocks, followBlock)
 
 		offset = end
 		fragmentNum++
-		if fragmentNum == 0 {
-			return nil, fmt.Errorf("message too large: exceeds 255 fragments")
+		if fragmentNum > 127 {
+			return nil, fmt.Errorf("message too large: exceeds 127 follow-on fragments")
 		}
 	}
 
@@ -88,21 +93,34 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 }
 
 // buildFirstFragment creates a BlockTypeFirstFragment (type 4) block.
-// Format: MessageID(4) + TotalSize(4) + Data(variable)
-func buildFirstFragment(messageID, totalSize uint32, data []byte) *ssu2noise.SSU2Block {
-	payload := make([]byte, 8+len(data))
+// SSU2 spec format: MessageID(4) + FragInfo(1) + TotalSize uint16(2) + Data
+// FragInfo = (0 << 1) | isLast  (fragment number 0, isLast flag in bit 0).
+func buildFirstFragment(messageID, totalSize uint32, data []byte, isLast bool) *ssu2noise.SSU2Block {
+	payload := make([]byte, 7+len(data))
 	binary.BigEndian.PutUint32(payload[0:4], messageID)
-	binary.BigEndian.PutUint32(payload[4:8], totalSize)
-	copy(payload[8:], data)
+	isLastBit := uint8(0)
+	if isLast {
+		isLastBit = 1
+	}
+	payload[4] = isLastBit // fragNum=0 for first fragment; isLast in bit 0
+	binary.BigEndian.PutUint16(payload[5:7], uint16(totalSize))
+	copy(payload[7:], data)
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, payload)
 }
 
 // buildFollowOnFragment creates a BlockTypeFollowOnFragment (type 5) block.
-// Format: MessageID(4) + FragmentNum(1) + Data(variable)
-func buildFollowOnFragment(messageID uint32, fragmentNum uint8, data []byte) *ssu2noise.SSU2Block {
-	payload := make([]byte, 5+len(data))
-	binary.BigEndian.PutUint32(payload[0:4], messageID)
-	payload[4] = fragmentNum
-	copy(payload[5:], data)
+// SSU2 spec format: FragInfo(1) + Reserved(2) + MessageID(4) + Data
+// FragInfo = (fragmentNum << 1) | isLast  (fragment number in bits 7:1, isLast in bit 0).
+func buildFollowOnFragment(messageID uint32, fragmentNum uint8, data []byte, isLast bool) *ssu2noise.SSU2Block {
+	payload := make([]byte, 7+len(data))
+	isLastBit := uint8(0)
+	if isLast {
+		isLastBit = 1
+	}
+	payload[0] = (fragmentNum << 1) | isLastBit
+	payload[1] = 0 // reserved
+	payload[2] = 0 // reserved
+	binary.BigEndian.PutUint32(payload[3:7], messageID)
+	copy(payload[7:], data)
 	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFollowOnFragment, payload)
 }
