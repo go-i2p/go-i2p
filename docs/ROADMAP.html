@@ -13,7 +13,7 @@
         <a href="../index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 1547 commits
+        📝 1552 commits
          • 📜 MIT License
       </div>
     </div>
@@ -286,22 +286,40 @@
 
 <h2 id="in-progress-components">In Progress Components 🚧</h2>
 
-<h2 id="next-priority-components">Next Priority Components 🎯</h2>
-
-<h2 id="future-components">Future Components 📅</h2>
-
-<h3 id="ssu2-transport-post-ntcp2">SSU2 Transport (Post-NTCP2)</h3>
+<h3 id="ssu2-transport">SSU2 Transport</h3>
 
 <ul>
-<li><strong>Secondary Transport Protocol</strong>:
+<li><strong>Core Transport</strong>:
 
 <ul>
-<li>📋 SSU2 handshake implementation</li>
-<li>📋 UDP-based session management</li>
-<li>📋 Peer testing mechanisms</li>
-<li>📋 Introducer functionality</li>
+<li>✅ SSU2 handshake implementation (XK pattern via go-noise)</li>
+<li>✅ UDP-based session management</li>
+<li>✅ I2NP message send/receive over SSU2 sessions</li>
+<li>✅ Congestion control and RTT estimation</li>
+<li>✅ Relay tag allocation and introducer registry</li>
+<li>🚧 NAT traversal: PeerTest initiation wired (peer test protocol completion in progress)</li>
+<li>🚧 Introducer publishing: registration wired, RouterInfo advertisement pending</li>
 </ul></li>
 </ul>
+
+<h3 id="netdb-explorer">NetDB Explorer</h3>
+
+<ul>
+<li>✅ Explorer instantiated and started at router startup</li>
+<li>✅ Random-key XOR lookup for peer discovery</li>
+<li>🚧 Scheduling tuning (exploration interval based on netdb size)</li>
+</ul>
+
+<h3 id="floodfillserver">FloodfillServer</h3>
+
+<ul>
+<li>✅ FloodfillServer instantiated and wired to DatabaseLookup dispatch</li>
+<li>✅ DatabaseStore/DatabaseSearchReply responses implemented</li>
+<li>✅ Per-peer rate limiting</li>
+<li>🚧 Enabled only when <code>netdb.floodfill_enabled = true</code> in config (disabled by default)</li>
+</ul>
+
+<h2 id="next-priority-components">Next Priority Components 🎯</h2>
 
 <p><strong>Next Focus</strong>: Application Layer (I2CP client library, streaming)</p>
 
@@ -321,7 +339,7 @@
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-03-23 22:35:23 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-03-23 22:52:23 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
