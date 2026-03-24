@@ -437,16 +437,22 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 }
 
 // resolveMetaEntryWithDepth attempts to resolve a single MetaLeaseSet entry by its hash
-// and type. Supports LeaseSet (1), LeaseSet2 (3), and recursive MetaLeaseSet (5).
+// and type. Supports LeaseSet (1), LeaseSet2 (3), EncryptedLeaseSet (5), and
+// recursive MetaLeaseSet (7) per the I2P MetaLeaseSet specification.
 func (dr *DestinationResolver) resolveMetaEntryWithDepth(entryHash [32]byte, entryType uint8, depth int) ([32]byte, error) {
 	hash := common.Hash(entryHash)
 
 	switch entryType {
-	case 3: // LeaseSet2
-		return dr.extractKeyFromLeaseSet2Direct(hash)
 	case 1: // Classic LeaseSet
 		return dr.extractKeyFromLeaseSet2(hash)
-	case 5: // Nested MetaLeaseSet (recursive, depth-limited)
+	case 3: // LeaseSet2
+		return dr.extractKeyFromLeaseSet2Direct(hash)
+	case 5: // EncryptedLeaseSet - requires decryption, fall back to LS2 lookup
+		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {
+			return key, nil
+		}
+		return dr.extractKeyFromLeaseSet2(hash)
+	case 7: // Nested MetaLeaseSet (recursive, depth-limited)
 		return dr.resolveMetaDestinationWithDepth(hash, depth+1)
 	default: // type 0 (unknown) — try LS2 then classic
 		if key, err := dr.extractKeyFromLeaseSet2Direct(hash); err == nil {

@@ -332,70 +332,93 @@ func (t *SSU2Transport) createOutboundSession(routerInfo router_info.RouterInfo,
 		return nil, err
 	}
 
+	// Use deferred cleanup - only unreserve if slotUsed is false
+	slotUsed := false
+	defer func() {
+		if !slotUsed {
+			t.unreserveSessionSlot()
+		}
+	}()
+
+	dialConfig, remoteUDPAddr, err := t.prepareDialConfig(routerInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
+	if err != nil {
+		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
+	}
+
+	session, newSlotUsed, err := t.registerOrReuseSession(conn, routerHash)
+	if err != nil {
+		return nil, err
+	}
+
+	slotUsed = newSlotUsed
+	return session, nil
+}
+
+// prepareDialConfig creates the dial configuration for an outbound SSU2 session.
+func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*ssu2noise.SSU2Config, *net.UDPAddr, error) {
 	ssu2Addr, err := ExtractSSU2Addr(routerInfo)
 	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, WrapSSU2Error(err, "extracting SSU2 address")
+		return nil, nil, WrapSSU2Error(err, "extracting SSU2 address")
 	}
 
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", ssu2Addr.String())
 	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, WrapSSU2Error(err, "resolving remote UDP address")
+		return nil, nil, WrapSSU2Error(err, "resolving remote UDP address")
 	}
 
 	t.identityMu.RLock()
 	identHash, err := t.identity.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
+		return nil, nil, fmt.Errorf("failed to get our identity hash: %w", err)
 	}
 
 	identityBytes := identHash.Bytes()
 	dialConfig, err := ssu2noise.NewSSU2Config(identityBytes[:], true)
 	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, WrapSSU2Error(err, "creating dial config")
+		return nil, nil, WrapSSU2Error(err, "creating dial config")
 	}
 
 	if err := initializeCryptoKeys(dialConfig, t.keystore); err != nil {
-		t.unreserveSessionSlot()
-		return nil, err
+		return nil, nil, err
 	}
 
 	remoteHash, err := routerInfo.IdentHash()
 	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
+		return nil, nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
 	remoteHashBytes := remoteHash.Bytes()
 	dialConfig = dialConfig.WithRemoteRouterHash(remoteHashBytes[:])
 
-	conn, err := ssu2noise.DialSSU2WithHandshakeContext(t.ctx, nil, remoteUDPAddr, dialConfig)
-	if err != nil {
-		t.unreserveSessionSlot()
-		return nil, WrapSSU2Error(err, "dialing SSU2 connection")
-	}
+	return dialConfig, remoteUDPAddr, nil
+}
 
+// registerOrReuseSession creates a new session or returns an existing one for the router hash.
+// Returns the session, a boolean indicating if a new slot is used, and any error.
+func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerHash data.Hash) (*SSU2Session, bool, error) {
 	session := NewSSU2SessionDeferred(conn, t.ctx, t.logger)
 	session.maxRetransmit = t.config.GetMaxRetransmissions()
 	session.SetTransportCallbacks(t.buildTransportCallbacks())
+
 	existing, loaded := t.sessions.LoadOrStore(routerHash, session)
 	if loaded {
 		session.Close()
-		t.unreserveSessionSlot()
 		if existingSession, ok := existing.(*SSU2Session); ok {
-			return existingSession, nil
+			return existingSession, false, nil // Reusing existing, slot not used
 		}
-		return nil, fmt.Errorf("unexpected session map entry type")
+		return nil, false, fmt.Errorf("unexpected session map entry type")
 	}
 
 	session.StartWorkers()
 	session.SetCleanupCallback(func() {
 		t.removeSession(routerHash)
 	})
-	return session, nil
+	return session, true, nil // New session, slot is used
 }
 
 // Compatible returns true if the RouterInfo has an SSU2 transport address.
