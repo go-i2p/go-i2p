@@ -17,7 +17,7 @@ The current release(0.1.4 and earlier) have literally hundreds of bugs pending r
 
 **`go-i2p`'s network presence is HIGHLY DISTINCTIVE at this time.** This is because:
 
- - We do not yet implement SSU2, all our routers are NTCP2 only. This will change.
+ - SSU2 is available but disabled by default. Peer Tests and Introducers are still in progress.
  - We do not implement Elgamal or AES+SessionTag or DSA. This will not change.
 
 ### Implemented Features
@@ -88,15 +88,15 @@ The current release(0.1.4 and earlier) have literally hundreds of bugs pending r
     - [X] Session lifecycle management
     - [X] Message queuing and worker threads
   - SSU2
-    - [ ] Session handshake
-    - [ ] Connection management
-    - [ ] Peer Tests
-    - [ ] Introducers
+    - [X] Session handshake
+    - [X] Connection management
+    - [~] Peer Tests
+    - [~] Introducers
   - [Noise Subsystem (see also https://github.com/go-i2p/go-noise)](https://github.com/go-i2p/go-noise)
     - [X] Noise Socket Framework
     - [X] NTCP2 Socket Framework
     - [X] ECIES-X25519-AEAD-Ratchet engine (`ratchet/` package)
-    - [ ] SSU2 Socket Framework
+    - [X] SSU2 Socket Framework
 - Tunnels
   - [X] Message structure parsing (delivery instructions)
   - [X] Fragment handling and reassembly

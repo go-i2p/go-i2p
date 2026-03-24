@@ -779,8 +779,22 @@ func (r *Router) initializeMessageRouter() {
 	r.participantManager = tunnel.NewManager()
 	log.Debug("Participant manager initialized for transit tunnel tracking")
 
+	// Wire participant manager into the message processor so incoming tunnel
+	// build requests from other routers are evaluated instead of silently dropped.
+	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
+	log.Debug("Participant manager wired into message processor")
+
+	// Wire build reply forwarder so accepted tunnel build requests can send
+	// replies back to the requester via the transport layer.
+	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
+	log.Debug("Build reply forwarder wired into message processor")
+
 	// Initialize garlic message router for handling garlic clove forwarding
 	r.initializeGarlicRouter()
+
+	// Create and wire garlic session manager for decrypting inbound garlic messages.
+	// Uses the router's X25519 encryption private key for ECIES decryption.
+	r.wireGarlicSessionManager()
 
 	// Wire InboundMessageHandler as the TunnelData handler on the message processor.
 	// This enables inbound tunnel messages to be decrypted and delivered to I2CP sessions.
@@ -804,7 +818,7 @@ func (r *Router) initializeMessageRouter() {
 		log.Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
 	}
 
-	log.Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, and garlic forwarding")
+	log.Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
 }
 
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
@@ -884,6 +898,23 @@ func (r *Router) initializeGarlicRouter() {
 		"transport_ready": r.TransportMuxer != nil,
 		"netdb_ready":     r.StdNetDB != nil,
 	}).Debug("Garlic message router initialized for non-LOCAL clove forwarding")
+}
+
+// wireGarlicSessionManager creates a GarlicSessionManager from the router's X25519
+// encryption private key and injects it into the MessageProcessor for decrypting
+// inbound garlic messages.
+func (r *Router) wireGarlicSessionManager() {
+	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	var privKey [32]byte
+	copy(privKey[:], privKeyBytes)
+
+	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
+	if err != nil {
+		log.WithError(err).Error("Failed to create garlic session manager — inbound garlic decryption will fail")
+		return
+	}
+	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
+	log.Debug("Garlic session manager wired into message processor")
 }
 
 // getOurRouterHash returns our router's identity hash.

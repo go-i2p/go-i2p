@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	"github.com/go-i2p/go-i2p/lib/naming"
+	"github.com/go-i2p/go-i2p/lib/netdb"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
@@ -642,6 +643,44 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 		server.SetHostnameResolver(hostResolver)
 		log.Debug("I2CP server: hostname resolver configured")
 	}
+
+	// Wire destination resolver backed by the NetDB so outbound SendMessage
+	// calls can look up the recipient's X25519 public key for garlic encryption.
+	destResolver := netdb.NewDestinationResolver(r.StdNetDB)
+	server.SetDestinationResolver(destResolver)
+	log.Debug("I2CP server: destination resolver configured")
+
+	// Wire message router for outbound I2CP message routing through garlic encryption
+	// and into the tunnel subsystem. The garlic session manager is created from the
+	// router's X25519 key and the transport send function routes via established sessions.
+	r.wireI2CPMessageRouter(server)
+}
+
+// wireI2CPMessageRouter creates and injects a MessageRouter into the I2CP server.
+// The MessageRouter handles outbound message encryption via garlic sessions and
+// sends encrypted messages through the transport layer to tunnel gateways.
+func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
+	privKeyBytes := r.RouterInfoKeystore.GetEncryptionPrivateKey().Bytes()
+	var privKey [32]byte
+	copy(privKey[:], privKeyBytes)
+
+	garlicMgr, err := i2np.NewGarlicSessionManager(privKey)
+	if err != nil {
+		log.WithError(err).Error("I2CP server: failed to create garlic session manager — outbound routing disabled")
+		return
+	}
+
+	transportSend := func(peerHash common.Hash, msg i2np.I2NPMessage) error {
+		session, sErr := r.GetSessionByHash(peerHash)
+		if sErr != nil {
+			return fmt.Errorf("no session for peer %x: %w", peerHash[:8], sErr)
+		}
+		return session.QueueSendI2NP(msg)
+	}
+
+	msgRouter := i2cp.NewMessageRouter(garlicMgr, transportSend)
+	server.SetMessageRouter(msgRouter)
+	log.Debug("I2CP server: message router configured for outbound routing")
 }
 
 // removeSession removes a session when it closes.
