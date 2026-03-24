@@ -167,7 +167,7 @@ func TestMergeBlockCallbacks_OverwritesNilOnly(t *testing.T) {
 	noopOptions := func(data []byte) error { return nil }
 	noopToken := func(token []byte) {}
 
-	existingTermination := func(_ uint32, reason uint8, _ []byte) {}
+	existingTermination := func(_ uint64, reason uint8, _ []byte) {}
 
 	cbs := &ssu2noise.DataHandlerCallbacks{
 		OnTermination: existingTermination, // should NOT be overwritten

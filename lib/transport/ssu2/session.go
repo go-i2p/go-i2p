@@ -116,7 +116,7 @@ func (s *SSU2Session) wireDataHandlerCallbacks() {
 // transport-level handlers supplied in extra. extra may be nil.
 func (s *SSU2Session) buildMergedCallbacks(extra *BlockCallbackConfig) ssu2noise.DataHandlerCallbacks {
 	cbs := ssu2noise.DataHandlerCallbacks{
-		OnTermination: func(_ uint32, reason uint8, _ []byte) {
+		OnTermination: func(_ uint64, reason uint8, _ []byte) {
 			s.logger.WithField("termination_reason", reason).Warn("SSU2 session terminated by peer")
 			s.cancel()
 		},

@@ -50,8 +50,14 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 		return err
 	}
 	nonce := ptBlock.Nonce
-	// Use AliceAddress as the observed external address when available.
-	externalAddr := ptBlock.AliceAddress
+	// Reconstruct the observed external address from AliceIP + AlicePort when available.
+	var externalAddr *net.UDPAddr
+	if len(ptBlock.AliceIP) > 0 {
+		externalAddr = &net.UDPAddr{
+			IP:   net.IP(ptBlock.AliceIP),
+			Port: int(ptBlock.AlicePort),
+		}
+	}
 	result := &ssu2noise.TestResult{
 		ExternalAddr: externalAddr,
 		Reachable:    externalAddr != nil,
@@ -223,13 +229,17 @@ func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, rep
 		return
 	}
 
-	// Build and send PeerTest message 1: Alice → Bob, informing Bob of Charlie.
+	// Build and send PeerTest message 1: Alice → Bob.
+	// RouterHash is only encoded for messages 2 and 4 per the SSU2 spec;
+	// Charlie selection on Bob's side is handled by the PeerTestManager.
+	_ = charlieAddr // charlieAddr conveyed via initiating the test session
 	charlieHashBytes := charlieHash.Bytes()
 	ptBlock := &ssu2noise.PeerTestBlock{
-		MessageCode:    ssu2noise.PeerTestRequest,
-		Nonce:          nonce,
-		RouterHash:     charlieHashBytes[:],
-		CharlieAddress: charlieAddr,
+		MessageCode: ssu2noise.PeerTestRequest,
+		Nonce:       nonce,
+		RouterHash:  charlieHashBytes[:],
+		Version:     2,
+		Timestamp:   uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {
