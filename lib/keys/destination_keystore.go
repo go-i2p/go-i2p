@@ -330,6 +330,79 @@ func buildDestinationFromPublicKeysWithPadding(encryptionPubKey types.ReceivingP
 	}, nil
 }
 
+// RotateKeys generates new encryption and signing keys, updating the destination
+// identity. The old keys are archived to disk with a timestamp suffix before
+// being replaced. This provides forward secrecy at the destination level.
+//
+// NOTE: Key rotation changes the .b32.i2p address. Any peers holding the old
+// address will no longer be able to reach this destination. The old keys are
+// preserved in an archive file for potential recovery or decryption of old
+// messages.
+//
+// Parameters:
+//   - dir: directory to store keys (and archive)
+//   - name: base name for key files
+//
+// Returns the previous destination (for logging/notification) and any error.
+func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Destination, error) {
+	log.WithFields(map[string]interface{}{
+		"at":   "DestinationKeyStore.RotateKeys",
+		"dir":  dir,
+		"name": name,
+	}).Info("Rotating destination keys")
+
+	// Archive current keys before rotation
+	oldDest := dks.destination
+	if err := dks.archiveCurrentKeys(dir, name); err != nil {
+		return nil, fmt.Errorf("failed to archive current keys: %w", err)
+	}
+
+	// Generate new key pairs
+	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new signing keys: %w", err)
+	}
+
+	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new encryption keys: %w", err)
+	}
+
+	// Generate new padding for the new identity
+	padding, err := calculateKeyPadding()
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate new padding: %w", err)
+	}
+
+	// Build the new destination
+	newDest, err := buildDestinationFromPublicKeysWithPadding(encryptionPubKey, signingPubKey, padding)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build new destination: %w", err)
+	}
+
+	// Zero old keys from memory
+	dks.Close()
+
+	// Update the keystore with new keys
+	dks.destination = newDest
+	dks.encryptionPrivKey = encryptionPrivKey
+	dks.signingPrivKey = signingPrivKey
+	dks.padding = padding
+
+	// Persist new keys
+	if err := dks.StoreKeys(dir, name); err != nil {
+		return nil, fmt.Errorf("failed to store rotated keys: %w", err)
+	}
+
+	log.WithFields(map[string]interface{}{
+		"at":       "DestinationKeyStore.RotateKeys",
+		"old_dest": oldDest.Base32Address,
+		"new_dest": newDest.Base32Address,
+	}).Info("Key rotation completed successfully")
+
+	return oldDest, nil
+}
+
 // Close zeroes all private key material from memory. After calling Close,
 // the key store must not be used for signing or encryption operations.
 // This implements defense-in-depth key hygiene per cryptographic best practices.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/crypto/curve25519"
@@ -342,4 +343,28 @@ func readLengthPrefixedField(data []byte, offset int, fieldName string) ([]byte,
 	offset += length
 
 	return field, offset, nil
+}
+
+// archiveCurrentKeys saves the current keys to an archive file with a timestamp.
+// The archive filename format is: <name>.dest.key.<timestamp>.archive
+// This preserves old keys for potential recovery or decryption of old messages.
+func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
+	data, err := dks.marshal()
+	if err != nil {
+		return fmt.Errorf("failed to marshal keys for archive: %w", err)
+	}
+
+	timestamp := time.Now().UTC().Format("20060102-150405")
+	archiveFilename := filepath.Join(dir, fmt.Sprintf("%s.dest.key.%s.archive", name, timestamp))
+
+	if err := os.WriteFile(archiveFilename, data, 0o600); err != nil {
+		return fmt.Errorf("failed to write archive file: %w", err)
+	}
+
+	log.WithFields(map[string]interface{}{
+		"at":      "archiveCurrentKeys",
+		"archive": archiveFilename,
+	}).Info("Archived current destination keys")
+
+	return nil
 }
