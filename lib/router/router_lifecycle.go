@@ -16,6 +16,16 @@ import (
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
+// logSubsystemStop logs a subsystem shutdown event with standard fields.
+// This reduces duplication across the various stopXxx methods.
+func logSubsystemStop(method, subsystem string) {
+	log.WithFields(logger.Fields{
+		"at":     method,
+		"phase":  "shutdown",
+		"reason": subsystem + " stopped",
+	}).Debug(subsystem + " stopped")
+}
+
 // Stop initiates router shutdown and waits for all goroutines to complete.
 // This method blocks until the router is fully stopped.
 func (r *Router) Stop() {
@@ -83,17 +93,8 @@ func (r *Router) Stop() {
 // stopNetDB shuts down the network database if it exists and logs the result.
 func (r *Router) stopNetDB() {
 	if r.StdNetDB != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopNetDB",
-			"phase":  "shutdown",
-			"reason": "stopping network database",
-		}).Debug("stopping NetDB")
 		r.StdNetDB.Stop()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopNetDB",
-			"phase":  "shutdown",
-			"reason": "network database stopped",
-		}).Debug("netDB stopped")
+		logSubsystemStop("(Router) stopNetDB", "netDB")
 	}
 }
 
@@ -105,17 +106,8 @@ func (r *Router) stopGarlicRouter() {
 	r.runMux.Unlock()
 
 	if gr != nil {
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopGarlicRouter",
-			"phase":  "shutdown",
-			"reason": "stopping garlic router",
-		}).Debug("stopping garlic router")
 		gr.Stop()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopGarlicRouter",
-			"phase":  "shutdown",
-			"reason": "garlic router stopped",
-		}).Debug("garlic router stopped")
+		logSubsystemStop("(Router) stopGarlicRouter", "garlic router")
 	}
 }
 
@@ -228,11 +220,7 @@ func (r *Router) isAcceptingTunnels() bool {
 func (r *Router) stopCongestionMonitor() {
 	if r.congestionMonitor != nil {
 		r.congestionMonitor.Stop()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopCongestionMonitor",
-			"phase":  "shutdown",
-			"reason": "congestion monitor stopped",
-		}).Debug("congestion monitor stopped")
+		logSubsystemStop("(Router) stopCongestionMonitor", "congestion monitor")
 	}
 }
 
@@ -242,11 +230,7 @@ func (r *Router) stopPublisher() {
 	if r.publisher != nil {
 		r.publisher.Stop()
 		r.publisher = nil
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopPublisher",
-			"phase":  "shutdown",
-			"reason": "netdb publisher stopped",
-		}).Debug("NetDB publisher stopped")
+		logSubsystemStop("(Router) stopPublisher", "NetDB publisher")
 	}
 }
 
@@ -397,11 +381,7 @@ func (r *Router) launchPublisher(tunnelPool *tunnel.Pool) {
 func (r *Router) stopTunnelManager() {
 	if r.tunnelManager != nil {
 		r.tunnelManager.Stop()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) stopTunnelManager",
-			"phase":  "shutdown",
-			"reason": "tunnel manager stopped",
-		}).Debug("tunnel manager stopped")
+		logSubsystemStop("(Router) stopTunnelManager", "tunnel manager")
 	}
 }
 

@@ -490,3 +490,24 @@ func (t *SSU2Transport) removeSession(routerHash data.Hash) {
 		atomic.AddInt32(&t.sessionCount, -1)
 	}
 }
+
+// findSessionByAddr iterates all active sessions and returns the first
+// SSU2Session whose remote address matches addr. Returns nil if none found.
+func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
+	if addr == nil {
+		return nil
+	}
+	var found *SSU2Session
+	t.sessions.Range(func(_, value interface{}) bool {
+		s, ok := value.(*SSU2Session)
+		if !ok || s.conn == nil {
+			return true
+		}
+		if s.conn.RemoteAddr().String() == addr.String() {
+			found = s
+			return false
+		}
+		return true
+	})
+	return found
+}

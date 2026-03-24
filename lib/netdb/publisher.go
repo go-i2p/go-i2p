@@ -604,6 +604,13 @@ func (p *Publisher) SetTransport(transport SessionProvider) {
 	p.fieldMu.Unlock()
 }
 
+// PublishOurRouterInfo triggers an immediate republication of our RouterInfo
+// to floodfill routers. Use this when the RouterInfo has changed (e.g. after
+// introducer addresses are updated following NAT detection).
+func (p *Publisher) PublishOurRouterInfo() {
+	p.publishOurRouterInfo()
+}
+
 // GetStats returns statistics about publishing activity
 func (p *Publisher) GetStats() PublisherStats {
 	return PublisherStats{

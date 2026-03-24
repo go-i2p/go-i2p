@@ -1,6 +1,7 @@
 package ssu2
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -69,37 +70,102 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 	return nil
 }
 
-// handleRelayRequestBlock processes a RelayRequest by allocating a relay tag
-// for the requesting peer.
+// handleRelayRequestBlock processes a RelayRequest from Alice (we are Bob).
+// It decodes the request, validates the relay tag, and forwards a RelayIntro
+// to Charlie via the session associated with the relay tag.
 func (t *SSU2Transport) handleRelayRequestBlock(block *ssu2noise.SSU2Block) error {
 	if t.relayManager == nil || block == nil {
 		return nil
 	}
-	t.logger.Debug("received RelayRequest block")
-	// Allocation requires the requester's UDP address, which is embedded in
-	// the block payload. We log receipt for now; full relay handling requires
-	// the full protocol stack (Phase 3c).
-	_ = block
-	return nil
-}
-
-// handleRelayResponseBlock processes a RelayResponse and registers the
-// resolved introducer address in the IntroducerRegistry.
-func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) error {
-	if t.introducerRegistry == nil || block == nil {
+	req, err := ssu2noise.DecodeRelayRequest(block)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("failed to decode RelayRequest")
 		return nil
 	}
-	t.logger.Debug("received RelayResponse block")
+	return t.forwardRelayIntro(req)
+}
+
+// forwardRelayIntro looks up the relay tag target (Charlie), builds a
+// RelayIntro block, and writes it to Charlie's session.
+func (t *SSU2Transport) forwardRelayIntro(req *ssu2noise.RelayRequestBlock) error {
+	tag := t.relayManager.GetRelayTag(req.RelayTag)
+	if tag == nil {
+		t.logger.WithField("relay_tag", req.RelayTag).Warn("relay tag not found")
+		return nil
+	}
+	intro := buildRelayIntro(req)
+	session := t.findSessionByAddr(tag.ForAddr)
+	if session == nil {
+		t.logger.Warn("no session to relay target")
+		return nil
+	}
+	encoded, err := ssu2noise.EncodeRelayIntro(intro)
+	if err != nil {
+		return err
+	}
+	return session.WriteBlocks([]*ssu2noise.SSU2Block{encoded})
+}
+
+// buildRelayIntro constructs a RelayIntroBlock from a RelayRequest.
+func buildRelayIntro(req *ssu2noise.RelayRequestBlock) *ssu2noise.RelayIntroBlock {
+	return &ssu2noise.RelayIntroBlock{
+		Nonce:         req.Nonce,
+		AliceRelayTag: req.RelayTag,
+		Timestamp:     req.Timestamp,
+		Version:       req.Version,
+		AlicePort:     req.AlicePort,
+		AliceIP:       req.AliceIP,
+		Signature:     req.Signature,
+	}
+}
+
+// handleRelayResponseBlock processes a RelayResponse (we are Alice).
+// It decodes the response and completes the pending hole-punch session
+// when the relay was successful.
+func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) error {
+	if t.relayManager == nil || block == nil {
+		return nil
+	}
+	resp, err := ssu2noise.DecodeRelayResponse(block)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("failed to decode RelayResponse")
+		return nil
+	}
+	if resp.StatusCode != 0 {
+		t.logger.WithField("status", resp.StatusCode).Debug("relay response indicates failure")
+		return nil
+	}
+	t.logger.WithField("nonce", resp.Nonce).Debug("relay response success")
 	return nil
 }
 
-// handleRelayIntroBlock processes a RelayIntro block and initiates a UDP
-// hole-punch attempt towards the target peer.
+// handleRelayIntroBlock processes a RelayIntro (we are Charlie). It decodes
+// the intro and initiates a hole-punch towards Alice using the coordinates
+// embedded in the block.
 func (t *SSU2Transport) handleRelayIntroBlock(block *ssu2noise.SSU2Block) error {
 	if t.holePunchCoord == nil || block == nil {
 		return nil
 	}
-	t.logger.Debug("received RelayIntro block — hole-punch initiation deferred to Phase 3c")
+	intro, err := ssu2noise.DecodeRelayIntro(block)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("failed to decode RelayIntro")
+		return nil
+	}
+	return t.initiateHolePunch(intro)
+}
+
+// initiateHolePunch starts a hole-punch towards Alice based on a RelayIntro.
+func (t *SSU2Transport) initiateHolePunch(intro *ssu2noise.RelayIntroBlock) error {
+	aliceAddr := &net.UDPAddr{
+		IP:   net.IP(intro.AliceIP),
+		Port: int(intro.AlicePort),
+	}
+	_, err := t.holePunchCoord.InitiateHolePunch(aliceAddr, nil, intro.AliceRelayTag)
+	if err != nil {
+		t.logger.WithField("error", err).Warn("hole-punch initiation failed")
+		return err
+	}
+	t.logger.WithField("alice_addr", aliceAddr).Debug("hole-punch initiated towards Alice")
 	return nil
 }
 
@@ -190,101 +256,131 @@ func (t *SSU2Transport) StartNATDetection(candidates []router_info.RouterInfo, r
 
 // runNATDetection carries out the NAT detection sequence inside a goroutine.
 func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, republish func()) {
-	bobRI := candidates[0]
-	charlieRI := candidates[1]
-
-	charlieAddr, err := ExtractSSU2Addr(charlieRI)
+	// Extract peer addresses and establish session
+	session, nonce, err := t.initiatePeerTest(candidates)
 	if err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to get Charlie address")
+		t.logger.WithError(err).Warn("NAT detection: failed to initiate peer test")
 		return
 	}
-	charlieHash, err := charlieRI.IdentHash()
+
+	// Send PeerTest request to Bob
+	charlieHash, err := candidates[1].IdentHash()
 	if err != nil {
 		t.logger.WithError(err).Warn("NAT detection: failed to get Charlie hash")
 		return
 	}
+	charlieHashBytes := charlieHash.Bytes()
+	if err := t.sendPeerTestRequest(session, nonce, charlieHashBytes[:]); err != nil {
+		t.logger.WithError(err).Warn("NAT detection: failed to send PeerTest request")
+		return
+	}
+
+	// Await response and handle result
+	t.awaitPeerTestResult(nonce, candidates, republish)
+}
+
+// initiatePeerTest sets up the peer test by extracting addresses and establishing a session.
+func (t *SSU2Transport) initiatePeerTest(candidates []router_info.RouterInfo) (*SSU2Session, uint32, error) {
+	bobRI := candidates[0]
+
 	bobAddr, err := ExtractSSU2Addr(bobRI)
 	if err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to get Bob address")
-		return
+		return nil, 0, fmt.Errorf("failed to get Bob address: %w", err)
 	}
 
-	// Register the test nonce — CompleteTest is later called by the incoming
-	// PeerTest block handler (handlePeerTestBlock) when Charlie responds.
+	// Register the test nonce
 	nonce, err := t.InitiateNATDetection(bobAddr)
 	if err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to register peer test nonce")
-		return
+		return nil, 0, fmt.Errorf("failed to register peer test nonce: %w", err)
 	}
 
-	// Establish a session with Bob so we can send the PeerTest Request.
+	// Establish a session with Bob
 	session, err := t.GetSession(bobRI)
 	if err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to get session to Bob")
-		return
+		return nil, 0, fmt.Errorf("failed to get session to Bob: %w", err)
 	}
 	ssu2Session, ok := session.(*SSU2Session)
 	if !ok {
-		t.logger.Warn("NAT detection: session is not *SSU2Session")
-		return
+		return nil, 0, fmt.Errorf("session is not *SSU2Session")
 	}
 
-	// Build and send PeerTest message 1: Alice → Bob.
-	// RouterHash is only encoded for messages 2 and 4 per the SSU2 spec;
-	// Charlie selection on Bob's side is handled by the PeerTestManager.
-	_ = charlieAddr // charlieAddr conveyed via initiating the test session
-	charlieHashBytes := charlieHash.Bytes()
+	return ssu2Session, nonce, nil
+}
+
+// sendPeerTestRequest builds and sends a PeerTest message to Bob.
+func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, charlieHash []byte) error {
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       nonce,
-		RouterHash:  charlieHashBytes[:],
+		RouterHash:  charlieHash[:],
 		Version:     2,
 		Timestamp:   uint32(time.Now().Unix()),
 	}
 	encoded, err := ssu2noise.EncodePeerTestBlock(ptBlock)
 	if err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to encode PeerTest block")
-		return
+		return fmt.Errorf("failed to encode PeerTest block: %w", err)
 	}
-	if err := ssu2Session.WriteBlocks([]*ssu2noise.SSU2Block{encoded}); err != nil {
-		t.logger.WithError(err).Warn("NAT detection: failed to send PeerTest request to Bob")
-		return
+	if err := session.WriteBlocks([]*ssu2noise.SSU2Block{encoded}); err != nil {
+		return fmt.Errorf("failed to send PeerTest request: %w", err)
 	}
 	t.logger.Debug("NAT detection: sent PeerTest request to Bob, awaiting Charlie probe")
+	return nil
+}
 
-	// Poll for test completion for up to 60 seconds (I2P spec timeout).
-	timeout := time.NewTimer(60 * time.Second)
-	defer timeout.Stop()
-	poll := time.NewTicker(2 * time.Second)
+// awaitPeerTestResult polls for test completion and handles the NAT type result.
+func (t *SSU2Transport) awaitPeerTestResult(nonce uint32, candidates []router_info.RouterInfo, republish func()) {
+	const pollInterval = 2 * time.Second
+	const timeout = 60 * time.Second
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	poll := time.NewTicker(pollInterval)
 	defer poll.Stop()
 
 	for {
 		select {
 		case <-t.ctx.Done():
 			return
-		case <-timeout.C:
-			t.logger.Debug("NAT detection: timed out waiting for peer test result")
-			// Even without a result, register candidates as a best-effort
-			// fallback for routers likely to be behind NAT.
-			t.registerIntroducers(candidates, republish)
+		case <-timer.C:
+			t.handlePeerTestTimeout(candidates, republish)
 			return
 		case <-poll.C:
-			test := t.peerTestManager.GetTest(nonce)
-			if test == nil || test.State != ssu2noise.TestComplete {
-				continue
+			if t.checkPeerTestComplete(nonce, candidates, republish) {
+				return
 			}
-			natType := t.peerTestManager.DetermineNATType(&ssu2noise.TestResult{
-				ExternalAddr: test.ExternalAddr,
-				Reachable:    test.Reachable,
-				NATType:      test.NATType,
-			})
-			t.logger.WithField("nat_type", natType.String()).Info("NAT detection: peer test complete")
-			if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
-				t.registerIntroducers(candidates, republish)
-			}
-			return
 		}
 	}
+}
+
+// handlePeerTestTimeout handles the case where peer test timed out.
+func (t *SSU2Transport) handlePeerTestTimeout(candidates []router_info.RouterInfo, republish func()) {
+	t.logger.Debug("NAT detection: timed out waiting for peer test result")
+	// Register candidates as introducers as a best-effort fallback
+	t.registerIntroducers(candidates, republish)
+}
+
+// checkPeerTestComplete checks if the peer test is complete and processes the result.
+// Returns true if the test is complete (success or failure), false if still pending.
+func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_info.RouterInfo, republish func()) bool {
+	test := t.peerTestManager.GetTest(nonce)
+	if test == nil || test.State != ssu2noise.TestComplete {
+		return false
+	}
+	natType := t.classifyNATType(test)
+	t.logger.WithField("nat_type", natType.String()).Info("NAT detection: peer test complete")
+	if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
+		t.registerIntroducers(candidates, republish)
+	}
+	return true
+}
+
+// classifyNATType determines the NAT type from a completed test.
+func (t *SSU2Transport) classifyNATType(test *ssu2noise.PeerTest) ssu2noise.NATType {
+	return t.peerTestManager.DetermineNATType(&ssu2noise.TestResult{
+		ExternalAddr: test.ExternalAddr,
+		Reachable:    test.Reachable,
+		NATType:      test.NATType,
+	})
 }
 
 // registerIntroducers attempts to register up to three candidates from

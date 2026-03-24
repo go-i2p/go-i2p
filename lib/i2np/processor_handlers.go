@@ -1,10 +1,14 @@
 package i2np
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-i2p/logger"
+
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 )
 
 func (p *MessageProcessor) processDataMessage(msg I2NPMessage) error {
@@ -76,7 +80,29 @@ func (p *MessageProcessor) processDatabaseStoreMessage(msg I2NPMessage) error {
 		"store_type": storeType,
 	}).Debug("Successfully stored data in NetDB")
 
+	// Send DeliveryStatus acknowledgment when a non-zero reply token is present.
+	p.sendDatabaseStoreAck(dbStore)
+
 	return nil
+}
+
+// sendDatabaseStoreAck sends a DeliveryStatus to the reply tunnel if the
+// DatabaseStore has a non-zero reply token. Per the I2P spec, the ack uses
+// the reply token as the message ID and is forwarded through the reply tunnel.
+func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
+	token := binary.BigEndian.Uint32(dbStore.ReplyToken[:])
+	if token == 0 {
+		return
+	}
+	if p.cloveForwarder == nil {
+		log.Debug("cannot send DatabaseStore ack: no clove forwarder")
+		return
+	}
+	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]))
+	ack := NewDeliveryStatusMessage(int(token), time.Now())
+	if err := p.cloveForwarder.ForwardThroughTunnel(dbStore.ReplyGateway, tunnelID, ack); err != nil {
+		log.WithField("error", err).Debug("failed to send DatabaseStore ack")
+	}
 }
 
 // processDatabaseSearchReplyMessage processes DatabaseSearchReply messages from peers.

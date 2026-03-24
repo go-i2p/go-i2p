@@ -889,7 +889,10 @@ func (r *Router) startSSU2NATDetection() {
 	}
 
 	republish := func() {
-		log.Info("SSU2 NAT detection: introducers registered — RouterInfo republication scheduled at next publish interval")
+		log.Info("SSU2 NAT detection: introducers registered — triggering RouterInfo republication")
+		if r.publisher != nil {
+			r.publisher.PublishOurRouterInfo()
+		}
 	}
 	ssu2Transport.StartNATDetection(candidates, republish)
 	log.Debug("SSU2 NAT detection goroutine started")

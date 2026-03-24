@@ -154,41 +154,25 @@ func (s *SSU2Session) SetTransportCallbacks(cfg *BlockCallbackConfig) {
 // mergeBlockCallbacks copies non-nil callbacks from cfg into cbs,
 // leaving any already-set fields (e.g. OnTermination) untouched.
 func mergeBlockCallbacks(cbs *ssu2noise.DataHandlerCallbacks, cfg *BlockCallbackConfig) {
-	if cfg.OnRouterInfo != nil {
-		cbs.OnRouterInfo = cfg.OnRouterInfo
-	}
-	if cfg.OnACK != nil {
-		cbs.OnACK = cfg.OnACK
-	}
-	if cfg.OnDateTime != nil {
-		cbs.OnDateTime = cfg.OnDateTime
-	}
-	if cfg.OnPeerTest != nil {
-		cbs.OnPeerTest = cfg.OnPeerTest
-	}
-	if cfg.OnRelayRequest != nil {
-		cbs.OnRelayRequest = cfg.OnRelayRequest
-	}
-	if cfg.OnRelayResponse != nil {
-		cbs.OnRelayResponse = cfg.OnRelayResponse
-	}
-	if cfg.OnRelayIntro != nil {
-		cbs.OnRelayIntro = cfg.OnRelayIntro
-	}
-	if cfg.OnNewToken != nil {
-		cbs.OnNewToken = cfg.OnNewToken
-	}
-	if cfg.OnAddress != nil {
-		cbs.OnAddress = cfg.OnAddress
-	}
-	if cfg.OnOptions != nil {
-		cbs.OnOptions = cfg.OnOptions
-	}
-	if cfg.OnPathChallenge != nil {
-		cbs.OnPathChallenge = cfg.OnPathChallenge
-	}
-	if cfg.OnPathResponse != nil {
-		cbs.OnPathResponse = cfg.OnPathResponse
+	// Use type-safe callback setters to reduce cyclomatic complexity
+	setIfNotNil(&cbs.OnRouterInfo, cfg.OnRouterInfo)
+	setIfNotNil(&cbs.OnACK, cfg.OnACK)
+	setIfNotNil(&cbs.OnDateTime, cfg.OnDateTime)
+	setIfNotNil(&cbs.OnPeerTest, cfg.OnPeerTest)
+	setIfNotNil(&cbs.OnRelayRequest, cfg.OnRelayRequest)
+	setIfNotNil(&cbs.OnRelayResponse, cfg.OnRelayResponse)
+	setIfNotNil(&cbs.OnRelayIntro, cfg.OnRelayIntro)
+	setIfNotNil(&cbs.OnNewToken, cfg.OnNewToken)
+	setIfNotNil(&cbs.OnAddress, cfg.OnAddress)
+	setIfNotNil(&cbs.OnOptions, cfg.OnOptions)
+	setIfNotNil(&cbs.OnPathChallenge, cfg.OnPathChallenge)
+	setIfNotNil(&cbs.OnPathResponse, cfg.OnPathResponse)
+}
+
+// setIfNotNil is a type-parameterized helper that sets *dest = src if src != nil.
+func setIfNotNil[T any](dest *T, src T) {
+	if any(src) != nil {
+		*dest = src
 	}
 }
 

@@ -140,6 +140,63 @@ func (m *BaseI2NPMessage) GetData() []byte {
 // maximum representable value is 65535.
 const MaxI2NPStandardPayload = 65535
 
+// ShortI2NPHeaderSize is the size of the short I2NP header used in NTCP2 blocks.
+// Format: type(1) + msgID(4) + shortExpiration(4) = 9 bytes
+const ShortI2NPHeaderSize = 9
+
+// MarshalShortI2NP serializes the I2NP message using the 9-byte short header
+// format used in NTCP2 block type 3 (I2NP message blocks).
+//
+// Short header format:
+//   - Type (1 byte)
+//   - Message ID (4 bytes, big-endian)
+//   - Short Expiration (4 bytes, big-endian, seconds since epoch)
+//
+// The payload follows the header. No checksum is included (AEAD provides integrity).
+func (m *BaseI2NPMessage) MarshalShortI2NP() ([]byte, error) {
+	totalSize := ShortI2NPHeaderSize + len(m.data)
+	result := make([]byte, totalSize)
+
+	// Type (1 byte)
+	result[0] = byte(m.type_)
+
+	// Message ID (4 bytes, big-endian)
+	binary.BigEndian.PutUint32(result[1:5], uint32(m.messageID))
+
+	// Short Expiration (4 bytes, big-endian, seconds since epoch)
+	binary.BigEndian.PutUint32(result[5:9], uint32(m.expiration.Unix()))
+
+	// Data
+	copy(result[ShortI2NPHeaderSize:], m.data)
+
+	return result, nil
+}
+
+// UnmarshalShortI2NP deserializes an I2NP message from the 9-byte short header
+// format used in NTCP2 block type 3.
+func (m *BaseI2NPMessage) UnmarshalShortI2NP(data []byte) error {
+	if len(data) < ShortI2NPHeaderSize {
+		return oops.Errorf("i2np short header too short: %d bytes, need at least %d", len(data), ShortI2NPHeaderSize)
+	}
+
+	// Type (1 byte)
+	m.type_ = int(data[0])
+
+	// Message ID (4 bytes, big-endian)
+	// Mask to 31 bits to guarantee positive int on 32-bit platforms
+	m.messageID = int(binary.BigEndian.Uint32(data[1:5])) & 0x7FFFFFFF
+
+	// Short Expiration (4 bytes, big-endian, seconds since epoch)
+	expSecs := binary.BigEndian.Uint32(data[5:9])
+	m.expiration = time.Unix(int64(expSecs), 0)
+
+	// Data (remaining bytes after header)
+	m.data = make([]byte, len(data)-ShortI2NPHeaderSize)
+	copy(m.data, data[ShortI2NPHeaderSize:])
+
+	return nil
+}
+
 // MarshalBinary serializes the I2NP message according to NTCP format.
 // Returns an error if the payload exceeds 65535 bytes (the 2-byte size field limit).
 func (m *BaseI2NPMessage) MarshalBinary() ([]byte, error) {
