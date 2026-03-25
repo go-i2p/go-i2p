@@ -272,19 +272,29 @@ func (s *NTCP2Session) drainSendQueue() {
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-deadline.C:
-			remaining := atomic.LoadInt32(&s.sendQueueSize)
-			if remaining > 0 {
-				s.logger.WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
-			}
+		if s.processDrainTick(deadline, ticker) {
 			return
-		case <-ticker.C:
-			if atomic.LoadInt32(&s.sendQueueSize) == 0 {
-				s.logger.Debug("Send queue drained successfully")
-				return
-			}
 		}
+	}
+}
+
+// processDrainTick handles one iteration of the drain loop.
+// Returns true if draining is complete (either queue emptied or timeout).
+func (s *NTCP2Session) processDrainTick(deadline *time.Timer, ticker *time.Ticker) bool {
+	select {
+	case <-deadline.C:
+		s.handleDrainTimeout()
+		return true
+	case <-ticker.C:
+		return atomic.LoadInt32(&s.sendQueueSize) == 0
+	}
+}
+
+// handleDrainTimeout logs a warning if messages remain after timeout.
+func (s *NTCP2Session) handleDrainTimeout() {
+	remaining := atomic.LoadInt32(&s.sendQueueSize)
+	if remaining > 0 {
+		s.logger.WithField("remaining", remaining).Warn("Send queue drain timeout, dropping remaining messages")
 	}
 }
 

@@ -192,26 +192,32 @@ func (s *Server) attemptAuthFromGetDate(conn net.Conn, msg *Message) {
 // length-prefixed strings (key=value encoded as individual strings).
 // Returns nil if the data cannot be parsed.
 func parseGetDateOptions(data []byte) map[string]string {
+	mappingData := extractMappingData(data)
+	if mappingData == nil {
+		return nil
+	}
+	return parseOptionEntries(mappingData)
+}
+
+// extractMappingData reads the mapping size header and returns the mapping bytes.
+func extractMappingData(data []byte) []byte {
 	if len(data) < 2 {
 		return nil
 	}
-
-	// Read mapping size (2 bytes, big endian)
 	mappingSize := int(binary.BigEndian.Uint16(data[0:2]))
 	if mappingSize == 0 {
 		return nil
 	}
-
 	data = data[2:]
 	if len(data) < mappingSize {
 		return nil
 	}
-	data = data[:mappingSize]
+	return data[:mappingSize]
+}
 
+// parseOptionEntries parses key=value;key=value;... format into a map.
+func parseOptionEntries(data []byte) map[string]string {
 	options := make(map[string]string)
-
-	// Parse key=value;key=value;... format using strings.Split
-	// instead of byte-by-byte concatenation (avoids O(n²) allocations)
 	entries := strings.Split(string(data), ";")
 	for _, entry := range entries {
 		if entry == "" {
@@ -222,7 +228,6 @@ func parseGetDateOptions(data []byte) map[string]string {
 			options[key] = value
 		}
 	}
-
 	return options
 }
 

@@ -266,8 +266,7 @@ func (s *SSU2Session) WriteBlocks(blocks []*ssu2noise.SSU2Block) error {
 }
 
 func (s *SSU2Session) drainSendQueue() {
-	queueSize := atomic.LoadInt32(&s.sendQueueSize)
-	if queueSize == 0 {
+	if atomic.LoadInt32(&s.sendQueueSize) == 0 {
 		return
 	}
 
@@ -276,15 +275,18 @@ func (s *SSU2Session) drainSendQueue() {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-deadline.C:
-			return
-		case <-ticker.C:
-			if atomic.LoadInt32(&s.sendQueueSize) == 0 {
-				return
-			}
-		}
+	for s.waitForQueueDrain(deadline, ticker) {
+	}
+}
+
+// waitForQueueDrain waits for a drain tick and returns true to continue waiting,
+// false when done (either queue empty or deadline expired).
+func (s *SSU2Session) waitForQueueDrain(deadline *time.Timer, ticker *time.Ticker) bool {
+	select {
+	case <-deadline.C:
+		return false
+	case <-ticker.C:
+		return atomic.LoadInt32(&s.sendQueueSize) > 0
 	}
 }
 
@@ -294,25 +296,47 @@ func (s *SSU2Session) sendWorker() {
 	defer ticker.Stop()
 
 	for {
-		select {
-		case msg := <-s.sendQueue:
-			atomic.AddInt32(&s.sendQueueSize, -1)
-			if err := s.sendWithCongestionControl(msg); err != nil {
-				s.logger.WithError(err).Error("Failed to send message")
-				s.discardRemainingMessages()
-				return
-			}
-		case <-ticker.C:
-			if s.handleRetransmissions() {
-				s.logger.Warn("Max retransmissions exceeded, closing session")
-				s.cancel()
-				return
-			}
-		case <-s.ctx.Done():
-			s.discardRemainingMessages()
+		if s.processSendWorkerEvents(ticker) {
 			return
 		}
 	}
+}
+
+// processSendWorkerEvents handles a single iteration of the send worker loop.
+// Returns true if the worker should exit.
+func (s *SSU2Session) processSendWorkerEvents(ticker *time.Ticker) bool {
+	select {
+	case msg := <-s.sendQueue:
+		return s.handleQueuedMessage(msg)
+	case <-ticker.C:
+		return s.checkRetransmissions()
+	case <-s.ctx.Done():
+		s.discardRemainingMessages()
+		return true
+	}
+}
+
+// handleQueuedMessage processes a message from the send queue.
+// Returns true if the worker should exit due to an error.
+func (s *SSU2Session) handleQueuedMessage(msg i2np.I2NPMessage) bool {
+	atomic.AddInt32(&s.sendQueueSize, -1)
+	if err := s.sendWithCongestionControl(msg); err != nil {
+		s.logger.WithError(err).Error("Failed to send message")
+		s.discardRemainingMessages()
+		return true
+	}
+	return false
+}
+
+// checkRetransmissions handles the retransmission tick.
+// Returns true if the worker should exit due to max retransmissions.
+func (s *SSU2Session) checkRetransmissions() bool {
+	if s.handleRetransmissions() {
+		s.logger.Warn("Max retransmissions exceeded, closing session")
+		s.cancel()
+		return true
+	}
+	return false
 }
 
 // sendWithCongestionControl fragments msg into MTU-sized SSU2 blocks, waits
@@ -322,31 +346,45 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 	if err != nil {
 		return err
 	}
-
 	blocks, err := FragmentI2NPMessage(msg, maxSSU2PayloadIPv4)
 	if err != nil {
 		return err
 	}
+	if err := s.waitForCongestionWindow(len(data)); err != nil {
+		return err
+	}
+	return s.sendTrackedBlocks(data, blocks)
+}
 
-	for !s.congestionCtrl.CanSend(len(data)) {
+// waitForCongestionWindow blocks until the congestion window allows sending size bytes.
+func (s *SSU2Session) waitForCongestionWindow(size int) error {
+	for !s.congestionCtrl.CanSend(size) {
 		select {
 		case <-s.ctx.Done():
 			return ErrSessionClosed
 		case <-time.After(ccPollInterval):
 		}
 	}
+	return nil
+}
 
+// sendTrackedBlocks writes blocks to the connection and tracks for retransmission.
+func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Block) error {
 	seq := s.trackPending(data)
 	if err := s.conn.WriteBlocks(blocks); err != nil {
 		s.removePending(seq)
 		s.congestionCtrl.OnPacketLoss()
 		return err
 	}
-	n := len(data)
+	s.updateSendStats(len(data))
+	return nil
+}
+
+// updateSendStats updates bandwidth and congestion control stats after a successful send.
+func (s *SSU2Session) updateSendStats(n int) {
 	atomic.StoreInt64(&s.lastSendNano, time.Now().UnixNano())
 	atomic.AddUint64(&s.bytesSent, uint64(n))
 	s.congestionCtrl.OnPacketSent(n)
-	return nil
 }
 
 // trackPending stores an I2NP payload in the pending retransmission map and
@@ -385,24 +423,13 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 		if now.Before(p.deadline) {
 			continue
 		}
-		if p.attempts >= s.maxRetransmit {
+		action := s.processRetransmission(p, now)
+		if action == retransmitDelete || action == retransmitMaxExceeded {
 			toDelete = append(toDelete, seq)
 			hadLoss = true
-			shouldClose = true
-			continue
-		}
-		if n, err := s.conn.Write(p.data); err != nil {
-			toDelete = append(toDelete, seq)
-			hadLoss = true
-		} else {
-			atomic.AddUint64(&s.bytesSent, uint64(n))
-			p.attempts++
-			backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
-			if backoff > maxRetransmitBackoff {
-				backoff = maxRetransmitBackoff
+			if action == retransmitMaxExceeded {
+				shouldClose = true
 			}
-			p.deadline = now.Add(backoff)
-			s.pendingMsgs[seq] = p
 		}
 	}
 	for _, seq := range toDelete {
@@ -414,6 +441,35 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 		s.congestionCtrl.OnRetransmissionTimeout()
 	}
 	return shouldClose
+}
+
+// retransmitAction indicates the result of processing a pending message for retransmission.
+type retransmitAction int
+
+const (
+	retransmitOK          retransmitAction = iota // successfully retransmitted
+	retransmitDelete                              // should delete due to error
+	retransmitMaxExceeded                         // max retransmissions exceeded
+)
+
+// processRetransmission handles a single pending message that has exceeded its deadline.
+// Must be called while holding pendingMsgsMu.
+func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retransmitAction {
+	if p.attempts >= s.maxRetransmit {
+		return retransmitMaxExceeded
+	}
+	if n, err := s.conn.Write(p.data); err != nil {
+		return retransmitDelete
+	} else {
+		atomic.AddUint64(&s.bytesSent, uint64(n))
+		p.attempts++
+		backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
+		if backoff > maxRetransmitBackoff {
+			backoff = maxRetransmitBackoff
+		}
+		p.deadline = now.Add(backoff)
+	}
+	return retransmitOK
 }
 
 // ackPendingBeforeTime removes pending messages sent before t and credits the
@@ -477,13 +533,7 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	recvAt := time.Now()
 	atomic.AddUint64(&s.bytesReceived, uint64(len(frame)))
 
-	// Update RTT estimate using time since last send as a rough proxy.
-	if lastSendNano := atomic.LoadInt64(&s.lastSendNano); lastSendNano > 0 {
-		if rtt := recvAt.Sub(time.Unix(0, lastSendNano)); rtt > 0 && rtt < maxRTTSample {
-			s.rttEstimator.Update(rtt)
-		}
-	}
-	// Any data received means the peer is alive; ACK pending messages.
+	s.updateRTTEstimate(recvAt)
 	s.ackPendingBeforeTime(recvAt)
 
 	msg := i2np.NewI2NPMessage(0)
@@ -491,16 +541,33 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 		s.logger.WithError(err).Debug("Failed to parse I2NP message")
 		return nil // non-fatal: skip malformed frame
 	}
+	return s.deliverMessage(msg)
+}
 
+// updateRTTEstimate updates the RTT estimate using time since last send as a rough proxy.
+func (s *SSU2Session) updateRTTEstimate(recvAt time.Time) {
+	lastSendNano := atomic.LoadInt64(&s.lastSendNano)
+	if lastSendNano <= 0 {
+		return
+	}
+	rtt := recvAt.Sub(time.Unix(0, lastSendNano))
+	if rtt > 0 && rtt < maxRTTSample {
+		s.rttEstimator.Update(rtt)
+	}
+}
+
+// deliverMessage sends the message to the receive channel with timeout handling.
+func (s *SSU2Session) deliverMessage(msg i2np.I2NPMessage) error {
 	select {
 	case s.recvChan <- msg:
+		return nil
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case <-time.After(100 * time.Millisecond):
 		atomic.AddUint64(&s.droppedMessages, 1)
 		s.logger.Warn("Receive channel full, dropping message")
+		return nil
 	}
-	return nil
 }
 
 func (s *SSU2Session) receiveWorker() {
@@ -508,32 +575,54 @@ func (s *SSU2Session) receiveWorker() {
 	buf := make([]byte, maxI2NPMessageSize)
 
 	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		default:
-		}
-
-		if err := s.conn.SetReadDeadline(time.Now().Add(ssu2ReadDeadline)); err != nil {
-			s.logger.WithError(err).Error("Failed to set read deadline")
+		if s.isContextCanceled() {
 			return
 		}
-
-		n, err := s.conn.Read(buf)
-		if err != nil {
-			switch classifyReceiveError(err) {
-			case receiveRetry:
-				continue
-			default:
-				s.logger.WithError(err).Debug("Read error on SSU2 session")
-				return
-			}
+		n, action := s.readFrame(buf)
+		if action == receiveFatal {
+			return
 		}
-
+		if action == receiveRetry {
+			continue
+		}
 		if err := s.dispatchReceived(buf[:n]); err != nil {
 			return
 		}
 	}
+}
+
+// isContextCanceled checks if the session context has been canceled.
+func (s *SSU2Session) isContextCanceled() bool {
+	select {
+	case <-s.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// readFrame reads a single frame from the connection with deadline handling.
+// Returns the number of bytes read and an action indicating how to proceed.
+// On success, action is -1 (proceed to dispatch). On error, action is receiveRetry or receiveFatal.
+func (s *SSU2Session) readFrame(buf []byte) (int, receiveAction) {
+	if err := s.conn.SetReadDeadline(time.Now().Add(ssu2ReadDeadline)); err != nil {
+		s.logger.WithError(err).Error("Failed to set read deadline")
+		return 0, receiveFatal
+	}
+	n, err := s.conn.Read(buf)
+	if err != nil {
+		return 0, s.handleReadError(err)
+	}
+	return n, -1 // proceed to dispatch
+}
+
+// handleReadError classifies a read error and returns the appropriate action.
+func (s *SSU2Session) handleReadError(err error) receiveAction {
+	action := classifyReceiveError(err)
+	if action == receiveFatal {
+		s.logger.WithError(err).Debug("Read error on SSU2 session")
+	}
+	return action
 }
 
 func isTimeout(err error) bool {

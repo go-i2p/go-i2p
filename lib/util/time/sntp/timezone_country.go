@@ -80,43 +80,46 @@ func lookupCountryByTimezone(tzName string) string {
 //  3. /etc/localtime symlink target (most Linux, macOS)
 //  4. Go stdlib time.Now().Location() (cross-platform fallback, works on Windows)
 func detectIANATimezone() string {
-	// Strategy 1: TZ environment variable. Users may set this explicitly.
-	if tz := os.Getenv("TZ"); tz != "" {
-		// TZ can be a path (e.g. ":/usr/share/zoneinfo/America/New_York")
-		// or a bare IANA name (e.g. "America/New_York"). Strip leading ":".
-		tz = strings.TrimPrefix(tz, ":")
-		if name := extractIANAName(tz); name != "" {
+	strategies := []func() string{
+		detectTimezoneFromEnv,
+		detectTimezoneFromEtcTimezone,
+		detectTimezoneFromLocaltime,
+		detectTimezoneFromGoStdlib,
+	}
+	for _, strategy := range strategies {
+		if name := strategy(); name != "" {
 			return name
 		}
 	}
-
-	// Strategy 2: /etc/timezone (Debian, Ubuntu, and derivatives).
-	if data, err := os.ReadFile("/etc/timezone"); err == nil {
-		if name := strings.TrimSpace(string(data)); name != "" {
-			return name
-		}
-	}
-
-	// Strategy 3: /etc/localtime symlink (most Linux distros, macOS).
-	// The symlink typically points to /usr/share/zoneinfo/<Area>/<Location>.
-	if target, err := os.Readlink("/etc/localtime"); err == nil {
-		if name := extractIANAName(target); name != "" {
-			return name
-		}
-	}
-
-	// Strategy 4: Go's time.Now().Location() (cross-platform fallback).
-	// On Windows, Go reads the registry key
-	// HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation and maps
-	// the Windows timezone name to an IANA name via its embedded mapping
-	// table. On all platforms, this returns the IANA timezone name if
-	// the system timezone is configured. "Local" is returned when the
-	// name cannot be determined, which is not a valid IANA name.
-	if name := detectTimezoneFromGoStdlib(); name != "" {
-		return name
-	}
-
 	return ""
+}
+
+// detectTimezoneFromEnv checks the TZ environment variable.
+func detectTimezoneFromEnv() string {
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		return ""
+	}
+	tz = strings.TrimPrefix(tz, ":")
+	return extractIANAName(tz)
+}
+
+// detectTimezoneFromEtcTimezone reads /etc/timezone (Debian, Ubuntu).
+func detectTimezoneFromEtcTimezone() string {
+	data, err := os.ReadFile("/etc/timezone")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// detectTimezoneFromLocaltime reads /etc/localtime symlink (Linux, macOS).
+func detectTimezoneFromLocaltime() string {
+	target, err := os.Readlink("/etc/localtime")
+	if err != nil {
+		return ""
+	}
+	return extractIANAName(target)
 }
 
 // detectTimezoneFromGoStdlib uses Go's standard library to obtain the

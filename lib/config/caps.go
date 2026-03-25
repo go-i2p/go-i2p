@@ -161,24 +161,37 @@ func countCapsFlags(caps string) (capsFlagCounts, error) {
 	seen := make(map[rune]bool, len(caps))
 	var c capsFlagCounts
 	for _, r := range caps {
-		if seen[r] {
-			return c, newValidationError(fmt.Sprintf("duplicate caps flag: %c", r))
+		if err := validateCapsRune(r, seen); err != nil {
+			return c, err
 		}
 		seen[r] = true
-		if _, ok := validCapsFlags[r]; !ok {
-			return c, newValidationError(fmt.Sprintf("unrecognized caps flag: %c", r))
-		}
-		if bandwidthFlags[r] {
-			c.bandwidth++
-		}
-		if reachabilityFlags[r] {
-			c.reachability++
-		}
-		if congestionFlags[r] {
-			c.congestion++
-		}
+		categorizeCapsFlag(r, &c)
 	}
 	return c, nil
+}
+
+// validateCapsRune checks for duplicates and unrecognized flags.
+func validateCapsRune(r rune, seen map[rune]bool) error {
+	if seen[r] {
+		return newValidationError(fmt.Sprintf("duplicate caps flag: %c", r))
+	}
+	if _, ok := validCapsFlags[r]; !ok {
+		return newValidationError(fmt.Sprintf("unrecognized caps flag: %c", r))
+	}
+	return nil
+}
+
+// categorizeCapsFlag increments the appropriate category counter for a flag.
+func categorizeCapsFlag(r rune, c *capsFlagCounts) {
+	if bandwidthFlags[r] {
+		c.bandwidth++
+	}
+	if reachabilityFlags[r] {
+		c.reachability++
+	}
+	if congestionFlags[r] {
+		c.congestion++
+	}
 }
 
 // validateCapsCounts checks that the per-category flag counts are within spec limits.

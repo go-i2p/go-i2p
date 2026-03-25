@@ -435,74 +435,61 @@ func (r *Router) routeMessage(msg i2np.I2NPMessage, fromPeer common.Hash) error 
 		"from_peer":    fmt.Sprintf("%x", fromPeer[:8]),
 	}).Debug("Routing I2NP message")
 
-	// Grab local references under lock to prevent race with clearRoutingComponents()
-	r.runMux.RLock()
-	mr := r.messageRouter
-	fs := r.floodfillServer
-	r.runMux.RUnlock()
-
+	mr, fs := r.getRoutingComponents()
 	if mr == nil {
 		return fmt.Errorf("message router not available (router may be shutting down)")
 	}
 
-	// Route based on message type to appropriate handler
+	return r.dispatchByMessageType(msg, mr, fs)
+}
+
+// getRoutingComponents returns the message router and floodfill server under lock.
+func (r *Router) getRoutingComponents() (*i2np.I2NPMessageDispatcher, *netdb.FloodfillServer) {
+	r.runMux.RLock()
+	defer r.runMux.RUnlock()
+	return r.messageRouter, r.floodfillServer
+}
+
+// dispatchByMessageType routes a message to the appropriate handler based on type.
+func (r *Router) dispatchByMessageType(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
 	switch msg.Type() {
 	case i2np.I2NPMessageTypeDatabaseStore:
-		// Parse DatabaseStore message from BaseI2NPMessage data
-		dbStore, err := r.parseDatabaseStoreMessage(msg)
-		if err != nil {
-			return fmt.Errorf("failed to parse DatabaseStore message: %w", err)
-		}
-		return mr.RouteDatabaseMessage(dbStore)
-
+		return r.routeDatabaseStore(msg, mr)
 	case i2np.I2NPMessageTypeDatabaseLookup:
-		if fs != nil {
-			if lookup, err := r.parseDatabaseLookupMessage(msg); err == nil {
-				if err := fs.HandleDatabaseLookup(lookup); err != nil {
-					log.WithError(err).Debug("Floodfill server lookup handling failed (non-fatal)")
-				}
-			}
-		}
-		return mr.RouteDatabaseMessage(msg)
-
+		return r.routeDatabaseLookup(msg, mr, fs)
 	case i2np.I2NPMessageTypeDatabaseSearchReply:
 		return mr.RouteDatabaseMessage(msg)
-
-	case i2np.I2NPMessageTypeData:
+	case i2np.I2NPMessageTypeData, i2np.I2NPMessageTypeDeliveryStatus,
+		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
+		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
-
-	case i2np.I2NPMessageTypeDeliveryStatus:
-		return mr.RouteMessage(msg)
-
-	case i2np.I2NPMessageTypeGarlic:
-		// Route garlic messages to the MessageProcessor for decryption and clove processing.
-		// The processor handles ECIES-X25519-AEAD-Ratchet decryption and clove routing.
-		return mr.RouteMessage(msg)
-
-	case i2np.I2NPMessageTypeTunnelData:
-		return mr.RouteMessage(msg)
-
-	case i2np.I2NPMessageTypeTunnelGateway:
-		// Route TunnelGateway messages to the MessageProcessor for tunnel injection.
-		// The processor delegates to the configured tunnelGatewayHandler for
-		// layered encryption and forwarding to the next hop.
-		return mr.RouteMessage(msg)
-
-	case i2np.I2NPMessageTypeTunnelBuild:
+	case i2np.I2NPMessageTypeTunnelBuild, i2np.I2NPMessageTypeTunnelBuildReply,
+		i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply:
 		return mr.RouteTunnelMessage(msg)
-
-	case i2np.I2NPMessageTypeTunnelBuildReply:
-		return mr.RouteTunnelMessage(msg)
-
-	case i2np.I2NPMessageTypeVariableTunnelBuild:
-		return mr.RouteTunnelMessage(msg)
-
-	case i2np.I2NPMessageTypeVariableTunnelBuildReply:
-		return mr.RouteTunnelMessage(msg)
-
 	default:
 		return fmt.Errorf("unsupported message type: %d", msg.Type())
 	}
+}
+
+// routeDatabaseStore handles DatabaseStore message routing.
+func (r *Router) routeDatabaseStore(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher) error {
+	dbStore, err := r.parseDatabaseStoreMessage(msg)
+	if err != nil {
+		return fmt.Errorf("failed to parse DatabaseStore message: %w", err)
+	}
+	return mr.RouteDatabaseMessage(dbStore)
+}
+
+// routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
+func (r *Router) routeDatabaseLookup(msg i2np.I2NPMessage, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
+	if fs != nil {
+		if lookup, err := r.parseDatabaseLookupMessage(msg); err == nil {
+			if err := fs.HandleDatabaseLookup(lookup); err != nil {
+				log.WithError(err).Debug("Floodfill server lookup handling failed (non-fatal)")
+			}
+		}
+	}
+	return mr.RouteDatabaseMessage(msg)
 }
 
 // parseDatabaseStoreMessage extracts and parses DatabaseStore data from a BaseI2NPMessage.
@@ -749,26 +736,36 @@ func (r *Router) GetSessionByHash(hash common.Hash) (i2np.I2NPTransportSession, 
 
 // retrieveRouterInfoWithTimeout looks up RouterInfo from NetDB with a timeout.
 func (r *Router) retrieveRouterInfoWithTimeout(hash common.Hash) (*router_info.RouterInfo, error) {
-	// Check if NetDB is available
+	routerInfoChan, err := r.getRouterInfoChannel(hash)
+	if err != nil {
+		return nil, err
+	}
+	return r.waitForRouterInfo(routerInfoChan, hash)
+}
+
+// getRouterInfoChannel initiates a RouterInfo lookup and returns the result channel.
+func (r *Router) getRouterInfoChannel(hash common.Hash) (<-chan router_info.RouterInfo, error) {
 	if r.StdNetDB == nil {
 		return nil, errors.New("router NetDB not available")
 	}
-
 	routerInfoChan := r.StdNetDB.GetRouterInfo(hash)
 	if routerInfoChan == nil {
 		return nil, fmt.Errorf("no RouterInfo found for peer %x", hash[:8])
 	}
+	return routerInfoChan, nil
+}
 
+// waitForRouterInfo waits for a RouterInfo to arrive on the channel with timeout.
+func (r *Router) waitForRouterInfo(ch <-chan router_info.RouterInfo, hash common.Hash) (*router_info.RouterInfo, error) {
 	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
 
 	select {
-	case routerInfo, ok := <-routerInfoChan:
+	case routerInfo, ok := <-ch:
 		if !ok {
 			return nil, fmt.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
 		}
 		return &routerInfo, nil
-
 	case <-timer.C:
 		r.logRouterInfoTimeout(hash)
 		return nil, fmt.Errorf("timeout waiting for RouterInfo for peer %x", hash[:8])

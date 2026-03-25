@@ -97,14 +97,9 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 		return nil
 	}
 
-	carrier, ok := msg.(DataCarrier)
-	if !ok {
-		return fmt.Errorf("tunnel build reply does not implement DataCarrier")
-	}
-
-	data := carrier.GetData()
-	if len(data) == 0 {
-		return fmt.Errorf("tunnel build reply contains no data")
+	data, err := extractBuildReplyData(msg)
+	if err != nil {
+		return err
 	}
 
 	const fixedRecordCount = 8
@@ -115,22 +110,9 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 		return fmt.Errorf("insufficient data for TunnelBuildReply: have %d, need %d", len(data), expectedSize)
 	}
 
-	var records [8]BuildResponseRecord
-	rawRecords := make([][]byte, fixedRecordCount)
-	offset := 0 // No count prefix byte for type 22
-
-	for i := 0; i < fixedRecordCount; i++ {
-		recordData := data[offset : offset+recordSize]
-		rawCopy := make([]byte, recordSize)
-		copy(rawCopy, recordData)
-		rawRecords[i] = rawCopy
-
-		record, err := ReadBuildResponseRecord(recordData)
-		if err != nil {
-			return fmt.Errorf("failed to parse response record %d: %w", i, err)
-		}
-		records[i] = record
-		offset += recordSize
+	records, rawRecords, err := parseFixedBuildRecords(data, fixedRecordCount, recordSize)
+	if err != nil {
+		return err
 	}
 
 	handler := &TunnelBuildReply{
@@ -145,6 +127,41 @@ func (p *MessageProcessor) processFixedBuildReply(msg I2NPMessage) error {
 	}).Debug("Dispatching fixed tunnel build reply to processor")
 
 	return p.buildReplyProcessor.ProcessTunnelBuildReply(handler, msg.MessageID())
+}
+
+// extractBuildReplyData extracts the data payload from a build reply message.
+func extractBuildReplyData(msg I2NPMessage) ([]byte, error) {
+	carrier, ok := msg.(DataCarrier)
+	if !ok {
+		return nil, fmt.Errorf("tunnel build reply does not implement DataCarrier")
+	}
+	data := carrier.GetData()
+	if len(data) == 0 {
+		return nil, fmt.Errorf("tunnel build reply contains no data")
+	}
+	return data, nil
+}
+
+// parseFixedBuildRecords parses a fixed number of build response records from data.
+func parseFixedBuildRecords(data []byte, count, recordSize int) ([8]BuildResponseRecord, [][]byte, error) {
+	var records [8]BuildResponseRecord
+	rawRecords := make([][]byte, count)
+	offset := 0
+
+	for i := 0; i < count; i++ {
+		recordData := data[offset : offset+recordSize]
+		rawCopy := make([]byte, recordSize)
+		copy(rawCopy, recordData)
+		rawRecords[i] = rawCopy
+
+		record, err := ReadBuildResponseRecord(recordData)
+		if err != nil {
+			return records, nil, fmt.Errorf("failed to parse response record %d: %w", i, err)
+		}
+		records[i] = record
+		offset += recordSize
+	}
+	return records, rawRecords, nil
 }
 
 // processVariableTunnelBuildReplyMessage processes VariableTunnelBuildReply (type 24) messages.

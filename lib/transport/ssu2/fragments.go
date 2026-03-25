@@ -52,20 +52,41 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 	totalSize := uint32(len(data))
 	var blocks []*ssu2noise.SSU2Block
 
-	// First fragment
+	firstBlock, firstDataSize, err := createFirstFragment(data, messageID, totalSize, maxPayload)
+	if err != nil {
+		return nil, err
+	}
+	blocks = append(blocks, firstBlock)
+
+	if firstDataSize < len(data) {
+		followBlocks, err := createFollowOnFragments(data[firstDataSize:], messageID, maxPayload)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, followBlocks...)
+	}
+
+	return blocks, nil
+}
+
+// createFirstFragment creates the first fragment block.
+func createFirstFragment(data []byte, messageID, totalSize uint32, maxPayload int) (*ssu2noise.SSU2Block, int, error) {
 	firstDataSize := maxPayload - firstFragmentOverhead
 	if firstDataSize <= 0 {
-		return nil, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
+		return nil, 0, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
 	}
 	if firstDataSize > len(data) {
 		firstDataSize = len(data)
 	}
+	isLast := firstDataSize == len(data)
+	block := buildFirstFragment(messageID, totalSize, data[:firstDataSize], isLast)
+	return block, firstDataSize, nil
+}
 
-	isLastFirst := firstDataSize == len(data)
-	firstBlock := buildFirstFragment(messageID, totalSize, data[:firstDataSize], isLastFirst)
-	blocks = append(blocks, firstBlock)
-
-	offset := firstDataSize
+// createFollowOnFragments creates all follow-on fragment blocks for remaining data.
+func createFollowOnFragments(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
+	var blocks []*ssu2noise.SSU2Block
+	offset := 0
 	fragmentNum := uint8(1)
 
 	for offset < len(data) {
@@ -78,9 +99,9 @@ func fragmentData(data []byte, messageID uint32, maxPayload int) ([]*ssu2noise.S
 			end = len(data)
 		}
 
-		isLastFollow := end == len(data)
-		followBlock := buildFollowOnFragment(messageID, fragmentNum, data[offset:end], isLastFollow)
-		blocks = append(blocks, followBlock)
+		isLast := end == len(data)
+		block := buildFollowOnFragment(messageID, fragmentNum, data[offset:end], isLast)
+		blocks = append(blocks, block)
 
 		offset = end
 		fragmentNum++

@@ -123,60 +123,74 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 		return nil, fmt.Errorf("transport has no listener address")
 	}
 
-	// SSU2Listener.Addr() returns *ssu2noise.SSU2Addr whose String() is a URI,
-	// not a plain "host:port". Unwrap to the underlying network address first.
-	effectiveAddr := addr
-	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
-		effectiveAddr = ssu2Addr.UnderlyingAddr()
-	}
-
-	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
+	host, portStr, err := extractHostPort(addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse listener address: %w", err)
+		return nil, err
 	}
 
-	options := map[string]string{
-		router_address.HOST_OPTION_KEY:             host,
-		router_address.PORT_OPTION_KEY:             portStr,
-		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
-	}
-
-	if transport.config != nil && transport.config.SSU2Config != nil && len(transport.config.SSU2Config.StaticKey) == 32 {
-		options[router_address.STATIC_KEY_OPTION_KEY] = encodeBase64(transport.config.SSU2Config.StaticKey)
-	}
-
-	// Add introducer information if available (for NAT-firewalled peers)
-	introducers := transport.GetIntroducers()
-	for i, intro := range introducers {
-		if intro == nil {
-			continue
-		}
-		// Per I2P spec, introducer options are formatted as: ihN, itagN, iexpN
-		// where N is the introducer index (0, 1, 2)
-		prefix := fmt.Sprintf("%d", i)
-
-		// Introducer router hash (ih0, ih1, ih2)
-		if len(intro.RouterHash) > 0 {
-			options[router_address.INTRODUCER_HASH_PREFIX+prefix] = encodeBase64(intro.RouterHash)
-		}
-
-		// Introducer relay tag (itag0, itag1, itag2)
-		if intro.RelayTag != 0 {
-			options[router_address.INTRODUCER_TAG_PREFIX+prefix] = fmt.Sprintf("%d", intro.RelayTag)
-		}
-
-		// Introducer expiration (iexp0, iexp1, iexp2) - 4 hours from AddedAt
-		if !intro.AddedAt.IsZero() {
-			expTime := intro.AddedAt.Add(4 * time.Hour).Unix()
-			options[router_address.INTRODUCER_EXPIRATION_PREFIX+prefix] = fmt.Sprintf("%d", expTime)
-		}
-	}
+	options := buildBaseSSU2Options(host, portStr)
+	addStaticKeyOption(options, transport)
+	addIntroducerOptions(options, transport.GetIntroducers())
 
 	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)
 	}
 	return ra, nil
+}
+
+// extractHostPort unwraps SSU2Addr and extracts host and port from the listener address.
+func extractHostPort(addr net.Addr) (string, string, error) {
+	effectiveAddr := addr
+	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
+		effectiveAddr = ssu2Addr.UnderlyingAddr()
+	}
+	host, portStr, err := net.SplitHostPort(effectiveAddr.String())
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse listener address: %w", err)
+	}
+	return host, portStr, nil
+}
+
+// buildBaseSSU2Options creates the base options map for an SSU2 RouterAddress.
+func buildBaseSSU2Options(host, port string) map[string]string {
+	return map[string]string{
+		router_address.HOST_OPTION_KEY:             host,
+		router_address.PORT_OPTION_KEY:             port,
+		router_address.PROTOCOL_VERSION_OPTION_KEY: "2",
+	}
+}
+
+// addStaticKeyOption adds the static key option if configured.
+func addStaticKeyOption(options map[string]string, transport *SSU2Transport) {
+	if transport.config != nil && transport.config.SSU2Config != nil && len(transport.config.SSU2Config.StaticKey) == 32 {
+		options[router_address.STATIC_KEY_OPTION_KEY] = encodeBase64(transport.config.SSU2Config.StaticKey)
+	}
+}
+
+// addIntroducerOptions adds introducer information to the options map.
+func addIntroducerOptions(options map[string]string, introducers []*ssu2noise.RegisteredIntroducer) {
+	for i, intro := range introducers {
+		if intro == nil {
+			continue
+		}
+		addSingleIntroducerOptions(options, intro, i)
+	}
+}
+
+// addSingleIntroducerOptions adds options for a single introducer.
+func addSingleIntroducerOptions(options map[string]string, intro *ssu2noise.RegisteredIntroducer, index int) {
+	prefix := fmt.Sprintf("%d", index)
+	if len(intro.RouterHash) > 0 {
+		options[router_address.INTRODUCER_HASH_PREFIX+prefix] = encodeBase64(intro.RouterHash)
+	}
+	if intro.RelayTag != 0 {
+		options[router_address.INTRODUCER_TAG_PREFIX+prefix] = fmt.Sprintf("%d", intro.RelayTag)
+	}
+	if !intro.AddedAt.IsZero() {
+		expTime := intro.AddedAt.Add(4 * time.Hour).Unix()
+		options[router_address.INTRODUCER_EXPIRATION_PREFIX+prefix] = fmt.Sprintf("%d", expTime)
+	}
 }
 
 // encodeBase64 returns the base64 standard encoding of data.

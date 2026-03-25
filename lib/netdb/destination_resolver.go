@@ -387,39 +387,52 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 		"depth":            depth,
 	}).Debug("resolving MetaLeaseSet destination")
 
-	// Step 1: Retrieve MetaLeaseSet from NetDB
-	mlsBytes, err := dr.netdb.GetMetaLeaseSetBytes(destHash)
+	mls, err := dr.fetchMetaLeaseSet(destHash)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
+		return [32]byte{}, err
 	}
 
-	mls, _, err := meta_leaseset.ReadMetaLeaseSet(mlsBytes)
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
-	}
-
-	// Step 2: Sort entries by cost and filter expired
-	entries := mls.SortEntriesByCost()
-	now := time.Now()
-	var validEntries []meta_leaseset.MetaLeaseSetEntry
-	for _, entry := range entries {
-		if entry.ExpiresTime().After(now) {
-			validEntries = append(validEntries, entry)
-		}
-	}
-
+	validEntries := filterValidMetaEntries(mls.SortEntriesByCost())
 	if len(validEntries) == 0 {
 		return [32]byte{}, fmt.Errorf("all MetaLeaseSet entries are expired")
 	}
 
 	log.WithFields(logger.Fields{
 		"at":            "ResolveMetaDestination",
-		"total_entries": len(entries),
 		"valid_entries": len(validEntries),
 	}).Debug("found valid MetaLeaseSet entries")
 
-	// Step 3: Try each entry in cost order
-	for _, entry := range validEntries {
+	return dr.resolveFirstValidEntry(validEntries, depth)
+}
+
+// fetchMetaLeaseSet retrieves and parses a MetaLeaseSet from the NetDB.
+func (dr *DestinationResolver) fetchMetaLeaseSet(destHash common.Hash) (meta_leaseset.MetaLeaseSet, error) {
+	mlsBytes, err := dr.netdb.GetMetaLeaseSetBytes(destHash)
+	if err != nil {
+		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("MetaLeaseSet not found for hash %x: %w", destHash[:8], err)
+	}
+	mls, _, err := meta_leaseset.ReadMetaLeaseSet(mlsBytes)
+	if err != nil {
+		return meta_leaseset.MetaLeaseSet{}, fmt.Errorf("failed to parse MetaLeaseSet: %w", err)
+	}
+	return mls, nil
+}
+
+// filterValidMetaEntries returns only the entries that have not expired.
+func filterValidMetaEntries(entries []meta_leaseset.MetaLeaseSetEntry) []meta_leaseset.MetaLeaseSetEntry {
+	now := time.Now()
+	var valid []meta_leaseset.MetaLeaseSetEntry
+	for _, entry := range entries {
+		if entry.ExpiresTime().After(now) {
+			valid = append(valid, entry)
+		}
+	}
+	return valid
+}
+
+// resolveFirstValidEntry tries each entry in order and returns the first successful resolution.
+func (dr *DestinationResolver) resolveFirstValidEntry(entries []meta_leaseset.MetaLeaseSetEntry, depth int) ([32]byte, error) {
+	for _, entry := range entries {
 		entryHash := entry.Hash()
 		key, err := dr.resolveMetaEntryWithDepth(entryHash, entry.Type(), depth)
 		if err == nil {
@@ -432,7 +445,6 @@ func (dr *DestinationResolver) resolveMetaDestinationWithDepth(destHash common.H
 			"error":      err.Error(),
 		}).Debug("MetaLeaseSet entry resolution failed, trying next")
 	}
-
 	return [32]byte{}, fmt.Errorf("no resolvable component LeaseSet found in MetaLeaseSet")
 }
 

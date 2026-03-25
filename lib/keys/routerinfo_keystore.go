@@ -272,27 +272,47 @@ func (ks *RouterInfoKeystore) GetEncryptionPrivateKey() types.PrivateEncryptionK
 
 func (ks *RouterInfoKeystore) StoreKeys() error {
 	log.WithField("at", "StoreKeys").Debug("Storing keys to disk")
+
+	if err := ks.ensureKeyDirectory(); err != nil {
+		return err
+	}
+
+	keyName := ks.resolveKeyName()
+
+	if err := ks.storeSigningKey(keyName); err != nil {
+		return err
+	}
+
+	if err := ks.storeEncryptionKey(keyName); err != nil {
+		return err
+	}
+
+	log.WithField("at", "StoreKeys").Debug("Successfully stored all keys")
+	return nil
+}
+
+// ensureKeyDirectory creates the key directory if it doesn't exist.
+func (ks *RouterInfoKeystore) ensureKeyDirectory() error {
 	if _, err := os.Stat(ks.dir); os.IsNotExist(err) {
 		log.WithField("dir", ks.dir).Debug("Creating directory for keys")
-		// Use 0700 to protect private key material from other users
-		err := os.MkdirAll(ks.dir, 0o700)
-		if err != nil {
+		if err := os.MkdirAll(ks.dir, 0o700); err != nil {
 			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to create directory")
 			return err
 		}
 	}
+	return nil
+}
 
-	// Use ks.name for filename derivation (not KeyID()) to stay consistent with
-	// loadOrGenerateKey which also uses ks.name. This prevents a path mismatch
-	// where StoreKeys writes to a KeyID()-derived path but load looks at the
-	// name-derived path.
-	keyName := ks.name
-	if keyName == "" {
-		// Fallback to KeyID() when name is empty (unusual but possible).
-		keyName = ks.KeyID()
+// resolveKeyName determines the filename prefix for key files.
+func (ks *RouterInfoKeystore) resolveKeyName() string {
+	if ks.name != "" {
+		return ks.name
 	}
+	return ks.KeyID()
+}
 
-	// Store Ed25519 signing private key
+// storeSigningKey writes the Ed25519 signing private key to disk.
+func (ks *RouterInfoKeystore) storeSigningKey(keyName string) error {
 	sigFilename := filepath.Join(ks.dir, keyName+".key")
 	log.WithFields(map[string]interface{}{
 		"at":   "StoreKeys",
@@ -302,23 +322,23 @@ func (ks *RouterInfoKeystore) StoreKeys() error {
 		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write signing key file")
 		return err
 	}
+	return nil
+}
 
-	// Store X25519 encryption private key so it persists across restarts.
-	// Without this, the router would get a new NTCP2 static key on every
-	// restart, invalidating all peers' cached session data.
-	if ks.encryptionPrivKey != nil {
-		encFilename := filepath.Join(ks.dir, keyName+".enc.key")
-		log.WithFields(map[string]interface{}{
-			"at":   "StoreKeys",
-			"file": encFilename,
-		}).Debug("Writing encryption key file")
-		if err := os.WriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
-			log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write encryption key file")
-			return err
-		}
+// storeEncryptionKey writes the X25519 encryption private key to disk.
+func (ks *RouterInfoKeystore) storeEncryptionKey(keyName string) error {
+	if ks.encryptionPrivKey == nil {
+		return nil
 	}
-
-	log.WithField("at", "StoreKeys").Debug("Successfully stored all keys")
+	encFilename := filepath.Join(ks.dir, keyName+".enc.key")
+	log.WithFields(map[string]interface{}{
+		"at":   "StoreKeys",
+		"file": encFilename,
+	}).Debug("Writing encryption key file")
+	if err := os.WriteFile(encFilename, ks.encryptionPrivKey.Bytes(), 0o600); err != nil {
+		log.WithError(err).WithField("at", "StoreKeys").Error("Failed to write encryption key file")
+		return err
+	}
 	return nil
 }
 
@@ -551,42 +571,63 @@ func (ks *RouterInfoKeystore) generateIdentityPaddingFromSizes(pubKeySize, sigKe
 			pubKeySize, sigKeySize, pubKeySize+sigKeySize, keys_and_cert.KEYS_AND_CERT_DATA_SIZE)
 	}
 
-	// Return cached padding if available and correct size
 	if len(ks.cachedPadding) == paddingSize {
 		return ks.cachedPadding, nil
 	}
 
-	// Try to load persisted padding from disk
+	padding, err := ks.loadOrGeneratePadding(paddingSize)
+	if err != nil {
+		return nil, err
+	}
+	ks.cachedPadding = padding
+	return ks.cachedPadding, nil
+}
+
+// loadOrGeneratePadding tries to load persisted padding or generates new padding.
+func (ks *RouterInfoKeystore) loadOrGeneratePadding(paddingSize int) ([]byte, error) {
 	paddingPath := filepath.Join(ks.dir, ks.name+".padding")
+
+	padding, err := ks.tryLoadPaddingFromDisk(paddingPath, paddingSize)
+	if err != nil {
+		return nil, err
+	}
+	if padding != nil {
+		return padding, nil
+	}
+
+	return ks.generateAndPersistPadding(paddingPath, paddingSize)
+}
+
+// tryLoadPaddingFromDisk attempts to load padding from disk. Returns nil, nil if file doesn't exist.
+func (ks *RouterInfoKeystore) tryLoadPaddingFromDisk(paddingPath string, expectedSize int) ([]byte, error) {
 	paddingData, readErr := os.ReadFile(paddingPath)
-	if readErr == nil {
-		if len(paddingData) == paddingSize {
-			log.WithField("at", "generateIdentityPaddingFromSizes").Debug("Loaded identity padding from disk")
-			ks.cachedPadding = paddingData
-			return ks.cachedPadding, nil
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			return nil, nil
 		}
-		// Size mismatch — key type may have changed; regenerate.
-		log.WithField("at", "generateIdentityPaddingFromSizes").Warn("Padding file size mismatch, regenerating")
-	} else if !os.IsNotExist(readErr) {
-		// File exists but unreadable (permissions, I/O error).
-		// Refuse to silently regenerate — would change identity hash.
 		return nil, oops.Errorf("failed to read padding file %s (refusing to regenerate — would change identity): %w", paddingPath, readErr)
 	}
 
-	// Generate new random padding
+	if len(paddingData) == expectedSize {
+		log.WithField("at", "generateIdentityPaddingFromSizes").Debug("Loaded identity padding from disk")
+		return paddingData, nil
+	}
+
+	log.WithField("at", "generateIdentityPaddingFromSizes").Warn("Padding file size mismatch, regenerating")
+	return nil, nil
+}
+
+// generateAndPersistPadding creates new random padding and saves it to disk.
+func (ks *RouterInfoKeystore) generateAndPersistPadding(paddingPath string, paddingSize int) ([]byte, error) {
 	padding := make([]byte, paddingSize)
-	_, err := rand.Read(padding)
-	if err != nil {
+	if _, err := rand.Read(padding); err != nil {
 		return nil, oops.Errorf("failed to generate padding: %w", err)
 	}
 
-	// Persist to disk so the identity hash survives restarts
 	if err := os.WriteFile(paddingPath, padding, 0o600); err != nil {
 		log.WithError(err).Warn("Failed to persist identity padding to disk; identity hash may change on restart")
 	}
-
-	ks.cachedPadding = padding
-	return ks.cachedPadding, nil
+	return padding, nil
 }
 
 // assembleRouterInfo creates the final RouterInfo with all components and standard options

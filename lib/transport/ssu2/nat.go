@@ -337,18 +337,21 @@ func (t *SSU2Transport) awaitPeerTestResult(nonce uint32, candidates []router_in
 	poll := time.NewTicker(pollInterval)
 	defer poll.Stop()
 
-	for {
-		select {
-		case <-t.ctx.Done():
-			return
-		case <-timer.C:
-			t.handlePeerTestTimeout(candidates, republish)
-			return
-		case <-poll.C:
-			if t.checkPeerTestComplete(nonce, candidates, republish) {
-				return
-			}
-		}
+	for t.pollPeerTestOnce(timer, poll, nonce, candidates, republish) {
+	}
+}
+
+// pollPeerTestOnce handles one iteration of the peer test polling loop.
+// Returns true to continue polling, false when done.
+func (t *SSU2Transport) pollPeerTestOnce(timer *time.Timer, poll *time.Ticker, nonce uint32, candidates []router_info.RouterInfo, republish func()) bool {
+	select {
+	case <-t.ctx.Done():
+		return false
+	case <-timer.C:
+		t.handlePeerTestTimeout(candidates, republish)
+		return false
+	case <-poll.C:
+		return !t.checkPeerTestComplete(nonce, candidates, republish)
 	}
 }
 
@@ -391,27 +394,7 @@ func (t *SSU2Transport) registerIntroducers(candidates []router_info.RouterInfo,
 		if registered >= 3 {
 			break
 		}
-		addr, err := ExtractSSU2Addr(ri)
-		if err != nil {
-			continue
-		}
-		h, err := ri.IdentHash()
-		if err != nil {
-			continue
-		}
-		hBytes := h.Bytes()
-		tag, err := t.AllocateRelayTag(addr)
-		if err != nil {
-			continue
-		}
-		intro := &ssu2noise.RegisteredIntroducer{
-			Addr:       addr,
-			RouterHash: hBytes[:],
-			RelayTag:   tag,
-			AddedAt:    time.Now(),
-			LastSeen:   time.Now(),
-		}
-		if err := t.RegisterIntroducer(intro); err == nil {
+		if t.tryRegisterIntroducer(ri) {
 			registered++
 		}
 	}
@@ -421,4 +404,39 @@ func (t *SSU2Transport) registerIntroducers(candidates []router_info.RouterInfo,
 			republish()
 		}
 	}
+}
+
+// tryRegisterIntroducer attempts to create and register an introducer from a RouterInfo.
+// Returns true if registration succeeded.
+func (t *SSU2Transport) tryRegisterIntroducer(ri router_info.RouterInfo) bool {
+	intro, err := t.createIntroducerFromRouterInfo(ri)
+	if err != nil {
+		return false
+	}
+	return t.RegisterIntroducer(intro) == nil
+}
+
+// createIntroducerFromRouterInfo extracts SSU2 address and identity, allocates a relay tag,
+// and builds a RegisteredIntroducer.
+func (t *SSU2Transport) createIntroducerFromRouterInfo(ri router_info.RouterInfo) (*ssu2noise.RegisteredIntroducer, error) {
+	addr, err := ExtractSSU2Addr(ri)
+	if err != nil {
+		return nil, err
+	}
+	h, err := ri.IdentHash()
+	if err != nil {
+		return nil, err
+	}
+	hBytes := h.Bytes()
+	tag, err := t.AllocateRelayTag(addr)
+	if err != nil {
+		return nil, err
+	}
+	return &ssu2noise.RegisteredIntroducer{
+		Addr:       addr,
+		RouterHash: hBytes[:],
+		RelayTag:   tag,
+		AddedAt:    time.Now(),
+		LastSeen:   time.Now(),
+	}, nil
 }
