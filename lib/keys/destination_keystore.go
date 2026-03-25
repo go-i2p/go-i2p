@@ -330,6 +330,60 @@ func buildDestinationFromPublicKeysWithPadding(encryptionPubKey types.ReceivingP
 	}, nil
 }
 
+// rotatedKeySet holds the generated keys for a rotation operation.
+type rotatedKeySet struct {
+	signingPubKey     types.SigningPublicKey
+	signingPrivKey    types.SigningPrivateKey
+	encryptionPubKey  types.PublicEncryptionKey
+	encryptionPrivKey types.PrivateEncryptionKey
+	padding           []byte
+}
+
+// generateRotatedKeys generates all key material needed for a rotation.
+func generateRotatedKeys() (*rotatedKeySet, error) {
+	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new signing keys: %w", err)
+	}
+
+	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new encryption keys: %w", err)
+	}
+
+	padding, err := calculateKeyPadding()
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate new padding: %w", err)
+	}
+
+	return &rotatedKeySet{
+		signingPubKey:     signingPubKey,
+		signingPrivKey:    signingPrivKey,
+		encryptionPubKey:  encryptionPubKey,
+		encryptionPrivKey: encryptionPrivKey,
+		padding:           padding,
+	}, nil
+}
+
+// applyRotatedKeys updates the keystore with new keys and persists them.
+func (dks *DestinationKeyStore) applyRotatedKeys(ks *rotatedKeySet, dir, name string) error {
+	newDest, err := buildDestinationFromPublicKeysWithPadding(ks.encryptionPubKey, ks.signingPubKey, ks.padding)
+	if err != nil {
+		return fmt.Errorf("failed to build new destination: %w", err)
+	}
+
+	dks.Close()
+	dks.destination = newDest
+	dks.encryptionPrivKey = ks.encryptionPrivKey
+	dks.signingPrivKey = ks.signingPrivKey
+	dks.padding = ks.padding
+
+	if err := dks.StoreKeys(dir, name); err != nil {
+		return fmt.Errorf("failed to store rotated keys: %w", err)
+	}
+	return nil
+}
+
 // RotateKeys generates new encryption and signing keys, updating the destination
 // identity. The old keys are archived to disk with a timestamp suffix before
 // being replaced. This provides forward secrecy at the destination level.
@@ -351,52 +405,22 @@ func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Desti
 		"name": name,
 	}).Info("Rotating destination keys")
 
-	// Archive current keys before rotation
 	oldDest := dks.destination
 	if err := dks.archiveCurrentKeys(dir, name); err != nil {
 		return nil, fmt.Errorf("failed to archive current keys: %w", err)
 	}
 
-	// Generate new key pairs
-	signingPubKey, signingPrivKey, err := generateSigningKeyPair()
+	keySet, err := generateRotatedKeys()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new signing keys: %w", err)
+		return nil, err
 	}
 
-	encryptionPubKey, encryptionPrivKey, err := generateEncryptionKeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate new encryption keys: %w", err)
+	if err := dks.applyRotatedKeys(keySet, dir, name); err != nil {
+		return nil, err
 	}
 
-	// Generate new padding for the new identity
-	padding, err := calculateKeyPadding()
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate new padding: %w", err)
-	}
-
-	// Build the new destination
-	newDest, err := buildDestinationFromPublicKeysWithPadding(encryptionPubKey, signingPubKey, padding)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build new destination: %w", err)
-	}
-
-	// Zero old keys from memory
-	dks.Close()
-
-	// Update the keystore with new keys
-	dks.destination = newDest
-	dks.encryptionPrivKey = encryptionPrivKey
-	dks.signingPrivKey = signingPrivKey
-	dks.padding = padding
-
-	// Persist new keys
-	if err := dks.StoreKeys(dir, name); err != nil {
-		return nil, fmt.Errorf("failed to store rotated keys: %w", err)
-	}
-
-	// Log with b32 addresses if available
 	oldB32, _ := oldDest.Base32Address()
-	newB32, _ := newDest.Base32Address()
+	newB32, _ := dks.destination.Base32Address()
 	log.WithFields(map[string]interface{}{
 		"at":       "DestinationKeyStore.RotateKeys",
 		"old_dest": oldB32,

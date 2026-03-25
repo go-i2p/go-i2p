@@ -537,43 +537,61 @@ func validateRouter(router RouterDefaults) error {
 	return nil
 }
 
-// validateNetDB validates network database configuration settings.
-func validateNetDB(netdb NetDBDefaults) error {
-	log.WithFields(logger.Fields{
-		"at":     "validateNetDBConfig",
-		"reason": "validating_netdb_settings",
-		"phase":  "startup",
-	}).Debug("validating NetDB configuration")
-	if netdb.Path == "" {
+// validateNetDBPath validates that the NetDB path is not empty.
+func validateNetDBPath(path string) error {
+	if path == "" {
 		log.WithFields(logger.Fields{
 			"at":     "validateNetDBConfig",
 			"reason": "empty_path",
 		}).Error("invalid NetDB configuration")
 		return newValidationError("NetDB.Path must not be empty")
 	}
-	if netdb.MaxRouterInfos < 10 {
-		log.WithFields(logger.Fields{
-			"at":               "validateNetDBConfig",
-			"reason":           "max_router_infos_too_low",
-			"max_router_infos": netdb.MaxRouterInfos,
-			"minimum_required": 10,
-		}).Error("invalid NetDB configuration")
-		return newValidationError("NetDB.MaxRouterInfos must be at least 10")
-	}
-	if netdb.MaxLeaseSets < 1 {
-		log.WithFields(logger.Fields{
-			"at":               "validateNetDBConfig",
-			"reason":           "max_lease_sets_too_low",
-			"max_lease_sets":   netdb.MaxLeaseSets,
-			"minimum_required": 1,
-		}).Error("invalid NetDB configuration")
-		return newValidationError("NetDB.MaxLeaseSets must be at least 1")
+	return nil
+}
+
+// validateNetDBMaxRouterInfos validates the max router infos setting.
+func validateNetDBMaxRouterInfos(maxRouterInfos int) error {
+	if maxRouterInfos >= 10 {
+		return nil
 	}
 	log.WithFields(logger.Fields{
-		"at":     "validateNetDBConfig",
-		"reason": "validation_passed",
-		"phase":  "startup",
-	}).Debug("NetDB configuration validated successfully")
+		"at":               "validateNetDBConfig",
+		"reason":           "max_router_infos_too_low",
+		"max_router_infos": maxRouterInfos,
+		"minimum_required": 10,
+	}).Error("invalid NetDB configuration")
+	return newValidationError("NetDB.MaxRouterInfos must be at least 10")
+}
+
+// validateNetDBMaxLeaseSets validates the max lease sets setting.
+func validateNetDBMaxLeaseSets(maxLeaseSets int) error {
+	if maxLeaseSets >= 1 {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":               "validateNetDBConfig",
+		"reason":           "max_lease_sets_too_low",
+		"max_lease_sets":   maxLeaseSets,
+		"minimum_required": 1,
+	}).Error("invalid NetDB configuration")
+	return newValidationError("NetDB.MaxLeaseSets must be at least 1")
+}
+
+// validateNetDB validates network database configuration settings.
+func validateNetDB(netdb NetDBDefaults) error {
+	logValidationStart("validateNetDBConfig", "validating_netdb_settings")
+
+	if err := validateNetDBPath(netdb.Path); err != nil {
+		return err
+	}
+	if err := validateNetDBMaxRouterInfos(netdb.MaxRouterInfos); err != nil {
+		return err
+	}
+	if err := validateNetDBMaxLeaseSets(netdb.MaxLeaseSets); err != nil {
+		return err
+	}
+
+	logValidationSuccess("validateNetDBConfig", "NetDB configuration validated successfully")
 	return nil
 }
 
@@ -676,46 +694,63 @@ func validateReseedStrategyIfSet(strategy string) error {
 	return nil
 }
 
+// validateI2CPMaxSessions validates the max sessions setting.
+func validateI2CPMaxSessions(maxSessions int) error {
+	if maxSessions >= 1 {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":               "validateI2CPConfig",
+		"reason":           "max_sessions_too_low",
+		"max_sessions":     maxSessions,
+		"minimum_required": 1,
+	}).Error("invalid I2CP configuration")
+	return newValidationError("I2CP.MaxSessions must be at least 1")
+}
+
+// validateI2CPMessageQueueSize validates the message queue size setting.
+func validateI2CPMessageQueueSize(msgQueueSize int) error {
+	if msgQueueSize >= 1 {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":                 "validateI2CPConfig",
+		"reason":             "message_queue_size_too_low",
+		"message_queue_size": msgQueueSize,
+		"minimum_required":   1,
+	}).Error("invalid I2CP configuration")
+	return newValidationError("I2CP.MessageQueueSize must be at least 1")
+}
+
+// validateI2CPNetworkType validates the network type setting.
+func validateI2CPNetworkType(network string) error {
+	validNetworkTypes := map[string]bool{"tcp": true, "unix": true}
+	if validNetworkTypes[network] {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":      "validateI2CPConfig",
+		"reason":  "invalid_network_type",
+		"network": network,
+	}).Error("invalid I2CP configuration")
+	return newValidationError("I2CP.Network must be one of: tcp, unix")
+}
+
 // validateI2CP validates I2CP server configuration settings.
 func validateI2CP(i2cp I2CPDefaults) error {
-	log.WithFields(logger.Fields{
-		"at":     "validateI2CPConfig",
-		"reason": "validating_i2cp_settings",
-		"phase":  "startup",
-	}).Debug("validating I2CP configuration")
-	if i2cp.MaxSessions < 1 {
-		log.WithFields(logger.Fields{
-			"at":               "validateI2CPConfig",
-			"reason":           "max_sessions_too_low",
-			"max_sessions":     i2cp.MaxSessions,
-			"minimum_required": 1,
-		}).Error("invalid I2CP configuration")
-		return newValidationError("I2CP.MaxSessions must be at least 1")
+	logValidationStart("validateI2CPConfig", "validating_i2cp_settings")
+
+	if err := validateI2CPMaxSessions(i2cp.MaxSessions); err != nil {
+		return err
 	}
-	if i2cp.MessageQueueSize < 1 {
-		log.WithFields(logger.Fields{
-			"at":                 "validateI2CPConfig",
-			"reason":             "message_queue_size_too_low",
-			"message_queue_size": i2cp.MessageQueueSize,
-			"minimum_required":   1,
-		}).Error("invalid I2CP configuration")
-		return newValidationError("I2CP.MessageQueueSize must be at least 1")
+	if err := validateI2CPMessageQueueSize(i2cp.MessageQueueSize); err != nil {
+		return err
 	}
-	// Validate network type
-	validNetworkTypes := map[string]bool{"tcp": true, "unix": true}
-	if !validNetworkTypes[i2cp.Network] {
-		log.WithFields(logger.Fields{
-			"at":      "validateI2CPConfig",
-			"reason":  "invalid_network_type",
-			"network": i2cp.Network,
-		}).Error("invalid I2CP configuration")
-		return newValidationError("I2CP.Network must be one of: tcp, unix")
+	if err := validateI2CPNetworkType(i2cp.Network); err != nil {
+		return err
 	}
-	log.WithFields(logger.Fields{
-		"at":     "validateI2CPConfig",
-		"reason": "validation_passed",
-		"phase":  "startup",
-	}).Debug("I2CP configuration validated successfully")
+
+	logValidationSuccess("validateI2CPConfig", "I2CP configuration validated successfully")
 	return nil
 }
 
