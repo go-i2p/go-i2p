@@ -214,6 +214,60 @@ func (tb *TunnelBuilder) CreateBuildRequest(req BuildTunnelRequest) (*TunnelBuil
 	}, nil
 }
 
+// BuildTunnel implements BuilderInterface by invoking CreateBuildRequest and
+// converting the result to BuildTunnelResult. This enables TunnelBuilder to be
+// used directly by Pool without requiring a wrapper or mock in production.
+//
+// Returns a BuildTunnelResult containing the tunnel ID and hashes of selected
+// peers, or an error if tunnel building fails.
+func (tb *TunnelBuilder) BuildTunnel(req BuildTunnelRequest) (*BuildTunnelResult, error) {
+	log.WithFields(logger.Fields{
+		"at":         "(TunnelBuilder) BuildTunnel",
+		"phase":      "tunnel_build",
+		"hop_count":  req.HopCount,
+		"is_inbound": req.IsInbound,
+	}).Debug("initiating tunnel build")
+
+	buildResult, err := tb.CreateBuildRequest(req)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":    "(TunnelBuilder) BuildTunnel",
+			"phase": "tunnel_build",
+		}).Error("tunnel build failed")
+		return &BuildTunnelResult{
+			TunnelID:   0,
+			PeerHashes: nil,
+		}, err
+	}
+
+	// Extract peer hashes from RouterInfo objects
+	peerHashes := make([]common.Hash, 0, len(buildResult.Hops))
+	for i, hop := range buildResult.Hops {
+		hash, hashErr := hop.IdentHash()
+		if hashErr != nil {
+			log.WithError(hashErr).WithFields(logger.Fields{
+				"at":        "(TunnelBuilder) BuildTunnel",
+				"phase":     "tunnel_build",
+				"hop_index": i,
+			}).Warn("failed to get hop identity hash, skipping")
+			continue
+		}
+		peerHashes = append(peerHashes, hash)
+	}
+
+	log.WithFields(logger.Fields{
+		"at":         "(TunnelBuilder) BuildTunnel",
+		"phase":      "tunnel_build",
+		"tunnel_id":  buildResult.TunnelID,
+		"peer_count": len(peerHashes),
+	}).Debug("tunnel build request created successfully")
+
+	return &BuildTunnelResult{
+		TunnelID:   buildResult.TunnelID,
+		PeerHashes: peerHashes,
+	}, nil
+}
+
 // validateHopCount validates that the hop count is within I2P spec limits (1-8).
 func (tb *TunnelBuilder) validateHopCount(hopCount int) error {
 	log.WithFields(logger.Fields{
