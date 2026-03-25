@@ -63,6 +63,34 @@ const (
 	MessageTypeReceiveMessageEnd   uint8 = 7 // Client -> Router: DEPRECATED, not supported
 )
 
+// messageTypeNames maps message type constants to human-readable names.
+var messageTypeNames = map[uint8]string{
+	MessageTypeCreateSession:           "CreateSession",
+	MessageTypeSessionStatus:           "SessionStatus",
+	MessageTypeReconfigureSession:      "ReconfigureSession",
+	MessageTypeDestroySession:          "DestroySession",
+	MessageTypeCreateLeaseSet:          "CreateLeaseSet",
+	MessageTypeRequestLeaseSet:         "RequestLeaseSet",
+	MessageTypeRequestVariableLeaseSet: "RequestVariableLeaseSet",
+	MessageTypeCreateLeaseSet2:         "CreateLeaseSet2",
+	MessageTypeSendMessage:             "SendMessage",
+	MessageTypeMessagePayload:          "MessagePayload",
+	MessageTypeMessageStatus:           "MessageStatus",
+	MessageTypeDisconnect:              "Disconnect",
+	MessageTypeSendMessageExpires:      "SendMessageExpires",
+	MessageTypeGetBandwidthLimits:      "GetBandwidthLimits",
+	MessageTypeBandwidthLimits:         "BandwidthLimits",
+	MessageTypeGetDate:                 "GetDate",
+	MessageTypeSetDate:                 "SetDate",
+	MessageTypeHostLookup:              "HostLookup",
+	MessageTypeHostReply:               "HostReply",
+	MessageTypeBlindingInfo:            "BlindingInfo",
+	MessageTypeDestLookup:              "DestLookup (deprecated)",
+	MessageTypeDestReply:               "DestReply (deprecated)",
+	MessageTypeReceiveMessageBegin:     "ReceiveMessageBegin (deprecated)",
+	MessageTypeReceiveMessageEnd:       "ReceiveMessageEnd (deprecated)",
+}
+
 // Reserved session IDs
 const (
 	SessionIDReservedControl   = 0x0000 // Control messages (pre-session)
@@ -488,58 +516,10 @@ func WriteMessage(w io.Writer, msg *Message) error {
 	return nil
 }
 
-// MessageTypeName returns a human-readable name for the message type
+// MessageTypeName returns a human-readable name for the message type.
 func MessageTypeName(msgType uint8) string {
-	switch msgType {
-	case MessageTypeCreateSession:
-		return "CreateSession"
-	case MessageTypeSessionStatus:
-		return "SessionStatus"
-	case MessageTypeReconfigureSession:
-		return "ReconfigureSession"
-	case MessageTypeDestroySession:
-		return "DestroySession"
-	case MessageTypeCreateLeaseSet:
-		return "CreateLeaseSet"
-	case MessageTypeRequestLeaseSet:
-		return "RequestLeaseSet"
-	case MessageTypeRequestVariableLeaseSet:
-		return "RequestVariableLeaseSet"
-	case MessageTypeCreateLeaseSet2:
-		return "CreateLeaseSet2"
-	case MessageTypeSendMessage:
-		return "SendMessage"
-	case MessageTypeMessagePayload:
-		return "MessagePayload"
-	case MessageTypeMessageStatus:
-		return "MessageStatus"
-	case MessageTypeDisconnect:
-		return "Disconnect"
-	case MessageTypeSendMessageExpires:
-		return "SendMessageExpires"
-	case MessageTypeGetBandwidthLimits:
-		return "GetBandwidthLimits"
-	case MessageTypeBandwidthLimits:
-		return "BandwidthLimits"
-	case MessageTypeGetDate:
-		return "GetDate"
-	case MessageTypeSetDate:
-		return "SetDate"
-	case MessageTypeHostLookup:
-		return "HostLookup"
-	case MessageTypeHostReply:
-		return "HostReply"
-	case MessageTypeBlindingInfo:
-		return "BlindingInfo"
-	case MessageTypeDestLookup:
-		return "DestLookup (deprecated)"
-	case MessageTypeDestReply:
-		return "DestReply (deprecated)"
-	case MessageTypeReceiveMessageBegin:
-		return "ReceiveMessageBegin (deprecated)"
-	case MessageTypeReceiveMessageEnd:
-		return "ReceiveMessageEnd (deprecated)"
-	default:
-		return fmt.Sprintf("Unknown(%d)", msgType)
+	if name, ok := messageTypeNames[msgType]; ok {
+		return name
 	}
+	return fmt.Sprintf("Unknown(%d)", msgType)
 }

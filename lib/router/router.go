@@ -115,30 +115,14 @@ type Router struct {
 
 // CreateRouter creates a router with the provided configuration
 func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
-	log.WithFields(logger.Fields{
-		"at":          "(Router) CreateRouter",
-		"phase":       "startup",
-		"step":        1,
-		"reason":      "creating router instance",
-		"base_dir":    cfg.BaseDir,
-		"working_dir": cfg.WorkingDir,
-	}).Debug("creating router with provided configuration")
+	logStartup("creating router instance", cfg.BaseDir, cfg.WorkingDir)
 
 	r, err := FromConfig(cfg)
 	if err != nil {
-		log.WithError(err).WithFields(logger.Fields{
-			"at":     "(Router) CreateRouter",
-			"phase":  "startup",
-			"reason": "router configuration failed",
-		}).Error("failed to create router from configuration")
+		logError("failed to create router from configuration", err)
 		return nil, err
 	}
-	log.WithFields(logger.Fields{
-		"at":     "(Router) CreateRouter",
-		"phase":  "startup",
-		"step":   2,
-		"reason": "router instance created successfully",
-	}).Debug("router created successfully")
+	logStartup("router instance created successfully", "", "")
 
 	if err := initializeRouterKeystore(r, cfg); err != nil {
 		return nil, err
@@ -153,6 +137,42 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 		return nil, err
 	}
 
+	transports, err := initializeTransports(r, ri, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	r.TransportMuxer = transport.Mux(transports...)
+	return r, nil
+}
+
+// logStartup logs a startup-phase debug message.
+func logStartup(reason, baseDir, workingDir string) {
+	fields := logger.Fields{
+		"at":     "(Router) CreateRouter",
+		"phase":  "startup",
+		"reason": reason,
+	}
+	if baseDir != "" {
+		fields["base_dir"] = baseDir
+	}
+	if workingDir != "" {
+		fields["working_dir"] = workingDir
+	}
+	log.WithFields(fields).Debug(reason)
+}
+
+// logError logs a startup-phase error.
+func logError(reason string, err error) {
+	log.WithError(err).WithFields(logger.Fields{
+		"at":     "(Router) CreateRouter",
+		"phase":  "startup",
+		"reason": reason,
+	}).Error(reason)
+}
+
+// initializeTransports creates and returns all configured transports.
+func initializeTransports(r *Router, ri *router_info.RouterInfo, cfg *config.RouterConfig) ([]transport.Transport, error) {
 	ntcp2Transport, err := buildNTCP2Transport(r, ri)
 	if err != nil {
 		return nil, err
@@ -161,17 +181,14 @@ func CreateRouter(cfg *config.RouterConfig) (*Router, error) {
 	transports := []transport.Transport{ntcp2Transport}
 
 	if cfg.Transport != nil && cfg.Transport.SSU2Enabled {
-		ssu2Transport, err := buildSSU2Transport(r, ri)
-		if err != nil {
+		if ssu2Transport, err := buildSSU2Transport(r, ri); err != nil {
 			log.WithError(err).Warn("SSU2 transport setup failed; continuing without SSU2")
 		} else {
 			transports = append(transports, ssu2Transport)
 		}
 	}
 
-	r.TransportMuxer = transport.Mux(transports...)
-
-	return r, nil
+	return transports, nil
 }
 
 // initializeRouterKeystore creates and stores the router keystore

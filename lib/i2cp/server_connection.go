@@ -91,41 +91,50 @@ func (s *Server) cleanupIdleSessions() {
 	now := time.Now()
 
 	for _, session := range sessions {
-		if !session.IsActive() {
-			continue
-		}
-
-		idleTime := now.Sub(session.LastActivity())
-		if idleTime > s.config.SessionTimeout {
-			sessionID := session.ID()
-			log.WithFields(logger.Fields{
-				"at":        "i2cp.Server.cleanupIdleSessions",
-				"sessionID": sessionID,
-				"idleTime":  idleTime,
-				"timeout":   s.config.SessionTimeout,
-			}).Info("closing_idle_session")
-
-			// Attempt to claim ownership of cleanup by removing from map.
-			// If the key is already gone, cleanupSessionConnection already handled it.
-			s.mu.Lock()
-			_, owned := s.sessionConns[sessionID]
-			delete(s.sessionConns, sessionID)
-			delete(s.connWriteMu, sessionID)
-			s.mu.Unlock()
-
-			if !owned {
-				continue
-			}
-
-			// We own the cleanup — destroy via manager.
-			if err := s.manager.DestroySession(sessionID); err != nil {
-				log.WithFields(logger.Fields{
-					"at":        "i2cp.Server.cleanupIdleSessions",
-					"sessionID": sessionID,
-				}).Debug("session already destroyed by connection cleanup")
-			}
-		}
+		s.cleanupSessionIfIdle(session, now)
 	}
+}
+
+// cleanupSessionIfIdle checks if a session is idle and cleans it up if necessary.
+func (s *Server) cleanupSessionIfIdle(session *Session, now time.Time) {
+	if !session.IsActive() {
+		return
+	}
+
+	idleTime := now.Sub(session.LastActivity())
+	if idleTime <= s.config.SessionTimeout {
+		return
+	}
+
+	sessionID := session.ID()
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.cleanupIdleSessions",
+		"sessionID": sessionID,
+		"idleTime":  idleTime,
+		"timeout":   s.config.SessionTimeout,
+	}).Info("closing_idle_session")
+
+	if !s.claimSessionCleanup(sessionID) {
+		return
+	}
+
+	if err := s.manager.DestroySession(sessionID); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.cleanupIdleSessions",
+			"sessionID": sessionID,
+		}).Debug("session already destroyed by connection cleanup")
+	}
+}
+
+// claimSessionCleanup attempts to claim ownership of session cleanup.
+// Returns true if cleanup ownership was claimed, false if already handled.
+func (s *Server) claimSessionCleanup(sessionID uint16) bool {
+	s.mu.Lock()
+	_, owned := s.sessionConns[sessionID]
+	delete(s.sessionConns, sessionID)
+	delete(s.connWriteMu, sessionID)
+	s.mu.Unlock()
+	return owned
 }
 
 // handleAcceptError processes errors from listener.Accept().

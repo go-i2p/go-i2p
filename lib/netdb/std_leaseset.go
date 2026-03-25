@@ -199,73 +199,77 @@ func (db *StdNetDB) persistLeaseSetToFilesystem(key common.Hash, ls lease_set.Le
 	return db.persistLeaseSetEntryToFile(key, &Entry{LeaseSet: &ls}, "LeaseSet")
 }
 
+// emptyLeaseSetChannel returns a closed empty channel indicating LeaseSet not found.
+func emptyLeaseSetChannel() chan lease_set.LeaseSet {
+	ch := make(chan lease_set.LeaseSet)
+	close(ch)
+	return ch
+}
+
+// leaseSetChannel returns a channel containing the given LeaseSet.
+func leaseSetChannel(ls lease_set.LeaseSet) chan lease_set.LeaseSet {
+	ch := make(chan lease_set.LeaseSet, 1)
+	ch <- ls
+	close(ch)
+	return ch
+}
+
 // GetLeaseSet retrieves a LeaseSet from the database by its hash.
 // Returns a channel that yields the LeaseSet or nil if not found.
 // Checks memory cache first, then loads from filesystem if necessary.
 func (db *StdNetDB) GetLeaseSet(hash common.Hash) (chnl chan lease_set.LeaseSet) {
 	log.WithField("hash", hash).Debug("Getting LeaseSet")
 
-	// Check memory cache first
-	db.lsMutex.RLock()
-	if ls, ok := db.LeaseSets[hash]; ok {
-		db.lsMutex.RUnlock()
-		// The entry exists but may hold a different LeaseSet variant
-		// (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet). Only return
-		// if this entry actually contains a classic LeaseSet.
-		if ls.LeaseSet != nil {
-			if db.isLeaseSetExpired(hash) {
-				log.WithField("hash", hash).Debug("LeaseSet expired, not serving from cache")
-				emptyChnl := make(chan lease_set.LeaseSet)
-				close(emptyChnl)
-				return emptyChnl
-			}
-			log.Debug("LeaseSet found in memory cache")
-			chnl = make(chan lease_set.LeaseSet, 1)
-			chnl <- *ls.LeaseSet
-			close(chnl)
-			return chnl
-		}
-		// Entry exists but is a different type — the hash is known but it's not
-		// a classic LeaseSet. Return empty to indicate "not found as this type"
-		// rather than falling through to disk where the same non-classic entry
-		// would be incorrectly parsed as a classic LeaseSet.
-		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet")
-		emptyChnl := make(chan lease_set.LeaseSet)
-		close(emptyChnl)
-		return emptyChnl
-	} else {
-		db.lsMutex.RUnlock()
+	if chnl = db.getLeaseSetFromCache(hash); chnl != nil {
+		return chnl
 	}
 
-	// Load from file — check if the on-disk entry is actually a classic LeaseSet
-	// before attempting to parse it, to avoid type confusion with LS2/Encrypted entries.
+	return db.loadLeaseSetFromDisk(hash)
+}
+
+// getLeaseSetFromCache attempts to retrieve a LeaseSet from the memory cache.
+// Returns nil if not in cache, indicating caller should try disk.
+func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseSet {
+	db.lsMutex.RLock()
+	entry, ok := db.LeaseSets[hash]
+	db.lsMutex.RUnlock()
+
+	if !ok {
+		return nil // Not in cache, try disk
+	}
+
+	if entry.LeaseSet == nil {
+		log.WithField("hash", hash).Debug("Entry found but is not a classic LeaseSet")
+		return emptyLeaseSetChannel()
+	}
+
+	if db.isLeaseSetExpired(hash) {
+		log.WithField("hash", hash).Debug("LeaseSet expired, not serving from cache")
+		return emptyLeaseSetChannel()
+	}
+
+	log.Debug("LeaseSet found in memory cache")
+	return leaseSetChannel(*entry.LeaseSet)
+}
+
+// loadLeaseSetFromDisk loads a LeaseSet from filesystem and caches it.
+func (db *StdNetDB) loadLeaseSetFromDisk(hash common.Hash) chan lease_set.LeaseSet {
 	entry, err := db.loadLeaseSetEntryFromFile(db.SkiplistFileForLeaseSet(hash))
 	if err != nil {
 		log.WithError(err).Debug("Failed to load LeaseSet entry from file")
-		emptyChnl := make(chan lease_set.LeaseSet)
-		close(emptyChnl)
-		return emptyChnl
+		return emptyLeaseSetChannel()
 	}
 
-	// Only proceed if the on-disk entry is actually a classic LeaseSet.
-	// Other entry types (LeaseSet2, EncryptedLeaseSet, MetaLeaseSet) should
-	// be looked up via their own Get*() methods.
 	if entry.LeaseSet == nil {
 		log.WithField("hash", hash).Debug("On-disk entry is not a classic LeaseSet")
-		emptyChnl := make(chan lease_set.LeaseSet)
-		close(emptyChnl)
-		return emptyChnl
+		return emptyLeaseSetChannel()
 	}
 
-	// Cache the classic LeaseSet entry in memory
 	db.lsMutex.Lock()
 	db.LeaseSets[hash] = Entry{LeaseSet: entry.LeaseSet}
 	db.lsMutex.Unlock()
 
-	chnl = make(chan lease_set.LeaseSet, 1)
-	chnl <- *entry.LeaseSet
-	close(chnl)
-	return chnl
+	return leaseSetChannel(*entry.LeaseSet)
 }
 
 // loadLeaseSetFromFile loads a LeaseSet entry from the skiplist file,

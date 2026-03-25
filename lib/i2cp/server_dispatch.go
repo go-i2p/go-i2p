@@ -236,57 +236,68 @@ func (s *Server) handleDestroySession(msg *Message, sessionPtr **Session) (*Mess
 	}, nil
 }
 
-func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
-	if *sessionPtr == nil {
-		return nil, fmt.Errorf("session not active")
+// stripSessionIDPrefix removes the 2-byte SessionID prefix from the payload.
+func stripSessionIDPrefix(payload []byte) ([]byte, error) {
+	if len(payload) < 2 {
+		return nil, fmt.Errorf("ReconfigureSession payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
 	}
+	return payload[2:], nil
+}
 
-	// Strip the 2-byte SessionID prefix from the wire payload.
-	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
-	// from msg.Payload. ParseReconfigureSessionPayload expects only the options Mapping.
-	if len(msg.Payload) < 2 {
-		return nil, fmt.Errorf("ReconfigureSession payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
-	}
-	payloadData := msg.Payload[2:]
-
-	// Parse new configuration from payload
+// parseAndValidateReconfigPayload parses and validates the reconfigure session payload.
+func parseAndValidateReconfigPayload(payloadData []byte) (*SessionConfig, error) {
 	newConfig, err := ParseReconfigureSessionPayload(payloadData)
 	if err != nil {
 		log.WithError(err).Error("failed to parse reconfigure session payload")
 		return nil, fmt.Errorf("failed to parse reconfigure payload: %w", err)
 	}
-
-	// Validate the new configuration
 	if err := ValidateSessionConfig(newConfig); err != nil {
 		log.WithError(err).Warn("invalid session config in reconfigure request")
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	return newConfig, nil
+}
+
+// logReconfigSuccess logs a successful session reconfiguration.
+func logReconfigSuccess(sessionID uint16, cfg *SessionConfig) {
+	log.WithFields(logger.Fields{
+		"at":                     "i2cp.Server.handleReconfigureSession",
+		"sessionID":              sessionID,
+		"inbound_tunnel_length":  cfg.InboundTunnelLength,
+		"outbound_tunnel_length": cfg.OutboundTunnelLength,
+		"inbound_tunnel_count":   cfg.InboundTunnelCount,
+		"outbound_tunnel_count":  cfg.OutboundTunnelCount,
+	}).Info("session_reconfigured")
+}
+
+func (s *Server) handleReconfigureSession(msg *Message, sessionPtr **Session) (*Message, error) {
+	if *sessionPtr == nil {
+		return nil, fmt.Errorf("session not active")
+	}
+
+	payloadData, err := stripSessionIDPrefix(msg.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	newConfig, err := parseAndValidateReconfigPayload(payloadData)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := (*sessionPtr).Reconfigure(newConfig); err != nil {
 		return nil, fmt.Errorf("failed to reconfigure session: %w", err)
 	}
 
-	// Rebuild tunnel pools to apply the new tunnel configuration.
-	// This stops old pools and creates new ones with the updated parameters.
 	if err := s.rebuildSessionTunnelPools(*sessionPtr); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "i2cp.Server.handleReconfigureSession",
 			"sessionID": (*sessionPtr).ID(),
 			"error":     err.Error(),
 		}).Warn("failed_to_rebuild_tunnel_pools_after_reconfigure")
-		// Non-fatal: config was updated, pools may rebuild on next maintenance cycle
 	}
 
-	log.WithFields(logger.Fields{
-		"at":                     "i2cp.Server.handleReconfigureSession",
-		"sessionID":              (*sessionPtr).ID(),
-		"inbound_tunnel_length":  newConfig.InboundTunnelLength,
-		"outbound_tunnel_length": newConfig.OutboundTunnelLength,
-		"inbound_tunnel_count":   newConfig.InboundTunnelCount,
-		"outbound_tunnel_count":  newConfig.OutboundTunnelCount,
-	}).Info("session_reconfigured")
-
-	// No response for ReconfigureSession
+	logReconfigSuccess((*sessionPtr).ID(), newConfig)
 	return nil, nil
 }
 
@@ -371,31 +382,15 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 	}
 
 	session := *sessionPtr
+	logLeaseSet2Request(session.ID(), len(msg.Payload))
 
-	// i2psnark compatibility: Log LeaseSet2 creation request
-	log.WithFields(logger.Fields{
-		"at":          "i2cp.Server.handleCreateLeaseSet2",
-		"sessionID":   session.ID(),
-		"payloadSize": len(msg.Payload),
-	}).Debug("handling_create_leaseset2")
-
-	// Strip the 2-byte SessionID prefix from the wire payload.
-	// ReadMessage extracts SessionID into msg.SessionID but does not remove it
-	// from msg.Payload. The actual LeaseSet2 data starts after the 2-byte prefix.
-	if len(msg.Payload) < 2 {
-		return nil, fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(msg.Payload))
+	leaseSetBytes, err := extractLeaseSet2Payload(msg.Payload)
+	if err != nil {
+		return nil, err
 	}
-	leaseSetBytes := msg.Payload[2:]
 
-	// Validate payload size - need at least minimal LeaseSet2
-	// Minimum LeaseSet2: destination (387+ bytes) + published (8) + expires (2) + flags (2) + leases (1+) ≈ 400 bytes
-	if len(leaseSetBytes) < 400 {
-		log.WithFields(logger.Fields{
-			"at":          "i2cp.Server.handleCreateLeaseSet2",
-			"sessionID":   session.ID(),
-			"payloadSize": len(leaseSetBytes),
-		}).Warn("create_leaseset2_payload_too_short")
-		return nil, fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 400)", len(leaseSetBytes))
+	if err := validateLeaseSet2PayloadSize(session.ID(), leaseSetBytes); err != nil {
+		return nil, err
 	}
 
 	log.WithFields(logger.Fields{
@@ -404,30 +399,13 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 		"size":      len(leaseSetBytes),
 	}).Info("leaseset2_received")
 
-	// Validate the LeaseSet2: parse structure, verify destination matches session,
-	// and check expiration. This prevents clients from publishing arbitrary or
-	// malicious data to the network database.
 	if err := session.ValidateLeaseSet2Data(leaseSetBytes); err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleCreateLeaseSet2",
-			"sessionID": session.ID(),
-			"error":     err,
-		}).Warn("create_leaseset2_validation_failed")
+		logLeaseSet2ValidationError(session.ID(), err)
 		return nil, fmt.Errorf("LeaseSet2 validation failed: %w", err)
 	}
 
-	// Cache the validated LeaseSet2 in the session
 	session.SetCurrentLeaseSet(leaseSetBytes)
-
-	// Publish LeaseSet2 to network database if publisher is configured
-	if err := session.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
-		// Log warning but don't fail - LeaseSet2 storage succeeded
-		log.WithFields(logger.Fields{
-			"at":        "i2cp.Server.handleCreateLeaseSet2",
-			"sessionID": session.ID(),
-			"error":     err,
-		}).Warn("failed_to_publish_leaseset2_to_network")
-	}
+	s.publishLeaseSet2WithLogging(session, leaseSetBytes)
 
 	log.WithFields(logger.Fields{
 		"at":        "i2cp.Server.handleCreateLeaseSet2",
@@ -435,9 +413,58 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 		"size":      len(leaseSetBytes),
 	}).Info("leaseset2_processed")
 
-	// Per I2CP protocol, no response is sent for CreateLeaseSet2Message
-	// Success is indicated by not returning an error
 	return nil, nil
+}
+
+// logLeaseSet2Request logs the initial CreateLeaseSet2 request.
+func logLeaseSet2Request(sessionID uint16, payloadSize int) {
+	log.WithFields(logger.Fields{
+		"at":          "i2cp.Server.handleCreateLeaseSet2",
+		"sessionID":   sessionID,
+		"payloadSize": payloadSize,
+	}).Debug("handling_create_leaseset2")
+}
+
+// extractLeaseSet2Payload strips the 2-byte SessionID prefix from the payload.
+func extractLeaseSet2Payload(payload []byte) ([]byte, error) {
+	if len(payload) < 2 {
+		return nil, fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 2 for SessionID)", len(payload))
+	}
+	return payload[2:], nil
+}
+
+// validateLeaseSet2PayloadSize checks the minimum payload size for a valid LeaseSet2.
+func validateLeaseSet2PayloadSize(sessionID uint16, leaseSetBytes []byte) error {
+	// Minimum LeaseSet2: destination (387+ bytes) + published (8) + expires (2) + flags (2) + leases (1+) ≈ 400 bytes
+	if len(leaseSetBytes) < 400 {
+		log.WithFields(logger.Fields{
+			"at":          "i2cp.Server.handleCreateLeaseSet2",
+			"sessionID":   sessionID,
+			"payloadSize": len(leaseSetBytes),
+		}).Warn("create_leaseset2_payload_too_short")
+		return fmt.Errorf("CreateLeaseSet2 payload too short: %d bytes (need at least 400)", len(leaseSetBytes))
+	}
+	return nil
+}
+
+// logLeaseSet2ValidationError logs a LeaseSet2 validation failure.
+func logLeaseSet2ValidationError(sessionID uint16, err error) {
+	log.WithFields(logger.Fields{
+		"at":        "i2cp.Server.handleCreateLeaseSet2",
+		"sessionID": sessionID,
+		"error":     err,
+	}).Warn("create_leaseset2_validation_failed")
+}
+
+// publishLeaseSet2WithLogging publishes LeaseSet2 to network and logs any errors.
+func (s *Server) publishLeaseSet2WithLogging(session *Session, leaseSetBytes []byte) {
+	if err := session.publishLeaseSetToNetwork(leaseSetBytes); err != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.handleCreateLeaseSet2",
+			"sessionID": session.ID(),
+			"error":     err,
+		}).Warn("failed_to_publish_leaseset2_to_network")
+	}
 }
 
 // handleGetDate returns the current router time and protocol version.
@@ -451,15 +478,46 @@ func (s *Server) handleCreateLeaseSet2(msg *Message, sessionPtr **Session) (*Mes
 //	Bytes 0-7:  Current time (milliseconds since epoch, big endian)
 //	Bytes 8-9:  Version string length (big endian uint16)
 //	Bytes 10+:  Protocol version string (UTF-8)
-func (s *Server) handleGetDate(msg *Message) (*Message, error) {
-	// Parse client version if provided in GetDate payload
-	clientVersion := ""
-	if len(msg.Payload) >= 2 {
-		strLen := binary.BigEndian.Uint16(msg.Payload[0:2])
-		if len(msg.Payload) >= 2+int(strLen) {
-			clientVersion = string(msg.Payload[2 : 2+strLen])
-		}
+
+// parseClientVersion extracts the client protocol version from GetDate payload.
+func parseClientVersion(payload []byte) string {
+	if len(payload) < 2 {
+		return ""
 	}
+	strLen := binary.BigEndian.Uint16(payload[0:2])
+	if len(payload) < 2+int(strLen) {
+		return ""
+	}
+	return string(payload[2 : 2+strLen])
+}
+
+// storeClientVersionInSession stores the client version in the session if available.
+func (s *Server) storeClientVersionInSession(sessionID uint16, clientVersion string) {
+	if sessionID == 0 || clientVersion == "" {
+		return
+	}
+	if session, exists := s.manager.GetSession(sessionID); exists {
+		session.SetProtocolVersion(clientVersion)
+		log.WithFields(logger.Fields{
+			"at":            "i2cp.Server.handleGetDate",
+			"sessionID":     sessionID,
+			"clientVersion": clientVersion,
+		}).Debug("stored_client_protocol_version")
+	}
+}
+
+// buildSetDatePayload creates the payload for SetDate response.
+func buildSetDatePayload(currentTimeMillis int64, versionStr string) []byte {
+	versionBytes := []byte(versionStr)
+	payload := make([]byte, 8+2+len(versionBytes))
+	binary.BigEndian.PutUint64(payload[0:8], uint64(currentTimeMillis))
+	binary.BigEndian.PutUint16(payload[8:10], uint16(len(versionBytes)))
+	copy(payload[10:], versionBytes)
+	return payload
+}
+
+func (s *Server) handleGetDate(msg *Message) (*Message, error) {
+	clientVersion := parseClientVersion(msg.Payload)
 
 	log.WithFields(logger.Fields{
 		"at":            "i2cp.Server.handleGetDate",
@@ -467,44 +525,16 @@ func (s *Server) handleGetDate(msg *Message) (*Message, error) {
 		"clientVersion": clientVersion,
 	}).Debug("handling_get_date_request")
 
-	// Store client version in session if we have one
-	// GetDate can be called before CreateSession in some clients,
-	// so we need to handle session lookup gracefully.
-	if msg.SessionID != 0 && clientVersion != "" {
-		if session, exists := s.manager.GetSession(msg.SessionID); exists {
-			session.SetProtocolVersion(clientVersion)
-			log.WithFields(logger.Fields{
-				"at":            "i2cp.Server.handleGetDate",
-				"sessionID":     msg.SessionID,
-				"clientVersion": clientVersion,
-			}).Debug("stored_client_protocol_version")
-		}
-	}
+	s.storeClientVersionInSession(msg.SessionID, clientVersion)
 
-	// Current router time (milliseconds since Unix epoch)
 	currentTimeMillis := time.Now().UnixMilli()
-
-	// Protocol version string: "0.9.67"
 	versionStr := fmt.Sprintf("%d.%d.%d",
 		ProtocolVersionMajor, ProtocolVersionMinor, ProtocolVersionPatch)
-	versionBytes := []byte(versionStr)
-
-	// Build payload: 8 bytes (time) + 2 bytes (string length) + version string
-	payload := make([]byte, 8+2+len(versionBytes))
-
-	// Time (8 bytes, big endian)
-	binary.BigEndian.PutUint64(payload[0:8], uint64(currentTimeMillis))
-
-	// Version string length (2 bytes, big endian)
-	binary.BigEndian.PutUint16(payload[8:10], uint16(len(versionBytes)))
-
-	// Version string
-	copy(payload[10:], versionBytes)
 
 	response := &Message{
 		Type:      MessageTypeSetDate,
 		SessionID: msg.SessionID,
-		Payload:   payload,
+		Payload:   buildSetDatePayload(currentTimeMillis, versionStr),
 	}
 
 	log.WithFields(logger.Fields{

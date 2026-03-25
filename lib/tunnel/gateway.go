@@ -82,6 +82,27 @@ func NewGateway(tunnelID TunnelID, encryption tunnel.TunnelEncryptor, nextHopID 
 	return gw, nil
 }
 
+// logSendError logs a send error with tunnel context.
+func (g *Gateway) logSendError(reason string, err error) {
+	log.WithFields(logger.Fields{
+		"at":        "Gateway.Send",
+		"tunnel_id": g.tunnelID,
+	}).WithError(err).Error(reason)
+}
+
+// validateSendMessage validates that the message is not empty.
+func (g *Gateway) validateSendMessage(msgBytes []byte) error {
+	if len(msgBytes) > 0 {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":        "Gateway.Send",
+		"tunnel_id": g.tunnelID,
+		"reason":    "empty message",
+	}).Error("Invalid message")
+	return ErrInvalidMessage
+}
+
 // Send wraps an I2NP message (as bytes) in tunnel format and encrypts it.
 //
 // Parameters:
@@ -102,42 +123,25 @@ func (g *Gateway) Send(msgBytes []byte) ([]byte, error) {
 		"msg_size":  len(msgBytes),
 	}).Debug("Sending message through tunnel gateway")
 
-	if len(msgBytes) == 0 {
-		log.WithFields(logger.Fields{
-			"at":        "Gateway.Send",
-			"tunnel_id": g.tunnelID,
-			"reason":    "empty message",
-		}).Error("Invalid message")
-		return nil, ErrInvalidMessage
+	if err := g.validateSendMessage(msgBytes); err != nil {
+		return nil, err
 	}
 
-	// Create simple delivery instructions for local delivery (type DTLocal)
 	deliveryInstructions, err := g.createDeliveryInstructions(msgBytes)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "Gateway.Send",
-			"tunnel_id": g.tunnelID,
-		}).WithError(err).Error("Failed to create delivery instructions")
+		g.logSendError("Failed to create delivery instructions", err)
 		return nil, err
 	}
 
-	// Build the tunnel message
 	tunnelMsg, err := g.buildTunnelMessage(deliveryInstructions, msgBytes)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "Gateway.Send",
-			"tunnel_id": g.tunnelID,
-		}).WithError(err).Error("Failed to build tunnel message")
+		g.logSendError("Failed to build tunnel message", err)
 		return nil, err
 	}
 
-	// Encrypt the tunnel message
 	encrypted, err := g.encryptTunnelMessage(tunnelMsg)
 	if err != nil {
-		log.WithFields(logger.Fields{
-			"at":        "Gateway.Send",
-			"tunnel_id": g.tunnelID,
-		}).WithError(err).Error("Failed to encrypt tunnel message")
+		g.logSendError("Failed to encrypt tunnel message", err)
 		return nil, err
 	}
 

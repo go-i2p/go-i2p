@@ -166,6 +166,42 @@ func (msg *TunnelBuildMessage) MarshalBinary() ([]byte, error) {
 //   - 528-byte encrypted record
 //   - Local router's decryption private key
 //   - Returns decrypted BuildRequestRecord
+
+// validateTunnelBuildDataSize checks if the data size matches expected 8*528 bytes.
+func validateTunnelBuildDataSize(recordData []byte) error {
+	expected := 8 * 528
+	if len(recordData) == expected {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":            "UnmarshalBinary",
+		"expected_size": expected,
+		"actual_size":   len(recordData),
+	}).Error("Invalid TunnelBuild data size")
+	return oops.Errorf("invalid TunnelBuild data size: expected %d bytes, got %d", expected, len(recordData))
+}
+
+// parseBuildRequestRecords parses cleartext BuildRequestRecords from record data.
+func parseBuildRequestRecords(recordData []byte) ([8]BuildRequestRecord, error) {
+	var records [8]BuildRequestRecord
+	log.WithFields(logger.Fields{
+		"at": "UnmarshalBinary",
+	}).Debug("Parsing build request records (cleartext)")
+
+	for i := 0; i < 8; i++ {
+		record, err := ReadBuildRequestRecord(recordData[i*528 : (i+1)*528])
+		if err != nil {
+			log.WithError(err).WithFields(logger.Fields{
+				"at":           "UnmarshalBinary",
+				"record_index": i,
+			}).Error("Failed to parse build request record")
+			return records, oops.Wrapf(err, "failed to parse build request record %d", i)
+		}
+		records[i] = record
+	}
+	return records, nil
+}
+
 func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	log.WithFields(logger.Fields{
 		"at":        "UnmarshalBinary",
@@ -178,32 +214,15 @@ func (msg *TunnelBuildMessage) UnmarshalBinary(data []byte) error {
 	}
 
 	recordData := msg.GetData()
-	if len(recordData) != 8*528 {
-		log.WithFields(logger.Fields{
-			"at":            "UnmarshalBinary",
-			"expected_size": 8 * 528,
-			"actual_size":   len(recordData),
-		}).Error("Invalid TunnelBuild data size")
-		return oops.Errorf("invalid TunnelBuild data size: expected %d bytes, got %d", 8*528, len(recordData))
+	if err := validateTunnelBuildDataSize(recordData); err != nil {
+		return err
 	}
 
-	log.WithFields(logger.Fields{
-		"at": "UnmarshalBinary",
-	}).Debug("Parsing build request records (cleartext)")
-
-	// Parse each 528-byte chunk as cleartext BuildRequestRecord
-	// WARNING: Does NOT handle encrypted records (non-compliant with I2P spec for network messages)
-	for i := 0; i < 8; i++ {
-		record, err := ReadBuildRequestRecord(recordData[i*528 : (i+1)*528])
-		if err != nil {
-			log.WithError(err).WithFields(logger.Fields{
-				"at":           "UnmarshalBinary",
-				"record_index": i,
-			}).Error("Failed to parse build request record")
-			return oops.Wrapf(err, "failed to parse build request record %d", i)
-		}
-		msg.Records[i] = record
+	records, err := parseBuildRequestRecords(recordData)
+	if err != nil {
+		return err
 	}
+	msg.Records = records
 
 	log.WithFields(logger.Fields{
 		"at":           "UnmarshalBinary",

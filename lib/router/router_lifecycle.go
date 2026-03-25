@@ -26,41 +26,18 @@ func logSubsystemStop(method, subsystem string) {
 	}).Debug(subsystem + " stopped")
 }
 
-// Stop initiates router shutdown and waits for all goroutines to complete.
-// This method blocks until the router is fully stopped.
-func (r *Router) Stop() {
+// logShutdownStep logs a shutdown step with standard fields.
+func logShutdownStep(step int, reason, message string) {
 	log.WithFields(logger.Fields{
 		"at":     "(Router) Stop",
 		"phase":  "shutdown",
-		"step":   1,
-		"reason": "shutdown requested",
-	}).Debug("stopping router")
-	r.runMux.Lock()
+		"step":   step,
+		"reason": reason,
+	}).Debug(message)
+}
 
-	if !r.running {
-		r.runMux.Unlock()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) Stop",
-			"phase":  "shutdown",
-			"reason": "router not running",
-		}).Debug("router already stopped")
-		return
-	}
-
-	r.running = false
-	r.runMux.Unlock()
-
-	// Cancel router context to signal shutdown to all goroutines
-	if r.cancel != nil {
-		r.cancel()
-		log.WithFields(logger.Fields{
-			"at":     "(Router) Stop",
-			"phase":  "shutdown",
-			"step":   2,
-			"reason": "context canceled to signal subsystems",
-		}).Debug("router context cancelled")
-	}
-
+// stopAllSubsystems shuts down all router subsystems in the correct order.
+func (r *Router) stopAllSubsystems() {
 	r.stopTunnelManager()
 	r.stopBandwidthTracker()
 	r.stopCongestionMonitor()
@@ -73,21 +50,49 @@ func (r *Router) Stop() {
 	r.stopGarlicRouter()
 	r.stopNetDB()
 	r.sendCloseSignal()
+}
 
-	// Wait for all goroutines to finish before returning
-	log.WithFields(logger.Fields{
-		"at":     "(Router) Stop",
-		"phase":  "shutdown",
-		"step":   3,
-		"reason": "waiting for goroutines to complete",
-	}).Debug("waiting for router goroutines to finish")
+// checkAlreadyStopped returns true if router is not running.
+func (r *Router) checkAlreadyStopped() bool {
+	if !r.running {
+		r.runMux.Unlock()
+		log.WithFields(logger.Fields{
+			"at":     "(Router) Stop",
+			"phase":  "shutdown",
+			"reason": "router not running",
+		}).Debug("router already stopped")
+		return true
+	}
+	return false
+}
+
+// cancelRouterContext cancels the router context to signal shutdown.
+func (r *Router) cancelRouterContext() {
+	if r.cancel != nil {
+		r.cancel()
+		logShutdownStep(2, "context canceled to signal subsystems", "router context cancelled")
+	}
+}
+
+// Stop initiates router shutdown and waits for all goroutines to complete.
+// This method blocks until the router is fully stopped.
+func (r *Router) Stop() {
+	logShutdownStep(1, "shutdown requested", "stopping router")
+	r.runMux.Lock()
+
+	if r.checkAlreadyStopped() {
+		return
+	}
+
+	r.running = false
+	r.runMux.Unlock()
+
+	r.cancelRouterContext()
+	r.stopAllSubsystems()
+
+	logShutdownStep(3, "waiting for goroutines to complete", "waiting for router goroutines to finish")
 	r.wg.Wait()
-	log.WithFields(logger.Fields{
-		"at":     "(Router) Stop",
-		"phase":  "shutdown",
-		"step":   4,
-		"reason": "all subsystems stopped",
-	}).Debug("router stopped successfully")
+	logShutdownStep(4, "all subsystems stopped", "router stopped successfully")
 }
 
 // stopNetDB shuts down the network database if it exists and logs the result.

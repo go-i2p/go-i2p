@@ -300,16 +300,38 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 		"reason": "encrypted_lookup_requested",
 	}).Debug("resolving encrypted destination")
 
-	// Step 1: Derive blinded public key for today
-	blindedDest, err := encrypted_leaseset.CreateBlindedDestination(dest, secret, time.Now())
+	lookupHash, err := dr.deriveBlindedLookupHash(dest, secret)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to derive blinded destination: %w", err)
+		return [32]byte{}, err
 	}
 
-	// Step 2: Hash blinded public key to get NetDB lookup key
+	els, err := dr.fetchEncryptedLeaseSet(lookupHash)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	innerLS2, err := dr.decryptEncryptedLeaseSet(dest, els)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	destHash, err := dest.Hash()
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to hash destination: %w", err)
+	}
+	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
+}
+
+// deriveBlindedLookupHash computes the NetDB lookup hash from a blinded destination.
+func (dr *DestinationResolver) deriveBlindedLookupHash(dest destination.Destination, secret []byte) (common.Hash, error) {
+	blindedDest, err := encrypted_leaseset.CreateBlindedDestination(dest, secret, time.Now())
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to derive blinded destination: %w", err)
+	}
+
 	blindedSigningKey, err := blindedDest.SigningPublicKey()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to get blinded signing key: %w", err)
+		return common.Hash{}, fmt.Errorf("failed to get blinded signing key: %w", err)
 	}
 	lookupHash := common.HashData(blindedSigningKey.Bytes())
 
@@ -318,39 +340,39 @@ func (dr *DestinationResolver) ResolveEncryptedDestination(dest destination.Dest
 		"lookup_hash": fmt.Sprintf("%x...", lookupHash[:8]),
 	}).Debug("looking up EncryptedLeaseSet")
 
-	// Step 3: Retrieve EncryptedLeaseSet from NetDB
+	return lookupHash, nil
+}
+
+// fetchEncryptedLeaseSet retrieves and parses an EncryptedLeaseSet from the NetDB.
+func (dr *DestinationResolver) fetchEncryptedLeaseSet(lookupHash common.Hash) (*encrypted_leaseset.EncryptedLeaseSet, error) {
 	elsBytes, err := dr.netdb.GetEncryptedLeaseSetBytes(lookupHash)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
+		return nil, fmt.Errorf("EncryptedLeaseSet not found for blinded hash %x: %w", lookupHash[:8], err)
 	}
 
 	els, _, err := encrypted_leaseset.ReadEncryptedLeaseSet(elsBytes)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
+		return nil, fmt.Errorf("failed to parse EncryptedLeaseSet: %w", err)
 	}
+	return &els, nil
+}
 
-	// Step 4: Derive subcredential from original signing key + blinded key
+// decryptEncryptedLeaseSet decrypts the inner LeaseSet2 from an EncryptedLeaseSet.
+func (dr *DestinationResolver) decryptEncryptedLeaseSet(dest destination.Destination, els *encrypted_leaseset.EncryptedLeaseSet) (*lease_set2.LeaseSet2, error) {
 	origSigningKey, err := dest.SigningPublicKey()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to get original signing key: %w", err)
+		return nil, fmt.Errorf("failed to get original signing key: %w", err)
 	}
 	subcredential := encrypted_leaseset.DeriveSubcredential(
 		origSigningKey.Bytes(),
 		els.BlindedPublicKey(),
 	)
 
-	// Step 5: Decrypt the inner LeaseSet2
 	innerLS2, err := els.DecryptInnerData(subcredential)
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
+		return nil, fmt.Errorf("failed to decrypt EncryptedLeaseSet inner data: %w", err)
 	}
-
-	// Step 6: Extract X25519 encryption key from inner LeaseSet2
-	destHash, err := dest.Hash()
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to hash destination: %w", err)
-	}
-	return dr.findX25519KeyInLeaseSet2(*innerLS2, destHash)
+	return innerLS2, nil
 }
 
 // maxMetaRecursionDepth limits how deep nested MetaLeaseSet resolution can go,

@@ -579,55 +579,100 @@ func validateNetDB(netdb NetDBDefaults) error {
 
 // validateBootstrap validates bootstrap configuration settings.
 func validateBootstrap(bootstrap BootstrapDefaults) error {
+	logValidationStart("validateBootstrapConfig", "validating_bootstrap_settings")
+
+	if err := validateLowPeerThreshold(bootstrap.LowPeerThreshold); err != nil {
+		return err
+	}
+
+	if err := validateMinimumReseedPeers(bootstrap.MinimumReseedPeers); err != nil {
+		return err
+	}
+
+	if err := validateBootstrapType(bootstrap.BootstrapType); err != nil {
+		return err
+	}
+
+	if err := validateReseedStrategyIfSet(bootstrap.ReseedStrategy); err != nil {
+		return err
+	}
+
+	logValidationSuccess("validateBootstrapConfig", "bootstrap configuration validated successfully")
+	return nil
+}
+
+// logValidationStart logs the start of a validation phase.
+func logValidationStart(at, reason string) {
 	log.WithFields(logger.Fields{
-		"at":     "validateBootstrapConfig",
-		"reason": "validating_bootstrap_settings",
+		"at":     at,
+		"reason": reason,
 		"phase":  "startup",
-	}).Debug("validating bootstrap configuration")
-	if bootstrap.LowPeerThreshold < 1 {
+	}).Debug("starting validation")
+}
+
+// logValidationSuccess logs successful validation completion.
+func logValidationSuccess(at, message string) {
+	log.WithFields(logger.Fields{
+		"at":     at,
+		"reason": "validation_passed",
+		"phase":  "startup",
+	}).Debug(message)
+}
+
+// validateLowPeerThreshold validates the LowPeerThreshold setting.
+func validateLowPeerThreshold(threshold int) error {
+	if threshold < 1 {
 		log.WithFields(logger.Fields{
 			"at":                 "validateBootstrapConfig",
 			"reason":             "low_peer_threshold_too_low",
-			"low_peer_threshold": bootstrap.LowPeerThreshold,
+			"low_peer_threshold": threshold,
 			"minimum_required":   1,
 		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.LowPeerThreshold must be at least 1")
 	}
-	if bootstrap.MinimumReseedPeers < 1 {
+	return nil
+}
+
+// validateMinimumReseedPeers validates the MinimumReseedPeers setting.
+func validateMinimumReseedPeers(peers int) error {
+	if peers < 1 {
 		log.WithFields(logger.Fields{
 			"at":                   "validateBootstrapConfig",
 			"reason":               "minimum_reseed_peers_too_low",
-			"minimum_reseed_peers": bootstrap.MinimumReseedPeers,
+			"minimum_reseed_peers": peers,
 			"minimum_required":     1,
 		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.MinimumReseedPeers must be at least 1")
 	}
-	// Validate BootstrapType is a known value
+	return nil
+}
+
+// validateBootstrapType validates the BootstrapType setting.
+func validateBootstrapType(bootstrapType string) error {
 	validBootstrapTypes := map[string]bool{
 		"auto": true, "file": true, "reseed": true, "local": true,
 	}
-	if !validBootstrapTypes[bootstrap.BootstrapType] {
+	if !validBootstrapTypes[bootstrapType] {
 		log.WithFields(logger.Fields{
 			"at":             "validateBootstrapConfig",
 			"reason":         "invalid_bootstrap_type",
-			"bootstrap_type": bootstrap.BootstrapType,
+			"bootstrap_type": bootstrapType,
 		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.BootstrapType must be one of: auto, file, reseed, local")
 	}
-	// Validate ReseedStrategy if set (may be empty in BootstrapDefaults)
-	if bootstrap.ReseedStrategy != "" && !IsValidReseedStrategy(bootstrap.ReseedStrategy) {
+	return nil
+}
+
+// validateReseedStrategyIfSet validates the ReseedStrategy if it's specified.
+func validateReseedStrategyIfSet(strategy string) error {
+	if strategy != "" && !IsValidReseedStrategy(strategy) {
 		log.WithFields(logger.Fields{
 			"at":              "validateBootstrapConfig",
 			"reason":          "invalid_reseed_strategy",
-			"reseed_strategy": bootstrap.ReseedStrategy,
+			"reseed_strategy": strategy,
 		}).Error("invalid bootstrap configuration")
 		return newValidationError("Bootstrap.ReseedStrategy must be one of: union, intersection, random")
 	}
-	log.WithFields(logger.Fields{
-		"at":     "validateBootstrapConfig",
-		"reason": "validation_passed",
-		"phase":  "startup",
-	}).Debug("bootstrap configuration validated successfully")
 	return nil
 }
 

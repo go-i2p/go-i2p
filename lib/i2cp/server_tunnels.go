@@ -33,66 +33,92 @@ func applyLengthVariance(baseLength, variance int) int {
 // and SetPeerSelector. If either is missing, pools are not initialized and an error
 // is returned (but session creation can still proceed).
 func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionConfig) error {
+	builder, selector, err := s.getTunnelInfrastructure()
+	if err != nil {
+		return err
+	}
+
+	inboundPool, err := s.createInboundPool(session, config, builder, selector)
+	if err != nil {
+		return err
+	}
+
+	if err := s.createOutboundPool(session, config, builder, selector, inboundPool); err != nil {
+		return err
+	}
+
+	s.logPoolsInitialized(session, config)
+	return nil
+}
+
+// getTunnelInfrastructure retrieves the tunnel builder and peer selector.
+func (s *Server) getTunnelInfrastructure() (tunnel.BuilderInterface, tunnel.PeerSelector, error) {
 	s.mu.RLock()
 	builder := s.tunnelBuilder
 	selector := s.peerSelector
 	s.mu.RUnlock()
 
-	// Check if tunnel infrastructure is available
 	if builder == nil || selector == nil {
-		return fmt.Errorf("tunnel infrastructure not configured (builder=%v, selector=%v)",
+		return nil, nil, fmt.Errorf("tunnel infrastructure not configured (builder=%v, selector=%v)",
 			builder != nil, selector != nil)
 	}
+	return builder, selector, nil
+}
 
-	// Create inbound tunnel pool
-	inboundBackup := backupQuantityOrDefault(config.InboundBackupQuantity)
-	inboundConfig := tunnel.PoolConfig{
-		MinTunnels:       config.InboundTunnelCount,
-		MaxTunnels:       config.InboundTunnelCount + inboundBackup,
-		TunnelLifetime:   10 * time.Minute,
-		RebuildThreshold: 2 * time.Minute,
-		BuildRetryDelay:  2 * time.Second,
-		MaxBuildRetries:  3,
-		HopCount:         applyLengthVariance(config.InboundTunnelLength, config.InboundLengthVariance),
-		IsInbound:        true,
+// createInboundPool creates and starts the inbound tunnel pool.
+func (s *Server) createInboundPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector) (*tunnel.Pool, error) {
+	backup := backupQuantityOrDefault(config.InboundBackupQuantity)
+	poolConfig := buildPoolConfig(config.InboundTunnelCount, backup, config.InboundTunnelLength, config.InboundLengthVariance, true)
+
+	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
+	pool.SetTunnelBuilder(builder)
+	session.SetInboundPool(pool)
+
+	if err := pool.StartMaintenance(); err != nil {
+		return nil, fmt.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
 	}
-	inboundPool := tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
-	inboundPool.SetTunnelBuilder(builder)
-	session.SetInboundPool(inboundPool)
+	return pool, nil
+}
 
-	// Start inbound pool maintenance to begin building tunnels
-	if err := inboundPool.StartMaintenance(); err != nil {
-		return fmt.Errorf("failed to start inbound tunnel pool maintenance: %w", err)
-	}
+// createOutboundPool creates and starts the outbound tunnel pool.
+func (s *Server) createOutboundPool(session *Session, config *SessionConfig, builder tunnel.BuilderInterface, selector tunnel.PeerSelector, inboundPool *tunnel.Pool) error {
+	backup := backupQuantityOrDefault(config.OutboundBackupQuantity)
+	poolConfig := buildPoolConfig(config.OutboundTunnelCount, backup, config.OutboundTunnelLength, config.OutboundLengthVariance, false)
 
-	// Create outbound tunnel pool
-	outboundBackup := backupQuantityOrDefault(config.OutboundBackupQuantity)
-	outboundConfig := tunnel.PoolConfig{
-		MinTunnels:       config.OutboundTunnelCount,
-		MaxTunnels:       config.OutboundTunnelCount + outboundBackup,
-		TunnelLifetime:   10 * time.Minute,
-		RebuildThreshold: 2 * time.Minute,
-		BuildRetryDelay:  2 * time.Second,
-		MaxBuildRetries:  3,
-		HopCount:         applyLengthVariance(config.OutboundTunnelLength, config.OutboundLengthVariance),
-		IsInbound:        false,
-	}
-	outboundPool := tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
-	outboundPool.SetTunnelBuilder(builder)
-	session.SetOutboundPool(outboundPool)
+	pool := tunnel.NewTunnelPoolWithConfig(selector, poolConfig)
+	pool.SetTunnelBuilder(builder)
+	session.SetOutboundPool(pool)
 
-	// Start outbound pool maintenance to begin building tunnels
-	if err := outboundPool.StartMaintenance(); err != nil {
-		// Stop the already-started inbound pool before returning
+	if err := pool.StartMaintenance(); err != nil {
 		inboundPool.Stop()
 		return fmt.Errorf("failed to start outbound tunnel pool maintenance: %w", err)
 	}
+	return nil
+}
 
+// buildPoolConfig constructs a tunnel pool configuration with standard timeouts.
+func buildPoolConfig(tunnelCount, backupQty, tunnelLength, lengthVariance int, isInbound bool) tunnel.PoolConfig {
+	return tunnel.PoolConfig{
+		MinTunnels:       tunnelCount,
+		MaxTunnels:       tunnelCount + backupQty,
+		TunnelLifetime:   10 * time.Minute,
+		RebuildThreshold: 2 * time.Minute,
+		BuildRetryDelay:  2 * time.Second,
+		MaxBuildRetries:  3,
+		HopCount:         applyLengthVariance(tunnelLength, lengthVariance),
+		IsInbound:        isInbound,
+	}
+}
+
+// logPoolsInitialized logs tunnel pool initialization details.
+func (s *Server) logPoolsInitialized(session *Session, config *SessionConfig) {
+	inboundBackup := backupQuantityOrDefault(config.InboundBackupQuantity)
+	outboundBackup := backupQuantityOrDefault(config.OutboundBackupQuantity)
 	log.WithFields(logger.Fields{
 		"at":                       "i2cp.Server.initializeSessionTunnelPools",
 		"sessionID":                session.ID(),
-		"inbound_hop_count":        inboundConfig.HopCount,
-		"outbound_hop_count":       outboundConfig.HopCount,
+		"inbound_hop_count":        applyLengthVariance(config.InboundTunnelLength, config.InboundLengthVariance),
+		"outbound_hop_count":       applyLengthVariance(config.OutboundTunnelLength, config.OutboundLengthVariance),
 		"inbound_tunnel_count":     config.InboundTunnelCount,
 		"outbound_tunnel_count":    config.OutboundTunnelCount,
 		"inbound_backup_quantity":  inboundBackup,
@@ -100,8 +126,6 @@ func (s *Server) initializeSessionTunnelPools(session *Session, config *SessionC
 		"inbound_length_variance":  config.InboundLengthVariance,
 		"outbound_length_variance": config.OutboundLengthVariance,
 	}).Info("tunnel_pools_initialized")
-
-	return nil
 }
 
 // rebuildSessionTunnelPools stops existing tunnel pools and creates new ones

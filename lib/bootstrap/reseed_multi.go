@@ -26,6 +26,58 @@ type ReseedResult struct {
 	Duration time.Duration
 }
 
+// logMultiServerReseedStart logs the start of a multi-server reseed operation.
+func logMultiServerReseedStart(minServers, totalServers int, strategy string) {
+	log.WithFields(logger.Fields{
+		"at":            "(ReseedBootstrap) MultiServerReseed",
+		"phase":         "bootstrap",
+		"reason":        "starting multi-server reseed",
+		"min_servers":   minServers,
+		"total_servers": totalServers,
+		"strategy":      strategy,
+	}).Info("starting multi-server reseed operation")
+}
+
+// validateReseedResults checks if enough servers responded and returns an error if not.
+func validateReseedResults(successfulResults, results []ReseedResult, minServers int) error {
+	if len(successfulResults) >= minServers {
+		return nil
+	}
+	log.WithFields(logger.Fields{
+		"at":                 "(ReseedBootstrap) MultiServerReseed",
+		"phase":              "bootstrap",
+		"reason":             "insufficient successful reseed servers",
+		"successful_servers": len(successfulResults),
+		"min_required":       minServers,
+		"total_attempted":    len(results),
+	}).Error("multi-server reseed failed: insufficient servers responded")
+	return oops.Errorf("insufficient reseed servers: got %d, need %d",
+		len(successfulResults), minServers)
+}
+
+// logMultiServerReseedComplete logs successful completion of multi-server reseed.
+func logMultiServerReseedComplete(successfulCount, combinedCount int, strategy string) {
+	log.WithFields(logger.Fields{
+		"at":                 "(ReseedBootstrap) MultiServerReseed",
+		"phase":              "bootstrap",
+		"reason":             "multi-server reseed completed",
+		"successful_servers": successfulCount,
+		"combined_routers":   combinedCount,
+		"strategy":           strategy,
+	}).Info("multi-server reseed completed successfully")
+}
+
+// shuffleRouterInfos randomizes the order of router infos unless random weighted strategy is used.
+func (rb *ReseedBootstrap) shuffleRouterInfos(combined []router_info.RouterInfo) {
+	if rb.config.ReseedStrategy == config.ReseedStrategyRandom {
+		return
+	}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng.Shuffle(len(combined), func(i, j int) {
+		combined[i], combined[j] = combined[j], combined[i]
+	})
+}
+
 // MultiServerReseed fetches RouterInfos from multiple servers concurrently
 // and applies the configured strategy to combine results.
 // It requires at least MinReseedServers successful responses.
@@ -36,57 +88,23 @@ func (rb *ReseedBootstrap) MultiServerReseed(ctx context.Context, n int) ([]rout
 	}
 
 	servers := rb.shuffleServers()
-
-	log.WithFields(logger.Fields{
-		"at":            "(ReseedBootstrap) MultiServerReseed",
-		"phase":         "bootstrap",
-		"reason":        "starting multi-server reseed",
-		"min_servers":   minServers,
-		"total_servers": len(servers),
-		"strategy":      rb.config.ReseedStrategy,
-	}).Info("starting multi-server reseed operation")
+	logMultiServerReseedStart(minServers, len(servers), rb.config.ReseedStrategy)
 
 	results := rb.fetchFromServers(ctx, servers, minServers)
 	successfulResults := filterSuccessful(results)
 
-	if len(successfulResults) < minServers {
-		log.WithFields(logger.Fields{
-			"at":                 "(ReseedBootstrap) MultiServerReseed",
-			"phase":              "bootstrap",
-			"reason":             "insufficient successful reseed servers",
-			"successful_servers": len(successfulResults),
-			"min_required":       minServers,
-			"total_attempted":    len(results),
-		}).Error("multi-server reseed failed: insufficient servers responded")
-		return nil, oops.Errorf("insufficient reseed servers: got %d, need %d",
-			len(successfulResults), minServers)
+	if err := validateReseedResults(successfulResults, results, minServers); err != nil {
+		return nil, err
 	}
 
 	combined := rb.applyStrategy(successfulResults)
+	rb.shuffleRouterInfos(combined)
 
-	// Shuffle results for randomization, unless the random weighted strategy
-	// was used (which already returns a weighted-shuffled order that should be preserved).
-	if rb.config.ReseedStrategy != config.ReseedStrategyRandom {
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		rng.Shuffle(len(combined), func(i, j int) {
-			combined[i], combined[j] = combined[j], combined[i]
-		})
-	}
-
-	// Limit results if requested
 	if n > 0 && len(combined) > n {
 		combined = combined[:n]
 	}
 
-	log.WithFields(logger.Fields{
-		"at":                 "(ReseedBootstrap) MultiServerReseed",
-		"phase":              "bootstrap",
-		"reason":             "multi-server reseed completed",
-		"successful_servers": len(successfulResults),
-		"combined_routers":   len(combined),
-		"strategy":           rb.config.ReseedStrategy,
-	}).Info("multi-server reseed completed successfully")
-
+	logMultiServerReseedComplete(len(successfulResults), len(combined), rb.config.ReseedStrategy)
 	return combined, nil
 }
 
