@@ -394,10 +394,13 @@ func (dks *DestinationKeyStore) RotateKeys(dir, name string) (*destination.Desti
 		return nil, fmt.Errorf("failed to store rotated keys: %w", err)
 	}
 
+	// Log with b32 addresses if available
+	oldB32, _ := oldDest.Base32Address()
+	newB32, _ := newDest.Base32Address()
 	log.WithFields(map[string]interface{}{
 		"at":       "DestinationKeyStore.RotateKeys",
-		"old_dest": oldDest.Base32Address,
-		"new_dest": newDest.Base32Address,
+		"old_dest": oldB32,
+		"new_dest": newB32,
 	}).Info("Key rotation completed successfully")
 
 	return oldDest, nil
