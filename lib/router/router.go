@@ -278,13 +278,7 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 	log.Debug("NTCP2 transport created successfully")
 
 	ntcpaddr := ntcp2Transport.Addr()
-	if ntcpaddr == nil {
-		log.Error("Failed to get NTCP2 address")
-		return nil, errors.New("failed to get NTCP2 address")
-	}
-	log.Debug("NTCP2 address:", ntcpaddr)
-
-	if err := addTransportAddress(ri, ntcpaddr, "NTCP2", func() (*router_address.RouterAddress, error) {
+	if err := validateAndAddTransportAddress(ri, ntcpaddr, "NTCP2", func() (*router_address.RouterAddress, error) {
 		return ntcp.ConvertToRouterAddress(ntcp2Transport)
 	}); err != nil {
 		return nil, err
@@ -316,19 +310,24 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 	log.Debug("SSU2 transport created successfully")
 
 	ssu2addr := ssu2Transport.Addr()
-	if ssu2addr == nil {
-		log.Error("Failed to get SSU2 address")
-		return nil, errors.New("failed to get SSU2 address")
-	}
-	log.Debug("SSU2 address:", ssu2addr)
-
-	if err := addTransportAddress(ri, ssu2addr, "SSU2", func() (*router_address.RouterAddress, error) {
+	if err := validateAndAddTransportAddress(ri, ssu2addr, "SSU2", func() (*router_address.RouterAddress, error) {
 		return ssu2.ConvertToRouterAddress(ssu2Transport)
 	}); err != nil {
 		return nil, err
 	}
 
 	return ssu2Transport, nil
+}
+
+// validateAndAddTransportAddress validates that addr is non-nil, logs it, and calls addTransportAddress.
+// This reduces code duplication between buildNTCP2Transport and buildSSU2Transport.
+func validateAndAddTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string, converter func() (*router_address.RouterAddress, error)) error {
+	if addr == nil {
+		log.Error("Failed to get " + proto + " address")
+		return errors.New("failed to get " + proto + " address")
+	}
+	log.Debug(proto+" address:", addr)
+	return addTransportAddress(ri, addr, proto, converter)
 }
 
 // addTransportAddress converts a transport's address to a RouterAddress via converter
