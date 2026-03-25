@@ -131,8 +131,8 @@ func (t *SSU2Transport) handleRelayResponseBlock(block *ssu2noise.SSU2Block) err
 		t.logger.WithField("error", err).Warn("failed to decode RelayResponse")
 		return nil
 	}
-	if resp.StatusCode != 0 {
-		t.logger.WithField("status", resp.StatusCode).Debug("relay response indicates failure")
+	if resp.Code != 0 {
+		t.logger.WithField("status", resp.Code).Debug("relay response indicates failure")
 		return nil
 	}
 	t.logger.WithField("nonce", resp.Nonce).Debug("relay response success")

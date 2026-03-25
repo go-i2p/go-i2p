@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/keys"
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/transport/ssu2"
 	"github.com/go-i2p/logger"
 )
 
@@ -78,10 +79,18 @@ func (p *routerInfoProvider) collectTransportAddresses() []*router_address.Route
 
 	var addresses []*router_address.RouterAddress
 	for _, t := range p.router.TransportMuxer.GetTransports() {
-		if ntcp2Transport, ok := t.(*ntcp.NTCP2Transport); ok {
-			addr, err := ntcp.ConvertToRouterAddress(ntcp2Transport)
+		switch transport := t.(type) {
+		case *ntcp.NTCP2Transport:
+			addr, err := ntcp.ConvertToRouterAddress(transport)
 			if err != nil {
-				log.WithError(err).Warn("Failed to convert transport to RouterAddress")
+				log.WithError(err).Warn("Failed to convert NTCP2 transport to RouterAddress")
+				continue
+			}
+			addresses = append(addresses, addr)
+		case *ssu2.SSU2Transport:
+			addr, err := ssu2.ConvertToRouterAddress(transport)
+			if err != nil {
+				log.WithError(err).Warn("Failed to convert SSU2 transport to RouterAddress")
 				continue
 			}
 			addresses = append(addresses, addr)

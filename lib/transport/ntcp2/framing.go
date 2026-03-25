@@ -217,32 +217,9 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	}
 
 	// Process blocks, extracting I2NP messages
-	var firstMsg i2np.I2NPMessage
-	for _, block := range blocks {
-		switch block.Type {
-		case BlockTypeI2NP:
-			msg, err := u.parseI2NPBlock(block.Data)
-			if err != nil {
-				log.WithError(err).Warn("Failed to parse I2NP block, skipping")
-				continue
-			}
-			if firstMsg == nil {
-				firstMsg = msg
-			} else {
-				u.bufferedMsgs = append(u.bufferedMsgs, msg)
-			}
-		case BlockTypeTermination:
-			log.Debug("Received termination block")
-			if u.BlockCallback != nil {
-				u.BlockCallback(block)
-			}
-			return nil, io.EOF
-		default:
-			// DateTime, Options, Padding, RouterInfo - pass to callback
-			if u.BlockCallback != nil {
-				u.BlockCallback(block)
-			}
-		}
+	firstMsg, terminated := u.processBlocks(blocks)
+	if terminated {
+		return nil, io.EOF
 	}
 
 	if firstMsg == nil {
@@ -251,6 +228,51 @@ func (u *BlockUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
 	}
 
 	return firstMsg, nil
+}
+
+// processBlocks handles each block type, returning the first I2NP message found
+// and whether a termination block was received. Additional I2NP messages are buffered.
+func (u *BlockUnframer) processBlocks(blocks []Block) (firstMsg i2np.I2NPMessage, terminated bool) {
+	for _, block := range blocks {
+		msg, term := u.processBlock(block)
+		if term {
+			return nil, true
+		}
+		if msg != nil {
+			if firstMsg == nil {
+				firstMsg = msg
+			} else {
+				u.bufferedMsgs = append(u.bufferedMsgs, msg)
+			}
+		}
+	}
+	return firstMsg, false
+}
+
+// processBlock handles a single NTCP2 block by type.
+// Returns an I2NP message if this is an I2NP block, and terminated=true if termination.
+func (u *BlockUnframer) processBlock(block Block) (msg i2np.I2NPMessage, terminated bool) {
+	switch block.Type {
+	case BlockTypeI2NP:
+		parsedMsg, err := u.parseI2NPBlock(block.Data)
+		if err != nil {
+			log.WithError(err).Warn("Failed to parse I2NP block, skipping")
+			return nil, false
+		}
+		return parsedMsg, false
+	case BlockTypeTermination:
+		log.Debug("Received termination block")
+		if u.BlockCallback != nil {
+			u.BlockCallback(block)
+		}
+		return nil, true
+	default:
+		// DateTime, Options, Padding, RouterInfo - pass to callback
+		if u.BlockCallback != nil {
+			u.BlockCallback(block)
+		}
+		return nil, false
+	}
 }
 
 // readFrame reads a single frame from the connection.

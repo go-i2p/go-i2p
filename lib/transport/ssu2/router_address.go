@@ -145,6 +145,33 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 		options[router_address.STATIC_KEY_OPTION_KEY] = encodeBase64(transport.config.SSU2Config.StaticKey)
 	}
 
+	// Add introducer information if available (for NAT-firewalled peers)
+	introducers := transport.GetIntroducers()
+	for i, intro := range introducers {
+		if intro == nil {
+			continue
+		}
+		// Per I2P spec, introducer options are formatted as: ihN, itagN, iexpN
+		// where N is the introducer index (0, 1, 2)
+		prefix := fmt.Sprintf("%d", i)
+
+		// Introducer router hash (ih0, ih1, ih2)
+		if len(intro.RouterHash) > 0 {
+			options[router_address.INTRODUCER_HASH_PREFIX+prefix] = encodeBase64(intro.RouterHash)
+		}
+
+		// Introducer relay tag (itag0, itag1, itag2)
+		if intro.RelayTag != 0 {
+			options[router_address.INTRODUCER_TAG_PREFIX+prefix] = fmt.Sprintf("%d", intro.RelayTag)
+		}
+
+		// Introducer expiration (iexp0, iexp1, iexp2) - 4 hours from AddedAt
+		if !intro.AddedAt.IsZero() {
+			expTime := intro.AddedAt.Add(4 * time.Hour).Unix()
+			options[router_address.INTRODUCER_EXPIRATION_PREFIX+prefix] = fmt.Sprintf("%d", expTime)
+		}
+	}
+
 	ra, err := router_address.NewRouterAddress(0, time.Time{}, "SSU2", options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RouterAddress: %w", err)

@@ -49,3 +49,55 @@ func TestDestinationKeyPersistenceFormat_DKSMagic(t *testing.T) {
 		t.Errorf("destination key file does not start with DKS\\x02 magic; got %q", data[:min(4, len(data))])
 	}
 }
+
+// TestRotateDestinationKeys_ArchivesOldKeys verifies that key rotation:
+// 1. Archives the old keys to a timestamped file
+// 2. Creates new keys with a different destination hash
+// 3. Persists the new keys
+func TestRotateDestinationKeys_ArchivesOldKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "test-dest"
+
+	// Create and store initial keys
+	dks, err := NewDestinationKeyStore()
+	require.NoError(t, err)
+
+	err = dks.StoreKeys(tmpDir, name)
+	require.NoError(t, err)
+
+	oldDest := dks.Destination()
+	oldHash, err := oldDest.Hash()
+	require.NoError(t, err)
+
+	// Rotate keys
+	newDKS, err := dks.RotateDestinationKeys(tmpDir, name)
+	require.NoError(t, err)
+	require.NotNil(t, newDKS)
+
+	// Verify new destination has different hash
+	newDest := newDKS.Destination()
+	newHash, err := newDest.Hash()
+	require.NoError(t, err)
+	assert.NotEqual(t, oldHash, newHash, "rotated keys should produce different destination hash")
+
+	// Verify archive file was created
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+
+	archiveFound := false
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".archive" {
+			archiveFound = true
+			break
+		}
+	}
+	assert.True(t, archiveFound, "archive file should exist after rotation")
+
+	// Verify the main key file was updated (contains the new keys)
+	loadedDKS, err := LoadDestinationKeyStore(tmpDir, name)
+	require.NoError(t, err)
+
+	loadedHash, err := loadedDKS.Destination().Hash()
+	require.NoError(t, err)
+	assert.Equal(t, newHash, loadedHash, "loaded keys should match rotated keys")
+}

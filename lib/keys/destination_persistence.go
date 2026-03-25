@@ -368,3 +368,46 @@ func (dks *DestinationKeyStore) archiveCurrentKeys(dir, name string) error {
 
 	return nil
 }
+
+// RotateDestinationKeys generates new destination keys, archives the old keys,
+// and persists the new keys. The new keys will produce a different .b32.i2p
+// address, which is expected behavior for key rotation (forward secrecy).
+//
+// Important: After rotation, the old destination address becomes invalid.
+// Any services or clients using the old address must be updated.
+//
+// The old keys are archived to a timestamped file in the same directory,
+// allowing recovery of old keys if needed for decrypting previous messages.
+//
+// Returns the new DestinationKeyStore with freshly generated keys.
+func (dks *DestinationKeyStore) RotateDestinationKeys(dir, name string) (*DestinationKeyStore, error) {
+	log.WithFields(map[string]interface{}{
+		"at":   "RotateDestinationKeys",
+		"dir":  dir,
+		"name": name,
+	}).Info("Rotating destination keys")
+
+	// Archive the current keys before rotation
+	if err := dks.archiveCurrentKeys(dir, name); err != nil {
+		return nil, fmt.Errorf("failed to archive current keys: %w", err)
+	}
+
+	// Generate new keys
+	newDKS, err := NewDestinationKeyStore()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new destination keys: %w", err)
+	}
+
+	// Persist the new keys (overwrites the current key file)
+	if err := newDKS.StoreKeys(dir, name); err != nil {
+		return nil, fmt.Errorf("failed to store new destination keys: %w", err)
+	}
+
+	log.WithFields(map[string]interface{}{
+		"at":   "RotateDestinationKeys",
+		"dir":  dir,
+		"name": name,
+	}).Info("Successfully rotated destination keys")
+
+	return newDKS, nil
+}
