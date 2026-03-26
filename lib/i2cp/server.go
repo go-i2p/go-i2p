@@ -11,6 +11,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/go-i2p/lib/naming"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
 )
@@ -169,6 +170,23 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Initialize default hostname resolver using embedded hosts.txt.
+	// This provides out-of-box hostname resolution for common .i2p addresses.
+	// Callers can override via SetHostnameResolver() if a different resolver is needed.
+	var hostnameResolver HostnameResolver
+	if resolver, err := naming.NewHostsTxtResolver(); err == nil {
+		hostnameResolver = resolver
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.NewServer",
+			"hosts": resolver.Size(),
+		}).Debug("default_hostname_resolver_initialized")
+	} else {
+		log.WithFields(logger.Fields{
+			"at":    "i2cp.NewServer",
+			"error": err.Error(),
+		}).Warn("failed_to_initialize_default_hostname_resolver")
+	}
+
 	return &Server{
 		config:            config,
 		manager:           NewSessionManager(),
@@ -176,6 +194,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		connWriteMu:       make(map[uint16]*sync.Mutex),
 		connStates:        make(map[net.Conn]*connectionState),
 		leaseSetPublisher: config.LeaseSetPublisher,
+		hostnameResolver:  hostnameResolver,
 		ctx:               ctx,
 		cancel:            cancel,
 	}, nil

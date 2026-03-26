@@ -13,4 +13,12 @@
 //   - Session: Manages client sessions and tunnel pools
 //   - MessageRouter: Routes messages through tunnel system
 //   - Publisher: Publishes LeaseSets to NetDB
+//
+// # Known Limitations
+//
+// Message Reliability: The i2cp.messageReliability option is parsed and stored
+// but all reliability modes (BestEffort, Guaranteed, None) are currently treated
+// as BestEffort. Guaranteed delivery acknowledgment tracking is not implemented.
+// Applications requiring guaranteed delivery must implement their own acknowledgment
+// layer (e.g., via the go-streaming library).
 package i2cp

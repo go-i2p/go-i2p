@@ -781,7 +781,8 @@ func BenchmarkHandleCreateLeaseSetWithoutPublisher(b *testing.B) {
 func TestHandleHostnameLookup_NoResolver(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
 	require.NoError(t, err)
-	// No hostname resolver set
+	// Explicitly set nil resolver to test the no-resolver case
+	server.SetHostnameResolver(nil)
 
 	lookupMsg := &HostLookupPayload{
 		RequestID:  42,
@@ -866,11 +867,14 @@ func TestHandleHostnameLookup_WithResolver_Error(t *testing.T) {
 func TestSetHostnameResolver(t *testing.T) {
 	server, err := NewServer(DefaultServerConfig())
 	require.NoError(t, err)
-	assert.Nil(t, server.hostnameResolver)
+	// NewServer now initializes a default hostname resolver
+	assert.NotNil(t, server.hostnameResolver)
 
+	// Verify that SetHostnameResolver can override the default
 	resolver := &mockHostnameResolver{}
 	server.SetHostnameResolver(resolver)
 	assert.NotNil(t, server.hostnameResolver)
+	assert.Equal(t, resolver, server.hostnameResolver)
 }
 
 // TestBuildMessageStatusResponse verifies MessageStatus message construction.

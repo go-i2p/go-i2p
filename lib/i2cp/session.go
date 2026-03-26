@@ -112,6 +112,13 @@ type SessionConfig struct {
 
 	// Message delivery semantics (per I2CP spec)
 	// Supported values: "BestEffort" (default), "Guaranteed", "None"
+	//
+	// NOTE: Currently all modes are treated as BestEffort. Guaranteed mode
+	// acknowledgment tracking is not implemented. This field is parsed and
+	// stored to support future delivery confirmation features and to allow
+	// clients to configure their preferred semantics. Applications requiring
+	// guaranteed delivery must implement their own acknowledgment layer
+	// (e.g., via the streaming library).
 	MessageReliability string // Message reliability mode (default: "BestEffort")
 
 	// LeaseSet configuration
