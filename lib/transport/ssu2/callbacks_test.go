@@ -12,7 +12,7 @@ func TestBlockCallbackConfig_ToDataHandlerCallbacks(t *testing.T) {
 	terminationCalled := false
 	routerInfoCalled := false
 	config := &BlockCallbackConfig{
-		OnTermination: func(_ uint32, reason uint8, _ []byte) {
+		OnTermination: func(_ uint64, reason uint8, _ []byte) {
 			terminationCalled = true
 			assert.Equal(t, uint8(1), reason)
 		},
@@ -36,7 +36,7 @@ func TestBlockCallbackConfig_ToDataHandlerCallbacks(t *testing.T) {
 
 func TestBlockCallbackConfig_AllCallbacks(t *testing.T) {
 	config := &BlockCallbackConfig{
-		OnTermination:   func(uint32, uint8, []byte) {},
+		OnTermination:   func(uint64, uint8, []byte) {},
 		OnRouterInfo:    func([]byte) error { return nil },
 		OnACK:           func(*ssu2noise.SSU2Block) error { return nil },
 		OnDateTime:      func(uint32) error { return nil },

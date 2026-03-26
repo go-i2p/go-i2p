@@ -89,9 +89,13 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	clientAddr := clientPC.LocalAddr().(*net.UDPAddr)
 
 	// Server config (responder) — no RemoteRouterHash needed for responders.
+	// Use permissive RouterInfo validator for tests (no real RouterInfo exchanged).
 	serverCfg, err := ssu2noise.NewSSU2Config(serverHash, false)
 	require.NoError(t, err)
-	serverCfg = serverCfg.WithStaticKey(serverPriv)
+	serverCfg = serverCfg.WithStaticKey(serverPriv).WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
+		// In tests, skip RouterInfo validation since we don't exchange real RouterInfo.
+		return nil
+	})
 
 	// Client config (initiator) — must know server's public key for XK.
 	// config.Validate() requires RemoteRouterHash to be set for initiators.

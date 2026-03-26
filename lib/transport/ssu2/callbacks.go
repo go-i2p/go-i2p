@@ -11,7 +11,7 @@ type BlockCallbackConfig struct {
 	// OnTermination is called when a peer sends a Termination block (type 6).
 	// validDataReceived is the number of valid data bytes received in this session;
 	// reason is the termination reason code; additionalData carries optional extended data.
-	OnTermination func(validDataReceived uint32, reason uint8, additionalData []byte)
+	OnTermination func(validDataReceived uint64, reason uint8, additionalData []byte)
 
 	// OnRouterInfo is called when a RouterInfo block (type 2) is received.
 	// The data should be forwarded to the NetDB subsystem.
@@ -69,7 +69,7 @@ func (c *BlockCallbackConfig) ToDataHandlerCallbacks() ssu2noise.DataHandlerCall
 // for block types that need real handling.
 func DefaultBlockCallbacks() *BlockCallbackConfig {
 	return &BlockCallbackConfig{
-		OnTermination: func(_ uint32, reason uint8, _ []byte) {
+		OnTermination: func(_ uint64, reason uint8, _ []byte) {
 			log.WithField("reason", reason).Info("Received SSU2 termination block")
 		},
 		OnRouterInfo: func(_ []byte) error {

@@ -98,9 +98,10 @@ func TestTunnelManager_FindMatchingBuildingTunnel(t *testing.T) {
 	peerSelector := &SimpleMockPeerSelector{}
 	tm := NewTunnelManager(peerSelector)
 
-	// Test finding matching tunnel (should return nil with current implementation)
+	// Test finding matching tunnel with no pending builds - should return nil
+	// Correlation is implemented via pendingBuilds map in trackPendingBuild/findMatchingBuildingTunnel
 	matchingTunnel := tm.findMatchingBuildingTunnel(3)
-	assert.Nil(t, matchingTunnel, "Current implementation should return nil (TODO: proper correlation)")
+	assert.Nil(t, matchingTunnel, "Should return nil when no pending build exists for message ID")
 }
 
 // TestTunnelManager_CleanupFailedTunnel tests failed tunnel cleanup
