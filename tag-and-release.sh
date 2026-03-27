@@ -114,8 +114,11 @@ tagandrelease() {
   FIRST_LINE=$(head -n 1 RELEASE_NOTES.md)
   if ! echo "$FIRST_LINE" | grep -q "v$VERSION"; then
     REPLACEMENT_LINE="Release notes for: \`$1\` Version \`$VERSION\`"
-    sed -i.bak "1s/.*/$REPLACEMENT_LINE/" RELEASE_NOTES.md
-    rm RELEASE_NOTES.md.bak
+    #sed -i.bak "1s/.*/$REPLACEMENT_LINE/" RELEASE_NOTES.md
+    #rm RELEASE_NOTES.md.bak
+    echo "$REPLACEMENT_LINE" > RELEASE_NOTES.md.tmp
+    tail -n +2 RELEASE_NOTES.md >> RELEASE_NOTES.md.tmp
+    mv RELEASE_NOTES.md.tmp RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
   fi
