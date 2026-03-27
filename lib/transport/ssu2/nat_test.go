@@ -25,6 +25,10 @@ func makeTestListener(t testing.TB) (*ssu2noise.SSU2Listener, func()) {
 	_, err = rand.Read(priv)
 	require.NoError(t, err)
 	cfg = cfg.WithStaticKey(priv)
+	// Add RouterInfoValidator required for responder configs per SSU2 spec
+	cfg.RouterInfoValidator = func(routerInfo, authenticatedStaticKey []byte) error {
+		return nil // Accept any RouterInfo in tests
+	}
 
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	require.NoError(t, err)
