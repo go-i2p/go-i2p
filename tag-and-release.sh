@@ -50,6 +50,7 @@ collecthash() {
   REMOTE=$(/usr/bin/git remote -v)
   cd "$GOI2P_DIR"
   echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
+  echo "$TAG_HASH"
 }
 
 LOGGER_TAG_HASH=$(collecthash logger) # 0
@@ -69,15 +70,25 @@ echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 # use go mod tidy to clean up unused deps
 update_our_packages() {
   go get -u ./...
+  echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH"
   go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH"
   go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH"
   go get "github.com/go-i2p/common@$COMMON_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/noise@$NOISE_TAG_HASH"
   go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH"
   go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH"
   go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"
   go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"
   go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"
   go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" >/dev/null 2>/dev/null || true
+  echo go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"
   go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
   go mod tidy >/dev/null 2>/dev/null || true
   echo "Updated our packages to v$VERSION" 1>&2
@@ -91,6 +102,7 @@ cleanup() {
 tagandrelease() {
   cd "$GOI2P_DIR"
   cd $1
+  echo "tagging and releasing $1 v$VERSION" 1>&2
   #cleanup
   comment_out_replaces
   update_our_packages > /dev/null 2>/dev/null
