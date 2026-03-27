@@ -30,6 +30,7 @@ github_release() {
 
 # comment out all replace directives from a go.mod file and use go mod tidy
 comment_out_replaces() {
+  echo "Commenting out replace directives in go.mod and running go mod tidy"
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
   go mod tidy
   rm go.mod.bak
