@@ -8,6 +8,26 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
+if [ $DRY_RUN = true ]; then
+  echo "Attempting a dry run, dependencies will be updated but not checked in"
+fi
+
+git() {
+  if [ $DRY_RUN = true ]; then
+    echo "git $*"
+  else
+    command git "$@"
+  fi
+}
+
+github_release() {
+  if [ $DRY_RUN = true ]; then
+    echo "github-release $*"
+  else
+    command github-release "$@"
+  fi
+}
+
 # comment out all replace directives from a go.mod file and use go mod tidy
 comment_out_replaces() {
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
@@ -26,13 +46,12 @@ GOI2P_DIR=$(pwd)
 
 collecthash() {
   cd "$1" && #push
-  TAG_HASH=$(git rev-parse HEAD)
-  REMOTE=$(git remote -v)
+  TAG_HASH=$(/usr/bin/git rev-parse HEAD)
+  REMOTE=$(/usr/bin/git remote -v)
   cd "$GOI2P_DIR"
-  echo "$TAG_HASH"
-  echo "$1 tag hash: $TAG_HASH" 1>&2
-  echo "Remote: $REMOTE" 1>&2
+  echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
 }
+
 LOGGER_TAG_HASH=$(collecthash logger) # 0
 CRYPTO_TAG_HASH=$(collecthash crypto) # 1
 COMMON_TAG_HASH=$(collecthash common) # 2
@@ -105,7 +124,7 @@ tagandrelease() {
   echo "$1 v$VERSION tag hash: $TAG_HASH" 1>&2
   echo "$TAG_HASH"
   if [ -f RELEASE_NOTES.md ]; then
-    github-release release \
+    github_release release \
       --user go-i2p \
       --repo "$1" \
       --tag "v$VERSION" \
