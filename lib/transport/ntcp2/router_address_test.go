@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/go-noise/ntcp2"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ import (
 // createTestTransport creates a minimal NTCP2Transport for testing
 func createTestTransport(t *testing.T, listenAddr string) *NTCP2Transport {
 	// Create a minimal RouterInfo for testing
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	for i := range routerHash {
 		routerHash[i] = byte(i)
 	}
@@ -249,7 +250,7 @@ func TestConvertToRouterAddress_Integration(t *testing.T) {
 // BenchmarkConvertToRouterAddress benchmarks the conversion function
 func BenchmarkConvertToRouterAddress(b *testing.B) {
 	// Create test RouterInfo
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	ntcp2Config, _ := ntcp2.NewNTCP2Config(routerHash, false)
 
 	// Generate a test static key

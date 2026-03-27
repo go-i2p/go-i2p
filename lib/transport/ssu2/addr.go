@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
@@ -26,8 +27,7 @@ func ExtractSSU2NoiseAddr(routerInfo router_info.RouterInfo) (*ssu2noise.SSU2Add
 		return nil, fmt.Errorf("failed to generate connection ID: %w", err)
 	}
 
-	hashBytes := routerHash.Bytes()
-	ssu2Addr, err := ssu2noise.NewSSU2Addr(udpAddr, hashBytes[:], connID, "initiator")
+	ssu2Addr, err := ssu2noise.NewSSU2Addr(udpAddr, routerHash, connID, "initiator")
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating SSU2 address")
 	}
@@ -36,7 +36,7 @@ func ExtractSSU2NoiseAddr(routerInfo router_info.RouterInfo) (*ssu2noise.SSU2Add
 }
 
 // WrapSSU2Addr wraps an existing net.Addr as an SSU2Addr with associated router hash metadata.
-func WrapSSU2Addr(addr net.Addr, routerHash []byte) (*ssu2noise.SSU2Addr, error) {
+func WrapSSU2Addr(addr net.Addr, routerHash data.Hash) (*ssu2noise.SSU2Addr, error) {
 	if ssu2Addr, ok := addr.(*ssu2noise.SSU2Addr); ok {
 		return ssu2Addr, nil
 	}

@@ -355,12 +355,8 @@ func (r *Router) createSessionFromConn(conn net.Conn) (*ntcp.NTCP2Session, commo
 
 	// Extract router hash from NTCP2 address
 	peerHashBytes := ntcpAddr.RouterHash()
-	if len(peerHashBytes) != 32 {
-		return nil, common.Hash{}, fmt.Errorf("invalid router hash length: expected 32, got %d", len(peerHashBytes))
-	}
 
-	var peerHash common.Hash
-	copy(peerHash[:], peerHashBytes)
+	peerHash := common.Hash(peerHashBytes)
 
 	// Create session with router's lifecycle context
 	// When the router stops, this context is cancelled, closing all sessions

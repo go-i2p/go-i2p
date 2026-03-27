@@ -13,8 +13,8 @@ import (
 
 // newTestRouterHash creates a 32-byte test router hash with each byte set to
 // its index plus the given offset.
-func newTestRouterHash(offset byte) []byte {
-	h := make([]byte, 32)
+func newTestRouterHash(offset byte) data.Hash {
+	var h data.Hash
 	for i := range h {
 		h[i] = byte(i) + offset
 	}

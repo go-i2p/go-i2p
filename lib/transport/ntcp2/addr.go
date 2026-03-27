@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-noise/ntcp2"
@@ -114,8 +115,7 @@ func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_i
 		return nil, fmt.Errorf("failed to get router hash for wrapping: %w", err)
 	}
 
-	hash := hashVal.Bytes()
-	return WrapNTCP2Addr(tcpAddr, hash[:])
+	return WrapNTCP2Addr(tcpAddr, hashVal)
 }
 
 // logSuccessfulExtraction logs the successful NTCP2 address extraction.
@@ -274,7 +274,7 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 }
 
 // Convert net.Addr to NTCP2Addr
-func WrapNTCP2Addr(addr net.Addr, routerHash []byte) (*ntcp2.NTCP2Addr, error) {
+func WrapNTCP2Addr(addr net.Addr, routerHash data.Hash) (*ntcp2.NTCP2Addr, error) {
 	if ntcp2Addr, ok := addr.(*ntcp2.NTCP2Addr); ok {
 		return ntcp2Addr, nil
 	}

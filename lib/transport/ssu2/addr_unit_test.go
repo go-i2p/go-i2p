@@ -7,6 +7,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 // into a new SSU2Addr.
 func TestWrapSSU2Addr_PlainUDPAddr(t *testing.T) {
 	addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9999}
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	routerHash[0] = 0xAB
 
 	result, err := WrapSSU2Addr(addr, routerHash)
@@ -27,7 +28,7 @@ func TestWrapSSU2Addr_PlainUDPAddr(t *testing.T) {
 // is returned as-is without creating a new one.
 func TestWrapSSU2Addr_ExistingSSU2Addr(t *testing.T) {
 	udpAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9999}
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	routerHash[1] = 0xCD
 
 	first, err := WrapSSU2Addr(udpAddr, routerHash)
@@ -42,7 +43,7 @@ func TestWrapSSU2Addr_ExistingSSU2Addr(t *testing.T) {
 // TestWrapSSU2Addr_ZeroHash verifies behaviour with an all-zero router hash.
 func TestWrapSSU2Addr_ZeroHash(t *testing.T) {
 	addr := &net.UDPAddr{IP: net.ParseIP("::1"), Port: 4444}
-	routerHash := make([]byte, 32) // all zeros
+	var routerHash data.Hash // all zeros
 
 	result, err := WrapSSU2Addr(addr, routerHash)
 	require.NoError(t, err)
@@ -53,7 +54,7 @@ func TestWrapSSU2Addr_ZeroHash(t *testing.T) {
 // (the function only requires net.Addr, not UDPAddr specifically).
 func TestWrapSSU2Addr_TCPAddr(t *testing.T) {
 	tcpAddr := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	routerHash[2] = 0xEF
 
 	result, err := WrapSSU2Addr(tcpAddr, routerHash)
@@ -67,7 +68,7 @@ func TestWrapSSU2Addr_TCPAddr(t *testing.T) {
 func TestWrapSSU2Addr_AddrNotSSU2(t *testing.T) {
 	// A plain *net.UDPAddr is not an *ssu2noise.SSU2Addr => a new one is made.
 	addr := &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 1234}
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 
 	result, err := WrapSSU2Addr(addr, routerHash)
 	require.NoError(t, err)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-i2p/common/data"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,7 +114,9 @@ func TestInitKeyManagement_Integration(t *testing.T) {
 	routerHash := make([]byte, 32)
 	_, err := rand.Read(routerHash)
 	require.NoError(t, err)
-	ssu2Config, err := ssu2noise.NewSSU2Config(routerHash, false)
+	var routerHashArr data.Hash
+	copy(routerHashArr[:], routerHash)
+	ssu2Config, err := ssu2noise.NewSSU2Config(routerHashArr, false)
 	require.NoError(t, err)
 	staticKey := make([]byte, 32)
 	_, err = rand.Read(staticKey)

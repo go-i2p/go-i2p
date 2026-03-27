@@ -104,8 +104,7 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 	if err != nil {
 		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
 	}
-	identityBytes := identHash.Bytes()
-	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
+	ntcp2Config, err := ntcp2.NewNTCP2Config(identHash, false)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -315,13 +314,11 @@ func (t *NTCP2Transport) extractPeerHash(conn net.Conn) data.Hash {
 
 	if ntcpAddr, ok := conn.RemoteAddr().(*ntcp2.NTCP2Addr); ok {
 		hashBytes := ntcpAddr.RouterHash()
-		if len(hashBytes) == 32 {
-			copy(peerHash[:], hashBytes)
-			// If the hash is non-zero, use it directly
-			var zeroHash data.Hash
-			if peerHash != zeroHash {
-				return peerHash
-			}
+		peerHash = hashBytes
+		// If the hash is non-zero, use it directly
+		var zeroHash data.Hash
+		if peerHash != zeroHash {
+			return peerHash
 		}
 	}
 
@@ -423,8 +420,7 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 	if err != nil {
 		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
 	}
-	identityBytes := identityHash.Bytes()
-	ntcp2Config, err := ntcp2.NewNTCP2Config(identityBytes[:], false)
+	ntcp2Config, err := ntcp2.NewNTCP2Config(identityHash, false)
 	if err != nil {
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
 		return nil, WrapNTCP2Error(err, "updating identity")
@@ -817,8 +813,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to get our identity hash: %w", err)
 	}
-	identityBytes := identHash.Bytes()
-	config, err := ntcp2.NewNTCP2Config(identityBytes[:], true)
+	config, err := ntcp2.NewNTCP2Config(identHash, true)
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
@@ -827,8 +822,7 @@ func (t *NTCP2Transport) createNTCP2Config(routerInfo router_info.RouterInfo) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
-	remoteHashBytes := remoteHash.Bytes()
-	config = config.WithRemoteRouterHash(remoteHashBytes[:])
+	config = config.WithRemoteRouterHash(remoteHash)
 
 	// Extract and set the peer's static key and IV from their RouterInfo.
 	// Required by the Noise XK pattern: the initiator must know the

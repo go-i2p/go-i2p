@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/go-i2p/common/data"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,9 @@ func makeTestListener(t testing.TB) (*ssu2noise.SSU2Listener, func()) {
 	_, err := rand.Read(routerHash)
 	require.NoError(t, err)
 
-	cfg, err := ssu2noise.NewSSU2Config(routerHash, false)
+	var routerHashArr data.Hash
+	copy(routerHashArr[:], routerHash)
+	cfg, err := ssu2noise.NewSSU2Config(routerHashArr, false)
 	require.NoError(t, err)
 	priv := make([]byte, 32)
 	_, err = rand.Read(priv)

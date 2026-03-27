@@ -111,8 +111,7 @@ func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to get router identity hash: %w", err)
 	}
-	identityBytes := identHash.Bytes()
-	cfg, err := ssu2noise.NewSSU2Config(identityBytes[:], false)
+	cfg, err := ssu2noise.NewSSU2Config(identHash, false)
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating SSU2 config")
 	}
@@ -201,12 +200,10 @@ func (t *SSU2Transport) extractPeerHash(conn net.Conn) data.Hash {
 	var peerHash data.Hash
 	if ssu2Addr, ok := conn.RemoteAddr().(*ssu2noise.SSU2Addr); ok {
 		hashBytes := ssu2Addr.RouterHash()
-		if len(hashBytes) == 32 {
-			copy(peerHash[:], hashBytes)
-			var zeroHash data.Hash
-			if peerHash != zeroHash {
-				return peerHash
-			}
+		peerHash = hashBytes
+		var zeroHash data.Hash
+		if peerHash != zeroHash {
+			return peerHash
 		}
 	}
 	addrStr := conn.RemoteAddr().String()
@@ -378,8 +375,7 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 		return nil, nil, fmt.Errorf("failed to get our identity hash: %w", err)
 	}
 
-	identityBytes := identHash.Bytes()
-	dialConfig, err := ssu2noise.NewSSU2Config(identityBytes[:], true)
+	dialConfig, err := ssu2noise.NewSSU2Config(identHash, true)
 	if err != nil {
 		return nil, nil, WrapSSU2Error(err, "creating dial config")
 	}
@@ -392,8 +388,7 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get remote router hash: %w", err)
 	}
-	remoteHashBytes := remoteHash.Bytes()
-	dialConfig = dialConfig.WithRemoteRouterHash(remoteHashBytes[:])
+	dialConfig = dialConfig.WithRemoteRouterHash(remoteHash)
 
 	return dialConfig, remoteUDPAddr, nil
 }

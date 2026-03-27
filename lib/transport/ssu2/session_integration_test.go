@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 	"github.com/go-i2p/logger"
@@ -56,10 +57,10 @@ func genKey(t testing.TB) (priv, pub []byte) {
 }
 
 // genRouterHash generates a random 32-byte router identity hash.
-func genRouterHash(t testing.TB) []byte {
+func genRouterHash(t testing.TB) data.Hash {
 	t.Helper()
-	h := make([]byte, 32)
-	_, err := rand.Read(h)
+	var h data.Hash
+	_, err := rand.Read(h[:])
 	require.NoError(t, err)
 	return h
 }
@@ -101,7 +102,9 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	// config.Validate() requires RemoteRouterHash to be set for initiators.
 	clientCfg, err := ssu2noise.NewSSU2Config(clientHash, true)
 	require.NoError(t, err)
-	clientCfg = clientCfg.WithStaticKey(clientPriv).WithRemoteRouterHash(serverPub)
+	var serverPubHash data.Hash
+	copy(serverPubHash[:], serverPub)
+	clientCfg = clientCfg.WithStaticKey(clientPriv).WithRemoteRouterHash(serverPubHash)
 
 	// Build both connections (no handshake yet).
 	serverConn, err = ssu2noise.NewSSU2Conn(serverPC, clientAddr, serverCfg, false, serverPriv, nil)

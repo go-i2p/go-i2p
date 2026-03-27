@@ -235,8 +235,8 @@ func TestGetTotalBandwidth_WithSessions(t *testing.T) {
 // TestSetupUDPListener_ValidListenerAddress verifies that setupUDPListener
 // binds to an ephemeral UDP port and initialises the NAT managers.
 func TestSetupUDPListener_ValidListenerAddress(t *testing.T) {
-	routerHash := make([]byte, 32)
-	_, err := rand.Read(routerHash)
+	var routerHash data.Hash
+	_, err := rand.Read(routerHash[:])
 	require.NoError(t, err)
 
 	cfg, err := ssu2noise.NewSSU2Config(routerHash, false)
@@ -267,7 +267,7 @@ func TestSetupUDPListener_ValidListenerAddress(t *testing.T) {
 // TestSetupUDPListener_InvalidAddress verifies that an invalid address returns
 // an error.
 func TestSetupUDPListener_InvalidAddress(t *testing.T) {
-	routerHash := make([]byte, 32)
+	var routerHash data.Hash
 	cfg, _ := ssu2noise.NewSSU2Config(routerHash, false)
 
 	tr := &SSU2Transport{

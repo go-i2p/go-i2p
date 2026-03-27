@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
 )
@@ -269,8 +270,7 @@ func (t *SSU2Transport) runNATDetection(candidates []router_info.RouterInfo, rep
 		t.logger.WithError(err).Warn("NAT detection: failed to get Charlie hash")
 		return
 	}
-	charlieHashBytes := charlieHash.Bytes()
-	if err := t.sendPeerTestRequest(session, nonce, charlieHashBytes[:]); err != nil {
+	if err := t.sendPeerTestRequest(session, nonce, charlieHash); err != nil {
 		t.logger.WithError(err).Warn("NAT detection: failed to send PeerTest request")
 		return
 	}
@@ -308,11 +308,11 @@ func (t *SSU2Transport) initiatePeerTest(candidates []router_info.RouterInfo) (*
 }
 
 // sendPeerTestRequest builds and sends a PeerTest message to Bob.
-func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, charlieHash []byte) error {
+func (t *SSU2Transport) sendPeerTestRequest(session *SSU2Session, nonce uint32, charlieHash data.Hash) error {
 	ptBlock := &ssu2noise.PeerTestBlock{
 		MessageCode: ssu2noise.PeerTestRequest,
 		Nonce:       nonce,
-		RouterHash:  charlieHash[:],
+		RouterHash:  &charlieHash,
 		Version:     2,
 		Timestamp:   uint32(time.Now().Unix()),
 	}
