@@ -1,12 +1,12 @@
 package ssu2
 
 import (
-	"encoding/base64"
 	"fmt"
 	"net"
 	"strings"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
@@ -193,7 +193,7 @@ func addSingleIntroducerOptions(options map[string]string, intro *ssu2noise.Regi
 	}
 }
 
-// encodeBase64 returns the base64 standard encoding of data.
+// encodeBase64 returns the I2P base64 encoding of data.
 func encodeBase64(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
+	return i2pbase64.EncodeToString(data)
 }

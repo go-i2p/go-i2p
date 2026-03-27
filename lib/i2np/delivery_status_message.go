@@ -88,8 +88,11 @@ func (d *DeliveryStatusMessage) UnmarshalBinary(data []byte) error {
 	d.StatusMessageID = int(binary.BigEndian.Uint32(messageData[0:4]))
 
 	// Parse timestamp from I2P Date format
-	var date common.Date
-	copy(date[:], messageData[4:12])
+	date, _, err := common.ReadDate(messageData[4:])
+	if err != nil {
+		log.WithError(err).Error("Failed to read Date from DeliveryStatus message")
+		return oops.Wrapf(err, "failed to read delivery status date")
+	}
 
 	// Validate the timestamp is reasonable
 	if date.IsZero() {

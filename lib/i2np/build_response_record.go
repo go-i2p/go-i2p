@@ -105,11 +105,10 @@ func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 }
 
 func readBuildResponseRecordHash(data []byte) (common.Hash, error) {
-	if len(data) < 32 {
+	hash, _, err := common.ReadHash(data)
+	if err != nil {
 		return common.Hash{}, ErrBuildResponseRecordNotEnoughData
 	}
-
-	hash := common.Hash(data[0:32])
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.readBuildResponseRecordHash",

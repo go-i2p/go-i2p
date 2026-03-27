@@ -348,11 +348,11 @@ func readReplyTagsByType(databaseLookup *DatabaseLookup, offset int, data []byte
 }
 
 func readDatabaseLookupKey(data []byte) (int, common.Hash, error) {
-	if len(data) < 32 {
+	key, _, err := common.ReadHash(data)
+	if err != nil {
 		return 0, common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 
-	key := common.Hash(data[:32])
 	log.WithFields(logger.Fields{
 		"at":  "i2np.readDatabaseLookupKey",
 		"key": key,
@@ -365,7 +365,10 @@ func readDatabaseLookupFrom(length int, data []byte) (int, common.Hash, error) {
 		return length, common.Hash{}, ErrDatabaseLookupNotEnoughData
 	}
 
-	from := common.Hash(data[length : length+32])
+	from, _, err := common.ReadHash(data[length:])
+	if err != nil {
+		return length, common.Hash{}, ErrDatabaseLookupNotEnoughData
+	}
 	log.WithFields(logger.Fields{
 		"at":   "i2np.database_lookup.readDatabaseLookupFrom",
 		"from": from,
@@ -435,7 +438,10 @@ func readDatabaseLookupExcludedPeers(length int, data []byte, size int) (int, []
 	var excludedPeers []common.Hash
 	for i := 0; i < size; i++ {
 		offset := length + i*32
-		peer := common.Hash(data[offset : offset+32])
+		peer, _, err := common.ReadHash(data[offset:])
+		if err != nil {
+			return length, []common.Hash{}, ErrDatabaseLookupNotEnoughData
+		}
 		excludedPeers = append(excludedPeers, peer)
 	}
 
@@ -450,7 +456,10 @@ func readDatabaseLookupReplyKey(length int, data []byte) (int, session_key.Sessi
 	if len(data) < length+32 {
 		return length, session_key.SessionKey{}, ErrDatabaseLookupNotEnoughData
 	}
-	replyKey := session_key.SessionKey(data[length : length+32])
+	replyKey, _, err := session_key.ReadSessionKey(data[length:])
+	if err != nil {
+		return length, session_key.SessionKey{}, ErrDatabaseLookupNotEnoughData
+	}
 
 	log.WithFields(logger.Fields{
 		"at":        "i2np.database_lookup.readDatabaseLookupReplyKey",

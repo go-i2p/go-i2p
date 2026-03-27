@@ -240,17 +240,7 @@ func (dr *DestinationResolver) extractKeyFromLegacyLeaseSet(ls lease_set.LeaseSe
 // extractX25519KeyFromCertificate extracts an X25519 key from a destination's key certificate.
 // Returns the X25519 key if the destination uses X25519 encryption, otherwise returns an error.
 func (dr *DestinationResolver) extractX25519KeyFromCertificate(dest destination.Destination) ([32]byte, error) {
-	certData, err := dest.KeyCertificate.Data()
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("failed to read key certificate data: %w", err)
-	}
-
-	if len(certData) < 4 {
-		return [32]byte{}, fmt.Errorf("key certificate data too short: expected at least 1 byte, got %d", len(certData))
-	}
-
-	// First 2 bytes are signing key type, next 2 are crypto key type
-	cryptoType := uint16(certData[2])<<8 | uint16(certData[3])
+	cryptoType := dest.KeyCertificate.PublicKeyType()
 	if cryptoType != key_certificate.KEYCERT_CRYPTO_X25519 {
 		return [32]byte{}, fmt.Errorf("destination uses crypto type %d, not X25519", cryptoType)
 	}

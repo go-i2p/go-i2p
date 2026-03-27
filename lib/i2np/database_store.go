@@ -275,37 +275,44 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("DatabaseStore message too short: %d bytes", len(data))
 	}
 
-	offset := 0
+	remainder := data
 
 	// Key (32 bytes)
-	copy(d.Key[:], data[offset:offset+32])
-	offset += 32
+	key, remainder, err := common.ReadHash(remainder)
+	if err != nil {
+		return fmt.Errorf("DatabaseStore: failed to read key hash: %w", err)
+	}
+	d.Key = key
 
 	// StoreType (1 byte)
-	d.StoreType = data[offset]
-	offset++
+	d.StoreType = remainder[0]
+	remainder = remainder[1:]
 
 	// Reply Token (4 bytes)
-	copy(d.ReplyToken[:], data[offset:offset+4])
-	offset += 4
+	copy(d.ReplyToken[:], remainder[:4])
+	remainder = remainder[4:]
 
 	// Check if reply token > 0 (has reply routing info)
 	hasReply := d.ReplyToken != [4]byte{0, 0, 0, 0}
 	if hasReply {
-		if len(data) < offset+36 { // Need replyTunnelID(4) + replyGateway(32)
+		if len(remainder) < 36 { // Need replyTunnelID(4) + replyGateway(32)
 			return fmt.Errorf("DatabaseStore with reply token truncated")
 		}
 		// Reply Tunnel ID (4 bytes)
-		copy(d.ReplyTunnelID[:], data[offset:offset+4])
-		offset += 4
+		copy(d.ReplyTunnelID[:], remainder[:4])
+		remainder = remainder[4:]
 
 		// Reply Gateway (32 bytes)
-		copy(d.ReplyGateway[:], data[offset:offset+32])
-		offset += 32
+		gateway, rem, err := common.ReadHash(remainder)
+		if err != nil {
+			return fmt.Errorf("DatabaseStore: failed to read reply gateway hash: %w", err)
+		}
+		d.ReplyGateway = gateway
+		remainder = rem
 	}
 
 	// Data (remaining bytes) - validate size before allocation
-	dataLen := len(data) - offset
+	dataLen := len(remainder)
 	if err := validateDatabaseStoreSize(d.StoreType, dataLen); err != nil {
 		log.WithFields(logger.Fields{
 			"at":        "UnmarshalBinary",
@@ -317,7 +324,7 @@ func (d *DatabaseStore) UnmarshalBinary(data []byte) error {
 	}
 
 	d.Data = make([]byte, dataLen)
-	copy(d.Data, data[offset:])
+	copy(d.Data, remainder)
 
 	log.WithFields(logger.Fields{
 		"at":        "UnmarshalBinary",

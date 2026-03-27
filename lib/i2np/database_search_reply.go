@@ -149,15 +149,18 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 		return ErrDatabaseSearchReplyNotEnoughData
 	}
 
-	offset := 0
+	remainder := data
 
 	// Key (32 bytes)
-	copy(d.Key[:], data[offset:offset+32])
-	offset += 32
+	key, remainder, err := common.ReadHash(remainder)
+	if err != nil {
+		return ErrDatabaseSearchReplyNotEnoughData
+	}
+	d.Key = key
 
 	// Count (1 byte)
-	d.Count = int(data[offset])
-	offset++
+	d.Count = int(remainder[0])
+	remainder = remainder[1:]
 
 	// Validate total length
 	expectedLen := 32 + 1 + (d.Count * 32) + 32
@@ -168,12 +171,20 @@ func (d *DatabaseSearchReply) UnmarshalBinary(data []byte) error {
 	// Peer hashes (count * 32 bytes)
 	d.PeerHashes = make([]common.Hash, d.Count)
 	for i := 0; i < d.Count; i++ {
-		copy(d.PeerHashes[i][:], data[offset:offset+32])
-		offset += 32
+		peerHash, rem, err := common.ReadHash(remainder)
+		if err != nil {
+			return ErrDatabaseSearchReplyNotEnoughData
+		}
+		d.PeerHashes[i] = peerHash
+		remainder = rem
 	}
 
 	// From (32 bytes)
-	copy(d.From[:], data[offset:offset+32])
+	from, _, err := common.ReadHash(remainder)
+	if err != nil {
+		return ErrDatabaseSearchReplyNotEnoughData
+	}
+	d.From = from
 
 	log.WithFields(logger.Fields{
 		"at":         "DatabaseSearchReply.UnmarshalBinary",

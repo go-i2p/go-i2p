@@ -5,11 +5,11 @@ package ssu2
 // encodeBase64, resolveUDPAddress, and ConvertToRouterAddress.
 
 import (
-	"encoding/base64"
 	"net"
 	"testing"
 	"time"
 
+	i2pbase64 "github.com/go-i2p/common/base64"
 	"github.com/go-i2p/common/router_address"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,11 +80,11 @@ func TestIsSSU2Transport_NTCP2Style(t *testing.T) {
 	assert.False(t, isSSU2Transport(ra))
 }
 
-// TestEncodeBase64_RoundTrip verifies encodeBase64 encodes correctly.
+// TestEncodeBase64_RoundTrip verifies encodeBase64 encodes correctly using I2P base64.
 func TestEncodeBase64_RoundTrip(t *testing.T) {
 	data := []byte{0x00, 0x01, 0x02, 0x03, 0xFF}
 	got := encodeBase64(data)
-	want := base64.StdEncoding.EncodeToString(data)
+	want := i2pbase64.EncodeToString(data)
 	assert.Equal(t, want, got)
 }
 

@@ -845,10 +845,11 @@ func parseDeliveryTypeData(di *GarlicCloveDeliveryInstructions, deliveryType byt
 // parseHashData parses a 32-byte hash for DESTINATION or ROUTER delivery types.
 // Returns the number of bytes consumed and any error.
 func parseHashData(di *GarlicCloveDeliveryInstructions, data []byte, deliveryTypeName string) (int, error) {
-	if len(data) < 32 {
+	hash, _, err := common.ReadHash(data)
+	if err != nil {
 		return 0, oops.Errorf("insufficient data for %s hash", deliveryTypeName)
 	}
-	copy(di.Hash[:], data[0:32])
+	di.Hash = hash
 	return 32, nil
 }
 
@@ -858,8 +859,12 @@ func parseTunnelData(di *GarlicCloveDeliveryInstructions, data []byte) (int, err
 	if len(data) < 36 {
 		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
 	}
-	copy(di.Hash[:], data[0:32])
-	di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(data[32:36]))
+	hash, remainder, err := common.ReadHash(data)
+	if err != nil {
+		return 0, oops.Errorf("insufficient data for TUNNEL hash and ID")
+	}
+	di.Hash = hash
+	di.TunnelID = tunnel.TunnelID(binary.BigEndian.Uint32(remainder[:4]))
 	return 36, nil
 }
 

@@ -238,11 +238,11 @@ func readDestinationHash(data []byte, offset int, di *DeliveryInstructions) (int
 		return offset, nil
 	}
 
-	if len(data) < offset+32 {
+	hash, _, err := common.ReadHash(data[offset:])
+	if err != nil {
 		return offset, oops.Errorf("insufficient data for hash")
 	}
-
-	copy(di.hash[:], data[offset:offset+32])
+	di.hash = hash
 	return offset + 32, nil
 }
 

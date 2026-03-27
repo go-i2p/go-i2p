@@ -307,8 +307,10 @@ func readBuildRequestRecordOurIdent(data []byte) (common.Hash, error) {
 		return common.Hash{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	hash := common.Hash{}
-	copy(hash[:], data[4:36])
+	hash, _, err := common.ReadHash(data[4:])
+	if err != nil {
+		return common.Hash{}, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordOurIdent",
@@ -337,8 +339,10 @@ func readBuildRequestRecordNextIdent(data []byte) (common.Hash, error) {
 		return common.Hash{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	hash := common.Hash{}
-	copy(hash[:], data[40:72])
+	hash, _, err := common.ReadHash(data[40:])
+	if err != nil {
+		return common.Hash{}, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordNextIdent",
@@ -351,8 +355,10 @@ func readBuildRequestRecordLayerKey(data []byte) (session_key.SessionKey, error)
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key := session_key.SessionKey{}
-	copy(session_key[:], data[72:104])
+	session_key, _, err := session_key.ReadSessionKey(data[72:])
+	if err != nil {
+		return session_key, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordLayerKey",
@@ -365,8 +371,10 @@ func readBuildRequestRecordIVKey(data []byte) (session_key.SessionKey, error) {
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key := session_key.SessionKey{}
-	copy(session_key[:], data[104:136])
+	session_key, _, err := session_key.ReadSessionKey(data[104:])
+	if err != nil {
+		return session_key, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordIVKey",
@@ -379,8 +387,10 @@ func readBuildRequestRecordReplyKey(data []byte) (session_key.SessionKey, error)
 		return session_key.SessionKey{}, ErrBuildRequestRecordNotEnoughData
 	}
 
-	session_key := session_key.SessionKey{}
-	copy(session_key[:], data[136:168])
+	session_key, _, err := session_key.ReadSessionKey(data[136:])
+	if err != nil {
+		return session_key, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at": "i2np.readBuildRequestRecordReplyKey",
@@ -646,7 +656,11 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	record := BuildRequestRecord{}
 	record.ReceiveTunnel = tunnel.TunnelID(common.Integer(data[0:4]).Int())
 	record.NextTunnel = tunnel.TunnelID(common.Integer(data[4:8]).Int())
-	copy(record.NextIdent[:], data[8:40])
+	nextIdent, _, err := common.ReadHash(data[8:])
+	if err != nil {
+		return BuildRequestRecord{}, ErrBuildRequestRecordNotEnoughData
+	}
+	record.NextIdent = nextIdent
 	record.Flag = int(data[40])
 	minutesSinceEpoch := common.Integer(data[44:48]).Int()
 	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*60, 0)

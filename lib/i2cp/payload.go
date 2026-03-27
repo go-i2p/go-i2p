@@ -38,28 +38,25 @@ type SendMessagePayload struct {
 //
 //	bytes 0-31:  Destination hash (32 bytes)
 //	bytes 32+:   Message payload (variable length)
-func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error) {
-	// Minimum size: 32 bytes for destination hash
-	// Payload can be empty (0 bytes), so minimum is exactly 32
-	if len(data) < 32 {
-		log.WithFields(logger.Fields{
-			"at":       "i2cp.ParseSendMessagePayload",
-			"dataSize": len(data),
-			"required": 32,
-		}).Error("send_message_payload_too_short")
-		return nil, fmt.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(data))
-	}
-
+func ParseSendMessagePayload(rawData []byte) (*SendMessagePayload, error) {
 	smp := &SendMessagePayload{}
 
 	// Parse destination hash (first 32 bytes)
-	copy(smp.Destination[:], data[0:32])
+	hash, remainder, err := data.ReadHash(rawData)
+	if err != nil {
+		log.WithFields(logger.Fields{
+			"at":       "i2cp.ParseSendMessagePayload",
+			"dataSize": len(rawData),
+			"required": 32,
+		}).Error("send_message_payload_too_short")
+		return nil, fmt.Errorf("send message payload too short: need at least 32 bytes for destination, got %d", len(rawData))
+	}
+	smp.Destination = hash
 
 	// Parse message payload (remaining bytes)
-	payloadLen := len(data) - 32
-	if payloadLen > 0 {
-		smp.Payload = make([]byte, payloadLen)
-		copy(smp.Payload, data[32:])
+	if len(remainder) > 0 {
+		smp.Payload = make([]byte, len(remainder))
+		copy(smp.Payload, remainder)
 	} else {
 		smp.Payload = []byte{}
 	}
@@ -67,7 +64,7 @@ func ParseSendMessagePayload(data []byte) (*SendMessagePayload, error) {
 	log.WithFields(logger.Fields{
 		"at":          "i2cp.ParseSendMessagePayload",
 		"destination": fmt.Sprintf("%x", smp.Destination[:8]),
-		"payloadSize": payloadLen,
+		"payloadSize": len(smp.Payload),
 	}).Debug("parsed_send_message_payload")
 
 	return smp, nil
@@ -231,41 +228,45 @@ type SendMessageExpiresPayload struct {
 //	bytes (N-6)-(N-1):  Expiration (6 bytes, big endian, 48-bit timestamp)
 //
 // Where N is the total payload size.
-func ParseSendMessageExpiresPayload(data []byte) (*SendMessageExpiresPayload, error) {
+func ParseSendMessageExpiresPayload(rawData []byte) (*SendMessageExpiresPayload, error) {
 	// Minimum size: 32 (destination) + 0 (payload) + 4 (nonce) + 2 (flags) + 6 (expiration) = 44 bytes
 	minSize := 32 + 4 + 2 + 6 // 44 bytes
-	if len(data) < minSize {
+	if len(rawData) < minSize {
 		log.WithFields(logger.Fields{
 			"at":       "i2cp.ParseSendMessageExpiresPayload",
-			"dataSize": len(data),
+			"dataSize": len(rawData),
 			"required": minSize,
 		}).Error("send_message_expires_payload_too_short")
-		return nil, fmt.Errorf("send message expires payload too short: need at least %d bytes, got %d", minSize, len(data))
+		return nil, fmt.Errorf("send message expires payload too short: need at least %d bytes, got %d", minSize, len(rawData))
 	}
 
 	smp := &SendMessageExpiresPayload{}
 
 	// Parse destination hash (first 32 bytes)
-	copy(smp.Destination[:], data[0:32])
+	hash, remainder, err := data.ReadHash(rawData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read destination hash: %w", err)
+	}
+	smp.Destination = hash
 
 	// Parse message payload (variable middle section)
 	// The fixed fields (nonce, flags, expiration) are at the end
-	payloadLen := len(data) - 32 - 12 // total - destination - (nonce+flags+expiration)
+	payloadLen := len(remainder) - 12 // remaining - (nonce+flags+expiration)
 	if payloadLen > 0 {
 		smp.Payload = make([]byte, payloadLen)
-		copy(smp.Payload, data[32:32+payloadLen])
+		copy(smp.Payload, remainder[:payloadLen])
 	} else {
 		smp.Payload = []byte{}
 	}
 
 	// Parse fixed fields at the end
-	offset := 32 + payloadLen
-	smp.Nonce = binary.BigEndian.Uint32(data[offset : offset+4])
-	smp.Flags = binary.BigEndian.Uint16(data[offset+4 : offset+6])
+	offset := payloadLen
+	smp.Nonce = binary.BigEndian.Uint32(remainder[offset : offset+4])
+	smp.Flags = binary.BigEndian.Uint16(remainder[offset+4 : offset+6])
 
 	// Parse 48-bit expiration (6 bytes) into uint64
 	// Read 6 bytes and shift into 64-bit value
-	expBytes := data[offset+6 : offset+12]
+	expBytes := remainder[offset+6 : offset+12]
 	smp.Expiration = uint64(expBytes[0])<<40 |
 		uint64(expBytes[1])<<32 |
 		uint64(expBytes[2])<<24 |

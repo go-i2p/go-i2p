@@ -216,8 +216,10 @@ func ReadI2NPNTCPMessageExpiration(data []byte) (datalib.Date, error) {
 		return datalib.Date{}, ErrI2NPNotEnoughData
 	}
 
-	date := datalib.Date{}
-	copy(date[:], data[5:13])
+	date, _, err := datalib.ReadDate(data[5:])
+	if err != nil {
+		return datalib.Date{}, err
+	}
 
 	log.WithFields(logger.Fields{
 		"at":   "i2np.ReadI2NPNTCPMessageExpiration",
