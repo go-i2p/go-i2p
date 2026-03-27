@@ -30,9 +30,9 @@ github_release() {
 
 # comment out all replace directives from a go.mod file and use go mod tidy
 comment_out_replaces() {
-  echo "Commenting out replace directives in go.mod and running go mod tidy"
+  echo "Commenting out replace directives in go.mod and running go mod tidy" 1>&2
   sed -i.bak '/^replace /s/^/\/\//g' go.mod
-  go mod tidy
+  #go mod tidy
   rm go.mod.bak
 }
 
@@ -50,49 +50,60 @@ collecthash() {
   TAG_HASH=$(/usr/bin/git rev-parse HEAD)
   REMOTE=$(/usr/bin/git remote -v)
   cd "$GOI2P_DIR"
-  echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
+  #echo "$1 tag hash: $TAG_HASH Remote: $REMOTE" 1>&2
   echo "$TAG_HASH"
 }
 
 LOGGER_TAG_HASH=$(collecthash logger) # 0
+echo "logger tag hash: $LOGGER_TAG_HASH" 1>&2
 CRYPTO_TAG_HASH=$(collecthash crypto) # 1
+echo "crypto tag hash: $CRYPTO_TAG_HASH" 1>&2
 COMMON_TAG_HASH=$(collecthash common) # 2
+echo "common tag hash: $COMMON_TAG_HASH" 1>&2
 NOISE_TAG_HASH=$(collecthash noise) # 3
+echo "noise tag hash: $NOISE_TAG_HASH" 1>&2
 GO_NOISE_TAG_HASH=$(collecthash go-noise) # 4
+echo "go-noise tag hash: $GO_NOISE_TAG_HASH" 1>&2
 GO_I2P_TAG_HASH=$(collecthash go-i2p) # 5
+echo "go-i2p tag hash: $GO_I2P_TAG_HASH" 1>&2
 GO_I2CP_TAG_HASH=$(collecthash go-i2cp) # 6
+echo "go-i2cp tag hash: $GO_I2CP_TAG_HASH" 1>&2
 GO_DATAGRAMS_TAG_HASH=$(collecthash go-datagrams) # 7
+echo "go-datagrams tag hash: $GO_DATAGRAMS_TAG_HASH" 1>&2
 GO_STREAMING_TAG_HASH=$(collecthash go-streaming) # 8
+echo "go-streaming tag hash: $GO_STREAMING_TAG_HASH" 1>&2
 GO_SAM_BRIDGE_TAG_HASH=$(collecthash go-sam-bridge) # 9
+echo "go-sam-bridge tag hash: $GO_SAM_BRIDGE_TAG_HASH" 1>&2
 
 echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
-  echo "Updating the packages"
-  go get -u ./...
-  echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH"
+  echo "Updating the packages" 1>&2
+  #go get -u ./...
+  echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" 1>&2
   go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH"
+  echo go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" 1>&2
   go get "github.com/go-i2p/crypto@$CRYPTO_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH"
+  echo go get "github.com/go-i2p/common@$COMMON_TAG_HASH" 1>&2
   go get "github.com/go-i2p/common@$COMMON_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/noise@$NOISE_TAG_HASH"
+  echo go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" 1>&2
   go get "github.com/go-i2p/noise@$NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH"
+  echo go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-noise@$GO_NOISE_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH"
+  echo go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-i2p@$GO_I2P_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH"
+  echo go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-i2cp@$GO_I2CP_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH"
+  echo go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-datagrams@$GO_DATAGRAMS_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH"
+  echo go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" >/dev/null 2>/dev/null || true
-  echo go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH"
+  echo go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
-  go mod tidy >/dev/null 2>/dev/null || true
+  go mod tidy 1>&2
+  go build ./... 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
   git commit -am "Update dependencies to v$VERSION"
 }
@@ -106,10 +117,16 @@ tagandrelease() {
   cd $1
   echo "tagging and releasing $1 v$VERSION" 1>&2
   #cleanup
+  echo "Commenting out replace directives and updating our packages for $1" 1>&2
   comment_out_replaces
-  update_our_packages > /dev/null 2>/dev/null
-  # if release nodes is less than 7 lines long, delete it and create a placeholder
-  if [ -f RELEASE_NOTES.md ] && [ $(wc -l < RELEASE_NOTES.md) -lt 7 ]; then
+  echo "Updating our packages for $1" 1>&2
+  update_our_packages
+  if [ $DRY_RUN = true ]; then
+    echo "Dry run: skipping git tag and release for $1"
+    return
+  fi
+  # if release nodes is less than 6 lines long, delete it and create a placeholder
+  if [ -f RELEASE_NOTES.md ] && [ $(wc -l < RELEASE_NOTES.md) -lt 6 ]; then
     rm RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Remove short RELEASE_NOTES.md for $1" 1>&2
@@ -135,10 +152,6 @@ tagandrelease() {
     mv RELEASE_NOTES.md.tmp RELEASE_NOTES.md
     git add -v -f RELEASE_NOTES.md 1>&2
     git commit -m "Update RELEASE_NOTES.md for v$VERSION" 1>&2
-  fi
-  if [ $DRY_RUN = true ]; then
-    echo "Dry run: skipping git tag and release for $1"
-    return
   fi
   git tag -sa "v$VERSION" -m "$1 v$VERSION" 1>&2
   TAG_HASH=$(git rev-parse "v$VERSION")
