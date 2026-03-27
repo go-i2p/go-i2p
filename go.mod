@@ -7,10 +7,10 @@ toolchain go1.24.11
 require (
 	github.com/beevik/ntp v1.5.0
 	github.com/eyedeekay/go-unzip v0.0.0-20240201194209-560d8225b50e
-	github.com/go-i2p/common v0.1.4-0.20260219220717-0b14adbcbaf8
-	github.com/go-i2p/crypto v0.1.4-0.20260219234435-41c70b0435dd
+	github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134
+	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
 	github.com/go-i2p/go-nat-listener v0.0.0-20260128190435-6fcfda9acc7a
-	github.com/go-i2p/go-noise 48e87d30af616e6b0586e1981a3a757cb29dcec0
+	github.com/go-i2p/go-noise v0.1.4-0.20260327202013-48e87d30af61
 	github.com/go-i2p/logger v0.1.3
 	github.com/go-i2p/su3 v0.0.1
 	github.com/samber/oops v1.21.0
@@ -23,16 +23,11 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
-	github.com/go-i2p/go-datagrams v0.1.4-0.20260129000405-f6a1f1328725 // indirect
-	github.com/go-i2p/go-i2cp v0.1.4-0.20260309213829-4a5c1a1e25e7 // indirect
-	github.com/go-i2p/go-sam-bridge v0.1.4-0.20260129000444-e5da49aaf5ba // indirect
-	github.com/go-i2p/go-streaming v0.1.4-0.20260129001439-6c0bfdcbdd02 // indirect
 	github.com/go-i2p/noise v1.1.1-0.20260218013035-4a9b0d93ea92 // indirect
 	github.com/go-i2p/red25519 v0.0.0-20260302212615-1093a31f680d // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
