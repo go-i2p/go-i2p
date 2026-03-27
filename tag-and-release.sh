@@ -102,8 +102,8 @@ update_our_packages() {
   go get "github.com/go-i2p/go-streaming@$GO_STREAMING_TAG_HASH" >/dev/null 2>/dev/null || true
   echo go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" 1>&2
   go get "github.com/go-i2p/go-sam-bridge@$GO_SAM_BRIDGE_TAG_HASH" >/dev/null 2>/dev/null || true
-  go mod tidy 1>&2
-  go build ./... 1>&2
+  go mod tidy -v 1>&2
+  go build -v ./... 1>&2
   echo "Updated our packages to v$VERSION" 1>&2
   git commit -am "Update dependencies to v$VERSION"
 }
