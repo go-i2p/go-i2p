@@ -69,6 +69,7 @@ echo "Collected tag hashes. Proceeding to tag version v$VERSION" 1>&2
 # go get all our packages at the new version
 # use go mod tidy to clean up unused deps
 update_our_packages() {
+  echo "Updating the packages"
   go get -u ./...
   echo go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH"
   go get "github.com/go-i2p/logger@$LOGGER_TAG_HASH" >/dev/null 2>/dev/null || true
