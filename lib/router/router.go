@@ -263,7 +263,12 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 
 // buildNTCP2Transport creates the NTCP2 transport, publishes its address to ri, and returns it.
 func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Transport, error) {
-	ntcp2Config, err := ntcp.NewConfig(":0") // Use port 0 for automatic assignment
+	port := 0 // default: automatic assignment
+	if r.cfg.Transport != nil && r.cfg.Transport.NTCP2Port > 0 {
+		port = r.cfg.Transport.NTCP2Port
+	}
+	addr := fmt.Sprintf(":%d", port)
+	ntcp2Config, err := ntcp.NewConfig(addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to create NTCP2 config")
 		return nil, err
