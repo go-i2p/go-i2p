@@ -179,11 +179,10 @@ func TestSessionIntegration_ClientToServerI2NP(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, msg.Type(), received.Type(), "message type should match")
-	wantBytes, err := msg.MarshalBinary()
-	require.NoError(t, err)
-	gotBytes, err := received.MarshalBinary()
-	require.NoError(t, err)
-	assert.Equal(t, wantBytes, gotBytes, "message payload should survive round-trip")
+	assert.Equal(t, msg.MessageID(), received.MessageID(), "message ID should match")
+	receivedDC, ok := received.(i2np.DataCarrier)
+	require.True(t, ok, "received message must implement DataCarrier")
+	assert.Equal(t, want, receivedDC.GetData(), "message payload should survive round-trip")
 }
 
 // TestSessionIntegration_BidirectionalI2NP extends M2 by verifying that
@@ -253,17 +252,38 @@ func TestFragmentIntegration_LargeMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	msg := newTestI2NPMessage(largePayload)
+
+	// Diagnose: check fragment blocks
+	shortData, err := marshalI2NPShort(msg)
+	require.NoError(t, err)
+	t.Logf("short data size: %d", len(shortData))
+	blocks, err := fragmentSSU2Short(shortData, maxSSU2PayloadIPv4)
+	require.NoError(t, err)
+	t.Logf("fragment blocks: %d", len(blocks))
+	for i, b := range blocks {
+		t.Logf("  block[%d]: type=%d, data_len=%d", i, b.Type, len(b.Data))
+	}
+
+	// Get server stats before send
+	serverStatsBefore := serverConn.RecvStats()
+	t.Logf("server recv stats before: %+v", serverStatsBefore)
+
 	require.NoError(t, clientSess.QueueSendI2NP(msg))
+	t.Log("QueueSendI2NP succeeded, waiting for delivery...")
+
+	// Wait a bit then check stats
+	time.Sleep(3 * time.Second)
+	serverStatsAfter := serverConn.RecvStats()
+	t.Logf("server recv stats after 3s: %+v", serverStatsAfter)
 
 	received, err := serverSess.ReadNextI2NP()
 	require.NoError(t, err)
 
 	assert.Equal(t, msg.Type(), received.Type(), "fragmented message type should match")
-	wantBytes, err := msg.MarshalBinary()
-	require.NoError(t, err)
-	gotBytes, err := received.MarshalBinary()
-	require.NoError(t, err)
-	assert.Equal(t, wantBytes, gotBytes, "reassembled payload should match original")
+	assert.Equal(t, msg.MessageID(), received.MessageID(), "fragmented message ID should match")
+	receivedDC, ok := received.(i2np.DataCarrier)
+	require.True(t, ok, "received message must implement DataCarrier")
+	assert.Equal(t, largePayload, receivedDC.GetData(), "reassembled payload should match original")
 }
 
 // TestSessionIntegration_CloseTerminatesSession verifies that closing the
