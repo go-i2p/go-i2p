@@ -241,6 +241,9 @@ func TestSetupUDPListener_ValidListenerAddress(t *testing.T) {
 
 	cfg, err := ssu2noise.NewSSU2Config(routerHash, false)
 	require.NoError(t, err)
+	cfg = cfg.WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
+		return nil // Accept any RouterInfo in tests
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -115,6 +115,7 @@ func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, e
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating SSU2 config")
 	}
+	cfg = cfg.WithRouterInfoValidator(ssu2noise.DefaultRouterInfoValidator)
 	return cfg, nil
 }
 
@@ -390,7 +391,29 @@ func (t *SSU2Transport) prepareDialConfig(routerInfo router_info.RouterInfo) (*s
 	}
 	dialConfig = dialConfig.WithRemoteRouterHash(remoteHash)
 
+	remoteStaticKey, err := extractRemoteStaticKey(routerInfo)
+	if err != nil {
+		return nil, nil, WrapSSU2Error(err, "extracting remote static key")
+	}
+	dialConfig = dialConfig.WithRemoteStaticKey(remoteStaticKey)
+
 	return dialConfig, remoteUDPAddr, nil
+}
+
+// extractRemoteStaticKey extracts the X25519 static public key from a remote
+// router's SSU2 address. This key is required for the Noise XK handshake.
+func extractRemoteStaticKey(routerInfo router_info.RouterInfo) ([]byte, error) {
+	for _, addr := range routerInfo.RouterAddresses() {
+		if !isSSU2Transport(addr) {
+			continue
+		}
+		sk, err := addr.StaticKey()
+		if err != nil {
+			continue
+		}
+		return sk[:], nil
+	}
+	return nil, fmt.Errorf("no SSU2 address with static key found in RouterInfo")
 }
 
 // registerOrReuseSession creates a new session or returns an existing one for the router hash.

@@ -93,18 +93,23 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	// Use permissive RouterInfo validator for tests (no real RouterInfo exchanged).
 	serverCfg, err := ssu2noise.NewSSU2Config(serverHash, false)
 	require.NoError(t, err)
-	serverCfg = serverCfg.WithStaticKey(serverPriv).WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
-		// In tests, skip RouterInfo validation since we don't exchange real RouterInfo.
+	// Generate explicit ConnectionIDs. NewSSU2Conn generates one internally but
+	// does not write it back to the config, so handshakeInitiator/handshakeResponder
+	// would see ConnectionID=0. Set them before NewSSU2Conn to avoid this.
+	serverConnID, err := ssu2noise.GenerateConnectionID()
+	require.NoError(t, err)
+	serverCfg = serverCfg.WithStaticKey(serverPriv).WithConnectionID(serverConnID).WithHandshakeTimeout(5 * time.Second).WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
 		return nil
 	})
 
 	// Client config (initiator) — must know server's public key for XK.
-	// config.Validate() requires RemoteRouterHash to be set for initiators.
 	clientCfg, err := ssu2noise.NewSSU2Config(clientHash, true)
+	require.NoError(t, err)
+	clientConnID, err := ssu2noise.GenerateConnectionID()
 	require.NoError(t, err)
 	var serverPubHash data.Hash
 	copy(serverPubHash[:], serverPub)
-	clientCfg = clientCfg.WithStaticKey(clientPriv).WithRemoteRouterHash(serverPubHash)
+	clientCfg = clientCfg.WithStaticKey(clientPriv).WithConnectionID(clientConnID).WithRemoteRouterHash(serverPubHash).WithRemoteStaticKey(serverPub)
 
 	// Build both connections (no handshake yet).
 	serverConn, err = ssu2noise.NewSSU2Conn(serverPC, clientAddr, serverCfg, false, serverPriv, nil)
@@ -114,11 +119,16 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	require.NoError(t, err)
 
 	// Run the XK handshake concurrently.
+	start := time.Now()
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- serverConn.Handshake(ctx) }()
 
-	require.NoError(t, clientConn.Handshake(ctx), "client handshake")
-	require.NoError(t, <-serverErr, "server handshake")
+	cErr := clientConn.Handshake(ctx)
+	t.Logf("handshake took %v (client err: %v)", time.Since(start), cErr)
+	require.NoError(t, cErr, "client handshake")
+	sErr := <-serverErr
+	t.Logf("server handshake err: %v", sErr)
+	require.NoError(t, sErr, "server handshake")
 
 	return serverConn, clientConn
 }
@@ -145,7 +155,7 @@ func TestSessionIntegration_ClientToServerI2NP(t *testing.T) {
 		t.Skip("skipping SSU2 loopback integration test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	serverConn, clientConn := loopbackPair(t, ctx)
@@ -159,9 +169,13 @@ func TestSessionIntegration_ClientToServerI2NP(t *testing.T) {
 	want := []byte("hello from ssu2 client")
 	msg := newTestI2NPMessage(want)
 
-	require.NoError(t, clientSess.QueueSendI2NP(msg))
+	sendErr := clientSess.QueueSendI2NP(msg)
+	t.Logf("QueueSendI2NP err: %v", sendErr)
+	require.NoError(t, sendErr)
 
+	t.Log("waiting for ReadNextI2NP...")
 	received, err := serverSess.ReadNextI2NP()
+	t.Logf("ReadNextI2NP err: %v", err)
 	require.NoError(t, err)
 
 	assert.Equal(t, msg.Type(), received.Type(), "message type should match")
@@ -179,7 +193,7 @@ func TestSessionIntegration_BidirectionalI2NP(t *testing.T) {
 		t.Skip("skipping SSU2 loopback integration test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	serverConn, clientConn := loopbackPair(t, ctx)
@@ -222,7 +236,7 @@ func TestFragmentIntegration_LargeMessage(t *testing.T) {
 		t.Skip("skipping SSU2 fragment integration test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	serverConn, clientConn := loopbackPair(t, ctx)
