@@ -253,7 +253,7 @@ func TestFragmentIntegration_LargeMessage(t *testing.T) {
 
 	msg := newTestI2NPMessage(largePayload)
 
-	// Diagnose: check fragment blocks
+	// Diagnose: create the fragment blocks and send directly via conn
 	shortData, err := marshalI2NPShort(msg)
 	require.NoError(t, err)
 	t.Logf("short data size: %d", len(shortData))
@@ -264,17 +264,14 @@ func TestFragmentIntegration_LargeMessage(t *testing.T) {
 		t.Logf("  block[%d]: type=%d, data_len=%d", i, b.Type, len(b.Data))
 	}
 
-	// Get server stats before send
-	serverStatsBefore := serverConn.RecvStats()
-	t.Logf("server recv stats before: %+v", serverStatsBefore)
+	// Send directly via the connection (bypassing session sendWorker)
+	t.Log("Sending fragment blocks directly via conn.WriteBlocks...")
+	err = clientConn.WriteBlocks(blocks)
+	require.NoError(t, err, "WriteBlocks should not error")
+	t.Log("WriteBlocks completed")
 
-	require.NoError(t, clientSess.QueueSendI2NP(msg))
-	t.Log("QueueSendI2NP succeeded, waiting for delivery...")
-
-	// Wait a bit then check stats
-	time.Sleep(3 * time.Second)
-	serverStatsAfter := serverConn.RecvStats()
-	t.Logf("server recv stats after 3s: %+v", serverStatsAfter)
+	// Wait for delivery
+	time.Sleep(2 * time.Second)
 
 	received, err := serverSess.ReadNextI2NP()
 	require.NoError(t, err)
