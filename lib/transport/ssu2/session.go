@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -339,21 +340,56 @@ func (s *SSU2Session) checkRetransmissions() bool {
 	return false
 }
 
-// sendWithCongestionControl fragments msg into MTU-sized SSU2 blocks, waits
-// for congestion-window room, then writes the blocks to the conn.
+// sendWithCongestionControl serializes msg as an SSU2 short-header I2NP
+// message, waits for congestion-window room, then sends it via conn.Write
+// which handles fragmentation automatically for large messages.
 func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
-	data, err := msg.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	blocks, err := FragmentI2NPMessage(msg, maxSSU2PayloadIPv4)
+	data, err := marshalI2NPShort(msg)
 	if err != nil {
 		return err
 	}
 	if err := s.waitForCongestionWindow(len(data)); err != nil {
 		return err
 	}
-	return s.sendTrackedBlocks(data, blocks)
+	return s.sendTrackedData(data)
+}
+
+// marshalI2NPShort converts an I2NP message to the 9-byte SSU2 short header
+// format: Type(1) + MessageID(4) + ShortExpiration(4) + Body.
+func marshalI2NPShort(msg i2np.I2NPMessage) ([]byte, error) {
+	var body []byte
+	if dc, ok := msg.(i2np.DataCarrier); ok {
+		body = dc.GetData()
+	} else {
+		full, err := msg.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		if len(full) < 16 {
+			return nil, fmt.Errorf("NTCP data too short: %d bytes", len(full))
+		}
+		body = full[16:]
+	}
+	result := make([]byte, i2np.ShortI2NPHeaderSize+len(body))
+	result[0] = byte(msg.Type())
+	binary.BigEndian.PutUint32(result[1:5], uint32(msg.MessageID()))
+	binary.BigEndian.PutUint32(result[5:9], uint32(msg.Expiration().Unix()))
+	copy(result[i2np.ShortI2NPHeaderSize:], body)
+	return result, nil
+}
+
+// sendTrackedData writes data via conn.Write (which handles fragmentation)
+// and tracks the data for retransmission.
+func (s *SSU2Session) sendTrackedData(data []byte) error {
+	seq := s.trackPending(data)
+	n, err := s.conn.Write(data)
+	if err != nil {
+		s.removePending(seq)
+		s.congestionCtrl.OnPacketLoss()
+		return err
+	}
+	s.updateSendStats(n)
+	return nil
 }
 
 // waitForCongestionWindow blocks until the congestion window allows sending size bytes.
@@ -529,6 +565,9 @@ func classifyReceiveError(err error) receiveAction {
 // messages, parses the payload as an I2NP message, and delivers it to recvChan.
 // Returns a non-nil error only for fatal session-ending conditions (context done).
 // Parse failures are logged and silently dropped (non-fatal).
+//
+// Frames arrive in SSU2 short-header format (9-byte header + body) from
+// conn.Read(), whether the original message was fragmented or not.
 func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	recvAt := time.Now()
 	atomic.AddUint64(&s.bytesReceived, uint64(len(frame)))
@@ -536,8 +575,8 @@ func (s *SSU2Session) dispatchReceived(frame []byte) error {
 	s.updateRTTEstimate(recvAt)
 	s.ackPendingBeforeTime(recvAt)
 
-	msg := i2np.NewI2NPMessage(0)
-	if err := msg.UnmarshalBinary(frame); err != nil {
+	msg := i2np.NewBaseI2NPMessage(0)
+	if err := msg.UnmarshalShortI2NP(frame); err != nil {
 		s.logger.WithError(err).Debug("Failed to parse I2NP message")
 		return nil // non-fatal: skip malformed frame
 	}
