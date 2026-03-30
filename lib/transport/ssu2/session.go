@@ -32,6 +32,7 @@ const maxRTTSample = 30 * time.Second
 // has not yet been confirmed delivered (used for session-level retransmission).
 type pendingI2NP struct {
 	data     []byte
+	blocks   []*ssu2noise.SSU2Block
 	sentAt   time.Time
 	deadline time.Time // sentAt + rto; extended on each retransmit with back-off
 	attempts int
@@ -341,17 +342,21 @@ func (s *SSU2Session) checkRetransmissions() bool {
 }
 
 // sendWithCongestionControl serializes msg as an SSU2 short-header I2NP
-// message, waits for congestion-window room, then sends it via conn.Write
-// which handles fragmentation automatically for large messages.
+// message, fragments it into correctly-formatted SSU2 blocks, waits for
+// congestion-window room, then writes the blocks to the conn.
 func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 	data, err := marshalI2NPShort(msg)
+	if err != nil {
+		return err
+	}
+	blocks, err := fragmentSSU2Short(data, maxSSU2PayloadIPv4)
 	if err != nil {
 		return err
 	}
 	if err := s.waitForCongestionWindow(len(data)); err != nil {
 		return err
 	}
-	return s.sendTrackedData(data)
+	return s.sendTrackedBlocks(data, blocks)
 }
 
 // marshalI2NPShort converts an I2NP message to the 9-byte SSU2 short header
@@ -376,6 +381,91 @@ func marshalI2NPShort(msg i2np.I2NPMessage) ([]byte, error) {
 	binary.BigEndian.PutUint32(result[5:9], uint32(msg.Expiration().Unix()))
 	copy(result[i2np.ShortI2NPHeaderSize:], body)
 	return result, nil
+}
+
+// fragmentSSU2Short splits SSU2 short-header data into correctly formatted
+// FirstFragment (type 4) and FollowOnFragment (type 5) blocks matching
+// the format expected by go-noise's DataHandler.
+//
+// For messages that fit in a single block, returns a type 3 I2NPMessage block.
+//
+// FirstFragment format: I2NPType(1) + MessageID(4) + ShortExpiry(4) + BodyChunk
+// FollowOnFragment format: FragInfo(1) + MessageID(4) + BodyChunk
+func fragmentSSU2Short(data []byte, maxPayload int) ([]*ssu2noise.SSU2Block, error) {
+	const blockTLVOverhead = 3 // type(1) + length(2)
+
+	if len(data)+blockTLVOverhead <= maxPayload {
+		return []*ssu2noise.SSU2Block{
+			ssu2noise.NewSSU2Block(ssu2noise.BlockTypeI2NPMessage, data),
+		}, nil
+	}
+
+	if len(data) < i2np.ShortI2NPHeaderSize {
+		return nil, fmt.Errorf("SSU2 short data too short: %d bytes", len(data))
+	}
+
+	// Extract header fields from SSU2 short format
+	i2npType := data[0]
+	messageID := binary.BigEndian.Uint32(data[1:5])
+	shortExpiry := binary.BigEndian.Uint32(data[5:9])
+	body := data[i2np.ShortI2NPHeaderSize:]
+
+	// FirstFragment: TLV(3) + I2NPType(1) + MessageID(4) + ShortExpiry(4) + BodyChunk
+	const firstFragHeaderSize = 9 // type(1) + msgID(4) + shortExpiry(4)
+	maxFirstBody := maxPayload - blockTLVOverhead - firstFragHeaderSize
+	if maxFirstBody <= 0 {
+		return nil, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
+	}
+
+	firstBodySize := maxFirstBody
+	if firstBodySize > len(body) {
+		firstBodySize = len(body)
+	}
+
+	firstData := make([]byte, firstFragHeaderSize+firstBodySize)
+	firstData[0] = i2npType
+	binary.BigEndian.PutUint32(firstData[1:5], messageID)
+	binary.BigEndian.PutUint32(firstData[5:9], shortExpiry)
+	copy(firstData[9:], body[:firstBodySize])
+
+	blocks := []*ssu2noise.SSU2Block{
+		ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, firstData),
+	}
+
+	// FollowOnFragments: TLV(3) + FragInfo(1) + MessageID(4) + BodyChunk
+	const followOnHeaderSize = 5 // fragInfo(1) + msgID(4)
+	maxFollowBody := maxPayload - blockTLVOverhead - followOnHeaderSize
+	if maxFollowBody <= 0 {
+		return nil, fmt.Errorf("max payload %d too small for follow-on fragment", maxPayload)
+	}
+
+	offset := firstBodySize
+	fragNum := uint8(1)
+	for offset < len(body) {
+		end := offset + maxFollowBody
+		if end > len(body) {
+			end = len(body)
+		}
+		isLast := end == len(body)
+		fragInfo := fragNum << 1
+		if isLast {
+			fragInfo |= 0x01
+		}
+
+		followData := make([]byte, followOnHeaderSize+(end-offset))
+		followData[0] = fragInfo
+		binary.BigEndian.PutUint32(followData[1:5], messageID)
+		copy(followData[5:], body[offset:end])
+
+		blocks = append(blocks, ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFollowOnFragment, followData))
+		offset = end
+		fragNum++
+		if fragNum > 127 {
+			return nil, fmt.Errorf("message too large: exceeds 127 follow-on fragments")
+		}
+	}
+
+	return blocks, nil
 }
 
 // sendTrackedData writes data via conn.Write (which handles fragmentation)
@@ -406,7 +496,7 @@ func (s *SSU2Session) waitForCongestionWindow(size int) error {
 
 // sendTrackedBlocks writes blocks to the connection and tracks for retransmission.
 func (s *SSU2Session) sendTrackedBlocks(data []byte, blocks []*ssu2noise.SSU2Block) error {
-	seq := s.trackPending(data)
+	seq := s.trackPendingBlocks(data, blocks)
 	if err := s.conn.WriteBlocks(blocks); err != nil {
 		s.removePending(seq)
 		s.congestionCtrl.OnPacketLoss()
@@ -426,12 +516,19 @@ func (s *SSU2Session) updateSendStats(n int) {
 // trackPending stores an I2NP payload in the pending retransmission map and
 // returns its sequence number.
 func (s *SSU2Session) trackPending(data []byte) uint64 {
+	return s.trackPendingBlocks(data, nil)
+}
+
+// trackPendingBlocks stores an I2NP payload and its pre-built blocks in the
+// pending retransmission map and returns its sequence number.
+func (s *SSU2Session) trackPendingBlocks(data []byte, blocks []*ssu2noise.SSU2Block) uint64 {
 	seq := atomic.AddUint64(&s.pendingSeqNext, 1)
 	rto := s.rttEstimator.GetRTO()
 	now := time.Now()
 	s.pendingMsgsMu.Lock()
 	s.pendingMsgs[seq] = &pendingI2NP{
 		data:     data,
+		blocks:   blocks,
 		sentAt:   now,
 		deadline: now.Add(rto),
 	}
@@ -494,17 +591,26 @@ func (s *SSU2Session) processRetransmission(p *pendingI2NP, now time.Time) retra
 	if p.attempts >= s.maxRetransmit {
 		return retransmitMaxExceeded
 	}
-	if n, err := s.conn.Write(p.data); err != nil {
-		return retransmitDelete
-	} else {
-		atomic.AddUint64(&s.bytesSent, uint64(n))
-		p.attempts++
-		backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
-		if backoff > maxRetransmitBackoff {
-			backoff = maxRetransmitBackoff
+	var err error
+	var n int
+	if len(p.blocks) > 0 {
+		err = s.conn.WriteBlocks(p.blocks)
+		if err == nil {
+			n = len(p.data)
 		}
-		p.deadline = now.Add(backoff)
+	} else {
+		n, err = s.conn.Write(p.data)
 	}
+	if err != nil {
+		return retransmitDelete
+	}
+	atomic.AddUint64(&s.bytesSent, uint64(n))
+	p.attempts++
+	backoff := s.rttEstimator.GetRTO() * (1 << uint(p.attempts))
+	if backoff > maxRetransmitBackoff {
+		backoff = maxRetransmitBackoff
+	}
+	p.deadline = now.Add(backoff)
 	return retransmitOK
 }
 
