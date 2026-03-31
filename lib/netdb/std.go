@@ -37,7 +37,6 @@ type StdNetDB struct {
 
 	expiryMutex sync.RWMutex // mutex for expiry tracking (shared for both LeaseSets and RouterInfos)
 
-	// HIGH PRIORITY FIX #3: Peer connection tracking and reputation
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 
 	// Cleanup goroutine management
@@ -62,7 +61,7 @@ func NewStdNetDB(db string) *StdNetDB {
 		leaseSetExpiry:   make(map[common.Hash]time.Time),
 		routerInfoExpiry: make(map[common.Hash]time.Time),
 		expiryMutex:      sync.RWMutex{},
-		PeerTracker:      NewPeerTracker(), // HIGH PRIORITY FIX #3: Initialize peer tracking
+		PeerTracker:      NewPeerTracker(),
 		ctx:              ctx,
 		cancel:           cancel,
 	}

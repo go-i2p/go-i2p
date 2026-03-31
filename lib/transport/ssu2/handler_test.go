@@ -9,6 +9,7 @@ import (
 
 func TestNewDefaultHandler_NotNil(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	if h == nil {
 		t.Fatal("NewDefaultHandler returned nil")
 	}
@@ -16,6 +17,7 @@ func TestNewDefaultHandler_NotNil(t *testing.T) {
 
 func TestDefaultHandler_CheckReplay_First(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	var key [32]byte
 	key[0] = 0xAB
 	if h.CheckReplay(key) {
@@ -25,6 +27,7 @@ func TestDefaultHandler_CheckReplay_First(t *testing.T) {
 
 func TestDefaultHandler_CheckReplay_Duplicate(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	var key [32]byte
 	key[0] = 0xCD
 	h.CheckReplay(key)
@@ -35,6 +38,7 @@ func TestDefaultHandler_CheckReplay_Duplicate(t *testing.T) {
 
 func TestDefaultHandler_CheckReplay_DifferentKeys(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	var key1, key2 [32]byte
 	key1[0] = 0x01
 	key2[0] = 0x02
@@ -46,6 +50,7 @@ func TestDefaultHandler_CheckReplay_DifferentKeys(t *testing.T) {
 
 func TestDefaultHandler_ValidateTimestamp_Within60s(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	now := uint32(time.Now().Unix())
 	if err := h.ValidateTimestamp(now); err != nil {
 		t.Errorf("current timestamp should be valid: %v", err)
@@ -54,6 +59,7 @@ func TestDefaultHandler_ValidateTimestamp_Within60s(t *testing.T) {
 
 func TestDefaultHandler_ValidateTimestamp_SlightSkew(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	past := uint32(time.Now().Unix()) - 30
 	if err := h.ValidateTimestamp(past); err != nil {
 		t.Errorf("30s skew should be within tolerance: %v", err)
@@ -62,6 +68,7 @@ func TestDefaultHandler_ValidateTimestamp_SlightSkew(t *testing.T) {
 
 func TestDefaultHandler_ValidateTimestamp_TooOld(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	old := uint32(time.Now().Unix()) - uint32(math.Round(61))
 	if err := h.ValidateTimestamp(old); err == nil {
 		t.Error("61s skew should fail validation")
@@ -70,6 +77,7 @@ func TestDefaultHandler_ValidateTimestamp_TooOld(t *testing.T) {
 
 func TestDefaultHandler_ValidateTimestamp_TooFar_Future(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	future := uint32(time.Now().Unix()) + 61
 	if err := h.ValidateTimestamp(future); err == nil {
 		t.Error("timestamp 61s in the future should fail validation")
@@ -79,6 +87,7 @@ func TestDefaultHandler_ValidateTimestamp_TooFar_Future(t *testing.T) {
 // TestDefaultHandler_Close verifies that Close resets the replay cache.
 func TestDefaultHandler_Close(t *testing.T) {
 	h := NewDefaultHandler()
+	defer h.Close()
 	var key [32]byte
 	key[0] = 0xAA
 	h.CheckReplay(key)
@@ -86,6 +95,46 @@ func TestDefaultHandler_Close(t *testing.T) {
 	// After Close, the map is reset so the same key is no longer seen.
 	if h.CheckReplay(key) {
 		t.Error("after Close, key should not be flagged as replay")
+	}
+}
+
+// TestDefaultHandler_ReplayCacheSize verifies the cache size accessor.
+func TestDefaultHandler_ReplayCacheSize(t *testing.T) {
+	h := NewDefaultHandler()
+	defer h.Close()
+	if h.ReplayCacheSize() != 0 {
+		t.Error("new handler should have empty cache")
+	}
+	var key [32]byte
+	key[0] = 0xBB
+	h.CheckReplay(key)
+	if h.ReplayCacheSize() != 1 {
+		t.Errorf("expected cache size 1, got %d", h.ReplayCacheSize())
+	}
+}
+
+// TestDefaultHandler_EvictStale verifies that stale entries are evicted.
+func TestDefaultHandler_EvictStale(t *testing.T) {
+	h := NewDefaultHandler()
+	defer h.Close()
+
+	var key [32]byte
+	key[0] = 0xCC
+	h.CheckReplay(key)
+
+	// Manually backdate the entry to make it stale.
+	h.mu.Lock()
+	h.seen[key] = time.Now().Add(-replayTTL - time.Second)
+	h.mu.Unlock()
+
+	h.evictStale()
+
+	if h.ReplayCacheSize() != 0 {
+		t.Error("stale entry should have been evicted")
+	}
+	// Key should no longer be flagged as replay.
+	if h.CheckReplay(key) {
+		t.Error("evicted key should not be flagged as replay")
 	}
 }
 
@@ -100,6 +149,7 @@ func TestDefaultHandler_SendTermination(t *testing.T) {
 
 	serverConn, _ := loopbackPair(t, ctx)
 	h := NewDefaultHandler()
+	defer h.Close()
 	err := h.SendTermination(serverConn, 0x00)
 	if err != nil {
 		t.Errorf("SendTermination returned error: %v", err)

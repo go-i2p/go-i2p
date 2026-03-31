@@ -28,18 +28,58 @@ type SSU2Handler interface {
 }
 
 // DefaultHandler implements SSU2Handler with replay detection and clock skew
-// validation suitable for production use.
+// validation suitable for production use. A background goroutine periodically
+// evicts stale entries from the replay cache to prevent unbounded memory growth.
+// Call Close() when the handler is no longer needed to stop the cleanup goroutine.
 type DefaultHandler struct {
 	mu      sync.Mutex
 	seen    map[[32]byte]time.Time
 	maxSkew time.Duration
+	done    chan struct{}
 }
 
+// replayTTL is the time-to-live for replay cache entries (2× clock skew tolerance).
+const replayTTL = 120 * time.Second
+
+// replayCleanupInterval is how often the background goroutine sweeps stale entries.
+const replayCleanupInterval = 5 * time.Minute
+
 // NewDefaultHandler creates a new DefaultHandler with ±60 second clock skew tolerance.
+// A background goroutine evicts replay cache entries older than 120 seconds every
+// 5 minutes. Call Close() to stop it.
 func NewDefaultHandler() *DefaultHandler {
-	return &DefaultHandler{
+	h := &DefaultHandler{
 		seen:    make(map[[32]byte]time.Time),
 		maxSkew: 60 * time.Second,
+		done:    make(chan struct{}),
+	}
+	go h.cleanupLoop()
+	return h
+}
+
+// cleanupLoop periodically removes stale entries from the replay cache.
+func (h *DefaultHandler) cleanupLoop() {
+	ticker := time.NewTicker(replayCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-h.done:
+			return
+		case <-ticker.C:
+			h.evictStale()
+		}
+	}
+}
+
+// evictStale removes replay cache entries older than replayTTL.
+func (h *DefaultHandler) evictStale() {
+	cutoff := time.Now().Add(-replayTTL)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for k, ts := range h.seen {
+		if ts.Before(cutoff) {
+			delete(h.seen, k)
+		}
 	}
 }
 
@@ -98,9 +138,22 @@ func buildTerminationBlock(reason byte) []byte {
 	return block
 }
 
-// Close releases resources held by the handler.
+// Close stops the background cleanup goroutine and resets the replay cache.
 func (h *DefaultHandler) Close() {
+	select {
+	case <-h.done:
+		// already closed
+	default:
+		close(h.done)
+	}
 	h.mu.Lock()
 	h.seen = make(map[[32]byte]time.Time)
 	h.mu.Unlock()
+}
+
+// ReplayCacheSize returns the current number of entries in the replay cache.
+func (h *DefaultHandler) ReplayCacheSize() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.seen)
 }

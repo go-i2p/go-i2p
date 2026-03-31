@@ -428,27 +428,24 @@ func TestTransportMuxer_ImplementsTransportInterface(t *testing.T) {
 // not contain any SSU v1 transport implementation or references. SSU v1 has
 // been removed from the I2P specification and replaced by SSU2.
 //
-// Finding: **NONE FOUND**. The ssu2/ package is a placeholder for the future
-// SSU2 implementation. All references to "SSU" in the transport package are
-// for SSU2, not the legacy SSU v1. No SSU v1 types, interfaces, or transport
-// style strings exist.
+// Finding: **NONE FOUND**. The ssu2/ package is a full SSU2 implementation
+// with session handshake, connection management, NAT traversal, and
+// fragmentation (14+ source files). All references to "SSU" in the transport
+// package are for SSU2, not the legacy SSU v1. No SSU v1 types, interfaces,
+// or transport style strings exist.
 func TestLegacyCrypto_NoSSUv1References(t *testing.T) {
-	// The ssu2 package exists as a placeholder — it does not implement SSU v1.
-	// All transport implementations in this package are either NTCP2 or future SSU2.
+	// The ssu2 package is a full SSU2 implementation — it does not implement SSU v1.
+	// All transport implementations in this package are either NTCP2 or SSU2.
 	//
 	// Verified by grep of lib/transport/:
 	// - No "SSU" string without "2" suffix in production code
-	// - No "ssu" transport style string (only "ntcp2")
-	// - ssu2/doc.go explicitly states "SSU2 (Secure Semireliable UDP 2)"
-	//
-	// The only SSU references in production code:
-	// 1. multi.go log message mentioning "SSU2" as a recommendation
-	// 2. doc.go mentioning "SSU2: UDP-based transport (planned)"
-	// 3. ssu2/doc.go — placeholder for future SSU2 implementation
+	// - No "ssu" transport style string (only "ntcp2" and "ssu2")
+	// - ssu2/ package implements full SSU2 with handshake, session management,
+	//   NAT traversal, peer tests, introducers, and fragmentation
 
 	t.Log("AUDIT RESULT: No SSU v1 transport references found in lib/transport/")
 	t.Log("All SSU references are for SSU2 (the modern replacement)")
-	t.Log("ssu2/ package is a placeholder with doc.go only — no implementation")
+	t.Log("ssu2/ package is a full SSU2 implementation with 14+ source files")
 }
 
 // =============================================================================

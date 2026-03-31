@@ -9,7 +9,6 @@ import (
 )
 
 // PeerStats tracks connection success/failure statistics for a peer.
-// HIGH PRIORITY FIX #3: Stale peer detection through connection tracking.
 type PeerStats struct {
 	Hash              common.Hash
 	SuccessCount      int
@@ -24,7 +23,6 @@ type PeerStats struct {
 
 // PeerTracker maintains reputation/connectivity statistics for peers.
 // Helps identify stale peers and prioritize reliable ones for tunnel building.
-// HIGH PRIORITY FIX #3: Infrastructure for peer reputation scoring.
 type PeerTracker struct {
 	stats map[common.Hash]*PeerStats
 	mu    sync.RWMutex

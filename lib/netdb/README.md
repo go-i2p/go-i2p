@@ -1174,8 +1174,8 @@ type PeerStats struct {
 }
 ```
 
-PeerStats tracks connection success/failure statistics for a peer. HIGH PRIORITY
-FIX #3: Stale peer detection through connection tracking.
+PeerStats tracks connection success/failure statistics for a peer.
+Stale peer detection through connection tracking.
 
 #### type PeerTracker
 
@@ -1674,7 +1674,6 @@ type StdNetDB struct {
 
 	LeaseSets map[common.Hash]Entry
 
-	// HIGH PRIORITY FIX #3: Peer connection tracking and reputation
 	PeerTracker *PeerTracker // tracks connection success/failure for peers
 }
 ```
