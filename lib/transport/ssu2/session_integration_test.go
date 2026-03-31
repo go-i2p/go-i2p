@@ -98,7 +98,7 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	// would see ConnectionID=0. Set them before NewSSU2Conn to avoid this.
 	serverConnID, err := ssu2noise.GenerateConnectionID()
 	require.NoError(t, err)
-	serverCfg = serverCfg.WithStaticKey(serverPriv).WithConnectionID(serverConnID).WithHandshakeTimeout(5 * time.Second).WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
+	serverCfg = serverCfg.WithStaticKey(serverPriv).WithConnectionID(serverConnID).WithHandshakeTimeout(5 * time.Second).WithDestroyTimeout(100 * time.Millisecond).WithRouterInfoValidator(func(routerInfo, authenticatedStaticKey []byte) error {
 		return nil
 	})
 
@@ -109,7 +109,7 @@ func loopbackPair(t testing.TB, ctx context.Context) (serverConn, clientConn *ss
 	require.NoError(t, err)
 	var serverPubHash data.Hash
 	copy(serverPubHash[:], serverPub)
-	clientCfg = clientCfg.WithStaticKey(clientPriv).WithConnectionID(clientConnID).WithRemoteRouterHash(serverPubHash).WithRemoteStaticKey(serverPub)
+	clientCfg = clientCfg.WithStaticKey(clientPriv).WithConnectionID(clientConnID).WithDestroyTimeout(100 * time.Millisecond).WithRemoteRouterHash(serverPubHash).WithRemoteStaticKey(serverPub)
 
 	// Build both connections (no handshake yet).
 	serverConn, err = ssu2noise.NewSSU2Conn(serverPC, clientAddr, serverCfg, false, serverPriv, nil)
@@ -253,22 +253,8 @@ func TestFragmentIntegration_LargeMessage(t *testing.T) {
 
 	msg := newTestI2NPMessage(largePayload)
 
-	// Diagnose: create the fragment blocks and send directly via conn
-	shortData, err := marshalI2NPShort(msg)
-	require.NoError(t, err)
-	t.Logf("short data size: %d", len(shortData))
-	blocks, err := fragmentSSU2Short(shortData, maxSSU2PayloadIPv4)
-	require.NoError(t, err)
-	t.Logf("fragment blocks: %d", len(blocks))
-	for i, b := range blocks {
-		t.Logf("  block[%d]: type=%d, data_len=%d", i, b.Type, len(b.Data))
-	}
-
-	// Send directly via the connection (bypassing session sendWorker)
-	t.Log("Sending fragment blocks directly via conn.WriteBlocks...")
-	err = clientConn.WriteBlocks(blocks)
-	require.NoError(t, err, "WriteBlocks should not error")
-	t.Log("WriteBlocks completed")
+	// Send via session (which fragments, encrypts, and sends)
+	require.NoError(t, clientSess.QueueSendI2NP(msg))
 
 	// Wait for delivery
 	time.Sleep(2 * time.Second)

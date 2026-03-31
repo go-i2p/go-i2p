@@ -349,7 +349,7 @@ func (s *SSU2Session) sendWithCongestionControl(msg i2np.I2NPMessage) error {
 	if err != nil {
 		return err
 	}
-	blocks, err := fragmentSSU2Short(data, maxSSU2PayloadIPv4)
+	blocks, err := fragmentSSU2Short(data, maxSSU2PayloadIPv6)
 	if err != nil {
 		return err
 	}
