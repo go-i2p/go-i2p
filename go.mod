@@ -1,8 +1,6 @@
 module github.com/go-i2p/go-i2p
 
-go 1.24.5
-
-toolchain go1.24.11
+go 1.25.0
 
 require (
 	github.com/beevik/ntp v1.5.0
@@ -10,14 +8,14 @@ require (
 	github.com/go-i2p/common v0.1.4-0.20260317205637-c40aee7ed134
 	github.com/go-i2p/crypto v0.1.4-0.20260327201310-96101c044a62
 	github.com/go-i2p/go-nat-listener v0.0.0-20260128190435-6fcfda9acc7a
-	github.com/go-i2p/go-noise v0.1.4-0.20260327202013-48e87d30af61
-	github.com/go-i2p/logger v0.1.3
+	github.com/go-i2p/go-noise v0.1.4-0.20260331185909-9a73d1a2f5f2
+	github.com/go-i2p/logger v0.1.5
 	github.com/go-i2p/su3 v0.0.1
 	github.com/samber/oops v1.21.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.48.0
+	golang.org/x/crypto v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -38,20 +36,20 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/samber/lo v1.52.0 // indirect
+	github.com/samber/lo v1.53.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	go.opentelemetry.io/otel v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel v1.42.0 // indirect
+	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	go.step.sm/crypto v0.76.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 )
 
 // Preserve these commented-out replace directives for local development.
@@ -68,7 +66,7 @@ require (
 // Group 2: noise, go-noise
 //replace github.com/go-i2p/noise => ../noise
 
-replace github.com/go-i2p/go-noise => ../go-noise
+//replace github.com/go-i2p/go-noise => ../go-noise
 
 // Group 3: logger, su3
 //replace github.com/go-i2p/logger => ../logger
