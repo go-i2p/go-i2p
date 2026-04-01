@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -82,17 +83,17 @@ type fragmentAssembler struct {
 
 var (
 	// ErrNilDecryption is returned when decryption is nil
-	ErrNilDecryption = oops.Errorf("decryption tunnel cannot be nil")
+	ErrNilDecryption = errors.New("decryption tunnel cannot be nil")
 	// ErrNilHandler is returned when message handler is nil
-	ErrNilHandler = oops.Errorf("message handler cannot be nil")
+	ErrNilHandler = errors.New("message handler cannot be nil")
 	// ErrInvalidTunnelData is returned when tunnel data is malformed
-	ErrInvalidTunnelData = oops.Errorf("invalid tunnel data")
+	ErrInvalidTunnelData = errors.New("invalid tunnel data")
 	// ErrChecksumMismatch is returned when checksum validation fails
-	ErrChecksumMismatch = oops.Errorf("tunnel message checksum mismatch")
+	ErrChecksumMismatch = errors.New("tunnel message checksum mismatch")
 	// ErrTooManyFragments is returned when fragment number exceeds maximum
-	ErrTooManyFragments = oops.Errorf("too many fragments: maximum 63")
+	ErrTooManyFragments = errors.New("too many fragments: maximum 63")
 	// ErrDuplicateFragment is returned when a fragment is received twice
-	ErrDuplicateFragment = oops.Errorf("duplicate fragment received")
+	ErrDuplicateFragment = errors.New("duplicate fragment received")
 )
 
 // NewEndpoint creates a new tunnel endpoint.

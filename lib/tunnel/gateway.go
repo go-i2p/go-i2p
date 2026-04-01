@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/binary"
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -34,11 +35,11 @@ type Gateway struct {
 
 var (
 	// ErrNilEncryption is returned when encryption is nil
-	ErrNilEncryption = oops.Errorf("encryption tunnel cannot be nil")
+	ErrNilEncryption = errors.New("encryption tunnel cannot be nil")
 	// ErrMessageTooLarge is returned when a message exceeds maximum size
-	ErrMessageTooLarge = oops.Errorf("message too large for tunnel")
+	ErrMessageTooLarge = errors.New("message too large for tunnel")
 	// ErrInvalidMessage is returned when message data is invalid
-	ErrInvalidMessage = oops.Errorf("invalid I2NP message data")
+	ErrInvalidMessage = errors.New("invalid I2NP message data")
 )
 
 const (
