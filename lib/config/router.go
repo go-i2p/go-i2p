@@ -102,6 +102,9 @@ var DefaultI2CPConfig = I2CPConfig{
 	WriteTimeout:     30 * time.Second,
 }
 
+// DefaultTransportConfig provides default transport layer configuration
+var DefaultTransportConfig = buildTransportDefaults()
+
 // defaults for router
 var defaultRouterConfig = &RouterConfig{
 	NetDb:          &DefaultNetDbConfig,

@@ -4,7 +4,7 @@
 
 I2PControl is a JSON-RPC 2.0 interface for monitoring I2P routers. This guide explains how to enable, configure, and use the I2PControl server in go-i2p for development and testing purposes.
 
-> **Note:** The current I2PControl implementation is **read-only** — it provides monitoring endpoints (router status, network stats, bandwidth) but does not yet support control operations such as changing router settings or performing router stop/restart.
+> **Note:** The I2PControl implementation provides both **monitoring** endpoints (router status, network stats, bandwidth) and **control** operations (shutdown, restart, reseed). Some configuration settings (port/address changes) require a server restart to take effect.
 
 ## Table of Contents
 

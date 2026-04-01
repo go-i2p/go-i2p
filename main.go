@@ -46,6 +46,7 @@ func init() {
 	registerNetDbFlags()
 	registerBootstrapFlags()
 	registerI2CPFlags()
+	registerTransportFlags()
 	bindFlagsToViper()
 }
 
@@ -87,12 +88,21 @@ func registerI2CPFlags() {
 		"Maximum number of concurrent I2CP sessions")
 }
 
+// registerTransportFlags registers transport layer configuration flags.
+func registerTransportFlags() {
+	RootCmd.PersistentFlags().Bool("transport.ssu2-enabled", config.DefaultTransportConfig.SSU2Enabled,
+		"Enable SSU2 transport (UDP-based, currently experimental)")
+	RootCmd.PersistentFlags().Int("transport.ssu2-port", config.DefaultTransportConfig.SSU2Port,
+		"SSU2 listen port (0 = random port assigned by OS)")
+}
+
 // bindFlagsToViper binds all command-line flags to viper configuration keys.
 func bindFlagsToViper() {
 	bindRouterFlagsToViper()
 	bindNetDbFlagsToViper()
 	bindBootstrapFlagsToViper()
 	bindI2CPFlagsToViper()
+	bindTransportFlagsToViper()
 }
 
 // bindRouterFlagsToViper binds router flags to viper configuration.
@@ -188,6 +198,26 @@ func bindI2CPFlagsToViper() {
 			"reason": "failed to bind i2cp.max_sessions flag",
 			"flag":   "i2cp.max-sessions",
 		}).Fatal("failed to bind i2cp.max_sessions flag")
+	}
+}
+
+// bindTransportFlagsToViper binds transport flags to viper configuration.
+func bindTransportFlagsToViper() {
+	if err := viper.BindPFlag("transport.ssu2_enabled", RootCmd.PersistentFlags().Lookup("transport.ssu2-enabled")); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindTransportFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind transport.ssu2_enabled flag",
+			"flag":   "transport.ssu2-enabled",
+		}).Fatal("failed to bind transport.ssu2_enabled flag")
+	}
+	if err := viper.BindPFlag("transport.ssu2_port", RootCmd.PersistentFlags().Lookup("transport.ssu2-port")); err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"at":     "bindTransportFlagsToViper",
+			"phase":  "startup",
+			"reason": "failed to bind transport.ssu2_port flag",
+			"flag":   "transport.ssu2-port",
+		}).Fatal("failed to bind transport.ssu2_port flag")
 	}
 }
 

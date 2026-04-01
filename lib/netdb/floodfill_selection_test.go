@@ -27,7 +27,6 @@ func TestSelectFloodfillRouters_NoFloodfills(t *testing.T) {
 
 // TestCalculateXORDistance tests XOR distance calculation
 func TestCalculateXORDistance(t *testing.T) {
-
 	tests := []struct {
 		name string
 		h1   common.Hash
@@ -66,7 +65,6 @@ func TestCalculateXORDistance(t *testing.T) {
 
 // TestCompareXORDistances tests distance comparison
 func TestCompareXORDistances(t *testing.T) {
-
 	tests := []struct {
 		name string
 		d1   []byte

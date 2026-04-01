@@ -197,7 +197,7 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 		return fmt.Errorf("failed to convert port to integer: %w", err)
 	}
 	tcpListener, err := nattraversal.ListenWithFallback(iport)
-	//tcpListener, err := net.Listen("tcp", config.ListenerAddress)
+	// tcpListener, err := net.Listen("tcp", config.ListenerAddress)
 	if err != nil {
 		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}

@@ -141,7 +141,6 @@ func TestExpirationLogic_Stats(t *testing.T) {
 
 // TestKademliaDistance_XORCalculation verifies XOR distance calculation.
 func TestKademliaDistance_XORCalculation(t *testing.T) {
-
 	tests := []struct {
 		name string
 		h1   common.Hash
@@ -181,7 +180,6 @@ func TestKademliaDistance_XORCalculation(t *testing.T) {
 
 // TestKademliaDistance_Comparison verifies distance comparison logic.
 func TestKademliaDistance_Comparison(t *testing.T) {
-
 	tests := []struct {
 		name   string
 		d1     []byte
@@ -224,7 +222,6 @@ func TestKademliaDistance_Comparison(t *testing.T) {
 
 // TestKademliaDistance_Symmetry verifies XOR distance is symmetric.
 func TestKademliaDistance_Symmetry(t *testing.T) {
-
 	h1 := common.Hash{0xDE, 0xAD, 0xBE, 0xEF}
 	h2 := common.Hash{0xCA, 0xFE, 0xBA, 0xBE}
 

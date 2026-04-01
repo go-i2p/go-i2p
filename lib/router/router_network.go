@@ -185,19 +185,30 @@ func (r *Router) executeReseed(bootstrapper bootstrap.Bootstrap) error {
 	return nil
 }
 
+// natRecheckInterval is how often the router re-runs SSU2 NAT detection
+// to account for network changes (e.g., IP address change, NAT mapping expiry).
+const natRecheckInterval = 15 * time.Minute
+
 // runMainLoop executes the primary router event loop
 func (r *Router) runMainLoop() {
 	log.WithFields(logger.Fields{
 		"at": "(Router) mainloop",
 	}).Debug("Router ready with database message processing enabled")
 
-	// Block until shutdown signal — no need for a 1-second ticker poll.
-	// Both closeChnl and ctx.Done() are signaled during Stop().
-	select {
-	case <-r.closeChnl:
-		log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router received close signal in mainloop")
-	case <-r.ctx.Done():
-		log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router context cancelled in mainloop")
+	natTicker := time.NewTicker(natRecheckInterval)
+	defer natTicker.Stop()
+
+	for {
+		select {
+		case <-r.closeChnl:
+			log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router received close signal in mainloop")
+			return
+		case <-r.ctx.Done():
+			log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router context cancelled in mainloop")
+			return
+		case <-natTicker.C:
+			r.startSSU2NATDetection()
+		}
 	}
 }
 
