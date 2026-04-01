@@ -111,6 +111,8 @@ type Pool struct {
 	failedPeers    map[common.Hash]time.Time // FIX #5: Track failed peer connection attempts
 	failedPeersMu  sync.RWMutex              // FIX #5: Protect failed peers map
 	peerTracker    PeerTracker               // Optional peer reputation tracking (netdb integration)
+	cachedActive   []*TunnelState            // Cached sorted active tunnels
+	cachedDirty    bool                      // True when cache needs rebuild
 }
 
 // PeerTracker interface for recording peer connection outcomes.
@@ -134,6 +136,7 @@ func NewTunnelPoolWithConfig(selector PeerSelector, config PoolConfig) *Pool {
 		config:        config,
 		lastBuildTime: time.Time{},                     // Zero time
 		failedPeers:   make(map[common.Hash]time.Time), // FIX #5: Track failed connection attempts
+		cachedDirty:   true,
 		ctx:           ctx,
 		cancel:        cancel,
 		peerTracker:   nil, // Will be set via SetPeerTracker if NetDB integration is enabled
@@ -180,6 +183,7 @@ func (p *Pool) AddTunnel(tunnel *TunnelState) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.tunnels[tunnel.ID] = tunnel
+	p.cachedDirty = true
 	log.WithFields(logger.Fields{
 		"at":           "(Pool) AddTunnel",
 		"phase":        "tunnel_build",
@@ -197,6 +201,7 @@ func (p *Pool) RemoveTunnel(id TunnelID) {
 	defer p.mutex.Unlock()
 	tunnel, existed := p.tunnels[id]
 	delete(p.tunnels, id)
+	p.cachedDirty = true
 	log.WithFields(logger.Fields{
 		"at":        "(Pool) RemoveTunnel",
 		"phase":     "tunnel_build",
@@ -808,18 +813,20 @@ func (p *Pool) SelectTunnel() *TunnelState {
 
 // getActiveTunnelsLocked returns active tunnels sorted by ID for deterministic order (must hold mutex)
 func (p *Pool) getActiveTunnelsLocked() []*TunnelState {
+	if !p.cachedDirty && p.cachedActive != nil {
+		return p.cachedActive
+	}
 	var active []*TunnelState
 	for _, tunnel := range p.tunnels {
 		if tunnel.State == TunnelReady {
 			active = append(active, tunnel)
 		}
 	}
-
-	// Sort by tunnel ID to ensure deterministic round-robin selection
 	sort.Slice(active, func(i, j int) bool {
 		return active[i].ID < active[j].ID
 	})
-
+	p.cachedActive = active
+	p.cachedDirty = false
 	return active
 }
 
