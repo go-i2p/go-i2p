@@ -34,6 +34,9 @@ type SSU2Transport struct {
 	introducerRegistry *ssu2noise.IntroducerRegistry
 	holePunchCoord     *ssu2noise.HolePunchCoordinator
 
+	// NAT state cache with TTL.
+	natStateCache *natState
+
 	// Key management.
 	persistentConfig   *PersistentConfig
 	keyRotationManager *ssu2noise.KeyRotationManager
@@ -80,13 +83,14 @@ func NewSSU2Transport(identity router_info.RouterInfo, config *Config, keystore 
 	config.SSU2Config = ssu2Config
 
 	t := &SSU2Transport{
-		config:   config,
-		identity: identity,
-		keystore: keystore,
-		handler:  NewDefaultHandler(),
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   l,
+		config:        config,
+		identity:      identity,
+		keystore:      keystore,
+		handler:       NewDefaultHandler(),
+		natStateCache: &natState{},
+		ctx:           ctx,
+		cancel:        cancel,
+		logger:        l,
 	}
 
 	if err := setupUDPListener(t, config, ssu2Config); err != nil {
@@ -551,4 +555,24 @@ func (t *SSU2Transport) findSessionByAddr(addr *net.UDPAddr) *SSU2Session {
 		return true
 	})
 	return found
+}
+
+// findSessionByHash looks up a session by the peer's identity hash.
+// Returns nil if no session exists for the given hash.
+func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
+	val, ok := t.sessions.Load(hash)
+	if !ok {
+		return nil
+	}
+	s, _ := val.(*SSU2Session)
+	return s
+}
+
+// RemoteUDPAddr returns the remote UDP address of the session's underlying
+// SSU2 connection.
+func (s *SSU2Session) RemoteUDPAddr() *net.UDPAddr {
+	if s.conn == nil {
+		return nil
+	}
+	return s.conn.GetRemoteAddr()
 }

@@ -107,3 +107,59 @@ func TestBuildTransportCallbacks_DelegatesHandler(t *testing.T) {
 	assert.NoError(t, cbs.OnRelayResponse(block))
 	assert.NoError(t, cbs.OnRelayIntro(block))
 }
+
+// TestHandlePeerTestAsBob_NoAliceAddr verifies Bob handler returns nil when
+// Alice address is missing from the PeerTest block.
+func TestHandlePeerTestAsBob_NoAliceAddr(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRequest,
+		Nonce:       42,
+		Version:     2,
+	}
+	err := tr.handlePeerTestAsBob(ptBlock)
+	assert.NoError(t, err)
+}
+
+// TestHandlePeerTestAsCharlie_NoAliceAddr verifies Charlie handler returns nil
+// when Alice address is missing.
+func TestHandlePeerTestAsCharlie_NoAliceAddr(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	ptBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRelay,
+		Nonce:       42,
+		Version:     2,
+	}
+	err := tr.handlePeerTestAsCharlie(ptBlock)
+	assert.NoError(t, err)
+}
+
+// TestAnyActiveSession_Empty verifies anyActiveSession returns nil with no
+// sessions.
+func TestAnyActiveSession_Empty(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	assert.Nil(t, tr.anyActiveSession())
+}
+
+// TestFindSessionByHash_NotFound verifies findSessionByHash returns nil for
+// unknown hashes.
+func TestFindSessionByHash_NotFound(t *testing.T) {
+	tr, cleanup := makeTestTransportWithListener(t)
+	defer cleanup()
+
+	var hash [32]byte
+	assert.Nil(t, tr.findSessionByHash(hash))
+}
+
+// TestRemoteUDPAddr_NilConn verifies RemoteUDPAddr returns nil when the
+// session's conn is nil.
+func TestRemoteUDPAddr_NilConn(t *testing.T) {
+	s := &SSU2Session{}
+	assert.Nil(t, s.RemoteUDPAddr())
+}

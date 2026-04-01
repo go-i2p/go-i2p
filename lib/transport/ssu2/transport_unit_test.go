@@ -18,11 +18,12 @@ import (
 func makeMinimalTransport() *SSU2Transport {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SSU2Transport{
-		config:  &Config{ListenerAddress: ":0", MaxSessions: 4},
-		handler: NewDefaultHandler(),
-		ctx:     ctx,
-		cancel:  cancel,
-		logger:  log.WithField("test", "transport_unit"),
+		config:        &Config{ListenerAddress: ":0", MaxSessions: 4},
+		handler:       NewDefaultHandler(),
+		natStateCache: &natState{},
+		ctx:           ctx,
+		cancel:        cancel,
+		logger:        log.WithField("test", "transport_unit"),
 	}
 }
 

@@ -165,7 +165,7 @@ type NetworkConfig struct {
 // Design notes:
 //   - Uses minimal interface requirements (duck typing)
 //   - Tracks start time for uptime calculation
-//   - Returns mock data for unimplemented features (bandwidth, active peers)
+//   - Collects live router statistics including bandwidth, peer counts, and tunnel information via RouterAccess interface
 //   - Safe to call concurrently (uses read-only access patterns)
 type routerStatsProvider struct {
 	// router provides access to router subsystems

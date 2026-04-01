@@ -18,6 +18,11 @@ func initNATManagers(t *SSU2Transport) {
 	t.introducerRegistry = ssu2noise.NewIntroducerRegistry(3)
 	t.holePunchCoord = ssu2noise.NewHolePunchCoordinator(t.relayManager)
 	t.peerTestManager = ssu2noise.NewPeerTestManager(t.listener)
+	if t.natStateCache == nil {
+		t.natStateCache = &natState{}
+	}
+	t.loadNATState()
+	t.startNATCleanup()
 }
 
 // buildTransportCallbacks returns a BlockCallbackConfig whose handlers delegate
@@ -40,8 +45,9 @@ func (t *SSU2Transport) buildTransportCallbacks() *BlockCallbackConfig {
 	}
 }
 
-// handlePeerTestBlock processes an incoming PeerTest block and stores the
-// result for NAT-type determination.
+// handlePeerTestBlock processes an incoming PeerTest block, dispatching by
+// message code to support Alice (initiator), Bob (relay), and Charlie
+// (responder) roles in the SSU2 peer test protocol.
 func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 	if t.peerTestManager == nil {
 		return nil
@@ -51,8 +57,21 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 		t.logger.WithField("error", err).Warn("failed to decode PeerTest block")
 		return err
 	}
+	switch ptBlock.MessageCode {
+	case ssu2noise.PeerTestRequest:
+		return t.handlePeerTestAsBob(ptBlock)
+	case ssu2noise.PeerTestRelay:
+		return t.handlePeerTestAsCharlie(ptBlock)
+	default:
+		return t.handlePeerTestAsAlice(ptBlock)
+	}
+}
+
+// handlePeerTestAsAlice processes a PeerTest response/probe/result directed at
+// the test initiator (Alice). It reconstructs the observed external address
+// and completes the pending test.
+func (t *SSU2Transport) handlePeerTestAsAlice(ptBlock *ssu2noise.PeerTestBlock) error {
 	nonce := ptBlock.Nonce
-	// Reconstruct the observed external address from AliceIP + AlicePort when available.
 	var externalAddr *net.UDPAddr
 	if len(ptBlock.AliceIP) > 0 {
 		externalAddr = &net.UDPAddr{
@@ -65,10 +84,131 @@ func (t *SSU2Transport) handlePeerTestBlock(block *ssu2noise.SSU2Block) error {
 		Reachable:    externalAddr != nil,
 	}
 	if completeErr := t.peerTestManager.CompleteTest(nonce, result); completeErr != nil {
-		// Test may not exist if we are acting as relay/responder; ignore.
 		t.logger.WithField("nonce", nonce).Debug("PeerTest complete (non-initiator path)")
 	}
 	return nil
+}
+
+// handlePeerTestAsBob processes a PeerTest request where we act as Bob (relay).
+// We record the relay test and forward a PeerTestRelay to Charlie (identified
+// by RouterHash in the block).
+func (t *SSU2Transport) handlePeerTestAsBob(ptBlock *ssu2noise.PeerTestBlock) error {
+	var aliceAddr *net.UDPAddr
+	if len(ptBlock.AliceIP) > 0 {
+		aliceAddr = &net.UDPAddr{
+			IP:   net.IP(ptBlock.AliceIP),
+			Port: int(ptBlock.AlicePort),
+		}
+	}
+	if aliceAddr == nil {
+		t.logger.Debug("PeerTest Bob: missing Alice address, ignoring")
+		return nil
+	}
+	charlieAddr := t.resolveCharlieAddr(ptBlock)
+	if charlieAddr == nil {
+		t.logger.Debug("PeerTest Bob: cannot resolve Charlie address, ignoring")
+		return nil
+	}
+	if _, err := t.peerTestManager.CreateRelayTest(ptBlock.Nonce, aliceAddr, charlieAddr); err != nil {
+		t.logger.WithField("error", err).Debug("PeerTest Bob: failed to create relay test")
+		return nil
+	}
+	return t.forwardPeerTestToCharlie(ptBlock, charlieAddr)
+}
+
+// resolveCharlieAddr looks up Charlie's SSU2 address from the RouterHash in
+// the PeerTest block. Returns nil if the hash is absent or the address cannot
+// be resolved.
+func (t *SSU2Transport) resolveCharlieAddr(ptBlock *ssu2noise.PeerTestBlock) *net.UDPAddr {
+	if ptBlock.RouterHash == nil {
+		return nil
+	}
+	session := t.findSessionByHash(*ptBlock.RouterHash)
+	if session == nil {
+		return nil
+	}
+	return session.RemoteUDPAddr()
+}
+
+// forwardPeerTestToCharlie builds a PeerTestRelay block and sends it to
+// Charlie via an existing session.
+func (t *SSU2Transport) forwardPeerTestToCharlie(ptBlock *ssu2noise.PeerTestBlock, charlieAddr *net.UDPAddr) error {
+	session := t.findSessionByAddr(charlieAddr)
+	if session == nil {
+		t.logger.Debug("PeerTest Bob: no session to Charlie for relay")
+		return nil
+	}
+	relayBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestRelay,
+		Nonce:       ptBlock.Nonce,
+		Version:     ptBlock.Version,
+		Timestamp:   ptBlock.Timestamp,
+		AlicePort:   ptBlock.AlicePort,
+		AliceIP:     ptBlock.AliceIP,
+		Signature:   ptBlock.Signature,
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(relayBlock)
+	if err != nil {
+		return fmt.Errorf("PeerTest Bob: encode relay block: %w", err)
+	}
+	return session.WriteBlocks([]*ssu2noise.SSU2Block{encoded})
+}
+
+// handlePeerTestAsCharlie processes a PeerTestRelay where we act as Charlie
+// (responder). We record the test and send a direct probe to Alice.
+func (t *SSU2Transport) handlePeerTestAsCharlie(ptBlock *ssu2noise.PeerTestBlock) error {
+	var aliceAddr *net.UDPAddr
+	if len(ptBlock.AliceIP) > 0 {
+		aliceAddr = &net.UDPAddr{
+			IP:   net.IP(ptBlock.AliceIP),
+			Port: int(ptBlock.AlicePort),
+		}
+	}
+	if aliceAddr == nil {
+		t.logger.Debug("PeerTest Charlie: missing Alice address, ignoring")
+		return nil
+	}
+	if err := t.peerTestManager.CreateResponderTest(ptBlock.Nonce, aliceAddr, nil); err != nil {
+		t.logger.WithField("error", err).Debug("PeerTest Charlie: failed to create responder test")
+		return nil
+	}
+	return t.sendProbeToAlice(ptBlock, aliceAddr)
+}
+
+// sendProbeToAlice sends a PeerTestProbe directly to Alice so she can observe
+// connectivity from a third party (Charlie). Uses an existing session's
+// underlying connection to send to Alice's address.
+func (t *SSU2Transport) sendProbeToAlice(ptBlock *ssu2noise.PeerTestBlock, aliceAddr *net.UDPAddr) error {
+	probeBlock := &ssu2noise.PeerTestBlock{
+		MessageCode: ssu2noise.PeerTestProbe,
+		Nonce:       ptBlock.Nonce,
+		Version:     ptBlock.Version,
+		Timestamp:   uint32(time.Now().Unix()),
+	}
+	encoded, err := ssu2noise.EncodePeerTestBlock(probeBlock)
+	if err != nil {
+		return fmt.Errorf("PeerTest Charlie: encode probe block: %w", err)
+	}
+	session := t.anyActiveSession()
+	if session == nil || session.conn == nil {
+		t.logger.Debug("PeerTest Charlie: no active session to send probe")
+		return nil
+	}
+	return session.conn.SendToAddress(encoded, aliceAddr)
+}
+
+// anyActiveSession returns the first active SSU2Session, or nil if none exist.
+func (t *SSU2Transport) anyActiveSession() *SSU2Session {
+	var found *SSU2Session
+	t.sessions.Range(func(_, value interface{}) bool {
+		s, ok := value.(*SSU2Session)
+		if ok && s.conn != nil {
+			found = s
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // handleRelayRequestBlock processes a RelayRequest from Alice (we are Bob).
@@ -190,6 +330,17 @@ func (t *SSU2Transport) GetNATType(peerAddr *net.UDPAddr) ssu2noise.NATType {
 		return ssu2noise.NATUnknown
 	}
 	return t.peerTestManager.DetermineNATType(result)
+}
+
+// GetCachedNATType returns the most recently cached NAT type from the
+// transport-level cache. Returns NATUnknown if the cache is empty or expired
+// (30-minute TTL).
+func (t *SSU2Transport) GetCachedNATType() ssu2noise.NATType {
+	natType, valid := t.natStateCache.get()
+	if !valid {
+		return ssu2noise.NATUnknown
+	}
+	return natType
 }
 
 // GetExternalAddr returns the external UDP address detected from the most
@@ -371,6 +522,15 @@ func (t *SSU2Transport) checkPeerTestComplete(nonce uint32, candidates []router_
 	}
 	natType := t.classifyNATType(test)
 	t.logger.WithField("nat_type", natType.String()).Info("NAT detection: peer test complete")
+
+	// Cache result with TTL and persist to disk.
+	var extStr string
+	if test.ExternalAddr != nil {
+		extStr = test.ExternalAddr.String()
+	}
+	t.natStateCache.set(natType, extStr)
+	t.saveNATState()
+
 	if natType == ssu2noise.NATRestricted || natType == ssu2noise.NATSymmetric {
 		t.registerIntroducers(candidates, republish)
 	}

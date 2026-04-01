@@ -556,10 +556,12 @@ func (s *SSU2Session) handleRetransmissions() (shouldClose bool) {
 		if now.Before(p.deadline) {
 			continue
 		}
+		// Any deadline expiry indicates packet loss — signal regardless of
+		// whether the retransmission itself succeeded or failed.
+		hadLoss = true
 		action := s.processRetransmission(p, now)
 		if action == retransmitDelete || action == retransmitMaxExceeded {
 			toDelete = append(toDelete, seq)
-			hadLoss = true
 			if action == retransmitMaxExceeded {
 				shouldClose = true
 			}
