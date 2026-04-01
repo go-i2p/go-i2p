@@ -90,7 +90,7 @@ func NewManager() *Manager {
 func NewManagerWithConfig(cfg config.TunnelDefaults) *Manager {
 	maxParticipants := cfg.MaxParticipatingTunnels
 	if maxParticipants <= 0 {
-		maxParticipants = 2000 // Sensible default if unset or zero
+		maxParticipants = 15000 // Match config.TunnelDefaults default
 		log.WithField("default_max", maxParticipants).Info("MaxParticipatingTunnels was zero, using default")
 	}
 	m := &Manager{

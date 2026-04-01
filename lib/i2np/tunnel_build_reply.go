@@ -98,7 +98,7 @@ func (t *TunnelBuildReply) logProcessingComplete(successCount int) {
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
 func (t *TunnelBuildReply) determineTunnelBuildResult(successCount int, firstError error) error {
 	if successCount == len(t.Records) {
-		log.Debug("Tunnel build successful - all hops accepted")
+		log.WithFields(logger.Fields{"at": "determineTunnelBuildResult"}).Debug("Tunnel build successful - all hops accepted")
 		return nil
 	}
 

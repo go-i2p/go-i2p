@@ -159,10 +159,10 @@ func (dm *DatabaseManager) logLookupRequest(reader DatabaseReader) {
 
 // handleLookupWithoutSession performs lookup without sending responses for backward compatibility.
 func (dm *DatabaseManager) handleLookupWithoutSession(key common.Hash) error {
-	log.Debug("No session provider available, performing lookup without sending response")
+	log.WithFields(logger.Fields{"at": "handleLookupWithoutSession"}).Debug("No session provider available, performing lookup without sending response")
 
 	if dm.retriever == nil {
-		log.Debug("No retriever available, cannot perform lookup")
+		log.WithFields(logger.Fields{"at": "handleLookupWithoutSession"}).Debug("No retriever available, cannot perform lookup")
 		return nil
 	}
 
@@ -177,7 +177,7 @@ func (dm *DatabaseManager) handleLookupWithoutSession(key common.Hash) error {
 // performLookupWithSession attempts lookup and sends appropriate response message.
 func (dm *DatabaseManager) performLookupWithSession(key, from common.Hash) error {
 	if dm.retriever == nil {
-		log.Debug("No retriever available, cannot perform lookup")
+		log.WithFields(logger.Fields{"at": "performLookupWithSession"}).Debug("No retriever available, cannot perform lookup")
 		return dm.sendDatabaseSearchReply(key, from)
 	}
 
@@ -250,7 +250,7 @@ func (dm *DatabaseManager) selectClosestFloodfills(targetKey common.Hash) []comm
 // hasFloodfillSelector checks if a floodfill selector is configured.
 func (dm *DatabaseManager) hasFloodfillSelector() bool {
 	if dm.floodfillSelector == nil {
-		log.Debug("No floodfill selector available, returning empty peer list")
+		log.WithFields(logger.Fields{"at": "hasFloodfillSelector"}).Debug("No floodfill selector available, returning empty peer list")
 		return false
 	}
 	return true
@@ -265,7 +265,7 @@ func (dm *DatabaseManager) fetchFloodfillRouters(targetKey common.Hash, count in
 	}
 
 	if len(floodfills) == 0 {
-		log.Debug("No floodfill routers available for peer suggestions")
+		log.WithFields(logger.Fields{"at": "fetchFloodfillRouters"}).Debug("No floodfill routers available for peer suggestions")
 	}
 
 	return floodfills, nil

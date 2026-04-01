@@ -54,7 +54,7 @@ func (db *StdNetDB) buildExcludeMap(exclude []common.Hash) map[common.Hash]bool 
 // so it's normal for a significant portion of routers to be filtered out.
 func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 	if ri == nil {
-		log.Debug("hasValidNTCP2Address: RouterInfo is nil")
+		log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: RouterInfo is nil")
 		return false
 	}
 
@@ -72,11 +72,11 @@ func hasValidNTCP2Address(ri *router_info.RouterInfo) bool {
 	}
 
 	if !hasValidNTCP2 {
-		log.Debug("hasValidNTCP2Address: NO valid NTCP2 addresses found")
+		log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: NO valid NTCP2 addresses found")
 		return false
 	}
 
-	log.Debug("hasValidNTCP2Address: At least one valid NTCP2 address found")
+	log.WithFields(logger.Fields{"at": "hasValidNTCP2Address"}).Debug("hasValidNTCP2Address: At least one valid NTCP2 address found")
 	return true
 }
 

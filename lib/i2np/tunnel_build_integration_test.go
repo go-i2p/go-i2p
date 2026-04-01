@@ -50,7 +50,7 @@ func TestTunnelBuildMessage_Creation(t *testing.T) {
 	records := createTestBuildRequestRecords()
 
 	// Create TunnelBuild message
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	// Verify I2NPMessage interface compliance
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
@@ -70,7 +70,7 @@ func TestTunnelBuildMessage_Creation(t *testing.T) {
 // TestTunnelBuildMessage_Serialization tests marshaling and unmarshaling
 func TestTunnelBuildMessage_Serialization(t *testing.T) {
 	records := createTestBuildRequestRecords()
-	originalMsg := NewTunnelBuildMessage(records)
+	originalMsg := newTunnelBuildMessage(records)
 	originalMsg.SetMessageID(12345)
 
 	// Marshal the message
@@ -177,7 +177,7 @@ func TestTunnelManager_GenerateTunnelID(t *testing.T) {
 // TestTunnelBuildMessage_InterfaceCompliance verifies interface satisfaction
 func TestTunnelBuildMessage_InterfaceCompliance(t *testing.T) {
 	records := createTestBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	// Test I2NPMessage interface
 	var i2npMsg I2NPMessage = msg

@@ -992,7 +992,7 @@ func validateRateLimitSettings(tunnel TunnelDefaults) error {
 
 // validateTransport validates transport layer configuration settings.
 func validateTransport(transport TransportDefaults) error {
-	log.Debug("Validating transport configuration")
+	log.WithFields(logger.Fields{"at": "validateTransport"}).Debug("Validating transport configuration")
 	if err := validateTransportSizes(transport); err != nil {
 		return err
 	}
@@ -1002,7 +1002,7 @@ func validateTransport(transport TransportDefaults) error {
 	if err := validateTransportTimeouts(transport); err != nil {
 		return err
 	}
-	log.Debug("Transport configuration validated successfully")
+	log.WithFields(logger.Fields{"at": "validateTransport"}).Debug("Transport configuration validated successfully")
 	return nil
 }
 
@@ -1049,7 +1049,7 @@ func validateTransportTimeouts(transport TransportDefaults) error {
 
 // validatePerformance validates performance tuning configuration settings.
 func validatePerformance(performance PerformanceDefaults) error {
-	log.Debug("Validating performance configuration")
+	log.WithFields(logger.Fields{"at": "validatePerformance"}).Debug("Validating performance configuration")
 	if performance.WorkerPoolSize < 1 {
 		log.WithField("worker_pool_size", performance.WorkerPoolSize).Error("Invalid performance configuration")
 		return newValidationError("Performance.WorkerPoolSize must be at least 1")
@@ -1058,7 +1058,7 @@ func validatePerformance(performance PerformanceDefaults) error {
 		log.WithField("message_queue_size", performance.MessageQueueSize).Error("Invalid performance configuration")
 		return newValidationError("Performance.MessageQueueSize must be at least 1")
 	}
-	log.Debug("Performance configuration validated successfully")
+	log.WithFields(logger.Fields{"at": "validatePerformance"}).Debug("Performance configuration validated successfully")
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/logger"
 
 	"github.com/go-i2p/common/certificate"
 	"github.com/go-i2p/common/key_certificate"
@@ -235,7 +236,7 @@ func generateNewKey() (types.PrivateKey, error) {
 		return nil, err
 	}
 
-	log.Debug("Generated new Ed25519 key pair")
+	log.WithFields(logger.Fields{"at": "generateNewKey"}).Debug("Generated new Ed25519 key pair")
 	// Return pointer to private key (required for interface compliance)
 	return privKey, nil
 }

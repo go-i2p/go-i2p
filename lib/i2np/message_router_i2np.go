@@ -42,13 +42,13 @@ func (mr *I2NPMessageDispatcher) SetNetDB(netdb I2NPNetDBStore) {
 	// If NetDB also implements FloodfillSelector, enable floodfill functionality
 	if selector, ok := netdb.(FloodfillSelector); ok {
 		mr.dbManager.SetFloodfillSelector(selector)
-		log.Debug("Floodfill selector configured for message router")
+		log.WithFields(logger.Fields{"at": "SetNetDB"}).Debug("Floodfill selector configured for message router")
 	}
 
 	// If NetDB also implements NetDBRetriever, configure retriever
 	if retriever, ok := netdb.(NetDBRetriever); ok {
 		mr.dbManager.SetRetriever(retriever)
-		log.Debug("NetDB retriever configured for message router")
+		log.WithFields(logger.Fields{"at": "SetNetDB"}).Debug("NetDB retriever configured for message router")
 	}
 
 	// Set database manager on processor for DatabaseLookup message handling
@@ -99,7 +99,7 @@ func (mr *I2NPMessageDispatcher) SetSessionProvider(provider SessionProvider) {
 	// Propagate to TunnelManager for tunnel build responses
 	mr.tunnelMgr.SetSessionProvider(provider)
 
-	log.Debug("Session provider configured for message router")
+	log.WithFields(logger.Fields{"at": "SetSessionProvider"}).Debug("Session provider configured for message router")
 }
 
 // RouteMessage routes messages based on their interfaces

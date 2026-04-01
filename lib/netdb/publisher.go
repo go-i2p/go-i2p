@@ -151,10 +151,10 @@ func (p *Publisher) Start() error {
 
 // Stop halts database publishing and waits for in-flight publishes to complete.
 func (p *Publisher) Stop() {
-	log.Info("Stopping database publisher")
+	log.WithFields(logger.Fields{"at": "Stop"}).Info("Stopping database publisher")
 	p.cancel()
 	p.wg.Wait()
-	log.Info("Database publisher stopped")
+	log.WithFields(logger.Fields{"at": "Stop"}).Info("Database publisher stopped")
 }
 
 // routerInfoPublishingLoop periodically publishes our RouterInfo
@@ -201,11 +201,11 @@ func (p *Publisher) leaseSetPublishingLoop() {
 // This makes our router discoverable in the I2P network by distributing our
 // RouterInfo to the closest floodfill routers in the DHT.
 func (p *Publisher) publishOurRouterInfo() {
-	log.Debug("Publishing our RouterInfo")
+	log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("Publishing our RouterInfo")
 
 	// Check if RouterInfo provider is configured
 	if p.routerInfoProvider == nil {
-		log.Debug("RouterInfoProvider not configured, skipping RouterInfo publishing")
+		log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("RouterInfoProvider not configured, skipping RouterInfo publishing")
 		return
 	}
 
@@ -218,7 +218,7 @@ func (p *Publisher) publishOurRouterInfo() {
 
 	// Validate RouterInfo before publishing
 	if !ri.IsValid() {
-		log.Warn("Local RouterInfo is invalid, skipping publishing")
+		log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Warn("Local RouterInfo is invalid, skipping publishing")
 		return
 	}
 
@@ -228,12 +228,12 @@ func (p *Publisher) publishOurRouterInfo() {
 		return
 	}
 
-	log.Debug("Successfully published our RouterInfo to floodfill routers")
+	log.WithFields(logger.Fields{"at": "publishOurRouterInfo"}).Debug("Successfully published our RouterInfo to floodfill routers")
 }
 
 // publishAllLeaseSets publishes all LeaseSets in the database
 func (p *Publisher) publishAllLeaseSets() {
-	log.Debug("Publishing all LeaseSets")
+	log.WithFields(logger.Fields{"at": "publishAllLeaseSets"}).Debug("Publishing all LeaseSets")
 
 	// Get all LeaseSets from the database
 	leaseSets := p.db.GetAllLeaseSets()

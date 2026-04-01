@@ -77,7 +77,7 @@ func applyResponseParsers(data []byte, record *BuildResponseRecord, parsers []re
 }
 
 func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
-	log.Debug("Reading BuildResponseRecord")
+	log.WithFields(logger.Fields{"at": "ReadBuildResponseRecord"}).Debug("Reading BuildResponseRecord")
 	record := BuildResponseRecord{}
 
 	if err := applyResponseParsers(data, &record, []responseFieldParser{
@@ -100,7 +100,7 @@ func ReadBuildResponseRecord(data []byte) (BuildResponseRecord, error) {
 		return record, err
 	}
 
-	log.Debug("BuildResponseRecord read successfully")
+	log.WithFields(logger.Fields{"at": "ReadBuildResponseRecord"}).Debug("BuildResponseRecord read successfully")
 	return record, nil
 }
 
@@ -177,6 +177,6 @@ func validateBuildResponseRecord(record BuildResponseRecord) error {
 		return fmt.Errorf("response record hash verification failed")
 	}
 
-	log.Debug("Response record validation passed")
+	log.WithFields(logger.Fields{"at": "validateBuildResponseRecord"}).Debug("Response record validation passed")
 	return nil
 }

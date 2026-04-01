@@ -120,7 +120,7 @@ func (r *Router) stopGarlicRouter() {
 func (r *Router) stopBandwidthTracker() {
 	if r.bandwidthTracker != nil {
 		r.bandwidthTracker.Stop()
-		log.Debug("Bandwidth tracker stopped")
+		log.WithFields(logger.Fields{"at": "stopBandwidthTracker"}).Debug("Bandwidth tracker stopped")
 	}
 }
 
@@ -244,7 +244,7 @@ func (r *Router) stopExplorer() {
 	if r.explorer != nil {
 		r.explorer.Stop()
 		r.explorer = nil
-		log.Debug("NetDB explorer stopped")
+		log.WithFields(logger.Fields{"at": "stopExplorer"}).Debug("NetDB explorer stopped")
 	}
 }
 
@@ -253,7 +253,7 @@ func (r *Router) stopFloodfillServer() {
 	if r.floodfillServer != nil {
 		r.floodfillServer.Stop()
 		r.floodfillServer = nil
-		log.Debug("Floodfill server stopped")
+		log.WithFields(logger.Fields{"at": "stopFloodfillServer"}).Debug("Floodfill server stopped")
 	}
 }
 
@@ -262,7 +262,7 @@ func (r *Router) stopFloodfillServer() {
 // netdb.floodfill_enabled in the config to enable it.
 func (r *Router) startFloodfillServer() {
 	if r.StdNetDB == nil || r.TransportMuxer == nil {
-		log.Debug("Floodfill server deferred: NetDB or transport muxer not ready")
+		log.WithFields(logger.Fields{"at": "startFloodfillServer"}).Debug("Floodfill server deferred: NetDB or transport muxer not ready")
 		return
 	}
 	adapter := &floodfillTransportAdapter{muxer: r.TransportMuxer, db: r.StdNetDB}
@@ -283,12 +283,12 @@ func (r *Router) startFloodfillServer() {
 // improving peer diversity over time. It requires a running tunnel pool.
 func (r *Router) startExplorer() {
 	if r.StdNetDB == nil || r.tunnelManager == nil {
-		log.Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
+		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: NetDB or tunnel manager not ready")
 		return
 	}
 	tunnelPool := r.tunnelManager.GetPool()
 	if tunnelPool == nil {
-		log.Debug("NetDB explorer deferred: tunnel pool not available")
+		log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer deferred: tunnel pool not available")
 		return
 	}
 
@@ -310,7 +310,7 @@ func (r *Router) startExplorer() {
 		r.explorer = nil
 		return
 	}
-	log.Debug("NetDB explorer started")
+	log.WithFields(logger.Fields{"at": "startExplorer"}).Debug("NetDB explorer started")
 }
 
 // startPublisher creates and starts the NetDB publisher for periodic RouterInfo and LeaseSet
@@ -319,7 +319,7 @@ func (r *Router) startExplorer() {
 func (r *Router) startPublisher() {
 	tunnelPool, err := r.resolvePublisherDependencies()
 	if err != nil {
-		log.Warn(err.Error())
+		log.WithFields(logger.Fields{"at": "startPublisher"}).Warn(err.Error())
 		return
 	}
 
@@ -394,7 +394,7 @@ func (r *Router) stopTunnelManager() {
 func (r *Router) stopParticipantManager() {
 	if r.participantManager != nil {
 		r.participantManager.Stop()
-		log.Debug("Participant manager stopped")
+		log.WithFields(logger.Fields{"at": "stopParticipantManager"}).Debug("Participant manager stopped")
 	}
 }
 
@@ -406,14 +406,14 @@ func (r *Router) stopI2CPServer() {
 		if err := r.leaseSetPublisher.WaitWithTimeout(30 * time.Second); err != nil {
 			log.WithError(err).Warn("LeaseSet publisher goroutines did not drain within timeout")
 		} else {
-			log.Debug("LeaseSet publisher goroutines drained")
+			log.WithFields(logger.Fields{"at": "stopI2CPServer"}).Debug("LeaseSet publisher goroutines drained")
 		}
 	}
 	if r.i2cpServer != nil {
 		if err := r.i2cpServer.Stop(); err != nil {
 			log.WithError(err).Error("Failed to stop I2CP server")
 		} else {
-			log.Debug("I2CP server stopped")
+			log.WithFields(logger.Fields{"at": "stopI2CPServer"}).Debug("I2CP server stopped")
 		}
 	}
 }
@@ -423,9 +423,9 @@ func (r *Router) stopI2CPServer() {
 func (r *Router) sendCloseSignal() {
 	select {
 	case r.closeChnl <- true:
-		log.Debug("Router stop signal sent")
+		log.WithFields(logger.Fields{"at": "sendCloseSignal"}).Debug("Router stop signal sent")
 	default:
-		log.Debug("Router stop signal already sent or channel full")
+		log.WithFields(logger.Fields{"at": "sendCloseSignal"}).Debug("Router stop signal already sent or channel full")
 	}
 }
 
@@ -736,7 +736,7 @@ func (r *Router) awaitStartupResult() error {
 
 // initializeNetDB creates and configures the network database
 func (r *Router) initializeNetDB() error {
-	log.Debug("Initializing network database")
+	log.WithFields(logger.Fields{"at": "initializeNetDB"}).Debug("Initializing network database")
 	r.StdNetDB = netdb.NewStdNetDB(r.cfg.NetDb.Path)
 	log.WithField("netdb_path", r.cfg.NetDb.Path).Debug("Created StdNetDB")
 	return nil
@@ -762,17 +762,17 @@ func (r *Router) initializeMessageRouter() {
 
 	// Initialize participant manager for tracking transit tunnels
 	r.participantManager = tunnel.NewManager()
-	log.Debug("Participant manager initialized for transit tunnel tracking")
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager initialized for transit tunnel tracking")
 
 	// Wire participant manager into the message processor so incoming tunnel
 	// build requests from other routers are evaluated instead of silently dropped.
 	r.messageRouter.GetProcessor().SetParticipantManager(r.participantManager)
-	log.Debug("Participant manager wired into message processor")
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Participant manager wired into message processor")
 
 	// Wire build reply forwarder so accepted tunnel build requests can send
 	// replies back to the requester via the transport layer.
 	r.messageRouter.GetProcessor().SetBuildReplyForwarder(&transportBuildReplyForwarder{sessionProvider: r})
-	log.Debug("Build reply forwarder wired into message processor")
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Build reply forwarder wired into message processor")
 
 	// Initialize garlic message router for handling garlic clove forwarding
 	r.initializeGarlicRouter()
@@ -785,7 +785,7 @@ func (r *Router) initializeMessageRouter() {
 	// This enables inbound tunnel messages to be decrypted and delivered to I2CP sessions.
 	if r.inboundHandler != nil {
 		r.messageRouter.GetProcessor().SetTunnelDataHandler(r.inboundHandler)
-		log.Debug("InboundMessageHandler wired as TunnelData handler on message processor")
+		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("InboundMessageHandler wired as TunnelData handler on message processor")
 	}
 
 	// Wire our router identity, build-record decryptor, and X25519 private key so that
@@ -800,10 +800,10 @@ func (r *Router) initializeMessageRouter() {
 		r.messageRouter.GetProcessor().SetOurRouterHash(routerHash)
 		r.messageRouter.GetProcessor().SetBuildRequestDecryptor(buildCrypto)
 		r.messageRouter.GetProcessor().SetOurPrivateKey(privKeyBytes)
-		log.Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
+		log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("MessageProcessor identity, decryptor, and private key wired for build record decryption")
 	}
 
-	log.Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
+	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("Message router initialized with NetDB, peer selection, session provider, tunnel data handler, garlic sessions, and garlic forwarding")
 }
 
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
@@ -825,12 +825,12 @@ func (r *Router) initializeTunnelManager() {
 	pool.SetTunnelBuilder(tm) // TunnelManager implements BuilderInterface
 
 	pool.SetPeerTracker(r.StdNetDB.PeerTracker)
-	log.Debug("Tunnel pool configured with NetDB peer tracker for reputation tracking")
+	log.WithFields(logger.Fields{"at": "initializeTunnelManager"}).Debug("Tunnel pool configured with NetDB peer tracker for reputation tracking")
 
 	if err := pool.StartMaintenance(); err != nil {
 		log.WithError(err).Error("Failed to start tunnel pool maintenance")
 	} else {
-		log.Debug("Tunnel pool automatic maintenance started")
+		log.WithFields(logger.Fields{"at": "initializeTunnelManager"}).Debug("Tunnel pool automatic maintenance started")
 	}
 
 	log.WithFields(logger.Fields{
@@ -897,7 +897,7 @@ func (r *Router) wireGarlicSessionManager() {
 		return
 	}
 	r.messageRouter.GetProcessor().SetGarlicSessionManager(garlicMgr)
-	log.Debug("Garlic session manager wired into message processor")
+	log.WithFields(logger.Fields{"at": "wireGarlicSessionManager"}).Debug("Garlic session manager wired into message processor")
 }
 
 // getOurRouterHash returns our router's identity hash.

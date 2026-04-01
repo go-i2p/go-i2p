@@ -410,11 +410,29 @@ func fragmentSSU2Short(data []byte, maxPayload int) ([]*ssu2noise.SSU2Block, err
 	shortExpiry := binary.BigEndian.Uint32(data[5:9])
 	body := data[i2np.ShortI2NPHeaderSize:]
 
-	// FirstFragment: TLV(3) + I2NPType(1) + MessageID(4) + ShortExpiry(4) + BodyChunk
+	firstBlock, firstBodySize, err := buildShortFirstFragment(i2npType, messageID, shortExpiry, body, maxPayload, blockTLVOverhead)
+	if err != nil {
+		return nil, err
+	}
+
+	blocks := []*ssu2noise.SSU2Block{firstBlock}
+
+	followOns, err := buildShortFollowOnFragments(messageID, body, firstBodySize, maxPayload, blockTLVOverhead)
+	if err != nil {
+		return nil, err
+	}
+	blocks = append(blocks, followOns...)
+
+	return blocks, nil
+}
+
+// buildShortFirstFragment creates the first fragment block for a fragmented SSU2 short message.
+// Returns the block, the number of body bytes included, and any error.
+func buildShortFirstFragment(i2npType byte, messageID, shortExpiry uint32, body []byte, maxPayload, tlvOverhead int) (*ssu2noise.SSU2Block, int, error) {
 	const firstFragHeaderSize = 9 // type(1) + msgID(4) + shortExpiry(4)
-	maxFirstBody := maxPayload - blockTLVOverhead - firstFragHeaderSize
+	maxFirstBody := maxPayload - tlvOverhead - firstFragHeaderSize
 	if maxFirstBody <= 0 {
-		return nil, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
+		return nil, 0, fmt.Errorf("max payload %d too small for first fragment", maxPayload)
 	}
 
 	firstBodySize := maxFirstBody
@@ -428,18 +446,18 @@ func fragmentSSU2Short(data []byte, maxPayload int) ([]*ssu2noise.SSU2Block, err
 	binary.BigEndian.PutUint32(firstData[5:9], shortExpiry)
 	copy(firstData[9:], body[:firstBodySize])
 
-	blocks := []*ssu2noise.SSU2Block{
-		ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, firstData),
-	}
+	return ssu2noise.NewSSU2Block(ssu2noise.BlockTypeFirstFragment, firstData), firstBodySize, nil
+}
 
-	// FollowOnFragments: TLV(3) + FragInfo(1) + MessageID(4) + BodyChunk
+// buildShortFollowOnFragments creates follow-on fragment blocks for the remaining body data.
+func buildShortFollowOnFragments(messageID uint32, body []byte, offset, maxPayload, tlvOverhead int) ([]*ssu2noise.SSU2Block, error) {
 	const followOnHeaderSize = 5 // fragInfo(1) + msgID(4)
-	maxFollowBody := maxPayload - blockTLVOverhead - followOnHeaderSize
+	maxFollowBody := maxPayload - tlvOverhead - followOnHeaderSize
 	if maxFollowBody <= 0 {
 		return nil, fmt.Errorf("max payload %d too small for follow-on fragment", maxPayload)
 	}
 
-	offset := firstBodySize
+	var blocks []*ssu2noise.SSU2Block
 	fragNum := uint8(1)
 	for offset < len(body) {
 		end := offset + maxFollowBody

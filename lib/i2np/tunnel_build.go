@@ -58,7 +58,7 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 	return &tb
 }
 
-// NewTunnelBuildMessage creates a new TunnelBuild I2NP message
+// newTunnelBuildMessage creates a new TunnelBuild I2NP message
 //
 // SPECIFICATION COMPLIANCE NOTE:
 // According to I2P specification (https://geti2p.net/spec/i2np), BuildRequestRecords
@@ -87,9 +87,9 @@ func NewTunnelBuilder(records [8]BuildRequestRecord) TunnelBuilder {
 //   - Unit testing of serialization logic
 //
 // DO NOT USE for production tunnel building without implementing encryption first.
-func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
+func newTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 	log.WithFields(logger.Fields{
-		"at":           "NewTunnelBuildMessage",
+		"at":           "newTunnelBuildMessage",
 		"record_count": 8,
 	}).Debug("Creating new TunnelBuild message")
 
@@ -108,7 +108,7 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 		// indistinguishable from encrypted data (spec requirement).
 		if _, err := rand.Read(data[i*528+222 : (i+1)*528]); err != nil {
 			log.WithFields(logger.Fields{
-				"at":     "NewTunnelBuildMessage",
+				"at":     "newTunnelBuildMessage",
 				"record": i,
 			}).Warn("Failed to generate random padding for record")
 		}
@@ -116,7 +116,7 @@ func NewTunnelBuildMessage(records [8]BuildRequestRecord) *TunnelBuildMessage {
 	msg.SetData(data)
 
 	log.WithFields(logger.Fields{
-		"at":        "NewTunnelBuildMessage",
+		"at":        "newTunnelBuildMessage",
 		"data_size": len(data),
 	}).Debug("TunnelBuild message created successfully (cleartext, requires encryption)")
 

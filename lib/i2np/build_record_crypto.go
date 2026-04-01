@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/crypto/ecies"
 	"github.com/go-i2p/crypto/types"
 	"github.com/go-i2p/go-noise/ratchet"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -74,7 +75,7 @@ func (c *BuildRecordCrypto) DecryptReplyRecord(
 		return BuildResponseRecord{}, fmt.Errorf("hash verification failed: %w", err)
 	}
 
-	log.Debug("Decrypted and verified build response record")
+	log.WithFields(logger.Fields{"at": "DecryptReplyRecord"}).Debug("Decrypted and verified build response record")
 	return record, nil
 }
 

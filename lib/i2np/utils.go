@@ -16,7 +16,7 @@ import (
 // ReadI2NPNTCPHeader reads an entire I2NP message and returns the parsed header
 // with embedded encrypted data
 func ReadI2NPNTCPHeader(data []byte) (I2NPNTCPHeader, error) {
-	log.Debug("Reading I2NP NTCP Header")
+	log.WithFields(logger.Fields{"at": "ReadI2NPNTCPHeader"}).Debug("Reading I2NP NTCP Header")
 	header := I2NPNTCPHeader{}
 
 	if err := executeHeaderParsers(data, &header); err != nil {

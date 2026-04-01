@@ -226,7 +226,7 @@ func initializeRouterKeystore(r *Router, cfg *config.RouterConfig) error {
 		}).Error("failed to store RouterInfoKeystore")
 		return err
 	}
-	log.Debug("RouterInfoKeystore stored successfully")
+	log.WithFields(logger.Fields{"at": "initializeRouterKeystore"}).Debug("RouterInfoKeystore stored successfully")
 
 	r.RouterInfoKeystore = keystore
 	return nil
@@ -243,7 +243,7 @@ func validateRouterKeys(r *Router) error {
 	// sha256 hash of public key
 	pubHash := types.SHA256(pub.Bytes())
 	b32PubHash := base32.EncodeToString(pubHash[:])
-	log.Debug("Router public key hash:", b32PubHash)
+	log.WithFields(logger.Fields{"at": "validateRouterKeys"}).Debug("Router public key hash:", b32PubHash)
 
 	return nil
 }
@@ -256,8 +256,8 @@ func constructRouterInfo(r *Router) (*router_info.RouterInfo, error) {
 		return nil, err
 	}
 
-	log.Debug("RouterInfo constructed successfully")
-	log.Debug("RouterInfo:", ri)
+	log.WithFields(logger.Fields{"at": "constructRouterInfo"}).Debug("RouterInfo constructed successfully")
+	log.WithFields(logger.Fields{"at": "constructRouterInfo"}).Debug("RouterInfo:", ri)
 	return ri, nil
 }
 
@@ -280,7 +280,7 @@ func buildNTCP2Transport(r *Router, ri *router_info.RouterInfo) (*ntcp.NTCP2Tran
 		log.WithError(err).Error("Failed to create NTCP2 transport")
 		return nil, err
 	}
-	log.Debug("NTCP2 transport created successfully")
+	log.WithFields(logger.Fields{"at": "buildNTCP2Transport"}).Debug("NTCP2 transport created successfully")
 
 	ntcpaddr := ntcp2Transport.Addr()
 	if err := validateAndAddTransportAddress(ri, ntcpaddr, "NTCP2", func() (*router_address.RouterAddress, error) {
@@ -312,7 +312,7 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 		log.WithError(err).Error("Failed to create SSU2 transport")
 		return nil, err
 	}
-	log.Debug("SSU2 transport created successfully")
+	log.WithFields(logger.Fields{"at": "buildSSU2Transport"}).Debug("SSU2 transport created successfully")
 
 	ssu2addr := ssu2Transport.Addr()
 	if err := validateAndAddTransportAddress(ri, ssu2addr, "SSU2", func() (*router_address.RouterAddress, error) {
@@ -328,10 +328,10 @@ func buildSSU2Transport(r *Router, ri *router_info.RouterInfo) (*ssu2.SSU2Transp
 // This reduces code duplication between buildNTCP2Transport and buildSSU2Transport.
 func validateAndAddTransportAddress(ri *router_info.RouterInfo, addr net.Addr, proto string, converter func() (*router_address.RouterAddress, error)) error {
 	if addr == nil {
-		log.Error("Failed to get " + proto + " address")
+		log.WithFields(logger.Fields{"at": "validateAndAddTransportAddress"}).Error("Failed to get " + proto + " address")
 		return errors.New("failed to get " + proto + " address")
 	}
-	log.Debug(proto+" address:", addr)
+	log.WithFields(logger.Fields{"at": "validateAndAddTransportAddress"}).Debug(proto+" address:", addr)
 	return addTransportAddress(ri, addr, proto, converter)
 }
 

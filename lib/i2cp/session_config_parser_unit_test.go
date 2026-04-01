@@ -338,7 +338,7 @@ func TestParseCreateSessionPayload_BoundaryValues(t *testing.T) {
 
 // TestApplyMessageOptions_Reliability tests that i2cp.messageReliability is wired into SessionConfig.
 func TestApplyMessageOptions_Reliability(t *testing.T) {
-	for _, rel := range []string{"BestEffort", "Guaranteed", "None"} {
+	for _, rel := range []string{"BestEffort", "None"} {
 		t.Run(rel, func(t *testing.T) {
 			config := DefaultSessionConfig()
 			options := map[string]string{"i2cp.messageReliability": rel}
@@ -347,6 +347,14 @@ func TestApplyMessageOptions_Reliability(t *testing.T) {
 			assert.True(t, config.ExplicitlySetFields["MessageReliability"], "MessageReliability not marked as explicitly set")
 		})
 	}
+	t.Run("Guaranteed", func(t *testing.T) {
+		config := DefaultSessionConfig()
+		options := map[string]string{"i2cp.messageReliability": "Guaranteed"}
+		applyMessageOptions(config, options)
+		assert.Equal(t, "BestEffort", config.MessageReliability, "Guaranteed should fall back to BestEffort")
+		assert.True(t, config.ExplicitlySetFields["MessageReliability"])
+		assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability")
+	})
 	t.Run("unknown_value", func(t *testing.T) {
 		config := DefaultSessionConfig()
 		options := map[string]string{"i2cp.messageReliability": "Invalid"}
@@ -477,10 +485,10 @@ func TestFullParsePipeline_NewOptions(t *testing.T) {
 	assert.Equal(t, 2, config.OutboundBackupQuantity, "OutboundBackupQuantity")
 	assert.Equal(t, -1, config.InboundLengthVariance, "InboundLengthVariance")
 	assert.Equal(t, 3, config.OutboundLengthVariance, "OutboundLengthVariance")
-	assert.Equal(t, "Guaranteed", config.MessageReliability, "MessageReliability")
+	assert.Equal(t, "BestEffort", config.MessageReliability, "Guaranteed should fall back to BestEffort")
 	assert.True(t, config.UseEncryptedLeaseSet, "UseEncryptedLeaseSet should be true")
 	assert.True(t, config.DontPublishLeaseSet, "DontPublishLeaseSet should be true")
 
 	assert.NotContains(t, config.UnsupportedOptions, "i2cp.encryptLeaseSet")
-	assert.NotContains(t, config.UnsupportedOptions, "i2cp.messageReliability")
+	assert.Contains(t, config.UnsupportedOptions, "i2cp.messageReliability")
 }

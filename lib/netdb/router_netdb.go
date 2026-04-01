@@ -50,7 +50,7 @@ func (r *RouterNetDB) GetRouterInfo(hash common.Hash) chan router_info.RouterInf
 // GetAllRouterInfos retrieves all RouterInfo entries from the database.
 // Returns a slice of RouterInfo entries ordered by hash.
 func (r *RouterNetDB) GetAllRouterInfos() []router_info.RouterInfo {
-	log.Debug("RouterNetDB: Getting all RouterInfos")
+	log.WithFields(logger.Fields{"at": "GetAllRouterInfos"}).Debug("RouterNetDB: Getting all RouterInfos")
 	return r.db.GetAllRouterInfos()
 }
 
@@ -94,7 +94,7 @@ func (r *RouterNetDB) StoreRouterInfoFromMessage(key common.Hash, data []byte, d
 // StoreRouterInfo stores a RouterInfo locally, satisfying the NetworkDatabase interface.
 // It delegates to the underlying StdNetDB.StoreRouterInfo.
 func (r *RouterNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
-	log.Debug("RouterNetDB: Storing RouterInfo")
+	log.WithFields(logger.Fields{"at": "StoreRouterInfo"}).Debug("RouterNetDB: Storing RouterInfo")
 	r.db.StoreRouterInfo(ri)
 }
 
@@ -142,14 +142,14 @@ func (r *RouterNetDB) Size() int {
 
 // RecalculateSize recalculates the cached size of the network database.
 func (r *RouterNetDB) RecalculateSize() error {
-	log.Debug("RouterNetDB: Recalculating size")
+	log.WithFields(logger.Fields{"at": "RecalculateSize"}).Debug("RouterNetDB: Recalculating size")
 	return r.db.RecalculateSize()
 }
 
 // Ensure verifies that the underlying database resources exist.
 // This should be called during initialization.
 func (r *RouterNetDB) Ensure() error {
-	log.Debug("RouterNetDB: Ensuring database resources")
+	log.WithFields(logger.Fields{"at": "Ensure"}).Debug("RouterNetDB: Ensuring database resources")
 	return r.db.Ensure()
 }
 

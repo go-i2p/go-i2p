@@ -76,7 +76,7 @@ func (s *ShortTunnelBuildReply) validateRecordCount(recordCount int) error {
 	}
 
 	if recordCount == 0 {
-		log.Warn("ShortTunnelBuildReply has no response records")
+		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("ShortTunnelBuildReply has no response records")
 		return fmt.Errorf("tunnel build failed: no response records")
 	}
 

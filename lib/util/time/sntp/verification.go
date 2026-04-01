@@ -63,7 +63,7 @@ func validateTimingMetrics(response *ntp.Response) bool {
 // validateTimeValue ensures the response time is not zero.
 func validateTimeValue(response *ntp.Response) bool {
 	if response.Time.IsZero() {
-		log.Warn("Invalid NTP response: Received zero time")
+		log.WithFields(logger.Fields{"at": "validateTimeValue"}).Warn("Invalid NTP response: Received zero time")
 		return false
 	}
 	return true

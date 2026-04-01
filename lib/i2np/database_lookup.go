@@ -197,7 +197,7 @@ type DatabaseLookup struct {
 }
 
 func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
-	log.Debug("Reading DatabaseLookup")
+	log.WithFields(logger.Fields{"at": "ReadDatabaseLookup"}).Debug("Reading DatabaseLookup")
 	databaseLookup := DatabaseLookup{}
 
 	if err := parseBasicFields(&databaseLookup, data); err != nil {
@@ -218,7 +218,7 @@ func ReadDatabaseLookup(data []byte) (DatabaseLookup, error) {
 		}
 	}
 
-	log.Debug("DatabaseLookup read successfully")
+	log.WithFields(logger.Fields{"at": "ReadDatabaseLookup"}).Debug("DatabaseLookup read successfully")
 	return databaseLookup, nil
 }
 

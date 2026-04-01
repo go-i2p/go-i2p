@@ -9,6 +9,7 @@ import (
 	"github.com/go-i2p/common/router_address"
 	"github.com/go-i2p/common/router_info"
 	"github.com/go-i2p/go-noise/ntcp2"
+	"github.com/go-i2p/logger"
 )
 
 // ExtractNTCP2Addr extracts the NTCP2 network address from a RouterInfo structure.
@@ -93,7 +94,7 @@ func findValidNTCP2Address(routerInfo router_info.RouterInfo, hashBytes []byte) 
 
 // processNTCP2Address resolves TCP address and wraps it with router hash.
 func processNTCP2Address(addr *router_address.RouterAddress, routerInfo router_info.RouterInfo) (net.Addr, error) {
-	log.Debug("Found NTCP2 transport address, resolving TCP address")
+	log.WithFields(logger.Fields{"at": "processNTCP2Address"}).Debug("Found NTCP2 transport address, resolving TCP address")
 	tcpAddr, err := resolveTCPAddress(addr)
 	if err != nil {
 		// Enhanced logging for TCP resolution failures - links to host extraction Issue #1
@@ -143,7 +144,7 @@ func resolveTCPAddress(addr *router_address.RouterAddress) (net.Addr, error) {
 	// CRITICAL FIX #2: Suppress error-level logging from common package Host() method
 	// The common package logs at ERROR level when host key is missing, but this is
 	// normal for introducer-based NTCP2 addresses. We call it silently and handle gracefully.
-	log.Debug("Getting host from RouterAddress")
+	log.WithFields(logger.Fields{"at": "resolveTCPAddress"}).Debug("Getting host from RouterAddress")
 	host, err := extractHostQuietly(addr)
 	if err != nil {
 		// Missing host key is normal for introducer-based addresses (NAT/firewall traversal)
@@ -254,7 +255,7 @@ func HasDialableNTCP2Address(routerInfo *router_info.RouterInfo) bool {
 // SupportsNTCP2 checks if RouterInfo has an NTCP2 transport address.
 func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 	if routerInfo == nil {
-		log.Debug("RouterInfo is nil, NTCP2 not supported")
+		log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo is nil, NTCP2 not supported")
 		return false
 	}
 	for _, addr := range routerInfo.RouterAddresses() {
@@ -265,11 +266,11 @@ func SupportsNTCP2(routerInfo *router_info.RouterInfo) bool {
 		}
 		// Check case-insensitively - some implementations use "NTCP2", others "ntcp2"
 		if strings.EqualFold(str, "ntcp2") {
-			log.Debug("RouterInfo supports NTCP2")
+			log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo supports NTCP2")
 			return true
 		}
 	}
-	log.Debug("RouterInfo does not support NTCP2")
+	log.WithFields(logger.Fields{"at": "SupportsNTCP2"}).Debug("RouterInfo does not support NTCP2")
 	return false
 }
 

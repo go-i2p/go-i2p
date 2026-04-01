@@ -17,7 +17,7 @@ func TestTunnelBuildMessage_SerializeDeserialize(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
 
 	// Create message
-	originalMsg := NewTunnelBuildMessage(records)
+	originalMsg := newTunnelBuildMessage(records)
 	originalMsg.SetMessageID(42)
 
 	// Verify data was serialized
@@ -60,7 +60,7 @@ func TestTunnelBuildMessage_SerializeDeserialize(t *testing.T) {
 // TestTunnelBuildMessage_RecordSerialization tests individual record serialization
 func TestTunnelBuildMessage_RecordSerialization(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	data := msg.GetData()
 
@@ -88,7 +88,7 @@ func TestTunnelBuildMessage_RecordSerialization(t *testing.T) {
 func TestTunnelBuildMessage_EmptyRecords(t *testing.T) {
 	var records [8]BuildRequestRecord
 
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	// Should still create valid message structure
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
@@ -137,7 +137,7 @@ func TestTunnelBuildMessage_RecordParsing(t *testing.T) {
 	}
 
 	// Fill remaining records with zeros (simpler test)
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	// Get the data and parse it back
 	data := msg.GetData()
@@ -178,7 +178,7 @@ func TestTunnelBuild_GetBuildRecords(t *testing.T) {
 // TestTunnelBuildMessage_Interfaces verifies all interfaces are satisfied
 func TestTunnelBuildMessage_Interfaces(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	// Verify I2NPMessage interface
 	assert.Equal(t, I2NPMessageTypeTunnelBuild, msg.Type())
@@ -197,7 +197,7 @@ func TestTunnelBuildMessage_Interfaces(t *testing.T) {
 // TestTunnelBuildMessage_DataConsistency tests that data field matches records
 func TestTunnelBuildMessage_DataConsistency(t *testing.T) {
 	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	actualData := msg.GetData()
 	require.Len(t, actualData, 8*528, "Total data length must be 8*528 bytes")

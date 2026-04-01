@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/crypto/rand"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -45,7 +46,7 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 
 	iv, err := pc.loadFile(ivPath, obfuscationIVSize, "obfuscation IV")
 	if err == nil {
-		log.Debug("loaded existing SSU2 obfuscation IV")
+		log.WithFields(logger.Fields{"at": "LoadOrGenerateObfuscationIV"}).Debug("loaded existing SSU2 obfuscation IV")
 		return iv, nil
 	}
 
@@ -55,7 +56,7 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 		return nil, err
 	}
 
-	log.Info("SSU2 obfuscation IV not found, generating new IV")
+	log.WithFields(logger.Fields{"at": "LoadOrGenerateObfuscationIV"}).Info("SSU2 obfuscation IV not found, generating new IV")
 	return pc.generateAndStoreKey(ivPath, obfuscationIVSize, "obfuscation IV")
 }
 
@@ -68,7 +69,7 @@ func (pc *PersistentConfig) LoadOrGenerateIntroKey() ([]byte, error) {
 
 	key, err := pc.loadFile(keyPath, introKeySize, "intro key")
 	if err == nil {
-		log.Debug("loaded existing SSU2 intro key")
+		log.WithFields(logger.Fields{"at": "LoadOrGenerateIntroKey"}).Debug("loaded existing SSU2 intro key")
 		return key, nil
 	}
 
@@ -77,7 +78,7 @@ func (pc *PersistentConfig) LoadOrGenerateIntroKey() ([]byte, error) {
 		return nil, err
 	}
 
-	log.Info("SSU2 intro key not found, generating new key")
+	log.WithFields(logger.Fields{"at": "LoadOrGenerateIntroKey"}).Info("SSU2 intro key not found, generating new key")
 	return pc.generateAndStoreKey(keyPath, introKeySize, "intro key")
 }
 

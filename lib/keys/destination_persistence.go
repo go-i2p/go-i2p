@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/common/destination"
 	"github.com/go-i2p/crypto/curve25519"
 	"github.com/go-i2p/crypto/ed25519"
+	"github.com/go-i2p/logger"
 )
 
 // Persisted key file format v2 (all fields are fixed-size):
@@ -110,7 +111,7 @@ func LoadOrCreateDestinationKeyStore(dir, name string) (*DestinationKeyStore, er
 
 	dks, err := LoadDestinationKeyStore(dir, name)
 	if err == nil {
-		log.Debug("Loaded existing destination key store")
+		log.WithFields(logger.Fields{"at": "LoadOrCreateDestinationKeyStore"}).Debug("Loaded existing destination key store")
 		return dks, nil
 	}
 

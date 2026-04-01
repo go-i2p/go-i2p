@@ -371,7 +371,7 @@ func (rp *ReplyProcessor) handleBuildFailure(
 // retryBuild attempts to retry a failed tunnel build with exponential backoff.
 func (rp *ReplyProcessor) retryBuild(tunnelID tunnel.TunnelID, pending *PendingBuildRequest) error {
 	if rp.retryCallback == nil {
-		log.Warn("No retry callback configured, cannot retry tunnel build")
+		log.WithFields(logger.Fields{"at": "retryBuild"}).Warn("No retry callback configured, cannot retry tunnel build")
 		return fmt.Errorf("retry not available")
 	}
 
@@ -508,5 +508,5 @@ func (rp *ReplyProcessor) Stop() {
 		delete(rp.pendingBuilds, id)
 	}
 
-	log.Debug("ReplyProcessor stopped, all pending timers cancelled")
+	log.WithFields(logger.Fields{"at": "Stop"}).Debug("ReplyProcessor stopped, all pending timers cancelled")
 }

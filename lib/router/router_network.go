@@ -38,7 +38,7 @@ func (r *Router) ensureNetDBReady() error {
 	if sz := r.StdNetDB.Size(); sz >= 0 {
 		log.WithField("size", sz).Debug("NetDB Size: " + strconv.Itoa(sz))
 	} else {
-		log.Warn("Unable to determine NetDB size")
+		log.WithFields(logger.Fields{"at": "ensureNetDBReady"}).Warn("Unable to determine NetDB size")
 	}
 
 	if r.StdNetDB.Size() < r.cfg.Bootstrap.LowPeerThreshold {
@@ -124,13 +124,13 @@ func (r *Router) createFileBootstrapper() (bootstrap.Bootstrap, error) {
 
 // createReseedBootstrapper creates a bootstrapper that fetches peers from reseed servers.
 func (r *Router) createReseedBootstrapper() bootstrap.Bootstrap {
-	log.Info("Using reseed bootstrap only (as specified by bootstrap_type)")
+	log.WithFields(logger.Fields{"at": "createReseedBootstrapper"}).Info("Using reseed bootstrap only (as specified by bootstrap_type)")
 	return bootstrap.NewReseedBootstrap(r.cfg.Bootstrap)
 }
 
 // createLocalBootstrapper creates a bootstrapper that reads from local netDb directories.
 func (r *Router) createLocalBootstrapper() bootstrap.Bootstrap {
-	log.Info("Using local netDb bootstrap only (as specified by bootstrap_type)")
+	log.WithFields(logger.Fields{"at": "createLocalBootstrapper"}).Info("Using local netDb bootstrap only (as specified by bootstrap_type)")
 	return bootstrap.NewLocalNetDbBootstrap(r.cfg.Bootstrap)
 }
 
@@ -195,9 +195,9 @@ func (r *Router) runMainLoop() {
 	// Both closeChnl and ctx.Done() are signaled during Stop().
 	select {
 	case <-r.closeChnl:
-		log.Debug("Router received close signal in mainloop")
+		log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router received close signal in mainloop")
 	case <-r.ctx.Done():
-		log.Debug("Router context cancelled in mainloop")
+		log.WithFields(logger.Fields{"at": "runMainLoop"}).Debug("Router context cancelled in mainloop")
 	}
 }
 
@@ -205,7 +205,7 @@ func (r *Router) runMainLoop() {
 func (r *Router) mainloop() {
 	// Initialize active sessions map for tracking NTCP2 connections
 	r.activeSessions = make(map[common.Hash]*ntcp.NTCP2Session)
-	log.Debug("Initialized active sessions map")
+	log.WithFields(logger.Fields{"at": "mainloop"}).Debug("Initialized active sessions map")
 
 	if err := r.initializeCoreComponents(); err != nil {
 		r.startupErr <- err
@@ -227,7 +227,7 @@ func (r *Router) mainloop() {
 	r.startSessionMonitors()
 
 	r.runMainLoop()
-	log.Debug("Exiting router mainloop")
+	log.WithFields(logger.Fields{"at": "mainloop"}).Debug("Exiting router mainloop")
 }
 
 // initializeCoreComponents initializes NetDB, I2CP, and I2PControl servers in order.
@@ -276,7 +276,7 @@ func (r *Router) wireInboundHandler() {
 // startSessionMonitors launches goroutines to monitor and process inbound sessions.
 // This is the entry point for the session monitoring subsystem.
 func (r *Router) startSessionMonitors() {
-	log.Debug("Starting session monitors")
+	log.WithFields(logger.Fields{"at": "startSessionMonitors"}).Debug("Starting session monitors")
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
@@ -288,7 +288,7 @@ func (r *Router) startSessionMonitors() {
 // and spawns a message processor goroutine for each new session.
 // This loop runs until the router is stopped.
 func (r *Router) monitorInboundSessions() {
-	log.Debug("Starting inbound session monitor")
+	log.WithFields(logger.Fields{"at": "monitorInboundSessions"}).Debug("Starting inbound session monitor")
 
 	for r.shouldContinueMonitoring() {
 		if conn := r.acceptInboundConnection(); conn != nil {
@@ -296,7 +296,7 @@ func (r *Router) monitorInboundSessions() {
 		}
 	}
 
-	log.Debug("Stopping inbound session monitor")
+	log.WithFields(logger.Fields{"at": "monitorInboundSessions"}).Debug("Stopping inbound session monitor")
 }
 
 // shouldContinueMonitoring checks if the router is still running.
@@ -598,7 +598,7 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 		auth, authErr := i2cp.NewPasswordAuthenticator(r.cfg.I2CP.Username, r.cfg.I2CP.Password)
 		if authErr == nil {
 			server.SetAuthenticator(auth)
-			log.Info("I2CP server: authentication enabled")
+			log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Info("I2CP server: authentication enabled")
 		}
 	}
 
@@ -606,9 +606,9 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 
 	if r.tunnelManager != nil {
 		server.SetTunnelBuilder(r.tunnelManager)
-		log.Debug("I2CP server: tunnel builder configured")
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: tunnel builder configured")
 	} else {
-		log.Warn("I2CP server: tunnel manager not available for session pools")
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Warn("I2CP server: tunnel manager not available for session pools")
 	}
 
 	peerSelector, err := tunnel.NewDefaultPeerSelector(r.StdNetDB)
@@ -616,7 +616,7 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 		log.WithError(err).Warn("Failed to create peer selector for I2CP sessions")
 	} else {
 		server.SetPeerSelector(peerSelector)
-		log.Debug("I2CP server: peer selector configured")
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: peer selector configured")
 	}
 
 	hostResolver, err := naming.NewHostsTxtResolver()
@@ -624,14 +624,14 @@ func (r *Router) configureI2CPServerInfrastructure(server *i2cp.Server) {
 		log.WithError(err).Warn("Failed to create hostname resolver for I2CP")
 	} else {
 		server.SetHostnameResolver(hostResolver)
-		log.Debug("I2CP server: hostname resolver configured")
+		log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: hostname resolver configured")
 	}
 
 	// Wire destination resolver backed by the NetDB so outbound SendMessage
 	// calls can look up the recipient's X25519 public key for garlic encryption.
 	destResolver := netdb.NewDestinationResolver(r.StdNetDB)
 	server.SetDestinationResolver(destResolver)
-	log.Debug("I2CP server: destination resolver configured")
+	log.WithFields(logger.Fields{"at": "configureI2CPServerInfrastructure"}).Debug("I2CP server: destination resolver configured")
 
 	// Wire message router for outbound I2CP message routing through garlic encryption
 	// and into the tunnel subsystem. The garlic session manager is created from the
@@ -663,7 +663,7 @@ func (r *Router) wireI2CPMessageRouter(server *i2cp.Server) {
 
 	msgRouter := i2cp.NewMessageRouter(garlicMgr, transportSend)
 	server.SetMessageRouter(msgRouter)
-	log.Debug("I2CP server: message router configured for outbound routing")
+	log.WithFields(logger.Fields{"at": "wireI2CPMessageRouter"}).Debug("I2CP server: message router configured for outbound routing")
 }
 
 // removeSession removes a session when it closes.
@@ -852,7 +852,7 @@ func (r *Router) startSSU2NATDetection() {
 
 	republish := r.createRepublishCallback()
 	ssu2Transport.StartNATDetection(candidates, republish)
-	log.Debug("SSU2 NAT detection goroutine started")
+	log.WithFields(logger.Fields{"at": "startSSU2NATDetection"}).Debug("SSU2 NAT detection goroutine started")
 }
 
 // getSSU2Transport retrieves the SSU2 transport from the TransportMuxer.
@@ -899,7 +899,7 @@ func (r *Router) collectSSU2Candidates() []router_info.RouterInfo {
 // after NAT detection registers introducers.
 func (r *Router) createRepublishCallback() func() {
 	return func() {
-		log.Info("SSU2 NAT detection: introducers registered — triggering RouterInfo republication")
+		log.WithFields(logger.Fields{"at": "createRepublishCallback"}).Info("SSU2 NAT detection: introducers registered — triggering RouterInfo republication")
 		if r.publisher != nil {
 			r.publisher.PublishOurRouterInfo()
 		}

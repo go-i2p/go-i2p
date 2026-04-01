@@ -170,7 +170,7 @@ type BuildRequestRecord struct {
 }
 
 func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
-	log.Debug("Reading BuildRequestRecord")
+	log.WithFields(logger.Fields{"at": "ReadBuildRequestRecord"}).Debug("Reading BuildRequestRecord")
 
 	record := BuildRequestRecord{}
 
@@ -186,7 +186,7 @@ func ReadBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 		return record, err
 	}
 
-	log.Debug("BuildRequestRecord read successfully")
+	log.WithFields(logger.Fields{"at": "ReadBuildRequestRecord"}).Debug("BuildRequestRecord read successfully")
 	return record, nil
 }
 
@@ -552,7 +552,7 @@ func (b *BuildRequestRecord) Bytes() []byte {
 	// Padding (29 bytes)
 	copy(data[193:222], b.Padding[:])
 
-	log.Debug("BuildRequestRecord serialized to 222 bytes")
+	log.WithFields(logger.Fields{"at": "Bytes"}).Debug("BuildRequestRecord serialized to 222 bytes")
 	return data
 }
 
@@ -632,7 +632,7 @@ func (b *BuildRequestRecord) ShortBytes() []byte {
 	// options/padding: remaining bytes [56:154] already zeroed
 	// MAC space: [154:170] already zeroed (filled by AEAD encryption)
 
-	log.Debug("BuildRequestRecord serialized to 218-byte short ECIES format")
+	log.WithFields(logger.Fields{"at": "ShortBytes"}).Debug("BuildRequestRecord serialized to 218-byte short ECIES format")
 	return data
 }
 
@@ -666,7 +666,7 @@ func ReadShortBuildRequestRecord(data []byte) (BuildRequestRecord, error) {
 	record.RequestTime = time.Unix(int64(minutesSinceEpoch)*60, 0)
 	record.SendMessageID = common.Integer(data[52:56]).Int()
 
-	log.Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
+	log.WithFields(logger.Fields{"at": "ReadShortBuildRequestRecord"}).Debug("ReadShortBuildRequestRecord: parsed 154-byte STBM cleartext")
 	return record, nil
 }
 

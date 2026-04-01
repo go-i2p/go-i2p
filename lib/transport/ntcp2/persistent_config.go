@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-i2p/crypto/rand"
 	"github.com/go-i2p/crypto/types"
+	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
 
@@ -42,7 +43,7 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 	// Try to load existing IV
 	iv, err := pc.loadObfuscationIV(ivPath)
 	if err == nil {
-		log.Debug("Successfully loaded existing obfuscation IV")
+		log.WithFields(logger.Fields{"at": "LoadOrGenerateObfuscationIV"}).Debug("Successfully loaded existing obfuscation IV")
 		return iv, nil
 	}
 
@@ -53,7 +54,7 @@ func (pc *PersistentConfig) LoadOrGenerateObfuscationIV() ([]byte, error) {
 	}
 
 	// File doesn't exist - generate new IV
-	log.Info("Obfuscation IV file not found, generating new IV")
+	log.WithFields(logger.Fields{"at": "LoadOrGenerateObfuscationIV"}).Info("Obfuscation IV file not found, generating new IV")
 	return pc.generateAndStoreObfuscationIV(ivPath)
 }
 
@@ -74,7 +75,7 @@ func (pc *PersistentConfig) loadObfuscationIV(path string) ([]byte, error) {
 		)
 	}
 
-	log.Debug("Successfully loaded obfuscation IV from file")
+	log.WithFields(logger.Fields{"at": "loadObfuscationIV"}).Debug("Successfully loaded obfuscation IV from file")
 	return data, nil
 }
 
@@ -101,7 +102,7 @@ func (pc *PersistentConfig) generateAndStoreObfuscationIV(path string) ([]byte, 
 		return nil, WrapNTCP2Error(err, "storing obfuscation IV")
 	}
 
-	log.Info("Successfully generated and stored new obfuscation IV")
+	log.WithFields(logger.Fields{"at": "generateAndStoreObfuscationIV"}).Info("Successfully generated and stored new obfuscation IV")
 	return iv, nil
 }
 

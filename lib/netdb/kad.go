@@ -449,14 +449,14 @@ func (kr *KademliaResolver) findClosestPeers(target common.Hash) []common.Hash {
 	// Get all known router infos from the network database
 	allRouterInfos := kr.NetworkDatabase.GetAllRouterInfos()
 	if len(allRouterInfos) == 0 {
-		log.Debug("No peers available in network database")
+		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No peers available in network database")
 		return []common.Hash{}
 	}
 
 	// Calculate XOR distances for all peers
 	peers := kr.calculatePeerDistances(allRouterInfos, target)
 	if len(peers) == 0 {
-		log.Debug("No suitable peers found after filtering")
+		log.WithFields(logger.Fields{"at": "findClosestPeers"}).Debug("No suitable peers found after filtering")
 		return []common.Hash{}
 	}
 

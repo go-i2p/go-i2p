@@ -2,6 +2,7 @@ package ssu2
 
 import (
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
+	"github.com/go-i2p/logger"
 )
 
 // BlockCallbackConfig holds callback functions for SSU2 block types
@@ -73,7 +74,7 @@ func DefaultBlockCallbacks() *BlockCallbackConfig {
 			log.WithField("reason", reason).Info("Received SSU2 termination block")
 		},
 		OnRouterInfo: func(_ []byte) error {
-			log.Debug("Received RouterInfo block (not yet wired to NetDB)")
+			log.WithFields(logger.Fields{"at": "DefaultBlockCallbacks"}).Debug("Received RouterInfo block (not yet wired to NetDB)")
 			return nil
 		},
 		OnDateTime: func(timestamp uint32) error {

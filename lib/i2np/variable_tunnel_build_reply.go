@@ -57,7 +57,7 @@ func (v *VariableTunnelBuildReply) validateRecordCount(recordCount int) error {
 	}
 
 	if recordCount == 0 {
-		log.Warn("VariableTunnelBuildReply has no response records")
+		log.WithFields(logger.Fields{"at": "validateRecordCount"}).Warn("VariableTunnelBuildReply has no response records")
 		return fmt.Errorf("tunnel build failed: no response records")
 	}
 
@@ -105,7 +105,7 @@ func (v *VariableTunnelBuildReply) logReplyCompletion(successCount, recordCount 
 // Returns nil if all hops accepted, otherwise returns an appropriate error.
 func (v *VariableTunnelBuildReply) determineBuildResult(successCount, recordCount int, firstError error) error {
 	if successCount == recordCount {
-		log.Debug("Variable tunnel build successful - all hops accepted")
+		log.WithFields(logger.Fields{"at": "determineBuildResult"}).Debug("Variable tunnel build successful - all hops accepted")
 		return nil
 	}
 

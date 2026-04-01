@@ -106,9 +106,9 @@ func (s *Server) SetAuthenticator(auth Authenticator) {
 	s.authenticator = auth
 
 	if auth != nil {
-		log.Info("i2cp_authentication_enabled")
+		log.WithFields(logger.Fields{"at": "SetAuthenticator"}).Info("i2cp_authentication_enabled")
 	} else {
-		log.Info("i2cp_authentication_disabled")
+		log.WithFields(logger.Fields{"at": "SetAuthenticator"}).Info("i2cp_authentication_disabled")
 	}
 }
 

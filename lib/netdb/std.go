@@ -310,7 +310,7 @@ func (db *StdNetDB) validatePathSecurity(cleanPath string) bool {
 // RecalculateSize is maintained for interface compatibility.
 // Since Size() now operates directly on in-memory data, this is a no-op.
 func (db *StdNetDB) RecalculateSize() error {
-	log.Debug("RecalculateSize called - Size() now uses in-memory data")
+	log.WithFields(logger.Fields{"at": "RecalculateSize"}).Debug("RecalculateSize called - Size() now uses in-memory data")
 	return nil
 }
 
@@ -346,7 +346,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 		defer f.Close()
 		err = e.Serialize(f)
 		if err == nil {
-			log.Debug("Successfully saved NetDB entry")
+			log.WithFields(logger.Fields{"at": "SaveEntry"}).Debug("Successfully saved NetDB entry")
 		} else {
 			log.WithError(err).Error("Failed to write NetDB entry")
 		}
@@ -363,7 +363,7 @@ func (db *StdNetDB) SaveEntry(e *Entry) (err error) {
 }
 
 func (db *StdNetDB) Save() error {
-	log.Debug("Saving all NetDB entries")
+	log.WithFields(logger.Fields{"at": "Save"}).Debug("Saving all NetDB entries")
 
 	riErrs := db.saveAllRouterInfos()
 	lsErrs := db.saveAllLeaseSets()
@@ -455,10 +455,10 @@ func (db *StdNetDB) Reseed(b bootstrap.Bootstrap, minRouters int) (err error) {
 func (db *StdNetDB) isReseedRequired(minRouters int) bool {
 	log.WithField("min_routers", minRouters).Debug("Checking if reseed is necessary")
 	if db.Size() > minRouters {
-		log.Debug("Reseed not necessary")
+		log.WithFields(logger.Fields{"at": "isReseedRequired"}).Debug("Reseed not necessary")
 		return false
 	}
-	log.Warn("NetDB size below minimum, reseed required")
+	log.WithFields(logger.Fields{"at": "isReseedRequired"}).Warn("NetDB size below minimum, reseed required")
 	return true
 }
 
@@ -754,10 +754,10 @@ func (db *StdNetDB) StoreRouterInfo(ri router_info.RouterInfo) {
 // ensure that the network database exists and load existing RouterInfos
 func (db *StdNetDB) Ensure() (err error) {
 	if !db.Exists() {
-		log.Debug("NetDB directory does not exist, creating it")
+		log.WithFields(logger.Fields{"at": "Ensure"}).Debug("NetDB directory does not exist, creating it")
 		err = db.Create()
 	} else {
-		log.Debug("NetDB directory already exists")
+		log.WithFields(logger.Fields{"at": "Ensure"}).Debug("NetDB directory already exists")
 		// Load existing RouterInfos from disk into memory
 		if loadErr := db.loadExistingRouterInfos(); loadErr != nil {
 			log.WithError(loadErr).Warn("Failed to load some existing RouterInfos, continuing anyway")
@@ -1156,7 +1156,7 @@ func (db *StdNetDB) GetRouterInfoBytes(hash common.Hash) ([]byte, error) {
 	db.riMutex.RLock()
 	if ri, ok := db.RouterInfos[hash]; ok && ri.RouterInfo != nil {
 		db.riMutex.RUnlock()
-		log.Debug("RouterInfo found in memory cache")
+		log.WithFields(logger.Fields{"at": "GetRouterInfoBytes"}).Debug("RouterInfo found in memory cache")
 
 		// Serialize the RouterInfo to bytes
 		data, err := ri.RouterInfo.Bytes()

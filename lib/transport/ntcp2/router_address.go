@@ -140,7 +140,7 @@ func ConvertToRouterAddress(transport *NTCP2Transport) (*router_address.RouterAd
 func extractTransportAddress(transport *NTCP2Transport) (string, string, error) {
 	addr := transport.Addr()
 	if addr == nil {
-		log.Error("Transport has no listening address")
+		log.WithFields(logger.Fields{"at": "extractTransportAddress"}).Error("Transport has no listening address")
 		return "", "", fmt.Errorf("transport has no listening address")
 	}
 
@@ -200,7 +200,7 @@ func extractHostPort(addr net.Addr) (string, string, error) {
 // Returns the base64-encoded static public key string and any validation error encountered.
 func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 	if transport.config == nil || transport.config.NTCP2Config == nil {
-		log.Error("Transport NTCP2 configuration is not initialized")
+		log.WithFields(logger.Fields{"at": "validateAndExtractStaticKey"}).Error("Transport NTCP2 configuration is not initialized")
 		return "", fmt.Errorf("transport NTCP2 configuration is not initialized")
 	}
 

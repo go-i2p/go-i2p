@@ -306,7 +306,7 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 	e.fieldMu.Unlock()
 
 	if resolver == nil {
-		log.Warn("Exploratory lookup skipped: no transport available, cannot reach network peers")
+		log.WithFields(logger.Fields{"at": "performExploratoryLookup"}).Warn("Exploratory lookup skipped: no transport available, cannot reach network peers")
 		return oops.Errorf("no transport available for exploratory lookup")
 	}
 

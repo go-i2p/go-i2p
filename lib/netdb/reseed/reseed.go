@@ -277,7 +277,7 @@ func mergeEmbeddedCerts(rootCAs *x509.CertPool) {
 			rootCAs.AddCert(cert)
 		}
 	}
-	log.Debug("Added embedded reseed certificates to TLS root CA pool")
+	log.WithFields(logger.Fields{"at": "mergeEmbeddedCerts"}).Debug("Added embedded reseed certificates to TLS root CA pool")
 }
 
 // buildReseedHTTPRequest constructs the HTTP request for reseed operations.
@@ -355,7 +355,7 @@ func validateReseedResponse(response *http.Response, uri string) error {
 			return oops.Errorf("response too small to be valid SU3 file: %d bytes", response.ContentLength)
 		}
 	} else {
-		log.Warn("Response content length not provided by server")
+		log.WithFields(logger.Fields{"at": "validateReseedResponse"}).Warn("Response content length not provided by server")
 	}
 
 	return nil
@@ -372,7 +372,7 @@ func (r Reseed) readSU3File(body io.Reader) (*su3.SU3, error) {
 	// Limit to 50 MB — reseed bundles are typically a few MB. This prevents
 	// a malicious server from sending an unbounded stream.
 	const maxReseedSize = 50 << 20 // 50 MB
-	log.Debug("Buffering complete SU3 response")
+	log.WithFields(logger.Fields{"at": "readSU3File"}).Debug("Buffering complete SU3 response")
 	limitedReader := io.LimitReader(body, maxReseedSize+1)
 	bufferedData, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -422,7 +422,7 @@ func (r Reseed) validateSU3FileType(su3file *su3.SU3) error {
 		}).Error("Invalid SU3 file type or content type")
 		return oops.Errorf("error: invalid SU3 file type (%v) or content type (%v)", su3file.FileType, su3file.ContentType)
 	}
-	log.Debug("SU3 file validation successful")
+	log.WithFields(logger.Fields{"at": "validateSU3FileType"}).Debug("SU3 file validation successful")
 	return nil
 }
 
@@ -454,7 +454,7 @@ func (r Reseed) getPublicKeyForSigner(signerID string) (interface{}, error) {
 // SECURITY: This function enforces signature verification - content is rejected if
 // verification fails or if the signer is unknown/untrusted.
 func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
-	log.Debug("Extracting content from SU3 file")
+	log.WithFields(logger.Fields{"at": "extractSU3Content"}).Debug("Extracting content from SU3 file")
 
 	// Get the public key for the signer - this will fail for unknown signers
 	publicKey, err := r.getPublicKeyForSigner(su3file.SignerID)
@@ -465,7 +465,7 @@ func (r Reseed) extractSU3Content(su3file *su3.SU3) ([]byte, error) {
 
 	// At this point, publicKey should never be nil (we reject unknown signers)
 	if publicKey == nil {
-		log.Error("Internal error: publicKey is nil after successful getPublicKeyForSigner")
+		log.WithFields(logger.Fields{"at": "extractSU3Content"}).Error("Internal error: publicKey is nil after successful getPublicKeyForSigner")
 		return nil, oops.Errorf("internal error: no public key available for verified signer")
 	}
 

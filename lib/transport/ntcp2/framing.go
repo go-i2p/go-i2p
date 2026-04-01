@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/i2np"
+	"github.com/go-i2p/logger"
 )
 
 // FrameI2NPMessageAsBlock frames an I2NP message using NTCP2 block format.
@@ -107,7 +108,7 @@ func (u *I2NPUnframer) BytesRead() int {
 }
 
 func (u *I2NPUnframer) ReadNextMessage() (i2np.I2NPMessage, error) {
-	log.Debug("Reading next framed message from connection")
+	log.WithFields(logger.Fields{"at": "ReadNextMessage"}).Debug("Reading next framed message from connection")
 
 	// Reset byte counter for this read operation
 	u.bytesRead = 0
@@ -261,7 +262,7 @@ func (u *BlockUnframer) processBlock(block Block) (msg i2np.I2NPMessage, termina
 		}
 		return parsedMsg, false
 	case BlockTypeTermination:
-		log.Debug("Received termination block")
+		log.WithFields(logger.Fields{"at": "processBlock"}).Debug("Received termination block")
 		if u.BlockCallback != nil {
 			u.BlockCallback(block)
 		}

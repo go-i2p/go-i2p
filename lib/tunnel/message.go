@@ -172,7 +172,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) Checksum() []byte {
 // Returns the contents of a decrypted tunnel message that contain the data for the
 // DeliveryInstructions.
 func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData() []byte {
-	log.Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
+	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Debug("Retrieving delivery instruction data from DecryptedTunnelMessage")
 	data_area := decrypted_tunnel_message[4+4+16:]
 	for i := 0; i < len(data_area); i++ {
 		if data_area[i] == 0x00 {
@@ -181,7 +181,7 @@ func (decrypted_tunnel_message DecryptedTunnelMessage) deliveryInstructionData()
 			return delivery_data
 		}
 	}
-	log.Warn("No delivery instruction data found in DecryptedTunnelMessage")
+	log.WithFields(logger.Fields{"at": "deliveryInstructionData"}).Warn("No delivery instruction data found in DecryptedTunnelMessage")
 	return []byte{}
 }
 

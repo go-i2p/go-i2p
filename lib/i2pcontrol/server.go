@@ -140,7 +140,7 @@ func createHTTPServer(cfg *config.I2PControlConfig, server *Server) *http.Server
 // It returns immediately after starting the server in a goroutine.
 func (s *Server) Start() error {
 	if !s.config.Enabled {
-		log.Info("I2PControl server is disabled")
+		log.WithFields(logger.Fields{"at": "Start"}).Info("I2PControl server is disabled")
 		return nil
 	}
 

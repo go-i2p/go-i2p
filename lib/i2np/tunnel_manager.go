@@ -95,7 +95,7 @@ func (tm *TunnelManager) ensureCleanupStarted() {
 	tm.cleanupOnce.Do(func() {
 		tm.cleanupTicker = time.NewTicker(30 * time.Second)
 		go tm.cleanupExpiredBuilds()
-		log.Debug("Tunnel manager cleanup goroutine started (lazy)")
+		log.WithFields(logger.Fields{"at": "ensureCleanupStarted"}).Debug("Tunnel manager cleanup goroutine started (lazy)")
 	})
 }
 
@@ -116,7 +116,7 @@ func (tm *TunnelManager) Stop() {
 			tm.outboundPool.Stop()
 		}
 
-		log.Debug("Tunnel manager stopped")
+		log.WithFields(logger.Fields{"at": "Stop"}).Debug("Tunnel manager stopped")
 	})
 }
 
@@ -836,7 +836,7 @@ func (tm *TunnelManager) processCorrelatedReply(handler TunnelReplyHandler, req 
 	if tm.inboundPool != nil || tm.outboundPool != nil {
 		tm.updateTunnelStatesFromReply(messageID, records, err)
 	} else {
-		log.Warn("No tunnel pool available for state updates")
+		log.WithFields(logger.Fields{"at": "processCorrelatedReply"}).Warn("No tunnel pool available for state updates")
 	}
 
 	return err

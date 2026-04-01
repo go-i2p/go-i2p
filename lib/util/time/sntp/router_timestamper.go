@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/crypto/rand"
+	"github.com/go-i2p/logger"
 
 	"github.com/beevik/ntp"
 )
@@ -591,7 +592,7 @@ func absDuration(d time.Duration) time.Duration {
 func getLocalCountryCode() string {
 	tzName := detectIANATimezone()
 	if tzName == "" {
-		log.Debug("Could not detect IANA timezone for NTP geo-selection")
+		log.WithFields(logger.Fields{"at": "getLocalCountryCode"}).Debug("Could not detect IANA timezone for NTP geo-selection")
 		return ""
 	}
 

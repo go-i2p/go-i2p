@@ -3,6 +3,8 @@ package util
 import (
 	"io"
 	"sync"
+
+	"github.com/go-i2p/logger"
 )
 
 var (
@@ -71,5 +73,5 @@ func CloseAll() {
 			}
 		}(closers[i])
 	}
-	log.Debug("All closers closed")
+	log.WithFields(logger.Fields{"at": "CloseAll"}).Debug("All closers closed")
 }

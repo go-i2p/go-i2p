@@ -95,7 +95,7 @@ func (p *MessageProcessor) sendDatabaseStoreAck(dbStore *DatabaseStore) {
 		return
 	}
 	if p.cloveForwarder == nil {
-		log.Debug("cannot send DatabaseStore ack: no clove forwarder")
+		log.WithFields(logger.Fields{"at": "sendDatabaseStoreAck"}).Debug("cannot send DatabaseStore ack: no clove forwarder")
 		return
 	}
 	tunnelID := tunnel.TunnelID(binary.BigEndian.Uint32(dbStore.ReplyTunnelID[:]))

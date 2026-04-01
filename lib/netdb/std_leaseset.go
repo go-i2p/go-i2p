@@ -249,7 +249,7 @@ func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseS
 		return emptyLeaseSetChannel()
 	}
 
-	log.Debug("LeaseSet found in memory cache")
+	log.WithFields(logger.Fields{"at": "getLeaseSetFromCache"}).Debug("LeaseSet found in memory cache")
 	return leaseSetChannel(*entry.LeaseSet)
 }
 
@@ -340,7 +340,7 @@ func (db *StdNetDB) parseAndCacheLeaseSet(hash common.Hash, data []byte) (lease_
 
 	// Always store/replace the cached entry so stale data is updated
 	db.lsMutex.Lock()
-	log.Debug("Storing LeaseSet in memory cache")
+	log.WithFields(logger.Fields{"at": "parseAndCacheLeaseSet"}).Debug("Storing LeaseSet in memory cache")
 	db.LeaseSets[hash] = Entry{
 		LeaseSet: &ls,
 	}
@@ -370,7 +370,7 @@ func (db *StdNetDB) fetchLeaseSetBytes(
 				log.WithError(err).Error("Failed to serialize cached " + typeName)
 				return nil, oops.Errorf("failed to serialize %s: %w", typeName, err)
 			}
-			log.Debug(typeName + " found in memory cache")
+			log.WithFields(logger.Fields{"at": "GetLeaseSet", "type": typeName}).Debug("found in memory cache")
 			return data, nil
 		}
 	}
@@ -568,7 +568,7 @@ func (db *StdNetDB) GetLeaseSet2(hash common.Hash) (chnl chan lease_set2.LeaseSe
 			close(emptyChnl)
 			return emptyChnl
 		}
-		log.Debug("LeaseSet2 found in memory cache")
+		log.WithFields(logger.Fields{"at": "GetLeaseSet2"}).Debug("LeaseSet2 found in memory cache")
 		chnl = make(chan lease_set2.LeaseSet2, 1)
 		chnl <- *ls.LeaseSet2
 		close(chnl)
@@ -609,12 +609,12 @@ func (db *StdNetDB) cacheLeaseSetEntryIfNewer(hash common.Hash, entry Entry, isN
 	if existing, ok := db.LeaseSets[hash]; ok {
 		if !isNewer(existing) {
 			db.lsMutex.Unlock()
-			log.Debug("Skipping " + typeName + " update — cached version is same or newer")
+			log.WithFields(logger.Fields{"at": "cacheLeaseSetEntryIfNewer"}).Debug("Skipping " + typeName + " update — cached version is same or newer")
 			return false
 		}
-		log.Debug("Replacing stale " + typeName + " in memory cache")
+		log.WithFields(logger.Fields{"at": "cacheLeaseSetEntryIfNewer"}).Debug("Replacing stale " + typeName + " in memory cache")
 	} else {
-		log.Debug("Adding " + typeName + " to memory cache")
+		log.WithFields(logger.Fields{"at": "cacheLeaseSetEntryIfNewer"}).Debug("Adding " + typeName + " to memory cache")
 	}
 	db.LeaseSets[hash] = entry
 	db.lsMutex.Unlock()
@@ -731,7 +731,7 @@ func (db *StdNetDB) GetEncryptedLeaseSet(hash common.Hash) (chnl chan encrypted_
 			close(emptyChnl)
 			return emptyChnl
 		}
-		log.Debug("EncryptedLeaseSet found in memory cache")
+		log.WithFields(logger.Fields{"at": "GetEncryptedLeaseSet"}).Debug("EncryptedLeaseSet found in memory cache")
 		chnl = make(chan encrypted_leaseset.EncryptedLeaseSet, 1)
 		chnl <- *ls.EncryptedLeaseSet
 		close(chnl)
@@ -875,7 +875,7 @@ func (db *StdNetDB) GetMetaLeaseSet(hash common.Hash) (chnl chan meta_leaseset.M
 			close(emptyChnl)
 			return emptyChnl
 		}
-		log.Debug("MetaLeaseSet found in memory cache")
+		log.WithFields(logger.Fields{"at": "GetMetaLeaseSet"}).Debug("MetaLeaseSet found in memory cache")
 		chnl = make(chan meta_leaseset.MetaLeaseSet, 1)
 		chnl <- *ls.MetaLeaseSet
 		close(chnl)
@@ -1034,7 +1034,7 @@ func (db *StdNetDB) trackMetaLeaseSetExpiration(key common.Hash, mls meta_leases
 // This method should be called once during NetDB initialization.
 // Use Stop() to gracefully shut down the cleanup goroutine.
 func (db *StdNetDB) StartExpirationCleaner() {
-	log.Info("Starting expiration cleaner (LeaseSets every 1 min, RouterInfos every 10 min)")
+	log.WithFields(logger.Fields{"at": "StartExpirationCleaner"}).Info("Starting expiration cleaner (LeaseSets every 1 min, RouterInfos every 10 min)")
 
 	db.cleanupWg.Add(1)
 	go func() {
@@ -1052,7 +1052,7 @@ func (db *StdNetDB) StartExpirationCleaner() {
 				tickCount++
 				db.runPeriodicMaintenance(tickCount)
 			case <-db.ctx.Done():
-				log.Info("Stopping expiration cleaner")
+				log.WithFields(logger.Fields{"at": "StartExpirationCleaner"}).Info("Stopping expiration cleaner")
 				return
 			}
 		}
@@ -1089,10 +1089,10 @@ func (db *StdNetDB) pruneStalePeerEntries() {
 // Blocks until the cleanup goroutine has exited.
 func (db *StdNetDB) Stop() {
 	if db.cancel != nil {
-		log.Info("Stopping StdNetDB")
+		log.WithFields(logger.Fields{"at": "Stop"}).Info("Stopping StdNetDB")
 		db.cancel()
 		db.cleanupWg.Wait()
-		log.Info("StdNetDB stopped")
+		log.WithFields(logger.Fields{"at": "Stop"}).Info("StdNetDB stopped")
 	}
 }
 
@@ -1171,7 +1171,7 @@ func (db *StdNetDB) GetLeaseSetExpirationStats() (total, expired int, nextExpiry
 // The method returns a slice of LeaseSetEntry containing the hash and Entry data.
 // This is primarily used for publishing all LeaseSets to floodfill routers.
 func (db *StdNetDB) GetAllLeaseSets() []LeaseSetEntry {
-	log.Debug("Getting all LeaseSets from database")
+	log.WithFields(logger.Fields{"at": "GetAllLeaseSets"}).Debug("Getting all LeaseSets from database")
 
 	db.lsMutex.RLock()
 	defer db.lsMutex.RUnlock()

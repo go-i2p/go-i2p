@@ -15,9 +15,9 @@ const (
 	DatabaseStoreTypeLeaseSet = 1
 	// DatabaseStoreTypeLeaseSet2 indicates LeaseSet2 (standard as of 0.9.38+)
 	DatabaseStoreTypeLeaseSet2 = 3
-	// DatabaseStoreTypeEncryptedLeaseSet indicates EncryptedLeaseSet (0.9.39+, not yet implemented)
+	// DatabaseStoreTypeEncryptedLeaseSet indicates EncryptedLeaseSet (0.9.39+), handled by lib/netdb
 	DatabaseStoreTypeEncryptedLeaseSet = 5
-	// DatabaseStoreTypeMetaLeaseSet indicates MetaLeaseSet (0.9.40+, not yet implemented)
+	// DatabaseStoreTypeMetaLeaseSet indicates MetaLeaseSet (0.9.40+), handled by lib/netdb
 	DatabaseStoreTypeMetaLeaseSet = 7
 )
 
@@ -84,8 +84,8 @@ type ::
              0    RouterInfo
              1    LeaseSet (original, deprecated)
              3    LeaseSet2 (standard as of 0.9.38+)
-             5    EncryptedLeaseSet (0.9.39+, not yet implemented)
-             7    MetaLeaseSet (0.9.40+, not yet implemented)
+             5    EncryptedLeaseSet (0.9.39+), handled by lib/netdb
+             7    MetaLeaseSet (0.9.40+), handled by lib/netdb
      bits 7-4:
             Reserved for future use, set to 0 for compatibility
 
@@ -115,8 +115,8 @@ data ::
                    followed by a gzip-compressed RouterInfo.
      If type == 1, data is an uncompressed LeaseSet (original, deprecated).
      If type == 3, data is an uncompressed LeaseSet2 (standard).
-     If type == 5, data is an uncompressed EncryptedLeaseSet (not yet implemented).
-     If type == 7, data is an uncompressed MetaLeaseSet (not yet implemented).
+     If type == 5, data is an uncompressed EncryptedLeaseSet, handled by lib/netdb.
+     If type == 7, data is an uncompressed MetaLeaseSet, handled by lib/netdb.
 */
 
 type DatabaseStore struct {

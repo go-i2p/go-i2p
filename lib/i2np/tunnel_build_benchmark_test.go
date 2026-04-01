@@ -9,13 +9,13 @@ func BenchmarkTunnelBuildMessage_Create(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewTunnelBuildMessage(records)
+		_ = newTunnelBuildMessage(records)
 	}
 }
 
 func BenchmarkTunnelBuildMessage_MarshalUnmarshal(b *testing.B) {
 	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -30,7 +30,7 @@ func BenchmarkTunnelBuildMessage_MarshalUnmarshal(b *testing.B) {
 
 func BenchmarkTunnelBuildMessage_Serialize(b *testing.B) {
 	records := createKnownValueBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -43,13 +43,13 @@ func BenchmarkTunnelBuildMessage_Creation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewTunnelBuildMessage(records)
+		_ = newTunnelBuildMessage(records)
 	}
 }
 
 func BenchmarkTunnelBuildMessage_Serialization(b *testing.B) {
 	records := createTestBuildRequestRecords()
-	msg := NewTunnelBuildMessage(records)
+	msg := newTunnelBuildMessage(records)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

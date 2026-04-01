@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-i2p/go-i2p/lib/config"
+	"github.com/go-i2p/logger"
 	"github.com/spf13/viper"
 )
 
@@ -299,14 +300,14 @@ func (h *RouterManagerHandler) Handle(ctx context.Context, params json.RawMessag
 func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}) {
 	if _, ok := req["Shutdown"]; ok {
 		if h.RouterControl == nil {
-			log.Warn("Shutdown requested but RouterControl is nil")
+			log.WithFields(logger.Fields{"at": "handleShutdown"}).Warn("Shutdown requested but RouterControl is nil")
 			result["Shutdown"] = "error: router control not available"
 			return
 		}
 		go func() {
-			log.Info("Shutdown requested via I2PControl")
+			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Shutdown requested via I2PControl")
 			h.RouterControl.Stop()
-			log.Info("Router shutdown completed via I2PControl")
+			log.WithFields(logger.Fields{"at": "handleShutdown"}).Info("Router shutdown completed via I2PControl")
 		}()
 		result["Shutdown"] = "initiated"
 	}
@@ -317,14 +318,14 @@ func (h *RouterManagerHandler) handleShutdown(req, result map[string]interface{}
 func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{}) {
 	if _, ok := req["Restart"]; ok {
 		if h.RouterControl == nil {
-			log.Warn("Restart requested but RouterControl is nil")
+			log.WithFields(logger.Fields{"at": "handleRestart"}).Warn("Restart requested but RouterControl is nil")
 			result["Restart"] = "error: router control not available"
 			return
 		}
 		go func() {
-			log.Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
+			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Restart requested via I2PControl (performing shutdown for supervisor restart)")
 			h.RouterControl.Stop()
-			log.Info("Router restart/stop completed via I2PControl")
+			log.WithFields(logger.Fields{"at": "handleRestart"}).Info("Router restart/stop completed via I2PControl")
 		}()
 		result["Restart"] = "initiated (shutdown only — external supervisor must restart the process)"
 	}
@@ -334,12 +335,12 @@ func (h *RouterManagerHandler) handleRestart(req, result map[string]interface{})
 func (h *RouterManagerHandler) handleReseed(req, result map[string]interface{}) {
 	if _, ok := req["Reseed"]; ok {
 		if h.RouterControl == nil {
-			log.Warn("Reseed requested but RouterControl is nil")
+			log.WithFields(logger.Fields{"at": "handleReseed"}).Warn("Reseed requested but RouterControl is nil")
 			result["Reseed"] = "error: router control not available"
 			return
 		}
 		go func() {
-			log.Info("Reseed requested via I2PControl")
+			log.WithFields(logger.Fields{"at": "handleReseed"}).Info("Reseed requested via I2PControl")
 			if err := h.RouterControl.Reseed(); err != nil {
 				log.WithError(err).Error("Reseed via I2PControl failed")
 			}

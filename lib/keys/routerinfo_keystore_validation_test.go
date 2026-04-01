@@ -344,7 +344,7 @@ func TestOnlyModernCryptoInGenerateNewKey(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident.Name != "ed25519" && ident.Name != "log" && ident.Name != "oops" {
+			if ident.Name != "ed25519" && ident.Name != "log" && ident.Name != "oops" && ident.Name != "logger" {
 				t.Errorf("generateNewKey() calls %s.%s — expected only ed25519 package",
 					ident.Name, sel.Sel.Name)
 			}

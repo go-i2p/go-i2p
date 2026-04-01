@@ -237,7 +237,7 @@ func (fs *FloodfillServer) Stop() {
 	if fs.lookupLimiter != nil {
 		fs.lookupLimiter.Stop()
 	}
-	log.Debug("Floodfill server stopped")
+	log.WithFields(logger.Fields{"at": "Stop"}).Debug("Floodfill server stopped")
 }
 
 // HandleDatabaseLookup processes an incoming DatabaseLookup request.
@@ -255,7 +255,7 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	fs.mu.RUnlock()
 
 	if !enabled {
-		log.Debug("Floodfill server not enabled, ignoring lookup")
+		log.WithFields(logger.Fields{"at": "HandleDatabaseLookup"}).Debug("Floodfill server not enabled, ignoring lookup")
 		return oops.Errorf("floodfill server not enabled")
 	}
 
@@ -271,7 +271,7 @@ func (fs *FloodfillServer) HandleDatabaseLookup(lookup *i2np.DatabaseLookup) err
 	// cause issues when used as a reply destination.
 	var zeroHash common.Hash
 	if lookup.From == zeroHash {
-		log.Warn("Rejecting DatabaseLookup with zero-hash From field")
+		log.WithFields(logger.Fields{"at": "HandleDatabaseLookup"}).Warn("Rejecting DatabaseLookup with zero-hash From field")
 		return oops.Errorf("invalid From field: zero hash")
 	}
 
